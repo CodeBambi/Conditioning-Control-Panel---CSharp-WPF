@@ -3410,6 +3410,7 @@
   "bug_report_steps_label": "재현 방법 (선택)",
   "bug_report_metadata_label": "함께 전송될 메타데이터",
   "bug_report_include_log_checkbox": "최근 활동 로그 포함 (마지막 100줄)",
+  "bug_report_hang_attached_hint": "{0}에 기록된 멈춤 보고서가 첨부됩니다. 빼려면 체크를 해제하세요.",
   "bug_report_preview_label": "미리보기 (서버로 전송되는 실제 내용)",
   "bug_report_scrubber_count": "경로 {0}개, 이메일 {1}개, 토큰 {2}개, appdata 참조 {3}개를 가렸어요.",
   "bug_report_privacy_notice": "이 신고는 CCP 관리자의 비공개 버그 트래커로 전송돼요. 작성한 내용, 위에 표시된 메타데이터, 정보를 지운 크래시 로그가 업로드돼요. Discord나 Patreon 신원은 함께 보내지 않아요. 스크러버가 홈 경로, 이메일 주소, 인식한 토큰을 가렸어요 — 아래 미리보기에서 확인해 주세요. IP 주소는 악용 방지를 위해 호스팅 업체에 보이지만 신고와 함께 저장되지는 않아요.",

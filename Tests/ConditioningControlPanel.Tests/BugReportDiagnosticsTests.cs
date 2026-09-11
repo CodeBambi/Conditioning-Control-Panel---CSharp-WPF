@@ -374,4 +374,53 @@ public class BugReportDiagnosticsTests
                                       + BugReportService.HangReportHeader.Length
                                       + Environment.NewLine.Length);
     }
+
+    // ── The freeze report rides along by default ─────────────────────────────────────────
+    //
+    // The hang_*.txt only ever reached the tracker if the user found and ticked the
+    // "include recent activity log" box, which defaults to off. A user who has just been
+    // task-killing a frozen app is the last person who will go looking for it, so a recent
+    // freeze now ticks the box itself. These pin the decision without a window or a disk.
+
+    [Fact]
+    public void ARecentFreeze_TicksTheBox()
+    {
+        var now = new DateTime(2026, 9, 11, 14, 0, 0);
+
+        Assert.True(BugReportService.ShouldPreAttachHangReport(now.AddMinutes(-3), now, isSuggestion: false));
+        Assert.True(BugReportService.ShouldPreAttachHangReport(now.AddDays(-3), now, isSuggestion: false));
+        // Exactly on the window edge still counts.
+        Assert.True(BugReportService.ShouldPreAttachHangReport(now - BugReportService.RecentHangWindow, now, isSuggestion: false));
+    }
+
+    [Fact]
+    public void NoFreeze_Or_AnOldOne_LeavesTheDefaultAlone()
+    {
+        var now = new DateTime(2026, 9, 11, 14, 0, 0);
+
+        // The overwhelming majority of reports: no hang file at all.
+        Assert.False(BugReportService.ShouldPreAttachHangReport(null, now, isSuggestion: false));
+        // A freeze from last month must not ride along with an unrelated bug.
+        Assert.False(BugReportService.ShouldPreAttachHangReport(now.AddDays(-30), now, isSuggestion: false));
+        Assert.False(BugReportService.ShouldPreAttachHangReport(now - BugReportService.RecentHangWindow - TimeSpan.FromMinutes(1), now, isSuggestion: false));
+    }
+
+    [Fact]
+    public void ASuggestion_NeverCarriesAFreezeReport()
+    {
+        var now = new DateTime(2026, 9, 11, 14, 0, 0);
+
+        // Suggestion mode hides the opt-in entirely and sends no log; a fresh hang must not
+        // sneak one back in through the pre-tick.
+        Assert.False(BugReportService.ShouldPreAttachHangReport(now.AddMinutes(-1), now, isSuggestion: true));
+    }
+
+    [Fact]
+    public void AClockThatWentBackwards_IsNotAFreeze()
+    {
+        var now = new DateTime(2026, 9, 11, 14, 0, 0);
+
+        // A file stamped in the future means the clock moved, not that a freeze is pending.
+        Assert.False(BugReportService.ShouldPreAttachHangReport(now.AddHours(2), now, isSuggestion: false));
+    }
 }

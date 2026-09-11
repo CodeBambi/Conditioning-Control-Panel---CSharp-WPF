@@ -751,6 +751,7 @@
   "bug_report_steps_label": "复现步骤（可选）",
   "bug_report_metadata_label": "将发送的元数据",
   "bug_report_include_log_checkbox": "包含近期活动日志（最近100行）",
+  "bug_report_hang_attached_hint": "将附上 {0} 的卡顿报告。如不需要，请取消勾选。",
   "bug_report_preview_label": "预览（发送到服务器的精确载荷）",
   "bug_report_scrubber_count": "已隐藏 {0} 个路径、{1} 个邮箱、{2} 个令牌、{3} 个应用数据引用",
   "bug_report_privacy_notice": "此报告将发送给CCP维护者的私有问题跟踪器。你的消息、上面显示的元数据和清理后的崩溃日志将被上传。不附带Discord或Patreon身份。清理工具已隐藏识别到的主目录路径、邮箱地址和令牌——检查下面预览确认。IP地址对我们的托管提供商可见用于防滥用，但不与报告一起存储",
