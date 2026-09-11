@@ -350,6 +350,15 @@
                         </StackPanel>
                     </StackPanel>
 
+                    <!-- Exclusive-mode warning. SpeechService and SherpaWakeService both open the
+                         mic with NAudio's WaveInEvent; when another process holds the device in
+                         exclusive mode the StartRecording call throws, the catch logs a warning
+                         and the session returns NotAvailable / false. Nothing reaches the UI, so
+                         the wake word and every spoken prompt just never happen. -->
+                    <TextBlock Text="{loc:Str set2_devices_mic_exclusive_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,0,0,10"/>
+
                     <!-- Input device -->
                     <Grid MinHeight="34" Margin="0,0,0,6"
                           ToolTip="Pick the microphone used for voice (Hey Bambi, mantras, lock cards).">
