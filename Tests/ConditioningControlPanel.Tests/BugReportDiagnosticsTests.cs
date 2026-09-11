@@ -331,4 +331,47 @@ public class BugReportDiagnosticsTests
         Assert.DoesNotContain("session counters cleared", result);
         Assert.DoesNotContain("[Session", result);
     }
+
+    // -- The UI-hang report attachment (ccp-bugs #1189/#1179/#1159/#984) -----------------
+    //
+    // hang_*.txt has existed since v6.8.2 and has never reached us: nothing attached it, so every
+    // freeze report arrived with the feature state (and now the UI thread's managed stack) sitting
+    // unread on the user's disk. These pin the section the report carries.
+
+    [Fact]
+    public void NoHangReport_AddsNoSection()
+    {
+        // The overwhelming majority of reports are not freezes. An empty header would be noise in
+        // every one of them.
+        Assert.Equal(string.Empty, BugReportService.BuildHangReportSection(null));
+        Assert.Equal(string.Empty, BugReportService.BuildHangReportSection(""));
+        Assert.Equal(string.Empty, BugReportService.BuildHangReportSection("   \r\n  "));
+    }
+
+    [Fact]
+    public void AHangReport_IsDelimitedSoTriageCanFindIt()
+    {
+        var section = BugReportService.BuildHangReportSection(
+            "CCP UI-hang report\nop=LockCard.Tick (92s, Send)\nui thread managed stack\n  Foo.Bar()");
+
+        Assert.StartsWith(BugReportService.HangReportHeader, section);
+        Assert.Contains("op=LockCard.Tick (92s, Send)", section);
+        Assert.Contains("Foo.Bar()", section);
+    }
+
+    [Fact]
+    public void AnOversizedHangReport_KeepsTheNewestBytes()
+    {
+        // The stack capture is APPENDED to the report, so it lives at the end. Trimming from the
+        // front is what keeps it; trimming from the back would throw away the only new evidence.
+        var body = new string('x', BugReportService.MaxHangReportChars + 5_000)
+                   + "\nui thread managed stack\n  System.Threading.Monitor.ReliableEnter()";
+
+        var section = BugReportService.BuildHangReportSection(body);
+
+        Assert.Contains("System.Threading.Monitor.ReliableEnter()", section);
+        Assert.True(section.Length <= BugReportService.MaxHangReportChars
+                                      + BugReportService.HangReportHeader.Length
+                                      + Environment.NewLine.Length);
+    }
 }
