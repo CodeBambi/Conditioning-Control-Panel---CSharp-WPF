@@ -68,6 +68,22 @@ import { el, clamp, shuffle } from './util.js';
 /** Marquee period band, seconds. drift 0 -> slow, drift 1 -> fast. */
 const DUR_SLOW_SEC = 44;
 const DUR_FAST_SEC = 12;
+/**
+ * THE WRAP LAW (phone wave, 0911). A row is `reps` copies of its tiles and the
+ * marquee slides exactly ONE copy per cycle, so the wrap is seamless only while
+ * the copies still on screen cover the frame: (reps - 1) x one copy's width
+ * must be >= the frame width. The build-time guess (3 copies under 6 tiles,
+ * else 2) was written against a desktop tile; on a landscape phone a 6-tile
+ * copy is ~560px against a 930px frame, and every cycle the strip's tail
+ * crossed the frame and left a third of the row bare - which the owner read as
+ * "the thumbnails never load". fitWrap() measures the real widths once the
+ * mosaic is in the document (and again on a resize/rotation) and ADDS clone
+ * sets until the law holds. Clone sets are never removed: an extra copy only
+ * costs elements, a missing one costs the illusion. Capped so a degenerate
+ * measurement (a 20px tile in a 4k frame) cannot mint a thousand seats.
+ */
+const WRAP_REPS_MAX = 6;
+const WRAP_FIT_DEBOUNCE_MS = 180;
 
 /* ----------------------------------------------------------------------------
  * LOOK PAINTING - shared by the board tiles and by every card in hud.js, so a
@@ -306,12 +322,17 @@ export function createBoard(o) {
   sizes.forEach((count, r) => {
     const rowEl = el('div', 'g-lf-row');
     const strip = el('div', 'g-lf-strip' + (r % 2 ? ' g-lf-rev' : ''));
-    // Enough repeats that the wrap never exposes a gap on a wide view.
+    // The build-time FLOOR; fitWrap() below grows it against the measured
+    // frame once the mosaic is in the document (see THE WRAP LAW).
     const reps = count <= 5 ? 3 : 2;
     const durSec = (DUR_SLOW_SEC - (DUR_SLOW_SEC - DUR_FAST_SEC) * clamp(opts.drift, 0, 1))
       * (0.85 + 0.3 * rng());
     if (strip) {
       strip.style.setProperty('--g-lf-reps', String(reps));
+      // The attribute picks a var-free keyframe set in styles.js: the shift
+      // is a plain percentage of the strip, nothing a phone engine has to
+      // resolve inside @keyframes.
+      strip.setAttribute('data-lf-reps', String(reps));
       strip.style.setProperty('--g-lf-dur', durSec.toFixed(1) + 's');
       if (reduced) strip.classList.add('g-lf-static');
     }
@@ -437,11 +458,110 @@ export function createBoard(o) {
     if (typeof requestAnimationFrame === 'function') pressRafId = requestAnimationFrame(pressStampLoop);
   }
 
+  /* ------------------------------------------------------------ the wrap */
+  let frozen = false;      // freeze() state, re-applied when a drift restarts
+  let fitTimer = 0;
+  let onResize = null;
+
+  /** Grow one row to `need` clone sets, every new seat wearing the row's
+   *  current looks (bare at build; a rotation mid-class copies the media). */
+  function padRow(row, need) {
+    if (!row || !row.strip) return 0;
+    let added = 0;
+    for (let rep = row.reps; rep < need; rep++) {
+      for (const tile of row.tiles) {
+        const node = buildTileEl(tile, rep);
+        if (!node) continue;
+        try { paintLook(node, tile); } catch (e) { /* the skin still shows */ }
+        row.strip.appendChild(node);
+        added += 1;
+      }
+    }
+    row.reps = need;
+    try {
+      row.strip.style.setProperty('--g-lf-reps', String(need));
+      row.strip.setAttribute('data-lf-reps', String(need));
+    } catch (e) { /* ignore */ }
+    return added;
+  }
+
+  /** The keyframe set changed under a running animation: restart it so every
+   *  engine re-resolves the shift (a frozen wall stays frozen). */
+  function restartDrift(strip) {
+    if (!strip || !strip.style) return;
+    try {
+      strip.style.animation = 'none';
+      void strip.offsetWidth;               // flush, so the reset is observed
+      strip.style.animation = '';
+      strip.style.animationPlayState = frozen ? 'paused' : 'running';
+    } catch (e) { /* ignore */ }
+    refStripAnim = null;                     // the press road re-finds its clock
+  }
+
+  /**
+   * Measure the frame and every row's copy width; add clone sets until
+   * (reps - 1) copies cover the frame. Returns the number of seats added. A
+   * board with no layout (the headless double, a detached mosaic) measures 0
+   * and keeps the build-time floor, which is exactly the old behaviour.
+   */
+  function fitWrap(why) {
+    if (destroyed || !mosaic) return 0;
+    let frameW = 0;
+    try {
+      frameW = mosaic.clientWidth || (mosaic.getBoundingClientRect ? mosaic.getBoundingClientRect().width : 0) || 0;
+    } catch (e) { return 0; }
+    if (!(frameW > 0)) return 0;
+    let added = 0;
+    const grown = [];
+    for (const row of rows) {
+      const strip = row.strip;
+      if (!strip || !row.tiles.length) continue;
+      let total = 0;
+      try {
+        total = strip.scrollWidth || (strip.getBoundingClientRect ? strip.getBoundingClientRect().width : 0) || 0;
+      } catch (e) { continue; }
+      const copyW = total / Math.max(1, row.reps | 0);
+      if (!(copyW > 0)) continue;
+      const need = clamp(Math.ceil(frameW / copyW) + 1, row.reps | 0, WRAP_REPS_MAX);
+      if (need <= row.reps) continue;
+      const before = row.reps;
+      added += padRow(row, need);
+      grown.push('row ' + rows.indexOf(row) + ' x' + before + '->x' + need);
+      restartDrift(strip);
+    }
+    if (added) say('wrap fit (' + (why || 'build') + '): frame ' + Math.round(frameW) + 'px, +' + added + ' seats: ' + grown.join(', '));
+    return added;
+  }
+
+  if (opts.mount && mosaic && opts.mount.appendChild) {
+    // The wall fills the window (immersion wave): the row count is only known
+    // here, so it is PUBLISHED here and styles.js solves the tile height from it
+    // (rows always fill the frame; density never changes with the window - the
+    // tile SIZE breathes, the tile COUNT is a tuned dial).
+    if (opts.mount.style) {
+      opts.mount.style.setProperty('--g-lf-rows', String(sizes.length));
+    }
+    opts.mount.appendChild(mosaic);
+    // In the document now, so the frame and the copies can be measured.
+    fitWrap('build');
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      onResize = () => {
+        if (destroyed) return;
+        if (fitTimer) clearTimeout(fitTimer);
+        fitTimer = setTimeout(() => { fitTimer = 0; fitWrap('resize'); }, WRAP_FIT_DEBOUNCE_MS);
+      };
+      window.addEventListener('resize', onResize);
+      window.addEventListener('orientationchange', onResize);
+    }
+  }
+
   /* ------------------------------------------------------------- budgets */
   /* Every budget here counts what Chromium actually pays for. `maxReps` is the
      multiplier the toroidal wrap applies to every live element, so it has to be
      known before a single url is dealt - which is why this sits AFTER the build
-     rather than at the top of the factory. */
+     AND the wrap fit rather than at the top of the factory. (A rotation that
+     grows the wrap later is not re-budgeted: the caps were set for a smaller
+     wall and an over-shot of one clone set is the cheaper of the two errors.) */
   let maxReps = 1;
   for (const r of rows) maxReps = Math.max(maxReps, (r.reps | 0) || 1);
 
@@ -467,17 +587,6 @@ export function createBoard(o) {
   }
   say('board budgets: ' + density + ' tiles x' + maxReps + ' reps, live cap '
     + liveCap + ', video cap ' + videoCap + (reduced ? ' (reduced motion)' : ''));
-
-  if (opts.mount && mosaic && opts.mount.appendChild) {
-    // The wall fills the window (immersion wave): the row count is only known
-    // here, so it is PUBLISHED here and styles.js solves the tile height from it
-    // (rows always fill the frame; density never changes with the window - the
-    // tile SIZE breathes, the tile COUNT is a tuned dial).
-    if (opts.mount.style) {
-      opts.mount.style.setProperty('--g-lf-rows', String(sizes.length));
-    }
-    opts.mount.appendChild(mosaic);
-  }
 
   function buildTileEl(tile, rep) {
     const node = el('div', 'g-lf-tile');
@@ -753,6 +862,10 @@ export function createBoard(o) {
     },
     /** The PRIMARY element copy of a tile (ceremonies anchor to it). */
     primaryEl(tile) { return tile && tile.els.length ? tile.els[0] : null; },
+    /** Re-measure the wrap now (a host that resized the frame itself). */
+    fitWrap(why) { return fitWrap(why || 'host'); },
+    /** Clone sets per row, after the fit. */
+    repsPerRow() { return rows.map((r) => r.reps | 0); },
     tileFor(node) { return byEl.get(node) || null; },
     targetTile() { return tiles.find((t) => t.target) || null; },
 
@@ -780,6 +893,7 @@ export function createBoard(o) {
      *  Gif tiles cannot be paused from script at all; they are budgeted
      *  instead, which is the whole point of the live window. */
     freeze(on) {
+      frozen = !!on;
       for (const r of rows) {
         if (!r.strip || !r.strip.style) continue;
         try { r.strip.style.animationPlayState = on ? 'paused' : 'running'; } catch (e) { /* ignore */ }
@@ -837,6 +951,11 @@ export function createBoard(o) {
 
     destroy() {
       destroyed = true;
+      if (fitTimer) { clearTimeout(fitTimer); fitTimer = 0; }
+      if (onResize && typeof window !== 'undefined' && window.removeEventListener) {
+        try { window.removeEventListener('resize', onResize); window.removeEventListener('orientationchange', onResize); } catch (e) { /* ignore */ }
+      }
+      onResize = null;
       if (pressRafId && typeof cancelAnimationFrame === 'function') {
         try { cancelAnimationFrame(pressRafId); } catch (e) { /* ignore */ }
       }
