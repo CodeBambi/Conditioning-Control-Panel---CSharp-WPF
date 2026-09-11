@@ -373,7 +373,8 @@ namespace ConditioningControlPanel
         private void UpdateLockdownCountdown(TimeSpan ts)
         {
             if (SettingsTab?.TxtLockdownCountdown != null)
-                SettingsTab.TxtLockdownCountdown.Text = $"{(int)ts.TotalMinutes:D2}:{ts.Seconds:D2}";
+                SettingsTab.TxtLockdownCountdown.Text =
+                    Services.SessionClockLabel.RailClock(ts, App.Settings?.Current?.HideLockdownTimer == true);
         }
 
         /// <summary>

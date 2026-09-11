@@ -105,6 +105,7 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
                 Set(ChkAutoRun, s.AutoStartEngine);
                 Set(ChkVidLaunch, s.ForceVideoOnLaunch);
                 Set(ChkEnableDeeper, s.EnableDeeper);
+                Set(ChkShowSessionCountdown, s.ShowSessionCountdown);
 
                 static void Set(CheckBox box, bool value)
                 {
@@ -180,6 +181,21 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
             s.AutoStartEngine = want;
             App.Settings?.Save();
             App.Logger?.Information("Auto-start engine set to {Enabled} (Settings/General)", want);
+        }
+
+        // =====================================================================================
+        //  display
+        // =====================================================================================
+
+        private void ChkShowSessionCountdown_Changed(object sender, RoutedEventArgs e)
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var want = ChkShowSessionCountdown.IsChecked ?? false;
+            if (s.ShowSessionCountdown == want) return;   // seeding echo, not a user edit
+            s.ShowSessionCountdown = want;
+            App.Settings?.Save();
+            App.Logger?.Information("Session countdown set to {Enabled} (Settings/General)", want);
         }
 
         private void ChkVidLaunch_Changed(object sender, RoutedEventArgs e)

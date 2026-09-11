@@ -864,8 +864,10 @@ namespace ConditioningControlPanel
             });
         }
 
+        /// <summary>Every lockdown clock on this window comes through here, so HideLockdownTimer
+        /// masks the page, the badge and the restart repaint in the same frame.</summary>
         private static string FormatLockdownClock(TimeSpan remaining) =>
-            remaining.TotalHours >= 1 ? remaining.ToString(@"h\:mm\:ss") : remaining.ToString(@"mm\:ss");
+            Services.SessionClockLabel.LockdownClock(remaining, App.Settings?.Current?.HideLockdownTimer == true);
 
         // --- The lockdown badge -------------------------------------------------------
         // A crimson pill in the title bar's status row. It exists because the Lockdown page is the
@@ -1150,7 +1152,8 @@ namespace ConditioningControlPanel
 
                 if (on)
                 {
-                    if (LockdownTab.TxtLockdownTimer != null) LockdownTab.TxtLockdownTimer.Text = "09:41";
+                    if (LockdownTab.TxtLockdownTimer != null)
+                        LockdownTab.TxtLockdownTimer.Text = FormatLockdownClock(new TimeSpan(0, 9, 41));
                     LockdownTab.StartEmergencyExitPulse();
 
                     if (LockdownTab.TxtPossessionRung != null)

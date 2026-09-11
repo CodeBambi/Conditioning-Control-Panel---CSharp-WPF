@@ -2471,6 +2471,16 @@ namespace ConditioningControlPanel.Models
             set { _startMinimized = value; OnPropertyChanged(); }
         }
 
+        // Off: the START button and the Presets tab's stop button show the session name and its
+        // state without the MM:SS. Not everyone wants to watch the timer tick. Settings / General /
+        // Display; read on every engine tick (MainWindow.Presets.cs OnSessionProgressUpdated).
+        private bool _showSessionCountdown = true;
+        public bool ShowSessionCountdown
+        {
+            get => _showSessionCountdown;
+            set { _showSessionCountdown = value; OnPropertyChanged(); }
+        }
+
         private bool _autoStartEngine = false;
         public bool AutoStartEngine
         {
@@ -3303,6 +3313,16 @@ namespace ConditioningControlPanel.Models
         {
             get => _lockdownAudioTics;
             set { _lockdownAudioTics = value; OnPropertyChanged(); }
+        }
+
+        // Hide the lockdown clock: the Lockdown page, the title-bar badge and the Home rail chip
+        // show dots instead of the time left (Services/SessionClockLabel.cs). The timer itself is
+        // untouched, and the digits' element stays put - it is also the five-click exit handle.
+        private bool _hideLockdownTimer = false;
+        public bool HideLockdownTimer
+        {
+            get => _hideLockdownTimer;
+            set { _hideLockdownTimer = value; OnPropertyChanged(); }
         }
 
         // "It remembers": set when a Full Doki lockdown ENDS, spent ~20 s into the next launch as one

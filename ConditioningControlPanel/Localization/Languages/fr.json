@@ -5151,5 +5151,9 @@
   "title_rabbit_hole": "The Rabbit Hole",
   "msg_rabbit_hole_open_failed": "The Rabbit Hole ne s'est pas ouvert :\n\n",
   "title_audio_layers": "Couches audio",
-  "msg_audio_layers_open_failed": "Couches audio n'a pas pu s'ouvrir.\n\n{0}\n\nLes détails complets sont dans le journal de l'app. Joins-les si tu le signales."
+  "msg_audio_layers_open_failed": "Couches audio n'a pas pu s'ouvrir.\n\n{0}\n\nLes détails complets sont dans le journal de l'app. Joins-les si tu le signales.",
+  "lockdown_hide_timer": "Masquer l'horloge",
+  "lockdown_hide_timer_tip": "Des points à la place du temps restant, ici et dans la barre de titre. Le verrouillage se termine quand même à l'heure.",
+  "set2_general_show_countdown": "Compte à rebours de session",
+  "set2_general_show_countdown_tip": "Affiche le temps restant sur le bouton START pendant une session. Désactivé, le bouton n'affiche que le nom de la session."
 }

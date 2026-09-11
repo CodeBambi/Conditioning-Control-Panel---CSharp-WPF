@@ -139,6 +139,26 @@
                     </StackPanel>
 
                     <feat:MonitorTargetPicker x:Name="ContentMonitorPicker" x:FieldModifier="internal"/>
+
+                    <!-- The START button's MM:SS while a session runs. It sits here because the
+                         button is title-bar chrome on every tab, and this card is where the rest of
+                         "how the window looks" lives. Default on; AppSettings.ShowSessionCountdown. -->
+                    <Border Style="{StaticResource SettingChip}" Margin="0,8,0,0"
+                            ToolTip="{loc:Str set2_general_show_countdown_tip}">
+                        <Grid MinHeight="22">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{loc:Str set2_general_show_countdown}"
+                                       Foreground="{DynamicResource TextLightBrush}"
+                                       FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <CheckBox Grid.Column="1" x:Name="ChkShowSessionCountdown" x:FieldModifier="internal"
+                                      Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                      Checked="ChkShowSessionCountdown_Changed" Unchecked="ChkShowSessionCountdown_Changed"/>
+                        </Grid>
+                    </Border>
                 </StackPanel>
             </Grid>
         </Border>

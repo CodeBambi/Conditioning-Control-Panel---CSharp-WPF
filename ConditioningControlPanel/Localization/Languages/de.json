@@ -5151,5 +5151,9 @@
   "title_rabbit_hole": "The Rabbit Hole",
   "msg_rabbit_hole_open_failed": "The Rabbit Hole konnte nicht geöffnet werden:\n\n",
   "title_audio_layers": "Audio-Ebenen",
-  "msg_audio_layers_open_failed": "Audio-Ebenen wurden nicht geöffnet.\n\n{0}\n\nDie vollständigen Angaben stehen im App-Log. Leg sie bei, wenn du das meldest."
+  "msg_audio_layers_open_failed": "Audio-Ebenen wurden nicht geöffnet.\n\n{0}\n\nDie vollständigen Angaben stehen im App-Log. Leg sie bei, wenn du das meldest.",
+  "lockdown_hide_timer": "Uhr ausblenden",
+  "lockdown_hide_timer_tip": "Punkte statt der Restzeit, hier und in der Titelleiste. Der Lockdown endet trotzdem pünktlich.",
+  "set2_general_show_countdown": "Sitzungs-Countdown",
+  "set2_general_show_countdown_tip": "Zeigt die Restzeit auf der START-Taste, solange eine Sitzung läuft. Aus: die Taste zeigt nur den Sitzungsnamen."
 }

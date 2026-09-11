@@ -5150,5 +5150,9 @@
   "title_rabbit_hole": "The Rabbit Hole",
   "msg_rabbit_hole_open_failed": "The Rabbit Hole não abriu:\n\n",
   "title_audio_layers": "Camadas de áudio",
-  "msg_audio_layers_open_failed": "Camadas de áudio não conseguiu abrir.\n\n{0}\n\nOs detalhes completos estão no log do app. Inclua-os se você reportar."
+  "msg_audio_layers_open_failed": "Camadas de áudio não conseguiu abrir.\n\n{0}\n\nOs detalhes completos estão no log do app. Inclua-os se você reportar.",
+  "lockdown_hide_timer": "Ocultar o relógio",
+  "lockdown_hide_timer_tip": "Pontos no lugar do tempo restante, aqui e na barra de título. O lockdown termina na hora mesmo assim.",
+  "set2_general_show_countdown": "Contagem regressiva da sessão",
+  "set2_general_show_countdown_tip": "Mostra o tempo restante no botão START enquanto uma sessão roda. Desligado, o botão mostra só o nome da sessão."
 }
