@@ -109,7 +109,7 @@ namespace ConditioningControlPanel
             ChkRestore.IsChecked = plan.ShowRestoreRow;
             TxtRestoreLabel.Text = Str("wb_restore_label", "Restore my settings from the cloud backup");
             TxtRestoreHint.Text = Str("wb_restore_hint",
-                "Your sliders, doors and preferences replace this PC's defaults. Your content folder, your level and your unlocks stay exactly as they are.");
+                "Your sliders, doors and preferences replace this PC's defaults. Your level, your XP and your unlocks are untouched.");
 
             // ---- flavour ----
             RowFlavour.Visibility = plan.ShowFlavourRow ? Visibility.Visible : Visibility.Collapsed;
@@ -132,7 +132,7 @@ namespace ConditioningControlPanel
                        _content.VersionLabel);
             TxtNotes.Text = _content.PatchNotes;
 
-            TxtTour.Text = Str("wb_tour", "Show me around (60 s)");
+            TxtTour.Text = Str("wb_tour", "Show me around (60 seconds)");
             TxtTour.Visibility = _content.TourAction != null ? Visibility.Visible : Visibility.Collapsed;
 
             // ---- season ----
