@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
@@ -149,7 +149,7 @@ namespace ConditioningControlPanel.Features
                 ChkSolidMode.IsChecked = s.BubbleSharedHost;
                 ChkBubbleGazePop.IsChecked = s.BubbleGazePopEnabled;
 
-                // Easter-egg hint (companion auto-pops a lingering effect bubble) — name the active persona.
+                // Easter-egg hint (companion auto-pops a lingering effect bubble): name the active persona.
                 var persona = App.Mods?.ActiveModId switch
                 {
                     "builtin-bambisleep" => "Bambi",
@@ -157,7 +157,7 @@ namespace ConditioningControlPanel.Features
                     "builtin-locked" => "Circe",
                     _ => "your companion"
                 };
-                TxtTriggerEggHint.Text = $"careful — {persona} loves these…";
+                TxtTriggerEggHint.Text = Localization.Loc.GetF("label_trigger_bubbles_egg_hint", persona);
 
                 ChkTriggers.IsChecked = s.BubbleTriggersEnabled;
                 TriggerOptionsPanel.Visibility = s.BubbleTriggersEnabled
