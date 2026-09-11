@@ -4046,6 +4046,58 @@ namespace ConditioningControlPanel.Models
             set { _lockCardRepeats = Math.Clamp(value, 1, 10); OnPropertyChanged(); }
         }
         
+        private bool _lockCardRandomRepeats = false;
+        /// <summary>
+        /// When true the repeat count is rolled per card instead of being fixed, between
+        /// <see cref="LockCardRepeatsMin"/> and <see cref="LockCardRepeats"/> inclusive.
+        /// Default false, so a user who never touches it keeps the flat count they had.
+        /// </summary>
+        public bool LockCardRandomRepeats
+        {
+            get => _lockCardRandomRepeats;
+            set { _lockCardRandomRepeats = value; OnPropertyChanged(); }
+        }
+
+        private int _lockCardRepeatsMin = 1; // Floor of the random range (1-10)
+        /// <summary>
+        /// Floor of the random repeat range. Only read when <see cref="LockCardRandomRepeats"/> is
+        /// on; a floor above <see cref="LockCardRepeats"/> is sorted out by the resolver rather
+        /// than by forcing the two sliders to chase each other in the UI.
+        /// </summary>
+        public int LockCardRepeatsMin
+        {
+            get => _lockCardRepeatsMin;
+            set { _lockCardRepeatsMin = Math.Clamp(value, 1, 10); OnPropertyChanged(); }
+        }
+
+        private bool _lockCardTargetLengthEnabled = false;
+        /// <summary>
+        /// When true the repeat count is derived from how much TYPING a card is worth rather than
+        /// from a count: a target character budget is rolled, and the phrase is repeated until it
+        /// covers that budget. A fifteen-character phrase and a sixty-character one then cost about
+        /// the same. Overrides both the fixed count and <see cref="LockCardRandomRepeats"/>.
+        /// Default false.
+        /// </summary>
+        public bool LockCardTargetLengthEnabled
+        {
+            get => _lockCardTargetLengthEnabled;
+            set { _lockCardTargetLengthEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _lockCardTargetLength = 120; // Characters to type per card (20-600)
+        public int LockCardTargetLength
+        {
+            get => _lockCardTargetLength;
+            set { _lockCardTargetLength = Math.Clamp(value, 20, 600); OnPropertyChanged(); }
+        }
+
+        private int _lockCardTargetLengthVariance = 20; // +/- characters on the rolled target (0-200)
+        public int LockCardTargetLengthVariance
+        {
+            get => _lockCardTargetLengthVariance;
+            set { _lockCardTargetLengthVariance = Math.Clamp(value, 0, 200); OnPropertyChanged(); }
+        }
+
         private bool _lockCardStrict = false; // No ESC escape
         public bool LockCardStrict
         {
