@@ -146,6 +146,10 @@ namespace ConditioningControlPanel
 
                 // The clocks hold card references, and every one of them just went stale.
                 ApplyDashboardFxLoops();
+
+                // ... and so did the nine pencils, which sit in the hosts the cards just moved
+                // into. Rebuilt last so they end up on top of whatever the slot now holds.
+                BuildDashboardPencils(hosts);
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "RenderDashboardSlots failed"); }
         }
@@ -330,15 +334,17 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Price tags. A tile the account cannot open wears the rail's own lock wording; an
-        /// entitled one, or one whose feature is today's free rotation, wears nothing at all -
-        /// absence is how this wall says "free", and the default layout is all free, so the
-        /// shipped wall carries no tag but the tease's.
+        /// Price tags. A tile the account cannot open wears the rail's own lock wording, the
+        /// animated tier rim and a lockband along its bottom edge; an entitled one, or one whose
+        /// feature is today's free rotation, wears nothing at all - absence is how this wall says
+        /// "free", and the default layout is all free, so the shipped wall carries no tag but the
+        /// tease's.
         ///
         /// <para>Deliberately NOT <c>TeaseTier</c>, which the plan's shorthand named: that
-        /// property is the tease COSTUME (it blurs the art past recognition and hangs a "?" over
+        /// property is the tease COSTUME (it blurs the art past recognition and hangs a glyph over
         /// it), and a locked door the user chose to put on their wall must still show what it is.
-        /// The livery rim therefore stays the tease's alone.</para>
+        /// <see cref="FeatureCard.LockedTier"/> is the same livery without the disguise, and the
+        /// card keeps the two apart itself so no tile is ever wearing both.</para>
         /// </summary>
         internal void RefreshDashboardLivery()
         {
@@ -348,14 +354,11 @@ namespace ConditioningControlPanel
                 foreach (var (card, f) in _dashboardCardRows)
                 {
                     if (string.Equals(f.Key, "justdrop", StringComparison.OrdinalIgnoreCase)) continue;
-                    if (f.Tier <= 0) { card.TierBadge = null; continue; }
+                    if (f.Tier <= 0) { card.TierBadge = null; card.LockedTier = 0; continue; }
 
-                    var name = DashboardTitle(f);
-                    var verdict = f.Tier >= 2
-                        ? (f.DailyFreeKey != null ? TierGate.RequiresLab(name, f.DailyFreeKey) : TierGate.RequiresLab(name))
-                        : (f.DailyFreeKey != null ? TierGate.RequiresPremium(name, f.DailyFreeKey) : TierGate.RequiresPremium(name));
-
-                    SetTierBadge(card, verdict.Allowed, Loc.Get(f.Tier >= 2 ? "hm3_rail_lock_t2" : "hm3_rail_lock_t1"));
+                    var allowed = IsDashboardFeatureEntitled(f);
+                    SetTierBadge(card, allowed, Loc.Get(f.Tier >= 2 ? "hm3_rail_lock_t2" : "hm3_rail_lock_t1"));
+                    card.LockedTier = allowed ? 0 : f.Tier;
                 }
 
                 // The tease owns its own badge, blur and title as one costume.
@@ -364,16 +367,32 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("RefreshDashboardLivery: {E}", ex.Message); }
         }
 
+        /// <summary>
+        /// May this account open <paramref name="f"/> right now? One reader for the wall and the
+        /// picker both, so a tile and its entry in the picker can never disagree about the bar.
+        /// Presentation only - <see cref="TierGate"/> is still the only thing that refuses, and
+        /// it is asked again at the click.
+        /// </summary>
+        internal static bool IsDashboardFeatureEntitled(DashboardFeature f)
+        {
+            if (f == null || f.Tier <= 0) return true;
+            var name = DashboardTitle(f);
+            var verdict = f.Tier >= 2
+                ? (f.DailyFreeKey != null ? TierGate.RequiresLab(name, f.DailyFreeKey) : TierGate.RequiresLab(name))
+                : (f.DailyFreeKey != null ? TierGate.RequiresPremium(name, f.DailyFreeKey) : TierGate.RequiresPremium(name));
+            return verdict.Allowed;
+        }
+
         // ---- helpers -------------------------------------------------------------------
 
-        private static string DashboardTitle(DashboardFeature f)
+        internal static string DashboardTitle(DashboardFeature f)
         {
             if (f.TitleLocKey == null) return f.TitleLiteral ?? f.Key;
             var english = DashboardEnglishTitles.TryGetValue(f.Key, out var e) ? e : Loc.Get(f.TitleLocKey);
             return StripLeadingGlyph(ModAwareLabel(english, f.TitleLocKey));
         }
 
-        private static System.Windows.Media.ImageSource? DashboardArt(DashboardFeature f)
+        internal static System.Windows.Media.ImageSource? DashboardArt(DashboardFeature f)
             => ModResourceResolver.ResolveImageDecoded(f.ArtPath, TileDecodeWidth)
                ?? ModResourceResolver.ResolveImage(f.ArtPath);
     }

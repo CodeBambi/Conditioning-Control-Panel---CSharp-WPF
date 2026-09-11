@@ -1,4 +1,4 @@
-<UserControl x:Class="ConditioningControlPanel.Features.FeatureCard"
+﻿<UserControl x:Class="ConditioningControlPanel.Features.FeatureCard"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Cursor="Hand"
@@ -89,6 +89,37 @@
                            Foreground="White"
                            FontSize="12"
                            FontWeight="SemiBold"/>
+            </Border>
+
+            <!-- LOCKBAND. Shown only when LockedTier > 0 (FeatureCard.ApplyLockedLivery):
+                 a tile the account cannot open yet, put there on purpose by the user, wearing
+                 the rail chip's own lock recipe - the same ~66% scrim, the same 1px tier
+                 hairline, the same padlock - so one bar reads the same wherever it appears.
+
+                 A STRIP, not a curtain. The rail band covers a 69px chip whole; a mosaic tile
+                 is art the user chose to look at, and the wall settled long ago that a locked
+                 tile keeps its art bright and names its price in the badge
+                 (MainWindow.PlayTab.cs:107-108). So the scrim is 15px of the bottom edge, the
+                 corner radius follows RootBorder's inner arc instead of the chip's 8, and the
+                 title above it is lifted by the same 15 while the band is up.
+
+                 Glyph only, no words: the price is already written in TierBadgeHost at the top
+                 left, and one 150px tile saying "Patron only" twice is worse than saying it
+                 once. IsHitTestVisible=False like every other overlay here - the click still
+                 lands on the real handler, which is what raises TierGate's toast. -->
+            <Border x:Name="LockBand"
+                    VerticalAlignment="Bottom"
+                    Height="15"
+                    CornerRadius="0,0,11,11"
+                    Background="#A8120A1E"
+                    BorderThickness="0,1,0,0"
+                    IsHitTestVisible="False"
+                    Panel.ZIndex="9"
+                    Visibility="Collapsed">
+                <Image x:Name="ImgLockBandGlyph"
+                       Width="10" Height="10"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
             </Border>
 
             <!-- Hover rim-light. A separate 1.5px ring rather than a brush swap on RootBorder:

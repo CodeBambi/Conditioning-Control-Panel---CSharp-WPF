@@ -5101,6 +5101,7 @@
   "inbox_dismiss": "破棄",
   "inbox_tooltip": "静かなときを待っていたものたち",
   "dash_toggle_hint": "タイルを右クリックでオン/オフ · 左クリックで開く",
+  "dash_pencil_tip": "このタイルを変更",
   "dash_toggle_hint_rail": "右クリック = オン/オフ",
   "inbox_programs_title": "プログラム",
   "inbox_programs_summary": "プログラムとは何か、そして今日のおすすめ。",

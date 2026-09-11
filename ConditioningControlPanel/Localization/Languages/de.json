@@ -5110,6 +5110,7 @@
   "inbox_dismiss": "Verwerfen",
   "inbox_tooltip": "Dinge, die auf einen ruhigeren Moment gewartet haben",
   "dash_toggle_hint": "Rechtsklick auf eine Kachel schaltet sie ein oder aus · Linksklick öffnet sie",
+  "dash_pencil_tip": "Diese Kachel ändern",
   "dash_toggle_hint_rail": "Rechtsklick = an/aus",
   "inbox_programs_title": "Programme",
   "inbox_programs_summary": "was ein Programm ist, und die Auswahl von heute.",

@@ -5108,6 +5108,7 @@
   "inbox_dismiss": "Убрать",
   "inbox_tooltip": "То, что ждало более спокойного момента",
   "dash_toggle_hint": "правый клик по плитке включает или выключает её · левый клик открывает",
+  "dash_pencil_tip": "Изменить эту плитку",
   "dash_toggle_hint_rail": "ПКМ = вкл/выкл",
   "inbox_programs_title": "Программы",
   "inbox_programs_summary": "что такое программа и выбор на сегодня.",

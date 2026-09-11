@@ -105,6 +105,7 @@
   "inbox_dismiss": "Dismiss",
   "inbox_tooltip": "Things that were waiting for a quieter moment",
   "dash_toggle_hint": "right-click a tile to switch it on or off · left-click opens it",
+  "dash_pencil_tip": "Change this tile",
   "dash_toggle_hint_rail": "right-click = on/off",
   "inbox_programs_title": "Programs",
   "inbox_programs_summary": "what a program is, and today's pick.",

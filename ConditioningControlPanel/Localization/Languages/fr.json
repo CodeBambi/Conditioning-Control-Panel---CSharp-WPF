@@ -5110,6 +5110,7 @@
   "inbox_dismiss": "Ignorer",
   "inbox_tooltip": "Ce qui attendait un moment plus calme",
   "dash_toggle_hint": "clic droit sur une tuile pour l'activer ou la désactiver · clic gauche pour l'ouvrir",
+  "dash_pencil_tip": "Changer cette tuile",
   "dash_toggle_hint_rail": "clic droit = on/off",
   "inbox_programs_title": "Programmes",
   "inbox_programs_summary": "ce qu'est un programme, et le choix du jour.",
