@@ -257,6 +257,9 @@ namespace ConditioningControlPanel
                     // first render (LoadFeatureImages in the ctor normally gets there first); this
                     // is the safety net for a Home tab shown before that ever ran.
                     EnsureDashboardSlotsRendered();
+                    // ... and re-render it if something rewrote the setting behind our back
+                    // (a cloud adopt, a settings restore). A no-op the rest of the time.
+                    SyncDashboardLayoutFromSettings();
                     RefreshPremiumRail(); // recompute chip dots (incl. Voice) from live state on every show
                     // Training Programs own the day's feature mix. Re-derived (never latched) on
                     // every show of the Dashboard, so arriving here can never find a stale lock -

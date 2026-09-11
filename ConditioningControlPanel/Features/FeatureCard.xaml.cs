@@ -53,11 +53,25 @@ namespace ConditioningControlPanel.Features
         /// thing the card is allowed to say, so it gets to be seen.</summary>
         private const double TeaseBorderThickness = 2;
 
+        /// <summary>A locked tile's rim is the same 2px as a teased one, and for the same
+        /// reason. Shared so the two costumes cannot drift a pixel apart.</summary>
+        private const double LockedBorderThickness = TeaseBorderThickness;
+
+        /// <summary>Height of the lockband strip; the title is lifted by exactly this much
+        /// while the band is up, so the two never overlap.</summary>
+        private const double LockBandHeight = 15;
+
         /// <summary>Rounded clip for the card's content, matching RootBorder's inner arc
         /// (CornerRadius 12 minus the 1px border). A Border never clips its CHILDREN to its
         /// CornerRadius - ClipToBounds is rectangular - so without this the full-bleed art
         /// (and its 1.06 hover zoom) paints square corners that poke past the rounded frame.</summary>
         private const double ContentClipRadius = 11;
+
+        /// <summary>The title strip's authored margin (FeatureCard.xaml), and the same margin
+        /// with the lockband's height added underneath it. Held here rather than read back off
+        /// the element, so a lock applied twice cannot walk the title up the card.</summary>
+        private static readonly Thickness TitleRestMargin = new(8, 14, 8, 8);
+        private static readonly Thickness TitleLockedMargin = new(8, 14, 8, 8 + LockBandHeight);
 
         private Window? _hostWindow;
         private bool _hovered;
@@ -101,6 +115,10 @@ namespace ConditioningControlPanel.Features
         public static readonly DependencyProperty TeaseTierProperty =
             DependencyProperty.Register(nameof(TeaseTier), typeof(int), typeof(FeatureCard),
                 new PropertyMetadata(0, OnTeaseTierChanged));
+
+        public static readonly DependencyProperty LockedTierProperty =
+            DependencyProperty.Register(nameof(LockedTier), typeof(int), typeof(FeatureCard),
+                new PropertyMetadata(0, OnLockedTierChanged));
 
         public static readonly RoutedEvent ClickEvent =
             EventManager.RegisterRoutedEvent(nameof(Click), RoutingStrategy.Bubble,
@@ -217,6 +235,27 @@ namespace ConditioningControlPanel.Features
             set => SetValue(TeaseTierProperty, value);
         }
 
+        /// <summary>
+        /// Puts the LOCKED livery on a tile whose feature this account cannot open: 0 = none,
+        /// 1 = gold rim, 2 = diamond rim. Any other positive value is treated as diamond.
+        ///
+        /// <para>Deliberately not <see cref="TeaseTier"/>. A tease hides what the feature is;
+        /// a locked tile is one the user picked and put on their own wall, so it keeps its name
+        /// and its art in full and only wears the price: the animated tier rim, the badge in the
+        /// same metal, and a lockband along the bottom edge. No blur, no veil, no glyph over the
+        /// art.</para>
+        ///
+        /// <para>Fully reversible, like the tease costume: 0 restores the theme-tracking border
+        /// and badge brushes through <see cref="FrameworkElement.SetResourceReference"/> rather
+        /// than freezing them at whatever the theme was when the lock came off. A card is never
+        /// both teased and locked - the tease wins, and this collapses itself while it is on.</para>
+        /// </summary>
+        public int LockedTier
+        {
+            get => (int)GetValue(LockedTierProperty);
+            set => SetValue(LockedTierProperty, value);
+        }
+
         public event RoutedEventHandler Click
         {
             add => AddHandler(ClickEvent, value);
@@ -315,11 +354,18 @@ namespace ConditioningControlPanel.Features
             }
             c.TxtTierBadge.Text = text;
             c.TierBadgeHost.Visibility = Visibility.Visible;
-            // A teased card's badge is worn in the livery metal, not in pink. Re-applied here
-            // (not only on the TeaseTier change) because the two properties are written in
-            // whichever order the caller happens to use, and the badge is rewritten far more
-            // often than the tease is.
+            // A costumed card's badge is worn in the livery metal, not in pink - and that is true
+            // of a LOCKED card as much as a teased one. Re-applied here (not only on the
+            // TeaseTier / LockedTier change) because the properties are written in whichever
+            // order the caller happens to use, and the badge is rewritten far more often than
+            // either costume is: the wall's livery pass sets TierBadge then LockedTier on every
+            // render, so a badge written second would otherwise come out pink on a locked tile.
+            //
+            // Whichever costume owns the rim is the one asked. Tease wins - it is the louder of
+            // the two and ApplyLockedLivery defers to it - so asking the owner directly here is
+            // what keeps the two from handing the rim back and forth.
             if (c.TeaseTier > 0) c.ApplyTeaseState();
+            else if (c.LockedTier > 0) c.ApplyLockedLivery();
         }
 
         private static void OnTeaseTierChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -350,8 +396,15 @@ namespace ConditioningControlPanel.Features
                     RootBorder.BorderThickness = new Thickness(1);
                     TierBadgeHost.SetResourceReference(Border.BorderBrushProperty, "PinkBrush");
                     TxtTierBadge.SetResourceReference(TextBlock.ForegroundProperty, "PinkBrush");
+                    // The costume is off; if this tile is also a door the account cannot open,
+                    // the locked livery takes the rim back rather than being left cleared.
+                    ApplyLockedLivery();
                     return;
                 }
+
+                // The tease is louder than the lock and wears the rim alone while it is on.
+                LockBand.Visibility = Visibility.Collapsed;
+                TxtTitle.Margin = TitleRestMargin;
 
                 var livery = TierLivery.BorderBrush(TeaseTier);
 
@@ -385,6 +438,81 @@ namespace ConditioningControlPanel.Features
                 Controls.TierFxBorder.SetTier(RootBorder, TeaseTier);
             }
             catch (Exception ex) { App.Logger?.Debug("FeatureCard.ApplyTeaseState: {E}", ex.Message); }
+        }
+
+        private static void OnLockedTierChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is FeatureCard c) c.ApplyLockedLivery();
+        }
+
+        /// <summary>
+        /// Puts on (or takes off) the locked livery. Same reversibility contract as
+        /// <see cref="ApplyTeaseState"/> - and the same two writers on one rim, which is why the
+        /// two hand it back and forth here instead of each clearing it blind.
+        /// </summary>
+        private void ApplyLockedLivery()
+        {
+            try
+            {
+                if (LockBand == null || RootBorder == null) return;
+
+                // The tease owns the rim while it is on, and it is a whole costume: blur, veil,
+                // glyph and all. A locked band under it would be the one tile saying both "you
+                // cannot have this" and "you cannot know what this is".
+                if (TeaseTier > 0)
+                {
+                    LockBand.Visibility = Visibility.Collapsed;
+                    TxtTitle.Margin = TitleRestMargin;
+                    return;
+                }
+
+                if (LockedTier <= 0)
+                {
+                    LockBand.Visibility = Visibility.Collapsed;
+                    TxtTitle.Margin = TitleRestMargin;
+                    Controls.TierFxBorder.SetTier(RootBorder, 0);
+                    RootBorder.SetResourceReference(Border.BorderBrushProperty, "GlassBorderBrush");
+                    RootBorder.BorderThickness = new Thickness(1);
+                    TierBadgeHost.SetResourceReference(Border.BorderBrushProperty, "PinkBrush");
+                    TxtTierBadge.SetResourceReference(TextBlock.ForegroundProperty, "PinkBrush");
+                    return;
+                }
+
+                var livery = TierLivery.BorderBrush(LockedTier);
+
+                LockBand.BorderBrush = LockBandBrush(LockedTier);
+                LockBand.Visibility = Visibility.Visible;
+                TxtTitle.Margin = TitleLockedMargin;
+
+                RootBorder.BorderBrush = livery;
+                RootBorder.BorderThickness = new Thickness(LockedBorderThickness);
+                TierBadgeHost.BorderBrush = livery;
+                TxtTierBadge.Foreground = livery;
+
+                // Living metal, the same band the tease and the vault wear. RimThickness must
+                // match the stroke set above or the highlight slides off the metal.
+                Controls.TierFxBorder.SetRimThickness(RootBorder, LockedBorderThickness);
+                Controls.TierFxBorder.SetTier(RootBorder, LockedTier);
+            }
+            catch (Exception ex) { App.Logger?.Debug("FeatureCard.ApplyLockedLivery: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// The lockband hairline, which is the RAIL's pair (#F0C24B / #B47BFF) rather than
+        /// <see cref="TierLivery"/>'s. The rail's Tier 2 band is violet where the livery rim is
+        /// ice-cyan, and the difference is deliberate: the rim is the metal, the band is the bar.
+        /// Literals rather than a resource lookup for the same reason <see cref="TierLivery"/>
+        /// carries fallbacks - a missing brush must degrade, never throw inside card construction
+        /// - and the rail's own brushes are local to its subtree, so there is nothing here to
+        /// look up anyway.
+        /// </summary>
+        private static Brush LockBandBrush(int tier)
+        {
+            var brush = new SolidColorBrush(tier >= 2
+                ? Color.FromRgb(0xB4, 0x7B, 0xFF)
+                : Color.FromRgb(0xF0, 0xC2, 0x4B));
+            brush.Freeze();
+            return brush;
         }
 
         private static void OnHelpSectionIdChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

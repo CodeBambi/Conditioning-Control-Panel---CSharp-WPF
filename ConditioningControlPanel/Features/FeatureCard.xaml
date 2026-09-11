@@ -1,4 +1,4 @@
-<UserControl x:Class="ConditioningControlPanel.Features.FeatureCard"
+﻿<UserControl x:Class="ConditioningControlPanel.Features.FeatureCard"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Cursor="Hand"
@@ -91,6 +91,49 @@
                            FontWeight="SemiBold"/>
             </Border>
 
+            <!-- LOCKBAND. Shown only when LockedTier > 0 (FeatureCard.ApplyLockedLivery):
+                 a tile the account cannot open yet, put there on purpose by the user, wearing
+                 the rail chip's own lock recipe - the same ~66% scrim, the same 1px tier
+                 hairline, the same padlock - so one bar reads the same wherever it appears.
+
+                 A STRIP, not a curtain. The rail band covers a 69px chip whole; a mosaic tile
+                 is art the user chose to look at, and the wall settled long ago that a locked
+                 tile keeps its art bright and names its price in the badge
+                 (MainWindow.PlayTab.cs:107-108). So the scrim is 15px of the bottom edge, the
+                 corner radius follows RootBorder's inner arc instead of the chip's 8, and the
+                 title above it is lifted by the same 15 while the band is up.
+
+                 Glyph only, no words: the price is already written in TierBadgeHost at the top
+                 left, and one 150px tile saying "Patron only" twice is worse than saying it
+                 once. IsHitTestVisible=False like every other overlay here - the click still
+                 lands on the real handler, which is what raises TierGate's toast. -->
+            <Border x:Name="LockBand"
+                    VerticalAlignment="Bottom"
+                    Height="15"
+                    CornerRadius="0,0,11,11"
+                    Background="#A8120A1E"
+                    BorderThickness="0,1,0,0"
+                    IsHitTestVisible="False"
+                    Panel.ZIndex="5"
+                    Visibility="Collapsed">
+                <Image x:Name="ImgLockBandGlyph"
+                       Width="10" Height="10"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
+            </Border>
+
+            <!-- THE OVERLAY STACK, bottom to top: art and title (0), the lockband (5), the hover
+                 rim-light (6), the active ring (7), the XP lock veil (8), then the "?" (10) and
+                 the tier badge (11) above everything.
+
+                 The numbers are explicit from the band up because declaration order alone gets
+                 it wrong: the band is authored before the rings so its 15px scrim can sit over
+                 the title gradient, but it must still pass UNDER both of them. A band painting
+                 over the active ring cut a notch out of the "this feature is on" stroke, and one
+                 painting over the XP veil put a bright bar across a card whose whole point was
+                 that it is dark. The title lift (TitleLockedMargin) is unaffected: it is a
+                 margin, not a Z question. -->
+
             <!-- Hover rim-light. A separate 1.5px ring rather than a brush swap on RootBorder:
                  the root border brush is a DynamicResource and animating it would mean cloning
                  the brush per card. Opacity-only, 150ms, driven from code-behind. -->
@@ -99,6 +142,7 @@
                     BorderThickness="1.5"
                     CornerRadius="12"
                     IsHitTestVisible="False"
+                    Panel.ZIndex="6"
                     Opacity="0"/>
 
             <!-- Active overlay: mod-tinted ring when the underlying feature is enabled.
@@ -111,12 +155,14 @@
                     BorderThickness="3.5"
                     CornerRadius="12"
                     IsHitTestVisible="False"
+                    Panel.ZIndex="7"
                     Visibility="Collapsed"/>
 
             <!-- Locked overlay -->
             <Border x:Name="LockedOverlay"
                     Background="#C0000000"
                     CornerRadius="12"
+                    Panel.ZIndex="8"
                     Visibility="Collapsed">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                     <Image Width="30" Height="30"

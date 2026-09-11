@@ -72,6 +72,19 @@ public class DashboardLayoutRuleTests
         Assert.Equal("fyp", loose.Slots[8].Primary);
     }
 
+    [Fact]
+    public void A_field_that_names_the_same_feature_twice_keeps_the_primary_alone()
+    {
+        // "spiral|spiral" is not a tile - it is one feature claiming both halves, which the
+        // once-only invariant forbids. The first appearance wins and the echo is dropped, the
+        // same rule a duplicate ACROSS two slots gets.
+        var l = DashboardLayoutRule.FromWire("spiral|spiral,flash");
+        Assert.Equal("spiral", l.Slots[0].Primary);
+        Assert.Null(l.Slots[0].Secondary);
+        Assert.False(l.Slots[0].IsSplit);
+        Assert.Equal("flash", l.Slots[1].Primary);
+    }
+
     // ── sanitize ─────────────────────────────────────────────────
 
     [Fact]
@@ -123,6 +136,34 @@ public class DashboardLayoutRuleTests
         Assert.Equal("flash", raw.Slots[0].Secondary);
     }
 
+    [Fact]
+    public void A_tier_locked_fx_is_never_a_split_half_and_a_wire_that_names_one_reduces()
+    {
+        // focusgaze is FX but Tier 2, and a gated feature has to keep a whole tile: the lockband,
+        // the tier rim and the price badge all live on FeatureCard, and SplitFeatureCard has no
+        // half-sized version of any of them, so half a cell is the one place its price cannot be
+        // shown. The server's FX_KEYS list still names it - harmless, because this is where every
+        // wire arrives.
+        Assert.False(FeatureCatalog.CanSplit("focusgaze"));
+
+        var l = DashboardLayoutRule.FromWire("flash|focusgaze,video");
+        Assert.Equal("flash", l.Slots[0].Primary);
+        Assert.Null(l.Slots[0].Secondary);
+        Assert.False(l.Slots[0].IsSplit);
+        Assert.Equal("video", l.Slots[1].Primary);
+
+        // The other way round the gated half is the one that survives, with its whole tile.
+        var g = DashboardLayoutRule.FromWire("focusgaze|flash");
+        Assert.Equal("focusgaze", g.Slots[0].Primary);
+        Assert.Null(g.Slots[0].Secondary);
+
+        // And Place refuses to make the pair rather than quietly making it.
+        var probe = DashboardLayout.Default();
+        Assert.Equal(PlaceOutcome.RefusedNotSplittable,
+            DashboardLayoutRule.Place(probe, 0, "focusgaze", split: true));
+        Assert.True(probe.IsDefault);
+    }
+
     // ── place ────────────────────────────────────────────────────
 
     [Fact]
@@ -169,7 +210,6 @@ public class DashboardLayoutRuleTests
     [Theory]
     [InlineData("justdrop", "flash")]   // the occupant is a door
     [InlineData("flash", "justdrop")]   // the newcomer is a door
-    [InlineData("flash", "flash")]      // one feature cannot be both halves
     public void Place_split_that_cannot_form_a_pair_is_RefusedNotSplittable(string sitting, string arriving)
     {
         var l = Empty();
@@ -187,6 +227,42 @@ public class DashboardLayoutRuleTests
         DashboardLayoutRule.Place(l, 3, "bubbles", true);
         Assert.Equal(PlaceOutcome.RefusedNotSplittable, DashboardLayoutRule.Place(l, 3, "spiral", true));
         Assert.Equal("bubbles", l.Slots[3].Secondary);
+    }
+
+    [Fact]
+    public void Place_of_a_key_onto_its_own_slot_is_Unchanged_and_spares_the_other_half()
+    {
+        // THE regression. Slot 5 ships as spiral|pinkfilter. Re-picking either half for the slot
+        // it is already in used to Remove() it first - promoting its partner into the hole - and
+        // then overwrite the promotion, so the OTHER half vanished and the outcome read Replaced.
+        var l = DashboardLayout.Default();
+        var before = DashboardLayoutRule.ToWire(l);
+
+        Assert.Equal(PlaceOutcome.Unchanged, DashboardLayoutRule.Place(l, 5, "spiral", false));
+        Assert.Equal("spiral", l.Slots[5].Primary);
+        Assert.Equal("pinkfilter", l.Slots[5].Secondary);
+
+        Assert.Equal(PlaceOutcome.Unchanged, DashboardLayoutRule.Place(l, 5, "pinkfilter", false));
+        Assert.Equal("spiral", l.Slots[5].Primary);
+        Assert.Equal("pinkfilter", l.Slots[5].Secondary);
+
+        // A single tile re-picked for its own cell is the same nothing.
+        Assert.Equal(PlaceOutcome.Unchanged, DashboardLayoutRule.Place(l, 0, "flash", false));
+        Assert.Equal(before, DashboardLayoutRule.ToWire(l));
+    }
+
+    [Fact]
+    public void Place_split_onto_a_slot_the_key_already_holds_is_Unchanged_not_a_refusal()
+    {
+        // Asking for a split of a tile with itself is not an illegal pair, it is a re-pick: the
+        // answer is "you already have that", and the layout must come out untouched either way.
+        var l = DashboardLayout.Default();
+        var before = DashboardLayoutRule.ToWire(l);
+
+        Assert.Equal(PlaceOutcome.Unchanged, DashboardLayoutRule.Place(l, 0, "flash", true));
+        Assert.Equal(PlaceOutcome.Unchanged, DashboardLayoutRule.Place(l, 5, "spiral", true));
+        Assert.Equal(PlaceOutcome.Unchanged, DashboardLayoutRule.Place(l, 5, "pinkfilter", true));
+        Assert.Equal(before, DashboardLayoutRule.ToWire(l));
     }
 
     [Fact]
@@ -209,6 +285,7 @@ public class DashboardLayoutRuleTests
             DashboardLayoutRule.Place(l, 0, "spiral", false),   // Replaced
             DashboardLayoutRule.Place(l, 0, "bubbles", true),   // Split
             DashboardLayoutRule.Place(l, 1, "spiral", false),   // MovedFrom
+            DashboardLayoutRule.Place(l, 1, "spiral", false),   // Unchanged (it is already there)
             DashboardLayoutRule.Place(l, 1, "fyp", true),       // RefusedNotSplittable
             DashboardLayoutRule.Place(l, 1, "nope", false),     // RefusedUnknownKey
         };

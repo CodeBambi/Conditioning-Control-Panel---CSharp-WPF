@@ -181,6 +181,9 @@ namespace ConditioningControlPanel
             allOk &= PaintSection("tabs", () => ApplySessionLockToTabs(locked, reason));
             allOk &= PaintSection("popup", () => ApplySessionLockToFeaturePopup(_activeFeaturePopupContent));
             allOk &= PaintSection("studio", ApplySessionLockToStudioRack);
+            // The nine slot pencils. Hidden while a session owns the dose, and the same
+            // call shuts a picker somebody left open when one started.
+            allOk &= PaintSection("dashboard-edit", () => ApplyDashboardEditLock(locked));
 
             // Only remember this paint if it fully succeeded, so the heartbeat retries a partial one.
             _sessionLockPainted = allOk ? locked : null;
