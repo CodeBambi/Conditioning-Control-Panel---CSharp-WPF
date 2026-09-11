@@ -68,7 +68,7 @@ import {
   judge, DECK,
 } from './deck.js';
 import {
-  CHAIN, capForTier, ringMsFor, verdictFor, afterClean, afterWrong,
+  CHAIN, capForTier, ringMsFor, verdictFor, afterClean, afterWrong, afterPass,
   chimePitch, isMajorRung, isRoyal, ladderFrac,
 } from './chain.js';
 import { createSwipe, SWIPE, scaleForDepth } from './swipe.js';
@@ -210,6 +210,29 @@ const INTRO_MS = 900;
  *  past it the round runs anyway, which is exactly what a broken url already
  *  does (its face removes itself and the drawn back is the fair round). */
 const READY_FALLBACK_MS = 1000;
+/** THE PHONE'S THREE ANSWERS TO A FACE THAT HAS NOT PAINTED (owner 2026-09-11:
+ *  "at the start we see gifs, then as we go faster we skip more and more").
+ *  Measured on a throttled headless phone (2 Mbps, x4 CPU, a swipe ~250ms
+ *  after the ring): 17% of cards had a painted face when swiped, 27% early in
+ *  the class and 7% late. The link cannot carry ~400 KB a card at a 750ms
+ *  ring, so no rail can keep the PLANNED order fed - and the old ceiling armed
+ *  the ring over a blank back after 1s regardless. Now:
+ *   1. THE DEAL PREFERS A CARD THAT HAS LANDED. nextCard() may swap the
+ *      planned card for a later same-tag card whose bytes are already here,
+ *      READY_LOOKAHEAD deep. Same tag = the plan's run cap and side sequence
+ *      are untouched; the pixels change, the ledger does not.
+ *   2. A CARD STILL BLANK AT THE CEILING IS SET ASIDE, NOT TIMED, when a
+ *      later card has landed (quietPass: under the stack like a pass, with
+ *      none of a pass's beats or costs, once per card). When nothing has
+ *      landed the gate keeps waiting up to READY_HARD_MS, then arms anyway -
+ *      the old road for a hung url. A ring armed over a blank never costs a
+ *      pass its rung (onPass), the room does not bill its own network.
+ *   3. THE HAND STAYS UP between cards (handUp) and a swipe that lands before
+ *      the ring arms is kept and played the moment it does (pendingDir):
+ *      at tempo the finger comes down in the spring, and a swipe that was
+ *      simply dropped read as a "skip" as much as a blank card did. */
+const READY_LOOKAHEAD = 8;
+const READY_HARD_MS = 5000;
 const AUTO_SUBMIT_MS = 45000;
 /** Live <video> nodes this class may hold at once (trap 36). A CONCURRENCY
  *  ceiling, not a supply one: the stack is three cards deep whatever the class
@@ -1087,6 +1110,43 @@ export default {
       try { const p = S && S.pool; if (p && typeof p.markBroken === 'function' && url) p.markBroken(url); }
       catch (e) { /* noop */ }
     }
+    /** The pool's synchronous "has this url landed" (provider isReadyNow),
+     *  guarded like the verbs above: a pool without it answers false, and a
+     *  deal that hears false everywhere never reorders - the old behaviour. */
+    function poolIsReady(url) {
+      try { const p = S && S.pool; return !!(p && typeof p.isReady === 'function' && url && p.isReady(url)); }
+      catch (e) { return false; }
+    }
+    /** Has this card's FACE landed - the bytes an <img> or a <video poster>
+     *  would paint from right now? A still or gif is its url. A clip is its
+     *  POSTER: the rail never pulls a clip's body (trap 36), and the poster is
+     *  the face it wears while it buffers, so a warm poster is a card that
+     *  paints on the tick it mints. A clip with no poster is only known once
+     *  minted, and its url's warm (headers) is the best answer there is. */
+    function cardReady(card) {
+      if (!card || !card.url || poolIsBroken(card.url)) return false;
+      if (card.kind === 'loop' || isVideoUrl(card.url, card.mime)) {
+        const poster = card.poster && card.poster !== card.url && !poolIsBroken(card.poster) ? card.poster : '';
+        return poster ? poolIsReady(poster) : poolIsReady(card.url);
+      }
+      return poolIsReady(card.url);
+    }
+    /** Has this face element painted - or, for a clip, is it wearing a poster
+     *  that has? The DOM double (no readyState / no boolean complete) says yes,
+     *  exactly as faceReady() reads it. */
+    function facePainted(face) {
+      if (!face) return false;
+      try {
+        if (face.tagName === 'VIDEO') {
+          if (typeof face.readyState !== 'number') return true;
+          if (Number(face.readyState) >= 2) return true;
+          const poster = typeof face.getAttribute === 'function' ? face.getAttribute('poster') : '';
+          return !!(poster && poolIsReady(poster));
+        }
+        if (typeof face.complete !== 'boolean') return true;
+        return !!(face.complete && Number(face.naturalWidth) > 0);
+      } catch (e) { return true; }
+    }
     /** The pool's spare rows for a tag (tagged pools hold up to TAG_CAP rows
      *  the frozen deck never dealt), guarded like the verbs above: a pool
      *  without the accessor - quick sort, an old double - answers none. */
@@ -1382,19 +1442,67 @@ export default {
     function warmDeck() {
       if (!S || !S.pool || typeof S.pool.warmManifest !== 'function') return;
       try {
-        S.pool.warmManifest(S.cards.map((c) => ({ url: c.url, kind: c.kind, mime: c.mime })));
+        /* A CLIP'S POSTER RIDES THE RAIL AHEAD OF THE CLIP (phone, 2026-09-11).
+         * The clip's own warm is headers only (trap 36) and its bytes start at
+         * mint, one card ahead, which on a phone link is not enough: 36 of the
+         * 50 blank cards in the measured class were clips. The poster is a
+         * small still, it is the face the clip wears while it buffers, and a
+         * warm one paints on the tick the card mints. `manifestAt` maps a card
+         * index to its entry so warmFollow can keep pointing at the top card. */
+        const entries = [];
+        const at = [];
+        for (const c of S.cards) {
+          at.push(entries.length);
+          if (c.poster && c.poster !== c.url && (c.kind === 'loop' || isVideoUrl(c.url, c.mime))) {
+            entries.push({ url: c.poster, kind: 'still', mime: '' });
+          }
+          entries.push({ url: c.url, kind: c.kind, mime: c.mime });
+        }
+        S.manifestAt = at;
+        S.pool.warmManifest(entries);
       } catch (e) { /* a warm-up never breaks a deal */ }
     }
     function warmFollow() {
       if (!S || !S.pool || typeof S.pool.warmCursor !== 'function') return;
       /* the play position in DECK ORDER: the top card's index, i.e. the deal
-       * cursor minus the cards still standing in the stack */
-      try { S.pool.warmCursor(Math.max(0, S.cursor - S.live.length)); } catch (e) { /* noop */ }
+       * cursor minus the cards still standing in the stack - translated to the
+       * manifest's own index, which counts posters as entries */
+      try {
+        const i = Math.max(0, S.cursor - S.live.length);
+        const at = S.manifestAt && S.manifestAt.length
+          ? S.manifestAt[Math.min(i, S.manifestAt.length - 1)] : i;
+        S.pool.warmCursor(at);
+      } catch (e) { /* noop */ }
     }
 
     /* ==================================================================== *
      * THE DEAL
      * ==================================================================== */
+    /**
+     * THE DEAL PREFERS A CARD THAT HAS LANDED (phone, 2026-09-11). When the
+     * planned card's face is not here yet, the first later card of the SAME
+     * TAG whose bytes are, within READY_LOOKAHEAD, takes its place and the
+     * planned card takes that slot. Same tag keeps the plan's side sequence
+     * and run cap exactly; the deck's frozen snapshot (S.deckRows, the retake
+     * cache) is never touched, so substitutes and retakes still resolve the
+     * same. A repeat (`seen`) is never pulled ahead of its first showing - the
+     * SEEN trickster reads that flag. On the desktop every url is local and
+     * therefore always ready, so the planned card is always taken: inert.
+     */
+    function readyFirst() {
+      if (!S || S.cursor >= S.cards.length) return;
+      const planned = S.cards[S.cursor];
+      if (!planned || cardReady(planned)) return;
+      const end = Math.min(S.cards.length, S.cursor + 1 + READY_LOOKAHEAD);
+      for (let k = S.cursor + 1; k < end; k++) {
+        const c = S.cards[k];
+        if (!c || c.tag !== planned.tag || c.seen || !cardReady(c)) continue;
+        S.cards[k] = planned;
+        S.cards[S.cursor] = c;
+        S.readyPulls += 1;
+        return;
+      }
+    }
     /** The next card off the deck; a spent deck is re-shuffled, never empty. */
     function nextCard() {
       if (!S) return null;
@@ -1435,6 +1543,7 @@ export default {
          * it from reseat() exactly as it did on the first pass. */
         warmDeck();
       }
+      readyFirst();
       const card = S.cards[S.cursor++];
       if (!card) return null;
       return Object.assign({}, card, { dealt: S.dealt++ });
@@ -1607,8 +1716,85 @@ export default {
         } catch (e) { hooked = false; }
         if (!hooked) { finish(); return; }              // the DOM double answers now
       };
-      guardId = timers.after(READY_FALLBACK_MS, finish);
+      /* THE CEILING, with a fork in it (phone, 2026-09-11). A face that has
+       * not painted by now is SET ASIDE when a later card has landed
+       * (deferUnpainted -> quietPass, which re-asks this gate over the new
+       * top), waited for a little longer when nothing has, and only past
+       * READY_HARD_MS is the round run over a blank back - the old road, kept
+       * for a hung url. A face that paints meanwhile still lands on finish()
+       * through the hooks above. */
+      let waited = READY_FALLBACK_MS;
+      const ceiling = () => {
+        if (spent) return;
+        if (deferUnpainted(live)) { spent = true; return; }
+        if (live.face && !facePainted(live.face) && waited < READY_HARD_MS) {
+          waited += READY_FALLBACK_MS;
+          guardId = timers.after(READY_FALLBACK_MS, ceiling);
+          return;
+        }
+        finish();
+      };
+      guardId = timers.after(READY_FALLBACK_MS, ceiling);
       watch();
+    }
+    /** Is there a card that has landed among the ones next in line - the two
+     *  standing under the top, or the deck's own window (the same window and
+     *  the same same-tag rule readyFirst deals by)? */
+    function anyReadyAhead() {
+      if (!S) return false;
+      for (let i = 1; i < S.live.length; i++) {
+        const live = S.live[i];
+        if (!live || !live.card) continue;
+        if ((live.face && facePainted(live.face)) || cardReady(live.card)) return true;
+      }
+      const from = S.cursor;
+      const planned = S.cards[from];
+      const end = Math.min(S.cards.length, from + 1 + READY_LOOKAHEAD);
+      for (let k = from; k < end; k++) {
+        const c = S.cards[k];
+        if (!c || !cardReady(c)) continue;
+        if (k === from || (planned && c.tag === planned.tag && !c.seen)) return true;
+      }
+      return false;
+    }
+    /**
+     * A card whose face has not painted by the ceiling is SET ASIDE, not timed
+     * (phone, 2026-09-11) - but only while the room has something better to
+     * show (anyReadyAhead), only once per card (`deferred` rides the copy the
+     * pass queue keeps, so the second time it surfaces it is armed whatever
+     * its face is doing), and never over a frozen or armed stack. Answers true
+     * when the room moved on; the caller's gate is then re-asked by quietPass.
+     */
+    function deferUnpainted(live) {
+      if (!S || destroyed || S.over || halted() || S.armed) return false;
+      if (!live || live !== S.live[0] || !live.card || live.card.deferred) return false;
+      if (live.face && facePainted(live.face)) return false;
+      if (!anyReadyAhead()) return false;
+      live.card.deferred = true;
+      S.deferrals += 1;
+      quietPass(live);
+      return true;
+    }
+    /** The quiet sink: under the stack like a pass, with none of a pass's beats
+     *  - no word, no cue, no count, no chain, no bus - because the player did
+     *  nothing. The stack shifts, refills, and the gate is asked again. */
+    function quietPass(live) {
+      if (!S || !live) return;
+      S.passQueue.push(Object.assign({}, live.card));
+      setAttr(live.node, 'data-depth', 'x');
+      setAttr(live.node, 'data-gone', '1');
+      freeSlot(live);
+      addCls(live.node, 'is-sink');
+      const node = live;
+      timers.after(reduced ? SWIPE.FADE_MS : 260, () => dropCard(node));
+      S.live.shift();
+      reseat();
+      handUp();
+      timers.after(reduced ? SWIPE.FADE_MS : SPRING_MS, () => {
+        if (!S || destroyed || S.over) return;
+        fillStack();
+        faceReady(S.live[0], armWhenReady);
+      });
     }
     /**
      * armTop, deferred until the class can honestly take it. A gate (or the
@@ -1652,6 +1838,15 @@ export default {
        * the lying label - needs the element, and this is the ONE moment the
        * room can hand it over honestly: the card is armed and it is the top. */
       bus.emit('deal', { card: top.card, node: top.node, rung: S.rung, ringMs: S.ringMs, chain: S.chain });
+      /* THE SWIPE THAT CAME EARLY plays now (phone, 2026-09-11): the player's
+       * own gesture on THIS card, made in the spring before the ring was up,
+       * read at elapsed 0 - never PERFECT, always honoured. A gesture made on a
+       * card that was set aside since (quietPass) is dropped, not moved. */
+      const pendingDir = S.pendingDir;
+      const pendingLive = S.pendingLive;
+      S.pendingDir = '';
+      S.pendingLive = null;
+      if (pendingDir && pendingLive === top) onCommit(pendingDir);
     }
     function ringTick() {
       if (!S || !S.armed || halted() || S.over) return;
@@ -1679,10 +1874,32 @@ export default {
      * THE THREE MOMENTS: commit, pass, and the wrong swipe (which is a commit
      * that happens to be wrong - it is HONOURED, never blocked).
      * ==================================================================== */
+    /** Is the hand live over the top card - armed, or between cards with the
+     *  next one already standing? A gesture in that gap is kept, not dropped. */
+    function handLive() {
+      return !!(S && !S.over && !halted() && S.opened && S.live[0]);
+    }
+    /** The hand comes back up the moment there is a next card (phone,
+     *  2026-09-11). disarm() drops it with the ring; every shift of the stack
+     *  raises it again so the spring and the ready gate are not a dead zone.
+     *  A frozen or finished class keeps it down; armTop raises it anyway. */
+    function handUp() {
+      if (!S || !S.swipe || !handLive()) return;
+      S.swipe.enabled(true);
+    }
     function onCommit(dir) {
-      if (!S || !S.armed || halted() || S.over) return false;
+      if (!S || halted() || S.over) return false;
       const top = S.live[0];
       if (!top) return false;
+      if (!S.armed) {
+        /* the ring is not up yet: keep the swipe for this card and let armTop
+         * play it (never before the room has opened - the door and the rules
+         * sheet are not a card) */
+        if (!S.opened) return false;
+        S.pendingDir = dir === 'left' ? 'left' : 'right';
+        S.pendingLive = top;
+        return false;
+      }
       const elapsed = now() - S.ringStart;
       const v = verdictFor(elapsed, S.ringMs);
       const correct = judge(top.card, dir, S.quick);
@@ -1744,6 +1961,7 @@ export default {
 
       S.live.shift();
       reseat();
+      handUp();
       timers.after(reduced ? SWIPE.FADE_MS : SPRING_MS, () => {
         if (!S || destroyed || S.over) return;
         fillStack();
@@ -1760,8 +1978,21 @@ export default {
       if (!top) return;
       disarm();
       S.passed += 1;
-      /* A PASS IS NOT AN ERROR. No chain, no rung, no accuracy: the card sinks
-       * under the stack and is dealt again later, and that is the whole of it. */
+      /* A PASS IS A MISS (owner, 2026-09-11): one rung down on the same fade a
+       * wrong swipe gets, never out, and accuracy never sees it - the card
+       * sinks under the stack and is dealt again later. The one exception is
+       * the room's own fault: a ring that was armed over a face that had not
+       * painted (the READY_HARD_MS road) costs nothing, the network is not the
+       * player's miss. */
+      const blank = !!(top.face && !facePainted(top.face));
+      if (!blank) {
+        const step = afterPass(S.chain, S.rung);
+        S.chain = step.chain;
+        S.rung = step.rung;
+        addCls(S.nodes.ladder, 'is-fading');
+        timers.after(step.fadeMs, () => delCls(S.nodes.ladder, 'is-fading'));
+        if (step.rungDown) bus.emit('rung', { from: step.from, to: step.rung, down: true });
+      }
       S.passQueue.push(Object.assign({}, top.card));
       /* a sinking card is not the top card either (see flyOut) */
       setAttr(top.node, 'data-depth', 'x');
@@ -1775,6 +2006,7 @@ export default {
       timers.after(reduced ? SWIPE.FADE_MS : 260, () => dropCard(node));
       S.live.shift();
       reseat();
+      handUp();
       paintHud();
       timers.after(reduced ? SWIPE.FADE_MS : SPRING_MS, () => {
         if (!S || destroyed || S.over) return;
@@ -2115,6 +2347,11 @@ export default {
         wrongsSinceRoyalFloor: 0, majorsPaid: [], royal: false, jackpots: 0,
         heat: 0.2,
         armed: false, pendingArm: false, ringMs: ringMsFor(0), ringStart: 0, ringTimer: 0,
+        /* the phone wave (2026-09-11): the swipe kept across the spring, the
+           room-open latch the hand reads, the manifest index per card, and two
+           counters for the rig */
+        pendingDir: '', pendingLive: null, opened: false, manifestAt: [],
+        readyPulls: 0, deferrals: 0,
         clockTimer: 0, autoTimer: 0,
         /* W3: the two latches the sound needs. `dragSide` is the stamp
            crossing's memory (P1-15) and `bellWarned` the T-20s warning's
@@ -2162,7 +2399,7 @@ export default {
         viewportOf: () => stageBox().w,
         onGrab: () => {
           retryBlockedPlay();
-          if (!S || !S.armed) return;
+          if (!S || !handLive()) return;
           const top = S.live[0];
           if (top) addCls(top.node, 'is-held');
           S.dragSide = '';                      // W3 P1-15: a fresh hand, no side yet
@@ -2173,8 +2410,10 @@ export default {
            * INTRO_MS before armTop() arms it, and for that first ~900ms the
            * hand was live while the class was not: the stamp tracked the finger
            * and leaned YES while the card itself refused to move or commit. The
-           * gesture is gated on the same armed state everything else is. */
-          if (!S || !S.armed) return;
+           * gesture is gated on the same armed state everything else is -
+           * widened (phone, 2026-09-11) to the gap between cards, where the
+           * next card is already standing and its swipe is kept (handLive). */
+          if (!S || !handLive()) return;
           const top = S.live[0];
           if (!top) return;
           setVar(top.node, '--sort-dx', d.dx + 'px');
@@ -2192,7 +2431,7 @@ export default {
           bus.emit('drag', { dx: d.dx, side: d.side, alpha: d.alpha, card: top.card });
         },
         onRelease: (r) => {
-          if (!S || !S.armed) return;
+          if (!S || !handLive()) return;
           const top = S.live[0];
           if (!top) return;
           delCls(top.node, 'is-held');
@@ -2309,9 +2548,11 @@ export default {
          * draining over a sheet the player is still reading is the shell's most
          * confident lie, and this class has two screens before its first card. */
         S.startedAt = now();
+        S.opened = true;
         if (S.budgetMs > 0) S.clockTimer = timers.every(250, paintClock);
         decksCall('start');
         fillStack();
+        handUp();
         timers.after(reduced ? 0 : INTRO_MS, () => {
           if (!S || destroyed || S.over) return;
           /* reduced motion keeps its shorter intro but STILL gets the gate -
@@ -2509,8 +2750,12 @@ export default {
         S.frozenElapsed = now() - S.ringStart;
         timers.cancel(S.ringTimer);
         S.ringTimer = 0;
-        if (S.swipe) S.swipe.enabled(false);
       }
+      /* the hand is down for the whole freeze, armed or between cards, and a
+       * swipe kept from before the pause does not outlive it */
+      if (S.swipe) S.swipe.enabled(false);
+      S.pendingDir = '';
+      S.pendingLive = null;
       S.frozenAt = now();
       /* a frozen ring is not a timing-critical one - she is free again until
        * the thaw re-arms it */
@@ -2540,6 +2785,8 @@ export default {
         S.ringTimer = timers.every(reduced ? RING_TICK_MS_REDUCED : RING_TICK_MS, ringTick);
         /* the ring the freeze interrupted is live again, fence and all */
         emiHoldRing(S.rung >= EMI_CHASE_RUNG);
+      } else {
+        handUp();               // between cards: the hand was down for the freeze
       }
       decksCall('resume');
     }
@@ -2622,7 +2869,10 @@ export default {
           correct: S.correct, wrong: S.wrong, passed: S.passed,
           perfect: S.perfect, just: S.just,
           jackpots: S.jackpots, royal: S.royal, majorsPaid: S.majorsPaid.slice(),
-          deck: { size: S.cards.length, cursor: S.cursor, dealt: S.dealt, recycles: S.recycles, queued: S.passQueue.length },
+          deck: {
+            size: S.cards.length, cursor: S.cursor, dealt: S.dealt, recycles: S.recycles, queued: S.passQueue.length,
+            readyPulls: S.readyPulls, deferrals: S.deferrals,
+          },
           /* A FROZEN RING REPORTS THE TIME IT STOPPED AT, not the wall clock.
            * `ringStart` is only re-based on the thaw, so reading it live during
            * a pause would say the card had been sitting there for the whole
