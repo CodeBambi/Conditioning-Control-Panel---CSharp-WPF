@@ -340,6 +340,117 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        // Characters a finished sentence may end on. '~' and '…' are in because the companion's own
+        // voice uses both as terminators ("good girl~").
+        private static readonly char[] SentenceEnders = { '.', '!', '?', '…', '~', ':', ';' };
+
+        /// <summary>
+        /// Pessimistic characters-per-token. Real English prose runs ~4, so requiring 3 means a reply
+        /// counts as "hit the cap" only when it is long enough that no honest short answer could be.
+        /// </summary>
+        private const int CharsPerTokenFloor = 3;
+
+        /// <summary>A trim that would throw away more than half the reply is not a repair.</summary>
+        private const double MinKeptFraction = 0.5;
+
+        /// <summary>Below this there is no reply left worth showing, so the fragment stays.</summary>
+        private const int MinKeptChars = 20;
+
+        // Closing marks that may sit AFTER the terminator: quotes, brackets and markdown emphasis.
+        // Emoji are deliberately NOT in here — see EndsMidSentence.
+        private static bool IsClosingMark(char ch) =>
+            ch == '"' || ch == '\'' || ch == ')' || ch == ']' || ch == '}' ||
+            ch == '»' || ch == '”' || ch == '’' || ch == '*' || ch == '_';
+
+        // Emoji and their glue (surrogate pairs, variation selectors, zero-width joiners) plus any
+        // other symbol. An emoji is how this companion ends a bubble, so one is treated as the end of
+        // a finished thought rather than something to look past.
+        private static bool IsEmojiLike(char ch) =>
+            char.IsSurrogate(ch) || char.IsSymbol(ch) ||
+            char.GetUnicodeCategory(ch) == System.Globalization.UnicodeCategory.NonSpacingMark ||
+            char.GetUnicodeCategory(ch) == System.Globalization.UnicodeCategory.Format;
+
+        /// <summary>
+        /// True when the text stops on a word rather than on a sentence, so "I was thinking we could"
+        /// is unfinished while "good girl~", "deeper." and "so cute 💕" are not.
+        ///
+        /// <para>Errs towards FINISHED on purpose: missing a truncation costs the user one ragged
+        /// bubble, while calling a complete reply truncated costs them a sentence she really wrote.
+        /// That is why a trailing emoji ends the question instead of being skipped past.</para>
+        /// </summary>
+        internal static bool EndsMidSentence(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+
+            var i = text!.Length - 1;
+            while (i >= 0 && char.IsWhiteSpace(text[i])) i--;
+            while (i >= 0 && IsClosingMark(text[i])) i--;
+            while (i >= 0 && char.IsWhiteSpace(text[i])) i--;
+            if (i < 0) return false;
+
+            if (IsEmojiLike(text[i])) return false;
+
+            foreach (var ender in SentenceEnders)
+                if (text[i] == ender) return false;
+
+            return true;
+        }
+
+        /// <summary>
+        /// Cuts the half-written last sentence off a reply the provider's token cap guillotined.
+        ///
+        /// <para><b>Why this exists (ccp-bugs #1164, "the message seem to be cropped").</b> The cloud
+        /// proxy caps a reply at <c>AiService.MaxTokensHardCap</c> = 100 tokens, the lowest ceiling of
+        /// the three transports, and it is the only one that never noticed. The OpenAI-compatible path
+        /// reads <c>finish_reason</c> and the Ollama path reads <c>done_reason</c>; the proxy's response
+        /// shape (<c>ProxyChatResponse</c>) carries neither, so a reply that stopped mid-word reached
+        /// the speech bubble exactly as the model left it, with nothing in the log to say so. The
+        /// bubble is the wrong place to learn that a budget ran out.</para>
+        ///
+        /// <para>Two guards keep it off ordinary short replies, which frequently and correctly end with
+        /// no punctuation at all ("good girl"):</para>
+        /// <list type="number">
+        /// <item>the reply must be long enough to have plausibly HIT the cap —
+        /// <paramref name="maxTokens"/> × <see cref="CharsPerTokenFloor"/> characters;</item>
+        /// <item>the trim must leave a whole sentence and at least <see cref="MinKeptFraction"/> of the
+        /// text behind. A single long sentence with no earlier terminator is returned untouched: a
+        /// fragment the user can read beats an empty bubble.</item>
+        /// </list>
+        /// </summary>
+        /// <param name="maxTokens">The response cap this call was sent with.</param>
+        /// <param name="trimmed">True when a dangling fragment was actually removed.</param>
+        internal static string TrimCutOffTail(string? text, int maxTokens, out bool trimmed)
+        {
+            trimmed = false;
+            if (string.IsNullOrWhiteSpace(text)) return text ?? string.Empty;
+            if (maxTokens <= 0) return text!;
+
+            var body = text!.TrimEnd();
+            if (body.Length < maxTokens * CharsPerTokenFloor) return text!;
+            if (!EndsMidSentence(body)) return text!;
+
+            var urls = new List<Match>();
+            foreach (Match m in AnyUrl.Matches(body)) urls.Add(m);
+
+            var cut = -1;
+            for (int i = body.Length - 1; i >= 0; i--)
+            {
+                var ch = body[i];
+                if (ch != '.' && ch != '!' && ch != '?' && ch != '…' && ch != '~') continue;
+                if (InsideAny(urls, i)) continue;   // "naughty-bambi-109749.html" is not a sentence end
+                cut = i;
+                break;
+            }
+
+            if (cut < 0) return text!;
+
+            var kept = body.Substring(0, cut + 1).TrimEnd();
+            if (kept.Length < MinKeptChars || kept.Length < body.Length * MinKeptFraction) return text!;
+
+            trimmed = true;
+            return kept;
+        }
+
         /// <summary>
         /// Strip tokenizer artifacts and reasoning blocks. Whitespace is normalised but the text is
         /// otherwise left alone - callers layer their own product-specific sanitising on top.

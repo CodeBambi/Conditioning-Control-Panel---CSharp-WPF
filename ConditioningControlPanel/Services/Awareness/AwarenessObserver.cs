@@ -128,6 +128,11 @@ namespace ConditioningControlPanel.Services.Awareness
         private string? _currentAppId;
         private ContextFrame? _lastFrame;
 
+        // Reason counts for the Information-level summary. Every per-frame [AWARE] line is Debug and
+        // therefore invisible in a bug report (ccp-bugs #1176); this is the part that survives.
+        private readonly AwarenessTally _tally = new();
+        private DateTime _lastTallyFlush;
+
         /// <summary>
         /// Production constructor. The four collaborators are required: an observer with no ledger, no
         /// scorer, no arbiter or no memory is not a degraded observer, it is a bug with a heartbeat.
@@ -310,6 +315,7 @@ namespace ConditioningControlPanel.Services.Awareness
             _gateWindowStart = now;
             _fullscreenSince = now;
             _lastTickAt = now;
+            _lastTallyFlush = now;
 
             try { _input.Start(); } catch (Exception ex) { App.Logger?.Debug("AwarenessObserver: input probe start failed - {Error}", ex.Message); }
             try { _media?.Start(); } catch (Exception ex) { App.Logger?.Debug("AwarenessObserver: media watcher start failed - {Error}", ex.Message); }
@@ -326,8 +332,17 @@ namespace ConditioningControlPanel.Services.Awareness
             _pollTimer.Tick += OnPollTick;
             _pollTimer.Start();
 
-            App.Logger?.Information("AwarenessObserver: started (poll {Ms}ms, dwell gate {Gate}s)",
-                (int)PollInterval.TotalMilliseconds, DwellGateSeconds);
+            // The dial state belongs in the ONE line that is guaranteed to reach a bug report. #1176
+            // arrived saying "no filter, all my programs on the title allow list" with no way to check
+            // either claim against the running config. Counts and the enum name only — never entries.
+            var settings = _policy();
+            App.Logger?.Information(
+                "AwarenessObserver: started (poll {Ms}ms, dwell gate {Gate}s, intensity={Intensity}, " +
+                "deny={Deny} entries, title-allow={Allow} entries, adult react/record={Reactions}/{Recording})",
+                (int)PollInterval.TotalMilliseconds, DwellGateSeconds,
+                AwarenessIntensityProfile.Current,
+                settings?.DenyList?.Count ?? -1, settings?.TitleAllowList?.Count ?? -1,
+                settings?.AdultReactionsEnabled, settings?.AdultRecordingEnabled);
         }
 
         /// <summary>Disarms the poll and flushes the ledger. Safe to call when never started.</summary>
@@ -357,6 +372,9 @@ namespace ConditioningControlPanel.Services.Awareness
 
             try { _ledger.NoteFocusEnd(_clock()); } catch { }
             _ledger.Stop();
+            // Last call: a session that ends before the 10-minute window closes still reports why she
+            // was quiet, which is the common shape for "I switched it on, nothing happened, I gave up".
+            FlushTally(force: true);
             ResetTransientState();
             App.Logger?.Debug("AwarenessObserver: stopped");
         }
@@ -459,6 +477,12 @@ namespace ConditioningControlPanel.Services.Awareness
                 // frame that does get spoken.
                 if (decision.Verdict != AwarenessVerdict.Silence) _ledger.CommitTrends(trends);
 
+                // The arbiter's gate token is the last thing between a cut frame and a spoken line, so
+                // it is the one the summary most needs. A delivery counts as its verdict, not its reason.
+                _tally.Note("arbiter", decision.Verdict == AwarenessVerdict.Silence
+                    ? decision.Reason
+                    : decision.Verdict.ToString());
+
                 App.Logger?.Debug("[AWARE] arbiter verdict={Verdict} tier={Tier} gate={Reason}",
                     decision.Verdict, decision.Tier, decision.Reason);
             }
@@ -482,7 +506,35 @@ namespace ConditioningControlPanel.Services.Awareness
             // of Observe(), so a lapsed account's window titles are never read, let alone recorded.
             if (!IsEnabled) return;
 
-            _ = TickAsync(_clock());
+            var tickAt = _clock();
+            FlushTally(force: false, now: tickAt);
+            _ = TickAsync(tickAt);
+        }
+
+        /// <summary>
+        /// Writes the reason summary at Information, which is the only level a bug report carries
+        /// (<c>LogPipeline</c> floors the session file there, and <c>[AWARE]</c> is not a
+        /// <c>BugReportService</c> diag marker). Counts and reason tokens only — see
+        /// <see cref="AwarenessTally"/> for why that is the whole line.
+        /// </summary>
+        private void FlushTally(bool force, DateTime? now = null)
+        {
+            try
+            {
+                var at = now ?? _clock();
+                if (!force && at - _lastTallyFlush < AwarenessTally.FlushInterval) return;
+                _lastTallyFlush = at;
+
+                var summary = _tally.Drain();
+                if (summary.Length == 0) return;
+
+                App.Logger?.Information("[AWARE] {Minutes}m summary: {Summary}",
+                    (int)AwarenessTally.FlushInterval.TotalMinutes, summary);
+            }
+            catch (Exception ex)
+            {
+                Diag.Swallowed(ex, "awareness summary is diagnostics, never a failure path");
+            }
         }
 
         // =================================================================================
@@ -728,6 +780,7 @@ namespace ConditioningControlPanel.Services.Awareness
 
             if (dnd != DndGate.None)
             {
+                _tally.Note("dnd", dnd);
                 // Invariant: every candidate leaves exactly one [AWARE] line. Debug, not Information:
                 // it names the resolved app id, and Serilog's floor is Information (see
                 // ReactionArbiter.Log for the whole argument).
@@ -762,7 +815,11 @@ namespace ConditioningControlPanel.Services.Awareness
 
             // Logs the one authoritative [AWARE] line for this event.
             var scored = _scorer.Score(input, now);
-            if (scored.Verdict == AwarenessVerdict.Silence) return;
+            if (scored.Verdict == AwarenessVerdict.Silence)
+            {
+                _tally.Note("scored", scored.Reason);
+                return;
+            }
 
             var habits = await SafeHabitsAsync(verdict.AppId, verdict.Cluster).ConfigureAwait(false);
             var recent = await SafeRecentAsync().ConfigureAwait(false);
@@ -847,6 +904,10 @@ namespace ConditioningControlPanel.Services.Awareness
             _currentAppId = null;
 
             if (drop == FrameDrop.None) return;
+
+            // Counted on EVERY drop, not once per change: "she says nothing" is a question about how
+            // much of the session was dropped, and the de-duplicated log line below cannot answer it.
+            _tally.Note("drop", drop);
 
             // Logged once per change: a deny-listed window in the foreground would otherwise write a
             // line every 1.5 seconds for as long as the user sits there.
