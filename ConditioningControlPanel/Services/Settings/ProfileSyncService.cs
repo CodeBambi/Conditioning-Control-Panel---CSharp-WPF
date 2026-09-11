@@ -480,6 +480,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void StartHeartbeat()
         {
+            // THE VAT'S SIGN-IN POKE, before the idempotency return on purpose: every login
+            // path lands here once the account is usable, and a second arrival (the 401
+            // self-heal, a Discord restore after a Patreon one) may carry a rotated token.
+            // DescentService dedupes against its own floor, so this never doubles a request
+            // on the wire. Mirror of the App.Descent.Reset() call in ClearAccountData.
+            App.Descent?.OnSignedIn();
+
             if (_heartbeatTimer != null) return;
 
             _heartbeatTimer = new DispatcherTimer
