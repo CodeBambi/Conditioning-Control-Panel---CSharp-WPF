@@ -125,6 +125,10 @@ public class QuestService : IDisposable
 
         Progress = LoadProgress();
 
+        // BEFORE the board is looked at, and before PatreonService can tidy up behind us
+        // (ccp-bugs#1186 / #1192, the upgrade case). See BootstrapPremiumHistory.
+        BootstrapPremiumHistory();
+
         // Check for expired quests and generate new ones
         CheckAndGenerateQuests();
 
@@ -789,9 +793,50 @@ public class QuestService : IDisposable
 
         var settings = App.Settings?.Current;
         if (settings == null) return false;
-        return settings.PatreonPremiumValidUntil != null
-            || settings.PatreonLabValidUntil != null
-            || settings.PatreonTier > 0;
+        return HasPremiumEvidenceInSettings(
+            settings.PatreonPremiumValidUntil, settings.PatreonLabValidUntil, settings.PatreonTier);
+    }
+
+    /// <summary>
+    /// The settings half of "was this account ever premium", as a pure predicate so the launch
+    /// bootstrap and the live read cannot drift apart. Any one of the three is enough: both grace
+    /// stamps are only ever written by a validation that came back premium and are left NON-NULL
+    /// once expired, and PatreonTier is the same signal from the UI cache. All three absent is the
+    /// genuinely free account, and only that.
+    /// </summary>
+    internal static bool HasPremiumEvidenceInSettings(
+        DateTime? patreonPremiumValidUntil, DateTime? patreonLabValidUntil, int patreonTier)
+        => patreonPremiumValidUntil != null || patreonLabValidUntil != null || patreonTier > 0;
+
+    /// <summary>
+    /// THE UPGRADE CASE (ccp-bugs#1186 / #1192). LastPremiumSeenUtc is new in 6.9.4, so it is null
+    /// for every install arriving from 6.9.3, and the settings evidence WasEverPremium falls back
+    /// on is NOT durable: on a launch with no Patreon tokens and no unified session,
+    /// PatreonService.InitializeAsync zeroes PatreonTier and nulls both grace stamps - and it does
+    /// that AFTER this constructor but BEFORE any drop decision, so by the time the keep gate asks,
+    /// a lapsed patron looks exactly like someone who was never a patron at all. Their 18/25
+    /// premium quest was then dropped, on the first launch of this release, once.
+    ///
+    /// Reading the evidence HERE, while it is still on disk, turns it into the durable stamp the
+    /// gate was designed around. It can only ever ADD history, never remove it, so the intended
+    /// "never a patron, drop the quest they cannot finish" case is untouched: an account with no
+    /// evidence gets no stamp.
+    /// </summary>
+    private void BootstrapPremiumHistory()
+    {
+        if (Progress.LastPremiumSeenUtc != null) return;
+
+        var settings = App.Settings?.Current;
+        if (settings == null) return;
+        if (!HasPremiumEvidenceInSettings(
+                settings.PatreonPremiumValidUntil, settings.PatreonLabValidUntil, settings.PatreonTier))
+            return;
+
+        Progress.LastPremiumSeenUtc = DateTime.UtcNow;
+        _isDirty = true;
+        App.Logger?.Information(
+            "Quest premium history bootstrapped from cached Patreon state (tier {Tier}, premium grace {Premium}, lab grace {Lab})",
+            settings.PatreonTier, settings.PatreonPremiumValidUntil, settings.PatreonLabValidUntil);
     }
 
     /// <summary>

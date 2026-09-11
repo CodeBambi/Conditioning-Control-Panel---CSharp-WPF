@@ -23,38 +23,52 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public static class WebcamWinRtEnumerator
     {
+        /// <summary>
+        /// The forgiving form, used by the device picker: a throw or a timeout is logged and read
+        /// as "no cameras". See <see cref="EnumerateStrict"/> for the one caller that must tell an
+        /// empty machine apart from a failed count.
+        /// </summary>
         public static IReadOnlyList<WebcamDeviceEnumerator.WebcamDevice> Enumerate()
         {
-            var devices = new List<WebcamDeviceEnumerator.WebcamDevice>();
             try
             {
-                // Run the async enumeration on a thread-pool thread and block the
-                // caller with a timeout. FindAllAsync completes off the caller's
-                // context so this can't deadlock the UI thread, and the timeout
-                // guards against a wedged device-enumeration service.
-                var task = Task.Run(async () =>
-                    await DeviceInformation.FindAllAsync(DeviceClass.VideoCapture));
-
-                if (!task.Wait(TimeSpan.FromSeconds(5)))
-                {
-                    App.Logger?.Warning("WebcamWinRtEnumerator: FindAllAsync timed out");
-                    return devices;
-                }
-
-                var collection = task.Result;
-                int idx = 0;
-                foreach (var di in collection)
-                {
-                    var name = string.IsNullOrWhiteSpace(di.Name) ? "(unnamed device)" : di.Name;
-                    devices.Add(new WebcamDeviceEnumerator.WebcamDevice(idx, name));
-                    idx++;
-                }
-                App.Logger?.Information("WebcamWinRtEnumerator: {Count} video-capture device(s) via WinRT", devices.Count);
+                return EnumerateStrict();
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "WebcamWinRtEnumerator: enumeration threw");
+                return new List<WebcamDeviceEnumerator.WebcamDevice>();
             }
+        }
+
+        /// <summary>
+        /// The same enumeration with the swallow taken off: a wedged device-enumeration service
+        /// (the timeout) or a WinRT failure THROWS, so only a clean run that found nothing returns
+        /// empty. The quest hardware gate is the caller that needs that difference.
+        /// </summary>
+        public static IReadOnlyList<WebcamDeviceEnumerator.WebcamDevice> EnumerateStrict()
+        {
+            var devices = new List<WebcamDeviceEnumerator.WebcamDevice>();
+
+            // Run the async enumeration on a thread-pool thread and block the
+            // caller with a timeout. FindAllAsync completes off the caller's
+            // context so this can't deadlock the UI thread, and the timeout
+            // guards against a wedged device-enumeration service.
+            var task = Task.Run(async () =>
+                await DeviceInformation.FindAllAsync(DeviceClass.VideoCapture));
+
+            if (!task.Wait(TimeSpan.FromSeconds(5)))
+                throw new TimeoutException("WebcamWinRtEnumerator: FindAllAsync timed out");
+
+            var collection = task.Result;
+            int idx = 0;
+            foreach (var di in collection)
+            {
+                var name = string.IsNullOrWhiteSpace(di.Name) ? "(unnamed device)" : di.Name;
+                devices.Add(new WebcamDeviceEnumerator.WebcamDevice(idx, name));
+                idx++;
+            }
+            App.Logger?.Information("WebcamWinRtEnumerator: {Count} video-capture device(s) via WinRT", devices.Count);
             return devices;
         }
     }

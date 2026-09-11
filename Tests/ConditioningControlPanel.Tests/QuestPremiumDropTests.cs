@@ -1,3 +1,4 @@
+using System;
 using ConditioningControlPanel.Services;
 using Xunit;
 
@@ -35,6 +36,44 @@ public class QuestPremiumDropTests
             entitlementResolved: true, wasEverPremium: true, currentProgress: 0));
         Assert.True(QuestService.CanDropPremiumQuest(
             entitlementResolved: true, wasEverPremium: false, currentProgress: 0));
+    }
+
+    // ---- THE UPGRADE CASE. LastPremiumSeenUtc is new in 6.9.4, so the first launch after an
+    // upgrade has to reconstruct "was this account ever premium" from the cached Patreon state -
+    // and it has to do it BEFORE PatreonService clears that state on a tokenless launch.
+
+    [Fact]
+    public void UpgradingFromAnExpiredGraceStamp_CountsAsHistory_SoTheQuestSurvives()
+    {
+        // 6.9.3 install, tier-2 patron who cancelled last month: the grace stamp is past-dated and
+        // left non-null, which is exactly the evidence wanted.
+        var lapsed = DateTime.UtcNow.AddDays(-30);
+        Assert.True(QuestService.HasPremiumEvidenceInSettings(lapsed, null, patreonTier: 0));
+        Assert.True(QuestService.HasPremiumEvidenceInSettings(null, lapsed, patreonTier: 0));
+
+        Assert.False(QuestService.CanDropPremiumQuest(
+            entitlementResolved: true, wasEverPremium: true, currentProgress: 18));
+    }
+
+    [Fact]
+    public void AFreshAccountThatWasNeverPremium_HasNoHistory_AndStillLosesTheQuest()
+    {
+        // The case the bootstrap must not regress: no stamp, no grace, no tier, nothing to keep.
+        Assert.False(QuestService.HasPremiumEvidenceInSettings(null, null, patreonTier: 0));
+
+        Assert.True(QuestService.CanDropPremiumQuest(
+            entitlementResolved: true, wasEverPremium: false, currentProgress: 18));
+    }
+
+    [Fact]
+    public void ACurrentPatron_CountsAsHistory_FromEitherSignal()
+    {
+        Assert.True(QuestService.HasPremiumEvidenceInSettings(
+            DateTime.UtcNow.AddDays(14), null, patreonTier: 0));
+        Assert.True(QuestService.HasPremiumEvidenceInSettings(null, null, patreonTier: 2));
+
+        Assert.False(QuestService.CanDropPremiumQuest(
+            entitlementResolved: true, wasEverPremium: true, currentProgress: 18));
     }
 
     [Fact]
