@@ -302,7 +302,7 @@ namespace ConditioningControlPanel
                 // parked as an Inbox row inside the first-launch window. The once-per-launch claim
                 // moved INTO the open action - a card that only ever became a row must not spend
                 // the launch's one offer, or opening the row later would find it already gone.
-                Startup?.PresentOrInbox(new Services.Startup.InboxItem
+                StartupLadder?.PresentOrInbox(new Services.Startup.InboxItem
                 {
                     Key = "intro:remote-media",
                     Glyph = "🌐",
@@ -315,7 +315,7 @@ namespace ConditioningControlPanel
                     },
                 });
 
-                if (Startup == null)
+                if (StartupLadder == null)
                 {
                     if (Interlocked.CompareExchange(ref _remoteMediaOfferClaimed, 1, 0) != 0) return;
                     FeatureIntroPopup.ShowIfFirstTime(RemoteMediaIntroKey, cardOwner);
@@ -444,7 +444,7 @@ namespace ConditioningControlPanel
         /// that wants the screen can queue rather than racing for it. See
         /// <see cref="Services.Startup.StartupPresenter"/> for why that mattered.
         /// </summary>
-        public static Services.Startup.StartupPresenter? Startup { get; private set; }
+        public static Services.Startup.StartupPresenter? StartupLadder { get; private set; }
 
         // Transient feed of recent AI-driven effect actions, surfaced in the Companion tab's
         // "Live actions" panel. Populated by the upcoming local-LLM effect controller; not persisted.
@@ -1797,7 +1797,7 @@ namespace ConditioningControlPanel
             // thing that queues on it. Everything that used to decide for itself when it was
             // allowed to open - the failed-update report, the wizard, What's New, the season
             // recap, the mod picker, the enhance nudge, the update dialog - now asks this.
-            Startup = new Services.Startup.StartupPresenter(Current?.Dispatcher ?? System.Windows.Threading.Dispatcher.CurrentDispatcher);
+            StartupLadder = new Services.Startup.StartupPresenter(Current?.Dispatcher ?? System.Windows.Threading.Dispatcher.CurrentDispatcher);
 
             // One-shot settings migrations. Must run before anything reads
             // the migrated fields (Flash UI, GazeFocusService, etc.).
@@ -3261,7 +3261,7 @@ namespace ConditioningControlPanel
                             Open = ShowAll,
                         };
 
-                        if (Startup != null) Startup.PresentOrInbox(item);
+                        if (StartupLadder != null) StartupLadder.PresentOrInbox(item);
                         else ShowAll();
                     }
                     catch (Exception ex)
@@ -3729,9 +3729,9 @@ namespace ConditioningControlPanel
                 // Priority 30: the upgrader's What's New slot. The two are alternatives - a fresh
                 // settings file has no LastSeenVersion, so What's New stamps and says nothing -
                 // and the sheet carries the patch notes itself for exactly that reason.
-                Startup?.EnqueueModal("welcome-back", 30, owner => ShowWelcomeBackSheet(owner, content, backup, plan));
+                StartupLadder?.EnqueueModal("welcome-back", 30, owner => ShowWelcomeBackSheet(owner, content, backup, plan));
 
-                if (Startup == null)
+                if (StartupLadder == null)
                 {
                     await Current.Dispatcher.InvokeAsync(() => ShowWelcomeBackSheet(null, content, backup, plan));
                 }
@@ -3931,7 +3931,7 @@ namespace ConditioningControlPanel
                     Open = () => _ = RetryWelcomeBackRestoreAsync(),
                 };
 
-                if (Startup != null) Startup.PresentOrInbox(item);
+                if (StartupLadder != null) StartupLadder.PresentOrInbox(item);
                 else Logger?.Warning("Welcome-back: the restore failed and there is no Inbox to say so");
             }
             catch (Exception ex)
@@ -4150,7 +4150,7 @@ namespace ConditioningControlPanel
                     // 30 s poll over IsStartupDialogShowing and then give up silently - which is
                     // how an upgrader still reading patch notes lost the update prompt entirely.
                     Logger?.Information("Queueing the update dialog behind the startup ladder...");
-                    Startup?.EnqueueModal("update-available", 80, owner =>
+                    StartupLadder?.EnqueueModal("update-available", 80, owner =>
                     {
                         try
                         {
@@ -4199,7 +4199,7 @@ namespace ConditioningControlPanel
                 // that did not take is the one piece of startup news that changes what the user
                 // should do next, and it used to hand-roll its own 30 s poll over
                 // IsStartupDialogShowing to avoid stacking. The ladder is that poll now.
-                Startup?.EnqueueModal("failed-update-report", 10, owner =>
+                StartupLadder?.EnqueueModal("failed-update-report", 10, owner =>
                     OfferManualUpdateDownload(
                         owner ?? Current?.MainWindow,
                         Loc.Get("title_update_failed"),
