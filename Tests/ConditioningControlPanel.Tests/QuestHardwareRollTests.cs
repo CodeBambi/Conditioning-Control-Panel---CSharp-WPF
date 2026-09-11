@@ -169,6 +169,56 @@ public class QuestHardwareRollTests
         Assert.False(settled.HasCamera);         // the real answer, in time for the recheck
     }
 
+    // ---- THE CAMERA PROBE'S THREE ANSWERS. A camera that cannot be COUNTED is not a camera that
+    // is MISSING: the enumerators the probe calls used to turn a broken COM registration, a wedged
+    // driver or a privacy block into an empty list, and an empty list reads as absent AND RESOLVED
+    // - the one combination this gate must never produce by accident, because it is permanent.
+
+    [Fact]
+    public void AnEnumerationThatThrows_ReadsPresentAndUNRESOLVED()
+    {
+        int probes = 0;
+        var gate = new QuestHardwareGate(
+            () => { System.Threading.Interlocked.Increment(ref probes); throw new InvalidOperationException("COM registration is broken"); },
+            () => true);
+
+        // Snapshot kicks the probe off and waits on it; a loaded runner may need more than the
+        // gate's 400ms budget, and the in-flight task is reused rather than probed again.
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        QuestHardwareState snapshot;
+        do { snapshot = gate.Snapshot(); }
+        while (System.Threading.Volatile.Read(ref probes) == 0 && DateTime.UtcNow < deadline);
+
+        Assert.Equal(1, System.Threading.Volatile.Read(ref probes));   // it ran, and it threw
+        Assert.True(snapshot.HasCamera);   // fail open: nobody loses four blink quests to a throw
+        Assert.False(snapshot.Resolved);   // ...and the recheck is armed, so it is not forever
+    }
+
+    [Fact]
+    public void ACleanEnumerationThatFoundNothing_ReadsAbsentAndRESOLVED()
+    {
+        var snapshot = SpinUntilResolved(new QuestHardwareGate(() => false, () => true));
+        Assert.False(snapshot.HasCamera);
+        Assert.True(snapshot.Resolved);    // the only way to say "this machine has no camera"
+    }
+
+    [Fact]
+    public void ACleanEnumerationThatFoundACamera_ReadsPresentAndRESOLVED()
+    {
+        var snapshot = SpinUntilResolved(new QuestHardwareGate(() => true, () => true));
+        Assert.True(snapshot.HasCamera);
+        Assert.True(snapshot.Resolved);
+    }
+
+    [Fact]
+    public void TheDevicePickersEnumeration_StillSwallowsItsOwnFailures()
+    {
+        // The other half of the fix: the strict form is for the gate alone. The webcam tracking
+        // feature keeps the forgiving one, so a device list that cannot be built is still an empty
+        // picker rather than an exception in the Lab tab.
+        Assert.Null(Record.Exception(() => WebcamDeviceEnumerator.Enumerate()));
+    }
+
     [Fact]
     public void ASettledProbe_IsResolved_SoNoRecheckIsArmedForever()
     {

@@ -76,13 +76,21 @@ internal sealed class QuestHardwareGate
         _microphone.Start();
     }
 
-    /// <summary>The enumeration the Lab tab shows "(no cameras detected)" from; the service's
-    /// DirectShow + WinRT/MF pair is repeated for a roll that happens before it is up.</summary>
+    /// <summary>The enumeration the Lab tab shows "(no cameras detected)" from - the service's
+    /// DirectShow + WinRT/MF pair, repeated here so a roll that happens before the service is up
+    /// still gets an answer.</summary>
+    // STRICT on purpose, and NOT WebcamTrackingService.EnumerateDevices(): every lenient path
+    // (the DirectShow catch, the WinRT catch and timeout, the "CLSID could not be resolved" and
+    // "activation returned null" exits) turns a failure into an EMPTY LIST, which this gate would
+    // then read as absent AND resolved - a camera owner silently loses all four blink quests, the
+    // board drops the one it is holding, and no recheck is ever armed because the answer looked
+    // final. A camera that cannot be COUNTED is not a camera that is MISSING. The strict pair
+    // throws instead, CachedProbe.Run catches, and the answer is present + UNRESOLVED, exactly
+    // like the mic. Only a clean enumeration that really found nothing says "no camera".
     private static bool DetectCamera()
     {
-        var svc = App.Webcam;
-        if (svc != null) return svc.EnumerateDevices().Count > 0;
-        return WebcamDeviceEnumerator.Enumerate().Count > 0 || WebcamWinRtEnumerator.Enumerate().Count > 0;
+        if (WebcamDeviceEnumerator.EnumerateStrict().Count > 0) return true;
+        return WebcamWinRtEnumerator.EnumerateStrict().Count > 0;
     }
 
     /// <summary>The same WaveIn enumeration the speech mic picker is built from - no new probe.</summary>
