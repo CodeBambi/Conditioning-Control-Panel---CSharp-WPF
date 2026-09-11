@@ -19,8 +19,8 @@
  *
  * MOCK MODE (`index.html?game=<id>&mock=1`, or any non-hosted page):
  *   - `ready`          -> answers `init` after 60 ms with a placeholder mod
- *                         {id:"builtin-bambisleep", name:"Bambi Sleep",
- *                          honorific:"good girl", subject:"Bambi"} and three
+ *                         {id:"builtin-ccp-default", name:"CCP Default",
+ *                          honorific:"sweetie", subject:"you"} and three
  *                         CSS-gradient "gifs" (inline SVG data: URLs)
  *   - `game-finished`  -> answers `verdict` after 400 ms (random escape /
  *                         sendback; `&verdict=escape|sendback` forces it;
@@ -159,7 +159,7 @@
       photosafe: query.photosafe === '1' || query.photosafe === 'true',
       lang: query.lang || 'en',
       seed: query.seed != null ? num(query.seed, 0) : undefined,
-      mod: { id: 'builtin-bambisleep', name: 'Bambi Sleep', honorific: 'good girl', subject: 'Bambi' },
+      mod: { id: 'builtin-ccp-default', name: 'CCP Default', honorific: 'sweetie', subject: 'you' },
       assets: { gifs: (query.gifs === '0') ? [] : MOCK_GIFS.slice() },
       mock: true
     };

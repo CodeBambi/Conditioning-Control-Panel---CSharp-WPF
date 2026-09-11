@@ -68,7 +68,20 @@ namespace ConditioningControlPanel.Services
         private static readonly Random _fallbackRandom = new();
         private static string GetFallbackResponse()
         {
-            var phrases = App.Mods?.GetPhrases("Idle") ?? new[] { "Good girl~" };
+            // The mod's own Idle pool wins. With no mod pool the fallback is neutral praise, not
+            // a themed line - this is what a free user hears most (cloud down, cap hit).
+            // GetPhrases returns an EMPTY array when nothing matches, so the length check matters:
+            // indexing an empty array here used to throw.
+            var phrases = App.Mods?.GetPhrases("Idle");
+            if (phrases == null || phrases.Length == 0)
+            {
+                phrases = new[]
+                {
+                    VocabTokens.Apply("That's it, {petname}~"),
+                    "Mmm~",
+                    "Just like that~"
+                };
+            }
             return phrases[_fallbackRandom.Next(phrases.Length)];
         }
 

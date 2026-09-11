@@ -31,8 +31,55 @@ export function tierForDepth(depth) {
 }
 
 /* circe = the Locked mod: custody/case-notes voice, never bambi's giggle
- * (same note as the old stub — the register mismatch reads as a bug). */
+ * (same note as the old stub — the register mismatch reads as a bug).
+ * default = the neutral house voice an unmodded run gets. Plain second person,
+ * no pet names beyond the house one, no gendered or anatomical words. It is the
+ * fallback for an unknown niche too, so it must never read as someone's persona. */
 export const ACCENT_POOLS = {
+  default: {
+    light: [
+      'noted',
+      'no wrong answers here',
+      'that was quick',
+      'shoulders down',
+      'take the time you want',
+      'answer with the first thing that comes',
+      'nothing to get right',
+      'still easy so far',
+      'a slow breath, then the next one',
+      'you answered before you decided to',
+      'settling already',
+      'keep going at your own pace',
+    ],
+    mid: [
+      'sinking a little with every answer',
+      'let the quiet come in closer',
+      "heavier now, isn't it",
+      'thoughts are getting slippery',
+      'you can let that one go',
+      'warmer, softer, further down',
+      'each answer costs a little less',
+      'half a thought is plenty',
+      'nothing to hold on to',
+      'the pull is doing the work now',
+      'deeper with the next one',
+      'fuzzy is fine',
+    ],
+    deep: [
+      'quiet and easy, all the way down',
+      'no thoughts left to spend',
+      'blank is a fine score',
+      'yes is the only word you need',
+      'nothing left to carry',
+      'sink, stay, sink, stay',
+      'gone, and glad to be gone',
+      'still and warm and safe',
+      'keep going until there is nothing',
+      'think nothing, feel everything',
+      'this is where you were headed',
+      'stay exactly here',
+    ],
+  },
   bambi: {
     light: [
       'hi pretty thing',
@@ -326,7 +373,8 @@ export function createAccentPicker() {
   }
 
   function next(niche, depth) {
-    const pools = ACCENT_POOLS[niche] || ACCENT_POOLS.bambi;
+    // Unknown niche falls to the neutral house pool, never to a persona's.
+    const pools = ACCENT_POOLS[niche] || ACCENT_POOLS.default;
     const tier = tierForDepth(depth);
     const key = niche + '/' + tier;
     let bag = bags.get(key);

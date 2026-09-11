@@ -5891,7 +5891,7 @@ namespace ConditioningControlPanel.Services
 
                     try
                     {
-                        ShowMessage(troll ? "GOOD GIRL!\nWATCH AGAIN 😜" : (App.Mods?.GetAttentionCheckFailMessage() ?? "DUMB BAMBI!\nTRY AGAIN"), 2000, replay);
+                        ShowMessage(troll ? "NICE TRY!\nWATCH AGAIN 😜" : (App.Mods?.GetAttentionCheckFailMessage() ?? "MISSED IT!\nTRY AGAIN"), 2000, replay);
                     }
                     catch
                     {
