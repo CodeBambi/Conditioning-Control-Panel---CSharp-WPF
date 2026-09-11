@@ -72,11 +72,11 @@ namespace ConditioningControlPanel
             ("DoorPlayTogether", "door.playtogether"), ("BtnNavFyp", "tab.fyp"),
             ("BtnNavAiEffects", "part.aieffects"), ("BtnNavDeeperEditor", "part.deepereditor"),
             ("BtnNavWorkshop", "part.workshop"), ("BtnNavEngineRoom", "part.engineroom"),
-            ("BtnNavWebApp", "launch.webapp"),
+            ("BtnNavWebApp", "launch.webapp"), ("BtnNavJustDrop", "door.justdrop"),
             // Play wall cards (PlayTabView.xaml) - resolved through PlayTab.FindName.
             ("BtnPlayRemoteControl", "tab.remotecontrol"), ("BtnPlayBlinkTrainer", "tab.blinktrainer"),
             ("BtnPlayGradedIntake", "tab.gradedintake"), ("BtnPlayFyp", "tab.fyp"),
-            ("BtnPlayJustDrop", "door.justdrop"), ("BtnPlayLockdown", "tab.lockdown"),
+            ("BtnPlayLockdown", "tab.lockdown"),
             ("BtnPlayArcademy", "card.arcademy"),
         };
 

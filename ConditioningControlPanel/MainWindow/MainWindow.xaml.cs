@@ -2711,7 +2711,6 @@ namespace ConditioningControlPanel
                     // overriding features/justdrop.png repainted the dashboard tile and left this
                     // card on the embedded art. Found by the review, which spotted that the card was
                     // offering authors a Frame button over a brush nothing wrote to.
-                    ("features/justdrop.png",           PlayTab?.PlayJustDropHeroBrush, 512, ModArtFramingRegistry.SurfacePlayCard),
                 };
                 foreach (var (path, brush, decodeWidth, surfaceId) in playHeroMap)
                 {
