@@ -499,6 +499,15 @@
                                                                 <TextBlock Grid.Column="0" Text="{loc:Str label_autonomy_wallpaper}" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                                                 <CheckBox Grid.Column="1" x:Name="ChkAutonomyWallpaper" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" VerticalAlignment="Center" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
                                                             </Grid>
+                                                            <!-- Preconditions, on the face of the setting rather than in a tooltip.
+                                                                 WallpaperService.Activate refuses outright when SPI_GETDESKWALLPAPER
+                                                                 hands back nothing usable (solid colour, slideshow, theme, Spotlight)
+                                                                 so the user's real wallpaper stays restorable, and it also bails when
+                                                                 the image pool is empty. Both refusals are silent, which reads as
+                                                                 "the feature never fires". -->
+                                                            <TextBlock Text="{loc:Str hint_autonomy_wallpaper_needs_image}" FontSize="10.5"
+                                                                       Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"
+                                                                       Margin="0,2,0,0"/>
                                                         </StackPanel>
                                                     </Grid>
 

@@ -222,7 +222,11 @@ namespace ConditioningControlPanel
                 "bouncing_text" => "Displays bouncing text across the screen",
                 "pink_filter" => "Applies a pink color filter overlay",
                 "spiral" => "Shows a hypnotic spiral overlay",
-                "brain_drain" => "Intense visual distortion effect",
+                // Localized on its own, and spelled out, because the blur surprises people: this
+                // block turns the whole screen soft mid-session and "Intense visual distortion
+                // effect" never told anyone that. The rest of this switch is still hardcoded
+                // English - pre-existing debt, not widened here.
+                "brain_drain" => Loc.Get("session_feature_brain_drain_desc"),
                 "bubbles" => "Floating interactive bubbles",
                 "lock_cards" => "Interactive lock card challenges",
                 "bubble_count" => "Bubble counting mini-game",
