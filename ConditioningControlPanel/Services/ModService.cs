@@ -650,6 +650,9 @@ namespace ConditioningControlPanel.Services
                 // Capped shorter: both land inside a fixed quiz card, not a scrolling surface.
                 if (manifest.Messages.QuizTrickQuestion?.Length > 200) manifest.Messages.QuizTrickQuestion = manifest.Messages.QuizTrickQuestion[..200];
                 if (manifest.Messages.QuizTrickAnswer?.Length > 60) manifest.Messages.QuizTrickAnswer = manifest.Messages.QuizTrickAnswer[..60];
+                // The marquee scrolls one line forever; a long one is a performance problem, not a
+                // wrapping one, so it is capped hardest of the set.
+                if (manifest.Messages.MarqueeBanner?.Length > 120) manifest.Messages.MarqueeBanner = manifest.Messages.MarqueeBanner[..120];
             }
             if (manifest.Triggers != null)
             {
@@ -1173,6 +1176,14 @@ namespace ConditioningControlPanel.Services
         public string GetGazeCorrectMessage() =>
             GetStringValue(m => m.Messages?.GazeCorrect, m => m.Messages!.GazeCorrect!);
 
+        /// <summary>
+        /// This mod's default marquee banner, walking to CCP Default (the neutral house banner) for
+        /// a mod that names none. Read only where a banner has to be INVENTED - a blank saved
+        /// message, or a retired house default nobody typed - never over text the user wrote.
+        /// </summary>
+        public string GetMarqueeBannerMessage() =>
+            GetStringValue(m => m.Messages?.MarqueeBanner, m => m.Messages!.MarqueeBanner!);
+
         // The quiz trick question deliberately does NOT walk to the base mod, and deliberately
         // returns null rather than a default: the neutral pool lives in QuizWindow.TrickQuestions
         // and is six lines, not one. Null here means "this mod has no themed trick question, leave
@@ -1496,7 +1507,8 @@ namespace ConditioningControlPanel.Services
                     AttentionCheckTroll = GetAttentionCheckTrollMessage(),
                     GazeCorrect = GetGazeCorrectMessage(),
                     QuizTrickQuestion = GetQuizTrickQuestionOverride(),
-                    QuizTrickAnswer = GetQuizTrickAnswerOverride()
+                    QuizTrickAnswer = GetQuizTrickAnswerOverride(),
+                    MarqueeBanner = GetMarqueeBannerMessage()
                 },
                 Browser = new ModBrowser
                 {

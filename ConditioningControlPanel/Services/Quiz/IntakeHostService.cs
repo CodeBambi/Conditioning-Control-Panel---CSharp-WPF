@@ -874,8 +874,9 @@ namespace ConditioningControlPanel.Services.Quiz
         /// bank-availability clamp. Mapped from the mod, not the legacy two-value ContentMode enum
         /// (which has no drone value and collapses every non-sissy mod to BambiSleep — that mapping
         /// served drone-mode users the whole bambi prompt bank). Built-in ids win; third-party mods
-        /// declare theirs via a manifest tag. Defaults to bambi. A dedicated picker is a Phase-3 UX
-        /// concern. The mapping itself now lives in <see cref="IntakeNiche"/> so the weekly pass
+        /// declare theirs via a manifest tag. Defaults to the neutral "default" niche - an install
+        /// with no themed mod signal gets the house bank, not somebody else's persona. A dedicated
+        /// picker is a Phase-3 UX concern. The mapping itself now lives in <see cref="IntakeNiche"/> so the weekly pass
         /// card and its nudge popup show art for the same niche this picks a prompt bank for.</summary>
         private static string DesiredNiche() => IntakeNiche.Current();
 

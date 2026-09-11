@@ -54,7 +54,12 @@ namespace ConditioningControlPanel.Models
                     ModeDisplayName = "Bambi Sleep",
                     TalkToLabel = "Talk to Bambi",
                     TakeoverLabel = "Bambi Takeover",
-                    Affirmation = "Good Girl"
+                    Affirmation = "Good Girl",
+                    // Descent vocabulary. "good girl" is not decoration here: it is the exact word
+                    // the Deeper speak prompt praised every user with until 6.9.4 routed that seed
+                    // through {petname}, and an unset PetName made it read "sweetie" for this mod.
+                    PetName = "good girl",
+                    Collective = "good girls"
                 },
 
                 SubliminalPool = new Dictionary<string, bool>
@@ -132,7 +137,10 @@ namespace ConditioningControlPanel.Models
                     AttentionCheckTroll = "GOOD GIRL!\nWATCH AGAIN \U0001F61C",
                     GazeCorrect = "GOOD GIRL",
                     QuizTrickQuestion = "Are you a good girl?",
-                    QuizTrickAnswer = "Obviously"
+                    QuizTrickAnswer = "Obviously",
+                    // The 6.9.3 house banner. It shipped as the default on every install, so a user
+                    // of this mod who never edited the marquee had been reading it for years.
+                    MarqueeBanner = "GOOD GIRLS CONDITION DAILY     ❤️🔒"
                 },
 
                 Browser = new ModBrowser
@@ -499,7 +507,11 @@ namespace ConditioningControlPanel.Models
                     TalkToLabel = "Ask your Bimbo",
                     TakeoverLabel = "Bimbo Takeover",
                     Affirmation = "babe",
-                    RankSubject = "Babe"
+                    RankSubject = "Babe",
+                    // Same 6.9.3 word as BambiSleep, for the same reason #1053 gave this mod the
+                    // same gaze and troll lines: they were shared literals, and both mods speak it.
+                    PetName = "good girl",
+                    Collective = "good girls"
                 },
 
                 // NO BAMBISLEEP TRIGGERS IN HERE. This pool started life as the BambiSleep pool
@@ -587,7 +599,8 @@ namespace ConditioningControlPanel.Models
                     AttentionCheckTroll = "GOOD GIRL!\nWATCH AGAIN \U0001F61C",
                     GazeCorrect = "GOOD GIRL",
                     QuizTrickQuestion = "Are you a good girl?",
-                    QuizTrickAnswer = "Obviously"
+                    QuizTrickAnswer = "Obviously",
+                    MarqueeBanner = "GOOD GIRLS CONDITION DAILY     ❤️🔒"
                 },
 
                 Browser = new ModBrowser
@@ -983,6 +996,10 @@ namespace ConditioningControlPanel.Models
                     TalkToLabel = "Talk to Companion",
                     TakeoverLabel = "Takeover",
                     Affirmation = "Subject"
+                    // PetName/Collective deliberately unset: the neutral pair is owner-locked at
+                    // VocabTokens.VanillaPetName / VanillaCollective ("sweetie"/"sweeties"), and
+                    // that const is the single config point. Naming it again here would make the
+                    // two drift the first time one of them is edited.
                 },
 
                 SubliminalPool = new Dictionary<string, bool>
@@ -1053,7 +1070,11 @@ namespace ConditioningControlPanel.Models
                     // The neutral answers. CCP Default is the base mod, so these are also
                     // what a mod that names neither of them falls back to.
                     AttentionCheckTroll = "NICE TRY!\nWATCH AGAIN \U0001F61C",
-                    GazeCorrect = "GOOD"
+                    GazeCorrect = "GOOD",
+                    // Kept identical to AppSettings.DefaultMarqueeMessage: an unmodded install
+                    // never reads this field (the settings default is already this text), so the
+                    // two can only drift on a mod that names no banner of its own.
+                    MarqueeBanner = "CONDITION DAILY     ❤️🔒"
                     // No QuizTrickQuestion on purpose: the neutral trick pool is the
                     // six-line array in QuizWindow, and that accessor never walks to base.
                 },
@@ -1324,7 +1345,10 @@ namespace ConditioningControlPanel.Models
                     ModeDisplayName = "Drone Mode",
                     TalkToLabel = "Query DroneOS",
                     TakeoverLabel = "System Override",
-                    Affirmation = "Unit"
+                    Affirmation = "Unit",
+                    // Its own voice rather than the 6.9.3 shared word, which was never a fit here.
+                    PetName = "unit",
+                    Collective = "units"
                 },
 
                 SubliminalPool = new Dictionary<string, bool>
@@ -1401,7 +1425,8 @@ namespace ConditioningControlPanel.Models
                     AttentionCheckTroll = "COMPLIANCE LOGGED\nRE-RUN ANYWAY \U0001F61C",
                     GazeCorrect = "COMPLIANT",
                     QuizTrickQuestion = "Is the unit ready to comply?",
-                    QuizTrickAnswer = "Affirmative"
+                    QuizTrickAnswer = "Affirmative",
+                    MarqueeBanner = "UNITS CONDITION DAILY     ❤️🔒"
                 },
 
                 Browser = new ModBrowser
@@ -2076,7 +2101,10 @@ namespace ConditioningControlPanel.Models
                     TalkToLabel = "Talk to Circe",
                     TakeoverLabel = "Surrender Control",
                     Affirmation = "Good boy",
-                    RankSubject = "pet"
+                    RankSubject = "pet",
+                    // Its own voice rather than the 6.9.3 shared word - a keeper addresses a pet.
+                    PetName = "pet",
+                    Collective = "pets"
                 },
 
                 SubliminalPool = new Dictionary<string, bool>
@@ -2169,7 +2197,8 @@ namespace ConditioningControlPanel.Models
                     AttentionCheckTroll = "Good pet.\nWatch it again for me \U0001F61C",
                     GazeCorrect = "GOOD PET",
                     QuizTrickQuestion = "Are you Circe's good pet?",
-                    QuizTrickAnswer = "Always"
+                    QuizTrickAnswer = "Always",
+                    MarqueeBanner = "GOOD PETS CONDITION DAILY     ❤️🔒"
                 },
 
                 Browser = new ModBrowser

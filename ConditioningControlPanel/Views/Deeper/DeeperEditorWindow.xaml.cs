@@ -166,6 +166,12 @@ namespace ConditioningControlPanel.Views.Deeper
             _playheadTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
             _playheadTimer.Tick += PlayheadTimer_Tick;
 
+            // The example has to name the ACTIVE mod's word, not the vanilla one: the praise this
+            // box is seeded with reads "that's it, {petname}", so a hard-coded "sweetie" advertised
+            // the wrong word to every user with a mod.
+            TxtSpeakCorrect.ToolTip =
+                $"Flashed after each correct rep, e.g. 'that's it, {Localization.VocabTokens.PetName}'.";
+
             BuildColorSwatches();
             BuildPatternCombo();
             FillHapticTargetCombo(CmbHapticTarget);
