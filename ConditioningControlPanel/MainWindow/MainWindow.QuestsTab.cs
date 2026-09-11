@@ -53,10 +53,8 @@ namespace ConditioningControlPanel
             if (App.Quests?.GetRemainingDailyRerolls() > 0) return;
 
             var hasPatreon = App.Patreon?.HasPremiumAccess == true;
-            var msg = hasPatreon
-                ? "You've used all your daily rerolls! Rerolls reset at midnight."
-                : "You've used your daily reroll! Patreon supporters get 2 extra rerolls.";
-            MessageBox.Show(msg, "Reroll Limit", MessageBoxButton.OK, MessageBoxImage.Information);
+            var msg = Loc.Get(hasPatreon ? "quest_reroll_daily_none_patron" : "quest_reroll_daily_none_free");
+            MessageBox.Show(msg, Loc.Get("quest_reroll_limit_title"), MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         internal void BtnRerollWeekly_Click(object sender, RoutedEventArgs e)
@@ -69,10 +67,8 @@ namespace ConditioningControlPanel
             else
             {
                 var hasPatreon = App.Patreon?.HasPremiumAccess == true;
-                var msg = hasPatreon
-                    ? "You've used all 3 weekly rerolls! Rerolls reset on Sunday."
-                    : "You've used your weekly reroll! Patreon supporters get 2 extra rerolls.";
-                MessageBox.Show(msg, "Reroll Limit", MessageBoxButton.OK, MessageBoxImage.Information);
+                var msg = Loc.Get(hasPatreon ? "quest_reroll_weekly_none_patron" : "quest_reroll_weekly_none_free");
+                MessageBox.Show(msg, Loc.Get("quest_reroll_limit_title"), MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
 
@@ -178,10 +174,12 @@ namespace ConditioningControlPanel
                 BonusText = bonus,
                 Art = GetQuestArt(def),
                 CanReroll = canReroll,
-                RerollText = canReroll ? $"\U0001f504 Reroll ({rerollsLeft})" : "\U0001f504 No rerolls left",
+                RerollText = canReroll
+                    ? Loc.GetF("btn_reroll_with_count", rerollsLeft)
+                    : Loc.Get("btn_reroll_none"),
                 RerollTooltip = canReroll
-                    ? "Swap this quest for a different one. Costs one of today's shared rerolls."
-                    : "You've used all of today's rerolls. They come back at midnight.",
+                    ? Loc.Get("quest_card_reroll_tip")
+                    : Loc.Get("quest_card_reroll_tip_none"),
             };
         }
 
@@ -241,8 +239,7 @@ namespace ConditioningControlPanel
                 if (quest == null || def == null)
                 {
                     _dailyCardQuestIds[i] = null;
-                    card.ShowEmpty(i, "No quest here yet",
-                                   "Nothing in today's pool fits this slot. Level up or check back after midnight.");
+                    card.ShowEmpty(i, Loc.Get("quest_card_empty_title"), Loc.Get("quest_card_empty_body"));
                     continue;
                 }
 
@@ -252,9 +249,11 @@ namespace ConditioningControlPanel
 
             QuestsTab.TxtDailyRerollPool.Text = allDailyDone
                 ? ""
-                : dailyRerollsLeft > 0
-                    ? $"\U0001f504 {dailyRerollsLeft} reroll{(dailyRerollsLeft == 1 ? "" : "s")} left today - spend one on whichever card you like"
-                    : "\U0001f504 No rerolls left today - they come back at midnight";
+                : dailyRerollsLeft > 1
+                    ? Loc.GetF("quest_daily_pool_many", dailyRerollsLeft)
+                    : dailyRerollsLeft == 1
+                        ? Loc.Get("quest_daily_pool_one")
+                        : Loc.Get("quest_daily_pool_none");
 
             // Refresh weekly quest display
             var weeklyDef = questService.GetCurrentWeeklyDefinition();
@@ -334,8 +333,8 @@ namespace ConditioningControlPanel
                 // Monday rollover (IsWeeklyExpired). We do NOT regenerate a completed quest — that
                 // would hand out a second weekly reward after every server refresh. (#496)
                 QuestsTab.TxtWeeklyQuestIcon.Text = "✅";
-                QuestsTab.TxtWeeklyQuestName.Text = "Weekly quest complete!";
-                QuestsTab.TxtWeeklyQuestDesc.Text = "Nice work! Your next weekly quest arrives Monday.";
+                QuestsTab.TxtWeeklyQuestName.Text = Loc.Get("quest_weekly_done_name");
+                QuestsTab.TxtWeeklyQuestDesc.Text = Loc.Get("quest_weekly_done_desc");
                 QuestsTab.TxtWeeklyProgress.Text = "";
                 QuestsTab.TxtWeeklyXP.Text = "";
                 QuestsTab.TxtWeeklyStreakBonus.Visibility = Visibility.Collapsed;
