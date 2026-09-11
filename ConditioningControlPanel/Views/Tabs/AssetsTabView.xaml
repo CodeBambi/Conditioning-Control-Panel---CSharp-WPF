@@ -59,12 +59,19 @@
         </Style>
     </UserControl.Resources>
         <Grid>
+        <!-- Row 1 (media source) is Auto, row 4 (asset browser) is the only star row, so
+             anything row 1 unfolds comes straight out of the browser's height. In Reddit or
+             Both that is the whole niche/custom-sub block, which is why the browser used to
+             shrink to a sliver: the fix is a scroll cap inside row 1 (see RemoteMediaScroll)
+             plus a floor here, so the browser can never be measured away entirely.
+             Row 3 is Auto rather than a literal 5 because its splitter is collapsed and a
+             literal height cannot give the 5px back. -->
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto" MaxHeight="340"/>
-            <RowDefinition Height="5"/>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*" MinHeight="220"/>
         </Grid.RowDefinitions>
     
         <!-- Header with title and actions -->
@@ -120,7 +127,15 @@
                 <WrapPanel x:Name="RemoteSourceChips" x:FieldModifier="internal"/>
 
                 <!-- Everything below is dead weight while the source is "local", so it only
-                     unfolds once remote media is actually in play. -->
+                     unfolds once remote media is actually in play. In Reddit or Both it is
+                     tall (13 niche chips, a resolved-subreddit line per checked niche, and up
+                     to 20 custom-sub chips), and this row is Auto inside a grid whose only
+                     star row is the asset browser, so an uncapped unfold ate the browser.
+                     The cap lives on the ScrollViewer rather than on the RowDefinition so the
+                     overflow scrolls instead of clipping, and so RemoteMediaDetails keeps its
+                     name and its Visibility contract with MainWindow.Assets.cs. -->
+                <ScrollViewer x:Name="RemoteMediaScroll" MaxHeight="300"
+                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel x:Name="RemoteMediaDetails" x:FieldModifier="internal" Visibility="Collapsed">
 
                     <!-- Mix ratio: only meaningful in "Both" -->
@@ -187,6 +202,7 @@
                                TextWrapping="Wrap" Margin="0,0,0,6" Visibility="Collapsed"/>
                     <WrapPanel x:Name="RemoteCustomSubChips" x:FieldModifier="internal"/>
                 </StackPanel>
+                </ScrollViewer>
             </StackPanel>
         </Border>
 
