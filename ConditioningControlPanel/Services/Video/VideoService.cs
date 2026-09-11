@@ -5891,7 +5891,12 @@ namespace ConditioningControlPanel.Services
 
                     try
                     {
-                        ShowMessage(troll ? "NICE TRY!\nWATCH AGAIN 😜" : (App.Mods?.GetAttentionCheckFailMessage() ?? "MISSED IT!\nTRY AGAIN"), 2000, replay);
+                        // Both halves go through the mod: the troll line is praise for a
+                        // PASSED check, so it gets its own manifest field rather than
+                        // reusing the scolding one. Unmodded, both resolve to CCP Default.
+                        ShowMessage(troll
+                            ? (App.Mods?.GetAttentionCheckTrollMessage() ?? "NICE TRY!\nWATCH AGAIN \U0001F61C")
+                            : (App.Mods?.GetAttentionCheckFailMessage() ?? "MISSED IT!\nTRY AGAIN"), 2000, replay);
                     }
                     catch
                     {

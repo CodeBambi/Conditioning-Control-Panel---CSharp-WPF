@@ -3561,7 +3561,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     if (newType == EffectTypes.Speak && string.IsNullOrWhiteSpace(te.SpeakTarget))
                     {
                         te.SpeakTarget = "YES";
-                        te.SpeakCorrectMessage = $"that's it, {VocabTokens.VanillaPetName}";
+                        te.SpeakCorrectMessage = $"that's it, {VocabTokens.PetName}";
                         te.SpeakIncorrectMessage = "try again";
                     }
                     RebuildTypeFields();

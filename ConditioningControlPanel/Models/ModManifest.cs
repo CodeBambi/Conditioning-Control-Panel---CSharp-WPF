@@ -273,6 +273,29 @@ namespace ConditioningControlPanel.Models
 
         [JsonProperty("bubbleCountRetry")]
         public string? BubbleCountRetry { get; set; }
+
+        /// <summary>
+        /// Shown when the attention check PASSED but the troll roll made the user watch the video
+        /// again. Its own field rather than a reuse of <see cref="AttentionCheckFail"/> because it
+        /// is praise, not a scolding.
+        /// </summary>
+        [JsonProperty("attentionCheckTroll")]
+        public string? AttentionCheckTroll { get; set; }
+
+        /// <summary>Fullscreen praise card after a correct gaze-minigame round.</summary>
+        [JsonProperty("gazeCorrect")]
+        public string? GazeCorrect { get; set; }
+
+        /// <summary>
+        /// One themed Pop Quiz trick question. Only used when <see cref="QuizTrickAnswer"/> is set
+        /// too: a question without its answer would pair a mod's wording with someone else's reply.
+        /// </summary>
+        [JsonProperty("quizTrickQuestion")]
+        public string? QuizTrickQuestion { get; set; }
+
+        /// <summary>The answer shown on all four buttons for <see cref="QuizTrickQuestion"/>.</summary>
+        [JsonProperty("quizTrickAnswer")]
+        public string? QuizTrickAnswer { get; set; }
     }
 
     public class ModBrowser

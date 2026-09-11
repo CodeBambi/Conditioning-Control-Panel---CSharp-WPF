@@ -125,7 +125,14 @@ namespace ConditioningControlPanel.Models
                 {
                     AttentionCheckFail = "DUMB BAMBI!\nTRY AGAIN",
                     AttentionCheckMercy = "BAMBI GETS MERCY",
-                    BubbleCountRetry = "WRONG!\nWATCH AGAIN"
+                    BubbleCountRetry = "WRONG!\nWATCH AGAIN",
+                    // The four below are the 6.9.3 hard-coded text, verbatim. They read as
+                    // this mod's voice and were shown to every user until Wave 1 neutralised
+                    // them, so this is where they belong now.
+                    AttentionCheckTroll = "GOOD GIRL!\nWATCH AGAIN \U0001F61C",
+                    GazeCorrect = "GOOD GIRL",
+                    QuizTrickQuestion = "Are you a good girl?",
+                    QuizTrickAnswer = "Obviously"
                 },
 
                 Browser = new ModBrowser
@@ -576,7 +583,11 @@ namespace ConditioningControlPanel.Models
                 {
                     AttentionCheckFail = "PAY ATTENTION!\nTRY AGAIN",
                     AttentionCheckMercy = "YOU GET MERCY",
-                    BubbleCountRetry = "WRONG!\nWATCH AGAIN"
+                    BubbleCountRetry = "WRONG!\nWATCH AGAIN",
+                    AttentionCheckTroll = "GOOD GIRL!\nWATCH AGAIN \U0001F61C",
+                    GazeCorrect = "GOOD GIRL",
+                    QuizTrickQuestion = "Are you a good girl?",
+                    QuizTrickAnswer = "Obviously"
                 },
 
                 Browser = new ModBrowser
@@ -1038,7 +1049,13 @@ namespace ConditioningControlPanel.Models
                 {
                     AttentionCheckFail = "ATTENTION REQUIRED\nTRY AGAIN",
                     AttentionCheckMercy = "MERCY GRANTED",
-                    BubbleCountRetry = "INCORRECT\nTRY AGAIN"
+                    BubbleCountRetry = "INCORRECT\nTRY AGAIN",
+                    // The neutral answers. CCP Default is the base mod, so these are also
+                    // what a mod that names neither of them falls back to.
+                    AttentionCheckTroll = "NICE TRY!\nWATCH AGAIN \U0001F61C",
+                    GazeCorrect = "GOOD"
+                    // No QuizTrickQuestion on purpose: the neutral trick pool is the
+                    // six-line array in QuizWindow, and that accessor never walks to base.
                 },
 
                 Browser = new ModBrowser
@@ -1380,7 +1397,11 @@ namespace ConditioningControlPanel.Models
                 {
                     AttentionCheckFail = "ERROR: ATTENTION FAILURE\nRETRY REQUIRED",
                     AttentionCheckMercy = "MERCY PROTOCOL ENGAGED",
-                    BubbleCountRetry = "INCORRECT\nRE-SCAN REQUIRED"
+                    BubbleCountRetry = "INCORRECT\nRE-SCAN REQUIRED",
+                    AttentionCheckTroll = "COMPLIANCE LOGGED\nRE-RUN ANYWAY \U0001F61C",
+                    GazeCorrect = "COMPLIANT",
+                    QuizTrickQuestion = "Is the unit ready to comply?",
+                    QuizTrickAnswer = "Affirmative"
                 },
 
                 Browser = new ModBrowser
@@ -2144,7 +2165,11 @@ namespace ConditioningControlPanel.Models
                 {
                     AttentionCheckFail = "Eyes drifted, pet.\nLook at me again.",
                     AttentionCheckMercy = "I'll be merciful. This once.",
-                    BubbleCountRetry = "Wrong, sweet thing.\nCount again for me."
+                    BubbleCountRetry = "Wrong, sweet thing.\nCount again for me.",
+                    AttentionCheckTroll = "Good pet.\nWatch it again for me \U0001F61C",
+                    GazeCorrect = "GOOD PET",
+                    QuizTrickQuestion = "Are you Circe's good pet?",
+                    QuizTrickAnswer = "Always"
                 },
 
                 Browser = new ModBrowser
