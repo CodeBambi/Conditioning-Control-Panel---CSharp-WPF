@@ -1055,6 +1055,24 @@ namespace ConditioningControlPanel.Models
             set { _flashDuration = Math.Clamp(value, 1, 30); OnPropertyChanged(); }
         }
 
+        // #1194: animated flashes used to play at whatever timing the file carried, which is far
+        // too slow for some GIFs and far too fast for others. 1.0 keeps the file's own timing;
+        // 2.0 plays it twice as fast. Applied by FlashService.ScaleFrameDelay when a flash window
+        // is handed its frames, so it touches FLASH windows only - the avatar's XamlAnimatedGif
+        // clips and the spiral overlay's own pump keep their own timing.
+        private double _flashGifSpeedMultiplier = 1.0; // 0.25x (quarter speed) .. 4x
+        /// <summary>
+        /// Playback speed multiplier for animated flash images (GIF / animated WebP).
+        /// Clamped 0.25-4.0; the resulting per-frame delay is additionally floored at
+        /// <see cref="ConditioningControlPanel.Services.FlashService.MIN_GIF_FRAME_DELAY_MS"/> ms
+        /// so a 4x on an already-fast GIF cannot spin the UI thread.
+        /// </summary>
+        public double FlashGifSpeedMultiplier
+        {
+            get => _flashGifSpeedMultiplier;
+            set { _flashGifSpeedMultiplier = Math.Clamp(value, 0.25, 4.0); OnPropertyChanged(); }
+        }
+
         // Gaming quality-of-life (#770): keep flashes out of a centered square on every monitor so
         // they never land on the crosshair / HUD centre. This is a PURE GLOBAL USER PREFERENCE —
         // deliberately absent from SessionSettings, SessionEngine's save/restore, Preset and the

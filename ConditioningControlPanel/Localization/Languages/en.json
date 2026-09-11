@@ -960,6 +960,8 @@
   "setting_click": "Click",
   "setting_max_on_screen": "Max On Screen",
   "setting_duration": "Duration",
+  "setting_gif_speed": "GIF speed",
+  "tooltip_playback_speed_for_animated_flash_images_gif": "Playback speed for animated flash images.\n1.0x keeps the file's own timing.",
   "setting_interval": "Interval",
   "setting_opacity": "Opacity",
   "setting_intensity": "Intensity",

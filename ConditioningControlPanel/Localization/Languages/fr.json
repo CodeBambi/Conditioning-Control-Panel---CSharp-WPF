@@ -185,6 +185,8 @@
   "setting_click": "Clic",
   "setting_max_on_screen": "Max à l'écran",
   "setting_duration": "Durée",
+  "setting_gif_speed": "Vitesse GIF",
+  "tooltip_playback_speed_for_animated_flash_images_gif": "Vitesse de lecture des images flash animées.\n1.0x conserve le rythme du fichier.",
   "setting_interval": "Intervalle",
   "setting_opacity": "Opacité",
   "setting_intensity": "Intensité",

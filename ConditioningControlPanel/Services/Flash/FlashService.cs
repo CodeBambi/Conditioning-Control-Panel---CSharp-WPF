@@ -65,6 +65,32 @@ namespace ConditioningControlPanel.Services
             => (useLayer || useHost) ? MAX_CONCURRENT_FLASH_HOST : MAX_CONCURRENT_FLASH;
 
         /// <summary>
+        /// Floor for an animated flash's per-frame delay, in milliseconds. A 4x multiplier on a GIF
+        /// that already carries a 10-20ms frame time would otherwise ask the heartbeat for a new
+        /// frame every tick on every live window; 10ms (100fps) is past what anyone can see and
+        /// keeps the UI thread out of a spin. It also guards the frame-index division below against
+        /// a decoder that hands back a zero delay.
+        /// </summary>
+        internal const double MIN_GIF_FRAME_DELAY_MS = 10.0;
+
+        /// <summary>
+        /// The per-frame delay an animated flash should actually play at: the file's own delay
+        /// divided by the user's speed multiplier (2x = half the delay = twice as fast), floored at
+        /// <see cref="MIN_GIF_FRAME_DELAY_MS"/>. A non-positive or non-finite source delay falls back
+        /// to the decoders' own 100ms default, and a garbage multiplier falls back to 1.0 before the
+        /// 0.25-4.0 clamp, so this never returns zero or NaN.
+        /// Pure so it can be unit-tested without spinning up WPF.
+        /// </summary>
+        internal static TimeSpan ScaleFrameDelay(TimeSpan sourceDelay, double multiplier)
+        {
+            var ms = sourceDelay.TotalMilliseconds;
+            if (double.IsNaN(ms) || double.IsInfinity(ms) || ms <= 0) ms = 100.0;
+            if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier <= 0) multiplier = 1.0;
+            multiplier = Math.Clamp(multiplier, 0.25, 4.0);
+            return TimeSpan.FromMilliseconds(Math.Max(MIN_GIF_FRAME_DELAY_MS, ms / multiplier));
+        }
+
+        /// <summary>
         /// The current run's cancellation token, or <see cref="CancellationToken.None"/> when no run
         /// owns one (Stop retires it - see #1107). Tolerates a source disposed by a racing Stop.
         /// </summary>
@@ -1471,7 +1497,8 @@ namespace ConditioningControlPanel.Services
                 window.Left = finalX;
                 window.Top = finalY;
                 window.Frames = imageData.Frames;
-                window.FrameDelay = imageData.FrameDelay;
+                // #1194: the user's GIF speed slider, applied once here rather than per tick.
+                window.FrameDelay = ScaleFrameDelay(imageData.FrameDelay, settings.FlashGifSpeedMultiplier);
                 window.StartTime = DateTime.Now;
                 window.CurrentFrameIndex = 0;
                 // The shared host is fully click-through (pops on it would need the global mouse

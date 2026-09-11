@@ -185,6 +185,8 @@
   "setting_click": "クリック",
   "setting_max_on_screen": "最大表示数",
   "setting_duration": "表示時間",
+  "setting_gif_speed": "GIF速度",
+  "tooltip_playback_speed_for_animated_flash_images_gif": "アニメーションフラッシュ画像の再生速度。\n1.0x はファイル本来の速度です。",
   "setting_interval": "間隔",
   "setting_opacity": "不透明度",
   "setting_intensity": "強度",
