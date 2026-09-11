@@ -773,6 +773,8 @@
   "setting_click": "点击",
   "setting_max_on_screen": "最大显示数量",
   "setting_duration": "持续时间",
+  "setting_gif_speed": "GIF 速度",
+  "tooltip_playback_speed_for_animated_flash_images_gif": "动态闪现图片的播放速度。\n1.0x 保持文件原本的节奏。",
   "setting_interval": "间隔",
   "setting_opacity": "透明度",
   "setting_intensity": "强度",
