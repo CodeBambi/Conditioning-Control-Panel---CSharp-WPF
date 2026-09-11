@@ -8012,6 +8012,34 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public int DashboardToggleHintUses { get; set; }
 
+        private string? _dashboardLayoutWire = null;
+        /// <summary>
+        /// The nine movable Home slots, encoded by
+        /// <see cref="Services.Dashboard.DashboardLayoutRule.ToWire"/>: nine comma-separated feature
+        /// keys, a pipe joining a split tile. A string rather than an object so the server
+        /// sanitizer and the client share one parser. Null means "never edited", which renders the
+        /// shipped wall.
+        /// </summary>
+        [JsonProperty("dashboard_layout")]
+        public string? DashboardLayoutWire
+        {
+            get => _dashboardLayoutWire;
+            set { _dashboardLayoutWire = value; OnPropertyChanged(); }
+        }
+
+        private bool _dashboardLayoutTouched = false;
+        /// <summary>
+        /// Set on the user's first slot edit and never cleared, a reset to default included. The
+        /// fill-if-empty cloud adopt reads this rather than the string, so a user who deliberately
+        /// went back to the shipped wall does not get another machine's layout pushed onto them.
+        /// </summary>
+        [JsonProperty("dashboard_layout_touched")]
+        public bool DashboardLayoutTouched
+        {
+            get => _dashboardLayoutTouched;
+            set { _dashboardLayoutTouched = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region First-time experience
