@@ -195,6 +195,19 @@
 
         <Style x:Key="NavEntryButton" TargetType="Button" BasedOn="{StaticResource NavRailButton}"/>
 
+        <!-- Subgroup caption inside a door panel (mort's map, 2026-09-11): a label, not a row.
+             Height is explicit because MeasureDoorPanel reads it for the open tween, and it is
+             a plain TextBlock so CacheNavRailParts fades it with the entry labels on collapse. -->
+        <Style x:Key="NavEntryGroupCaption" TargetType="TextBlock">
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="FontSize" Value="9"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="Margin" Value="14,6,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Bottom"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
+        </Style>
+
         <!-- Brand-accented entries. Same template, different accent: Deeper violet,
              Available Subjects neon purple, Profile Discord blue, Premium Patreon red -
              the four identities the old header strip carried in inline styles. -->
@@ -649,24 +662,28 @@
 
                          Headroom, in fixed canvas units (the whole UI is a Viewbox over a
                          1585x901 canvas, so this NEVER changes with the window size): the
-                         column is ~760px minus the 40px search pill row above = ~720, the six
-                         68px door rows plus five 8px gaps are 448, and the widest accordion
-                         (Play, 8 entries x NavEntryRowHeight 32) is 256 - 704 total. A door
-                         would need ~9 entries before the rail starts scrolling. -->
+                         column is ~760px minus the 40px search pill row above = ~720; the seven
+                         68px door rows plus six 8px gaps are 524 (mort's map added Play
+                         Together, 2026-09-11), and the widest accordion (Play: 8 rows x
+                         NavEntryRowHeight 32 plus one 24px caption) is 280 - 804 total, so
+                         the rail scrolls while Play or Studio is open. By design: the
+                         ScrollViewer above is the mode, and it costs no code. -->
                     <Grid MinHeight="{Binding ViewportHeight, ElementName=NavRailScroll}">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="0"/>
                             <RowDefinition Height="Auto"/>   <!-- 1: home -->
                             <RowDefinition Height="8"/>
-                            <RowDefinition Height="Auto"/>   <!-- 3: studio -->
+                            <RowDefinition Height="Auto"/>   <!-- 3: play -->
                             <RowDefinition Height="8"/>
-                            <RowDefinition Height="Auto"/>   <!-- 5: companion -->
+                            <RowDefinition Height="Auto"/>   <!-- 5: play together -->
                             <RowDefinition Height="8"/>
-                            <RowDefinition Height="Auto"/>   <!-- 7: play -->
+                            <RowDefinition Height="Auto"/>   <!-- 7: studio -->
                             <RowDefinition Height="8"/>
-                            <RowDefinition Height="Auto"/>   <!-- 9: you -->
+                            <RowDefinition Height="Auto"/>   <!-- 9: companion -->
                             <RowDefinition Height="8"/>
-                            <RowDefinition Height="Auto"/>   <!-- 11: library -->
+                            <RowDefinition Height="Auto"/>   <!-- 11: you -->
+                            <RowDefinition Height="8"/>
+                            <RowDefinition Height="Auto"/>   <!-- 13: library -->
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
@@ -744,8 +761,225 @@
 
                         </StackPanel>
 
-                        <!-- ===== STUDIO (default: presets) ===== -->
+                        <!-- ===== PLAY (default: play) ===== -->
                         <StackPanel Grid.Row="3">
+                        <Button x:Name="DoorPlay" Tag="play" Style="{StaticResource NavDoorButton}"
+                                poss:Possession.Role="TabHeader" poss:Possession.Name="the Play door"
+                                Background="#22B8E85C" BorderBrush="#B8E85C"
+                                Click="NavDoor_Click" ToolTip="{loc:Str nav_door_play}">
+                            <!-- Medallion: see DoorHome for what the four children are for. -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="56"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
+                                         IsHitTestVisible="False"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
+                                        BorderThickness="1" BorderBrush="Transparent"/>
+                                <Viewbox Grid.Column="0" Width="40" Height="40"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Image x:Name="ImgDoorPlay"
+                                           Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                           Source="pack://application:,,,/Resources/nav/door_play.png">
+                                        <Image.Clip>
+                                            <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
+                                        </Image.Clip>
+                                    </Image>
+                                </Viewbox>
+                                <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
+                                    <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
+                                             HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock Text="{loc:Str nav_door_play}"
+                                                   Style="{StaticResource NavDoorLabelText}"/>
+                                    </Viewbox>
+                                </Grid>
+                            </Grid>
+                        </Button>
+                        <Border x:Name="DoorPanelPlay" ClipToBounds="True" Height="0" IsHitTestVisible="False">
+                            <StackPanel x:Name="DoorEntriesPlay">
+                                <!-- The wall stays first: it is the door's default destination (NavDoorMap). -->
+                                <Button x:Name="BtnLab" Tag="Play" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavPlay_Click" ToolTip="{loc:Str nav_door_play}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🕹️', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str nav_door_play}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <!-- Deeper Player / Deeper Editor (mort's map, 2026-09-11): one page, two doors. This row is the Play half - the hub with the player launcher; the editor half is a Creator Tools row under Studio. x:Name stays BtnDeeper (API for NavButtonForTab and the tutorial). -->
+                                <Button x:Name="BtnDeeper" Tag="Deeper" Style="{StaticResource NavEntryButtonDeeper}"
+                                        Click="BtnDeeper_Click" ToolTip="{loc:Str tooltip_deeper}"
+                                        RenderTransformOrigin="0.5,0.5">
+                                    <Button.RenderTransform>
+                                        <ScaleTransform x:Name="BtnDeeperScale" ScaleX="1" ScaleY="1"/>
+                                    </Button.RenderTransform>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🌊', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str nav_deeper_player}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavBlinkTrainer" Tag="BlinkTrainer" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavBlinkTrainer_Click" ToolTip="{loc:Str tooltip_nav_blink_trainer}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='👀', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_blink_trainer}" VerticalAlignment="Center"/>
+                                        <Border x:Name="TagPremiumBlinkTrainer" Style="{StaticResource NavEntryPremiumTag}"
+                                                ToolTip="{loc:Str nav_tag_premium_tip}">
+                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavGradedIntake" Tag="GradedIntake" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavGradedIntake_Click" ToolTip="{loc:Str tooltip_nav_graded_intake}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='📝', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_gradedintake}" VerticalAlignment="Center"/>
+                                        <Border x:Name="TagPremiumGradedIntake" Style="{StaticResource NavEntryPremiumTag}"
+                                                ToolTip="{loc:Str nav_tag_premium_tip}">
+                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Button>
+                                <!-- For You gets a rail row for the first time: ShowTab("fyp") is intercepted into the feed window, so this row never lights the indicator and NavButtonForTab has no case for it. -->
+                                <Button x:Name="BtnNavFyp" Tag="Fyp" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavFyp_Click" ToolTip="{loc:Str tab_fyp}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='📲', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_fyp}" VerticalAlignment="Center"/>
+                                        <Border x:Name="TagPremiumFyp" Style="{StaticResource NavEntryPremiumTag}"
+                                                ToolTip="{loc:Str nav_tag_premium_tip}">
+                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnPatreonExclusives" Tag="Patreon" Style="{StaticResource NavEntryButtonPatreon}"
+                                        Click="BtnPatreonExclusives_Click" ToolTip="{loc:Str tooltip_patreon_exclusives}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="⭐" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{loc:Str tab_exclusives}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <TextBlock Text="{loc:Str nav_group_training_plans}" Style="{StaticResource NavEntryGroupCaption}"/>
+                                <Button x:Name="BtnQuests" Tag="Quests" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnQuests_Click" ToolTip="{loc:Str tooltip_daily_weekly_quests}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='📜', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_quests}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnPrograms" Tag="Programs" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnPrograms_Click" ToolTip="{loc:Str tooltip_programs}"
+                                        RenderTransformOrigin="0.5,0.5">
+                                    <Button.RenderTransform>
+                                        <ScaleTransform x:Name="BtnProgramsScale" ScaleX="1" ScaleY="1"/>
+                                    </Button.RenderTransform>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='📅', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_programs}" VerticalAlignment="Center"/>
+                                        <!-- BETA pill: gold on purpose - it must stand apart from the pink
+                                             accent so it reads as a status, not a highlight. Literal text
+                                             like the version strings, not a loc key. -->
+                                        <Border Margin="5,0,0,0" VerticalAlignment="Center" CornerRadius="9999"
+                                                Padding="4,0" Background="#33FFD700"
+                                                BorderBrush="#AAFFD700" BorderThickness="1">
+                                            <TextBlock Text="BETA" FontSize="8" FontWeight="Bold" Foreground="#FFD700"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
+                        </StackPanel>
+
+                        <!-- ===== PLAY TOGETHER (default: availablesubjects) - mort's map, 2026-09-11 ===== -->
+                        <StackPanel Grid.Row="5">
+                        <Button x:Name="DoorPlayTogether" Tag="playtogether" Style="{StaticResource NavDoorButton}"
+                                poss:Possession.Role="TabHeader" poss:Possession.Name="the Play Together door"
+                                Background="#2266E0C8" BorderBrush="#66E0C8"
+                                Click="NavDoor_Click" ToolTip="{loc:Str nav_door_playtogether}">
+                            <!-- Medallion: see DoorHome for what the four children are for. -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="56"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
+                                         IsHitTestVisible="False"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
+                                        BorderThickness="1" BorderBrush="Transparent"/>
+                                <Viewbox Grid.Column="0" Width="40" Height="40"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Image x:Name="ImgDoorPlayTogether"
+                                           Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                           Source="pack://application:,,,/Resources/nav/door_play.png">
+                                        <Image.Clip>
+                                            <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
+                                        </Image.Clip>
+                                    </Image>
+                                </Viewbox>
+                                <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
+                                    <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
+                                             HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock Text="{loc:Str nav_door_playtogether}"
+                                                   Style="{StaticResource NavDoorLabelText}"/>
+                                    </Viewbox>
+                                </Grid>
+                            </Grid>
+                        </Button>
+                        <Border x:Name="DoorPanelPlayTogether" ClipToBounds="True" Height="0" IsHitTestVisible="False">
+                            <StackPanel x:Name="DoorEntriesPlayTogether">
+                                <TextBlock Text="{loc:Str nav_group_remote_control}" Style="{StaticResource NavEntryGroupCaption}"/>
+                                <Button x:Name="BtnAvailableSubjects" Tag="AvailableSubjects"
+                                        Style="{StaticResource NavEntryButtonNeon}"
+                                        Click="BtnAvailableSubjects_Click"
+                                        ToolTip="{loc:Str tooltip_available_subjects}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🛰️', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str nav_find_subjects}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavRemoteControl" Tag="RemoteControl" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavRemoteControl_Click" ToolTip="{loc:Str tooltip_nav_remote_control}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='📱', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str nav_give_up_control}" VerticalAlignment="Center"/>
+                                        <Border x:Name="TagPremiumRemoteControl" Style="{StaticResource NavEntryPremiumTag}"
+                                                ToolTip="{loc:Str nav_tag_premium_tip}">
+                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Button>
+                                <!-- A launcher, not a tab: Goon Game opens its own window through the Play wall's own handler, so there is one code path and no ShowTab key. -->
+                                <Button x:Name="BtnNavGoon" Tag="Goon" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnStartGoon_Click" ToolTip="{loc:Str nav_goon_game}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🎯', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str nav_goon_game}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
+                        </StackPanel>
+
+                        <!-- ===== STUDIO (default: studio) ===== -->
+                        <StackPanel Grid.Row="7">
                         <Button x:Name="DoorStudio" Tag="studio" Style="{StaticResource NavDoorButton}"
                                 poss:Possession.Role="TabHeader" poss:Possession.Name="the Studio door"
                                 Background="#22FF7E6B" BorderBrush="#FF7E6B"
@@ -784,8 +1018,7 @@
                         </Button>
                         <Border x:Name="DoorPanelStudio" ClipToBounds="True" Height="0" IsHitTestVisible="False">
                             <StackPanel x:Name="DoorEntriesStudio">
-                                <!-- Phase 4: the effects rack. First entry, so it is what the
-                                     Studio door header lands on (NavDoorMap default = "studio"). -->
+                                <TextBlock Text="{loc:Str nav_group_core_engine}" Style="{StaticResource NavEntryGroupCaption}"/>
                                 <Button x:Name="BtnNavStudio" Tag="Studio" Style="{StaticResource NavEntryButton}"
                                         Click="BtnNavStudio_Click" ToolTip="{loc:Str st4_nav_studio_tip}">
                                     <StackPanel Orientation="Horizontal">
@@ -810,7 +1043,7 @@
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='📋', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_presets}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{loc:Str nav_presets_sessions}" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnNavHaptics" Tag="Haptics" Style="{StaticResource NavEntryButton}"
@@ -825,13 +1058,69 @@
                                         </Border>
                                     </StackPanel>
                                 </Button>
+                                <TextBlock Text="{loc:Str nav_group_companion_effects}" Style="{StaticResource NavEntryGroupCaption}"/>
+                                <!-- AI Effects: the companion's effect permissions and dials (PermissionsZone), split out of the Companion page by mort's map. Lands on that page scrolled to the zone; the Engine Room (cloud/local, memory) is two rows down the Companion door. -->
+                                <Button x:Name="BtnNavAiEffects" Tag="AiEffects" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavAiEffects_Click" ToolTip="{loc:Str nav_ai_effects}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🪄', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str nav_ai_effects}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavAwareness" Tag="Awareness" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnAwareness_Click" ToolTip="{loc:Str tooltip_nav_awareness}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='👁️', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str nav_screen_awareness}" VerticalAlignment="Center"/>
+                                        <Border x:Name="TagPremiumAwareness" Style="{StaticResource NavEntryPremiumTag}"
+                                                ToolTip="{loc:Str nav_tag_premium_tip}">
+                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavBambiTakeover" Tag="Takeover" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavBambiTakeover_Click" ToolTip="{loc:Str tooltip_nav_takeover}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='💫', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str nav_companion_takeover}" VerticalAlignment="Center"/>
+                                        <Border x:Name="TagPremiumTakeover" Style="{StaticResource NavEntryPremiumTag}"
+                                                ToolTip="{loc:Str nav_tag_premium_tip}">
+                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavLockdown" Tag="Lockdown" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavLockdown_Click" ToolTip="{loc:Str tooltip_nav_lockdown}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_lockdown_mode}" VerticalAlignment="Center"/>
+                                        <Border x:Name="TagPremiumLockdown" Style="{StaticResource NavEntryPremiumTag}"
+                                                ToolTip="{loc:Str nav_tag_premium_tip}">
+                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Button>
+                                <TextBlock Text="{loc:Str nav_group_creator_tools}" Style="{StaticResource NavEntryGroupCaption}"/>
+                                <Button x:Name="BtnNavDeeperEditor" Tag="DeeperEditor" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavDeeperEditor_Click" ToolTip="{loc:Str nav_deeper_editor}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🎬', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str nav_deeper_editor}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <!-- Just Drop's door goes here (Creator Tools, [Premium]) - added by the next PR in this stack, which also takes the Quick Drop button off the Play hero. -->
                             </StackPanel>
                         </Border>
 
                         </StackPanel>
 
                         <!-- ===== COMPANION (default: companion) ===== -->
-                        <StackPanel Grid.Row="5">
+                        <StackPanel Grid.Row="9">
                         <Button x:Name="DoorCompanion" Tag="companion" Style="{StaticResource NavDoorButton}"
                                 poss:Possession.Role="TabHeader" poss:Possession.Name="the Companion door"
                                 Background="#22E85CE0" BorderBrush="#E85CE0"
@@ -878,16 +1167,21 @@
                                         <TextBlock Text="{loc:Str tab_companion}" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
-                                <Button x:Name="BtnNavBambiTakeover" Tag="Takeover" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavBambiTakeover_Click" ToolTip="{loc:Str tooltip_nav_takeover}">
+                                <!-- Workshop and Engine Room are zones of the Companion page (CompanionRoomView); these rows land on the page with the zone revealed. -->
+                                <Button x:Name="BtnNavWorkshop" Tag="Workshop" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavWorkshop_Click" ToolTip="{loc:Str nav_workshop}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='💫', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_takeover}" VerticalAlignment="Center"/>
-                                        <Border x:Name="TagPremiumTakeover" Style="{StaticResource NavEntryPremiumTag}"
-                                                ToolTip="{loc:Str nav_tag_premium_tip}">
-                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
-                                        </Border>
+                                               Source="{Binding Source='🧰', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str nav_workshop}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavEngineRoom" Tag="EngineRoom" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavEngineRoom_Click" ToolTip="{loc:Str nav_engine_room}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🔧', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str nav_engine_room}" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnNavSheListening" Tag="SheListening" Style="{StaticResource NavEntryButton}"
@@ -902,165 +1196,13 @@
                                         </Border>
                                     </StackPanel>
                                 </Button>
-                                <!-- Awareness finally gets a real button: BtnAwareness_Click has been an
-                                     orphan handler (MainWindow.AccountShell.cs) with no XAML owner. -->
-                                <Button x:Name="BtnNavAwareness" Tag="Awareness" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnAwareness_Click" ToolTip="{loc:Str tooltip_nav_awareness}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='👁️', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_awareness}" VerticalAlignment="Center"/>
-                                        <Border x:Name="TagPremiumAwareness" Style="{StaticResource NavEntryPremiumTag}"
-                                                ToolTip="{loc:Str nav_tag_premium_tip}">
-                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                            </StackPanel>
-                        </Border>
-
-                        </StackPanel>
-
-                        <!-- ===== PLAY (default: play) ===== -->
-                        <StackPanel Grid.Row="7">
-                        <Button x:Name="DoorPlay" Tag="play" Style="{StaticResource NavDoorButton}"
-                                poss:Possession.Role="TabHeader" poss:Possession.Name="the Play door"
-                                Background="#22B8E85C" BorderBrush="#B8E85C"
-                                Click="NavDoor_Click" ToolTip="{loc:Str nav_door_play}">
-                            <!-- Medallion: see DoorHome for what the four children are for. -->
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="56"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
-                                         IsHitTestVisible="False"
-                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
-                                        HorizontalAlignment="Center" VerticalAlignment="Center"
-                                        Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="Transparent"/>
-                                <Viewbox Grid.Column="0" Width="40" Height="40"
-                                         HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Image x:Name="ImgDoorPlay"
-                                           Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
-                                           Source="pack://application:,,,/Resources/nav/door_play.png">
-                                        <Image.Clip>
-                                            <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
-                                        </Image.Clip>
-                                    </Image>
-                                </Viewbox>
-                                <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
-                                    <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
-                                             HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <TextBlock Text="{loc:Str nav_door_play}"
-                                                   Style="{StaticResource NavDoorLabelText}"/>
-                                    </Viewbox>
-                                </Grid>
-                            </Grid>
-                        </Button>
-                        <Border x:Name="DoorPanelPlay" ClipToBounds="True" Height="0" IsHitTestVisible="False">
-                            <StackPanel x:Name="DoorEntriesPlay">
-                                <!-- Phase 6: this row is the Play card wall now (ShowTab("play")),
-                                     the Play door's first entry and therefore its default
-                                     destination. The x:Name STAYS BtnLab: it is API for
-                                     NavButtonForTab, MainWindow.ChromeFx's NavButtons list and
-                                     TutorialService.NavEntryDoorKeys, which is keyed by the
-                                     x:Names the nav has always used. The old "Lab" label and the
-                                     🧪 flask went with the page - the flask is the Tier 2 badge on
-                                     the wall's lockbands now, and nothing else. -->
-                                <Button x:Name="BtnLab" Tag="Play" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavPlay_Click" ToolTip="{loc:Str nav_door_play}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🕹️', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str nav_door_play}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnDeeper" Tag="Deeper" Style="{StaticResource NavEntryButtonDeeper}"
-                                        Click="BtnDeeper_Click" ToolTip="{loc:Str tooltip_deeper}"
-                                        RenderTransformOrigin="0.5,0.5">
-                                    <Button.RenderTransform>
-                                        <ScaleTransform x:Name="BtnDeeperScale" ScaleX="1" ScaleY="1"/>
-                                    </Button.RenderTransform>
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🌊', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_deeper}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnPatreonExclusives" Tag="Patreon" Style="{StaticResource NavEntryButtonPatreon}"
-                                        Click="BtnPatreonExclusives_Click" ToolTip="{loc:Str tooltip_patreon_exclusives}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="⭐" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                        <TextBlock Text="{loc:Str tab_exclusives}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnNavGradedIntake" Tag="GradedIntake" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavGradedIntake_Click" ToolTip="{loc:Str tooltip_nav_graded_intake}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='📝', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_gradedintake}" VerticalAlignment="Center"/>
-                                        <Border x:Name="TagPremiumGradedIntake" Style="{StaticResource NavEntryPremiumTag}"
-                                                ToolTip="{loc:Str nav_tag_premium_tip}">
-                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnNavLockdown" Tag="Lockdown" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavLockdown_Click" ToolTip="{loc:Str tooltip_nav_lockdown}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_lockdown_mode}" VerticalAlignment="Center"/>
-                                        <Border x:Name="TagPremiumLockdown" Style="{StaticResource NavEntryPremiumTag}"
-                                                ToolTip="{loc:Str nav_tag_premium_tip}">
-                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnNavBlinkTrainer" Tag="BlinkTrainer" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavBlinkTrainer_Click" ToolTip="{loc:Str tooltip_nav_blink_trainer}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='👀', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_blink_trainer}" VerticalAlignment="Center"/>
-                                        <Border x:Name="TagPremiumBlinkTrainer" Style="{StaticResource NavEntryPremiumTag}"
-                                                ToolTip="{loc:Str nav_tag_premium_tip}">
-                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnNavRemoteControl" Tag="RemoteControl" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavRemoteControl_Click" ToolTip="{loc:Str tooltip_nav_remote_control}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='📱', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_remote_control}" VerticalAlignment="Center"/>
-                                        <Border x:Name="TagPremiumRemoteControl" Style="{StaticResource NavEntryPremiumTag}"
-                                                ToolTip="{loc:Str nav_tag_premium_tip}">
-                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnAvailableSubjects" Tag="AvailableSubjects"
-                                        Style="{StaticResource NavEntryButtonNeon}"
-                                        Click="BtnAvailableSubjects_Click"
-                                        ToolTip="{loc:Str tooltip_available_subjects}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🛰️', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_available_subjects}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
                             </StackPanel>
                         </Border>
 
                         </StackPanel>
 
                         <!-- ===== YOU (default: discord / Profile) ===== -->
-                        <StackPanel Grid.Row="9">
+                        <StackPanel Grid.Row="11">
                         <Button x:Name="DoorYou" Tag="you" Style="{StaticResource NavDoorButton}"
                                 poss:Possession.Role="TabHeader" poss:Possession.Name="the You door"
                                 Background="#225EA8FF" BorderBrush="#5EA8FF"
@@ -1107,13 +1249,14 @@
                                         <TextBlock Text="{loc:Str tab_profile}" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
-                                <!-- THE SPIRAL ROOM (CONTRACT-FUSE-0816 2.4). Collapsed unless this
-                                     account is in the fog era or has an open spiral - a fuse-dark
-                                     account with no descent block, which is every install today,
-                                     never sees this row and the You door measures exactly as it
-                                     did before. MainWindow.SpiralRoom.cs owns the visibility and
-                                     the label: during the fog era the row is a gold ellipsis,
-                                     because naming the room would spoil it. -->
+                                <Button x:Name="BtnEnhancements" Tag="Enhancements" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnEnhancements_Click" ToolTip="{loc:Str tooltip_enhancement_tree}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_enhancements}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
                                 <Button x:Name="BtnNavSpiral" Tag="Spiral" Style="{StaticResource NavEntryButton}"
                                         Visibility="Collapsed"
                                         Click="BtnNavSpiral_Click" ToolTip="{loc:Str tooltip_spiral_room}">
@@ -1124,49 +1267,12 @@
                                                    VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
-                                <Button x:Name="BtnQuests" Tag="Quests" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnQuests_Click" ToolTip="{loc:Str tooltip_daily_weekly_quests}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='📜', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_quests}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
                                 <Button x:Name="BtnAchievements" Tag="Achievements" Style="{StaticResource NavEntryButton}"
                                         Click="BtnAchievements_Click" ToolTip="{loc:Str tooltip_nav_achievements}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='🏆', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock Text="{loc:Str tab_achievements}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnEnhancements" Tag="Enhancements" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnEnhancements_Click" ToolTip="{loc:Str tooltip_enhancement_tree}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_enhancements}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <!-- Training Programs — multi-day arcs (Programs tab, v6.6) -->
-                                <Button x:Name="BtnPrograms" Tag="Programs" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnPrograms_Click" ToolTip="{loc:Str tooltip_programs}"
-                                        RenderTransformOrigin="0.5,0.5">
-                                    <Button.RenderTransform>
-                                        <ScaleTransform x:Name="BtnProgramsScale" ScaleX="1" ScaleY="1"/>
-                                    </Button.RenderTransform>
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='📅', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_programs}" VerticalAlignment="Center"/>
-                                        <!-- BETA pill: gold on purpose - it must stand apart from the pink
-                                             accent so it reads as a status, not a highlight. Literal text
-                                             like the version strings, not a loc key. -->
-                                        <Border Margin="5,0,0,0" VerticalAlignment="Center" CornerRadius="9999"
-                                                Padding="4,0" Background="#33FFD700"
-                                                BorderBrush="#AAFFD700" BorderThickness="1">
-                                            <TextBlock Text="BETA" FontSize="8" FontWeight="Bold" Foreground="#FFD700"/>
-                                        </Border>
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnLeaderboard" Tag="Leaderboard" Style="{StaticResource NavEntryButton}"
@@ -1183,7 +1289,7 @@
                         </StackPanel>
 
                         <!-- ===== LIBRARY (default: assets) ===== -->
-                        <StackPanel Grid.Row="11">
+                        <StackPanel Grid.Row="13">
                         <Button x:Name="DoorLibrary" Tag="library" Style="{StaticResource NavDoorButton}"
                                 poss:Possession.Role="TabHeader" poss:Possession.Name="the Library door"
                                 Background="#225ED4E8" BorderBrush="#5ED4E8"
@@ -1235,40 +1341,7 @@
                         </Button>
                         <Border x:Name="DoorPanelLibrary" ClipToBounds="True" Height="0" IsHitTestVisible="False">
                             <StackPanel x:Name="DoorEntriesLibrary">
-                                <!-- Assets STAYS first: it is the Library door's default destination
-                                     in NavDoorMap ("library" -> "assets"), and the four rows below
-                                     are launchers, not tabs. -->
-                                <Button x:Name="BtnOpenAssetsTop" Tag="Assets" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnAssets_Click" ToolTip="{loc:Str tooltip_assets_packs}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='📁', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_assets}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <!-- Phase 7 · Library door. These four rows are LAUNCHERS, not tabs:
-                                     none of them calls ShowTab, none of them appears in NavDoorMap,
-                                     and none of them may (a rail row that claims a tab key the app
-                                     has no view for would leave the active indicator pointing at
-                                     nothing). Each one calls the EXACT handler that already owned
-                                     the launch, so there is precisely one code path per window:
-
-                                       Mods      -> BtnManageMods_Click   (MainWindow.xaml.cs:1789,
-                                                    the title-bar gear's own handler - _isLoading
-                                                    guard, share-badge poll and ApplyActiveModChange
-                                                    all included). The Mod Creator is untouched: it
-                                                    is a button INSIDE ModManagerDialog.
-                                       Catalogue -> BtnCatalogue_Click    (MainWindow.Presets.cs:1104)
-                                       Phrases   -> BtnManagePhrases_Click(MainWindow.Patreon.cs:898,
-                                                    which also refreshes the Companion tab's count)
-                                       Media Log -> BtnNavMediaLog_Click  (TabNavigation.cs), which
-                                                    re-fires the Assets tab's own BtnMediaLog rather
-                                                    than newing a second MediaHistoryWindow - see the
-                                                    comment there for why that matters.
-
-                                     Deliberately NOT duplicated here: the Mod Catalogue browser
-                                     (a button inside ModManagerDialog) and Session History (a
-                                     Studio/Presets surface). -->
+                                <!-- Mods, Assets, Phrase Manager, Media Log (mort's map). Assets is still the door's default destination in NavDoorMap; the other three are launchers that call the exact handler that already owned each window (BtnManageMods_Click, BtnManagePhrases_Click, BtnNavMediaLog_Click - see that one for why it re-fires the Assets tab's button). -->
                                 <Button x:Name="BtnNavMods" Tag="Mods" Style="{StaticResource NavEntryButton}"
                                         Click="BtnManageMods_Click" ToolTip="{loc:Str yl7_nav_mods_tip}">
                                     <StackPanel Orientation="Horizontal">
@@ -1277,19 +1350,12 @@
                                         <TextBlock Text="{loc:Str yl7_nav_mods}" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
-                                <Button x:Name="BtnNavCatalogue" Tag="Catalogue" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnCatalogue_Click" ToolTip="{loc:Str yl7_nav_catalogue_tip}">
+                                <Button x:Name="BtnOpenAssetsTop" Tag="Assets" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnAssets_Click" ToolTip="{loc:Str tooltip_assets_packs}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🌐', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str yl7_nav_catalogue}" VerticalAlignment="Center"/>
-                                        <!-- v6.8.0 NEW pill: remove in 6.9 -->
-                                        <Border Margin="4,0,0,0" VerticalAlignment="Center" CornerRadius="6"
-                                                Padding="3,0" Background="#33FF69B4"
-                                                BorderBrush="#FF69B4" BorderThickness="1">
-                                            <TextBlock Text="NEW" FontFamily="Consolas, Courier New" FontSize="8"
-                                                       FontWeight="Bold" Foreground="#FF8FC7"/>
-                                        </Border>
+                                               Source="{Binding Source='📁', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_assets}" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnNavPhrases" Tag="Phrases" Style="{StaticResource NavEntryButton}"
@@ -1358,15 +1424,16 @@
                          not contribute the 40px door Viewbox markup NavRailFlyoutTests counts.
                          See Controls/DescentFuseRailChip.cs. -->
                     <controls:DescentFuseRailChip x:Name="FuseRailChip"/>
-                    <!-- v6.8.0 Web App door: a LAUNCHER, not a tab (same rule as the four Library
-                         launchers) - it opens app.cclabs.app in the default browser, so it has its
-                         own Click and deliberately no NavDoorMap row: NavDoor_Click on this Tag
-                         would log-and-stay, and the "you are here" ring must never light for a
-                         door you cannot be in. The medallion keeps the full four-child shape
-                         (see DoorHome) because CacheNavDoorRows walks it via NavLauncherDoors. -->
+                    <!-- ===== WEB (mort's map, 2026-09-11) =====
+                         The v6.8.0 Web App launcher door is an accordion door now, with two LAUNCHER
+                         rows and no tab of its own: Web App opens app.cclabs.app in the browser, and
+                         the Catalogue moved here from Library. NavDoorMap files it with an EMPTY default
+                         tab, which NavDoor_Click reads as "expand, do not navigate" - the "you are
+                         here" ring never lights for a door you cannot be in. The medallion keeps the
+                         full four-child shape (see DoorHome) for CacheNavDoorRows. -->
                     <Button x:Name="DoorWebApp" Tag="webapp" Style="{StaticResource NavDoorButton}"
                             Background="#225EC8F2" BorderBrush="#5EC8F2"
-                            Click="DoorWebApp_Click" ToolTip="{loc:Str tooltip_nav_door_webapp}">
+                            Click="NavDoor_Click" ToolTip="{loc:Str nav_door_web}">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="56"/>
@@ -1392,12 +1459,39 @@
                             <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
                                 <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
                                          HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="{loc:Str nav_door_webapp}"
+                                    <TextBlock Text="{loc:Str nav_door_web}"
                                                Style="{StaticResource NavDoorLabelText}"/>
                                 </Viewbox>
                             </Grid>
                         </Grid>
                     </Button>
+                    <Border x:Name="DoorPanelWeb" ClipToBounds="True" Height="0" IsHitTestVisible="False">
+                        <StackPanel x:Name="DoorEntriesWeb">
+                            <Button x:Name="BtnNavWebApp" Tag="WebApp" Style="{StaticResource NavEntryButton}"
+                                    Click="DoorWebApp_Click" ToolTip="{loc:Str tooltip_nav_door_webapp}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                           Source="{Binding Source='🔗', Converter={StaticResource EmojiToImageSource}}"/>
+                                    <TextBlock Text="{loc:Str nav_door_webapp}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="BtnNavCatalogue" Tag="Catalogue" Style="{StaticResource NavEntryButton}"
+                                    Click="BtnCatalogue_Click" ToolTip="{loc:Str yl7_nav_catalogue_tip}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                           Source="{Binding Source='🌐', Converter={StaticResource EmojiToImageSource}}"/>
+                                    <TextBlock Text="{loc:Str yl7_nav_catalogue}" VerticalAlignment="Center"/>
+                                    <!-- v6.8.0 NEW pill: remove in 6.9 -->
+                                    <Border Margin="4,0,0,0" VerticalAlignment="Center" CornerRadius="6"
+                                            Padding="3,0" Background="#33FF69B4"
+                                            BorderBrush="#FF69B4" BorderThickness="1">
+                                        <TextBlock Text="NEW" FontFamily="Consolas, Courier New" FontSize="8"
+                                                   FontWeight="Bold" Foreground="#FF8FC7"/>
+                                    </Border>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Border>
                     <Button x:Name="DoorSettings" Tag="appsettings" Style="{StaticResource NavDoorButton}"
                             poss:Possession.Role="TabHeader" poss:Possession.Name="the Settings door"
                             Background="#225CE0A5" BorderBrush="#5CE0A5"
@@ -3037,7 +3131,7 @@
                                                Source="{Binding Source='🚪', Converter={StaticResource EmojiToImageSource}}"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                             <TextBlock Text="What moved in 6.8" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
-                                            <TextBlock Text="The 60-second map: the six doors, where your old tabs went, and why left-click and right-click swapped."
+                                            <TextBlock Text="The 60-second map: the doors, where your old tabs went, and why left-click and right-click swapped."
                                                        Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="{loc:Str btn_start_guide}" Click="BtnTutorialWhatMoved_Click"
