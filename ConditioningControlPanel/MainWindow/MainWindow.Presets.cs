@@ -1852,16 +1852,22 @@ namespace ConditioningControlPanel
                     try { App.IntakePunchCard?.NotifySessionProgress(session, e.ProgressPercent); }
                     catch (Exception ex) { App.Logger?.Debug("Punch card progress hook: {E}", ex.Message); }
 
-                    // Update session button with remaining time
-                    PresetsTab.BtnStartSession.Content = Loc.GetF("btn_stop_session_0_1", $"{((int)remaining.TotalMinutes):D2}", $"{remaining.Seconds:D2}");
+                    // Update session button with remaining time - or without it: ShowSessionCountdown
+                    // off keeps the name and the state and drops the MM:SS on both buttons.
+                    var showCountdown = App.Settings?.Current?.ShowSessionCountdown != false;
+                    PresetsTab.BtnStartSession.Content = Services.SessionClockLabel.StopButton(
+                        remaining, showCountdown, Loc.Get("btn_stop_session_0_1"), Loc.Get("btn_stop_session_2"));
 
-                    // Update Start button label with session name + timer
+                    // Update Start button label with session name + timer. Without the clock the
+                    // name gets the room OnSessionStarted gives it (22), with it the old 14.
                     var mName = session.GetModeAwareName();
-                    var name = mName.Length > 14
-                        ? mName.Substring(0, 11) + "..."
+                    var nameMax = showCountdown ? 14 : 22;
+                    var name = mName.Length > nameMax
+                        ? mName.Substring(0, nameMax - 3) + "..."
                         : mName;
                     var pauseIndicator = _sessionEngine.IsPaused ? $" [{Loc.Get("label_paused")}]" : "";
-                    TxtStartLabel.Text = Loc.GetF("label_0_1_2_3", name, $"{((int)remaining.TotalMinutes):D2}", $"{remaining.Seconds:D2}", pauseIndicator);
+                    TxtStartLabel.Text = Services.SessionClockLabel.StartButton(
+                        name, remaining, showCountdown, pauseIndicator, Loc.Get("label_0_1_2_3"));
 
                     // Training Programs: drive the TODAY panel's session progress strip off this
                     // same 1-second engine tick rather than a second timer. It no-ops unless the

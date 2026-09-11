@@ -5141,5 +5141,9 @@
   "title_rabbit_hole": "The Rabbit Hole",
   "msg_rabbit_hole_open_failed": "The Rabbit Hole no llegó a abrirse:\n\n",
   "title_audio_layers": "Capas de audio",
-  "msg_audio_layers_open_failed": "Capas de audio no se abrió.\n\n{0}\n\nLos detalles completos están en el registro de la app. Inclúyelos si lo reportas."
+  "msg_audio_layers_open_failed": "Capas de audio no se abrió.\n\n{0}\n\nLos detalles completos están en el registro de la app. Inclúyelos si lo reportas.",
+  "lockdown_hide_timer": "Ocultar el reloj",
+  "lockdown_hide_timer_tip": "Puntos en lugar del tiempo restante, aquí y en la barra de título. El bloqueo termina igual a su hora.",
+  "set2_general_show_countdown": "Cuenta atrás de la sesión",
+  "set2_general_show_countdown_tip": "Muestra el tiempo restante en el botón START mientras dura una sesión. Apagado, el botón solo muestra el nombre de la sesión."
 }

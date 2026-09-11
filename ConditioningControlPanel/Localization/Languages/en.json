@@ -5725,5 +5725,9 @@
   "title_rabbit_hole": "The Rabbit Hole",
   "msg_rabbit_hole_open_failed": "The Rabbit Hole could not open:\n\n",
   "title_audio_layers": "Audio Layers",
-  "msg_audio_layers_open_failed": "Audio Layers did not open.\n\n{0}\n\nThe full details are in the app log. Include them if you report this."
+  "msg_audio_layers_open_failed": "Audio Layers did not open.\n\n{0}\n\nThe full details are in the app log. Include them if you report this.",
+  "lockdown_hide_timer": "Hide the clock",
+  "lockdown_hide_timer_tip": "Dots instead of the time left, here and in the title bar. The lockdown still ends on time.",
+  "set2_general_show_countdown": "Session countdown",
+  "set2_general_show_countdown_tip": "Show the time left on the START button while a session runs. Off, the button shows the session name and nothing else."
 }

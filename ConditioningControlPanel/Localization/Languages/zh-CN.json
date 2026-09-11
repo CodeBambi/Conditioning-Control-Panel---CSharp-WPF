@@ -5606,5 +5606,9 @@
   "title_rabbit_hole": "The Rabbit Hole",
   "msg_rabbit_hole_open_failed": "The Rabbit Hole 打不开：\n\n",
   "title_audio_layers": "音频层",
-  "msg_audio_layers_open_failed": "音频层没有打开。\n\n{0}\n\n完整细节在应用日志里。报告时请一并附上。"
+  "msg_audio_layers_open_failed": "音频层没有打开。\n\n{0}\n\n完整细节在应用日志里。报告时请一并附上。",
+  "lockdown_hide_timer": "隐藏时钟",
+  "lockdown_hide_timer_tip": "用圆点代替剩余时间，此页面和标题栏都适用。锁定仍会按时结束。",
+  "set2_general_show_countdown": "会话倒计时",
+  "set2_general_show_countdown_tip": "会话进行时在 START 按钮上显示剩余时间。关闭后按钮只显示会话名称。"
 }

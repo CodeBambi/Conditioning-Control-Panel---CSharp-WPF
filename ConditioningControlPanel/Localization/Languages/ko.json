@@ -5148,5 +5148,9 @@
   "title_rabbit_hole": "The Rabbit Hole",
   "msg_rabbit_hole_open_failed": "The Rabbit Hole을 열지 못했습니다:\n\n",
   "title_audio_layers": "오디오 레이어",
-  "msg_audio_layers_open_failed": "오디오 레이어가 열리지 않았습니다.\n\n{0}\n\n자세한 내용은 앱 로그에 있습니다. 신고할 때 함께 넣어 주세요."
+  "msg_audio_layers_open_failed": "오디오 레이어가 열리지 않았습니다.\n\n{0}\n\n자세한 내용은 앱 로그에 있습니다. 신고할 때 함께 넣어 주세요.",
+  "lockdown_hide_timer": "시계 숨기기",
+  "lockdown_hide_timer_tip": "남은 시간 대신 점을 표시합니다. 이 페이지와 제목 표시줄에 적용됩니다. 락다운은 정시에 끝납니다.",
+  "set2_general_show_countdown": "세션 카운트다운",
+  "set2_general_show_countdown_tip": "세션 중 START 버튼에 남은 시간을 표시합니다. 끄면 버튼에 세션 이름만 표시됩니다."
 }
