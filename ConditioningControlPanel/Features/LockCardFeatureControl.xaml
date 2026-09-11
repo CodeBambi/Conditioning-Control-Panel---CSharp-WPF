@@ -1,4 +1,4 @@
-<UserControl x:Class="ConditioningControlPanel.Features.LockCardFeatureControl"
+﻿<UserControl x:Class="ConditioningControlPanel.Features.LockCardFeatureControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
@@ -95,7 +95,7 @@
                                 </Grid>
 
                                 <!-- Repeats -->
-                                <Grid Height="36" ToolTip="{loc:Str tooltip_number_of_times_to_type_the_phrase_1_10}">
+                                <Grid x:Name="RowRepeats" Height="36" ToolTip="{loc:Str tooltip_number_of_times_to_type_the_phrase_1_10}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" MinWidth="120"/>
                                         <ColumnDefinition Width="*"/>
@@ -107,6 +107,88 @@
                                             feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="10,0"
                                             ValueChanged="SliderRepeats_Changed"/>
                                     <TextBlock Grid.Column="2" x:Name="TxtRepeats" Text="3x" HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
+                                               Foreground="{DynamicResource PinkBrush}"/>
+                                </Grid>
+
+                                <!-- Repeat shape. Two switches, and each reveals its own dials only
+                                     once it is on: collapsed, this is two rows. "Match by length"
+                                     additionally HIDES the Repeats row and the random switch above -
+                                     in that mode the count is derived, not chosen, and leaving a dead
+                                     slider on screen would read as a bug. -->
+                                <Grid x:Name="RowRandomRepeats" Height="34" ToolTip="{loc:Str tooltip_lock_card_random_repeats}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_lock_card_random_repeats}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <CheckBox Grid.Column="1" x:Name="ChkRandomRepeats" feat:SessionLock.Owned="True"
+                                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                              Checked="ChkRandomRepeats_Changed" Unchecked="ChkRandomRepeats_Changed"/>
+                                </Grid>
+
+                                <Grid x:Name="RowRepeatsMin" Height="36" Visibility="Collapsed"
+                                      ToolTip="{loc:Str tooltip_lock_card_fewest_repeats}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_lock_card_fewest_repeats}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <Slider Grid.Column="1" x:Name="SliderRepeatsMin" Minimum="1" Maximum="10" Value="1"
+                                            feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="10,0"
+                                            ValueChanged="SliderRepeatsMin_Changed"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtRepeatsMin" Text="1x" HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
+                                               Foreground="{DynamicResource PinkBrush}"/>
+                                </Grid>
+
+                                <Grid Height="34" ToolTip="{loc:Str tooltip_lock_card_match_by_length}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_lock_card_match_by_length}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <CheckBox Grid.Column="1" x:Name="ChkTargetLength" feat:SessionLock.Owned="True"
+                                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                              Checked="ChkTargetLength_Changed" Unchecked="ChkTargetLength_Changed"/>
+                                </Grid>
+
+                                <Grid x:Name="RowTargetLength" Height="36" Visibility="Collapsed"
+                                      ToolTip="{loc:Str tooltip_lock_card_target_characters}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_lock_card_target_characters}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <Slider Grid.Column="1" x:Name="SliderTargetLength" Minimum="20" Maximum="600" Value="120"
+                                            TickFrequency="10" IsSnapToTickEnabled="True"
+                                            feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="10,0"
+                                            ValueChanged="SliderTargetLength_Changed"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtTargetLength" Text="120" HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
+                                               Foreground="{DynamicResource PinkBrush}"/>
+                                </Grid>
+
+                                <Grid x:Name="RowTargetVariance" Height="36" Visibility="Collapsed"
+                                      ToolTip="{loc:Str tooltip_lock_card_length_variance}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_lock_card_length_variance}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <Slider Grid.Column="1" x:Name="SliderTargetVariance" Minimum="0" Maximum="200" Value="20"
+                                            TickFrequency="5" IsSnapToTickEnabled="True"
+                                            feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="10,0"
+                                            ValueChanged="SliderTargetVariance_Changed"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtTargetVariance" Text="&#177;20" HorizontalAlignment="Right"
                                                VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
                                                Foreground="{DynamicResource PinkBrush}"/>
                                 </Grid>
