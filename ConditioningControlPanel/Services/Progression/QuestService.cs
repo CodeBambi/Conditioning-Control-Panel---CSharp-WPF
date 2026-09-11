@@ -62,6 +62,13 @@ public class QuestService : IDisposable
     private static readonly TimeSpan EntitlementSettleWindow = TimeSpan.FromSeconds(90);
     private bool _premiumRecheckPending;
 
+    // ccp-bugs#1151: the twin of the flag above, for the hardware probe. A pass that ran while the
+    // camera/mic answer was still unresolved (the 400ms budget expiring on a cold DirectShow
+    // enumeration is the ordinary case at launch) read "present" and may have dealt or kept a
+    // quest this machine cannot serve. Arm this, and the refresh tick reconciles the board once
+    // the probe has actually landed. In-memory only: the probe re-runs every launch anyway.
+    private bool _hardwareRecheckPending;
+
     // Accumulators for fractional minutes (time-based quests are called with small increments)
     private double _spiralMinutesAccumulator;
     private double _pinkFilterMinutesAccumulator;
@@ -106,6 +113,12 @@ public class QuestService : IDisposable
 
     public QuestService()
     {
+        // FIRST LINE ON PURPOSE (ccp-bugs#1151). The board is rolled a few statements below, and
+        // the camera probe is a cold DirectShow enumeration that rarely finishes inside the gate's
+        // 400ms budget. Starting it before the quests.json read buys it that read; the recheck
+        // flag covers the times it still is not back.
+        QuestHardwareGate.Shared.Prime();
+
         _progressPath = Path.Combine(
             App.UserDataPath,
             "quests.json");
@@ -154,8 +167,15 @@ public class QuestService : IDisposable
             // A premium-loss decision deferred at launch (#889) is retried here, once the
             // entitlement answer has landed.
             var premiumRecheck = _premiumRecheckPending && IsEntitlementResolved();
-            if (dailyExpired || weeklyExpired || premiumRecheck)
+            // ccp-bugs#1151: same shape for the hardware answer. Only fires once the probe has
+            // actually landed, so a probe that keeps failing can never spin this tick.
+            var hardwareRecheck = _hardwareRecheckPending && QuestHardwareGate.Shared.Snapshot().Resolved;
+            if (dailyExpired || weeklyExpired || premiumRecheck || hardwareRecheck)
             {
+                if (dailyExpired || weeklyExpired)
+                {
+                    App.Logger?.Information("Quest rollover detected (daily={Daily}, weekly={Weekly})", dailyExpired, weeklyExpired);
+                }
                 if (premiumRecheck)
                 {
                     // NOT cleared here: CheckAndGenerateQuests recomputes the flag from what is
@@ -163,9 +183,10 @@ public class QuestService : IDisposable
                     // entitlement flapped back to unresolved before the inner check ran.
                     App.Logger?.Information("Quest premium recheck: entitlement resolved, reconciling deferred quests");
                 }
-                else
+                if (hardwareRecheck)
                 {
-                    App.Logger?.Information("Quest rollover detected (daily={Daily}, weekly={Weekly})", dailyExpired, weeklyExpired);
+                    // Same rule: cleared by CheckAndGenerateQuests, not here.
+                    App.Logger?.Information("Quest hardware recheck: probe resolved, reconciling the board");
                 }
                 CheckAndGenerateQuests();
                 QuestsRefreshed?.Invoke(this, EventArgs.Empty);
@@ -261,6 +282,16 @@ public class QuestService : IDisposable
         // defers a decision (CanDropPremiumQuest, the generators, the re-roll blocks at the end)
         // re-arms it, so a decision can never be lost between the arming and the retry.
         _premiumRecheckPending = false;
+        // Same contract for the hardware answer: every roll and every keep gate below re-arms it
+        // while the probe is unresolved, so clearing it here cannot lose a deferred decision - and
+        // once the probe HAS landed the flag stays clear, which is what stops the refresh tick
+        // from reconciling the board once a minute forever.
+        _hardwareRecheckPending = false;
+
+        // ccp-bugs#1186 / #1192: before anything decides to drop a premium quest, record that this
+        // account HAS premium right now if it does. This is the only durable "was ever premium"
+        // evidence the client keeps, and CanDropPremiumQuest reads it.
+        if (StampPremiumSeen()) changed = true;
 
         // THE DAILY BOARD. All three of today's quests are dealt at once and reconciled as a
         // set - rollover, migration from the old one-at-a-time file, top-up, and the per-slot
@@ -295,6 +326,23 @@ public class QuestService : IDisposable
                 App.Logger?.Information("Weekly quest '{QuestId}' requires premium (access lost), regenerating",
                     Progress.WeeklyQuest.DefinitionId);
                 GenerateNewWeeklyQuest();
+                changed = true;
+            }
+        }
+
+        // THE WEEKLY KEEP GATE (ccp-bugs#1151). The daily equivalent is per-slot inside
+        // ReconcileDailySlots. Without this the weekly slot was the worst offender in the report:
+        // a blink quest dealt once - by an older build, or by a roll that ran before the camera
+        // probe answered - was never looked at again until the week turned over.
+        if (Progress.WeeklyQuest != null && !Progress.WeeklyQuest.IsCompleted)
+        {
+            var weeklyDef = GetCurrentWeeklyDefinition();
+            if (weeklyDef != null && NeedsAbsentHardware(weeklyDef)
+                && CanDropUnservableQuest(Progress.WeeklyQuest, "weekly"))
+            {
+                App.Logger?.Information("Weekly quest '{QuestId}' needs hardware this machine does not have, regenerating",
+                    Progress.WeeklyQuest.DefinitionId);
+                GenerateNewWeeklyQuest(excludeId: Progress.WeeklyQuest.DefinitionId);
                 changed = true;
             }
         }
@@ -449,6 +497,13 @@ public class QuestService : IDisposable
             {
                 reason = "requires premium (access lost)";
             }
+            else if (NeedsAbsentHardware(def) && CanDropUnservableQuest(slot, "daily slot " + (i + 1)))
+            {
+                // ccp-bugs#1151. Gating the ROLL was never enough on its own: a board dealt by a
+                // build older than the gate, or dealt while the probe had not answered yet, kept
+                // its impossible quest for as long as the player did not burn a reroll on it.
+                reason = "needs hardware this machine does not have";
+            }
             else if (!IsQuestAvailableForLevel(def.Category))
             {
                 reason = "requires locked feature (" + def.Category + ")";
@@ -566,9 +621,14 @@ public class QuestService : IDisposable
         // Use remote quests from QuestDefinitionService if available, fall back to embedded
         var questPool = App.QuestDefinitions?.GetDailyQuests() ?? QuestDefinition.DailyQuests.ToList();
         var hasPremium = App.Patreon?.HasPremiumAccess == true;
-        // Cached, so dealing all three seats enumerates devices once (ccp-bugs#1151).
-        var hasCamera = QuestHardwareGate.Shared.HasCamera();
-        var availableQuests = FilterDailyRollPool(questPool, excludeIds, hasPremium, DateTime.Today, applyDateWindow: true, hasCamera);
+        // Cached, so dealing all three seats enumerates devices once (ccp-bugs#1151). An
+        // unresolved answer rolls from the everything-present pool and arms the recheck, exactly
+        // as an unresolved entitlement rolls from the free pool and arms its own.
+        var hw = QuestHardwareGate.Shared.Snapshot();
+        if (!hw.Resolved) _hardwareRecheckPending = true;
+        var hasCamera = hw.HasCamera;
+        var hasMic = hw.HasMicrophone;
+        var availableQuests = FilterDailyRollPool(questPool, excludeIds, hasPremium, DateTime.Today, applyDateWindow: true, hasCamera, hasMic);
 
         // THE WINDOW MUST NEVER STARVE THE PLAYER. If a date window emptied the pool,
         // fall back to the undated pool rather than leaving the day questless: an event
@@ -576,7 +636,7 @@ public class QuestService : IDisposable
         // with it. See IsQuestInDateWindow.
         if (availableQuests.Count == 0)
         {
-            availableQuests = FilterDailyRollPool(questPool, excludeIds, hasPremium, DateTime.Today, applyDateWindow: false, hasCamera);
+            availableQuests = FilterDailyRollPool(questPool, excludeIds, hasPremium, DateTime.Today, applyDateWindow: false, hasCamera, hasMic);
         }
 
         // LAST RESORT: three slots can drain a pool that one slot never could (a low-level
@@ -588,7 +648,7 @@ public class QuestService : IDisposable
             // Through the same helper, with the exclusions dropped rather than the predicates.
             // Hand-rolling this filter is how a Remote quest gets onto the board: it is the one
             // path that never sees IsRollableAsDaily unless it goes through here.
-            availableQuests = FilterDailyRollPool(questPool, (ICollection<string>?)null, hasPremium, DateTime.Today, applyDateWindow: false, hasCamera);
+            availableQuests = FilterDailyRollPool(questPool, (ICollection<string>?)null, hasPremium, DateTime.Today, applyDateWindow: false, hasCamera, hasMic);
         }
 
         if (availableQuests.Count == 0) return null;
@@ -624,14 +684,17 @@ public class QuestService : IDisposable
 
         // Use remote quests from QuestDefinitionService if available, fall back to embedded
         var questPool = App.QuestDefinitions?.GetWeeklyQuests() ?? QuestDefinition.WeeklyQuests.ToList();
-        // Same hardware gate as the daily roll (ccp-bugs#1151): no webcam, no blink weekly.
-        var hasCamera = QuestHardwareGate.Shared.HasCamera();
+        // Same hardware gate as the daily roll (ccp-bugs#1151): no webcam, no blink weekly. The
+        // weekly slot is the one that hurt most - nothing re-examined it until the week turned
+        // over, so a blink quest dealt here sat on the board for seven days.
+        var hw = QuestHardwareGate.Shared.Snapshot();
+        if (!hw.Resolved) _hardwareRecheckPending = true;
         var availableQuests = QuestHardwareGate.GateOrFallBack(questPool
             .Where(q => q.Id != excludeId)
             .Where(q => IsQuestAvailableForLevel(q.Category))
             .Where(IsQuestAvailableForTier)
             .Where(IsQuestInDateWindow)
-            .ToList(), hasCamera);
+            .ToList(), hw.HasCamera, hw.HasMicrophone);
 
         // Same starvation guard as the daily generator — see the note there.
         if (availableQuests.Count == 0)
@@ -640,7 +703,7 @@ public class QuestService : IDisposable
                 .Where(q => q.Id != excludeId)
                 .Where(q => IsQuestAvailableForLevel(q.Category))
                 .Where(IsQuestAvailableForTier)
-                .ToList(), hasCamera);
+                .ToList(), hw.HasCamera, hw.HasMicrophone);
         }
 
         if (availableQuests.Count == 0) return;
@@ -657,20 +720,21 @@ public class QuestService : IDisposable
     /// <summary>
     /// Guards the "requires premium, access lost" rerolls (#889). Throwing a premium quest away is
     /// only correct once we actually KNOW the entitlement, and a Patreon answer arrives seconds
-    /// after launch — before it does, every patron looks free. Progress is also protected: a quest
-    /// the player has already worked on is never taken away mid-run. A deferred decision is retried
-    /// by the refresh timer, so a genuinely lapsed patron still gets a free quest a tick later.
+    /// after launch - before it does, every patron looks free. A deferred decision is retried by
+    /// the refresh timer, so a genuinely lapsed patron still gets a free quest a tick later.
+    ///
+    /// THE PROGRESS GUARD IS NOT UNCONDITIONAL ANY MORE (ccp-bugs#1186, #1192). It was written for
+    /// one person: the LAPSED patron, mid-way through a premium quest when their pledge ended, who
+    /// should be allowed to finish what they started. Applied to someone who was NEVER premium it
+    /// does the exact opposite of its purpose - they cannot finish it, cannot be given another,
+    /// and watch the slot sit there until the day or the week turns over. So the guard now asks
+    /// who it is protecting: <see cref="WasEverPremium"/>.
     /// </summary>
     private bool CanDropPremiumQuest(ActiveQuest quest, string slot)
     {
-        if (quest.CurrentProgress > 0)
-        {
-            App.Logger?.Information(
-                "Premium {Slot} quest '{QuestId}' kept: it already has progress ({Progress})",
-                slot, quest.DefinitionId, quest.CurrentProgress);
-            return false;
-        }
-
+        // Resolution FIRST, so an unresolved entitlement always arms the recheck. Under the old
+        // order a quest with progress returned early and armed nothing, and the decision was not
+        // retried until something else happened to arm the flag.
         if (!IsEntitlementResolved())
         {
             _premiumRecheckPending = true;
@@ -680,6 +744,103 @@ public class QuestService : IDisposable
             return false;
         }
 
+        var canDrop = CanDropPremiumQuest(entitlementResolved: true, WasEverPremium(), quest.CurrentProgress);
+        if (!canDrop)
+        {
+            App.Logger?.Information(
+                "Premium {Slot} quest '{QuestId}' kept: lapsed patron, already has progress ({Progress})",
+                slot, quest.DefinitionId, quest.CurrentProgress);
+        }
+        else if (quest.CurrentProgress > 0)
+        {
+            App.Logger?.Information(
+                "Premium {Slot} quest '{QuestId}' dropped despite progress ({Progress}): this account has never had premium access",
+                slot, quest.DefinitionId, quest.CurrentProgress);
+        }
+        return canDrop;
+    }
+
+    /// <summary>
+    /// Pure form of the guard, split out so it is testable without a live App. The whole of
+    /// ccp-bugs#1186 / #1192 is the middle term: progress alone used to be enough to keep a
+    /// premium quest, for everybody.
+    /// </summary>
+    internal static bool CanDropPremiumQuest(bool entitlementResolved, bool wasEverPremium, int currentProgress)
+        => entitlementResolved && (currentProgress <= 0 || !wasEverPremium);
+
+    /// <summary>
+    /// Has this account EVER been seen with premium access? There is no tier history on the client
+    /// - the subscription cache only ever holds the current answer - so the durable half is a stamp
+    /// the quest ledger writes itself (<see cref="QuestProgress.LastPremiumSeenUtc"/>).
+    ///
+    /// The settings clauses are the bootstrap, so the answer is not simply "no" for every existing
+    /// install on the first launch after this ships. The two grace stamps are only ever written by
+    /// a validation that came back premium, and are left NON-NULL once expired, which makes a
+    /// past-dated stamp exactly the evidence wanted; PatreonTier is the same signal from the UI
+    /// cache. All three are cleared on an explicit logout - harmless, because a signed-out session
+    /// is unresolved (IsEntitlementResolved) and never reaches a drop decision at all.
+    ///
+    /// Deliberately generous: a false "yes" keeps a quest one more day, a false "no" takes a real
+    /// patron's half-finished quest away.
+    /// </summary>
+    private bool WasEverPremium()
+    {
+        if (Progress.LastPremiumSeenUtc != null) return true;
+
+        var settings = App.Settings?.Current;
+        if (settings == null) return false;
+        return settings.PatreonPremiumValidUntil != null
+            || settings.PatreonLabValidUntil != null
+            || settings.PatreonTier > 0;
+    }
+
+    /// <summary>
+    /// Record that premium access was observed, once the entitlement is trustworthy. Called from
+    /// the reconcile pass, which runs at launch and on every refresh tick, so a patron's stamp is
+    /// refreshed long before it could ever matter.
+    /// </summary>
+    private bool StampPremiumSeen()
+    {
+        if (App.Patreon?.HasPremiumAccess != true || !IsEntitlementResolved()) return false;
+        // A day's resolution is plenty: this only answers "ever", and rewriting it on every tick
+        // would dirty the file once a minute for the whole session.
+        var now = DateTime.UtcNow;
+        if (Progress.LastPremiumSeenUtc is { } seen && now - seen < TimeSpan.FromHours(12)) return false;
+        Progress.LastPremiumSeenUtc = now;
+        return true;
+    }
+
+    /// <summary>
+    /// THE KEEP GATE'S PREDICATE (ccp-bugs#1151): does this quest need a camera or a microphone
+    /// this machine does not have? An unresolved probe answers NO and arms the recheck, so the
+    /// fail-open never costs a quest and never becomes permanent.
+    /// </summary>
+    private bool NeedsAbsentHardware(QuestDefinition def)
+    {
+        var hw = QuestHardwareGate.Shared.Snapshot();
+        if (!hw.Resolved)
+        {
+            _hardwareRecheckPending = true;
+            return false;
+        }
+        return QuestHardwareGate.NeedsAbsentHardware(def, hw.HasCamera, hw.HasMicrophone);
+    }
+
+    /// <summary>
+    /// Whether a quest the machine cannot serve may be taken off the board. Progress is protected
+    /// the same way the premium guard protects it: a quest with points on it means the hardware
+    /// worked at some point, so the honest reading is "the device was unplugged", not "this was
+    /// always impossible". The player still has the reroll button, and the next rollover clears it.
+    /// </summary>
+    private bool CanDropUnservableQuest(ActiveQuest quest, string slot)
+    {
+        if (quest.CurrentProgress > 0)
+        {
+            App.Logger?.Information(
+                "Unservable {Slot} quest '{QuestId}' kept: it already has progress ({Progress})",
+                slot, quest.DefinitionId, quest.CurrentProgress);
+            return false;
+        }
         return true;
     }
 
@@ -777,11 +938,11 @@ public class QuestService : IDisposable
     /// </summary>
     internal static List<QuestDefinition> FilterDailyRollPool(
         IEnumerable<QuestDefinition> pool, string? excludeId, bool hasPremium,
-        DateTime today, bool applyDateWindow, bool hasCamera = true)
+        DateTime today, bool applyDateWindow, bool hasCamera = true, bool hasMicrophone = true)
         => FilterDailyRollPool(
             pool,
             string.IsNullOrEmpty(excludeId) ? null : new[] { excludeId },
-            hasPremium, today, applyDateWindow, hasCamera);
+            hasPremium, today, applyDateWindow, hasCamera, hasMicrophone);
 
     /// <summary>
     /// Set-excluding form, for the three-up daily board. Each seat has to roll against every id
@@ -793,7 +954,7 @@ public class QuestService : IDisposable
     /// </summary>
     internal static List<QuestDefinition> FilterDailyRollPool(
         IEnumerable<QuestDefinition> pool, ICollection<string>? excludeIds, bool hasPremium,
-        DateTime today, bool applyDateWindow, bool hasCamera = true)
+        DateTime today, bool applyDateWindow, bool hasCamera = true, bool hasMicrophone = true)
     {
         var filtered = pool
             .Where(q => excludeIds == null || !excludeIds.Contains(q.Id))
@@ -804,7 +965,7 @@ public class QuestService : IDisposable
             .ToList();
         // LAST predicate, and the first one dropped when the pool runs dry: a machine with no
         // webcam must not be dealt a blink quest (ccp-bugs#1151) but must still be dealt a quest.
-        return QuestHardwareGate.GateOrFallBack(filtered, hasCamera);
+        return QuestHardwareGate.GateOrFallBack(filtered, hasCamera, hasMicrophone);
     }
 
     /// <summary>

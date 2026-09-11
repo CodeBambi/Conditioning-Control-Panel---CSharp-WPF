@@ -98,6 +98,16 @@ public class QuestDefinition
     public bool RequiresPremium { get; set; }
 
     /// <summary>
+    /// Devices this quest cannot be completed without, as published by the definitions channel:
+    /// "camera"/"webcam", "microphone"/"mic", or several separated by commas or spaces. Null on
+    /// every embedded quest - their requirements come from the category instead
+    /// (QuestHardwareGate.NeedsCamera / NeedsMicrophone). Unknown words are ignored, so a typo in
+    /// hand-authored JSON costs the gate rather than the player's quest. ccp-bugs#1151.
+    /// </summary>
+    [JsonProperty("requiresHardware")]
+    public string? RequiresHardware { get; set; }
+
+    /// <summary>
     /// Whether this is a seasonal quest (temporary/event-based)
     /// </summary>
     [JsonProperty("seasonal")]
