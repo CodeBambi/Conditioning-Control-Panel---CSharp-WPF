@@ -1068,15 +1068,9 @@ namespace ConditioningControlPanel
         // Navigation tiles still navigate to the ONE existing entry, never launch
         // (PlayTabView.xaml:1163-1167 rule).
 
-        internal void CardFlash_Click(object sender, RoutedEventArgs e) => OpenStudioModule("flash");
-
-        internal void CardSubliminal_Click(object sender, RoutedEventArgs e) => OpenStudioModule("subliminal");
-
-        internal void CardBouncingText_Click(object sender, RoutedEventArgs e) => OpenStudioModule("bouncingtext");
-
-        internal void CardBubblePop_Click(object sender, RoutedEventArgs e) => OpenStudioModule("bubbles");
-
-        internal void CardLockCard_Click(object sender, RoutedEventArgs e) => OpenStudioModule("lockcard");
+        // The per-feature Card*_Click twins are gone with the tiles that carried them: the
+        // slot renderer wires OpenStudioModule / ToggleWallFeature straight onto the card it
+        // builds, so a handler per feature name would be a second place to keep in step.
 
         /// <summary>
         /// The ? box: navigates to today's free premium feature. The tile is repainted by
@@ -1110,17 +1104,6 @@ namespace ConditioningControlPanel
         /// Patreon row uses so the pulse-clearing and lazy-init side effects stay in one place.
         /// </summary>
         internal void CardVault_Click(object sender, RoutedEventArgs e) => BtnPatreonExclusives_Click(sender, e);
-
-        /// <summary>
-        /// The mosaic's nameless TEASE tile. Everything about it - which feature it teases, which
-        /// livery it wears, whether it is still teasing at all - lives in one block at the top of
-        /// <c>MainWindow.TeaseCard.cs</c>; this is only the wall's end of the wire.
-        ///
-        /// <para>The old two-branch behaviour (navigate when the door is open, placeholder toast
-        /// when it is withheld) moved into <see cref="TeaseCardClicked"/> intact, with the toast
-        /// replaced by the teaser card the owner asked for on 2026-08-13.</para>
-        /// </summary>
-        internal void CardJustDrop_Click(object sender, RoutedEventArgs e) => TeaseCardClicked();
 
         /// <summary>
         /// Paints the mosaic's price tags and the ? box's face. The FX tiles are all free and
