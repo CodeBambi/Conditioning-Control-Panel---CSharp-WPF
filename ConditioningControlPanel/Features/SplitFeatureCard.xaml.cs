@@ -75,6 +75,15 @@ namespace ConditioningControlPanel.Features
         private const int SplitReducedMs = 110;
         private const int SplitFrameRate = 30;
 
+        /// <summary>Resting opacity for the half whose feature is OFF, matching FeatureCard's
+        /// InactiveContentOpacity. Applied per half rather than per card: each half is its own
+        /// on/off feature, so a combo tile with one half lit has to be able to say so.
+        ///
+        /// <para>No opt-out property here, unlike FeatureCard: a split tile exists to carry two
+        /// toggles (it raises ToggleA/ToggleB and nothing else), so there is no destination-tile
+        /// case to exclude.</para></summary>
+        private const double InactiveHalfOpacity = 0.62;
+
         /// <summary>Shared frozen stand-in for a region the seam has swept out of existence.</summary>
         private static readonly PathGeometry EmptyGeometry = CreateEmptyGeometry();
 
@@ -138,6 +147,9 @@ namespace ConditioningControlPanel.Features
         public SplitFeatureCard()
         {
             InitializeComponent();
+            // Both halves start OFF and their DP callbacks only fire on a CHANGE, so a card whose
+            // features are off at startup would never be handed its resting dim without this.
+            ApplyHalfRestOpacity();
             Loaded += OnCardLoaded;
             Unloaded += OnCardUnloaded;
             // A tile hidden mid-hover (tab switch out of the dashboard) can be denied its
@@ -393,6 +405,10 @@ namespace ConditioningControlPanel.Features
             if (_halfHover == halfA) return;
             _halfHover = halfA;
 
+            // The committed half is about to fill the tile, so it gets its full art back even
+            // while its feature is off - the reveal is the point of the sweep.
+            ApplyHalfRestOpacity();
+
             HoverWashA.Opacity = halfA == true ? 1 : 0;
             HoverWashB.Opacity = halfA == false ? 1 : 0;
 
@@ -503,6 +519,9 @@ namespace ConditioningControlPanel.Features
             try
             {
                 _halfHover = null;
+                // ResetSplit clears _halfHover behind SetHalfHover's back, so the half that was
+                // committed would otherwise stay at full brightness with no hover to explain it.
+                ApplyHalfRestOpacity();
                 BeginAnimation(SplitProgressProperty, null);
                 SplitProgress = SplitRest;
                 // Assigning a value it already holds raises no property-changed callback, so the
@@ -545,6 +564,7 @@ namespace ConditioningControlPanel.Features
         {
             ActiveRingA.Visibility = IsActiveA ? Visibility.Visible : Visibility.Collapsed;
             ActiveRingB.Visibility = IsActiveB ? Visibility.Visible : Visibility.Collapsed;
+            ApplyHalfRestOpacity();
             // RebuildGeometry only draws the rings that are on screen (it also runs per frame of
             // the hover fill), so a ring that just came on needs this to get its geometry.
             SafeRebuildGeometry();
@@ -592,6 +612,18 @@ namespace ConditioningControlPanel.Features
                 if (IsActiveB) Breathe(ActiveRingB, OpacityProperty, ActiveRingMinOpacity, ActiveRingMaxOpacity); else ParkRing(ActiveRingB);
             }
             catch (Exception ex) { App.Logger?.Debug("SplitFeatureCard.ApplyActiveBreath: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// The ONE writer for the two half hosts' Opacity: an OFF half rests dim unless the mouse
+        /// has committed the card to it. A plain assignment rather than an animation, so a later
+        /// call can never be shadowed by an animation still holding the property.
+        /// </summary>
+        private void ApplyHalfRestOpacity()
+        {
+            if (HalfHostA == null || HalfHostB == null) return;
+            HalfHostA.Opacity = IsActiveA || _halfHover == true ? 1.0 : InactiveHalfOpacity;
+            HalfHostB.Opacity = IsActiveB || _halfHover == false ? 1.0 : InactiveHalfOpacity;
         }
 
         private static void ParkRing(System.Windows.Shapes.Path ring)

@@ -34,6 +34,16 @@ namespace ConditioningControlPanel.Features
         private const int RimLightMs = 150;
         private const int AmbientFrameRate = 24;
 
+        /// <summary>Resting opacity for a locked card. Unchanged from the value that has always
+        /// ridden on <see cref="IsLocked"/>.</summary>
+        private const double LockedContentOpacity = 0.35;
+
+        /// <summary>Resting opacity for a switched-OFF card that opted into
+        /// <see cref="DimWhenInactive"/>. Deep enough that the lit tiles win the eye at a glance,
+        /// shallow enough that the art still reads and the tile still looks clickable - and well
+        /// clear of the 0.35 lock veil, which has to keep meaning something else.</summary>
+        private const double InactiveContentOpacity = 0.62;
+
         /// <summary>Blur radius for a teased card's art. Tuned to "coloured smear": at the
         /// mosaic's tile size this leaves a mood and a palette and no recognisable shape, which
         /// is the whole point - the art must not name the feature.</summary>
@@ -74,6 +84,10 @@ namespace ConditioningControlPanel.Features
 
         public static readonly DependencyProperty IsActiveProperty =
             DependencyProperty.Register(nameof(IsActive), typeof(bool), typeof(FeatureCard),
+                new PropertyMetadata(false, OnActiveStateChanged));
+
+        public static readonly DependencyProperty DimWhenInactiveProperty =
+            DependencyProperty.Register(nameof(DimWhenInactive), typeof(bool), typeof(FeatureCard),
                 new PropertyMetadata(false, OnActiveStateChanged));
 
         public static readonly DependencyProperty HelpSectionIdProperty =
@@ -135,6 +149,23 @@ namespace ConditioningControlPanel.Features
         {
             get => (bool)GetValue(IsActiveProperty);
             set => SetValue(IsActiveProperty, value);
+        }
+
+        /// <summary>
+        /// Opt-in: while this card's feature is OFF, rest the art at
+        /// <see cref="InactiveContentOpacity"/> so the wall's lit tiles are the ones the eye
+        /// lands on. Hovering lifts it back to full, so an off tile still reads as a live
+        /// affordance rather than as something disabled.
+        ///
+        /// <para>Opt-in rather than automatic because <see cref="IsActive"/> is only meaningful
+        /// on the tiles that actually toggle. The destination tiles (Just Drop, Mystery, the
+        /// Vault) never receive an IsActive write, so an automatic rule would park them at 62%
+        /// forever and say "off" about something that has no off.</para>
+        /// </summary>
+        public bool DimWhenInactive
+        {
+            get => (bool)GetValue(DimWhenInactiveProperty);
+            set => SetValue(DimWhenInactiveProperty, value);
         }
 
         /// <summary>
@@ -391,12 +422,10 @@ namespace ConditioningControlPanel.Features
             {
                 LockedOverlay.Visibility = Visibility.Visible;
                 TxtLockLabel.Text = LockLevel > 0 ? $"Lvl {LockLevel}" : "Locked";
-                ContentRoot.Opacity = 0.35;
             }
             else
             {
                 LockedOverlay.Visibility = Visibility.Collapsed;
-                ContentRoot.Opacity = 1.0;
             }
             ApplyActiveState();
         }
@@ -407,7 +436,28 @@ namespace ConditioningControlPanel.Features
             // can't really be "on" even if the underlying setting is true.
             var showActive = IsActive && !IsLocked;
             ActiveBorder.Visibility = showActive ? Visibility.Visible : Visibility.Collapsed;
+            ApplyRestOpacity();
             ApplyActiveBreath(showActive);
+        }
+
+        /// <summary>
+        /// The ONE writer for <c>ContentRoot.Opacity</c>. Lock, inactive-dim and hover all want
+        /// that channel, so they are resolved here in priority order instead of each assigning it
+        /// from its own handler - two writers on one property is how a card ends up stuck at 35%
+        /// after a lock is lifted.
+        ///
+        /// <para>A plain assignment, never a DoubleAnimation: an animation on this property would
+        /// hold its final value at local precedence, and every later assignment here would then be
+        /// silently ignored.</para>
+        /// </summary>
+        private void ApplyRestOpacity()
+        {
+            if (ContentRoot == null) return;
+            double target =
+                IsLocked ? LockedContentOpacity
+                : DimWhenInactive && !IsActive && !_hovered ? InactiveContentOpacity
+                : 1.0;
+            ContentRoot.Opacity = target;
         }
 
         // ============================== FX ==============================
@@ -583,6 +633,11 @@ namespace ConditioningControlPanel.Features
                 // A locked tile is not an affordance; lighting it up on hover promises a click
                 // that does nothing.
                 if (IsLocked) on = false;
+
+                // An inactive tile rests dim; hovering hands it back its full art so the pointer
+                // proves the tile is still live. ApplyRestOpacity re-reads IsLocked, so this stays
+                // correct for a locked card, whose veil must not lift.
+                ApplyRestOpacity();
 
                 MotionFx.HoverLift(RootBorder, on);
                 if (on) HoverPop.Enter(ImgIconHost); else HoverPop.Leave(ImgIconHost);

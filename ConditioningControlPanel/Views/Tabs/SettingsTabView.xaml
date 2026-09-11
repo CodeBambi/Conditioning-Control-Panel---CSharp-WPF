@@ -802,6 +802,7 @@
                                   Icon="pack://application:,,,/Resources/features/flash.png"
                                   HelpSectionId="FlashImages"
                                   Click="CardFlash_Click"
+                                  DimWhenInactive="True"
                                   ToggleRequested="CardFlash_Toggle"/>
             <features:SplitFeatureCard Grid.Row="0" Grid.Column="1" x:Name="ComboVideoBubble" x:FieldModifier="internal"
                                        TitleA="Mandatory Video" TitleB="Bubble Count"
@@ -814,12 +815,14 @@
                                   Icon="pack://application:,,,/Resources/features/subliminal.png"
                                   HelpSectionId="Subliminals"
                                   Click="CardSubliminal_Click"
+                                  DimWhenInactive="True"
                                   ToggleRequested="CardSubliminal_Toggle"/>
             <features:FeatureCard Grid.Row="0" Grid.Column="3" x:Name="CardBouncingText" x:FieldModifier="internal"
                                   Title="Bouncing Text"
                                   Icon="pack://application:,,,/Resources/features/bouncing_text.png"
                                   HelpSectionId="BouncingText"
                                   Click="CardBouncingText_Click"
+                                  DimWhenInactive="True"
                                   ToggleRequested="CardBouncingText_Toggle"/>
 
             <!-- Row 2: the TEASE tile (far left, owner spec) + centre logo + spiral pair -->
@@ -1255,12 +1258,14 @@
                                   Icon="pack://application:,,,/Resources/features/Bubble_pop.png"
                                   HelpSectionId="BubblePop"
                                   Click="CardBubblePop_Click"
+                                  DimWhenInactive="True"
                                   ToggleRequested="CardBubblePop_Toggle"/>
             <features:FeatureCard Grid.Row="3" Grid.Column="3" x:Name="CardLockCard" x:FieldModifier="internal"
                                   Title="Lock Card"
                                   Icon="pack://application:,,,/Resources/features/Phrase_Lock.png"
                                   HelpSectionId="LockCard"
                                   Click="CardLockCard_Click"
+                                  DimWhenInactive="True"
                                   ToggleRequested="CardLockCard_Toggle"/>
 
             <!-- ============================================================ -->
