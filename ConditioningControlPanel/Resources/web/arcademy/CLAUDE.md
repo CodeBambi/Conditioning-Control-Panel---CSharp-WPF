@@ -3491,6 +3491,32 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     `--pass-every`, `--kbps`). MANIFEST_AHEAD_* in provider/index.js now count ENTRIES
     (posters included), which is why they doubled.
 
+146. **A TOROIDAL MARQUEE IS ONLY SEAMLESS WHILE THE COPIES STILL ON SCREEN COVER THE FRAME
+    (LOST & FOUND, phone wave, 2026-09-11).** Owner's landscape-phone shot: "FIND HER 0 / 26",
+    row 1 three thumbnails then nothing, row 3 one tile, most of the wall bare - read as "the
+    thumbnails never load". Nothing was unloaded: the bare stretch is the strip's own TAIL.
+    `board.js` builds a row as `reps` copies of its tiles and `styles.js` slides exactly one
+    copy per cycle, so the wrap only closes when `(reps - 1) x copy width >= frame width`.
+    `reps` was a build-time guess (3 under 6 tiles, else 2) written against a desktop tile; on
+    a 844-930px landscape phone the touch floor deals ~26 tiles in 4 rows, a 6-tile copy is
+    ~560px, and once a cycle the tail crossed the frame and left up to a third of the row
+    empty - no skin, no border, because there is no element there. Measured on the throttled
+    rig (2 Mbps, 100ms, x4, 844x390 coarse): 30 of 33 one-second samples had a row with >40px
+    uncovered, worst 280px; after: 0 of 33. The cure is `fitWrap()`: once the mosaic is in
+    the document (and debounced on resize/orientationchange) measure the frame and each
+    strip, ADD clone sets until the law holds (never remove; `WRAP_REPS_MAX` 6), paint the new
+    seats from the row's current looks, restart the strip's animation so the new shift is
+    picked up, and only THEN compute the element budgets (maxReps counts the fitted wrap; a
+    1600x900 desktop deals 9-11 tiles a row and stays at x2 with its caps untouched, a frame
+    that does grow to x3 sees `liveCap` fall 24 -> 18 by the ceiling's own law).
+    The keyframes are now per clone count (`data-lf-reps` -> `g-lf-driftL3` etc., a plain
+    percentage of the strip) instead of `calc(-100% / var(--g-lf-reps))`, so no phone engine
+    has to resolve a custom property inside @keyframes to land on the seam; the var form
+    stays as the fallback. The audit that missed it counted opacity/display/media per tile;
+    the one that catches it measures the UNCOVERED width of the viewport per row every
+    second (scratchpad `lfroom-drive.mjs`, `wrap gap` line). Any marquee that clones for a
+    wrap has this law; check it against the narrowest tile the mobile pass can deal.
+
 ## 5. The game module contract (short version)
 
 ```js
