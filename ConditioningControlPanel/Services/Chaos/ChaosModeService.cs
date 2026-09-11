@@ -1046,9 +1046,7 @@ public sealed class ChaosModeService
             bool runClosing = _state.RunDurationSec - elapsed <= 3;
             if (App.Video?.IsPlaying == true && (capHit || runClosing))
             {
-                _chaosVideoCapUtc = DateTime.MinValue;
-                try { App.Video?.ForceCleanup(); } catch (Exception ex) { App.Logger?.Debug("Chaos video cap: {E}", ex.Message); }
-                ExtendHeavyQuarantine(VIDEO_TEARDOWN_QUARANTINE_SEC);   // ForceCleanup may not raise VideoEnded
+                StopChaosOwnedVideo(capHit ? "cap" : "run closing");
                 _state.PushEvent("▶ the tape snaps off");
                 // porn_dvd lesson: the full slice ran (the 15s cap IS the slice length);
                 // a run-closing cut before the cap is an abort and doesn't count.
@@ -2172,6 +2170,34 @@ public sealed class ChaosModeService
         if (until > _heavyUntilUtc) _heavyUntilUtc = until;
     }
 
+    /// <summary>
+    /// May a run-exit path tear the tape down? <c>App.Video.ForceCleanup()</c> closes EVERY video
+    /// window the service owns, so chaos may only fire it at a video chaos itself started: the
+    /// user's own mandatory/session video must survive the descent ending on top of it. The armed
+    /// cap is that ownership mark - it is set only when a Video payload detonates
+    /// (<see cref="FirePayloadForDetonation"/>) and cleared the moment the tape is accounted for.
+    /// Pure so the rule is pinned by a test without a WPF app behind it.
+    /// </summary>
+    internal static bool ShouldStopVideoOnRunExit(bool chaosCapArmed, bool videoPlaying)
+        => chaosCapArmed && videoPlaying;
+
+    /// <summary>
+    /// Stop a chaos-fired video and disarm the cap. Every run-exit path calls this, because the
+    /// mid-run cap in <c>RunTick</c> cannot: the tick early-returns while the run is paused (draft
+    /// card, lesson card, manual hold) and its run-closing branch only covers the clock running
+    /// out, so a quit mid-tape used to walk the video onto the results screen and the lobby behind
+    /// it (ccp-bugs #1201). Idempotent - the cap is cleared first, so a second call is a no-op.
+    /// </summary>
+    private void StopChaosOwnedVideo(string reason)
+    {
+        bool armed = _chaosVideoCapUtc != DateTime.MinValue;
+        _chaosVideoCapUtc = DateTime.MinValue;   // an armed cap never outlives the run
+        if (!ShouldStopVideoOnRunExit(armed, App.Video?.IsPlaying == true)) return;
+        try { App.Video?.ForceCleanup(); } catch (Exception ex) { App.Logger?.Debug("Chaos video teardown: {E}", ex.Message); }
+        ExtendHeavyQuarantine(VIDEO_TEARDOWN_QUARANTINE_SEC);   // ForceCleanup may not raise VideoEnded
+        App.Logger?.Information("[Chaos] tore down a chaos-fired video ({Reason})", reason);
+    }
+
     /// <summary>Mirrors the pop streak into the tunnel background so the fall accelerates with
     /// the combo and brakes when it halves/breaks. Combo only ever changes on the UI thread
     /// (timers + click handlers), so this posts straight through.</summary>
@@ -3088,6 +3114,7 @@ public sealed class ChaosModeService
         _paused = false;
         _runTimer?.Stop();
         _spawnTimer?.Stop();
+        StopChaosOwnedVideo("force shutdown");
         try { App.Bubbles?.EndChaosMode(); } catch (Exception ex) { Diag.Swallowed(ex); }
         try { App.Bubbles?.Resume(); } catch (Exception ex) { Diag.Swallowed(ex); }
         StopKeyHook();
@@ -3135,6 +3162,10 @@ public sealed class ChaosModeService
         _spawning = false;
         if (App.Video != null) App.Video.VideoStarted -= OnVideoStartedDuringRun;
         if (App.Video != null) App.Video.VideoEnded -= OnVideoEndedDuringRun;
+        // EndRun does NOT flow through CleanupAfterRun: it shows the results card and cleanup only
+        // runs when that card is dismissed, so the tape has to come off here or it plays over the
+        // results and on into the lobby.
+        StopChaosOwnedVideo("run end");
         _runTimer?.Stop();
         _spawnTimer?.Stop();
         StopKeyHook();
@@ -3229,6 +3260,7 @@ public sealed class ChaosModeService
         try { System.Windows.Media.CompositionTarget.Rendering -= OnChaosRendering; } catch (Exception ex) { Diag.Swallowed(ex); }
         if (App.Video != null) App.Video.VideoStarted -= OnVideoStartedDuringRun;   // belt-and-suspenders (mid-run close)
         if (App.Video != null) App.Video.VideoEnded -= OnVideoEndedDuringRun;
+        StopChaosOwnedVideo("cleanup");   // the last net: overlay closed mid-run, Run Again, app exit
         StopKeyHook();   // idempotent; covers the overlay-closed-mid-run path
         StopRippleHook();
         CloseToyButtons();
