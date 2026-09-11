@@ -9,6 +9,7 @@ using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models.Dashboard;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Dashboard;
+using ConditioningControlPanel.Views.Controls.Dashboard;
 
 namespace ConditioningControlPanel
 {
@@ -45,6 +46,10 @@ namespace ConditioningControlPanel
         /// render and the pencils do not. Keyed by host so the hover handlers - which are attached
         /// to the hosts once and live as long as they do - can find theirs without a closure.</summary>
         private readonly Dictionary<Grid, Button> _dashboardPencilByHost = new();
+
+        /// <summary>The open picker, or null. One at a time by construction: opening closes
+        /// whatever was there first.</summary>
+        private DashboardPickerPopup? _dashboardPicker;
 
         /// <summary>One template for all nine. A ControlTemplate is shareable and sealed on first
         /// use, so building it once is both cheaper and the only way to be sure the nine pencils
@@ -205,22 +210,60 @@ namespace ConditioningControlPanel
         // ---- the two seams -------------------------------------------------------------
 
         /// <summary>
-        /// PHASE F SEAM 1. Opens a picker for one slot. Everything about which picker that is
+        /// PHASE F SEAM 1. Opens a picker for one slot. Everything about WHICH picker that is
         /// lives here and nowhere else, so swapping the flat one for the rolodex is a change to
-        /// this method's body.
+        /// this method's body and to nothing downstream of it.
+        ///
+        /// <para>The picker is an overlay in the grid's own tree rather than a Popup. A Popup
+        /// gets its own top-level HWND, which does not inherit the root Viewbox's scale, so the
+        /// panel would line up with the wall at exactly one window size. It is also the rect the
+        /// rolodex has to occupy, which is the other half of why it is here and not floating.</para>
         /// </summary>
         internal void OpenDashboardPicker(int slot)
         {
             if (RefuseActionIfSessionLocked("dashboard:edit")) return;
             if (slot < 0 || slot >= DashboardLayout.SlotCount) return;
 
-            // The flat picker arrives with part 2 of this phase.
-            App.Logger?.Debug("[Dashboard] Picker requested for slot {Slot}", slot);
+            try
+            {
+                var grid = SettingsTab?.VelvetFeatureGrid;
+                if (grid == null) return;
+
+                // Built fresh every time rather than hidden and shown: entitlement, mod art and
+                // mod names can all have moved, and a stale shelf promises a tile the wall will
+                // not paint.
+                CloseDashboardPicker();
+
+                var picker = new DashboardPickerPopup { Margin = new Thickness(6) };
+                Grid.SetRow(picker, 0);
+                Grid.SetRowSpan(picker, 4);
+                Grid.SetColumn(picker, 0);
+                Grid.SetColumnSpan(picker, 4);
+                // Over the program lock ribbon's 30, which is the highest thing on this grid.
+                Panel.SetZIndex(picker, 40);
+
+                picker.Picked += key => HandleDashboardPick(picker.Slot, key);
+                picker.ResetRequested += ResetDashboardLayout;
+                picker.CloseRequested += CloseDashboardPicker;
+
+                grid.Children.Add(picker);
+                _dashboardPicker = picker;
+                picker.ShowFor(slot);
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "OpenDashboardPicker failed for slot {Slot}", slot); }
         }
 
         /// <summary>Closes whatever picker is open. A no-op when none is.</summary>
         internal void CloseDashboardPicker()
         {
+            try
+            {
+                var picker = _dashboardPicker;
+                _dashboardPicker = null;
+                if (picker == null) return;
+                (picker.Parent as Panel)?.Children.Remove(picker);
+            }
+            catch (Exception ex) { App.Logger?.Debug("CloseDashboardPicker: {E}", ex.Message); }
         }
 
         /// <summary>
@@ -243,9 +286,22 @@ namespace ConditioningControlPanel
             AskDashboardPickChoice(slot, key, offerSplit: prompt == PickPrompt.AskReplaceOrSplit);
         }
 
-        /// <summary>Raises the Replace / Split / Cancel ask. The surface arrives with part 2.</summary>
+        /// <summary>
+        /// Raises the Replace / Split / Cancel ask, and commits whatever comes back. Cancel
+        /// answers nothing at all, which is correct: never mind is not an edit.
+        /// </summary>
         private void AskDashboardPickChoice(int slot, string key, bool offerSplit)
         {
+            var picker = _dashboardPicker;
+            if (picker == null)
+            {
+                // No picker on screen means no room to ask - a host that raised a pick from its
+                // own chrome. A plain replace is what the question would have defaulted to.
+                CommitDashboardPick(slot, key, split: false);
+                return;
+            }
+
+            picker.Ask(offerSplit, split => CommitDashboardPick(slot, key, split));
         }
 
         // ---- the accepted edit ---------------------------------------------------------
@@ -269,6 +325,9 @@ namespace ConditioningControlPanel
                 RenderDashboardSlots(CurrentLayout);
                 SaveDashboardLayout(DashboardPickerRule.Commit(CurrentLayout));
                 App.Logger?.Information("[Dashboard] Slot {Slot} changed ({Outcome})", slot, outcome);
+
+                // One ask per pencil. The pencil was for THIS cell, and it has been answered.
+                CloseDashboardPicker();
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "CommitDashboardPick failed for slot {Slot}", slot); }
         }
@@ -286,6 +345,7 @@ namespace ConditioningControlPanel
             {
                 RenderDashboardSlots(DashboardLayout.Default());
                 SaveDashboardLayout(DashboardPickerRule.Reset());
+                CloseDashboardPicker();
                 App.Logger?.Information("[Dashboard] Layout reset to default");
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "ResetDashboardLayout failed"); }
