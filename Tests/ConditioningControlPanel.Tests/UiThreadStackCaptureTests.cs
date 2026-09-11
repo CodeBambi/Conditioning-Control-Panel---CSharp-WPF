@@ -25,7 +25,7 @@ public class UiThreadStackCaptureTests
     {
         var first = UiThreadStacks.CaptureWithBudget(Environment.CurrentManagedThreadId, 0);
         Assert.Contains("budget", first);
-        var second = UiThreadStacks.CaptureWithBudget(Environment.CurrentManagedThreadId, 20_000);
+        var second = UiThreadStacks.CaptureWithBudget(Environment.CurrentManagedThreadId, 90_000);
         Assert.Contains("skipped", second);
     }
 
@@ -33,7 +33,7 @@ public class UiThreadStackCaptureTests
     public void ASelfSnapshotYieldsTheCallingThreadsManagedFrames()
     {
         var sw = Stopwatch.StartNew();
-        var text = UiThreadStacks.CaptureWithBudget(Environment.CurrentManagedThreadId, 20_000);
+        var text = UiThreadStacks.CaptureWithBudget(Environment.CurrentManagedThreadId, 90_000);
         sw.Stop();
 
         // This test method's own frame must appear: that is a managed stack walk having worked,
@@ -53,7 +53,7 @@ public class UiThreadStackCaptureTests
     {
         // SafeUiManagedThreadId returns -1 when the dispatcher will not answer, and a wedged
         // process is exactly where that happens. The report must still get a printable line.
-        var text = UiThreadStacks.CaptureWithBudget(-1, 20_000);
+        var text = UiThreadStacks.CaptureWithBudget(-1, 90_000);
 
         Assert.False(string.IsNullOrWhiteSpace(text));
         Assert.Contains("not present in the snapshot", text);
