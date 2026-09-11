@@ -58,11 +58,25 @@ public class ProfileSyncDashboardLayoutTests
     }
 
     [Fact]
-    public void ATouchedWallWithNoWireSendsTheClear()
+    public void ATouchedWallWithNoWireSendsNoChange()
     {
-        // "" is the server's delete instruction, and it is only reachable from a touched install
-        // that has already round-tripped - never from a fresh one.
-        Assert.Equal("", ProfileSyncService.DashboardLayoutPayloadFor(null, touched: true, hasLoadedProfile: true));
+        // "" is the server's delete instruction and no client path means it; an inconsistent
+        // touched-but-empty install stays silent rather than wiping the account's layout.
+        Assert.Null(ProfileSyncService.DashboardLayoutPayloadFor(null, touched: true, hasLoadedProfile: true));
+        Assert.Null(ProfileSyncService.DashboardLayoutPayloadFor("", touched: true, hasLoadedProfile: true));
+    }
+
+    [Fact]
+    public void LogoutReleasesOwnershipButKeepsTheWall()
+    {
+        var settings = new AppSettings { DashboardLayoutWire = CustomWire(), DashboardLayoutTouched = true };
+        ProfileSyncService.ReleaseDashboardLayoutOwnership(settings);
+        Assert.False(settings.DashboardLayoutTouched);
+        Assert.Equal(CustomWire(), settings.DashboardLayoutWire);
+        // Released, the wall is adoptable again and no longer pushed.
+        Assert.Null(ProfileSyncService.DashboardLayoutPayloadFor(settings.DashboardLayoutWire, settings.DashboardLayoutTouched, hasLoadedProfile: true));
+        Assert.True(ProfileSyncService.ApplyCloudDashboardLayout(settings, "lockcard,flash,,,,,,,"));
+        ProfileSyncService.ReleaseDashboardLayoutOwnership(null);
     }
 
     // ---- the adopt decision -----------------------------------------------------------------

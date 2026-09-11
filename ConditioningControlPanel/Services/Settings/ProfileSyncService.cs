@@ -516,7 +516,8 @@ namespace ConditioningControlPanel.Services
         public void ResetLoadedProfileState()
         {
             _hasLoadedProfile = false;
-            App.Logger?.Debug("Profile sync: loaded-profile flag reset (logout) - defaults guard re-armed");
+            ReleaseDashboardLayoutOwnership(App.Settings?.Current);
+            App.Logger?.Debug("Profile sync: loaded-profile flag reset (logout) - defaults guard re-armed, dashboard layout released");
         }
 
         /// <summary>
@@ -2512,14 +2513,27 @@ namespace ConditioningControlPanel.Services
         /// an opinion: it is the shipped default, which must never overwrite a layout the subject
         /// arranged on another machine.
         ///
-        /// Once both hold, an explicit empty string is meaningful - it is "clear it", which the
-        /// server answers by deleting the field - so a null wire on a touched install sends "".
+        /// Once both hold, the wire goes up as-is. A touched install with a null wire is an
+        /// inconsistent state (every writer sets both), and it still sends null: "" is the server's
+        /// DELETE instruction, and nothing on the client ever means that. A reset writes the
+        /// default wire, it does not clear the field.
         /// </summary>
         internal static string? DashboardLayoutPayloadFor(string? wire, bool touched, bool hasLoadedProfile)
         {
             if (!hasLoadedProfile) return null;
             if (!touched) return null;
-            return wire ?? string.Empty;
+            return string.IsNullOrEmpty(wire) ? null : wire;
+        }
+
+        /// <summary>
+        /// Logout hands the wall back. The wire stays (the screen must not change under the
+        /// subject), but the touched flag drops so the next account's cloud layout can adopt over
+        /// it and this account's arrangement is never pushed up under someone else's id.
+        /// </summary>
+        internal static void ReleaseDashboardLayoutOwnership(Models.AppSettings? settings)
+        {
+            if (settings == null) return;
+            settings.DashboardLayoutTouched = false;
         }
 
         /// <summary>What to put in the sync payload's <c>dashboard_layout</c> field.</summary>
