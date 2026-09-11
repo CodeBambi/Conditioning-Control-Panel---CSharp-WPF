@@ -2541,36 +2541,15 @@ namespace ConditioningControlPanel
         {
             try
             {
-                // Dashboard feature cards (velvet mosaic, 4x4 hybrid wall since 2026-08-11).
-                // The FX tiles are back on their ORIGINAL art paths - the ones every .ccpmod
-                // override has always targeted - so the one-day 3x3 detour cost the contract
-                // nothing (its dtrh/loom/deeper rows shipped in no release). NO ART PATH WAS
-                // EVER RENAMED - mod contract rule 2.
-                var cardMap = new (string resourcePath, Features.FeatureCard? card)[]
-                {
-                    ("features/flash.png", SettingsTab.CardFlash),
-                    ("features/subliminal.png", SettingsTab.CardSubliminal),
-                    ("features/bouncing_text.png", SettingsTab.CardBouncingText),
-                    ("features/Bubble_pop.png", SettingsTab.CardBubblePop),
-                    ("features/Phrase_Lock.png", SettingsTab.CardLockCard),
-                    // The ? box and the Vault resolve through ModTileVariant below: built-in
-                    // mods get app-shipped themed faces (features/mysterybox_bambi.png, ...)
-                    // by filename convention - same mechanism as the takeover art fork - while
-                    // a .ccpmod that overrides the BASE path still wins outright.
-                };
-                foreach (var (path, card) in cardMap)
-                {
-                    if (card == null) continue;
-                    var image = ModResourceResolver.ResolveImage(path);
-                    if (image != null)
-                        card.Icon = image;
-                }
+                // The nine movable tiles are built and painted by MainWindow.DashboardSlots.cs
+                // (RefreshDashboardArt below) from the catalog's art paths - the SAME
+                // features/*.png every .ccpmod override has always targeted. NO ART PATH WAS EVER
+                // RENAMED - mod contract rule 2. Only the two fixed cells are addressed by name
+                // here, because only they resolve through ModTileVariant: built-in mods get
+                // app-shipped themed faces (features/mysterybox_bambi.png, ...) by filename
+                // convention, while a .ccpmod that overrides the BASE path still wins outright.
+                RefreshDashboardArt();
 
-                if (SettingsTab.CardJustDrop != null)
-                {
-                    var img = LoadModImageDecoded("features/justdrop.png", TileDecodeWidth);
-                    if (img != null) SettingsTab.CardJustDrop.Icon = img;
-                }
                 if (SettingsTab.CardMystery != null)
                 {
                     var img = ModTileVariant("mysterybox", TileDecodeWidth);
@@ -2580,30 +2559,6 @@ namespace ConditioningControlPanel
                 {
                     var img = ModTileVariant("vault", WideTileDecodeWidth);
                     if (img != null) SettingsTab.CardVault.Icon = img;
-                }
-
-                // The three diagonal tiles: per-half art through the resolver, so mods reskin
-                // each half exactly as they reskinned the old single tiles for these features.
-                if (SettingsTab.ComboVideoBubble != null)
-                {
-                    var a = ModResourceResolver.ResolveImage("features/mandatory_videos.png");
-                    var b = ModResourceResolver.ResolveImage("features/Bubble_count.png");
-                    if (a != null) SettingsTab.ComboVideoBubble.IconA = a;
-                    if (b != null) SettingsTab.ComboVideoBubble.IconB = b;
-                }
-                if (SettingsTab.ComboSpiralPink != null)
-                {
-                    var a = ModResourceResolver.ResolveImage("features/spiral_overlay.png");
-                    var b = ModResourceResolver.ResolveImage("features/Pink_filter.png");
-                    if (a != null) SettingsTab.ComboSpiralPink.IconA = a;
-                    if (b != null) SettingsTab.ComboSpiralPink.IconB = b;
-                }
-                if (SettingsTab.ComboMindDrain != null)
-                {
-                    var a = ModResourceResolver.ResolveImage("features/Mind_Wipers.png");
-                    var b = ModResourceResolver.ResolveImage("features/brain_drain.png");
-                    if (a != null) SettingsTab.ComboMindDrain.IconA = a;
-                    if (b != null) SettingsTab.ComboMindDrain.IconB = b;
                 }
 
                 // PHASE 8: the eight "legacy progression tab rectangles" rows are gone with

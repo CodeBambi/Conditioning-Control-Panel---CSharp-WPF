@@ -219,95 +219,8 @@ namespace ConditioningControlPanel.Views.Tabs
         // back, split into left-click-opens (Card*_Click -> OpenStudioModule) and
         // right-click-toggles (Card*_Toggle -> ToggleWallFeature); the three diagonal combo
         // tiles forward per-half. Same shape as ever: the view forwards, MainWindow decides.
-        private void CardFlash_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.CardFlash_Click(sender, e);
-        }
-        private void CardFlash_Toggle(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("flash");
-        }
-        private void CardSubliminal_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.CardSubliminal_Click(sender, e);
-        }
-        private void CardSubliminal_Toggle(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("subliminal");
-        }
-        private void CardBouncingText_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.CardBouncingText_Click(sender, e);
-        }
-        private void CardBouncingText_Toggle(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("bouncingtext");
-        }
-        private void CardBubblePop_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.CardBubblePop_Click(sender, e);
-        }
-        private void CardBubblePop_Toggle(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("bubbles");
-        }
-        private void CardLockCard_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.CardLockCard_Click(sender, e);
-        }
-        private void CardLockCard_Toggle(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("lockcard");
-        }
-        // Diagonal combos: A = the top-left half, B = the bottom-right, as authored in XAML.
-        private void ComboVideoBubble_ClickA(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.OpenStudioModule("video");
-        }
-        private void ComboVideoBubble_ClickB(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.OpenStudioModule("bubblecount");
-        }
-        private void ComboVideoBubble_ToggleA(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("video");
-        }
-        private void ComboVideoBubble_ToggleB(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("bubblecount");
-        }
-        private void ComboSpiralPink_ClickA(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.OpenStudioModule("spiral");
-        }
-        private void ComboSpiralPink_ClickB(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.OpenStudioModule("pinkfilter");
-        }
-        private void ComboSpiralPink_ToggleA(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("spiral");
-        }
-        private void ComboSpiralPink_ToggleB(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("pinkfilter");
-        }
-        private void ComboMindDrain_ClickA(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.OpenStudioModule("mindwipe");
-        }
-        private void ComboMindDrain_ClickB(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.OpenStudioModule("braindrain");
-        }
-        private void ComboMindDrain_ToggleA(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("mindwipe");
-        }
-        private void ComboMindDrain_ToggleB(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("braindrain");
-        }
+        // The nine movable tiles' shims are gone with the tiles: MainWindow.DashboardSlots.cs
+        // builds those cards and wires their two gestures directly. The fixed cells keep theirs.
         private void CardMystery_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw) mw.CardMystery_Click(sender, e);
@@ -320,11 +233,6 @@ namespace ConditioningControlPanel.Views.Tabs
         private void CardVault_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw) mw.CardVault_Click(sender, e);
-        }
-        private void CardJustDrop_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardJustDrop_Click(sender, e);
         }
         private void ChkDiscordRichPresence_Changed(object sender, RoutedEventArgs e)
         {

@@ -253,6 +253,10 @@ namespace ConditioningControlPanel
                 case "settings":
                     SettingsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(SettingsTab);
+                    // The nine movable cells, built from the persisted layout. A no-op after the
+                    // first render (LoadFeatureImages in the ctor normally gets there first); this
+                    // is the safety net for a Home tab shown before that ever ran.
+                    EnsureDashboardSlotsRendered();
                     RefreshPremiumRail(); // recompute chip dots (incl. Voice) from live state on every show
                     // Training Programs own the day's feature mix. Re-derived (never latched) on
                     // every show of the Dashboard, so arriving here can never find a stale lock -

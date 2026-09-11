@@ -1068,15 +1068,9 @@ namespace ConditioningControlPanel
         // Navigation tiles still navigate to the ONE existing entry, never launch
         // (PlayTabView.xaml:1163-1167 rule).
 
-        internal void CardFlash_Click(object sender, RoutedEventArgs e) => OpenStudioModule("flash");
-
-        internal void CardSubliminal_Click(object sender, RoutedEventArgs e) => OpenStudioModule("subliminal");
-
-        internal void CardBouncingText_Click(object sender, RoutedEventArgs e) => OpenStudioModule("bouncingtext");
-
-        internal void CardBubblePop_Click(object sender, RoutedEventArgs e) => OpenStudioModule("bubbles");
-
-        internal void CardLockCard_Click(object sender, RoutedEventArgs e) => OpenStudioModule("lockcard");
+        // The per-feature Card*_Click twins are gone with the tiles that carried them: the
+        // slot renderer wires OpenStudioModule / ToggleWallFeature straight onto the card it
+        // builds, so a handler per feature name would be a second place to keep in step.
 
         /// <summary>
         /// The ? box: navigates to today's free premium feature. The tile is repainted by
@@ -1112,17 +1106,6 @@ namespace ConditioningControlPanel
         internal void CardVault_Click(object sender, RoutedEventArgs e) => BtnPatreonExclusives_Click(sender, e);
 
         /// <summary>
-        /// The mosaic's nameless TEASE tile. Everything about it - which feature it teases, which
-        /// livery it wears, whether it is still teasing at all - lives in one block at the top of
-        /// <c>MainWindow.TeaseCard.cs</c>; this is only the wall's end of the wire.
-        ///
-        /// <para>The old two-branch behaviour (navigate when the door is open, placeholder toast
-        /// when it is withheld) moved into <see cref="TeaseCardClicked"/> intact, with the toast
-        /// replaced by the teaser card the owner asked for on 2026-08-13.</para>
-        /// </summary>
-        internal void CardJustDrop_Click(object sender, RoutedEventArgs e) => TeaseCardClicked();
-
-        /// <summary>
         /// Paints the mosaic's price tags and the ? box's face. The FX tiles are all free and
         /// deliberately carry no tag - absence is how the wall says "free".
         ///
@@ -1137,11 +1120,10 @@ namespace ConditioningControlPanel
 
             try
             {
-                // The tease tile: blur, livery rim and a livery diamond instead of the old "SOON"
-                // price tag. It owns its own badge now (same SetTierBadge helper, called from
-                // there) because the badge, the title, the tooltip and the blur have to move as
-                // one costume - see MainWindow.TeaseCard.cs.
-                ApplyTeaseCard();
+                // The wall's price tags, and the tease tile's costume with them: the renderer
+                // paints whichever slots currently hold a tiered feature, then hands the tease
+                // its blur, rim, badge and title as one piece (MainWindow.TeaseCard.cs).
+                RefreshDashboardLivery();
 
                 RefreshMysteryTile();
                 RefreshWallActiveStates();
@@ -1403,33 +1385,7 @@ namespace ConditioningControlPanel
         /// </summary>
         internal void RefreshWallActiveStates()
         {
-            var s = App.Settings?.Current;
-            var dash = SettingsTab;
-            if (s == null || dash == null) return;
-            try
-            {
-                if (dash.CardFlash != null) dash.CardFlash.IsActive = s.FlashEnabled;
-                if (dash.CardSubliminal != null) dash.CardSubliminal.IsActive = s.SubliminalEnabled;
-                if (dash.CardBubblePop != null) dash.CardBubblePop.IsActive = s.BubblesEnabled;
-                if (dash.CardLockCard != null) dash.CardLockCard.IsActive = s.LockCardEnabled;
-                if (dash.CardBouncingText != null) dash.CardBouncingText.IsActive = s.BouncingTextEnabled;
-                if (dash.ComboVideoBubble != null)
-                {
-                    dash.ComboVideoBubble.IsActiveA = s.MandatoryVideosEnabled;
-                    dash.ComboVideoBubble.IsActiveB = s.BubbleCountEnabled;
-                }
-                if (dash.ComboSpiralPink != null)
-                {
-                    dash.ComboSpiralPink.IsActiveA = s.SpiralEnabled;
-                    dash.ComboSpiralPink.IsActiveB = s.PinkFilterEnabled;
-                }
-                if (dash.ComboMindDrain != null)
-                {
-                    dash.ComboMindDrain.IsActiveA = s.MindWipeEnabled;
-                    dash.ComboMindDrain.IsActiveB = s.BrainDrainEnabled;
-                }
-            }
-            catch (Exception ex) { App.Logger?.Debug("RefreshWallActiveStates: {E}", ex.Message); }
+            RefreshDashboardActiveStates();
         }
 
         private static void SetTierBadge(Features.FeatureCard? card, bool allowed, string badge)

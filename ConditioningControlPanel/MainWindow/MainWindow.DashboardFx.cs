@@ -82,12 +82,14 @@ namespace ConditioningControlPanel
         private TextBlock? _browserStatusWatched;
 
         /// <summary>
-        /// The mosaic tiles. Null-tolerant - the view is a partial rewire.
+        /// The mosaic's single tiles: the nine movable ones the slot renderer built, plus the two
+        /// fixed cells that are still authored in XAML. Every single tile on the wall belongs here
+        /// or it silently keeps its motion running after a MotionLevel change - the same omission
+        /// family as ChipFyp missing from PremiumRailItems. The split tiles are the renderer's
+        /// DashboardSplitCards.
         ///
-        /// <para>Phase 3: <c>CardBrainDrain</c> joined (the G2 rescue's front door), and
-        /// <c>CardSystem</c> was kept in the tree Collapsed. Phase 8 deleted that tile - "System"
-        /// is not a feature and its entry point is the quick-toggles row's pill - so the array is
-        /// twelve real tiles now, all visible.</para>
+        /// <para>Recomputed on every read rather than cached: a render replaces every movable card
+        /// with a new object, so a cached list would be pointing at tiles nobody can see.</para>
         /// </summary>
         private IEnumerable<FeatureCard> DashboardFeatureCards
         {
@@ -95,29 +97,8 @@ namespace ConditioningControlPanel
             {
                 var tab = SettingsTab;
                 if (tab == null) return Enumerable.Empty<FeatureCard>();
-                // The 4x4 hybrid wall (2026-08-11, redesign #2). Every SINGLE tile on the mosaic
-                // belongs here or it silently keeps its motion running after a MotionLevel
-                // change - the same omission family as ChipFyp missing from PremiumRailItems.
-                // The three diagonal tiles are DashboardSplitCards, just below.
-                var all = new[]
-                {
-                    tab.CardFlash, tab.CardSubliminal, tab.CardBouncingText,
-                    tab.CardBubblePop, tab.CardLockCard,
-                    tab.CardJustDrop, tab.CardMystery, tab.CardVault,
-                };
-                return all.Where(c => c != null)!;
-            }
-        }
-
-        /// <summary>The three diagonal tiles - same motion contract as the singles above.</summary>
-        private IEnumerable<SplitFeatureCard> DashboardSplitCards
-        {
-            get
-            {
-                var tab = SettingsTab;
-                if (tab == null) return Enumerable.Empty<SplitFeatureCard>();
-                var all = new[] { tab.ComboVideoBubble, tab.ComboSpiralPink, tab.ComboMindDrain };
-                return all.Where(c => c != null)!;
+                var fixedCells = new[] { tab.CardMystery, tab.CardVault }.Where(c => c != null)!;
+                return DashboardSingleCards.Concat(fixedCells!);
             }
         }
 
