@@ -19,8 +19,19 @@ namespace ConditioningControlPanel.Services.Chaos;
 internal static class DtrhLoomStore
 {
     public const int MaxSpirals = 12;
-    private const int MaxBase64Chars = 8 * 1024 * 1024;      // chars of base64 accepted
-    private const int MaxGifBytes = 8 * 1024 * 1024;         // decoded ceiling (worker soft-caps at 6MB)
+
+    /// <summary>Decoded ceiling. Mirrors <c>HARD_CAP</c> in <c>engine/loomWorker.js</c>:
+    /// whatever the loom is willing to weave, this must be willing to keep.</summary>
+    internal const int MaxGifBytes = 8 * 1024 * 1024;
+
+    /// <summary>The same ceiling counted in base64 characters - 4 chars per 3 bytes, plus
+    /// padding and a little slack. It has to be DERIVED: an 8MB literal here (the decoded
+    /// number, reused) admitted only 6MB of gif, so every weave between 6 and 8MB - which the
+    /// worker emits happily, having already retried once at 512px - came back "too heavy to
+    /// hang" while sitting inside the store's own stated ceiling. The stock "bambi haze"
+    /// pattern weaves to ~6.8MB and so could never be saved at all.</summary>
+    internal const int MaxBase64Chars = ((MaxGifBytes + 2) / 3) * 4 + 1024;
+
     private const string Prefix = "loom_";
 
     private static readonly Regex SlugRe = new("^[a-z0-9_-]{1,24}$", RegexOptions.Compiled);
@@ -72,7 +83,11 @@ internal static class DtrhLoomStore
     {
         var slug = Slugify(name);
         if (slug == null) return (false, null, "bad-name");
-        if (string.IsNullOrEmpty(gifBase64) || gifBase64.Length > MaxBase64Chars) return (false, slug, "too-big");
+        // nothing arrived is not the same complaint as too much arrived: an empty payload used
+        // to be reported as "too heavy to hang", which sends the weaver off simplifying a
+        // pattern that was never the problem.
+        if (string.IsNullOrEmpty(gifBase64)) return (false, slug, "bad-gif");
+        if (gifBase64.Length > MaxBase64Chars) return (false, slug, "too-big");
 
         try
         {
