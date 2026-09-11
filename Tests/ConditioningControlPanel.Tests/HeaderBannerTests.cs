@@ -14,7 +14,7 @@ namespace ConditioningControlPanel.Tests;
 /// the surface is <c>MainWindow.xaml</c>, and MainWindow cannot be instantiated in a unit test
 /// without the whole service graph. Every failure guarded here still ships from a clean compile:
 /// a re-added tertiary TextBlock rotates a beat the owner asked to retire; a banner host that
-/// drifts out of the header (or grows past the 28px capsule already in that row) silently gives
+/// drifts out of the header (or grows past the 28px the row was authored against) silently gives
 /// the vertical row back; and a rotation modulus that outruns the array is an
 /// IndexOutOfRangeException on a 4-second timer.</para>
 /// </summary>
@@ -144,20 +144,22 @@ public class HeaderBannerTests
     // =====================================================================================
 
     [Fact]
-    public void TheBannerSitsBetweenTheVersionTextAndTheLanguagePill()
+    public void TheBannerSitsBetweenTheVersionTextAndTheRightHandChrome()
     {
         var xaml = MainWindowXaml();
 
         var version = xaml.IndexOf("x:Name=\"TxtHeaderVersion\"", StringComparison.Ordinal);
         var host = xaml.IndexOf("x:Name=\"HeaderBannerHost\"", StringComparison.Ordinal);
-        var pill = xaml.IndexOf("x:Name=\"CmbLanguagePill\"", StringComparison.Ordinal);
+        // The update button anchors the right-hand chrome: the language pill that used to sit
+        // ahead of it was demoted 0911 (Settings > General owns the picker now).
+        var chrome = xaml.IndexOf("x:Name=\"BtnUpdateAvailable\"", StringComparison.Ordinal);
 
         Assert.True(version >= 0, "TxtHeaderVersion is gone from the header");
         Assert.True(host >= 0, "HeaderBannerHost is gone - the banner has no home in the header");
-        Assert.True(pill >= 0, "CmbLanguagePill is gone from the header");
+        Assert.True(chrome >= 0, "BtnUpdateAvailable is gone from the header");
 
-        Assert.True(version < host && host < pill,
-            "the banner host left the header slot between the version text and the language pill");
+        Assert.True(version < host && host < chrome,
+            "the banner host left the header slot between the version text and the right-hand chrome");
 
         // Both beats live inside that host, not loose in the header.
         var block = Regex.Match(xaml, "<Border Grid.Column=\"5\" x:Name=\"HeaderBannerHost\".*?</Border>\\s*</Grid>",
@@ -180,8 +182,8 @@ public class HeaderBannerTests
                                 RegexOptions.Singleline);
         Assert.True(block.Success, "HeaderBannerHost is gone");
 
-        // 28 is the tallest thing already in this row (BtnManageMods' capsule). A banner taller
-        // than that grows the header and gives back the row this change reclaimed.
+        // 28 is what this row was authored against (the mod capsule that sat here until 0911). A
+        // banner taller than that grows the header and gives back the row this change reclaimed.
         var height = Regex.Match(block.Value, "Height=\"(\\d+)\"");
         Assert.True(height.Success, "HeaderBannerHost lost its explicit Height - it now sizes to its text");
         Assert.True(int.Parse(height.Groups[1].Value) <= 28,

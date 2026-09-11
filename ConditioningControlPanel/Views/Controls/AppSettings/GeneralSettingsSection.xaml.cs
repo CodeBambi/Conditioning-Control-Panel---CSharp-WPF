@@ -18,10 +18,10 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
     ///   MainWindow handler: they were write-only mirrors that <c>SaveSettings()</c> read on its way
     ///   past. As a live editor they have to persist themselves, exactly as their twins in
     ///   Features/SystemFeatureControl.xaml.cs always did.</item>
-    ///   <item><b>Shared path</b> (<c>CmbLanguageSetting</c>). Owner decision #8 keeps the chrome
-    ///   pill AND lists languages here, so this is deliberately a second SURFACE - but not a second
-    ///   implementation. It calls <c>MainWindow.ApplyLanguageSelection</c>, the same method the pill
-    ///   calls, and that method re-selects both combos when it is done.</item>
+    ///   <item><b>Shared path</b> (<c>CmbLanguageSetting</c>). The chrome pill it used to share the
+    ///   path with was demoted 0911, so this is the one in-app picker - but still not its own
+    ///   implementation. It calls <c>MainWindow.ApplyLanguageSelection</c>, which the first-run
+    ///   wizard calls too, and that method re-selects this combo when it is done.</item>
     /// </list>
     ///
     /// <para><b>Why the local writes compare before writing instead of using an _isLoading flag.</b>
@@ -123,7 +123,7 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
         }
 
         // =====================================================================================
-        //  language (shared path with the chrome pill - see class docs)
+        //  language (shared path with the first-run wizard - see class docs)
         // =====================================================================================
 
         private void CmbLanguageSetting_SelectionChanged(object sender, SelectionChangedEventArgs e)
