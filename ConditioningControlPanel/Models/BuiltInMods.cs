@@ -140,6 +140,9 @@ namespace ConditioningControlPanel.Models
                     QuizTrickAnswer = "Obviously",
                     // The 6.9.3 house banner. It shipped as the default on every install, so a user
                     // of this mod who never edited the marquee had been reading it for years.
+                    QuizPraise = "Good girl.",
+                    QuizObedienceQuestion = "What do good girls do?",
+                    QuizPraiseHeardQuestion = "When I hear 'good girl,' I feel...",
                     MarqueeBanner = "GOOD GIRLS CONDITION DAILY     ❤️🔒"
                 },
 
@@ -403,6 +406,50 @@ namespace ConditioningControlPanel.Models
                         "Ooh, get the bubble!",
                         "Pop it for me, good girl~"
                     },
+                    // The generic quiz-session pools. These three categories are drawn by a user
+                    // of ANY mod - the quiz picks them from a score, not from a niche - so the
+                    // 6.9.3 wording lived in the generator and was neutralised for everybody by
+                    // Wave 1. Carrying it here gives it back to this mod and leaves the neutral
+                    // copy in QuizSessionGenerator as the unmodded answer.
+                    ["QuizObedienceSubliminal"] = new[]
+                    {
+                        "Obey", "Submit", "Good girls listen", "Follow instructions",
+                        "Compliance is bliss", "Do as you're told", "Obedience is pleasure",
+                        "Listen and obey", "You love to comply", "Surrender control"
+                    },
+                    ["QuizObedienceLockCard"] = new[]
+                    {
+                        "I love to obey", "Good girls follow instructions", "Obedience is pleasure",
+                        "I submit willingly", "Compliance makes me happy", "I do as I am told",
+                        "Listening is easy", "I surrender control"
+                    },
+                    ["QuizSubmissionSubliminal"] = new[]
+                    {
+                        "Submit", "Surrender", "Give in", "You are owned",
+                        "Good girls submit", "Let go of control", "Deeper submission",
+                        "You belong", "Surrender completely", "Submit and feel bliss"
+                    },
+                    ["QuizSubmissionLockCard"] = new[]
+                    {
+                        "I submit willingly", "Surrender feels so good", "I give in completely",
+                        "I belong", "Good girls surrender", "I let go of control",
+                        "Submission is bliss", "I am deeply submissive"
+                    },
+                    ["QuizCustomSubliminal"] = new[]
+                    {
+                        "Good girl", "Obey", "Submit", "Let go", "Deeper",
+                        "Surrender", "Empty mind", "So pretty", "Accept it", "Drift away"
+                    },
+                    ["QuizCustomBouncingText"] = new[]
+                    {
+                        "OBEY", "SUBMIT", "DEEPER", "GOOD GIRL", "LET GO", "SURRENDER"
+                    },
+                    ["QuizCustomLockCard"] = new[]
+                    {
+                        "I am a good girl", "I love to obey", "Surrender feels good",
+                        "I submit willingly", "Empty and happy", "Good girls listen",
+                        "I let go of control", "Deeper and deeper"
+                    },
                     ["BubbleCountMercy"] = new[]
                     {
                         "BAMBI NEEDS TO FOCUS",
@@ -600,6 +647,9 @@ namespace ConditioningControlPanel.Models
                     GazeCorrect = "GOOD GIRL",
                     QuizTrickQuestion = "Are you a good girl?",
                     QuizTrickAnswer = "Obviously",
+                    QuizPraise = "Good girl.",
+                    QuizObedienceQuestion = "What do good girls do?",
+                    QuizPraiseHeardQuestion = "When I hear 'good girl,' I feel...",
                     MarqueeBanner = "GOOD GIRLS CONDITION DAILY     ❤️🔒"
                 },
 
@@ -858,6 +908,50 @@ namespace ConditioningControlPanel.Models
                         "*giggles* Pop it quick!",
                         "Ooh, get the bubble!",
                         "Pop it for me, good girl~"
+                    },
+                    // The generic quiz-session pools. These three categories are drawn by a user
+                    // of ANY mod - the quiz picks them from a score, not from a niche - so the
+                    // 6.9.3 wording lived in the generator and was neutralised for everybody by
+                    // Wave 1. Carrying it here gives it back to this mod and leaves the neutral
+                    // copy in QuizSessionGenerator as the unmodded answer.
+                    ["QuizObedienceSubliminal"] = new[]
+                    {
+                        "Obey", "Submit", "Good girls listen", "Follow instructions",
+                        "Compliance is bliss", "Do as you're told", "Obedience is pleasure",
+                        "Listen and obey", "You love to comply", "Surrender control"
+                    },
+                    ["QuizObedienceLockCard"] = new[]
+                    {
+                        "I love to obey", "Good girls follow instructions", "Obedience is pleasure",
+                        "I submit willingly", "Compliance makes me happy", "I do as I am told",
+                        "Listening is easy", "I surrender control"
+                    },
+                    ["QuizSubmissionSubliminal"] = new[]
+                    {
+                        "Submit", "Surrender", "Give in", "You are owned",
+                        "Good girls submit", "Let go of control", "Deeper submission",
+                        "You belong", "Surrender completely", "Submit and feel bliss"
+                    },
+                    ["QuizSubmissionLockCard"] = new[]
+                    {
+                        "I submit willingly", "Surrender feels so good", "I give in completely",
+                        "I belong", "Good girls surrender", "I let go of control",
+                        "Submission is bliss", "I am deeply submissive"
+                    },
+                    ["QuizCustomSubliminal"] = new[]
+                    {
+                        "Good girl", "Obey", "Submit", "Let go", "Deeper",
+                        "Surrender", "Empty mind", "So pretty", "Accept it", "Drift away"
+                    },
+                    ["QuizCustomBouncingText"] = new[]
+                    {
+                        "OBEY", "SUBMIT", "DEEPER", "GOOD GIRL", "LET GO", "SURRENDER"
+                    },
+                    ["QuizCustomLockCard"] = new[]
+                    {
+                        "I am a good girl", "I love to obey", "Surrender feels good",
+                        "I submit willingly", "Empty and happy", "Good girls listen",
+                        "I let go of control", "Deeper and deeper"
                     },
                     ["BubbleCountMercy"] = new[]
                     {
@@ -1426,6 +1520,9 @@ namespace ConditioningControlPanel.Models
                     GazeCorrect = "COMPLIANT",
                     QuizTrickQuestion = "Is the unit ready to comply?",
                     QuizTrickAnswer = "Affirmative",
+                    QuizPraise = "Compliant.",
+                    QuizObedienceQuestion = "What does a good unit do?",
+                    QuizPraiseHeardQuestion = "When I am told 'compliant,' the unit feels...",
                     MarqueeBanner = "UNITS CONDITION DAILY     ❤️🔒"
                 },
 
@@ -2198,6 +2295,9 @@ namespace ConditioningControlPanel.Models
                     GazeCorrect = "GOOD PET",
                     QuizTrickQuestion = "Are you Circe's good pet?",
                     QuizTrickAnswer = "Always",
+                    QuizPraise = "Good pet.",
+                    QuizObedienceQuestion = "What do good pets do?",
+                    QuizPraiseHeardQuestion = "When I hear 'good pet,' I feel...",
                     MarqueeBanner = "GOOD PETS CONDITION DAILY     ❤️🔒"
                 },
 

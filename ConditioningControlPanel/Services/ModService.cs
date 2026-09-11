@@ -650,6 +650,10 @@ namespace ConditioningControlPanel.Services
                 // Capped shorter: both land inside a fixed quiz card, not a scrolling surface.
                 if (manifest.Messages.QuizTrickQuestion?.Length > 200) manifest.Messages.QuizTrickQuestion = manifest.Messages.QuizTrickQuestion[..200];
                 if (manifest.Messages.QuizTrickAnswer?.Length > 60) manifest.Messages.QuizTrickAnswer = manifest.Messages.QuizTrickAnswer[..60];
+                // Both quiz questions land on a fixed card, like the trick pair above.
+                if (manifest.Messages.QuizPraise?.Length > 60) manifest.Messages.QuizPraise = manifest.Messages.QuizPraise[..60];
+                if (manifest.Messages.QuizObedienceQuestion?.Length > 200) manifest.Messages.QuizObedienceQuestion = manifest.Messages.QuizObedienceQuestion[..200];
+                if (manifest.Messages.QuizPraiseHeardQuestion?.Length > 200) manifest.Messages.QuizPraiseHeardQuestion = manifest.Messages.QuizPraiseHeardQuestion[..200];
                 // The marquee scrolls one line forever; a long one is a performance problem, not a
                 // wrapping one, so it is capped hardest of the set.
                 if (manifest.Messages.MarqueeBanner?.Length > 120) manifest.Messages.MarqueeBanner = manifest.Messages.MarqueeBanner[..120];
@@ -1195,6 +1199,19 @@ namespace ConditioningControlPanel.Services
         /// <summary>Active mod's answer for <see cref="GetQuizTrickQuestionOverride"/>, or null.</summary>
         public string? GetQuizTrickAnswerOverride() => NullIfBlank(_activeMod.Manifest.Messages?.QuizTrickAnswer);
 
+        // The Pop Quiz overrides follow the same contract as the trick pair above: active mod only,
+        // null for "no opinion". The neutral wording is the 25-question array in PopQuizService, so
+        // walking to CCP Default would replace a pool with a single line.
+
+        /// <summary>Active mod's Pop Quiz praise sentence, or null when it ships none.</summary>
+        public string? GetQuizPraiseOverride() => NullIfBlank(_activeMod.Manifest.Messages?.QuizPraise);
+
+        /// <summary>Active mod's wording for the Pop Quiz obedience question, or null.</summary>
+        public string? GetQuizObedienceQuestionOverride() => NullIfBlank(_activeMod.Manifest.Messages?.QuizObedienceQuestion);
+
+        /// <summary>Active mod's wording for the Pop Quiz "when I hear praise" question, or null.</summary>
+        public string? GetQuizPraiseHeardQuestionOverride() => NullIfBlank(_activeMod.Manifest.Messages?.QuizPraiseHeardQuestion);
+
         // Browser (defense-in-depth: validate URL at point of use, not just at install)
         public string GetDefaultBrowserUrl()
         {
@@ -1508,7 +1525,10 @@ namespace ConditioningControlPanel.Services
                     GazeCorrect = GetGazeCorrectMessage(),
                     QuizTrickQuestion = GetQuizTrickQuestionOverride(),
                     QuizTrickAnswer = GetQuizTrickAnswerOverride(),
-                    MarqueeBanner = GetMarqueeBannerMessage()
+                    MarqueeBanner = GetMarqueeBannerMessage(),
+                    QuizPraise = GetQuizPraiseOverride(),
+                    QuizObedienceQuestion = GetQuizObedienceQuestionOverride(),
+                    QuizPraiseHeardQuestion = GetQuizPraiseHeardQuestionOverride()
                 },
                 Browser = new ModBrowser
                 {

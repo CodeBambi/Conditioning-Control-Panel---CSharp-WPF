@@ -298,6 +298,29 @@ namespace ConditioningControlPanel.Models
         public string? QuizTrickAnswer { get; set; }
 
         /// <summary>
+        /// Praise line on a Pop Quiz card, as a sentence ("Good girl."). Also supplies the answer
+        /// chip in the "your favorite word is" question, with any trailing full stop trimmed - a
+        /// chip is a word, not a sentence. Required for any of the three themed quiz slots: a mod's
+        /// question over the neutral praise reads as a bug on the card.
+        /// </summary>
+        [JsonProperty("quizPraise")]
+        public string? QuizPraise { get; set; }
+
+        /// <summary>
+        /// This mod's wording for the Pop Quiz obedience question ("What do good girls do?").
+        /// Used only when <see cref="QuizPraise"/> is set too.
+        /// </summary>
+        [JsonProperty("quizObedienceQuestion")]
+        public string? QuizObedienceQuestion { get; set; }
+
+        /// <summary>
+        /// This mod's wording for the Pop Quiz question about hearing praise
+        /// ("When I hear 'good girl,' I feel..."). Used only when <see cref="QuizPraise"/> is set.
+        /// </summary>
+        [JsonProperty("quizPraiseHeardQuestion")]
+        public string? QuizPraiseHeardQuestion { get; set; }
+
+        /// <summary>
         /// This mod's default scrolling banner over the Settings marquee. Only ever used for a
         /// banner the user has NOT written themselves: a blank saved message, or one of the two
         /// retired house defaults. A user who typed their own banner keeps it in every mod.
