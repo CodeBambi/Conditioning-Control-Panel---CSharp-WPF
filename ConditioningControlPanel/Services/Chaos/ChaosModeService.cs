@@ -3,6 +3,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Services.Chaos;
 
@@ -353,7 +354,7 @@ public sealed class ChaosModeService
             App.Logger?.Error(ex, "ChaosModeService.StartRun failed");
             CleanupAfterRun();
             App.Bubbles?.Resume();
-            MessageBox.Show("Couldn't open the Rabbit Hole:\n\n" + ex, "The Rabbit Hole",
+            MessageBox.Show(Loc.Get("msg_rabbit_hole_open_failed") + ex, Loc.Get("title_rabbit_hole"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
