@@ -468,24 +468,19 @@ public class SpiralRoomTests
         => Assert.True(ChromeFxNav.IsAirspaceTab(SpiralRoom.TabKey));
 
     /// <summary>
-    /// It is ON the strip (a -1 would mean a ghost key), and it was APPENDED rather than inserted:
-    /// ChromeFxNavTests pins four indices by number, and inserting "spiral" beside "discord" — where
-    /// it actually sits on the rail — would have moved three of them. The cost of appending is a
-    /// slide direction computed from the wrong end of the strip, which is free here precisely
-    /// because the tab never slides.
+    /// It is ON the strip (a -1 would mean a ghost key), and since mort's map re-cut the whole
+    /// strip (2026-09-11) it sits where it sits on the rail: in the You door, after the Skill
+    /// Tree and before Achievements. It used to be appended to spare ChromeFxNavTests' pinned
+    /// indices; a full re-cut had nothing left to spare.
     /// </summary>
     [Fact]
-    public void TheSpiralRoomIsAppendedToTheNavStrip_NotInserted()
+    public void TheSpiralRoomSitsInTheYouDoorOnTheNavStrip()
     {
-        var order = ChromeFxNav.NavOrder;
-        Assert.Equal(SpiralRoom.TabKey, order[^1]);
-        Assert.Equal(order.Length - 1, ChromeFxNav.IndexOf(SpiralRoom.TabKey));
-
-        // The four pinned neighbours are exactly where ChromeFxNavTests left them.
-        Assert.Equal(0, ChromeFxNav.IndexOf("settings"));
-        Assert.Equal(8, ChromeFxNav.IndexOf("lab"));
-        Assert.Equal(22, ChromeFxNav.IndexOf("assets"));
-        Assert.Equal(23, ChromeFxNav.IndexOf("appsettings"));
+        var spiral = ChromeFxNav.IndexOf(SpiralRoom.TabKey);
+        Assert.True(spiral >= 0, "spiral is a ghost key");
+        Assert.Equal(ChromeFxNav.IndexOf("enhancements") + 1, spiral);
+        Assert.Equal(ChromeFxNav.IndexOf("achievements") - 1, spiral);
+        Assert.True(ChromeFxNav.IndexOf("discord") < spiral && spiral < ChromeFxNav.IndexOf("assets"));
     }
 
     // ================================================================

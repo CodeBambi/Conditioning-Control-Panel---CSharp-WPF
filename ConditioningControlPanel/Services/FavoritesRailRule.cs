@@ -10,7 +10,7 @@ namespace ConditioningControlPanel.Services
     /// tested without a window; <c>MainWindow.FavoritesRail.cs</c> owns the chips.
     ///
     /// <para>A destination is a Ctrl+K palette row id (<see cref="SettingsPaletteEntry.Id"/>):
-    /// <c>door.*</c>, <c>tab.*</c>, <c>launch.*</c> and <c>card.*</c>. The palette is already the
+    /// <c>door.*</c>, <c>tab.*</c>, <c>launch.*</c>, <c>card.*</c> and <c>part.*</c>. The palette is already the
     /// app's one registry of "places you can go", with a localised label, a glyph and a ShowTab
     /// key per row, so the rail borrows it rather than keeping a second list that would drift.
     /// Settings sections and individual controls are not destinations: pinning "master volume"
@@ -24,7 +24,9 @@ namespace ConditioningControlPanel.Services
         /// <summary>The last five places opened, most recent first.</summary>
         public const int RecentCap = 5;
 
-        private static readonly string[] DestinationPrefixes = { "door.", "tab.", "launch.", "card." };
+        // "part." rows (2026-09-11) name a zone of a page - the Deeper player/editor halves, the
+        // Companion page's AI Effects, Workshop and Engine Room - and are pinnable like a tab.
+        private static readonly string[] DestinationPrefixes = { "door.", "tab.", "launch.", "card.", "part." };
 
         /// <summary>
         /// ShowTab keys that never enter RECENT. "settings" is the dashboard itself - the page the

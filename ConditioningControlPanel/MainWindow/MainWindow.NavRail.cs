@@ -439,6 +439,10 @@ namespace ConditioningControlPanel
                     (ImgDoorStudio,    "nav/door_studio.png"),
                     (ImgDoorCompanion, "nav/door_companion.png"),
                     (ImgDoorPlay,      "nav/door_play.png"),
+                    // No medallion of its own yet (mort's map, 2026-09-11): the XAML literal
+                    // borrows Play's PNG, and this row lets a mod - or the art pass that owes it
+                    // one - hand it its own file without a code change.
+                    (ImgDoorPlayTogether, "nav/door_playtogether.png"),
                     (ImgDoorYou,       "nav/door_you.png"),
                     (ImgDoorLibrary,   "nav/door_library.png"),
                     (ImgDoorWebApp,    "nav/door_webapp.png"),

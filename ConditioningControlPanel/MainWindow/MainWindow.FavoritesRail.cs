@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
-using System.Windows.Automation.Peers;
-using System.Windows.Automation.Provider;
 using System.Windows.Controls;
 using System.Windows.Media;
 using ConditioningControlPanel.Localization;
@@ -68,6 +66,13 @@ namespace ConditioningControlPanel
             ("BtnOpenAssetsTop", "tab.assets"), ("BtnNavMods", "launch.mods"),
             ("BtnNavCatalogue", "launch.catalogue"), ("BtnNavPhrases", "launch.phrases"),
             ("BtnNavMediaLog", "launch.medialog"),
+            // mort's map (2026-09-11): the new door, the For You row, the four zone rows and the
+            // Web door's launcher. BtnNavGoon has no palette row (a launcher with no tab) and
+            // DoorWebApp has no tab to pin, so neither is here - FavoritesRailMapTests exempts both.
+            ("DoorPlayTogether", "door.playtogether"), ("BtnNavFyp", "tab.fyp"),
+            ("BtnNavAiEffects", "part.aieffects"), ("BtnNavDeeperEditor", "part.deepereditor"),
+            ("BtnNavWorkshop", "part.workshop"), ("BtnNavEngineRoom", "part.engineroom"),
+            ("BtnNavWebApp", "launch.webapp"),
             // Play wall cards (PlayTabView.xaml) - resolved through PlayTab.FindName.
             ("BtnPlayRemoteControl", "tab.remotecontrol"), ("BtnPlayBlinkTrainer", "tab.blinktrainer"),
             ("BtnPlayGradedIntake", "tab.gradedintake"), ("BtnPlayFyp", "tab.fyp"),
@@ -183,17 +188,40 @@ namespace ConditioningControlPanel
         {
             try
             {
-                if (entry.Id.StartsWith("launch.", StringComparison.Ordinal)
-                    && entry.ElementNames.Length > 0
-                    && FindName(entry.ElementNames[0]) is Button launcher
-                    && new ButtonAutomationPeer(launcher).GetPattern(PatternInterface.Invoke) is IInvokeProvider invoke)
-                {
-                    invoke.Invoke();
-                    return;
-                }
+                if (SettingsPaletteWindow.TryPressLauncher(this, entry)) return;
                 SettingsPaletteWindow.Navigate(this, entry);
+                RevealZoneFor(entry.Id);
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "Favorites rail: could not open {Id}", entry.Id); }
+        }
+
+        /// <summary>Opens a palette row by id; the rail rows that name a page zone route here.</summary>
+        internal void OpenPaletteRow(string id)
+        {
+            var entry = SettingsPaletteIndex.All.FirstOrDefault(e => e.Id == id);
+            if (entry == null) { App.Logger?.Warning("OpenPaletteRow: no palette row {Id}", id); return; }
+            OpenDestination(entry);
+        }
+
+        /// <summary>
+        /// The Workshop and the Engine Room are drawers on the Companion page, and a pulse on a
+        /// shut drawer is a pulse on a title bar. The room already knows how to open them for its
+        /// own cross-zone links (ICompanionRoomNavigator), so the rail row asks it to - one hop
+        /// later, at Normal priority, the same beat the palette's own pulse waits for.
+        /// </summary>
+        private void RevealZoneFor(string id)
+        {
+            if (id != "part.workshop" && id != "part.engineroom") return;
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() =>
+            {
+                try
+                {
+                    var room = CompanionTab?.Room;
+                    if (room == null) return;
+                    if (id == "part.workshop") room.RevealWorkshop(); else room.RevealEngineRoom();
+                }
+                catch (Exception ex) { App.Logger?.Debug("RevealZoneFor({Id}): {E}", id, ex.Message); }
+            }));
         }
 
         /// <summary>

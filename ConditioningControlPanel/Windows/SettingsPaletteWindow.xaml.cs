@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
+using System.Windows.Automation.Peers;
+using System.Windows.Automation.Provider;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -266,6 +268,10 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // A launcher row with no tab (the Web door's two) has nowhere to go: pressing the
+                // button is the only honest answer, and a pulse inside a shut accordion is none.
+                if (string.IsNullOrWhiteSpace(entry.TabKey) && TryPressLauncher(mw, entry)) return;
+
                 // ShowTab is the only navigation API: it opens the owning door (ExpandDoorForTab),
                 // fires the nav bark, parks per-tab FX and moves the active indicator. Palette
                 // navigation must be indistinguishable from a rail click.
@@ -299,6 +305,30 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Palette navigation failed for {Id}", entry.Id);
+            }
+        }
+
+        /// <summary>
+        /// Presses the button a <c>launch.*</c> row names. Used by the favorites rail for every
+        /// launcher chip (a pinned "Mods" has to open Mods, not land beside the button) and by
+        /// <see cref="Navigate"/> for the tab-less rows only, so the palette keeps its one verb
+        /// for everything that has a page. Through the automation peer, so the button's own
+        /// Click - and every subscriber on it - fires.
+        /// </summary>
+        internal static bool TryPressLauncher(MainWindow mw, SettingsPaletteEntry entry)
+        {
+            try
+            {
+                if (!entry.Id.StartsWith("launch.", StringComparison.Ordinal) || entry.ElementNames.Length == 0) return false;
+                if (ResolveFirst(mw, entry.ElementNames) is not Button launcher) return false;
+                if (new ButtonAutomationPeer(launcher).GetPattern(PatternInterface.Invoke) is not IInvokeProvider invoke) return false;
+                invoke.Invoke();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("TryPressLauncher({Id}): {E}", entry.Id, ex.Message);
+                return false;
             }
         }
 

@@ -219,6 +219,9 @@ namespace ConditioningControlPanel.Services
             // Phase 6: the Play door's default destination is the card wall's own key. "lab" is
             // still a working alias but is no longer the name of anything that exists.
             Door("play", "nav_door_play", "🎮", "play", "play games lab");
+            // mort's map (2026-09-11): the multiplayer door. Default = Find Subjects, like its header.
+            Door("playtogether", "nav_door_playtogether", "🛰️", "availablesubjects",
+                 "play together multiplayer remote control subjects goon game");
             Door("you", "nav_door_you", "👤", "discord", "you profile progress");
             Door("library", "nav_door_library", "📚", "assets", "library assets media");
             // The withheld Just Drop door. Declared in rail order (below Library, above the pinned
@@ -255,7 +258,9 @@ namespace ConditioningControlPanel.Services
                 });
 
             Tab("settings", "tab_dashboard", "📊", "settings", "dashboard home start engine");
-            Tab("presets", "tab_presets", "📋", "presets", "presets sessions catalogue share");
+            // Five rows relabelled by mort's map (2026-09-11) - the page keeps its old name, the rail
+            // and this row say the new one, and the old words stay in the aliases so both find it.
+            Tab("presets", "nav_presets_sessions", "📋", "presets", "presets sessions catalogue share");
             // Phase 4: the effects rack. Reuses the door's own loc key as the caption, the same way
             // the Play row does. Every rack module is in the aliases so a feature is findable by its
             // own name ("brain drain", "spiral") and not only by the room it now lives in - which is
@@ -265,9 +270,9 @@ namespace ConditioningControlPanel.Services
                 "bubbles lock card bouncing text pink filter scheduler ramp exclusion haptics");
             Tab("haptics", "tab_haptics", "📳", "haptics", "haptics toy vibrator buttplug funscript");
             Tab("companion", "tab_companion", "🤖", "companion", "companion ai persona workshop chat");
-            Tab("bambitakeover", "tab_takeover", "💫", "bambitakeover", "takeover autonomy");
+            Tab("bambitakeover", "nav_companion_takeover", "💫", "bambitakeover", "takeover autonomy companion");
             Tab("shelistening", "tab_shelistening", "🎙️", "shelistening", "listening voice speech mic");
-            Tab("awareness", "tab_awareness", "👁️", "awareness", "awareness screen watching");
+            Tab("awareness", "nav_screen_awareness", "👁️", "awareness", "awareness screen watching");
             // Phase 6: the Lab page became the Play door's card wall. The row survives (people
             // search for "lab", "gaze", "rabbit hole") but it now names — and navigates to — the
             // thing that actually exists. The 🧪 flask is the Tier 2 lockband badge now, not a
@@ -299,8 +304,8 @@ namespace ConditioningControlPanel.Services
             Tab("gradedintake", "tab_gradedintake", "📝", "gradedintake", "intake quiz graded pass");
             Tab("lockdown", "tab_lockdown_mode", "🔒", "lockdown", "lockdown lock kiosk");
             Tab("blinktrainer", "tab_blink_trainer", "👀", "blinktrainer", "blink trainer eyes");
-            Tab("remotecontrol", "tab_remote_control", "📱", "remotecontrol", "remote control phone");
-            Tab("availablesubjects", "tab_available_subjects", "🛰️", "availablesubjects", "subjects online users");
+            Tab("remotecontrol", "nav_give_up_control", "📱", "remotecontrol", "remote control phone give up");
+            Tab("availablesubjects", "nav_find_subjects", "🛰️", "availablesubjects", "subjects online users find");
             Tab("discord", "tab_profile", "👤", "discord", "profile trainer card wardrobe");
             // The Spiral Room (CONTRACT-FUSE-0816 2.4), which replaced the map window. Listed like
             // every other live ShowTab key and deliberately NOT gated on the block: the palette has
@@ -319,8 +324,8 @@ namespace ConditioningControlPanel.Services
             Tab("appsettings", "tab_settings", "⚙️", "appsettings", "settings options preferences");
 
             // ---- Library launchers (Phase 7) --------------------------------------------
-            // Four things the Library door opens that are NOT tabs: a dialog, a website, a dialog
-            // and a window. The palette has exactly one navigation verb - ShowTab - so a row here
+            // Three things the Library door opens that are NOT tabs: a dialog, a dialog and a
+            // window (the Catalogue moved to the Web door on 2026-09-11, below). The palette has exactly one navigation verb - ShowTab - so a row here
             // cannot press a button for the user, and inventing a second verb would put window
             // launches behind a search box where a mistyped Enter opens a modal. These rows
             // therefore do what the index says it does everywhere else: they take you to where the
@@ -328,7 +333,7 @@ namespace ConditioningControlPanel.Services
             // door via ExpandDoorForTab for free), and ElementNames pulses the rail row that
             // launches it, so the answer to "where is the phrase manager" is the button itself.
             //
-            // If the palette ever grows a launch verb, these four are its first customers.
+            // If the palette ever grows a launch verb, these three are its first customers.
             void Launcher(string id, string labelKey, string glyph, string element, string aliases) =>
                 list.Add(new SettingsPaletteEntry
                 {
@@ -343,12 +348,61 @@ namespace ConditioningControlPanel.Services
 
             Launcher("mods", "yl7_nav_mods", "🧩", "BtnNavMods",
                      "mods mod manager install ccpmod creator themes packs");
-            Launcher("catalogue", "yl7_nav_catalogue", "🌐", "BtnNavCatalogue",
-                     "catalogue community share browse presets sessions download");
             Launcher("phrases", "yl7_nav_phrases", "💬", "BtnNavPhrases",
                      "phrase manager text pools mantras subliminals barks lines");
             Launcher("medialog", "yl7_nav_medialog", "🎞️", "BtnNavMediaLog",
                      "media log history what did i see flashes videos recently shown");
+
+            // ---- page zones (mort's map, 2026-09-11) ------------------------------------
+            // Five rail rows that name a ZONE of an existing page rather than a page: the map
+            // splits Deeper into Player / Editor and lifts AI Effects, the Workshop and the
+            // Engine Room out of the Companion page. None of those is a real page yet (follow-up),
+            // so each row navigates to the page and pulses the zone - the same journey the rail
+            // row makes, through the same Navigate. The breadcrumb names the DOOR the row sits
+            // in, which is not always the page's door: AI Effects is a Studio row on the
+            // Companion page.
+            void Part(string id, string labelKey, string glyph, string tab, string element, string doorKey, string aliases) =>
+                list.Add(new SettingsPaletteEntry
+                {
+                    Id = "part." + id,
+                    LabelKey = labelKey,
+                    Glyph = glyph,
+                    TabKey = tab,
+                    ElementNames = new[] { element },
+                    ContextKeys = new[] { GroupNav, doorKey },
+                    Aliases = aliases,
+                });
+
+            Part("deeperplayer", "nav_deeper_player", "🌊", "deeper", "BtnDeeperOpenPlayer", "nav_door_play",
+                 "deeper player play enhancement");
+            Part("deepereditor", "nav_deeper_editor", "🎬", "deeper", "BtnDeeperNewEnhancement", "nav_door_studio",
+                 "deeper editor create new enhancement creator tools");
+            Part("aieffects", "nav_ai_effects", "🪄", "companion", "PermissionsZone", "nav_door_studio",
+                 "ai effects permissions what she may do haptic intensity companion effects");
+            Part("workshop", "nav_workshop", "🧰", "companion", "WorkshopZone", "nav_door_companion",
+                 "workshop persona behavior triggers phrases roster library");
+            Part("engineroom", "nav_engine_room", "🔧", "companion", "EngineZone", "nav_door_companion",
+                 "engine room cloud local model memory ollama brain");
+
+            // ---- the Web door's two launchers -------------------------------------------
+            // No tab at all (the door is expand-only), so Navigate presses the button instead of
+            // pulsing it inside a shut accordion - see SettingsPaletteWindow.TryPressLauncher.
+            void WebLauncher(string id, string labelKey, string glyph, string element, string aliases) =>
+                list.Add(new SettingsPaletteEntry
+                {
+                    Id = "launch." + id,
+                    LabelKey = labelKey,
+                    Glyph = glyph,
+                    TabKey = string.Empty,
+                    ElementNames = new[] { element },
+                    ContextKeys = new[] { GroupNav, "nav_door_web" },
+                    Aliases = aliases,
+                });
+
+            WebLauncher("webapp", "nav_door_webapp", "🔗", "BtnNavWebApp",
+                        "web app cclabs browser account link device dashboard");
+            WebLauncher("catalogue", "yl7_nav_catalogue", "🌐", "BtnNavCatalogue",
+                        "catalogue community share browse presets sessions download");
 
             // ---- the eight Settings sections -------------------------------------------
             void Section(string key, string labelKey, string glyph, string aliases) =>

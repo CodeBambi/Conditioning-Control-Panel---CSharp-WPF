@@ -96,7 +96,6 @@ public class YouLibraryDoorTests
     public static IEnumerable<object[]> LibraryLaunchers => new[]
     {
         new object[] { "BtnNavMods",     "BtnManageMods_Click",   "yl7_nav_mods",      "yl7_nav_mods_tip" },
-        new object[] { "BtnNavCatalogue", "BtnCatalogue_Click",   "yl7_nav_catalogue", "yl7_nav_catalogue_tip" },
         new object[] { "BtnNavPhrases",  "BtnManagePhrases_Click", "yl7_nav_phrases",  "yl7_nav_phrases_tip" },
         new object[] { "BtnNavMediaLog", "BtnNavMediaLog_Click",  "yl7_nav_medialog",  "yl7_nav_medialog_tip" },
     };
@@ -114,7 +113,7 @@ public class YouLibraryDoorTests
     }
 
     // =====================================================================================
-    //  1. the Library door's four launcher rows
+    //  1. the Library door's three launcher rows (the Catalogue is a Web door row since 2026-09-11)
     // =====================================================================================
 
     [Theory]
@@ -149,22 +148,21 @@ public class YouLibraryDoorTests
     }
 
     [Fact]
-    public void AssetsStaysTheLibraryDoorsFirstRow()
+    public void TheLibraryDoorFollowsMortsMap()
     {
-        // NavDoorMap routes the door header to "assets"; ShowTab then moves the active indicator
-        // onto whichever row owns that key. If a launcher were first, the door would open with the
-        // indicator on the second row — the rail would look like it navigated somewhere it didn't.
+        // mort's map (2026-09-11): Mods, Assets, Phrase Manager, Media Log - the Catalogue moved
+        // to the Web door. NavDoorMap still routes the header to "assets" (the door's only tab),
+        // so the indicator lands on the second row; that is the map's order, on purpose.
         var names = Regex.Matches(LibraryDoorPanel(), "<Button x:Name=\"(\\w+)\"")
                          .Select(m => m.Groups[1].Value).ToArray();
-        Assert.Equal("BtnOpenAssetsTop", names.First());
-        Assert.Equal(5, names.Length);
+        Assert.Equal(new[] { "BtnNavMods", "BtnOpenAssetsTop", "BtnNavPhrases", "BtnNavMediaLog" }, names);
     }
 
     [Fact]
     public void TheLibraryLaunchersClaimNoTabKey()
     {
         // A rail row that claims a key the app has no view for leaves the active indicator
-        // pointing at nothing. These four open a dialog, a website, a dialog and a window.
+        // pointing at nothing. These three open a dialog, a dialog and a window.
         var nav = ReadSource("MainWindow", "MainWindow.TabNavigation.cs");
         var row = Regex.Match(nav, @"\(""library"",\s*""assets"",\s*new\[\]\s*\{([^}]*)\}");
         Assert.True(row.Success, "the NavDoorMap row for the Library door has moved or changed shape");
@@ -334,7 +332,9 @@ public class YouLibraryDoorTests
             Assert.Contains("x:Name=\"" + element + "\"", xaml);
         }
 
-        // All four, not three: a dropped row is a feature nobody can search for.
-        Assert.Equal(4, Regex.Matches(palette, @"\n\s*Launcher\(""").Count);
+        // All three (the Catalogue is a WebLauncher row since 2026-09-11): a dropped row is a
+        // feature nobody can search for.
+        Assert.Equal(3, Regex.Matches(palette, @"\n\s*Launcher\(""").Count);
+        Assert.Contains("WebLauncher(\"catalogue\"", palette);
     }
 }
