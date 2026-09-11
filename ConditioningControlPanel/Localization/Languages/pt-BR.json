@@ -4656,6 +4656,7 @@
   "label_remote_niches": "Nichos",
   "label_remote_niches_shared": "Compartilhado com o feed For You - uma seleção, os dois lugares.",
   "label_remote_custom_subs": "Seus próprios subreddits",
+  "label_remote_custom_subs_summary": "{0} em uso · {1} guardados",
   "tooltip_remote_custom_sub_add": "Digite o nome de um subreddit (o r/ é opcional) ou cole o link e clique em Adicionar.",
   "label_remote_sub_verified": "Verificado · {0} clipes no Reddit",
   "label_remote_sub_verified_stills": "Verificado · só imagens",

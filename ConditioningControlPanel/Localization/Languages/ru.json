@@ -4655,6 +4655,7 @@
   "label_remote_niches": "Ниши",
   "label_remote_niches_shared": "Общее с лентой For You - один выбор, оба места.",
   "label_remote_custom_subs": "Твои сабреддиты",
+  "label_remote_custom_subs_summary": "{0} используется · {1} сохранено",
   "tooltip_remote_custom_sub_add": "Введи название сабреддита (r/ необязательно) или вставь ссылку, затем нажми «Добавить».",
   "label_remote_sub_verified": "Проверено · {0} клипов на Reddit",
   "label_remote_sub_verified_stills": "Проверено · только картинки",
