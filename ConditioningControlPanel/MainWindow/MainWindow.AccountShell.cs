@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -521,10 +521,8 @@ namespace ConditioningControlPanel
             Dispatcher.Invoke(() =>
             {
                 BtnUpdateAvailable.Tag = updateAvailable ? "UpdateAvailable" : "NoUpdate";
-                BtnUpdateAvailable.Content = updateAvailable ? "UPDATE" : "LATEST VERSION :3";
-                BtnUpdateAvailable.ToolTip = updateAvailable
-                    ? "Update Available - Click to install!"
-                    : "You're on the latest version";
+                BtnUpdateAvailable.Content = Loc.Get(updateAvailable ? "btn_update_now" : "btn_update_up_to_date");
+                BtnUpdateAvailable.ToolTip = Loc.Get(updateAvailable ? "tooltip_update_now" : "tooltip_update_up_to_date");
             });
         }
         #endregion

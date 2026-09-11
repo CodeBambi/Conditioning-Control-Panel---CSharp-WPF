@@ -828,10 +828,12 @@ namespace ConditioningControlPanel
                                 if (BtnUpdateAvailable != null)
                                 {
                                     BtnUpdateAvailable.Tag = "UrgentUpdate";
-                                    BtnUpdateAvailable.Content = $"UPDATE AVAILABLE v{result.version}";
-                                    BtnUpdateAvailable.ToolTip = !string.IsNullOrEmpty(result.url)
-                                        ? $"Version {result.version} is available - Click to visit download page!"
-                                        : $"Version {result.version} is available - Click to update!";
+                                    BtnUpdateAvailable.Content = Loc.GetF("btn_update_to_version", result.version);
+                                    BtnUpdateAvailable.ToolTip = Loc.GetF(
+                                        !string.IsNullOrEmpty(result.url)
+                                            ? "tooltip_update_to_version_download"
+                                            : "tooltip_update_to_version_install",
+                                        result.version);
                                 }
                             });
                         }
