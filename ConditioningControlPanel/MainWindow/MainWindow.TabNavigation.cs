@@ -611,7 +611,9 @@ namespace ConditioningControlPanel
         private static readonly (string Door, string DefaultTab, string[] Tabs)[] NavDoorMap =
         {
             ("home",      "settings",  new[] { "settings", "progression" }),
-            ("studio",    "studio",    new[] { "studio", "presets", "haptics" }),
+            // "justdrop" is a window key like "fyp": filed here so the Studio row's door resolves;
+            // ShowTab intercepts it before any door would expand.
+            ("studio",    "studio",    new[] { "studio", "presets", "haptics", "justdrop" }),
             ("companion", "companion", new[] { "companion", "bambitakeover", "shelistening", "awareness" }),
             // Phase 6: "play" replaced "lab" in place as this door's first entry and default
             // destination. "lab" is deliberately NOT listed - it is a legacy alias, resolved by
@@ -1010,6 +1012,10 @@ namespace ConditioningControlPanel
         private void BtnNavBlinkTrainer_Click(object sender, RoutedEventArgs e) => ShowTab("blinktrainer");
 
         private void BtnNavRemoteControl_Click(object sender, RoutedEventArgs e) => ShowTab("remotecontrol");
+
+        // ShowTab("justdrop"), never JustDropHostService.LaunchShop(): ShowTab owns the withheld
+        // refusal and is the path the Exclusives shelf, the tease tile and the palette row take.
+        private void BtnNavJustDrop_Click(object sender, RoutedEventArgs e) => ShowTab("justdrop");
 
 
         /// <summary>

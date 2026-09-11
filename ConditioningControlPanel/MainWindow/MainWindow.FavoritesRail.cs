@@ -68,10 +68,12 @@ namespace ConditioningControlPanel
             ("BtnOpenAssetsTop", "tab.assets"), ("BtnNavMods", "launch.mods"),
             ("BtnNavCatalogue", "launch.catalogue"), ("BtnNavPhrases", "launch.phrases"),
             ("BtnNavMediaLog", "launch.medialog"),
+            // Just Drop (owner call 2026-09-11): a creator tool, so its row is under Studio.
+            ("BtnNavJustDrop", "door.justdrop"),
             // Play wall cards (PlayTabView.xaml) - resolved through PlayTab.FindName.
             ("BtnPlayRemoteControl", "tab.remotecontrol"), ("BtnPlayBlinkTrainer", "tab.blinktrainer"),
             ("BtnPlayGradedIntake", "tab.gradedintake"), ("BtnPlayFyp", "tab.fyp"),
-            ("BtnPlayJustDrop", "door.justdrop"), ("BtnPlayLockdown", "tab.lockdown"),
+            ("BtnPlayLockdown", "tab.lockdown"),
             ("BtnPlayArcademy", "card.arcademy"),
         };
 
