@@ -404,6 +404,17 @@
     <!-- Nav rail door art (2026-08-11 emoji purge): one emblem per door, referenced by
          MainWindow.xaml pack URIs - a missing file here crashes InitializeComponent. -->
     <Resource Include="Resources\nav\*.png" />
+    <!-- Home dashboard billboard posters (2026-09-12), one per roster card in
+         Services/DashboardBillboard.cs. 688x384, 16:9, no text: the bottom third of each is
+         dark and calm on purpose so the shade with the eyebrow, title and line sits there.
+         Listed one by one rather than globbed - the roster names these six files and nothing
+         else belongs in the folder. -->
+    <Resource Include="Resources\billboard\webapp.png" />
+    <Resource Include="Resources\billboard\remix.png" />
+    <Resource Include="Resources\billboard\loom.png" />
+    <Resource Include="Resources\billboard\discord.png" />
+    <Resource Include="Resources\billboard\exclusives.png" />
+    <Resource Include="Resources\billboard\support.png" />
 
     <!-- Training Programs art: day mood plates and program sigils.
          SINGLE LEVEL on purpose - a Resources\programs\<sub>\ folder would compile fine and then
