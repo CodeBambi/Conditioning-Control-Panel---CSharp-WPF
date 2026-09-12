@@ -20,42 +20,54 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.9.3";
+        public const string AppVersion = "6.9.5";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.9.3 - The Spiral pt. 3
+        public const string CurrentPatchNotes = @"v6.9.5 - The Spiral pt. 4
 
-a fix wave for the things you reported after pt. 2, plus the spiral finally remembering what you did each day. nothing here touches your progress. it stays yours :3
+two new rooms on the Play wall, a cleaner home, a quieter first launch, and a copy pass over the whole app. nothing here touches your progress. it stays yours :3
 
-THE SPIRAL
-- the calendar card on the web spiral names the features you used on each day instead of ""their names were not kept"". the app keeps a per-day log and sends it up with your stats.
-- the lil spiral in the nav rail is on by default. you can switch it off in Settings.
+TWO NEW ROOMS (tier 2, same door as the rabbit hole)
+- Racing Thoughts: a no-lose kart run. EMI rides in the cup, the road is built from a hypno track, and the words it says come at you as bubbles. pick a file, or play from bambicloud and the run follows whatever is on. it plays on a phone too.
+- Piece by Piece: chess on a 3D board, hotseat or online. the room fills in as the game goes: flash pops, gif rain, the spiral veil, your own media on the walls.
 
-VIDEOS
-- video fix: closing a mandatory video with ESC left a libvlc ghost behind in the sound mixer, eating ram until clips froze on their first frame. every teardown now lets go of the video for real.
-- the Deeper player no longer strands an empty borderless window over the library after a video ends. ESC, the panic key and the end of the clip all close it.
+HOME
+- the premium rail is now Favorites and Recent. right-click a tile or a side rail row to pin it. every chip wears its feature art.
+- the browser card folds shut, and opens itself when a link needs it. the space it frees holds a rotating billboard.
+- left-click opens a tile, right-click switches it on or off. the app says so, on the dashboard and on the Studio rack, until you have done it a few times.
+- off tiles are grey. the Deeper editor has a tile. Just Drop lives under Studio. the mod manager is in the mod dropdown, the language picker in Settings.
 
-MONITORS
-- Settings, General has a ""Show content on"" picker: all monitors, primary only, or one specific screen. the System menu got the same picker so the two can not disagree. flashes, videos, overlays, subliminals and bouncing text all follow it, and changing it mid-session moves them right away.
+FIRST LAUNCH, AND FEWER POP-UPS
+- the wizard is two screens, then EMI knocks and you take the short walk or not. it opens in your OS language.
+- launch pop-ups come one at a time. announcements, nudges and toasts wait in an Inbox on the title bar while you are new, in a session or in a dialog.
+- coming back with a cloud backup is one sheet, not three boxes, and your content folder stays where it was.
 
-COMPANION
-- offline mode no longer silences the companion for good, and the message you got when it happened stops blaming your connection.
-- EMI's greeting no longer falls through to a stock line.
-- Infection Control gets its Goon Fuel name back and its tube fit stays put.
+EMI
+- she has noticed things: a third session in a row, a room you keep coming back to, tabbing away, a broken streak. the companions have voiced lines of their own, and the Cheshire reads you on the way down.
+- the header banner has taglines, CCP trivia and the odd read on your week between announcements. off switch under Settings > Notifications.
 
-SESSIONS, TRIGGERS AND CARDS
-- takeover effects end when the engine ends instead of outliving it.
-- deactivating a custom awareness preset keeps its triggers.
-- a lock card phrase with an ellipsis or curly quotes can be typed.
-- solved a bug where Possession could hitch the app and EMI shrank into a single pixel.
+FIXES AND ASKS
+- a machine with no camera stops drawing blink quests. a never-patron drops a premium quest it cannot finish. streak fixes come back monthly, and the app says so.
+- locked achievements show how far along you are. the daily vat fills on sign-in.
+- a video the descent started ends with the descent. the Loom saves every preset, ""bambi haze"" included.
+- Lockdown: ""Hide the clock"", and a switch so the START button stops counting at you. EMI's chip and mute prompt survive a lockdown.
+- the Deeper library says how long each enhancement runs.
+- the cloud companion ends on a full sentence instead of mid-word. the log keeps the shape of a reply, never the words.
+- the Flash card has a GIF speed slider. lock cards can roll their repeat count or size a card by typing length.
+- the asset browser keeps its height in Reddit and Both. the nav rail spiral chip stops flickering. the For You page retries a blank scrolller answer.
+- a fresh install with no mod is neutral by default. a mod keeps its voice. the mod creator keeps every message field on save.
+- the copy pass: about 400 strings rewritten or moved onto translation. no exclamation marks, no sales pitch, and the help cards agree with the app.
+- freezes: the hang report names what the app was stuck in, and rides along in your next bug report.
 
-THE ARCADEMY
-- the sort room stays smooth with a gif heavy library. only the cards on screen animate.
+CCLABS.APP
+- the Remix page is free for everyone. the sorting room has a door, deals only loaded cards on a phone, and a pass costs the chain. the spiral calendar learns more about your days.
 
-full nerd changelog in pull requests 817, 928, 948 through 952, 978, 1013 through 1015 and 1017.";
+every tier is on sale from september 11 to 18. code ARCADEMY at checkout. go play :3
+
+full nerd changelog in pull requests 651 through 679, 842 through 870, 873 through 947, 953 through 1012, 1016, 1019 through 1106.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
