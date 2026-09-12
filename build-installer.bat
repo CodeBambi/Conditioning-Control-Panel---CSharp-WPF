@@ -7,7 +7,7 @@ echo ============================================
 echo.
 
 :: Configuration
-set VERSION=6.9.3
+set VERSION=6.9.5
 set PROJECT_DIR=ConditioningControlPanel
 set PUBLISH_DIR=%PROJECT_DIR%\bin\Release\net8.0-windows10.0.19041.0\win-x64\publish
 set INSTALLER_OUTPUT=installer-output
@@ -23,6 +23,8 @@ if exist "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" (
     set ISCC_PATH=C:\Program Files ^(x86^)\Inno Setup 6\ISCC.exe
 ) else if exist "C:\Program Files\Inno Setup 6\ISCC.exe" (
     set ISCC_PATH=C:\Program Files\Inno Setup 6\ISCC.exe
+) else if exist "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" (
+    set ISCC_PATH=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe
 ) else (
     echo ERROR: Inno Setup 6 not found!
     echo Please install from: https://jrsoftware.org/isdl.php
