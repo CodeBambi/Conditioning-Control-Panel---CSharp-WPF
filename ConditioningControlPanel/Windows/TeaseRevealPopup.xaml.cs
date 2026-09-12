@@ -9,8 +9,9 @@ using ConditioningControlPanel.Services;
 namespace ConditioningControlPanel
 {
     /// <summary>
-    /// The teaser card behind a nameless tease tile (see <c>FeatureCard.TeaseTier</c> and the
-    /// switch block at the top of <c>MainWindow.TeaseCard.cs</c>).
+    /// The teaser card behind a nameless tease tile (see <c>FeatureCard.TeaseTier</c>). No tile
+    /// wears the costume since 2026-09-12, when the Deeper editor took the mosaic slot the Just
+    /// Drop tease held; this is the generic half, kept for the next one.
     ///
     /// <para>It exists to say ONE thing - something is coming, and it is a Tier N thing - and it
     /// must never say more than that. There is no feature name, no glyph that identifies the

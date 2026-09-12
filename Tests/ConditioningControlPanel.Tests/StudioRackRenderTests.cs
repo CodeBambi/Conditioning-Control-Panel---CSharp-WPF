@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using ConditioningControlPanel.Services;
@@ -461,6 +462,79 @@ public class StudioRackRenderTests
             var ex = Record.Exception(() => JsonDocument.Parse(File.ReadAllText(f)));
             Assert.True(ex == null, $"{f} does not parse strictly: {ex?.Message}");
         }
+    }
+
+    // =====================================================================================
+    //  the rack's gesture line (owner, 2026-09-12)
+    //
+    //  Right-click on a rack row has quick-toggled that module since Phase 4 and the page
+    //  never said so. These mirror the Home rail's gesture-line tests (FavoritesRailArtTests):
+    //  the line is translated everywhere, it names the buttons in the order the hand meets
+    //  them, and it is docked outside the scroller so a full rack cannot scroll it away.
+    // =====================================================================================
+
+    /// <summary>The Studio markup, read from the source tree rather than the copy beside the binary.</summary>
+    private static string StudioXaml() =>
+        File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Views", "Tabs", "StudioTabView.xaml"));
+
+    [Fact]
+    public void TheRackGestureLineIsTranslatedEverywhereAndReadsLeftBeforeRight()
+    {
+        foreach (var language in CompanionLocMasters.Languages)
+        {
+            var file = CompanionLocMasters.For(language);
+            Assert.True(file.TryGetValue("st4_rack_gesture_hint", out var line),
+                        "st4_rack_gesture_hint is missing from " + language + ".json");
+            Assert.False(string.IsNullOrWhiteSpace(line),
+                         "st4_rack_gesture_hint is empty in " + language + ".json");
+            Assert.DoesNotContain("!", line, StringComparison.Ordinal);
+            Assert.DoesNotContain("—", line, StringComparison.Ordinal);  // em-dash
+            Assert.DoesNotContain("–", line, StringComparison.Ordinal);  // en-dash
+        }
+
+        // The EN line has to agree with the code: left-click owns selection (RackEntry_Click),
+        // right-click owns the on/off flip (RackEntry_RightClick calls entry.Toggle), and it
+        // says them in that order because that is the order a hand meets them.
+        var en = CompanionLocMasters.For("en")["st4_rack_gesture_hint"];
+        var left = en.IndexOf("Left-click", StringComparison.OrdinalIgnoreCase);
+        var right = en.IndexOf("Right-click", StringComparison.OrdinalIgnoreCase);
+        Assert.True(left >= 0, "the EN rack line no longer names left-click");
+        Assert.True(right > left, "the EN rack line names right-click before left-click");
+
+        var second = en.Substring(right);
+        Assert.Contains("switch", second, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("module", second, StringComparison.OrdinalIgnoreCase);
+        // Pinning is the dashboard rail's second gesture, not the rack's.
+        Assert.DoesNotContain("pin", second, StringComparison.OrdinalIgnoreCase);
+
+        var code = File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel",
+                                                 "Views", "Tabs", "StudioTabView.xaml.cs"));
+        Assert.Contains("e.Row.MouseRightButtonUp += RackEntry_RightClick;", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheRackGestureLineIsDockedBelowTheRackNotInsideIt()
+    {
+        // Auto above Auto would let a full rack push the line off the bottom of the card; star
+        // above Auto pays the line first and gives the list what is left, which is what the
+        // scroller is for. And the line never hides itself: it is not a first-run nudge, so no
+        // Visibility on it and no DashboardToggleHintRule-style retirement by count.
+        var xaml = StudioXaml();
+        var column = xaml.Substring(xaml.IndexOf("<!-- The rack list.", StringComparison.Ordinal));
+        column = column.Substring(0, column.IndexOf("<!-- The detail column.", StringComparison.Ordinal));
+
+        var scrollerEnds = column.IndexOf("</ScrollViewer>", StringComparison.Ordinal);
+        var hint = column.IndexOf("st4_rack_gesture_hint", StringComparison.Ordinal);
+        Assert.True(hint > 0, "the rack markup no longer shows st4_rack_gesture_hint");
+        Assert.True(scrollerEnds > 0 && hint > scrollerEnds,
+            "st4_rack_gesture_hint sits inside the rack's ScrollViewer, so a full rack scrolls it away");
+
+        var rows = Regex.Matches(column, "<RowDefinition Height=\"(\\*|Auto)\"/>")
+                        .Cast<Match>().Select(m => m.Groups[1].Value).ToList();
+        Assert.Equal(new[] { "*", "Auto" }, rows);
+
+        var block = column.Substring(hint, Math.Min(300, column.Length - hint));
+        Assert.DoesNotContain("Visibility", block, StringComparison.Ordinal);
     }
 
     // ---- helpers -------------------------------------------------------------------------

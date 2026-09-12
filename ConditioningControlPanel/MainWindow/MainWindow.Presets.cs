@@ -1112,15 +1112,17 @@ namespace ConditioningControlPanel
         internal void CardVault_Click(object sender, RoutedEventArgs e) => BtnPatreonExclusives_Click(sender, e);
 
         /// <summary>
-        /// The mosaic's nameless TEASE tile. Everything about it - which feature it teases, which
-        /// livery it wears, whether it is still teasing at all - lives in one block at the top of
-        /// <c>MainWindow.TeaseCard.cs</c>; this is only the wall's end of the wire.
+        /// The mosaic's DEEPER EDITOR tile (owner, 2026-09-12), which took the slot the nameless
+        /// tease tile held. It goes to the Deeper page, where the library, the editor and the
+        /// player sit together.
         ///
-        /// <para>The old two-branch behaviour (navigate when the door is open, placeholder toast
-        /// when it is withheld) moved into <see cref="TeaseCardClicked"/> intact, with the toast
-        /// replaced by the teaser card the owner asked for on 2026-08-13.</para>
+        /// <para>Navigate, never launch - the wall's own rule. The first cut of this tile opened
+        /// the editor on a blank enhancement (it called <c>BtnDeeperNewEnhancement_Click</c>) and
+        /// the owner corrected it on the desk run: "the deeper editor should link and open the
+        /// deeper page, not the editor". A tile that puts a modal dialog on screen from the front
+        /// page is a tile you cannot browse past.</para>
         /// </summary>
-        internal void CardJustDrop_Click(object sender, RoutedEventArgs e) => TeaseCardClicked();
+        internal void CardDeeperEditor_Click(object sender, RoutedEventArgs e) => ShowTab("deeper");
 
         /// <summary>
         /// Paints the mosaic's price tags and the ? box's face. The FX tiles are all free and
@@ -1137,12 +1139,10 @@ namespace ConditioningControlPanel
 
             try
             {
-                // The tease tile: blur, livery rim and a livery diamond instead of the old "SOON"
-                // price tag. It owns its own badge now (same SetTierBadge helper, called from
-                // there) because the badge, the title, the tooltip and the blur have to move as
-                // one costume - see MainWindow.TeaseCard.cs.
-                ApplyTeaseCard();
-
+                // No pass over the Deeper editor tile, deliberately: the Deeper page has no
+                // ExclusiveFeature roster row, so it is not sold and the tile wears no price tag.
+                // If Deeper is ever gated, it gets a SetTierBadge call here and the rail's gold
+                // star in the same change, so the two can never disagree.
                 RefreshMysteryTile();
                 RefreshWallActiveStates();
 

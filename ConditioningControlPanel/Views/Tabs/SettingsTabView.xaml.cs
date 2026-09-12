@@ -257,10 +257,10 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw) mw.CardVault_Click(sender, e);
         }
-        private void CardJustDrop_Click(object sender, RoutedEventArgs e)
+        private void CardDeeperEditor_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardJustDrop_Click(sender, e);
+                mw.CardDeeperEditor_Click(sender, e);
         }
         private void ChkDiscordRichPresence_Changed(object sender, RoutedEventArgs e)
         {

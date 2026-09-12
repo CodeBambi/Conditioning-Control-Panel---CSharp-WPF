@@ -215,9 +215,11 @@ namespace ConditioningControlPanel.Features
         /// icon. The card is otherwise untouched: it still clicks, still hovers, still lives on
         /// the same wall, so the tease is a costume rather than a second control.</para>
         ///
-        /// <para>Generic on purpose. Teasing a different feature later is a matter of moving
-        /// this one property (see the switch block at the top of
-        /// <c>MainWindow.TeaseCard.cs</c>), not of writing another card.</para>
+        /// <para>Generic on purpose, and currently unworn: the one tile that carried a tease was
+        /// the dashboard's nameless Just Drop slot, which became the Deeper editor tile on
+        /// 2026-09-12. Teasing a feature again is a matter of setting this one property on a card
+        /// and pointing its click at <c>TeaseRevealPopup.ShowFor</c>, not of writing another
+        /// card.</para>
         /// </summary>
         public int TeaseTier
         {
