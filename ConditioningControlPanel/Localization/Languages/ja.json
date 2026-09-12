@@ -4519,6 +4519,7 @@
   "set2_intake_nudge_hint": "新しいウィークリーインテークパスが待っている時に、起動時に表示される。",
   "st4_studio_title": "スタジオ",
   "st4_studio_subtitle": "すべてのエフェクトをひとつのラックに。左からモジュールを選んでね。",
+  "st4_rack_gesture_hint": "左クリックでモジュールを選択。モジュールを右クリックでオン/オフ。",
   "st4_nav_studio": "エフェクトラック",
   "st4_nav_studio_tip": "全機能の設定を、ひとまとめに。",
   "st4_studio_group_effects": "エフェクト",

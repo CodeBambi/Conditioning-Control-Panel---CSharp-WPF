@@ -4526,6 +4526,7 @@
   "set2_intake_nudge_hint": "새 주간 인테이크 패스가 기다리고 있으면 실행할 때 알려줘요.",
   "st4_studio_title": "스튜디오",
   "st4_studio_subtitle": "모든 이펙트를 한 랭에. 왼쪽에서 모듈을 골라봐.",
+  "st4_rack_gesture_hint": "왼쪽 클릭으로 모듈 선택. 모듈을 오른쪽 클릭하면 켜고 끄기.",
   "st4_nav_studio": "이펙트 랭",
   "st4_nav_studio_tip": "모든 기능의 설정을 한자리에.",
   "st4_studio_group_effects": "이펙트",

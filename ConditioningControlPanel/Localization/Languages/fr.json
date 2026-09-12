@@ -4528,6 +4528,7 @@
   "set2_intake_nudge_hint": "S'affiche au lancement quand un nouveau pass d'admission hebdo t'attend.",
   "st4_studio_title": "Studio",
   "st4_studio_subtitle": "Tous les effets, un seul rack. Choisis un module à gauche.",
+  "st4_rack_gesture_hint": "Clic gauche choisit un module. Clic droit sur un module pour l'activer ou le désactiver.",
   "st4_nav_studio": "Rack d'Effets",
   "st4_nav_studio_tip": "Les réglages de chaque fonction, au même endroit.",
   "st4_studio_group_effects": "EFFETS",

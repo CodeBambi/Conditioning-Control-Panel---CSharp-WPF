@@ -5091,6 +5091,7 @@
   "set2_intake_nudge_hint": "Shown at launch when a new weekly intake pass is waiting for you.",
   "st4_studio_title": "Studio",
   "st4_studio_subtitle": "Every effect, one rack. Pick a module on the left.",
+  "st4_rack_gesture_hint": "Left-click picks a module. Right-click a module to switch it on or off.",
   "st4_nav_studio": "Effects Rack",
   "st4_nav_studio_tip": "Every feature's settings, in one place.",
   "st4_studio_group_effects": "EFFECTS",

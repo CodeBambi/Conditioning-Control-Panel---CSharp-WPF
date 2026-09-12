@@ -4528,6 +4528,7 @@
   "set2_intake_nudge_hint": "Erscheint beim Start, wenn ein neuer wöchentlicher Intake-Pass auf dich wartet.",
   "st4_studio_title": "Studio",
   "st4_studio_subtitle": "Alle Effekte, ein Rack. Such dir links ein Modul aus.",
+  "st4_rack_gesture_hint": "Linksklick wählt ein Modul. Rechtsklick auf ein Modul schaltet es ein oder aus.",
   "st4_nav_studio": "Effekt-Rack",
   "st4_nav_studio_tip": "Die Einstellungen jeder Funktion, an einem Ort.",
   "st4_studio_group_effects": "EFFEKTE",
