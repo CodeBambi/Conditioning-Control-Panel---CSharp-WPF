@@ -28,7 +28,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public const string CurrentPatchNotes = @"v6.9.5 - The Spiral pt. 4
 
-a cleaner home, a quieter first launch, and a copy pass over the whole app. nothing here touches your progress. it stays yours :3
+a cleaner home, a quieter first launch, and a copy pass over the whole app.
 
 HOME
 - the premium rail is now Favorites and Recent. right-click a tile or a side rail row to pin it. every chip wears its feature art.
