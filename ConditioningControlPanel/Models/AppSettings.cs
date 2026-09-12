@@ -8037,13 +8037,18 @@ namespace ConditioningControlPanel.Models
         /// below it (the Deeper toolbar, the audio row and the WebView2) is collapsed and the card
         /// gives its rows back to the column.
         ///
-        /// <para>Default false on purpose. Nobody's dashboard changes shape until they click the
-        /// chevron, which is also why this is a plain bool with no DefaultValueHandling: an
-        /// upgrader's settings.json has no key, deserializes to false, and the dashboard looks
-        /// exactly like the build they came from. <c>MainWindow.DashboardFold.cs</c> restores it
-        /// at Loaded and writes it on every click.</para>
+        /// <para>Default TRUE (owner call, 2026-09-12: "by default browser should be hidden, and
+        /// unhidden whenever we call it"). The property initializer is the whole mechanism and it
+        /// is upgrader-safe on purpose: the loader deserializes onto a default-constructed
+        /// AppSettings, so a settings.json with no key keeps this true, a file that says false
+        /// stays false, and nobody who has already stated a preference has it overwritten.</para>
+        ///
+        /// <para>This is the SAVED PREFERENCE, not the state on screen. When the app calls the
+        /// browser - a companion link, a remote-control command, a site radio - the card is opened
+        /// by <c>MainWindow.RevealDashboardBrowser</c> for the rest of that run WITHOUT touching
+        /// this bool. Only the chevron writes here.</para>
         /// </summary>
-        public bool DashboardBrowserCollapsed { get; set; }
+        public bool DashboardBrowserCollapsed { get; set; } = true;
 
         private List<string> _railFavorites = new();
         /// <summary>
