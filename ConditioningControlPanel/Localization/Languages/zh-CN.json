@@ -4982,6 +4982,7 @@
   "set2_intake_nudge_hint": "启动时，如果有新的每周测验通行证在等你，就会显示。",
   "st4_studio_title": "工作室",
   "st4_studio_subtitle": "所有效果，同一个机架。在左边挑一个模块吧。",
+  "st4_rack_gesture_hint": "左键选择模块。右键点击模块可开关。",
   "st4_nav_studio": "效果机架",
   "st4_nav_studio_tip": "所有功能的设置，集中在一处。",
   "st4_studio_group_effects": "效果",

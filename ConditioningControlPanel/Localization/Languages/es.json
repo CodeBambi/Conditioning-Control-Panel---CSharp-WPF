@@ -4517,6 +4517,7 @@
   "set2_intake_nudge_hint": "Aparece al arrancar cuando te espera un nuevo pase de ingreso semanal.",
   "st4_studio_title": "Estudio",
   "st4_studio_subtitle": "Todos los efectos, un solo rack. Elige un módulo a la izquierda.",
+  "st4_rack_gesture_hint": "Clic izquierdo elige un módulo. Clic derecho en un módulo lo enciende o apaga.",
   "st4_nav_studio": "Rack de Efectos",
   "st4_nav_studio_tip": "Los ajustes de cada función, en un solo sitio.",
   "st4_studio_group_effects": "EFECTOS",
