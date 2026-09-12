@@ -278,6 +278,82 @@ public class FavoritesRailArtTests
             + $"past the {OldFullColumn} the column already held at eight and five. Shrink the chip or the caps.");
     }
 
+    // ---------------------------------------------------------------- the gesture line
+
+    /// <summary>The rail markup, read from the source tree rather than the copy beside the binary.</summary>
+    private static string RailXaml() =>
+        File.ReadAllText(Path.Combine(AppDir(), "Views", "Tabs", "SettingsTabView.xaml"));
+
+    [Fact]
+    public void The_gesture_line_is_docked_below_the_lists_not_inside_them()
+    {
+        var xaml = RailXaml();
+        var scrollerEnds = xaml.IndexOf("</ScrollViewer>", StringComparison.Ordinal);
+        var hint = xaml.IndexOf("rail_gesture_hint", StringComparison.Ordinal);
+
+        Assert.True(hint > 0, "the rail markup no longer shows rail_gesture_hint");
+        Assert.True(scrollerEnds > 0 && hint > scrollerEnds,
+            "rail_gesture_hint sits inside the rail's ScrollViewer, so a full column scrolls it away");
+    }
+
+    [Fact]
+    public void The_lists_take_the_star_row_and_the_line_the_auto_row()
+    {
+        // Auto above Auto would let a full column push the line off the bottom; star above Auto
+        // pays the line first and gives the lists what is left, which is what the scroller is for.
+        var xaml = RailXaml();
+        var rail = xaml.Substring(xaml.IndexOf("x:Name=\"FavoritesRail\"", StringComparison.Ordinal));
+        rail = rail.Substring(0, rail.IndexOf("VELVET MOSAIC", StringComparison.Ordinal));
+
+        var rows = Regex.Matches(rail, "<RowDefinition Height=\"(\\*|Auto)\"/>")
+                        .Cast<Match>().Select(m => m.Groups[1].Value).ToList();
+        Assert.Equal(new[] { "*", "Auto" }, rows);
+    }
+
+    [Fact]
+    public void The_gesture_line_never_hides_itself()
+    {
+        // It explains the column, so it is not a first-run nudge that gets retired and not a
+        // thing to collapse when the lists are empty (that is when it is most wanted).
+        var xaml = RailXaml();
+        var hint = xaml.IndexOf("rail_gesture_hint", StringComparison.Ordinal);
+        var block = xaml.Substring(hint, Math.Min(400, xaml.Length - hint));
+        Assert.DoesNotContain("Visibility", block, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_gesture_line_is_translated_everywhere()
+    {
+        foreach (var language in CompanionLocMasters.Languages)
+        {
+            var file = CompanionLocMasters.For(language);
+            Assert.True(file.TryGetValue("rail_gesture_hint", out var line),
+                        "rail_gesture_hint is missing from " + language + ".json");
+            Assert.False(string.IsNullOrWhiteSpace(line), "rail_gesture_hint is empty in " + language + ".json");
+            Assert.DoesNotContain("!", line, StringComparison.Ordinal);
+            Assert.DoesNotContain("\u2014", line, StringComparison.Ordinal);  // em-dash
+            Assert.DoesNotContain("\u2013", line, StringComparison.Ordinal);  // en-dash
+        }
+    }
+
+    [Fact]
+    public void The_gesture_line_says_what_the_code_does()
+    {
+        // The owner asked for this with the two buttons the other way round. BuildRailChip wires
+        // Click to OpenDestination and AttachPinMenu to the ContextMenu, so left opens and right
+        // pins - and the EN line has to agree with that, not with the ask.
+        var rail = File.ReadAllText(Path.Combine(AppDir(), "MainWindow", "MainWindow.FavoritesRail.cs"));
+        Assert.Contains("chip.Click += (_, _) => OpenDestination(entry);", rail, StringComparison.Ordinal);
+        Assert.Contains("AttachPinMenu(chip, entry.Id", rail, StringComparison.Ordinal);
+
+        var line = CompanionLocMasters.For("en")["rail_gesture_hint"];
+        var left = line.IndexOf("Left-click", StringComparison.OrdinalIgnoreCase);
+        var right = line.IndexOf("Right-click", StringComparison.OrdinalIgnoreCase);
+        Assert.True(left >= 0 && right > left, "the EN gesture line no longer names both buttons in order");
+        Assert.Contains("open", line.Substring(left, right - left), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("pin", line.Substring(right), StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void The_chip_is_still_tall_enough_to_carry_a_picture_and_a_caption()
     {

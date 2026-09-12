@@ -113,6 +113,7 @@
   "rail_unpin": "Unpin",
   "rail_favorites_full": "Favorites is full. Unpin one first.",
   "rail_chip_tip": "Left-click opens it. Right-click to pin or unpin.",
+  "rail_gesture_hint": "Left-click opens. Right-click pins or unpins. The side rail works the same.",
   "inbox_programs_title": "Programs",
   "inbox_programs_summary": "what a program is, and today's pick.",
   "intake_nudge_title": "Your weekly intake pass is ready",

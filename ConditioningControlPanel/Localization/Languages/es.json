@@ -5091,6 +5091,7 @@
   "rail_unpin": "Quitar",
   "rail_favorites_full": "Favoritos está lleno. Quita uno primero.",
   "rail_chip_tip": "Clic izquierdo lo abre. Clic derecho para fijar o quitar.",
+  "rail_gesture_hint": "Clic izquierdo abre. Clic derecho fija o quita. La barra lateral funciona igual.",
   "inbox_programs_title": "Programas",
   "inbox_programs_summary": "qué es un programa, y la elección de hoy.",
   "fr8_welcome_title": "Bienvenido/a.",

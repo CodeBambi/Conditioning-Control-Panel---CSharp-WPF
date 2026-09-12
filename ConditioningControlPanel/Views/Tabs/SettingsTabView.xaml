@@ -161,8 +161,12 @@
         <!-- (Services/FavoritesRailArt.cs), the palette emoji only when no  -->
         <!-- picture resolves, and RECENT grew from five boxes to seven.     -->
         <!-- ============================================================ -->
+        <!-- Stretches the full row since 2026-09-12 (was VerticalAlignment="Top", which let the
+             card hug the chips). The owner asked for the space under the rail to carry the
+             gesture line, so the card owns the column and the line is docked at its foot: the
+             lists scroll inside the row above it, and the line stays put however many chips are
+             pinned. Nothing is hidden by count. -->
         <Border x:Name="FavoritesRail" x:FieldModifier="internal" Grid.Column="0" Grid.Row="1" Margin="5,5,0,5"
-                VerticalAlignment="Top"
                 Background="{DynamicResource ElevatedSurfaceBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
                 BorderThickness="1" CornerRadius="12">
             <Border.Resources>
@@ -180,6 +184,21 @@
                     <Setter Property="TextAlignment" Value="Center"/>
                     <Setter Property="TextWrapping" Value="Wrap"/>
                     <Setter Property="Margin" Value="0,0,0,6"/>
+                </Style>
+                <!-- The gesture line at the foot of the column. Same family as the FAVORITES /
+                     RECENT captions and a step smaller, but muted rather than pink: it explains
+                     the column, it does not head a section, and a third pink caption down there
+                     would read as a third list. LineHeight is pinned because the line wraps to
+                     five or six of them in a 69px column and the default leading makes that a
+                     block rather than a footnote. -->
+                <Style x:Key="RailGestureHint" TargetType="TextBlock">
+                    <Setter Property="FontSize" Value="7.5"/>
+                    <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+                    <Setter Property="Opacity" Value="0.9"/>
+                    <Setter Property="TextAlignment" Value="Center"/>
+                    <Setter Property="TextWrapping" Value="Wrap"/>
+                    <Setter Property="LineHeight" Value="10"/>
+                    <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
                 </Style>
                 <!-- Legibility scrim, added to EVERY chip in code: the art is bright neon on
                      near-black and a text shadow would not survive it, so the caption sits in a
@@ -204,7 +223,8 @@
                     <Setter Property="Margin" Value="2,0,2,3"/>
                 </Style>
                 <!-- 69x36 on a 3px gap - a 39 pitch. THE COLUMN ARITHMETIC, because two more
-                     RECENT boxes have to come out of a row whose height nobody may change:
+                     RECENT boxes have to come out of a row whose height nobody may change.
+                     THE SCROLLING PART, both lists full:
 
                        stack margin           6 + 6            =  12
                        FAVORITES caption      9pt bold + 3     =  15
@@ -212,15 +232,24 @@
                        RECENT caption         4 + 9pt bold + 3 =  19
                        7 recent chips         7 x (36 + 3)     = 273
                                                                  ===
-                       full column                               631  (+2 border +10 margin = 643)
+                       scrolling part                            631
 
                      The chips were 69x42 on a 4px gap (a 46 pitch) while RECENT held five, which
-                     is 644 full (656 in the column). So eight favorites and SEVEN recent now cost
-                     13 DIP LESS than eight and five did: the column cannot overflow anywhere the
-                     old one fitted, and it fits two more boxes. The 6 DIP the chip gave up is
-                     paid for by the art - a picture reads at 36 where an emoji plus a caption
-                     wanted the 42. Keep this block, RailChipStyle and FavoritesRailRule's two
-                     caps in step; FavoritesRailArtTests re-does the sum from this file.
+                     is 644. So eight favorites and SEVEN recent now cost 13 DIP LESS than eight
+                     and five did, and it fits two more boxes. The 6 DIP the chip gave up is paid
+                     for by the art - a picture reads at 36 where an emoji plus a caption wanted
+                     the 42.
+
+                     BELOW that, outside the scroller, the gesture line is docked in its own Auto
+                     row: a 1px rule, 5 of padding, the wrapped line, 7 of padding. Its height is
+                     TEXT-DRIVEN and therefore language-driven - about five or six 10px lines at
+                     69 wide in English, more in German - so there is no number to put here, and
+                     there is no need for one: it is a row of its own, so it cannot overflow and
+                     cannot be pushed out. What it does do is take its height off the lists'
+                     visible area, which is exactly what the ScrollViewer above is for.
+
+                     Keep this block, RailChipStyle and FavoritesRailRule's two caps in step;
+                     FavoritesRailArtTests re-does the sum from this file.
 
                      A locked destination swaps BorderBrush for the gold tier livery in code. -->
                 <Style x:Key="RailChipStyle" TargetType="Button">
@@ -263,18 +292,46 @@
             <!-- A ScrollViewer for the reason the old rail had one: the row is fixed-height and
                  WPF's layout clip would eat the last chip silently. Width 69 = what the 92px
                  column leaves once the theme's scrollbar takes its share (#860). -->
-            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel Margin="4,6,4,6" Width="69" HorizontalAlignment="Center">
-                    <TextBlock Text="{loc:Str rail_favorites_caption}" Style="{StaticResource RailSectionCaption}"/>
-                    <StackPanel x:Name="FavoritesList" x:FieldModifier="internal"/>
-                    <TextBlock x:Name="FavoritesEmpty" x:FieldModifier="internal"
-                               Text="{loc:Str rail_favorites_empty}" Style="{StaticResource RailEmptyText}"/>
-                    <TextBlock Text="{loc:Str rail_recent_caption}" Style="{StaticResource RailSectionCaption}" Margin="0,4,0,3"/>
-                    <StackPanel x:Name="RecentList" x:FieldModifier="internal"/>
-                    <TextBlock x:Name="RecentEmpty" x:FieldModifier="internal"
-                               Text="{loc:Str rail_recent_empty}" Style="{StaticResource RailEmptyText}"/>
-                </StackPanel>
-            </ScrollViewer>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <!-- The lists take whatever is left after the gesture line has been paid for,
+                         and scroll inside it. Star above Auto, not the other way round: an Auto
+                         row for the lists would let a full column push the line off the bottom,
+                         which is the one thing it must never do. -->
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="4,6,4,6" Width="69" HorizontalAlignment="Center">
+                        <TextBlock Text="{loc:Str rail_favorites_caption}" Style="{StaticResource RailSectionCaption}"/>
+                        <StackPanel x:Name="FavoritesList" x:FieldModifier="internal"/>
+                        <TextBlock x:Name="FavoritesEmpty" x:FieldModifier="internal"
+                                   Text="{loc:Str rail_favorites_empty}" Style="{StaticResource RailEmptyText}"/>
+                        <TextBlock Text="{loc:Str rail_recent_caption}" Style="{StaticResource RailSectionCaption}" Margin="0,4,0,3"/>
+                        <StackPanel x:Name="RecentList" x:FieldModifier="internal"/>
+                        <TextBlock x:Name="RecentEmpty" x:FieldModifier="internal"
+                                   Text="{loc:Str rail_recent_empty}" Style="{StaticResource RailEmptyText}"/>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- THE GESTURE LINE (owner, 2026-09-12: "we can use the space under the
+                     favourite rail to explain what they can do here"). It says what the CODE
+                     does, which is the other way round from how the owner phrased it: the chip's
+                     Click opens the destination and the ContextMenu pins or unpins it, and the
+                     same menu is wired onto the nav rail's own rows (WireFavoritePinMenus), so
+                     the last sentence is a fact rather than a flourish.
+
+                     Docked, never hidden: it sits outside the ScrollViewer in its own Auto row,
+                     so a full column scrolls the chips past it and the line stays. The rule is a
+                     1px top border rather than a Separator so it stops short of the card's
+                     rounded corners. No scrollbar gutter here - the line is outside the scroller
+                     and may use the full width, which is why its margins are 8 and the chip
+                     stack's are 4. -->
+                <Border Grid.Row="1" Margin="8,0,8,0" Padding="0,5,0,7"
+                        BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="0,1,0,0">
+                    <TextBlock Text="{loc:Str rail_gesture_hint}" Style="{StaticResource RailGestureHint}"/>
+                </Border>
+            </Grid>
         </Border>
 
         <!-- ============================================================ -->
