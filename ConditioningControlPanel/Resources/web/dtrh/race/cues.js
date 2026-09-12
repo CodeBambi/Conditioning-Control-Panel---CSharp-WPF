@@ -39,20 +39,34 @@ import { KIND_BY_ID } from './bubbleKinds.js';
  * The words whose bubble is drawn BIG (race/wordFace.js): the ones the file is actually about.
  * Every other word rides an ordinary bubble, so these read as the beat of the line rather than as
  * sixteen shouts. A phrase that landed in one bubble counts if either half is on the list.
+ *
+ * The list is in two halves. NEUTRAL_ACCENT_WORDS is the house grammar - the drop / sink / breathe
+ * vocabulary any track speaks. THEMED_ACCENT_WORDS is the persona half, the words only a themed
+ * track says at all, so they are inert on a neutral file and are what a Bambi or Sissy track is
+ * built out of. The split is the whole point: when the race layer gets an active-mod signal (it has
+ * none today - the tube's lives in game/chaosRun.js), the themed half stops being unioned in on a
+ * vanilla install and rides the mod instead. Until then ACCENT_WORDS is the same 54 words it was,
+ * so no track changes and race/smoke/catalogue-check.mjs still reads what it expects.
  */
-export const ACCENT_WORDS = new Set([
-  // the original sixteen
+export const NEUTRAL_ACCENT_WORDS = new Set([
+  // the original sixteen, less the persona words
   'drop', 'sink', 'deeper', 'down', 'relax', 'now', 'empty',
-  'blank', 'bump', 'obey', 'pink', 'good', 'girl', 'bambi', 'sleep', 'bimbo',
+  'blank', 'bump', 'obey', 'pink', 'good', 'sleep',
   // 2026-09-08, off the survey of the eleven transcripts: the words the scripts lean on that are
   // said far too often to stop the road with a row (accept alone is said 104 times, 77 of them in
   // Bubble Acceptance) but that the reader's eye should still land on. A big bubble is the right
   // size for a word that is everywhere; a trigger row is not.
-  'accept', 'accepting', 'asleep', 'sleepy', 'doll', 'dolly', 'bubble', 'deep',
-  'cock', 'right', 'happy', 'perfect', 'pretty', 'heavy', 'warm',
-  'wonderful', 'stronger', 'control', 'resist', 'sexy', 'slutty', 'horny',
+  'accept', 'accepting', 'asleep', 'sleepy', 'bubble', 'deep',
+  'right', 'happy', 'perfect', 'heavy', 'warm',
+  'wonderful', 'stronger', 'control', 'resist',
   'breath', 'breathe', 'breathing', 'voice', 'listen', 'time', 'melt', 'melting',
-  'giggle', 'giggles', 'plastic', 'lock', 'locked', 'limp', 'trance', 'mindless']);
+  'giggle', 'giggles', 'lock', 'locked', 'limp', 'trance', 'mindless']);
+
+/** The persona half: words a themed track speaks and a neutral one never does. */
+export const THEMED_ACCENT_WORDS = new Set([
+  'girl', 'bambi', 'bimbo', 'doll', 'dolly', 'cock', 'pretty', 'sexy', 'slutty', 'horny', 'plastic']);
+
+export const ACCENT_WORDS = new Set([...NEUTRAL_ACCENT_WORDS, ...THEMED_ACCENT_WORDS]);
 /** What is stripped off a transcript word before it is held against that list. */
 const ACCENT_TRIM = /^["'(\[]+|[,.;:!?…"')\]]+$/g;
 
@@ -423,9 +437,9 @@ export function resultTag(taken, countable) {
   if (of <= 0) return null;
   const r = got / of;
   if (got === of) return 'every word';
-  if (r >= 0.8) return 'good girl';
-  if (r >= 0.5) return 'half of her';
-  if (r >= 0.2) return 'she noticed';
+  if (r >= 0.8) return 'most of it';
+  if (r >= 0.5) return 'half of it';
+  if (r >= 0.2) return 'you caught a few';
   return 'you were not listening';
 }
 

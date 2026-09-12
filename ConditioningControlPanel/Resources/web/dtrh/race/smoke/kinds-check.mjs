@@ -253,7 +253,7 @@ if (lock) {
   ok(lock.card.frame !== 'none', `inside a poured frame (${lock.card.frame})`);
   ok(!lock.after.there, 'and it is gone off the glass after its 1.7 s');
 }
-// the plain freeze is untouched: no phrase, no lacquer, the two words it has always said
+// the plain freeze: no phrase, no lacquer, the neutral house word the card falls back to
 const plain = await isolated('the plain freeze', async () => {
   await ev(`window.__race.race.debugPayload('bambiFreeze', { strength: 45 })`);
   await sleep(400);
@@ -266,7 +266,7 @@ const plain = await isolated('the plain freeze', async () => {
   return card;
 });
 if (plain) {
-  eq(plain.said, 'BAMBI FREEZE', 'the freeze bubble still says what it has always said');
+  eq(plain.said, 'FREEZE', 'the freeze bubble says the neutral word when no caller names one');
   ok(!/is-lacquer/.test(plain.cls), 'and it is not wearing the lacquer');
 }
 

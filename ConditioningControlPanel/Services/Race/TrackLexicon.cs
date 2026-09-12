@@ -16,18 +16,34 @@ public static class TrackLexicon
     public const int MaxPhrases = 200;
 
     /// <summary>
-    /// CHART.md STRUCTURE_WORDS (English v1). Spotted occurrences of these become "word" events;
-    /// everything else in the lexicon came from a mod or the settings and becomes a "trigger".
+    /// CHART.md STRUCTURE_WORDS (English v1), the neutral core. Matches
+    /// Resources/web/dtrh/race/chart.js STRUCTURE_WORDS word for word - the two copies must stay
+    /// in step. "girl" / "bimbo" / "doll" used to live here and applied to every track on every
+    /// install; they moved to <see cref="ThemedStructureWords"/>.
     /// </summary>
-    public static readonly IReadOnlyList<string> StructureWords = new[]
+    private static readonly string[] NeutralStructureWords =
     {
         "drop", "dropping", "sleep", "sleepy", "asleep", "deeper", "deep", "down", "sink", "sinking",
         "relax", "relaxing", "breathe", "breath", "blank", "empty", "obey", "listen", "focus",
         "surrender", "melt", "float", "floating", "heavy", "wake", "awake", "waking", "up", "open",
         "count", "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
-        "ten", "now", "good", "girl", "bimbo", "doll", "mind", "mindless", "pink", "spiral", "trance",
+        "ten", "now", "good", "mind", "mindless", "pink", "spiral", "trance",
         "trigger"
     };
+
+    /// <summary>
+    /// Persona words appended only when a themed mod is active. They are ordinary structure words
+    /// for a Bambi / Sissy / Drone / Locked track and always were, so every modded install charts
+    /// exactly as it did; an unmodded install no longer spots someone else's vocabulary.
+    /// </summary>
+    private static readonly string[] ThemedStructureWords = { "girl", "bimbo", "doll" };
+
+    /// <summary>
+    /// Spotted occurrences of these become "word" events; everything else in the lexicon came from
+    /// a mod or the settings and becomes a "trigger". Resolved against the active mod, so this and
+    /// <see cref="IsStructureWord"/> can never disagree about the same word.
+    /// </summary>
+    public static IReadOnlyList<string> StructureWords => Current().Words;
 
     /// <summary>CHART.md DROP_WORDS. The "now" rule (only after a count) lives in the fold.</summary>
     public static readonly IReadOnlyList<string> DropWords = new[]
@@ -35,11 +51,51 @@ public static class TrackLexicon
         "drop", "dropping", "sleep", "asleep", "deeper", "sink", "sinking", "now"
     };
 
-    private static readonly HashSet<string> StructureSet = new(StructureWords, StringComparer.Ordinal);
     private static readonly HashSet<string> DropSet = new(DropWords, StringComparer.Ordinal);
 
+    /// <summary>Resolved structure words for one mod, cached so a chart pass does not rebuild the
+    /// set per spotted word. Immutable and swapped as a whole reference.</summary>
+    private sealed class Resolved
+    {
+        public string ModId = "";
+        public IReadOnlyList<string> Words = Array.Empty<string>();
+        public HashSet<string> Set = new(StringComparer.Ordinal);
+    }
+
+    private static Resolved _cache = new();
+
+    /// <summary>
+    /// Structure words for the ACTIVE mod. Vanilla (no mod, or the neutral CCP Default) gets the
+    /// neutral core; every themed mod gets the core plus <see cref="ThemedStructureWords"/>, which
+    /// is the list this class shipped before.
+    /// </summary>
+    private static Resolved Current()
+    {
+        string modId;
+        try { modId = App.Mods?.ActiveModId ?? ""; }
+        catch { modId = ""; }   // charting can run before the mod system is up; neutral is the safe answer
+
+        var cached = _cache;
+        if (string.Equals(cached.ModId, modId, StringComparison.Ordinal)) return cached;
+
+        var vanilla = string.IsNullOrWhiteSpace(modId)
+            || string.Equals(modId, Models.BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase);
+
+        var words = new List<string>(NeutralStructureWords);
+        if (!vanilla) words.AddRange(ThemedStructureWords);
+
+        var fresh = new Resolved
+        {
+            ModId = modId,
+            Words = words,
+            Set = new HashSet<string>(words, StringComparer.Ordinal),
+        };
+        _cache = fresh;
+        return fresh;
+    }
+
     /// <summary>True when the phrase is one of CHART.md's structure words rather than a trigger.</summary>
-    public static bool IsStructureWord(string phrase) => StructureSet.Contains(phrase);
+    public static bool IsStructureWord(string phrase) => Current().Set.Contains(phrase);
 
     /// <summary>True when a spotted word is a drop word.</summary>
     public static bool IsDropWord(string phrase) => DropSet.Contains(phrase);
