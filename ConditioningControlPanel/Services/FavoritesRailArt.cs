@@ -17,11 +17,14 @@ namespace ConditioningControlPanel.Services
         Cover,
 
         /// <summary>
-        /// A 64x64 medallion (the nav door icons). Drawn centred at its own aspect where the
-        /// emoji used to sit, never cover-fitted: cropping a square icon to a 1.9:1 chip cuts
-        /// the top and bottom off the drawing and leaves a stripe nobody can name.
+        /// Square icon art (the 64x64 nav door medallions). The chip is still filled edge to
+        /// edge, but with a PLATE rather than a crop: the same icon blown up soft and darkened
+        /// as the backdrop, the icon itself at 26 DIP over it. Cover-fitting a square icon into
+        /// a 1.9:1 chip cuts the top and bottom off the drawing, and dropping the icon on a flat
+        /// tint at glyph size is what the first pass shipped - the desk read it as "a small icon
+        /// next to a caption, barely different from the emoji it replaced".
         /// </summary>
-        Icon,
+        Plate,
     }
 
     /// <summary>One destination's picture.</summary>
@@ -64,28 +67,51 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public const int MaxDecodeWidth = 1024;
 
+        /// <summary>
+        /// Decode width for a plate's backdrop. TWELVE PIXELS, and that is the whole blur: the
+        /// icon is decoded tiny and then stretched across the chip by the template's
+        /// HighQuality scaling, which costs one small bitmap where a real BlurEffect would cost
+        /// a render target per chip, fifteen chips deep, inside the dashboard's Viewbox.
+        /// </summary>
+        public const int PlateBackdropDecodeWidth = 12;
+
+        /// <summary>
+        /// Decode width for the icon a plate carries. It paints at 26 DIP, about 63 real pixels
+        /// on a maximised 4K window, and the mod editor tells authors a 128px medallion is the
+        /// crisp HiDPI size - so ask for exactly that and no more.
+        /// </summary>
+        public const int PlateIconDecodeWidth = 128;
+
+        /// <summary>Side of the icon a plate carries, in DIP, inside a 69x36 chip.</summary>
+        public const double PlateIconSize = 26;
+
         // ─── the table ───────────────────────────────────────────────
         // Keys are SettingsPaletteEntry.Id. Doors and their tab twin share a picture on purpose:
         // they are the same room, and the rail showing two different faces for one place was the
         // thing the palette-row-as-chip rule exists to prevent.
+        //
+        // EVERY destination has a picture. The null case is kept in the type and in For() for a
+        // palette row added tomorrow and for art a mod breaks, but nothing ships on the glyph:
+        // the desk pass on 2026-09-12 found the rail reading as icons beside captions, and a
+        // column where two chips out of ten are emoji reads the same way.
         private static readonly Dictionary<string, RailChipArt?> _map = new(StringComparer.Ordinal)
         {
-            // --- the seven doors, as their own nav medallions ------------------------
-            ["door.home"] = Icon("nav/door_home.png"),
-            ["door.studio"] = Icon("nav/door_studio.png"),
-            ["door.companion"] = Icon("nav/door_companion.png"),
-            ["door.play"] = Icon("nav/door_play.png"),
-            ["door.you"] = Icon("nav/door_you.png"),
-            ["door.library"] = Icon("nav/door_library.png"),
-            ["door.settings"] = Icon("nav/door_settings.png"),
+            // --- the seven doors, as their own nav medallions on a plate --------------
+            ["door.home"] = Plate("nav/door_home.png"),
+            ["door.studio"] = Plate("nav/door_studio.png"),
+            ["door.companion"] = Plate("nav/door_companion.png"),
+            ["door.play"] = Plate("nav/door_play.png"),
+            ["door.you"] = Plate("nav/door_you.png"),
+            ["door.library"] = Plate("nav/door_library.png"),
+            ["door.settings"] = Plate("nav/door_settings.png"),
             // The tab rows that land on the same room as a door wear the same medallion.
-            ["tab.settings"] = Icon("nav/door_home.png"),
-            ["tab.studio"] = Icon("nav/door_studio.png"),
-            ["tab.companion"] = Icon("nav/door_companion.png"),
-            ["tab.play"] = Icon("nav/door_play.png"),
-            ["tab.discord"] = Icon("nav/door_you.png"),
-            ["tab.assets"] = Icon("nav/door_library.png"),
-            ["tab.appsettings"] = Icon("nav/door_settings.png"),
+            ["tab.settings"] = Plate("nav/door_home.png"),
+            ["tab.studio"] = Plate("nav/door_studio.png"),
+            ["tab.companion"] = Plate("nav/door_companion.png"),
+            ["tab.play"] = Plate("nav/door_play.png"),
+            ["tab.discord"] = Plate("nav/door_you.png"),
+            ["tab.assets"] = Plate("nav/door_library.png"),
+            ["tab.appsettings"] = Plate("nav/door_settings.png"),
 
             // --- features with their own illustration --------------------------------
             ["door.justdrop"] = Cover("features/justdrop.png"),
@@ -106,30 +132,34 @@ namespace ConditioningControlPanel.Services
             // and the room is where a spiral means something rather than where one is switched on.
             ["tab.spiral"] = Cover("features/spiral_overlay.png"),
 
-            // --- explicit fallbacks: the palette glyph stands -------------------------
-            // Not an oversight in any of these cases:
-            //  * presets / quests / achievements / enhancements / programs / leaderboard /
-            //    availablesubjects are rooms full of per-item art (one PNG per quest, per skill,
-            //    per program) with no picture that stands for the room;
-            //  * the Arcademy's only plate lives under Resources/web, which ships as Content and
-            //    is not reachable by a pack:// URI, so it would resolve to nothing at runtime;
-            //  * the four Library launchers are dialogs and a website, not features with faces.
-            ["tab.presets"] = null,
-            ["tab.availablesubjects"] = null,
-            ["tab.quests"] = null,
-            ["tab.achievements"] = null,
-            ["tab.enhancements"] = null,
-            ["tab.programs"] = null,
-            ["tab.leaderboard"] = null,
-            ["card.arcademy"] = null,
-            ["launch.mods"] = null,
-            ["launch.catalogue"] = null,
-            ["launch.phrases"] = null,
-            ["launch.medialog"] = null,
+            // --- rooms with no art of their own -------------------------------------
+            // These twelve had no picture that stands for the room, so the first pass left them
+            // on the emoji. The desk pass asked for a second look, and the repo does ship one:
+            // the achievement, skill and quest badges are drawn in the same neon hand as the
+            // feature art, and each of these rooms has a badge ABOUT it. Every one is cropped to
+            // its illustration by a railChip rect in ModArtFramingRegistry, because these files
+            // carry the badge's name burned in under the drawing - the same reason the feature
+            // art has rects.
+            //
+            // They stay ordinary mod paths: an author who reskins achievements/modder.png
+            // reskins the Mods chip with it, exactly as one who reskins features/vault.png
+            // reskins the Vault chip.
+            ["tab.presets"] = Cover("Cards/spotlight.png"),            // a session, as the session-complete card draws one
+            ["tab.availablesubjects"] = Cover("skills/hive_mind.png"), // two dolls and a live count
+            ["tab.quests"] = Cover("quests/daily_devotion_d.png"),     // the daily quest tile
+            ["tab.achievements"] = Cover("achievements/honor_roll.png"),
+            ["tab.enhancements"] = Cover("skills/sparkle_boost_3.png"),// a skill node, which is what the tree is made of
+            ["tab.programs"] = Cover("programs/plate_default.png"),    // the default program plate
+            ["tab.leaderboard"] = Cover("skills/trophy_case.png"),
+            ["card.arcademy"] = Cover("achievements/teachers_pet.png"),// the Arcademy is a school; its own plate is Content, not a pack Resource
+            ["launch.mods"] = Cover("achievements/modder.png"),
+            ["launch.catalogue"] = Cover("achievements/curator.png"),  // a wall of cards under a glass
+            ["launch.phrases"] = Cover("achievements/word_perfect.png"),
+            ["launch.medialog"] = Cover("achievements/screen_time.png"),
         };
 
         private static RailChipArt Cover(string path) => new(path, RailArtFit.Cover);
-        private static RailChipArt Icon(string path) => new(path, RailArtFit.Icon);
+        private static RailChipArt Plate(string path) => new(path, RailArtFit.Plate);
 
         /// <summary>The whole table, including the explicit nulls.</summary>
         public static IReadOnlyDictionary<string, RailChipArt?> Map { get; } =

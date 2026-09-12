@@ -51,13 +51,30 @@ public class FavoritesRailArtTests
     }
 
     [Fact]
-    public void Some_destinations_keep_the_glyph_on_purpose()
+    public void Every_destination_ships_with_a_picture()
     {
-        // The fallback is a decision, not an empty table: if this ever reads zero, someone has
-        // given every row a picture and the glyph path below is dead code nobody is testing.
-        Assert.Contains(FavoritesRailArt.Map, kv => kv.Value == null);
-        Assert.Null(FavoritesRailArt.For("card.arcademy"));
-        Assert.Null(FavoritesRailArt.For("no.such.row"));
+        // The desk pass on 2026-09-12 asked for a second look at the twelve rooms the first pass
+        // left on the emoji, and the repo did ship art for all of them. A row that goes back to
+        // null should be a decision somebody argues for, not a drift.
+        var glyphOnly = FavoritesRailArt.Map.Where(kv => kv.Value == null).Select(kv => kv.Key).ToList();
+        Assert.True(glyphOnly.Count == 0,
+            "destinations still on the emoji fallback: " + string.Join(", ", glyphOnly));
+    }
+
+    [Fact]
+    public void The_glyph_fallback_still_answers_for_a_row_nobody_listed()
+        => Assert.Null(FavoritesRailArt.For("no.such.row"));
+
+    [Fact]
+    public void Most_chips_are_cover_art()
+    {
+        // Plate is for square icon art only. If it ever outgrows the fourteen door rows, the
+        // rail has quietly gone back to icons-beside-captions, which is the thing the desk
+        // pass rejected.
+        var plates = FavoritesRailArt.Map.Values.Count(a => a is { Fit: RailArtFit.Plate });
+        var covers = FavoritesRailArt.Map.Values.Count(a => a is { Fit: RailArtFit.Cover });
+        Assert.Equal(14, plates);
+        Assert.True(covers > plates, "cover art should be the rule and the plate the exception");
     }
 
     // ---------------------------------------------------------------- the files
@@ -94,6 +111,19 @@ public class FavoritesRailArtTests
     // ---------------------------------------------------------------- framing
 
     [Fact]
+    public void The_plate_icon_fits_the_chip_it_sits_on()
+    {
+        // 26 DIP of icon in a 36 DIP chip, with the caption band under it. A plate icon that
+        // grew past the chip would crop itself against the rounded border.
+        Assert.True(FavoritesRailArt.PlateIconSize < 36, "the plate icon is taller than the chip");
+        Assert.True(FavoritesRailArt.PlateIconSize >= 22, "under 22 DIP the plate is an icon beside a caption again");
+        // The backdrop is a stretched tiny decode rather than a BlurEffect: it has to be tiny
+        // enough to actually blur when it is thrown across 69 DIP.
+        Assert.True(FavoritesRailArt.PlateBackdropDecodeWidth <= 16,
+            "a backdrop decoded this wide will not read as a blur when stretched over the chip");
+    }
+
+    [Fact]
     public void Cover_art_is_framed_by_the_rail_chip_surface()
     {
         var chip = ModArtFramingRegistry.FindSurface(ModArtFramingRegistry.SurfaceRailChip);
@@ -110,12 +140,37 @@ public class FavoritesRailArtTests
     }
 
     [Fact]
-    public void Icon_art_is_never_given_a_crop_window()
+    public void Plate_art_is_never_given_a_crop_window()
     {
-        // A 64x64 medallion is drawn centred at its own aspect, so a railChip rect for one would
-        // be a number nothing reads and a Frame button offered to authors for nothing.
-        foreach (var art in FavoritesRailArt.Map.Values.Where(a => a is { Fit: RailArtFit.Icon }))
+        // A plate shows its icon whole at its own aspect, so a railChip rect for one would be a
+        // number nothing reads and a Frame button offered to authors for nothing.
+        foreach (var art in FavoritesRailArt.Map.Values.Where(a => a is { Fit: RailArtFit.Plate }))
             Assert.Null(ModArtFramingRegistry.ShippedViewbox(art!.ResourcePath, ModArtFramingRegistry.SurfaceRailChip));
+    }
+
+    [Fact]
+    public void Every_borrowed_badge_is_cropped_to_its_illustration()
+    {
+        // The achievement, skill and quest badges carry their own name burned in under the
+        // drawing. Without a rect the chip shows a smear of that wordmark behind our caption,
+        // so a badge with no railChip row is a bug, not a default.
+        var needsARect = FavoritesRailArt.Map.Values
+            .Where(a => a is { Fit: RailArtFit.Cover })
+            .Select(a => a!.ResourcePath)
+            .Where(p => p.StartsWith("achievements/", StringComparison.Ordinal)
+                        || p.StartsWith("skills/", StringComparison.Ordinal)
+                        || p.StartsWith("quests/", StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.NotEmpty(needsARect);
+        foreach (var path in needsARect)
+        {
+            var rect = ModArtFramingRegistry.ShippedViewbox(path, ModArtFramingRegistry.SurfaceRailChip);
+            Assert.True(rect != null, path + " is a badge with no railChip crop - its wordmark will show");
+            Assert.True(rect!.Value.Height < 0.95,
+                path + " is cropped to the whole image, so the name under the drawing is still in frame");
+        }
     }
 
     // ---------------------------------------------------------------- mod art

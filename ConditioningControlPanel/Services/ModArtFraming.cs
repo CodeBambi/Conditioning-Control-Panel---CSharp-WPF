@@ -256,6 +256,27 @@ namespace ConditioningControlPanel.Services
             // the padlock - and leave the wordmark out, which is the same job at either height.
             new("features/blink_trainer.png",  SurfaceRailChip, new Rect(0.05, 0.06, 0.44, 0.72)),
             new("lockdown_icon.png",           SurfaceRailChip, new Rect(0.08, 0,    0.25, 1)),
+            // The twelve rooms with no feature art of their own borrow a badge (2026-09-12 desk
+            // pass: a rail two thirds emoji does not read as "the images for the features"). Every
+            // badge is drawn illustration on top, name underneath, so each rect is the illustration
+            // band - without one the chip shows a smear of the badge's own wordmark behind our
+            // caption, which is what these rects have always been for. The 1024 square achievement
+            // badges share one band; the skill nodes are ~368x278 with a label bar at the foot and
+            // their subject off to the left.
+            new("achievements/honor_roll.png",   SurfaceRailChip, new Rect(0.06, 0.03, 0.88, 0.58)),
+            new("achievements/teachers_pet.png", SurfaceRailChip, new Rect(0.06, 0.03, 0.88, 0.58)),
+            new("achievements/modder.png",       SurfaceRailChip, new Rect(0.06, 0.03, 0.88, 0.58)),
+            new("achievements/curator.png",      SurfaceRailChip, new Rect(0.06, 0.03, 0.88, 0.58)),
+            new("achievements/word_perfect.png", SurfaceRailChip, new Rect(0.06, 0.03, 0.88, 0.58)),
+            new("achievements/screen_time.png",  SurfaceRailChip, new Rect(0.06, 0.03, 0.88, 0.58)),
+            new("quests/daily_devotion_d.png",   SurfaceRailChip, new Rect(0.05, 0.04, 0.90, 0.68)),
+            new("skills/hive_mind.png",          SurfaceRailChip, new Rect(0.04, 0.06, 0.72, 0.66)),
+            new("skills/sparkle_boost_3.png",    SurfaceRailChip, new Rect(0.04, 0.06, 0.66, 0.70)),
+            new("skills/trophy_case.png",        SurfaceRailChip, new Rect(0.10, 0.06, 0.60, 0.70)),
+            // These two carry no wordmark, so the honest centre crop IS the right window; the rows
+            // exist to say so out loud and to give a mod author a Frame button for them.
+            new("programs/plate_default.png",    SurfaceRailChip, new Rect(0, 0, 1, 1)),
+            new("Cards/spotlight.png",           SurfaceRailChip, new Rect(0, 0, 1, 1)),
             // The two taller launchers.
             new("features/blink_trainer.png",  SurfaceRailCard, new Rect(0.05, 0.06, 0.44, 0.72)),
             new("lockdown_icon.png",           SurfaceRailCard, new Rect(0.08, 0,    0.25, 1)),

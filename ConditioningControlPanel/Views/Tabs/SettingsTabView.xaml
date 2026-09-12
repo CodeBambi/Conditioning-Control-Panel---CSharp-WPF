@@ -181,11 +181,11 @@
                     <Setter Property="TextWrapping" Value="Wrap"/>
                     <Setter Property="Margin" Value="0,0,0,6"/>
                 </Style>
-                <!-- Legibility scrim, added to a chip in code ONLY when cover art landed on it:
-                     the art is bright neon on near-black and a text shadow would not survive it,
-                     so the caption sits in the dark band at the foot instead. A chip with no
-                     picture keeps its flat tinted face and gets no scrim - darkening a flat
-                     surface buys nothing and reads as a smudge. Same stops the premium rail's
+                <!-- Legibility scrim, added to EVERY chip in code: the art is bright neon on
+                     near-black and a text shadow would not survive it, so the caption sits in a
+                     dark band at the foot instead. Every chip, including one whose art failed to
+                     resolve, because that band is what makes the column read as one set of
+                     pictures rather than two kinds of chip. Same stops the premium rail's
                      ChipScrimBrush used, and ModArtFramingRegistry calls this surface FootBand
                      so the mod editor's preview paints the same band. -->
                 <LinearGradientBrush x:Key="RailChipScrim" StartPoint="0,0" EndPoint="0,1">
