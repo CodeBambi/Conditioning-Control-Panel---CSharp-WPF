@@ -1434,7 +1434,108 @@
                     </Border>
                 </Grid>
             </Border>
-    
+
+            <!-- ============================================================ -->
+            <!-- THE BILLBOARD (2026-09-12).                                  -->
+            <!--                                                              -->
+            <!-- What sits in the row the folded browser gave back. Modelled  -->
+            <!-- on the doors on the CC Labs remix page (remix/ui/doors.js):  -->
+            <!-- a poster cover-fitted under a dark shade, a small mono       -->
+            <!-- eyebrow, a title, one line, a chevron, and a dot per card.   -->
+            <!-- One card at a time, the next one on a 12s clock, the pointer -->
+            <!-- on it stops the clock, a dot jumps. Nothing opens by itself. -->
+            <!--                                                              -->
+            <!-- Visible ONLY while the browser is folded, so an unfolded     -->
+            <!-- dashboard is byte-for-byte the one that shipped. The roster  -->
+            <!-- and the walk are Services/DashboardBillboard.cs; the paint,  -->
+            <!-- the clock and the click are MainWindow.DashboardBillboard.cs.-->
+            <!-- ============================================================ -->
+            <Border x:Name="DashBillboard" x:FieldModifier="internal" Grid.Row="1"
+                    Visibility="Collapsed" Margin="0,0,0,5"
+                    CornerRadius="12" ClipToBounds="True"
+                    Background="{DynamicResource ElevatedSurfaceBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- The card. A Button so the whole poster is the hit target, keyboard focus
+                         works and the click lands in one handler; the template is the card itself
+                         so nothing of the default chrome shows through. -->
+                    <Button Grid.Row="0" x:Name="BillboardCard" x:FieldModifier="internal"
+                            Click="BillboardCard_Click" Cursor="Hand"
+                            HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                            Padding="0" Margin="8,8,8,4" MinHeight="96">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="card" CornerRadius="10" ClipToBounds="True"
+                                        Background="{DynamicResource SurfaceBgBrush}"
+                                        BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}">
+                                    <ContentPresenter/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="card" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                    </Trigger>
+                                    <Trigger Property="IsKeyboardFocused" Value="True">
+                                        <Setter TargetName="card" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Grid x:Name="BillboardFace" x:FieldModifier="internal">
+                            <!-- Cover fit: UniformToFill inside a clipping border, so a 16:9 plate
+                                 and a square logo both fill the card without letterboxing. -->
+                            <Image x:Name="BillboardPoster" x:FieldModifier="internal"
+                                   Stretch="UniformToFill" StretchDirection="Both"
+                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                            <!-- The shade. Same job as .door-shade: the words need ground under
+                                 them whatever the poster happens to be. -->
+                            <Border IsHitTestVisible="False">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#0014142B" Offset="0.18"/>
+                                        <GradientStop Color="#8014142B" Offset="0.46"/>
+                                        <GradientStop Color="#DB14142B" Offset="0.74"/>
+                                        <GradientStop Color="#F714142B" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Left"
+                                        Margin="12,0,46,9" IsHitTestVisible="False">
+                                <TextBlock x:Name="BillboardEyebrow" x:FieldModifier="internal"
+                                           FontFamily="{DynamicResource Font.Mono}" FontSize="10"
+                                           Foreground="{DynamicResource PinkBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="BillboardTitle" x:FieldModifier="internal"
+                                           FontSize="15" FontWeight="Bold" Margin="0,1,0,0"
+                                           Foreground="{DynamicResource TextLightBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="BillboardLine" x:FieldModifier="internal"
+                                           FontSize="11" Margin="0,1,0,0"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            <Border Width="26" Height="26" CornerRadius="13" IsHitTestVisible="False"
+                                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                    Margin="0,0,11,11" BorderThickness="1"
+                                    Background="#8C14142B" BorderBrush="{DynamicResource PinkBrush}">
+                                <TextBlock Text="›" FontSize="15" Margin="0,-2,0,0"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource PinkBrush}"/>
+                            </Border>
+                        </Grid>
+                    </Button>
+
+                    <!-- One dot per card. Built in code so a dot can jump straight to its card. -->
+                    <StackPanel Grid.Row="1" x:Name="BillboardDots" x:FieldModifier="internal"
+                                Orientation="Horizontal" HorizontalAlignment="Center"
+                                Margin="0,0,0,7"/>
+                </Grid>
+            </Border>
+
             <!-- ============================================================ -->
             <!-- COMPANION STRIP (Phase 3, new).                              -->
             <!--                                                              -->

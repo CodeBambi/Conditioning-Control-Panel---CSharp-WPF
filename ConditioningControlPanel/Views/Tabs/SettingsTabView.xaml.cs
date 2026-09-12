@@ -130,6 +130,12 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnFoldBrowser_Click(sender, e);
         }
+        // The billboard card in the row the folded browser gives back.
+        private void BillboardCard_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.BillboardCard_Click(sender, e);
+        }
         // Phase 2: BtnExportPhrases_Click / BtnImportPhrases_Click moved with the phrase-backup
         // card to Views/Controls/AppSettings/DataSettingsSection.xaml.cs.
         private void BtnUnifiedLogin_Click(object sender, RoutedEventArgs e)
