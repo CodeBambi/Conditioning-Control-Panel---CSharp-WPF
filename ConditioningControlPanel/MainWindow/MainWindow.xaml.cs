@@ -2579,10 +2579,10 @@ namespace ConditioningControlPanel
                         card.Icon = image;
                 }
 
-                if (SettingsTab.CardJustDrop != null)
+                if (SettingsTab.CardDeeperEditor != null)
                 {
-                    var img = LoadModImageDecoded("features/justdrop.png", TileDecodeWidth);
-                    if (img != null) SettingsTab.CardJustDrop.Icon = img;
+                    var img = LoadModImageDecoded("features/deeper_editor.png", TileDecodeWidth);
+                    if (img != null) SettingsTab.CardDeeperEditor.Icon = img;
                 }
                 if (SettingsTab.CardMystery != null)
                 {

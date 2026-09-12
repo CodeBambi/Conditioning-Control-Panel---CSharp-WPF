@@ -111,15 +111,12 @@ namespace ConditioningControlPanel
                 if (BtnNavJustDrop != null)
                     BtnNavJustDrop.Visibility = available ? Visibility.Visible : Visibility.Collapsed;
 
-                // Then the other surfaces that render the flag.
-
-                // The dashboard's tease tile reads the same flag to know when to take its costume
-                // off. Called here rather than left to the next mosaic repaint so a mid-session
-                // reveal lands on every surface in the same frame.
-                ApplyTeaseCard();
-
+                // Then the one other surface that renders the flag. There were two until
+                // 2026-09-12, when the dashboard's nameless tease tile became the Deeper editor
+                // tile and stopped reading this flag at all.
+                //
                 // The Session door's Takeaway shelf ends in an "order a drop" card that only
-                // exists while the door does. Rebuilt here for the same reason the tease tile is:
+                // exists while the door does. Rebuilt here rather than left to the next repaint:
                 // a reveal that lands mid-session must reach every surface that reads the flag,
                 // not just the ones the user happens to open next.
                 RefreshTakeawayShelf();

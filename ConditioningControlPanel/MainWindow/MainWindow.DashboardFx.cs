@@ -96,7 +96,7 @@ namespace ConditioningControlPanel
                 {
                     tab.CardFlash, tab.CardSubliminal, tab.CardBouncingText,
                     tab.CardBubblePop, tab.CardLockCard,
-                    tab.CardJustDrop, tab.CardMystery, tab.CardVault,
+                    tab.CardDeeperEditor, tab.CardMystery, tab.CardVault,
                 };
                 return all.Where(c => c != null)!;
             }
