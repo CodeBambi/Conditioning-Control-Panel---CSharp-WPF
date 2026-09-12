@@ -88,18 +88,14 @@ namespace ConditioningControlPanel
             {
                 var all = new[]
                 {
-                    DoorHome, DoorPlay, DoorPlayTogether, DoorStudio, DoorCompanion, DoorYou, DoorLibrary,
-                    DoorWebApp, DoorSettings,
+                    DoorHome, DoorStudio, DoorCompanion, DoorPlay, DoorYou, DoorLibrary, DoorWebApp, DoorSettings,
                     BtnSettings,
-                    BtnLab, BtnDeeper, BtnNavBlinkTrainer, BtnNavGradedIntake, BtnNavFyp, BtnPatreonExclusives,
-                    BtnQuests, BtnPrograms,
-                    BtnAvailableSubjects, BtnNavRemoteControl, BtnNavGoon,
-                    BtnNavStudio, BtnPresets, BtnNavHaptics, BtnNavAiEffects, BtnNavAwareness,
-                    BtnNavBambiTakeover, BtnNavLockdown, BtnNavDeeperEditor, BtnNavJustDrop,
-                    BtnCompanion, BtnNavWorkshop, BtnNavEngineRoom, BtnNavSheListening,
-                    BtnDiscordTab, BtnEnhancements, BtnNavSpiral, BtnAchievements, BtnLeaderboard,
-                    BtnNavMods, BtnOpenAssetsTop, BtnNavPhrases, BtnNavMediaLog,
-                    BtnNavWebApp, BtnNavCatalogue,
+                    BtnNavStudio, BtnPresets, BtnNavHaptics, BtnNavJustDrop,
+                    BtnCompanion, BtnNavBambiTakeover, BtnNavSheListening, BtnNavAwareness,
+                    BtnLab, BtnDeeper, BtnPatreonExclusives, BtnNavGradedIntake, BtnNavLockdown,
+                    BtnNavBlinkTrainer, BtnNavRemoteControl, BtnAvailableSubjects,
+                    BtnDiscordTab, BtnNavSpiral, BtnQuests, BtnAchievements, BtnEnhancements, BtnPrograms, BtnLeaderboard,
+                    BtnOpenAssetsTop, BtnNavMods, BtnNavCatalogue, BtnNavPhrases, BtnNavMediaLog,
                 };
                 return all.Where(b => b != null)!;
             }

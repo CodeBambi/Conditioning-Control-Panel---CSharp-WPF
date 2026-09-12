@@ -45,33 +45,6 @@ public class NavRailFlyoutTests
         return double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
     }
 
-    /// <summary>Doors open on hover (owner call, 2026-09-11): a short dwell, cancelled on leave,
-    /// through the same one-door-at-a-time move a click makes. The dwell is a constant, not a
-    /// setting.</summary>
-    [Fact]
-    public void DoorsOpenOnHover_AfterAShortDwell_CancelledOnLeave()
-    {
-        var src = NavRailSource();
-        var dwell = ConstValue(src, "NavDoorHoverDwellMs");
-        Assert.InRange(dwell, 150, 400);
-
-        var hook = Regex.Match(src, @"private void HookNavDoorHover\(\).*?\n        \}", RegexOptions.Singleline);
-        Assert.True(hook.Success, "HookNavDoorHover is gone - doors no longer open on hover");
-        Assert.Contains("MouseEnter += (_, __) => StartNavDoorHoverDwell(door)", hook.Value);
-        Assert.Contains("MouseLeave += (_, __) => CancelNavDoorHoverDwell()", hook.Value);
-
-        var elapsed = Regex.Match(src, @"private void NavDoorHoverDwellElapsed\(\).*?\n        \}", RegexOptions.Singleline);
-        Assert.True(elapsed.Success, "NavDoorHoverDwellElapsed is gone");
-        // One door at a time, through the accordion's own move; never a navigation.
-        Assert.Contains("SetExpandedDoor(door)", elapsed.Value);
-        Assert.DoesNotContain("ShowTab(", elapsed.Value);
-        // A shut rail and a held rail both stand the dwell down.
-        Assert.Contains("!_navRailExpanded || _navRailHoldCount > 0", elapsed.Value);
-
-        Assert.Contains("HookNavDoorHover();", src);
-        Assert.DoesNotContain("NavDoorHoverDwell", File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Models", "AppSettings.cs")));
-    }
-
     [Fact]
     public void LeavingTheRailCollapsesItOnTheSpot()
     {
@@ -136,12 +109,12 @@ public class NavRailFlyoutTests
         double iconShut = ConstValue(NavRailSource(), "NavDoorIconCollapsed");
 
         // MainWindow.xaml authors the COLLAPSED state, so a rail whose Loaded hook never ran still
-        // renders correctly shut - which only holds while the two halves agree. Nine since
-        // mort's map (2026-09-11): the eight tab doors (Play Together joined) plus the Web door.
+        // renders correctly shut - which only holds while the two halves agree. Eight since
+        // v6.8.0: the seven tab doors plus the Web App launcher door.
         var authored = Regex.Matches(
             xaml,
             "<Viewbox Grid\\.Column=\"0\" Width=\"" + iconShut + "\" Height=\"" + iconShut + "\"");
-        Assert.Equal(9, authored.Count);
+        Assert.Equal(8, authored.Count);
 
         // The permanent grey hairline is gone; the 1px edge is Transparent until the door is active.
         Assert.DoesNotContain(

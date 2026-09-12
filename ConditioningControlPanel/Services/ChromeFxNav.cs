@@ -27,23 +27,26 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public static readonly string[] NavOrder =
         {
-            // mort's map (2026-09-11) re-cut the whole strip, so every index moved and this is
-            // the VISUAL order again, spiral included (it used to be appended to spare the pinned
-            // indices; a full re-cut has nothing to spare). ChromeFxNavTests pins settings=0,
-            // play=1, studio=10, presets=11, assets=23, appsettings=24 - move a row, move those.
             "settings",                                                        // Home
-            "play", "deeper", "blinktrainer", "gradedintake", "exclusives",
-            "quests", "programs",                                              // Play
-            "availablesubjects", "remotecontrol",                              // Play Together
-            "studio", "presets", "haptics", "awareness", "bambitakeover",
-            "lockdown",                                                        // Studio
-            "companion", "shelistening",                                       // Companion
-            "discord", "enhancements", "spiral", "achievements", "leaderboard",// You
+            "studio", "presets", "haptics",                                    // Studio
+            "companion", "bambitakeover", "shelistening", "awareness",         // Companion
+            "play", "deeper", "exclusives", "gradedintake", "lockdown",
+            "blinktrainer", "remotecontrol", "availablesubjects",              // Play
+            "discord", "quests", "achievements", "enhancements",
+            "programs", "leaderboard",                                         // You
             "assets",                                                          // Library
             // No "justdrop" row: it stopped being a rail door when the shop became a window
-            // (JustDropHostService). "fyp" has a Play row now but stays off this strip: ShowTab
-            // intercepts it into a window, so nothing ever slides to or from it.
+            // (JustDropHostService). This list is the VISUAL order and the slide direction is read
+            // straight off it, so removing the key put "appsettings" back from 24 to 23 - and
+            // ChromeFxNavTests asserts that index by number, so its InlineData row moved back too.
             "appsettings",                                                     // Settings (pinned last)
+            // APPENDED, NOT INSERTED. "spiral" is the You door's second row visually, but putting it
+            // there would shift every later index and ChromeFxNavTests pins four of them by number
+            // (settings=0, lab=8, assets=22, appsettings=23). The cost of appending is that the
+            // slide direction into and out of the Spiral Room is computed from the wrong end of the
+            // strip - which costs exactly nothing, because "spiral" is an AIRSPACE tab: it hosts a
+            // WebView2, it never slides at all, and EntranceOffset's answer for it is discarded.
+            "spiral",
         };
 
         /// <summary>

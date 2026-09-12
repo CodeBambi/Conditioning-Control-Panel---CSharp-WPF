@@ -33,38 +33,32 @@ public class WebNudgeTests
         File.ReadAllText(Path.Combine(new[] { RepoRoot(), "ConditioningControlPanel" }.Concat(parts).ToArray()));
 
     // =====================================================================================
-    //  1. the Web door: an expand-only accordion whose Web App row is the launcher
+    //  1. the Web App door is a launcher, not a tab
     // =====================================================================================
 
     [Fact]
-    public void TheWebDoorIsAnExpandOnlyAccordionAndTheWebAppRowLaunches()
+    public void TheWebDoorIsALauncherNotATab()
     {
-        // mort's map (2026-09-11): the v6.8.0 launcher medallion became the Web door, an
-        // accordion of two launcher rows (Web App, Catalogue) with no tab of its own.
         var xaml = ReadSource("MainWindow", "MainWindow.xaml");
         var door = Regex.Match(xaml, "<Button x:Name=\"DoorWebApp\".*?</Button>", RegexOptions.Singleline);
         Assert.True(door.Success, "DoorWebApp is gone from MainWindow.xaml");
-        Assert.Contains("Click=\"NavDoor_Click\"", door.Value);
 
-        // The launch moved one row down, onto the Web App entry, and kept its handler.
-        var row = Regex.Match(xaml, "<Button x:Name=\"BtnNavWebApp\".*?</Button>", RegexOptions.Singleline);
-        Assert.True(row.Success, "BtnNavWebApp is gone from MainWindow.xaml");
-        Assert.Contains("Click=\"DoorWebApp_Click\"", row.Value);
-        Assert.Single(Regex.Matches(xaml, "Click=\"DoorWebApp_Click\""));
+        // Its own handler: NavDoor_Click on a Tag with no NavDoorMap row is a logged no-op,
+        // which for this door would mean a dead click on the one thing it exists to do.
+        Assert.Contains("Click=\"DoorWebApp_Click\"", door.Value);
+        Assert.DoesNotContain("Click=\"NavDoor_Click\"", door.Value);
 
         var tabNav = ReadSource("MainWindow", "MainWindow.TabNavigation.cs");
 
-        // In NavDoorMap with an EMPTY default tab: NavDoor_Click expands and navigates nowhere,
-        // so no ShowTab case and no palette door row are dragged in (PaletteDoorParityTests
-        // skips a row whose default tab is empty).
+        // NOT in NavDoorMap - a map row drags in a default tab, a ShowTab case and a palette
+        // door row (PaletteDoorParityTests), none of which a browser link has.
         var map = Regex.Match(tabNav, @"NavDoorMap =\s*\{.*?\};", RegexOptions.Singleline);
         Assert.True(map.Success, "NavDoorMap has moved or changed shape");
-        Assert.Matches("\\(\"webapp\",\\s*\"\",\\s*new\\[\\]", map.Value);
-        Assert.Contains("if (string.IsNullOrEmpty(d.DefaultTab)) { SetExpandedDoor(d.Door); return; }", tabNav);
+        Assert.DoesNotContain("webapp", map.Value);
 
-        // No launcher doors are left; the parts switch hands the walker a real panel.
-        Assert.Contains("NavLauncherDoors = System.Array.Empty<string>()", tabNav);
-        Assert.Contains("\"webapp\" => (DoorWebApp, DoorPanelWeb, DoorEntriesWeb)", tabNav);
+        // In the launcher list and the parts switch instead, so the rail walker can animate it.
+        Assert.Contains("NavLauncherDoors = { \"webapp\" }", tabNav);
+        Assert.Contains("\"webapp\" => (DoorWebApp, null, null)", tabNav);
 
         // The click goes through BrowserLauncher (clipboard fallback for the machines with no
         // default browser) at the canonical destination.

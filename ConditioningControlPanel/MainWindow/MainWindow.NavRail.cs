@@ -9,7 +9,6 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
-using System.Windows.Threading;
 using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel
@@ -105,15 +104,6 @@ namespace ConditioningControlPanel
         /// tween and a re-entry mid-collapse simply re-targets the same Width clock.</para>
         /// </summary>
         private const int NavRailCollapseAnimMs = 150;
-
-        /// <summary>
-        /// Dwell before a hovered door header opens its accordion (owner call, Discord "New UI
-        /// Feedback", 2026-09-11: doors open on hover, not only on click). Long enough that a
-        /// pointer crossing the rail on its way somewhere does not flip three doors, short enough
-        /// to read as "it opened when I got there". Cancelled by MouseLeave; a click still opens
-        /// the door at once through NavDoor_Click.
-        /// </summary>
-        private const int NavDoorHoverDwellMs = 250;
 
         // ===================== medallion door rows (CONTRACT, 2026-08-12) =====================
         // Sizes are animated between these two states; MainWindow.xaml authors the COLLAPSED
@@ -219,10 +209,6 @@ namespace ConditioningControlPanel
         /// must not release the other's hold.</summary>
         private int _navRailHoldCount;
 
-        /// <summary>The door under the pointer whose dwell is running, or null.</summary>
-        private string? _navDoorHoverPending;
-        private DispatcherTimer? _navDoorHoverTimer;
-
         /// <summary>Every label in the rail, cached once. Faded rather than collapsed: a
         /// Visibility flip would re-measure the door panels mid-tween and fight the accordion's
         /// own Height animation.</summary>
@@ -283,7 +269,6 @@ namespace ConditioningControlPanel
                 // Doors first: it seeds _navDoorLabelTexts, which the walk below reads.
                 CacheNavDoorRows();
                 HookNavDoorRerouteSeam();
-                HookNavDoorHover();
                 CacheNavRailParts(NavSidebar);
 
                 // The medallion art is mod-aware from the first frame; MainWindow.xaml's literal
@@ -380,76 +365,6 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Doors open on hover. Every door header that has a panel gets a dwell: the pointer
-        /// resting on it for <see cref="NavDoorHoverDwellMs"/> moves the accordion there through
-        /// <see cref="SetExpandedDoor"/>, which is the same one-door-at-a-time move a click makes
-        /// and animates only while MotionFx allows. Leaving the header before the dwell lands
-        /// cancels it, so a pointer crossing the rail opens nothing on the way.
-        ///
-        /// <para>Hover never navigates: the page stays where it is and the "you are here" ring
-        /// does not move. Click still does both (NavDoor_Click -> ShowTab -> ExpandDoorForTab).
-        /// The dwell also stands down while the rail is shut (<see cref="SetExpandedDoor"/> opens
-        /// no panel then anyway) and while a hold is up, so a tutorial spotlight is not re-homed
-        /// by a passing hand. ApplyNavRailDoorState still shuts every panel on collapse; this
-        /// only ever changes which door is the chosen one.</para>
-        /// </summary>
-        private void HookNavDoorHover()
-        {
-            try
-            {
-                foreach (var d in NavDoorMap)
-                {
-                    var parts = NavDoorParts(d.Door);
-                    if (parts.Header == null || parts.Panel == null) continue;
-                    var door = d.Door;
-                    parts.Header.MouseEnter += (_, __) => StartNavDoorHoverDwell(door);
-                    parts.Header.MouseLeave += (_, __) => CancelNavDoorHoverDwell();
-                }
-            }
-            catch (Exception ex) { App.Logger?.Warning(ex, "HookNavDoorHover failed; doors open on click only"); }
-        }
-
-        private void StartNavDoorHoverDwell(string door)
-        {
-            try
-            {
-                if (string.Equals(door, _expandedDoor, StringComparison.Ordinal)) return;
-                _navDoorHoverPending = door;
-                if (_navDoorHoverTimer == null)
-                {
-                    _navDoorHoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(NavDoorHoverDwellMs) };
-                    _navDoorHoverTimer.Tick += (_, __) => NavDoorHoverDwellElapsed();
-                }
-                _navDoorHoverTimer.Stop();
-                _navDoorHoverTimer.Start();
-            }
-            catch (Exception ex) { App.Logger?.Debug("StartNavDoorHoverDwell({Door}): {E}", door, ex.Message); }
-        }
-
-        private void CancelNavDoorHoverDwell()
-        {
-            _navDoorHoverPending = null;
-            _navDoorHoverTimer?.Stop();
-        }
-
-        private void NavDoorHoverDwellElapsed()
-        {
-            try
-            {
-                _navDoorHoverTimer?.Stop();
-                var door = _navDoorHoverPending;
-                _navDoorHoverPending = null;
-                if (door == null || !_navRailExpanded || _navRailHoldCount > 0) return;
-                // The pointer has to still be on the header: a leave that never arrived (the
-                // same missed-edge family SyncNavRailToPointer exists for) must not open a door
-                // nobody is looking at.
-                if (NavDoorParts(door).Header?.IsMouseOver != true) return;
-                SetExpandedDoor(door);
-            }
-            catch (Exception ex) { App.Logger?.Debug("NavDoorHoverDwellElapsed: {E}", ex.Message); }
-        }
-
-        /// <summary>
         /// Preview, so handling it stops the Button ever raising Click: the door the user pressed
         /// simply does not open, and we open the other one in its place. A returned key is matched
         /// against NavDoorMap first (a door opens its default tab, exactly as NavDoor_Click would),
@@ -524,10 +439,6 @@ namespace ConditioningControlPanel
                     (ImgDoorStudio,    "nav/door_studio.png"),
                     (ImgDoorCompanion, "nav/door_companion.png"),
                     (ImgDoorPlay,      "nav/door_play.png"),
-                    // No medallion of its own yet (mort's map, 2026-09-11): the XAML literal
-                    // borrows Play's PNG, and this row lets a mod - or the art pass that owes it
-                    // one - hand it its own file without a code change.
-                    (ImgDoorPlayTogether, "nav/door_playtogether.png"),
                     (ImgDoorYou,       "nav/door_you.png"),
                     (ImgDoorLibrary,   "nav/door_library.png"),
                     (ImgDoorWebApp,    "nav/door_webapp.png"),

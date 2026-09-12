@@ -235,21 +235,9 @@ namespace ConditioningControlPanel.Services
             // ShowTab key of their own - "assets" is the Library door's only/default tab and is
             // what resolves the door, exactly as BtnOpenAssetsTop does above.
             ["BtnNavMods"] = "assets",
+            ["BtnNavCatalogue"] = "assets",
             ["BtnNavPhrases"] = "assets",
             ["BtnNavMediaLog"] = "assets",
-            // mort's map (2026-09-11). Values are the key NavDoorMap files under the door each
-            // row now sits in: "studio" for the Companion Effects / Creator Tools rows (they open
-            // the Companion and Deeper pages, but live in the Studio door), "companion" for the
-            // Workshop and Engine Room zones, "webapp" for the Web door's two launchers (an
-            // expand-only door key, never a tab).
-            ["BtnNavFyp"] = "fyp",
-            ["BtnNavGoon"] = "availablesubjects",
-            ["BtnNavAiEffects"] = "studio",
-            ["BtnNavDeeperEditor"] = "studio",
-            ["BtnNavWorkshop"] = "companion",
-            ["BtnNavEngineRoom"] = "companion",
-            ["BtnNavWebApp"] = "webapp",
-            ["BtnNavCatalogue"] = "webapp",
             ["BtnNavJustDrop"] = "justdrop"
         };
 
@@ -1056,18 +1044,15 @@ namespace ConditioningControlPanel.Services
                     Title = "Where Your Tabs Went",
                     Description = "Old tab  ->  its door now\n\n" +
                                   "• Dashboard  ->  Home\n" +
-                                  "• Lab, Deeper Player, Blink Trainer, Graded Intake, For You,\n" +
-                                  "   Exclusives, Quests, Programs  ->  Play\n" +
-                                  "• Available Subjects, Remote Control, Goon Game  ->  Play Together\n" +
-                                  "• Presets, Haptics, the tile popups, Awareness, Takeover,\n" +
-                                  "   Lockdown, the Deeper Editor, Just Drop  ->  Studio\n" +
-                                  "• Companion, Workshop, Engine Room, She's Listening  ->  Companion\n" +
-                                  "• Profile, Enhancements, Achievements, Leaderboard  ->  You\n" +
-                                  "• Mods, Assets, Phrase Manager, Media Log  ->  Library\n" +
-                                  "• Web App, Catalogue  ->  Web\n\n" +
-                                  "Renames worth knowing: the Lab page is gone (its contents are cards on " +
-                                  "the Play wall), Enhancements is the Skill Tree, Awareness is Screen " +
-                                  "Awareness, and Remote Control's own page is Give Up Control.",
+                                  "• Presets, Haptics, the tile popups  ->  Studio\n" +
+                                  "• Companion, Takeover, She's Listening, Awareness  ->  Companion\n" +
+                                  "• Lab, Deeper, Exclusives, Graded Intake, Lockdown,\n" +
+                                  "   Blink Trainer, Remote Control, Available Subjects  ->  Play\n" +
+                                  "• Profile, Quests, Achievements, Enhancements,\n" +
+                                  "   Programs, Leaderboard  ->  You\n" +
+                                  "• Assets, Mods, Catalogue, Phrase Manager, Media Log  ->  Library\n\n" +
+                                  "Two renames worth knowing: the Lab page is gone (its contents are cards on " +
+                                  "the Play wall), and Enhancements is now the Skill Tree.",
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
@@ -1078,9 +1063,7 @@ namespace ConditioningControlPanel.Services
                     Description = "Every dashboard tile used to pop open its own little window. Those windows " +
                                   "are gone: the tile now opens the matching module in this rack, where all of " +
                                   "the settings live side by side.\n\n" +
-                                  "Core Engine holds Presets & Sessions and Haptics; Companion Effects holds " +
-                                  "AI Effects, Screen Awareness, Companion Takeover and Lockdown Mode; Creator " +
-                                  "Tools holds the Deeper Editor and Just Drop.",
+                                  "Presets & Sessions, Haptics and Just Drop are entries of this door too.",
                     TargetElementName = "DoorStudio",
                     RequiresTab = "studio",
                     // The rack restores whatever module was last selected, so pick one that matches
@@ -1094,9 +1077,8 @@ namespace ConditioningControlPanel.Services
                     Icon = ">",
                     Title = "Play",
                     Description = "The Lab tab no longer exists. Everything it held is a card on this wall, " +
-                                  "next to the Deeper Player, the Blink Trainer, Graded Intake, For You, " +
-                                  "Exclusives and the Training Plans (Quests, Programs). Playing with someone " +
-                                  "else is the next door down: Play Together.\n\n" +
+                                  "next to Deeper, Exclusives, Graded Intake, Lockdown, the Blink Trainer, " +
+                                  "Remote Control and Available Subjects.\n\n" +
                                   "Locked cards stay visible on purpose, so you can see what a thing is before " +
                                   "you decide whether you want it.",
                     TargetElementName = "DoorPlay",
@@ -1108,9 +1090,9 @@ namespace ConditioningControlPanel.Services
                     Id = "ut_you",
                     Icon = ">",
                     Title = "You",
-                    Description = "Your Profile, the Skill Tree, Achievements and the Leaderboard, all under " +
+                    Description = "Your Profile, Quests, Achievements, Programs and the Leaderboard, all under " +
                                   "one door.\n\n" +
-                                  "Quests and Programs are Training Plans now, under Play.",
+                                  "Enhancements moved here as well, under its new name: the Skill Tree.",
                     TargetElementName = "DoorYou",
                     RequiresTab = "discord",
                     TextPosition = TutorialStepPosition.Right
@@ -1832,8 +1814,7 @@ namespace ConditioningControlPanel.Services
                     Id = "pat_awareness",
                     Icon = "👁",
                     Title = "Window Awareness",
-                    Description = "Over in the Studio door, under Companion Effects, the Screen Awareness " +
-                                  "entry lets her notice what " +
+                    Description = "Over in the Companion door, the Awareness entry lets her notice what " +
                                   "you're doing:\n" +
                                   "• Detects active windows\n" +
                                   "• Comments on your activity\n" +
