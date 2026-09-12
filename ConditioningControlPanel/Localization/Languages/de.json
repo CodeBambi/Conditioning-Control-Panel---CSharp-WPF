@@ -5100,7 +5100,7 @@
   "rail_unpin": "Lösen",
   "rail_favorites_full": "Favoriten sind voll. Erst eines lösen.",
   "rail_chip_tip": "Linksklick öffnet es. Rechtsklick zum Anheften oder Lösen.",
-  "rail_gesture_hint": "Linksklick öffnet. Rechtsklick heftet an oder löst. In der Seitenleiste genauso.",
+  "rail_gesture_hint": "Linksklick öffnet. Rechtsklick auf eine Kachel schaltet sie ein oder aus. Rechtsklick hier oder in der Seitenleiste heftet an oder löst.",
   "inbox_programs_title": "Programme",
   "inbox_programs_summary": "was ein Programm ist, und die Auswahl von heute.",
   "fr8_welcome_title": "Willkommen.",

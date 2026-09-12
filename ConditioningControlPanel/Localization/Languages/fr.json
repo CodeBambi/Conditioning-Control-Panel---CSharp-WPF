@@ -5100,7 +5100,7 @@
   "rail_unpin": "Désépingler",
   "rail_favorites_full": "Les favoris sont pleins. Désépinglez-en un d'abord.",
   "rail_chip_tip": "Clic gauche pour ouvrir. Clic droit pour épingler ou désépingler.",
-  "rail_gesture_hint": "Clic gauche ouvre. Clic droit épingle ou désépingle. La barre latérale aussi.",
+  "rail_gesture_hint": "Clic gauche ouvre. Clic droit sur une tuile pour l'activer ou la désactiver. Clic droit ici ou dans la barre latérale pour épingler ou désépingler.",
   "inbox_programs_title": "Programmes",
   "inbox_programs_summary": "ce qu'est un programme, et le choix du jour.",
   "fr8_welcome_title": "Bienvenue.",

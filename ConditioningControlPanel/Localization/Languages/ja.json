@@ -5091,7 +5091,7 @@
   "rail_unpin": "ピン留めを外す",
   "rail_favorites_full": "お気に入りがいっぱいです。先に一つ外してください。",
   "rail_chip_tip": "左クリックで開く。右クリックでピン留めまたは解除。",
-  "rail_gesture_hint": "左クリックで開く。右クリックでピン留めまたは解除。サイドレールでも同じ。",
+  "rail_gesture_hint": "左クリックで開く。タイルを右クリックでオン/オフ。ここやサイドレールを右クリックでピン留めまたは解除。",
   "inbox_programs_title": "プログラム",
   "inbox_programs_summary": "プログラムとは何か、そして今日のおすすめ。",
   "fr8_welcome_title": "ようこそ。",

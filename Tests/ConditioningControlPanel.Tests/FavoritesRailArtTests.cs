@@ -367,19 +367,39 @@ public class FavoritesRailArtTests
     [Fact]
     public void The_gesture_line_says_what_the_code_does()
     {
-        // The owner asked for this with the two buttons the other way round. BuildRailChip wires
-        // Click to OpenDestination and AttachPinMenu to the ContextMenu, so left opens and right
-        // pins - and the EN line has to agree with that, not with the ask.
+        // Right-click means two things on this dashboard and the line has to keep them apart.
+        // On a mosaic TILE it toggles the feature (FeatureCard.OnRightClick raises
+        // ToggleRequestedEvent), which is what dash_toggle_hint already says; on a rail CHIP or a
+        // side rail ROW it pins or unpins (AttachPinMenu's ContextMenu). Left-click opens in both
+        // places. The owner asked for this with the buttons the other way round, so the EN line
+        // has to agree with the code and not with the ask.
+        var card = File.ReadAllText(Path.Combine(AppDir(), "Features", "FeatureCard.xaml.cs"));
+        Assert.Contains("private void OnRightClick(", card, StringComparison.Ordinal);
+        Assert.Contains("RaiseEvent(new RoutedEventArgs(ToggleRequestedEvent, this));", card, StringComparison.Ordinal);
+
         var rail = File.ReadAllText(Path.Combine(AppDir(), "MainWindow", "MainWindow.FavoritesRail.cs"));
         Assert.Contains("chip.Click += (_, _) => OpenDestination(entry);", rail, StringComparison.Ordinal);
         Assert.Contains("AttachPinMenu(chip, entry.Id", rail, StringComparison.Ordinal);
 
         var line = CompanionLocMasters.For("en")["rail_gesture_hint"];
-        var left = line.IndexOf("Left-click", StringComparison.OrdinalIgnoreCase);
-        var right = line.IndexOf("Right-click", StringComparison.OrdinalIgnoreCase);
-        Assert.True(left >= 0 && right > left, "the EN gesture line no longer names both buttons in order");
-        Assert.Contains("open", line.Substring(left, right - left), StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("pin", line.Substring(right), StringComparison.OrdinalIgnoreCase);
+        var sentences = line.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.Equal(3, sentences.Length);
+
+        // One: left-click opens.
+        Assert.StartsWith("Left-click", sentences[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("open", sentences[0], StringComparison.OrdinalIgnoreCase);
+
+        // Two: right-click a TILE switches the feature on or off, in dash_toggle_hint's words.
+        Assert.StartsWith("Right-click", sentences[1], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("tile", sentences[1], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("switch", sentences[1], StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("pin", sentences[1], StringComparison.OrdinalIgnoreCase);
+
+        // Three: right-click HERE or on the side rail pins, and says nothing about switching.
+        Assert.StartsWith("Right-click", sentences[2], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("side rail", sentences[2], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("pin", sentences[2], StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("switch", sentences[2], StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

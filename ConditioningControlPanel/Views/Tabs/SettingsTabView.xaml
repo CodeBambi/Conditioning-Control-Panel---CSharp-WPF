@@ -247,12 +247,13 @@
 
                      BELOW that, outside the scroller, the gesture line is docked in its own Auto
                      row: a 1px rule, 5 of padding, the wrapped line, 7 of padding. Its height is
-                     TEXT-DRIVEN and therefore language-driven - at 10pt on a 13 leading that is
-                     roughly eight lines at 69 wide in English and more in German - so there is no
-                     number to put here, and there is no need for one: it is a row of its own, so
-                     it cannot overflow and cannot be pushed out. What it does do is take its
-                     height off the lists' visible area, which is exactly what the ScrollViewer
-                     above is for, and it is why the caps are worth the arithmetic above.
+                     TEXT-DRIVEN and therefore language-driven - three sentences at 10pt on a 13
+                     leading is a dozen or so lines at 69 wide in English and more in German - so
+                     there is no number to put here, and there is no need for one: it is a row of
+                     its own, so it cannot overflow and cannot be pushed out. What it does do is
+                     take its height off the lists' visible area, which is exactly what the
+                     ScrollViewer above is for, and it is why the caps are worth the arithmetic
+                     above rather than being left to sort themselves out.
 
                      Keep this block, RailChipStyle and FavoritesRailRule's two caps in step;
                      FavoritesRailArtTests re-does the sum from this file.
@@ -321,11 +322,23 @@
                 </ScrollViewer>
 
                 <!-- THE GESTURE LINE (owner, 2026-09-12: "we can use the space under the
-                     favourite rail to explain what they can do here"). It says what the CODE
-                     does, which is the other way round from how the owner phrased it: the chip's
-                     Click opens the destination and the ContextMenu pins or unpins it, and the
-                     same menu is wired onto the nav rail's own rows (WireFavoritePinMenus), so
-                     the last sentence is a fact rather than a flourish.
+                     favourite rail to explain what they can do here", then "we gotta also say
+                     that they can also quickly activate and deactivate features with the right
+                     click"). Three sentences, because RIGHT-CLICK MEANS TWO THINGS on this page
+                     and one sentence covering both would muddle them:
+
+                       left-click            opens, everywhere (chip.Click -> OpenDestination)
+                       right-click a TILE    switches the feature on or off
+                                             (FeatureCard.OnRightClick -> ToggleRequestedEvent,
+                                             which is what dash_toggle_hint says on the logo face)
+                       right-click a CHIP    pins or unpins - here, and on every nav rail row,
+                       or a RAIL ROW         door header and Play card AttachPinMenu reaches
+                                             (WireFavoritePinMenus)
+
+                     It says what the CODE does, which is the other way round from how the owner
+                     first phrased it ("right click to open, left click to activate or pin").
+                     FavoritesRailArtTests holds all three sentences against those three call
+                     sites, so a line that drifts back to the ask fails.
 
                      Docked, never hidden: it sits outside the ScrollViewer in its own Auto row,
                      so a full column scrolls the chips past it and the line stays. The rule is a
