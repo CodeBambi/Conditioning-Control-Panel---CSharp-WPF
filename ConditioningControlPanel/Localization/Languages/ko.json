@@ -5098,6 +5098,7 @@
   "rail_unpin": "고정 해제",
   "rail_favorites_full": "즐겨찾기가 가득 찼습니다. 먼저 하나를 해제하세요.",
   "rail_chip_tip": "왼쪽 클릭으로 열기. 오른쪽 클릭으로 고정 또는 해제.",
+  "rail_gesture_hint": "왼쪽 클릭으로 열기. 타일을 오른쪽 클릭하면 켜고 끄기. 여기나 사이드 레일을 오른쪽 클릭하면 고정 또는 해제.",
   "inbox_programs_title": "프로그램",
   "inbox_programs_summary": "프로그램이 무엇인지, 그리고 오늘의 추천.",
   "fr8_welcome_title": "환영해요.",

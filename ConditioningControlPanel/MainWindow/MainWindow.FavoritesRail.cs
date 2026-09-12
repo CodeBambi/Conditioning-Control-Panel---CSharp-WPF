@@ -26,11 +26,21 @@ namespace ConditioningControlPanel
     /// where the user goes.
     ///
     /// <para>A chip is a Ctrl+K palette row (<see cref="SettingsPaletteIndex"/>): same id, same
-    /// label, same glyph, same navigation. The rail keeps no registry of its own, so a door that
-    /// moves in the palette moves here for free, and a row the server has withheld
+    /// label, same navigation. The rail keeps no registry of its own, so a door that moves in the
+    /// palette moves here for free, and a row the server has withheld
     /// (<see cref="SettingsPaletteEntry.Available"/>) never renders. List rules live in
     /// <see cref="FavoritesRailRule"/>; the lists live in AppSettings (RailFavorites,
     /// RailRecent).</para>
+    ///
+    /// <para>The FACE is the one thing the chip does not take from the palette row. Since
+    /// 2026-09-12 (owner: "use the images for the different features") a chip IS a picture: the
+    /// art fills all 69x36 of it, the caption sits on a scrim at the foot, and the palette glyph
+    /// is only what is left if nothing resolves. Scene art is cover-fitted and cropped; square
+    /// icon art - the nav door medallions - goes on a plate instead, the icon blown up soft
+    /// behind itself, because the first pass drew those at glyph size and the desk read them as
+    /// icons beside captions. Which picture is <see cref="FavoritesRailArt"/>; the crop is the
+    /// railChip surface in <see cref="ModArtFramingRegistry"/>, so a .ccpmod that re-skins
+    /// features/flash.png re-skins the chip and is framed by its own author, not by our rect.</para>
     ///
     /// <para>Locked destinations keep their chip and wear the padlock; the click goes where a
     /// rail click would and the page raises its own upsell, the same "navigation is never
@@ -104,7 +114,9 @@ namespace ConditioningControlPanel
             RefreshFavoritesRail();
         }
 
-        /// <summary>Rebuilds both chip stacks from settings. Cheap: at most thirteen buttons.</summary>
+        /// <summary>Rebuilds both chip stacks from settings. Cheap: at most fifteen buttons,
+        /// and every picture on them comes out of the resolver's decode cache after the first
+        /// paint.</summary>
         internal void RefreshFavoritesRail()
         {
             var dash = SettingsTab;
@@ -138,12 +150,20 @@ namespace ConditioningControlPanel
             bool locked = IsNavEntryLocked(entry.TabKey);
 
             var grid = new Grid();
-            grid.Children.Add(new Helpers.EmojiTextBlock
+            var face = BuildRailChipArt(entry.Id, grid, out bool painted);
+            if (!painted)
             {
-                Text = entry.Glyph, FontSize = 15,
-                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, 5, 0, 0),
-            });
+                // Nothing resolved. The glyph stands, but on the same shape the plates use - a
+                // subject over the scrim, not a small mark beside a caption - so one chip the
+                // art missed does not break the column's rhythm.
+                grid.Children.Add(RailChipScrim());
+                grid.Children.Add(new Helpers.EmojiTextBlock
+                {
+                    Text = entry.Glyph, FontSize = 17,
+                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top,
+                    Margin = new Thickness(0, 2, 0, 0),
+                });
+            }
             grid.Children.Add(new TextBlock
             {
                 Text = entry.Label,
@@ -168,11 +188,152 @@ namespace ConditioningControlPanel
                     ? entry.Label + "\n" + Loc.Get("rail_chip_tip")
                     : entry.Label + "  ·  " + entry.Context + "\n" + Loc.Get("rail_chip_tip"),
             };
+            // The art is the chip's Background, so the template's rounded Border clips it for
+            // free. A local value outranks the style's AccentTintedBgBrush setter; a chip with
+            // no picture never sets one and keeps the flat tinted face.
+            if (face != null) chip.Background = face;
             if (locked && TryFindResource("Tier1GoldBorderBrush") is Brush gold) chip.BorderBrush = gold;
             chip.Click += (_, _) => OpenDestination(entry);
             AttachPinMenu(chip, entry.Id, holdRail: false);
             return chip;
         }
+
+        /// <summary>
+        /// Fills a chip with the destination's own picture (owner ask 2026-09-12, reworked after
+        /// that day's desk pass). Returns the brush the chip takes as its Background - every
+        /// chip's face is a Background, so the template's rounded Border clips it for free -
+        /// and adds the layers that go over it to <paramref name="grid"/>.
+        /// <paramref name="painted"/> is the one answer the caller needs: false means nothing
+        /// resolved and the palette glyph stands.
+        ///
+        /// <list type="bullet">
+        /// <item><b>Cover</b> - scene art, cropped to the chip by the railChip surface.</item>
+        /// <item><b>Plate</b> - square icon art (the nav medallions). The icon fills the chip
+        /// twice: once soft and darkened as the backdrop, once at 26 DIP over it. The soft copy
+        /// is not a BlurEffect but a 12px decode stretched across the chip - same look, one
+        /// small bitmap instead of a render target per chip.</item>
+        /// </list>
+        ///
+        /// <para>Mod art is respected exactly as the mosaic respects it: the lookup goes through
+        /// <see cref="Services.ModResourceResolver"/> on the same resource paths, the app-shipped
+        /// themed fork (<c>features/vault_bambi.png</c>) is tried first for a built-in mod, and
+        /// the crop comes from <see cref="Services.ModArtFramingRegistry"/> so a .ccpmod's own
+        /// picture is framed by its author or centre-cropped, never by a rect drawn for ours.</para>
+        /// </summary>
+        private Brush? BuildRailChipArt(string paletteId, Grid grid, out bool painted)
+        {
+            painted = false;
+            try
+            {
+                var art = Services.FavoritesRailArt.For(paletteId);
+                if (art == null) return null;
+
+                var suffix = Services.FavoritesRailArt.ThemeSuffix(App.Mods?.ActiveModId);
+                var candidates = Services.FavoritesRailArt.Candidates(art.ResourcePath, suffix);
+
+                return art.Fit == Services.RailArtFit.Plate
+                    ? BuildPlateFace(candidates, grid, out painted)
+                    : BuildCoverFace(art.ResourcePath, candidates, grid, out painted);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BuildRailChipArt({Id}): {E}", paletteId, ex.Message);
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Scene art filling the whole chip. Two decodes at most: the crop window decides the
+        /// decode width (a chip framed on a quarter of the image needs four times the pixels)
+        /// and the window is not known until the first bitmap has given up its aspect ratio.
+        /// Both are cached by the resolver, so a repaint costs neither.
+        /// </summary>
+        private Brush? BuildCoverFace(string basePath, IReadOnlyList<string> candidates, Grid grid, out bool painted)
+        {
+            painted = false;
+            foreach (var path in candidates)
+            {
+                var probe = Services.ModResourceResolver.ResolveImageDecoded(
+                    path, Services.FavoritesRailArt.BaseDecodeWidth);
+                if (probe == null) continue;
+
+                bool modArt = Services.ModResourceResolver.HasActiveModOverride(path);
+                var brush = new ImageBrush(probe) { Stretch = Stretch.UniformToFill };
+                ApplyArtFraming(brush, basePath, Services.ModArtFramingRegistry.SurfaceRailChip, modArt);
+
+                var width = Services.FavoritesRailArt.DecodeWidthFor(brush.Viewbox.Width);
+                if (width > Services.FavoritesRailArt.BaseDecodeWidth)
+                {
+                    var sharper = Services.ModResourceResolver.ResolveImageDecoded(path, width);
+                    if (sharper != null) brush.ImageSource = sharper;
+                }
+                brush.Freeze();
+
+                grid.Children.Add(RailChipScrim());
+                painted = true;
+                return brush;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// A square icon on a plate of itself: the icon decoded at 12px and stretched across the
+        /// chip by the template's HighQuality scaling is the backdrop (a blur that costs one
+        /// small bitmap rather than a render target), a flat wash takes the contrast back out of
+        /// it, and the icon proper sits at 26 DIP over the scrim inside a rounded plate so the
+        /// medallion's own square edge reads as a frame rather than a seam.
+        /// </summary>
+        private Brush? BuildPlateFace(IReadOnlyList<string> candidates, Grid grid, out bool painted)
+        {
+            painted = false;
+            foreach (var path in candidates)
+            {
+                var icon = Services.ModResourceResolver.ResolveImageDecoded(
+                    path, Services.FavoritesRailArt.PlateIconDecodeWidth);
+                if (icon == null) continue;
+
+                var soft = Services.ModResourceResolver.ResolveImageDecoded(
+                    path, Services.FavoritesRailArt.PlateBackdropDecodeWidth) ?? icon;
+                var backdrop = new ImageBrush(soft) { Stretch = Stretch.UniformToFill };
+                backdrop.Freeze();
+
+                // Takes the backdrop back down to a wash, so the icon over it stays the subject.
+                grid.Children.Add(new Border
+                {
+                    CornerRadius = new CornerRadius(8),
+                    IsHitTestVisible = false,
+                    Background = new SolidColorBrush(Color.FromArgb(0xA6, 0x0E, 0x0A, 0x1A)),
+                });
+                grid.Children.Add(RailChipScrim());
+
+                var plate = new Border
+                {
+                    Width = Services.FavoritesRailArt.PlateIconSize,
+                    Height = Services.FavoritesRailArt.PlateIconSize,
+                    CornerRadius = new CornerRadius(5),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Top,
+                    Margin = new Thickness(0, 1, 0, 0),
+                    IsHitTestVisible = false,
+                    Background = new ImageBrush(icon) { Stretch = Stretch.Uniform },
+                };
+                RenderOptions.SetBitmapScalingMode(plate, BitmapScalingMode.HighQuality);
+                grid.Children.Add(plate);
+
+                painted = true;
+                return backdrop;
+            }
+            return null;
+        }
+
+        /// <summary>The foot band the caption sits in. Every chip gets one, art or no art, so
+        /// the column reads as one set of pictures rather than two kinds of chip.</summary>
+        private Border RailChipScrim() => new()
+        {
+            CornerRadius = new CornerRadius(8),
+            IsHitTestVisible = false,
+            Background = SettingsTab?.FavoritesRail?.TryFindResource("RailChipScrim") as Brush,
+        };
 
         /// <summary>
         /// Opens a destination the way the palette does - one navigation verb, so the arrival

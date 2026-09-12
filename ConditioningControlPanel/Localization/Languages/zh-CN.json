@@ -5556,6 +5556,7 @@
   "rail_unpin": "取消固定",
   "rail_favorites_full": "收藏已满，请先取消固定一项。",
   "rail_chip_tip": "左键打开。右键固定或取消固定。",
+  "rail_gesture_hint": "左键打开。右键点击卡片可开关。在这里或侧边栏右键可固定或取消固定。",
   "inbox_programs_title": "计划",
   "inbox_programs_summary": "什么是计划，以及今日推荐。",
   "fr8_welcome_title": "欢迎。",
