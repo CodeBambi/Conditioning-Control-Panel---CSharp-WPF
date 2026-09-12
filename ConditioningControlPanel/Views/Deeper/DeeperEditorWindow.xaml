@@ -1688,7 +1688,7 @@
                             <TextBlock Text="Praise (on correct)" Style="{StaticResource EditorLabel}"/>
                             <TextBox x:Name="TxtSpeakCorrect" Style="{StaticResource EditorTextBox}"
                                      MaxLength="40"
-                                     ToolTip="Flashed after each correct rep, e.g. 'that&apos;s it, sweetie'."
+                                     ToolTip="Flashed after each correct rep."
                                      TextChanged="EffectField_TextChanged"/>
                             <TextBlock Text="Scold (on miss)" Style="{StaticResource EditorLabel}"/>
                             <TextBox x:Name="TxtSpeakIncorrect" Style="{StaticResource EditorTextBox}"

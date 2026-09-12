@@ -102,6 +102,12 @@ namespace ConditioningControlPanel
                 // opens (ArcademyHostService.DoorAvailable) the band must already be right.
                 SetLockband(tab.PlayLockArcademy,
                     TierGate.RequiresLab(Services.Arcademy.ArcademyHostService.ProductName));
+                // Piece by Piece: the same T2 bar and the same posture - a literal product name,
+                // identical in all nine language files, so a key would only add a row nobody
+                // translates. Not on the daily-free wheel either (no key passed, so no FREE TODAY
+                // stamp to keep in step).
+                SetLockband(tab.PlayLockPieceByPiece,
+                    TierGate.RequiresLab(Services.PieceByPiece.PieceByPieceHostService.ProductName));
 
                 // --- The Arcademy: present, and locked when the account is not T2 ------------
                 // NOT the Just Drop posture below any more. Until v6.8.5 the door was shut and a
@@ -134,15 +140,9 @@ namespace ConditioningControlPanel
                 // --- Graded Intake: four states, not two ------------------------------------
                 RefreshPlayIntakeCard();
 
-                // --- Just Drop: present or absent, never locked -----------------------------
-                // A HIDE, not a lockband, and the distinction is the point: a lockband advertises
-                // something this account could buy, and a door the server has not opened is not
-                // for sale. Same posture the rail took before the shop became a window - on an
-                // account without it, the zone simply has three cards.
-                if (tab.SlotJustDrop != null)
-                    tab.SlotJustDrop.Visibility = Services.JustDrop.JustDropService.DoorAvailable
-                        ? Visibility.Visible
-                        : Visibility.Collapsed;
+                // Just Drop's card is gone from this wall (owner call 2026-09-11: a creator tool,
+                // not a game). Its row is under Studio > Creator Tools, shown or hidden by
+                // ApplyJustDropDoorVisibility from the same server flag.
 
                 // Nothing else on this wall is conditional. The Deeper master-switch flip and the
                 // Bureau's account chip used to live here; both cards left the page on 2026-08-12
@@ -327,5 +327,22 @@ namespace ConditioningControlPanel
         // rules it obeyed are the ones to carry with it: element.BeginAnimation, never
         // Storyboard.SetTargetName (which silently no-ops across the tab UserControl namescopes),
         // and skip entirely under MotionLevel.Off.
+
+        // ---- lockbands --------------------------------------------------------------------
+
+        /// <summary>
+        /// Paints a tier band from a <see cref="TierVerdict"/>: locked means Visible. Lived in
+        /// the dashboard's premium rail until that rail went (2026-09-11); the Play wall is the
+        /// surface that still wears bands. One helper on purpose - two copies of "locked means
+        /// Visible" is how a band ends up inverted on one surface and nobody notices.
+        /// </summary>
+        internal static void SetLockband(FrameworkElement? band, in TierVerdict verdict)
+            => SetLockbandVisible(band, !verdict.Allowed);
+
+        internal static void SetLockbandVisible(FrameworkElement? band, bool locked)
+        {
+            if (band == null) return;
+            band.Visibility = locked ? Visibility.Visible : Visibility.Collapsed;
+        }
     }
 }

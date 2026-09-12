@@ -375,7 +375,7 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
   }
 
   /**
-   * The freeze card. `text` is the road's own phrase when the caller has one (race only; the tube
+   * The freeze card. `text` is the caller's own phrase when it has one (race only; the tube
    * never passes it, so dtrh.html reads the neutral FREEZE unless a caller names the word).
    * `lacquer` is the race's `lock` kind: the same card and the same timing behind a pink lacquer
    * frame, because a doll being posed is not the same beat as a freeze being called.

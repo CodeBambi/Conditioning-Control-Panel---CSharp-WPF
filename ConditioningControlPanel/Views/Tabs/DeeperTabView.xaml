@@ -155,6 +155,13 @@
                                 <TextBlock Text=" · "
                                            Foreground="{DynamicResource TextDimBrush}" FontSize="11"/>
                             </StackPanel>
+                            <!-- Media length (m:ss or h:mm:ss); collapsed while unknown -->
+                            <TextBlock Text="{Binding DurationDisplay}"
+                                       Visibility="{Binding ShowDuration}"
+                                       Foreground="{DynamicResource TextDimBrush}" FontSize="11"/>
+                            <TextBlock Text=" · "
+                                       Visibility="{Binding ShowDuration}"
+                                       Foreground="{DynamicResource TextDimBrush}" FontSize="11"/>
                             <!-- Auto-tag chips -->
                             <ItemsControl ItemsSource="{Binding Tags}"
                                           Visibility="{Binding ShowTags}">

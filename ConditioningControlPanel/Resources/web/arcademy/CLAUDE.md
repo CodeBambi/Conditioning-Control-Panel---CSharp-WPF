@@ -98,15 +98,22 @@ shell/room.js      THE ROOM SCENE (VN antechamber): the painted set between the
                    highlight that big reads as a bug), the_deep_end (The
                    Pool 105, vn-08, open lane water + the ladder), and the
                    Semester II + III five: sort (The Sorting Room 201, vn-12,
-                   the card conveyor - the belt, not the three bins),
+                   the card conveyor - the belt, not the three bins - plus the
+                   green door leaf on the right wall, which this table called an
+                   alcove until ccp-bugs#1165),
                    echo (Music Room 202, vn-13, the four lit drum heads on the
                    stage), instant_recall (Lecture Hall 203, vn-14, the blank
                    projection screen - NOT the lectern), anomaly (Darkroom 301,
                    vn-15, the drying lines framed on the ONE crooked print +
                    the black light-trap curtain as the painted exit) and
                    composure (The Studio 302, vn-16, the sliding-tile canvas on
-                   the easel). Three of the ten have a painted exit (101, 103,
-                   301); the other seven are doorless and that is legal.
+                   the easel). FOUR of the ten have a painted exit (101, 103,
+                   201, 301); the other six are doorless and that is legal.
+                   The sign under a painted exit is drawn in STAGE pixels, so
+                   it is sized twice - once for landscape's ~0.5 fit and once
+                   for portrait's ~0.28 (rooms.css, "the painted door, held
+                   upright"). `shell/smoke/exit-sign-check.mjs` does the
+                   arithmetic for every door on every phone in range.
                    TWO PLATES ARE COMPOSITED, never regenerated: vn-16's wall
                    sign was painted "COMPOSUE", so the sign rect was cloned out
                    and logo-composure-keyed.png pasted back in (the homeroom
@@ -3464,6 +3471,102 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     whose `package.json` carries `"type":"module"`. Run the §6 syntax pass against the rig's
     COPY (which sits under a `module` package.json), never against a bare path, and never write
     `*/` inside a comment - say "of every game module" instead.
+
+145. **A PHONE LINK CANNOT FEED THE SORT DECK IN PLANNED ORDER, AND A PASS IS A MISS (SORT,
+    phone wave, 2026-09-11).** Owner: "at the start we see gifs, then as we go faster we skip
+    more and more" and "the streak doesn't go down when we miss". Measured on a throttled
+    headless phone (2 Mbps, 100ms, x4 CPU, mock Scrolller feed, a swipe 250ms after the ring):
+    21% of cards had a painted face when swiped and the top-but-unarmed gap was a median
+    1080ms - nearly every card hit the 1s ready ceiling and was then timed over a blank back,
+    36 of 50 blanks being clips. `games/sort/index.js` now (a) puts a clip's POSTER on the
+    warm rail ahead of the clip (`warmDeck`, `S.manifestAt`; the clip's own warm is headers
+    only, trap 36, so the poster is the only face that can be ready before the mint), (b) deals
+    READY-FIRST: `nextCard() -> readyFirst()` swaps the planned card for a later SAME-TAG card
+    whose bytes have landed (`cardReady` over the provider's new synchronous `isReady`), so
+    the plan's side sequence and run cap never move and `S.deckRows` is untouched, (c) at the
+    ready ceiling SETS ASIDE an unpainted card when a later one has landed (`deferUnpainted ->
+    quietPass`: under the stack like a pass, no beat, no cost, once per card), otherwise waits
+    up to `READY_HARD_MS` before the old blank-back road, and (d) keeps the hand up between
+    cards (`handUp`/`handLive`) and PLAYS a swipe that landed before the ring armed
+    (`S.pendingDir` in `armTop`, verdict `early`) - at tempo the finger comes down in the
+    spring, and a dropped swipe read as a "skip" too. The streak half: a pass (ring closed) now
+    costs one rung like a wrong swipe (`chain.js afterPass`, accuracy untouched, never on a
+    ring the room armed over a blank); `sort_rules_pass` changed in lex.js AND
+    `ArcademyHostService.cs` (the C# table wins on the wire). Everything is inert on the
+    desktop: a local url is always ready, so the planned card is always taken. Rig:
+    scratchpad `sortroom-drive.mjs` (CDP, mock feed on :3101, `--touch`, `--early`,
+    `--pass-every`, `--kbps`). MANIFEST_AHEAD_* in provider/index.js now count ENTRIES
+    (posters included), which is why they doubled.
+
+146. **A TOROIDAL MARQUEE IS ONLY SEAMLESS WHILE THE COPIES STILL ON SCREEN COVER THE FRAME
+    (LOST & FOUND, phone wave, 2026-09-11).** Owner's landscape-phone shot: "FIND HER 0 / 26",
+    row 1 three thumbnails then nothing, row 3 one tile, most of the wall bare - read as "the
+    thumbnails never load". Nothing was unloaded: the bare stretch is the strip's own TAIL.
+    `board.js` builds a row as `reps` copies of its tiles and `styles.js` slides exactly one
+    copy per cycle, so the wrap only closes when `(reps - 1) x copy width >= frame width`.
+    `reps` was a build-time guess (3 under 6 tiles, else 2) written against a desktop tile; on
+    a 844-930px landscape phone the touch floor deals ~26 tiles in 4 rows, a 6-tile copy is
+    ~560px, and once a cycle the tail crossed the frame and left up to a third of the row
+    empty - no skin, no border, because there is no element there. Measured on the throttled
+    rig (2 Mbps, 100ms, x4, 844x390 coarse): 30 of 33 one-second samples had a row with >40px
+    uncovered, worst 280px; after: 0 of 33. The cure is `fitWrap()`: once the mosaic is in
+    the document (and debounced on resize/orientationchange) measure the frame and each
+    strip, ADD clone sets until the law holds (never remove; `WRAP_REPS_MAX` 6), paint the new
+    seats from the row's current looks, restart the strip's animation so the new shift is
+    picked up, and only THEN compute the element budgets (maxReps counts the fitted wrap; a
+    1600x900 desktop deals 9-11 tiles a row and stays at x2 with its caps untouched, a frame
+    that does grow to x3 sees `liveCap` fall 24 -> 18 by the ceiling's own law).
+    The keyframes are now per clone count (`data-lf-reps` -> `g-lf-driftL3` etc., a plain
+    percentage of the strip) instead of `calc(-100% / var(--g-lf-reps))`, so no phone engine
+    has to resolve a custom property inside @keyframes to land on the seam; the var form
+    stays as the fallback. The audit that missed it counted opacity/display/media per tile;
+    the one that catches it measures the UNCOVERED width of the viewport per row every
+    second (scratchpad `lfroom-drive.mjs`, `wrap gap` line). Any marquee that clones for a
+    wrap has this law; check it against the narrowest tile the mobile pass can deal.
+
+147. **A HUNT DEDUPES ON THE PICTURE OR IT DOES NOT DEDUPE (LOST & FOUND, 2026-09-11).**
+    Owner: "an image can be in multiple places as a copy but seems like only one is correct.
+    We should be sure that the target doesn't get duplicated and there is only one." Two
+    separate doors let her onto a second seat. The loud one was deliberate: `assignWarm()`
+    dealt up to `PLAYTEST.NEAR_TWIN_URL_CAP` (4) "strong" near-twins carrying the TARGET'S
+    ACTUAL MEDIA at a shifted hue - and the constant's own comment predicted the bug it
+    caused ("uncapped, half a tier-4 board would be literal copies - which reads as a bug,
+    not as difficulty"). It read as a bug at 4 too. The quiet one was the dedupe itself:
+    every guard in the room compared EXACT URLS (`drawLive`'s `have` set, `sleeperUsed`,
+    `parkedUrl`, the target filters), and one picture reaches a page under several urls -
+    a clip and its own poster (`loop5.mp4` / `loop5.jpg`; the web host adds a clip's poster
+    to the STILL pool, provider shim `absorb`), a second rendition (`-640x800`, or reddit's
+    size-as-a-query preview host), a crosspost, the same file on a CDN's `preview.` and `i.`
+    subdomains. `board.js mediaKey()` is the identity that survives all of it and `setUrl()`
+    is the one gate that enforces it.
+    **THE LAW HAS TWO TIERS AND THAT IS THE DESIGN.** HER picture is absolute - no second
+    seat, no `lastResort` past it - because that is the report. Any OTHER repeat is merely
+    unwanted: the seat re-draws `UNIQUE_DRAW_TRIES` times and then TAKES the copy. Strict
+    global uniqueness is the trap inside the trap: a tier-4 board is 52 seats and a library
+    smaller than the wall is ordinary (the rig's own feed delivers nine distinct pictures
+    behind those 52), so a strict rule answers a duplicate complaint by parking forty seats
+    on the glyph floor - a worse wall, not a fixed one.
+    **KEY ON THE PATH, NEVER THE FILE NAME.** Name-only keying breaks the DESKTOP outright:
+    the shell serves a local library as `https://ccp.assets/<folder>/<file>` off the
+    player's own tree, and a folder of `001.jpg` beside another folder of `001.jpg` is the
+    ordinary shape of a saved library. Same trap remotely - `v.redd.it/<post>/DASH_720.mp4`
+    puts the identity in the PARENT segment. Drop the scheme and host, keep every segment,
+    fold only what is provably a rendition of one file (query, the `#.ext` animation hint,
+    extension, `-WxH`, a thumb/poster/small/mobile marker, case).
+    **THE SECOND DOOR IS `setTarget`.** A round rotation PROMOTES a seat that is already
+    dressed - no provider draw, so `setUrl`'s gate never sees it - and a shared park resting
+    on that picture puts her on two seats again from round two on. Measured on main: five
+    seats at the deal, NINE by the end of the class. The law is enforced in `setTarget` too.
+    Rig (headless Edge, 844x390 coarse + touch, 2 Mbps / 100 ms / x4, a feed that serves the
+    same picture as a rendition, a repost, and a clip's own poster): main dealt her onto 5
+    seats and a tap on a decoy wearing her picture scored a MISS; the fix deals her onto 1,
+    end of class 1, no decoy wears her, and no seat went bare (0 on the glyph floor, both
+    builds). A `shared:true` draw - parking a sleeper on a live url, one decoder and one
+    clock - is the one legal two-seat case and says so at the call site.
+    **Wrap clones are not a third door**: `buildTileEl` registers every clone in `byEl`, so
+    `tileFromNode` resolves rep 0, rep 1 and a set `fitWrap` adds after a rotation to the
+    SAME tile object. Verified by tapping each rep (trap 146 built those clone sets); do not
+    "fix" it by counting clones - `duplicateKeys()` counts primary seats for that reason.
 
 ## 5. The game module contract (short version)
 

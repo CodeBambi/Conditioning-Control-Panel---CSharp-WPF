@@ -480,6 +480,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void StartHeartbeat()
         {
+            // THE VAT'S SIGN-IN POKE, before the idempotency return on purpose: every login
+            // path lands here once the account is usable, and a second arrival (the 401
+            // self-heal, a Discord restore after a Patreon one) may carry a rotated token.
+            // DescentService dedupes against its own floor, so this never doubles a request
+            // on the wire. Mirror of the App.Descent.Reset() call in ClearAccountData.
+            App.Descent?.OnSignedIn();
+
             if (_heartbeatTimer != null) return;
 
             _heartbeatTimer = new DispatcherTimer
@@ -1872,6 +1879,7 @@ namespace ConditioningControlPanel.Services
                         // ConsecutiveDays, daily_quest_streak, completion dates, etc.) was never refreshed
                         // from cloud, so admin restores / cross-device progress stayed invisible until the
                         // V1 fallback ran. Mirror MergeCloudProfile's stats merge for V2.
+                        var liftedLifetime = false;
                         if (v2Result?.User?.Stats != null)
                         {
                             if (MergeV2CloudStatsIntoLocalProgress(v2Result.User.Stats, v2Result.ForceStreakOverride == true))
@@ -1882,8 +1890,9 @@ namespace ConditioningControlPanel.Services
                                 App.Settings?.Save();
                                 App.Achievements?.Save();
                                 // Same rule as the legacy path: a lifted lifetime counter is
-                                // another device's history, not today's use.
-                                App.FeatureDayLog?.Rebaseline("v2 cloud merge");
+                                // another device's history, not today's use. The re-baseline
+                                // itself waits until after the minutes merge below.
+                                liftedLifetime = true;
                             }
                         }
 
@@ -1921,7 +1930,16 @@ namespace ConditioningControlPanel.Services
                                 v2Result.TotalConditioningMinutes.Value, settings.TotalConditioningMinutes);
                             settings.TotalConditioningMinutes = v2Result.TotalConditioningMinutes.Value;
                             App.Settings?.Save();
+                            liftedLifetime = true;
                         }
+
+                        // A take-higher merge just lifted lifetime counters to what another device
+                        // banked. That gain is not today's: move the day log's baseline past it.
+                        // AFTER the minutes merge, deliberately: the day log diffs
+                        // TotalConditioningMinutes too, and a re-baseline taken before that lift
+                        // booked another device's whole history onto today (the 1,000-minute days
+                        // in the server archive).
+                        if (liftedLifetime) App.FeatureDayLog?.Rebaseline("v2 cloud merge");
 
                         // Merge companion progress from server (per-companion, higher level wins)
                         if (v2Result?.CompanionProgress != null && v2Result.CompanionProgress.Count > 0)
@@ -4230,6 +4248,24 @@ namespace ConditioningControlPanel.Services
         };
 
         /// <summary>
+        /// The other half of <see cref="ExcludedBackupProperties"/>. A backup never carries these,
+        /// so a restored settings object arrives with them at their defaults - and until 6.9.4
+        /// both restore paths (the startup welcome-back sheet and the manual button on the
+        /// Settings tab) let those defaults win. The content folder was the visible casualty:
+        /// after a restore <c>CustomAssetsPath</c> read "", the assets prompt had already been
+        /// spent by the first run, and nothing re-asked, so the app quietly fell back to the
+        /// default folder. Identity and progression fields are copied by the callers themselves;
+        /// this is for the machine-local settings that are nobody's progress but still the user's.
+        /// </summary>
+        internal static void PreserveLocalOnlyFields(AppSettings current, AppSettings restored)
+        {
+            if (current == null || restored == null) return;
+            restored.CustomAssetsPath = current.CustomAssetsPath;
+            restored.DiscordWebhookUrl = current.DiscordWebhookUrl;
+            restored.LastSeenUtc = current.LastSeenUtc;
+        }
+
+        /// <summary>
         /// Backup current settings to the cloud. Debounced to 5 minutes unless forced.
         /// </summary>
         public async Task<bool> BackupSettingsAsync(bool force = false)
@@ -4508,6 +4544,58 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Warning(ex, "Easter egg request failed");
                 return -1;
+            }
+        }
+
+        /// <summary>
+        /// Tells the server this account has answered a server announcement, so it is never
+        /// served to this user again - on this PC or any other.
+        ///
+        /// <para>The client's own record is a SINGLE slot (<c>AppSettings.DismissedAnnouncementId</c>)
+        /// living in the settings file, which means it does not exist on a machine the user has
+        /// not used yet. "The Spiral is open" therefore replayed in full on every new install and
+        /// after every settings wipe, months after it was news. Dismissal is a fact about the
+        /// person, not about the PC, so the server keeps it and filters the announcement out at
+        /// the source (GET /config/announcement skips any id in the account's
+        /// <c>dismissed_announcements</c>).</para>
+        ///
+        /// <para>Fire-and-forget on purpose. The local slot is still written first and is the
+        /// offline fallback, so nothing here is load-bearing for the popup that just closed: a
+        /// failure means the announcement may reappear on a DIFFERENT machine, which is exactly
+        /// the pre-existing behaviour. Never throws, and logs at Debug rather than Warning
+        /// because an offline dismissal is ordinary, not a fault.</para>
+        /// </summary>
+        /// <param name="announcementId">The announcement's server id. Ignored when blank.</param>
+        public async Task DismissAnnouncementAsync(string announcementId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(announcementId)) return;
+
+                var unifiedId = App.Settings?.Current?.UnifiedId;
+                if (string.IsNullOrEmpty(unifiedId)) return;   // no cloud account: local slot is all there is
+
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/announcement/dismiss");
+                AddAuthHeader(request);
+                request.Content = new StringContent(
+                    JsonConvert.SerializeObject(new { unified_id = unifiedId, announcement_id = announcementId }),
+                    Encoding.UTF8,
+                    "application/json"
+                );
+
+                var response = await _httpClient.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    App.Logger?.Debug("Announcement dismissal not recorded server-side: {Status} (id={Id})",
+                        response.StatusCode, announcementId);
+                    return;
+                }
+
+                App.Logger?.Debug("Announcement {Id} dismissed server-side", announcementId);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Announcement dismissal request failed: {Error}", ex.Message);
             }
         }
 

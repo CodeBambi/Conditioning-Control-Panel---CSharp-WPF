@@ -71,6 +71,11 @@
                           Margin="0,14,0,0" IsChecked="False"
                           Checked="OnFieldChanged" Unchecked="OnFieldChanged"/>
 
+                <!-- Only visible when a freeze was recorded recently; the box above is ticked for
+                     the user in that case, and this line says which freeze is riding along. -->
+                <TextBlock x:Name="TxtHangHint" Foreground="#9898B0" FontSize="11"
+                           Margin="24,4,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
+
                 <TextBlock x:Name="TxtScrubberCounts" Foreground="#9898B0" FontSize="11"
                            Margin="0,10,0,0" TextWrapping="Wrap"/>
 

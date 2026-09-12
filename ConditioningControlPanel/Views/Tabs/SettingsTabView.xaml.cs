@@ -108,83 +108,6 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnMuteBrowser_Click(sender, e);
         }
-        // Right-click anywhere in the chip stack: MainWindow works out which chip took the hit
-        // and turns that feature on/off. Left-click (the Chip*_Click shims below) opens it.
-        private void PremiumRailContent_RightClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.PremiumRail_RightClick(sender, e);
-        }
-        private void ChipTakeover_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.PremiumChip_Click(PremiumFeature.Takeover);
-        }
-        private void ChipAwareness_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.PremiumChip_Click(PremiumFeature.Awareness);
-        }
-        private void ChipHaptics_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.PremiumChip_Click(PremiumFeature.Haptics);
-        }
-        private void ChipGradedIntake_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.PremiumChip_Click(PremiumFeature.GradedIntake);
-        }
-        private void ChipVoice_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.PremiumChip_Click(PremiumFeature.Voice);
-        }
-        private void ChipFyp_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.PremiumChip_Click(PremiumFeature.Fyp);
-        }
-        private void BtnLockdownMinus_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.PremiumLockdownAdjust(-5);
-        }
-        private void BtnLockdownPlus_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.PremiumLockdownAdjust(5);
-        }
-        private void BtnLockdownGo_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.PremiumLockdownActivate();
-        }
-        private void BtnBlinkMinus_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.PremiumBlinkAdjust(-5);
-        }
-        private void BtnBlinkPlus_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.PremiumBlinkAdjust(5);
-        }
-        private void BtnBlinkGo_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.PremiumBlinkToggle();
-        }
-        private void ChipRemote_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.PremiumRemoteOpenFlyout();
-        }
-        private void BtnRemoteStart_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.PremiumRemoteStart();
-        }
         private void BtnQuickLogout_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -199,6 +122,19 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnReloadBrowser_Click(sender, e);
+        }
+        // The browser card's fold chevron. MainWindow.DashboardFold.cs owns the setting, the row
+        // arithmetic and the height ease; this view only carries the button.
+        private void BtnFoldBrowser_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.BtnFoldBrowser_Click(sender, e);
+        }
+        // The billboard card in the row the folded browser gives back.
+        private void BillboardCard_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.BillboardCard_Click(sender, e);
         }
         // Phase 2: BtnExportPhrases_Click / BtnImportPhrases_Click moved with the phrase-backup
         // card to Views/Controls/AppSettings/DataSettingsSection.xaml.cs.
@@ -321,10 +257,10 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw) mw.CardVault_Click(sender, e);
         }
-        private void CardJustDrop_Click(object sender, RoutedEventArgs e)
+        private void CardDeeperEditor_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardJustDrop_Click(sender, e);
+                mw.CardDeeperEditor_Click(sender, e);
         }
         private void ChkDiscordRichPresence_Changed(object sender, RoutedEventArgs e)
         {

@@ -302,6 +302,16 @@ race.css can take every filter, the backdrop blur and the colour keyframes off t
 glitch shudders on transform alone, a heavier fill stands in for the blur, the melt's sag drops its
 saturate). The masks stay: a mask is a composite, not a per-frame filter pass. The desktop rules
 are untouched, the Descent passes no cap. `race/smoke/loom-spiral-check.mjs` section 7b.
+LIGHTER (2026-09-10: the phone "seems to be going great unless i record my phone. It starts to lag
+then"). A screen recording is a load the page cannot see, so it is a hand switch: the options row
+`lighter` (race/menu.js, persisted in `race.options` as `lite`, default off), read by raceBoot into
+`settings.lite` (`?lite=1|0` overrides it for a check). run.js pulls the four levers the perf passes
+left unpulled, for the next launch: the resolution lid at `LITE_DPR` 0.6 from the first frame and
+held there (race/pixel.js, the governor stands down), live bubbles capped at 80 under the tier's own
+cap (`createBubbleField({cap})`), the spiral canvas at 20 fps on any tier (loomSpiralFx
+`LITE_FRAME_MS`), and the spiral and pink holds composited flat (race.css `[data-lite="1"]`
+`mix-blend-mode: normal`, with the spiral's inline cap lowered to 0.6 and the touch tier's no-filter
+block stamped along with it). Off is the run exactly as it was. Section 7d of the same smoke.
 The second pass (2026-09-10, "smoother but still not good enough ... the gifs, pink filter and
 spiral ... the blink shutter effect on the bambi sleep trigger"): under the same stamp the melt's
 drip (an animated background-position, a 3 M px repaint per frame) is gone and only the sag stays;

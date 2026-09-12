@@ -6,6 +6,8 @@ using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json.Linq;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Services.Chaos;
 
@@ -290,6 +292,7 @@ internal static class DtrhHostService
             case "run-started":
             {
                 _runActive = true;
+                SeasonRecapService.TrackFeature(SeasonFeatureKeys.Dtrh);
                 _vnSpeaking = false;   // never carry a stale duck into a run
                 ApplyWorldFreeze(false);   // a stale freeze from a crashed prior run must not bleed into this descent's dedup state
                 ResetRunMetrics();     // fresh native engagement counters for this descent

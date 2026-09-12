@@ -108,6 +108,9 @@ namespace ConditioningControlPanel
             {
                 DiscordTab?.ProfileSpiralGlyph?.RefreshMotion();
                 ProfileMenuSpiralGlyph?.RefreshMotion();
+                // The nav-rail chip wears the same glyph since it stopped being a WebView2
+                // (Controls/SpiralRailHost.cs), so it re-arms from the same choke point.
+                SpiralRail?.RefreshGlyphMotion();
             }
             catch (Exception ex) { App.Logger?.Debug("RefreshSpiralGlyphMotion: {E}", ex.Message); }
         }

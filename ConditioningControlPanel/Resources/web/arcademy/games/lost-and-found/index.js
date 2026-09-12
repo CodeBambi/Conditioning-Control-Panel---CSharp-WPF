@@ -51,7 +51,7 @@ import {
   DENSITY_LEVELS, DENSITY_HARD_CAP, DENSITY_COARSE_CAP, TOUCH_MIN_TILE_H,
 } from './constants.js';
 import { makeRng } from '../../core/rng.js';
-import { createBoard, paintLook, isVideoUrl, isAnimatedUrl } from './board.js';
+import { createBoard, paintLook, isVideoUrl, isAnimatedUrl, mediaKey } from './board.js';
 import { createHud } from './hud.js';
 import { createTrickster } from './trickster.js';
 import { createCasino } from './casino.js';
@@ -441,7 +441,10 @@ export default {
      */
     function drawLive(targetUrl) {
       if (!pool || typeof pool.next !== 'function' || !board) return null;
-      const have = new Set(board.liveUrls().map((e) => e.url));
+      // keyed on the PICTURE, not the url: a clip is the same clock as itself
+      // at another size, and the target's clip is the target (one-picture law)
+      const have = new Set(board.liveUrls().map((e) => mediaKey(e.url)));
+      const targetKey = mediaKey(targetUrl);
       // Preferring video is only useful while there is a player slot left for
       // one: past the element ceiling every video draw would be refused and the
       // seat would fall back to a still, quietly shrinking the live window.
@@ -451,8 +454,8 @@ export default {
       for (let i = 0; i < PLAYTEST.LIVE_DRAW_TRIES; i++) {
         const got = pool.next('loop');
         if (!got || !got.url) break;
-        if (targetUrl && got.url === targetUrl) continue;
-        if (have.has(got.url)) continue;
+        if (targetKey && mediaKey(got.url) === targetKey) continue;
+        if (have.has(mediaKey(got.url))) continue;
         // the bundled placeholder floor lands in the loop pool too and animates
         // nothing - usable, but never worth spending a live seat on
         if (!isAnimatedUrl(got.url)) { if (!fallback) fallback = got; continue; }
@@ -471,9 +474,14 @@ export default {
       if (reduced || !board) return null;         // reduced motion parks nowhere
       const live = board.liveUrls();
       if (!live.length) return null;
+      const targetKey = mediaKey(targetUrl);
       for (let i = 0; i < 3; i++) {
         const pick = live[Math.floor(rng() * live.length)];
-        if (pick && pick.url && (!targetUrl || pick.url !== targetUrl)) return pick;
+        // `shared`: a park is the one draw the one-picture law lets two seats
+        // wear - it IS the same resource on purpose (see board.js)
+        if (pick && pick.url && (!targetKey || mediaKey(pick.url) !== targetKey)) {
+          return { url: pick.url, remote: pick.remote, shared: true };
+        }
       }
       return null;
     }
@@ -492,6 +500,13 @@ export default {
      *   bank  drawn-but-unspent urls, oldest first
      * ---------------------------------------------------------------------- */
     const SLEEPER_BANK_MAX = 8;
+    /* KEYED ON THE PICTURE, not the url (0911). This ledger's whole job is
+     * "no seat repeats what another seat already wears", which is the
+     * one-picture law read from the draw side - and the feed hands one picture
+     * out under several urls. Keyed on the url it would cheerfully deal the
+     * same picture twice, board.setUrl would refuse the second, and dressTile
+     * would burn its UNIQUE_DRAW_TRIES on a pool that keeps offering the same
+     * thing. Keyed on mediaKey the retry actually gets something new. */
     let sleeperUsed = new Set();
     const sleeperBank = [];
     function sleeperReset() {
@@ -499,8 +514,8 @@ export default {
       sleeperBank.length = 0;
     }
     function sleeperBankPush(got) {
-      if (!got || !got.url || sleeperUsed.has(got.url)) return;
-      if (sleeperBank.some((e) => e.url === got.url)) return;
+      if (!got || !got.url || sleeperUsed.has(mediaKey(got.url))) return;
+      if (sleeperBank.some((e) => mediaKey(e.url) === mediaKey(got.url))) return;
       sleeperBank.push(got);
       while (sleeperBank.length > SLEEPER_BANK_MAX) sleeperBank.shift();
     }
@@ -509,8 +524,8 @@ export default {
       let at = -1;
       for (let i = 0; i < sleeperBank.length; i++) {
         const e = sleeperBank[i];
-        if (!e || !e.url || sleeperUsed.has(e.url)) continue;
-        if (targetUrl && e.url === targetUrl) continue;
+        if (!e || !e.url || sleeperUsed.has(mediaKey(e.url))) continue;
+        if (targetUrl && mediaKey(e.url) === mediaKey(targetUrl)) continue;
         if (!isAnimatedUrl(e.url)) { at = i; break; }
         if (at < 0) at = i;
       }
@@ -518,13 +533,14 @@ export default {
     }
     function sleeperTake(got, targetUrl) {
       if (!got || !got.url) return got;
-      if (!sleeperUsed.has(got.url)) { sleeperUsed.add(got.url); return got; }
+      const key = mediaKey(got.url);
+      if (!sleeperUsed.has(key)) { sleeperUsed.add(key); return got; }
       /* this seat would repeat: spend a banked url if one is free, and bank the
        * repeat in its place (it may still dress a later seat) */
       const alt = sleeperBankTake(targetUrl);
       if (!alt) return got;                       // nothing banked: the repeat stands
       sleeperBankPush(got);
-      sleeperUsed.add(alt.url);
+      sleeperUsed.add(mediaKey(alt.url));
       return alt;
     }
 
@@ -537,7 +553,7 @@ export default {
       for (let i = 0; i < 3; i++) {
         const got = pool.next('still');
         if (!got || !got.url) break;
-        if (targetUrl && got.url === targetUrl) continue;
+        if (targetUrl && mediaKey(got.url) === mediaKey(targetUrl)) continue;
         // the still we actually asked for
         if (!isAnimatedUrl(got.url)) { if (animated) sleeperBankPush(animated); return sleeperTake(got, targetUrl); }
         if (!animated) animated = got;            // a pool that ignores `kind`
@@ -580,12 +596,17 @@ export default {
       if (!tile || !board) return false;
       let got = null;
       try { got = pool && typeof pool.next === 'function' ? pool.next('still') : null; } catch (e) { got = null; }
-      if (got && got.url && !isAnimatedUrl(got.url) && board.setUrl(tile, got)) return true;
+      // the law may refuse this still (another seat wears that picture); a
+      // resting seat would rather take the repeat than fall to the floor
+      if (got && got.url && !isAnimatedUrl(got.url)
+        && (board.setUrl(tile, got) || board.setUrl(tile, got, { lastResort: true }))) return true;
       const target = board.targetTile();
+      const targetKey = target ? mediaKey(target.url) : '';
       const live = board.liveUrls().filter((e) => !isVideoUrl(e.url)
-        && (!target || e.url !== target.url));
+        && (!targetKey || mediaKey(e.url) !== targetKey));
       const pick = live.length ? live[Math.floor(Math.random() * live.length)] : null;
-      if (pick && board.setUrl(tile, pick)) return true;
+      // a park is a SHARED seat by design (one resource, one clock) - see board.js
+      if (pick && board.setUrl(tile, { url: pick.url, remote: pick.remote, shared: true })) return true;
       return board.setUrl(tile, { url: null });
     }
 
@@ -710,16 +731,26 @@ export default {
      *  an error). Returns true if any look took. */
     function dressTile(tile, targetUrl, wantLive, delayMs) {
       const o = { paintDelayMs: delayMs };
-      if (wantLive) {
-        const got = drawLive(targetUrl);
-        if (got && board.setUrl(tile, got, o)) return true;
-      }
-      const rest = drawSleeper(targetUrl);
-      if (rest && board.setUrl(tile, rest, o)) return true;
-      if (!wantLive) {
-        const got = drawLive(targetUrl);          // still-less library, cap free
-        if (got && board.setUrl(tile, got, o)) return true;
-      }
+      /* A draw the one-picture law refuses (board.setUrl: another seat already
+       * wears that picture) is drawn AGAIN, a few times. If the pool has
+       * nothing new left - a library smaller than the wall, which is ordinary
+       * - the last draw is taken ANYWAY (`lastResort`): a repeated decoy is a
+       * better wall than a seat on the glyph floor, and setUrl still refuses
+       * the one repeat that matters, the target's own picture. */
+      const tries = Math.max(1, PLAYTEST.UNIQUE_DRAW_TRIES | 0);
+      const seat = (draw) => {
+        let last = null;
+        for (let i = 0; i < tries; i++) {
+          const got = draw();
+          if (!got || !got.url) break;
+          if (board.setUrl(tile, got, o)) return true;
+          last = got;
+        }
+        return !!last && board.setUrl(tile, last, Object.assign({ lastResort: true }, o));
+      };
+      if (wantLive && seat(() => drawLive(targetUrl))) return true;
+      if (seat(() => drawSleeper(targetUrl))) return true;
+      if (!wantLive && seat(() => drawLive(targetUrl))) return true;   // still-less library, cap free
       return false;
     }
 
@@ -768,7 +799,9 @@ export default {
       try {
         if (!late && (!onlyBare || wearsPlaceholder(target))) {
           const got = pool.next('target');
-          if (got && got.url) { targetUrl = got.url; board.setUrl(target, got); }
+          // `evict`: if a decoy already wears this picture (a late batch, a
+          // repost), it is bared and re-seated below - she lands exactly once
+          if (got && got.url && board.setUrl(target, got, { evict: true })) targetUrl = got.url;
         }
       } catch (e) { say('target draw failed - gradient target stands'); }
       /* THE LIVE WINDOW. Only `cap` seats animate; the rest wear stills. On a
@@ -813,10 +846,13 @@ export default {
       // remote/local media can land after the briefing card is up
       if (hud) hud.refreshCards(targetLook());
       const after = board.liveStats();
+      const dupes = board.duplicateKeys();
       say('board dressed: ' + density + ' tiles, ' + warm + ' near-twins, '
         + after.used + '/' + after.cap + ' live urls on ' + after.tiles + ' seats ('
         + after.elements + ' animated els, ' + after.videoTiles + ' video), '
-        + (targetUrl ? 'target media ok' : 'target on its look signature only'));
+        + (targetUrl ? 'target media ok' : 'target on its look signature only')
+        + ', target on ' + board.targetSeats() + ' seat(s), '
+        + (dupes.length ? dupes.length + ' shared picture(s)' : 'no shared picture'));
     }
 
     /* ---------------------------------------------------------------- swaps */
@@ -897,8 +933,17 @@ export default {
             const target = board.targetTile();
             // ...on the SAME side of the live window the seat is already on, so
             // a remote batch can never quietly inflate the animated set.
-            const got = tile ? drawFor(tile, target ? target.url : null) : null;
-            if (got) board.setUrl(tile, got);
+            /* A refusal here is the one-picture law, not a budget: this seat
+             * was offered a picture some other seat already wears. Draw again
+             * rather than drop the upgrade - and on a pool with nothing new
+             * left the seat simply keeps the media it already had. */
+            const tries = Math.max(1, PLAYTEST.UNIQUE_DRAW_TRIES | 0);
+            for (let k = 0; tile && k < tries; k++) {
+              const got = drawFor(tile, target ? target.url : null);
+              if (!got || !got.url) break;
+              // the last try takes the repeat rather than drop the upgrade
+              if (board.setUrl(tile, got, k === tries - 1 ? { lastResort: true } : null)) break;
+            }
           }
         };
         step();
@@ -989,15 +1034,9 @@ export default {
       board.setTarget(pick);
       pick.warm = false;             // setTarget marks, it never un-warms - and
                                      // a target that is warm would tease, not find
-      // Near-twins re-key to the NEW look, seeded off the round stream. On
-      // touch the strong-twin repaint is capped and staggered so the ceremony
-      // tail never lands on a decode stampede (paintDelayMs = board.js seam).
-      board.assignWarm({
-        share: dials.nearTwinShare,
-        rng: r,
-        urlCap: touch ? Math.min(2, PLAYTEST.NEAR_TWIN_URL_CAP) : undefined,
-        paintDelayMs: touch ? 240 : 0,
-      });
+      // Near-twins re-key to the NEW look, seeded off the round stream (hue
+      // twins only - the target's picture is on one seat, board.js).
+      board.assignWarm({ share: dials.nearTwinShare, rng: r });
       // THE FUNNEL: refreshCards repaints the chip AND any live peek/spot card
       // and the howto polaroid - never setTargetArt alone.
       if (hud) hud.refreshCards(targetLook());

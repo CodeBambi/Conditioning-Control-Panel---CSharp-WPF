@@ -166,6 +166,12 @@ namespace ConditioningControlPanel.Views.Deeper
             _playheadTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
             _playheadTimer.Tick += PlayheadTimer_Tick;
 
+            // The example has to name the ACTIVE mod's word, not the vanilla one: the praise this
+            // box is seeded with reads "that's it, {petname}", so a hard-coded "sweetie" advertised
+            // the wrong word to every user with a mod.
+            TxtSpeakCorrect.ToolTip =
+                $"Flashed after each correct rep, e.g. 'that's it, {Localization.VocabTokens.PetName}'.";
+
             BuildColorSwatches();
             BuildPatternCombo();
             FillHapticTargetCombo(CmbHapticTarget);
@@ -3561,7 +3567,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     if (newType == EffectTypes.Speak && string.IsNullOrWhiteSpace(te.SpeakTarget))
                     {
                         te.SpeakTarget = "YES";
-                        te.SpeakCorrectMessage = $"that's it, {VocabTokens.VanillaPetName}";
+                        te.SpeakCorrectMessage = $"that's it, {VocabTokens.PetName}";
                         te.SpeakIncorrectMessage = "try again";
                     }
                     RebuildTypeFields();
@@ -4378,6 +4384,13 @@ namespace ConditioningControlPanel.Views.Deeper
                 // surface them on the card without having to re-scan files.
                 if (_enhancement.Metadata != null)
                     _enhancement.Metadata.AutoTags = EnhancementAutoTagger.Detect(_enhancement);
+
+                // Carry the media length in the file so the library list can
+                // show it without opening the media. Only when the preview
+                // actually measured it; a file saved before any media loaded
+                // keeps whatever it had.
+                if (_enhancement.Metadata != null && _totalSeconds > 0 && !double.IsNaN(_totalSeconds))
+                    _enhancement.Metadata.MediaDurationSeconds = Math.Round(_totalSeconds, 1);
 
                 App.EnhancementLibrary?.Save(_enhancement, path);
                 _filePath = path;

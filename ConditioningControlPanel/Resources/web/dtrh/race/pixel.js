@@ -37,6 +37,10 @@
  * the frame, and a hold that drops it needs an answer in two seconds, not five.
  * It climbs back the same way, one rung at a time, when the average frame is
  * under FAST_MS again.
+ * LIGHTER (2026-09-10, the owner: it lags "unless i record my phone"): with
+ * `lite` the lid is LITE_DPR from the first frame and the governor never lifts
+ * it. A recording is a load the page cannot see, so the player asks for the
+ * headroom up front instead of the governor finding it two seconds late.
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -61,6 +65,8 @@ const FRAME_WIN = 300;         // frames kept for the avg / p95
 const SLOW_MS = 24, FAST_MS = 13;   // governor thresholds on the avg frame (about 42 and 77 fps)
 /** The coarse pointer's lower rung and its faster read (see THE GOVERNOR in the header). */
 export const TOUCH_DPR_FLOOR = 0.8, GOV_TOUCH_SEC = 2;
+/** The lighter switch's fixed lid (see LIGHTER in the header). */
+export const LITE_DPR = 0.6;
 /** `(pointer: coarse)` and nothing else, the way pixelDefault reads it - `?coarse=` forces it for a check. */
 export function coarsePointer(win) {
   const w = win || (typeof window !== 'undefined' ? window : null);
@@ -133,10 +139,10 @@ const BLIT_FRAG = `
     #include <colorspace_fragment>
   }`;
 
-export function createPixelizer({ renderer, canvas, block = pixelDefault(), log = null }) {
+export function createPixelizer({ renderer, canvas, block = pixelDefault(), log = null, lite = false }) {
   let cur = normalizeBlock(block);
   let w = 1, h = 1;
-  let dprCap = Infinity;         // the governor's lid on the device pixel ratio (1 while slow, the touch floor while slower)
+  let dprCap = lite ? LITE_DPR : Infinity;   // the governor's lid on the device pixel ratio (1 while slow, the touch floor while slower, LITE_DPR for good under lighter)
   const touch = coarsePointer();
   const screenDpr = () => Math.min(window.devicePixelRatio || 1, Q.maxDpr, 1.5);
   const nativeDpr = () => Math.min(screenDpr(), dprCap);
@@ -193,7 +199,7 @@ export function createPixelizer({ renderer, canvas, block = pixelDefault(), log 
   }
 
   // ---- the frame ---------------------------------------------------------------------------
-  const stats = { calls: 0, triangles: 0, passes: 0, frameMs: 0, frameP95: 0, dprCap: Infinity, touch };
+  const stats = { calls: 0, triangles: 0, passes: 0, frameMs: 0, frameP95: 0, dprCap: lite ? LITE_DPR : Infinity, touch, lite: !!lite };
   let fCalls = 0, fTris = 0, fPasses = 0, perfLast = 0;
   const info = renderer.info;
   function tally() { if (!info || !info.render) return; fCalls += info.render.calls; fTris += info.render.triangles; fPasses++; }
@@ -209,6 +215,7 @@ export function createPixelizer({ renderer, canvas, block = pixelDefault(), log 
     return { avg: sum / gapN, p95: view[Math.min(gapN - 1, Math.floor(gapN * 0.95))] };
   }
   function govern(avg) {
+    if (lite) return;              // the lid is the player's, not the governor's
     if (gapN < 60) return;
     const native = screenDpr();
     if (avg > SLOW_MS && dprCap > 1 && native > 1) { dprCap = 1; apply(); if (log) log(`[race-perf] governor: dpr 1 (avg frame ${avg.toFixed(1)} ms)`); }

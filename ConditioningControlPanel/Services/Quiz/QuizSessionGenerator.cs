@@ -703,6 +703,31 @@ namespace ConditioningControlPanel.Services
             };
         }
 
+        /// <summary>
+        /// One phrase pool as the ACTIVE mod sees it. The generic categories below (obedience,
+        /// submission, and the catch-all) are drawn by every user whatever mod they run, and Wave 1
+        /// rewrote several of their phrases neutral with no mod lookup - so a themed mod may own
+        /// the whole pool through its manifest <c>phrases</c> dictionary, and the neutral list here
+        /// is what an unmodded install gets. CCP Default deliberately names none of these
+        /// categories: the neutral wording lives here, once, and a second copy would drift.
+        ///
+        /// <para>The per-niche cases (bambi / sissy / circe) are untouched - those are already the
+        /// mod's own words, chosen by the intake niche rather than a quiz score.</para>
+        /// </summary>
+        private static List<string> ThemedOrNeutral(string category, List<string> neutral)
+        {
+            try
+            {
+                var themed = App.Mods?.GetPhrases(category);
+                if (themed is { Length: > 0 }) return new List<string>(themed);
+            }
+            catch
+            {
+                // No mod layer (tests, very early startup): the neutral pool is the right answer.
+            }
+            return neutral;
+        }
+
         public static SessionTextContent GetFallbackContent(string categoryId, double scorePercentage)
         {
             var content = new SessionTextContent();
@@ -791,22 +816,22 @@ namespace ConditioningControlPanel.Services
                 case "obedience":
                     content.Name = $"{diffPrefix} Obedience Training";
                     content.Description = "A session designed to reinforce obedience and compliance.";
-                    content.SubliminalPhrases = new List<string>
+                    content.SubliminalPhrases = ThemedOrNeutral("QuizObedienceSubliminal", new List<string>
                     {
                         "Obey", "Submit", "Listening is easy", "Follow instructions",
                         "Compliance is bliss", "Do as you're told", "Obedience is pleasure",
                         "Listen and obey", "You love to comply", "Surrender control"
-                    };
+                    });
                     content.BouncingTextPhrases = new List<string>
                     {
                         "OBEY", "SUBMIT", "COMPLY", "LISTEN", "FOLLOW", "SURRENDER"
                     };
-                    content.LockCardPhrases = new List<string>
+                    content.LockCardPhrases = ThemedOrNeutral("QuizObedienceLockCard", new List<string>
                     {
                         "I love to obey", "I follow instructions", "Obedience is pleasure",
                         "I submit willingly", "Compliance makes me happy", "I do as I am told",
                         "Listening is easy", "I surrender control"
-                    };
+                    });
                     break;
 
                 case "mindlessness":
@@ -833,42 +858,42 @@ namespace ConditioningControlPanel.Services
                 case "submission":
                     content.Name = $"{diffPrefix} Submission";
                     content.Description = "A session to deepen submission and surrender.";
-                    content.SubliminalPhrases = new List<string>
+                    content.SubliminalPhrases = ThemedOrNeutral("QuizSubmissionSubliminal", new List<string>
                     {
                         "Submit", "Surrender", "Give in", "You are owned",
                         "Submission is easy", "Let go of control", "Deeper submission",
                         "You belong", "Surrender completely", "Submit and feel bliss"
-                    };
+                    });
                     content.BouncingTextPhrases = new List<string>
                     {
                         "SUBMIT", "SURRENDER", "GIVE IN", "OWNED", "DEEPER", "BELONG"
                     };
-                    content.LockCardPhrases = new List<string>
+                    content.LockCardPhrases = ThemedOrNeutral("QuizSubmissionLockCard", new List<string>
                     {
                         "I submit willingly", "Surrender feels so good", "I give in completely",
                         "I belong", "I surrender", "I let go of control",
                         "Submission is bliss", "I am deeply submissive"
-                    };
+                    });
                     break;
 
                 default:
                     content.Name = $"{diffPrefix} Conditioning";
                     content.Description = "A personalized conditioning session.";
-                    content.SubliminalPhrases = new List<string>
+                    content.SubliminalPhrases = ThemedOrNeutral("QuizCustomSubliminal", new List<string>
                     {
                         "Good", "Obey", "Submit", "Let go", "Deeper",
                         "Surrender", "Empty mind", "So good", "Accept it", "Drift away"
-                    };
-                    content.BouncingTextPhrases = new List<string>
+                    });
+                    content.BouncingTextPhrases = ThemedOrNeutral("QuizCustomBouncingText", new List<string>
                     {
                         "OBEY", "SUBMIT", "DEEPER", "SO GOOD", "LET GO", "SURRENDER"
-                    };
-                    content.LockCardPhrases = new List<string>
+                    });
+                    content.LockCardPhrases = ThemedOrNeutral("QuizCustomLockCard", new List<string>
                     {
                         "I am good for this", "I love to obey", "Surrender feels good",
                         "I submit willingly", "Empty and happy", "I listen",
                         "I let go of control", "Deeper and deeper"
-                    };
+                    });
                     break;
             }
 

@@ -221,8 +221,8 @@ namespace ConditioningControlPanel.Services
             Door("play", "nav_door_play", "🎮", "play", "play games lab");
             Door("you", "nav_door_you", "👤", "discord", "you profile progress");
             Door("library", "nav_door_library", "📚", "assets", "library assets media");
-            // The withheld Just Drop door. Declared in rail order (below Library, above the pinned
-            // Settings door) and carrying the ONLY IsAvailable predicate in this index: the row is
+            // The withheld Just Drop row (Studio > Creator Tools since 2026-09-11, a creator tool by
+            // owner call). It carries the first IsAvailable predicate in this index: the row is
             // in All - so the door/tab parity tests still see it, and so the day the server opens
             // the door there is nothing left to remember - but Search skips it while
             // JustDropService.DoorAvailable is false. Without that, Ctrl+K would be the one place
@@ -236,7 +236,7 @@ namespace ConditioningControlPanel.Services
                 LabelKey = "jd_door_title",
                 Glyph = "🎚",
                 TabKey = "justdrop",
-                ContextKeys = new[] { GroupDoors },
+                ContextKeys = new[] { GroupNav, "nav_door_studio" },
                 Aliases = "just drop shop session order drop express",
                 IsAvailable = () => JustDrop.JustDropService.DoorAvailable,
             });

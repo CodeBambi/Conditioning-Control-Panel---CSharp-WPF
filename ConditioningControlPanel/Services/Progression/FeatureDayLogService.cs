@@ -126,6 +126,24 @@ public class FeatureDayLogService : IDisposable
     }
 
     /// <summary>
+    /// Credit today with one engagement event (wire contract 2, <see cref="FeatureDayEntry.EventKeys"/>).
+    /// Unlike the counters there is no lifetime source to diff against, so the hook IS the record:
+    /// a key outside the whitelist is dropped here rather than stored. Safe from any thread; the
+    /// 60 s timer (or the next sync's Flush) writes it to disk.
+    /// </summary>
+    public void Note(string eventKey, int amount = 1)
+    {
+        if (amount <= 0 || string.IsNullOrEmpty(eventKey) || !FeatureDayEntry.IsEventKey(eventKey)) return;
+        lock (_lock)
+        {
+            var today = DateTime.Today;
+            Log.GetOrAddDay(DayKey(today)).Add(eventKey, amount);
+            Log.Prune(DayKey(today.AddDays(-FeatureDayLog.MaxDays)));
+            _dirty = true;
+        }
+    }
+
+    /// <summary>
     /// Move every baseline to the current lifetime value without crediting the difference. For
     /// the moment a cloud merge lifts the local counters to what another device banked: that
     /// gain belongs to other days, not to today.

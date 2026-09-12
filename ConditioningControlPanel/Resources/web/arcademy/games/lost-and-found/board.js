@@ -68,6 +68,103 @@ import { el, clamp, shuffle } from './util.js';
 /** Marquee period band, seconds. drift 0 -> slow, drift 1 -> fast. */
 const DUR_SLOW_SEC = 44;
 const DUR_FAST_SEC = 12;
+/**
+ * THE WRAP LAW (phone wave, 0911). A row is `reps` copies of its tiles and the
+ * marquee slides exactly ONE copy per cycle, so the wrap is seamless only while
+ * the copies still on screen cover the frame: (reps - 1) x one copy's width
+ * must be >= the frame width. The build-time guess (3 copies under 6 tiles,
+ * else 2) was written against a desktop tile; on a landscape phone a 6-tile
+ * copy is ~560px against a 930px frame, and every cycle the strip's tail
+ * crossed the frame and left a third of the row bare - which the owner read as
+ * "the thumbnails never load". fitWrap() measures the real widths once the
+ * mosaic is in the document (and again on a resize/rotation) and ADDS clone
+ * sets until the law holds. Clone sets are never removed: an extra copy only
+ * costs elements, a missing one costs the illusion. Capped so a degenerate
+ * measurement (a 20px tile in a 4k frame) cannot mint a thousand seats.
+ */
+const WRAP_REPS_MAX = 6;
+const WRAP_FIT_DEBOUNCE_MS = 180;
+
+/* ----------------------------------------------------------------------------
+ * THE ONE-PICTURE LAW (owner, 0911): a picture sits on exactly ONE seat of the
+ * wall, and the target's picture on exactly one seat - so a tap on "her" is
+ * never a miss because a copy of her was dealt as a decoy. The wall used to
+ * dedupe on the exact url, which is not the same thing: the feed hands the
+ * same picture out under several urls - a clip and its own poster (the poster
+ * is the clip's first frame, and the target is drawn from the STILLS, so the
+ * clip could animate her on another seat), a rendition at another size (the
+ * `-640x800` / `-1280x1600` suffix), a repost under a second niche - and the
+ * recency ring only spreads draws within one bucket. mediaKey() is the
+ * identity that survives all of that: the whole path, rendition markers and
+ * extension folded away, case folded.
+ *
+ * THE LAW HAS TWO TIERS, and the difference is the whole design. THE TARGET'S
+ * picture is absolute: no second seat may wear it, ever, whatever else has to
+ * give - that is the owner's report, word for word. Any OTHER repeat is
+ * merely unwanted: setUrl refuses it so the caller draws again
+ * (UNIQUE_DRAW_TRIES), and only when every draw came back a repeat does the
+ * caller ask again with `lastResort` and take the copy. A library SMALLER than
+ * the wall is ordinary - a tier-4 board is 52 seats and a player may own
+ * twenty pictures - and on one of those a strict rule would answer the owner's
+ * duplicate complaint by leaving thirty seats on the glyph floor, which is a
+ * worse wall, not a fixed one. So: her picture once, the rest as distinct as
+ * the library allows.
+ *
+ * `evict` is the target's own draw (she lands and the copies are bared),
+ * `shared:true` is a draw that is MEANT to be two seats on one resource
+ * (parking a sleeper on a live url when the library has no stills - one
+ * decoder, one clock), and the bundled placeholder floor is exempt.
+ * -------------------------------------------------------------------------- */
+const SIZE_SUFFIX_RE = /[-_]\d{2,5}x\d{2,5}(?=[-_.]|$)/g;
+const RENDITION_MARK_RE = /[-_](?:thumb(?:nail)?|poster|small|mobile)(?=[-_.]|$)/gi;
+const SCHEME_HOST_RE = /^[a-z][a-z0-9+.-]*:\/\/[^/]*/i;
+const PLACEHOLDER_URL_RE = /\/ae-ph-\d+\.svg(\?|#|$)/i;
+
+/**
+ * The media identity of a url: what the player SEES, not where it came from.
+ *
+ * THE PATH, never the bare file name, and the choice is load-bearing in both
+ * directions. Key on too much (the whole url) and a second rendition of one
+ * picture reads as a second picture. Key on too little (the last segment) and
+ * the DESKTOP breaks outright: the shell serves a local library as
+ * `https://ccp.assets/<folder>/<file>` straight off the player's own tree
+ * (ArcademyHostService.ToAssetsUrl), and a folder of 001.jpg / 002.jpg beside
+ * another folder of 001.jpg / 002.jpg is the ordinary shape of a saved
+ * library - name-only keying would call those one picture and bare half the
+ * wall. The same trap remotely: v.redd.it puts the identity in the PARENT
+ * segment and a resolution in the file name (<post>/DASH_720.mp4), so every
+ * reddit clip on the wall would collapse onto "dash_720".
+ *
+ * So: drop the scheme and host - one CDN hands the same file out under its
+ * `preview.` and `i.` subdomains, and inside the Discord Activity the web shim
+ * rewrites every remote row to `<frame origin>/scrolller-media/...`
+ * (inventory.js) - keep every path segment, and fold only what is provably a
+ * rendition of ONE file: the query (reddit's preview host puts the size
+ * there), the host's `#.ext` animation hint, the extension (a clip and its own
+ * poster sit side by side as loop5.mp4 / loop5.jpg), a `-640x800` size suffix,
+ * a thumb/poster/small/mobile rendition marker, and case.
+ */
+export function mediaKey(url) {
+  let s = String(url || '').trim();
+  if (!s) return '';
+  if (/^(blob|data):/i.test(s)) return s;          // a pile row: the url is the picture
+  const hash = s.indexOf('#'); if (hash >= 0) s = s.slice(0, hash);   // the host's ext hint
+  const q = s.indexOf('?'); if (q >= 0) s = s.slice(0, q);
+  s = s.replace(SCHEME_HOST_RE, '').replace(/\\/g, '/').replace(/^\.?\/+/, '');
+  const slash = s.lastIndexOf('/');
+  const dir = slash >= 0 ? s.slice(0, slash + 1) : '';
+  let name = slash >= 0 ? s.slice(slash + 1) : s;
+  const dot = name.lastIndexOf('.');
+  if (dot > 0) name = name.slice(0, dot);
+  name = name.replace(SIZE_SUFFIX_RE, '').replace(RENDITION_MARK_RE, '');
+  return ((dir + name) || s).toLowerCase();
+}
+
+/** A key the one-picture law counts: real media only, never the glyph floor. */
+export function uniqueKey(url) {
+  if (!url || PLACEHOLDER_URL_RE.test(String(url))) return '';
+  return mediaKey(url);
+}
 
 /* ----------------------------------------------------------------------------
  * LOOK PAINTING - shared by the board tiles and by every card in hud.js, so a
@@ -306,12 +403,17 @@ export function createBoard(o) {
   sizes.forEach((count, r) => {
     const rowEl = el('div', 'g-lf-row');
     const strip = el('div', 'g-lf-strip' + (r % 2 ? ' g-lf-rev' : ''));
-    // Enough repeats that the wrap never exposes a gap on a wide view.
+    // The build-time FLOOR; fitWrap() below grows it against the measured
+    // frame once the mosaic is in the document (see THE WRAP LAW).
     const reps = count <= 5 ? 3 : 2;
     const durSec = (DUR_SLOW_SEC - (DUR_SLOW_SEC - DUR_FAST_SEC) * clamp(opts.drift, 0, 1))
       * (0.85 + 0.3 * rng());
     if (strip) {
       strip.style.setProperty('--g-lf-reps', String(reps));
+      // The attribute picks a var-free keyframe set in styles.js: the shift
+      // is a plain percentage of the strip, nothing a phone engine has to
+      // resolve inside @keyframes.
+      strip.setAttribute('data-lf-reps', String(reps));
       strip.style.setProperty('--g-lf-dur', durSec.toFixed(1) + 's');
       if (reduced) strip.classList.add('g-lf-static');
     }
@@ -437,11 +539,110 @@ export function createBoard(o) {
     if (typeof requestAnimationFrame === 'function') pressRafId = requestAnimationFrame(pressStampLoop);
   }
 
+  /* ------------------------------------------------------------ the wrap */
+  let frozen = false;      // freeze() state, re-applied when a drift restarts
+  let fitTimer = 0;
+  let onResize = null;
+
+  /** Grow one row to `need` clone sets, every new seat wearing the row's
+   *  current looks (bare at build; a rotation mid-class copies the media). */
+  function padRow(row, need) {
+    if (!row || !row.strip) return 0;
+    let added = 0;
+    for (let rep = row.reps; rep < need; rep++) {
+      for (const tile of row.tiles) {
+        const node = buildTileEl(tile, rep);
+        if (!node) continue;
+        try { paintLook(node, tile); } catch (e) { /* the skin still shows */ }
+        row.strip.appendChild(node);
+        added += 1;
+      }
+    }
+    row.reps = need;
+    try {
+      row.strip.style.setProperty('--g-lf-reps', String(need));
+      row.strip.setAttribute('data-lf-reps', String(need));
+    } catch (e) { /* ignore */ }
+    return added;
+  }
+
+  /** The keyframe set changed under a running animation: restart it so every
+   *  engine re-resolves the shift (a frozen wall stays frozen). */
+  function restartDrift(strip) {
+    if (!strip || !strip.style) return;
+    try {
+      strip.style.animation = 'none';
+      void strip.offsetWidth;               // flush, so the reset is observed
+      strip.style.animation = '';
+      strip.style.animationPlayState = frozen ? 'paused' : 'running';
+    } catch (e) { /* ignore */ }
+    refStripAnim = null;                     // the press road re-finds its clock
+  }
+
+  /**
+   * Measure the frame and every row's copy width; add clone sets until
+   * (reps - 1) copies cover the frame. Returns the number of seats added. A
+   * board with no layout (the headless double, a detached mosaic) measures 0
+   * and keeps the build-time floor, which is exactly the old behaviour.
+   */
+  function fitWrap(why) {
+    if (destroyed || !mosaic) return 0;
+    let frameW = 0;
+    try {
+      frameW = mosaic.clientWidth || (mosaic.getBoundingClientRect ? mosaic.getBoundingClientRect().width : 0) || 0;
+    } catch (e) { return 0; }
+    if (!(frameW > 0)) return 0;
+    let added = 0;
+    const grown = [];
+    for (const row of rows) {
+      const strip = row.strip;
+      if (!strip || !row.tiles.length) continue;
+      let total = 0;
+      try {
+        total = strip.scrollWidth || (strip.getBoundingClientRect ? strip.getBoundingClientRect().width : 0) || 0;
+      } catch (e) { continue; }
+      const copyW = total / Math.max(1, row.reps | 0);
+      if (!(copyW > 0)) continue;
+      const need = clamp(Math.ceil(frameW / copyW) + 1, row.reps | 0, WRAP_REPS_MAX);
+      if (need <= row.reps) continue;
+      const before = row.reps;
+      added += padRow(row, need);
+      grown.push('row ' + rows.indexOf(row) + ' x' + before + '->x' + need);
+      restartDrift(strip);
+    }
+    if (added) say('wrap fit (' + (why || 'build') + '): frame ' + Math.round(frameW) + 'px, +' + added + ' seats: ' + grown.join(', '));
+    return added;
+  }
+
+  if (opts.mount && mosaic && opts.mount.appendChild) {
+    // The wall fills the window (immersion wave): the row count is only known
+    // here, so it is PUBLISHED here and styles.js solves the tile height from it
+    // (rows always fill the frame; density never changes with the window - the
+    // tile SIZE breathes, the tile COUNT is a tuned dial).
+    if (opts.mount.style) {
+      opts.mount.style.setProperty('--g-lf-rows', String(sizes.length));
+    }
+    opts.mount.appendChild(mosaic);
+    // In the document now, so the frame and the copies can be measured.
+    fitWrap('build');
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      onResize = () => {
+        if (destroyed) return;
+        if (fitTimer) clearTimeout(fitTimer);
+        fitTimer = setTimeout(() => { fitTimer = 0; fitWrap('resize'); }, WRAP_FIT_DEBOUNCE_MS);
+      };
+      window.addEventListener('resize', onResize);
+      window.addEventListener('orientationchange', onResize);
+    }
+  }
+
   /* ------------------------------------------------------------- budgets */
   /* Every budget here counts what Chromium actually pays for. `maxReps` is the
      multiplier the toroidal wrap applies to every live element, so it has to be
      known before a single url is dealt - which is why this sits AFTER the build
-     rather than at the top of the factory. */
+     AND the wrap fit rather than at the top of the factory. (A rotation that
+     grows the wrap later is not re-budgeted: the caps were set for a smaller
+     wall and an over-shot of one clone set is the cheaper of the two errors.) */
   let maxReps = 1;
   for (const r of rows) maxReps = Math.max(maxReps, (r.reps | 0) || 1);
 
@@ -467,17 +668,6 @@ export function createBoard(o) {
   }
   say('board budgets: ' + density + ' tiles x' + maxReps + ' reps, live cap '
     + liveCap + ', video cap ' + videoCap + (reduced ? ' (reduced motion)' : ''));
-
-  if (opts.mount && mosaic && opts.mount.appendChild) {
-    // The wall fills the window (immersion wave): the row count is only known
-    // here, so it is PUBLISHED here and styles.js solves the tile height from it
-    // (rows always fill the frame; density never changes with the window - the
-    // tile SIZE breathes, the tile COUNT is a tuned dial).
-    if (opts.mount.style) {
-      opts.mount.style.setProperty('--g-lf-rows', String(sizes.length));
-    }
-    opts.mount.appendChild(mosaic);
-  }
 
   function buildTileEl(tile, rep) {
     const node = el('div', 'g-lf-tile');
@@ -567,6 +757,24 @@ export function createBoard(o) {
     const anim = isAnimatedUrl(url);
     if (anim && liveBlocked(tile, url)) return false;
     if (isVid && !tile.isVideo && videoTiles >= videoCap) return false;
+    /* THE ONE-PICTURE LAW (see mediaKey). Checked before any budget moves, so
+     * a refusal costs nothing. */
+    const key = (draw && draw.shared) ? '' : uniqueKey(url);
+    if (key) {
+      const evict = !!(o && o.evict);
+      // TIER ONE - HER picture, and no `lastResort` buys a way past it: a
+      // second seat wearing the target is the bug being fixed, not a repeat.
+      const target = tiles.find((t) => t.target);
+      if (!evict && target && target !== tile && uniqueKey(target.url) === key) return false;
+      // TIER TWO - any other repeat. EVERY wearer, not just the first: a
+      // shared park can legally rest two seats on one picture, so the target's
+      // own draw has to clear the whole set to land alone.
+      const others = tiles.filter((t) => t !== tile && t.url && uniqueKey(t.url) === key);
+      if (others.length) {
+        if (!evict) { if (!(o && o.lastResort)) return false; }
+        else for (const other of others) setUrl(other, { url: null });  // bare; the dress re-seats it
+      }
+    }
 
     releaseLive(tile);
     if (tile.isVideo && !isVid) videoTiles = Math.max(0, videoTiles - 1);
@@ -631,50 +839,34 @@ export function createBoard(o) {
    *
    * The provider is ASKED for same-niche decoys (claim spec nearTwinBias) but does
    * not honour the hint yet, so this is the local fallback that makes the tease
-   * real either way:
-   *   STRONG twins carry the target's actual media at a different hue (capped, or
-   *   half the board would be literal copies);
-   *   WEAK twins take the target's gradient at an unused hue - visually adjacent,
-   *   never ambiguous.
-   * Both are tagged `warm`, which is the only thing index.js reads.
+   * real either way: a twin takes the target's GRADIENT at an unused hue -
+   * visually adjacent, never ambiguous. Tagged `warm`, which is the only thing
+   * index.js reads.
+   *
+   * There are no "strong" twins any more (0911). Up to four seats used to wear
+   * the target's own picture at a shifted hue, and the owner read it exactly
+   * as the constants file predicted it would: "an image can be in multiple
+   * places but only one is correct" - a bug, not difficulty. The one-picture
+   * law (setUrl) would refuse the copy now anyway; the branch is gone so the
+   * intent is in one place.
    */
   function assignWarm(o) {
     const opts = o || {};
     const share = clamp(opts.share, 0, 1);
     const wantRng = typeof opts.rng === 'function' ? opts.rng : rng;
-    // Optional stagger for the strong-twin repaints (per-round target rotation
-    // on touch): the url still lands NOW - bookkeeping stays correct - only the
-    // paint is deferred, through setUrl's own paintDelayMs seam.
-    const paintDelay = Math.max(0, opts.paintDelayMs | 0);
     for (const tile of tiles) if (!tile.target) tile.warm = false;
     if (share <= 0) return 0;
 
     const target = api.targetTile();
     if (!target) return 0;
-    const urlCap = Number.isFinite(opts.urlCap) ? opts.urlCap : PLAYTEST.NEAR_TWIN_URL_CAP;
     const want = Math.min(Math.round(share * tiles.length), Math.floor(tiles.length / 2));
     const used = usedSignatures();
     const freeHues = HUES.filter((h) => !used.has(target.grad + ':' + h));
     const candidates = shuffle(tiles.filter((tile) => !tile.target), wantRng);
 
     let made = 0;
-    let strong = 0;
     for (const tile of candidates) {
       if (made >= want) break;
-      if (strong < urlCap && target.url
-        // The target's own url is free to copy when it is already on the wall
-        // (it always is - this IS the target's url), so a strong twin never
-        // mints a decoder. setUrl still arbitrates, so the budget cannot be
-        // side-stepped through this door either.
-        && setUrl(tile, { url: target.url, remote: target.remote },
-          paintDelay ? { paintDelayMs: paintDelay * (strong + 1) } : null)) {
-        // same media, different hue: the honest local version of a near-twin
-        used.delete(tile.grad + ':' + tile.hue);
-        tile.warm = true;
-        used.add(tile.grad + ':' + tile.hue);
-        strong += 1; made += 1;
-        continue;
-      }
       const hue = freeHues.shift();
       if (hue == null) break;                 // out of collision-free signatures
       used.delete(tile.grad + ':' + tile.hue);
@@ -753,15 +945,56 @@ export function createBoard(o) {
     },
     /** The PRIMARY element copy of a tile (ceremonies anchor to it). */
     primaryEl(tile) { return tile && tile.els.length ? tile.els[0] : null; },
+    /** Re-measure the wrap now (a host that resized the frame itself). */
+    fitWrap(why) { return fitWrap(why || 'host'); },
+    /** Clone sets per row, after the fit. */
+    repsPerRow() { return rows.map((r) => r.reps | 0); },
+    /** The one-picture law's telemetry: every media key worn by more than one
+     *  seat (a shared park is the one legal case; it is listed all the same,
+     *  so a log line can say how many). Empty is the promise kept. */
+    duplicateKeys() {
+      const seen = new Map();
+      for (const t of tiles) {
+        const k = uniqueKey(t.url);
+        if (!k) continue;
+        seen.set(k, (seen.get(k) | 0) + 1);
+      }
+      const out = [];
+      for (const [k, n] of seen) if (n > 1) out.push({ key: k, seats: n });
+      return out;
+    },
+    /** How many seats wear the target's PICTURE - the law says exactly 1, and
+     *  0 while she is on her gradient signature alone (a dry pool, the glyph
+     *  floor), which the dress line already reports in words. */
+    targetSeats() {
+      const target = api.targetTile();
+      const k = target ? uniqueKey(target.url) : '';
+      if (!k) return 0;
+      return tiles.reduce((n, t) => n + (uniqueKey(t.url) === k ? 1 : 0), 0);
+    },
     tileFor(node) { return byEl.get(node) || null; },
     targetTile() { return tiles.find((t) => t.target) || null; },
 
     setUrl, repaint, swapLooks, assignWarm,
 
-    /** Mark/unmark the hunt target (a look field, so it rides swaps). */
+    /** Mark/unmark the hunt target (a look field, so it rides swaps).
+     *
+     *  THE ONE-PICTURE LAW's second door. A round rotation promotes a seat
+     *  that is ALREADY dressed (rotateTarget picks off the wall - no provider
+     *  draw, no new decoder), so the law's setUrl gate never sees it. If a
+     *  shared park happens to rest on the picture being promoted, she is on
+     *  two seats again from round two on: the owner's bug, one round later.
+     *  Bare the other wearers here instead; the next onlyBare dress re-seats
+     *  them from the provider's next batch. */
     setTarget(tile) {
       for (const t of tiles) t.target = false;
-      if (tile) tile.target = true;
+      if (!tile) return;
+      tile.target = true;
+      const key = uniqueKey(tile.url);
+      if (!key) return;
+      for (const t of tiles) {
+        if (t !== tile && t.url && uniqueKey(t.url) === key) setUrl(t, { url: null });
+      }
     },
 
     /** Class toggling on every copy of a tile (found rim, pity, warm). */
@@ -780,6 +1013,7 @@ export function createBoard(o) {
      *  Gif tiles cannot be paused from script at all; they are budgeted
      *  instead, which is the whole point of the live window. */
     freeze(on) {
+      frozen = !!on;
       for (const r of rows) {
         if (!r.strip || !r.strip.style) continue;
         try { r.strip.style.animationPlayState = on ? 'paused' : 'running'; } catch (e) { /* ignore */ }
@@ -837,6 +1071,11 @@ export function createBoard(o) {
 
     destroy() {
       destroyed = true;
+      if (fitTimer) { clearTimeout(fitTimer); fitTimer = 0; }
+      if (onResize && typeof window !== 'undefined' && window.removeEventListener) {
+        try { window.removeEventListener('resize', onResize); window.removeEventListener('orientationchange', onResize); } catch (e) { /* ignore */ }
+      }
+      onResize = null;
       if (pressRafId && typeof cancelAnimationFrame === 'function') {
         try { cancelAnimationFrame(pressRafId); } catch (e) { /* ignore */ }
       }

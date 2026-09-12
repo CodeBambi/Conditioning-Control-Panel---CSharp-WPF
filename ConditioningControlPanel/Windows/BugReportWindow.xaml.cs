@@ -33,6 +33,8 @@ namespace ConditioningControlPanel
             if (_kind == BugReportService.ReportKind.Suggestion)
                 ApplySuggestionMode();
 
+            PreTickForRecentFreeze();
+
             _enableTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(2),
@@ -66,6 +68,30 @@ namespace ConditioningControlPanel
             TxtSteps.Visibility = Visibility.Collapsed;
             ChkIncludeAppLog.Visibility = Visibility.Collapsed;
             TxtScrubberCounts.Visibility = Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// A freeze that the watchdog recorded in the last week is the one case where the activity
+        /// log is the whole report: the hang_*.txt it wrote carries the UI thread's managed stack,
+        /// and that file only reaches us through the opt-in below. Leaving the box unticked meant
+        /// the user who most needs to send it is the user least likely to know it exists, so it is
+        /// ticked for them here and a line underneath says which freeze is attached. Untickable as
+        /// before, and untouched for everyone with no hang file and for suggestions.
+        /// </summary>
+        private void PreTickForRecentFreeze()
+        {
+            try
+            {
+                if (BugReportService.FindRecentHangReport(_kind) is not DateTime at) return;
+
+                ChkIncludeAppLog.IsChecked = true;
+                TxtHangHint.Text = Loc.GetF("bug_report_hang_attached_hint", at.ToString("d"));
+                TxtHangHint.Visibility = Visibility.Visible;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("[BugReport] freeze pre-tick skipped: {Msg}", ex.Message);
+            }
         }
 
         private void OnLoaded(object sender, RoutedEventArgs e)

@@ -1186,6 +1186,24 @@ namespace ConditioningControlPanel.Models
             set { _flashDuration = Math.Clamp(value, 1, 30); OnPropertyChanged(); }
         }
 
+        // #1194: animated flashes used to play at whatever timing the file carried, which is far
+        // too slow for some GIFs and far too fast for others. 1.0 keeps the file's own timing;
+        // 2.0 plays it twice as fast. Applied by FlashService.ScaleFrameDelay when a flash window
+        // is handed its frames, so it touches FLASH windows only - the avatar's XamlAnimatedGif
+        // clips and the spiral overlay's own pump keep their own timing.
+        private double _flashGifSpeedMultiplier = 1.0; // 0.25x (quarter speed) .. 4x
+        /// <summary>
+        /// Playback speed multiplier for animated flash images (GIF / animated WebP).
+        /// Clamped 0.25-4.0; the resulting per-frame delay is additionally floored at
+        /// <see cref="ConditioningControlPanel.Services.FlashService.MIN_GIF_FRAME_DELAY_MS"/> ms
+        /// so a 4x on an already-fast GIF cannot spin the UI thread.
+        /// </summary>
+        public double FlashGifSpeedMultiplier
+        {
+            get => _flashGifSpeedMultiplier;
+            set { _flashGifSpeedMultiplier = Math.Clamp(value, 0.25, 4.0); OnPropertyChanged(); }
+        }
+
         // Gaming quality-of-life (#770): keep flashes out of a centered square on every monitor so
         // they never land on the crosshair / HUD centre. This is a PURE GLOBAL USER PREFERENCE —
         // deliberately absent from SessionSettings, SessionEngine's save/restore, Preset and the
@@ -2211,15 +2229,31 @@ namespace ConditioningControlPanel.Models
         }
 
         /// <summary>
-        /// Move existing users off the old gendered default banner text. Keyed on an exact match of
-        /// <see cref="LegacyGenderedMarqueeMessage"/>, so anyone who customised their banner - by even
-        /// one character - keeps what they wrote. Runs once, from InitializeMarqueeBanner().
+        /// Move users with NO themed mod off the old gendered default banner text. Keyed on an exact
+        /// match of <see cref="LegacyGenderedMarqueeMessage"/>, so anyone who customised their banner
+        /// - by even one character - keeps what they wrote. Runs once, from InitializeMarqueeBanner().
+        ///
+        /// <para>A themed mod is skipped and the one-shot flag is still latched, deliberately. The
+        /// old text is that mod's own voice, so rewriting it is the visible, one-way change 6.9.4
+        /// promised would not happen to anyone with a mod active; and latching means a later switch
+        /// to CCP Default does not spring the same rewrite on them months afterwards.</para>
         /// </summary>
-        internal void MigrateMarqueeMessage()
+        /// <param name="activeModId">
+        /// <see cref="Services.ModService.ActiveModId"/>. Null means the mod layer is not up yet, and
+        /// the migration DEFERS - it neither rewrites nor latches, so the next launch that does know
+        /// the mod decides. ModService is constructed in App.OnStartup, well before the only caller,
+        /// so the deferral is a safety net rather than an expected path.
+        /// </param>
+        internal void MigrateMarqueeMessage(string? activeModId)
         {
             if (_marqueeNeutralDefaultMigrated) return;
-            if (string.Equals(_marqueeMessage?.Trim(), LegacyGenderedMarqueeMessage.Trim(), StringComparison.Ordinal))
+            if (string.IsNullOrWhiteSpace(activeModId)) return;
+
+            if (string.Equals(activeModId, BuiltInMods.CCPDefaultId, StringComparison.Ordinal) &&
+                string.Equals(_marqueeMessage?.Trim(), LegacyGenderedMarqueeMessage.Trim(), StringComparison.Ordinal))
+            {
                 MarqueeMessage = DefaultMarqueeMessage;
+            }
             MarqueeNeutralDefaultMigrated = true;
         }
 
@@ -2566,6 +2600,16 @@ namespace ConditioningControlPanel.Models
         {
             get => _startMinimized;
             set { _startMinimized = value; OnPropertyChanged(); }
+        }
+
+        // Off: the START button and the Presets tab's stop button show the session name and its
+        // state without the MM:SS. Not everyone wants to watch the timer tick. Settings / General /
+        // Display; read on every engine tick (MainWindow.Presets.cs OnSessionProgressUpdated).
+        private bool _showSessionCountdown = true;
+        public bool ShowSessionCountdown
+        {
+            get => _showSessionCountdown;
+            set { _showSessionCountdown = value; OnPropertyChanged(); }
         }
 
         private bool _autoStartEngine = false;
@@ -3402,6 +3446,16 @@ namespace ConditioningControlPanel.Models
             set { _lockdownAudioTics = value; OnPropertyChanged(); }
         }
 
+        // Hide the lockdown clock: the Lockdown page, the title-bar badge and the Home rail chip
+        // show dots instead of the time left (Services/SessionClockLabel.cs). The timer itself is
+        // untouched, and the digits' element stays put - it is also the five-click exit handle.
+        private bool _hideLockdownTimer = false;
+        public bool HideLockdownTimer
+        {
+            get => _hideLockdownTimer;
+            set { _hideLockdownTimer = value; OnPropertyChanged(); }
+        }
+
         // "It remembers": set when a Full Doki lockdown ENDS, spent ~20 s into the next launch as one
         // ember charge on the Lockdown door plus one bark, then cleared. Persisted because the whole
         // point is that it survives the app closing; cleared unconditionally on the next launch so a
@@ -4159,6 +4213,58 @@ namespace ConditioningControlPanel.Models
             set { _lockCardRepeats = Math.Clamp(value, 1, 10); OnPropertyChanged(); }
         }
         
+        private bool _lockCardRandomRepeats = false;
+        /// <summary>
+        /// When true the repeat count is rolled per card instead of being fixed, between
+        /// <see cref="LockCardRepeatsMin"/> and <see cref="LockCardRepeats"/> inclusive.
+        /// Default false, so a user who never touches it keeps the flat count they had.
+        /// </summary>
+        public bool LockCardRandomRepeats
+        {
+            get => _lockCardRandomRepeats;
+            set { _lockCardRandomRepeats = value; OnPropertyChanged(); }
+        }
+
+        private int _lockCardRepeatsMin = 1; // Floor of the random range (1-10)
+        /// <summary>
+        /// Floor of the random repeat range. Only read when <see cref="LockCardRandomRepeats"/> is
+        /// on; a floor above <see cref="LockCardRepeats"/> is sorted out by the resolver rather
+        /// than by forcing the two sliders to chase each other in the UI.
+        /// </summary>
+        public int LockCardRepeatsMin
+        {
+            get => _lockCardRepeatsMin;
+            set { _lockCardRepeatsMin = Math.Clamp(value, 1, 10); OnPropertyChanged(); }
+        }
+
+        private bool _lockCardTargetLengthEnabled = false;
+        /// <summary>
+        /// When true the repeat count is derived from how much TYPING a card is worth rather than
+        /// from a count: a target character budget is rolled, and the phrase is repeated until it
+        /// covers that budget. A fifteen-character phrase and a sixty-character one then cost about
+        /// the same. Overrides both the fixed count and <see cref="LockCardRandomRepeats"/>.
+        /// Default false.
+        /// </summary>
+        public bool LockCardTargetLengthEnabled
+        {
+            get => _lockCardTargetLengthEnabled;
+            set { _lockCardTargetLengthEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _lockCardTargetLength = 120; // Characters to type per card (20-600)
+        public int LockCardTargetLength
+        {
+            get => _lockCardTargetLength;
+            set { _lockCardTargetLength = Math.Clamp(value, 20, 600); OnPropertyChanged(); }
+        }
+
+        private int _lockCardTargetLengthVariance = 20; // +/- characters on the rolled target (0-200)
+        public int LockCardTargetLengthVariance
+        {
+            get => _lockCardTargetLengthVariance;
+            set { _lockCardTargetLengthVariance = Math.Clamp(value, 0, 200); OnPropertyChanged(); }
+        }
+
         private bool _lockCardStrict = false; // No ESC escape
         public bool LockCardStrict
         {
@@ -8094,6 +8200,54 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool HasSeenProgramsIntro { get; set; }
+
+        /// <summary>
+        /// Right-click toggles the user has performed on the dashboard tiles. Drives the
+        /// "right-click a tile to switch it on or off" caption on the logo face via
+        /// <see cref="Services.DashboardToggleHintRule"/>; stops counting once the caption is retired.
+        /// </summary>
+        public int DashboardToggleHintUses { get; set; }
+
+        /// <summary>
+        /// The Home dashboard's browser card is folded shut: the header strip stays, everything
+        /// below it (the Deeper toolbar, the audio row and the WebView2) is collapsed and the card
+        /// gives its rows back to the column.
+        ///
+        /// <para>Default TRUE (owner call, 2026-09-12: "by default browser should be hidden, and
+        /// unhidden whenever we call it"). The property initializer is the whole mechanism and it
+        /// is upgrader-safe on purpose: the loader deserializes onto a default-constructed
+        /// AppSettings, so a settings.json with no key keeps this true, a file that says false
+        /// stays false, and nobody who has already stated a preference has it overwritten.</para>
+        ///
+        /// <para>This is the SAVED PREFERENCE, not the state on screen. When the app calls the
+        /// browser - a companion link, a remote-control command, a site radio - the card is opened
+        /// by <c>MainWindow.RevealDashboardBrowser</c> for the rest of that run WITHOUT touching
+        /// this bool. Only the chevron writes here.</para>
+        /// </summary>
+        public bool DashboardBrowserCollapsed { get; set; } = true;
+
+        private List<string> _railFavorites = new();
+        /// <summary>
+        /// The dashboard rail's FAVORITES: Ctrl+K palette row ids ("tab.deeper", "door.play",
+        /// "launch.mods", "card.arcademy") in the order the user pinned them. Rules, cap and
+        /// dedupe live in <see cref="Services.FavoritesRailRule"/>.
+        /// </summary>
+        [JsonProperty("rail_favorites")]
+        public List<string> RailFavorites
+        {
+            get => _railFavorites;
+            set { _railFavorites = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        private List<string> _railRecent = new();
+        /// <summary>The dashboard rail's RECENT: the last few destinations opened, most recent
+        /// first, same id scheme as <see cref="RailFavorites"/>.</summary>
+        [JsonProperty("rail_recent")]
+        public List<string> RailRecent
+        {
+            get => _railRecent;
+            set { _railRecent = value ?? new List<string>(); OnPropertyChanged(); }
+        }
 
         #endregion
 

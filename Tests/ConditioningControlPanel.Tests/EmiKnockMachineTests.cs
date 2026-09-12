@@ -8,18 +8,25 @@ namespace ConditioningControlPanel.Tests;
 /// <summary>
 /// THE ONBOARDING PROMPT THAT ONLY EVER HAPPENS ONCE.
 ///
-/// <para>Ask EMI wave 1 gives the dock chip a single flash: three pink pulses on a settled first
-/// launch, and if the user clicks, one offer to be walked round the app. It is the only discovery
-/// mechanism a feature that ships switched on and silent has ever had - and it is also the single
-/// easiest thing in this app to get wrong, because an onboarding prompt that comes back is the
-/// fastest possible route to the whole widget being switched off. The owner's requirement was
-/// "once, and if they shrug, once more, and then never".</para>
+/// <para>On a settled first launch the dock chip pulses and EMI comes out in the same beat, and
+/// what she says is one question: walk with me? It is the only discovery mechanism a feature that
+/// ships switched on and silent has ever had - and it is also the single easiest thing in this app
+/// to get wrong, because an onboarding prompt that comes back is the fastest possible route to the
+/// whole widget being switched off. The owner's requirement, after the first-run redesign, is
+/// "once, asked out loud, and then never".</para>
+///
+/// <para>It used to be quieter and worse: three pink pulses and nothing else, with the offer
+/// reachable only if the user read a 40 px ring as an invitation and clicked it inside six seconds.
+/// The offer was spent whether or not they did, so a shrug bought one softer re-offer on a later
+/// launch to make up for it. Now she asks the first time, so there is nothing to make up for:
+/// <c>OfferCap</c> is 1, the later beat is gone, and upgraders are somebody else's job (What's New
+/// offers them their tour, on a launch where they are already reading it).</para>
 ///
 /// <para><see cref="EmiKnockMachine"/> is pure for exactly that reason - no timers, no dispatcher,
 /// no <c>App</c>, an injectable clock and a world behind an interface - so the four brakes and the
 /// population branch can be walked in a millisecond instead of across three fresh installs and a
 /// pair of upgrades. What is checked here is that she knocks at all, and much more importantly
-/// that she stops: at the answer, at the two-offer cap, at a tour already taken, and behind every
+/// that she stops: at the answer, at the one-offer cap, at a tour already taken, and behind every
 /// gate that says something else owns the screen.</para>
 ///
 /// <para>The last class in the file covers the ONE line the knock adds to the offer cadence: a
@@ -83,13 +90,37 @@ public class EmiKnockMachineTests
         Assert.Equal(EmiKnockMachine.FreshMoment, m.ContactMoment(w));
     }
 
+    /// <summary>
+    /// AND AN UPGRADER IS LEFT ALONE. This assertion is the reverse of the one it replaces, and
+    /// deliberately so: an upgrader's launch already has What's New on it, offering the upgrade
+    /// tour from the surface they are looking at. A companion materialising on top of that to offer
+    /// a second tour is precisely the pile-up the first-run redesign exists to end, so the knock
+    /// gave the population up rather than competing for it.
+    ///
+    /// <para>None, not Walked. They have not taken anything; they are simply not owed it by
+    /// her.</para>
+    /// </summary>
     [Fact]
-    public void AnUpgraderIsKnockedAtToo()
+    public void AnUpgraderIsNotTheKnocksProblemAnyMore()
     {
         var (m, w) = Upgrader();
-        Assert.True(m.MayKnock(w));
-        Assert.Equal(EmiKnockPopulation.Upgrader, m.Population(w));
-        Assert.Equal(EmiKnockMachine.UpgradeMoment, m.ContactMoment(w));
+        Assert.Equal(EmiKnockPopulation.None, m.Population(w));
+        Assert.False(m.OfferOwed(w));
+        Assert.False(m.MayKnock(w));
+        Assert.Null(m.ContactMoment(w));
+    }
+
+    /// <summary>
+    /// The upgrade tour did not stop existing, it changed owner. The moment id and the verb are
+    /// still addressable so the surface that took the population over has something to fire, and
+    /// this pins them against a future tidy-up that deletes them as "unreachable".
+    /// </summary>
+    [Fact]
+    public void TheUpgradeOfferSurvivesAsAnIdEvenThoughTheKnockNeverReachesIt()
+    {
+        Assert.Equal("firstContactUpgrade", EmiKnockMachine.UpgradeMoment);
+        Assert.Equal(EmiKnockMachine.UpgradeTour, EmiKnockMachine.TourFor(EmiKnockPopulation.Upgrader));
+        Assert.Equal("tour:upgrade", EmiKnockMachine.EffectFor(EmiKnockPopulation.Upgrader));
     }
 
     // =========================================================================================
@@ -112,19 +143,48 @@ public class EmiKnockMachineTests
     }
 
     /// <summary>
-    /// BRAKE 2. The knock, plus one shrugged re-offer, and never a third. The cap is checked on its
-    /// own, with the state still at "knocked", so it cannot be passing because of brake 1.
+    /// BRAKE 2. ONE offer, ever. The cap is checked on its own, with the state still at "knocked"
+    /// rather than "spent", so it cannot be passing because of brake 1 - which matters more than
+    /// ever now, because with the cap at one this brake is the ONLY thing that makes a no
+    /// permanent. A no writes nothing; it simply never earns a second offer.
     /// </summary>
     [Fact]
     public void Brake2_TheOfferCapEndsIt()
     {
+        Assert.Equal(1, EmiKnockMachine.OfferCap);
+
         var (m, w) = Fresh();
         w.KnockState = EmiKnockMachine.Knocked;
 
-        w.KnockOffers = EmiKnockMachine.OfferCap - 1;
+        w.KnockOffers = 0;
         Assert.True(m.OfferOwed(w));
 
-        w.KnockOffers = EmiKnockMachine.OfferCap;
+        w.KnockOffers = 1;
+        Assert.False(m.OfferOwed(w));
+        Assert.False(m.MayKnock(w));
+    }
+
+    /// <summary>
+    /// THE OWNER'S PROMISE, stated as one assertion: a ledger that says she has knocked and made
+    /// her one offer is never owed another, on any launch, however long ago it was and whatever
+    /// they answered. This is the state every install lands in seconds after its first launch, so
+    /// it is the state that has to hold forever.
+    /// </summary>
+    [Fact]
+    public void KnockedWithOneOfferIsNeverOwedAgain()
+    {
+        var (m, w) = Fresh();
+        w.KnockState = EmiKnockMachine.Knocked;
+        w.KnockOffers = 1;
+
+        // A year later, a new launch, nothing else owning the screen, the walk still not taken.
+        w.KnockAtUtc = w.LaunchStartedUtc.AddDays(-365).Ticks;
+
+        Assert.False(m.OfferOwed(w));
+        Assert.False(m.MayKnock(w));
+
+        // ...and the same with the old two-offer ledger from before the redesign.
+        w.KnockOffers = 2;
         Assert.False(m.OfferOwed(w));
         Assert.False(m.MayKnock(w));
     }
@@ -161,35 +221,21 @@ public class EmiKnockMachineTests
         Assert.Null(m.ContactMoment(w));
     }
 
-    /// <summary>...and the same brake, from the other population's side.</summary>
-    [Fact]
-    public void Brake4_AnUpgraderWhoTookTheUpgradeTourGetsNothing()
-    {
-        var (m, w) = Upgrader();
-        w.Tours.Add(EmiKnockMachine.UpgradeTour);
-
-        Assert.Equal(EmiKnockPopulation.Walked, m.Population(w));
-        Assert.False(m.MayKnock(w));
-    }
-
     /// <summary>
-    /// The two tours are NOT interchangeable. A fresh install that somehow has the upgrade tour
-    /// latched is still owed the short walk, and vice versa - brake 4 is per tour, not a single
-    /// "has been shown something" flag, which is the shape of gate this codebase has been bitten by
-    /// before.
+    /// Brake 4 is PER TOUR, not a single "has been shown something" flag - which is the shape of
+    /// gate this codebase has been bitten by before. A fresh install that somehow has the upgrade
+    /// tour latched (a restored settings file, a hand-edited ledger) is still owed the short walk,
+    /// because the short walk is the tour she is actually offering.
     /// </summary>
     [Fact]
     public void Brake4_IsPerTourAndNotABareSeenFlag()
     {
         var (m, w) = Fresh();
         w.Tours.Add(EmiKnockMachine.UpgradeTour);
+
         Assert.Equal(EmiKnockPopulation.Fresh, m.Population(w));
         Assert.True(m.MayKnock(w));
-
-        var (m2, w2) = Upgrader();
-        w2.Tours.Add(EmiKnockMachine.ShortWalkTour);
-        Assert.Equal(EmiKnockPopulation.Upgrader, m2.Population(w2));
-        Assert.True(m2.MayKnock(w2));
+        Assert.Equal(EmiKnockMachine.FreshMoment, m.ContactMoment(w));
     }
 
     // =========================================================================================
@@ -317,73 +363,64 @@ public class EmiKnockMachineTests
     }
 
     // =========================================================================================
-    //  the re-offer
+    //  never twice, and never again
     // =========================================================================================
 
     /// <summary>
-    /// The re-offer is a LATER-LAUNCH beat. A knock stamped inside this launch must not produce a
-    /// second one: without this, a dismiss and a re-summon would read as a fresh sitting and she
-    /// would knock twice inside a minute.
+    /// NEVER TWICE IN ONE SITTING. With the cap at one, brake 2 stops this on its own for any
+    /// honest ledger - so the world here is a DISHONEST one, which is the only way the guard is
+    /// reachable and therefore the only way it is worth testing: the state says she has knocked
+    /// this launch and the counter says no offer was spent. A QA replay leaves exactly that, and so
+    /// does a settings file rolled back under a running app.
+    ///
+    /// <para>Without the launch-time guard, that world would put her back on screen seconds after
+    /// the user sent her away - the single worst thing this feature can do.</para>
     /// </summary>
     [Fact]
     public void SheNeverKnocksTwiceInOneLaunch()
     {
         var (m, w) = Fresh();
         w.KnockState = EmiKnockMachine.Knocked;
-        w.KnockOffers = 1;
+        w.KnockOffers = 0;
         w.KnockAtUtc = w.LaunchStartedUtc.AddMinutes(2).Ticks;
 
-        Assert.True(m.OfferOwed(w));      // the offer survives...
-        Assert.False(m.MayKnock(w));      // ...but not into this same sitting
-    }
-
-    /// <summary>...and on the NEXT launch the same shrugged offer comes back exactly once.</summary>
-    [Fact]
-    public void TheShruggedOfferComesBackOnceOnTheNextLaunch()
-    {
-        var (m, w) = Fresh();
-        w.KnockState = EmiKnockMachine.Knocked;
-        w.KnockOffers = 1;
-        w.KnockAtUtc = w.LaunchStartedUtc.AddDays(-1).Ticks;
-
-        Assert.True(m.MayKnock(w));
-
-        // The flash spends the second offer, and that is the end of it forever.
-        w.KnockOffers = 2;
-        w.KnockAtUtc = w.LaunchStartedUtc.AddMinutes(1).Ticks;
-        Assert.False(m.MayKnock(w));
-        Assert.False(m.OfferOwed(w));
+        Assert.True(m.OfferOwed(w));      // the brakes are all clear...
+        Assert.False(m.MayKnock(w));      // ...and she still stays put this sitting
     }
 
     /// <summary>
-    /// The re-offer is the QUIETER beat. First contact carries the ask; the second time she just
-    /// mentions it, which is why <c>firstContactLater</c> is a pool with no offer attached.
+    /// A SHRUG IS FINAL. She came out, she asked, they said no or simply closed her - and there is
+    /// no later launch on which that turns back into an offer. This is the test the old machine
+    /// could not have passed: it deliberately gave a shrug one more go, back when the "offer" had
+    /// been three pulses on a ring nobody knew was a button.
     /// </summary>
     [Fact]
-    public void TheSecondContactIsTheQuieterOne()
+    public void AShruggedOfferNeverComesBack()
+    {
+        var (m, w) = Fresh();
+        w.KnockState = EmiKnockMachine.Knocked;   // asked, not answered: they shrugged
+        w.KnockOffers = 1;
+        w.KnockAtUtc = w.LaunchStartedUtc.AddDays(-1).Ticks;   // a different launch entirely
+
+        Assert.False(m.OfferOwed(w));
+        Assert.False(m.MayKnock(w));
+    }
+
+    /// <summary>
+    /// THE ORDER TRAP. The offer is spent at the knock and the summon it triggers reads
+    /// <see cref="EmiKnockMachine.ContactMoment"/> a beat later - by which time the counter is
+    /// already at the cap. So the contact moment must NOT consult the counter: if it did, the
+    /// knock's own summon would be told "nothing scripted to say" and she would arrive out of
+    /// nowhere and play the ambient hello, with the walk never offered at all.
+    /// </summary>
+    [Fact]
+    public void TheContactMomentStillSpeaksAfterTheOfferIsSpent()
     {
         var (m, w) = Fresh();
         w.KnockState = EmiKnockMachine.Knocked;
+        w.KnockOffers = EmiKnockMachine.OfferCap;   // exactly what NoteKnocked just wrote
 
-        w.KnockOffers = 1;
         Assert.Equal(EmiKnockMachine.FreshMoment, m.ContactMoment(w));
-
-        w.KnockOffers = 2;
-        Assert.Equal(EmiKnockMachine.LaterMoment, m.ContactMoment(w));
-    }
-
-    /// <summary>An upgrader's second contact is the same quieter beat, not a second upgrade pitch.</summary>
-    [Fact]
-    public void TheSecondContactIsTheSameForBothPopulations()
-    {
-        var (m, w) = Upgrader();
-        w.KnockState = EmiKnockMachine.Knocked;
-
-        w.KnockOffers = 1;
-        Assert.Equal(EmiKnockMachine.UpgradeMoment, m.ContactMoment(w));
-
-        w.KnockOffers = 2;
-        Assert.Equal(EmiKnockMachine.LaterMoment, m.ContactMoment(w));
     }
 
     /// <summary>A null world is not a reason to knock. Every entry point answers "no".</summary>
@@ -503,19 +540,22 @@ public class EmiScriptedAskBypassTests
 }
 
 /// <summary>
-/// THE CONTENT SIDE of the knock: the three contact moments, as they are actually shipped in
+/// THE CONTENT SIDE of the knock: the two contact moments, as they are actually shipped in
 /// <c>Resources/emi/desk-lines.json</c>.
 ///
 /// <para>A moment id is fired by string and the bus drops what it does not know in silence, so a
 /// definition that is missing, or one whose dials contradict the machine, costs a beat forever
 /// with nothing on screen to say so. <c>EmiMomentIdWiringTests</c> already proves the ids exist;
 /// what is checked here is that the DIALS behind them still say what the contract says they
-/// should - above all the two that make the knock reachable at all (<c>scripted</c>, priority 3)
+/// should - above all the two that make the offer reachable at all (<c>scripted</c>, priority 3)
 /// and the one that is brake 3 (<c>limit: ever/1</c>).</para>
+///
+/// <para>There were three until the first-run redesign. <c>firstContactLater</c> was the softer
+/// re-offer a shrug used to earn, and it went with the second offer.</para>
 /// </summary>
 public class EmiKnockLinesFileTests
 {
-    private static System.Text.Json.JsonElement Moments()
+    private static System.Text.Json.JsonElement LinesFile()
     {
         var dir = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
         while (dir != null && !System.IO.Directory.Exists(
@@ -530,21 +570,52 @@ public class EmiKnockLinesFileTests
         Assert.True(System.IO.File.Exists(path), "desk-lines.json is missing at " + path);
 
         var doc = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(path));
-        return doc.RootElement.GetProperty("moments").Clone();
+        return doc.RootElement.Clone();
+    }
+
+    private static System.Text.Json.JsonElement Moments() => LinesFile().GetProperty("moments");
+
+    /// <summary>Every ask authored against a moment, in file order.</summary>
+    private static List<System.Text.Json.JsonElement> AsksFor(string moment)
+    {
+        var found = new List<System.Text.Json.JsonElement>();
+        var root = LinesFile();
+        if (!root.TryGetProperty("asks", out var asks)) return found;
+        foreach (var a in asks.EnumerateArray())
+        {
+            if (a.TryGetProperty("moment", out var m) && m.GetString() == moment) found.Add(a);
+        }
+        return found;
     }
 
     [Theory]
     [InlineData(EmiKnockMachine.FreshMoment)]
     [InlineData(EmiKnockMachine.UpgradeMoment)]
-    [InlineData(EmiKnockMachine.LaterMoment)]
     public void EveryContactMomentIsDefined(string id)
     {
         Assert.True(Moments().TryGetProperty(id, out _), id + " is not in desk-lines.json");
     }
 
     /// <summary>
-    /// The two that carry the offer must be <c>scripted</c>, or the ask is refused by a cadence
-    /// gate the knock cannot possibly satisfy and the chip's six seconds of pulses lead nowhere.
+    /// AND THE LATER BEAT IS GONE, from the content side as well as from the machine. Left behind,
+    /// it would be a written, limited, ceremony-priority moment that nothing can ever fire: dead
+    /// weight that reads like a live feature to the next person who opens the file.
+    /// </summary>
+    [Fact]
+    public void TheRetiredLaterMomentIsNotInTheLinesFile()
+    {
+        Assert.False(Moments().TryGetProperty("firstContactLater", out _),
+            "firstContactLater is still defined, but nothing can reach it: the second offer is gone");
+
+        var root = LinesFile();
+        Assert.False(root.GetProperty("pools").TryGetProperty("firstContactLater", out _),
+            "the firstContactLater pool is still shipped with no moment to draw it");
+    }
+
+    /// <summary>
+    /// The moments that carry the offer must be <c>scripted</c>, or the ask is refused by a cadence
+    /// gate the knock cannot possibly satisfy (never before the third summon; this is the first)
+    /// and she arrives out of nowhere with nothing to ask.
     /// </summary>
     [Theory]
     [InlineData(EmiKnockMachine.FreshMoment)]
@@ -561,24 +632,12 @@ public class EmiKnockLinesFileTests
     }
 
     /// <summary>
-    /// The re-offer is a pool with NO offer attached: somebody who shrugged once does not need the
-    /// same two chips put in front of them a second time.
-    /// </summary>
-    [Fact]
-    public void TheReOfferCarriesNoAsk()
-    {
-        var m = Moments().GetProperty(EmiKnockMachine.LaterMoment);
-        Assert.Equal(0.0, m.GetProperty("askOdds").GetDouble());
-    }
-
-    /// <summary>
     /// BRAKE 3, on the content side. Each contact moment fires once in a lifetime, whatever the
     /// machine's own counters say - the two ceilings are deliberately independent.
     /// </summary>
     [Theory]
     [InlineData(EmiKnockMachine.FreshMoment)]
     [InlineData(EmiKnockMachine.UpgradeMoment)]
-    [InlineData(EmiKnockMachine.LaterMoment)]
     public void EveryContactMomentIsLimitedToOnceEver(string id)
     {
         var limit = Moments().GetProperty(id).GetProperty("limit");
@@ -594,7 +653,6 @@ public class EmiKnockLinesFileTests
     [Theory]
     [InlineData(EmiKnockMachine.FreshMoment)]
     [InlineData(EmiKnockMachine.UpgradeMoment)]
-    [InlineData(EmiKnockMachine.LaterMoment)]
     public void EveryContactMomentIsACeremony(string id)
     {
         Assert.Equal(3, Moments().GetProperty(id).GetProperty("priority").GetInt32());
@@ -607,11 +665,73 @@ public class EmiKnockLinesFileTests
     [Theory]
     [InlineData(EmiKnockMachine.FreshMoment)]
     [InlineData(EmiKnockMachine.UpgradeMoment)]
-    [InlineData(EmiKnockMachine.LaterMoment)]
     public void EveryContactMomentKeepsTheSpiceDown(string id)
     {
         Assert.True(Moments().GetProperty(id).GetProperty("spiceCeiling").GetInt32() <= 1,
             id + " must not reach the top spice shelf on somebody's first minute");
+    }
+
+    /// <summary>
+    /// THE ASK IS THE FIRST THING SHE EVER SAYS, so it has to introduce her AND land on the walk in
+    /// one breath.
+    ///
+    /// <para>The engine's ask branch RETURNS the ask and never the pool line behind it, so when the
+    /// offer fires, the ask's <c>q</c> is the whole of first contact - there is no greeting bubble
+    /// in front of it any more, because nobody clicked anything to summon her. An ask left reading
+    /// "show you around?" would therefore be a stranger materialising mid-sentence.</para>
+    ///
+    /// <para>Every one of them carries <c>tour:shortwalk</c>: this is the only offer she makes on
+    /// this moment, and there is no second one coming, so an ask wired to anything else would
+    /// silently cost a user the app's only tour.</para>
+    /// </summary>
+    [Fact]
+    public void EveryFirstContactAskIntroducesHerAndOffersTheWalk()
+    {
+        var asks = AsksFor(EmiKnockMachine.FreshMoment);
+        Assert.True(asks.Count >= 3, "the contract asks for 3+ variants; found " + asks.Count);
+
+        foreach (var a in asks)
+        {
+            var id = a.GetProperty("id").GetString() ?? "?";
+            var q = a.GetProperty("q").GetString() ?? string.Empty;
+
+            Assert.Equal("tour:shortwalk", a.GetProperty("effect").GetString());
+            Assert.Equal(2, a.GetProperty("chips").GetArrayLength());
+
+            // It ends on the offer: the last thing on the glass is the question, not a preamble.
+            Assert.EndsWith("?", q.TrimEnd());
+
+            // ...and it says who is asking, which the pool line used to do.
+            Assert.Contains("emi", q, StringComparison.Ordinal);
+
+            // VOICE.md, the two rules a test can actually hold: her own lowercase, and no dashes.
+            Assert.Equal(q.ToLowerInvariant(), q);
+            Assert.DoesNotContain("\u2014", q);   // em dash
+            Assert.DoesNotContain("\u2013", q);   // en dash
+            Assert.True(q.Length <= 60, id + " is " + q.Length + " chars; VOICE.md caps a line at 60");
+        }
+    }
+
+    /// <summary>
+    /// AND THE POOL BEHIND IT MUST NOT OFFER THE WALK. Those lines are the FALLBACK: the engine
+    /// only reaches them when <c>PickAsk</c> came back empty, which on this moment means the walk
+    /// is not feasible at all (already taken, a session running, a tutorial up). Copy that ends on
+    /// "shall we?" there is an offer with no chips under it and nothing behind the answer.
+    /// </summary>
+    [Fact]
+    public void TheFirstContactPoolIsAGreetingNotASecondOffer()
+    {
+        var pool = LinesFile().GetProperty("pools").GetProperty(EmiKnockMachine.FreshMoment);
+        Assert.True(pool.GetArrayLength() >= 8, "the shuffle bag needs 8+ lines");
+
+        foreach (var line in pool.EnumerateArray())
+        {
+            var id = line.GetProperty("id").GetString() ?? "?";
+            var t = line.GetProperty("t").GetString() ?? string.Empty;
+            Assert.False(t.TrimEnd().EndsWith("?", StringComparison.Ordinal),
+                id + " ends on a question, but this pool only ever plays when the walk cannot be "
+                   + "offered - there are no chips coming to answer it");
+        }
     }
 
     /// <summary>

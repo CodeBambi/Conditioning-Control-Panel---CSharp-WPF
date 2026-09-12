@@ -72,6 +72,10 @@ public static class DispatcherHelper
 
         if (dispatcher.CheckAccess())
         {
+            // Same-thread fast path: WPF creates no DispatcherOperation here, so the dispatcher
+            // hook that names ops (UiOpTracker) sees nothing. `caller` is a compile-time constant,
+            // so naming it costs two volatile writes and no allocation.
+            using var _op = Services.UiOpTracker.Scope(caller);
             action();
             return;
         }

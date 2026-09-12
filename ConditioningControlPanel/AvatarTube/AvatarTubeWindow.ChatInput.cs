@@ -762,6 +762,7 @@ namespace ConditioningControlPanel
 
             TxtUserInput.Text = "";
             ToggleInputPanel();
+            SeasonRecapService.TrackFeature(SeasonFeatureKeys.Companion);
 
             // Which of the send paths below this message takes. Decided ONCE, up front, so the
             // EMIT hook and the actual call can't disagree if the kill switch — or IsAvailable,

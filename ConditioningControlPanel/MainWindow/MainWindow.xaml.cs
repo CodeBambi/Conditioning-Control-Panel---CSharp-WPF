@@ -74,6 +74,13 @@ namespace ConditioningControlPanel
         public ObservableCollection<ModSelectorItem> AvailableMods { get; } = new();
         // Guards SelectionChanged from re-entering activation while we repopulate the list.
         private bool _suppressModSelectorChange;
+
+        /// <summary>
+        /// Id of the "Open Mod Manager" row at the bottom of <see cref="AvailableMods"/>. Never a
+        /// mod id: <see cref="ModSelectorCombo_SelectionChanged"/> catches it before ActivateMod
+        /// could see it.
+        /// </summary>
+        internal const string ModManagerEntryId = "__open_mod_manager__";
         private BrowserService? _browser;
         private bool _browserInitialized = false;
         // _skipSiteToggleNavigation removed in #867: the site toggle handler moved from Checked
@@ -472,8 +479,8 @@ namespace ConditioningControlPanel
                 App.Settings.Current.PropertyChanged += OnSettingsPropertyChangedForWall;
             }
 
-            // A landed server override for the ? box repaints the wall + rail + lockbands: the
-            // rail refresh is the one funnel that already fans out to all three. The Velvet
+            // A landed server override for the ? box repaints the wall and the rail: the
+            // dashboard refresh is the one funnel that already fans out to both. The Velvet
             // Vault rides the SAME event (never its own timer) so the FREE TODAY card and the
             // dashboard's ? box can never name two different features; the call no-ops until
             // the tab has been built at least once.
@@ -482,7 +489,7 @@ namespace ConditioningControlPanel
                 App.DailyFree.TodayChanged += () =>
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        RefreshPremiumRail();
+                        RefreshDashboardRail();
                         RefreshExclusivesTab();
                         // The Play wall rides it too, for its lockbands AND its FREE TODAY
                         // re-stamps (MainWindow.PlayTab.cs). It is not reached by the rail
@@ -541,9 +548,9 @@ namespace ConditioningControlPanel
             // (and latches) the same Welcomed flag WelcomeDialog.ShowIfNeeded did, at the same
             // instant, so the else branch below - What's New, season recap, the upgrader's mod
             // picker - is reached by exactly the same population as before. The wizard itself
-            // owns what used to be three separate modals: the welcome card, the first-run mod
+            // owns what used to be four separate modals: the age check, the welcome card, the first-run mod
             // picker (ModPickerDialog.ShowIfNeeded's one-shot + offline guards included) and the
-            // "choose a content folder" MessageBox; StartTutorial is launched from its last step.
+            // "choose a content folder" MessageBox. No tour starts from it: EMI offers the walk once, later.
             // ASK EMI WAVE 1: read LastSeenVersion HERE, before anything on this launch stamps it.
             // ShowWhatsNewIfNeeded (the first statement of the else branch, a few lines down) writes
             // the current version into that setting synchronously, minutes before the knock's own
@@ -559,118 +566,91 @@ namespace ConditioningControlPanel
                 // first launch and she does not get to talk over someone's first thirty seconds.
                 try { App.EmiDesk?.Fire("firstLaunchEver", null); } catch { }
 
-                Dispatcher.BeginInvoke(new Action(async () =>
-                {
-                    // Wait for any update dialog to be dismissed first
-                    // Check every 500ms for up to 30 seconds
-                    for (int i = 0; i < 60 && App.IsUpdateDialogActive; i++)
+                // Priority 20 on the ladder. The three hand-rolled waits this replaces (30 s for
+                // the update dialog, 10 s for the window, then the open) all live in the presenter
+                // now, along with the give-up rule: five minutes without a free screen and the
+                // first run is HANDED BACK rather than spent on a wizard nobody saw.
+                EnqueueStartupModal("first-run-wizard", 20,
+                    owner =>
                     {
-                        await Task.Delay(500);
-                    }
-
-                    // The wizard's doors step and the spotlight overlay both measure this window's
-                    // controls, so neither may start against a window that hasn't loaded yet (up
-                    // to 10s). This is why the wizard opens here rather than in the constructor.
-                    for (int i = 0; i < 20 && !IsLoaded; i++)
+                        try
+                        {
+                            FirstRunWizard.Run(owner as MainWindow ?? this);
+                        }
+                        finally
+                        {
+                            // The wizard is modal, so this is the far side of it: the screen is the
+                            // user's again and the HOLD comes off. In a finally because a wizard
+                            // that threw must not leave EMI muted for the rest of the launch.
+                            try { App.EmiDesk?.ReleaseHold("firstLaunchEver"); } catch { }
+                        }
+                    },
+                    onAbandoned: () =>
                     {
-                        await Task.Delay(500);
-                    }
-
-                    if (!App.IsUpdateDialogActive && IsLoaded)
-                    {
-                        FirstRunWizard.Run(this);
-                        // The wizard is modal, so this is the far side of it: the screen is the
-                        // user's again and the HOLD comes off.
-                        try { App.EmiDesk?.ReleaseHold("firstLaunchEver"); } catch { }
-                    }
-                    else
-                    {
-                        // The waits above gave up (an update dialog still on screen after 30s, a
-                        // window that never loaded). Hand the flags back rather than spending a
+                        // The ladder gave up (an update dialog still on screen after five minutes,
+                        // a window that never loaded). Hand the flags back rather than spending a
                         // first run nobody was shown - the next launch offers it properly.
                         FirstRunWizard.HandBackFirstRun(
                             App.IsUpdateDialogActive ? "update dialog still open" : "window never loaded");
                         // Nothing was shown, so nothing is owed the screen.
                         try { App.EmiDesk?.ReleaseHold("firstLaunchEver"); } catch { }
-                    }
 
-                    // THE KNOCK (Ask EMI wave 1). The far side of the wizard, on both paths: the
-                    // population this is FOR is the one that pressed "explore on my own", and the
-                    // hand-back path is a launch where nothing was ever shown and she is exactly as
-                    // welcome. Every remaining gate - the wizard, an update dialog, a session, a
-                    // tutorial overlay, a minimised window, the setting, whether she is already out
-                    // - lives in EmiKnockMachine.MayKnock, so this is one call and no policy.
-                    QueueEmiKnock(knockSeenVersion);
-                    // Normal, NOT Loaded: this app keeps the dispatcher busy enough (compositor
-                    // host + avatar animations) that Loaded-priority items are starved and never
-                    // run - the first-launch tour silently never started at Loaded priority.
-                }), System.Windows.Threading.DispatcherPriority.Normal);
+                        // ...and the launch does not get to CONTINUE unshown either. The wizard's
+                        // Welcome step is the only 18+ gate a fresh install has - App.OnStartup's
+                        // MessageBox stands down for any launch the wizard claimed - so carrying on
+                        // here would be an adult app running with the question never asked. The
+                        // hand-back above means the next launch offers the screen properly.
+                        // No-op when an earlier launch already accepted (the hand-back path leaves
+                        // that flag alone on purpose).
+                        FirstRunWizard.AbortUngatedLaunch("the ladder gave up on the wizard", handBack: false);
+                    });
+
+                // THE KNOCK (Ask EMI wave 1). The far side of the wizard, on both paths: the
+                // population this is FOR is the one that pressed "explore on my own", and the
+                // hand-back path is a launch where nothing was ever shown and she is exactly as
+                // welcome. Every remaining gate - the wizard, an update dialog, a session, a
+                // tutorial overlay, a minimised window, the setting, whether she is already out
+                // - lives in EmiKnockMachine.MayKnock, so this is one call and no policy.
+                QueueEmiKnock(knockSeenVersion);
             }
             else
             {
-                // Not first launch - check if we need to show "What's New" after an update
+                // Not first launch - check if we need to show "What's New" after an update.
+                // Both of these now END in an EnqueueStartupModal (priorities 30 and 40); their
+                // own predicates still decide synchronously, right here, whether there is anything
+                // to queue at all.
                 ShowWhatsNewIfNeeded();
                 TryPresentSeasonRecap();
 
-                // Upgraders into the modular build get the SAME picker, once, at the equivalent safe
-                // point: after the update dialog AND the What's New / season-recap dialogs are done,
-                // and once this window has actually loaded. No tutorial follows here - existing users
-                // already had it.
-                Dispatcher.BeginInvoke(new Action(async () =>
+                // Upgraders into the modular build get the SAME picker, once, at priority 50 -
+                // behind What's New and the recap by construction rather than by a 1500 ms delay
+                // followed by a 600-iteration poll over three flags. ModPickerDialog.ShowIfNeeded
+                // keeps every one of its own guards (ModPickerShown / offline offers / full
+                // install), so the population offered the picker has not changed.
+                EnqueueStartupModal("mod-picker", 50, owner =>
                 {
                     try
                     {
-                        // Let the startup dialogs that were queued just above actually claim the
-                        // flag before we start watching it - What's New posts itself and has not
-                        // raised IsStartupDialogShowing yet at this instant.
-                        await Task.Delay(1500);
-
-                        // Same waiting idiom as the first-launch branch, plus IsStartupDialogShowing:
-                        // What's New is modal and posts itself onto the dispatcher, so it can still be
-                        // pending when this runs. Every modular upgrader ARRIVES with a What's New to
-                        // read, so wait out minutes of reading, not seconds - at 30s a user still on
-                        // the patch notes silently lost the picker until the next launch (play-test
-                        // scenario C caught exactly that). Past 5 min we still defer to next launch,
-                        // which ModPickerShown=false keeps armed.
-                        //
-                        // App.Tutorial.IsActive is in the predicate since v6.8.0: What's New clears
-                        // IsStartupDialogShowing in its finally BEFORE the "Show me around (60s)"
-                        // action it queued gets to run, so without this check the picker opened
-                        // modally ON TOP of the running upgrade tour's spotlight (flagged in the
-                        // 0812 build review). The tour is minutes at most, well inside the 5-min
-                        // budget this loop already spends on the patch notes.
-                        for (int i = 0; i < 600 && (App.IsUpdateDialogActive || IsStartupDialogShowing
-                                                    || App.Tutorial?.IsActive == true); i++)
-                        {
-                            await Task.Delay(500);
-                        }
-
-                        for (int i = 0; i < 20 && !IsLoaded; i++)
-                        {
-                            await Task.Delay(500);
-                        }
-
-                        if (!App.IsUpdateDialogActive && !IsStartupDialogShowing
-                            && App.Tutorial?.IsActive != true && IsLoaded)
-                        {
-                            // Pre-ticks the card for the mod they were already running, so one press
-                            // restores what the installer removed.
-                            ModPickerDialog.ShowIfNeeded(this, preselectActiveMod: true);
-                        }
+                        // Pre-ticks the card for the mod they were already running, so one press
+                        // restores what the installer removed.
+                        ModPickerDialog.ShowIfNeeded(owner as MainWindow ?? this, preselectActiveMod: true);
                     }
                     catch (Exception ex)
                     {
                         App.Logger?.Warning(ex, "Failed to offer the mod picker to an upgrading install");
                     }
+                });
 
-                    // THE KNOCK (Ask EMI wave 1), the upgrader's half. Same call, same gates; the
-                    // snapshot taken before ShowWhatsNewIfNeeded ran is what makes this population
-                    // legible at all by the time we get here.
-                    QueueEmiKnock(knockSeenVersion);
-                    // Normal, NOT Loaded - Loaded-priority work is starved in this app and silently
-                    // never runs (same reason as the first-launch branch above).
-                }), System.Windows.Threading.DispatcherPriority.Normal);
+                // THE KNOCK (Ask EMI wave 1), the upgrader's half. Same call, same gates; the
+                // snapshot taken before ShowWhatsNewIfNeeded ran is what makes this population
+                // legible at all by the time we get here.
+                QueueEmiKnock(knockSeenVersion);
             }
+
+            // The title bar's Inbox glyph. Nothing to show yet - it stays collapsed until the
+            // first surface is parked - but the badge has to be subscribed to the presenter's
+            // collection before any of them are.
+            InitializeInboxBadge();
 
             // Initialize scheduler timer (checks every 30 seconds)
             _schedulerTimer = new DispatcherTimer
@@ -757,10 +737,10 @@ namespace ConditioningControlPanel
             // ToggleRequested handler that used to be registered here are gone with the twelve FX
             // tiles they served. The wall is eight destinations now — "on" is not a state Down the
             // Rabbit Hole has — so there is nothing to highlight and nothing to quick-toggle. The
-            // gesture moved to the premium rail, where the chips genuinely are toggles, and the
-            // per-feature state dots live in the Studio rack beside the dials.
+            // gesture lives on the tiles' right-click; the premium rail that carried it too is
+            // gone (2026-09-11), and the per-feature state dots live in the Studio rack.
             //
-            // The mosaic's own repaint (tier price tags) hangs off RefreshPremiumRail instead,
+            // The mosaic's own repaint (tier price tags) hangs off RefreshDashboardRail instead,
             // which already carries the three triggers it needs: patron status arriving or being
             // lost, the Home door being shown, and the weekly intake pass changing.
         }
@@ -781,16 +761,15 @@ namespace ConditioningControlPanel
                 _avatarTubeWindow?.UpdateAvatarForLevel(App.Settings.Current.PlayerLevel);
 
                 // THE VAT'S LATE KEY. Opening the Trainer Card fires exactly one ungated
-                // Descent request (MainWindow.ProfileVat.OnProfileVatVisibilityChanged), but
-                // DescentService.RefreshAsync returns false without a word when UnifiedId or
-                // AuthToken is not populated yet — and auth lands well after startup (the
-                // restore-session path alone sleeps 3s). Nothing then re-poked Descent: the
-                // post-sync hook in ProfileSyncService is gated on HasSeenBlock, which that
-                // silent miss left false, so the jar, its faucet tooltip and the XP readout
-                // all stayed dark until a sign-out/in or the 60s background poll happened to
-                // catch up. Profile-loaded is the app's "server data has landed" signal, so
-                // ask again here. RequestRefresh is fire-and-forget and self-throttling
-                // (MinFetchInterval + in-flight gate), so an already-lit vat costs nothing.
+                // Descent request (MainWindow.ProfileVat.OnProfileVatVisibilityChanged), and
+                // auth lands well after startup (the restore-session path alone sleeps 3s).
+                // Profile-loaded is the app's "server data has landed" signal, so ask again
+                // here. Belt and braces now: DescentService remembers an ask it could not
+                // serve and fires it from OnSignedIn (every login path), and an ask inside
+                // its floor after a failed fetch is deferred, not dropped. RequestRefresh is
+                // fire-and-forget and self-throttling (a same-credential fetch that already
+                // answered inside the floor makes this a no-op), so an already-lit vat costs
+                // nothing.
                 App.Descent?.RequestRefresh("profile loaded");
 
                 // Re-arm autonomy after profile load ONLY if the user opted into resume-on-startup
@@ -837,7 +816,9 @@ namespace ConditioningControlPanel
                 CelebrateLevelUp();
                 UpdateLevelDisplay();
                 // Show level up notification
-                _trayIcon?.ShowNotification("Level Up!", $"You reached Level {newLevel}!", System.Windows.Forms.ToolTipIcon.Info);
+                _trayIcon?.ShowNotification(Loc.Get("toast_level_up_title"),
+                                            Loc.GetF("toast_level_up_body", newLevel),
+                                            System.Windows.Forms.ToolTipIcon.Info);
                 // Play level up sound
                 PlayLevelUpSound();
                 // Update avatar if level threshold reached (20, 50, 100)
@@ -2432,7 +2413,10 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Rebuilds the top-bar mod-switcher ComboBox and selects the active mod.
-        /// Order: CCP Default → Bambi Sleep → Sissy Hypno → Dronification → user mods (alphabetical).
+        /// Order: CCP Default → Bambi Sleep → Sissy Hypno → Dronification → user mods (alphabetical),
+        /// then the one row that is not a mod: "Open Mod Manager" (<see cref="ModManagerEntryId"/>),
+        /// which took over from the header capsule 0911. Its label is read once here, so a live
+        /// language switch relabels it on the next rebuild, like every other code-behind string.
         /// </summary>
         private void InitializeModSelector()
         {
@@ -2464,6 +2448,10 @@ namespace ConditioningControlPanel
                     {
                         AvailableMods.Add(BuildSelectorItem(mod));
                     }
+
+                    // Last, and drawn as a footer by the item template: the manager row.
+                    AvailableMods.Add(new ModSelectorItem(
+                        ModManagerEntryId, Loc.Get("label_open_mod_manager"), Brushes.Transparent, isAction: true));
 
                     if (ModSelectorCombo != null)
                         ModSelectorCombo.SelectedValue = App.Mods.ActiveModId;
@@ -2592,10 +2580,10 @@ namespace ConditioningControlPanel
                         card.Icon = image;
                 }
 
-                if (SettingsTab.CardJustDrop != null)
+                if (SettingsTab.CardDeeperEditor != null)
                 {
-                    var img = LoadModImageDecoded("features/justdrop.png", TileDecodeWidth);
-                    if (img != null) SettingsTab.CardJustDrop.Icon = img;
+                    var img = LoadModImageDecoded("features/deeper_editor.png", TileDecodeWidth);
+                    if (img != null) SettingsTab.CardDeeperEditor.Icon = img;
                 }
                 if (SettingsTab.CardMystery != null)
                 {
@@ -2664,48 +2652,6 @@ namespace ConditioningControlPanel
                         img.Source = resolved;
                 }
 
-                // Premium quick-launch rail chip art. These live as ImageBrush resources
-                // inside PremiumRail.Resources with a hardcoded pack:// UriSource, so the
-                // rail was the one place on the Dashboard that kept the base art after a
-                // mod switch. Mutate each brush's ImageSource in place — the chips bind to
-                // them with {StaticResource}, so they all repaint from the one assignment.
-                // The DecodePixelWidth values mirror the XAML: the rail only ever shows
-                // these ~170px wide, and re-resolving without a decode cap would pull the
-                // full-size neon PNGs into memory.
-                //
-                // The surfaceId on each row is what ApplyArtFraming crops against: the six
-                // ordinary chips are railChip; Blink and Lockdown are the two taller launchers
-                // that carry live controls over their whole face (railCard). The shapes those
-                // ids stand for live in Services/ModArtFraming.cs, not here.
-                var railArtMap = new (string key, string resourcePath, int decodeWidth, string surfaceId)[]
-                {
-                    ("ArtTakeover",  "features/takeover.png",       384, ModArtFramingRegistry.SurfaceRailChip),
-                    ("ArtAwareness", "features/awareness.png",      512, ModArtFramingRegistry.SurfaceRailChip),
-                    ("ArtHaptics",   "features/vibe.png",           384, ModArtFramingRegistry.SurfaceRailChip),
-                    ("ArtIntake",    "features/lab_quiz_hero.png",  512, ModArtFramingRegistry.SurfaceRailChip),
-                    ("ArtRemote",    "features/remote_control.png", 768, ModArtFramingRegistry.SurfaceRailChip),
-                    ("ArtBlink",     "features/blink_trainer.png",  512, ModArtFramingRegistry.SurfaceRailCard),
-                    ("ArtFyp",       "features/fyp.png",           512, ModArtFramingRegistry.SurfaceRailChip),
-                    ("ArtLockdown",  "lockdown_icon.png",          1024, ModArtFramingRegistry.SurfaceRailCard),
-                };
-                var railResources = SettingsTab.PremiumRail?.Resources;
-                if (railResources != null)
-                {
-                    foreach (var (key, path, decodeWidth, surfaceId) in railArtMap)
-                    {
-                        if (railResources[key] is not ImageBrush brush || brush.IsFrozen) continue;
-                        var image = LoadModImageDecoded(path, decodeWidth);
-                        if (image != null)
-                            brush.ImageSource = image;
-                        // Unconditional, and NOT inside the image != null guard: the crop has to
-                        // be re-decided on every pass or a mod that overrides only some slots
-                        // leaves the rest wearing whatever the previous mod was framed by, and
-                        // switching back to built-in art never restores the shipped rect.
-                        ApplyArtFraming(brush, path, surfaceId,
-                                        image != null && ModResourceResolver.HasActiveModOverride(path));
-                    }
-                }
-
                 // "Lab" hero headers (mod-sensitive): drone-mode ships green versions under
                 // resources/features/lab_*_hero.png; the embedded pink ones are the fallback.
                 // Only two rows left - the Lab tab's own three moved to playHeroMap below with the
@@ -2746,8 +2692,8 @@ namespace ConditioningControlPanel
                 //
                 // Unlike labHeroMap above, this block goes through LoadModImageDecoded: these are
                 // 132-138px card headers, and ResolveImage decodes at full resolution, which is how
-                // the rail's neon PNGs used to cost a few MB apiece for a thumbnail. The caps mirror
-                // railArtMap's, and the brush's ImageSource is mutated IN PLACE - the cards bind the
+                // the old rail's neon PNGs used to cost a few MB apiece for a thumbnail. The caps are
+                // the same idea, and the brush's ImageSource is mutated IN PLACE - the cards bind the
                 // brush itself, so replacing the brush would repaint nothing.
                 var playHeroMap = new (string resourcePath, ImageBrush? brush, int decodeWidth, string surfaceId)[]
                 {
@@ -2779,7 +2725,6 @@ namespace ConditioningControlPanel
                     // overriding features/justdrop.png repainted the dashboard tile and left this
                     // card on the embedded art. Found by the review, which spotted that the card was
                     // offering authors a Frame button over a brush nothing wrote to.
-                    ("features/justdrop.png",           PlayTab?.PlayJustDropHeroBrush, 512, ModArtFramingRegistry.SurfacePlayCard),
                 };
                 foreach (var (path, brush, decodeWidth, surfaceId) in playHeroMap)
                 {
@@ -2792,13 +2737,6 @@ namespace ConditioningControlPanel
                                     image != null && ModResourceResolver.HasActiveModOverride(path));
                 }
 
-                // The rail chips do NOT all paint straight from the resources above: the hover
-                // nudge (PrepareRailArtNudge) hands each of them a private Clone(), which stops
-                // observing the resource the moment it is made. Push the freshly mutated art into
-                // those clones or a runtime mod switch repaints the resource and nothing else.
-                // No-op before the dashboard FX are wired (the list is empty), which is exactly
-                // the startup case where the clones are made AFTER this method and are correct.
-                RefreshRailArtClones();
             }
             catch (Exception ex)
             {
@@ -2933,10 +2871,44 @@ namespace ConditioningControlPanel
         {
             if (_isLoading || _suppressModSelectorChange) return;
             if (ModSelectorCombo?.SelectedValue is not string newModId) return;
+
+            if (newModId == ModManagerEntryId)
+            {
+                OpenModManagerFromSelector();
+                return;
+            }
+
             if (App.Mods == null || App.Mods.ActiveModId == newModId) return;
 
             App.Mods.ActivateMod(newModId);
             ApplyActiveModChange();
+        }
+
+        /// <summary>
+        /// The last row of the mod drop-down is a verb, not a mod. Put the selection back on the
+        /// active mod under the same suppress flag InitializeModSelector uses (so this handler does
+        /// not re-enter and the chip never paints "Open Mod Manager"), close the list, and open the
+        /// manager once the combo has finished its own selection cycle. The dialog itself goes
+        /// through <see cref="BtnManageMods_Click"/>, the one launcher the rail entry also uses.
+        /// </summary>
+        private void OpenModManagerFromSelector()
+        {
+            _suppressModSelectorChange = true;
+            try
+            {
+                if (ModSelectorCombo != null)
+                {
+                    ModSelectorCombo.SelectedValue = App.Mods?.ActiveModId;
+                    ModSelectorCombo.IsDropDownOpen = false;
+                }
+            }
+            finally
+            {
+                _suppressModSelectorChange = false;
+            }
+
+            Dispatcher.BeginInvoke(DispatcherPriority.Normal,
+                new Action(() => BtnManageMods_Click(this, new RoutedEventArgs())));
         }
 
         /// <summary>
@@ -3399,8 +3371,12 @@ namespace ConditioningControlPanel
             // etc.) reflect on this button too.
             EnsureBrowserWebcamStateSubscribed();
 
-            // Dashboard premium quick-toggle rail: paint state + subscribe to patron changes.
-            InitPremiumRail();
+            // Dashboard favorites rail: pin menus, first paint, patron-change subscription.
+            InitFavoritesRail();
+
+            // Dashboard browser card: restore the saved fold. Default is unfolded, so an install
+            // that has never touched the chevron lands on exactly the layout it shipped with.
+            InitDashboardBrowserFold();
 
             // Header "Remember" button: reflect whether a setup is already saved.
             SyncRememberButton();
@@ -4030,18 +4006,21 @@ namespace ConditioningControlPanel
                 {
                     try
                     {
-                        // SETTLED, not merely "after". MayKnock reads the screen at one instant, and
-                        // the two things most likely to own it are queued rather than running: the
-                        // wizard's own tour starts a beat after its last step, and What's New posts
-                        // itself onto the dispatcher. So wait them out with the same idiom the mod
-                        // picker uses a few hundred lines up - a beat for the queue to fill, then up
-                        // to five minutes of somebody actually reading. Past that we simply do not
-                        // knock; the offer has not been spent, so the next launch offers it properly.
-                        await Task.Delay(1500);
-
-                        for (int i = 0; i < 600 && (App.IsUpdateDialogActive || IsStartupDialogShowing
-                                                    || App.Tutorial?.IsActive == true); i++)
+                        // SETTLED, not merely "after", and now the ladder is what says so. MayKnock
+                        // reads the screen at one instant, and the things most likely to own it are
+                        // QUEUED rather than running at the moment this is called - the wizard and
+                        // What's New are both enqueued a few lines before this. The old version
+                        // guessed at that with a flat 1500 ms delay and then polled three flags;
+                        // IsLadderIdle is the same question asked of the thing that actually knows.
+                        // Past five minutes we simply do not knock; the offer has not been spent,
+                        // so the next launch offers it properly.
+                        var startup = App.StartupLadder;
+                        for (int i = 0; i < 600; i++)
                         {
+                            bool busy = App.IsUpdateDialogActive || IsStartupDialogShowing
+                                        || App.Tutorial?.IsActive == true
+                                        || startup?.IsLadderIdle == false;
+                            if (!busy && i > 0) break;
                             await Task.Delay(500);
                         }
 
@@ -4070,18 +4049,24 @@ namespace ConditioningControlPanel
         public Win32WindowWrapper(IntPtr handle) => Handle = handle;
     }
 
-    /// <summary>DTO bound to the top-bar mod-switcher ComboBox.</summary>
+    /// <summary>
+    /// DTO bound to the top-bar mod-switcher ComboBox. <see cref="IsAction"/> marks the one row
+    /// that is not a mod: the "Open Mod Manager" verb <c>MainWindow.InitializeModSelector</c>
+    /// appends last, which the item template draws as a footer.
+    /// </summary>
     public sealed class ModSelectorItem
     {
         public string Id { get; }
         public string Name { get; }
         public Brush AccentBrush { get; }
+        public bool IsAction { get; }
 
-        public ModSelectorItem(string id, string name, Brush accentBrush)
+        public ModSelectorItem(string id, string name, Brush accentBrush, bool isAction = false)
         {
             Id = id;
             Name = name;
             AccentBrush = accentBrush;
+            IsAction = isAction;
         }
     }
 }

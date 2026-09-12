@@ -76,6 +76,8 @@ export const BACK_LONG = 512;
 export const BACK_LONG_TOUCH = 256;
 /** 24 fps under touch; the desktop runs at display rate. */
 export const TOUCH_FRAME_MS = 42;
+/** 20 fps under the lighter switch (race/menu.js), on any tier. */
+export const LITE_FRAME_MS = 50;
 /** payloadFx's `.sf-pfx-layer` fade is 0.45 s; the canvas outlives the hold by that plus a breath. */
 export const FADE_MS = 700;
 
@@ -120,8 +122,10 @@ export function backingFor(w, h, touch) {
  *
  * @param {Object} o { reducedMotion?: bool, log?: (msg)=>void }
  */
-export function createLoomSpiralFx({ reducedMotion = false, log = null } = {}) {
+export function createLoomSpiralFx({ reducedMotion = false, log = null, lite = false } = {}) {
   const say = typeof log === 'function' ? log : () => {};
+  /** The frame cap: the lighter switch's 20 fps beats the touch tier's 24; the desktop has none. */
+  const capMs = () => (lite ? LITE_FRAME_MS : touch ? TOUCH_FRAME_MS : 0);
   /** el -> { el, view, ctx, q, loop, kind, timer, id, onLost } - the 2D view over the shared field */
   const live = new Map();
   /** THE ONE FIELD. A GL canvas (never in the DOM) and loomField's renderer over it, built on the
@@ -183,8 +187,9 @@ export function createLoomSpiralFx({ reducedMotion = false, log = null } = {}) {
     rafId = 0;
     if (disposed || lost || !live.size || hidden()) return;
     const t = Number.isFinite(now) ? now : Date.now();
-    if (touch && t - lastAt < TOUCH_FRAME_MS - 1) {
-      toId = setTimeout(() => { toId = 0; rafId = raf(frame); }, TOUCH_FRAME_MS);
+    const cap = capMs();
+    if (cap && t - lastAt < cap - 1) {
+      toId = setTimeout(() => { toId = 0; rafId = raf(frame); }, cap);
       return;
     }
     lastAt = t;
@@ -360,7 +365,7 @@ export function createLoomSpiralFx({ reducedMotion = false, log = null } = {}) {
         backing: r.view.width + 'x' + r.view.height,
         mounted: r.view.parentNode === r.el,
       }));
-      return { holds, touch, lost, disposed, still: !!reducedMotion, field: !!field, ...stats };
+      return { holds, touch, lite: !!lite, frameMs: capMs(), lost, disposed, still: !!reducedMotion, field: !!field, ...stats };
     },
   };
   return api;

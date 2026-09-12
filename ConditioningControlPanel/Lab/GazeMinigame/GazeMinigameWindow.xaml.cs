@@ -1198,7 +1198,9 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
                         LeftPane.Children.Clear();
                         RightPane.Children.Clear();
                         PlayJingle();
-                        await ShowFullscreenFeedbackAsync("GOOD", Color.FromRgb(0xFF, 0x69, 0xB4));
+                        // Mod-resolved praise word; unmodded (CCP Default) this is "GOOD".
+                        await ShowFullscreenFeedbackAsync(
+                            App.Mods?.GetGazeCorrectMessage() ?? "GOOD", Color.FromRgb(0xFF, 0x69, 0xB4));
                         break;
                     case RoundOutcome.Wrong:
                         if (_settings.VibrationMode == GazeVibrationMode.OnWrong) FireVibration("punish");

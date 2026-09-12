@@ -436,10 +436,9 @@ namespace ConditioningControlPanel
             // Update XP bar login state when Patreon auth changes
             UpdateXPBarLoginState();
 
-            // Dashboard premium quick-toggle rail: re-gate (lock overlay + greying) on
-            // every auth change. Without this, logging out mid-session left the rail
-            // chips live because the rail only refreshed on startup / TierChanged.
-            RefreshPremiumRail();
+            // Dashboard rail + mosaic price tags: repaint on every auth change, not only on
+            // TierChanged - logging out mid-session used to leave the rail a tier behind.
+            RefreshDashboardRail();
         }
 
         // ========================================================================
@@ -983,18 +982,29 @@ namespace ConditioningControlPanel
         /// (Patreon tier + whitelist + cached grace + SubscribeStar) rather than trusting any
         /// single event's tier argument, because several grant paths - cached state restored in
         /// the ctor, the 14-day grace window, V2-linked accounts - never raise TierChanged at
-        /// all. Suppressed (unspent) while a session, the guided tour, or the update dialog is
-        /// on screen; MainWindow_Loaded re-checks on every launch, so suppression only delays
-        /// the card, never burns it.
+        /// all. Inside the quiet window (a session, the guided tour, a dialog on screen) the
+        /// card becomes an Inbox row; MainWindow_Loaded re-checks on every launch, so nothing
+        /// here ever burns it.
         /// </summary>
         private void MaybeShowPremiumCelebration()
         {
             try
             {
                 if (App.Patreon?.HasPremiumAccess != true) return;
-                if (_sessionEngine?.IsRunning == true) return;
-                if (App.IsUpdateDialogActive || IsStartupDialogShowing) return;
-                FeatureIntroPopup.ShowCelebrationIfFirstTime(this);
+                if (App.Settings?.Current?.SeenFeatureIntros.Contains(FeatureIntroPopup.CelebrationKey) == true) return;
+
+                // Through the presenter. A running session or a dialog on screen are two of its
+                // quiet inputs, so the card becomes an Inbox row in both cases rather than being
+                // dropped until the next launch's re-check (the early returns that used to sit
+                // here did exactly that). The seen-flag is still spent inside ShowCore, at open time.
+                PresentOrInbox(new Services.Startup.InboxItem
+                {
+                    Key = "intro:" + FeatureIntroPopup.CelebrationKey,
+                    Glyph = "💖",
+                    Title = "Premium is yours",
+                    Summary = "Everything that was locked is open.",
+                    Open = () => FeatureIntroPopup.ShowCelebrationIfFirstTime(this),
+                });
             }
             catch (Exception ex)
             {

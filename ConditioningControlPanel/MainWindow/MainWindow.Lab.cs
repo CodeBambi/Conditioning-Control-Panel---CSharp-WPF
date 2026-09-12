@@ -403,6 +403,34 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Play → Piece by Piece strip. Opens the 3D chess board (Resources/web/piecebypiece) via
+        /// <see cref="Services.PieceByPiece.PieceByPieceHostService"/>, the sibling of the DtRH,
+        /// Arcademy and Intake hosts. Both gates live in <c>Launch()</c> - idempotent re-focus
+        /// first, then the T2 bar through <see cref="TierGate"/> - for the same reason the
+        /// Arcademy card leaves its refusal there: the strip's lockband is decoration, and the
+        /// one code path that actually opens the door has to be the one that can say no.
+        ///
+        /// <para>No <c>BootFailedThisSession</c> prompt, unlike the Arcademy. That warning exists
+        /// because losing the Arcademy costs a paying account the headline feature; a chess board
+        /// that refused to start once is worth simply clicking again, and a second black window
+        /// is a cheaper thing to spend than a dialog on every visit.</para>
+        /// </summary>
+        internal void BtnStartPieceByPiece_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Services.PieceByPiece.PieceByPieceHostService.Launch();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "BtnStartPieceByPiece_Click failed");
+                MessageBox.Show(Loc.GetF("play_pbp_open_failed_body", ex.Message),
+                    Services.PieceByPiece.PieceByPieceHostService.ProductName,
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        /// <summary>
         /// Quick Start: launch a Chaos run with the saved settings, bypassing the modal hub.
         /// Mirrors what BEGIN CHAOS does after SaveToSettings (StartRun reads ChaosRunConfig.FromSettings),
         /// just without the dialog.
@@ -884,8 +912,10 @@ namespace ConditioningControlPanel
             });
         }
 
+        /// <summary>Every lockdown clock on this window comes through here, so HideLockdownTimer
+        /// masks the page, the badge and the restart repaint in the same frame.</summary>
         private static string FormatLockdownClock(TimeSpan remaining) =>
-            remaining.TotalHours >= 1 ? remaining.ToString(@"h\:mm\:ss") : remaining.ToString(@"mm\:ss");
+            Services.SessionClockLabel.LockdownClock(remaining, App.Settings?.Current?.HideLockdownTimer == true);
 
         // --- The lockdown badge -------------------------------------------------------
         // A crimson pill in the title bar's status row. It exists because the Lockdown page is the
@@ -1170,7 +1200,8 @@ namespace ConditioningControlPanel
 
                 if (on)
                 {
-                    if (LockdownTab.TxtLockdownTimer != null) LockdownTab.TxtLockdownTimer.Text = "09:41";
+                    if (LockdownTab.TxtLockdownTimer != null)
+                        LockdownTab.TxtLockdownTimer.Text = FormatLockdownClock(new TimeSpan(0, 9, 41));
                     LockdownTab.StartEmergencyExitPulse();
 
                     if (LockdownTab.TxtPossessionRung != null)
@@ -1207,11 +1238,31 @@ namespace ConditioningControlPanel
                 if (s == null) return;
                 if (!s.LockdownPossessionEnabled || s.LockdownPossessionIntroSeen) return;
 
-                FeatureIntroPopup.ShowIfFirstTime("possession", this);
+                // Through the presenter: unchanged on a normal launch (nothing is quiet, so the
+                // card opens right here), and an Inbox row rather than an ambush if possession is
+                // armed inside the first-launch window or mid-session. The bark still fires now -
+                // it is her voice, not a modal, and it is the half that survives being clicked
+                // through in half a second.
+                // The flag is spent when the card OPENS, not when the row is posted: a row waved
+                // away from the Inbox unread used to burn the only offer of the rules for good.
+                PresentOrInbox(new Services.Startup.InboxItem
+                {
+                    Key = "intro:possession",
+                    Glyph = "🕶",
+                    Title = "The warden's rules",
+                    Summary = "What possession does before the room starts moving.",
+                    Open = () =>
+                    {
+                        var live = App.Settings?.Current;
+                        if (live != null && !live.LockdownPossessionIntroSeen)
+                        {
+                            live.LockdownPossessionIntroSeen = true;
+                            App.Settings?.Save();
+                        }
+                        FeatureIntroPopup.ShowIfFirstTime("possession", this);
+                    },
+                });
                 App.Bark?.NotifyPossessionRules();
-
-                s.LockdownPossessionIntroSeen = true;
-                App.Settings?.Save();
             }
             catch (Exception ex)
             {

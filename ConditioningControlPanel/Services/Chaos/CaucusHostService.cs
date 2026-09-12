@@ -11,6 +11,8 @@ using ConditioningControlPanel.Models.Race;
 using ConditioningControlPanel.Services.Race;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json.Linq;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Services.Chaos;
 
@@ -278,6 +280,7 @@ internal static class CaucusHostService
                 break;
             case "run-started":
                 _runActive = true;
+                SeasonRecapService.TrackFeature(SeasonFeatureKeys.Race);
                 App.Logger?.Information("RaceHost: run started (seed={Seed})", (string?)o["seed"]);
                 break;
             case "run-ended":

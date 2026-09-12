@@ -46,7 +46,33 @@ namespace ConditioningControlPanel.Services
             int Write([MarshalAs(UnmanagedType.LPWStr)] string pszPropName, ref object pVar);
         }
 
+        /// <summary>
+        /// The forgiving form, and the one the webcam tracking feature uses: anything that goes
+        /// wrong is logged and read as "no cameras", because a device picker that throws is worse
+        /// than an empty one. Callers that must be able to tell "there is no camera" apart from
+        /// "the camera could not be counted" want <see cref="EnumerateStrict"/>.
+        /// </summary>
         public static IReadOnlyList<WebcamDevice> Enumerate()
+        {
+            try
+            {
+                return EnumerateStrict();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "WebcamDeviceEnumerator: enumeration threw");
+                return new List<WebcamDevice>();
+            }
+        }
+
+        /// <summary>
+        /// The same enumeration with the swallow taken off: a broken COM registration, a wedged
+        /// driver or a privacy block THROWS instead of returning an empty list. Only a clean run
+        /// that genuinely found nothing returns empty. The quest hardware gate needs that
+        /// distinction - an error read as "absent" is an answer it would then trust forever - and
+        /// nothing else should care.
+        /// </summary>
+        public static IReadOnlyList<WebcamDevice> EnumerateStrict()
         {
             var devices = new List<WebcamDevice>();
             ICreateDevEnum? devEnum = null;
@@ -56,21 +82,19 @@ namespace ConditioningControlPanel.Services
             {
                 var devEnumType = Type.GetTypeFromCLSID(CLSID_SystemDeviceEnum);
                 if (devEnumType == null)
-                {
-                    App.Logger?.Warning("WebcamDeviceEnumerator: SystemDeviceEnum CLSID could not be resolved");
-                    return devices;
-                }
+                    throw new InvalidOperationException("SystemDeviceEnum CLSID could not be resolved");
 
                 devEnum = Activator.CreateInstance(devEnumType) as ICreateDevEnum;
                 if (devEnum == null)
-                {
-                    App.Logger?.Warning("WebcamDeviceEnumerator: ICreateDevEnum activation returned null");
-                    return devices;
-                }
+                    throw new InvalidOperationException("ICreateDevEnum activation returned null");
 
                 Guid videoCat = CLSID_VideoInputDeviceCategory;
                 int hr = devEnum.CreateClassEnumerator(ref videoCat, out enumMoniker, 0);
                 // hr == 0 (S_OK) → enumMoniker valid; hr == 1 (S_FALSE) → no devices.
+                // A negative hr is a FAILURE, not an empty machine, so it throws.
+                if (hr < 0)
+                    throw Marshal.GetExceptionForHR(hr)
+                        ?? new InvalidOperationException($"CreateClassEnumerator failed (0x{hr:X8})");
                 if (hr != 0 || enumMoniker == null)
                 {
                     return devices;
@@ -115,10 +139,6 @@ namespace ConditioningControlPanel.Services
                     devices.Add(new WebcamDevice(idx, name));
                     idx++;
                 }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "WebcamDeviceEnumerator: enumeration threw");
             }
             finally
             {

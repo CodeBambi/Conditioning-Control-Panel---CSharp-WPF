@@ -115,6 +115,11 @@ namespace ConditioningControlPanel
             // them without touching a single comparison.
             tab = (tab ?? string.Empty).ToLowerInvariant();
 
+            // The dashboard's RECENT rail. At the door, before the three intercepts below, so a
+            // window key (fyp, justdrop) counts as an open like any tab; the rule itself skips
+            // the dashboard, its aliases, "patreon" and any row the server has withheld.
+            NoteDestinationOpened(tab);
+
             // Legacy redirect: the "patreon" tab was eliminated; its account/data
             // content lives in the Settings door's Account section now, so this IS
             // a tab switch (ShowAppInfoPopup -> ShowAccountSettings -> appsettings).
@@ -253,7 +258,7 @@ namespace ConditioningControlPanel
                 case "settings":
                     SettingsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(SettingsTab);
-                    RefreshPremiumRail(); // recompute chip dots (incl. Voice) from live state on every show
+                    RefreshDashboardRail(); // rail + price tags from live state on every show
                     // Training Programs own the day's feature mix. Re-derived (never latched) on
                     // every show of the Dashboard, so arriving here can never find a stale lock -
                     // not after a crash, an abort, or a session event that fired out of order.
@@ -294,7 +299,7 @@ namespace ConditioningControlPanel
                 case "progression":
                     SettingsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(SettingsTab);
-                    RefreshPremiumRail();
+                    RefreshDashboardRail();
                     break;
 
                 case "quests":
@@ -606,7 +611,9 @@ namespace ConditioningControlPanel
         private static readonly (string Door, string DefaultTab, string[] Tabs)[] NavDoorMap =
         {
             ("home",      "settings",  new[] { "settings", "progression" }),
-            ("studio",    "studio",    new[] { "studio", "presets", "haptics" }),
+            // "justdrop" is a window key like "fyp": filed here so the Studio row's door resolves;
+            // ShowTab intercepts it before any door would expand.
+            ("studio",    "studio",    new[] { "studio", "presets", "haptics", "justdrop" }),
             ("companion", "companion", new[] { "companion", "bambitakeover", "shelistening", "awareness" }),
             // Phase 6: "play" replaced "lab" in place as this door's first entry and default
             // destination. "lab" is deliberately NOT listed - it is a legacy alias, resolved by
@@ -751,6 +758,13 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // Nothing on the rail flashes for attention while the quiet window is on. Returns
+                // TRUE so the caller stands down too: false means "I could not announce it, do your
+                // own entry-level pulse", and an entry pulse is exactly as much of an interruption
+                // as the header one. The announcement is not lost - the door still opens on the
+                // first visit and the card behind it is still owed.
+                if (App.StartupLadder?.IsQuiet == true) return true;
+
                 if (IsDoorExpandedForTab(tabKey)) return false;
                 var header = NavDoorHeaderForTab(tabKey);
                 if (header == null) return false;
@@ -961,7 +975,7 @@ namespace ConditioningControlPanel
         /// so the x:Name MainWindow.xaml used to declare is a passthrough now.
         ///
         /// This one property is why the move cost nothing: all ~71 <c>HapticsTab.&lt;x:Name&gt;</c>
-        /// dereferences across MainWindow.Haptics.cs, .Patreon.cs, .PremiumRail.cs, .Presets.cs,
+        /// dereferences across MainWindow.Haptics.cs, .Patreon.cs, .Presets.cs,
         /// .Remember.cs, .SessionFeatureLock.cs, .TabFxTakeoverLabStatus.cs and .xaml.cs (incl.
         /// both <c>features/vibe.png</c> repaint rows and the IsVisibleChanged live-status hook)
         /// resolve through it unchanged. Never rename it.
@@ -998,6 +1012,10 @@ namespace ConditioningControlPanel
         private void BtnNavBlinkTrainer_Click(object sender, RoutedEventArgs e) => ShowTab("blinktrainer");
 
         private void BtnNavRemoteControl_Click(object sender, RoutedEventArgs e) => ShowTab("remotecontrol");
+
+        // ShowTab("justdrop"), never JustDropHostService.LaunchShop(): ShowTab owns the withheld
+        // refusal and is the path the Exclusives shelf, the tease tile and the palette row take.
+        private void BtnNavJustDrop_Click(object sender, RoutedEventArgs e) => ShowTab("justdrop");
 
 
         /// <summary>
@@ -1054,8 +1072,11 @@ namespace ConditioningControlPanel
         {
             try
             {
-                if (_sessionEngine?.IsRunning == true) return;
-                FeatureIntroPopup.ShowIfFirstTime(key, this, NavDoorForTab(doorTab ?? key));
+                // Through the presenter, like the dashboard's own card: inside the quiet window
+                // (first ten minutes, a tour, a session, a modal up) the card becomes an Inbox row
+                // instead of a modal explainer on every tab a new user clicks through. The
+                // session check that used to live here is one of the presenter's quiet inputs.
+                FeatureIntroPopup.ShowWhenStartupSettles(key, this, NavDoorForTab(doorTab ?? key));
             }
             catch (Exception ex)
             {
@@ -1084,6 +1105,11 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // The browser fold's backstop: re-derive the card, the rows, the chevron and the
+                // billboard from the saved bool every time the dashboard comes on screen, so a
+                // surface that a killed animation left behind cannot outlive one tab switch.
+                if (visible) ResettleBrowserFold();
+
                 if (!visible || _dashboardIntroQueued) return;
                 // A session running at this point means the window was re-shown mid-session, not
                 // a launch. Leave the queue unarmed so a later, quieter visit gets the card.

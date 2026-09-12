@@ -16,6 +16,7 @@ namespace ConditioningControlPanel.Tests;
 /// with no Application present, so this class swaps <see cref="InteractionQueueService.TriggerScheduler"/>
 /// for a synchronous one for the duration of the test and restores it afterwards.
 /// </summary>
+[Collection(InteractionQueueSchedulerCollection.Name)]
 public class InteractionQueueTests : IDisposable
 {
     private readonly Action<Action> _originalScheduler;

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Windows.Media;
 using ConditioningControlPanel.Models;
 
@@ -39,31 +40,52 @@ namespace ConditioningControlPanel.Services.Quiz
         {
             try
             {
-                var modId = App.Mods?.ActiveModId;
-                if (modId == BuiltInMods.DronificationId) return "drone";
-                if (modId == BuiltInMods.SissyHypnoId) return "sissy";
-                if (modId == BuiltInMods.LockedId) return "circe";
-
-                // Locked's own tags ("locked"/"chastity") read as circe too.
-                var tags = App.Mods?.ActiveMod?.Manifest?.Tags;
-                if (tags != null)
-                {
-                    foreach (var tag in tags)
-                    {
-                        if (string.Equals(tag, "drone", StringComparison.OrdinalIgnoreCase)) return "drone";
-                        if (string.Equals(tag, "sissy", StringComparison.OrdinalIgnoreCase)) return "sissy";
-                        if (string.Equals(tag, "circe", StringComparison.OrdinalIgnoreCase)) return "circe";
-                        if (string.Equals(tag, "locked", StringComparison.OrdinalIgnoreCase)) return "circe";
-                        if (string.Equals(tag, "chastity", StringComparison.OrdinalIgnoreCase)) return "circe";
-                    }
-                }
-
-                // Only the positive SissyHypno reading counts. ContentMode's other value means
-                // "no sissy mod", not "bambi", so everything else lands on the neutral niche.
-                if (App.Settings?.Current?.ContentMode == ContentMode.SissyHypno) return "sissy";
-                return Fallback;
+                return Resolve(
+                    App.Mods?.ActiveModId,
+                    App.Mods?.ActiveMod?.Manifest?.Tags,
+                    App.Settings?.Current?.ContentMode == ContentMode.SissyHypno);
             }
             catch { return Fallback; }
+        }
+
+        /// <summary>
+        /// The pure half of <see cref="Current"/>: mod id, then manifest tags, then the one legacy
+        /// signal. Separated so it can be exercised without an App - the four themed ids are easy to
+        /// drop one of (6.9.4 shipped without the BambiSleep branch, which silently moved every
+        /// Bambi user onto the neutral pass card and prompt bank), and a test is the only thing that
+        /// notices.
+        /// </summary>
+        /// <param name="modId">Active mod id, or null when there is no mod service yet.</param>
+        /// <param name="tags">Active mod's manifest tags, for third-party .ccpmod files.</param>
+        /// <param name="sissyContentMode">The legacy enum's one positive reading.</param>
+        internal static string Resolve(string? modId, IEnumerable<string>? tags, bool sissyContentMode)
+        {
+            // BambiSleep ships its own pass card and prompt bank, so it names its own niche here
+            // like every other themed built-in. It was the Fallback until 6.9.4 made the fallback
+            // neutral, which left "bambi" unreachable from every code path.
+            if (modId == BuiltInMods.BambiSleepId) return "bambi";
+            if (modId == BuiltInMods.DronificationId) return "drone";
+            if (modId == BuiltInMods.SissyHypnoId) return "sissy";
+            if (modId == BuiltInMods.LockedId) return "circe";
+
+            // Locked's own tags ("locked"/"chastity") read as circe too.
+            if (tags != null)
+            {
+                foreach (var tag in tags)
+                {
+                    if (string.Equals(tag, "bambi", StringComparison.OrdinalIgnoreCase)) return "bambi";
+                    if (string.Equals(tag, "drone", StringComparison.OrdinalIgnoreCase)) return "drone";
+                    if (string.Equals(tag, "sissy", StringComparison.OrdinalIgnoreCase)) return "sissy";
+                    if (string.Equals(tag, "circe", StringComparison.OrdinalIgnoreCase)) return "circe";
+                    if (string.Equals(tag, "locked", StringComparison.OrdinalIgnoreCase)) return "circe";
+                    if (string.Equals(tag, "chastity", StringComparison.OrdinalIgnoreCase)) return "circe";
+                }
+            }
+
+            // Only the positive SissyHypno reading counts. ContentMode's other value means
+            // "no sissy mod", not "bambi", so everything else lands on the neutral niche.
+            if (sissyContentMode) return "sissy";
+            return Fallback;
         }
 
         /// <summary>

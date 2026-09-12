@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
@@ -21,6 +21,26 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public class AiService : IDisposable, IAiService
     {
+
+        /// <summary>Replacement characters and C0 controls (tabs and newlines excepted): the
+        /// signature of a reply that was already garbage when it arrived.</summary>
+        internal static int CountGarbledChars(string? text)
+        {
+            if (string.IsNullOrEmpty(text)) return 0;
+            int n = 0;
+            foreach (var ch in text)
+                if (ch == (char)0xFFFD || (ch < ' ' && ch != (char)10 && ch != (char)13 && ch != (char)9)) n++;
+            return n;
+        }
+
+        internal static int CountLines(string? text)
+        {
+            if (string.IsNullOrEmpty(text)) return 0;
+            int n = 1;
+            foreach (var ch in text) if (ch == (char)10) n++;
+            return n;
+        }
+
         private readonly HttpClient _httpClient;
         private readonly BambiSprite _bambiSprite;
 
@@ -344,7 +364,7 @@ namespace ConditioningControlPanel.Services
 
             // Sanitize response to remove any leaked metadata tags FIRST (so context-tag
             // echoes don't accidentally trip moderation regexes).
-            var sanitized = SanitizeResponse(raw);
+            var sanitized = SanitizeResponse(raw, MaxTokensHardCap);
 
             // OUTPUT MODERATION (Layer 1). Discard prohibited model output before display.
             if (guard != null)
@@ -513,8 +533,12 @@ namespace ConditioningControlPanel.Services
                 // because nothing recorded what the model actually returned - only that a reply
                 // arrived. One repro with this line settles whether the text was already garbage on
                 // arrival (a provider/model problem) or was mangled downstream by our own cleanup.
-                App.Logger?.Debug("AiService: raw reply ({Length} chars): {Raw}",
-                    result.Content?.Length ?? 0, result.Content ?? "(null)");
+                // Shape only, never the text: Debug reaches the flight recorder, and the recorder
+                // rides along in every bug report (LogPipeline has no level floor on that sink), so
+                // the reply itself would leave the machine. Garbage-on-arrival is still readable
+                // from the shape - a reply full of U+FFFD or control characters is the provider's.
+                App.Logger?.Debug("AiService: raw reply shape: {Length} chars, {Garbled} garbled, {Lines} lines",
+                    result.Content?.Length ?? 0, CountGarbledChars(result.Content), CountLines(result.Content));
 
                 return new ProxyPostResult(ProxyOutcome.Ok, result.Content,
                     result.TokensUsed?.CachedIn, result.TokensRemainingToday);
@@ -802,7 +826,7 @@ namespace ConditioningControlPanel.Services
             }
 
             var raw = post.Content!;
-            var sanitized = SanitizeResponse(raw);
+            var sanitized = SanitizeResponse(raw, maxTokens);
 
             // OUTPUT MODERATION (Layer 1). Prohibited model output is discarded before display;
             // the caller (CompanionBrain) rolls the turn back so it never reaches disk (P2/H5).
@@ -832,7 +856,12 @@ namespace ConditioningControlPanel.Services
         /// Sanitizes AI response by removing any leaked internal metadata tags.
         /// The AI sometimes echoes context tags that should be hidden from users.
         /// </summary>
-        private static string SanitizeResponse(string? response)
+        /// <param name="maxTokens">
+        /// The cap this call was actually sent with, so a reply the cap guillotined can be recognised
+        /// and ended cleanly rather than mid-word (ccp-bugs #1164). See
+        /// <see cref="AiTextHygiene.TrimCutOffTail"/>.
+        /// </param>
+        private static string SanitizeResponse(string? response, int maxTokens)
         {
             if (string.IsNullOrEmpty(response))
                 return response ?? string.Empty;
@@ -845,6 +874,19 @@ namespace ConditioningControlPanel.Services
             // reaction tags like [Media/Streaming], and the truncated variants the 100-token cap
             // produces. Shared with the parser path so both stay in step.
             var sanitized = AiTextHygiene.StripMetadataTags(response);
+
+            // #1164: the proxy reports no finish_reason, so the only evidence a reply was cut off is
+            // the reply itself — long enough to have hit the cap, and stopping on a word. Ending on
+            // the previous sentence reads as a short answer; ending mid-word reads as a broken app.
+            // Length only in the log line: the reply is the companion talking to the user.
+            var repaired = AiTextHygiene.TrimCutOffTail(sanitized, maxTokens, out var trimmed);
+            if (trimmed)
+            {
+                App.Logger?.Warning(
+                    "[AI] cloud reply hit the {Cap}-token cap and stopped mid-sentence - trimmed the dangling " +
+                    "fragment ({Before} -> {After} chars)", maxTokens, sanitized.Length, repaired.Length);
+                sanitized = repaired;
+            }
 
             // If sanitization removed everything meaningful, return a fallback
             if (string.IsNullOrWhiteSpace(sanitized))

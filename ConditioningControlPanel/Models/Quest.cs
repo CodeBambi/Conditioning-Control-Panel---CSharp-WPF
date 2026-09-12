@@ -98,6 +98,16 @@ public class QuestDefinition
     public bool RequiresPremium { get; set; }
 
     /// <summary>
+    /// Devices this quest cannot be completed without, as published by the definitions channel:
+    /// "camera"/"webcam", "microphone"/"mic", or several separated by commas or spaces. Null on
+    /// every embedded quest - their requirements come from the category instead
+    /// (QuestHardwareGate.NeedsCamera / NeedsMicrophone). Unknown words are ignored, so a typo in
+    /// hand-authored JSON costs the gate rather than the player's quest. ccp-bugs#1151.
+    /// </summary>
+    [JsonProperty("requiresHardware")]
+    public string? RequiresHardware { get; set; }
+
+    /// <summary>
     /// Whether this is a seasonal quest (temporary/event-based)
     /// </summary>
     [JsonProperty("seasonal")]
@@ -184,8 +194,25 @@ public class QuestDefinition
             "keywordtrigger" => QuestCategory.KeywordTrigger,
             "blink" => QuestCategory.BlinkTrainer,
             "blinktrainer" => QuestCategory.BlinkTrainer,
-            _ => QuestCategory.Combined
+            _ => UnknownCategory(category)
         };
+    }
+
+    /// <summary>
+    /// Combined is the safe bucket for a category this build does not know (a server-side quest
+    /// type newer than the client), but silently is how a typo in a quest definition shipped for
+    /// a month as a "Combined" quest. Say so once per unknown value.
+    /// </summary>
+    private static readonly System.Collections.Generic.HashSet<string> _warnedCategories = new(StringComparer.OrdinalIgnoreCase);
+    private static QuestCategory UnknownCategory(string? category)
+    {
+        var key = category ?? "(null)";
+        lock (_warnedCategories)
+        {
+            if (_warnedCategories.Add(key))
+                App.Logger?.Warning("Quest: unknown category '{Category}' mapped to Combined", key);
+        }
+        return QuestCategory.Combined;
     }
 
     /// <summary>

@@ -1,0 +1,157 @@
+<Window x:Class="ConditioningControlPanel.WelcomeBackSheet"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Welcome back"
+        Width="560"
+        SizeToContent="Height"
+        MinHeight="240"
+        MaxHeight="660"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        PreviewKeyDown="Window_PreviewKeyDown">
+
+    <!-- The one surface a returning user meets on a new PC.
+
+         It stands in for five things that used to arrive one after another: "a cloud backup was
+         found", "restore failed", "settings restored", the What's New dialog and the season
+         rollover box. All five were unowned and modal, and all five fired on the same population.
+
+         Progressive disclosure is the whole layout. Two toggles, both already set the way the
+         common answer goes, and one primary button; the patch notes are folded away behind a line
+         you can ignore, and the season line is a single muted sentence that only appears when the
+         server actually rotated the board. Every row here is Collapsed unless the decision
+         (WelcomeBackDecision) says it has something to say, so the sheet shrinks to what is true.
+
+         Strings come through the Str() fallback helper in code-behind, so a language file missing
+         a wb_ key renders the English draft rather than the raw key. Every text element carries an
+         explicit Foreground - the inherited one is unreadable on this background. -->
+
+    <Window.Resources>
+        <Style x:Key="WbRow" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="16,13"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+        </Style>
+
+        <Style x:Key="WbRowLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+
+        <Style x:Key="WbRowHint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12"
+            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
+        <Grid Margin="26,22,26,22" MouseLeftButtonDown="Sheet_MouseLeftButtonDown">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- ================= who this is ================= -->
+            <TextBlock x:Name="TxtHeading" Grid.Row="0"
+                       Foreground="{DynamicResource PinkBrush}"
+                       FontSize="23" FontWeight="Bold" TextWrapping="Wrap"/>
+
+            <TextBlock x:Name="TxtSubline" Grid.Row="1" Margin="0,6,0,20"
+                       Foreground="{DynamicResource TextMutedBrush}"
+                       FontSize="12.5" TextWrapping="Wrap"/>
+
+            <!-- ================= row 1: the cloud backup ================= -->
+            <Border x:Name="RowRestore" Grid.Row="2" Style="{StaticResource WbRow}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <CheckBox x:Name="ChkRestore" Grid.Column="0" IsChecked="True"
+                              Style="{StaticResource ItemCheckBox}"
+                              VerticalAlignment="Top" Margin="0,1,14,0"/>
+
+                    <StackPanel Grid.Column="1">
+                        <TextBlock x:Name="TxtRestoreLabel" Style="{StaticResource WbRowLabel}"
+                                   MouseLeftButtonUp="RestoreLabel_Click"/>
+                        <TextBlock x:Name="TxtRestoreHint" Style="{StaticResource WbRowHint}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ================= row 2: the flavour ================= -->
+            <Border x:Name="RowFlavour" Grid.Row="3" Style="{StaticResource WbRow}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <CheckBox x:Name="ChkFlavour" Grid.Column="0" IsChecked="True"
+                              Style="{StaticResource ItemCheckBox}"
+                              VerticalAlignment="Top" Margin="0,1,14,0"/>
+
+                    <StackPanel Grid.Column="1">
+                        <TextBlock x:Name="TxtFlavourLabel" Style="{StaticResource WbRowLabel}"
+                                   MouseLeftButtonUp="FlavourLabel_Click"/>
+                        <TextBlock x:Name="TxtFlavourHint" Style="{StaticResource WbRowHint}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ================= row 3: what changed, folded away =================
+                 Not an Expander: this app has no Expander style, and the stock one paints a
+                 light-theme header with a chrome arrow on a dark sheet. A toggle line plus a
+                 Collapsed panel is the same affordance with no theme surprises. -->
+            <StackPanel x:Name="RowWhatsNew" Grid.Row="4" Margin="0,2,0,0">
+                <TextBlock x:Name="TxtWhatsNewToggle"
+                           Foreground="{DynamicResource PinkBrush}"
+                           FontSize="13" Cursor="Hand" TextWrapping="Wrap"
+                           MouseLeftButtonUp="WhatsNewToggle_Click"/>
+
+                <Border x:Name="NotesPanel" Visibility="Collapsed" Margin="0,10,0,0"
+                        Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="12">
+                    <StackPanel>
+                        <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto">
+                            <TextBlock x:Name="TxtNotes" Foreground="#C0C0C0" FontSize="12.5"
+                                       TextWrapping="Wrap" LineHeight="19"/>
+                        </ScrollViewer>
+
+                        <TextBlock x:Name="TxtTour" Margin="0,12,0,0"
+                                   Foreground="{DynamicResource PinkBrush}"
+                                   FontSize="13" FontWeight="SemiBold" Cursor="Hand"
+                                   MouseLeftButtonUp="Tour_Click"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- ================= the season, one muted line ================= -->
+            <TextBlock x:Name="TxtSeasonLine" Grid.Row="5" Margin="0,18,0,0"
+                       Foreground="{DynamicResource TextMutedBrush}"
+                       FontSize="12" TextWrapping="Wrap" Visibility="Collapsed"/>
+
+            <!-- ================= the way out ================= -->
+            <Button x:Name="BtnGo" Grid.Row="6" Margin="0,22,0,0"
+                    HorizontalAlignment="Right" Padding="38,11"
+                    Style="{StaticResource PinkButton}"
+                    IsDefault="True" Click="BtnGo_Click"/>
+        </Grid>
+    </Border>
+</Window>

@@ -258,7 +258,7 @@ eq(JSON.parse(await ev(HOLD)).canvases, 0, 'every pop after a loss is a gif, wit
  * ==========================================================================*/
 {
   const run = readFileSync(resolve(RACE, 'run.js'), 'utf8');
-  ok(/opacityCap:\s*touchTier\s*\?/.test(run), 'run.js passes the inline cap on the touch tier only');
+  ok(/opacityCap:\s*touchTier(?:\s*\|\|\s*lite)?\s*\?/.test(run), 'run.js passes the inline cap on the touch tier only (and under the lighter switch)');
   ok(/dataset\.touch\s*=\s*'1'/.test(run), 'and stamps data-touch on the root for race.css');
   const LAYER = (sel) => `(() => { const el = document.querySelector('${sel}'); if (!el) return JSON.stringify({ there: false });
     const cs = getComputedStyle(el); return JSON.stringify({ there: true, filter: cs.filter, bf: cs.backdropFilter || cs.webkitBackdropFilter, anim: cs.animationName, mask: cs.maskImage || cs.webkitMaskImage }); })()`;
@@ -387,6 +387,49 @@ eq(JSON.parse(await ev(HOLD)).canvases, 0, 'every pop after a loss is a gif, wit
   eq(gov.sec, 2, 'and is read every two seconds');
   ok(gov.coarseOn === true && gov.coarseOff === false, '?coarse= forces the answer either way');
   eq(gov.touch, false, 'this desktop run is not on the touch ladder');
+}
+
+/* ============================================================================
+ * 7d. LIGHTER (race/menu.js `lighter` -> settings.lite): the four levers at once,
+ *     for a phone being screen-recorded. Off is the run exactly as it was.
+ * ==========================================================================*/
+{
+  const menu = readFileSync(resolve(RACE, 'menu.js'), 'utf8');
+  const boot = readFileSync(resolve(DTRH, 'raceBoot.js'), 'utf8');
+  const run = readFileSync(resolve(RACE, 'run.js'), 'utf8');
+  ok(/id:\s*'lite',\s*label:\s*'lighter'/.test(menu), 'the options panel has the lighter row');
+  ok(/LITES\.includes\(raw\.lite\)/.test(menu) && /lite:\s*'off'/.test(menu), 'it persists with the other options and defaults off');
+  ok(/settings\.lite\s*=\s*wantsLite\(opts\)/.test(boot), 'raceBoot reads it into settings.lite');
+  ok(/createPixelizer\(\{[^}]*\blite\b/.test(run) && /createLoomSpiralFx\(\{[^}]*\blite\b/.test(run) && /cap:\s*lite\s*\?\s*LITE_BUBBLE_CAP/.test(run), 'run.js hands it to the pixelizer, the spiral canvas and the bubble field');
+  ok(/dataset\.lite\s*=\s*'1'/.test(run), 'and stamps data-lite on the root for race.css');
+  const lv = await parse(`(async () => {
+    const px = await import('/dtrh/race/pixel.js');
+    const m = await import('/dtrh/race/loomSpiralFx.js');
+    const b = await import('/dtrh/race/loomBook.js');
+    const fx = m.createLoomSpiralFx({ lite: true });
+    const el = document.createElement('div');
+    el.className = 'sf-pfx-layer sf-pfx-spiral rh-loom-probe';
+    document.querySelector('.sf-pfx').appendChild(el);
+    fx.mount(el, b.createLoomBook({ seed: 5 }).draw({ room: 'chapel' }), { kind: 'spiral', durMs: 4000 });
+    const d = fx.diagnostics();
+    fx.dispose(); el.remove();
+    const plain = m.createLoomSpiralFx({}).diagnostics();
+    return JSON.stringify({ liteDpr: px.LITE_DPR, frameMs: d.frameMs, lite: d.lite, plainMs: plain.frameMs, plainTouch: plain.touch });
+  })()`);
+  eq(lv.liteDpr, 0.6, 'the resolution lid under lighter is 0.6');
+  eq(lv.frameMs, 50, 'the spiral canvas paces at 20 fps under lighter');
+  ok(lv.lite === true, 'and says so');
+  ok(lv.plainTouch ? lv.plainMs === 42 : lv.plainMs === 0, `without it the tier's own pace stands (${lv.plainMs} ms)`);
+  await ev(`window.__race.race.debugPayload('overlay', { overlay: 'spiral', strength: 60 })`);
+  await sleep(150);
+  const before = await ev(`getComputedStyle(document.querySelector('.sf-pfx-spiral')).mixBlendMode`);
+  eq(before, 'screen', 'the spiral hold blends with screen off the switch');
+  await ev(`document.getElementById('race-root').dataset.lite = '1'`);
+  await sleep(50);
+  const after = await ev(`getComputedStyle(document.querySelector('.sf-pfx-spiral')).mixBlendMode`);
+  eq(after, 'normal', 'and flat under it');
+  await ev(`delete document.getElementById('race-root').dataset.lite`);
+  await sleep(4500);
 }
 
 /* ============================================================================

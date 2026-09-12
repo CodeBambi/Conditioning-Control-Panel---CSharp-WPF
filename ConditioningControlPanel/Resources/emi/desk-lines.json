@@ -1752,22 +1752,6 @@
         "max": 1
       }
     },
-    "firstContactLater": {
-      "pools": [
-        "firstContactLater"
-      ],
-      "odds": 1.0,
-      "cooldownMs": 0,
-      "priority": 3,
-      "mix": 1.0,
-      "spiceCeiling": 1,
-      "hold": false,
-      "askOdds": 0.0,
-      "limit": {
-        "per": "ever",
-        "max": 1
-      }
-    },
     "bookOffer": {
       "pools": [
         "bookOffer"
@@ -13567,7 +13551,7 @@
       },
       {
         "id": "firstContact.003",
-        "t": "that flash was me. one knock. you answered. good eyes.",
+        "t": "that pink flash was me. hi. i'm emi. i live here.",
         "face": "o_o",
         "spice": 0
       },
@@ -13580,7 +13564,7 @@
       },
       {
         "id": "firstContact.005",
-        "t": "first one in the room gets to do the tour. that's me.",
+        "t": "first one in the room gets to say hi. that's me.",
         "face": "(´∀`)",
         "spice": 0
       },
@@ -13703,70 +13687,6 @@
       {
         "id": "firstContactUpgrade.010",
         "t": "months of you in here and no me. we're fixing that.",
-        "face": "(´∀`)",
-        "spice": 1
-      }
-    ],
-    "firstContactLater": [
-      {
-        "id": "firstContactLater.001",
-        "t": "oh. hi again. i wasn't waiting. this is just my spot.",
-        "face": "^_^",
-        "spice": 0
-      },
-      {
-        "id": "firstContactLater.002",
-        "t": "back again. the offer's still warm. no pressure. some.",
-        "face": "¬_¬",
-        "spice": 1
-      },
-      {
-        "id": "firstContactLater.003",
-        "t": "hi. still emi. still here. the place got no smaller.",
-        "face": "0_0",
-        "spice": 0
-      },
-      {
-        "id": "firstContactLater.004",
-        "t": "you said later. its later. i checked twice.",
-        "face": "^_~",
-        "spice": 0,
-        "typo": true
-      },
-      {
-        "id": "firstContactLater.005",
-        "t": "no walk, all good. i drew a map instead. it's in my head.",
-        "face": "._.",
-        "spice": 0
-      },
-      {
-        "id": "firstContactLater.006",
-        "t": "i'm fine. i did a lap without you. it was quick.",
-        "face": "-_-",
-        "spice": 0
-      },
-      {
-        "id": "firstContactLater.007",
-        "t": "everything's still where it was. i checked. for me.",
-        "face": "o_o",
-        "spice": 0
-      },
-      {
-        "id": "firstContactLater.008",
-        "t": "totally fine btw. i already forgot the no. mostley.",
-        "face": "-_-",
-        "spice": 0,
-        "typo": true
-      },
-      {
-        "id": "firstContactLater.009",
-        "t": "all good here. the corner needed sitting in. i sat.",
-        "face": "^_^",
-        "spice": 0
-      },
-      {
-        "id": "firstContactLater.010",
-        "t": "hm. you again. good. the place missed you. i'm the place.",
         "face": "(´∀`)",
         "spice": 1
       }
@@ -17613,7 +17533,7 @@
     {
       "id": "ask.firstContact.001",
       "moment": "firstContact",
-      "q": "show you around?",
+      "q": "hi. i'm emi. i live here. want the quick lap?",
       "face": "(◕‿◕)",
       "chips": [
         "show me",
@@ -17636,7 +17556,7 @@
     {
       "id": "ask.firstContact.002",
       "moment": "firstContact",
-      "q": "i know a shortcut. come?",
+      "q": "hi!! i'm emi. i know a shortcut. come?",
       "face": "^_~",
       "chips": [
         "ok",
@@ -17659,7 +17579,7 @@
     {
       "id": "ask.firstContact.003",
       "moment": "firstContact",
-      "q": "two minutes. best bits?",
+      "q": "i'm emi. i live in that ring. two minutes, best bits?",
       "face": "0_0",
       "chips": [
         "go on",
@@ -17672,6 +17592,29 @@
       "no": {
         "t": "nah is allowed. the bits aren't going anywhere.",
         "face": "^_^"
+      },
+      "spice": 0,
+      "effect": "tour:shortwalk",
+      "when": [
+        "!touring"
+      ]
+    },
+    {
+      "id": "ask.firstContact.004",
+      "moment": "firstContact",
+      "q": "emi. hi. i memorised this place. walk it with me?",
+      "face": "(◕‿◕)",
+      "chips": [
+        "let's go",
+        "not now"
+      ],
+      "yes": {
+        "t": "oh good. seven stops. i'll keep it quick. ish.",
+        "face": "^_^"
+      },
+      "no": {
+        "t": "that's allowed. i'll be in the ring if you want it.",
+        "face": "._."
       },
       "spice": 0,
       "effect": "tour:shortwalk",

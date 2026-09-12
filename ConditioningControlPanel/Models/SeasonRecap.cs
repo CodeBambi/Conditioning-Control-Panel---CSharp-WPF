@@ -26,6 +26,26 @@ namespace ConditioningControlPanel.Models
         public const string MindWipe = "mindwipe";
         public const string BlinkTrainer = "blink";
         public const string Companion = "companion";
+        // Lab modes. Not in the Catalog (the recap card shows conditioning effects only); they
+        // exist so the same TrackFeature hook can feed the per-day engagement log below.
+        public const string ChaosMode = "chaos";
+        public const string Dtrh = "dtrh";
+        public const string Race = "race";
+        public const string PieceByPiece = "pbp";
+
+        /// <summary>
+        /// The day-log event key (<see cref="FeatureDayEntry.EventKeys"/>) a season feature key
+        /// maps to, or null for one that never goes on the wire. Lives here so the two lists
+        /// cannot drift apart without the build noticing.
+        /// </summary>
+        public static string? ToDayLogEvent(string key) => key switch
+        {
+            Flash => "e_fl", Video => "e_vd", Subliminal => "e_sb", Overlay => "e_ov",
+            Bubbles => "e_bb", BubbleCount => "e_bc", BouncingText => "e_bt", LockCard => "e_lk",
+            MindWipe => "e_mw", PopQuiz => "e_pq", BlinkTrainer => "e_bl", Companion => "e_cp",
+            ChaosMode => "e_ch", Dtrh => "e_dt", Race => "e_rc", PieceByPiece => "e_pb",
+            _ => null
+        };
 
         public sealed record FeatureDef(string Key, string LabelLocKey, string ImagePath);
 

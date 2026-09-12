@@ -1,4 +1,4 @@
-<UserControl x:Class="ConditioningControlPanel.Features.SystemFeatureControl"
+﻿<UserControl x:Class="ConditioningControlPanel.Features.SystemFeatureControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
@@ -54,12 +54,12 @@
                             </Grid>
 
                             <!-- GPU decode -->
-                            <Grid Height="34" ToolTip="Play mandatory videos on the GPU. Off by default (software decode) to dodge a white-screen bug on some PCs. Turn ON if a video only plays on one of your screens, keeps swapping screens, or freezes when it starts.">
+                            <Grid Height="34" ToolTip="{loc:Str tooltip_force_video_gpu_decode}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Force video GPU decode" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_force_video_gpu_decode}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <CheckBox Grid.Column="1" x:Name="ChkVideoGpuDecode"
                                           Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
@@ -67,12 +67,12 @@
                             </Grid>
 
                             <!-- Blurred video background -->
-                            <Grid Height="34" ToolTip="Fill the empty bars around a video that doesn't fit the screen (e.g. a vertical clip on a widescreen monitor) with a blurred, zoomed copy of the video, like TikTok. Turn OFF for plain black bars.">
+                            <Grid Height="34" ToolTip="{loc:Str tooltip_blurred_video_background}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Blurred video background" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_blurred_video_background}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <CheckBox Grid.Column="1" x:Name="ChkVideoBlurBg"
                                           Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
@@ -197,7 +197,7 @@
                                 <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str btn_escape}"
                                                         Foreground="{StaticResource TextLightBrush}"
                                                         FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" x:Name="TxtPanicKeyState" Text="🔑 —"
+                                <TextBlock Grid.Column="1" x:Name="TxtPanicKeyState" Text="🔑 -"
                                            Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold"
                                            HorizontalAlignment="Right" VerticalAlignment="Center"/>
                             </Grid>
