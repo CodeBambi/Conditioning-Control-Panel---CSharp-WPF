@@ -28,11 +28,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public const string CurrentPatchNotes = @"v6.9.5 - The Spiral pt. 4
 
-two new rooms on the Play wall, a cleaner home, a quieter first launch, and a copy pass over the whole app. nothing here touches your progress. it stays yours :3
-
-TWO NEW ROOMS (tier 2, same door as the rabbit hole)
-- Racing Thoughts: a no-lose kart run. EMI rides in the cup, the road is built from a hypno track, and the words it says come at you as bubbles. pick a file, or play from bambicloud and the run follows whatever is on. it plays on a phone too.
-- Piece by Piece: chess on a 3D board, hotseat or online. the room fills in as the game goes: flash pops, gif rain, the spiral veil, your own media on the walls.
+a cleaner home, a quieter first launch, and a copy pass over the whole app. nothing here touches your progress. it stays yours :3
 
 HOME
 - the premium rail is now Favorites and Recent. right-click a tile or a side rail row to pin it. every chip wears its feature art.
@@ -67,7 +63,7 @@ CCLABS.APP
 
 every tier is on sale from september 11 to 18. code ARCADEMY at checkout. go play :3
 
-full nerd changelog in pull requests 651 through 679, 842 through 870, 873 through 947, 953 through 1012, 1016, 1019 through 1106.";
+full nerd changelog in pull requests 900, 923 through 931, 1024, 1025, 1029, 1036, and 1038 through 1106.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
