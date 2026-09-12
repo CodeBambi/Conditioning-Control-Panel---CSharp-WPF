@@ -123,6 +123,13 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnReloadBrowser_Click(sender, e);
         }
+        // The browser card's fold chevron. MainWindow.DashboardFold.cs owns the setting, the row
+        // arithmetic and the height ease; this view only carries the button.
+        private void BtnFoldBrowser_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.BtnFoldBrowser_Click(sender, e);
+        }
         // Phase 2: BtnExportPhrases_Click / BtnImportPhrases_Click moved with the phrase-backup
         // card to Views/Controls/AppSettings/DataSettingsSection.xaml.cs.
         private void BtnUnifiedLogin_Click(object sender, RoutedEventArgs e)

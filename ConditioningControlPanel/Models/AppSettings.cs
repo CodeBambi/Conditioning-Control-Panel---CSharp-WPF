@@ -8032,6 +8032,19 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public int DashboardToggleHintUses { get; set; }
 
+        /// <summary>
+        /// The Home dashboard's browser card is folded shut: the header strip stays, everything
+        /// below it (the Deeper toolbar, the audio row and the WebView2) is collapsed and the card
+        /// gives its rows back to the column.
+        ///
+        /// <para>Default false on purpose. Nobody's dashboard changes shape until they click the
+        /// chevron, which is also why this is a plain bool with no DefaultValueHandling: an
+        /// upgrader's settings.json has no key, deserializes to false, and the dashboard looks
+        /// exactly like the build they came from. <c>MainWindow.DashboardFold.cs</c> restores it
+        /// at Loaded and writes it on every click.</para>
+        /// </summary>
+        public bool DashboardBrowserCollapsed { get; set; }
+
         private List<string> _railFavorites = new();
         /// <summary>
         /// The dashboard rail's FAVORITES: Ctrl+K palette row ids ("tab.deeper", "door.play",

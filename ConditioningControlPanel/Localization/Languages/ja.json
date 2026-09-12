@@ -5151,5 +5151,7 @@
   "lockdown_hide_timer": "時計を隠す",
   "lockdown_hide_timer_tip": "残り時間の代わりに点を表示します。このページとタイトルバーに適用されます。ロックダウンは時間どおりに終了します。",
   "set2_general_show_countdown": "セッションのカウントダウン",
-  "set2_general_show_countdown_tip": "セッション中、STARTボタンに残り時間を表示します。オフにするとボタンにはセッション名だけが表示されます。"
+  "set2_general_show_countdown_tip": "セッション中、STARTボタンに残り時間を表示します。オフにするとボタンにはセッション名だけが表示されます。",
+  "tooltip_browser_fold": "ブラウザを折りたたみます。ページは読み込まれたままです。",
+  "tooltip_browser_unfold": "ブラウザをもう一度開きます。"
 }

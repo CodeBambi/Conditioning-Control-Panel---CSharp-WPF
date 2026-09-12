@@ -5735,5 +5735,7 @@
   "lockdown_hide_timer": "Hide the clock",
   "lockdown_hide_timer_tip": "Dots instead of the time left, here and in the title bar. The lockdown still ends on time.",
   "set2_general_show_countdown": "Session countdown",
-  "set2_general_show_countdown_tip": "Show the time left on the START button while a session runs. Off, the button shows the session name and nothing else."
+  "set2_general_show_countdown_tip": "Show the time left on the START button while a session runs. Off, the button shows the session name and nothing else.",
+  "tooltip_browser_fold": "Fold the browser away. The page stays loaded.",
+  "tooltip_browser_unfold": "Open the browser back up."
 }

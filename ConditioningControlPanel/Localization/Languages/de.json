@@ -5160,5 +5160,7 @@
   "lockdown_hide_timer": "Uhr ausblenden",
   "lockdown_hide_timer_tip": "Punkte statt der Restzeit, hier und in der Titelleiste. Der Lockdown endet trotzdem pünktlich.",
   "set2_general_show_countdown": "Sitzungs-Countdown",
-  "set2_general_show_countdown_tip": "Zeigt die Restzeit auf der START-Taste, solange eine Sitzung läuft. Aus: die Taste zeigt nur den Sitzungsnamen."
+  "set2_general_show_countdown_tip": "Zeigt die Restzeit auf der START-Taste, solange eine Sitzung läuft. Aus: die Taste zeigt nur den Sitzungsnamen.",
+  "tooltip_browser_fold": "Den Browser einklappen. Die Seite bleibt geladen.",
+  "tooltip_browser_unfold": "Den Browser wieder aufklappen."
 }

@@ -5616,5 +5616,7 @@
   "lockdown_hide_timer": "隐藏时钟",
   "lockdown_hide_timer_tip": "用圆点代替剩余时间，此页面和标题栏都适用。锁定仍会按时结束。",
   "set2_general_show_countdown": "会话倒计时",
-  "set2_general_show_countdown_tip": "会话进行时在 START 按钮上显示剩余时间。关闭后按钮只显示会话名称。"
+  "set2_general_show_countdown_tip": "会话进行时在 START 按钮上显示剩余时间。关闭后按钮只显示会话名称。",
+  "tooltip_browser_fold": "折叠浏览器。页面仍保持加载。",
+  "tooltip_browser_unfold": "重新展开浏览器。"
 }

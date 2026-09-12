@@ -5151,5 +5151,7 @@
   "lockdown_hide_timer": "Ocultar el reloj",
   "lockdown_hide_timer_tip": "Puntos en lugar del tiempo restante, aquí y en la barra de título. El bloqueo termina igual a su hora.",
   "set2_general_show_countdown": "Cuenta atrás de la sesión",
-  "set2_general_show_countdown_tip": "Muestra el tiempo restante en el botón START mientras dura una sesión. Apagado, el botón solo muestra el nombre de la sesión."
+  "set2_general_show_countdown_tip": "Muestra el tiempo restante en el botón START mientras dura una sesión. Apagado, el botón solo muestra el nombre de la sesión.",
+  "tooltip_browser_fold": "Pliega el navegador. La página sigue cargada.",
+  "tooltip_browser_unfold": "Vuelve a abrir el navegador."
 }

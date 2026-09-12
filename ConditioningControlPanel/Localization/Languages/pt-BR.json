@@ -5159,5 +5159,7 @@
   "lockdown_hide_timer": "Ocultar o relógio",
   "lockdown_hide_timer_tip": "Pontos no lugar do tempo restante, aqui e na barra de título. O lockdown termina na hora mesmo assim.",
   "set2_general_show_countdown": "Contagem regressiva da sessão",
-  "set2_general_show_countdown_tip": "Mostra o tempo restante no botão START enquanto uma sessão roda. Desligado, o botão mostra só o nome da sessão."
+  "set2_general_show_countdown_tip": "Mostra o tempo restante no botão START enquanto uma sessão roda. Desligado, o botão mostra só o nome da sessão.",
+  "tooltip_browser_fold": "Recolhe o navegador. A página continua carregada.",
+  "tooltip_browser_unfold": "Abre o navegador de novo."
 }
