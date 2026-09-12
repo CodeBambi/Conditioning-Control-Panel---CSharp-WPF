@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -76,9 +76,9 @@ namespace ConditioningControlPanel
                 tab.TxtTakeoverStatus.Foreground = new SolidColorBrush(active ? GreenColor : MutedColor);
             }
             if (tab.TxtTakeoverStatusSub != null)
-                tab.TxtTakeoverStatusSub.Text = active
-                    ? "She has the reins. Tap stop any time."
-                    : "She's not watching right now.";
+                tab.TxtTakeoverStatusSub.Text = Localization.Loc.Get(active
+                    ? "takeover_status_sub_active"
+                    : "takeover_status_sub_dormant");
 
             if (!active) HideVoicePanel();
         }

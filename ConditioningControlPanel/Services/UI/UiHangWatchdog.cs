@@ -19,6 +19,12 @@ namespace ConditioningControlPanel.Services;
 /// for all thread stacks, managed included). The hang and any later recovery are also
 /// logged, which timestamps the freeze exactly even if the dump fails.
 ///
+/// Since 6.9.4 the small hang_*.txt report ALSO carries the UI thread's managed stack,
+/// captured in-process from a PSS snapshot (see UiThreadStacks) and named by the
+/// dispatcher operation that never returned (see UiOpTracker). That matters because the
+/// dump, which has the same information, has never once reached us: the bug reporter now
+/// attaches the text report, and cannot attach a 40MB dump.
+///
 /// STARTUP PHASE: OnStartup runs the whole service init synchronously on the UI thread,
 /// so the dispatcher cannot pump a single heartbeat until startup completes — that
 /// silence is BY DESIGN, not a hang. Until the first heartbeat ever lands, a much longer
@@ -156,7 +162,7 @@ public static class UiHangWatchdog
                         // Durable, human-readable report + the cross-session sentinel. Written
                         // BEFORE the minidump because the dump can take up to 60s (or never finish)
                         // and a task-kill during it must still leave evidence behind.
-                        WriteHangReport(silence, started, mark);
+                        WriteHangReport(silence, started, mark, SafeUiManagedThreadId(dispatcher));
                     }
                     if (!_dumpWritten)
                     {
@@ -296,7 +302,7 @@ public static class UiHangWatchdog
 
     private static string SentinelPath => Path.Combine(App.UserDataPath, "logs", "ui_hang.pending");
 
-    private static void WriteHangReport(long silenceMs, bool startedPumping, string mark)
+    private static void WriteHangReport(long silenceMs, bool startedPumping, string mark, int uiManagedThreadId)
     {
         try
         {
@@ -341,6 +347,12 @@ public static class UiHangWatchdog
             // A frozen UI is exactly the case where the last few hundred Debug lines - which have
             // never reached a disk before - say which subsystem stopped answering.
             Services.Logging.FlightRecorderSink.DumpIfActive("hang");
+
+            // ...and only NOW the expensive part. The whole report above is already flushed to the
+            // platter, so a stack capture that stalls for its full budget (or that the user
+            // task-kills us in the middle of) can no longer cost us the evidence we already had -
+            // it can only add to it. See AppendUiThreadStacks.
+            AppendUiThreadStacks(path, text, uiManagedThreadId);
         }
         catch (Exception ex)
         {
@@ -349,6 +361,71 @@ public static class UiHangWatchdog
             {
                 App.Logger?.Error("[WATCHDOG] hang report file failed ({E}); state inline:{NL}{State}",
                     ex.Message, Environment.NewLine, HangContext.Describe());
+            }
+            catch { }
+        }
+    }
+
+    /// <summary>
+    /// How long the in-process stack capture may take before the watchdog gives up on it. Generous
+    /// enough for a cold DAC load on a machine that is already thrashing (a healthy capture
+    /// measures ~100ms), short enough that the watchdog is back to writing the minidump quickly.
+    /// </summary>
+    private const int StackCaptureBudgetMs = 20_000;
+
+    /// <summary>
+    /// Which managed thread the dispatcher belongs to. Read through a guard because this is called
+    /// from the hang path, where a dispatcher mid-shutdown can throw on property access.
+    /// </summary>
+    private static int SafeUiManagedThreadId(Dispatcher dispatcher)
+    {
+        try { return dispatcher.Thread.ManagedThreadId; }
+        catch { return -1; }
+    }
+
+    /// <summary>
+    /// Capture the UI thread's managed stack and append it to the report that was just written,
+    /// then re-arm the sentinel with the fuller text so a task-killed session still carries the
+    /// stack into the NEXT session's log.
+    ///
+    /// This is the answer to the #1189 family: those reports show a Send-priority operation running
+    /// for 71-137s with no stack at all, so there is nothing to fix. Appending (rather than
+    /// building the stack into the first write) is deliberate - the durable evidence lands first
+    /// and this can only add to it.
+    /// </summary>
+    private static void AppendUiThreadStacks(string path, string reportSoFar, int uiManagedThreadId)
+    {
+        try
+        {
+            string stacks = UiThreadStacks.CaptureWithBudget(uiManagedThreadId, StackCaptureBudgetMs);
+            string block = "ui thread managed stack (captured in-process at hang time)" +
+                           Environment.NewLine + stacks;
+
+            using (var fs = new FileStream(path, FileMode.Append, FileAccess.Write,
+                       FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.WriteThrough))
+            using (var sw = new StreamWriter(fs, Encoding.UTF8))
+            {
+                sw.Write(Environment.NewLine);
+                sw.Write(block);
+                sw.Flush();
+                fs.Flush(true);
+            }
+
+            // The sentinel is the copy that survives a task-kill, so it has to be re-armed with the
+            // stack too - otherwise the next session re-logs the half of the report that was
+            // already useless.
+            ArmSentinel(reportSoFar + Environment.NewLine + block);
+
+            App.Logger?.Error("[WATCHDOG] ui thread stack captured into {Path}{NL}{Stacks}",
+                path, Environment.NewLine, stacks);
+            VideoDiag.Log("WATCHDOG", "ui thread stack captured into " + path);
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                App.Logger?.Error("[WATCHDOG] ui thread stack capture failed: {E}", ex.Message);
+                VideoDiag.Log("WATCHDOG", "ui thread stack capture failed: " + ex.Message);
             }
             catch { }
         }

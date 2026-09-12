@@ -20,53 +20,42 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.9.1";
+        public const string AppVersion = "6.9.3";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.9.1 - The Spiral
+        public const string CurrentPatchNotes = @"v6.9.3 - The Spiral pt. 3
 
-this is the big one. on September 1st the Descent ceremony ran and the monthly wipe is gone forever. from here on your level, your XP and your hours are yours for good. this is the version that carries you into that world, and i wanted it to feel special. it does :3
+a fix wave for the things you reported after pt. 2, plus the spiral finally remembering what you did each day. nothing here touches your progress. it stays yours :3
+
+THE SPIRAL
+- the calendar card on the web spiral names the features you used on each day instead of ""their names were not kept"". the app keeps a per-day log and sends it up with your stats.
+- the lil spiral in the nav rail is on by default. you can switch it off in Settings.
+
+VIDEOS
+- video fix: closing a mandatory video with ESC left a libvlc ghost behind in the sound mixer, eating ram until clips froze on their first frame. every teardown now lets go of the video for real.
+- the Deeper player no longer strands an empty borderless window over the library after a video ends. ESC, the panic key and the end of the clip all close it.
+
+MONITORS
+- Settings, General has a ""Show content on"" picker: all monitors, primary only, or one specific screen. the System menu got the same picker so the two can not disagree. flashes, videos, overlays, subliminals and bouncing text all follow it, and changing it mid-session moves them right away.
+
+COMPANION
+- offline mode no longer silences the companion for good, and the message you got when it happened stops blaming your connection.
+- EMI's greeting no longer falls through to a stock line.
+- Infection Control gets its Goon Fuel name back and its tube fit stays put.
+
+SESSIONS, TRIGGERS AND CARDS
+- takeover effects end when the engine ends instead of outliving it.
+- deactivating a custom awareness preset keeps its triggers.
+- a lock card phrase with an ellipsis or curly quotes can be typed.
+- solved a bug where Possession could hitch the app and EMI shrank into a single pixel.
 
 THE ARCADEMY
-- the campus takes center stage. classes that are secretly little games, a prize counter, your own locker, report cards, the works. wander around, get graded, get conditioned.
-- EMI runs the halls. she deals commentary, hands out hints in Daily Trigger, and cameos in Impulse Control when you least expect her.
-- your Sparks wallet follows you around the whole campus, and it now tells you WHY it refused a purchase instead of just refusing.
-- faster on phones, prettier in portrait, and the flash guard slider finally says which way is gentler.
+- the sort room stays smooth with a gif heavy library. only the cards on screen animate.
 
-EMI'S DESK
-- EMI got out of the school. summon her onto your desktop: a little ring on the edge of your screen opens into her CRT glass and she just hangs out. reacts to what the app is doing to you. picks up props. lives her life.
-- we wrote her a whole handbook together. Ask EMI anything about the app and she answers, in all 9 languages. it is the new guide and she is very proud of it.
-- new users get a proper first contact from her now instead of silence.
-
-EVERYWHERE AT ONCE
-- one account, everywhere. desktop, the web at cclabs.app, and now your phone. XP, wallet, presence, profile, it all connects.
-- the CCP Mobile public beta is live! grab the APK here: https://github.com/CodeBambi/CCP-Mobile-Releases/releases/latest
-
-THE DESCENT
-- the wipe is gone. nothing clears any more, and levels and hours carry forward from here on.
-- the season recap card only shows if a reset actually happened to you, the countdown is honest and stands down when it is over, and if a stray reset order ever reaches the app after the Descent, the app refuses it. your progress does not roll back because a server hiccuped.
-
-NEW MOD: INFECTION CONTROL
-- a sixth mod joins the shelf, created by Miss Jenny. Nurse Amber runs the ward with over 330 freshly voiced lines: barks, mantra takeovers, her own flash voicelines, and her voice all the way down the Rabbit Hole.
-- her own spiral, her own colors, and she comments on nearly everything you do.
-- like the other built-ins the audio arrives as a downloadable pack so the installer stays lean.
-
-AND SOME FIXES
-- the updater now upgrades the copy you are actually running, the fade slider actually fades, escape always escapes when it should, muted means muted, tooltips are readable again, ghost mode stops freezing, and the menus behave.
-- full nerd changelog in the pull requests, numbers 380 through 445.
-
-6.9.1 HOTFIXES (the day after)
-- the ceremony's two doors fit on screen at high display scaling, and ""not tonight"" stops re-asking for the session.
-- your profile card shows which door you picked, with the +10% on the XP numbers if you cycled.
-- the board notice, the Spiral help card and EMI's barks all agree now: nothing was wiped and nothing resets.
-- bubbles have their own ""stare to pop"" switch on the bubble page.
-- a headset play/pause tap no longer ends a strict lock video.
-- a failed update download gets a proper box and a manual download button, and the exe carries its real version number.
-- flash audio unducks after a stop, reveal in explorer works with spaces, customize and privacy are hidden on other people's cards, OCR text stays out of the logs, and the single-digit age bypass is closed.
-- full nerd changelog in pull requests 451 through 475.";
+full nerd changelog in pull requests 817, 928, 948 through 952, 978, 1013 through 1015 and 1017.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

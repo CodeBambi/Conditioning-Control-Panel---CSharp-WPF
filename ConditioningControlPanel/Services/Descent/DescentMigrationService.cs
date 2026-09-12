@@ -450,7 +450,7 @@ namespace ConditioningControlPanel.Services.Descent
         /// </summary>
         private bool TryHoldForQuiet()
         {
-            var presenter = App.Startup;
+            var presenter = App.StartupLadder;
             if (presenter is null || !presenter.IsQuiet) return false;
 
             lock (_gate)
@@ -497,7 +497,7 @@ namespace ConditioningControlPanel.Services.Descent
 
         private void OnStartupQuietChanged()
         {
-            if (App.Startup?.IsQuiet == true) return;
+            if (App.StartupLadder?.IsQuiet == true) return;
             ReleaseQuietHold();
         }
 
@@ -522,7 +522,7 @@ namespace ConditioningControlPanel.Services.Descent
 
             try
             {
-                var presenter = App.Startup;
+                var presenter = App.StartupLadder;
                 if (presenter != null)
                 {
                     presenter.QuietChanged -= OnStartupQuietChanged;

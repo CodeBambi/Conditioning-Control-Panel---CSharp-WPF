@@ -50,6 +50,33 @@ namespace ConditioningControlPanel
                 var settings = App.Settings?.Current;
                 if (settings == null || settings.HasSeenProgramsIntro || _opening) return;
 
+                var presenter = App.StartupLadder;
+                if (presenter == null) { ShowCore(owner); return; }
+
+                // Quiet window -> an Inbox row; the seen-flag is spent in ShowCore at open time,
+                // so a row that is waved away leaves the card owed on a later visit.
+                presenter.PresentOrInbox(new Services.Startup.InboxItem
+                {
+                    Key = "intro:programs",
+                    Glyph = "\U0001F4C5",
+                    Title = Localization.Loc.Get("inbox_programs_title"),
+                    Summary = Localization.Loc.Get("inbox_programs_summary"),
+                    Open = () => ShowCore(owner),
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Programs intro presenter gate failed");
+            }
+        }
+
+        private static void ShowCore(Window? owner)
+        {
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings == null || settings.HasSeenProgramsIntro || _opening) return;
+
                 var featured = PickFeaturedProgram();
 
                 // Deferred so the click handler returns and the Programs tab behind it gets to lay

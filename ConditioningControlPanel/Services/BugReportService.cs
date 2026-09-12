@@ -42,6 +42,10 @@ namespace ConditioningControlPanel.Services
         // keep the whole app-log field inside the server's 200,000-char limit with room to spare.
         private const int MaxAppLogChars = 120_000;
         private const int MaxDiagDumpChars = 60_000;
+        // The UI-hang report (hang_*.txt) now carries the UI thread's managed stack, which is the
+        // one thing the #1189/#1179/#1159/#984 freeze family has never had. It is the smallest and
+        // most valuable attachment in the report, so it gets its own (generous) budget.
+        internal const int MaxHangReportChars = 24_000;
         internal const int MaxAppLogFieldChars = 190_000;
         // Diagnostic-line rescue (#634 + freeze reports). The last-N tail scrolls the [RES]/
         // [WATCHDOG] history out of every report because a relaunch writes far more startup
@@ -207,6 +211,16 @@ namespace ConditioningControlPanel.Services
                 if (!string.IsNullOrWhiteSpace(diagSampled))
                     combined = combined + Environment.NewLine + Environment.NewLine +
                         "## Diagnostics (sampled)" + Environment.NewLine + diagSampled;
+
+                // The watchdog's own hang report. Until now it only ever reached us as the single
+                // [WATCHDOG] line the sampled-diagnostics scan rescued from the rolling app log -
+                // the file itself, which holds the feature state AND (since 6.9.4) the UI thread's
+                // managed stack, was never attached to anything and never left the user's machine.
+                // It survives the relaunch a hard freeze forces, so it is here rather than in the
+                // scrolled tail.
+                var hangReport = BuildHangReportSection(TryReadNewestHangReport(out var hangAt), hangAt);
+                if (!string.IsNullOrWhiteSpace(hangReport))
+                    combined = combined + Environment.NewLine + Environment.NewLine + hangReport;
 
                 (scrubbedApp, appCounts) = LogScrubber.Scrub(combined);
 
@@ -703,6 +717,124 @@ namespace ConditioningControlPanel.Services
             if (section.Length > MaxDiagSectionChars)
                 section = section.Substring(section.Length - MaxDiagSectionChars);
             return section;
+        }
+
+        internal const string HangReportHeader = "===== UI-hang report (logs/hang_*.txt) =====";
+
+        /// <summary>
+        /// Wrap the newest hang report in its delimiter and cap it at <see cref="MaxHangReportChars"/>,
+        /// keeping the NEWEST bytes - the tail is where the stack capture is appended, and the stack
+        /// is the whole reason this section exists. Empty in, empty out (the overwhelming majority
+        /// of reports are not freezes and must not carry an empty header). Pure, so the shape that
+        /// lands in the GitHub issue can be pinned by a test.
+        /// </summary>
+        internal static string BuildHangReportSection(string? hangReportText, DateTime? writtenLocal = null)
+        {
+            if (string.IsNullOrWhiteSpace(hangReportText)) return string.Empty;
+            // The watchdog keeps the four newest reports, so a user whose LAST freeze was weeks ago
+            // and who is now filing an unrelated bug would otherwise hand triage a stale stack with
+            // nothing to date it (the report's own "when" header is what the cap trims away first).
+            var header = writtenLocal is DateTime at
+                ? HangReportHeader + " written " + at.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+                : HangReportHeader;
+            return header + Environment.NewLine + Tail(hangReportText!.Trim(), MaxHangReportChars);
+        }
+
+        /// <summary>
+        /// How fresh a <c>hang_*.txt</c> has to be before the report dialog ticks the activity-log
+        /// box on the user's behalf. Seven days is the span the watchdog's own retention already
+        /// implies (it keeps the four newest files), and it is long enough to cover the usual
+        /// "it froze on Friday, I filed it on Monday" gap without dragging a month-old stack into
+        /// an unrelated report.
+        /// </summary>
+        internal static readonly TimeSpan RecentHangWindow = TimeSpan.FromDays(7);
+
+        /// <summary>
+        /// Should the report dialog open with the activity-log opt-in already ticked?
+        /// <para>Yes only when a freeze was recorded inside <see cref="RecentHangWindow"/> and the
+        /// user is filing a bug rather than a suggestion. Everyone else keeps the unticked default:
+        /// the whole point of the opt-in is that a report carries no log unless there is a reason.</para>
+        /// <para>A timestamp in the future means a clock change, not a freeze that has not happened
+        /// yet, so it is refused rather than trusted. Pure, so the decision can be pinned by a test
+        /// without a dialog, a clock or a disk.</para>
+        /// </summary>
+        internal static bool ShouldPreAttachHangReport(DateTime? hangWrittenLocal, DateTime nowLocal, bool isSuggestion)
+        {
+            if (isSuggestion) return false;
+            if (hangWrittenLocal is not DateTime at) return false;
+            if (at > nowLocal) return false;
+            return nowLocal - at <= RecentHangWindow;
+        }
+
+        /// <summary>
+        /// When the newest <c>hang_*.txt</c> was written, if one is recent enough to ride along with
+        /// the report the user is about to file; <c>null</c> otherwise. Cheap: it reads timestamps,
+        /// not contents. Never throws.
+        /// </summary>
+        public static DateTime? FindRecentHangReport(ReportKind kind)
+        {
+            try
+            {
+                var at = NewestHangReportTime();
+                return ShouldPreAttachHangReport(at, DateTime.Now, kind == ReportKind.Suggestion) ? at : null;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("[BugReport] hang report probe failed: {Msg}", ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>Local write time of the newest <c>hang_*.txt</c>, or <c>null</c> if there is none.</summary>
+        private static DateTime? NewestHangReportTime()
+        {
+            var logDir = Path.Combine(App.UserDataPath, "logs");
+            if (!Directory.Exists(logDir)) return null;
+
+            DateTime newestAt = DateTime.MinValue;
+            foreach (var file in Directory.GetFiles(logDir, "hang_*.txt"))
+            {
+                var at = File.GetLastWriteTimeUtc(file);
+                if (at > newestAt) newestAt = at;
+            }
+            return newestAt == DateTime.MinValue ? null : newestAt.ToLocalTime();
+        }
+
+        /// <summary>
+        /// Newest <c>hang_*.txt</c> from the logs folder (the watchdog keeps the four most recent).
+        /// Opened share-all because the watchdog may still be appending the stack capture to it.
+        /// Never throws.
+        /// </summary>
+        private static string TryReadNewestHangReport(out DateTime? writtenLocal)
+        {
+            writtenLocal = null;
+            try
+            {
+                var logDir = Path.Combine(App.UserDataPath, "logs");
+                if (!Directory.Exists(logDir)) return string.Empty;
+
+                string? newest = null;
+                DateTime newestAt = DateTime.MinValue;
+                foreach (var file in Directory.GetFiles(logDir, "hang_*.txt"))
+                {
+                    var at = File.GetLastWriteTimeUtc(file);
+                    if (at <= newestAt) continue;
+                    newestAt = at;
+                    newest = file;
+                }
+                if (newest == null) return string.Empty;
+                writtenLocal = newestAt.ToLocalTime();
+
+                using var fs = new FileStream(newest, FileMode.Open, FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete);
+                using var sr = new StreamReader(fs, Encoding.UTF8);
+                return sr.ReadToEnd();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("[BugReport] hang report read failed: {Msg}", ex.Message);
+                return string.Empty;
+            }
         }
 
         /// <summary>Keep the last <paramref name="maxChars"/> characters. Empty in, empty out.</summary>

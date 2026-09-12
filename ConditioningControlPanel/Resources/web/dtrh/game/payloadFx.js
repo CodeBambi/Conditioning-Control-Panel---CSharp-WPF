@@ -36,7 +36,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const SPRITE = (n) => `/dtrh/assets/bubbles/effects/${n}.png`;
 const FALLBACK_SPRITES = [SPRITE('flash'), SPRITE('spiral'), SPRITE('pinkfilter'), SPRITE('glitch')];
 // a small built-in whisper pool for word flashes when no subliminal text is piped
-const WORDS = ['good girl', 'drop', 'sink', 'obey', 'deeper', 'blank', 'melt', 'pink', 'empty', 'yes'];
+const WORDS = ['quiet', 'drop', 'sink', 'obey', 'deeper', 'blank', 'melt', 'pink', 'empty', 'yes'];
 const pick = (a) => a[(Math.random() * a.length) | 0];
 
 // hard caps so a dense wave can never flood the DOM with clips/flashes
@@ -375,8 +375,8 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
   }
 
   /**
-   * The freeze card. `text` is the road's own phrase when the caller has one (race only; the tube
-   * never passes it, so dtrh.html still reads BAMBI FREEZE off the same two words it always has).
+   * The freeze card. `text` is the caller's own phrase when it has one (race only; the tube
+   * never passes it, so dtrh.html reads the neutral FREEZE unless a caller names the word).
    * `lacquer` is the race's `lock` kind: the same card and the same timing behind a pink lacquer
    * frame, because a doll being posed is not the same beat as a freeze being called.
    */
@@ -384,7 +384,7 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
     const el = document.createElement('div');
     el.className = lacquer ? 'sf-pfx-freeze is-lacquer' : 'sf-pfx-freeze';
     const word = document.createElement('span');
-    word.textContent = String(text || '').trim().toUpperCase() || (lacquer ? pick(WORDS).toUpperCase() : 'BAMBI FREEZE');
+    word.textContent = String(text || '').trim().toUpperCase() || (lacquer ? pick(WORDS).toUpperCase() : 'FREEZE');
     el.appendChild(word);
     root.appendChild(el);
     setTimeout(() => { if (!disposed) el.classList.add('sf-pfx-out'); }, 1200);

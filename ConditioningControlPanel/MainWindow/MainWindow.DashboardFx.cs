@@ -60,12 +60,6 @@ namespace ConditioningControlPanel
         private const int LogoSheenMinGapSeconds = 25;
         private const int LogoSheenMaxGapSeconds = 40;
 
-        private const double RailHoverArtNudge = -0.03;   // brush-relative: ~1.3px on a 42px chip
-        private const int RailHoverMs = 150;
-
-        private const double DotPulseMinOpacity = 0.45;
-        private const double DotPulseSeconds = 3.4;
-
         /// <summary>Seconds for one pass of the browser frame's travelling light, and the full
         /// cycle including its rest. The long flat tail IS the pause - one clock, nothing to
         /// schedule.</summary>
@@ -78,7 +72,6 @@ namespace ConditioningControlPanel
         private bool _dashboardFxInitialized;
         private DispatcherTimer? _logoSheenTimer;
         private readonly Random _dashboardFxRng = new();
-        private readonly List<Ellipse> _pulsingRailDots = new();
         private TextBlock? _browserStatusWatched;
 
         /// <summary>
@@ -97,7 +90,7 @@ namespace ConditioningControlPanel
                 if (tab == null) return Enumerable.Empty<FeatureCard>();
                 // The 4x4 hybrid wall (2026-08-11, redesign #2). Every SINGLE tile on the mosaic
                 // belongs here or it silently keeps its motion running after a MotionLevel
-                // change - the same omission family as ChipFyp missing from PremiumRailItems.
+                // change.
                 // The three diagonal tiles are DashboardSplitCards, just below.
                 var all = new[]
                 {
@@ -117,28 +110,6 @@ namespace ConditioningControlPanel
                 var tab = SettingsTab;
                 if (tab == null) return Enumerable.Empty<SplitFeatureCard>();
                 var all = new[] { tab.ComboVideoBubble, tab.ComboSpiralPink, tab.ComboMindDrain };
-                return all.Where(c => c != null)!;
-            }
-        }
-
-        /// <summary>
-        /// The premium rail's 9 hoverable items (7 chips + the 2 launcher cards).
-        ///
-        /// <para>ChipFyp was missing here until the Phase-3 verify pass: For You got no hover lift
-        /// and no art nudge, the same omission family as the ArtFyp-missing-from-railArtMap bug
-        /// Phase 0 fixed. Every element that carries an Art* brush belongs in this list.</para>
-        /// </summary>
-        private IEnumerable<FrameworkElement> PremiumRailItems
-        {
-            get
-            {
-                var tab = SettingsTab;
-                if (tab == null) return Enumerable.Empty<FrameworkElement>();
-                var all = new FrameworkElement?[]
-                {
-                    tab.ChipTakeover, tab.ChipAwareness, tab.ChipHaptics, tab.ChipGradedIntake,
-                    tab.ChipVoice, tab.ChipFyp, tab.CardLockdown, tab.CardBlink, tab.ChipRemote,
-                };
                 return all.Where(c => c != null)!;
             }
         }
@@ -177,16 +148,6 @@ namespace ConditioningControlPanel
                     tab.LogoFaceLogo.IsVisibleChanged += LogoFace_IsVisibleChanged;
                 _logoSheenTimer = new DispatcherTimer();
                 _logoSheenTimer.Tick += (_, __) => SweepLogoSheen();
-
-                // 4. Premium rail hover. The chip's ART is its Background brush, so the nudge is a
-                //    RelativeTransform on a private CLONE of it - the shared resource brush is
-                //    left alone (and may well be frozen).
-                foreach (var item in PremiumRailItems)
-                {
-                    PrepareRailArtNudge(item);
-                    item.MouseEnter += RailItem_MouseEnter;
-                    item.MouseLeave += RailItem_MouseLeave;
-                }
 
                 // 5. Browser card: watch the status text rather than editing the ~10 places that
                 //    write it. One hook, and it cannot get out of step with them.
@@ -230,7 +191,6 @@ namespace ConditioningControlPanel
                 ApplyLogoSheenTimer();
                 ApplyBrowserFrameSweep();
                 ApplyBrowserStatusPulse();
-                foreach (var dot in _pulsingRailDots.ToList()) ApplyRailDotPulse(dot, true, force: true);
             }
             catch (Exception ex) { App.Logger?.Debug("ApplyDashboardFxLoops: {E}", ex.Message); }
         }
@@ -848,158 +808,6 @@ namespace ConditioningControlPanel
                 SweepSheen(tab.LogoFaceLogo, tab.LogoSheen, tab.LogoSheenSlide, LogoSheenSeconds, 0.26);
             }
             catch (Exception ex) { App.Logger?.Debug("SweepLogoSheen: {E}", ex.Message); }
-        }
-
-        // ============================== 4. premium rail ==============================
-
-        /// <summary>
-        /// Source resource brush -> the private clone a rail item actually paints with. Populated
-        /// by <see cref="PrepareRailArtNudge"/>; drained by <see cref="RefreshRailArtClones"/>.
-        /// See that method for why the pair has to be remembered at all.
-        /// </summary>
-        private readonly List<(ImageBrush Source, ImageBrush Clone)> _railArtClones = new();
-
-        /// <summary>
-        /// Gives a rail item its own copy of its art brush with a translate transform on it. The
-        /// brushes are shared XAML resources and may be frozen, so we clone once at init rather
-        /// than reach into the resource (which would also nudge every other user of it).
-        /// </summary>
-        private void PrepareRailArtNudge(FrameworkElement item)
-        {
-            try
-            {
-                var brush = item switch
-                {
-                    Control c => c.Background,
-                    Border b => b.Background,
-                    _ => null,
-                };
-                if (brush == null || brush.RelativeTransform is TranslateTransform) return;
-                if (brush.RelativeTransform != null && !brush.RelativeTransform.Value.IsIdentity) return;
-
-                var copy = brush.Clone();
-                copy.RelativeTransform = new TranslateTransform();
-                // Cloning severs the {StaticResource} link, which is exactly what railArtMap
-                // (MainWindow.xaml.cs, LoadFeatureImages) mutates on a mod switch. Remember the
-                // pair so the clone can be re-synced; see RefreshRailArtClones.
-                if (brush is ImageBrush src && copy is ImageBrush dst)
-                    _railArtClones.Add((src, dst));
-                switch (item)
-                {
-                    case Control c: c.Background = copy; break;
-                    case Border b: b.Background = copy; break;
-                }
-            }
-            catch (Exception ex) { App.Logger?.Debug("PrepareRailArtNudge: {E}", ex.Message); }
-        }
-
-        /// <summary>
-        /// Re-points every rail chip's private art clone at whatever the shared resource brush is
-        /// showing now. Called at the end of <c>LoadFeatureImages()</c>.
-        ///
-        /// <para>Why this exists: the rail's mod-awareness is <b>brush mutation, not brush
-        /// reassignment</b> - <c>railArtMap</c> writes <c>ImageSource</c> into the eight
-        /// <c>Art*</c> resources and relies on every chip's <c>{StaticResource}</c> reference to
-        /// repaint from that one write. <see cref="PrepareRailArtNudge"/> hands each chip a
-        /// <c>Clone()</c> so the hover nudge does not shove every other user of the brush, and a
-        /// clone does not observe the source's later edits. At startup the order hides it
-        /// (<c>LoadFeatureImages()</c> runs in the ctor, the clones are made on Loaded, so they
-        /// capture the correct art), but a RUNTIME mod switch repainted the resources only and the
-        /// chips kept the previous mod's art until restart. Pre-existing; found by the Phase-3
-        /// verify pass, which has "mod switch repaints the rail" as an exit criterion.</para>
-        /// </summary>
-        private void RefreshRailArtClones()
-        {
-            try
-            {
-                foreach (var (source, clone) in _railArtClones)
-                {
-                    if (clone.IsFrozen) continue;
-                    if (!ReferenceEquals(clone.ImageSource, source.ImageSource))
-                        clone.ImageSource = source.ImageSource;
-                    // The CROP has to travel with the art, for exactly the reason the art does.
-                    // railArtMap now writes Viewbox as well as ImageSource (ApplyArtFraming), and
-                    // a chip paints its clone, not the resource - so a mod's framing written to
-                    // the resource alone would be arithmetically perfect and completely invisible.
-                    if (clone.Viewbox != source.Viewbox)
-                        clone.Viewbox = source.Viewbox;
-                }
-            }
-            catch (Exception ex) { App.Logger?.Debug("RefreshRailArtClones: {E}", ex.Message); }
-        }
-
-        private void RailItem_MouseEnter(object sender, MouseEventArgs e) => ApplyRailHover(sender, true);
-
-        private void RailItem_MouseLeave(object sender, MouseEventArgs e) => ApplyRailHover(sender, false);
-
-        /// <summary>Hover on a rail item: the 1.02 lift plus a ~1px push on the art behind it.
-        /// The chips sit in a ScrollViewer that clips, so the lift is deliberately the shared
-        /// 1.02 and not the tiles' old 1.03 - the rail only has 4px of margin to grow into.</summary>
-        private void ApplyRailHover(object sender, bool on)
-        {
-            try
-            {
-                if (sender is not FrameworkElement item) return;
-                MotionFx.HoverLift(item, on);
-
-                var brush = item switch
-                {
-                    Control c => c.Background,
-                    Border b => b.Background,
-                    _ => null,
-                };
-                if (brush?.RelativeTransform is not TranslateTransform nudge || nudge.IsFrozen) return;
-
-                double to = on ? RailHoverArtNudge : 0;
-                if (!MotionFx.AllowTransitions)
-                {
-                    nudge.BeginAnimation(TranslateTransform.YProperty, null);
-                    nudge.Y = to;
-                    return;
-                }
-                var anim = new DoubleAnimation(to, TimeSpan.FromMilliseconds(RailHoverMs))
-                {
-                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
-                };
-                nudge.BeginAnimation(TranslateTransform.YProperty, anim);
-            }
-            catch (Exception ex) { App.Logger?.Debug("ApplyRailHover: {E}", ex.Message); }
-        }
-
-        /// <summary>
-        /// Status-dot pulse. Event-driven on purpose: <see cref="RefreshPremiumRail"/> calls this
-        /// through SetDot whenever a feature's state actually changes, so an all-off rail holds no
-        /// clocks at all. A dot that is off never breathes - a pulse on a dead indicator is a lie
-        /// told with animation.
-        /// </summary>
-        private void ApplyRailDotPulse(Ellipse? dot, bool on, bool force = false)
-        {
-            if (dot == null) return;
-            try
-            {
-                bool known = _pulsingRailDots.Contains(dot);
-                // RefreshPremiumRail repaints all five dots on every state change; re-arming a
-                // Forever breath each time would visibly reset its phase.
-                if (on && known && !force) return;
-                if (on && !known) _pulsingRailDots.Add(dot);
-                else if (!on) _pulsingRailDots.Remove(dot);
-
-                if (!on || !ChromeAmbientAllowed)
-                {
-                    dot.BeginAnimation(UIElement.OpacityProperty, null);
-                    dot.Opacity = 1;
-                    return;
-                }
-                var pulse = new DoubleAnimation(DotPulseMinOpacity, 1.0, TimeSpan.FromSeconds(DotPulseSeconds))
-                {
-                    AutoReverse = true,
-                    RepeatBehavior = RepeatBehavior.Forever,
-                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
-                };
-                Timeline.SetDesiredFrameRate(pulse, AmbientFrameRate);
-                dot.BeginAnimation(UIElement.OpacityProperty, pulse);
-            }
-            catch (Exception ex) { App.Logger?.Debug("ApplyRailDotPulse: {E}", ex.Message); }
         }
 
         // ============================== 5. browser card ==============================

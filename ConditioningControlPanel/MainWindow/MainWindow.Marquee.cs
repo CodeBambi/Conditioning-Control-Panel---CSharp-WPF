@@ -778,17 +778,45 @@ namespace ConditioningControlPanel
 
         #region Marquee Banner
 
+        /// <summary>
+        /// The banner to show when there is nothing of the user's to show - a blank saved message or
+        /// one of the retired house defaults. Resolves through the active mod (which walks to CCP
+        /// Default, whose banner is the neutral <see cref="AppSettings.DefaultMarqueeMessage"/>), so
+        /// an unmodded install is neutral and a themed one keeps its own line. Never called over
+        /// text the user typed.
+        /// </summary>
+        private static string ResolveDefaultMarqueeMessage()
+        {
+            try
+            {
+                var banner = App.Mods?.GetMarqueeBannerMessage();
+                if (!string.IsNullOrWhiteSpace(banner)) return banner!;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Marquee: mod banner lookup failed; using the neutral default");
+            }
+            return AppSettings.DefaultMarqueeMessage;
+        }
+
         private void InitializeMarqueeBanner()
         {
             try
             {
-                // Migrate old message to new default if needed
+                // One-shot: users on an UNMODDED install still parked on the old gendered default
+                // get the neutral one. A themed mod is skipped - that text is its voice. Anyone who
+                // typed their own banner is left alone either way.
+                App.Settings.Current.MigrateMarqueeMessage(App.Mods?.ActiveModId);
+
+                // Migrate old message to new default if needed. The replacement comes from the
+                // active mod, not the neutral const: this branch only fires on a banner the user
+                // never wrote, and handing a Bambi install the house line is the same regression.
                 var currentSaved = App.Settings.Current.MarqueeMessage;
                 if (string.IsNullOrWhiteSpace(currentSaved) ||
                     currentSaved.Contains("WELCOME TO YOUR CONDITIONING") ||
                     currentSaved.Contains("RELAX AND SUBMIT"))
                 {
-                    App.Settings.Current.MarqueeMessage = "GOOD GIRLS CONDITION DAILY     ❤️🔒";
+                    App.Settings.Current.MarqueeMessage = ResolveDefaultMarqueeMessage();
                 }
 
                 // Need to wait for layout to measure text width
@@ -950,10 +978,12 @@ namespace ConditioningControlPanel
                                 if (BtnUpdateAvailable != null)
                                 {
                                     BtnUpdateAvailable.Tag = "UrgentUpdate";
-                                    BtnUpdateAvailable.Content = $"UPDATE AVAILABLE v{result.version}";
-                                    BtnUpdateAvailable.ToolTip = !string.IsNullOrEmpty(result.url)
-                                        ? $"Version {result.version} is available - Click to visit download page!"
-                                        : $"Version {result.version} is available - Click to update!";
+                                    BtnUpdateAvailable.Content = Loc.GetF("btn_update_to_version", result.version);
+                                    BtnUpdateAvailable.ToolTip = Loc.GetF(
+                                        !string.IsNullOrEmpty(result.url)
+                                            ? "tooltip_update_to_version_download"
+                                            : "tooltip_update_to_version_install",
+                                        result.version);
                                 }
                             });
                         }
@@ -1267,7 +1297,7 @@ namespace ConditioningControlPanel
                 var message = App.Settings.Current.MarqueeMessage;
                 if (string.IsNullOrWhiteSpace(message))
                 {
-                    message = "GOOD GIRLS CONDITION DAILY     ❤️🔒";
+                    message = ResolveDefaultMarqueeMessage();
                 }
                 message = message.ToUpperInvariant();
 

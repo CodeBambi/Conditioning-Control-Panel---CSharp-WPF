@@ -17,10 +17,12 @@ namespace ConditioningControlPanel
         {
             InitializeComponent();
 
-            TxtVersionInfo.Text = $"Version {updateInfo.Version} is now available.\n" +
-                                  $"You are currently on version {UpdateService.GetCurrentVersion()}.";
+            // Localized, not interpolated: this dialog is every user's first sentence about a
+            // release, and it was the last English-only copy on the update path.
+            TxtVersionInfo.Text = Loc.GetF("msg_update_version_line",
+                                           updateInfo.Version, UpdateService.GetCurrentVersion());
 
-            TxtFileSize.Text = $"Download size: {updateInfo.FormattedFileSize}";
+            TxtFileSize.Text = Loc.GetF("msg_update_download_size", updateInfo.FormattedFileSize);
 
             // Use release notes from GitHub (fetched during update check)
             // Don't fallback to CurrentPatchNotes as those are for the CURRENT version, not the new one
@@ -30,7 +32,7 @@ namespace ConditioningControlPanel
             }
             else
             {
-                TxtReleaseNotes.Text = $"Version {updateInfo.Version} is available.\n\nRelease notes were not provided for this update.";
+                TxtReleaseNotes.Text = Loc.GetF("msg_update_no_notes_for_version", updateInfo.Version);
             }
         }
 

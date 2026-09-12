@@ -5,6 +5,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Services.Chaos;
 
@@ -356,7 +357,7 @@ public sealed class ChaosModeService
             App.Logger?.Error(ex, "ChaosModeService.StartRun failed");
             CleanupAfterRun();
             App.Bubbles?.Resume();
-            MessageBox.Show("Couldn't open the Rabbit Hole:\n\n" + ex, "The Rabbit Hole",
+            MessageBox.Show(Loc.Get("msg_rabbit_hole_open_failed") + ex, Loc.Get("title_rabbit_hole"),
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
@@ -1049,9 +1050,7 @@ public sealed class ChaosModeService
             bool runClosing = _state.RunDurationSec - elapsed <= 3;
             if (App.Video?.IsPlaying == true && (capHit || runClosing))
             {
-                _chaosVideoCapUtc = DateTime.MinValue;
-                try { App.Video?.ForceCleanup(); } catch (Exception ex) { App.Logger?.Debug("Chaos video cap: {E}", ex.Message); }
-                ExtendHeavyQuarantine(VIDEO_TEARDOWN_QUARANTINE_SEC);   // ForceCleanup may not raise VideoEnded
+                StopChaosOwnedVideo(capHit ? "cap" : "run closing");
                 _state.PushEvent("▶ the tape snaps off");
                 // porn_dvd lesson: the full slice ran (the 15s cap IS the slice length);
                 // a run-closing cut before the cap is an abort and doesn't count.
@@ -2175,6 +2174,76 @@ public sealed class ChaosModeService
         if (until > _heavyUntilUtc) _heavyUntilUtc = until;
     }
 
+    /// <summary>
+    /// May a run-exit path tear the tape down? <c>App.Video.ForceCleanup()</c> closes EVERY video
+    /// window the service owns, so chaos may only fire it at a video chaos itself started: the
+    /// user's own mandatory/session video must survive the descent ending on top of it. The armed
+    /// cap is that ownership mark - it is set only when a Video payload detonates
+    /// (<see cref="FirePayloadForDetonation"/>) and cleared the moment the tape is accounted for.
+    /// Pure so the rule is pinned by a test without a WPF app behind it.
+    /// </summary>
+    internal static bool ShouldStopVideoOnRunExit(bool chaosCapArmed, bool videoPlaying)
+        => chaosCapArmed && videoPlaying;
+
+    /// <summary>
+    /// Is the chaos tape actually on screen? Playing is the ordinary answer. Windows with no
+    /// playback is the sliver where <c>PlayVideo</c> has built its fullscreen surfaces and the
+    /// player has not started yet - still something to close. A teardown already in flight is
+    /// neither: <c>ForceCleanup</c> is doing the work, and re-entering it pumps the dispatcher
+    /// inside its own pump. Pure, so the rule is pinned by a test with no video service behind it.
+    /// </summary>
+    internal static bool ChaosTapeIsOnScreen(bool videoPlaying, bool hasOpenWindows, bool cleaningUp)
+        => videoPlaying || (hasOpenWindows && !cleaningUp);
+
+    /// <summary>
+    /// Stop a chaos-fired video and disarm the cap. Every run-exit path calls this, because the
+    /// mid-run cap in <c>RunTick</c> cannot: the tick early-returns while the run is paused (draft
+    /// card, lesson card, manual hold) and its run-closing branch only covers the clock running
+    /// out, so a quit mid-tape used to walk the video onto the results screen and the lobby behind
+    /// it (ccp-bugs #1201). Idempotent - the cap is cleared first, so a second call is a no-op.
+    /// </summary>
+    private void StopChaosOwnedVideo(string reason)
+    {
+        // The HT-link payload is the other tape chaos can start: a fullscreen browser takeover
+        // claimed under MediaOwner.Chaos (EffectPayload.HtLinkPayload). Nothing ever released it
+        // on the way out, so quitting the run left the clip playing over the lobby until it ended
+        // on its own. Owner-checked, so a video the user opened themselves - or kept after leaving
+        // fullscreen, which hands ownership to them - is not ours to touch.
+        try
+        {
+            if (App.BrowserMedia?.Owner == Services.Browser.BrowserMediaService.MediaOwner.Chaos)
+            {
+                App.BrowserMedia.ForceEnd("chaos " + reason);
+                App.Logger?.Information("[Chaos] released the HT-link browser takeover ({Reason})", reason);
+            }
+        }
+        catch (Exception ex) { App.Logger?.Debug("Chaos browser takeover release: {E}", ex.Message); }
+
+        bool armed = _chaosVideoCapUtc != DateTime.MinValue;
+        _chaosVideoCapUtc = DateTime.MinValue;   // an armed cap never outlives the run
+        if (!armed) return;                      // chaos started no tape: the user's own video is not ours to touch
+
+        // The tape may not be on screen YET, and that was the hole this teardown left open. A video
+        // bubble arms the cap at detonation, but the request still has to choose a clip off the UI
+        // thread, sit out the 800ms freeze delay, and possibly wait its turn in the InteractionQueue
+        // behind a bubble count or a lock card. Quitting a second after the pop therefore found
+        // nothing playing, tore nothing down, and the video opened over the results card and the
+        // lobby a moment later - the reported #1201 symptom, on a window of at least 800ms.
+        // Cancelling the pending request closes it, and it can only ever reach a request chaos
+        // itself made: the user's own video and the scheduler's carry no token.
+        try { App.Video?.CancelPendingChaosVideo(reason); }
+        catch (Exception ex) { App.Logger?.Debug("Chaos video cancel: {E}", ex.Message); }
+
+        bool onScreen = ChaosTapeIsOnScreen(
+            App.Video?.IsPlaying == true,
+            App.Video?.HasOpenWindows == true,
+            App.Video?.IsCleaningUp == true);
+        if (!ShouldStopVideoOnRunExit(armed, onScreen)) return;
+        try { App.Video?.ForceCleanup(); } catch (Exception ex) { App.Logger?.Debug("Chaos video teardown: {E}", ex.Message); }
+        ExtendHeavyQuarantine(VIDEO_TEARDOWN_QUARANTINE_SEC);   // ForceCleanup may not raise VideoEnded
+        App.Logger?.Information("[Chaos] tore down a chaos-fired video ({Reason})", reason);
+    }
+
     /// <summary>Mirrors the pop streak into the tunnel background so the fall accelerates with
     /// the combo and brakes when it halves/breaks. Combo only ever changes on the UI thread
     /// (timers + click handlers), so this posts straight through.</summary>
@@ -2190,6 +2259,10 @@ public sealed class ChaosModeService
     /// the teardown quarantine so no cascade rises into the LibVLC disposal churn.</summary>
     private void OnVideoEndedDuringRun(object? sender, EventArgs e)
     {
+        // The ownership mark means "the tape chaos started is still up". A tape dismissed early
+        // (Esc on a non-strict video, a short source) must drop it here, or a session video that
+        // starts inside the 15 s cap window would read as chaos-owned and get torn down on exit.
+        _chaosVideoCapUtc = DateTime.MinValue;
         try { Application.Current?.Dispatcher?.BeginInvoke((Action)(() => ChaosTunnelService.SetVideoPlaying(false))); } catch (Exception ex) { Diag.Swallowed(ex); }
         ExtendHeavyQuarantine(VIDEO_TEARDOWN_QUARANTINE_SEC);
     }
@@ -2240,6 +2313,12 @@ public sealed class ChaosModeService
         {
             _chaosVideoCapUtc = DateTime.UtcNow.AddSeconds(VIDEO_HARD_CAP_SEC);
             _heavyUntilUtc = DateTime.UtcNow.AddSeconds(VIDEO_HARD_CAP_SEC + 3);   // cap + open/close slack
+            // Ownership begins HERE, not when the tape appears. The request is about to travel
+            // through an off-thread clip selection, an 800ms freeze delay and possibly the
+            // InteractionQueue, and a run that ends inside that window has to be able to call it
+            // back (#1201). The cap alone cannot do that - it only says a video is owed.
+            if (spec.Payload is VideoPayload video)
+                video.ChaosToken = App.Video?.ClaimChaosVideoToken() ?? 0;
         }
         else if (kind == EffectBubblePayloadKind.GifCascade)
         {
@@ -3091,6 +3170,7 @@ public sealed class ChaosModeService
         _paused = false;
         _runTimer?.Stop();
         _spawnTimer?.Stop();
+        StopChaosOwnedVideo("force shutdown");
         try { App.Bubbles?.EndChaosMode(); } catch (Exception ex) { Diag.Swallowed(ex); }
         try { App.Bubbles?.Resume(); } catch (Exception ex) { Diag.Swallowed(ex); }
         StopKeyHook();
@@ -3138,6 +3218,10 @@ public sealed class ChaosModeService
         _spawning = false;
         if (App.Video != null) App.Video.VideoStarted -= OnVideoStartedDuringRun;
         if (App.Video != null) App.Video.VideoEnded -= OnVideoEndedDuringRun;
+        // EndRun does NOT flow through CleanupAfterRun: it shows the results card and cleanup only
+        // runs when that card is dismissed, so the tape has to come off here or it plays over the
+        // results and on into the lobby.
+        StopChaosOwnedVideo("run end");
         _runTimer?.Stop();
         _spawnTimer?.Stop();
         StopKeyHook();
@@ -3232,6 +3316,7 @@ public sealed class ChaosModeService
         try { System.Windows.Media.CompositionTarget.Rendering -= OnChaosRendering; } catch (Exception ex) { Diag.Swallowed(ex); }
         if (App.Video != null) App.Video.VideoStarted -= OnVideoStartedDuringRun;   // belt-and-suspenders (mid-run close)
         if (App.Video != null) App.Video.VideoEnded -= OnVideoEndedDuringRun;
+        StopChaosOwnedVideo("cleanup");   // the last net: overlay closed mid-run, Run Again, app exit
         StopKeyHook();   // idempotent; covers the overlay-closed-mid-run path
         StopRippleHook();
         CloseToyButtons();

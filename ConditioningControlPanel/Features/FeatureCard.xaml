@@ -32,9 +32,19 @@
              a XAML EventTrigger has no way to ask. -->
 
         <Grid x:Name="ContentRoot" SizeChanged="OnContentRootSizeChanged">
-            <!-- Full-bleed background image via ImageBrush (respects parent CornerRadius) -->
+            <!-- Full-bleed background image via ImageBrush (respects parent CornerRadius).
+                 The child is the same art in greyscale (Services/ArtDesaturate), painted OVER
+                 the colour and faded in while the feature is off: an off tile is grey, an on
+                 tile is the only one wearing its palette. A child rather than a sibling so the
+                 hover pop (scale + wobble on ImgIconHost) and the tease blur carry both layers
+                 as one picture. Opacity is written only by FeatureCard.ApplyMute. -->
             <Border x:Name="ImgIconHost" CornerRadius="11"
-                    RenderOptions.BitmapScalingMode="HighQuality"/>
+                    RenderOptions.BitmapScalingMode="HighQuality">
+                <Border x:Name="ImgIconMute" CornerRadius="11"
+                        RenderOptions.BitmapScalingMode="HighQuality"
+                        IsHitTestVisible="False"
+                        Opacity="0"/>
+            </Border>
 
             <!-- Glyph fallback (for cards without an image) -->
             <Border x:Name="GlyphHost"

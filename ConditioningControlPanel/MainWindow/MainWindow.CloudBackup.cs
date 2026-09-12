@@ -155,6 +155,8 @@ namespace ConditioningControlPanel
                     restored.PatreonLabValidUntil = current.PatreonLabValidUntil;
                     restored.LastPatreonVerification = current.LastPatreonVerification;
                     restored.OpenRouterApiKey = current.OpenRouterApiKey;
+                    // Same machine-local set the startup restore keeps: the content folder above all.
+                    ConditioningControlPanel.Services.ProfileSyncService.PreserveLocalOnlyFields(current, restored);
                 }
 
                 App.Settings?.RestoreFrom(restored);

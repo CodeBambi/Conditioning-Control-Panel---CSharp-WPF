@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -303,6 +304,7 @@ namespace ConditioningControlPanel
             _owner = owner;
             InitializeComponent();
 
+            DetectSystemLanguage();
             ApplyStaticText();
             PopulateLanguages();
             BuildModCards();
@@ -497,7 +499,7 @@ namespace ConditioningControlPanel
 
                 // The far side of the first run: the screen is the user's, and it stays theirs.
                 // The quiet window: ten minutes in which nothing else pops (the presenter parks it in the Inbox).
-                try { App.Startup?.BeginFirstLaunchQuiet(TimeSpan.FromMinutes(10)); }
+                try { App.StartupLadder?.BeginFirstLaunchQuiet(TimeSpan.FromMinutes(10)); }
                 catch (Exception ex) { App.Logger?.Debug(ex, "[FirstRun] Could not open the quiet window"); }
             }), DispatcherPriority.Normal);
         }
@@ -569,7 +571,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private void ApplyStaticText()
         {
-            Title = Str("fr8_wizard_title", "Getting started");
+            Title = Str("fr8_wizard_title", "First run");
             TxtWizardTitle.Text = Title;
 
             // --- step 1: welcome ---
@@ -578,10 +580,10 @@ namespace ConditioningControlPanel
             TxtAppTitle.Text = Loc.Get("app_title");
             TxtWelcomeHeading.Text = Str("fr8_welcome_title", "Welcome.");
             TxtWelcomeBody.Text = Str("fr8_welcome_body",
-                "Two quick choices and she is all yours. Everything else can wait until you ask for it.");
+                "Two choices and you are in. Everything else waits until you go looking for it.");
 
             TxtLanguageLabel.Text = Str("fr8_welcome_language", "Language");
-            TxtLanguageHint.Text = Str("fr8_welcome_language_hint", "You can change this any time from the title bar.");
+            TxtLanguageHint.Text = Str("fr8_welcome_language_hint", "You can change this later in Settings.");
 
             TxtFolderLabel.Text = Str("fr8_welcome_folder", "Your own content");
             TxtFolderHint.Text = Str("fr8_welcome_folder_hint",
@@ -590,7 +592,7 @@ namespace ConditioningControlPanel
             // Keep the queued confirmation if the folder was already asked for: this method also
             // runs on a language switch, and repainting the button would quietly un-say it.
             BtnPickFolder.Content = PickAssetsFolderRequested
-                ? Str("fr8_welcome_pick_folder_queued", "We'll ask for your content folder right after this")
+                ? Str("fr8_welcome_pick_folder_queued", "The folder picker opens right after this")
                 : Str("fr8_welcome_pick_folder", "Choose a content folder");
 
             TxtAgeConfirm.Text = Str("fr8_age_confirm",
@@ -600,12 +602,12 @@ namespace ConditioningControlPanel
             // --- step 2: flavour ---
             TxtModHeading.Text = Str("fr8_modpick_heading", "Pick your flavour");
             TxtModSub.Text = Str("fr8_modpick_sub",
-                "A mod re-skins the whole app: her name and voice, the art, the phrases, the programs. " +
-                "Pick the one you want to start with - you can switch any time from the title bar.");
+                "A mod re-skins the whole app: your companion's name and voice, the art, the phrases, " +
+                "the programs. Pick one to start with. You can switch any time from the title bar.");
             if (!_modStepOffline)
             {
                 TxtModHint.Text = Str("fr8_modpick_offline_hint",
-                    "Offline? The download waits. No second ask.");
+                    "Offline? The download waits. There is no second ask.");
             }
         }
 
@@ -642,7 +644,7 @@ namespace ConditioningControlPanel
                 BtnNext.Content = Str("fr8_welcome_enter", "Enter");
                 BtnNext.IsEnabled = ChkAgeConfirm.IsChecked == true;
 
-                TxtCloseHint.Text = Str("fr8_welcome_close_hint", "Not for you? Just close this window.");
+                TxtCloseHint.Text = Str("fr8_welcome_close_hint", "Not for you? Close this window.");
                 TxtCloseHint.Visibility = Visibility.Visible;
             }
             else
@@ -700,8 +702,10 @@ namespace ConditioningControlPanel
         // ------------------------------------------------------------------ step 1: language
 
         /// <summary>
-        /// The same language list the title-bar pill and Settings offer, from the same helper -
-        /// <c>MainWindow.FillLanguageCombo</c> - so this screen can never drift from them.
+        /// The same language list Settings · General offers, from the same helper -
+        /// <c>MainWindow.FillLanguageCombo</c> - so this screen can never drift from it. The list
+        /// opens on whatever <see cref="DetectSystemLanguage"/> settled on, so the rest of the walk
+        /// reads in that language from the first screen.
         /// </summary>
         private void PopulateLanguages()
         {
@@ -709,6 +713,38 @@ namespace ConditioningControlPanel
             try { MainWindow.FillLanguageCombo(CmbWizardLanguage, shortLabels: false); }
             catch (Exception ex) { App.Logger?.Warning(ex, "[FirstRun] Could not fill the language list"); }
             finally { _populatingLanguage = false; }
+        }
+
+        /// <summary>
+        /// A fresh box starts in the OS display language when the app ships it. Runs once, from the
+        /// constructor, before the static text is applied: the wizard only exists on a first run
+        /// (<see cref="ShouldRunAndClaim"/>) and the setting is still at its "en" default there, so
+        /// nothing a person chose can be overwritten. Exact match first (pt-BR, zh-CN), then the
+        /// two-letter language, then leave English alone. Never throws: a culture lookup must not be
+        /// the reason a first run fails to start.
+        /// </summary>
+        private void DetectSystemLanguage()
+        {
+            try
+            {
+                var current = App.Settings?.Current?.Language;
+                if (current != null && current != "en") return;
+
+                var ui = CultureInfo.InstalledUICulture;
+                var codes = LocalizationManager.AvailableLanguages.Select(l => l.Code).ToArray();
+                var match = codes.FirstOrDefault(c => string.Equals(c, ui.Name, StringComparison.OrdinalIgnoreCase))
+                         ?? codes.FirstOrDefault(c => string.Equals(c, ui.TwoLetterISOLanguageName, StringComparison.OrdinalIgnoreCase))
+                         ?? codes.FirstOrDefault(c => c.StartsWith(ui.TwoLetterISOLanguageName + "-", StringComparison.OrdinalIgnoreCase));
+                if (match == null || match == "en") return;
+
+                if (_owner != null) _owner.ApplyLanguageSelection(match);
+                else MainWindow.SetApplicationLanguage(match);
+                App.Logger?.Information("[FirstRun] Language defaulted to {Code} from the OS display language {Culture}", match, ui.Name);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[FirstRun] Could not read the OS display language");
+            }
         }
 
         private void CmbWizardLanguage_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1144,7 +1180,7 @@ namespace ConditioningControlPanel
             PickAssetsFolderRequested = true;
             BtnPickFolder.IsEnabled = false;
             BtnPickFolder.Content = Str("fr8_welcome_pick_folder_queued",
-                "We'll ask for your content folder right after this");
+                "The folder picker opens right after this");
         }
 
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)

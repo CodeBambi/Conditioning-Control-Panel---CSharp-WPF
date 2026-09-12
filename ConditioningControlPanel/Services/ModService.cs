@@ -645,6 +645,18 @@ namespace ConditioningControlPanel.Services
                 if (manifest.Messages.AttentionCheckFail?.Length > 500) manifest.Messages.AttentionCheckFail = manifest.Messages.AttentionCheckFail[..500];
                 if (manifest.Messages.AttentionCheckMercy?.Length > 500) manifest.Messages.AttentionCheckMercy = manifest.Messages.AttentionCheckMercy[..500];
                 if (manifest.Messages.BubbleCountRetry?.Length > 500) manifest.Messages.BubbleCountRetry = manifest.Messages.BubbleCountRetry[..500];
+                if (manifest.Messages.AttentionCheckTroll?.Length > 500) manifest.Messages.AttentionCheckTroll = manifest.Messages.AttentionCheckTroll[..500];
+                if (manifest.Messages.GazeCorrect?.Length > 500) manifest.Messages.GazeCorrect = manifest.Messages.GazeCorrect[..500];
+                // Capped shorter: both land inside a fixed quiz card, not a scrolling surface.
+                if (manifest.Messages.QuizTrickQuestion?.Length > 200) manifest.Messages.QuizTrickQuestion = manifest.Messages.QuizTrickQuestion[..200];
+                if (manifest.Messages.QuizTrickAnswer?.Length > 60) manifest.Messages.QuizTrickAnswer = manifest.Messages.QuizTrickAnswer[..60];
+                // Both quiz questions land on a fixed card, like the trick pair above.
+                if (manifest.Messages.QuizPraise?.Length > 60) manifest.Messages.QuizPraise = manifest.Messages.QuizPraise[..60];
+                if (manifest.Messages.QuizObedienceQuestion?.Length > 200) manifest.Messages.QuizObedienceQuestion = manifest.Messages.QuizObedienceQuestion[..200];
+                if (manifest.Messages.QuizPraiseHeardQuestion?.Length > 200) manifest.Messages.QuizPraiseHeardQuestion = manifest.Messages.QuizPraiseHeardQuestion[..200];
+                // The marquee scrolls one line forever; a long one is a performance problem, not a
+                // wrapping one, so it is capped hardest of the set.
+                if (manifest.Messages.MarqueeBanner?.Length > 120) manifest.Messages.MarqueeBanner = manifest.Messages.MarqueeBanner[..120];
             }
             if (manifest.Triggers != null)
             {
@@ -1156,6 +1168,50 @@ namespace ConditioningControlPanel.Services
         public string GetBubbleCountRetryMessage() =>
             GetStringValue(m => m.Messages?.BubbleCountRetry, m => m.Messages!.BubbleCountRetry!);
 
+        /// <summary>
+        /// Praise line for the troll replay (attention check passed, watch it again anyway). Walks
+        /// the same ActiveMod -> CCP Default chain as its sibling above, so an unmodded run gets the
+        /// neutral line and a themed mod keeps its own voice.
+        /// </summary>
+        public string GetAttentionCheckTrollMessage() =>
+            GetStringValue(m => m.Messages?.AttentionCheckTroll, m => m.Messages!.AttentionCheckTroll!);
+
+        /// <summary>Fullscreen praise word after a correct gaze-minigame round.</summary>
+        public string GetGazeCorrectMessage() =>
+            GetStringValue(m => m.Messages?.GazeCorrect, m => m.Messages!.GazeCorrect!);
+
+        /// <summary>
+        /// This mod's default marquee banner, walking to CCP Default (the neutral house banner) for
+        /// a mod that names none. Read only where a banner has to be INVENTED - a blank saved
+        /// message, or a retired house default nobody typed - never over text the user wrote.
+        /// </summary>
+        public string GetMarqueeBannerMessage() =>
+            GetStringValue(m => m.Messages?.MarqueeBanner, m => m.Messages!.MarqueeBanner!);
+
+        // The quiz trick question deliberately does NOT walk to the base mod, and deliberately
+        // returns null rather than a default: the neutral pool lives in QuizWindow.TrickQuestions
+        // and is six lines, not one. Null here means "this mod has no themed trick question, leave
+        // the neutral pool alone" - the same contract as GetPetNameOverride above.
+
+        /// <summary>Active mod's themed trick question, or null when it ships none.</summary>
+        public string? GetQuizTrickQuestionOverride() => NullIfBlank(_activeMod.Manifest.Messages?.QuizTrickQuestion);
+
+        /// <summary>Active mod's answer for <see cref="GetQuizTrickQuestionOverride"/>, or null.</summary>
+        public string? GetQuizTrickAnswerOverride() => NullIfBlank(_activeMod.Manifest.Messages?.QuizTrickAnswer);
+
+        // The Pop Quiz overrides follow the same contract as the trick pair above: active mod only,
+        // null for "no opinion". The neutral wording is the 25-question array in PopQuizService, so
+        // walking to CCP Default would replace a pool with a single line.
+
+        /// <summary>Active mod's Pop Quiz praise sentence, or null when it ships none.</summary>
+        public string? GetQuizPraiseOverride() => NullIfBlank(_activeMod.Manifest.Messages?.QuizPraise);
+
+        /// <summary>Active mod's wording for the Pop Quiz obedience question, or null.</summary>
+        public string? GetQuizObedienceQuestionOverride() => NullIfBlank(_activeMod.Manifest.Messages?.QuizObedienceQuestion);
+
+        /// <summary>Active mod's wording for the Pop Quiz "when I hear praise" question, or null.</summary>
+        public string? GetQuizPraiseHeardQuestionOverride() => NullIfBlank(_activeMod.Manifest.Messages?.QuizPraiseHeardQuestion);
+
         // Browser (defense-in-depth: validate URL at point of use, not just at install)
         public string GetDefaultBrowserUrl()
         {
@@ -1464,7 +1520,15 @@ namespace ConditioningControlPanel.Services
                 {
                     AttentionCheckFail = GetAttentionCheckFailMessage(),
                     AttentionCheckMercy = GetAttentionCheckMercyMessage(),
-                    BubbleCountRetry = GetBubbleCountRetryMessage()
+                    BubbleCountRetry = GetBubbleCountRetryMessage(),
+                    AttentionCheckTroll = GetAttentionCheckTrollMessage(),
+                    GazeCorrect = GetGazeCorrectMessage(),
+                    QuizTrickQuestion = GetQuizTrickQuestionOverride(),
+                    QuizTrickAnswer = GetQuizTrickAnswerOverride(),
+                    MarqueeBanner = GetMarqueeBannerMessage(),
+                    QuizPraise = GetQuizPraiseOverride(),
+                    QuizObedienceQuestion = GetQuizObedienceQuestionOverride(),
+                    QuizPraiseHeardQuestion = GetQuizPraiseHeardQuestionOverride()
                 },
                 Browser = new ModBrowser
                 {

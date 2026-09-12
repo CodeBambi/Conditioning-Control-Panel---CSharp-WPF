@@ -105,7 +105,6 @@ public class CompanionContentResolverTests
 
     [Theory]
     [InlineData(BuiltInMods.BambiSleepId)]
-    [InlineData(BuiltInMods.CCPDefaultId)]
     [InlineData(null)]
     public void TheBaselineVoiceLibraryIsOfferedToTheModsItActuallyBelongsTo(string? modId)
     {
@@ -113,6 +112,7 @@ public class CompanionContentResolverTests
     }
 
     [Theory]
+    [InlineData(BuiltInMods.CCPDefaultId)]
     [InlineData(BuiltInMods.SissyHypnoId)]
     [InlineData(BuiltInMods.LockedId)]
     [InlineData(BuiltInMods.DronificationId)]

@@ -409,9 +409,23 @@
                              shared 190px ceiling the T2 art (aspect 0.427) came ~81px down the
                              left edge while the title's own top lands near 53px, so the sign
                              covered "DOWN THE RABBIT HOLE" (user report, v6.8.6). 112px holds it
-                             to ~48px tall, clearing the title with room to spare, and it stays a
-                             corner stamp rather than a billboard. Raising it puts the collision
-                             back; re-measure the title block first. -->
+                             to ~48px tall and keeps it a corner stamp rather than a billboard.
+
+                             That was a height fix, and height was never the whole story: the
+                             copy block is vertically CENTRED, so its top rides up as the blurb
+                             wraps to more lines on a narrower window, and the sign's 6 degree
+                             tilt plus its glow reach a few px past its 48px layout box. The two
+                             met again (Discord UI thread, v6.9.4): the sign sat on the first
+                             letters of the title. Sizing cannot settle a collision between a
+                             fixed corner and a floating block, so the copy block now clears the
+                             sign HORIZONTALLY instead - see the Margin on SlotDtrh's left
+                             StackPanel. Moving the sign to the bottom-left corner was the other
+                             option and it only moves the problem: the same centred block puts the
+                             blurb's last line ~40px from the bottom edge, exactly where a 48px
+                             sign would land, and 13px body text under a sign reads worse than a
+                             25px title under it. Top-left also stays the one corner the launch
+                             column never reaches, and this corner is under the near-opaque end
+                             of the veil, so nothing of the illustration is lost to it. -->
                         <!-- Named for the same reason as the Remote badge, with one difference:
                              "dtrh" is NOT on the wheel. It is an override-only key (the owner's
                              promo Saturdays), which is exactly why the lockband above already
@@ -432,8 +446,21 @@
                                 <!-- left: title + blurb. Literal English, carried over verbatim from
                                      the retired LabTabView.xaml:79-93 (deleted in Phase 6; see
                                      git 48a093ebc) - these cards were deliberately never localized
-                                     and the move is not the moment to change that. -->
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                     and the move is not the moment to change that.
+
+                                     The left Margin clears PlayBadgeDtrh, the PRIME SUBJECT sign
+                                     stamped on the hero's top-left corner (its comment above has
+                                     the history). The sign's layout box ends 110px in from the
+                                     hero's edge (112px ceiling, -2 margin); its tilt and glow reach
+                                     ~12px past that; the slot's own inset is 28. 100 puts the
+                                     first letter at 128, clear of the glow at any window width.
+                                     "Any badge width" holds because MaxWidthOverride is a hard
+                                     ceiling in TierBadge.MeasureOverride: the sign is never wider
+                                     than 112, however wide the hero. If that ceiling moves, this
+                                     margin moves with it - they are one number, kept apart only
+                                     because the sign lives outside SlotDtrh so it can draw over
+                                     the lockband. -->
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="100,0,0,0">
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                         <TextBlock Text="🐇 DOWN THE RABBIT HOLE" Foreground="White" FontSize="25" FontWeight="Bold">
                                             <TextBlock.Effect>
@@ -1023,13 +1050,12 @@
                     </Border>
                 </Grid>
                 <!-- Columns FIXED at 3 (see the note on the first zone), but Rows deliberately
-                     UNSET here, unlike its neighbours. This zone is the one whose card count
-                     varies: Just Drop is Collapsed until the server opens it, and UniformGrid does
-                     not give a Collapsed child a cell. With Rows unset it derives them as
-                     ceil(visible / 3), so three cards sit on one row and the fourth starts a second
-                     one - where a hard Rows="1" would arrange the fourth card outside the grid, and
-                     a hard Rows="2" would leave everyone who does NOT have the door staring at an
-                     empty half-height row. -->
+                     UNSET here, unlike its neighbours. This zone used to be the one whose card
+                     count varied (Just Drop's card was Collapsed until the server opened it; that
+                     card left for the Studio door's Creator Tools row on 2026-09-11, owner call:
+                     a creator tool, not a game). Rows stays unset: UniformGrid derives
+                     ceil(visible / 3), the right answer for three cards and for the next
+                     conditional card alike. -->
                 <UniformGrid Columns="3">
                     <!-- Four gate states, not two (Premium / Available / Spent / NeedsLogin). The
                          card carries the band; the PAGE keeps RefreshGradedIntakeGate and the
@@ -1175,65 +1201,6 @@
                             </Grid>
                         </Border>
                     </Grid>
-                    <!-- JUST DROP. One of the two places the shop is reached from now that it has
-                         no rail door (the other is the Exclusives shelf) - and this is the one that
-                         matters, because someone in the SESSIONS zone is already looking for a
-                         session to run.
-
-                         The whole slot is Collapsed until the server opens the door for this
-                         account (RefreshPlayCards reads JustDropService.DoorAvailable). That is a
-                         hide, NOT a lockband: a lockband is for something you could buy, and this
-                         is something that does not exist for you yet. -->
-                    <Grid x:Name="SlotJustDrop" x:FieldModifier="internal" Visibility="Collapsed">
-                        <Border Style="{StaticResource PlayCardT2}">
-                            <Grid>
-                                <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="*"/>
-                                        <RowDefinition Height="Auto"/>
-                                    </Grid.RowDefinitions>
-                                    <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}">
-                                        <Grid>
-                                            <Border CornerRadius="16,16,0,0">
-                                                <Border.Background>
-                                                    <ImageBrush x:Name="PlayJustDropHeroBrush" x:FieldModifier="internal"
-                                                                ImageSource="pack://application:,,,/Resources/features/justdrop.png" Stretch="UniformToFill"/>
-                                                </Border.Background>
-                                            </Border>
-                                            <Border CornerRadius="16,16,0,0">
-                                                <Border.Background>
-                                                    <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
-                                                        <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
-                                                        <GradientStop Color="Transparent" Offset="0.9"/>
-                                                    </LinearGradientBrush>
-                                                </Border.Background>
-                                            </Border>
-                                        </Grid>
-                                    </Border>
-                                    <TextBlock Grid.Row="1" Text="{loc:Str jd_door_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
-                                    <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_justdrop}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
-                                    <!-- ShowTab("justdrop"), never JustDropHostService.LaunchShop():
-                                         ShowTab intercepts that key, owns the withheld refusal and
-                                         is the same launch path the dashboard tease tile and the
-                                         Ctrl+K palette row use. Exactly the rule the FYP card above
-                                         follows, and for the same reason. -->
-                                    <Button Grid.Row="3" x:Name="BtnPlayJustDrop" Content="{loc:Str btn_open}" Cursor="Hand"
-                                            HorizontalAlignment="Left" Padding="16,8"
-                                            Background="{DynamicResource AccentGradientBrush}" Foreground="White"
-                                            BorderThickness="0" FontWeight="Bold" FontSize="13"
-                                            Click="BtnPlayJustDrop_Click">
-                                        <Button.Resources>
-                                            <Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style>
-                                        </Button.Resources>
-                                    </Button>
-                                </Grid>
-                                <fx:TierBadge x:Name="PlayBadgeJustDrop" x:FieldModifier="internal"
-                                              Style="{StaticResource PlayTierBadge}" Tier="2"/>
-                            </Grid>
-                        </Border>
-                    </Grid>
                     <!-- Navigates to ShowTab("lockdown"). The activation double-warning and
                          App.Lockdown.Activate stay on that page; nothing here re-implements them.
                          The lockdown pulse is that page's, and Phase 6 does not touch it. -->
@@ -1332,7 +1299,7 @@
                      Same launch posture as the DtRH hero: the band below is decoration and
                      ArcademyHostService.Launch does the refusing (the door, T2, AudioOnlySession).
 
-                     Visibility=Collapsed by DEFAULT, exactly like SlotJustDrop above - the card
+                     Visibility=Collapsed by DEFAULT - the card
                      is never shown by the markup, only by code. RefreshPlayCards asserts it from
                      ArcademyHostService.DoorAvailable on every repaint (true since v6.8.5); the
                      default here is what keeps the card hidden in the frames before that first

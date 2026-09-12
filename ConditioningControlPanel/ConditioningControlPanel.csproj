@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>ConditioningControlPanel</AssemblyName>
     <RootNamespace>ConditioningControlPanel</RootNamespace>
-    <Version>6.9.1</Version>
+    <Version>6.9.3</Version>
     <Company>CodeBambi</Company>
     <Product>Conditioning Control Panel</Product>
     <Description>A professional visual conditioning application with gamification features.</Description>
@@ -115,6 +115,13 @@
     <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.3" />
     <PackageReference Include="org.k2fsa.sherpa.onnx.runtime.win-x64" Version="1.13.3" />
     
+    <!-- Hang forensics (ccp-bugs #1189/#1179/#1159/#984). ClrMD reads the managed stacks of a
+         PSS snapshot of our OWN process, which is how UiThreadStacks turns "the UI thread has
+         been silent for 90s" into named frames inside hang_*.txt. Pinned exactly: this runs in
+         a wedged process and an unattended minor bump is not worth the risk. 3.1.512801 ships a
+         net6.0 lib (clean on net8.0-windows); the 4.x line only carries net10.0/netstandard2.0. -->
+    <PackageReference Include="Microsoft.Diagnostics.Runtime" Version="3.1.512801" />
+
     <!-- Logging -->
     <PackageReference Include="Serilog" Version="3.1.1" />
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
@@ -265,6 +272,7 @@
     <!-- Weekly Intake Pass card art, one per niche (see Services\Quiz\IntakeNiche.cs).
          These must stay listed explicitly: there is no Resources\**\*.png glob, and a missing
          entry makes the pack:// URI fail at RUNTIME while the build still succeeds. -->
+    <Resource Include="Resources\intake\pass_card_default.png" />
     <Resource Include="Resources\intake\pass_card_bambi.png" />
     <Resource Include="Resources\intake\pass_card_sissy.png" />
     <Resource Include="Resources\intake\pass_card_drone.png" />
@@ -396,6 +404,17 @@
     <!-- Nav rail door art (2026-08-11 emoji purge): one emblem per door, referenced by
          MainWindow.xaml pack URIs - a missing file here crashes InitializeComponent. -->
     <Resource Include="Resources\nav\*.png" />
+    <!-- Home dashboard billboard posters (2026-09-12), one per roster card in
+         Services/DashboardBillboard.cs. 688x384, 16:9, no text: the bottom third of each is
+         dark and calm on purpose so the shade with the eyebrow, title and line sits there.
+         Listed one by one rather than globbed - the roster names these six files and nothing
+         else belongs in the folder. -->
+    <Resource Include="Resources\billboard\webapp.png" />
+    <Resource Include="Resources\billboard\remix.png" />
+    <Resource Include="Resources\billboard\loom.png" />
+    <Resource Include="Resources\billboard\discord.png" />
+    <Resource Include="Resources\billboard\exclusives.png" />
+    <Resource Include="Resources\billboard\support.png" />
 
     <!-- Training Programs art: day mood plates and program sigils.
          SINGLE LEVEL on purpose - a Resources\programs\<sub>\ folder would compile fine and then

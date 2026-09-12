@@ -237,7 +237,8 @@ namespace ConditioningControlPanel.Services
             ["BtnNavMods"] = "assets",
             ["BtnNavCatalogue"] = "assets",
             ["BtnNavPhrases"] = "assets",
-            ["BtnNavMediaLog"] = "assets"
+            ["BtnNavMediaLog"] = "assets",
+            ["BtnNavJustDrop"] = "justdrop"
         };
 
         public event EventHandler<TutorialStep>? StepChanged;
@@ -1062,7 +1063,7 @@ namespace ConditioningControlPanel.Services
                     Description = "Every dashboard tile used to pop open its own little window. Those windows " +
                                   "are gone: the tile now opens the matching module in this rack, where all of " +
                                   "the settings live side by side.\n\n" +
-                                  "Presets & Sessions and Haptics are entries of this door too.",
+                                  "Presets & Sessions, Haptics and Just Drop are entries of this door too.",
                     TargetElementName = "DoorStudio",
                     RequiresTab = "studio",
                     // The rack restores whatever module was last selected, so pick one that matches

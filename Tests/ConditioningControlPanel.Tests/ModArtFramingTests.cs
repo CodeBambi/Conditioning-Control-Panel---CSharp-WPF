@@ -42,8 +42,8 @@ public class ModArtFramingTests
     [Fact]
     public void ToViewbox_AtZoomOne_SourceTallerThanSurface_TakesFullWidthAndCropsHeight()
     {
-        // Square source into the rail chip's 69x42: the frame is wider, so width is spent whole.
-        var chipAspect = 69.0 / 42.0;
+        // Square source into the rail chip's 69x36: the frame is wider, so width is spent whole.
+        var chipAspect = 69.0 / 36.0;
         var rect = ModArtFramingRegistry.ToViewbox(null, sourceAspect: 1.0, surfaceAspect: chipAspect);
 
         Assert.Equal(1.0, rect.Width, Tol);
@@ -341,31 +341,9 @@ public class ModArtFramingTests
     private static string ReadSource(params string[] parts) =>
         File.ReadAllText(Path.Combine(new[] { RepoRoot(), "ConditioningControlPanel" }.Concat(parts).ToArray()));
 
-    /// <summary>The x:Key of each rail brush, the file it paints and the surface it is bound to.</summary>
-    public static TheoryData<string, string, string> RailBrushKeys() => new()
-    {
-        { "ArtTakeover",  "features/takeover.png",       ModArtFramingRegistry.SurfaceRailChip },
-        { "ArtAwareness", "features/awareness.png",      ModArtFramingRegistry.SurfaceRailChip },
-        { "ArtHaptics",   "features/vibe.png",           ModArtFramingRegistry.SurfaceRailChip },
-        { "ArtIntake",    "features/lab_quiz_hero.png",  ModArtFramingRegistry.SurfaceRailChip },
-        { "ArtRemote",    "features/remote_control.png", ModArtFramingRegistry.SurfaceRailChip },
-        { "ArtFyp",       "features/fyp.png",            ModArtFramingRegistry.SurfaceRailChip },
-        { "ArtBlink",     "features/blink_trainer.png",  ModArtFramingRegistry.SurfaceRailCard },
-        { "ArtLockdown",  "lockdown_icon.png",           ModArtFramingRegistry.SurfaceRailCard },
-    };
-
-    [Theory]
-    [MemberData(nameof(RailBrushKeys))]
-    public void RailChipViewboxInXaml_MatchesTheRegistrysShippedRect(string xamlKey, string resourcePath, string surfaceId)
-    {
-        var xaml = ReadSource("Views", "Tabs", "SettingsTabView.xaml");
-        var literal = ExtractViewbox(xaml, $"x:Key=\"{xamlKey}\"");
-        Assert.NotNull(literal);
-
-        var shipped = ModArtFramingRegistry.ShippedViewbox(resourcePath, surfaceId);
-        Assert.NotNull(shipped);
-        AssertRectsMatch(shipped!.Value, literal!.Value, $"{xamlKey} / {resourcePath}");
-    }
+    // The eight rail-chip rows used to be checked against SettingsTabView.xaml's Art* literals
+    // here. The rail went on 2026-09-11 (favorites + recent took the column), so the registry
+    // is the only copy of those rects now and there is nothing left to compare them with.
 
     [Fact]
     public void GoonViewboxInXaml_MatchesTheRegistrysShippedRect()

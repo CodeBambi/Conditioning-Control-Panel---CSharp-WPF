@@ -98,15 +98,22 @@ shell/room.js      THE ROOM SCENE (VN antechamber): the painted set between the
                    highlight that big reads as a bug), the_deep_end (The
                    Pool 105, vn-08, open lane water + the ladder), and the
                    Semester II + III five: sort (The Sorting Room 201, vn-12,
-                   the card conveyor - the belt, not the three bins),
+                   the card conveyor - the belt, not the three bins - plus the
+                   green door leaf on the right wall, which this table called an
+                   alcove until ccp-bugs#1165),
                    echo (Music Room 202, vn-13, the four lit drum heads on the
                    stage), instant_recall (Lecture Hall 203, vn-14, the blank
                    projection screen - NOT the lectern), anomaly (Darkroom 301,
                    vn-15, the drying lines framed on the ONE crooked print +
                    the black light-trap curtain as the painted exit) and
                    composure (The Studio 302, vn-16, the sliding-tile canvas on
-                   the easel). Three of the ten have a painted exit (101, 103,
-                   301); the other seven are doorless and that is legal.
+                   the easel). FOUR of the ten have a painted exit (101, 103,
+                   201, 301); the other six are doorless and that is legal.
+                   The sign under a painted exit is drawn in STAGE pixels, so
+                   it is sized twice - once for landscape's ~0.5 fit and once
+                   for portrait's ~0.28 (rooms.css, "the painted door, held
+                   upright"). `shell/smoke/exit-sign-check.mjs` does the
+                   arithmetic for every door on every phone in range.
                    TWO PLATES ARE COMPOSITED, never regenerated: vn-16's wall
                    sign was painted "COMPOSUE", so the sign rect was cloned out
                    and logo-composure-keyed.png pasted back in (the homeroom

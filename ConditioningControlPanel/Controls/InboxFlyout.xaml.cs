@@ -11,7 +11,7 @@ namespace ConditioningControlPanel.Controls
     /// The panel behind the title-bar Inbox glyph: the rows the quiet window collected, each with
     /// the surface it is holding.
     ///
-    /// <para>It binds straight to <c>App.Startup.Inbox</c> - an ObservableCollection the presenter
+    /// <para>It binds straight to <c>App.StartupLadder.Inbox</c> - an ObservableCollection the presenter
     /// owns - so opening or dismissing a row anywhere updates this list and the badge without a
     /// refresh call. The control never decides anything: Open and Dismiss both hand back to the
     /// presenter, which is where the surface's own bookkeeping lives.</para>
@@ -35,7 +35,7 @@ namespace ConditioningControlPanel.Controls
             TxtInboxTitle.Text = Str("inbox_title", "Inbox");
             TxtInboxEmpty.Text = Str("inbox_empty", "Nothing waiting.");
 
-            var inbox = App.Startup?.Inbox;
+            var inbox = App.StartupLadder?.Inbox;
             if (inbox != null)
             {
                 ItemsInbox.ItemsSource = inbox;
@@ -50,7 +50,7 @@ namespace ConditioningControlPanel.Controls
 
         private void RefreshEmptyState()
         {
-            var count = App.Startup?.UnreadCount ?? 0;
+            var count = App.StartupLadder?.UnreadCount ?? 0;
             TxtInboxEmpty.Visibility = count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
@@ -62,7 +62,7 @@ namespace ConditioningControlPanel.Controls
                 // Close FIRST. Several of these surfaces are modal, and a ShowDialog opened from
                 // inside a still-open Popup leaves the popup floating above the dialog.
                 RequestClose?.Invoke();
-                App.Startup?.OpenItem(item);
+                App.StartupLadder?.OpenItem(item);
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "Inbox row could not be opened"); }
         }
@@ -72,8 +72,8 @@ namespace ConditioningControlPanel.Controls
             try
             {
                 if ((sender as FrameworkElement)?.Tag is not InboxItem item) return;
-                App.Startup?.DismissItem(item);
-                if ((App.Startup?.UnreadCount ?? 0) == 0) RequestClose?.Invoke();
+                App.StartupLadder?.DismissItem(item);
+                if ((App.StartupLadder?.UnreadCount ?? 0) == 0) RequestClose?.Invoke();
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "Inbox row could not be dismissed"); }
         }

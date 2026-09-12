@@ -85,6 +85,12 @@ namespace ConditioningControlPanel.Models.Deeper
         [JsonProperty("featured")]
         public bool Featured { get; set; }
 
+        // Length of the bound media in seconds, written by the editor on save
+        // once the preview knows it. Lets the library list show a duration
+        // without opening the media; absent in files saved by older builds.
+        [JsonProperty("media_duration", NullValueHandling = NullValueHandling.Ignore)]
+        public double? MediaDurationSeconds { get; set; }
+
         [JsonExtensionData]
         public IDictionary<string, JToken>? UnknownFields { get; set; }
     }

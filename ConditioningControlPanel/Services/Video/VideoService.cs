@@ -224,6 +224,77 @@ namespace ConditioningControlPanel.Services
         /// 5-minute stuck detector, which is what used to be the only way out.</summary>
         internal static readonly TimeSpan TriggerStallCeiling = TimeSpan.FromSeconds(45);
 
+        // ---- a video the descent asked for (ccp-bugs #1201) ------------------------------
+        // A chaos video is REQUESTED when the bubble detonates and only reaches the screen much
+        // later: clip selection runs off the UI thread, the freeze delay adds another 800ms, and
+        // the request can sit parked in the InteractionQueue behind a bubble count or a lock card
+        // for longer still. "Is a video playing" therefore cannot answer "does the descent still
+        // own a video" at run exit, and quitting right after a video bubble popped left the tape
+        // opening over the results card and the lobby behind it - the reported #1201 symptom.
+        //
+        // So every chaos request carries a token. ChaosModeService cancels through the last token
+        // handed out when the run ends by any path, and each resumption point between the request
+        // and the first frame abandons a cancelled one. A request with no token (0) belongs to the
+        // user or to the scheduler, and nothing here can touch it.
+        private int _chaosVideoToken;             // last token handed out; 0 is never a token
+        private int _chaosVideoCancelledThrough;  // every token <= this one has been cancelled
+
+        /// <summary>
+        /// The pure rule behind the cancellation, extracted so a test can pin it without LibVLC
+        /// behind it (the same seam <see cref="EvaluateTriggerGuard"/> uses). A request is
+        /// abandoned only when it carries a token AND a cancel has swept through that token, so a
+        /// video requested AFTER the cancel - the next run's, or the user's own - still plays.
+        /// </summary>
+        internal static bool ShouldAbandonVideoRequest(int requestToken, int cancelledThrough)
+            => requestToken != 0 && requestToken <= cancelledThrough;
+
+        /// <summary>
+        /// Take a token for a video a descent run is about to fire. Claimed at DETONATION time,
+        /// not at playback time: the whole point is to own the request through the window where
+        /// nothing is on screen yet.
+        /// </summary>
+        public int ClaimChaosVideoToken() => Interlocked.Increment(ref _chaosVideoToken);
+
+        /// <summary>
+        /// Cancel every chaos-owned video request made so far that has not reached the screen.
+        /// Cheap, synchronous and non-blocking: it moves one integer, and the requests discover
+        /// they are obsolete at their own next step. It cannot touch a video the user or the
+        /// scheduler asked for (those carry no token), and it does not tear down a tape already
+        /// playing - that stays <see cref="ForceCleanup"/>'s job, behind the caller's ownership
+        /// check. Returns true if there was anything outstanding to cancel.
+        /// </summary>
+        public bool CancelPendingChaosVideo(string reason)
+        {
+            int through = Volatile.Read(ref _chaosVideoToken);
+            if (through <= Volatile.Read(ref _chaosVideoCancelledThrough)) return false;
+            Volatile.Write(ref _chaosVideoCancelledThrough, through);
+            App.Logger?.Information("VideoService: every pending chaos video request through #{Token} is cancelled ({Reason})",
+                through, reason);
+            return true;
+        }
+
+        private bool IsChaosVideoRequestCancelled(int requestToken)
+            => ShouldAbandonVideoRequest(requestToken, Volatile.Read(ref _chaosVideoCancelledThrough));
+
+        /// <summary>
+        /// The shared abandon step for a cancelled chaos request. It also hands the InteractionQueue
+        /// its Video slot back when this call is a dequeued replay holding it, or the next
+        /// interaction would wait out the queue's 5-minute stuck window. Guarded exactly like the
+        /// cascade and feed releases: current==Video with nothing playing only happens right after
+        /// a dequeue.
+        /// </summary>
+        private bool AbandonCancelledChaosRequest(int requestToken, string where)
+        {
+            if (!IsChaosVideoRequestCancelled(requestToken)) return false;
+            App.Logger?.Information("VideoService: {Where} abandoned - the descent that asked for this video has ended", where);
+            if (!_videoPlaying &&
+                App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.Video)
+            {
+                App.InteractionQueue.Complete(InteractionQueueService.InteractionType.Video);
+            }
+            return true;
+        }
+
         private bool _strictActive;
         // True across the strict retry GAP: from the moment a strict run's attention check fails
         // until the replacement video is actually on screen. ShowMessage deliberately clears
@@ -1839,7 +1910,7 @@ namespace ConditioningControlPanel.Services
         private DateTime _cascadeDeferDeadlineUtc = DateTime.MinValue;
 
         /// <summary>#871: hold a trigger the gif-cascade guard refused and replay it once the rain stops.</summary>
-        private void DeferTriggerPastCascade(bool silentIfEmpty, bool? strictOverride, bool userEarned = false)
+        private void DeferTriggerPastCascade(bool silentIfEmpty, bool? strictOverride, bool userEarned = false, int chaosToken = 0)
         {
             if (_cascadeDeferPending)
             {
@@ -1886,7 +1957,7 @@ namespace ConditioningControlPanel.Services
                         return;
                     }
 
-                    TriggerVideo(silentIfEmpty, strictOverride, userEarned);
+                    TriggerVideo(silentIfEmpty, strictOverride, userEarned, chaosToken);
 
                     // TriggerVideo may have parked itself again (a new cascade). Only release the
                     // ceiling when the chain really ended, so the re-defer above inherits it.
@@ -1927,7 +1998,7 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>#1073: hold a trigger the For You guard refused and replay it once the feed leaves
         /// the screen (closed, or ghosted away).</summary>
-        private void DeferTriggerPastFeed(bool silentIfEmpty, bool? strictOverride, bool userEarned = false)
+        private void DeferTriggerPastFeed(bool silentIfEmpty, bool? strictOverride, bool userEarned = false, int chaosToken = 0)
         {
             if (_feedDeferPending)
             {
@@ -1968,7 +2039,7 @@ namespace ConditioningControlPanel.Services
                         return;
                     }
 
-                    TriggerVideo(silentIfEmpty, strictOverride, userEarned);
+                    TriggerVideo(silentIfEmpty, strictOverride, userEarned, chaosToken);
 
                     // TriggerVideo may have parked itself again (the feed came back, or a cascade
                     // started). Only release the ceiling when the chain really ended, so a re-defer
@@ -2088,9 +2159,19 @@ namespace ConditioningControlPanel.Services
         /// the unrelated mandatory-video SCHEDULER happens to be off. See the For You guard below
         /// and the replay re-asserts in DeferTriggerPastFeed / DeferTriggerPastCascade.
         /// </param>
-        public void TriggerVideo(bool silentIfEmpty = false, bool? strictOverride = null, bool userEarned = false)
+        /// <param name="chaosToken">
+        /// Nonzero when a descent run asked for this video (<see cref="ClaimChaosVideoToken"/>).
+        /// The request is then abandoned, at every point between here and the first frame, once the
+        /// run that asked for it has ended (#1201). Zero - the default - is a video the user or the
+        /// scheduler asked for, which nothing here may cancel.
+        /// </param>
+        public void TriggerVideo(bool silentIfEmpty = false, bool? strictOverride = null, bool userEarned = false, int chaosToken = 0)
         {
             App.Logger?.Information("VideoService: TriggerVideo called (userEarned={UserEarned})", userEarned);
+
+            // The run can have ended while this request sat in the queue, or behind a cascade or
+            // the feed. Nothing is on screen yet, so this is the cheapest place to stop.
+            if (AbandonCancelledChaosRequest(chaosToken, "TriggerVideo")) return;
 
             // Prevent overlapping triggers (e.g. during 800ms freeze delay).
             //
@@ -2158,7 +2239,7 @@ namespace ConditioningControlPanel.Services
                 {
                     App.InteractionQueue.Complete(InteractionQueueService.InteractionType.Video);
                 }
-                DeferTriggerPastCascade(silentIfEmpty, strictOverride, userEarned);
+                DeferTriggerPastCascade(silentIfEmpty, strictOverride, userEarned, chaosToken);
                 return;
             }
 
@@ -2206,7 +2287,7 @@ namespace ConditioningControlPanel.Services
                 {
                     App.InteractionQueue.Complete(InteractionQueueService.InteractionType.Video);
                 }
-                DeferTriggerPastFeed(silentIfEmpty, strictOverride, userEarned);
+                DeferTriggerPastFeed(silentIfEmpty, strictOverride, userEarned, chaosToken);
                 return;
             }
 
@@ -2220,7 +2301,7 @@ namespace ConditioningControlPanel.Services
                     App.InteractionQueue.CurrentInteraction);
                 App.InteractionQueue.TryStart(
                     InteractionQueueService.InteractionType.Video,
-                    () => TriggerVideo(silentIfEmpty, strictOverride, userEarned),
+                    () => TriggerVideo(silentIfEmpty, strictOverride, userEarned, chaosToken),
                     queue: true);
                 return;
             }
@@ -2279,7 +2360,7 @@ namespace ConditioningControlPanel.Services
                 {
                     try
                     {
-                        ContinueTriggerVideo(selected, strict, silentIfEmpty);
+                        ContinueTriggerVideo(selected, strict, silentIfEmpty, chaosToken);
                     }
                     catch (Exception ex)
                     {
@@ -2296,9 +2377,18 @@ namespace ConditioningControlPanel.Services
         /// chosen off it (#732). Split out rather than inlined so the expensive selection cannot
         /// drift back onto the dispatcher.
         /// </summary>
-        private void ContinueTriggerVideo(string? path, bool strict, bool silentIfEmpty)
+        private void ContinueTriggerVideo(string? path, bool strict, bool silentIfEmpty, int chaosToken = 0)
         {
             App.Logger?.Information("VideoService: GetNextVideo returned: {Path}", path ?? "(null)");
+
+            // Selection ran off the UI thread and can take seconds (a content-pack decrypt, a
+            // full-library refill), which is most of the window #1201 falls into. Release the
+            // trigger guard along with the request, or the next video is dropped as an overlap.
+            if (AbandonCancelledChaosRequest(chaosToken, "the chosen clip"))
+            {
+                _triggerInProgress = false;
+                return;
+            }
 
             if (string.IsNullOrEmpty(path))
             {
@@ -2419,7 +2509,7 @@ namespace ConditioningControlPanel.Services
                         // is no result to wait for, so the queued call just runs when the thread frees.
                         DispatcherHelper.RunOnUI(() =>
                         {
-                            try { PlayVideo(path, strict); }
+                            try { PlayVideo(path, strict, chaosToken: chaosToken); }
                             catch (Exception ex)
                             {
                                 App.Logger?.Error(ex, "VideoService: PlayVideo after the freeze delay failed");
@@ -2440,7 +2530,7 @@ namespace ConditioningControlPanel.Services
             {
                 // Attention checks or minigame active - play video without freeze
                 App.Logger?.Debug("VideoService: Playing video immediately (skipFreeze=true)");
-                PlayVideo(path, strict);
+                PlayVideo(path, strict, chaosToken: chaosToken);
             }
         }
 
@@ -2906,7 +2996,7 @@ namespace ConditioningControlPanel.Services
             _scheduler.Start();
         }
 
-        private void PlayVideo(string path, bool strict, bool isVoutRetry = false)
+        private void PlayVideo(string path, bool strict, bool isVoutRetry = false, int chaosToken = 0)
         {
             App.Logger?.Information("VideoService: PlayVideo called for {File}", Path.GetFileName(path));
 
@@ -2925,6 +3015,15 @@ namespace ConditioningControlPanel.Services
                 App.Settings?.Current?.DualMonitorEnabled == true));
 
             _triggerInProgress = false;
+
+            // The last gate before any fullscreen surface exists, and the one the 800ms freeze
+            // delay lands on: a descent that ended while this request waited does not get its tape
+            // opened over the results card and the lobby (#1201).
+            if (AbandonCancelledChaosRequest(chaosToken, "PlayVideo"))
+            {
+                VideoDiag.Log("VIDEO", "SKIP - the descent that asked for this video has ended");
+                return;
+            }
 
             if (_videoPlaying)
             {
@@ -5891,7 +5990,12 @@ namespace ConditioningControlPanel.Services
 
                     try
                     {
-                        ShowMessage(troll ? "GOOD GIRL!\nWATCH AGAIN 😜" : (App.Mods?.GetAttentionCheckFailMessage() ?? "DUMB BAMBI!\nTRY AGAIN"), 2000, replay);
+                        // Both halves go through the mod: the troll line is praise for a
+                        // PASSED check, so it gets its own manifest field rather than
+                        // reusing the scolding one. Unmodded, both resolve to CCP Default.
+                        ShowMessage(troll
+                            ? (App.Mods?.GetAttentionCheckTrollMessage() ?? "NICE TRY!\nWATCH AGAIN \U0001F61C")
+                            : (App.Mods?.GetAttentionCheckFailMessage() ?? "MISSED IT!\nTRY AGAIN"), 2000, replay);
                     }
                     catch
                     {
