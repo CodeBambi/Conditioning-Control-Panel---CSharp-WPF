@@ -425,9 +425,8 @@
             <!-- The Title="" literals below are English design-time fallbacks only.
                  At runtime MainWindow.ApplyModFeatureNames() overwrites every FX title
                  with the mod-aware localized name (same keys as the Studio rack rows).
-                 Two tiles are runtime-owned outright instead: the ? box (RefreshMysteryTile()
-                 writes today's feature name over it on every repaint) and the tease tile
-                 (ApplyTeaseCard() owns its title, badge, tooltip and blur together). -->
+                 One tile is runtime-owned outright instead: the ? box, where
+                 RefreshMysteryTile() writes today's feature name over it on every repaint. -->
 
             <!-- Row 1: flash, the video pair, subliminals, bouncing text -->
             <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardFlash" x:FieldModifier="internal"
@@ -458,26 +457,40 @@
                                   DimWhenInactive="True"
                                   ToggleRequested="CardBouncingText_Toggle"/>
 
-            <!-- Row 2: the TEASE tile (far left, owner spec) + centre logo + spiral pair -->
-            <!-- THE TEASE TILE. Nameless on purpose (owner, 2026-08-13): the art below is
-                 blurred past recognition by FeatureCard.TeaseTier, the title is "???", the rim
-                 is the teased feature's tier livery and the click opens a cryptic teaser rather
-                 than a door. Nothing here may name the feature.
+            <!-- Row 2: the Deeper editor (far left) + centre logo + spiral pair -->
+            <!-- THE DEEPER EDITOR TILE (owner, 2026-09-12: "get rid of the just drop tile, put
+                 there the Deeper editor"). It took the slot off the nameless tease tile, which
+                 was Just Drop's last dashboard surface; Just Drop itself did not move and still
+                 sits on the Studio rail row, on the Exclusives shelf and in Ctrl+K.
 
-                 The art IS still loaded, and must be: it is the substrate the blur smears into,
-                 which is what makes the tile a shape rather than an empty box. It is never
-                 legible - see the blur radius note in FeatureCard.
+                 A LAUNCHER, not a feature, and the tile is shaped by that in three places:
 
-                 Title and TeaseTier here are FIRST-FRAME values, not the authority: the switch
-                 block at the top of MainWindow.TeaseCard.cs owns both and rewrites them on every
-                 mosaic repaint (and the instant the teased feature is revealed). They are
-                 authored rather than left blank so the tile can never flash a name or an
-                 unblurred face in the frames before the first repaint. -->
-            <features:FeatureCard Grid.Row="1" Grid.Column="0" x:Name="CardJustDrop" x:FieldModifier="internal"
-                                  Title="???"
-                                  TeaseTier="2"
-                                  Icon="pack://application:,,,/Resources/features/justdrop.png"
-                                  Click="CardJustDrop_Click"/>
+                 * No ToggleRequested handler. Right-click still raises the card's toggle event
+                   (FeatureCard.OnRightClick raises it unconditionally) and nothing is listening,
+                   so the gesture does nothing here. An editor has no on/off to quick-toggle, and
+                   wiring one would have to invent a state it does not have.
+                 * No DimWhenInactive, so CardMuteRule.ShouldMute answers false for this tile
+                   whatever else is going on - there is no "off" colour to drain.
+                 * No price tag. The Deeper page carries no ExclusiveFeature roster row, so it is
+                   not sold and IsNavEntryLocked answers false for it; RefreshMosaicTierBadges
+                   therefore leaves this tile alone and the editor is exactly as open as the page
+                   it belongs to. If Deeper is ever gated, gate both in the same change.
+
+                 The click opens the editor on a NEW enhancement, through the same handler the
+                 Deeper page's own New button uses (BtnDeeperNewEnhancement_Click), so the dialog,
+                 the blank-enhancement call and the tutorial hooks all stay in one place. -->
+            <features:FeatureCard Grid.Row="1" Grid.Column="0" x:Name="CardDeeperEditor" x:FieldModifier="internal"
+                                  Title="{loc:Str dash_deeper_editor_title}"
+                                  Icon="pack://application:,,,/Resources/features/deeper_editor.png"
+                                  Click="CardDeeperEditor_Click">
+                <features:FeatureCard.ToolTip>
+                    <StackPanel MaxWidth="280">
+                        <TextBlock Text="{loc:Str dash_deeper_editor_blurb}" TextWrapping="Wrap"/>
+                        <TextBlock Text="{loc:Str dash_deeper_editor_tip}" TextWrapping="Wrap"
+                                   Opacity="0.7" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </features:FeatureCard.ToolTip>
+            </features:FeatureCard>
 
             <!-- Centre logo, back at 2x2 (the 3x3 interlude had it 1x1).
                  Doubles as the weekly Graded Intake pass card: when a free account has an

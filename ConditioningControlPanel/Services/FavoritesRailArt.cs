@@ -120,6 +120,10 @@ namespace ConditioningControlPanel.Services
             ["tab.shelistening"] = Cover("features/audio_whispers.png"),
             ["tab.awareness"] = Cover("features/awareness.png"),
             ["tab.deeper"] = Cover("features/deeper.png"),
+            // The editor gets its OWN picture rather than a second copy of deeper.png: the two
+            // rows can sit in the rail at the same time, and two chips wearing one drawing read
+            // as a duplicate rather than as a page and the tool that edits it.
+            ["launch.deepereditor"] = Cover("features/deeper_editor.png"),
             // The Velvet Vault storefront. vault.png ships themed faces (vault_bambi.png and
             // friends), so this chip re-skins with the active built-in mod for free.
             ["tab.exclusives"] = Cover("features/vault.png"),

@@ -295,6 +295,27 @@ namespace ConditioningControlPanel.Services
                 IsAvailable = () => Arcademy.ArcademyHostService.DoorAvailable,
             });
             Tab("deeper", "tab_deeper", "🌊", "deeper", "deeper files audio video");
+            // THE DEEPER EDITOR. A window the Deeper page opens, not a room, so it is a
+            // launch.* row like the four Library launchers below and not a Tab() call. It is
+            // listed at all because the editor grew a dashboard tile on 2026-09-12 and a
+            // destination with a tile but no palette row cannot be pinned, cannot be found by
+            // name, and would be the one face on the wall the rail has never heard of.
+            //
+            // The palette's single verb still applies: this row navigates to the Deeper page and
+            // pulses the button that opens the editor. The chip and the tile get there in one
+            // click and one click respectively, which is the closest the index can come without
+            // a launch verb of its own - the same compromise card.arcademy makes.
+            list.Add(new SettingsPaletteEntry
+            {
+                Id = "launch.deepereditor",
+                LabelKey = "dash_deeper_editor_title",
+                Glyph = "✏️",
+                TabKey = "deeper",
+                ElementNames = new[] { "BtnDeeperNewEnhancement" },
+                ContextKeys = new[] { GroupNav, "tab_deeper" },
+                Aliases = "deeper editor enhancement new enhancement build make author "
+                          + "triggers timeline ccpenh edit video audio",
+            });
             Tab("exclusives", "tab_exclusives", "⭐", "exclusives", "premium exclusives velvet vault showcase");
             Tab("gradedintake", "tab_gradedintake", "📝", "gradedintake", "intake quiz graded pass");
             Tab("lockdown", "tab_lockdown_mode", "🔒", "lockdown", "lockdown lock kiosk");

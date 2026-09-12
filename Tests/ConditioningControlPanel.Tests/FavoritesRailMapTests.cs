@@ -10,9 +10,10 @@ namespace ConditioningControlPanel.Tests;
 
 /// <summary>
 /// The favorites rail's pin map (MainWindow.FavoritesRail.cs, FavoritePinMap) joins x:Names in
-/// MainWindow.xaml / PlayTabView.xaml to Ctrl+K palette row ids. Both halves can rot silently:
-/// a renamed button compiles and just loses its right-click, and a retired palette row leaves
-/// a chip nobody can build. Source-text reads, because MainWindow cannot be instantiated here.
+/// MainWindow.xaml / PlayTabView.xaml / DeeperTabView.xaml to Ctrl+K palette row ids. Both halves
+/// can rot silently: a renamed button compiles and just loses its right-click, and a retired
+/// palette row leaves a chip nobody can build. Source-text reads, because MainWindow cannot be
+/// instantiated here.
 /// </summary>
 public class FavoritesRailMapTests
 {
@@ -41,17 +42,49 @@ public class FavoritesRailMapTests
         return rows;
     }
 
+    /// <summary>
+    /// Which view a mapped x:Name should live in. This mirrors MainWindow.RailElementHost, which
+    /// is the runtime half of the same rule: a tab UserControl keeps its own namescope, so a name
+    /// that moved into one and was not added here would silently lose its pin menu.
+    /// </summary>
+    private static string ViewFor(string element) =>
+        element.StartsWith("BtnPlay", StringComparison.Ordinal) ? "play"
+        : element == "BtnDeeperNewEnhancement" ? "deeper"
+        : "main";
+
     [Fact]
     public void Every_mapped_element_exists_in_its_view()
     {
-        var main = Read("MainWindow", "MainWindow.xaml");
-        var play = Read("Views", "Tabs", "PlayTabView.xaml");
+        var views = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["main"] = Read("MainWindow", "MainWindow.xaml"),
+            ["play"] = Read("Views", "Tabs", "PlayTabView.xaml"),
+            ["deeper"] = Read("Views", "Tabs", "DeeperTabView.xaml"),
+        };
         foreach (var (element, _) in PinMap())
         {
-            var view = element.StartsWith("BtnPlay", StringComparison.Ordinal) ? play : main;
+            var view = views[ViewFor(element)];
             Assert.True(view.Contains("x:Name=\"" + element + "\"", StringComparison.Ordinal),
                 $"FavoritePinMap names \"{element}\" but no such x:Name exists in its view");
         }
+    }
+
+    [Fact]
+    public void The_pin_menus_look_in_the_namescope_the_element_actually_lives_in()
+    {
+        // The runtime half. FindName on the window cannot see inside a tab UserControl, so every
+        // mapped name that is not MainWindow's own has to be named in RailElementHost. A name
+        // added to the table and not there resolves to null and is logged, never thrown - which
+        // is exactly the silent rot this file exists for.
+        var rail = Read("MainWindow", "MainWindow.FavoritesRail.cs");
+        var start = rail.IndexOf("RailElementHost(string element)", StringComparison.Ordinal);
+        Assert.True(start > 0, "RailElementHost not found in MainWindow.FavoritesRail.cs");
+        var rule = rail.Substring(start, Math.Min(600, rail.Length - start));
+
+        foreach (var (element, _) in PinMap().Where(r => ViewFor(r.Element) != "main"))
+            Assert.True(rule.Contains(element, StringComparison.Ordinal)
+                        || element.StartsWith("BtnPlay", StringComparison.Ordinal),
+                $"\"{element}\" lives in a tab view but RailElementHost still looks for it on the window");
     }
 
     [Fact]

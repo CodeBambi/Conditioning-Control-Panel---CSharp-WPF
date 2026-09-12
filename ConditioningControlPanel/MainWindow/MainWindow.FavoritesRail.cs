@@ -54,9 +54,10 @@ namespace ConditioningControlPanel
         private bool _favoritesMenusWired;
 
         /// <summary>
-        /// The join from a rail or Play-wall control (x:Name) to the palette row it opens. The
-        /// x:Names are facts about MainWindow.xaml / PlayTabView.xaml and live nowhere else;
-        /// FavoritesRailMapTests reads this table from source and checks each name still exists.
+        /// The join from a rail, Play-wall or Deeper-page control (x:Name) to the palette row it
+        /// opens. The x:Names are facts about MainWindow.xaml / PlayTabView.xaml / DeeperTabView.xaml
+        /// and live nowhere else; FavoritesRailMapTests reads this table from source and checks each
+        /// name still exists in its own view. Which view that is, is <see cref="RailElementHost"/>.
         /// Launcher rows (Goon Game, the descent, the gaze games, the Loom) have no palette row
         /// yet, so they cannot be pinned - follow-up: a launch verb in the registry.
         /// </summary>
@@ -85,6 +86,11 @@ namespace ConditioningControlPanel
             ("BtnPlayGradedIntake", "tab.gradedintake"), ("BtnPlayFyp", "tab.fyp"),
             ("BtnPlayLockdown", "tab.lockdown"),
             ("BtnPlayArcademy", "card.arcademy"),
+            // The Deeper EDITOR (2026-09-12), which is a window rather than a room. Its tile took
+            // the tease tile's slot on the mosaic, and a destination with a tile but no way to pin
+            // it would be the one face on the wall the rail has never heard of. Lives in
+            // DeeperTabView.xaml - resolved through DeeperTab.FindName.
+            ("BtnDeeperNewEnhancement", "launch.deepereditor"),
         };
 
         /// <summary>Subscribe to patron-status changes, wire the pin menus, paint once.</summary>
@@ -348,7 +354,7 @@ namespace ConditioningControlPanel
             {
                 if (entry.Id.StartsWith("launch.", StringComparison.Ordinal)
                     && entry.ElementNames.Length > 0
-                    && FindName(entry.ElementNames[0]) is Button launcher
+                    && ResolveRailElement(entry.ElementNames[0]) is Button launcher
                     && new ButtonAutomationPeer(launcher).GetPattern(PatternInterface.Invoke) is IInvokeProvider invoke)
                 {
                     invoke.Invoke();
@@ -407,19 +413,37 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    bool onPlayWall = element.StartsWith("BtnPlay", StringComparison.Ordinal);
-                    var target = onPlayWall
-                        ? PlayTab?.FindName(element) as FrameworkElement
-                        : FindName(element) as FrameworkElement;
+                    var target = ResolveRailElement(element);
                     if (target == null)
                     {
                         App.Logger?.Debug("Favorites rail: no element named {Name} to pin", element);
                         continue;
                     }
-                    AttachPinMenu(target, id, holdRail: !onPlayWall);
+                    AttachPinMenu(target, id, holdRail: RailElementHost(element) == null);
                 }
                 catch (Exception ex) { App.Logger?.Debug("WireFavoritePinMenus({Name}): {E}", element, ex.Message); }
             }
+        }
+
+        /// <summary>
+        /// Which view owns a mapped x:Name, or null for MainWindow's own namescope. A tab
+        /// UserControl keeps a namescope of its own, so <c>FindName</c> on the window cannot see
+        /// inside one: the Play wall's cards and the Deeper page's New button have to be asked
+        /// for on their view. Kept next to the table it reads so the two move together, and used
+        /// by the pin wiring AND by <see cref="OpenDestination"/>, which must press the same
+        /// button the menu was hung on.
+        /// </summary>
+        private FrameworkElement? RailElementHost(string element) =>
+            element.StartsWith("BtnPlay", StringComparison.Ordinal) ? PlayTab
+            : string.Equals(element, "BtnDeeperNewEnhancement", StringComparison.Ordinal) ? DeeperTab
+            : null;
+
+        /// <summary>The control behind a mapped x:Name, or null when it has moved or been
+        /// renamed - a soft failure everywhere it is used.</summary>
+        private FrameworkElement? ResolveRailElement(string element)
+        {
+            var host = RailElementHost(element);
+            return (host == null ? FindName(element) : host.FindName(element)) as FrameworkElement;
         }
 
         /// <param name="holdRail">True for the nav rail's own rows: the rail collapses on
