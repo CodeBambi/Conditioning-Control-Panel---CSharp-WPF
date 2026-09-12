@@ -45,6 +45,10 @@ namespace ConditioningControlPanel
 
         private async System.Threading.Tasks.Task InitializeBrowserAsync(string? overrideStartUrl = null)
         {
+            // Anything that brings the browser up wants it on screen, so a folded card opens here
+            // once rather than at each of the six callers.
+            RevealDashboardBrowser("browser-init");
+
             if (_browserInitialized || _browserInitializing) return;
 
             // A browser whose CoreWebView2 never came up leaves the flag cleared but the dead
@@ -338,6 +342,11 @@ namespace ConditioningControlPanel
             // (ccp-bugs#1138).
             RestoreWindowForBrowserSurface();
             ShowTab("settings");
+            // The card may be folded shut (AppSettings.DashboardBrowserCollapsed, on by default).
+            // Bringing the surface forward and leaving the page behind a closed card is the same
+            // "nothing happened" this method exists to prevent, so the fold opens too. A reveal
+            // never writes the preference - see MainWindow.DashboardFold.cs.
+            RevealDashboardBrowser("focus-surface");
             Activate();
             Focus();
         }
@@ -587,6 +596,8 @@ namespace ConditioningControlPanel
                 return;
             }
             if (_browser == null) return;
+
+            RevealDashboardBrowser("site-toggle");
 
             var isBambiCloud = SettingsTab.RbBambiCloud.IsChecked == true;
             var url = isBambiCloud
@@ -2671,6 +2682,8 @@ namespace ConditioningControlPanel
                             SettingsTab.BrowserContainer.Children.Add(_browser.WebView);
                         }
                         SettingsTab.BrowserLoadingText.Visibility = Visibility.Collapsed;
+                        // The page is back in the card, so the card cannot stay shut over it.
+                        RevealDashboardBrowser("popout-closed");
                     }
                     _browserPopoutWindow = null;
                     SettingsTab.BtnPopOutBrowser.Content = Loc.Get("btn_pop_out");
@@ -3121,6 +3134,7 @@ namespace ConditioningControlPanel
         private void NavigateBrowserToCurrentSiteHome()
         {
             if (_browser?.WebView?.CoreWebView2 == null) return;
+            RevealDashboardBrowser("reload");
             try
             {
                 var isBambiCloud = SettingsTab.RbBambiCloud?.IsChecked == true;

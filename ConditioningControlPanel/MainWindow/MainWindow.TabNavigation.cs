@@ -1105,6 +1105,11 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // The browser fold's backstop: re-derive the card, the rows, the chevron and the
+                // billboard from the saved bool every time the dashboard comes on screen, so a
+                // surface that a killed animation left behind cannot outlive one tab switch.
+                if (visible) ResettleBrowserFold();
+
                 if (!visible || _dashboardIntroQueued) return;
                 // A session running at this point means the window was re-shown mid-session, not
                 // a launch. Leave the queue unarmed so a later, quieter visit gets the card.

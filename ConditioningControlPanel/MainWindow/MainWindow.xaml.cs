@@ -3373,6 +3373,10 @@ namespace ConditioningControlPanel
             // Dashboard favorites rail: pin menus, first paint, patron-change subscription.
             InitFavoritesRail();
 
+            // Dashboard browser card: restore the saved fold. Default is unfolded, so an install
+            // that has never touched the chevron lands on exactly the layout it shipped with.
+            InitDashboardBrowserFold();
+
             // Header "Remember" button: reflect whether a setup is already saved.
             SyncRememberButton();
 

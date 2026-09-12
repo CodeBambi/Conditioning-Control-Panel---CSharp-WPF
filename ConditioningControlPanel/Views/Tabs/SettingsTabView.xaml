@@ -877,8 +877,14 @@
              this column is SHORTER than it was and the browser card gains the difference. Nothing
              here may grow: every unit taken from row 0 comes off the WebView2's layout slot. -->
         <Grid Grid.Column="2" Grid.Row="1" Margin="5">
+            <!-- The fold (2026-09-12). Row 0 is the browser card and row 1 is the space it gives
+                 back when it is folded shut; the two trade places and nothing else in this column
+                 moves. Expanded: card "*", fold row 0 - byte-for-byte the shipped arithmetic, so
+                 the WebView2's layout slot is unchanged. Collapsed: card Auto (the header strip
+                 only), fold row "*". MainWindow.DashboardFold.cs owns the swap. -->
             <Grid.RowDefinitions>
-                <RowDefinition Height="*"/>
+                <RowDefinition x:Name="BrowserCardRow" x:FieldModifier="internal" Height="*"/>
+                <RowDefinition x:Name="BrowserFoldRow" x:FieldModifier="internal" Height="0"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
@@ -921,12 +927,19 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <!-- Browser Header - single row with title, tabs, status, webcam toggle, pop out -->
+                    <!-- Browser Header - single row with title, tabs, status, webcam toggle, pop out,
+                         and the fold chevron at the right end. The header is the one strip that
+                         survives a fold, so everything in it has to make sense with no page under
+                         it: the site radios still pick a site, Pop Out still pops the page into its
+                         own window, mute still mutes audio the hidden page is playing. Nothing here
+                         is hidden on fold - the controls keep their own Visibility owners
+                         (DeeperBrowserBadge, the webcam label) and a second writer would fight them. -->
                     <Grid Grid.Row="0" Margin="0,0,0,4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
@@ -1146,12 +1159,46 @@
                                 </Style>
                             </Button.Style>
                         </Button>
+                        <!-- The fold chevron. Down arrow = the card is shut and this opens it, up
+                             arrow = it is open and this shuts it; the glyph, the tooltip and the
+                             animation all live in MainWindow.DashboardFold.cs, because the setting
+                             (AppSettings.DashboardBrowserCollapsed), not this button, is the truth. -->
+                        <Button Grid.Column="7" x:Name="BtnFoldBrowser" x:FieldModifier="internal"
+                                Click="BtnFoldBrowser_Click" Cursor="Hand"
+                                Background="Transparent" BorderThickness="0" Padding="6,2" Margin="6,0,0,0"
+                                VerticalAlignment="Center">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource TransparentPink50Brush}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                            <TextBlock x:Name="TxtFoldBrowser" x:FieldModifier="internal"
+                                       Text="&#x25B4;" FontSize="13"
+                                       Foreground="{DynamicResource TextMutedBrush}"/>
+                        </Button>
                     </Grid>
-    
+
                     <!-- Browser Container. No fixed Height on purpose - see the Grid note above.
                          It fills the star row, so the WebView2's layout slot (and therefore its
-                         native window) is always inside this card. -->
-                    <Border Grid.Row="1" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" ClipToBounds="True">
+                         native window) is always inside this card.
+                         BrowserFoldBody is the whole of the card below the header, and the fold
+                         collapses THIS element rather than BrowserContainer inside it. Two reasons.
+                         One: BrowserContainer.Visibility already has owners (session start/stop,
+                         the remote-control takeover, MainWindow.Settings) and a second writer would
+                         fight them - a folded card must not un-hide a browser a running session hid.
+                         Two: a Collapsed ancestor drives IsVisible=false on the WebView2's HwndHost,
+                         which hides the native window itself; the control is never re-parented and
+                         never disposed, so the page, its audio pipeline and the pop-out flow all
+                         survive a fold and re-expanding shows the same page with no reload. -->
+                    <Border x:Name="BrowserFoldBody" x:FieldModifier="internal"
+                            Grid.Row="1" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" ClipToBounds="True">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
@@ -1401,7 +1448,7 @@
             <!-- nothing for the motion kill-switch or the ShowTab teardown to -->
             <!-- have to reach. Give it a portrait later, with the loop.       -->
             <!-- ============================================================ -->
-            <Border x:Name="CompanionStrip" x:FieldModifier="internal" Grid.Row="1"
+            <Border x:Name="CompanionStrip" x:FieldModifier="internal" Grid.Row="2"
                     CornerRadius="12" Padding="10,7" Margin="0,0,0,5"
                     Background="{DynamicResource ElevatedSurfaceBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
@@ -1454,7 +1501,7 @@
             <!-- The card's old section_quick_links caption is gone with the    -->
             <!-- header row; the "?" popover still explains the strip.          -->
             <!-- ============================================================ -->
-            <Border Grid.Row="2" CornerRadius="12" Padding="9,7"
+            <Border Grid.Row="3" CornerRadius="12" Padding="9,7"
                     Background="{DynamicResource ElevatedSurfaceBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
                 <Grid>

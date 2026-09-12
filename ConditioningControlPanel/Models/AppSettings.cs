@@ -8032,6 +8032,24 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public int DashboardToggleHintUses { get; set; }
 
+        /// <summary>
+        /// The Home dashboard's browser card is folded shut: the header strip stays, everything
+        /// below it (the Deeper toolbar, the audio row and the WebView2) is collapsed and the card
+        /// gives its rows back to the column.
+        ///
+        /// <para>Default TRUE (owner call, 2026-09-12: "by default browser should be hidden, and
+        /// unhidden whenever we call it"). The property initializer is the whole mechanism and it
+        /// is upgrader-safe on purpose: the loader deserializes onto a default-constructed
+        /// AppSettings, so a settings.json with no key keeps this true, a file that says false
+        /// stays false, and nobody who has already stated a preference has it overwritten.</para>
+        ///
+        /// <para>This is the SAVED PREFERENCE, not the state on screen. When the app calls the
+        /// browser - a companion link, a remote-control command, a site radio - the card is opened
+        /// by <c>MainWindow.RevealDashboardBrowser</c> for the rest of that run WITHOUT touching
+        /// this bool. Only the chevron writes here.</para>
+        /// </summary>
+        public bool DashboardBrowserCollapsed { get; set; } = true;
+
         private List<string> _railFavorites = new();
         /// <summary>
         /// The dashboard rail's FAVORITES: Ctrl+K palette row ids ("tab.deeper", "door.play",
