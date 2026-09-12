@@ -51,6 +51,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 ChkLockdownNoPanic.IsChecked = s.LockdownDisablePanicKey;
                 ChkLockdownSysKeys.IsChecked = s.LockdownBlockSystemKeys;
                 ChkLockdownDose.IsChecked = s.LockdownDoseKeeperEnabled;
+                ChkLockdownHideTimer.IsChecked = s.HideLockdownTimer;
 
                 ApplyIntensityPills(s.LockdownPossessionIntensity);
                 ApplyPossessionEnabledLook(s.LockdownPossessionEnabled);
@@ -191,6 +192,23 @@ namespace ConditioningControlPanel.Views.Tabs
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Lockdown card: failed to write the lockdown safeties");
+            }
+        }
+
+        /// <summary>Read on every clock repaint (MainWindow.Lab.cs FormatLockdownClock), so there is
+        /// nothing to push; the next tick picks it up.</summary>
+        private void ChkLockdownHideTimer_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_loadingPossession) return;
+            try
+            {
+                if (App.Settings?.Current == null) return;
+                App.Settings.Current.HideLockdownTimer = ChkLockdownHideTimer.IsChecked == true;
+                App.Settings?.Save();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Lockdown card: failed to write HideLockdownTimer");
             }
         }
 

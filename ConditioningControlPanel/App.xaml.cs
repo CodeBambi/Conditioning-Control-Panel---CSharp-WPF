@@ -302,7 +302,7 @@ namespace ConditioningControlPanel
                 // parked as an Inbox row inside the first-launch window. The once-per-launch claim
                 // moved INTO the open action - a card that only ever became a row must not spend
                 // the launch's one offer, or opening the row later would find it already gone.
-                Startup?.PresentOrInbox(new Services.Startup.InboxItem
+                StartupLadder?.PresentOrInbox(new Services.Startup.InboxItem
                 {
                     Key = "intro:remote-media",
                     Glyph = "🌐",
@@ -315,7 +315,7 @@ namespace ConditioningControlPanel
                     },
                 });
 
-                if (Startup == null)
+                if (StartupLadder == null)
                 {
                     if (Interlocked.CompareExchange(ref _remoteMediaOfferClaimed, 1, 0) != 0) return;
                     FeatureIntroPopup.ShowIfFirstTime(RemoteMediaIntroKey, cardOwner);
@@ -444,7 +444,7 @@ namespace ConditioningControlPanel
         /// that wants the screen can queue rather than racing for it. See
         /// <see cref="Services.Startup.StartupPresenter"/> for why that mattered.
         /// </summary>
-        public static Services.Startup.StartupPresenter? Startup { get; private set; }
+        public static Services.Startup.StartupPresenter? StartupLadder { get; private set; }
 
         // Transient feed of recent AI-driven effect actions, surfaced in the Companion tab's
         // "Live actions" panel. Populated by the upcoming local-LLM effect controller; not persisted.
@@ -1654,6 +1654,12 @@ namespace ConditioningControlPanel
             // to the logs folder when the dispatcher stops responding for 10s.
             Services.UiHangWatchdog.Start(Dispatcher);
 
+            // ...and name the dispatcher operation that is stuck when it fires. One hook covers
+            // every BeginInvoke/Invoke in the app; the per-operation cost is an array store
+            // (ccp-bugs #1189/#1179/#1159/#984, where "a Send-priority op has run for 137s" is
+            // all we ever learn). Must be installed before any feature posts work.
+            Services.UiOpTracker.Install(Dispatcher);
+
             // Flush-on-write trace for the mandatory-video show/heal path and the panic key
             // (#616/#617/#621/#622/#623). Separate from the Serilog rolling file on purpose: the
             // relaunch a user needs in order to FILE the report scrolls the freeze window out of
@@ -1719,8 +1725,8 @@ namespace ConditioningControlPanel
 
                     try
                     {
-                        MessageBox.Show($"An error occurred:\n\n{args.Exception.Message}\n\nDetails logged to crash log.",
-                            "Error - Please report this", MessageBoxButton.OK, MessageBoxImage.Error);
+                        MessageBox.Show(Loc.GetF("msg_unexpected_error", args.Exception.Message),
+                            Loc.Get("title_unexpected_error"), MessageBoxButton.OK, MessageBoxImage.Error);
                     }
                     catch { /* MessageBox may fail during shutdown */ }
                 }
@@ -1791,7 +1797,7 @@ namespace ConditioningControlPanel
             // thing that queues on it. Everything that used to decide for itself when it was
             // allowed to open - the failed-update report, the wizard, What's New, the season
             // recap, the mod picker, the enhance nudge, the update dialog - now asks this.
-            Startup = new Services.Startup.StartupPresenter(Current?.Dispatcher ?? System.Windows.Threading.Dispatcher.CurrentDispatcher);
+            StartupLadder = new Services.Startup.StartupPresenter(Current?.Dispatcher ?? System.Windows.Threading.Dispatcher.CurrentDispatcher);
 
             // One-shot settings migrations. Must run before anything reads
             // the migrated fields (Flash UI, GazeFocusService, etc.).
@@ -3013,9 +3019,14 @@ namespace ConditioningControlPanel
                 && Settings?.Current?.HasAcceptedAgeVerification != true
                 && !FirstRunWizard.FirstRunClaimedThisLaunch)
             {
-                Dispatcher.BeginInvoke(new Action(() =>
+                // On the ladder at priority 5, ahead of the failed-update report (10): it is the
+                // one surface that must be answered before anything else is worth showing, and
+                // as a bare Loaded-priority post it could land on top of whatever the ladder had
+                // already opened. If the ladder never gets to it (five minutes behind the update
+                // dialog), the old direct post runs so the gate is never silently skipped.
+                void AskAgeGate(Window? owner)
                 {
-                    var result = MessageBox.Show(mainWindow,
+                    var result = MessageBox.Show(owner ?? mainWindow,
                         "This application contains adult content intended for users aged 18 and older.\n\n" +
                         "By clicking \"Yes\", you confirm that you are at least 18 years old and that viewing adult content is legal in your jurisdiction.\n\n" +
                         "Do you wish to continue?",
@@ -3032,7 +3043,19 @@ namespace ConditioningControlPanel
 
                     Settings.Current.HasAcceptedAgeVerification = true;
                     Settings.Save();
-                }), System.Windows.Threading.DispatcherPriority.Loaded);
+                }
+
+                if (StartupLadder != null)
+                {
+                    StartupLadder.EnqueueModal("age-gate", 5, AskAgeGate,
+                        onAbandoned: () => Dispatcher.BeginInvoke(new Action(() => AskAgeGate(mainWindow)),
+                            System.Windows.Threading.DispatcherPriority.Normal));
+                }
+                else
+                {
+                    Dispatcher.BeginInvoke(new Action(() => AskAgeGate(mainWindow)),
+                        System.Windows.Threading.DispatcherPriority.Loaded);
+                }
             }
         }
 
@@ -3336,7 +3359,7 @@ namespace ConditioningControlPanel
                             Open = ShowAll,
                         };
 
-                        if (Startup != null) Startup.PresentOrInbox(item);
+                        if (StartupLadder != null) StartupLadder.PresentOrInbox(item);
                         else ShowAll();
                     }
                     catch (Exception ex)
@@ -3804,9 +3827,9 @@ namespace ConditioningControlPanel
                 // Priority 30: the upgrader's What's New slot. The two are alternatives - a fresh
                 // settings file has no LastSeenVersion, so What's New stamps and says nothing -
                 // and the sheet carries the patch notes itself for exactly that reason.
-                Startup?.EnqueueModal("welcome-back", 30, owner => ShowWelcomeBackSheet(owner, content, backup, plan));
+                StartupLadder?.EnqueueModal("welcome-back", 30, owner => ShowWelcomeBackSheet(owner, content, backup, plan));
 
-                if (Startup == null)
+                if (StartupLadder == null)
                 {
                     await Current.Dispatcher.InvokeAsync(() => ShowWelcomeBackSheet(null, content, backup, plan));
                 }
@@ -4009,7 +4032,7 @@ namespace ConditioningControlPanel
                     Open = () => _ = RetryWelcomeBackRestoreAsync(),
                 };
 
-                if (Startup != null) Startup.PresentOrInbox(item);
+                if (StartupLadder != null) StartupLadder.PresentOrInbox(item);
                 else Logger?.Warning("Welcome-back: the restore failed and there is no Inbox to say so");
             }
             catch (Exception ex)
@@ -4141,6 +4164,10 @@ namespace ConditioningControlPanel
             restored.Welcomed = current.Welcomed;
             restored.FirstRunAssetsPromptShown = current.FirstRunAssetsPromptShown;
 
+            // Machine-local settings the backup never carried (content folder, webhook, last-seen).
+            // Without this the restore reset the content folder to "" with no prompt to pick it again.
+            ConditioningControlPanel.Services.ProfileSyncService.PreserveLocalOnlyFields(current, restored);
+
             // Preserve lifetime stats — take higher value (current may have server-synced data)
             restored.TotalConditioningMinutes = Math.Max(current.TotalConditioningMinutes, restored.TotalConditioningMinutes);
 
@@ -4211,7 +4238,7 @@ namespace ConditioningControlPanel
                                 {
                                     btn.Tag = "UpdateAvailable";
                                     btn.Content = "UPDATE";
-                                    btn.ToolTip = "Update Available - Click to install!";
+                                    btn.ToolTip = Loc.Get("tooltip_update_available_install");
                                     Logger?.Information("Update button configured successfully");
                                 }
                             }
@@ -4228,7 +4255,7 @@ namespace ConditioningControlPanel
                     // 30 s poll over IsStartupDialogShowing and then give up silently - which is
                     // how an upgrader still reading patch notes lost the update prompt entirely.
                     Logger?.Information("Queueing the update dialog behind the startup ladder...");
-                    Startup?.EnqueueModal("update-available", 80, owner =>
+                    StartupLadder?.EnqueueModal("update-available", 80, owner =>
                     {
                         try
                         {
@@ -4277,7 +4304,7 @@ namespace ConditioningControlPanel
                 // that did not take is the one piece of startup news that changes what the user
                 // should do next, and it used to hand-roll its own 30 s poll over
                 // IsStartupDialogShowing to avoid stacking. The ladder is that poll now.
-                Startup?.EnqueueModal("failed-update-report", 10, owner =>
+                StartupLadder?.EnqueueModal("failed-update-report", 10, owner =>
                     OfferManualUpdateDownload(
                         owner ?? Current?.MainWindow,
                         Loc.Get("title_update_failed"),
@@ -4458,11 +4485,8 @@ namespace ConditioningControlPanel
                     // Silent update for Inno Setup installations
                     var result = MessageBox.Show(
                         owner,
-                        "Update downloaded successfully!\n\n" +
-                        "The app will now close and update automatically.\n" +
-                        "It will restart when complete.\n\n" +
-                        "Continue?",
-                        "Ready to Update",
+                        Loc.Get("msg_ready_to_update"),
+                        Loc.Get("title_ready_to_update"),
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Question);
 
@@ -4490,11 +4514,8 @@ namespace ConditioningControlPanel
                     // Fresh install flow - show installer UI
                     var result = MessageBox.Show(
                         owner,
-                        "Installer downloaded successfully.\n\n" +
-                        "The app will now close and the installer will start.\n" +
-                        "Please follow the installer prompts to complete the update.\n\n" +
-                        "Continue?",
-                        "Ready to Install",
+                        Loc.Get("msg_ready_to_install"),
+                        Loc.Get("title_ready_to_install"),
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Question);
 
@@ -4642,10 +4663,8 @@ namespace ConditioningControlPanel
                         Logger?.Warning("Update check returned no update, but server banner indicated update available. Offering browser fallback.");
                         var result = MessageBox.Show(
                             owner,
-                            "The automatic update check couldn't find the update, but our server indicates a new version is available.\n\n" +
-                            "This can happen with certain installation types. Would you like to open the releases page to download manually?\n\n" +
-                            "After this update, automatic updates should work normally.",
-                            "Update Available",
+                            Loc.Get("msg_update_manual_fallback"),
+                            Loc.Get("dialog_update_available"),
                             MessageBoxButton.YesNo,
                             MessageBoxImage.Information);
 
@@ -4672,8 +4691,8 @@ namespace ConditioningControlPanel
 
                     MessageBox.Show(
                         owner,
-                        $"You're running the latest version ({UpdateService.GetCurrentVersion()}).",
-                        "No Updates",
+                        Loc.GetF("msg_already_on_latest", UpdateService.GetCurrentVersion()),
+                        Loc.Get("title_no_updates"),
                         MessageBoxButton.OK,
                         MessageBoxImage.Information);
                     return false;
@@ -4691,9 +4710,8 @@ namespace ConditioningControlPanel
                 {
                     var result = MessageBox.Show(
                         owner,
-                        $"Update check failed: {ex.Message}\n\n" +
-                        "However, our server indicates a new version is available. Would you like to open the releases page to download manually?",
-                        "Update Check Failed",
+                        Loc.GetF("msg_update_check_failed_fallback", ex.Message),
+                        Loc.Get("title_update_check_failed"),
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Warning);
 
@@ -4714,8 +4732,8 @@ namespace ConditioningControlPanel
 
                 MessageBox.Show(
                     owner,
-                    $"Failed to check for updates: {ex.Message}",
-                    "Update Check Failed",
+                    Loc.GetF("msg_update_check_failed", ex.Message),
+                    Loc.Get("title_update_check_failed"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 return false;

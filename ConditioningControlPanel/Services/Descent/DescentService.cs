@@ -28,15 +28,29 @@ namespace ConditioningControlPanel.Services.Descent
     /// </summary>
     public sealed class DescentService
     {
-        /// <summary>
-        /// Floor between two fetches, whatever asks. The Trainer Card polls at 60s
-        /// and a sync can land at any moment; without this, a burst of syncs would
-        /// each fire a profile GET.
-        /// </summary>
-        private static readonly TimeSpan MinFetchInterval = TimeSpan.FromSeconds(10);
-
+        /// <summary>One fetch in the air at a time.</summary>
         private readonly SemaphoreSlim _gate = new(1, 1);
-        private DateTime _lastFetchUtc = DateTime.MinValue;
+
+        /// <summary>
+        /// The 10s floor, the credentials the last fetch carried, and every want this service
+        /// could not serve on the spot (<see cref="DescentRefreshGate"/>). Locked on itself:
+        /// Ask runs on the pool, <see cref="Reset"/> on the UI thread, and the background poll
+        /// reads the floor.
+        /// </summary>
+        private readonly DescentRefreshGate _refreshGate = new();
+
+        /// <summary>
+        /// Bumped by <see cref="Reset"/>. A fetch that went out for the account that just
+        /// signed out lands after Reset carrying the wrong account's block; the mismatch is
+        /// how it is discarded instead of standing on user B's Trainer Card.
+        /// </summary>
+        private int _generation;
+
+        /// <summary>
+        /// 1 while a deferred retry is in the air. One is enough: when it lands it re-asks
+        /// the gate, which remembers every want made in the meantime.
+        /// </summary>
+        private int _deferredArmed;
 
         /// <summary>The last well-formed block, or null. See the tri-state note above.</summary>
         public DescentBlock? Current { get; private set; }
@@ -80,10 +94,32 @@ namespace ConditioningControlPanel.Services.Descent
         }
 
         /// <summary>
+        /// THE SIGN-IN POKE. Called from ProfileSyncService.StartHeartbeat, which every
+        /// login path reaches once the account is usable (the three startup restores, the
+        /// login dialog, the AccountService flows, the 401 token self-heal); the mirror of
+        /// <see cref="Reset"/> on the way out.
+        ///
+        /// Why the vat needed one: the Trainer Card asks exactly once on open, and when the
+        /// card is on screen before the auth token lands (a launch that opens on the card, a
+        /// login made from it) that one ask used to die silently in <see cref="RefreshAsync"/>.
+        /// ProfileLoaded is not a sign-in signal: it fires only when a sync succeeds or the
+        /// progression moved, so a login that took any other branch never re-asked, and the
+        /// jar, its tooltip and the XP readout stayed dark until a sign-out or the 60s
+        /// background poll. Now the ask is remembered and this is what fires it.
+        ///
+        /// Safe to call more than once per login (a Patreon and a Discord restore both reach
+        /// StartHeartbeat): the gate answers a second ask inside the floor with Skip when a
+        /// fetch with these same credentials already answered, so nothing doubles on the wire.
+        /// </summary>
+        public void OnSignedIn() => RequestRefresh("signed in");
+
+        /// <summary>
         /// Fetch and parse the block. Returns true when a fetch actually happened
-        /// (whether or not it produced a block); false when it was skipped — offline
-        /// mode, no account, no auth token, a fetch already in flight, or inside the
-        /// floor.
+        /// (whether or not it produced a block); false when it was skipped: offline
+        /// mode, no account or token yet (remembered, fired by <see cref="OnSignedIn"/>),
+        /// a fetch already in flight or inside the floor (remembered, retried when the
+        /// floor clears), or a request the floor coalesced into a fetch that already
+        /// answered with these same credentials. See <see cref="DescentRefreshGate"/>.
         /// </summary>
         public async Task<bool> RefreshAsync(string reason, bool force = false)
         {
@@ -91,29 +127,59 @@ namespace ConditioningControlPanel.Services.Descent
             // outrank. It is the same check every other network path takes
             // (ProfileSyncService.LoadProfileAsync / SyncProfileAsync /
             // SendHeartbeatAsync): a user who turned the app's networking off must
-            // not be able to see a request leave for a decorative meter.
-            if (App.Settings?.Current?.OfflineMode == true) return false;
+            // not be able to see a request leave for a decorative meter. The gate
+            // answers it with Skip and, unlike the other skips, does not remember it.
+            var settings = App.Settings?.Current;
+            bool offline = settings?.OfflineMode == true;
+            string? unifiedId = settings?.UnifiedId;
+            string? authToken = settings?.AuthToken;
 
-            string? unifiedId = App.Settings?.Current?.UnifiedId;
-            if (string.IsNullOrEmpty(unifiedId)) return false;
-            if (string.IsNullOrEmpty(App.Settings?.Current?.AuthToken)) return false;
-
-            if (!_gate.Wait(0)) return false;
+            bool haveGate = _gate.Wait(0);
             try
             {
-                if (!force && DateTime.UtcNow - _lastFetchUtc < MinFetchInterval) return false;
-                _lastFetchUtc = DateTime.UtcNow;
+                DescentRefreshVerdict verdict;
+                TimeSpan retryIn;
+                lock (_refreshGate)
+                    verdict = _refreshGate.Ask(DateTime.UtcNow, unifiedId, authToken, offline, inFlight: !haveGate, force, reason, out retryIn);
 
-                var userNode = await new V2AuthService().GetUserProfileNodeAsync(unifiedId).ConfigureAwait(false);
+                switch (verdict)
+                {
+                    case DescentRefreshVerdict.Skip:
+                        return false;
+                    case DescentRefreshVerdict.WaitForSignIn:
+                        Log.Debug("[Descent] refresh '{Reason}' waits for sign-in", reason);
+                        return false;
+                    case DescentRefreshVerdict.Defer:
+                        ScheduleDeferredRetry(retryIn, reason);
+                        return false;
+                }
+
+                int generation = Volatile.Read(ref _generation);
+                lock (_refreshGate) _refreshGate.BeginFetch(DateTime.UtcNow, unifiedId!, authToken!);
+
+                var userNode = await new V2AuthService().GetUserProfileNodeAsync(unifiedId!).ConfigureAwait(false);
+
+                if (generation != Volatile.Read(ref _generation))
+                {
+                    // Reset ran while this was in the air: the answer belongs to the account
+                    // that signed out. Not applied, not counted as an answer for whoever is
+                    // signed in now (their own ask, if any, is still standing in the gate).
+                    Log.Debug("[Descent] profile read landed after logout, discarded ({Reason})", reason);
+                    return true;
+                }
+
                 if (userNode is null)
                 {
                     // A failed read is NOT "the user has no descent". Leave the last
                     // known block standing rather than blanking a vat over a flaky
                     // network — the alternative is a meter that flickers out of
-                    // existence every time Vercel hiccups.
+                    // existence every time Vercel hiccups. It is not an answer either:
+                    // a want made during this fetch stays standing for the retry.
+                    lock (_refreshGate) _refreshGate.EndFetch(answered: false);
                     Log.Debug("[Descent] profile read returned nothing ({Reason})", reason);
                     return true;
                 }
+                lock (_refreshGate) _refreshGate.EndFetch(answered: true);
 
                 // THE POLL'S SECOND READING (feat/xp-economy). The same response carries the
                 // account's level/xp/current_season, which this service used to throw away —
@@ -137,8 +203,42 @@ namespace ConditioningControlPanel.Services.Descent
             }
             finally
             {
-                _gate.Release();
+                if (haveGate) _gate.Release();
             }
+        }
+
+        /// <summary>
+        /// Come back for a want the gate could not serve on the spot. One retry in the air
+        /// at a time; when it lands it asks <see cref="DescentRefreshGate.Pending"/> first,
+        /// so a fetch that answered in the meantime (the in-flight one, a poll) makes it a
+        /// no-op, and a logout in the meantime (which clears the want) does too. It does not
+        /// loop on its own: a retry that fails on the wire stands down until somebody asks
+        /// again, which the 60s polls always do.
+        /// </summary>
+        private void ScheduleDeferredRetry(TimeSpan delay, string reason)
+        {
+            if (Interlocked.CompareExchange(ref _deferredArmed, 1, 0) != 0) return;
+
+            Log.Debug("[Descent] refresh '{Reason}' deferred {Seconds:F1}s", reason, delay.TotalSeconds);
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(delay).ConfigureAwait(false);
+                    Interlocked.Exchange(ref _deferredArmed, 0);
+
+                    string? wanted;
+                    lock (_refreshGate) wanted = _refreshGate.Pending ? _refreshGate.PendingReason ?? reason : null;
+                    if (wanted is null) return;
+
+                    await RefreshAsync("deferred: " + wanted).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Interlocked.Exchange(ref _deferredArmed, 0);
+                    Log.Debug("[Descent] deferred refresh '{Reason}' failed: {Error}", reason, ex.Message);
+                }
+            });
         }
 
         /// <summary>
@@ -200,7 +300,9 @@ namespace ConditioningControlPanel.Services.Descent
             {
                 try
                 {
-                    if (DateTime.UtcNow - _lastFetchUtc < BackgroundPollFreshEnough) return;
+                    DateTime lastFetchUtc;
+                    lock (_refreshGate) lastFetchUtc = _refreshGate.LastFetchUtc;
+                    if (DateTime.UtcNow - lastFetchUtc < BackgroundPollFreshEnough) return;
                     RequestRefresh("background profile poll");
                 }
                 catch (Exception ex) { Log.Debug("[Descent] background poll tick failed: {Error}", ex.Message); }
@@ -220,9 +322,10 @@ namespace ConditioningControlPanel.Services.Descent
         /// </summary>
         public void Reset()
         {
+            Interlocked.Increment(ref _generation);     // a fetch still in the air belongs to the old account
+            lock (_refreshGate) _refreshGate.Reset();   // the floor (a re-login may ask at once), its credentials, any want
             Current = null;
             HasSeenBlock = false;
-            _lastFetchUtc = DateTime.MinValue;   // a re-login may ask again at once
             Log.Debug("[Descent] state cleared (logout)");
             RaiseBlockChanged();
         }

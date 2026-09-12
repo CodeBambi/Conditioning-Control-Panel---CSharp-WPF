@@ -380,14 +380,14 @@
                             VerticalAlignment="Center"
                             Background="#5A2E7A" CornerRadius="12" Padding="10,4"
                             Margin="0,0,12,0"
-                            ToolTip="Takeover is active.">
+                            ToolTip="{loc:Str titlebar_takeover_tip}">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Width="8" Height="8" Fill="#C9A0FF" Margin="0,0,6,0" VerticalAlignment="Center">
                                 <Ellipse.Effect>
                                     <DropShadowEffect Color="#C9A0FF" BlurRadius="6" ShadowDepth="0" Opacity="0.8"/>
                                 </Ellipse.Effect>
                             </Ellipse>
-                            <TextBlock Text="Takeover active" Foreground="White" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str titlebar_takeover_label}" Foreground="White" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
 
@@ -402,14 +402,14 @@
                             Margin="0,0,12,0"
                             Cursor="Hand"
                             MouseLeftButtonDown="MicActivePill_Click"
-                            ToolTip="Microphone is active. Click to stop listening.">
+                            ToolTip="{loc:Str titlebar_mic_tip}">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Width="8" Height="8" Fill="#FFA726" Margin="0,0,6,0" VerticalAlignment="Center">
                                 <Ellipse.Effect>
                                     <DropShadowEffect Color="#FFA726" BlurRadius="6" ShadowDepth="0" Opacity="0.8"/>
                                 </Ellipse.Effect>
                             </Ellipse>
-                            <TextBlock Text="Mic active" Foreground="White" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str titlebar_mic_label}" Foreground="White" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
 
@@ -422,14 +422,14 @@
                             Margin="0,0,12,0"
                             Cursor="Hand"
                             MouseLeftButtonDown="WebcamActivePill_Click"
-                            ToolTip="Webcam tracking is active. Click to stop.">
+                            ToolTip="{loc:Str titlebar_camera_tip}">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Width="8" Height="8" Fill="#FF4444" Margin="0,0,6,0" VerticalAlignment="Center">
                                 <Ellipse.Effect>
                                     <DropShadowEffect Color="#FF4444" BlurRadius="6" ShadowDepth="0" Opacity="0.8"/>
                                 </Ellipse.Effect>
                             </Ellipse>
-                            <TextBlock Text="Camera active" Foreground="White" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str titlebar_camera_label}" Foreground="White" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
 
@@ -475,11 +475,14 @@
                             Click="BtnReportBug_Click" Style="{StaticResource WindowControlButton}"
                             ToolTip="{loc:Str btn_report_bug}" FontSize="14"/>
                     <Button x:Name="BtnMinimize" Content="─" Width="46" Height="36"
-                            Click="BtnMinimize_Click" Style="{StaticResource WindowControlButton}"/>
-                    <Button x:Name="BtnMaximize" Content="☐" Width="46" Height="36" 
-                            Click="BtnMaximize_Click" Style="{StaticResource WindowControlButton}"/>
-                    <Button x:Name="BtnClose" Content="✕" Width="46" Height="36" 
-                            Click="BtnClose_Click" Style="{StaticResource WindowCloseButton}"/>
+                            Click="BtnMinimize_Click" Style="{StaticResource WindowControlButton}"
+                            ToolTip="{loc:Str titlebar_minimize_tip}"/>
+                    <Button x:Name="BtnMaximize" Content="☐" Width="46" Height="36"
+                            Click="BtnMaximize_Click" Style="{StaticResource WindowControlButton}"
+                            ToolTip="{loc:Str titlebar_maximize_tip}"/>
+                    <Button x:Name="BtnClose" Content="✕" Width="46" Height="36"
+                            Click="BtnClose_Click" Style="{StaticResource WindowCloseButton}"
+                            ToolTip="{loc:Str titlebar_close_tip}"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -811,13 +814,33 @@
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnNavHaptics" Tag="Haptics" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavHaptics_Click" ToolTip="{loc:Str tab_haptics}">
+                                        Click="BtnNavHaptics_Click" ToolTip="{loc:Str tooltip_nav_haptics}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='📳', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock Text="{loc:Str tab_haptics}" VerticalAlignment="Center"/>
                                         <Border x:Name="TagPremiumHaptics" Style="{StaticResource NavEntryPremiumTag}"
                                                 ToolTip="{loc:Str nav_tag_premium_tip}">
+                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Button>
+                                <!-- JUST DROP (owner decision, 2026-09-11): a creator tool, not a game, so its
+                                     row is here at the tail of the Studio door and the Play rack card is gone. Still a
+                                     WINDOW: ShowTab("justdrop") intercepts the key, owns the withheld refusal
+                                     and launches the shop - the same path the Exclusives shelf, the dashboard
+                                     tease tile and the Ctrl+K row take. Collapsed by default: the row is never
+                                     shown by markup, only by ApplyJustDropDoorVisibility once the server has
+                                     opened the door for this account. The pill wears the Tier 2 tooltip. -->
+                                <Button x:Name="BtnNavJustDrop" Tag="JustDrop" Style="{StaticResource NavEntryButton}"
+                                        Visibility="Collapsed"
+                                        Click="BtnNavJustDrop_Click" ToolTip="{loc:Str jd_door_title}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🎚', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str jd_door_title}" VerticalAlignment="Center"/>
+                                        <Border x:Name="TagPremiumJustDrop" Style="{StaticResource NavEntryPremiumTag}"
+                                                ToolTip="{loc:Str nav_tag_lab_tip}">
                                             <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
                                         </Border>
                                     </StackPanel>
@@ -876,7 +899,7 @@
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnNavBambiTakeover" Tag="Takeover" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavBambiTakeover_Click" ToolTip="{loc:Str tab_takeover}">
+                                        Click="BtnNavBambiTakeover_Click" ToolTip="{loc:Str tooltip_nav_takeover}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='💫', Converter={StaticResource EmojiToImageSource}}"/>
@@ -902,7 +925,7 @@
                                 <!-- Awareness finally gets a real button: BtnAwareness_Click has been an
                                      orphan handler (MainWindow.AccountShell.cs) with no XAML owner. -->
                                 <Button x:Name="BtnNavAwareness" Tag="Awareness" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnAwareness_Click" ToolTip="{loc:Str tab_awareness}">
+                                        Click="BtnAwareness_Click" ToolTip="{loc:Str tooltip_nav_awareness}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='👁️', Converter={StaticResource EmojiToImageSource}}"/>
@@ -994,7 +1017,7 @@
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnNavGradedIntake" Tag="GradedIntake" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavGradedIntake_Click" ToolTip="{loc:Str tab_gradedintake}">
+                                        Click="BtnNavGradedIntake_Click" ToolTip="{loc:Str tooltip_nav_graded_intake}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='📝', Converter={StaticResource EmojiToImageSource}}"/>
@@ -1006,7 +1029,7 @@
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnNavLockdown" Tag="Lockdown" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavLockdown_Click" ToolTip="{loc:Str tab_lockdown_mode}">
+                                        Click="BtnNavLockdown_Click" ToolTip="{loc:Str tooltip_nav_lockdown}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
@@ -1018,7 +1041,7 @@
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnNavBlinkTrainer" Tag="BlinkTrainer" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavBlinkTrainer_Click" ToolTip="{loc:Str tab_blink_trainer}">
+                                        Click="BtnNavBlinkTrainer_Click" ToolTip="{loc:Str tooltip_nav_blink_trainer}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='👀', Converter={StaticResource EmojiToImageSource}}"/>
@@ -1030,7 +1053,7 @@
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnNavRemoteControl" Tag="RemoteControl" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavRemoteControl_Click" ToolTip="{loc:Str tab_remote_control}">
+                                        Click="BtnNavRemoteControl_Click" ToolTip="{loc:Str tooltip_nav_remote_control}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='📱', Converter={StaticResource EmojiToImageSource}}"/>
@@ -1130,7 +1153,7 @@
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnAchievements" Tag="Achievements" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnAchievements_Click" ToolTip="{loc:Str tab_achievements}">
+                                        Click="BtnAchievements_Click" ToolTip="{loc:Str tooltip_nav_achievements}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='🏆', Converter={StaticResource EmojiToImageSource}}"/>
@@ -1167,7 +1190,7 @@
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnLeaderboard" Tag="Leaderboard" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnLeaderboard_Click" ToolTip="{loc:Str tab_leaderboard}">
+                                        Click="BtnLeaderboard_Click" ToolTip="{loc:Str tooltip_nav_leaderboard}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='📊', Converter={StaticResource EmojiToImageSource}}"/>
@@ -1315,18 +1338,18 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- ===== NO JUST DROP DOOR HERE, DELIBERATELY =====
+                        <!-- ===== JUST DROP: NO DOOR OF ITS OWN, BY DECISION =====
                              Just Drop had a rail door and a tab until it became a WINDOW
                              (Services/JustDrop/JustDropHostService.cs), the same shell the Graded
-                             Intake and DtRH use. A shop that opens borderless over the app has no
-                             business also being a row in the rail, and the two places it is
-                             actually reached from - the Play door's rack and the Exclusives shelf -
-                             are where someone looking for a session already is.
+                             Intake and DtRH use. On 2026-09-11 the owner placed it: a creator
+                             tool, not a game. So it is one ROW, under Studio > Creator Tools
+                             (BtnNavJustDrop, above), and nothing else on this rail. The Play rack
+                             card that used to open it went with that call; the Exclusives shelf,
+                             the dashboard tease tile and the Ctrl+K row stay.
 
-                             The key "justdrop" still exists and still routes through ShowTab, which
-                             intercepts it and launches the window (exactly as it does for "fyp").
-                             That is what keeps the dashboard tease tile and the Ctrl+K palette row
-                             working without either of them knowing a window is involved. -->
+                             The key "justdrop" still routes through ShowTab, which intercepts it
+                             and launches the window (exactly as it does for "fyp"), so none of
+                             those callers know a window is involved. -->
                         </StackPanel>
                     </Grid>
                 </ScrollViewer>
@@ -1338,7 +1361,10 @@
                          (AppSettings.DescentSpiralRailEnabled, no editor), and the control still
                          stays collapsed until the server ships this account a descent block. Collapsed measures as zero, so the rail's
                          layout is identical to the build before this element existed.
-                         See Controls/SpiralRailHost.cs - especially the airspace note. -->
+                         Native WPF (a SpiralGlyph in a medallion) since 2026-09-09: the WebView2
+                         it used to host was a native child HWND, and an HWND on the rail stole
+                         the pointer from NavSidebar and made the flyout open and shut on a loop.
+                         See Controls/SpiralRailHost.cs. -->
                     <controls:SpiralRailHost x:Name="SpiralRail"/>
                     <Border Height="1" Background="{DynamicResource PanelAccentBrush}" Margin="10,8,10,6"/>
                     <!-- THE FUSE RAIL CHIP (CONTRACT-FUSE-0816 2.2). A gold clock that appears
@@ -1474,15 +1500,17 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <!-- 5: support banner. Star, so it is the FIRST thing to give width
-                             back; the right-hand chrome (language pill, update button) lives in
-                             an Auto column of the outer grid and can never be pushed out.
+                             back; the right-hand chrome (update button, help, profile bubble)
+                             lives in an Auto column of the outer grid and can never be pushed out.
                              2*, not *, because column 1 is capped at 200 anyway: the weight is
                              what keeps the support line off an ellipsis once the update button
                              is showing. -->
                         <ColumnDefinition Width="2*"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- v6.0 Mod Switcher: ComboBox + gear button for management -->
+                    <!-- v6.0 Mod Switcher. The manager used to be a capsule beside this chip;
+                         since 0911 it is the last row of the drop-down (and Library > Mods in
+                         the rail), so the header holds one control for what is running. -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
                         <!-- #860: MaxWidth caps a long mod name (creator mods name themselves)
                              so the switcher can never shove the header around. The item template
@@ -1561,88 +1589,46 @@
                                     </Grid>
                                 </ControlTemplate>
                             </ComboBox.Template>
+                            <!-- Rows are mods, except the last one: an "Open Mod Manager" verb that
+                                 InitializeModSelector appends (IsAction). It draws a gear where the
+                                 accent dot goes and a hairline above, so it reads as a footer and
+                                 not as a mod. It never stays selected: ModSelectorCombo_SelectionChanged
+                                 puts the active mod back before the chip can paint it, closes the
+                                 list and then opens the manager. -->
                             <ComboBox.ItemTemplate>
                                 <DataTemplate>
                                     <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="0" Width="8" Height="8" CornerRadius="4" Margin="0,0,8,0"
+                                        <Border x:Name="Rule" Grid.Row="0" Grid.ColumnSpan="2" Height="1"
+                                                Background="#3A3A5C" Margin="0,-4,0,5" Visibility="Collapsed"/>
+                                        <Border x:Name="Dot" Grid.Row="1" Grid.Column="0" Width="8" Height="8" CornerRadius="4" Margin="0,0,8,0"
                                                 Background="{Binding AccentBrush}" VerticalAlignment="Center"/>
-                                        <TextBlock Grid.Column="1" Text="{Binding Name}" Foreground="White"
+                                        <TextBlock x:Name="Gear" Grid.Row="1" Grid.Column="0" Text="&#xE713;" Margin="0,0,8,0"
+                                                   FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI" FontSize="10"
+                                                   Foreground="{DynamicResource PinkBrush}" VerticalAlignment="Center"
+                                                   Visibility="Collapsed"/>
+                                        <TextBlock x:Name="Label" Grid.Row="1" Grid.Column="1" Text="{Binding Name}" Foreground="White"
                                                    VerticalAlignment="Center" FontSize="11"
                                                    TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
                                     </Grid>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding IsAction}" Value="True">
+                                            <Setter TargetName="Rule" Property="Visibility" Value="Visible"/>
+                                            <Setter TargetName="Dot" Property="Visibility" Value="Collapsed"/>
+                                            <Setter TargetName="Gear" Property="Visibility" Value="Visible"/>
+                                            <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
-                        <!-- Accent capsule, not a bare glyph: the old 22px muted gear was the
-                             single most-asked "where is it?" control in the app. Gear + caption
-                             live inside the template so one hit area covers both.
-                             Height 28 is free vertical room - the Row 1 tab buttons in column 1
-                             are already Height 32, so this cannot grow the header row. 0813 turned
-                             the stacked gear-over-caption into a one-line wordmark (the gear IS
-                             the O of "MOD"), so the 28px now holds a single line with room to
-                             spare and nothing needs a pinned LineHeight to avoid clipping.
-                             AutomationProperties.Name keeps the localized string on the control
-                             for screen readers - the visible letters are split across runs. -->
-                        <Button x:Name="BtnManageMods" Click="BtnManageMods_Click"
-                                ToolTip="{loc:Str tooltip_manage_mods}"
-                                AutomationProperties.Name="{loc:Str label_mod_manager}"
-                                Margin="4,0,0,0" Height="28" VerticalAlignment="Center"
-                                Background="Transparent" BorderThickness="0" Cursor="Hand">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <!-- #857: padding trimmed 7->5 so the capsule costs the
-                                         header a few px less; the caption still drives the width. -->
-                                    <Border x:Name="capsule" CornerRadius="4" Padding="5,1"
-                                            Background="{DynamicResource TransparentPink20Brush}"
-                                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
-                                        <!-- The wordmark. Sizes are measured, not eyeballed. Segoe UI
-                                             Bold at 11 has a 7.97px cap band running from 0.13 BELOW
-                                             the baseline to 7.83 above it, so its optical centre is
-                                             3.85 above the baseline. The MDL2 gear's ink is 0.994em
-                                             tall and fills its whole advance, so FontSize 10 draws a
-                                             9.94px glyph whose inner body reads at about cap height
-                                             with the teeth as the overshoot a round letter wants next
-                                             to a flat-topped M and D.
-                                             It shares ONE TextBlock with the letters, so the text
-                                             engine baselines it instead of a guessed margin: an
-                                             InlineUIContainer bottom-aligns to the baseline, and at
-                                             this font the glyph's own baseline IS its box bottom. The
-                                             -1 bottom margin then drops it to a 4.00 centre, i.e.
-                                             onto the cap band's 3.85 to within a sixth of a pixel,
-                                             instead of leaving the whole overshoot above the baseline.
-                                             The 0.7 side margins are the side bearings a real "O"
-                                             would have and this glyph does not.
-                                             The three inlines are written with NO whitespace between
-                                             them on purpose: a line break there collapses to a real
-                                             space and the button reads "M (gear) D MANAGER".
-                                             The letters are literal because label_mod_manager is the
-                                             string "MOD MANAGER" in all nine language files; the key
-                                             is still bound, as this button's AutomationProperties.Name. -->
-                                        <TextBlock FontSize="11" FontWeight="Bold" TextWrapping="NoWrap"
-                                                   Foreground="{DynamicResource PinkBrush}"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"><Run Text="M"/><InlineUIContainer
-                                                       BaselineAlignment="Baseline"><TextBlock
-                                                           Text="&#xE713;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI"
-                                                           FontSize="10" FontWeight="Normal"
-                                                           Foreground="{DynamicResource PinkBrush}"
-                                                           Margin="0.7,0,0.7,-1"/></InlineUIContainer><Run
-                                                       Text="D MANAGER"/></TextBlock>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="capsule" Property="Background"
-                                                    Value="{DynamicResource TransparentPink40Brush}"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
-                        </Button>
-
                         <!-- Account chip (Phase 1, net-new). Sits beside the mod chip so the two
                              "who am I / what am I running" facts read as one cluster.
                              States are painted by RefreshAccountChip (MainWindow.UiUpdates.cs):
@@ -1738,9 +1724,9 @@
                          full-width strip whose only job was two rotating one-liners; the row is
                          gone and the banner now rides the header's leftover width, between the
                          version text and the right-hand chrome. Sizing rules that keep that
-                         honest: Height 26 is BELOW the 28px mod capsule already in this row, so
-                         the banner can never grow the header; the host is centred in a star
-                         column that collapses before any Auto column, so the language pill and
+                         honest: Height 26 is under the 28px this row was authored against (the
+                         old mod capsule), so the banner can never grow the header; the host is
+                         centred in a star column that collapses before any Auto column, so the
                          update button cannot be pushed out; and both beats trim with an
                          ellipsis rather than wrap, so a narrow window loses banner text and
                          nothing else. The third beat (the Platinum Puppets thanks hyperlink) was
@@ -1833,8 +1819,9 @@
                      The eight buttons were MOVED, not rebuilt - same x:Name, Click, Tag,
                      tooltip, icon-in-a-Panel content shape and pulse transforms. -->
 
-                <!-- Right side: preset picker (collapsed but live), language pill, update
-                     button, Help, and the profile bubble (avatar + hover account menu).
+                <!-- Right side: preset picker (collapsed but live), update button, Help, and
+                     the profile bubble (avatar + hover account menu). The language pill left
+                     this strip 0911: Settings > General owns the picker now.
                      Bug Report lives in the title bar (BtnTitleBarBugReport) - the copy that
                      used to sit here was a duplicate and was removed for the bubble. -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -1933,97 +1920,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <!-- Language Pill -->
-                    <ComboBox x:Name="CmbLanguagePill" Width="90" Margin="0,0,10,0"
-                              SelectionChanged="CmbLanguagePill_SelectionChanged"
-                              ToolTip="{loc:Str tooltip_change_language}">
-                        <ComboBox.Style>
-                            <Style TargetType="ComboBox">
-                                <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
-                                <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
-                                <Setter Property="BorderBrush" Value="#3D3D60"/>
-                                <Setter Property="BorderThickness" Value="1"/>
-                                <Setter Property="Padding" Value="8,4"/>
-                                <Setter Property="FontSize" Value="12"/>
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="ComboBox">
-                                            <Grid>
-                                                <ToggleButton x:Name="ToggleButton"
-                                                              IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                                                              Focusable="False" ClickMode="Press">
-                                                    <ToggleButton.Template>
-                                                        <ControlTemplate TargetType="ToggleButton">
-                                                            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#3D3D60"
-                                                                    BorderThickness="1" CornerRadius="4" Cursor="Hand">
-                                                                <Grid>
-                                                                    <Grid.ColumnDefinitions>
-                                                                        <ColumnDefinition Width="*"/>
-                                                                        <ColumnDefinition Width="16"/>
-                                                                    </Grid.ColumnDefinitions>
-                                                                    <Path Grid.Column="1" Fill="#808080" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                                          Data="M 0 0 L 3 3 L 6 0 Z"/>
-                                                                </Grid>
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </ToggleButton.Template>
-                                                </ToggleButton>
-                                                <ContentPresenter x:Name="ContentSite" IsHitTestVisible="False"
-                                                                  Content="{TemplateBinding SelectionBoxItem}"
-                                                                  ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                                                  Margin="6,4,18,4" VerticalAlignment="Center" HorizontalAlignment="Left">
-                                                    <ContentPresenter.Resources>
-                                                        <Style TargetType="TextBlock">
-                                                            <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
-                                                        </Style>
-                                                    </ContentPresenter.Resources>
-                                                </ContentPresenter>
-                                                <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}"
-                                                       Placement="Bottom" AllowsTransparency="True" Focusable="False"
-                                                       PopupAnimation="Slide">
-                                                    <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#3D3D60"
-                                                            BorderThickness="1" CornerRadius="4" Margin="0,2,0,0"
-                                                            MinWidth="{TemplateBinding ActualWidth}">
-                                                        <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
-                                                            <ItemsPresenter/>
-                                                        </ScrollViewer>
-                                                    </Border>
-                                                </Popup>
-                                            </Grid>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </ComboBox.Style>
-                        <ComboBox.ItemContainerStyle>
-                            <Style TargetType="ComboBoxItem">
-                                <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
-                                <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
-                                <Setter Property="Padding" Value="8,4"/>
-                                <Setter Property="Cursor" Value="Hand"/>
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="ComboBoxItem">
-                                            <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
-                                                <ContentPresenter/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
-                                                </Trigger>
-                                                <Trigger Property="IsSelected" Value="True">
-                                                    <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
-                                                    <Setter Property="Foreground" Value="White"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </ComboBox.ItemContainerStyle>
-                    </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v6_9_1_is_out}"
-                            Click="BtnUpdateAvailable_Click" ToolTip="{loc:Str tooltip_v6_9_1_the_spiral}"
+                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v6_9_3_is_out}"
+                            Click="BtnUpdateAvailable_Click" ToolTip="{loc:Str tooltip_v6_9_3_the_spiral_pt_3}"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -2687,8 +2585,9 @@
                 <views:StudioTabView x:Name="StudioTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-                <!-- No Just Drop tab. It is a window now - see the rail comment above and
-                     Services/JustDrop/JustDropHostService.cs. -->
+                <!-- No Just Drop tab. It is a window now (Services/JustDrop/JustDropHostService.cs),
+                     opened from its Studio > Creator Tools row - owner call 2026-09-11, see the
+                     rail comment above. -->
             </Grid>
         </AdornerDecorator>
 
@@ -2828,12 +2727,12 @@
                 <Button x:Name="BtnStartMenu" Grid.Column="2" Width="68" Height="50" Margin="8,0,0,0"
                         Style="{StaticResource PinkButton}" Background="{DynamicResource AccentGradientBrush}"
                         FontSize="22" Click="BtnStartMenu_Click"
-                        ToolTip="Start options">
+                        ToolTip="{loc:Str tooltip_start_options}">
                     <TextBlock Text="▼" FontSize="18" VerticalAlignment="Center" HorizontalAlignment="Center" TextAlignment="Center"/>
                     <Button.ContextMenu>
                         <ContextMenu>
-                            <MenuItem x:Name="MenuStartNormal" Header="▶  Start normally" Click="MenuStartNormal_Click"/>
-                            <MenuItem x:Name="MenuJumpRightIn" Header="🎲  Jump right in (randomize + start)" Click="MenuJumpRightIn_Click"/>
+                            <MenuItem x:Name="MenuStartNormal" Header="{loc:Str menu_start_normally}" Click="MenuStartNormal_Click"/>
+                            <MenuItem x:Name="MenuJumpRightIn" Header="{loc:Str menu_jump_right_in}" Click="MenuJumpRightIn_Click"/>
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>

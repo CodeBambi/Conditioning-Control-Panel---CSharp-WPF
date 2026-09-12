@@ -153,7 +153,7 @@ namespace ConditioningControlPanel.Services
             { AutonomyActionType.Flash, new[] {
                 "Time for a little surprise~",
                 "Here comes something pretty!",
-                "Look at the screen, good girl~",
+                "Look at the screen for me~",
                 "Ooh, I want to show you something~",
                 "Pretty picture time~"
             }},
@@ -1907,12 +1907,13 @@ namespace ConditioningControlPanel.Services
             }
             else
             {
-                // Fall back to preset phrase
+                // Fall back to preset phrase. The pet name comes from the active mod via
+                // {petname}, so this reads right unmodded (vanilla "sweetie") and in a mod.
                 var phrases = new[]
                 {
                     "*giggles* I love being with you~",
                     "You're doing so well~",
-                    "Such a good girl~",
+                    Localization.VocabTokens.Apply("Such a good {petname}~"),
                     "Teehee~",
                     "I'm always watching~",
                     "*bounces* Pay attention to me~"
@@ -2038,7 +2039,11 @@ namespace ConditioningControlPanel.Services
                 {
                     // Bespoke voiced success response for this exact mantra.
                     var respAudio = App.MantraVoice?.ResolveAudio(mantra.ResponseAudio);
-                    Speak(string.IsNullOrWhiteSpace(mantra.Response) ? "Good girl~" : mantra.Response, respAudio);
+                    // No custom response on this mantra: neutral praise, with the pet name coming
+                    // from the active mod via {petname}.
+                    Speak(string.IsNullOrWhiteSpace(mantra.Response)
+                        ? Localization.VocabTokens.Apply("Perfect, {petname}~")
+                        : mantra.Response, respAudio);
                     // Typed-minigame credit if it happens to be running; otherwise credit the
                     // spoken completion directly - TryCompleteMantra() bails when the minigame
                     // is closed, which used to mean a mic-verified mantra credited nothing

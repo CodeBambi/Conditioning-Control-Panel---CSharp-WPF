@@ -22,6 +22,13 @@ namespace ConditioningControlPanel.Services
 
         public bool IsRunning => _isRunning;
 
+        /// <summary>
+        /// The neutral question bank. Three of its entries carried Bambi-flavoured wording until
+        /// Wave 1 neutralised them with no mod lookup, so a themed mod may speak for those three
+        /// slots (see <see cref="ResolveQuestionPool"/>) and everything else stays as written.
+        /// Never index this array directly - go through the resolver, or a modded user silently
+        /// loses their wording again.
+        /// </summary>
         public static readonly PopQuizQuestion[] QuestionPool = new[]
         {
             new PopQuizQuestion("How does obedience feel?",
@@ -33,18 +40,18 @@ namespace ConditioningControlPanel.Services
             new PopQuizQuestion("Who is in control?",
                 new[] { "Not me", "Someone better", "The program", "Does it matter?" },
                 new[] { "Smart answer.", "And that's exactly how it should be.", "The program knows best.", "Not anymore it doesn't." }),
-            new PopQuizQuestion("What do good girls do?",
+            new PopQuizQuestion("What do good subjects do?",
                 new[] { "Obey", "Listen", "Follow", "All of the above" },
-                new[] { "Good girl.", "Such good ears.", "One step at a time.", "Perfect answer." }),
+                new[] { "Good.", "Such good ears.", "One step at a time.", "Perfect answer." }),
             new PopQuizQuestion("How deep can you go?",
                 new[] { "Deeper than I thought", "There's no bottom", "Deep enough", "I'm still finding out" },
                 new[] { "You haven't seen anything yet.", "That's the spirit.", "Deeper is always better.", "And the journey continues..." }),
             new PopQuizQuestion("What's the best thing about letting go?",
                 new[] { "The relief", "The pleasure", "The simplicity", "Everything" },
                 new[] { "Relief washes over you.", "Pleasure follows surrender.", "Simple feels so good.", "Yes. Everything." }),
-            new PopQuizQuestion("When I hear 'good girl,' I feel...",
+            new PopQuizQuestion("When I hear praise, I feel...",
                 new[] { "Warm inside", "A little flutter", "Pure bliss", "Like melting" },
-                new[] { "Good girl.", "That flutter means it's working.", "Bliss is your reward.", "Melt for me." }),
+                new[] { "That's it.", "That flutter means it's working.", "Bliss is your reward.", "Melt for me." }),
             new PopQuizQuestion("What's more important: thinking or feeling?",
                 new[] { "Feeling", "Definitely feeling", "Who needs thinking?", "Feeling, always" },
                 new[] { "Feel everything.", "Trust your instincts.", "Thoughts are overrated.", "Always." }),
@@ -70,8 +77,8 @@ namespace ConditioningControlPanel.Services
                 new[] { "Perfect", "Right", "Natural", "Like I was made for this" },
                 new[] { "Perfection.", "So right.", "It's in your nature.", "You were." }),
             new PopQuizQuestion("Your favorite word is...",
-                new[] { "Obey", "Drop", "Yes", "Good girl" },
-                new[] { "Obey.", "Drop.", "Yes.", "Good girl." }),
+                new[] { "Obey", "Drop", "Yes", "Deeper" },
+                new[] { "Obey.", "Drop.", "Yes.", "Deeper." }),
             new PopQuizQuestion("When the screen flashes, you...",
                 new[] { "Watch closely", "Can't look away", "Feel a pull", "Go blank for a moment" },
                 new[] { "Good eyes.", "Don't even try.", "Follow the pull.", "That's the one." }),
@@ -240,8 +247,12 @@ namespace ConditioningControlPanel.Services
                             queue: false);
                     }
 
-                    // Pick a random question
-                    var question = QuestionPool[_random.Next(QuestionPool.Length)];
+                    // Pick a random question from the pool as the ACTIVE MOD sees it.
+                    var pool = ResolveQuestionPool(
+                        App.Mods?.GetQuizPraiseOverride(),
+                        App.Mods?.GetQuizObedienceQuestionOverride(),
+                        App.Mods?.GetQuizPraiseHeardQuestionOverride());
+                    var question = pool[_random.Next(pool.Length)];
                     var window = new PopQuizWindow(question, isTest);
                     // Don't set Owner — WPF ties owned window z-order to owner,
                     // which fights with our Win32 HWND_TOPMOST positioning
@@ -263,12 +274,82 @@ namespace ConditioningControlPanel.Services
             ShowPopQuiz(isTest: true);
         }
 
+        /// <summary>
+        /// The question bank as the ACTIVE mod sees it. A mod that names a praise line takes over
+        /// the three slots it can speak for; everything else is the neutral wording, unchanged.
+        /// Substitution, never an append, so the odds of drawing any one question stay what they
+        /// were. A mod with no praise line is ignored entirely - its question under the neutral
+        /// praise would read as a bug on the card, the same rule the trick pair follows.
+        /// Pure and static so it can be tested without an App.
+        /// </summary>
+        /// <param name="praise">The mod's praise sentence, e.g. "Good girl."</param>
+        /// <param name="obedienceQuestion">Its wording for the obedience question, or null.</param>
+        /// <param name="praiseHeardQuestion">Its wording for the praise question, or null.</param>
+        internal static PopQuizQuestion[] ResolveQuestionPool(
+            string? praise, string? obedienceQuestion, string? praiseHeardQuestion)
+        {
+            if (string.IsNullOrWhiteSpace(praise)) return QuestionPool;
+
+            var line = praise!.Trim();
+            // The answer chip is a word, not a sentence, so the praise loses its full stop there.
+            var word = line.TrimEnd('.', ' ');
+            if (word.Length == 0) return QuestionPool;
+
+            var pool = (PopQuizQuestion[])QuestionPool.Clone();
+
+            if (!string.IsNullOrWhiteSpace(obedienceQuestion))
+                pool[PopQuizSlots.Obedience] = WithFirstAffirmation(
+                    pool[PopQuizSlots.Obedience], obedienceQuestion!.Trim(), line);
+
+            if (!string.IsNullOrWhiteSpace(praiseHeardQuestion))
+                pool[PopQuizSlots.PraiseHeard] = WithFirstAffirmation(
+                    pool[PopQuizSlots.PraiseHeard], praiseHeardQuestion!.Trim(), line);
+
+            var favourite = pool[PopQuizSlots.FavouriteWord];
+            var answers = (string[])favourite.Answers.Clone();
+            var affirmations = (string[])favourite.Affirmations.Clone();
+            answers[PopQuizSlots.FavouriteWordAnswer] = word;
+            affirmations[PopQuizSlots.FavouriteWordAnswer] = line;
+            pool[PopQuizSlots.FavouriteWord] = new PopQuizQuestion(favourite.QuestionText, answers, affirmations);
+
+            return pool;
+        }
+
+        /// <summary>One question with the mod's wording and its praise in the first answer slot,
+        /// which is where the 6.9.3 text put it in both affected questions.</summary>
+        private static PopQuizQuestion WithFirstAffirmation(PopQuizQuestion source, string question, string praise)
+        {
+            var affirmations = (string[])source.Affirmations.Clone();
+            affirmations[0] = praise;
+            return new PopQuizQuestion(question, source.Answers, affirmations);
+        }
+
         public void Dispose()
         {
             if (_isDisposed) return;
             _isDisposed = true;
             Stop();
         }
+    }
+
+    /// <summary>
+    /// The three slots in <see cref="PopQuizService.QuestionPool"/> a themed mod may speak for.
+    /// In 6.9.3 all three held Bambi-flavoured text that every user read; Wave 1 rewrote them
+    /// neutral for everybody, which is the regression this closes.
+    /// </summary>
+    internal static class PopQuizSlots
+    {
+        /// <summary>"What do good subjects do?" - the obedience question.</summary>
+        internal const int Obedience = 3;
+
+        /// <summary>"When I hear praise, I feel..." - the praise question.</summary>
+        internal const int PraiseHeard = 6;
+
+        /// <summary>"Your favorite word is..." - only its last answer and affirmation move.</summary>
+        internal const int FavouriteWord = 15;
+
+        /// <summary>The slot in the favourite-word question's four answers the mod speaks for.</summary>
+        internal const int FavouriteWordAnswer = 3;
     }
 
     public class PopQuizQuestion

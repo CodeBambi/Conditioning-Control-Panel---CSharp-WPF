@@ -912,8 +912,10 @@ namespace ConditioningControlPanel
             });
         }
 
+        /// <summary>Every lockdown clock on this window comes through here, so HideLockdownTimer
+        /// masks the page, the badge and the restart repaint in the same frame.</summary>
         private static string FormatLockdownClock(TimeSpan remaining) =>
-            remaining.TotalHours >= 1 ? remaining.ToString(@"h\:mm\:ss") : remaining.ToString(@"mm\:ss");
+            Services.SessionClockLabel.LockdownClock(remaining, App.Settings?.Current?.HideLockdownTimer == true);
 
         // --- The lockdown badge -------------------------------------------------------
         // A crimson pill in the title bar's status row. It exists because the Lockdown page is the
@@ -1198,7 +1200,8 @@ namespace ConditioningControlPanel
 
                 if (on)
                 {
-                    if (LockdownTab.TxtLockdownTimer != null) LockdownTab.TxtLockdownTimer.Text = "09:41";
+                    if (LockdownTab.TxtLockdownTimer != null)
+                        LockdownTab.TxtLockdownTimer.Text = FormatLockdownClock(new TimeSpan(0, 9, 41));
                     LockdownTab.StartEmergencyExitPulse();
 
                     if (LockdownTab.TxtPossessionRung != null)
@@ -1240,18 +1243,26 @@ namespace ConditioningControlPanel
                 // armed inside the first-launch window or mid-session. The bark still fires now -
                 // it is her voice, not a modal, and it is the half that survives being clicked
                 // through in half a second.
+                // The flag is spent when the card OPENS, not when the row is posted: a row waved
+                // away from the Inbox unread used to burn the only offer of the rules for good.
                 PresentOrInbox(new Services.Startup.InboxItem
                 {
                     Key = "intro:possession",
                     Glyph = "🕶",
                     Title = "The warden's rules",
                     Summary = "What possession does before the room starts moving.",
-                    Open = () => FeatureIntroPopup.ShowIfFirstTime("possession", this),
+                    Open = () =>
+                    {
+                        var live = App.Settings?.Current;
+                        if (live != null && !live.LockdownPossessionIntroSeen)
+                        {
+                            live.LockdownPossessionIntroSeen = true;
+                            App.Settings?.Save();
+                        }
+                        FeatureIntroPopup.ShowIfFirstTime("possession", this);
+                    },
                 });
                 App.Bark?.NotifyPossessionRules();
-
-                s.LockdownPossessionIntroSeen = true;
-                App.Settings?.Save();
             }
             catch (Exception ex)
             {

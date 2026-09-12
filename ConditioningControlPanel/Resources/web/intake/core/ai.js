@@ -202,6 +202,9 @@ const clamp01 = (n) => (n < 0 ? 0 : n > 1 ? 1 : (n || 0));
 export function createStubAI() {
   // Synthesis-tail voice only — accents live in accents.js now.
   const VOICE = {
+    // default = the neutral house voice (no mod). Also the fallback for an
+    // unknown niche, so it must not carry anyone's persona.
+    default: ['noted', 'that tracks', 'quiet suits you', 'thinking is hard, letting go is easy'],
     bambi: ['good girl', 'so soft now', 'let it get bubbly', 'thinking is hard, dropping is easy'],
     drone: ['compliance is calm', 'the pattern is clear', 'obey and quiet', 'unit accepts input'],
     sissy: ['be honest with yourself', 'you already know', 'prettier when you agree', 'let the pink in'],
@@ -214,7 +217,7 @@ export function createStubAI() {
   async function askAI(req) {
     const niche = NICHES.includes(req && req.niche) ? req.niche : NICHES[0];
     if (req && req.want === AiWant.Synthesis) {
-      const pool = VOICE[niche] || VOICE.bambi;
+      const pool = VOICE[niche] || VOICE.default;
       const arche = req.route && req.route.primaryArchetypeId ? req.route.primaryArchetypeId : niche;
       return {
         synthesis: `You read as ${arche}. ${pool[Math.floor(hash01(arche) * pool.length)]}.`,

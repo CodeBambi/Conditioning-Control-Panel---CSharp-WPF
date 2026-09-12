@@ -78,8 +78,11 @@ const HEAD_GAP = 8;
  *  - `hotspot`  : the class furniture - the ONE lit thing, wears the action tag.
  *  - `exit`     : optional painted way out (a door in the art). Same verb as
  *                 the apron's back slab; a room without one just keeps the slab.
- *                 Only rooms whose art actually HAS a door get one - seven of
- *                 the ten are painted doorless and that stays legal.
+ *                 Only rooms whose art actually HAS a door get one - six of
+ *                 the ten are painted doorless and that stays legal. Read the
+ *                 plate before you call a room doorless: the Sorting Room was
+ *                 called that for a fortnight and its door was in the art the
+ *                 whole time (ccp-bugs#1165).
  *  - `freeSwim` : optional second furniture, for a game that declares
  *                 `manifest.endless`. Renders only when the shell hands down an
  *                 onFreeSwim; spends the same one-class latch as the hotspot.
@@ -128,11 +131,27 @@ const SCENES = Object.freeze({
    * where a decision LANDS, the belt is where it is asked for, and the deck of
    * face-down cards riding up it is the two-pile swipe sitting in the furniture.
    * The rect takes the belt's whole diagonal run, so the last card is caught at
-   * the mouth of the pink bin. Doorless: the far-right recess is a dark alcove
-   * behind a bin, not a painted way out. */
+   * the mouth of the pink bin.
+   *
+   * AND IT IS NOT DOORLESS (ccp-bugs#1165, "Sort room ... does not have a
+   * 'return to campus' door in the image"). This row used to write the
+   * far-right shape off as "a dark alcove behind a bin", and that was a
+   * misreading of the plate. The ALCOVE is the unlit corridor past x1328; in
+   * FRONT of it the art paints a whole door, and the pixels say so - sampled
+   * row by row off vn-12 rather than read off a spec: a header moulding across
+   * the top, the jamb shadow at x1220..1237, a lit green leaf at x1238..1312
+   * (a different, warmer green than the wall) carrying a navy window pane at
+   * x1252..1300 / y205..315, and the leaf's own lit edge at x1313..1327. The
+   * three bins only reach y342 at that x, so the leaf stands clear of them all
+   * the way down from the moulding.
+   *
+   * The rect is the LEAF PLUS ITS EDGE and stops short of the alcove: what the
+   * player points at when they say "the door" is the thing with a handle side
+   * and a window in it, not the hole in the wall beside it. */
   sort: Object.freeze({
     art: 'vn-12-sorting-room-201.png',
     hotspot: Object.freeze([744, 402, 320, 168]),
+    exit: Object.freeze([1240, 170, 92, 172]),       // the green leaf + its edge
   }),
   /* THE MUSIC ROOM 202. The four lit drum heads on the low stage - pink, gold,
    * cream, purple - which is the Simon ring already dealt out as furniture, and

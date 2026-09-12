@@ -228,11 +228,24 @@ namespace ConditioningControlPanel
         /// <para><c>TxtXP</c> is here for a mechanical reason rather than a rule: the BANK odometer
         /// (MainWindow.BankFx.cs, StepBankCounter) rewrites that readout roughly every 70 ms for the
         /// length of a token flight. A text effect that took it would be a silent no-op - overwritten
-        /// before anyone could read it - while still burning a ghost slot and a 45 s target cooldown.</para></summary>
+        /// before anyone could read it - while still burning a ghost slot and a 45 s target cooldown.</para>
+        ///
+        /// <para><c>EmiDockChip</c> is here because it is the ONLY way into EMI that a user can see
+        /// (ccp-bugs #1190). The summon chord is a global hotkey people have to be told about and
+        /// there is no tray entry: grep for callers of <c>EmiDeskService.Toggle</c> and the dock chip
+        /// is the whole list. Blocklisting the UserControl rather than its inner <c>BtnChip</c> is
+        /// what makes it stick - WalkPossession returns at the named element and never descends, so
+        /// the button inside it cannot be enrolled either. Left alone the chip is an ordinary Button
+        /// target, which puts swap on it (it glides into a neighbour's seat and STAYS there for 30 s)
+        /// along with dissolve and melt - and Possession only ever runs during a lockdown, which is
+        /// why the report reads as "EMI is not available in lockdown" rather than as a haunt. She is
+        /// not an exit, so this is reachability rather than a POSSESSION.md hard rule, but a
+        /// companion nobody can reach is a broken feature for the length of the hold.</para></summary>
         private static readonly HashSet<string> PossessionNeverNames = new(StringComparer.Ordinal)
         {
             "TxtLockdownTimer", "TxtLockdownExit", "BtnEmergencyExit", "EERoot",
             "LockdownGate", "TxtPossessionRung", "PossessionPips", "TxtXP",
+            "EmiDockChip",
         };
 
         /// <summary>Labels are the one role that can run to the hundreds on a dense tab, and a deck full

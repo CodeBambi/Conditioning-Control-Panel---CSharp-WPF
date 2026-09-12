@@ -511,23 +511,23 @@ namespace ConditioningControlPanel
             if (on && App.Speech?.IsAvailable != true)
             {
                 hint.Foreground = amber;
-                hint.Text = App.Speech == null || !Services.Speech.SpeechService.HasCaptureDevice
-                    ? "No microphone detected — connect one to use this."
+                hint.Text = Localization.Loc.Get(App.Speech == null || !Services.Speech.SpeechService.HasCaptureDevice
+                    ? "takeover_voice_hint_no_mic"
                     : App.Speech.ModelStatus == Services.Speech.SpeechModelStatus.LoadFailed
-                        ? "Speech model found but it would not load — remove any extra model you added under Resources\\Models\\vosk, then restart."
-                        : "Speech model not installed yet — voice prompts stay off until it is.";
+                        ? "takeover_voice_hint_model_failed"
+                        : "takeover_voice_hint_model_missing");
                 return;
             }
             if (on && (s!.SpeechWakeWordEnabled || s.SpeechPushToTalkEnabled))
             {
                 hint.Foreground = amber;
-                hint.Text = "Paused — you're driving the mic with “Hey Bambi” / push-to-talk, so she only does mantras when you ask. Turn those off in She's Listening for surprise mantras.";
+                hint.Text = Localization.Loc.Get("takeover_voice_hint_paused_mic");
                 return;
             }
             hint.Foreground = grey;
-            hint.Text = on
-                ? "During Takeover she'll now and then ask you to repeat a phrase. Offline mic — opens only when she prompts you."
-                : "During Takeover she'll now and then ask you to repeat a phrase. Suppressed while you're driving the mic yourself.";
+            hint.Text = Localization.Loc.Get(on
+                ? "takeover_voice_hint_on"
+                : "takeover_voice_hint_off");
         }
 
         internal void ChkAutonomyResume_Changed(object sender, RoutedEventArgs e)
@@ -696,16 +696,16 @@ namespace ConditioningControlPanel
             var available = App.Speech?.IsAvailable == true;
             if (!available)
             {
-                BambiTakeoverTab.TxtAutonomyVoiceHint.Text =
+                BambiTakeoverTab.TxtAutonomyVoiceHint.Text = Localization.Loc.Get(
                     App.Speech == null || !Services.Speech.SpeechService.HasCaptureDevice
-                        ? "No microphone detected — connect one to use this."
+                        ? "takeover_voice_hint_no_mic"
                         : App.Speech.ModelStatus == Services.Speech.SpeechModelStatus.LoadFailed
-                            ? "Speech model found but it would not load — remove any extra model you added under Resources\\Models\\vosk, then restart."
-                            : "Speech model not installed yet — voice prompts stay off until it is.";
+                            ? "takeover_voice_hint_model_failed"
+                            : "takeover_voice_hint_model_missing");
             }
             else
             {
-                BambiTakeoverTab.TxtAutonomyVoiceHint.Text = "Offline mic. Opens only when she prompts you.";
+                BambiTakeoverTab.TxtAutonomyVoiceHint.Text = Localization.Loc.Get("takeover_voice_hint_offline_mic");
             }
         }
 

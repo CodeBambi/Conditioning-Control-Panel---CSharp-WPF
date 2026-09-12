@@ -257,6 +257,9 @@ public class QuestDefinitionService : IDisposable
                         ? QuestDefinition.BundledArtPath(q["id"]!.ToString())
                         : GetFallbackImagePath(q["category"]?.ToString()),
                     RequiresPremium = (bool?)q["requiresPremium"] ?? false,
+                    // ccp-bugs#1151: lets the channel publish a quest that needs a camera or a
+                    // microphone without a client update. Read by QuestHardwareGate.
+                    RequiresHardware = q["requiresHardware"]?.ToString(),
                     IsSeasonal = (bool?)q["seasonal"] ?? false,
                     ActiveFrom = q["activeFrom"]?.ToString(),
                     ActiveUntil = q["activeUntil"]?.ToString()

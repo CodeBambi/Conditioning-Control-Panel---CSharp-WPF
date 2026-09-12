@@ -69,21 +69,25 @@ export const BAND_DEPTH_FLOOR = Object.freeze({
 
 /* ----------------------------------------------------------------------------
  * NICHES + ROUTE
- * v1 niches are Bambi / Drone / Sissy, plus Circe (the Locked / keyholder
- * register, mod builtin-locked). Each bank supplies 3-5 archetypes; the engine
- * reveals a primary + optional secondary from the TRAJECTORY (not RNG), with
- * shares that climb 5% -> 45% over the run.
- * NOTE: all four banks are authored (banks/circe.json landed at v1.0.0, 629
- * prompts, same shape as the other three), so IntakeHostService.SafeNiche's
- * missing-bank clamp no longer trips for any v1 niche.
+ * Default is the neutral house niche - what an install with no themed mod runs.
+ * It is a real niche with its own bank (banks/default.json), not a stand-in.
+ * The themed niches are Bambi / Drone / Sissy, plus Circe (the Locked /
+ * keyholder register, mod builtin-locked), and a mod opts into one. Each bank
+ * supplies 3-5 archetypes; the engine reveals a primary + optional secondary
+ * from the TRAJECTORY (not RNG), with shares that climb 5% -> 45% over the run.
+ * NOTE: every niche here has an authored bank, so IntakeHostService.SafeNiche's
+ * missing-bank clamp does not trip.
+ * Default is FIRST because NICHES[0] is the "unrecognised niche" answer in
+ * several consumers, and that answer must be the neutral one.
  * -------------------------------------------------------------------------- */
 export const Niche = Object.freeze({
+  Default: 'default',
   Bambi: 'bambi',
   Drone: 'drone',
   Sissy: 'sissy',
   Circe: 'circe',
 });
-export const NICHES = Object.freeze([Niche.Bambi, Niche.Drone, Niche.Sissy, Niche.Circe]);
+export const NICHES = Object.freeze([Niche.Default, Niche.Bambi, Niche.Drone, Niche.Sissy, Niche.Circe]);
 
 /**
  * @typedef {Object} Route  Revealed archetype trajectory (engine -> result/UI).
@@ -204,9 +208,12 @@ export const NICHES = Object.freeze([Niche.Bambi, Niche.Drone, Niche.Sissy, Nich
  *                                     without the key falls back to the clinical
  *                                     default pool below.
  */
+// The base is the UNMODDED look: neutral slate/indigo, no persona palette. Every
+// themed bank overrides both accents in its own theme block, so this is the colour
+// a no-mod run (and the engine's placeholder bank) shows.
 export const DEFAULT_THEME = Object.freeze({
-  accent: '#ff69b4',
-  accent2: '#b06cff',
+  accent: '#7c8fb0',
+  accent2: '#8f7cc0',
   subjectNoun: 'Subject',
   sectionTitles: Object.freeze({
     [Band.Calibration]:  'Section 1 · Baseline Response',
@@ -654,7 +661,7 @@ export const STEER_BAND_WEIGHT = Object.freeze({
  */
 
 /** Build an empty, well-formed QuizRunResult (engine seed / stub). */
-export function emptyResult(niche = Niche.Bambi) {
+export function emptyResult(niche = Niche.Default) {
   return {
     product: PRODUCT_NAME,
     niche,
@@ -720,7 +727,7 @@ export function emptyResult(niche = Niche.Bambi) {
  */
 export function defaultBootConfig(overrides = {}) {
   return Object.assign({
-    niche: Niche.Bambi,
+    niche: Niche.Default,
     caps: Object.assign({}, DEFAULT_CAPS),
     endless: false,
     steerValve: 1,

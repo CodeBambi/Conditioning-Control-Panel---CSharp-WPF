@@ -10,7 +10,7 @@ namespace ConditioningControlPanel
     /// <summary>
     /// The title bar's half of the startup Inbox: a glyph with a count, and the popup behind it.
     ///
-    /// <para>The list itself lives on <c>App.Startup</c> (the presenter owns it, and the surfaces
+    /// <para>The list itself lives on <c>App.StartupLadder</c> (the presenter owns it, and the surfaces
     /// post to it from all over the app). This file only paints: it mirrors the count onto the
     /// button, shows the button when there is something to see, and hides it again when the last
     /// row is gone.</para>
@@ -27,7 +27,7 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var startup = App.Startup;
+                var startup = App.StartupLadder;
                 if (startup == null || BtnInbox == null) return;
 
                 startup.Inbox.CollectionChanged += OnInboxCollectionChanged;
@@ -52,7 +52,7 @@ namespace ConditioningControlPanel
             try
             {
                 if (BtnInbox == null) return;
-                var count = App.Startup?.UnreadCount ?? 0;
+                var count = App.StartupLadder?.UnreadCount ?? 0;
 
                 // Tag is what the button's template binds its badge digits to - the badge lives
                 // inside a ControlTemplate, so there is no named element to reach from here.
@@ -125,7 +125,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private static void PresentOrInbox(Services.Startup.InboxItem item)
         {
-            var startup = App.Startup;
+            var startup = App.StartupLadder;
             if (startup != null) { startup.PresentOrInbox(item); return; }
             try { item.Open(); }
             catch (Exception ex) { App.Logger?.Warning(ex, "Surface '{Key}' failed to open", item.Key); }
@@ -150,7 +150,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private void EnqueueStartupModal(string key, int priority, Action<Window?> show, Action? onAbandoned = null)
         {
-            var startup = App.Startup;
+            var startup = App.StartupLadder;
             if (startup != null) { startup.EnqueueModal(key, priority, show, onAbandoned); return; }
 
             Dispatcher.BeginInvoke(new Action(() =>

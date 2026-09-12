@@ -106,9 +106,9 @@ namespace ConditioningControlPanel
             // mod-renamed. Same keys as the matching Studio rack rows (RefreshRackLabels), so a
             // mod that renames "Flash Images" renames the tile, the rack row and the panel title
             // together. Two tiles are absent on purpose: the ? box's title belongs to
-            // RefreshMysteryTile, and the tease tile's belongs to ApplyTeaseCard (a mod-aware
-            // rename of a feature nobody is allowed to name would defeat the tease). The Vault's
-            // title uses the Exclusives tab's own key.
+            // RefreshMysteryTile, and the Deeper editor tile carries a {loc:Str} title in the
+            // XAML because it names a TOOL rather than an effect - there is no rack row for a
+            // mod to rename it alongside. The Vault's title uses the Exclusives tab's own key.
             if (SettingsTab.CardFlash != null) SettingsTab.CardFlash.Title = MLCard("Flash Images", "section_flash_images");
             if (SettingsTab.CardSubliminal != null) SettingsTab.CardSubliminal.Title = MLCard("Subliminals", "section_subliminals_2");
             if (SettingsTab.CardBouncingText != null) SettingsTab.CardBouncingText.Title = MLCard("Bouncing Text", "label_bouncing_text");

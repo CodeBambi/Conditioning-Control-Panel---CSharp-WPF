@@ -59,12 +59,27 @@
         </Style>
     </UserControl.Resources>
         <Grid>
+        <!-- Row 1 (media source) is Auto, row 4 (asset browser) is the only star row, so
+             anything row 1 unfolds comes straight out of the browser's height. In Reddit or
+             Both that is the whole niche/custom-sub block, which is why the browser used to
+             shrink to a sliver: the fix is a scroll cap inside row 1 (see RemoteMediaScroll)
+             plus a floor here, so the browser can never be measured away entirely.
+
+             The numbers are DIP on the fixed 1585x901 design canvas (MainWindow.xaml), so
+             they do not move with the window: the Viewbox scales the whole canvas. This tab
+             gets roughly 650 of those 901. Row 0 costs ~40, row 1 ~110 in local mode and
+             ~110 + the scroll cap in Reddit/Both, and the browser needs ~90 of its own for
+             header, action bar and padding before a single thumbnail row (128) fits. Cap 200
+             + floor 260 leaves the browser ~300 in the worst case, two thumbnail rows in the
+             typical one, and never lets the floor out-vote the canvas (40+310+260 < 650).
+             Row 3 is Auto rather than a literal 5 because its splitter is collapsed and a
+             literal height cannot give the 5px back. -->
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto" MaxHeight="340"/>
-            <RowDefinition Height="5"/>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*" MinHeight="260"/>
         </Grid.RowDefinitions>
     
         <!-- Header with title and actions -->
@@ -120,7 +135,19 @@
                 <WrapPanel x:Name="RemoteSourceChips" x:FieldModifier="internal"/>
 
                 <!-- Everything below is dead weight while the source is "local", so it only
-                     unfolds once remote media is actually in play. -->
+                     unfolds once remote media is actually in play. In Reddit or Both it is
+                     tall (13 niche chips, a resolved-subreddit line per checked niche, and up
+                     to 20 custom-sub chips), and this row is Auto inside a grid whose only
+                     star row is the asset browser, so an uncapped unfold ate the browser.
+                     The cap lives on the ScrollViewer rather than on the RowDefinition so the
+                     overflow scrolls instead of clipping, and so RemoteMediaDetails keeps its
+                     name and its Visibility contract with MainWindow.Assets.cs. 200 is the
+                     budget worked out on the root grid above; the typical Both layout (ratio
+                     row, niche chips, a handful of niche lines, the folded custom-sub line)
+                     fits inside it without a scrollbar, and only the everything-checked case
+                     scrolls. -->
+                <ScrollViewer x:Name="RemoteMediaScroll" MaxHeight="200"
+                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel x:Name="RemoteMediaDetails" x:FieldModifier="internal" Visibility="Collapsed">
 
                     <!-- Mix ratio: only meaningful in "Both" -->
@@ -164,29 +191,41 @@
                     <!-- Custom subreddits. The chips below are the LIBRARY (every sub kept
                          anywhere in the app, AppSettings.RemoteSubLibrary): a lit pill is in
                          this machine's media pool (FypOnlineCustomSubs), a dashed one is kept
-                         but unused here, and the X forgets the name everywhere at once. -->
-                    <TextBlock Text="{loc:Str label_remote_custom_subs}" Style="{StaticResource SettingLabel}"
-                               FontSize="12" Margin="0,6,0,2"/>
-                    <TextBlock Text="{loc:Str label_remote_custom_subs_kept}"
-                               Foreground="{StaticResource TextMutedBrush}" FontSize="11"
-                               TextWrapping="Wrap" Margin="0,0,0,4"/>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                        <TextBox x:Name="TxtRemoteCustomSub" x:FieldModifier="internal" Width="200"
-                                 Background="#1E1E32" Foreground="White" BorderBrush="#3A3A5A"
-                                 FontSize="11" Padding="6,4" VerticalAlignment="Center"
-                                 ToolTip="{loc:Str tooltip_remote_custom_sub_add}"/>
-                        <Button x:Name="BtnRemoteAddSub" x:FieldModifier="internal" Content="{loc:Str btn_add}"
-                                Style="{StaticResource SmallPinkButton}" Padding="10,4" FontSize="11"
-                                Margin="6,0,0,0"/>
+                         but unused here, and the X forgets the name everywhere at once.
+
+                         Folded by default behind the same ▸ line the niche sub lists use, and
+                         for the same reason the scroll cap exists: up to 20 pills plus the add
+                         row is the tallest thing in this panel, and most visits never touch
+                         it. The folded line carries the counts, so nothing is hidden that the
+                         chips would have told you at a glance. Text and click are painted from
+                         MainWindow.Assets.cs (PaintRemoteCustomSubsToggle); expansion state is
+                         session-only, like _remoteNicheExpanded. -->
+                    <TextBlock x:Name="RemoteCustomSubsToggle" x:FieldModifier="internal"
+                               Text="{loc:Str label_remote_custom_subs}" Style="{StaticResource SettingLabel}"
+                               FontSize="12" Margin="0,6,0,2" Cursor="Hand" Background="Transparent"/>
+                    <StackPanel x:Name="RemoteCustomSubsBody" x:FieldModifier="internal" Visibility="Collapsed">
+                        <TextBlock Text="{loc:Str label_remote_custom_subs_kept}"
+                                   Foreground="{StaticResource TextMutedBrush}" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,0,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBox x:Name="TxtRemoteCustomSub" x:FieldModifier="internal" Width="200"
+                                     Background="#1E1E32" Foreground="White" BorderBrush="#3A3A5A"
+                                     FontSize="11" Padding="6,4" VerticalAlignment="Center"
+                                     ToolTip="{loc:Str tooltip_remote_custom_sub_add}"/>
+                            <Button x:Name="BtnRemoteAddSub" x:FieldModifier="internal" Content="{loc:Str btn_add}"
+                                    Style="{StaticResource SmallPinkButton}" Padding="10,4" FontSize="11"
+                                    Margin="6,0,0,0"/>
+                        </StackPanel>
+                        <!-- Inline, non-blocking. This replaced a modal MessageBox: a typo in a
+                             subreddit name does not deserve a dialog, and the probe result (not
+                             found / offline) has nowhere else to land. -->
+                        <TextBlock x:Name="TxtRemoteSubError" x:FieldModifier="internal"
+                                   Foreground="{StaticResource RemoteSubErrorBrush}" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,0,0,6" Visibility="Collapsed"/>
+                        <WrapPanel x:Name="RemoteCustomSubChips" x:FieldModifier="internal"/>
                     </StackPanel>
-                    <!-- Inline, non-blocking. This replaced a modal MessageBox: a typo in a
-                         subreddit name does not deserve a dialog, and the probe result (not
-                         found / offline) has nowhere else to land. -->
-                    <TextBlock x:Name="TxtRemoteSubError" x:FieldModifier="internal"
-                               Foreground="{StaticResource RemoteSubErrorBrush}" FontSize="11"
-                               TextWrapping="Wrap" Margin="0,0,0,6" Visibility="Collapsed"/>
-                    <WrapPanel x:Name="RemoteCustomSubChips" x:FieldModifier="internal"/>
                 </StackPanel>
+                </ScrollViewer>
             </StackPanel>
         </Border>
 

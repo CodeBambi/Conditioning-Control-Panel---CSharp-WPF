@@ -1112,23 +1112,25 @@ namespace ConditioningControlPanel
         internal void CardVault_Click(object sender, RoutedEventArgs e) => BtnPatreonExclusives_Click(sender, e);
 
         /// <summary>
-        /// The mosaic's nameless TEASE tile. Everything about it - which feature it teases, which
-        /// livery it wears, whether it is still teasing at all - lives in one block at the top of
-        /// <c>MainWindow.TeaseCard.cs</c>; this is only the wall's end of the wire.
+        /// The mosaic's DEEPER EDITOR tile (owner, 2026-09-12), which took the slot the nameless
+        /// tease tile held. It goes to the Deeper page, where the library, the editor and the
+        /// player sit together.
         ///
-        /// <para>The old two-branch behaviour (navigate when the door is open, placeholder toast
-        /// when it is withheld) moved into <see cref="TeaseCardClicked"/> intact, with the toast
-        /// replaced by the teaser card the owner asked for on 2026-08-13.</para>
+        /// <para>Navigate, never launch - the wall's own rule. The first cut of this tile opened
+        /// the editor on a blank enhancement (it called <c>BtnDeeperNewEnhancement_Click</c>) and
+        /// the owner corrected it on the desk run: "the deeper editor should link and open the
+        /// deeper page, not the editor". A tile that puts a modal dialog on screen from the front
+        /// page is a tile you cannot browse past.</para>
         /// </summary>
-        internal void CardJustDrop_Click(object sender, RoutedEventArgs e) => TeaseCardClicked();
+        internal void CardDeeperEditor_Click(object sender, RoutedEventArgs e) => ShowTab("deeper");
 
         /// <summary>
         /// Paints the mosaic's price tags and the ? box's face. The FX tiles are all free and
         /// deliberately carry no tag - absence is how the wall says "free".
         ///
-        /// <para>Called from <c>RefreshPremiumRail</c>, which already carries the triggers this
-        /// needs - patron status landing or being lost, the Home door being shown, and the weekly
-        /// intake pass changing under <c>EnsureIntakePassRailHooked</c>.</para>
+        /// <para>Called from <c>RefreshDashboardRail</c>, which already carries the triggers this
+        /// needs - patron status landing or being lost, the Home door being shown, and the ? box
+        /// rotating.</para>
         /// </summary>
         internal void RefreshMosaicTierBadges()
         {
@@ -1137,12 +1139,10 @@ namespace ConditioningControlPanel
 
             try
             {
-                // The tease tile: blur, livery rim and a livery diamond instead of the old "SOON"
-                // price tag. It owns its own badge now (same SetTierBadge helper, called from
-                // there) because the badge, the title, the tooltip and the blur have to move as
-                // one costume - see MainWindow.TeaseCard.cs.
-                ApplyTeaseCard();
-
+                // No pass over the Deeper editor tile, deliberately: the Deeper page has no
+                // ExclusiveFeature roster row, so it is not sold and the tile wears no price tag.
+                // If Deeper is ever gated, it gets a SetTierBadge call here and the rail's gold
+                // star in the same change, so the two can never disagree.
                 RefreshMysteryTile();
                 RefreshWallActiveStates();
 
@@ -1282,6 +1282,34 @@ namespace ConditioningControlPanel
         {
             if (RefuseIfSessionFeatureLocked($"card:{key}")) return;
             SetWallFeature(key, !IsWallFeatureOn(key));
+            NoteDashboardToggleUsed();
+        }
+
+        /// <summary>
+        /// One more right-click toggle learned. Counts until the caption is retired, then stops
+        /// touching settings at all - no save per toggle for the life of the install.
+        /// </summary>
+        internal void NoteDashboardToggleUsed()
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s == null || !Services.DashboardToggleHintRule.ShouldShow(s.DashboardToggleHintUses)) return;
+                s.DashboardToggleHintUses++;
+                App.Settings?.Save();
+                RefreshDashboardToggleHint();
+            }
+            catch (Exception ex) { App.Logger?.Debug("Dashboard toggle hint count: {E}", ex.Message); }
+        }
+
+        /// <summary>Shows or retires the gesture caption on the logo face.</summary>
+        internal void RefreshDashboardToggleHint()
+        {
+            var dash = SettingsTab;
+            if (dash == null) return;
+            var show = Services.DashboardToggleHintRule.ShouldShow(App.Settings?.Current?.DashboardToggleHintUses ?? 0);
+            var v = show ? Visibility.Visible : Visibility.Collapsed;
+            if (dash.DashToggleHint != null) dash.DashToggleHint.Visibility = v;
         }
 
         /// <summary>The persisted flag behind a wall key. Unknown key = false.</summary>
@@ -1823,16 +1851,22 @@ namespace ConditioningControlPanel
                     try { App.IntakePunchCard?.NotifySessionProgress(session, e.ProgressPercent); }
                     catch (Exception ex) { App.Logger?.Debug("Punch card progress hook: {E}", ex.Message); }
 
-                    // Update session button with remaining time
-                    PresetsTab.BtnStartSession.Content = Loc.GetF("btn_stop_session_0_1", $"{((int)remaining.TotalMinutes):D2}", $"{remaining.Seconds:D2}");
+                    // Update session button with remaining time - or without it: ShowSessionCountdown
+                    // off keeps the name and the state and drops the MM:SS on both buttons.
+                    var showCountdown = App.Settings?.Current?.ShowSessionCountdown != false;
+                    PresetsTab.BtnStartSession.Content = Services.SessionClockLabel.StopButton(
+                        remaining, showCountdown, Loc.Get("btn_stop_session_0_1"), Loc.Get("btn_stop_session_2"));
 
-                    // Update Start button label with session name + timer
+                    // Update Start button label with session name + timer. Without the clock the
+                    // name gets the room OnSessionStarted gives it (22), with it the old 14.
                     var mName = session.GetModeAwareName();
-                    var name = mName.Length > 14
-                        ? mName.Substring(0, 11) + "..."
+                    var nameMax = showCountdown ? 14 : 22;
+                    var name = mName.Length > nameMax
+                        ? mName.Substring(0, nameMax - 3) + "..."
                         : mName;
                     var pauseIndicator = _sessionEngine.IsPaused ? $" [{Loc.Get("label_paused")}]" : "";
-                    TxtStartLabel.Text = Loc.GetF("label_0_1_2_3", name, $"{((int)remaining.TotalMinutes):D2}", $"{remaining.Seconds:D2}", pauseIndicator);
+                    TxtStartLabel.Text = Services.SessionClockLabel.StartButton(
+                        name, remaining, showCountdown, pauseIndicator, Loc.Get("label_0_1_2_3"));
 
                     // Training Programs: drive the TODAY panel's session progress strip off this
                     // same 1-second engine tick rather than a second timer. It no-ops unless the

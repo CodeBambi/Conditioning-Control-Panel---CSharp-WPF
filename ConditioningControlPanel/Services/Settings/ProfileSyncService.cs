@@ -480,6 +480,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void StartHeartbeat()
         {
+            // THE VAT'S SIGN-IN POKE, before the idempotency return on purpose: every login
+            // path lands here once the account is usable, and a second arrival (the 401
+            // self-heal, a Discord restore after a Patreon one) may carry a rotated token.
+            // DescentService dedupes against its own floor, so this never doubles a request
+            // on the wire. Mirror of the App.Descent.Reset() call in ClearAccountData.
+            App.Descent?.OnSignedIn();
+
             if (_heartbeatTimer != null) return;
 
             _heartbeatTimer = new DispatcherTimer
@@ -4239,6 +4246,24 @@ namespace ConditioningControlPanel.Services
             nameof(AppSettings.DiscordWebhookUrl),
             nameof(AppSettings.LastSeenUtc), // Local-only greeting timestamp — must never leave the device.
         };
+
+        /// <summary>
+        /// The other half of <see cref="ExcludedBackupProperties"/>. A backup never carries these,
+        /// so a restored settings object arrives with them at their defaults - and until 6.9.4
+        /// both restore paths (the startup welcome-back sheet and the manual button on the
+        /// Settings tab) let those defaults win. The content folder was the visible casualty:
+        /// after a restore <c>CustomAssetsPath</c> read "", the assets prompt had already been
+        /// spent by the first run, and nothing re-asked, so the app quietly fell back to the
+        /// default folder. Identity and progression fields are copied by the callers themselves;
+        /// this is for the machine-local settings that are nobody's progress but still the user's.
+        /// </summary>
+        internal static void PreserveLocalOnlyFields(AppSettings current, AppSettings restored)
+        {
+            if (current == null || restored == null) return;
+            restored.CustomAssetsPath = current.CustomAssetsPath;
+            restored.DiscordWebhookUrl = current.DiscordWebhookUrl;
+            restored.LastSeenUtc = current.LastSeenUtc;
+        }
 
         /// <summary>
         /// Backup current settings to the cloud. Debounced to 5 minutes unless forced.

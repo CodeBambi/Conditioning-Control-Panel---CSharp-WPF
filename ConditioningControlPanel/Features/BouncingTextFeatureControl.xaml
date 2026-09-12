@@ -1,4 +1,4 @@
-<UserControl x:Class="ConditioningControlPanel.Features.BouncingTextFeatureControl"
+﻿<UserControl x:Class="ConditioningControlPanel.Features.BouncingTextFeatureControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
@@ -171,7 +171,7 @@
                                 </Grid>
 
                                 <!-- Font: any family installed on Windows, plus the bundled Fredoka. -->
-                                <Grid Height="36" ToolTip="Any font installed on Windows. Applies live - no restart.">
+                                <Grid Height="36" ToolTip="{loc:Str tooltip_bouncing_font_any_installed}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" MinWidth="120"/>
                                         <ColumnDefinition Width="*"/>

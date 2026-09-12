@@ -150,12 +150,15 @@ namespace ConditioningControlPanel.Services
         // says where. If a surface is restyled, change it HERE and both the runtime crop and the
         // editor's preview follow — that is the reason this table exists.
 
-        /// <summary>Premium quick-launch rail chip: 69x42 (SettingsTabView PremiumChipStyle
-        /// Height=42, PremiumRailContent Width=69).</summary>
+        /// <summary>The dashboard rail's chip, 69x36. Painted again since 2026-09-12: the
+        /// FAVORITES + RECENT chips took the premium rail's column and now wear the feature's
+        /// own picture (<see cref="FavoritesRailArt"/>), so this surface is live rather than a
+        /// leftover. It was 69x42 while the premium rail owned it - the chip gave up 6 DIP when
+        /// RECENT grew from five boxes to seven.</summary>
         public const string SurfaceRailChip = "railChip";
 
-        /// <summary>The two taller rail launchers that carry live controls (Lockdown, Blink).
-        /// Same 69 width, ~62 tall once the stepper row is in.</summary>
+        /// <summary>The old rail's two taller launcher cards (Lockdown, Blink), 69x62. Retired
+        /// with the rail; kept for the same manifest reason as <see cref="SurfaceRailChip"/>.</summary>
         public const string SurfaceRailCard = "railCard";
 
         /// <summary>Play door card header plate: full card width, 138 tall (PlayCardArtPlate).</summary>
@@ -200,7 +203,7 @@ namespace ConditioningControlPanel.Services
         private static readonly ArtSurface[] _surfaces =
         {
             // Fixed-size surfaces: the preview is exact.
-            new(SurfaceRailChip,   "Rail chip",       69.0 / 42.0,   8,  ArtScrim.FootBand),
+            new(SurfaceRailChip,   "Rail chip",       69.0 / 36.0,   8,  ArtScrim.FootBand),
             new(SurfaceRailCard,   "Rail launcher",   69.0 / 62.0,   8,  ArtScrim.FullFace),
             // 240x68: the 240-wide host inside a 72-tall border, less its 2px border top and
             // bottom. Its art also fades out to the left under an OpacityMask, which the preview
@@ -237,13 +240,43 @@ namespace ConditioningControlPanel.Services
 
         private static readonly ArtSlotBinding[] _bindings =
         {
-            // Rail chips — rects from SettingsTabView.xaml's Art* ImageBrush resources.
+            // The dashboard rail's chips. Lifted verbatim from SettingsTabView.xaml's Art*
+            // resources when the premium rail held them; the FAVORITES + RECENT chips paint the
+            // same surface again since 2026-09-12, so these six are live art direction, not
+            // archive. Each one frames the illustration and pushes the wordmark burned into the
+            // PNG out of the chip.
             new("features/takeover.png",       SurfaceRailChip, new Rect(0,    0.06, 1,    0.54)),
             new("features/awareness.png",      SurfaceRailChip, new Rect(0.02, 0.05, 0.40, 0.43)),
             new("features/vibe.png",           SurfaceRailChip, new Rect(0,    0.07, 1,    0.61)),
             new("features/lab_quiz_hero.png",  SurfaceRailChip, new Rect(0.22, 0.04, 0.62, 0.66)),
             new("features/remote_control.png", SurfaceRailChip, new Rect(0.60, 0.03, 0.35, 0.62)),
             new("features/fyp.png",            SurfaceRailChip, new Rect(0.20, 0.33, 0.50, 0.545)),
+            // Blink and Lockdown are rail chips too now (they were the two taller launcher cards
+            // before). Their railCard rects are reused because they frame the SUBJECT - the eye,
+            // the padlock - and leave the wordmark out, which is the same job at either height.
+            new("features/blink_trainer.png",  SurfaceRailChip, new Rect(0.05, 0.06, 0.44, 0.72)),
+            new("lockdown_icon.png",           SurfaceRailChip, new Rect(0.08, 0,    0.25, 1)),
+            // The twelve rooms with no feature art of their own borrow a badge (2026-09-12 desk
+            // pass: a rail two thirds emoji does not read as "the images for the features"). Every
+            // badge is drawn illustration on top, name underneath, so each rect is the illustration
+            // band - without one the chip shows a smear of the badge's own wordmark behind our
+            // caption, which is what these rects have always been for. The 1024 square achievement
+            // badges share one band; the skill nodes are ~368x278 with a label bar at the foot and
+            // their subject off to the left.
+            new("achievements/honor_roll.png",   SurfaceRailChip, new Rect(0.06, 0.03, 0.88, 0.58)),
+            new("achievements/teachers_pet.png", SurfaceRailChip, new Rect(0.06, 0.03, 0.88, 0.58)),
+            new("achievements/modder.png",       SurfaceRailChip, new Rect(0.06, 0.03, 0.88, 0.58)),
+            new("achievements/curator.png",      SurfaceRailChip, new Rect(0.06, 0.03, 0.88, 0.58)),
+            new("achievements/word_perfect.png", SurfaceRailChip, new Rect(0.06, 0.03, 0.88, 0.58)),
+            new("achievements/screen_time.png",  SurfaceRailChip, new Rect(0.06, 0.03, 0.88, 0.58)),
+            new("quests/daily_devotion_d.png",   SurfaceRailChip, new Rect(0.05, 0.04, 0.90, 0.68)),
+            new("skills/hive_mind.png",          SurfaceRailChip, new Rect(0.04, 0.06, 0.72, 0.66)),
+            new("skills/sparkle_boost_3.png",    SurfaceRailChip, new Rect(0.04, 0.06, 0.66, 0.70)),
+            new("skills/trophy_case.png",        SurfaceRailChip, new Rect(0.10, 0.06, 0.60, 0.70)),
+            // These two carry no wordmark, so the honest centre crop IS the right window; the rows
+            // exist to say so out loud and to give a mod author a Frame button for them.
+            new("programs/plate_default.png",    SurfaceRailChip, new Rect(0, 0, 1, 1)),
+            new("Cards/spotlight.png",           SurfaceRailChip, new Rect(0, 0, 1, 1)),
             // The two taller launchers.
             new("features/blink_trainer.png",  SurfaceRailCard, new Rect(0.05, 0.06, 0.44, 0.72)),
             new("lockdown_icon.png",           SurfaceRailCard, new Rect(0.08, 0,    0.25, 1)),

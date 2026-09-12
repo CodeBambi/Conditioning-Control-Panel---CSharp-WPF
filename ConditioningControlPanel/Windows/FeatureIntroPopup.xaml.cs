@@ -120,7 +120,7 @@ namespace ConditioningControlPanel
         ///
         /// <para>It used to wait it out on a 1 s clock of its own, re-testing the same three flags
         /// App.xaml.cs polled, for up to five minutes. That clock is gone: the card is handed to
-        /// <c>App.Startup.PresentOrInbox</c>, which opens it at once when nothing is quiet and
+        /// <c>App.StartupLadder.PresentOrInbox</c>, which opens it at once when nothing is quiet and
         /// otherwise makes it a row in the Inbox the user opens when they want it. Either way the
         /// seen-flag is spent by <see cref="ShowCore"/> at OPEN time, never here, so a card that
         /// only ever became a row is still owed on the next launch if the row is never clicked.</para>
@@ -138,7 +138,7 @@ namespace ConditioningControlPanel
                 if (App.Settings?.Current?.SeenFeatureIntros.Contains(key) == true) return;
                 if (!_settling.Add(key)) return;
 
-                var presenter = App.Startup;
+                var presenter = App.StartupLadder;
                 if (presenter == null)
                 {
                     // No ladder to settle behind: the offer is resolved here and now, so the guard

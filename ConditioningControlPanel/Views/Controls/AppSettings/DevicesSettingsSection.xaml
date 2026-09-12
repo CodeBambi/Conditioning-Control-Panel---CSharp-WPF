@@ -127,11 +127,11 @@
                                 <!-- 6-blink → stop & recalibrate shortcut. THE toggle now; the four
                                      copies on Lab/BlinkTrainer/Deeper cards were deleted. -->
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,20,4"
-                                            ToolTip="Blink fast 6 times in a row to stop everything and jump to recalibration.">
+                                            ToolTip="{loc:Str tooltip_devices_blink_recal}">
                                     <CheckBox x:Name="ChkBlinkRecalWebcamBar" x:FieldModifier="internal"
                                               Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
                                               Checked="ChkBlinkRecalShortcut_Changed" Unchecked="ChkBlinkRecalShortcut_Changed"/>
-                                    <TextBlock Text="Blink to recalibrate" Foreground="{DynamicResource TextSecondaryBrush}"
+                                    <TextBlock Text="{loc:Str set2_devices_blink_recal}" Foreground="{DynamicResource TextSecondaryBrush}"
                                                FontSize="11" VerticalAlignment="Center" Margin="7,0,0,0"/>
                                 </StackPanel>
 
@@ -141,10 +141,10 @@
                                                FontSize="10.5" VerticalAlignment="Center" Margin="0,0,7,0"/>
                                     <ComboBox x:Name="CmbWebcamDevice" x:FieldModifier="internal" Width="170"
                                               VerticalAlignment="Center"
-                                              ToolTip="Pick the capture device to use for blink / gaze tracking. If your physical webcam doesn't show its in-use light, you may have a virtual camera selected (OBS, Snap, etc.) — switch here, then hit Start."
+                                              ToolTip="{loc:Str tooltip_devices_cam_pick}"
                                               SelectionChanged="CmbWebcamDevice_SelectionChanged"/>
                                     <Button x:Name="BtnWebcamDeviceRefresh" x:FieldModifier="internal" Content="↻"
-                                            ToolTip="Re-scan connected video-capture devices."
+                                            ToolTip="{loc:Str tooltip_devices_cam_refresh}"
                                             Padding="9,3" Margin="6,0,0,0" VerticalAlignment="Center"
                                             Background="Transparent" Foreground="{DynamicResource PinkBrush}"
                                             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
@@ -180,7 +180,7 @@
 
                                 <!-- actions -->
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,0,4">
-                                    <Button x:Name="BtnWebcamReviewPrivacy" x:FieldModifier="internal" Content="Privacy info"
+                                    <Button x:Name="BtnWebcamReviewPrivacy" x:FieldModifier="internal" Content="{loc:Str btn_devices_privacy_info}"
                                             ToolTip="{loc:Str tooltip_webcam_review_privacy}"
                                             Padding="10,6" Margin="0,0,6,0" VerticalAlignment="Center"
                                             Background="Transparent" Foreground="{DynamicResource TextSecondaryBrush}"
@@ -188,7 +188,7 @@
                                             FontSize="11" Cursor="Hand" Click="BtnWebcamReviewPrivacy_Click">
                                         <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
                                     </Button>
-                                    <Button x:Name="BtnWebcamDebugCalibrate" x:FieldModifier="internal" Content="Calibrate"
+                                    <Button x:Name="BtnWebcamDebugCalibrate" x:FieldModifier="internal" Content="{loc:Str btn_devices_calibrate}"
                                             ToolTip="{loc:Str tooltip_webcam_calibrate}"
                                             Padding="11,6" Margin="0,0,6,0" VerticalAlignment="Center"
                                             Background="Transparent" Foreground="{DynamicResource PinkBrush}"
@@ -196,8 +196,8 @@
                                             FontSize="11" FontWeight="SemiBold" Cursor="Hand" Click="BtnWebcamDebugCalibrate_Click">
                                         <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
                                     </Button>
-                                    <Button x:Name="BtnWebcamDebugQuickRecal" x:FieldModifier="internal" Content="Quick Recal"
-                                            ToolTip="One-dot drift correction. Stare at the pink center dot for ~2 s — a constant nudge is added to the cursor so it lands where you're looking, no full recalibration needed."
+                                    <Button x:Name="BtnWebcamDebugQuickRecal" x:FieldModifier="internal" Content="{loc:Str btn_devices_quick_recal}"
+                                            ToolTip="{loc:Str tooltip_devices_quick_recal}"
                                             Padding="11,6" Margin="0,0,6,0" VerticalAlignment="Center"
                                             Background="Transparent" Foreground="{DynamicResource PinkBrush}"
                                             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
@@ -215,10 +215,10 @@
                             </WrapPanel>
 
                             <!-- Advanced / diagnostics (everything from the old card preserved) -->
-                            <Expander Header="Advanced" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" Margin="0,12,0,0">
+                            <Expander Header="{loc:Str label_devices_advanced}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" Margin="0,12,0,0">
                                 <StackPanel Margin="4,8,0,0">
                                     <WrapPanel Orientation="Horizontal">
-                                        <Button x:Name="BtnWebcamDebugTrackerTest" x:FieldModifier="internal" Content="Tracker Test"
+                                        <Button x:Name="BtnWebcamDebugTrackerTest" x:FieldModifier="internal" Content="{loc:Str btn_devices_tracker_test}"
                                                 ToolTip="{loc:Str tooltip_webcam_tracker_test}"
                                                 Padding="11,6" Margin="0,0,10,8" VerticalAlignment="Center"
                                                 Background="Transparent" Foreground="{DynamicResource SecondaryBrush}"
@@ -226,8 +226,8 @@
                                                 FontSize="11" FontWeight="SemiBold" Cursor="Hand" Click="BtnWebcamDebugTrackerTest_Click">
                                             <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
                                         </Button>
-                                        <Button x:Name="BtnWebcamRevokeConsent" x:FieldModifier="internal" Content="Revoke consent"
-                                                ToolTip="Stops webcam tracking, deletes calibration data, and clears your consent. You'll be re-prompted next time you enable a webcam feature."
+                                        <Button x:Name="BtnWebcamRevokeConsent" x:FieldModifier="internal" Content="{loc:Str btn_devices_revoke_consent}"
+                                                ToolTip="{loc:Str tooltip_devices_revoke_consent}"
                                                 Padding="11,6" Margin="0,0,10,8" VerticalAlignment="Center"
                                                 Background="Transparent" Foreground="{DynamicResource DangerBrush}"
                                                 BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1"
@@ -257,7 +257,7 @@
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="Show debug gaze cursor"
+                                                <TextBlock Grid.Column="0" Text="{loc:Str set2_devices_debug_cursor}"
                                                            Foreground="{DynamicResource TextLightBrush}"
                                                            FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"
                                                            VerticalAlignment="Center" Margin="0,0,10,0"/>
@@ -268,13 +268,13 @@
                                         </Border>
 
                                         <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource SettingChip}"
-                                                ToolTip="Keeps the calibration fresh automatically: when you click somewhere while looking at it, the gaze mapping gets a tiny nudge toward the click. Corrects the slow drift that used to need a Quick Recal.">
+                                                ToolTip="{loc:Str tooltip_devices_auto_drift}">
                                             <Grid MinHeight="22">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="Auto drift correction"
+                                                <TextBlock Grid.Column="0" Text="{loc:Str set2_devices_auto_drift}"
                                                            Foreground="{DynamicResource TextLightBrush}"
                                                            FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"
                                                            VerticalAlignment="Center" Margin="0,0,10,0"/>
@@ -286,13 +286,13 @@
 
                                         <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
                                                 Style="{StaticResource SettingChip}"
-                                                ToolTip="Advanced: leave on unless you know what you're doing. Affects how gaze-reactive effects map to your monitors.">
+                                                ToolTip="{loc:Str tooltip_devices_restrict_gaze}">
                                             <Grid MinHeight="22">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="Restrict gaze-reactive effects to the calibrated screen"
+                                                <TextBlock Grid.Column="0" Text="{loc:Str set2_devices_restrict_gaze}"
                                                            Foreground="{DynamicResource TextLightBrush}"
                                                            FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"
                                                            VerticalAlignment="Center" Margin="0,0,10,0"/>
@@ -350,9 +350,18 @@
                         </StackPanel>
                     </StackPanel>
 
+                    <!-- Exclusive-mode warning. SpeechService and SherpaWakeService both open the
+                         mic with NAudio's WaveInEvent; when another process holds the device in
+                         exclusive mode the StartRecording call throws, the catch logs a warning
+                         and the session returns NotAvailable / false. Nothing reaches the UI, so
+                         the wake word and every spoken prompt just never happen. -->
+                    <TextBlock Text="{loc:Str set2_devices_mic_exclusive_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,0,0,10"/>
+
                     <!-- Input device -->
                     <Grid MinHeight="34" Margin="0,0,0,6"
-                          ToolTip="Pick the microphone used for voice (Hey Bambi, mantras, lock cards).">
+                          ToolTip="{loc:Str tooltip_devices_mic_pick}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="150"/>
                             <ColumnDefinition Width="*"/>
@@ -363,12 +372,12 @@
                         <ComboBox Grid.Column="1" x:Name="CmbMicDevice" x:FieldModifier="internal"
                                   Margin="6,0" FontSize="12" VerticalAlignment="Center"
                                   SelectionChanged="CmbMicDevice_SelectionChanged"
-                                  ToolTip="Pick the microphone used for voice (Hey Bambi, mantras, lock cards)."/>
+                                  ToolTip="{loc:Str tooltip_devices_mic_pick}"/>
                         <Button Grid.Column="2" x:Name="BtnMicRefresh" x:FieldModifier="internal" Content="↻"
                                 Padding="10,3" Background="#33FF69B4" Foreground="White" FontSize="12"
                                 BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"
                                 VerticalAlignment="Center"
-                                Click="BtnMicRefresh_Click" ToolTip="Re-scan microphones."/>
+                                Click="BtnMicRefresh_Click" ToolTip="{loc:Str tooltip_devices_mic_refresh}"/>
                     </Grid>
 
                     <!-- Wake word -->
@@ -385,7 +394,7 @@
                                   Checked="ChkSpeechWakeWord_Changed" Unchecked="ChkSpeechWakeWord_Changed"/>
                     </Grid>
                     <Grid Margin="22,0,0,8"
-                          ToolTip="Comma-separated wake phrases (e.g. hey bambi, hey bimbo). Short common-word phrases recognize best.">
+                          ToolTip="{loc:Str tooltip_devices_wake_phrases}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
@@ -398,7 +407,7 @@
                                  Foreground="{DynamicResource TextLightBrush}" Background="{DynamicResource SurfaceBgBrush}"
                                  BorderBrush="{DynamicResource PanelAccentHoverBrush}" BorderThickness="1" Padding="6,3"
                                  LostFocus="TxtSpeechWakeWords_LostFocus"
-                                 ToolTip="Comma-separated wake phrases (e.g. hey bambi, hey bimbo). Short common-word phrases recognize best."/>
+                                 ToolTip="{loc:Str tooltip_devices_wake_phrases}"/>
                     </Grid>
 
                     <!-- Wake sensitivity -->
@@ -451,7 +460,7 @@
                                   Checked="ChkSpeechPushToTalk_Changed" Unchecked="ChkSpeechPushToTalk_Changed"/>
                     </Grid>
                     <Grid Margin="22,0,0,8"
-                          ToolTip="Click, then press the key you want to use for push-to-talk.">
+                          ToolTip="{loc:Str tooltip_devices_ptt_key}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
@@ -467,7 +476,7 @@
                                 Content="{loc:Str set2_btn_set_key}" FontSize="11" Padding="10,3"
                                 Style="{StaticResource OutlineButton}"
                                 Click="BtnSetPttKey_Click"
-                                ToolTip="Click, then press the key you want to use for push-to-talk."/>
+                                ToolTip="{loc:Str tooltip_devices_ptt_key}"/>
                     </Grid>
 
                     <!-- Headphones / barge-in -->
