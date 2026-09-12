@@ -310,6 +310,34 @@ public class FavoritesRailArtTests
         Assert.Equal(new[] { "*", "Auto" }, rows);
     }
 
+    /// <summary>A numeric Setter out of one of the rail's TextBlock styles.</summary>
+    private static double StyleNumber(string styleKey, string property)
+    {
+        var xaml = RailXaml();
+        var start = xaml.IndexOf("x:Key=\"" + styleKey + "\"", StringComparison.Ordinal);
+        Assert.True(start > 0, styleKey + " is gone from SettingsTabView.xaml");
+        var block = xaml.Substring(start, xaml.IndexOf("</Style>", start, StringComparison.Ordinal) - start);
+
+        var hit = Regex.Match(block, "Property=\"" + property + "\"\\s+Value=\"([\\d.]+)\"");
+        Assert.True(hit.Success, styleKey + " no longer sets " + property);
+        return double.Parse(hit.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    [Fact]
+    public void The_gesture_line_is_not_a_footnote()
+    {
+        // It shipped at 7.5 and the owner sent it back ("bigger text here pls"), so this is the
+        // floor rather than a style preference: the line that explains the column may not read
+        // smaller than the captions that head it.
+        var hint = StyleNumber("RailGestureHint", "FontSize");
+        var caption = StyleNumber("RailSectionCaption", "FontSize");
+
+        Assert.True(hint >= caption,
+            $"the gesture line is {hint} against a {caption} section caption - it is a footnote again");
+        Assert.True(StyleNumber("RailGestureHint", "LineHeight") > hint,
+            "the pinned LineHeight is under the font size, which sets the lines on top of each other");
+    }
+
     [Fact]
     public void The_gesture_line_never_hides_itself()
     {

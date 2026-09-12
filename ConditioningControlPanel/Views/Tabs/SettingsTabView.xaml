@@ -185,19 +185,24 @@
                     <Setter Property="TextWrapping" Value="Wrap"/>
                     <Setter Property="Margin" Value="0,0,0,6"/>
                 </Style>
-                <!-- The gesture line at the foot of the column. Same family as the FAVORITES /
-                     RECENT captions and a step smaller, but muted rather than pink: it explains
-                     the column, it does not head a section, and a third pink caption down there
-                     would read as a third list. LineHeight is pinned because the line wraps to
-                     five or six of them in a 69px column and the default leading makes that a
-                     block rather than a footnote. -->
+                <!-- The gesture line at the foot of the column. 10, a step ABOVE the FAVORITES /
+                     RECENT captions, on the owner's word after the desk run ("bigger text here
+                     pls"): it shipped at 7.5 and read as a footnote you had to lean into. Muted
+                     rather than pink, at full opacity - it explains the column, it does not head
+                     a section, and a third pink caption down there would read as a third list,
+                     but at this size it no longer needs dimming to stay out of the way.
+
+                     LineHeight is pinned at 13 to match, because a sentence wraps to eight or so
+                     lines in a 69px column and the default leading makes that a slab. It may take
+                     as many lines as it needs: the rail fills the row now, so the vertical room
+                     is there, and the line owns its own Auto row so those lines come out of the
+                     lists' scroll area rather than off the bottom of the card. -->
                 <Style x:Key="RailGestureHint" TargetType="TextBlock">
-                    <Setter Property="FontSize" Value="7.5"/>
+                    <Setter Property="FontSize" Value="10"/>
                     <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
-                    <Setter Property="Opacity" Value="0.9"/>
                     <Setter Property="TextAlignment" Value="Center"/>
                     <Setter Property="TextWrapping" Value="Wrap"/>
-                    <Setter Property="LineHeight" Value="10"/>
+                    <Setter Property="LineHeight" Value="13"/>
                     <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
                 </Style>
                 <!-- Legibility scrim, added to EVERY chip in code: the art is bright neon on
@@ -242,11 +247,12 @@
 
                      BELOW that, outside the scroller, the gesture line is docked in its own Auto
                      row: a 1px rule, 5 of padding, the wrapped line, 7 of padding. Its height is
-                     TEXT-DRIVEN and therefore language-driven - about five or six 10px lines at
-                     69 wide in English, more in German - so there is no number to put here, and
-                     there is no need for one: it is a row of its own, so it cannot overflow and
-                     cannot be pushed out. What it does do is take its height off the lists'
-                     visible area, which is exactly what the ScrollViewer above is for.
+                     TEXT-DRIVEN and therefore language-driven - at 10pt on a 13 leading that is
+                     roughly eight lines at 69 wide in English and more in German - so there is no
+                     number to put here, and there is no need for one: it is a row of its own, so
+                     it cannot overflow and cannot be pushed out. What it does do is take its
+                     height off the lists' visible area, which is exactly what the ScrollViewer
+                     above is for, and it is why the caps are worth the arithmetic above.
 
                      Keep this block, RailChipStyle and FavoritesRailRule's two caps in step;
                      FavoritesRailArtTests re-does the sum from this file.
