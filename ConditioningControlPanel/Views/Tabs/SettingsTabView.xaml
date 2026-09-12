@@ -1548,7 +1548,136 @@
                     </Border>
                 </Grid>
             </Border>
-    
+
+            <!-- ============================================================ -->
+            <!-- THE BILLBOARD (2026-09-12, reshaped after the first desk    -->
+            <!-- pass).                                                      -->
+            <!--                                                             -->
+            <!-- What sits in the row the folded browser gave back. Modelled -->
+            <!-- on the doors on the CC Labs remix page (remix/ui/doors.js): -->
+            <!-- art with a dark shade at the bottom, a small mono eyebrow,  -->
+            <!-- a title, one line and a chevron.                            -->
+            <!--                                                             -->
+            <!-- A RACK, not a poster. The first cut was one card filling the -->
+            <!-- whole freed space (874x504 at the desk), which blew the      -->
+            <!-- square marks - discord.png, logo.png - up into a blurry      -->
+            <!-- giant. So: four small 16:9 cards in a 2x2 grid, and every    -->
+            <!-- 12s ONE slot swaps to the card that has been off screen      -->
+            <!-- longest. No dots: the grid is its own index.                 -->
+            <!--                                                             -->
+            <!-- Two art treatments, decided per card by BillboardArt.        -->
+            <!-- Cover: wide feature art, cover-fitted. Plate: a square mark, -->
+            <!-- which is NOT cover-fitted - the same image goes behind it    -->
+            <!-- blurred and darkened and the mark itself sits at 72px in the -->
+            <!-- middle, so a logo reads as a logo.                           -->
+            <!--                                                             -->
+            <!-- Visible ONLY while the browser is folded, so an unfolded     -->
+            <!-- dashboard is byte-for-byte the one that shipped. The roster  -->
+            <!-- and the walk are Services/DashboardBillboard.cs; the paint,  -->
+            <!-- the clock and the click are MainWindow.DashboardBillboard.cs.-->
+            <!-- ============================================================ -->
+            <Border x:Name="DashBillboard" x:FieldModifier="internal" Grid.Row="1"
+                    Visibility="Collapsed" Margin="0,0,0,5"
+                    CornerRadius="12" ClipToBounds="True"
+                    Background="{DynamicResource ElevatedSurfaceBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                <ItemsControl x:Name="BillboardRackHost" x:FieldModifier="internal" Margin="5">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Rows="2" Columns="2"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <!-- A Button so the whole card is the hit target, keyboard focus works
+                                 and the click lands in one handler; the template IS the card, so
+                                 none of the default chrome shows through. -->
+                            <Button Click="BillboardCard_Click" Cursor="Hand" Margin="3"
+                                    Padding="0" MinHeight="74" ToolTip="{Binding Tip}"
+                                    HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="card" CornerRadius="10" ClipToBounds="True"
+                                                Background="{DynamicResource SurfaceBgBrush}"
+                                                BorderThickness="1"
+                                                BorderBrush="{DynamicResource GlassBorderBrush}">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="card" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                            </Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="card" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                                <Grid>
+                                    <!-- Cover: wide feature art, UniformToFill inside the clipping
+                                         border above. -->
+                                    <Image Source="{Binding Art}" Stretch="UniformToFill"
+                                           Visibility="{Binding CoverVisibility}"
+                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                    <!-- Plate: the same file twice. Behind, blurred and dimmed so
+                                         it is a ground rather than a picture; in front, the mark at
+                                         its own size. Box kernel on purpose - a Gaussian blur of a
+                                         full-bleed bitmap is the expensive one, and this is static
+                                         art that never animates. -->
+                                    <Grid Visibility="{Binding PlateVisibility}">
+                                        <Image Source="{Binding Art}" Stretch="UniformToFill" Opacity="0.28"
+                                               RenderOptions.BitmapScalingMode="LowQuality">
+                                            <Image.Effect>
+                                                <BlurEffect Radius="28" KernelType="Box" RenderingBias="Performance"/>
+                                            </Image.Effect>
+                                        </Image>
+                                        <Image Source="{Binding Art}" Width="72" Height="72" Stretch="Uniform"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Margin="0,0,0,24"
+                                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                                    </Grid>
+                                    <!-- The shade. Same job as .door-shade: the words need ground
+                                         under them whatever the art happens to be. -->
+                                    <Border IsHitTestVisible="False">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="#0014142B" Offset="0.30"/>
+                                                <GradientStop Color="#8C14142B" Offset="0.56"/>
+                                                <GradientStop Color="#E614142B" Offset="0.80"/>
+                                                <GradientStop Color="#FA14142B" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                    </Border>
+                                    <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Left"
+                                                Margin="10,0,34,7" IsHitTestVisible="False">
+                                        <TextBlock Text="{Binding Eyebrow}"
+                                                   FontFamily="{DynamicResource Font.Mono}" FontSize="9"
+                                                   Foreground="{DynamicResource PinkBrush}"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding Title}"
+                                                   FontSize="13" FontWeight="Bold" Margin="0,1,0,0"
+                                                   Foreground="{DynamicResource TextLightBrush}"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding Line}"
+                                                   FontSize="10" Margin="0,1,0,0"
+                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    <Border Width="20" Height="20" CornerRadius="10" IsHitTestVisible="False"
+                                            HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                            Margin="0,0,8,8" BorderThickness="1"
+                                            Background="#8C14142B" BorderBrush="{DynamicResource PinkBrush}">
+                                        <TextBlock Text="›" FontSize="13" Margin="0,-3,0,0"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource PinkBrush}"/>
+                                    </Border>
+                                </Grid>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+
             <!-- ============================================================ -->
             <!-- COMPANION STRIP (Phase 3, new).                              -->
             <!--                                                              -->
