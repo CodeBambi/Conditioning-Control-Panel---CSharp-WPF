@@ -59,14 +59,37 @@ public class FavoritesRailRuleTests
     }
 
     [Fact]
-    public void Recent_is_most_recent_first_deduped_and_capped_at_five()
+    public void Recent_holds_seven_boxes()
+    {
+        // Five until 2026-09-12, when the owner asked for two more. The cap is half the column
+        // arithmetic written over RailChipStyle in SettingsTabView.xaml; FavoritesRailArtTests
+        // owns the other half.
+        Assert.Equal(7, FavoritesRailRule.RecentCap);
+        Assert.Equal(8, FavoritesRailRule.FavoritesCap);
+    }
+
+    [Fact]
+    public void Recent_is_most_recent_first_and_deduped()
     {
         var recent = new List<string>();
         foreach (var id in new[] { "tab.a", "tab.b", "tab.c", "tab.a", "tab.d", "tab.e", "tab.f" })
             FavoritesRailRule.NoteOpened(recent, id);
 
+        // Seven opens, one of them a repeat, so nothing is trimmed yet: the repeat moved to the
+        // front and left six distinct ids behind it.
+        Assert.Equal(new[] { "tab.f", "tab.e", "tab.d", "tab.a", "tab.c", "tab.b" }, recent);
+    }
+
+    [Fact]
+    public void Recent_trims_the_oldest_at_the_cap()
+    {
+        var recent = new List<string>();
+        for (int i = 0; i < FavoritesRailRule.RecentCap + 3; i++)
+            Assert.True(FavoritesRailRule.NoteOpened(recent, "tab.n" + i));
+
         Assert.Equal(FavoritesRailRule.RecentCap, recent.Count);
-        Assert.Equal(new[] { "tab.f", "tab.e", "tab.d", "tab.a", "tab.c" }, recent);
+        Assert.Equal("tab.n" + (FavoritesRailRule.RecentCap + 2), recent[0]);
+        Assert.Equal("tab.n3", recent[^1]);
     }
 
     [Fact]

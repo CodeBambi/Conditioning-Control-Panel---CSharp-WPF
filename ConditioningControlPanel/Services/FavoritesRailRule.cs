@@ -18,11 +18,17 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public static class FavoritesRailRule
     {
-        /// <summary>Chips the 92px column holds before it has to scroll.</summary>
+        /// <summary>Pinned chips the 92px column holds before it has to scroll.</summary>
         public const int FavoritesCap = 8;
 
-        /// <summary>The last five places opened, most recent first.</summary>
-        public const int RecentCap = 5;
+        /// <summary>
+        /// The last seven places opened, most recent first. Five until 2026-09-12, when the owner
+        /// asked for two more boxes ("we got space"); the chip lost 6 DIP of height in the same
+        /// change so the full column is shorter than it was at five. The arithmetic is spelled
+        /// out over RailChipStyle in <c>Views/Tabs/SettingsTabView.xaml</c> - move either cap and
+        /// that sum moves with it.
+        /// </summary>
+        public const int RecentCap = 7;
 
         private static readonly string[] DestinationPrefixes = { "door.", "tab.", "launch.", "card." };
 

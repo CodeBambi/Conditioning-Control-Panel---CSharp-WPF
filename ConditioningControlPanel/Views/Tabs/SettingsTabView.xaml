@@ -151,11 +151,15 @@
         <!-- FAVORITES + RECENT RAIL (col 0). Owner call, Discord "New UI  -->
         <!-- Feedback", 2026-09-11: the premium quick-toggle rail that sat  -->
         <!-- here is gone. The column remembers where the user goes instead -->
-        <!-- - pinned destinations on top, the last five opened below. The  -->
+        <!-- - pinned destinations on top, the last seven opened below. The -->
         <!-- chips are built in code (MainWindow.FavoritesRail.cs) from the -->
         <!-- Ctrl+K palette rows, so this file owns the frame and the       -->
         <!-- styles only. The gated features those chips toggled are still  -->
         <!-- switched on from their own cards and pages.                    -->
+        <!--                                                                -->
+        <!-- 2026-09-12, owner: the chips wear the FEATURE'S OWN PICTURE     -->
+        <!-- (Services/FavoritesRailArt.cs), the palette emoji only when no  -->
+        <!-- picture resolves, and RECENT grew from five boxes to seven.     -->
         <!-- ============================================================ -->
         <Border x:Name="FavoritesRail" x:FieldModifier="internal" Grid.Column="0" Grid.Row="1" Margin="5,5,0,5"
                 VerticalAlignment="Top"
@@ -177,7 +181,19 @@
                     <Setter Property="TextWrapping" Value="Wrap"/>
                     <Setter Property="Margin" Value="0,0,0,6"/>
                 </Style>
-                <!-- Caption at the foot of a chip; the palette glyph sits above it. -->
+                <!-- Legibility scrim, added to a chip in code ONLY when cover art landed on it:
+                     the art is bright neon on near-black and a text shadow would not survive it,
+                     so the caption sits in the dark band at the foot instead. A chip with no
+                     picture keeps its flat tinted face and gets no scrim - darkening a flat
+                     surface buys nothing and reads as a smudge. Same stops the premium rail's
+                     ChipScrimBrush used, and ModArtFramingRegistry calls this surface FootBand
+                     so the mod editor's preview paints the same band. -->
+                <LinearGradientBrush x:Key="RailChipScrim" StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#00000000" Offset="0.28"/>
+                    <GradientStop Color="#73000000" Offset="0.62"/>
+                    <GradientStop Color="#DE000000" Offset="1"/>
+                </LinearGradientBrush>
+                <!-- Caption at the foot of a chip; the picture (or the palette glyph) sits above. -->
                 <Style x:Key="RailChipCaption" TargetType="TextBlock">
                     <Setter Property="FontSize" Value="8.5"/>
                     <Setter Property="FontWeight" Value="SemiBold"/>
@@ -187,21 +203,43 @@
                     <Setter Property="VerticalAlignment" Value="Bottom"/>
                     <Setter Property="Margin" Value="2,0,2,3"/>
                 </Style>
-                <!-- Same footprint the old chips had (69x42) so the column reads the same;
-                     a locked destination swaps BorderBrush for the gold tier livery in code. -->
+                <!-- 69x36 on a 3px gap - a 39 pitch. THE COLUMN ARITHMETIC, because two more
+                     RECENT boxes have to come out of a row whose height nobody may change:
+
+                       stack margin           6 + 6            =  12
+                       FAVORITES caption      9pt bold + 3     =  15
+                       8 favorite chips       8 x (36 + 3)     = 312
+                       RECENT caption         4 + 9pt bold + 3 =  19
+                       7 recent chips         7 x (36 + 3)     = 273
+                                                                 ===
+                       full column                               631  (+2 border +10 margin = 643)
+
+                     The chips were 69x42 on a 4px gap (a 46 pitch) while RECENT held five, which
+                     is 644 full (656 in the column). So eight favorites and SEVEN recent now cost
+                     13 DIP LESS than eight and five did: the column cannot overflow anywhere the
+                     old one fitted, and it fits two more boxes. The 6 DIP the chip gave up is
+                     paid for by the art - a picture reads at 36 where an emoji plus a caption
+                     wanted the 42. Keep this block, RailChipStyle and FavoritesRailRule's two
+                     caps in step; FavoritesRailArtTests re-does the sum from this file.
+
+                     A locked destination swaps BorderBrush for the gold tier livery in code. -->
                 <Style x:Key="RailChipStyle" TargetType="Button">
                     <Setter Property="Cursor" Value="Hand"/>
-                    <Setter Property="Margin" Value="0,0,0,4"/>
-                    <Setter Property="Height" Value="42"/>
+                    <Setter Property="Margin" Value="0,0,0,3"/>
+                    <Setter Property="Height" Value="36"/>
                     <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
                     <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
                     <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="Button">
+                                <!-- The Background is the ART on a chip that has a picture (an
+                                     ImageBrush written from code), so the rounded face comes for
+                                     free: a Border paints its Background inside its CornerRadius
+                                     where a child Image would need its own clip. -->
                                 <Border x:Name="cb" Background="{TemplateBinding Background}"
                                         BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
-                                        CornerRadius="9">
+                                        CornerRadius="9" RenderOptions.BitmapScalingMode="HighQuality">
                                     <Grid>
                                         <Border x:Name="tint" CornerRadius="8" Opacity="0" IsHitTestVisible="False"
                                                 Background="{DynamicResource TransparentPinkBrush}"/>

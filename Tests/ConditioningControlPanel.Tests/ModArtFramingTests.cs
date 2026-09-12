@@ -42,8 +42,8 @@ public class ModArtFramingTests
     [Fact]
     public void ToViewbox_AtZoomOne_SourceTallerThanSurface_TakesFullWidthAndCropsHeight()
     {
-        // Square source into the rail chip's 69x42: the frame is wider, so width is spent whole.
-        var chipAspect = 69.0 / 42.0;
+        // Square source into the rail chip's 69x36: the frame is wider, so width is spent whole.
+        var chipAspect = 69.0 / 36.0;
         var rect = ModArtFramingRegistry.ToViewbox(null, sourceAspect: 1.0, surfaceAspect: chipAspect);
 
         Assert.Equal(1.0, rect.Width, Tol);

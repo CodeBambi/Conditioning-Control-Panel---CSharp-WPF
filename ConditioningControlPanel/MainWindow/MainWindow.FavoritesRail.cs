@@ -26,11 +26,19 @@ namespace ConditioningControlPanel
     /// where the user goes.
     ///
     /// <para>A chip is a Ctrl+K palette row (<see cref="SettingsPaletteIndex"/>): same id, same
-    /// label, same glyph, same navigation. The rail keeps no registry of its own, so a door that
-    /// moves in the palette moves here for free, and a row the server has withheld
+    /// label, same navigation. The rail keeps no registry of its own, so a door that moves in the
+    /// palette moves here for free, and a row the server has withheld
     /// (<see cref="SettingsPaletteEntry.Available"/>) never renders. List rules live in
     /// <see cref="FavoritesRailRule"/>; the lists live in AppSettings (RailFavorites,
     /// RailRecent).</para>
+    ///
+    /// <para>The FACE is the one thing the chip does not take from the palette row. Since
+    /// 2026-09-12 (owner: "use the images for the different features") a chip wears the
+    /// destination's own picture - the feature illustration the mosaic and the Play wall use, or
+    /// the door's nav medallion - and the palette glyph only when nothing resolves. Which picture
+    /// is <see cref="FavoritesRailArt"/>; the crop is the railChip surface in
+    /// <see cref="ModArtFramingRegistry"/>, so a .ccpmod that re-skins features/flash.png
+    /// re-skins the chip and is framed by its own author rather than by our rect.</para>
     ///
     /// <para>Locked destinations keep their chip and wear the padlock; the click goes where a
     /// rail click would and the page raises its own upsell, the same "navigation is never
@@ -104,7 +112,9 @@ namespace ConditioningControlPanel
             RefreshFavoritesRail();
         }
 
-        /// <summary>Rebuilds both chip stacks from settings. Cheap: at most thirteen buttons.</summary>
+        /// <summary>Rebuilds both chip stacks from settings. Cheap: at most fifteen buttons,
+        /// and every picture on them comes out of the resolver's decode cache after the first
+        /// paint.</summary>
         internal void RefreshFavoritesRail()
         {
             var dash = SettingsTab;
@@ -138,12 +148,17 @@ namespace ConditioningControlPanel
             bool locked = IsNavEntryLocked(entry.TabKey);
 
             var grid = new Grid();
-            grid.Children.Add(new Helpers.EmojiTextBlock
+            var cover = BuildRailChipArt(entry.Id, grid, out bool painted);
+            if (!painted)
             {
-                Text = entry.Glyph, FontSize = 15,
-                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, 5, 0, 0),
-            });
+                // Nothing resolved: the palette glyph stands, exactly as the chip shipped.
+                grid.Children.Add(new Helpers.EmojiTextBlock
+                {
+                    Text = entry.Glyph, FontSize = 14,
+                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top,
+                    Margin = new Thickness(0, 3, 0, 0),
+                });
+            }
             grid.Children.Add(new TextBlock
             {
                 Text = entry.Label,
@@ -168,10 +183,105 @@ namespace ConditioningControlPanel
                     ? entry.Label + "\n" + Loc.Get("rail_chip_tip")
                     : entry.Label + "  ·  " + entry.Context + "\n" + Loc.Get("rail_chip_tip"),
             };
+            // The art is the chip's Background, so the template's rounded Border clips it for
+            // free. A local value outranks the style's AccentTintedBgBrush setter; a chip with
+            // no picture never sets one and keeps the flat tinted face.
+            if (cover != null) chip.Background = cover;
             if (locked && TryFindResource("Tier1GoldBorderBrush") is Brush gold) chip.BorderBrush = gold;
             chip.Click += (_, _) => OpenDestination(entry);
             AttachPinMenu(chip, entry.Id, holdRail: false);
             return chip;
+        }
+
+        /// <summary>
+        /// Puts the destination's own picture on a chip (owner ask, 2026-09-12). Cover art comes
+        /// back as the brush the chip should take as its Background; an icon adds itself to
+        /// <paramref name="grid"/> and the return is null. <paramref name="painted"/> is the one
+        /// answer the caller needs: false means nothing resolved and the palette glyph stands.
+        ///
+        /// <para>Mod art is respected exactly as the mosaic respects it: the lookup goes through
+        /// <see cref="Services.ModResourceResolver"/> on the same resource paths, the app-shipped
+        /// themed fork (<c>features/vault_bambi.png</c>) is tried first for a built-in mod, and
+        /// the crop comes from <see cref="Services.ModArtFramingRegistry"/> so a .ccpmod's own
+        /// picture is framed by its author or centre-cropped, never by a rect drawn for ours.</para>
+        /// </summary>
+        private ImageBrush? BuildRailChipArt(string paletteId, Grid grid, out bool painted)
+        {
+            painted = false;
+            try
+            {
+                var art = Services.FavoritesRailArt.For(paletteId);
+                if (art == null) return null;
+
+                var suffix = Services.FavoritesRailArt.ThemeSuffix(App.Mods?.ActiveModId);
+                var candidates = Services.FavoritesRailArt.Candidates(art.ResourcePath, suffix);
+
+                if (art.Fit == Services.RailArtFit.Icon)
+                {
+                    // A 64x64 door medallion, drawn where the emoji was. Never cover-fitted:
+                    // cropping a square icon to a 1.9:1 chip cuts the drawing in half.
+                    foreach (var path in candidates)
+                    {
+                        var icon = Services.ModResourceResolver.ResolveImageDecoded(
+                            path, Services.FavoritesRailArt.BaseDecodeWidth);
+                        if (icon == null) continue;
+
+                        var medallion = new Image
+                        {
+                            Source = icon,
+                            Width = 19, Height = 19,
+                            Stretch = Stretch.Uniform,
+                            HorizontalAlignment = HorizontalAlignment.Center,
+                            VerticalAlignment = VerticalAlignment.Top,
+                            Margin = new Thickness(0, 2, 0, 0),
+                            IsHitTestVisible = false,
+                        };
+                        RenderOptions.SetBitmapScalingMode(medallion, BitmapScalingMode.HighQuality);
+                        grid.Children.Add(medallion);
+                        painted = true;
+                        return null;
+                    }
+                    return null;
+                }
+
+                // Cover art. Two decodes at most: the crop window decides the decode width (a
+                // chip framed on a quarter of the image needs four times the pixels), and the
+                // window is not known until the first bitmap has given up its aspect ratio. Both
+                // decodes are cached by the resolver, so a repaint costs neither.
+                foreach (var path in candidates)
+                {
+                    var probe = Services.ModResourceResolver.ResolveImageDecoded(
+                        path, Services.FavoritesRailArt.BaseDecodeWidth);
+                    if (probe == null) continue;
+
+                    bool modArt = Services.ModResourceResolver.HasActiveModOverride(path);
+                    var brush = new ImageBrush(probe) { Stretch = Stretch.UniformToFill };
+                    ApplyArtFraming(brush, art.ResourcePath, Services.ModArtFramingRegistry.SurfaceRailChip, modArt);
+
+                    var width = Services.FavoritesRailArt.DecodeWidthFor(brush.Viewbox.Width);
+                    if (width > Services.FavoritesRailArt.BaseDecodeWidth)
+                    {
+                        var sharper = Services.ModResourceResolver.ResolveImageDecoded(path, width);
+                        if (sharper != null) brush.ImageSource = sharper;
+                    }
+                    brush.Freeze();
+
+                    // The caption sits over the picture, so it needs the foot band under it.
+                    grid.Children.Add(new Border
+                    {
+                        CornerRadius = new CornerRadius(8),
+                        IsHitTestVisible = false,
+                        Background = SettingsTab?.FavoritesRail?.TryFindResource("RailChipScrim") as Brush,
+                    });
+                    painted = true;
+                    return brush;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BuildRailChipArt({Id}): {E}", paletteId, ex.Message);
+            }
+            return null;
         }
 
         /// <summary>
