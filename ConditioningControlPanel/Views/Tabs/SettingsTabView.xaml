@@ -463,7 +463,7 @@
                  was Just Drop's last dashboard surface; Just Drop itself did not move and still
                  sits on the Studio rail row, on the Exclusives shelf and in Ctrl+K.
 
-                 A LAUNCHER, not a feature, and the tile is shaped by that in three places:
+                 A DOOR to a tool, not a feature, and the tile is shaped by that in three places:
 
                  * No ToggleRequested handler. Right-click still raises the card's toggle event
                    (FeatureCard.OnRightClick raises it unconditionally) and nothing is listening,
@@ -473,12 +473,14 @@
                    whatever else is going on - there is no "off" colour to drain.
                  * No price tag. The Deeper page carries no ExclusiveFeature roster row, so it is
                    not sold and IsNavEntryLocked answers false for it; RefreshMosaicTierBadges
-                   therefore leaves this tile alone and the editor is exactly as open as the page
-                   it belongs to. If Deeper is ever gated, gate both in the same change.
+                   therefore leaves this tile alone and the page is exactly as open from here as
+                   it is from the rail. If Deeper is ever gated, gate both in the same change.
 
-                 The click opens the editor on a NEW enhancement, through the same handler the
-                 Deeper page's own New button uses (BtnDeeperNewEnhancement_Click), so the dialog,
-                 the blank-enhancement call and the tutorial hooks all stay in one place. -->
+                 The click is ShowTab("deeper") and nothing else - the library, the editor and the
+                 player are all on that page. The first cut opened the editor on a blank
+                 enhancement and the owner corrected it on the desk run, 2026-09-12: "the deeper
+                 editor should link and open the deeper page, not the editor". The wall's
+                 "navigate, never launch" rule, which this tile is now back inside. -->
             <features:FeatureCard Grid.Row="1" Grid.Column="0" x:Name="CardDeeperEditor" x:FieldModifier="internal"
                                   Title="{loc:Str dash_deeper_editor_title}"
                                   Icon="pack://application:,,,/Resources/features/deeper_editor.png"

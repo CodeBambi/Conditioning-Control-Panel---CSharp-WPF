@@ -14,11 +14,13 @@ namespace ConditioningControlPanel.Tests;
 /// <para>It took the slot the nameless Just Drop tease tile held. Three things about that swap are
 /// worth a test rather than a comment, because all three compile either way:</para>
 /// <list type="number">
-/// <item>the tile is a LAUNCHER, so it must not carry a right-click toggle or the dim-when-off
-/// opt-in - an editor has no "on", and a card that greys out when nothing is running would be
-/// telling the user something untrue;</item>
-/// <item>its click has to reach the Deeper page's own New handler rather than a second copy of
-/// the dialog-plus-blank-enhancement sequence;</item>
+/// <item>the tile carries no right-click toggle and no dim-when-off opt-in - an editor has no
+/// "on", and a card that greys out when nothing is running would be telling the user something
+/// untrue;</item>
+/// <item>its click NAVIGATES to the Deeper page and does nothing else. The first cut opened the
+/// editor on a blank enhancement and the owner corrected it on the desk run, 2026-09-12: "the
+/// deeper editor should link and open the deeper page, not the editor". A front-page tile that
+/// puts a modal dialog on screen is a tile you cannot browse past, so this is pinned;</item>
 /// <item>the retired tease wiring has to be gone rather than merely unreferenced - a leftover
 /// ApplyTeaseCard call against a card that no longer exists is a silent no-op forever.</item>
 /// </list>
@@ -80,7 +82,7 @@ public class DeeperEditorTileTests
     }
 
     [Fact]
-    public void The_tile_is_a_launcher_and_takes_no_toggle()
+    public void The_tile_takes_no_toggle()
     {
         var tile = TileElement();
         // FeatureCard.OnRightClick raises ToggleRequested on every card. With no handler the
@@ -94,18 +96,21 @@ public class DeeperEditorTileTests
     }
 
     [Fact]
-    public void The_click_reuses_the_Deeper_pages_own_new_handler()
+    public void The_click_opens_the_Deeper_page_and_nothing_else()
     {
         Assert.Contains("mw.CardDeeperEditor_Click", ReadSource("Views", "Tabs", "SettingsTabView.xaml.cs"),
                         StringComparison.Ordinal);
-        // One journey, one implementation: the media-type dialog, CreateBlank and the interactive
-        // tutorial hand-off all stay inside BtnDeeperNewEnhancement_Click. Whitespace-insensitive
-        // so a reformat cannot fail it, but the two names must sit in the same expression.
+
         var presets = ReadSource("MainWindow", "MainWindow.Presets.cs");
         var at = presets.IndexOf("internal void CardDeeperEditor_Click", StringComparison.Ordinal);
         Assert.True(at > 0, "MainWindow has no CardDeeperEditor_Click");
         var body = presets.Substring(at, Math.Min(200, presets.Length - at));
-        Assert.Contains("BtnDeeperNewEnhancement_Click", body, StringComparison.Ordinal);
+
+        // Whitespace-insensitive, but the destination is pinned: this is a door to a page.
+        Assert.Contains("ShowTab(\"deeper\")", body, StringComparison.Ordinal);
+        // The owner's correction, kept honest. Opening the editor from the wall put a modal
+        // dialog on the front page; the tile lands on the room and lets the user choose.
+        Assert.DoesNotContain("BtnDeeperNewEnhancement_Click", body, StringComparison.Ordinal);
     }
 
     // ---------------------------------------------------------------- the retired tease
@@ -153,34 +158,27 @@ public class DeeperEditorTileTests
     // ---------------------------------------------------------------- the palette and the rail
 
     [Fact]
-    public void The_editor_has_a_palette_row_that_lands_on_the_button_that_opens_it()
+    public void The_tile_and_Ctrl_K_land_in_the_same_room()
     {
-        var row = SettingsPaletteIndex.All.FirstOrDefault(e => e.Id == "launch.deepereditor");
-        Assert.True(row != null, "no Ctrl+K row for the Deeper editor");
+        // tab.deeper already exists and already carries the page's picture, the rail chip and the
+        // RECENT entry. The tile navigating there means there is nothing else to register: a
+        // second row for the same destination would put two chips in the rail for one room.
+        var row = SettingsPaletteIndex.All.FirstOrDefault(e => e.Id == "tab.deeper");
+        Assert.True(row != null, "the Deeper page lost its Ctrl+K row");
         Assert.Equal("deeper", row!.TabKey);
-        Assert.Contains("BtnDeeperNewEnhancement", row.ElementNames);
-        Assert.Equal("dash_deeper_editor_title", row.LabelKey);
-        Assert.True(FavoritesRailRule.IsDestination(row.Id), "a launch.* row is a pinnable destination");
+        Assert.True(FavoritesRailArt.Knows("tab.deeper"), "the Deeper chip has no art decision");
     }
 
-    [Theory]
-    [InlineData("deeper editor")]
-    [InlineData("new enhancement")]
-    [InlineData("ccpenh")]
-    public void The_editor_is_findable_by_what_people_call_it(string term)
-        => Assert.True(SettingsPaletteIndex.Search(term).Any(e => e.Id == "launch.deepereditor"),
-                       $"searching the palette for \"{term}\" does not find the Deeper editor");
-
     [Fact]
-    public void The_rail_chip_does_not_borrow_the_Deeper_pages_picture()
+    public void No_second_palette_row_survived_the_correction()
     {
-        var editor = FavoritesRailArt.For("launch.deepereditor");
-        Assert.True(editor != null, "the Deeper editor chip has no art decision");
-        Assert.Equal("features/deeper_editor.png", editor!.ResourcePath);
-        Assert.Equal(RailArtFit.Cover, editor.Fit);
-        // Page and tool can sit in the rail together, so one drawing for both would read as a
-        // duplicated chip rather than as two destinations.
-        Assert.NotEqual(FavoritesRailArt.For("tab.deeper")!.ResourcePath, editor.ResourcePath);
+        // The first cut registered launch.deepereditor, which only made sense while the tile
+        // pressed BtnDeeperNewEnhancement. Once it navigates, the row, its art entry and its pin
+        // map entry are all a duplicate of tab.deeper.
+        Assert.DoesNotContain(SettingsPaletteIndex.All, e => e.Id == "launch.deepereditor");
+        Assert.False(FavoritesRailArt.Knows("launch.deepereditor"));
+        Assert.DoesNotContain("deepereditor", ReadSource("MainWindow", "MainWindow.FavoritesRail.cs"),
+                              StringComparison.Ordinal);
     }
 
     // ---------------------------------------------------------------- the copy

@@ -1113,16 +1113,16 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// The mosaic's DEEPER EDITOR tile (owner, 2026-09-12), which took the slot the nameless
-        /// tease tile held. It opens the editor on a new enhancement by calling the Deeper page's
-        /// own New handler, so the media-type dialog, the blank enhancement and the interactive
-        /// tutorial hand-off all keep happening in exactly one place.
+        /// tease tile held. It goes to the Deeper page, where the library, the editor and the
+        /// player sit together.
         ///
-        /// <para>Launch, not navigate. The wall's "navigate, never launch" rule is about tiles
-        /// that stand for a ROOM (the ? box, the Vault, the old tease tile): sending someone to a
-        /// page they then have to press a button on. This tile stands for the button.</para>
+        /// <para>Navigate, never launch - the wall's own rule. The first cut of this tile opened
+        /// the editor on a blank enhancement (it called <c>BtnDeeperNewEnhancement_Click</c>) and
+        /// the owner corrected it on the desk run: "the deeper editor should link and open the
+        /// deeper page, not the editor". A tile that puts a modal dialog on screen from the front
+        /// page is a tile you cannot browse past.</para>
         /// </summary>
-        internal void CardDeeperEditor_Click(object sender, RoutedEventArgs e)
-            => BtnDeeperNewEnhancement_Click(sender, e);
+        internal void CardDeeperEditor_Click(object sender, RoutedEventArgs e) => ShowTab("deeper");
 
         /// <summary>
         /// Paints the mosaic's price tags and the ? box's face. The FX tiles are all free and
