@@ -98,7 +98,8 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
     public void FlashBurst(int amount)
     {
         var s = App.Settings?.Current;
-        int? duration = s != null && s.FlashDuration > 0 ? s.FlashDuration : null;
+        // FlashDuration is SECONDS; TriggerFlashOnce's customDuration is MILLISECONDS.
+        int? duration = s != null && s.FlashDuration > 0 ? s.FlashDuration * 1000 : null;
         _flashAt = Now;
         App.Flash?.TriggerFlashOnce(amount, duration, null, true);
     }

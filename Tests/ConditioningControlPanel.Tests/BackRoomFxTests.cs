@@ -67,7 +67,12 @@ public class BackRoomFxTests
         public int Stops;
         public RecordingSink(FakeScheduler clock) => _clock = clock;
         private void Add(string c) => Calls.Add((_clock.NowMs, c));
-        public void FlashBurst(int amount) => Add($"flash:{amount}");
+        // FlashService staggers the burst's images 300 ms apart; each image is its own onset.
+        public void FlashBurst(int amount)
+        {
+            Add($"flash:{amount}");
+            for (int i = 0; i < amount; i++) Calls.Add((_clock.NowMs + i * BackRoomFxPlan.FlashImageGapMs, "flashimg:"));
+        }
         public void GifRain(int durationMs) => Add($"rain:{durationMs}");
         public void GlitchWash(int durationMs, double opacity) => Add($"glitch:{durationMs}");
         public void Subliminal(string text) => Add($"sub:{text}");
@@ -196,7 +201,7 @@ public class BackRoomFxTests
 
     private static void AssertUnderSixHz(RecordingSink sink, string label)
     {
-        foreach (var family in new[] { "sub:", "glitch:", "flash:" })
+        foreach (var family in new[] { "sub:", "glitch:", "flashimg:" })
         {
             var onsets = sink.Calls.Where(c => c.Call.StartsWith(family)).Select(c => c.At).OrderBy(t => t).ToList();
             for (int i = 1; i < onsets.Count; i++)
@@ -231,6 +236,42 @@ public class BackRoomFxTests
         Fire(fx, "fx.gif_storm");
         clock.Advance(30_000);
         AssertUnderSixHz(sink, "stacked");
+    }
+
+    [Fact]
+    public void OverlappingFlashBursts_PaceFromTheLastImage()
+    {
+        // gif_storm Full is a 6-image burst (0..1500 ms); a gif_burst 500 ms later must not interleave.
+        var (fx, clock, sink) = Make(BackRoomFxIntensity.Full);
+        Fire(fx, "fx.gif_storm");
+        clock.Advance(500);
+        Fire(fx, "fx.gif_burst");
+        clock.Advance(30_000);
+        Assert.True(sink.Calls.Count(c => c.Call == "flashimg:") > 6);
+        AssertUnderSixHz(sink, "storm then burst");
+    }
+
+    [Fact]
+    public void JackpotBurst_ThenQueuedFlashFx_StayUnderSixHz()
+    {
+        var (fx, clock, sink) = Make(BackRoomFxIntensity.Full);
+        Fire(fx, "fx.jackpot", "sub0", "sub1", "sub2");
+        clock.Advance(300);
+        Fire(fx, "fx.gif_storm");
+        Fire(fx, "fx.gif_burst");
+        clock.Advance(2000);
+        Fire(fx, "fx.gif_burst");
+        clock.Advance(30_000);
+        AssertUnderSixHz(sink, "jackpot then flashes");
+    }
+
+    [Fact]
+    public void SymbolKeys_AreCapped()
+    {
+        var (fx, clock, sink) = Make(BackRoomFxIntensity.Full);
+        Fire(fx, "fx.sub_single", Enumerable.Repeat("sub0", 500).ToArray());
+        clock.Advance(600_000);
+        Assert.True(sink.Calls.Count(c => c.Call.StartsWith("sub:")) <= BackRoomFxPlan.MaxSymbolKeys);
     }
 
     // ---- symbols ------------------------------------------------------------------------------------

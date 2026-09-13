@@ -123,7 +123,8 @@ public sealed class BackRoomFx : IBackRoomFx
                         () => _sink.GlitchWash(BackRoomFxPlan.GlitchWashMs, BackRoomFxPlan.GlitchOpacity));
                 break;
             case FxPrim.FlashBurst:
-                At(_pacer.Reserve(FxChannel.Flash, at), () => _sink.FlashBurst(Math.Max(1, s.Count)));
+                int images = Math.Max(1, s.Count);
+                At(_pacer.Reserve(FxChannel.Flash, at, (images - 1) * BackRoomFxPlan.FlashImageGapMs), () => _sink.FlashBurst(images));
                 break;
             case FxPrim.GifRain:
                 At(at, () => _sink.GifRain(s.DurationMs));

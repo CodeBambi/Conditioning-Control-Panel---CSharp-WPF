@@ -145,8 +145,8 @@ public sealed class ChaosFlashOverlay : Window
     // window (DWM re-composition hitch at trigger time). The window now idles visible (Opacity 0,
     // image cleared, click-through) through this grace, hiding only after a truly quiet spell.
     private readonly DispatcherTimer _hideGrace;
-    private (string path, int durationMs, double opacity, bool still)? _pending;
-    private readonly bool _spanAll;   // the Back Room hero ignores the single-screen setting   // first Display can land before Loaded
+    private (string path, int durationMs, double opacity, bool still)? _pending;   // first Display can land before Loaded
+    private readonly bool _spanAll;   // the Back Room hero ignores the single-screen setting
     private int _displayGen;   // guards the async still-decode against a newer wash / a clear
 
     private ChaosFlashOverlay(bool spanAll = false)

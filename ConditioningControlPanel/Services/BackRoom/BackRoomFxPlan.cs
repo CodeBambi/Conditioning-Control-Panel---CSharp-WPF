@@ -71,6 +71,14 @@ public static class BackRoomFxPlan
     /// <summary>The glitch wash opacity the contract names (<c>ChaosFlashOverlay.Show(ms, 0.3)</c>).</summary>
     public const double GlitchOpacity = 0.3;
 
+    /// <summary>FlashService staggers a one-shot's images this far apart (FlashService, <c>i * 300</c>),
+    /// so a flash-burst of n images is n onsets spread over <c>(n - 1) * FlashImageGapMs</c>.</summary>
+    public const int FlashImageGapMs = 300;
+
+    /// <summary>At most one symbol key per dealt item (4 words + 4 GIFs). A page sending hundreds of
+    /// keys must not schedule hundreds of subliminals.</summary>
+    public const int MaxSymbolKeys = 8;
+
     /// <summary>Length of a word run, used for the "then" in a recipe.</summary>
     public static int WordsMs(int words) => Math.Max(0, words) * WordGapMs;
 
@@ -313,7 +321,7 @@ public static class BackRoomFxPlan
         var dealWords = deal?.Words?.Where(w => w != null && !string.IsNullOrWhiteSpace(w.Text)).ToList() ?? new List<BackRoomWord>();
         var dealGifs = deal?.Gifs?.Where(g => g != null).ToList() ?? new List<BackRoomGif>();
 
-        foreach (var raw in keys ?? Array.Empty<string>())
+        foreach (var raw in (keys ?? Array.Empty<string>()).Take(MaxSymbolKeys))
         {
             var key = raw ?? string.Empty;
             if (key.StartsWith("spiral", StringComparison.Ordinal) || key.StartsWith("emi", StringComparison.Ordinal) || key == "melt")
