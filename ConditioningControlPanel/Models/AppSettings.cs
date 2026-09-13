@@ -4852,6 +4852,24 @@ namespace ConditioningControlPanel.Models
             set { _motionLevel = value; OnPropertyChanged(); }
         }
 
+        private Services.BackRoom.BackRoomFxIntensity _backRoomFxIntensity = Services.BackRoom.BackRoomFxIntensity.Normal;
+        /// <summary>
+        /// THE BACK ROOM effects intensity (CONTRACT section 4): Calm, Normal or Full. Calm is also
+        /// forced whenever the effective motion level is not Full, and Full never breaks the Brake
+        /// (no strobe over 6 Hz, one hero at a time, feature toggles still win).
+        /// </summary>
+        [JsonProperty]
+        public Services.BackRoom.BackRoomFxIntensity BackRoomFxIntensity
+        {
+            get => _backRoomFxIntensity;
+            set
+            {
+                if (!Enum.IsDefined(typeof(Services.BackRoom.BackRoomFxIntensity), value)) value = Services.BackRoom.BackRoomFxIntensity.Normal;
+                _backRoomFxIntensity = value;
+                OnPropertyChanged();
+            }
+        }
+
         private bool _videoForceHardwareDecoding = false;
         /// <summary>
         /// Force GPU (DXVA) hardware decoding for mandatory videos. Default OFF — mandatory videos
