@@ -183,6 +183,7 @@ public class EmiRingCatalogueTests
             (Path.Combine(root, "Quiz", "IntakeHostService.cs"), "intake"),
             (Path.Combine(root, "GoonGame", "GoonHostService.cs"), "goon"),
             (Path.Combine(root, "JustDrop", "JustDropHostService.cs"), "justdrop"),
+            (Path.Combine(root, "BackRoom", "BackRoomHostService.cs"), "backroom"),
         };
 
         foreach (var (file, id) in expected)

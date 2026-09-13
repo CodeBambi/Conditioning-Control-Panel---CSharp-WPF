@@ -116,5 +116,10 @@ namespace ConditioningControlPanel.Views.Tabs
         // PieceByPieceHostService.Launch owns both of its gates (idempotency, then T2).
         private void BtnStartPieceByPiece_Click(object sender, RoutedEventArgs e)
             => Owner?.BtnStartPieceByPiece_Click(sender, e);
+
+        // The Back Room: a LAUNCH with no gate at all (free for everyone); the host re-focuses a
+        // room that is already open.
+        private void BtnStartBackRoom_Click(object sender, RoutedEventArgs e)
+            => Owner?.BtnStartBackRoom_Click(sender, e);
     }
 }

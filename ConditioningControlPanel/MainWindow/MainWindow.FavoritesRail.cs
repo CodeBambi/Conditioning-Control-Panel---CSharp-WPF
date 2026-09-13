@@ -84,7 +84,7 @@ namespace ConditioningControlPanel
             ("BtnPlayRemoteControl", "tab.remotecontrol"), ("BtnPlayBlinkTrainer", "tab.blinktrainer"),
             ("BtnPlayGradedIntake", "tab.gradedintake"), ("BtnPlayFyp", "tab.fyp"),
             ("BtnPlayLockdown", "tab.lockdown"),
-            ("BtnPlayArcademy", "card.arcademy"),
+            ("BtnPlayArcademy", "card.arcademy"), ("BtnPlayBackRoom", "card.backroom"),
         };
 
         /// <summary>Subscribe to patron-status changes, wire the pin menus, paint once.</summary>
