@@ -138,7 +138,9 @@ Request:
   "freeze": { "col": 1 } }
 ```
 
-- `count` 1..20 paid spins (page default 10, lower if `sp < 10`). With `freeze`, `count` must be 1.
+- `count` 1..20 paid spins. The page default is `defaultTapeCount(sp) = clamp(floor(sp / 5), 1, 10)`
+  (16 SP -> 3, 50+ SP -> 10); a manual pick goes up to 20. The page never offers a count above what
+  the balance affords. With `freeze`, `count` must be 1.
 - Cost: `count` SP, or `1 + freezeCost` for a freeze spin. `sp < cost` -> `insufficient` + `sp`.
 - **Plain tape:** refused with `tape_unplayed` (body carries the stored tape) unless
   `cursor.played === stored.outcomes.length`. The page just resumes that tape.
@@ -347,7 +349,37 @@ export async function mount(ctx) {
    time; picking another moves the hold. (The preview's multi-freeze is not carried over.)
 2. **Cap:** raised to 99,999 everywhere (section 3.4). Clip and flag above it.
 3. **Soft launch:** door flag `BACKROOM_OPEN` + `BACKROOM_TESTERS`.
-4. **Tape size:** default 10 spins, max 20.
+4. **Tape size:** default `defaultTapeCount(sp)` (at most 10, shorter on a small balance), manual max 20.
 5. **Intensity:** `Calm | Normal | Full`, default `Normal`.
 6. **Model requests:** none. Every node the page drives is present. Station hotspot rects are measured
    on the room art by C1, not a model change.
+
+## 10. Checkpoint 1 amendments (2026-09-13)
+
+Where these disagree with the sections above, these win.
+
+1. **Table v5:** `emi3` pays 400 at 1 in 12,987 (was 2,500 at 1 in 25,000). Paytable constant `TABLE_V5`.
+2. **Freezes are sealed from melt:** a freeze spin and everything it expands into neither consume nor
+   start melt; `melt` comes back exactly as it went in.
+3. **A re-spin keeps the hold:** a `spiral2` re-spin won on a freeze spin repeats the frozen table with the
+   same held column.
+4. **A held melt is a blank:** a melt symbol in the held column is carried, not drawn, and counts as a
+   blank on the payline, never a malus.
+5. **`freeze.col` is 0-based:** 0, 1 or 2.
+6. **Keyed seed:** `rngFor(key, uid, n, 'slot')` = HMAC-SHA256 under `BACKROOM_SEED_KEY` (server only,
+   32+ chars). Without the key the door stays shut for everyone, testers included.
+7. **Third lock:** after `purchase_lock` and `backroom_lock`, `user_write_lock:<uid>` (NX EX 5), the lock
+   `/v2/user/sync` re-reads under. Any miss is `409 {reason:'busy'}`.
+8. **Receipts trimmed to 500:** arrival order in `backroom:idorder:<uid>`; above 500 the OLDEST are
+   trimmed, never the whole hash.
+9. **Tape default:** `defaultTapeCount(sp)` (section 3.2, decision 4).
+10. **Freeze response shape** (as S1 implemented it). The freeze outcomes are in `freeze.outcomes`, NOT
+    in `tape`; `tape` is the stored tape's id and cursor only (no `outcomes`), or `null` with no tape:
+
+```json
+{ "ok": true, "idem": "...", "sp": 49, "spBefore": 50, "cost": 2, "capped": false,
+  "melt": 0, "jackpot": 400,
+  "tape": { "id": "t_9f3c...", "played": 3 },
+  "freeze": { "col": 1, "held": "gif1", "outcomes": [
+    { "i": 0, "kind": "freeze", "...": "same outcome fields as 3.2, expansions inline" } ] } }
+```
