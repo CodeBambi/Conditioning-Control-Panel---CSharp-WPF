@@ -5,7 +5,7 @@
  * The server has already settled every outcome it hands us. This file only decides WHICH settled
  * outcome plays next and what the readouts say meanwhile (Law I). Two queues: `side` (a freeze spin
  * and whatever it expanded into) drains before `main` (the bought tape) resumes, so a freeze bought
- * mid-tape never skips, voids or reorders a tape outcome. */
+ * mid-tape never skips, voids or reorders a tape outcome, and never moves the tape's cursor. */
 
 export const TAPE_DEFAULT = 10;   // the default tape at a healthy balance (50 SP and up)
 export const TAPE_MAX = 20;       // the most spins the server sells in one tape
@@ -148,7 +148,12 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
   }
 
   /** The next outcome, and which queue it comes off (a freeze tape drains first). */
-  const play = () => ({ kind: 'play', outcome: next(), from: unplayed(side) ? 'side' : 'main' });
+  const play = () => {
+    const outcome = next(), fromSide = unplayed(side);
+    // A freeze and its re-spins hold the column (10.3); free spins it won draw all three reels.
+    const held = fromSide && (outcome.kind === 'freeze' || outcome.kind === 'respin') ? side.col : null;
+    return { kind: 'play', outcome, from: fromSide ? 'side' : 'main', held };
+  };
 
   const cursorBody = () => (main ? { cursor: { tapeId: main.id, played: main.played } } : {});
   const refuse = reason => ({ kind: 'refused', reason });
@@ -177,13 +182,11 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
     if (r.kind) return r;
     if (!r.ok) return refuse(r.reason);
     adopt(r.body);
-    const t = adoptTape(r.body.tape);
-    if (t && main && t.id === main.id) {
-      // Defensive: a server that answers with the stored tape keeps our place in it.
-      main = { ...t, played: Math.max(t.played, main.played) };
-    } else {
-      side = t ? { ...t, played: 0 } : null;
-    }
+    // 10.10: the spins are in `freeze.outcomes`; `tape` is only the stored tape's {id, played}, so `main`
+    // and its cursor are left exactly where they are and resume once the freeze has played out.
+    const f = r.body.freeze;
+    side = f && Array.isArray(f.outcomes) && f.outcomes.length
+      ? { id: `freeze:${f.col}`, played: 0, outcomes: f.outcomes, col: Number.isInteger(f.col) ? f.col : col } : null;
     hold = null;
     return next() ? play() : refuse('empty');
   }

@@ -137,31 +137,40 @@ test('too_fast waits out retryInMs silently on the same idem, cursor folded in',
   assert.deepEqual(calls.at(-1).body.cursor, done);
 });
 
-test('a freeze mid-tape plays first, costs 2, and never skips a tape outcome', async () => {
+test('a freeze mid-tape plays its own outcomes, holds through a re-spin, then the tape resumes at the same cursor', async () => {
   const r = rig({ sp: 50 });
   await r.tape.open();
-  const head = await play(r, 3);
-  const mainId = r.tape.cursor().tapeId;
-  const stored = r.server.user.tape.outcomes.map(o => o.i);
-  const spBefore = r.server.user.sp;
+  // 10 paid rows (pays 3, 2, 0, 40, 3, then nothing), then the freeze: spiral2 on the held spiral1 plus its re-spin (sub2).
+  const none = ['gif1', 'spiral1', 'sub2'];
+  r.server.script(['gif0', 'gif1', 'gif2'], ['sub0', 'gif1', 'sub1'], ['gif0', 'spiral1', 'sub0'], ['gif0', 'gif0', 'gif0'],
+    ['gif3', 'gif1', 'gif2'], none, none, none, none, none, ['spiral0', 'x', 'gif2'], ['sub1', 'x', 'sub2']);
+  const first = await r.tape.press();
+  assert.equal(r.tape.snapshot().shownSp, 40, 'before: 50 - 10, no win landed');
+  r.tape.land(first.outcome); r.advance(1000);
+  const head = [first.outcome, ...await play(r, 2)];
+  assert.equal(r.tape.snapshot().shownSp, 45);
+  const mainId = r.tape.cursor().tapeId, stored = r.server.user.tape.outcomes.map(o => o.i);
+  const cursor = r.tape.cursor();
   assert.equal(r.tape.toggleHold(0), 0);
   assert.equal(r.tape.toggleHold(1), 1, 'one column: lighting another moves the hold');
   const f = await r.tape.press();
-  assert.equal(f.outcome.kind, 'freeze');
-  assert.equal(f.outcome.symbols[1], head[2].symbols[1], 'held column keeps what was showing');
-  const buy = tapeCalls(r).at(-1);
+  const buy = tapeCalls(r).at(-1), receipt = r.server.user.freezes.at(-1);
   assert.deepEqual([buy.body.freeze, buy.body.count, buy.body.cursor], [{ col: 1 }, 1, { tapeId: mainId, played: 3 }]);
-  assert.equal(r.tape.snapshot().hold, null, 'the hold is spent on one spin');
-  // The freeze and anything it expanded into drain before the tape resumes.
-  const side = [f.outcome];
+  assert.deepEqual([f.from, f.held, f.outcome.kind, f.outcome.line, f.outcome.symbols[1]], ['side', 1, 'freeze', 'spiral2', 'spiral1']);
+  assert.equal(receipt.at, 3);
+  assert.equal(r.tape.snapshot().hold, null, 'the hold is spent on one buy');
+  assert.deepEqual(r.tape.cursor(), cursor, 'the stored tape cursor did not move');
+  assert.equal(r.server.user.sp, 50 - 10 + 48 - 2 + 3);
+  assert.equal(r.tape.snapshot().shownSp, 43, 'during: the freeze cost shows, its unplayed wins do not');
   r.tape.land(f.outcome);
+  assert.equal(r.tape.snapshot().shownSp, 44);
+  const re = await r.tape.press();
+  assert.deepEqual([re.from, re.held, re.outcome.kind, re.outcome.line, re.outcome.symbols[1]], ['side', 1, 'respin', 'sub2', 'spiral1'], 'a re-spin keeps the hold');
+  r.tape.land(re.outcome);
+  assert.equal(r.tape.snapshot().shownSp, 46);
+  assert.deepEqual(r.tape.cursor(), cursor);
   let p = await r.tape.press();
-  while (p.from === 'side') {
-    side.push(p.outcome); r.tape.land(p.outcome); p = await r.tape.press();
-  }
-  assert.equal(r.server.user.sp, spBefore - 2 + side.reduce((s, o) => s + o.pay, 0));
-  assert.equal(p.outcome.i, 3);
-  assert.equal(r.tape.cursor().tapeId, mainId);
+  assert.deepEqual([p.from, p.held, p.outcome.i], ['main', null, 3], 'the tape resumes where it was');
   const tail = [];
   for (;;) {
     tail.push(p.outcome); r.tape.land(p.outcome);
@@ -170,7 +179,18 @@ test('a freeze mid-tape plays first, costs 2, and never skips a tape outcome', a
   }
   assert.deepEqual([...head, ...tail].map(o => o.i), stored);
   assert.equal(tapeCalls(r).length, 2);
-  assert.equal(r.tape.snapshot().shownSp, r.server.user.sp);
+  assert.equal(r.tape.snapshot().shownSp, r.server.user.sp, 'after: display meets the ledger');
+  assert.equal(r.tape.snapshot().shownSp, 89);
+});
+
+test('a freeze with no stored tape answers tape:null and plays on its own', async () => {
+  const r = rig({ sp: 5 });
+  await r.tape.open();
+  r.tape.toggleHold(2);
+  const f = await r.tape.press();
+  const body = await r.server.handle('tape', tapeCalls(r).at(-1).body, tapeCalls(r).at(-1).idem);
+  assert.deepEqual([body.body.tape, body.body.freeze.col, body.body.freeze.held], [null, 2, 'sub2'], 'a replayed receipt');
+  assert.deepEqual([f.outcome.kind, f.held, f.outcome.symbols[2], r.tape.cursor()], ['freeze', 2, 'sub2', null]);
 });
 
 test('insufficient: nothing sent below 1 SP, a freeze below its cost is refused quietly', async () => {
