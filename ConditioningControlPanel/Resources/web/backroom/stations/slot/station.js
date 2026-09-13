@@ -239,8 +239,10 @@ export async function mount(ctx) {
     }
   }
 
-  /** The landing beat (Law X): the party the Brake allows, the ladder, the tokens and EMI, all on one frame. */
-  function land(o, before) {
+  /** The landing beat (Law X): the party the Brake allows, the ladder, the tokens and EMI, all on one frame.
+   *  Melt reads from the tape cursor, never a freeze outcome's own meltLeft (the stored tape's end melt). */
+  function land(landed, before) {
+    const melt = tape.snapshot().melt, o = (landed.meltLeft || 0) === melt ? landed : { ...landed, meltLeft: melt };
     const tier = tierOf(o), melted = meltedBy(o), r = recipe(o, { seen: seen[tier], jackpots });
     if (tier > 0) { seen[tier]++; if (tier === 4) jackpots++; }
     if (tier > 0) { sound.win(r.sound, ladderSemis(streak, melted)); streak++; } else streak = 0;   // the no-pay cue was the last reel's muted thud

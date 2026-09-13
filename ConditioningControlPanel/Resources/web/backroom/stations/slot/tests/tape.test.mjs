@@ -220,6 +220,32 @@ test('melt is carried over from the server on open and reported when it changes'
   assert.deepEqual(r.melts, [2, 1, 3, 2]);
 });
 
+test('a freeze mid-tape never moves the shown melt, though its outcomes carry the stored tape end melt', async () => {
+  const r = rig({ sp: 50 });
+  await r.tape.open();
+  const none = ['gif1', 'spiral1', 'sub2'];
+  // 9 blank paid rows then a melt on the 10th; the freeze (held gif1) lands spiral2 and its re-spin a blank.
+  r.server.script(none, none, none, none, none, none, none, none, none, ['gif0', 'melt', 'sub0'],
+    ['x', 'spiral0', 'spiral1'], ['x', 'gif0', 'sub1']);
+  await play(r, 2);
+  assert.equal(r.tape.snapshot().melt, 0);
+  r.tape.toggleHold(0);
+  const f = await r.tape.press();
+  assert.deepEqual([f.from, f.outcome.kind, f.outcome.line, f.outcome.meltLeft], ['side', 'freeze', 'spiral2', 3],
+    'the server settled the whole tape first: the freeze sees its end melt');
+  r.tape.land(f.outcome);
+  assert.equal(r.tape.snapshot().melt, 0, 'a freeze landing leaves the shown melt on the tape cursor');
+  const re = await r.tape.press();
+  assert.deepEqual([re.from, re.outcome.kind, re.outcome.meltLeft], ['side', 'respin', 3]);
+  r.tape.land(re.outcome);
+  assert.equal(r.tape.snapshot().melt, 0, 'and so does its re-spin');
+  assert.deepEqual(r.melts, [0], 'no melt change was reported through the freeze');
+  const rest = await play(r, 8);
+  assert.equal(rest.at(-1).line, 'melt');
+  assert.equal(r.tape.snapshot().melt, 3, 'the melt arrives when the tape reaches it');
+  assert.deepEqual(r.melts, [0, 3]);
+});
+
 test('free spins play from the tape and abort drops a press in flight', async () => {
   const r = rig({ sp: 20 });
   await r.tape.open();

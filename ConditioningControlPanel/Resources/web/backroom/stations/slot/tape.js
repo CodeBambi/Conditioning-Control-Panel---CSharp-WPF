@@ -202,16 +202,21 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
     },
     /** The reels have stopped on `outcome`: its pay lands, readouts move to its after-state. */
     land(outcome) {
+      let fromMain = false;
       if (unplayed(side) && side.outcomes[side.played] === outcome) {
         side.played++;
         if (!unplayed(side)) side = null;
       } else if (unplayed(main) && main.outcomes[main.played] === outcome) {
         main.played++;
+        fromMain = true;
       } else {
         return false;
       }
       last = outcome;
-      melt = outcome.meltLeft || 0;
+      // The shown melt follows the tape cursor. A freeze and everything it expands into are sealed from
+      // melt (10.2) and carry the melt left at the END of the stored tape (3.4, settled up front), so a
+      // freeze landing mid-tape leaves the readout where the tape's last landed spin put it.
+      if (fromMain) melt = outcome.meltLeft || 0;
       free = outcome.freeLeft || 0;
       lastWin = outcome.pay || 0;
       if (Array.isArray(outcome.symbols)) shown = outcome.symbols;
