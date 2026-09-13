@@ -67,6 +67,7 @@ namespace ConditioningControlPanel.Avalonia
             CheckSamplerLocalization(Check);
             CheckPrivacyLocalization(Check);
             CheckAwarenessPicker(Check);
+            CheckAwarenessPickerLocalization(Check);
             CheckTextEditor(Check);
             CheckTriggerControls(Check);
             Console.WriteLine();
@@ -543,6 +544,88 @@ namespace ConditioningControlPanel.Avalonia
                     AnswerNoticeOk(noticeDialog);
                     ClosePicker(noticeDialog, noticeCompletion);
                 }
+                owner?.Close();
+                Dispatcher.UIThread.RunJobs();
+            }
+        }
+
+        /// <summary>
+        /// #495 awareness picker static-caption localization at the public rendered-modal seam.
+        /// Each mode uses the public synthetic constructor and stays the same shown picker while
+        /// the language changes from English to French. Only the ordinary Cancel route closes it;
+        /// no prompt, persistence, provider, process scan, or host integration is reached.
+        /// </summary>
+        private static void CheckAwarenessPickerLocalization(Action<string, bool, string?> check)
+        {
+            Window? owner = null;
+            var shown = new List<(AwarenessAppPickerDialog Dialog, Task<bool?> Completion)>();
+            var previousLanguage = LocalizationManager.Instance.CurrentLanguage;
+
+            static string? Caption(Button button) => (button.Content as TextBlock)?.Text;
+
+            static void ClickButton(Button button)
+            {
+                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            try
+            {
+                owner = new Window();
+                owner.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                foreach (var (kind, mode) in new[]
+                {
+                    (AwarenessListKind.Deny, "deny"),
+                    (AwarenessListKind.TitleAllow, "title-allow")
+                })
+                {
+                    LocalizationManager.Instance.SetLanguage("en");
+                    var picker = new AwarenessAppPickerDialog(
+                        kind, Array.Empty<string>(), new[] { "synthetic.exe" });
+                    var completion = picker.ShowDialog<bool?>(owner);
+                    shown.Add((picker, completion));
+                    Dispatcher.UIThread.RunJobs();
+
+                    var cancel = picker.FindControl<Button>("BtnCancel")!;
+                    var add = picker.FindControl<Button>("BtnAdd")!;
+                    check($"awareness picker {mode} starts as a shown modal",
+                        picker.IsVisible && !completion.IsCompleted,
+                        $"visible={picker.IsVisible}, completed={completion.IsCompleted}");
+                    check($"awareness picker {mode} renders literal English captions",
+                        Caption(cancel) == "Cancel" && Caption(add) == "+ Add",
+                        $"cancel={Caption(cancel) ?? "<null>"}, add={Caption(add) ?? "<null>"}");
+
+                    LocalizationManager.Instance.SetLanguage("fr");
+                    Dispatcher.UIThread.RunJobs();
+                    check($"awareness picker {mode} refreshes literal French captions on the same instance",
+                        Caption(cancel) == "Annuler" && Caption(add) == "+ Ajouter",
+                        $"cancel={Caption(cancel) ?? "<null>"}, add={Caption(add) ?? "<null>"}");
+
+                    ClickButton(cancel);
+                    check($"awareness picker {mode} ordinary Cancel completes and leaves no owned window",
+                        completion.IsCompletedSuccessfully && completion.Result == false
+                        && !picker.IsVisible && picker.OwnedWindows.All(window => !window.IsVisible),
+                        $"status={completion.Status}, result={completion.Result?.ToString() ?? "<null>"}, "
+                        + $"visible={picker.IsVisible}, ownedOpen={picker.OwnedWindows.Any(window => window.IsVisible)}");
+                }
+            }
+            catch (Exception ex)
+            {
+                check("awareness picker localization fixture executes", false, ex.ToString());
+            }
+            finally
+            {
+                foreach (var (picker, completion) in shown)
+                {
+                    if (picker.IsVisible)
+                        ClickButton(picker.FindControl<Button>("BtnCancel")!);
+                    Dispatcher.UIThread.RunJobs();
+                }
+
+                LocalizationManager.Instance.SetLanguage(previousLanguage);
+                Dispatcher.UIThread.RunJobs();
                 owner?.Close();
                 Dispatcher.UIThread.RunJobs();
             }

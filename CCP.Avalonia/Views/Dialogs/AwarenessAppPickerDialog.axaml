@@ -3,9 +3,9 @@
      Deviations, all forced:
 
        Style="{StaticResource X}"     -> Theme="{StaticResource X}"   (keyed styles are ControlThemes)
-       {loc:Str key}                  -> {Binding LocX}               (LocExtension is a WPF
-                                         MarkupExtension and stays in the head; the strings still
-                                         come from CCP.Core's Loc, via the VM)
+       {loc:Str key}                  -> {loc:Str key}                (the five live captions use
+                                         Core's shared localization indexer; constructor and row
+                                         snapshots remain code-side)
        Visibility="Collapsed"         -> IsVisible="False"
        Converter={StaticResource BoolToVisibility}
                                       -> IsVisible bound to the bool directly
@@ -23,10 +23,11 @@
      Content as an access key and every loc key here is snake_case. See CLAUDE.md. BtnSave set its
      text from code in the original and still does.
 
-     The one loc string inside the DataTemplate reaches the window's VM through $parent[Window],
-     because the template's x:DataType is the row, not the VM. -->
+     The localized strings inside the DataTemplate bind directly to Core's shared indexer; the
+     template's x:DataType remains the row, and row labels/details remain row-bound. -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
         x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.AwarenessAppPickerDialog"
         x:DataType="vm:AwarenessAppPickerViewModel"
         xmlns:vm="clr-namespace:ConditioningControlPanel.Avalonia.Views.Dialogs"
@@ -117,7 +118,7 @@
                                             BorderThickness="1" CornerRadius="4" Padding="6,2"
                                             VerticalAlignment="Center"
                                             IsVisible="{Binding IsRecommended}">
-                                        <TextBlock Text="{Binding $parent[Window].((vm:AwarenessAppPickerViewModel)DataContext).LocRecommended}"
+                                        <TextBlock Text="{loc:Str companion_awareness_picker_recommended}"
                                                    Foreground="#9FD79F" FontSize="9.5" FontWeight="Bold"/>
                                     </Border>
                                 </Grid>
@@ -138,20 +139,20 @@
                      Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
                      BorderBrush="{StaticResource PinkBrush}" BorderThickness="1"
                      Padding="10,7" FontSize="12.5" VerticalContentAlignment="Center"
-                     ToolTip.Tip="{Binding LocAddTip}"/>
+                     ToolTip.Tip="{loc:Str companion_awareness_picker_add_tip}"/>
             <Button x:Name="BtnAdd" Grid.Column="1" Theme="{StaticResource ActionButton}"
                     Margin="8,0,0,0">
-                <TextBlock Text="{Binding LocBtnAdd}"/>
+                <TextBlock Text="{loc:Str btn_add_2}"/>
             </Button>
         </Grid>
         <TextBlock Grid.Row="3" x:Name="TxtAddHint" Foreground="{DynamicResource TextMutedBrush}"
                    FontSize="11" Margin="0,44,0,0" TextWrapping="Wrap"
-                   Text="{Binding LocAddHint}"/>
+                   Text="{loc:Str companion_awareness_picker_add_hint}"/>
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
             <Button x:Name="BtnCancel" Theme="{StaticResource SecondaryButton}"
                     Margin="0,0,8,0">
-                <TextBlock Text="{Binding LocBtnCancel}"/>
+                <TextBlock Text="{loc:Str btn_cancel}"/>
             </Button>
             <Button x:Name="BtnSave" Theme="{StaticResource ActionButton}"/>
         </StackPanel>

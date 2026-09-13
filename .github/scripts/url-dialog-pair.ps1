@@ -8,7 +8,7 @@ function Test-SmokeResult($Mode, $Code, [string]$Output, [string]$Errors) {
     $fails = @([regex]::Matches($Output, '(?m)^  \[FAIL\] (.*)\r?$') | ForEach-Object { $_.Groups[1].Value.TrimEnd("`r") })
     if ($Errors.Trim() -or $Output -notmatch '(?m)^  \[PASS\] URL prompt bootstrap has no desktop lifetime\r?$') { return $false }
     if ($Mode -eq 'green') {
-        return $Code -eq 0 -and $passes -eq 130 -and $fails.Count -eq 0 -and
+        return $Code -eq 0 -and $passes -eq 138 -and $fails.Count -eq 0 -and
             $Output.TrimEnd().EndsWith('Linux head can produce every value it renders.')
     }
     $expected = @(
@@ -28,7 +28,7 @@ function Test-SmokeResult($Mode, $Code, [string]$Output, [string]$Errors) {
 }
 
 if ($SelfCheck) {
-    $ok = "  [PASS] URL prompt bootstrap has no desktop lifetime`n" + ("  [PASS] fixture`n" * 129) + 'Linux head can produce every value it renders.'
+    $ok = "  [PASS] URL prompt bootstrap has no desktop lifetime`n" + ("  [PASS] fixture`n" * 137) + 'Linux head can produce every value it renders.'
     if (!(Test-SmokeResult green 0 $ok '') -or (Test-SmokeResult red 1 $ok '') -or
         (Test-SmokeResult green 0 $ok 'startup error') -or (Test-SmokeResult green 1 $ok '') -or
         (Test-SmokeResult green 0 ($ok.Replace('no desktop lifetime', 'desktop lifetime')) '') -or
@@ -122,7 +122,7 @@ try {
     $commit = Require-Success (Invoke-Owned $git @('-C', $repo, 'cat-file', '-p', 'HEAD') $repo 'commit-object') # Real parents even with shallow checkout.
     Save-Json "$root/identity.json" @{ checkout = $identity; commitObject = $commit; githubSha = $env:GITHUB_SHA; os = [Environment]::OSVersion.VersionString; powershell = "$($PSVersionTable.PSVersion)" }
     # Freeze the reviewed safe Program/App/null-lifetime route and every product dependency.
-    foreach ($entry in @(@('CCP.Avalonia', 'c1f93102556634f6cc6b0f8100f7c3e79ba0576f'), @('CCP.Core', 'ec2d4c2a60bf3683ce7ec97c4d9e1c5c6d84b0c3'))) {
+    foreach ($entry in @(@('CCP.Avalonia', '4d5345820342fe81a552fd1c1d46548531c1cab4'), @('CCP.Core', 'ec2d4c2a60bf3683ce7ec97c4d9e1c5c6d84b0c3'))) {
         $tree = Require-Success (Invoke-Owned $git @('-C', $repo, 'rev-parse', "HEAD:$($entry[0])") $repo "tree-$($entry[0])")
         if ($tree -ne $entry[1]) { throw "Unreviewed source tree: $($entry[0])" }
     }
