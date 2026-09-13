@@ -116,7 +116,7 @@ export async function mount(ctx) {
       s.hold !== null ? t('br_slot_cost', '{n} SP', { n: s.freezeCost })
       : s.nextKind === 'free' || s.nextKind === 'respin' ? t('br_slot_free_spin', 'Free spin')
       : s.onTape ? t('br_slot_on_tape', '{n} left on tape', { n: s.onTape })
-      : s.sp >= 1 ? t('br_slot_tape_cost', '{n} SP for {n} spins', { n: Math.min(10, Math.floor(s.sp)) })
+      : s.tapeCount >= 1 ? t('br_slot_tape_cost', '{n} SP for {n} spins', { n: s.tapeCount })
       : t('br_slot_cost', '{n} SP', { n: s.stake });
     if (scene) {
       scene.setHold(s.hold);
