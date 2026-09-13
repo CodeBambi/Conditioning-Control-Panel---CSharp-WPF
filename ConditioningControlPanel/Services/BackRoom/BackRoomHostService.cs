@@ -63,9 +63,17 @@ internal static class BackRoomHostService
     private static bool _minimised;
     private static DateTime _lastPanicPressUtc;
 
-    /// <summary>C3 and C4 replace these at integration; until then the null objects answer.</summary>
-    internal static IBackRoomFx Fx { get; set; } = new NullBackRoomFx();
-    internal static IBackRoomMedia Media { get; set; } = new NullBackRoomMedia(Loc.Get);
+    /// <summary>The real dispatcher (C3, shared with the dev rig so they share one hero gate) and the
+    /// real media feed (C4). Tests may swap either for a null object.</summary>
+    internal static IBackRoomFx Fx { get; set; } = BackRoomFxServices.Shared;
+    internal static IBackRoomMedia Media { get; set; } = new BackRoomMedia(LexOrFallback);
+
+    /// <summary>Loc.Get returns the key itself on a miss; the feed wants the fallback then.</summary>
+    private static string LexOrFallback(string key, string fallback)
+    {
+        var s = Loc.Get(key);
+        return string.IsNullOrWhiteSpace(s) || s == key ? fallback : s;
+    }
 
     public static bool IsActive => _host != null;
 
