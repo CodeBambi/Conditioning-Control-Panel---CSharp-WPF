@@ -1,4 +1,4 @@
-/* backroom/room/room.css - the room shell. Plum and neon, lifted from the art. */
+/* backroom/room/room.css - the room shell over the 3D view. Plum and neon. */
 
 :root {
   --br-ground: #120c1c;
@@ -14,34 +14,45 @@
 html, body { margin: 0; height: 100%; background: var(--br-ground); color: var(--br-ink); overflow: hidden;
   font: 14px/1.35 "Segoe UI", system-ui, sans-serif; user-select: none; }
 
-.br-stage { position: fixed; inset: 0; display: grid; place-items: center; }
-.br-scene { width: 100%; height: 100%; display: block; cursor: pointer; }
-.br-art { image-rendering: auto; }
+.br-stage { position: fixed; inset: 0; }
+.br-canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+.br-canvas:active { cursor: grabbing; }
+html.br-overview .br-canvas { cursor: default; }
 
-/* Hotspots: invisible until hovered. THE GLOW (in fast, out slow). */
-.br-spot { fill: rgba(255, 111, 181, 0); stroke: rgba(255, 207, 107, 0); stroke-width: 3;
-  transition: fill 480ms ease-out, stroke 480ms ease-out; }
-.br-spot:hover { fill: rgba(255, 111, 181, .10); stroke: rgba(255, 207, 107, .55); transition-duration: 90ms; }
-.br-spot.is-soon:hover { fill: rgba(185, 156, 255, .08); stroke: rgba(185, 156, 255, .45); }
+/* The room's own chrome sits between the view and the station layer. */
+.br-room-ui { position: fixed; inset: 0; z-index: 10; pointer-events: none; }
+.br-room-ui > * { pointer-events: auto; }
+html.br-visiting .br-room-ui { visibility: hidden; }
 
-.br-target { fill: none; stroke: var(--br-gold); stroke-width: 2.5; opacity: 0; transform-box: fill-box;
-  transform-origin: center; }
-.br-target.is-on { opacity: .9; animation: br-ring 340ms cubic-bezier(.2, 1.5, .4, 1); }
-@keyframes br-ring { from { transform: scale(2.1); opacity: 0; } to { transform: scale(1); opacity: .9; } }
+.br-loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; background: radial-gradient(ellipse, #422445, #160d1e); }
+.br-loading[hidden] { display: none; }
+.br-spark { font-size: 38px; color: #eaa3d4; }
+.br-loading-text { margin: 0; font-size: 18px; letter-spacing: .04em; color: var(--br-ink); }
+.br-loading-bar { width: 180px; height: 3px; border-radius: 3px; background: rgba(255, 255, 255, .12); overflow: hidden; }
+.br-loading-bar i { display: block; height: 100%; width: 0; background: var(--br-pink); transition: width 200ms ease-out; }
 
-/* The player: the campus student, in the room's light. */
-.br-you { pointer-events: none; }
-.br-youring { fill: rgba(255, 207, 107, .22); stroke: rgba(255, 207, 107, .8); stroke-width: 2; }
-.br-you .gh-sprite rect { shape-rendering: crispEdges; }
-.br-you .gh-skin { fill: #f1d7c9; }
-.br-you .gh-k1 { fill: #e2b9a4; }
-.br-you .gh-k2 { fill: #c48f78; }
-.br-you .gh-k3 { fill: #8f5f4c; }
-.br-you .gh-eye { fill: var(--br-ground); }
-.br-you .gh-leg { fill: #3b2c63; }
-.br-you .gh-bag { fill: #b58b3c; }
-.br-you .gh-hair { fill: var(--br-gold); }
-.br-you .gh-shirt { fill: #ff9fb0; }
+.br-hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); pointer-events: none;
+  color: var(--br-ink-dim); font-size: 12px; white-space: nowrap; }
+.br-crosshair { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%;
+  background: rgba(255, 224, 240, .6); box-shadow: 0 0 5px #120914; pointer-events: none; }
+.br-crosshair[hidden] { display: none; }
+
+.br-visit { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); min-width: 210px;
+  font: 600 15px/1 "Segoe UI", system-ui, sans-serif; color: var(--br-ink); cursor: pointer;
+  background: linear-gradient(135deg, rgba(162, 92, 143, .92), rgba(84, 53, 101, .93)); border: 1px solid #dda9d4;
+  border-radius: 12px; padding: 14px 24px; }
+.br-visit[hidden] { display: none; }
+.br-visit:focus-visible, .br-pill:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 2px; }
+
+.br-nav { position: absolute; top: 12px; right: 120px; display: flex; gap: 8px; }
+.br-pill { font: 600 13px/1 "Segoe UI", system-ui, sans-serif; color: var(--br-ink); cursor: pointer;
+  background: rgba(42, 24, 56, .86); border: 1px solid rgba(185, 156, 255, .45); border-radius: 999px; padding: 9px 15px; }
+.br-pill:hover { border-color: var(--br-gold); }
+.br-pill:disabled { opacity: .6; cursor: default; }
+.br-map-list { position: absolute; left: 16px; right: 16px; bottom: 26px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.br-map-list[hidden] { display: none; }
+html.br-overview .br-hint { visibility: hidden; }
 
 /* HUD: Back is always on top of everything, stations included (Law VI). */
 .br-hud { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; justify-content: space-between;
@@ -78,8 +89,8 @@ html.br-leaving .br-sp { opacity: .5; }
 @keyframes br-fade { from { opacity: 0; } }
 @keyframes br-rise { from { transform: translateY(14px) scale(.96); opacity: 0; } }
 
-html.br-reduced .br-target.is-on, html.br-reduced .br-card, html.br-reduced .br-card-veil { animation: none; }
-html.br-reduced .br-spot, html.br-reduced .br-back { transition: none; }
+html.br-reduced .br-card, html.br-reduced .br-card-veil { animation: none; }
+html.br-reduced .br-back, html.br-reduced .br-loading-bar i { transition: none; }
 @media (prefers-reduced-motion: reduce) {
-  .br-target.is-on, .br-card, .br-card-veil { animation: none; }
+  .br-card, .br-card-veil { animation: none; }
 }

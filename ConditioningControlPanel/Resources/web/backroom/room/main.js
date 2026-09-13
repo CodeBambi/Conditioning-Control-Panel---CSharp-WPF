@@ -1,28 +1,39 @@
 /* ============================================================================
- * backroom/room/main.js - boot, the Back button, and the three ways out.
+ * backroom/room/main.js - boot, the Back button, visiting, and the ways out.
  *
- * Boot: subscribe, post `ready`, wait for `init`, read stations.json, draw the
- * room. The Back button and Escape are wired BEFORE any of that, so the room
+ * Boot: subscribe, post `ready`, wait for `init`, read stations.json, build the
+ * 3D room. The Back button and Escape are wired BEFORE any of that, so the room
  * can be left at every frame, including a boot that never finishes (Law VI).
  *
+ * Visiting (E or the Visit prompt near a station): the room holds (pose kept,
+ * loop stopped, context kept), then the loader opens the station, or the
+ * dust-sheet card for a `soon` one.
+ *
  * Leaving:
- *   Back / Escape with a station open  -> the station closes, the room stays.
+ *   Back / Escape with a station open  -> the station closes, the room resumes
+ *                                         on the exact spot and facing.
+ *   Back / Escape in the room view     -> back to walking.
  *   Back / Escape in the room          -> `exit`, then `exit-done` once settled.
  *   host `close` (app exit, panic)     -> settle inside 300 ms, `exit-done`.
  * ==========================================================================*/
 
 import * as bridge from '../bridge.js';
-import { normaliseStations } from './geometry.js';
+import { normaliseStations } from './walk.js';
 import { createScene } from './scene.js';
 import { createLoader } from './loader.js';
+import { createHud } from './hud.js';
 
 const PAGE_SETTLE_MS = 300;
+const LABEL_FALLBACK = { br_slot_jackpot: 'A little luck', br_slot_status: 'Pull me', br_wheel_status: 'Your daily detour' };
+const ADS = [
+  { file: 'arcademy', key: 'br_ad_arcademy', fallback: 'The Arcademy' },
+  { file: 'dtrh', key: 'br_ad_dtrh', fallback: 'Down the Rabbit Hole' },
+  { file: 'focus-gaze', key: 'br_ad_focus_gaze', fallback: 'Focus Gaze' },
+];
 
-const state = { sp: 0, reduced: false, motion: 'full', intensity: 'normal', lex: {}, open: null, suspended: false };
+const state = { sp: 0, reduced: false, motion: 'full', intensity: 'normal', lex: {}, open: null, suspended: false, userStill: false };
 const spListeners = new Set();
-let scene = null;
-let loader = null;
-let leaving = false;
+let scene = null, loader = null, hud = null, leaving = false, visiting = false;
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -30,6 +41,9 @@ function lex(key, fallback) {
   const v = state.lex && state.lex[key];
   return (typeof v === 'string' && v && v !== key) ? v : (fallback == null ? key : fallback);
 }
+const label = (row) => lex(row.labelKey, row.name);
+const forcedStill = () => !!state.reduced || state.intensity === 'calm';
+const still = () => forcedStill() || state.userStill;
 
 function paintChrome() {
   const back = $('#br-back');
@@ -42,6 +56,11 @@ function paintChrome() {
   document.documentElement.classList.toggle('br-suspended', !!state.suspended);
 }
 
+function paintMotion() {
+  if (scene) scene.setStill(still());
+  if (hud) hud.motion(still(), forcedStill());
+}
+
 function setSp(sp) {
   if (!Number.isFinite(sp)) return;
   state.sp = sp;
@@ -49,14 +68,34 @@ function setSp(sp) {
   for (const fn of Array.from(spListeners)) { try { fn(sp); } catch (e) { bridge.log('warn', 'onSp threw: ' + e); } }
 }
 
-/** Back, from anywhere. A station closes first; an empty room is left. */
+async function visit(row) {
+  if (leaving || visiting || !scene || !loader || scene.overview) return;
+  visiting = true;
+  scene.hold();
+  hud.hideWhileVisiting(true);
+  await loader.open(row, { variant: row.variant ? { id: row.variant, name: label(row), palette: row.fixture.palette } : null });
+}
+
+async function returnToRoom() {
+  visiting = false;
+  await loader.close();
+  if (leaving || visiting) return;
+  hud.hideWhileVisiting(false);
+  if (scene) scene.release();
+}
+
+/** Back, from anywhere. A station closes first, then the room view; an empty room is left. */
 async function back(reason) {
   if (leaving) return;
-  if (loader && loader.current) {
-    await loader.close();
-    return;
-  }
+  if (loader && (loader.current || visiting)) { await returnToRoom(); return; }
+  if (scene && scene.overview) { scene.setOverview(false); hud.overview(false); return; }
   leave(reason || 'back');
+}
+
+async function settle() {
+  if (scene) scene.halt();
+  if (loader) await loader.close(PAGE_SETTLE_MS - 60);
+  bridge.send({ type: 'exit-done' });
 }
 
 async function leave(reason) {
@@ -64,9 +103,7 @@ async function leave(reason) {
   leaving = true;
   document.documentElement.classList.add('br-leaving');
   bridge.send({ type: 'exit', reason });
-  if (scene) scene.halt();
-  if (loader) await loader.close(PAGE_SETTLE_MS - 60);
-  bridge.send({ type: 'exit-done' });
+  await settle();
 }
 
 function wireExits() {
@@ -79,9 +116,7 @@ function wireExits() {
   bridge.on('close', async () => {
     if (leaving) return;
     leaving = true;
-    if (scene) scene.halt();
-    if (loader) await loader.close(PAGE_SETTLE_MS - 60);
-    bridge.send({ type: 'exit-done' });
+    await settle();
   });
 }
 
@@ -93,6 +128,13 @@ async function readStations() {
     bridge.log('error', 'stations.json unreadable: ' + ((e && e.message) || e));
     return [];
   }
+}
+
+/** The wall pictures' deal, under its own station id so it never replaces a sit-down deal. */
+function media() {
+  const reqId = bridge.mintId();
+  return bridge.request({ type: 'media-request', reqId, station: 'room' }, 'media', (m) => m.reqId === reqId, 6000,
+    { reqId, seed: 0, gifs: [], words: [], timeout: true });
 }
 
 async function start(init) {
@@ -112,18 +154,28 @@ async function start(init) {
     state.motion = String(m.motion || state.motion);
     state.intensity = String(m.intensity || state.intensity);
     state.reduced = !!m.reduced;
-    if (scene) scene.setReduced(state.reduced);
     paintChrome();
+    paintMotion();
   });
   bridge.on('suspend', (m) => {
     state.suspended = !!m.on;
-    if (scene) scene.pause(state.suspended);
+    if (scene) scene.pause(state.suspended);   // a held room stays held either way
     if (loader) loader.suspend(state.suspended);
     paintChrome();
   });
 
+  hud = createHud({
+    root: $('#br-room-ui'), lex, label,
+    onVisit: (row) => visit(row),
+    onGo: (row) => { if (scene) { scene.go(row); hud.overview(false); } },
+    onOverview: (on) => { if (scene) { scene.setOverview(on); hud.overview(scene.overview); } },
+    onMotion: () => { if (forcedStill()) return; state.userStill = !state.userStill; paintMotion(); },
+  });
+  hud.motion(still(), forcedStill());
+
   const stations = await readStations();
   if (leaving) return;
+  hud.stations(stations);
   loader = createLoader({
     layer: $('#br-layer'),
     state,
@@ -132,19 +184,38 @@ async function start(init) {
     standUp: () => back('back'),
     log: (level, msg) => bridge.log(level, msg),
   });
-  scene = createScene({
-    mount: $('#br-stage'),
-    stations,
-    label: (s) => lex(s.labelKey, s.id),
-    reduced: state.reduced,
-    onArrive: (s) => { if (!leaving) loader.open(s); },
-    log: (msg) => bridge.log('warn', msg),
-  });
-  document.documentElement.classList.add('br-ready');
-  bridge.log('info', 'room up: ' + stations.length + ' stations, ' + stations.filter((s) => s.state === 'live').length + ' live');
-
   // Test seam for the smoke checks (never read by the room itself).
-  window.__backroom = { state, stations, scene, loader, back, lex };
+  window.__backroom = { state, stations, loader, back, lex, visit, get scene() { return scene; } };
+
+  try {
+    scene = await createScene({
+      mount: $('#br-stage'),
+      stations,
+      base: 'room/assets/',
+      faces: 'stations/slot/assets/emi-faces-slot.png',
+      ads: ADS.map((a) => ({ url: 'room/assets/ads/' + a.file + '.webp', caption: lex(a.key, a.fallback) })),
+      label: (row, key) => (key === '@name' ? label(row) : lex(key, LABEL_FALLBACK[key])),
+      media,
+      still: still(),
+      onProgress: (f) => hud.progress(f),
+      onNearest: (row) => hud.nearest(row),
+      onVisit: (row) => visit(row),
+      log: (msg) => bridge.log('warn', msg),
+    });
+  } catch (e) {
+    bridge.log('error', 'room build failed: ' + ((e && e.stack) || e));
+    hud.failed(lex('br_station_closed', 'Closed for a moment.'));
+    return;
+  }
+  if (leaving) { scene.halt(); return; }
+  // M toggles the view inside the scene; keep the HUD in step after it has.
+  window.addEventListener('keydown', (e) => { if (e.code === 'KeyM') setTimeout(() => hud.overview(scene.overview), 0); });
+  if (state.suspended) scene.pause(true);
+  paintMotion();
+  hud.ready();
+  document.documentElement.classList.add('br-ready');
+  bridge.log('info', 'room up: ' + stations.length + ' fixtures, ' + stations.filter((s) => s.state === 'live').length
+    + ' live, built in ' + Math.round(scene.buildMs) + ' ms');
 }
 
 wireExits();
