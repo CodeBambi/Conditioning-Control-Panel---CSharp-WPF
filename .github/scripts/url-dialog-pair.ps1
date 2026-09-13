@@ -23,7 +23,7 @@ function Test-SmokeResult($Mode, $Code, [string]$Output, [string]$Errors) {
             "URL prompt $dismiss (invalid first: True): rejects without completing  (Result=not a URL, visible=False, completed=True, errorVisible=False, error=)"
         }
     )
-    return $Code -eq 1 -and $passes -eq 106 -and $fails.Count -eq 18 -and
+    return $Code -eq 1 -and $passes -eq 114 -and $fails.Count -eq 18 -and
         ($fails -join "`n") -ceq ($expected -join "`n") -and $Output.TrimEnd().EndsWith('18 assertion(s) failed.')
 }
 
