@@ -72,11 +72,12 @@ export async function createScene(o) {
     const l = new THREE.DirectionalLight(color, intensity); l.position.set(...pos); scene.add(l);
   }
   const owned = [];            // textures and materials made here, freed in dispose()
-  let raf = 0, disposed = false;
+  let raf = 0, disposed = false, settle = null;
   function dispose() {
     if (disposed) return;
     disposed = true;
     cancelAnimationFrame(raf);
+    if (settle) settle();         // a rise, sink or spin cut short by dispose still resolves its promise
     canvas.removeEventListener('pointerdown', onDown); canvas.removeEventListener('pointermove', onMove);
     canvas.removeEventListener('pointerup', onUp); canvas.removeEventListener('pointercancel', cancelPull);
     scene.traverse(n => {
@@ -216,6 +217,7 @@ export async function createScene(o) {
 
   // Timeline state.
   let phase = 'hidden', tl = null, spin = null, pull = null, pullBack = null, hold = null, mood = 'idle', moodAt = 0;
+  settle = () => { const t = tl, s = spin; tl = null; spin = null; if (t && t.done) t.done(); if (s && s.resolve) s.resolve(); };
   let celebrateAt = -Infinity, celebrateAmount = 0;
   const pulse = [-Infinity, -Infinity, -Infinity];
   const sparks = [];
