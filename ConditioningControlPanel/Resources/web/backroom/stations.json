@@ -1,0 +1,12 @@
+[
+  { "id": "slot", "spot": "bottom-left", "state": "live", "entry": "stations/slot/station.js",
+    "hotspot": [150, 380, 240, 270], "stand": [362, 566], "labelKey": "br_station_slot" },
+  { "id": "wheel", "spot": "top-left", "state": "soon",
+    "hotspot": [280, 100, 210, 255], "stand": [470, 372], "labelKey": "br_station_wheel" },
+  { "id": "scratcher", "spot": "bottom-right", "state": "soon",
+    "hotspot": [990, 355, 270, 285], "stand": [962, 600], "labelKey": "br_station_scratcher" },
+  { "id": "cards", "spot": "top-right", "state": "soon",
+    "hotspot": [890, 205, 240, 210], "stand": [902, 440], "labelKey": "br_station_cards" },
+  { "id": "counter", "spot": "top-middle", "state": "soon",
+    "hotspot": [530, 70, 320, 270], "stand": [690, 372], "labelKey": "br_station_counter" }
+]
