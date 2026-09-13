@@ -90,6 +90,10 @@ internal static class BackRoomHostService
                 // The player's own media (the C4 feed deals ccp.assets urls). Allow, because the
                 // slot paints dealt GIFs into reel textures and a tainted image cannot reach WebGL.
                 ("ccp.assets", App.EffectiveAssetsPath, CoreWebView2HostResourceAccessKind.Allow),
+                // Downloaded audio packs mirror the ccp.game tree. The slot's chimes and thud are the
+                // race's own sfx (dtrh/shared/audioSrc.js); without this host CCP_CONTENT_READY never
+                // arrives and a pack-only clip is silent. Same helper as the Arcademy and DTRH hosts.
+                ChaosWebViewHost.ContentMapping(),
             };
 
             _host = new ChaosWebViewHost(new ChaosWebViewHost.Options
