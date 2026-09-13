@@ -66,6 +66,7 @@ namespace ConditioningControlPanel.Avalonia
             CheckWorkshopRoster(Check);
             CheckSamplerLocalization(Check);
             CheckPrivacyLocalization(Check);
+            CheckAwarenessPicker(Check);
             CheckTextEditor(Check);
             CheckTriggerControls(Check);
             Console.WriteLine();
@@ -346,6 +347,204 @@ namespace ConditioningControlPanel.Avalonia
                 LocalizationManager.Instance.SetLanguage(previousLanguage);
                 host?.Close();
                 if (host is not null) Dispatcher.UIThread.RunJobs();
+            }
+        }
+
+        /// <summary>
+        /// #495 awareness picker confirmation defaults at the public modal seam. Synthetic rows use
+        /// the dialog's public constructor, and the checkbox, owned prompt, keyboard route, and
+        /// modal task are all observed on shown controls. No caller, provider, process scan, or
+        /// persistence path is reached.
+        /// </summary>
+        private static void CheckAwarenessPicker(Action<string, bool, string?> check)
+        {
+            Window? owner = null;
+            AwarenessAppPickerDialog? noDialog = null;
+            AwarenessAppPickerDialog? yesDialog = null;
+            AwarenessAppPickerDialog? noticeDialog = null;
+            Task<bool?>? noCompletion = null;
+            Task<bool?>? yesCompletion = null;
+            Task<bool?>? noticeCompletion = null;
+
+            static List<AwarenessPickRow> Rows(AwarenessAppPickerDialog dialog) =>
+                dialog.FindControl<ItemsControl>("ItemList")!.ItemsSource!
+                    .Cast<AwarenessPickRow>().ToList();
+
+            static CheckBox GuardCheckBox(AwarenessAppPickerDialog dialog) =>
+                dialog.GetVisualDescendants().OfType<CheckBox>()
+                    .Single(box => box.Tag is AwarenessPickRow { Raw: "@passwords" });
+
+            static List<(Button Button, string Caption)> PromptButtons(Window prompt) =>
+                prompt.GetVisualDescendants().OfType<Button>()
+                    .Select(button => (button, (button.Content as TextBlock)?.Text ?? string.Empty))
+                    .ToList();
+
+            static Window? OpenPrompt(AwarenessAppPickerDialog dialog) =>
+                dialog.OwnedWindows.FirstOrDefault(window => window.IsVisible);
+
+            static void ClickButton(Button button)
+            {
+                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            static void PressKey(Window target, PhysicalKey key)
+            {
+                target.KeyPressQwerty(key, RawInputModifiers.None);
+                Dispatcher.UIThread.RunJobs();
+                if (target.IsVisible) target.KeyReleaseQwerty(key, RawInputModifiers.None);
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            static void AnswerGuardNo(AwarenessAppPickerDialog dialog)
+            {
+                if (OpenPrompt(dialog) is not Window prompt) return;
+                var buttons = PromptButtons(prompt);
+                if (buttons.Count != 2 || buttons[0].Caption != "Yes" || buttons[1].Caption != "No")
+                    throw new InvalidOperationException("Unexpected guard prompt shape during cleanup");
+                ClickButton(buttons[1].Button);
+            }
+
+            static void AnswerNoticeOk(AwarenessAppPickerDialog dialog)
+            {
+                if (OpenPrompt(dialog) is not Window prompt) return;
+                var buttons = PromptButtons(prompt);
+                if (buttons.Count != 1 || buttons[0].Caption != "OK")
+                    throw new InvalidOperationException("Unexpected notice prompt shape during cleanup");
+                ClickButton(buttons[0].Button);
+            }
+
+            static void ClosePicker(AwarenessAppPickerDialog dialog, Task<bool?> completion)
+            {
+                if (dialog.IsVisible)
+                    ClickButton(dialog.FindControl<Button>("BtnCancel")!);
+                if (!completion.IsCompletedSuccessfully || dialog.IsVisible)
+                    throw new InvalidOperationException("Picker did not close successfully during cleanup");
+            }
+
+            try
+            {
+                owner = new Window();
+                owner.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                // A fresh picker keeps the safe-No route independent of the explicit-Yes route.
+                noDialog = new AwarenessAppPickerDialog(
+                    AwarenessListKind.Deny,
+                    new[] { "@passwords" },
+                    new[] { "synthetic.exe" });
+                noCompletion = noDialog.ShowDialog<bool?>(owner);
+                Dispatcher.UIThread.RunJobs();
+                var noGuard = GuardCheckBox(noDialog);
+                var noRow = Rows(noDialog).Single(row => row.Raw == "@passwords");
+                check("awareness picker renders the shown recommended guard checkbox",
+                    noDialog.IsVisible && noGuard.IsChecked == true && noRow.IsRecommended,
+                    $"visible={noDialog.IsVisible}, checked={noGuard.IsChecked}, recommended={noRow.IsRecommended}");
+
+                noGuard.IsChecked = false;
+                Dispatcher.UIThread.RunJobs();
+                var noPrompt = OpenPrompt(noDialog);
+                var noButtons = noPrompt is null ? new List<(Button Button, string Caption)>() : PromptButtons(noPrompt);
+                check("awareness picker opens its owned Yes/No guard prompt",
+                    noPrompt is not null && noButtons.Count == 2
+                    && noButtons[0].Caption == "Yes" && noButtons[1].Caption == "No",
+                    $"open={noPrompt is not null}, captions={string.Join("|", noButtons.Select(button => button.Caption))}");
+                var noButton = noButtons.Count == 2 ? noButtons[1].Button : null;
+                check("awareness picker guard prompt makes No the default",
+                    noButton?.IsDefault == true,
+                    $"isDefault={noButton?.IsDefault.ToString() ?? "<missing>"}");
+                check("awareness picker guard prompt focuses No",
+                    noButton?.IsFocused == true,
+                    $"isFocused={noButton?.IsFocused.ToString() ?? "<missing>"}");
+
+                if (noPrompt is not null) PressKey(noPrompt, PhysicalKey.Enter);
+                check("awareness picker guard prompt closes after actual Enter",
+                    OpenPrompt(noDialog) is null,
+                    $"open={OpenPrompt(noDialog) is not null}");
+                check("awareness picker stays open after safe Enter",
+                    noDialog.IsVisible && !noCompletion.IsCompleted,
+                    $"visible={noDialog.IsVisible}, completed={noCompletion.IsCompleted}");
+                check("awareness picker safe Enter leaves Result null",
+                    noDialog.Result is null,
+                    $"result={(noDialog.Result is null ? "<null>" : string.Join(",", noDialog.Result))}");
+                check("awareness picker safe Enter rechecks the guard",
+                    noRow.IsListed && noGuard.IsChecked == true,
+                    $"listed={noRow.IsListed}, checked={noGuard.IsChecked}");
+
+                // Explicit Yes remains the only route that can remove a recommended guard.
+                yesDialog = new AwarenessAppPickerDialog(
+                    AwarenessListKind.Deny,
+                    new[] { "@passwords", "existing.exe" },
+                    new[] { "synthetic.exe" });
+                yesCompletion = yesDialog.ShowDialog<bool?>(owner);
+                Dispatcher.UIThread.RunJobs();
+                var yesGuard = GuardCheckBox(yesDialog);
+                yesGuard.IsChecked = false;
+                Dispatcher.UIThread.RunJobs();
+                var yesPrompt = OpenPrompt(yesDialog);
+                var yesButtons = yesPrompt is null ? new List<(Button Button, string Caption)>() : PromptButtons(yesPrompt);
+                check("awareness picker exposes explicit Yes for guard removal",
+                    yesPrompt is not null && yesButtons.Count == 2
+                    && yesButtons[0].Caption == "Yes" && yesButtons[1].Caption == "No",
+                    $"open={yesPrompt is not null}, captions={string.Join("|", yesButtons.Select(button => button.Caption))}");
+                if (yesButtons.Count == 2) ClickButton(yesButtons[0].Button);
+                var yesRow = Rows(yesDialog).Single(row => row.Raw == "@passwords");
+                ClickButton(yesDialog.FindControl<Button>("BtnSave")!);
+                check("awareness picker explicit Yes unlists the guard and saves true without it",
+                    OpenPrompt(yesDialog) is null && !yesDialog.IsVisible
+                    && yesCompletion.IsCompletedSuccessfully && yesCompletion.Result == true
+                    && !yesRow.IsListed && yesDialog.Result is not null
+                    && !yesDialog.Result.Contains("@passwords")
+                    && yesDialog.Result.Contains("existing.exe"),
+                    $"open={OpenPrompt(yesDialog) is not null}, visible={yesDialog.IsVisible}, "
+                    + $"completed={yesCompletion.Status}, result={string.Join(",", yesDialog.Result ?? new List<string>())}");
+
+                // The same Ask path also serves the one-button invalid-entry notice.
+                noticeDialog = new AwarenessAppPickerDialog(
+                    AwarenessListKind.Deny,
+                    Array.Empty<string>(),
+                    new[] { "synthetic.exe" });
+                noticeCompletion = noticeDialog.ShowDialog<bool?>(owner);
+                Dispatcher.UIThread.RunJobs();
+                noticeDialog.FindControl<TextBox>("TxtNewItem")!.Text = "*";
+                ClickButton(noticeDialog.FindControl<Button>("BtnAdd")!);
+                var noticePrompt = OpenPrompt(noticeDialog);
+                var noticeButtons = noticePrompt is null ? new List<(Button Button, string Caption)>() : PromptButtons(noticePrompt);
+                check("awareness picker opens the one-button OK notice",
+                    noticePrompt is not null && noticeButtons.Count == 1 && noticeButtons[0].Caption == "OK",
+                    $"open={noticePrompt is not null}, captions={string.Join("|", noticeButtons.Select(button => button.Caption))}");
+                var okButton = noticeButtons.Count == 1 ? noticeButtons[0].Button : null;
+                check("awareness picker one-button notice defaults to and focuses OK",
+                    okButton?.IsDefault == true && okButton.IsFocused,
+                    $"isDefault={okButton?.IsDefault.ToString() ?? "<missing>"}, "
+                    + $"isFocused={okButton?.IsFocused.ToString() ?? "<missing>"}");
+                if (noticePrompt is not null) PressKey(noticePrompt, PhysicalKey.Enter);
+                check("awareness picker Enter closes OK notice without completing the picker",
+                    OpenPrompt(noticeDialog) is null && noticeDialog.IsVisible
+                    && !noticeCompletion.IsCompleted && noticeDialog.Result is null,
+                    $"open={OpenPrompt(noticeDialog) is not null}, visible={noticeDialog.IsVisible}, "
+                    + $"completed={noticeCompletion.IsCompleted}, result={(noticeDialog.Result is null ? "<null>" : "set")}");
+            }
+            catch (Exception ex)
+            {
+                check("awareness picker fixture executes", false, ex.ToString());
+            }
+            finally
+            {
+                if (noDialog is not null && noCompletion is not null)
+                {
+                    AnswerGuardNo(noDialog);
+                    ClosePicker(noDialog, noCompletion);
+                }
+                if (yesDialog is not null && yesCompletion is not null)
+                    ClosePicker(yesDialog, yesCompletion);
+                if (noticeDialog is not null && noticeCompletion is not null)
+                {
+                    AnswerNoticeOk(noticeDialog);
+                    ClosePicker(noticeDialog, noticeCompletion);
+                }
+                owner?.Close();
+                Dispatcher.UIThread.RunJobs();
             }
         }
 

@@ -187,7 +187,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             var answer = await Ask(
                 Loc.Get("companion_awareness_picker_drop_guard_title"),
                 Loc.GetF("companion_awareness_picker_drop_guard", row.Label),
-                ("Yes", true), ("No", false));
+                1, ("Yes", true), ("No", false));
 
             if (answer == true)
             {
@@ -219,7 +219,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             {
                 await Ask(Loc.Get("title_confirm"),
                     Loc.Get("companion_awareness_picker_bad_entry"),
-                    (Loc.Get("btn_ok"), true));
+                    0, (Loc.Get("btn_ok"), true));
                 return;
             }
 
@@ -268,10 +268,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// <see cref="TextEditorDialog"/> rather than shared, because making it shared would mean
         /// editing a sibling view another agent may be holding. Each button carries the value
         /// Close() hands back; dismissing the window yields null. Buttons hold a TextBlock, not
-        /// Content, for the access-key reason in the AXAML header. The app has no btn_yes/btn_no loc
-        /// keys - WPF got those strings from the OS - so Yes and No are English here.
+        /// Content, for the access-key reason in the AXAML header. The caller supplies the WPF
+        /// default-button index: No for the guard confirmation and OK for the one-button notice.
         /// </summary>
-        private Task<bool?> Ask(string title, string message, params (string Label, bool? Value)[] buttons)
+        private Task<bool?> Ask(string title, string message, int defaultButtonIndex,
+                                params (string Label, bool? Value)[] buttons)
         {
             var row = new StackPanel
             {
@@ -307,18 +308,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 }
             };
 
-            foreach (var (label, value) in buttons)
+            Button? defaultButton = null;
+            for (var i = 0; i < buttons.Length; i++)
             {
+                var (label, value) = buttons[i];
                 var button = new Button
                 {
                     Content = new TextBlock { Text = label },
                     Padding = new Thickness(14, 6),
-                    Cursor = new Cursor(StandardCursorType.Hand)
+                    Cursor = new Cursor(StandardCursorType.Hand),
+                    IsDefault = i == defaultButtonIndex
                 };
                 button.Click += (_, _) => dialog.Close(value);
                 row.Children.Add(button);
+                if (i == defaultButtonIndex) defaultButton = button;
             }
 
+            dialog.Opened += (_, _) => defaultButton?.Focus();
             return dialog.ShowDialog<bool?>(this);
         }
     }
