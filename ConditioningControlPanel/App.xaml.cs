@@ -5314,6 +5314,8 @@ Application State:
             // exit-done, and that timer can never tick from inside OnExit - so the flush it guards
             // never happened and the last class's grades/streak went with the process.
             try { Services.Arcademy.ArcademyHostService.ShutdownFlush(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            // The Back Room: same posture - the last tape cursor goes out and the window is disposed now.
+            try { Services.BackRoom.BackRoomHostService.ShutdownFlush(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // The Emergency Exit's friction door: a WebView2 process outliving the app is a leak, and
             // Close() is safe from here - it has no state to flush and never touches the lockdown (any
