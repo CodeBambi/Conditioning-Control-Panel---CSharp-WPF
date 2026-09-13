@@ -273,6 +273,7 @@ namespace ConditioningControlPanel.Services
             new("skills/hive_mind.png",          SurfaceRailChip, new Rect(0.04, 0.06, 0.72, 0.66)),
             new("skills/sparkle_boost_3.png",    SurfaceRailChip, new Rect(0.04, 0.06, 0.66, 0.70)),
             new("skills/trophy_case.png",        SurfaceRailChip, new Rect(0.10, 0.06, 0.60, 0.70)),
+            new("skills/lucky_bubbles.png",      SurfaceRailChip, new Rect(0.06, 0.06, 0.88, 0.70)),
             // These two carry no wordmark, so the honest centre crop IS the right window; the rows
             // exist to say so out loud and to give a mod author a Frame button for them.
             new("programs/plate_default.png",    SurfaceRailChip, new Rect(0, 0, 1, 1)),

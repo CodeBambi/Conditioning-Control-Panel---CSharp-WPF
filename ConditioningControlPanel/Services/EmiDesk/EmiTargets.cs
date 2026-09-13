@@ -356,6 +356,11 @@ public static class EmiTargets
         T("goon", "features/goon_game.png", Tile(0x76, 0xC8, 0x93), Always, Never,
             () => GoonGame.GoonHostService.Launch());
 
+        // The Back Room: free for everyone, so never locked. Like the Arcademy it has no
+        // Resources/features art, and borrows its own room render from the web tree instead.
+        T("backroom", "web/backroom/room/backroom_final.png", Tile(0xB9, 0x5C, 0xD8), Always, Never,
+            () => BackRoom.BackRoomHostService.Launch());
+
         // The shop is withheld on most accounts; ShowTab owns the refusal, IsAvailable keeps the
         // card out of the ring entirely rather than offering a door that answers with a log line.
         T("justdrop", "features/justdrop.png", Tile(0xFF, 0xB3, 0x6B),
