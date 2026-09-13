@@ -28,6 +28,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             base.OnAttachedToVisualTree(e);
             LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
             LocalizationManager.Instance.LanguageChanged += OnLanguageChanged;
+            if (DataContext is AttentionGaugeViewModel vm)
+                vm.RefreshLocalizedText();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)

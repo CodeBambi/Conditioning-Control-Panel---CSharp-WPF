@@ -702,6 +702,28 @@ namespace ConditioningControlPanel.Avalonia
                     vm.BarFraction == 0.72 && vm.IsDetailShown && detail.IsVisible,
                     $"fraction={vm.BarFraction}, vmShown={vm.IsDetailShown}, visible={detail.IsVisible}");
 
+                // Reproduce the lifecycle boundary with the same shown gauge and same VM: leave
+                // the English rendering, change locale while detached, then inspect immediately
+                // after reattachment. This is intentionally a rendered-value assertion; binding
+                // refresh is the contract, not a required list of notification names.
+                LocalizationManager.Instance.SetLanguage("en");
+                Dispatcher.UIThread.RunJobs();
+                host.Content = null;
+                Dispatcher.UIThread.RunJobs();
+                var sameVmDetached = !gauge.IsAttachedToVisualTree();
+                LocalizationManager.Instance.SetLanguage("fr");
+                Dispatcher.UIThread.RunJobs();
+                host.Content = gauge;
+                Dispatcher.UIThread.RunJobs();
+                check("reattached gauge renders detached locale changes on the same DataContext",
+                    sameVmDetached && gauge.IsAttachedToVisualTree() && ReferenceEquals(gauge.ViewModel, vm)
+                    && vm.IsDetailShown && detail.IsVisible
+                    && title.Text == "Son attention"
+                    && state.Text == "Il lui reste plein d'attention pour toi aujourd'hui."
+                    && detail.Text == "~63 chats restants · remise à zéro à minuit",
+                    $"detached={sameVmDetached}, attached={gauge.IsAttachedToVisualTree()}, sameVm={ReferenceEquals(gauge.ViewModel, vm)}, "
+                    + $"visible={detail.IsVisible}, title={title.Text ?? "<null>"}, state={state.Text ?? "<null>"}, detail={detail.Text ?? "<null>"}");
+
                 host.Content = null;
                 Dispatcher.UIThread.RunJobs();
                 var detached = !gauge.IsAttachedToVisualTree();
