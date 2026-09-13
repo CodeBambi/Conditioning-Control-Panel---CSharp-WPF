@@ -147,7 +147,9 @@ export async function createScene(o) {
       ctx.clearRect(0, 0, c.width, c.height);
       for (let j = 0; j < strips[r].length; j++) {
         ctx.save(); ctx.translate((j + 0.5) * 256, 128); ctx.rotate(-Math.PI / 2); ctx.scale(1, -1);
-        drawSymbol(ctx, strips[r][j], t, look);
+        // One bad drawable (a broken or tainted GIF) paints the fallback tile, never the whole reel.
+        try { ctx.save(); drawSymbol(ctx, strips[r][j], t, look); } catch { ctx.restore(); ctx.save(); drawSymbol(ctx, strips[r][j], t, { reduced: look.reduced, face: look.face }); }
+        ctx.restore();
         const glaze = ctx.createLinearGradient(-128, 0, 128, 0);
         glaze.addColorStop(0, '#07040f99'); glaze.addColorStop(0.12, '#ffffff08'); glaze.addColorStop(0.5, '#ffffff00');
         glaze.addColorStop(0.88, '#ffffff08'); glaze.addColorStop(1, '#07040f99');
@@ -326,7 +328,18 @@ export async function createScene(o) {
     }
     renderer.render(scene, camera);
   }
-  const loop = t => { if (disposed) return; update(t); raf = requestAnimationFrame(loop); };
+  // A throw in one frame must not stop the loop (a spin in flight would never land). A tainted canvas
+  // (cross-origin media without CORS) stays tainted, so drop the dealt GIFs and rebuild the reel canvases.
+  let frameFailed = false;
+  const loop = t => {
+    if (disposed) return;
+    try { update(t); } catch (err) {
+      if (look.gif) { console.warn('[slot] reel media failed to upload, using fallback art', err); look = { ...look, gif: null }; setStrips(strips); }
+      else if (!frameFailed) console.error('[slot] frame failed', err);
+      frameFailed = true;
+    }
+    raf = requestAnimationFrame(loop);
+  };
 
   // Lever drag and freeze taps (preview gesture: release past 55% of the pull spins once).
   const ray = new THREE.Raycaster(), pointer = new THREE.Vector2();

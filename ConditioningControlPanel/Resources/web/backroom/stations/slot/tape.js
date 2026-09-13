@@ -103,7 +103,7 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
     return null;
   }
 
-  const freezeCost = () => 1 + (Number(table && table.freezeCost) || 1);
+  const freezeCost = () => { const f = Number(table && table.freezeCost); return 1 + (table && table.freezeCost != null && Number.isFinite(f) ? f : 1); };
   const canFreeze = () => !unplayed(side);
 
   /** Send one intent, reusing its idem verbatim on every retry of that same intent. */
