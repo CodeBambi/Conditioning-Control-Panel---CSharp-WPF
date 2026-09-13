@@ -3139,6 +3139,23 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// The DISK half of the flash pool as a copy, after the same refresh and deselection prune
+        /// <see cref="GetChaosImagePaths"/> runs. The Back Room media feed deals from this instead:
+        /// it needs the whole list to run a seeded shuffle (a random draw cannot be replayed), and
+        /// only disk files have a <c>ccp.assets</c> url behind them - pack entries decrypt to temp
+        /// copies and remote entries are https urls, neither of which the page can be pointed at.
+        /// </summary>
+        internal List<string> SnapshotLocalImagePaths()
+        {
+            lock (_lockObj)
+            {
+                if (_imageList.Count == 0 && _packImageList.Count == 0) RefreshImageLists();
+                PruneDeselectedFromPools();
+                return new List<string>(_imageList);
+            }
+        }
+
+        /// <summary>
         /// Refreshes both image lists (regular and pack images) from disk cache.
         /// Called when lists are empty or cache has expired.
         /// </summary>
