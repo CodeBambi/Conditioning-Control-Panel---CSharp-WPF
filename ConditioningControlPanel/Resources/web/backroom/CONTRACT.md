@@ -28,11 +28,13 @@ Not salvaged: the chips wallet, the cage, the pot, the Arcademy tier gate.
 | Walkable 3D room (`room/scene.js`, `fixtures.js`, `screens.js`, `walk.js`, `hud.js`, `room/assets/`) | same folder | R1 |
 | Room asset speed pass | client `Scripts/build-backroom-room-assets.mjs` (reads blender-scripting, never writes to it) | R1 |
 | Slot station page | client `Resources/web/backroom/stations/slot/` | C2 |
+| Daily Daze wheel station page | client `Resources/web/backroom/stations/wheel/` (`station.md`) | CW |
 | Host window + service | client `Services/BackRoom/BackRoomHostService.cs` on `ChaosWebViewHost` | C1 |
 | Station request relay | client `Services/BackRoom/BackRoomApi.cs` | C1 (shape), C2 (slot ops) |
 | Effect dispatcher | client `Services/BackRoom/BackRoomFx.cs` | C3 |
 | Media feed | client `Services/BackRoom/BackRoomMedia.cs` | C4 |
 | Slot server | CCP-Server `proxy/backroom-slot.js` (pure), `proxy/backroom-routes.js`, `proxy/scripts/sim-backroom-slot.mjs` | S1 |
+| Wheel server | CCP-Server `proxy/backroom-wheel.js` (pure, table v2), `proxy/backroom-wheel-routes.js` | S-wheel |
 
 Origins, same scheme as the Arcademy host: `https://ccp.game/` maps `Resources\web` (Deny), page URL
 `https://ccp.game/backroom/index.html`, three.js from `https://ccp.game/vendor/three/` (identical build
@@ -112,7 +114,7 @@ Host relay whitelist (the only C# that changes when a station is added, one row 
 ```csharp
 static readonly Dictionary<string, (string Method, string Path)[]> Ops = new() {
   ["slot"] = new[] { ("GET","state"), ("POST","tape"), ("POST","cursor") },
-  // ["wheel"] = new[] { ("GET","state"), ("POST","spin") },   // later stations append a row
+  ["wheel"] = new[] { ("GET","state"), ("POST","spin") },
 };
 // op -> {METHOD} /v2/backroom/{station}/{op}
 ```
@@ -201,6 +203,23 @@ means the player re-watches a few settled spins, nothing more.
   client never sends SP to these routes.
 - **Paytable is server code** (`backroom-slot.js` `TABLE_V3`), versioned. The client has no fallback
   table: if `state` fails, the cabinet shows "closed for a moment" and Back.
+
+### 3.5 Daily Daze wheel (`/v2/backroom/wheel/*`, amended 2026-09-14)
+
+One free spin per account per UTC day (owner decision, wheel option A). No stake, no floor enforced.
+
+- `GET state` -> `{ ok, sp, open, day:"YYYY-MM-DD", spun, result|null, snoozeCarry, nextResetAt, jackpot:{ amount,
+  odds:"1 in N"|"never", wonToday, eligible }, slices:[ { id, label, pay, width, odds } ], floorMs }`. `width` is the
+  drawn width in degrees (the picture), `odds` the published chance (the ledger; `"never"` when it cannot be won
+  now). The jackpot slice's `pay` is the day's pot. Slices carry no kind: `jackpot` and `snooze` are known by id.
+- `POST spin {idem}` -> `{ ok, sp, result:{ day, sliceId, sliceIndex, pay, snoozeCarryPaid, jackpot, jackpotFallback,
+  snoozed, total, capped }, jackpot, snoozeCarry, nextResetAt }`. `total` is pay + carry before the cap; `sp` is
+  the balance after it.
+- Refusals: `already_spun` (+ `result, sp, jackpot, snoozeCarry, nextResetAt`), `bad_request`, and `busy` and
+  `too_fast` as HTTP 200 (not the slot's 409); `closed` is 403.
+- The page lands on `result.sliceIndex` whatever the drag, seeded inside the drawn slice by the day, and shows the
+  stored landing and a countdown on reopen. Effects are existing ids only (section 4): 1-3 SP `fx.spiral_brief`,
+  5-20 `fx.gif_burst`, 40 and 100 `fx.gif_storm`, the pot `fx.jackpot`, Snooze none. Details: `stations/wheel/station.md`.
 
 ## 4. Lines and effect ids
 
@@ -315,7 +334,8 @@ Driven nodes (verified present in the glb 2026-09-13): `cabinet`, `reel_1..3` (X
                  "palette": { "candy_rose": "ac83ed", "...": "rrggbb" },
                  "faces": true, "reels": true, "labels": { "marquee": "@name" },
                  "bounds": { "min": [x, y, z], "max": [x, y, z] } } },
-  { "id": "wheel", "name": "Daily Daze", "labelKey": "br_station_wheel", "state": "soon", "...": "..." } ]
+  { "id": "wheel", "name": "Daily Daze", "labelKey": "br_station_wheel", "state": "live",
+    "entry": "stations/wheel/station.js", "...": "..." } ]
 ```
 
 One row per fixture, metres, y up (numbers from blender-scripting `backroom/out/placements.json`). Rows:

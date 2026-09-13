@@ -38,6 +38,18 @@ internal static class BackRoomHostService
         "br_room_label_jackpot", "br_room_label_status", "br_room_label_wheel_status", "br_ad_arcademy", "br_ad_dtrh", "br_ad_focus_gaze",
         "br_station_failed", "br_station_closed", "br_model_missing", "br_suspended",
         "br_preset_drop", "br_preset_relax", "br_preset_let_go", "br_preset_sink",
+        // Daily Daze station (stations/wheel): the page keeps an English fallback for each.
+        "br_wheel_title", "br_wheel_stage", "br_wheel_loading", "br_wheel_back", "br_wheel_sp", "br_wheel_spin",
+        "br_wheel_free", "br_wheel_come_back", "br_wheel_ready", "br_wheel_spinning", "br_wheel_won",
+        "br_wheel_jackpot_won", "br_wheel_snoozed", "br_wheel_fallback", "br_wheel_carry_paid", "br_wheel_capped",
+        "br_wheel_next", "br_wheel_already", "br_wheel_jackpot", "br_wheel_gain", "br_wheel_gain_snooze",
+        "br_wheel_odds", "br_wheel_odds_note", "br_wheel_odds_snooze", "br_wheel_young", "br_wheel_taken",
+        "br_wheel_carry", "br_wheel_closed", "br_wheel_offline", "br_wheel_model_missing", "br_wheel_screen_ready",
+        "br_wheel_screen_spinning", "br_wheel_screen_pot", "br_wheel_screen_win", "br_wheel_screen_jackpot",
+        "br_wheel_screen_snooze", "br_wheel_screen_next", "br_wheel_slice_jackpot", "br_wheel_slice_sip",
+        "br_wheel_slice_glow", "br_wheel_slice_sparkle", "br_wheel_slice_dreamy", "br_wheel_slice_shimmer",
+        "br_wheel_slice_snooze", "br_wheel_slice_twinkle", "br_wheel_slice_deep", "br_wheel_slice_dazzle",
+        "br_wheel_slice_dazed",
     };
 
     /// <summary>DEBUG only: <c>CCP_BACKROOM_CDP_PORT</c> opens a remote debugging port on the room's

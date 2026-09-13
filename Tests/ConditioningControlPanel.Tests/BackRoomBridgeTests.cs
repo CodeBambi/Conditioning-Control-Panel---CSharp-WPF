@@ -125,7 +125,7 @@ public class BackRoomBridgeTests
 
     [Theory]
     [InlineData("slot", "withdraw")]
-    [InlineData("wheel", "state")]
+    [InlineData("wheel", "tape")]
     [InlineData("SLOT", "state")]
     public async Task UnlistedOps_AreRefusedBadOp_WithoutARelay(string station, string op)
     {

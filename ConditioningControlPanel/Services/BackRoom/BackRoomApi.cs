@@ -74,7 +74,7 @@ public sealed class BackRoomApi : IBackRoomRelay
         new Dictionary<string, (string Method, string Path)[]>(StringComparer.Ordinal)
         {
             ["slot"] = new[] { ("GET", "state"), ("POST", "tape"), ("POST", "cursor") },
-            // ["wheel"] = new[] { ("GET", "state"), ("POST", "spin") },   // later stations append a row
+            ["wheel"] = new[] { ("GET", "state"), ("POST", "spin") },
         };
 
     private static readonly HttpClient SharedHttp = new() { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
