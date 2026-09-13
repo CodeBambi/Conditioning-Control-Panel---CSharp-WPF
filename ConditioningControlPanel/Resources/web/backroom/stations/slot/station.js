@@ -6,12 +6,18 @@
  *   tape.js   what plays next, and the readouts (server-settled outcomes)
  *   scene.js  the cabinet, one WebGL context per open(), freed in close()
  *   media.js  the dealt GIFs and words painted on the reel cells
+ *   pace.js   THE PACE: about 4 s an outcome
+ *   feel.js   THE HOUSE BOOK: which move plays, how big, and the Brake (lane F1)
+ *   bank.js / sound.js  THE BANK's tokens and the cues
  * ==========================================================================*/
 
 import { createTape, stopsFor } from './tape.js';
 import { createScene, FACES } from './scene.js';
 import { createMedia, fxSymbols } from './media.js';
 import { PACE } from './pace.js';
+import { recipe, tierOf, meltedBy, ladderSemis, winTokens, spendTokens, glance, landPose, restPose, pressPose, glanceHoldMs } from './feel.js';
+import { createBank } from './bank.js';
+import { createSound } from './sound.js';
 
 const STATION = 'slot';
 const LINE_LABELS = {
@@ -37,13 +43,19 @@ export async function mount(ctx) {
   const hostBack = ctx.hostBack === true;
   // CONTRACT 7: one station, three cabinets in the room. variant = { id, name, palette } or null.
   const variant = ctx.variant && typeof ctx.variant === 'object' ? ctx.variant : null;
+  const lite = String(ctx.intensity || '').toLowerCase() === 'calm';   // Brake 8: Calm bank flies 4 tokens at most
   loadCss();
 
   let el = null, scene = null, tape = null, media = null, session = 0, alive = false;
   let busy = false, suspended = false, unSp = null, lastMelt = null;
   let pace = 'idle', queued = false, breathEnds = 0, marks = [];   // pace phase: idle | breath | spin | reveal
+  // Feel state for one sit-down (lane F1): the readout override while THE BANK flies, the win streak for
+  // THE CHIME LADDER, how often each tier has partied (Brake 3), and EMI's current pose (THE MASCOT GLANCE).
+  let sound = null, bank = null, shown = null, spObs = null, streak = 0, seen = [0, 0, 0, 0, 0], jackpots = 0;
+  let pose = 'idle0_0', glanceTimer = 0, gainTimer = 0, playing = null, feelLog = [], bankFrom = 0, bankTo = 0;
   const $ = sel => el.querySelector(sel), wait = ms => new Promise(r => setTimeout(r, Math.max(0, ms)));
   function mark(phase) { pace = phase; marks = [...marks.slice(-79), { phase, at: Math.round(performance.now()) }]; }
+  function note(what, extra = {}) { feelLog = [...feelLog.slice(-79), { what, at: Math.round(performance.now()), ...extra }]; }
 
   function sendMelt(left) {
     if (left === lastMelt) return;
@@ -63,12 +75,12 @@ export async function mount(ctx) {
       <div class="slot-hint" hidden>${t('br_slot_pull', 'Pull down')} &darr;</div>
       <header class="slot-top">
         <button class="slot-back" type="button">&larr; ${t('br_slot_back', 'Back')}</button>
-        <div class="slot-readouts">
-          <span class="slot-sp"></span><span class="slot-jackpot"></span>
-        </div>
+        <span class="slot-sp"></span><span class="slot-jackpot"></span>
         <div class="slot-status" aria-live="polite"></div>
-        <canvas class="slot-face" width="152" height="137" aria-hidden="true"></canvas>
       </header>
+      <canvas class="slot-face" width="152" height="137" aria-hidden="true"></canvas>
+      <span class="slot-gain" hidden></span>
+      <div class="slot-tokens" aria-hidden="true"></div>
       <div class="slot-controls">
         <div class="slot-freeze">${[0, 1, 2].map(i => `<button type="button" data-col="${i}" aria-pressed="false"></button>`).join('')}</div>
       </div>
@@ -89,6 +101,8 @@ export async function mount(ctx) {
   }
 
   function back() {
+    // Law VIII: Back rings on the frame it is asked (standalone; in the room the room's chip answers its own press).
+    if (el && !hostBack) $('.slot-back').classList.add('is-ringing');
     if (typeof ctx.standUp === 'function') ctx.standUp();
     else close();
   }
@@ -106,24 +120,33 @@ export async function mount(ctx) {
     return t('br_slot_offline', 'The house is not answering. Try again in a moment.');
   }
 
+  /* ONE SP READOUT (in-room tidy, lane F1). With ctx.hostBack the room's SP chip (#br-sp-value) is the only
+   * SP on screen and THE BANK's target: the station hides its own chip and writes what the readout SAYS into
+   * the room's (Law I, display only). A room repaint mid-sit-down is put back by the observer; close() hands
+   * the chip back holding ctx.sp(), the room's own true value. Standalone, .slot-sp is both. */
+  const readout = () => (hostBack ? document.getElementById('br-sp-value') : el && $('.slot-sp'));
+  const shownSp = () => (shown ?? (tape ? tape.snapshot().shownSp : 0));
+  const spText = n => (hostBack ? String(n) : t('br_slot_sp', '{n} SP', { n: fmt(n) }));
+  function paintSp() { const node = readout(); if (node && node.textContent !== spText(shownSp())) node.textContent = spText(shownSp()); }
+
   function sync() {
     if (!el || !tape) return;
     const s = tape.snapshot();
-    $('.slot-sp').textContent = t('br_slot_sp', '{n} SP', { n: fmt(s.shownSp) });
+    paintSp();
     $('.slot-jackpot').textContent = t('br_slot_jackpot', 'Jackpot {n}', { n: fmt(s.jackpot) });
     const parts = [t('br_slot_last_win', 'Last win {n}', { n: fmt(s.lastWin) }), t('br_slot_free_left', 'Free spins {n}', { n: s.free })];
     parts.push(s.melt ? t('br_slot_melt_left', 'Melt: {n} spins at half', { n: s.melt }) : t('br_slot_ready', 'Ready'));
     $('.slot-status').textContent = parts.join('  ·  ');
-    const playing = el.dataset.phase === 'play';
+    const playable = el.dataset.phase === 'play';
     el.dataset.pace = pace;
     el.querySelectorAll('[data-col]').forEach((b, i) => {
       const on = s.hold === i, roman = ['I', 'II', 'III'][i];
       b.setAttribute('aria-pressed', String(on));
       b.textContent = on ? t('br_slot_frozen', 'Frozen {n}', { n: roman }) : t('br_slot_freeze', 'Freeze {n}', { n: roman });
-      b.disabled = !playing || busy || !s.canFreeze;
+      b.disabled = !playable || busy || !s.canFreeze;
     });
     const spin = $('.slot-spin');
-    spin.disabled = !playing || (busy && pace !== 'reveal');   // a press in the reveal waits for the breath
+    spin.disabled = !playable || (busy && pace !== 'reveal');   // a press in the reveal waits for the breath
     spin.querySelector('span').textContent = t('br_slot_spin', 'Spin');
     spin.querySelector('small').textContent =
       s.hold !== null ? t('br_slot_cost', '{n} SP', { n: s.freezeCost })
@@ -140,15 +163,6 @@ export async function mount(ctx) {
     }
   }
 
-  function faceFor(o) {
-    if (!o) return 'idle0_0';
-    if (o.line === 'emi3') return 'jackpot';
-    if (o.pay > 0) return 'hearts';
-    if (o.meltLeft > 0) return 'melt';
-    if (o.freeLeft > 0) return 'spirals';
-    return 'idle0_0';
-  }
-
   function drawHud(name) {
     const c = el && $('.slot-face'), img = scene && scene.faceImage;
     if (!c || !img) return;
@@ -156,7 +170,44 @@ export async function mount(ctx) {
     g.clearRect(0, 0, 152, 137);
     g.drawImage(img, (FACES[name] ?? 3) * 152, 0, 152, 137, 0, 0, 152, 137);
   }
-  function setFace(name) { if (scene) scene.setFace(name); drawHud(name); }
+  function setFace(name) { pose = name; if (scene) scene.setFace(name); drawHud(name); }
+  /** THE MASCOT GLANCE: react now (inside Law VIII's 100 ms), hold, then settle on the rest pose. Never the
+   *  same pose twice in a row; the rest is skipped when she is already there. */
+  function glanceTo(want, holdMs, rest) {
+    clearTimeout(glanceTimer);
+    setFace(glance(pose, want));
+    note('glance', { pose });
+    if (rest) glanceTimer = setTimeout(() => { if (alive && pose !== rest) { setFace(rest); note('rest', { pose }); } }, holdMs);
+  }
+
+  /** THE THUD on the SP readout: the bank's last token (a mini-thud). Reduced motion: a lit state, no scale. */
+  function thudReadout() {
+    const node = readout(), box = node && (node.closest('.br-sp') || node);
+    if (!box || typeof box.animate !== 'function') return;
+    if (reduced) { box.animate([{ boxShadow: '0 0 0 2px #ffcf6b' }, { boxShadow: '0 0 0 2px #ffcf6b' }], { duration: 520 }); return; }
+    box.animate([{ transform: 'scale(1.3)', filter: 'brightness(2.2)' }, { transform: 'scale(.94)', offset: 0.55 }, { transform: 'scale(1)', filter: 'brightness(1)' }],
+      { duration: 340, easing: 'cubic-bezier(.2,1.5,.4,1)' });
+  }
+  function gain(n) {
+    const g = el && $('.slot-gain');
+    if (!g) return;
+    g.textContent = t(n >= 0 ? 'br_slot_gain' : 'br_slot_spent', n >= 0 ? '+{n} SP' : '-{n} SP', { n: fmt(Math.abs(n)) });
+    g.hidden = false; g.dataset.sign = n >= 0 ? 'up' : 'down';
+    clearTimeout(gainTimer); gainTimer = setTimeout(() => { if (el) $('.slot-gain').hidden = true; }, 1600);
+  }
+  const readoutAt = () => { const b = readout() && readout().getBoundingClientRect(); return b && b.width ? { x: b.left + b.width / 2, y: b.top + b.height / 2 } : null; };
+  /** THE BANK forwards (a win) or reversed (a tape or freeze debit). */
+  function flyBank(kind, fromValue, toValue, n) {
+    shown = fromValue;
+    const from = kind === 'pay' ? () => scene && (scene.project('payout_spawn') || scene.project('payout_tray')) : readoutAt;
+    const to = kind === 'pay' ? readoutAt : () => scene && (scene.project('payout_tray') || scene.project('payout_spawn'));
+    if (kind === 'pay' && scene) scene.trayThud();
+    if (!(bank.busy && bank.kind === 'pay' && kind === 'pay')) bankFrom = fromValue;   // a merged pay keeps its first value
+    bankTo = toValue;
+    const how = bank.start({ kind, n, fromValue, toValue, from, to });
+    note('bank', { kind, fromValue, toValue, n, how });
+    paintSp();
+  }
 
   function renderOdds() {
     const s = tape.snapshot();
@@ -174,7 +225,7 @@ export async function mount(ctx) {
   function toggleFreeze(col) {
     if (!alive || busy || !tape || el.dataset.phase !== 'play') return;
     tape.toggleHold(col);
-    sync();
+    sync();   // scene.setHold dips the button this frame (Law VIII)
   }
 
   function fire(o) {
@@ -188,27 +239,48 @@ export async function mount(ctx) {
     }
   }
 
+  /** The landing beat (Law X): the party the Brake allows, the ladder, the tokens and EMI, all on one frame. */
+  function land(o, before) {
+    const tier = tierOf(o), melted = meltedBy(o), r = recipe(o, { seen: seen[tier], jackpots });
+    if (tier > 0) { seen[tier]++; if (tier === 4) jackpots++; }
+    if (tier > 0) { sound.win(r.sound, ladderSemis(streak, melted)); streak++; } else streak = 0;   // the no-pay cue was the last reel's muted thud
+    scene.setMelted(melted);
+    scene.celebrate(r, o.pay, t('br_slot_screen_win', 'WIN +{n}', { n: fmt(o.pay) }));
+    if (r.tokens) flyBank('pay', before, tape.snapshot().shownSp, winTokens(tier, lite));
+    glanceTo(landPose(o), glanceHoldMs(melted), restPose(o.meltLeft));
+    note('land', { line: o.line, pay: o.pay, tier, party: r.party, sound: r.sound, melted, streak });
+  }
+
   async function press() {
     if (!alive || suspended || !scene || el.dataset.phase !== 'play') return;
-    if (busy) { queued = queued || pace === 'reveal'; return; }
+    sound.arm();
+    if (busy) { if (pace === 'reveal') { queued = true; scene.answer(); note('answer', { queued: true }); } return; }
     const my = session, before = tape.snapshot();
+    // Law VIII: the lever leans and EMI glances on this frame, before the tape or the server answers.
+    scene.answer(); clearTimeout(glanceTimer); setFace(glance(pose, pressPose()));
+    note('answer', { pose });
     busy = true; queued = false; card(null); mark('breath'); sync();
     // THE BREATH (PACE): the next spin starts no sooner than BREATH_MS after the last reveal; the buy runs meanwhile.
     const [r] = await Promise.all([tape.press(), wait(breathEnds - performance.now())]);
     if (my !== session || !alive) return;
     if (r.kind !== 'play') {
-      busy = false; mark('idle');
+      busy = false; mark('idle'); scene.letGo(); setFace(glance(pose, restPose(before.melt)));
       if (r.kind === 'refused') card(refusalText(r.reason));
       sync();
       return;
     }
-    const o = r.outcome;
-    setFace('idle0_0'); mark('spin'); sync();
+    const o = r.outcome, after = tape.snapshot();
+    if (after.shownSp < before.shownSp) flyBank('spend', before.shownSp, after.shownSp, spendTokens(before.shownSp - after.shownSp, lite));
+    scene.setMelted(before.melt > 0);
+    playing = { o, lastReel: [2, 1, 0].find(i => i !== r.held) };
+    mark('spin'); sync();
     await scene.spin(Array.isArray(o.stops) ? o.stops : stopsFor(before.strips, o.symbols), r.held);
     if (my !== session || !alive) return;
+    playing = null;
+    const shownBefore = shownSp();
     tape.land(o); fire(o);
-    if (o.line === 'emi3') scene.celebrate(o.pay);
-    setFace(faceFor(o)); scene.reveal(o.pay > 0); mark('reveal'); sync();
+    land(o, shownBefore);
+    scene.reveal(o.pay > 0); mark('reveal'); sync();
     await wait(PACE.REVEAL_MS);
     if (my !== session || !alive) return;
     breathEnds = performance.now() + PACE.BREATH_MS;
@@ -228,18 +300,30 @@ export async function mount(ctx) {
   async function open() {
     if (alive) return;
     alive = true; busy = false; suspended = false; lastMelt = null; pace = 'idle'; queued = false; breathEnds = 0;
+    shown = null; streak = 0; seen = [0, 0, 0, 0, 0]; jackpots = 0; pose = 'idle0_0'; playing = null;
     const my = ++session;
     el = build();
     ctx.root.append(el);
     addEventListener('keydown', onKey); addEventListener('resize', onResize);
     tape = createTape({ request: (op, body, idem) => ctx.request(op, body, idem), onMelt: sendMelt });
     media = createMedia($('.slot-media'), ctx.lex);
+    sound = createSound();
+    bank = createBank({
+      layer: $('.slot-tokens'), reduced,
+      onTick: (value, kind, quiet) => { shown = value; paintSp(); if (!quiet) sound.token(false); note('tick', { kind, value }); },
+      onLand: kind => { if (kind === 'spend' && scene) scene.trayThud(); else { sound.token(true); thudReadout(); }
+                        gain(bankTo - bankFrom); },
+      onDone: () => { shown = null; paintSp(); },
+    });
+    const roomChip = hostBack && document.getElementById('br-sp-value');
+    if (roomChip && typeof MutationObserver === 'function') { spObs = new MutationObserver(paintSp); spObs.observe(roomChip, { childList: true, characterData: true, subtree: true }); }
     if (typeof ctx.onSp === 'function') unSp = ctx.onSp(v => { if (tape) { tape.setServerSp(v); sync(); } });
     const dealt = Promise.resolve().then(() => (typeof ctx.media === 'function' ? ctx.media() : null))
       .then(m => (my === session ? media.deal(m) : null)).catch(() => null);
     const [made, state] = await Promise.all([
       createScene({ canvas: $('.slot-stage'), reduced, palette: variant && variant.palette, hint: $('.slot-hint'), canPull: () => (!busy || pace === 'reveal') && !suspended,
-                    onLever: () => press(), onFreeze: col => toggleFreeze(col) }).catch(e => ({ error: e })),
+                    onLever: () => press(), onFreeze: col => toggleFreeze(col),
+                    onReelStop: i => { const p = playing; sound.thud(i, !!p && i === p.lastReel && !(p.o.pay > 0)); note('thud', { reel: i }); } }).catch(e => ({ error: e })),
       tape.open(),
     ]);
     if (my !== session) { if (made && made.dispose) made.dispose(); return; }
@@ -259,7 +343,7 @@ export async function mount(ctx) {
     scene.setLook({ gif: i => media.gif(i), word: i => media.word(i) });
     dealt.then(() => { if (my === session && scene) scene.setLook({ gif: i => media.gif(i), word: i => media.word(i) }); });
     renderOdds();
-    setFace(!s.last && s.melt ? 'melt' : faceFor(s.last));
+    setFace(!s.last ? restPose(s.melt) : landPose(s.last));
     el.dataset.phase = 'rise';
     sync();
     await scene.rise();
@@ -280,13 +364,22 @@ export async function mount(ctx) {
     removeEventListener('keydown', onKey); removeEventListener('resize', onResize);
     if (typeof unSp === 'function') unSp();
     unSp = null;
+    // Law VI: Back skips every ceremony to its settled state, then hands the room its chip back.
+    clearTimeout(glanceTimer); clearTimeout(gainTimer);
+    if (bank) { bank.skip(); bank.dispose(); }
+    if (spObs) spObs.disconnect();
+    spObs = null;
+    const chip = hostBack && document.getElementById('br-sp-value');
+    if (chip && typeof ctx.sp === 'function' && Number.isFinite(ctx.sp())) chip.textContent = String(ctx.sp());
+    if (sound) sound.dispose();
     const s = scene, root = el, m = media;
+    if (s) s.skip();
     if (root) root.dataset.phase = 'leaving';
     if (s) await Promise.race([s.sink(), new Promise(r => setTimeout(r, 340))]);
     if (s) s.dispose();
     if (m) m.dispose();
     if (root) root.remove();
-    if (my === session) { scene = null; el = null; tape = null; media = null; busy = false; }
+    if (my === session) { scene = null; el = null; tape = null; media = null; busy = false; bank = null; sound = null; shown = null; }
   }
 
   return {
@@ -294,7 +387,9 @@ export async function mount(ctx) {
     close,
     suspend(on) {
       suspended = !!on;
-      if (suspended && scene) scene.cancelPull();
+      if (sound) sound.suspend(suspended);
+      if (suspended && bank) bank.skip();
+      if (suspended && scene) { scene.cancelPull(); scene.skip(); }
       if (el) sync();
     },
     async destroy() {
@@ -304,6 +399,8 @@ export async function mount(ctx) {
     /** For dev.html and CDP checks only. */
     debug: () => ({ phase: el && el.dataset.phase, busy, alive, pace, marks, snapshot: tape && tape.snapshot(),
                     hostBack, variant: variant && variant.id, palette: !!(scene && scene.recoloured),
-                    spinning: !!(scene && scene.spinning), sceneAlive: !!scene }),
+                    spinning: !!(scene && scene.spinning), sceneAlive: !!scene,
+                    feel: { log: feelLog, pose, streak, seen, shown, readout: readout() && readout().textContent,
+                            cues: sound ? sound.trace.slice() : [], scene: scene && scene.debug() } }),
   };
 }

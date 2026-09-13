@@ -4,9 +4,12 @@
  * dispose(). Nodes are looked up by NAME only (nodes.js); framing comes from
  * cam_seat -> cam_target and live bounds, because the glb is still moving.
  *
- * Not ported from the preview (feel is lane F1): chimes, the jewellery trims
- * and landing frames (they were placed at hard-coded coordinates), the debug
- * face strip and the cabinet/reel view toggle.
+ * The feel (lane F1) is decided in feel.js and played here: the lever's Law VIII
+ * answer, THE THUD per reel, THE SHIVER, THE BREATH, THE MARQUEE heat on
+ * marquee_glow, the payout_tray thud, and one cabinet celebration per win tier.
+ *
+ * Not ported from the preview: the jewellery trims and landing frames (they were
+ * placed at hard-coded coordinates), the debug face strip and the view toggle.
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -15,32 +18,30 @@ import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
 import { drawSymbol } from './symbols.js';
 import { PACE, reelStopMs, reelsMs } from './pace.js';
 import { applyPalette } from './palette.js';
+import { FEEL, bezier, breath, shiverPx, chaseMs } from './feel.js';
 
 export const FACES = { idle0_0: 3, hearts: 7, spirals: 8, melt: 9, jackpot: 10 };
-const RISE_MS = 620, CAMERA_MS = 620, SINK_MS = 340, PAINT_MS = 100, { THUD_MS } = PACE;
+const RISE_MS = 620, CAMERA_MS = 620, SINK_MS = 340, PAINT_MS = 100, { THUD_MS } = FEEL;
 const LENS_DEG = 20;           // vertical field; a narrow screen backs the camera off to keep the width
-const FIT_MARGIN = 1.2;         // breathing room around the reels + lever box
+const FIT_MARGIN = 1.04;        // breathing room around the marquee, reels and lever box
 const PULL_MAX = 0.5, PULL_COMMIT = 0.55;
+const LEAN = 0.22, BREATH_RAD = 0.03;   // Law VIII lean into a press; THE BREATH's reach at rest
 const PALETTES = {
   idle: [0xd90068, 0x006acb, 0xff9c00, 0x6220bd, 0x00a97c], spin: [0xff126e, 0x1567ff, 0xffb000, 0x00ccac],
   pull: [0x7920c4, 0xff197c], freeze: [0x0049a8, 0x00c7f2, 0x74f4ff], win: [0xe37100, 0xffd32b, 0xff4b24],
-  jackpot: [0xffbd00, 0xff1677, 0x7139ef, 0x00bed0], melt: [0x351369, 0xa32d99, 0x6230a0],
-  free: [0x006ca0, 0x00dda8, 0x8726e5],
+  big: [0xff4b24, 0xffd32b, 0xff126e, 0xffb000], jackpot: [0xffbd00, 0xffe27a, 0xffa000, 0xfff1b8],
+  melt: [0x351369, 0xa32d99, 0x6230a0], free: [0x006ca0, 0x00dda8, 0x8726e5],
 };
+const PARTY_MS = [0, 700, 900, 1000, 1400];   // per tier: how long the cabinet celebrates (THE BREATH waits it out)
 
 const clamp = x => Math.min(1, Math.max(0, x)), ease = x => 1 - (1 - clamp(x)) ** 3;
-function bezier(x, a, b, c, d) {
-  let lo = 0, hi = 1, t = x;
-  for (let i = 0; i < 14; i++) { t = (lo + hi) / 2; const v = 3 * (1 - t) ** 2 * t * a + 3 * (1 - t) * t * t * c + t ** 3; if (v < x) lo = t; else hi = t; }
-  return 3 * (1 - t) ** 2 * t * b + 3 * (1 - t) * t * t * d + t ** 3;
-}
 /** 0..1 of a reel's travel at `dt`: spin up, blur at a steady speed, decelerate into the stop. */
 function reelTravel(dt, dur, up = 180, down = Math.min(PACE.DECEL_MS, dur * 0.5)) {
   const v = 1 / (dur - up / 2 - (2 * down) / 3);
   if (dt <= up) return v * dt * dt / (2 * up);
   return dt <= dur - down ? v * (dt - up / 2) : v * (dur - down - up / 2) + (v * down / 3) * (1 - (1 - clamp((dt - dur + down) / down)) ** 3);
 }
-const reveal = x => bezier(clamp(x), 0.2, 1.35, 0.35, 1), thud = x => bezier(clamp(x), 0.2, 1.5, 0.4, 1);
+const reveal = x => bezier(FEEL.REVEAL_EASE, x), thud = x => bezier(FEEL.THUD_EASE, x);
 const asset = p => new URL(p, import.meta.url).href;
 
 function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
@@ -64,8 +65,8 @@ function paintDisplay(ctx, w, h, marquee, text) {
 }
 
 /**
- * @param {{canvas:HTMLCanvasElement, reduced:boolean, hint?:HTMLElement,
- *          canPull:()=>boolean, onLever:()=>void, onFreeze:(i:number)=>void}} o
+ * @param {{canvas:HTMLCanvasElement, reduced:boolean, hint?:HTMLElement, palette?:object,
+ *          canPull:()=>boolean, onLever:()=>void, onFreeze:(i:number)=>void, onReelStop?:(i:number)=>void}} o
  * @returns {Promise<{missing:string[], dispose:()=>void} | object>}
  */
 export async function createScene(o) {
@@ -113,7 +114,7 @@ export async function createScene(o) {
   const absent = OPTIONAL.filter(n => !get(n));
   if (absent.length) console.warn(`[slot] glb lacks optional nodes, degrading: ${absent.join(', ')}`);
 
-  const cabinet = get('cabinet'), lever = get('lever');
+  const cabinet = get('cabinet'), lever = get('lever'), rigRest = rig.position.clone();
   const reels = [1, 2, 3].map(i => get(`reel_${i}`)), restX = reels.map(r => r.rotation.x);
   const freezers = [1, 2, 3].map(i => get(`freeze_${i}`));
   freezers.forEach(f => f && f.material && (f.material = f.material.clone(), f.userData.restY = f.position.y));
@@ -126,6 +127,12 @@ export async function createScene(o) {
   });
   const glass = get('reel_window');
   if (glass && glass.material) Object.assign(glass.material, { transparent: true, opacity: 0.035, depthWrite: false });
+  // THE MARQUEE's heat lives on marquee_glow (its own clone: neon_pink is shared with the piping).
+  const glowNode = get('marquee_glow'), glowMat = glowNode && glowNode.isMesh && glowNode.material && glowNode.material.emissive
+    ? (glowNode.material = glowNode.material.clone()) : null;
+  const glowRest = glowMat && { color: glowMat.emissive.clone(), intensity: glowMat.emissiveIntensity };
+  if (glowMat) owned.push(glowMat);
+  const tray = get('payout_tray'), trayRest = tray && tray.scale.clone();
 
   // EMI face: atlas cell with a half-texel inset (FACES.md), Nearest, no mips.
   let faceMesh = null, faceName = 'idle0_0';
@@ -189,7 +196,8 @@ export async function createScene(o) {
     stops.forEach((k, r) => { stopsNow[r] = k; reels[r].rotation.x = restX[r] + angle(k, strips[r].length || 13); });
   }
 
-  // Framing: from cam_seat/cam_target and live bounds, at the rest pose.
+  // Framing: from cam_seat/cam_target and live bounds, at the rest pose. The marquee is in the play box
+  // and EMI's face so the cabinet's name and her glance read above the reels at every aspect (in-room tidy, lane F1).
   let poses = null;
   function frame(aspect) {
     const y = rig.position.y; rig.position.y = 0; rig.updateMatrixWorld(true);
@@ -198,11 +206,12 @@ export async function createScene(o) {
     const playBox = new THREE.Box3();
     (glass ? [glass] : reels).forEach(n => playBox.expandByObject(n));
     playBox.expandByObject(lever);
+    for (const n of [get('marquee'), glowNode, faceMesh]) if (n) playBox.expandByObject(n);
     const whole = new THREE.Box3().setFromObject(cabinet);
     const fit = (box, d, aimAt) => {
       const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), d).normalize(), up = new THREE.Vector3().crossVectors(d, right);
       const c = box.getCenter(new THREE.Vector3());
-      if (aimAt) c.addScaledVector(up, aimAt.clone().sub(c).dot(up));   // authored aim height, live width
+      if (aimAt) c.addScaledVector(up, (aimAt.clone().sub(c).dot(up)) * 0.15);   // a nod toward the authored aim height, keep the box
       const tan = Math.tan(THREE.MathUtils.degToRad(LENS_DEG) / 2);
       let hw = 0, hh = 0, depth = 0;
       for (const x of [box.min.x, box.max.x]) for (const yy of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
@@ -210,7 +219,7 @@ export async function createScene(o) {
         hw = Math.max(hw, Math.abs(p.dot(right))); hh = Math.max(hh, Math.abs(p.dot(up))); depth = Math.max(depth, p.dot(d));
       }
       const dist = Math.max(hh / tan, hw / (tan * aspect)) * FIT_MARGIN + depth;
-      return { pos: c.clone().addScaledVector(d, dist), look: c };
+      return { pos: c.clone().addScaledVector(d, dist), look: c, dist, right };
     };
     const side = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), dir).normalize();
     const quarter = dir.clone().addScaledVector(side, 0.75).add(new THREE.Vector3(0, 0.45, 0)).normalize();
@@ -228,8 +237,9 @@ export async function createScene(o) {
   // Timeline state.
   let phase = 'hidden', tl = null, spin = null, pull = null, pullBack = null, hold = null, mood = 'idle', moodAt = 0;
   settle = () => { const t = tl, s = spin; tl = null; spin = null; if (t && t.done) t.done(); if (s && s.resolve) s.resolve(); };
-  let celebrateAt = -Infinity, celebrateAmount = 0, revealAt = -Infinity, revealGain = 0;
-  const pulse = [-Infinity, -Infinity, -Infinity];
+  let revealAt = -Infinity, revealGain = 0, lean = null, party = null, shiverAt = -Infinity, trayAt = -Infinity, melted = false;
+  let heat = { from: 0, to: 0, at: -Infinity, gold: false };
+  const pulse = [-Infinity, -Infinity, -Infinity], stopAt = [-Infinity, -Infinity, -Infinity];
   const sparks = [];
   const spawn = get('payout_spawn');
   if (spawn) {
@@ -237,7 +247,7 @@ export async function createScene(o) {
     for (let i = 0; i < 7; i++) { const m = new THREE.Mesh(geo, mat); m.visible = false; scene.add(m); sparks.push(m); }
   }
   const emi = get('emi_topper'), emiRest = emi && { p: emi.position.clone(), s: emi.scale.clone(), r: emi.rotation.clone() };
-  const tmp = new THREE.Vector3(), nextColor = new THREE.Color();
+  const tmp = new THREE.Vector3(), nextColor = new THREE.Color(), GOLD = new THREE.Color(0xffc23a);
 
   function screen(name, text) {
     const s = screens[name];
@@ -250,6 +260,13 @@ export async function createScene(o) {
     const m = { jackpot: 'jackpot', hearts: 'win', melt: 'melt', spirals: 'free' }[faceName] || 'idle';
     if (m !== mood) { mood = m; moodAt = performance.now(); }
   }
+  /** THE GLOW on the marquee heat: in fast, out slow; reduced motion steps to the state. */
+  function heatNow(t) {
+    if (reduced) return heat.to;
+    const q = clamp((t - heat.at) / (heat.to > heat.from ? FEEL.GLOW_IN_MS : FEEL.GLOW_OUT_MS));
+    return heat.from + (heat.to - heat.from) * ease(q);
+  }
+  function heatTo(level, gold) { const t = performance.now(); heat = { from: heatNow(t), to: level, at: t, gold: !!gold }; }
 
   function settleSpin() {
     if (!spin) return;
@@ -273,27 +290,38 @@ export async function createScene(o) {
         if (dt >= SINK_MS) { const done = tl.done; tl = null; phase = 'hidden'; done(); }
       }
     }
+    const partying = !!party && t < party.end, pr = partying ? party.r : null;
     if (spin) {
       const s = spin, dt = t - s.start;
-      lever.rotation.x = reduced ? 0 : s.leverFrom ? s.leverFrom * (1 - ease(dt / THUD_MS)) : 0.4 * Math.sin(Math.PI * clamp(dt / 420));
+      // The pull carries on from wherever the Law VIII lean (or the drag) left the lever.
+      lever.rotation.x = reduced ? (dt < reelsMs() ? LEAN : 0) : Math.max(0.4 * Math.sin(Math.PI * clamp(dt / 420)), s.leverFrom * (1 - ease(dt / 420)));
       let all = true;
       for (let i = 0; i < 3; i++) {
         if (s.held === i) continue;
         const n = strips[i].length || 13, dur = reelStopMs(i), home = angle(s.stops[i], n);
-        // Reduced motion: the reel rests, then eases the short way into its stop in its thud window.
-        const target = reduced ? s.from[i] + ((home - s.from[i]) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI : home + Math.PI * 2 * (6 + 2 * i);
+        const target = home + Math.PI * 2 * (6 + 2 * i);
+        // Law VI: reduced motion takes the STATE. The reel rests, then is simply on its stop at its thud frame.
         let x = reduced ? s.from[i] : THREE.MathUtils.lerp(s.from[i], target, reelTravel(dt, dur));
-        if (dt >= dur) { const k = clamp((dt - dur) / THUD_MS); x = reduced ? THREE.MathUtils.lerp(s.from[i], target, ease(k)) : target + (1 - thud(k)) * 0.035; if (k < 1) all = false; } else all = false;
+        if (dt >= dur) {
+          if (!s.stopped[i]) { s.stopped[i] = true; stopAt[i] = t; if (o.onReelStop) o.onReelStop(i); }   // THE THUD: cue on this frame
+          const k = clamp((dt - dur) / THUD_MS);
+          x = reduced ? home : target + (1 - thud(k)) * 0.035;
+          if (k < 1) all = false;
+        } else all = false;
         reels[i].rotation.x = restX[i] + x;
       }
       if (all && dt >= reelsMs()) settleSpin();   // a held column never shortens the pace
     } else if (pull) lever.rotation.x = PULL_MAX * pull.amount;
     else if (pullBack) { const q = clamp((t - pullBack.start) / 200); lever.rotation.x = pullBack.angle * (1 - ease(q)); if (q === 1) pullBack = null; }
-    else lever.rotation.x = reduced || phase !== 'play' || t - celebrateAt < 1000 ? 0 : 0.018 * (1 - Math.cos(t / 900)); // THE BREATH
+    else if (lean) lever.rotation.x = reduced ? LEAN : lean.from + (LEAN - lean.from) * ease((t - lean.start) / FEEL.LEAN_MS);   // Law VIII
+    else lever.rotation.x = reduced || phase !== 'play' || partying ? 0 : BREATH_RAD * breath(t);   // THE BREATH, the only breather
 
-    // The payline reveal: the reels lift (a win) or dim (nothing) for REVEAL_MS; reduced holds a flat step.
+    // The payline reveal lifts (a win) or dims (nothing) for REVEAL_MS; THE THUD flashes each reel 2.2 -> 1.
     const rq = (t - revealAt) / PACE.REVEAL_MS, glow = rq < 0 || rq > 1 ? 1 : 1 + revealGain * (reduced ? 0.6 : Math.sin(Math.PI * rq));
-    reels.forEach(r => r.material && r.material.color && r.material.color.setScalar(glow));
+    reels.forEach((r, i) => {
+      const k = (t - stopAt[i]) / THUD_MS, flash = k < 0 || k >= 1 ? 1 : reduced ? 1.3 : 1 + 1.2 * (1 - ease(k));
+      if (r.material && r.material.color) r.material.color.setScalar(glow * flash);
+    });
 
     freezers.forEach((f, i) => {
       if (!f) return;
@@ -301,41 +329,68 @@ export async function createScene(o) {
       f.position.y = f.userData.restY - (reduced ? 0 : Math.sin(clamp((t - pulse[i]) / 200) * Math.PI) * 0.012);
     });
 
-    const m = spin ? 'spin' : mood !== 'idle' ? mood : hold !== null ? 'freeze' : pull ? 'pull' : 'idle';
-    const colors = PALETTES[m], period = m === 'spin' ? 420 : m === 'jackpot' ? 550 : m === 'idle' ? 1900 : 950;
-    const travel = reduced ? 0 : (t - moodAt) / period;
+    // THE MARQUEE: the chase runs at the heat of the last win, the tier's own palette while it celebrates.
+    const h = heatNow(t);
+    const partyMood = pr && pr.chase ? (pr.gold ? 'jackpot' : pr.tier >= 3 ? 'big' : 'win') : null;
+    const m = spin ? 'spin' : partyMood || (mood !== 'idle' ? mood : hold !== null ? 'freeze' : pull ? 'pull' : 'idle');
+    const colors = PALETTES[m], period = m === 'spin' ? 420 : chaseMs(partyMood ? Math.max(h, pr.tier) : h);
+    const travel = reduced ? 0 : (t - (partyMood ? party.start : moodAt)) / period;
     bulbs.forEach((b, i) => {
       const p = i * 0.65 + travel, step = Math.floor(p), mix = p - step;
       b.material.color.setHex(colors[step % colors.length]).lerp(nextColor.setHex(colors[(step + 1) % colors.length]), mix * mix * (3 - 2 * mix));
-      b.material.emissive.copy(b.material.color); b.material.emissiveIntensity = m === 'jackpot' ? 0.22 : 0.1;
+      b.material.emissive.copy(b.material.color); b.material.emissiveIntensity = 0.1 + 0.04 * h;
     });
+    if (glowMat) {
+      glowMat.emissive.copy(glowRest.color).lerp(GOLD, heat.gold ? clamp(h / 4) : 0);
+      glowMat.emissiveIntensity = glowRest.intensity * (0.55 + 0.45 * h);
+    }
+
     if (emi) {
       emi.position.copy(emiRest.p); emi.scale.copy(emiRest.s); emi.rotation.copy(emiRest.r);
-      const age = t - moodAt;
+      const age = t - moodAt, pa = partying ? t - party.start : Infinity;
       if (!reduced && phase === 'play') {
-        let lean = 0, hop = 0, squash = 1;
-        if (spin) lean = 0.055 * Math.sin((t - spin.start) / 220);
-        else if (pull) lean = -0.09 * pull.amount;
-        else if ((m === 'win' || m === 'jackpot') && age < 800) { const q = age / 800; hop = Math.sin(q * Math.PI) * 0.025; squash = 1 - 0.07 * Math.sin(q * Math.PI * 2); lean = 0.06 * Math.sin(q * Math.PI * 2); }
-        else if (m === 'melt') { squash = 0.91; lean = -0.07; }
-        else if (m === 'free' && age < 900) lean = 0.08 * Math.sin(age / 900 * Math.PI * 2);
-        emi.position.y += hop; emi.rotation.z += lean; emi.scale.y *= squash; emi.scale.x /= Math.sqrt(squash);
+        let lean2 = 0, hop = 0, squash = 1, pop = 1, turn = 0;
+        if (spin) lean2 = 0.055 * Math.sin((t - spin.start) / (melted ? 440 : 220));   // Brake 5: EMI slows while melted
+        else if (pull) lean2 = -0.09 * pull.amount;
+        else if (pr && pr.reveal && pa < FEEL.REVEAL_MS) { const q = pa / FEEL.REVEAL_MS; pop = 0.6 + 0.4 * reveal(q); turn = Math.PI * 2 * reveal(q); }   // THE REVEAL
+        else if (pr && pr.jolt && pa < 600) { const q = pa / 600; hop = Math.sin(q * Math.PI) * 0.025; squash = 1 - 0.07 * Math.sin(q * Math.PI * 2); lean2 = 0.06 * Math.sin(q * Math.PI * 2); }
+        else if (m === 'melt') { squash = 0.91; lean2 = -0.07; }
+        else if (m === 'free' && age < 600) lean2 = 0.08 * Math.sin(age / 600 * Math.PI * 2);
+        emi.position.y += hop; emi.rotation.z += lean2; emi.rotation.y += turn;
+        emi.scale.multiplyScalar(pop); emi.scale.y *= squash; emi.scale.x /= Math.sqrt(squash);
       }
     }
-    const celebrating = !reduced && t - celebrateAt < 1000;
-    if (screens.screen_jackpot) screens.screen_jackpot.mesh.material.emissiveIntensity = celebrating ? 1.3 : reduced ? 0.45 : 0.45 + 0.12 * Math.sin(t / 500);
-    if (screens.screen_jackpot) {
-      const base = screens.screen_jackpot.base || '';
-      screen('screen_jackpot', celebrating ? Math.round(celebrateAmount * ease((t - celebrateAt) / 650)).toLocaleString('en-US') : base);
+    // screen_jackpot per tier: the jackpot counts up (THE REVEAL), big thuds 2.2 -> 1, bigger glows, then the base text.
+    const sj = screens.screen_jackpot;
+    if (sj) {
+      const pa = partying ? t - party.start : Infinity;
+      let lit = 0.45, text = sj.base || '';
+      if (pr && pr.screen) {
+        text = pr.tier === 4 && !reduced && pa < FEEL.REVEAL_MS ? Math.round(party.amount * ease(pa / FEEL.REVEAL_MS)).toLocaleString('en-US') : party.label || text;
+        lit = reduced ? 1 : pr.tier >= 3 ? 0.45 * (1 + 1.2 * (1 - ease(pa / THUD_MS))) + 0.35 : 0.45 + 0.5 * (1 - ease(pa / FEEL.GLOW_OUT_MS));
+      }
+      sj.mesh.material.emissiveIntensity = lit;
+      screen('screen_jackpot', text);
     }
     sparks.forEach((s, i) => {
-      const age = t - celebrateAt - i * 55;
-      s.visible = celebrating && age >= 0 && age < 570;
+      const age = partying && pr.sparks && !reduced ? t - party.start - i * 55 : -1;
+      s.visible = age >= 0 && age < 570;   // THE SPARKLE BURST, under 600 ms
       if (!s.visible) return;
       const q = age / 570;
       spawn.getWorldPosition(s.position);
       s.position.x += (i - 3) * 0.07 * q; s.position.y += Math.sin(q * Math.PI) * 0.32; s.position.z += q * 0.2; s.rotation.set(q * 4, i, q * 7);
     });
+    if (tray) {   // payout_tray takes a small THE THUD when the bank starts or the spend lands
+      const k = (t - trayAt) / THUD_MS;
+      tray.scale.copy(trayRest);
+      if (!reduced && k >= 0 && k < 1) tray.scale.y *= 1 + 0.12 * (1 - thud(k));
+    }
+    // THE SHIVER: the whole cabinet, +-4 px across the screen, no colour change. Reduced motion plays nothing.
+    const px = reduced ? 0 : shiverPx(t - shiverAt);
+    if (poses && phase === 'play') {
+      const wpp = (2 * poses.play.dist * Math.tan(THREE.MathUtils.degToRad(LENS_DEG) / 2)) / (canvas.clientHeight || 1);
+      rig.position.x = rigRest.x + poses.play.right.x * px * wpp; rig.position.z = rigRest.z + poses.play.right.z * px * wpp;
+    }
     if (!reduced && t - lastPaint > PAINT_MS) paint(t);
     if (o.hint) {
       o.hint.hidden = phase !== 'play' || !!spin;
@@ -384,7 +439,7 @@ export async function createScene(o) {
     while (ob && !targets.includes(ob)) ob = ob.parent;
     const b = leverRect(), pad = 18;
     if (ob === lever || (!ob && e.clientX >= b.left - pad && e.clientX <= b.right + pad && e.clientY >= b.top - pad && e.clientY <= b.bottom + pad)) {
-      e.preventDefault(); pullBack = null; pull = { id: e.pointerId, y: e.clientY, amount: 0 };
+      e.preventDefault(); pullBack = null; lean = null; pull = { id: e.pointerId, y: e.clientY, amount: 0 };
       canvas.setPointerCapture(e.pointerId); canvas.style.cursor = 'grabbing';
     } else if (ob) o.onFreeze(freezers.indexOf(ob));
   }
@@ -408,8 +463,34 @@ export async function createScene(o) {
     resize, setStrips, setStops, setFace, dispose, cancelPull,
     screen(name, text) { if (screens[name]) screens[name].base = text; screen(name, text); },
     setLook(next) { look = { ...next, reduced, face: atlas && atlas.image }; paint(performance.now()); },
-    setHold(col) { if (col !== hold && col !== null) pulse[col] = performance.now(); hold = col; },
-    celebrate(amount) { celebrateAt = performance.now(); celebrateAmount = amount; },
+    /** A freeze lit or cleared: the button dips either way (Law VIII). */
+    setHold(col) { if (col !== hold) { const c = col !== null ? col : hold; if (c !== null) pulse[c] = performance.now(); } hold = col; },
+    /** Law VIII: the lever leans into a press at once, before the tape or the server answers. */
+    answer() { if (spin || pull || phase !== 'play') return; pullBack = null; lean = { start: performance.now(), from: lever.rotation.x }; },
+    /** A press that was refused: the lean lets go. */
+    letGo() { if (!lean) return; lean = null; pullBack = { start: performance.now(), angle: lever.rotation.x }; },
+    setMelted(on) { melted = !!on; },
+    /** One cabinet celebration per landed outcome (feel.recipe). Brake 2: a lesser party inside a running one merges. */
+    celebrate(r, amount = 0, label = '') {
+      const t = performance.now();
+      heatTo(Math.max(r.heat, party && t < party.end ? heat.to : 0), r.gold || (party && t < party.end && heat.gold));
+      if (r.shiver) shiverAt = t;
+      if (party && t < party.end && party.r.tier >= r.tier) return false;
+      party = r.tier > 0 ? { r, amount, label, start: t, end: t + PARTY_MS[r.tier] } : null;
+      return true;
+    },
+    /** THE BANK touches the tray: when a win starts paying out, or when a spend lands in it. */
+    trayThud() { trayAt = performance.now(); },
+    /** Law VI: Back and suspend skip every ceremony to its settled state. */
+    skip() { party = null; shiverAt = trayAt = -Infinity; stopAt.fill(-Infinity); revealAt = -Infinity; lean = null; heat = { ...heat, from: heat.to, at: -Infinity }; },
+    /** A node's centre in client px (tokens fly from and to these), null when the glb lacks it. */
+    project(name) {
+      const n = get(name);
+      if (!n) return null;
+      const box = new THREE.Box3().setFromObject(n), p = (box.isEmpty() ? n.getWorldPosition(new THREE.Vector3()) : box.getCenter(new THREE.Vector3())).project(camera);
+      const r = canvas.getBoundingClientRect();
+      return { x: r.left + (p.x + 1) * r.width / 2, y: r.top + (1 - p.y) * r.height / 2 };
+    },
     /** Light the landed payline for PACE.REVEAL_MS (a win lifts, nothing dims). The caller holds the pace. */
     reveal(win) { revealAt = performance.now(); revealGain = win ? 0.45 : -0.25; },
     /** Rise over the dimmed room, then ease to the seat. Resolves when interactive. */
@@ -430,11 +511,19 @@ export async function createScene(o) {
     spin(stops, held = null) {
       settleSpin();
       return new Promise(resolve => {
-        spin = { start: performance.now(), stops, held, leverFrom: pull || pullBack ? lever.rotation.x : 0, resolve,
+        spin = { start: performance.now(), stops, held, leverFrom: lever.rotation.x, resolve, stopped: [false, false, false],
                  from: reels.map((r, i) => r.rotation.x - restX[i]) };
-        pull = null; pullBack = null;
+        pull = null; pullBack = null; lean = null;
       });
     },
     settle: settleSpin,
+    /** For dev.html and CDP checks only. */
+    debug() {
+      const t = performance.now();
+      return { lever: lever.rotation.x, heat: heatNow(t), gold: heat.gold, party: party && t < party.end ? party.r.party : null,
+               tier: party && t < party.end ? party.r.tier : 0, face: faceName, shiverPx: reduced ? 0 : shiverPx(t - shiverAt),
+               reelBrightness: reels.map(r => r.material && r.material.color ? r.material.color.r : 1), leaning: !!lean,
+               tray: !!tray, glow: !!glowMat, emiScale: emi ? emi.scale.x / emiRest.s.x : null };
+    },
   };
 }

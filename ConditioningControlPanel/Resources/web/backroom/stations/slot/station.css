@@ -22,17 +22,32 @@
 .slot-hint { position: absolute; transform: translate(-50%, -100%); white-space: nowrap; font-size: 12px; letter-spacing: .6px;
   color: #f5cfe7; pointer-events: none; text-shadow: 0 2px 5px #160e20; }
 
-.slot-top { position: absolute; top: 18px; left: 22px; right: 22px; display: flex; align-items: center; gap: 14px; z-index: 4; }
-/* Inside the room (ctx.hostBack) the room's Back chip and SP chip sit in these corners, over the station. */
-.slot-station[data-host-back] .slot-top { left: 112px; right: 112px; }
-.slot-readouts { display: flex; gap: 8px; }
-.slot-readouts span { background: #201229e8; border: 1px solid #b77da247; padding: 8px 14px; border-radius: 30px; font-size: 13px; }
-.slot-sp { color: #ffe3f2; font-weight: 600; }
+/* The chips stack in the left corner and EMI's face takes the right one, so the cabinet marquee (framed into
+   the play view by scene.js) reads clearly across the top at 1280x720 and 1920x1080 (in-room tidy, lane F1). */
+.slot-top { position: absolute; top: 14px; left: 14px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  z-index: 4; max-width: 230px; }
+/* Inside the room (ctx.hostBack) the room's Back chip and SP chip hold the top corners: stack under them, and the
+   room's SP chip is the only SP readout (station.md), so ours hides. */
+.slot-station[data-host-back] .slot-top { top: 58px; left: 12px; }
+.slot-station[data-host-back] .slot-sp { display: none; }
+.slot-sp, .slot-jackpot, .slot-status { background: #201229e8; border: 1px solid #b77da247; padding: 6px 12px; border-radius: 30px; font-size: 12px; }
+.slot-sp { color: #ffe3f2; font-weight: 600; font-variant-numeric: tabular-nums; }
 .slot-jackpot { color: #f7d5af; }
-.slot-status { margin-left: auto; background: #201229e8; border: 1px solid #b77da247; padding: 10px 18px; border-radius: 30px;
-  font-size: 13px; color: #edc7df; white-space: pre; }
-.slot-face { width: 58px; height: 52px; image-rendering: pixelated; border: 3px solid #6b507e; border-radius: 10px;
-  box-shadow: 0 3px 20px #0a0412; }
+.slot-status { color: #edc7df; border-radius: 12px; line-height: 1.35; }
+.slot-face { position: absolute; top: 14px; right: 14px; z-index: 4; width: 52px; height: 47px; image-rendering: pixelated;
+  border: 3px solid #6b507e; border-radius: 10px; box-shadow: 0 3px 20px #0a0412; }
+.slot-station[data-host-back] .slot-face { top: 58px; right: 12px; }
+/* Every value is also text (Brake 9): the bank's +N sits by the SP readout while the tokens land. */
+.slot-gain { position: absolute; top: 14px; left: 168px; z-index: 5; padding: 4px 12px; border-radius: 30px; pointer-events: none;
+  background: #2b1638ee; border: 1px solid #ffcf6b66; color: #ffcf6b; font-weight: 600; font-size: 13px; }
+.slot-gain[data-sign="down"] { color: #edc7df; border-color: #b77da255; }
+.slot-station[data-host-back] .slot-gain { top: 58px; left: auto; right: 74px; }
+.slot-tokens { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
+.slot-token { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; will-change: transform;
+  background: radial-gradient(circle at 35% 30%, #fff6d8, #ffcf6b 45%, #d9689f 100%); box-shadow: 0 0 10px #ffcf6b99; }
+.slot-token-spend { background: radial-gradient(circle at 35% 30%, #ffe9f6, #e59cca 50%, #7a3f86 100%); box-shadow: 0 0 8px #e59cca88; }
+/* Law VIII: Back answers on its frame with a ring (a state, so reduced motion keeps it). */
+.slot-station .slot-back.is-ringing, .slot-station .slot-back:active { box-shadow: 0 0 0 3px #ff8ed2cc; }
 
 .slot-controls { position: absolute; bottom: 72px; left: 50%; transform: translateX(-50%); width: min(82vw, 1060px);
   display: flex; justify-content: center; align-items: center; gap: 24px; z-index: 3; pointer-events: none; }
@@ -63,10 +78,9 @@
 .slot-station[data-phase="closed"] :is(.slot-controls, .slot-spin, .slot-odds) { display: none; }
 
 @media (max-width: 800px) {
-  .slot-top { top: 10px; left: 12px; right: 12px; gap: 8px; flex-wrap: wrap; }
-  .slot-status { font-size: 11px; padding: 8px 10px; white-space: normal; order: 5; margin-left: 0; flex-basis: 100%; }
-  .slot-readouts span { font-size: 11px; padding: 6px 10px; }
-  .slot-face { margin-left: auto; width: 44px; height: 40px; }
+  .slot-top { top: 10px; left: 12px; max-width: 180px; }
+  .slot-sp, .slot-jackpot, .slot-status { font-size: 11px; padding: 5px 10px; }
+  .slot-face { top: 10px; right: 12px; width: 44px; height: 40px; }
   .slot-controls { bottom: 72px; width: calc(100vw - 24px); gap: 8px; }
   .slot-freeze { gap: 4px; }
   .slot-freeze button { min-width: 0; padding: 8px; font-size: 10px; }
