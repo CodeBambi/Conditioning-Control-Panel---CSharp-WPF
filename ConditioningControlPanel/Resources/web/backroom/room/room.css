@@ -1,0 +1,85 @@
+/* backroom/room/room.css - the room shell. Plum and neon, lifted from the art. */
+
+:root {
+  --br-ground: #120c1c;
+  --br-plum: #2a1838;
+  --br-ink: #f4e8ff;
+  --br-ink-dim: #bfa6d6;
+  --br-pink: #ff6fb5;
+  --br-gold: #ffcf6b;
+  --br-lav: #b99cff;
+  color-scheme: dark;
+}
+
+html, body { margin: 0; height: 100%; background: var(--br-ground); color: var(--br-ink); overflow: hidden;
+  font: 14px/1.35 "Segoe UI", system-ui, sans-serif; user-select: none; }
+
+.br-stage { position: fixed; inset: 0; display: grid; place-items: center; }
+.br-scene { width: 100%; height: 100%; display: block; cursor: pointer; }
+.br-art { image-rendering: auto; }
+
+/* Hotspots: invisible until hovered. THE GLOW (in fast, out slow). */
+.br-spot { fill: rgba(255, 111, 181, 0); stroke: rgba(255, 207, 107, 0); stroke-width: 3;
+  transition: fill 480ms ease-out, stroke 480ms ease-out; }
+.br-spot:hover { fill: rgba(255, 111, 181, .10); stroke: rgba(255, 207, 107, .55); transition-duration: 90ms; }
+.br-spot.is-soon:hover { fill: rgba(185, 156, 255, .08); stroke: rgba(185, 156, 255, .45); }
+
+.br-target { fill: none; stroke: var(--br-gold); stroke-width: 2.5; opacity: 0; transform-box: fill-box;
+  transform-origin: center; }
+.br-target.is-on { opacity: .9; animation: br-ring 340ms cubic-bezier(.2, 1.5, .4, 1); }
+@keyframes br-ring { from { transform: scale(2.1); opacity: 0; } to { transform: scale(1); opacity: .9; } }
+
+/* The player: the campus student, in the room's light. */
+.br-you { pointer-events: none; }
+.br-youring { fill: rgba(255, 207, 107, .22); stroke: rgba(255, 207, 107, .8); stroke-width: 2; }
+.br-you .gh-sprite rect { shape-rendering: crispEdges; }
+.br-you .gh-skin { fill: #f1d7c9; }
+.br-you .gh-k1 { fill: #e2b9a4; }
+.br-you .gh-k2 { fill: #c48f78; }
+.br-you .gh-k3 { fill: #8f5f4c; }
+.br-you .gh-eye { fill: var(--br-ground); }
+.br-you .gh-leg { fill: #3b2c63; }
+.br-you .gh-bag { fill: #b58b3c; }
+.br-you .gh-hair { fill: var(--br-gold); }
+.br-you .gh-shirt { fill: #ff9fb0; }
+
+/* HUD: Back is always on top of everything, stations included (Law VI). */
+.br-hud { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; justify-content: space-between;
+  align-items: center; z-index: 30; pointer-events: none; }
+.br-back, .br-card-back { pointer-events: auto; font: 600 14px/1 "Segoe UI", system-ui, sans-serif; color: var(--br-ink);
+  background: rgba(42, 24, 56, .88); border: 1px solid rgba(255, 111, 181, .55); border-radius: 999px;
+  padding: 9px 18px; cursor: pointer; transition: transform 120ms cubic-bezier(.2, 1.5, .4, 1); }
+.br-back:hover, .br-card-back:hover { border-color: var(--br-gold); }
+.br-back:active, .br-card-back:active { transform: scale(.96); }
+.br-back:focus-visible, .br-card-back:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 2px; }
+.br-sp { pointer-events: auto; background: rgba(18, 12, 28, .8); border: 1px solid rgba(255, 207, 107, .4);
+  border-radius: 999px; padding: 7px 14px; color: var(--br-ink-dim); }
+.br-sp b { color: var(--br-gold); font-variant-numeric: tabular-nums; margin-left: 4px; }
+html.br-leaving .br-sp { opacity: .5; }
+
+/* The station layer: stations and cards sit over the room, under the HUD. */
+.br-layer { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
+.br-layer > * { pointer-events: auto; }
+.br-station { position: absolute; inset: 0; background: var(--br-ground); }
+
+.br-card-veil { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(12, 8, 20, .55);
+  animation: br-fade 220ms ease-out; }
+.br-card { position: relative; width: min(420px, calc(100vw - 48px)); padding: 26px 26px 22px; border-radius: 16px;
+  background: linear-gradient(160deg, #3a2550, #22152f); border: 1px solid rgba(185, 156, 255, .35);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .5); text-align: center; overflow: hidden;
+  animation: br-rise 340ms cubic-bezier(.2, 1.5, .4, 1); }
+/* The dust sheet: a pale cloth draped over the top of the card, folds by gradient only. */
+.br-card-sheet { position: absolute; left: -10%; right: -10%; top: -30px; height: 74px; border-radius: 0 0 50% 50% / 0 0 26px 26px;
+  background: repeating-linear-gradient(100deg, rgba(236, 226, 244, .20) 0 28px, rgba(236, 226, 244, .10) 28px 52px); }
+.br-card-veil.is-failed .br-card-sheet { display: none; }
+.br-card-title { position: relative; margin: 30px 0 8px; font-size: 20px; color: var(--br-ink); }
+.br-card-body { position: relative; margin: 0 0 18px; color: var(--br-ink-dim); }
+
+@keyframes br-fade { from { opacity: 0; } }
+@keyframes br-rise { from { transform: translateY(14px) scale(.96); opacity: 0; } }
+
+html.br-reduced .br-target.is-on, html.br-reduced .br-card, html.br-reduced .br-card-veil { animation: none; }
+html.br-reduced .br-spot, html.br-reduced .br-back { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .br-target.is-on, .br-card, .br-card-veil { animation: none; }
+}
