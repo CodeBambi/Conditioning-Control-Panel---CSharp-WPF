@@ -80,6 +80,55 @@ namespace ConditioningControlPanel
             catch { }
         }
 
+        private Views.Controls.SeasonTitleGlitch? _seasonTitleGlitch;
+
+        /// <summary>Once per app session: the glitch is news the first time and noise after that.</summary>
+        private static bool _seasonTitleGlitchPlayed;
+
+        /// <summary>
+        /// Plays the "Airhead August" to permanent-title glitch on the Quests header. Returns true
+        /// when it took over the title, in which case the shimmer starts when it finishes instead of
+        /// now. Full motion only: it is a burst of hard flicker, so Reduced gets the final title.
+        /// Clicking the header replays it (an easter egg, and how the owner vets it).
+        /// </summary>
+        private bool TryPlaySeasonTitleGlitch(bool replay)
+        {
+            if (!replay && _seasonTitleGlitchPlayed) return false;
+            if (Services.MotionFx.Level != MotionLevel.Full) return false;
+            var title = QuestsTab?.TxtSeasonTitle;
+            var finalTitle = App.QuestDefinitions?.SeasonTitle;
+            if (title == null || string.IsNullOrWhiteSpace(finalTitle)) return false;
+
+            _seasonTitleGlitchPlayed = true;
+            try
+            {
+                if (_seasonTitleGlitch == null)
+                {
+                    _seasonTitleGlitch = new Views.Controls.SeasonTitleGlitch(title);
+                    if (title.Parent is Border banner)
+                        banner.MouseLeftButtonUp += (_, _) => TryPlaySeasonTitleGlitch(replay: true);
+                }
+                StopSeasonTitleShimmer();
+                _seasonTitleGlitch.Play(Views.Controls.SeasonTitleGlitch.DeadTitle, finalTitle, () =>
+                {
+                    if (QuestsTab?.Visibility == Visibility.Visible) StartSeasonTitleShimmer();
+                });
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("[Quests] Season title glitch failed: {Error}", ex.Message);
+                title.Text = finalTitle;
+                return false;
+            }
+        }
+
+        private void StopSeasonTitleGlitch()
+        {
+            try { _seasonTitleGlitch?.Stop(); }
+            catch (Exception ex) { Diag.Swallowed(ex, "season title glitch stop"); }
+        }
+
         private void StartLockdownPulse()
         {
             if (_lockdownPulseStoryboard != null) return; // already running

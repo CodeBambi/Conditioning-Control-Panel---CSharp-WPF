@@ -2546,6 +2546,7 @@ namespace ConditioningControlPanel
             if (!Services.MotionFx.AllowAmbientLoops)
             {
                 StopSeasonTitleShimmer();
+                StopSeasonTitleGlitch();
                 StopSkillTreeAnimations();
                 StopProgramBannerFx();
                 StopLockdownPulse();
