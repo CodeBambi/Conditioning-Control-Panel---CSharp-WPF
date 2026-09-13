@@ -333,7 +333,7 @@ Station module shape (the room calls nothing else):
 ```js
 export async function mount(ctx) {
   // ctx = { root, bridge, request(op, body, idem?), fx(fxId, symbols?), media(), sp(), onSp(fn),
-  //         reduced, motion, intensity, lex(key, fallback), standUp(), variant, hostBack }
+  //         reduced, motion, intensity, lex(key, fallback), standUp(), variant, hostBack, spReadout }
   return {
     open(),                 // take the screen; resolve when interactive (Back is live before this)
     close(),                // Promise, settles within 420 ms, flushes its own cursor
@@ -385,6 +385,20 @@ export async function mount(ctx) {
   not while a station holds the room), at most 12 frames a second, into a canvas texture of at most
   384 px on the long edge, and at most one new decode per rendered frame. Still (reduced, Calm, Motion
   still) shows the first frame.
+- **The SP chip (`ctx.spReadout`, amended 2026-09-14).** The room's HUD chip is the only SP on screen
+  and the room owns its rule: it always shows Law I `shownSp` = `state.sp` minus what the tape still
+  owes, on every repaint (init, a `balance` frame, a `station-result` that carried `sp`, a station
+  closing, a station reopening). `ctx.spReadout` is `{ set(value), owe(n), thud(), target() }`:
+  `owe(n)` is the pays still unplayed on the tape, a number or a reader `() => n` the room calls on each
+  repaint while the station is open; `set(value)` shows a number as is while THE BANK flies and
+  `set(null)` goes back to the rule; `thud()` is the landing mini-thud on the chip (lit, not scaled, when
+  reduced); `target()` is the chip's box for token flights. When a station closes the room freezes a
+  reader to its last answer and drops any `set` value, so the chip neither dips on Back nor on reopen
+  before the station has its tape. A station hands over a plain number in `close()` and registers its
+  reader only once its tape state is back. A `station-result` repaints the chip on the next frame, after
+  the station has adopted the same reply. Stations never look the chip up by id or observe it.
+- **HUD keys (amended 2026-09-14).** Room HUD buttons drop focus on pointerup, and while walking or with
+  a station open, Space and Enter on a HUD button do nothing (the station's keys are the station's).
 - **Budget.** At 1280x720 on the entry pose: 212 draw calls (the preview draws 1,268 there, 1,312 in its
   own check), no shadows, no post passes, pixel ratio capped at 1.5.
 

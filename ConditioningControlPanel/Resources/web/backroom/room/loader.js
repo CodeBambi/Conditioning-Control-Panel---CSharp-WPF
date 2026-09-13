@@ -22,7 +22,8 @@ export const REQUEST_TIMEOUT_MS = 6000;
 const withTimeout = (p, ms) => Promise.race([Promise.resolve(p).catch(() => {}), new Promise((r) => setTimeout(r, ms))]);
 
 /**
- * @param {Object} room  { layer, state, lex(key, fallback), onSp(fn), standUp(), log(level,msg) }
+ * @param {Object} room  { layer, state, lex(key, fallback), onSp(fn), spReadout, spChanged(), chipSettle(),
+ *                        standUp(), log(level,msg) }
  */
 export function createLoader(room) {
   let current = null;   // { station, handle, root, kind }
@@ -58,7 +59,10 @@ export function createLoader(room) {
           { type: 'station-request', reqId, station: station.id, op: String(op), idem: idem || undefined, body: body || {} },
           'station-result', (m) => m.reqId === reqId, REQUEST_TIMEOUT_MS,
         ).then((res) => {
-          if (res && res.body && Number.isFinite(res.body.sp)) s.sp = res.body.sp;   // true value; displays may lie
+          if (res && res.body && Number.isFinite(res.body.sp)) {
+            s.sp = res.body.sp;   // true value; displays may lie
+            if (room.spChanged) room.spChanged();   // the chip repaints next frame, once the station has adopted the reply
+          }
           return res;
         });
       },
@@ -76,6 +80,8 @@ export function createLoader(room) {
       },
       sp: () => s.sp,
       onSp: (fn) => room.onSp(fn),
+      /** The room's SP chip (CONTRACT 7.1): { set(value|null), owe(n | () => n), thud(), target() }. */
+      spReadout: room.spReadout,
       get reduced() { return s.reduced; },
       get motion() { return s.motion; },
       get intensity() { return s.intensity; },
@@ -139,6 +145,7 @@ export function createLoader(room) {
       try { if (typeof c.handle.destroy === 'function') c.handle.destroy(); } catch (e) { room.log('warn', 'destroy threw: ' + e); }
       bridge.send({ type: 'station-close', station: c.station.id });
     }
+    if (room.chipSettle) room.chipSettle();
     try { c.root.remove(); } catch (e) { /* noop */ }
   }
 

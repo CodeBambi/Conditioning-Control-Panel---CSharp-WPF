@@ -50,10 +50,55 @@ function paintChrome() {
   back.textContent = lex('br_back', 'Back');
   back.setAttribute('aria-label', lex('br_back', 'Back'));
   $('#br-sp-label').textContent = lex('br_balance', 'SP');
-  $('#br-sp-value').textContent = String(state.sp);
+  paintSpChip();
   document.title = lex('br_room_title', 'The Back Room');
   document.documentElement.classList.toggle('br-reduced', !!state.reduced);
   document.documentElement.classList.toggle('br-suspended', !!state.suspended);
+}
+
+/* THE SP CHIP (CONTRACT 7.1). It always shows Law I shownSp: the server balance minus the wins still
+ * on a tape. The station tells the room what the tape still owes (spReadout.owe) and, while THE BANK
+ * flies, the number to show (spReadout.set). The rule is the room's, so it holds on every repaint: a
+ * balance frame, a station-result that moved state.sp, a closed station and a reopened one. */
+const chip = { owed: 0, shown: null };
+let chipFrame = 0;
+function owedNow() {
+  let n = chip.owed;
+  if (typeof n === 'function') { try { n = n(); } catch (e) { n = 0; } }
+  n = Number(n);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+function paintSpChip() {
+  const node = $('#br-sp-value');
+  const v = String(chip.shown != null ? chip.shown : Math.max(0, state.sp - owedNow()));
+  if (node && node.textContent !== v) node.textContent = v;
+}
+const spReadout = Object.freeze({
+  /** A number shown as is (a BANK tick), or null to go back to the rule. */
+  set(value) { const n = Number(value); chip.shown = value == null || !Number.isFinite(n) ? null : n; paintSpChip(); },
+  /** The pays still on the tape: a number, or a reader the room calls on each repaint while the station is open. */
+  owe(n) { chip.owed = typeof n === 'function' ? n : (Number(n) || 0); paintSpChip(); },
+  /** THE THUD: a bank token landing on the chip. Reduced motion lights it instead of scaling it. */
+  thud() {
+    const box = $('.br-sp');
+    if (!box || typeof box.animate !== 'function') return;
+    if (state.reduced) { box.animate([{ boxShadow: '0 0 0 2px #ffcf6b' }, { boxShadow: '0 0 0 2px #ffcf6b' }], { duration: 520 }); return; }
+    box.animate([{ transform: 'scale(1.3)', filter: 'brightness(2.2)' }, { transform: 'scale(.94)', offset: 0.55 }, { transform: 'scale(1)', filter: 'brightness(1)' }],
+      { duration: 340, easing: 'cubic-bezier(.2,1.5,.4,1)' });
+  },
+  /** The chip's box, where THE BANK's tokens fly to and from. */
+  target() { return $('.br-sp'); },
+});
+/** A station is gone: a reader freezes to its last answer and any flight value is dropped. */
+function chipSettle() {
+  chip.owed = owedNow();
+  chip.shown = null;
+  paintSpChip();
+}
+/** state.sp moved under a station-result: repaint next frame, after the station adopted the same reply. */
+function spChanged() {
+  if (chipFrame) return;
+  chipFrame = requestAnimationFrame(() => { chipFrame = 0; paintSpChip(); });
 }
 
 function paintMotion() {
@@ -209,6 +254,9 @@ async function start(init) {
     state,
     lex,
     onSp: (fn) => { spListeners.add(fn); return () => spListeners.delete(fn); },
+    spReadout,
+    spChanged,
+    chipSettle,
     standUp: () => back('back'),
     log: (level, msg) => bridge.log(level, msg),
   });

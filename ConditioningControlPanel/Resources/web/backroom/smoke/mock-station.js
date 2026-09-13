@@ -4,7 +4,7 @@
 
 export async function mount(ctx) {
   const seen = { opened: false, closed: false, destroyed: false, suspended: null, state: null, variant: ctx.variant, hostBack: ctx.hostBack };
-  window.__mockStation = { seen, ctxKeys: Object.keys(ctx) };
+  window.__mockStation = { seen, ctxKeys: Object.keys(ctx), ctx };
   let panel = null;
   return {
     async open() {

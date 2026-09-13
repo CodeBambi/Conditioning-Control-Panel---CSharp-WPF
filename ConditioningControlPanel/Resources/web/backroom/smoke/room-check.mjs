@@ -225,7 +225,7 @@ await key('KeyE'); await key('KeyE', 'keyUp');
 for (let i = 0; i < 40 && !(await ev(`!!(window.__mockStation && window.__mockStation.seen.state)`)); i++) await sleep(100);
 ok((await posted('station-open')).some((m) => m.station === 'slot'), 'E posts station-open slot');
 ok(await ev(`window.__mockStation.seen.variant && window.__mockStation.seen.variant.id === 'violet' && window.__mockStation.seen.variant.palette.candy_rose === 'ac83ed'`), 'ctx.variant carries violet and its palette');
-ok(await ev(`['root','bridge','request','fx','media','sp','onSp','reduced','motion','intensity','lex','standUp','variant','hostBack'].every((k) => window.__mockStation.ctxKeys.includes(k))`), 'ctx carries every section 7 field');
+ok(await ev(`['root','bridge','request','fx','media','sp','onSp','reduced','motion','intensity','lex','standUp','variant','hostBack','spReadout'].every((k) => window.__mockStation.ctxKeys.includes(k))`), 'ctx carries every section 7 field');
 ok(await ev(`window.__mockStation.seen.hostBack === true`), 'ctx.hostBack tells the station the room owns Back');
 d = await dbg();
 ok(d.held && !d.running, 'the room loop stops while the station is open');
@@ -296,6 +296,44 @@ await sleep(300);
   await ev(`document.querySelector('.br-nav .br-pill').focus()`);
   await press('Enter');
   ok(!(await dbg()).overview, 'Enter on a focused Room view button while walking does nothing');
+}
+
+// 2d3. the SP chip is the room's: Law I shownSp through a flight, a station-result, Back, a balance frame and a reopen
+{
+  const chipText = () => ev(`document.querySelector('#br-sp-value').textContent`);
+  const frame = () => ev(`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))`);
+  const openViolet = async () => {
+    await ev(`window.__mockStation = null`);
+    await ev(`window.__backroom.scene.go(${row('slot:violet')})`);
+    await sleep(150);
+    await key('KeyE'); await key('KeyE', 'keyUp');
+    for (let i = 0; i < 40 && !(await ev(`!!(window.__mockStation && window.__mockStation.seen.state)`)); i++) await sleep(100);
+  };
+  await openViolet();
+  ok(await ev(`(() => { const r = window.__mockStation.ctx.spReadout; return ['set','owe','thud','target'].every((k) => typeof r[k] === 'function') && r.target() === document.querySelector('.br-sp'); })()`), 'ctx.spReadout has set, owe, thud and target (the chip box)');
+  await ev(`window.__mockStation.ctx.spReadout.owe(() => 12)`);
+  ok(await chipText() === '45', 'owe 12 at SP 57: the chip reads 45');
+  await ev(`window.__mockStation.ctx.spReadout.set(50)`);
+  ok(await chipText() === '50', 'set(50) shows a bank tick as is');
+  await ev(`window.__mockStation.ctx.spReadout.set(null)`);
+  await ev(`window.__mockStation.ctx.request('state', {})`);
+  await frame();
+  ok(await chipText() === '45', 'set(null) and a station-result that carried sp both repaint to the rule, 45');
+  await ev(`window.__mockStation.ctx.spReadout.thud()`);
+  await key('Escape');
+  await sleep(500);
+  ok(!(await ev(`!!window.__backroom.loader.current`)) && await chipText() === '45', 'Back with wins unplayed: the chip stays 45');
+  await ev(`window.__hostEmit({ type: 'balance', sp: 60, why: 'earn' })`);
+  await sleep(100);
+  ok(await chipText() === '48', 'a balance frame after close keeps what the tape owes: 60 - 12 = 48');
+  await ev(`window.__hostEmit({ type: 'balance', sp: 57, why: 'spend' })`);
+  await openViolet();
+  await frame();
+  ok(await chipText() === '45', 'reopen (its state reply carried sp 57): the chip does not dip before the station has its tape');
+  await ev(`window.__mockStation.ctx.spReadout.owe(0)`);
+  ok(await chipText() === '57', 'the tape played out (owe 0): the chip meets the balance');
+  await key('Escape');
+  await sleep(500);
 }
 
 // 2e. a soon station: the dust-sheet card, no code
