@@ -50,6 +50,10 @@ internal sealed class RaceCloudWindow : IDisposable
 
     public bool IsOpen => _window != null && _window.IsVisible;
 
+    /// <summary>True while this window has the focus: the player is pressing things on their site
+    /// rather than driving.</summary>
+    public bool IsFocused => _window != null && _window.IsActive;
+
     /// <summary>Open the window, or bring it back if it was closed to the tray of the mind.
     /// <paramref name="url"/> is the page to land on (a track's own page, from the levels
     /// panel); null keeps whatever is already loaded, or the site's front door on a fresh
