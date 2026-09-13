@@ -4,6 +4,8 @@
  * returns, and nothing else.
  *
  *   soon   -> a dust-sheet card. No code is loaded, no model is asked for.
+ *   variant-> one station, several fixtures (the three slot colours): the row's
+ *             variant reaches the station as ctx.variant, null for the rest.
  *   live   -> import(entry), mount(ctx), open(). A module that fails to load or
  *             to mount gets a plain card instead, and the room stays usable.
  *
@@ -45,7 +47,7 @@ export function createLoader(room) {
     return root;
   }
 
-  function buildCtx(station, root) {
+  function buildCtx(station, root, variant) {
     const s = room.state;
     return {
       root,
@@ -79,15 +81,17 @@ export function createLoader(room) {
       get intensity() { return s.intensity; },
       lex: (key, fallback) => room.lex(key, fallback),
       standUp: () => room.standUp(),
+      /** { id, name, palette:{materialName: 'rrggbb'} | null } or null. Optional for a station to honour. */
+      variant: variant || null,
     };
   }
 
   /** Take the screen for `station`. Resolves once it is interactive (or carded). */
-  async function open(station) {
+  async function open(station, extra) {
     if (current) await close();
     const my = ++seq;
     if (station.state !== 'live') {
-      const root = card('soon', station, room.lex(station.labelKey, station.id),
+      const root = card('soon', station, room.lex(station.labelKey, station.name || station.id),
         room.lex('br_soon_body', 'Under a dust sheet for now. This one opens soon.'));
       current = { station, handle: null, root, kind: 'soon' };
       return 'soon';
@@ -102,7 +106,7 @@ export function createLoader(room) {
       const mod = await import('../' + station.entry);
       if (my !== seq) return 'superseded';
       if (typeof mod.mount !== 'function') throw new Error('no mount export');
-      const handle = await mod.mount(buildCtx(station, root));
+      const handle = await mod.mount(buildCtx(station, root, extra && extra.variant));
       if (my !== seq) { try { handle && handle.destroy && handle.destroy(); } catch (e) { /* noop */ } return 'superseded'; }
       current.handle = handle;
       bridge.send({ type: 'station-open', station: station.id });
@@ -116,7 +120,7 @@ export function createLoader(room) {
         bridge.send({ type: 'station-close', station: station.id });
       }
       root.remove();
-      current = { station, handle: null, root: card('failed', station, room.lex(station.labelKey, station.id),
+      current = { station, handle: null, root: card('failed', station, room.lex(station.labelKey, station.name || station.id),
         room.lex('br_station_failed', 'This station would not start. Try again in a moment.')), kind: 'failed' };
       return 'failed';
     }

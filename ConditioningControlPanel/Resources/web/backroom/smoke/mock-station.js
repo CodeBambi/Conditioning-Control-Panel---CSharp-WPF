@@ -3,7 +3,7 @@
  * mounts a station through the section 7 shape and the ctx works. */
 
 export async function mount(ctx) {
-  const seen = { opened: false, closed: false, destroyed: false, suspended: null, state: null };
+  const seen = { opened: false, closed: false, destroyed: false, suspended: null, state: null, variant: ctx.variant };
   window.__mockStation = { seen, ctxKeys: Object.keys(ctx) };
   let panel = null;
   return {
