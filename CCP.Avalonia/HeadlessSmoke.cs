@@ -65,6 +65,7 @@ namespace ConditioningControlPanel.Avalonia
             CheckUrlPrompt(Check);
             CheckWorkshopRoster(Check);
             CheckSamplerLocalization(Check);
+            CheckPrivacyLocalization(Check);
             CheckTextEditor(Check);
             CheckTriggerControls(Check);
             Console.WriteLine();
@@ -300,6 +301,51 @@ namespace ConditioningControlPanel.Avalonia
                 LocalizationManager.Instance.SetLanguage(previousLanguage);
                 if (dialog?.IsVisible == true) dialog.Close();
                 if (dialog is not null) Dispatcher.UIThread.RunJobs();
+            }
+        }
+
+        /// <summary>
+        /// #494 privacy localization at the public rendered-caption seam. The headless platform
+        /// is already set up by <see cref="CheckUrlPrompt"/>; this fixture shows the real privacy
+        /// panel once, changes language on that same instance, and pumps the dispatcher before
+        /// reading the named status TextBlock. No login, toggle, consent, or host action is reached.
+        /// </summary>
+        private static void CheckPrivacyLocalization(Action<string, bool, string?> check)
+        {
+            Window? host = null;
+            var previousLanguage = LocalizationManager.Instance.CurrentLanguage;
+            try
+            {
+                LocalizationManager.Instance.SetLanguage("en");
+                var panel = new ProfilePrivacyPanel();
+                host = new Window { Content = panel };
+                host.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var caption = panel.FindControl<TextBlock>("TxtDiscordTabStatus")!;
+                var english = caption.Text;
+                check("privacy panel shows the English connection caption",
+                    english == "Not Connected" && english != "label_not_connected",
+                    $"caption={english ?? "<null>"}");
+
+                LocalizationManager.Instance.SetLanguage("fr");
+                Dispatcher.UIThread.RunJobs();
+                var french = caption.Text;
+                check("privacy panel refreshes the shown connection caption in French",
+                    french == "Non Connecté"
+                    && french != "Not Connected"
+                    && french != "label_not_connected",
+                    $"caption={french ?? "<null>"}");
+            }
+            catch (Exception ex)
+            {
+                check("privacy localization fixture executes", false, ex.ToString());
+            }
+            finally
+            {
+                LocalizationManager.Instance.SetLanguage(previousLanguage);
+                host?.Close();
+                if (host is not null) Dispatcher.UIThread.RunJobs();
             }
         }
 
