@@ -35,7 +35,7 @@ internal static class BackRoomHostService
         "br_station_slot", "br_station_wheel", "br_station_scratcher", "br_station_cards", "br_station_counter",
         "br_station_slot_rose", "br_station_slot_violet", "br_station_slot_mint", "br_station_roulette",
         "br_visit", "br_room_view", "br_room_walk", "br_motion_on", "br_motion_still", "br_loading",
-        "br_slot_jackpot", "br_slot_status", "br_wheel_status", "br_ad_arcademy", "br_ad_dtrh", "br_ad_focus_gaze",
+        "br_room_label_jackpot", "br_room_label_status", "br_room_label_wheel_status", "br_ad_arcademy", "br_ad_dtrh", "br_ad_focus_gaze",
         "br_station_failed", "br_station_closed", "br_model_missing", "br_suspended",
         "br_preset_drop", "br_preset_relax", "br_preset_let_go", "br_preset_sink",
     };

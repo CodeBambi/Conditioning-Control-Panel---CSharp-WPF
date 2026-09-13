@@ -24,7 +24,7 @@ import { createLoader } from './loader.js';
 import { createHud } from './hud.js';
 
 const PAGE_SETTLE_MS = 300;
-const LABEL_FALLBACK = { br_slot_jackpot: 'A little luck', br_slot_status: 'Pull me', br_wheel_status: 'Your daily detour' };
+const LABEL_FALLBACK = { br_room_label_jackpot: 'A little luck', br_room_label_status: 'Pull me', br_room_label_wheel_status: 'Your daily detour' };
 const ADS = [
   { file: 'arcademy', key: 'br_ad_arcademy', fallback: 'The Arcademy' },
   { file: 'dtrh', key: 'br_ad_dtrh', fallback: 'Down the Rabbit Hole' },
