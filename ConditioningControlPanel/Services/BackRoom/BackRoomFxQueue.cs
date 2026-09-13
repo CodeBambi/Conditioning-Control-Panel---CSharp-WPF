@@ -90,7 +90,8 @@ public enum FxChannel
 /// Brake: no strobe over 6 Hz at any intensity. Every onset on a channel is pushed back until it
 /// sits at least <see cref="MinGapMs"/> after the previous one on that channel, ACROSS fx: a
 /// <c>fx.sub_single</c> landing on top of a <c>fx.sub_cascade</c> is paced into the same run rather
-/// than doubling its rate.
+/// than doubling its rate. An onset that is really a run (a flash-burst's staggered images) reserves
+/// its whole span, so the next onset is paced from the run's LAST image, not its first.
 /// </summary>
 public sealed class FxStrobePacer
 {
@@ -101,18 +102,21 @@ public sealed class FxStrobePacer
     {
         FxChannel.Subliminal => BackRoomFxPlan.WordGapMs,
         FxChannel.Glitch => BackRoomFxPlan.GlitchWashMs,
-        // FlashService admits one one-shot at a time anyway; this keeps a queue of them honest.
+        // Measured from the previous burst's last image. FlashService clears its busy flag as soon as
+        // a burst is scheduled, so bursts can overlap unless the room spaces them itself.
         _ => 1000,
     };
 
-    /// <summary>The absolute time the onset may happen, never earlier than <paramref name="desiredMs"/>.</summary>
-    public long Reserve(FxChannel channel, long desiredMs)
+    /// <summary>The absolute time the onset may happen, never earlier than <paramref name="desiredMs"/>.
+    /// <paramref name="spanMs"/> is how long the onset keeps producing onsets of its own (a burst's
+    /// last image); the channel stays reserved until then.</summary>
+    public long Reserve(FxChannel channel, long desiredMs, int spanMs = 0)
     {
         lock (_lock)
         {
             long at = desiredMs;
             if (_last.TryGetValue(channel, out long prev)) at = Math.Max(at, prev + MinGapMs(channel));
-            _last[channel] = at;
+            _last[channel] = at + Math.Max(0, spanMs);
             return at;
         }
     }
