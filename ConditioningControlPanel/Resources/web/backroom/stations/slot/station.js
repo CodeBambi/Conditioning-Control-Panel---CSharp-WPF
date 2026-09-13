@@ -43,6 +43,8 @@ export async function mount(ctx) {
   const hostBack = ctx.hostBack === true;
   // CONTRACT 7: one station, three cabinets in the room. variant = { id, name, palette } or null.
   const variant = ctx.variant && typeof ctx.variant === 'object' ? ctx.variant : null;
+  // CONTRACT 7.1: the room's SP chip, { set(value), owe(n), thud(), target() }. Standalone keeps .slot-sp.
+  const hostSp = ctx.spReadout && typeof ctx.spReadout.set === 'function' && typeof ctx.spReadout.owe === 'function' ? ctx.spReadout : null;
   const lite = String(ctx.intensity || '').toLowerCase() === 'calm';   // Brake 8: Calm bank flies 4 tokens at most
   loadCss();
 
@@ -51,7 +53,7 @@ export async function mount(ctx) {
   let pace = 'idle', queued = false, breathEnds = 0, marks = [];   // pace phase: idle | breath | spin | reveal
   // Feel state for one sit-down (lane F1): the readout override while THE BANK flies, the win streak for
   // THE CHIME LADDER, how often each tier has partied (Brake 3), and EMI's current pose (THE MASCOT GLANCE).
-  let sound = null, bank = null, shown = null, spObs = null, streak = 0, seen = [0, 0, 0, 0, 0], jackpots = 0;
+  let sound = null, bank = null, shown = null, owing = false, streak = 0, seen = [0, 0, 0, 0, 0], jackpots = 0;
   let pose = 'idle0_0', glanceTimer = 0, gainTimer = 0, playing = null, feelLog = [], bankFrom = 0, bankTo = 0;
   const $ = sel => el.querySelector(sel), wait = ms => new Promise(r => setTimeout(r, Math.max(0, ms)));
   function mark(phase) { pace = phase; marks = [...marks.slice(-79), { phase, at: Math.round(performance.now()) }]; }
@@ -90,6 +92,7 @@ export async function mount(ctx) {
       <div class="slot-loading">${t('br_slot_loading', 'Preparing the cabinet')}</div>`;
     root.querySelector('.slot-back').onclick = back;
     root.querySelector('.slot-card-back').onclick = back;
+    if (hostSp) root.dataset.hostSp = '';
     if (hostBack) {
       root.dataset.hostBack = '';
       root.querySelector('.slot-back').hidden = true;
@@ -120,14 +123,16 @@ export async function mount(ctx) {
     return t('br_slot_offline', 'The house is not answering. Try again in a moment.');
   }
 
-  /* ONE SP READOUT (in-room tidy, lane F1). With ctx.hostBack the room's SP chip (#br-sp-value) is the only
-   * SP on screen and THE BANK's target: the station hides its own chip and writes what the readout SAYS into
-   * the room's (Law I, display only). A room repaint mid-sit-down is put back by the observer; close() hands
-   * the chip back holding ctx.sp(), the room's own true value. Standalone, .slot-sp is both. */
-  const readout = () => (hostBack ? document.getElementById('br-sp-value') : el && $('.slot-sp'));
+  /* ONE SP READOUT (in-room tidy, lane F1). In the room, ctx.spReadout is the only SP on screen and THE
+   * BANK's target (CONTRACT 7.1): the room keeps its chip on Law I shownSp from what the tape owes (owe), and
+   * the station only hands it a number while THE BANK flies (set). Standalone, .slot-sp is both. */
+  const readout = () => (hostSp ? hostSp.target() : el && $('.slot-sp'));
   const shownSp = () => (shown ?? (tape ? tape.snapshot().shownSp : 0));
-  const spText = n => (hostBack ? String(n) : t('br_slot_sp', '{n} SP', { n: fmt(n) }));
-  function paintSp() { const node = readout(); if (node && node.textContent !== spText(shownSp())) node.textContent = spText(shownSp()); }
+  function paintSp() {
+    if (hostSp) { hostSp.set(shown); return; }
+    const node = el && $('.slot-sp'), text = t('br_slot_sp', '{n} SP', { n: fmt(shownSp()) });
+    if (node && node.textContent !== text) node.textContent = text;
+  }
 
   function sync() {
     if (!el || !tape) return;
@@ -182,7 +187,8 @@ export async function mount(ctx) {
 
   /** THE THUD on the SP readout: the bank's last token (a mini-thud). Reduced motion: a lit state, no scale. */
   function thudReadout() {
-    const node = readout(), box = node && (node.closest('.br-sp') || node);
+    if (hostSp) { hostSp.thud(); return; }
+    const box = readout();
     if (!box || typeof box.animate !== 'function') return;
     if (reduced) { box.animate([{ boxShadow: '0 0 0 2px #ffcf6b' }, { boxShadow: '0 0 0 2px #ffcf6b' }], { duration: 520 }); return; }
     box.animate([{ transform: 'scale(1.3)', filter: 'brightness(2.2)' }, { transform: 'scale(.94)', offset: 0.55 }, { transform: 'scale(1)', filter: 'brightness(1)' }],
@@ -317,8 +323,6 @@ export async function mount(ctx) {
                         gain(bankTo - bankFrom); },
       onDone: () => { shown = null; paintSp(); },
     });
-    const roomChip = hostBack && document.getElementById('br-sp-value');
-    if (roomChip && typeof MutationObserver === 'function') { spObs = new MutationObserver(paintSp); spObs.observe(roomChip, { childList: true, characterData: true, subtree: true }); }
     if (typeof ctx.onSp === 'function') unSp = ctx.onSp(v => { if (tape) { tape.setServerSp(v); sync(); } });
     const dealt = Promise.resolve().then(() => (typeof ctx.media === 'function' ? ctx.media() : null))
       .then(m => (my === session ? media.deal(m) : null)).catch(() => null);
@@ -339,6 +343,8 @@ export async function mount(ctx) {
     }
     if (!state.ok) { made.dispose(); el.dataset.phase = 'closed'; card(refusalText('closed')); return; }   // 3.4: no state, no fallback table
     scene = made;
+    // The tape is back: from here the room reads what it owes live (until close hands it a number).
+    if (hostSp) { owing = true; hostSp.owe(() => (tape ? tape.snapshot().owed : 0)); }
     const s = tape.snapshot();
     scene.setStrips(s.strips);
     scene.setStops(s.last && Array.isArray(s.last.stops) ? s.last.stops : stopsFor(s.strips, s.shown));
@@ -369,10 +375,11 @@ export async function mount(ctx) {
     // Law VI: Back skips every ceremony to its settled state, then hands the room its chip back.
     clearTimeout(glanceTimer); clearTimeout(gainTimer);
     if (bank) { bank.skip(); bank.dispose(); }
-    if (spObs) spObs.disconnect();
-    spObs = null;
-    const chip = hostBack && document.getElementById('br-sp-value');
-    if (chip && typeof ctx.sp === 'function' && Number.isFinite(ctx.sp())) chip.textContent = String(ctx.sp());
+    // What a reopen will show: the stored tape's unplayed pays (a freeze's own outcomes are not stored).
+    // Before the tape came back the room keeps what it had, so a quick Back never dips the chip either.
+    if (hostSp && owing && tape) hostSp.owe(tape.snapshot().tapeOwed);
+    if (hostSp) hostSp.set(null);
+    owing = false;
     if (sound) sound.dispose();
     const s = scene, root = el, m = media;
     if (s) s.skip();
@@ -402,7 +409,7 @@ export async function mount(ctx) {
     debug: () => ({ phase: el && el.dataset.phase, busy, alive, pace, marks, snapshot: tape && tape.snapshot(),
                     hostBack, variant: variant && variant.id, palette: !!(scene && scene.recoloured),
                     spinning: !!(scene && scene.spinning), sceneAlive: !!scene,
-                    feel: { log: feelLog, pose, streak, seen, shown, readout: readout() && readout().textContent,
+                    feel: { log: feelLog, pose, streak, seen, shown, readout: String(shownSp()), hostSp: !!hostSp,
                             cues: sound ? sound.trace.slice() : [], scene: scene && scene.debug() } }),
   };
 }

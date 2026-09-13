@@ -29,7 +29,7 @@
 /* Inside the room (ctx.hostBack) the room's Back chip and SP chip hold the top corners: stack under them, and the
    room's SP chip is the only SP readout (station.md), so ours hides. */
 .slot-station[data-host-back] .slot-top { top: 58px; left: 12px; }
-.slot-station[data-host-back] .slot-sp { display: none; }
+.slot-station[data-host-sp] .slot-sp { display: none; }
 .slot-sp, .slot-jackpot, .slot-status { background: #201229e8; border: 1px solid #b77da247; padding: 6px 12px; border-radius: 30px; font-size: 12px; }
 .slot-sp { color: #ffe3f2; font-weight: 600; font-variant-numeric: tabular-nums; }
 .slot-jackpot { color: #f7d5af; }

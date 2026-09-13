@@ -244,6 +244,8 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
       const n = next();
       return {
         sp, shownSp: shownSpOf(sp, main, side), melt, free, lastWin, last, hold,
+        // What the chip still owes (Law I): every unplayed pay, and the stored tape's share alone (a reopen sees only that).
+        owed: sp - shownSpOf(sp, main, side), tapeOwed: sp - shownSpOf(sp, main),
         jackpot: table ? table.jackpot : 0, lines: table ? table.lines || [] : [],
         stake: table ? table.stake || 1 : 1, freezeCost: freezeCost(), canFreeze: canFreeze(),
         strips, shown, floorMs, nextKind: n ? n.kind : null, tapeCount: tapeCount(), tapePicked: picked,

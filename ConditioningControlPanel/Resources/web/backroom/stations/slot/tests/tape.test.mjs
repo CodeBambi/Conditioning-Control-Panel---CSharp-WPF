@@ -162,6 +162,8 @@ test('a freeze mid-tape plays its own outcomes, holds through a re-spin, then th
   assert.deepEqual(r.tape.cursor(), cursor, 'the stored tape cursor did not move');
   assert.equal(r.server.user.sp, 50 - 10 + 48 - 2 + 3);
   assert.equal(r.tape.snapshot().shownSp, 43, 'during: the freeze cost shows, its unplayed wins do not');
+  assert.deepEqual([r.tape.snapshot().owed, r.tape.snapshot().tapeOwed], [46, 43],
+    'owed counts the freeze wins too, tapeOwed only the stored tape (what a reopen shows)');
   r.tape.land(f.outcome);
   assert.equal(r.tape.snapshot().shownSp, 44);
   const re = await r.tape.press();
