@@ -115,8 +115,10 @@ namespace ConditioningControlPanel.Localization
 
             CurrentLanguage = languageCode;
             LanguageChanged?.Invoke(this, EventArgs.Empty);
-            // Notify all bindings that use the indexer
+            // WPF's indexer bindings listen for "Item[]"; Avalonia's listen for "Item".
+            // Keep both notifications so every head refreshes the same shared indexer binding.
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Item[]"));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Item"));
         }
 
         /// <summary>

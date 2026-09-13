@@ -4,10 +4,9 @@
 
        Style="{StaticResource X}"   ->  Theme="{StaticResource X}"   (keyed styles are ControlThemes)
        <Style x:Key TargetType>     ->  <ControlTheme x:Key TargetType>
-       {loc:Str key}                ->  {Binding LocX}               (LocExtension is a WPF
-                                        MarkupExtension and stays in the head; the strings still
-                                        come from CCP.Core's Loc, via the VM)
-       ToolTip="{loc:Str …}"        ->  ToolTip.Tip="{Binding …}"
+       {loc:Str key}                ->  {loc:Str key}                (the Avalonia twin binds
+                                        directly to CCP.Core's shared localization indexer)
+       ToolTip="{loc:Str …}"        ->  ToolTip.Tip="{loc:Str …}"
        Visibility="Collapsed"       ->  IsVisible="False"
        MouseLeftButtonDown= /
        PreviewMouseLeftButtonDown=  ->  wired in the constructor
@@ -20,6 +19,7 @@
                                        exist on Avalonia. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime.WorkshopRosterCell"
              x:DataType="vm:WorkshopRosterCellViewModel"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -56,7 +56,7 @@
         <!-- The roster's own help affordance rides beside the beta chip, as it did in the tray. -->
         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
             <Border Background="#FF6B6B" CornerRadius="3" Padding="5,1" VerticalAlignment="Center">
-                <TextBlock Text="{Binding LocBeta}" Foreground="White" FontSize="9" FontWeight="Bold"/>
+                <TextBlock Text="{loc:Str label_beta}" Foreground="White" FontSize="9" FontWeight="Bold"/>
             </Border>
             <Button x:Name="HelpBtnCompanions" Theme="{DynamicResource HelpButtonStyle}"
                     VerticalAlignment="Center" Margin="7,0,0,0" Tag="Companions"/>
@@ -71,7 +71,7 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock x:Name="TxtCompanion0Name" Text="{Binding LocSyntheticBlowdoll}"
+                        <TextBlock x:Name="TxtCompanion0Name" Text="{loc:Str label_synthetic_blowdoll}"
                                    Foreground="{DynamicResource PinkBrush}" FontSize="11.5" FontWeight="SemiBold"/>
                         <TextBlock x:Name="TxtCompanion0Lock" Text=" [50]" Foreground="#FFD700"
                                    FontSize="10" VerticalAlignment="Center" IsVisible="False"/>
@@ -80,12 +80,12 @@
                         <Button x:Name="BtnCompanion0Personality" Content="🎭" FontSize="10" Padding="4,0"
                                 Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
                                 Tag="0"
-                                ToolTip.Tip="{Binding LocTooltipAssignAiPersonality}"/>
+                                ToolTip.Tip="{loc:Str tooltip_assign_ai_personality}"/>
                         <TextBlock x:Name="TxtCompanion0Prompt" Text="" Foreground="#666" FontSize="10"
                                    VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="150"/>
                     </StackPanel>
                 </StackPanel>
-                <TextBlock x:Name="TxtCompanion0Level" Grid.Column="1" Text="{Binding LocLv1}"
+                <TextBlock x:Name="TxtCompanion0Level" Grid.Column="1" Text="{loc:Str label_lv_1}"
                            Theme="{StaticResource CmpCellValueStyle}" Foreground="#AAAAAA"/>
             </Grid>
         </Border>
@@ -99,7 +99,7 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock x:Name="TxtCompanion1Name" Text="{Binding LocPerfectFuckpuppet}"
+                        <TextBlock x:Name="TxtCompanion1Name" Text="{loc:Str label_perfect_fuckpuppet}"
                                    Foreground="#9370DB" FontSize="11.5" FontWeight="SemiBold"/>
                         <TextBlock x:Name="TxtCompanion1Lock" Text=" [100]" Foreground="#FFD700"
                                    FontSize="10" VerticalAlignment="Center" IsVisible="False"/>
@@ -108,12 +108,12 @@
                         <Button x:Name="BtnCompanion1Personality" Content="🎭" FontSize="10" Padding="4,0"
                                 Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
                                 Tag="1"
-                                ToolTip.Tip="{Binding LocTooltipAssignAiPersonality}"/>
+                                ToolTip.Tip="{loc:Str tooltip_assign_ai_personality}"/>
                         <TextBlock x:Name="TxtCompanion1Prompt" Text="" Foreground="#666" FontSize="10"
                                    VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="150"/>
                     </StackPanel>
                 </StackPanel>
-                <TextBlock x:Name="TxtCompanion1Level" Grid.Column="1" Text="{Binding LocLv1}"
+                <TextBlock x:Name="TxtCompanion1Level" Grid.Column="1" Text="{loc:Str label_lv_1}"
                            Theme="{StaticResource CmpCellValueStyle}" Foreground="#AAAAAA"/>
             </Grid>
         </Border>
@@ -127,7 +127,7 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock x:Name="TxtCompanion2Name" Text="{Binding LocBrainwashedSlavedoll}"
+                        <TextBlock x:Name="TxtCompanion2Name" Text="{loc:Str label_brainwashed_slavedoll}"
                                    Foreground="#50C878" FontSize="11.5" FontWeight="SemiBold"/>
                         <TextBlock x:Name="TxtCompanion2Lock" Text=" [125]" Foreground="#FFD700"
                                    FontSize="10" VerticalAlignment="Center" IsVisible="False"/>
@@ -136,12 +136,12 @@
                         <Button x:Name="BtnCompanion2Personality" Content="🎭" FontSize="10" Padding="4,0"
                                 Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
                                 Tag="2"
-                                ToolTip.Tip="{Binding LocTooltipAssignAiPersonality}"/>
+                                ToolTip.Tip="{loc:Str tooltip_assign_ai_personality}"/>
                         <TextBlock x:Name="TxtCompanion2Prompt" Text="" Foreground="#666" FontSize="10"
                                    VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="150"/>
                     </StackPanel>
                 </StackPanel>
-                <TextBlock x:Name="TxtCompanion2Level" Grid.Column="1" Text="{Binding LocLv1}"
+                <TextBlock x:Name="TxtCompanion2Level" Grid.Column="1" Text="{loc:Str label_lv_1}"
                            Theme="{StaticResource CmpCellValueStyle}" Foreground="#AAAAAA"/>
             </Grid>
         </Border>
@@ -155,7 +155,7 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock x:Name="TxtCompanion3Name" Text="{Binding LocPlatinumPuppet}"
+                        <TextBlock x:Name="TxtCompanion3Name" Text="{loc:Str label_platinum_puppet}"
                                    Foreground="#FF6B6B" FontSize="11.5" FontWeight="SemiBold"/>
                         <TextBlock x:Name="TxtCompanion3Lock" Text=" [150]" Foreground="#FFD700"
                                    FontSize="10" VerticalAlignment="Center" IsVisible="False"/>
@@ -164,12 +164,12 @@
                         <Button x:Name="BtnCompanion3Personality" Content="🎭" FontSize="10" Padding="4,0"
                                 Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
                                 Tag="3"
-                                ToolTip.Tip="{Binding LocTooltipAssignAiPersonality}"/>
+                                ToolTip.Tip="{loc:Str tooltip_assign_ai_personality}"/>
                         <TextBlock x:Name="TxtCompanion3Prompt" Text="" Foreground="#666" FontSize="10"
                                    VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="150"/>
                     </StackPanel>
                 </StackPanel>
-                <TextBlock x:Name="TxtCompanion3Level" Grid.Column="1" Text="{Binding LocLv1}"
+                <TextBlock x:Name="TxtCompanion3Level" Grid.Column="1" Text="{loc:Str label_lv_1}"
                            Theme="{StaticResource CmpCellValueStyle}" Foreground="#AAAAAA"/>
             </Grid>
         </Border>
@@ -183,7 +183,7 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock x:Name="TxtCompanion4Name" Text="{Binding LocBambiCow}"
+                        <TextBlock x:Name="TxtCompanion4Name" Text="{loc:Str label_bambi_cow}"
                                    Foreground="#F5DEB3" FontSize="11.5" FontWeight="SemiBold"/>
                         <TextBlock x:Name="TxtCompanion4Lock" Text=" [75]" Foreground="#FFD700"
                                    FontSize="10" VerticalAlignment="Center" IsVisible="False"/>
@@ -192,12 +192,12 @@
                         <Button x:Name="BtnCompanion4Personality" Content="🎭" FontSize="10" Padding="4,0"
                                 Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
                                 Tag="4"
-                                ToolTip.Tip="{Binding LocTooltipAssignAiPersonality}"/>
+                                ToolTip.Tip="{loc:Str tooltip_assign_ai_personality}"/>
                         <TextBlock x:Name="TxtCompanion4Prompt" Text="" Foreground="#666" FontSize="10"
                                    VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="150"/>
                     </StackPanel>
                 </StackPanel>
-                <TextBlock x:Name="TxtCompanion4Level" Grid.Column="1" Text="{Binding LocLv1}"
+                <TextBlock x:Name="TxtCompanion4Level" Grid.Column="1" Text="{loc:Str label_lv_1}"
                            Theme="{StaticResource CmpCellValueStyle}" Foreground="#AAAAAA"/>
             </Grid>
         </Border>

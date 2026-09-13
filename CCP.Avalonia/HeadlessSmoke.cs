@@ -17,6 +17,7 @@ using ConditioningControlPanel.Avalonia.Views.Controls;
 using ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Moderation;
 
 namespace ConditioningControlPanel.Avalonia
@@ -62,6 +63,8 @@ namespace ConditioningControlPanel.Avalonia
                   url.LocCancel != "btn_cancel", url.LocCancel);
 
             CheckUrlPrompt(Check);
+            CheckWorkshopRoster(Check);
+            CheckSamplerLocalization(Check);
             CheckTextEditor(Check);
             CheckTriggerControls(Check);
             Console.WriteLine();
@@ -208,6 +211,95 @@ namespace ConditioningControlPanel.Avalonia
             {
                 owner?.Close();
                 if (owner is not null) Dispatcher.UIThread.RunJobs();
+            }
+        }
+
+        /// <summary>
+        /// #494 roster localization at the public rendered-caption seam. The headless platform is
+        /// already set up by <see cref="CheckUrlPrompt"/>; this fixture shows the real roster cell
+        /// once, changes language on that same instance, and pumps the dispatcher before reading
+        /// the rendered TextBlock. No host service or roster action is reached.
+        /// </summary>
+        private static void CheckWorkshopRoster(Action<string, bool, string?> check)
+        {
+            Window? host = null;
+            var previousLanguage = LocalizationManager.Instance.CurrentLanguage;
+            try
+            {
+                var roster = new WorkshopRosterCell();
+                host = new Window { Content = roster };
+                host.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var caption = roster.FindControl<TextBlock>("TxtCompanion0Name")!;
+                LocalizationManager.Instance.SetLanguage("en");
+                Dispatcher.UIThread.RunJobs();
+                var english = caption.Text;
+                check("roster shows the English synthetic companion caption",
+                    english == "Synthetic Blowdoll" && english != "label_synthetic_blowdoll",
+                    $"caption={english ?? "<null>"}");
+
+                LocalizationManager.Instance.SetLanguage("fr");
+                Dispatcher.UIThread.RunJobs();
+                var french = caption.Text;
+                check("roster refreshes the shown synthetic companion caption in French",
+                    french == "Poupée Synthétique"
+                    && french != "Synthetic Blowdoll"
+                    && french != "label_synthetic_blowdoll",
+                    $"caption={french ?? "<null>"}");
+            }
+            catch (Exception ex)
+            {
+                check("roster localization fixture executes", false, ex.ToString());
+            }
+            finally
+            {
+                LocalizationManager.Instance.SetLanguage(previousLanguage);
+                host?.Close();
+                if (host is not null) Dispatcher.UIThread.RunJobs();
+            }
+        }
+
+        /// <summary>
+        /// #494 sampler localization at the public rendered-caption seam. The dialog constructor
+        /// only loads XAML and copies in-memory settings; this fixture does not click Save or reach
+        /// a provider. The headless platform is already set up by <see cref="CheckUrlPrompt"/>.
+        /// </summary>
+        private static void CheckSamplerLocalization(Action<string, bool, string?> check)
+        {
+            OpenAiCompatibleSamplerSettingsDialog? dialog = null;
+            var previousLanguage = LocalizationManager.Instance.CurrentLanguage;
+            try
+            {
+                LocalizationManager.Instance.SetLanguage("en");
+                dialog = new OpenAiCompatibleSamplerSettingsDialog(new CompanionPromptSettings());
+                dialog.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var cancel = dialog.FindControl<Button>("BtnCancel")!;
+                var cancelCaption = (cancel.Content as TextBlock)?.Text;
+                check("sampler shows the English Cancel caption",
+                    cancelCaption == "Cancel" && cancelCaption != "btn_cancel",
+                    $"caption={cancelCaption ?? "<null>"}");
+
+                LocalizationManager.Instance.SetLanguage("fr");
+                Dispatcher.UIThread.RunJobs();
+                cancelCaption = (cancel.Content as TextBlock)?.Text;
+                check("sampler refreshes the shown Cancel caption in French",
+                    cancelCaption == "Annuler"
+                    && cancelCaption != "Cancel"
+                    && cancelCaption != "btn_cancel",
+                    $"caption={cancelCaption ?? "<null>"}");
+            }
+            catch (Exception ex)
+            {
+                check("sampler localization fixture executes", false, ex.ToString());
+            }
+            finally
+            {
+                LocalizationManager.Instance.SetLanguage(previousLanguage);
+                if (dialog?.IsVisible == true) dialog.Close();
+                if (dialog is not null) Dispatcher.UIThread.RunJobs();
             }
         }
 
