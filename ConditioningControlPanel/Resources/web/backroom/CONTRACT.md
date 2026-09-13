@@ -122,7 +122,7 @@ static readonly Dictionary<string, (string Method, string Path)[]> Ops = new() {
   "table": { "v": 3, "stake": 1, "freezeCost": 1, "jackpot": 2500, "rtp": 1.02, "rtpFrozen": 1.02,
              "lines": [ { "id": "emi3", "pays": 2500, "odds": "1 in 25,000" }, "..." ] },
   "strips": [ ["gif0","spiral0","sub0", "...13 ids"], ["..."], ["..."] ],
-  "floorMs": 800 }
+  "floorMs": 3000 }
 ```
 
 `table.lines` is the published odds (10.1) and is what the page prints. `strips` are server-owned and
@@ -187,9 +187,9 @@ means the player re-watches a few settled spins, nothing more.
   `drawTripleClass` -> `dressTriple` shape). The malus only dresses onto a `none` class.
 - **Order:** melt is consumed in DRAW order. A freeze bought mid-tape sees the melt left at the END of
   the stored tape. Playback may show a stale melt count for a few spins (Law I, display only).
-- **Rate floor:** `nextBuyAt = now + outcomes.length * SLOT_FLOOR_MS` (800 ms default, env). A plain
+- **Rate floor:** `nextBuyAt = now + outcomes.length * SLOT_FLOOR_MS` (3000 ms default, env; 10.12). A plain
   tape before `nextBuyAt` -> `{ok:false, reason:'too_fast', retryInMs}`; the page waits it out silently.
-  A freeze spin checks a 700 ms floor against the last buy. Plus the per-account 60/min limiter.
+  A freeze spin checks a 3000 ms floor against the last buy. Plus the per-account 60/min limiter.
 - **Cap (decided):** the SP cap rises from 9,999 to 99,999 for everyone. Server `SKILL_POINTS_CAP` and
   every client clamp (AppSettings, ProfileSyncService merge, anti-cheat) move together in one change,
   ahead of the slot. At 99,999 winnings above the cap are lost and `capped:true` is returned.
@@ -383,3 +383,10 @@ Where these disagree with the sections above, these win.
   "freeze": { "col": 1, "held": "gif1", "outcomes": [
     { "i": 0, "kind": "freeze", "...": "same outcome fields as 3.2, expansions inline" } ] } }
 ```
+
+11. **Pace (owner decision):** the page plays one outcome in about 4 s (was about 2 s), every paid, free
+    and re-spin outcome included, so a small SP balance lasts about twice as long.
+12. **Server floor 3000 ms per outcome:** `SLOT_FLOOR_MS` defaults to 3000 (was 800) and
+    `SLOT_FREEZE_FLOOR_MS` to 3000 (was 700), env overrides kept; `state.floorMs` is 3000. A freeze right
+    after a freeze waits `max(3000, that freeze's outcomes x 3000)`. A modified client tops out near
+    1,200 outcomes an hour against the page's 900.
