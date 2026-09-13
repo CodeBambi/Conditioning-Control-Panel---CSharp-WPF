@@ -1573,6 +1573,14 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // The Back Room: the Arcademy's ladder, same reason (press 1 suspends, press 2 closes).
+            if (Services.BackRoom.BackRoomHostService.IsActive)
+            {
+                VideoDiag.Log("PANIC", "handed off to the Back Room window (suspend, then close)");
+                Services.BackRoom.BackRoomHostService.HandlePanicPress();
+                return;
+            }
+
             // For You feed: a two-rung ladder. Press 1 drops ghost mode if the feed is parked as a
             // see-through mirror (otherwise the user is staring at a translucent pane they cannot
             // grab — the mouse passes straight through it, its own close button included), press 2
@@ -1642,6 +1650,7 @@ namespace ConditioningControlPanel
                 return App.Chaos?.IsDescending == true
                     || Services.Chaos.DtrhHostService.IsActive
                     || Services.Arcademy.ArcademyHostService.IsActive
+                    || Services.BackRoom.BackRoomHostService.IsActive
                     || Services.Fyp.FypHostService.IsActive
                     || Services.JustDrop.JustDropHostService.IsActive;
             }
@@ -1853,6 +1862,7 @@ namespace ConditioningControlPanel
             Step("chaos", () => App.Chaos?.ForceShutdown());
             Step("DtRH", () => Services.Chaos.DtrhHostService.CloseActive());
             Step("Arcademy", () => Services.Arcademy.ArcademyHostService.CloseActive());
+            Step("Back Room", () => Services.BackRoom.BackRoomHostService.CloseActive("panic"));
             Step("For You feed", () => Services.Fyp.FypHostService.Close());
             Step("Just Drop", () => Services.JustDrop.JustDropHostService.CloseActive());
             Step("Lab minigames", () => App.BlinkTrainer?.Stop());
