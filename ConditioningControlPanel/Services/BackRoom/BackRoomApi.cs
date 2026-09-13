@@ -41,7 +41,27 @@ public interface IBackRoomRelay
 /// </summary>
 public sealed class BackRoomApi : IBackRoomRelay
 {
-    public const string BaseUrl = "https://codebambi-proxy.vercel.app";
+    public const string ProductionBaseUrl = "https://codebambi-proxy.vercel.app";
+
+    /// <summary>The proxy every relay goes to. DEBUG builds honour <c>CCP_BACKROOM_BASE_URL</c> (an
+    /// http(s)://127.0.0.1 or localhost url only) so a desk run can point the room at a local server
+    /// harness; Release builds always use <see cref="ProductionBaseUrl"/>.</summary>
+    public static string BaseUrl { get; } = ResolveBaseUrl(
+#if DEBUG
+        Environment.GetEnvironmentVariable("CCP_BACKROOM_BASE_URL")
+#else
+        null
+#endif
+    );
+
+    internal static string ResolveBaseUrl(string? overrideUrl)
+    {
+        if (string.IsNullOrWhiteSpace(overrideUrl)) return ProductionBaseUrl;
+        if (!Uri.TryCreate(overrideUrl.Trim(), UriKind.Absolute, out var u)) return ProductionBaseUrl;
+        if (u.Scheme != Uri.UriSchemeHttp && u.Scheme != Uri.UriSchemeHttps) return ProductionBaseUrl;
+        if (!u.IsLoopback) return ProductionBaseUrl;
+        return u.GetLeftPart(UriPartial.Authority);
+    }
 
     /// <summary>Total time for one relay, retries included.</summary>
     public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);

@@ -40,6 +40,18 @@ internal static class BackRoomHostService
         "br_preset_drop", "br_preset_relax", "br_preset_let_go", "br_preset_sink",
     };
 
+    /// <summary>DEBUG only: <c>CCP_BACKROOM_CDP_PORT</c> opens a remote debugging port on the room's
+    /// own browser process (its own user data folder, so no other host shares these arguments) for
+    /// desk-run screenshots. Release builds add nothing.</summary>
+    private static string DebugBrowserArguments()
+    {
+#if DEBUG
+        var port = Environment.GetEnvironmentVariable("CCP_BACKROOM_CDP_PORT");
+        if (int.TryParse(port, out var p) && p is > 1024 and < 65536) return " --remote-debugging-port=" + p;
+#endif
+        return string.Empty;
+    }
+
     private static readonly TimeSpan PanicDoublePressWindow = TimeSpan.FromSeconds(2);
 
     private static ChaosWebViewHost? _host;
@@ -109,7 +121,7 @@ internal static class BackRoomHostService
                 CenterOnMainWindow = true,
                 WindowTitle = ProductName,
                 LogTag = "BackRoom",
-                ExtraBrowserArguments = BrowserArguments,
+                ExtraBrowserArguments = BrowserArguments + DebugBrowserArguments(),
                 OnReady = () => _bridge?.OnReady(),
                 OnMessage = m => _bridge?.Handle(m),
                 OnProcessFailed = kind => { App.Logger?.Warning("BackRoom: process failed ({Kind}), closing", kind); OnUi(DisposeAll); },
