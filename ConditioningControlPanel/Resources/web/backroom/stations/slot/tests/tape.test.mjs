@@ -1,7 +1,7 @@
 // node --test ConditioningControlPanel/Resources/web/backroom/stations/slot/tests/
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTape, shownSpOf, stopsFor, normalize } from '../tape.js';
+import { createTape, shownSpOf, stopsFor, normalize, defaultTapeCount, affordableTapeCount, TAPE_MAX } from '../tape.js';
 import { createMockServer } from '../mock-server.js';
 
 function rig(opts = {}) {
@@ -105,8 +105,8 @@ test('a lost reply retries with the same idem and debits once', async () => {
   assert.equal(calls.length, 2);
   assert.equal(calls[0].idem, calls[1].idem);
   const receipt = r.server.user.tape.outcomes.reduce((t, o) => t + o.pay, 0);
-  assert.equal(r.server.user.sp, 20 - 10 + receipt, 'debited once');
-  assert.equal(r.tape.snapshot().shownSp, 10);
+  assert.equal(r.server.user.sp, 20 - 4 + receipt, 'debited once (20 SP buys the 4-spin default)');
+  assert.equal(r.tape.snapshot().shownSp, 16);
 });
 
 test('a press after retries ran out reuses the same intent; a new intent mints a new idem', async () => {
@@ -183,7 +183,7 @@ test('insufficient: nothing sent below 1 SP, a freeze below its cost is refused 
   assert.deepEqual(await r2.tape.press(), { kind: 'refused', reason: 'insufficient' });
   r2.tape.clearHold();
   const p = await r2.tape.press();
-  assert.equal(tapeCalls(r2)[0].body.count, 1, 'count is min(10, sp)');
+  assert.equal(tapeCalls(r2)[0].body.count, 1, '1 SP affords a 1-spin tape');
   assert.equal(p.kind, 'play');
 });
 
@@ -214,4 +214,41 @@ test('free spins play from the tape and abort drops a press in flight', async ()
   const inflight = r.tape.press();
   r.tape.abort();
   assert.deepEqual(await inflight, { kind: 'aborted' });
+});
+
+test('defaultTapeCount: floor(sp / 5) held to 1..10, and the clamp never offers more than the balance', () => {
+  const sps = [0, 1, 4, 5, 16, 49, 50, 500];
+  assert.deepEqual(sps.map(defaultTapeCount), [1, 1, 1, 1, 3, 9, 10, 10]);
+  assert.deepEqual(sps.map(sp => affordableTapeCount(defaultTapeCount(sp), sp)), [0, 1, 1, 1, 3, 9, 10, 10]);
+  assert.deepEqual(sps.map(sp => affordableTapeCount(TAPE_MAX, sp)), [0, 1, 4, 5, 16, 20, 20, 20], 'a manual pick is held to the balance and the server max');
+  assert.equal(defaultTapeCount(NaN), 1);
+  assert.equal(affordableTapeCount(12, 7.9), 7);
+});
+
+test('the tape follows the balance until the player picks a count, and any pick stays affordable', async () => {
+  const r = rig({ sp: 16 });
+  await r.tape.open();
+  assert.equal(r.tape.snapshot().tapeCount, 3);
+  r.tape.setServerSp(49);
+  assert.equal(r.tape.snapshot().tapeCount, 9, 'a balance change moves the default');
+  r.tape.setServerSp(16);
+  const p = await r.tape.press();
+  assert.equal(p.kind, 'play');
+  assert.equal(tapeCalls(r)[0].body.count, 3);
+  assert.equal(r.server.user.sp, 13 + r.server.user.tape.outcomes.reduce((t, o) => t + o.pay, 0));
+
+  const r2 = rig({ sp: 16 });
+  await r2.tape.open();
+  assert.equal(r2.tape.pickCount(12), 12);
+  r2.tape.setServerSp(500);
+  assert.equal(r2.tape.snapshot().tapeCount, 12, 'a pick is kept when the balance moves');
+  assert.equal(r2.tape.pickCount(99), TAPE_MAX);
+  r2.tape.setServerSp(16);
+  assert.equal(r2.tape.snapshot().tapeCount, 16, 'never above what the balance affords');
+  await r2.tape.press();
+  assert.equal(tapeCalls(r2)[0].body.count, 16);
+  r2.tape.setServerSp(0);
+  assert.equal(r2.tape.pickCount(null), 0, 'back to the default, and 0 SP affords nothing');
+  await r2.tape.open();
+  assert.equal(r2.tape.snapshot().tapePicked, null, 'a new sit-down forgets the pick');
 });

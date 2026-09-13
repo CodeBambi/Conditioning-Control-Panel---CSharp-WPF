@@ -7,7 +7,22 @@
  * and whatever it expanded into) drains before `main` (the bought tape) resumes, so a freeze bought
  * mid-tape never skips, voids or reorders a tape outcome. */
 
-export const TAPE_DEFAULT = 10;
+export const TAPE_DEFAULT = 10;   // the default tape at a healthy balance (50 SP and up)
+export const TAPE_MAX = 20;       // the most spins the server sells in one tape
+
+/** Owner rule: a small balance gets a short default tape so it lasts. clamp(floor(sp / 5), 1, 10). */
+export function defaultTapeCount(sp) {
+  const n = Math.floor((Number(sp) || 0) / 5);
+  return Math.max(1, Math.min(TAPE_DEFAULT, n));
+}
+
+/** Any count the page offers or sends: whole, at most TAPE_MAX, never above the balance (1 SP a spin).
+ *  0 means not even one spin is affordable. */
+export function affordableTapeCount(count, sp) {
+  const want = Math.floor(Number(count) || 0), have = Math.floor(Number(sp) || 0);
+  return Math.max(0, Math.min(TAPE_MAX, want, have));
+}
+
 const RETRYABLE = new Set(['timeout', 'offline', 'busy']);
 const MAX_RETRIES = 3;     // per press, for timeout/offline/busy
 const MAX_WAITS = 12;      // per press, for too_fast (the floor is honest, this only stops a loop)
@@ -55,6 +70,9 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
   let melt = 0, free = 0, lastWin = 0, last = null;
   let epoch = 0;            // abort() bumps it; a press from an older epoch resolves 'aborted'
   let reported = null;
+  let picked = null;        // a count the player chose this sit-down; null follows defaultTapeCount(sp)
+
+  const tapeCount = () => affordableTapeCount(picked ?? defaultTapeCount(sp), sp);
 
   function reportMelt() {
     if (melt === reported) return;
@@ -74,7 +92,7 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
   /** GET state. Resumes an unplayed tape and carries melt over from the server. */
   async function open() {
     const my = ++epoch;
-    pending = null; side = null; hold = null; main = null; last = null;
+    pending = null; side = null; hold = null; main = null; last = null; picked = null;
     let res, tries = 0;
     for (;;) {
       res = normalize(await request('state', {}));
@@ -136,7 +154,7 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
   const refuse = reason => ({ kind: 'refused', reason });
 
   async function buyTape(my) {
-    const count = Math.min(TAPE_DEFAULT, Math.floor(sp));
+    const count = tapeCount();
     if (count < 1) return refuse('insufficient');
     const r = await send('tape', 'tape', { count, ...cursorBody() }, my);
     if (r.kind) return r;
@@ -204,6 +222,13 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
       return hold;
     },
     clearHold() { hold = null; },
+    /** The player picks a tape length (1..TAPE_MAX) for this sit-down; null goes back to the default.
+     *  Returns the count the next tape would actually buy. */
+    pickCount(n) {
+      const v = Math.floor(Number(n));
+      picked = n == null || !(v >= 1) ? null : Math.min(TAPE_MAX, v);
+      return tapeCount();
+    },
     abort() { epoch++; },
     setServerSp(v) { if (Number.isFinite(v)) sp = v; },
     cursor() { return main ? { tapeId: main.id, played: main.played } : null; },
@@ -213,7 +238,7 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
         sp, shownSp: shownSpOf(sp, main, side), melt, free, lastWin, last, hold,
         jackpot: table ? table.jackpot : 0, lines: table ? table.lines || [] : [],
         stake: table ? table.stake || 1 : 1, freezeCost: freezeCost(), canFreeze: canFreeze(),
-        strips, shown, floorMs, nextKind: n ? n.kind : null,
+        strips, shown, floorMs, nextKind: n ? n.kind : null, tapeCount: tapeCount(), tapePicked: picked,
         onTape: (unplayed(main) ? main.outcomes.length - main.played : 0) +
                 (unplayed(side) ? side.outcomes.length - side.played : 0),
       };
