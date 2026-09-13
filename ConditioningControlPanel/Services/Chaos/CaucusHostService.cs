@@ -1095,7 +1095,9 @@ internal static class CaucusHostService
     }
 
     /// <summary>Their player started. If the race is still sitting on the menu, this is what starts
-    /// the run: the audio is the clock, so the run begins when the audio does.</summary>
+    /// the run: the audio is the clock, so the run begins when the audio does. A play pressed over
+    /// there hands the focus back to the race, so the player is not left steering a browser while
+    /// the run starts behind it. The BambiCloud window stays open (the audio lives in it), just under.</summary>
     private static void OnCloudPlay()
     {
         if (_cloudClock == null || !ReferenceEquals(_clock, _cloudClock)) return;
@@ -1103,6 +1105,7 @@ internal static class CaucusHostService
         if (!_runActive) PostTrack(new { type = "cloud-run" });
         StartTrackClock();
         PostClock();
+        if (_cloud?.IsFocused == true) _host?.FocusWeb();
     }
 
     /// <summary>Their element ran out. Same ending a local file gets: the page winds the lap up and
