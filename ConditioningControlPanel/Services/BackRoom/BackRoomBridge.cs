@@ -54,6 +54,9 @@ public sealed class BackRoomBridge
         /// <summary>Marshal onto the thread settings listeners run on (the host's dispatcher).
         /// Null = run inline, which is what the suite wants.</summary>
         public Action<Action>? OnUi { get; init; }
+        /// <summary>Run blocking work off the UI thread (the media deal reads file headers). Null =
+        /// run inline, which is what the suite wants; the host passes <c>Task.Run</c>.</summary>
+        public Action<Action>? OffUi { get; init; }
         public Func<int>? NextSeed { get; init; }
         public Action<string>? Log { get; init; }
     }
@@ -244,20 +247,25 @@ public sealed class BackRoomBridge
         if (string.IsNullOrEmpty(reqId) || station == null) { _d.Log?.Invoke("bad media-request dropped"); return; }
         lock (_gate) { if (!_answered.Add("media:" + reqId)) return; }
         int seed = _d.NextSeed?.Invoke() ?? Random.Shared.Next();
-        BackRoomMediaDeal deal;
-        try { deal = _d.Media.Deal(station, seed); }
-        catch (Exception ex)
+        // BackRoomMedia reads file headers: deal off the UI thread; Post marshals the reply back.
+        void DealAndPost()
         {
-            _d.Log?.Invoke("media deal threw, using fallback: " + ex.Message);
-            deal = new NullBackRoomMedia(null).Deal(station, seed);
+            BackRoomMediaDeal deal;
+            try { deal = _d.Media.Deal(station, seed); }
+            catch (Exception ex)
+            {
+                _d.Log?.Invoke("media deal threw, using fallback: " + ex.Message);
+                deal = new NullBackRoomMedia(null).Deal(station, seed);
+            }
+            lock (_gate) { if (_closed) return; _deals[station] = deal; }
+            _d.Post(new
+            {
+                type = "media", reqId, seed = deal.Seed,
+                gifs = deal.Gifs.Select(g => new { key = g.Key, url = g.Url, w = g.W, h = g.H, src = g.Src }),
+                words = deal.Words.Select(w => new { key = w.Key, text = w.Text, src = w.Src }),
+            });
         }
-        lock (_gate) _deals[station] = deal;
-        _d.Post(new
-        {
-            type = "media", reqId, seed = deal.Seed,
-            gifs = deal.Gifs.Select(g => new { key = g.Key, url = g.Url, w = g.W, h = g.H, src = g.Src }),
-            words = deal.Words.Select(w => new { key = w.Key, text = w.Text, src = w.Src }),
-        });
+        if (_d.OffUi != null) _d.OffUi(DealAndPost); else DealAndPost();
     }
 
     private void OnFx(JObject m)

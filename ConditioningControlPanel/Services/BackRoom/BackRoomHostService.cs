@@ -80,6 +80,7 @@ internal static class BackRoomHostService
                 NoteEvent = key => App.FeatureDayLog?.Note(key),
                 SetSp = sp => { if (App.Settings?.Current is { } s) s.SkillPoints = sp; },
                 OnUi = OnUi,
+                OffUi = work => System.Threading.Tasks.Task.Run(work),
                 Log = msg => App.Logger?.Debug("BackRoom: {Msg}", msg),
             });
 

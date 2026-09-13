@@ -90,6 +90,36 @@ public class BackRoomBridgeLifecycleTests
     }
 
     [Fact]
+    public void Media_DealsOffTheUiThread_AndPostsOnlyOnceTheWorkRuns()
+    {
+        var posted = new System.Collections.Generic.List<JObject>();
+        var queued = new System.Collections.Generic.List<Action>();
+        var clock = new Clock();
+        var bridge = new BackRoomBridge(new BackRoomBridge.Deps
+        {
+            Post = m => posted.Add(JObject.FromObject(m)),
+            Relay = new Relay(),
+            BuildInit = () => new { type = "init", protocol = 1 },
+            CloseWindow = () => { },
+            Schedule = clock.Schedule,
+            OffUi = queued.Add,
+            NextSeed = () => 7,
+        });
+        bridge.Handle(JObject.Parse("{\"type\":\"media-request\",\"reqId\":\"" + Req + "\",\"station\":\"slot\"}"));
+        Assert.Empty(posted);
+        var work = Assert.Single(queued);
+        work();
+        var media = Assert.Single(posted, p => (string?)p["type"] == "media");
+        Assert.Equal(7, (int)media["seed"]!);
+
+        // A deal that finishes after the window closed posts nothing.
+        bridge.Handle(JObject.Parse("{\"type\":\"media-request\",\"reqId\":\"" + Req + "x\",\"station\":\"slot\"}"));
+        bridge.CloseNow();
+        queued[1]();
+        Assert.Single(posted, p => (string?)p["type"] == "media");
+    }
+
+    [Fact]
     public void Media_DealsFallbackPresets_AndFxAcksUnknown_OnTheNullObjects()
     {
         var rig = new Rig();
