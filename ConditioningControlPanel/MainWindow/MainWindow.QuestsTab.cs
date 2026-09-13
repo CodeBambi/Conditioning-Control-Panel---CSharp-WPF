@@ -199,9 +199,10 @@ namespace ConditioningControlPanel
             // Proactively recalculate streak from calendar so stale values are caught immediately
             questService.RecalculateStreak();
 
-            // Update season title from server or defaults
+            // Header title: an event title from the server, else "Deeper Every Month". Left alone
+            // while the glitch owns the text; it lands on the same title when it finishes.
             var seasonTitle = App.QuestDefinitions?.SeasonTitle;
-            if (!string.IsNullOrEmpty(seasonTitle))
+            if (!string.IsNullOrEmpty(seasonTitle) && _seasonTitleGlitch?.IsPlaying != true)
             {
                 QuestsTab.TxtSeasonTitle.Text = seasonTitle;
             }

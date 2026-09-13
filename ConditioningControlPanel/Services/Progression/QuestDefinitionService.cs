@@ -45,39 +45,43 @@ public class QuestDefinitionService : IDisposable
     public DateTime? LastUpdated => _cache?.FetchedAt;
 
     /// <summary>
-    /// Default sissy-themed month names used when server doesn't provide a season title
+    /// The permanent Quests header title. Monthly seasons ended with The Descent (v6.9.0):
+    /// progress never resets and only the monthly board rotates, so the header no longer
+    /// names a month.
     /// </summary>
-    private static readonly Dictionary<int, string> DefaultMonthNames = new()
-    {
-        { 1, "Jerk-it January" },
-        { 2, "Fucked-up February" },
-        { 3, "Mindless March" },
-        { 4, "Airhead April" },
-        { 5, "Mooing May" },
-        { 6, "Juicy June" },
-        { 7, "Jelly July" },
-        { 8, "Ass-up August" },
-        { 9, "Sissygasm September" },
-        { 10, "Obey-tober" },
-        { 11, "No-nut November" },
-        { 12, "Dick-ember" }
-    };
+    internal const string PermanentTitle = "Deeper Every Month";
 
     /// <summary>
-    /// Current season title (from server or default month name). The cached server
-    /// title is only trusted while it was fetched in the CURRENT UTC month: the
-    /// month-rollover refetch (IsCacheStale) fires on startup, but when it fails —
-    /// offline launch, server hiccup — RefreshFromServerAsync leaves the old cache
-    /// loaded, and the Quests header kept showing last month's season ("Juicy June"
-    /// in July, #480). Falling back to the local month name self-corrects on the 1st
-    /// even with no network; the next successful refetch restores the server title.
+    /// A month name as a whole word ("Airhead August", "No-nut November"), or one of the two
+    /// punned months. "May" and "March" only count as the LAST word, so an event title such as
+    /// "You May Obey" or "March of the Bimbos" is not mistaken for a dead season.
     /// </summary>
-    public string SeasonTitle =>
-        (_cache?.FetchedAt is { } fetched
-            && fetched.Year == DateTime.UtcNow.Year
-            && fetched.Month == DateTime.UtcNow.Month
-            ? _cache?.SeasonTitle : null)
-        ?? DefaultMonthNames.GetValueOrDefault(DateTime.Now.Month, DateTime.Now.ToString("MMMM"));
+    private static readonly System.Text.RegularExpressions.Regex DeadSeasonPattern = new(
+        @"\b(january|february|april|june|july|august|september|october|november|december)\b"
+        + @"|\b(may|march)\s*$|obey-?tober|dick-?ember",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase
+        | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>True for a title in the old monthly-season style, which must never be shown again.</summary>
+    internal static bool IsDeadSeasonTitle(string title) => DeadSeasonPattern.IsMatch(title);
+
+    /// <summary>
+    /// The server's title wins only when it is set, was fetched in the CURRENT UTC month (a failed
+    /// month-rollover refetch leaves the old cache loaded, #480) and is not a dead season name. The
+    /// server still says "Airhead August", so without that last check every client would show it.
+    /// Anything else resolves to <see cref="PermanentTitle"/>, which leaves the server free to
+    /// override the header for an event later.
+    /// </summary>
+    internal static string ResolveSeasonTitle(string? serverTitle, DateTime? fetchedAtUtc, DateTime utcNow)
+    {
+        if (string.IsNullOrWhiteSpace(serverTitle)) return PermanentTitle;
+        if (fetchedAtUtc is not { } fetched || fetched.Year != utcNow.Year || fetched.Month != utcNow.Month)
+            return PermanentTitle;
+        return IsDeadSeasonTitle(serverTitle) ? PermanentTitle : serverTitle.Trim();
+    }
+
+    /// <summary>Current Quests header title. See <see cref="ResolveSeasonTitle"/>.</summary>
+    public string SeasonTitle => ResolveSeasonTitle(_cache?.SeasonTitle, _cache?.FetchedAt, DateTime.UtcNow);
 
     public QuestDefinitionService()
     {

@@ -178,6 +178,7 @@ namespace ConditioningControlPanel
 
             // Stop animations on tabs we're leaving to reduce idle CPU
             StopSeasonTitleShimmer();
+            StopSeasonTitleGlitch();
             StopLockdownPulse();
             StopSkillTreeAnimations();
             StopExclusivesMotion();
@@ -305,8 +306,9 @@ namespace ConditioningControlPanel
                 case "quests":
                     QuestsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(QuestsTab);
-                    StartSeasonTitleShimmer();
                     RefreshQuestUI();
+                    // The first visit plays the dead-season glitch; the shimmer follows it.
+                    if (!TryPlaySeasonTitleGlitch(replay: false)) StartSeasonTitleShimmer();
                     break;
 
                 case "programs":
