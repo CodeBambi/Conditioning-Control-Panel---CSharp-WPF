@@ -14,6 +14,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia.Views.Controls;
+using ConditioningControlPanel.Avalonia.Views.Controls.Companion;
 using ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
@@ -68,6 +69,7 @@ namespace ConditioningControlPanel.Avalonia
             CheckPrivacyLocalization(Check);
             CheckAwarenessPicker(Check);
             CheckAwarenessPickerLocalization(Check);
+            CheckAttentionGaugeLocalization(Check);
             CheckTextEditor(Check);
             CheckTriggerControls(Check);
             Console.WriteLine();
@@ -628,6 +630,123 @@ namespace ConditioningControlPanel.Avalonia
                 Dispatcher.UIThread.RunJobs();
                 owner?.Close();
                 Dispatcher.UIThread.RunJobs();
+            }
+        }
+
+        /// <summary>
+        /// #495 gauge localization at the public rendered-control seam. The real gauge stays in
+        /// one synthetic window while its language changes; the detail command is exercised through
+        /// the shown button, not by mutating the viewmodel behind the control. Detaching and
+        /// reattaching the same view also verifies that its current DataContext owns the refresh.
+        /// </summary>
+        private static void CheckAttentionGaugeLocalization(Action<string, bool, string?> check)
+        {
+            Window? host = null;
+            AttentionGaugeView? gauge = null;
+            var previousLanguage = LocalizationManager.Instance.CurrentLanguage;
+
+            static TextBlock Text(AttentionGaugeView view, string expected) =>
+                view.GetVisualDescendants().OfType<TextBlock>().Single(block => block.Text == expected);
+
+            try
+            {
+                LocalizationManager.Instance.SetLanguage("en");
+                gauge = new AttentionGaugeView();
+                host = new Window { Content = gauge, Width = 430, Height = 170 };
+                host.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var vm = gauge.ViewModel!;
+                var title = Text(gauge, "Her attention");
+                var state = Text(gauge, "Plenty of her attention left today.");
+                var detail = gauge.FindControl<TextBlock>("Z6DetailLine")!;
+                var detailButton = gauge.GetVisualDescendants().OfType<Button>()
+                    .Single(button => ReferenceEquals(button.Command, vm.ToggleDetailCommand));
+                var bar = gauge.GetVisualDescendants().OfType<Grid>()
+                    .Single(grid => grid.ColumnDefinitions.Count == 2);
+
+                check("attention gauge shows with its public DataContext and detail button",
+                    gauge.IsVisible && ReferenceEquals(gauge.DataContext, vm)
+                    && ReferenceEquals(gauge.ViewModel, vm) && detailButton.IsVisible,
+                    $"visible={gauge.IsVisible}, dataContext={gauge.DataContext?.GetType().Name}, button={detailButton.IsVisible}");
+                check("attention gauge preserves its 72% fraction and staged flags",
+                    vm.BarFraction == 0.72 && bar.ColumnDefinitions[0].Width.GridUnitType == GridUnitType.Star
+                    && Math.Abs(bar.ColumnDefinitions[0].Width.Value - 0.72) < 0.0001
+                    && Math.Abs(bar.ColumnDefinitions[1].Width.Value - 0.28) < 0.0001
+                    && !vm.IsSpent && !vm.ShowFloorNote && !vm.ShowUpsell && vm.UpsellCommand is null,
+                    $"fraction={vm.BarFraction}, columns={bar.ColumnDefinitions[0].Width.Value}/{bar.ColumnDefinitions[1].Width.Value}");
+                check("attention gauge renders literal English title and state",
+                    title.Text == "Her attention" && state.Text == "Plenty of her attention left today.",
+                    $"title={title.Text ?? "<null>"}, state={state.Text ?? "<null>"}");
+                check("attention gauge keeps detail hidden at rest",
+                    !vm.IsDetailShown && !detail.IsVisible,
+                    $"vmShown={vm.IsDetailShown}, visible={detail.IsVisible}");
+
+                detailButton.Command!.Execute(null);
+                Dispatcher.UIThread.RunJobs();
+                check("attention gauge public detail button reveals the English detail line",
+                    vm.IsDetailShown && detail.IsVisible
+                    && detail.Text == "~63 chats left · resets at midnight",
+                    $"vmShown={vm.IsDetailShown}, visible={detail.IsVisible}, detail={detail.Text ?? "<null>"}");
+
+                LocalizationManager.Instance.SetLanguage("fr");
+                Dispatcher.UIThread.RunJobs();
+                check("attention gauge refreshes title and state in French on the same shown instance",
+                    title.Text == "Son attention"
+                    && state.Text == "Il lui reste plein d'attention pour toi aujourd'hui.",
+                    $"title={title.Text ?? "<null>"}, state={state.Text ?? "<null>"}");
+                check("attention gauge refreshes the shown detail line from the French JSON",
+                    detail.Text == "~63 chats restants · remise à zéro à minuit",
+                    $"detail={detail.Text ?? "<null>"}");
+                check("attention gauge preserves fraction and detail visibility after locale change",
+                    vm.BarFraction == 0.72 && vm.IsDetailShown && detail.IsVisible,
+                    $"fraction={vm.BarFraction}, vmShown={vm.IsDetailShown}, visible={detail.IsVisible}");
+
+                host.Content = null;
+                Dispatcher.UIThread.RunJobs();
+                var detached = !gauge.IsAttachedToVisualTree();
+                var currentVm = new AttentionGaugeViewModel { IsDetailShown = true };
+                gauge.ViewModel = currentVm;
+                host.Content = gauge;
+                Dispatcher.UIThread.RunJobs();
+                check("attention gauge detaches and reattaches with its current DataContext",
+                    detached && gauge.IsAttachedToVisualTree() && ReferenceEquals(gauge.ViewModel, currentVm)
+                    && currentVm.IsDetailShown && detail.IsVisible,
+                    $"detached={detached}, attached={gauge.IsAttachedToVisualTree()}, current={ReferenceEquals(gauge.ViewModel, currentVm)}, visible={detail.IsVisible}");
+
+                LocalizationManager.Instance.SetLanguage("en");
+                Dispatcher.UIThread.RunJobs();
+                check("reattached gauge refreshes the current DataContext in English",
+                    title.Text == "Her attention"
+                    && state.Text == "Plenty of her attention left today."
+                    && detail.Text == "~63 chats left · resets at midnight",
+                    $"title={title.Text ?? "<null>"}, state={state.Text ?? "<null>"}, detail={detail.Text ?? "<null>"}");
+                LocalizationManager.Instance.SetLanguage("fr");
+                Dispatcher.UIThread.RunJobs();
+                check("reattached gauge refreshes the current DataContext in French",
+                    title.Text == "Son attention"
+                    && state.Text == "Il lui reste plein d'attention pour toi aujourd'hui."
+                    && detail.Text == "~63 chats restants · remise à zéro à minuit",
+                    $"title={title.Text ?? "<null>"}, state={state.Text ?? "<null>"}, detail={detail.Text ?? "<null>"}");
+
+                host.Close();
+                Dispatcher.UIThread.RunJobs();
+                check("attention gauge closes normally and drains the dispatcher",
+                    !host.IsVisible && !gauge.IsAttachedToVisualTree(),
+                    $"hostVisible={host.IsVisible}, attached={gauge.IsAttachedToVisualTree()}");
+            }
+            catch (Exception ex)
+            {
+                check("attention gauge localization fixture executes", false, ex.ToString());
+            }
+            finally
+            {
+                LocalizationManager.Instance.SetLanguage(previousLanguage);
+                Dispatcher.UIThread.RunJobs();
+                if (host?.IsVisible == true)
+                    host.Close();
+                if (host is not null)
+                    Dispatcher.UIThread.RunJobs();
             }
         }
 

@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Windows.Input;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using ConditioningControlPanel.Localization;
@@ -20,6 +21,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         {
             AvaloniaXamlLoader.Load(this);
             DataContext = new AttentionGaugeViewModel();
+        }
+
+        protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            base.OnAttachedToVisualTree(e);
+            LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
+            LocalizationManager.Instance.LanguageChanged += OnLanguageChanged;
+        }
+
+        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
+            base.OnDetachedFromVisualTree(e);
+        }
+
+        private void OnLanguageChanged(object? sender, EventArgs e)
+        {
+            if (DataContext is AttentionGaugeViewModel vm)
+                vm.RefreshLocalizedText();
         }
 
         /// <summary>Convenience for hosts that hand in a viewmodel rather than setting DataContext.</summary>
@@ -77,6 +97,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public string FloorNote => Loc.Get("companion_attention_floor_note");
 
         public string UpsellCopy => Loc.Get("companion_attention_upsell");
+
+        internal void RefreshLocalizedText()
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LocTitle)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LocTagTrain1)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LocDetailTip)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(StateCopy)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DetailLine)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(FloorNote)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UpsellCopy)));
+        }
 
         // Placeholder state: the WPF MockAttentionGaugeVm's default artboard, 72% remaining.
         public double BarFraction => 0.72;
