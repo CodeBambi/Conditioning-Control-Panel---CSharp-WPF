@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Slot station - dev harness</title>
+<!-- Dev harness only: a mock ctx and mock-server.js stand in for the room, the host and the server.
+     Serve ConditioningControlPanel/Resources as the web root (the dev GIFs come from avatar0_emotes),
+     then open /web/backroom/stations/slot/dev.html. Query: ?sp=57&melt=0&floor=800&latency=120&reduced -->
+<script type="importmap">{"imports":{"three":"../../../vendor/three/three.module.min.js","three/addons/":"../../../vendor/three/addons/"}}</script>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #160e20; font: 12px Segoe UI, Arial, sans-serif; color: #fce5f3; }
+  #room { position: fixed; inset: 0; background: #160e20 url(../../room/backroom_final.png) center / contain no-repeat; }
+  #root { position: fixed; inset: 0; }
+  #sit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 12px 22px; border-radius: 20px;
+         background: #28172fea; color: inherit; border: 1px solid #edb1d177; font: inherit; font-size: 14px; cursor: pointer; }
+  #dev { position: fixed; top: 130px; right: 8px; z-index: 50; display: flex; flex-direction: column; gap: 4px; opacity: .85; }
+  #dev button { font: 11px Segoe UI, Arial, sans-serif; padding: 3px 8px; }
+  #dev summary { cursor: pointer; text-align: right; }
+</style>
+</head>
+<body>
+<div id="room"></div>
+<div id="root"></div>
+<button id="sit" type="button">Take a seat</button>
+<details id="dev"><summary>dev</summary>
+  <button data-do="jackpot">next: EMI x3</button>
+  <button data-do="melt">next: melt</button>
+  <button data-do="spirals">next: 3 spirals</button>
+  <button data-do="too_fast">fault: too_fast</button>
+  <button data-do="timeout">fault: lost reply</button>
+  <button data-do="door">toggle door</button>
+  <button data-do="broke">set SP 0</button>
+</details>
+<script type="module">
+import { mount } from './station.js';
+import { createMockServer } from './mock-server.js';
+
+const q = new URLSearchParams(location.search);
+const num = (k, d) => (q.has(k) ? Number(q.get(k)) : d);
+const server = createMockServer({ sp: num('sp', 57), melt: num('melt', 0), floorMs: num('floor', 800) });
+const latency = num('latency', 120);
+const sent = [];
+const spFns = new Set();
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const gif = name => `../../../../avatar0_emotes/${name}.gif`;
+
+const ctx = {
+  root: document.getElementById('root'),
+  bridge: { send: m => { sent.push(m); console.log('[bridge]', JSON.stringify(m)); } },
+  request: async (op, body, idem) => { await wait(latency); return server.handle(op, body, idem); },
+  fx: async (fxId, symbols) => { sent.push({ type: 'fx', fxId, symbols }); console.log('[fx]', fxId, symbols); return { fired: [], skipped: [] }; },
+  media: async () => {
+    await wait(latency);
+    return { seed: 918273,
+      gifs: [{ key: 'g0', url: gif('cheer'), src: 'pool' }, { key: 'g1', url: gif('giggle'), src: 'pool' },
+             { key: 'g2', url: gif('flirt'), src: 'pool' }, { key: 'g3', url: './fallback/gif3.webp', src: 'fallback' }],
+      words: [{ key: 's0', text: 'Drop', src: 'preset' }, { key: 's1', text: 'Relax', src: 'preset' },
+              { key: 's2', text: 'Let Go', src: 'preset' }, { key: 's3', text: 'Sink', src: 'preset' }] };
+  },
+  sp: () => server.user.sp,
+  onSp: fn => { spFns.add(fn); return () => spFns.delete(fn); },
+  reduced: q.has('reduced'), motion: q.has('reduced') ? 'Reduced' : 'Full', intensity: 'Normal',
+  lex: (key, fallback) => fallback,
+  standUp: () => stand(),
+};
+
+const station = await mount(ctx);
+const sit = document.getElementById('sit');
+async function stand() { await station.close(); sit.hidden = false; sit.focus(); }
+async function open() { sit.hidden = true; await station.open(); }
+sit.onclick = open;
+
+let door = true;
+const rows = { jackpot: ['emi', 'emi', 'emi'], melt: ['gif1', 'melt', 'spiral2'], spirals: ['spiral0', 'spiral1', 'spiral2'] };
+document.getElementById('dev').addEventListener('click', e => {
+  const act = e.target.dataset && e.target.dataset.do;
+  if (rows[act]) server.script(rows[act]);
+  if (act === 'too_fast') server.fail('tape', 'too_fast', 1, { body: { retryInMs: 1500 } });
+  if (act === 'timeout') server.fail('tape', 'timeout', 1, { apply: true });
+  if (act === 'door') server.setOpen(door = !door);
+  if (act === 'broke') { server.user.sp = 0; spFns.forEach(fn => fn(0)); }
+});
+
+window.dev = { server, station, ctx, sent, open, stand };
+</script>
+</body>
+</html>
