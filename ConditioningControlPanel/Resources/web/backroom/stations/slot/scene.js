@@ -34,7 +34,7 @@ function bezier(x, a, b, c, d) {
   return 3 * (1 - t) ** 2 * t * b + 3 * (1 - t) * t * t * d + t ** 3;
 }
 /** 0..1 of a reel's travel at `dt`: spin up, blur at a steady speed, decelerate into the stop. */
-function travel(dt, dur, up = 180, down = Math.min(PACE.DECEL_MS, dur * 0.5)) {
+function reelTravel(dt, dur, up = 180, down = Math.min(PACE.DECEL_MS, dur * 0.5)) {
   const v = 1 / (dur - up / 2 - (2 * down) / 3);
   if (dt <= up) return v * dt * dt / (2 * up);
   return dt <= dur - down ? v * (dt - up / 2) : v * (dur - down - up / 2) + (v * down / 3) * (1 - (1 - clamp((dt - dur + down) / down)) ** 3);
@@ -279,7 +279,7 @@ export async function createScene(o) {
         const n = strips[i].length || 13, dur = reelStopMs(i), home = angle(s.stops[i], n);
         // Reduced motion: the reel rests, then eases the short way into its stop in its thud window.
         const target = reduced ? s.from[i] + ((home - s.from[i]) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI : home + Math.PI * 2 * (6 + 2 * i);
-        let x = reduced ? s.from[i] : THREE.MathUtils.lerp(s.from[i], target, travel(dt, dur));
+        let x = reduced ? s.from[i] : THREE.MathUtils.lerp(s.from[i], target, reelTravel(dt, dur));
         if (dt >= dur) { const k = clamp((dt - dur) / THUD_MS); x = reduced ? THREE.MathUtils.lerp(s.from[i], target, ease(k)) : target + (1 - thud(k)) * 0.035; if (k < 1) all = false; } else all = false;
         reels[i].rotation.x = restX[i] + x;
       }
