@@ -11,6 +11,7 @@
 import { createTape, stopsFor } from './tape.js';
 import { createScene, FACES } from './scene.js';
 import { createMedia, fxSymbols } from './media.js';
+import { PACE } from './pace.js';
 
 const STATION = 'slot';
 const LINE_LABELS = {
@@ -36,7 +37,9 @@ export async function mount(ctx) {
 
   let el = null, scene = null, tape = null, media = null, session = 0, alive = false;
   let busy = false, suspended = false, unSp = null, lastMelt = null;
-  const $ = sel => el.querySelector(sel);
+  let pace = 'idle', queued = false, breathEnds = 0, marks = [];   // pace phase: idle | breath | spin | reveal
+  const $ = sel => el.querySelector(sel), wait = ms => new Promise(r => setTimeout(r, Math.max(0, ms)));
+  function mark(phase) { pace = phase; marks = [...marks.slice(-79), { phase, at: Math.round(performance.now()) }]; }
 
   function sendMelt(left) {
     if (left === lastMelt) return;
@@ -103,6 +106,7 @@ export async function mount(ctx) {
     parts.push(s.melt ? t('br_slot_melt_left', 'Melt: {n} spins at half', { n: s.melt }) : t('br_slot_ready', 'Ready'));
     $('.slot-status').textContent = parts.join('  ·  ');
     const playing = el.dataset.phase === 'play';
+    el.dataset.pace = pace;
     el.querySelectorAll('[data-col]').forEach((b, i) => {
       const on = s.hold === i, roman = ['I', 'II', 'III'][i];
       b.setAttribute('aria-pressed', String(on));
@@ -110,7 +114,7 @@ export async function mount(ctx) {
       b.disabled = !playing || busy || !s.canFreeze;
     });
     const spin = $('.slot-spin');
-    spin.disabled = !playing || busy;
+    spin.disabled = !playing || (busy && pace !== 'reveal');   // a press in the reveal waits for the breath
     spin.querySelector('span').textContent = t('br_slot_spin', 'Spin');
     spin.querySelector('small').textContent =
       s.hold !== null ? t('br_slot_cost', '{n} SP', { n: s.freezeCost })
@@ -176,28 +180,31 @@ export async function mount(ctx) {
   }
 
   async function press() {
-    if (!alive || busy || suspended || !scene || el.dataset.phase !== 'play') return;
+    if (!alive || suspended || !scene || el.dataset.phase !== 'play') return;
+    if (busy) { queued = queued || pace === 'reveal'; return; }
     const my = session, before = tape.snapshot();
-    busy = true; card(null); sync();
-    const r = await tape.press();
+    busy = true; queued = false; card(null); mark('breath'); sync();
+    // THE BREATH (PACE): the next spin starts no sooner than BREATH_MS after the last reveal; the buy runs meanwhile.
+    const [r] = await Promise.all([tape.press(), wait(breathEnds - performance.now())]);
     if (my !== session || !alive) return;
     if (r.kind !== 'play') {
-      busy = false;
+      busy = false; mark('idle');
       if (r.kind === 'refused') card(refusalText(r.reason));
       sync();
       return;
     }
     const o = r.outcome;
-    setFace('idle0_0');
-    sync();
-    await scene.spin(Array.isArray(o.stops) ? o.stops : stopsFor(before.strips, o.symbols), o.kind === 'freeze' ? before.hold : null);
+    setFace('idle0_0'); mark('spin'); sync();
+    await scene.spin(Array.isArray(o.stops) ? o.stops : stopsFor(before.strips, o.symbols), r.held);
     if (my !== session || !alive) return;
-    tape.land(o);
-    fire(o);
+    tape.land(o); fire(o);
     if (o.line === 'emi3') scene.celebrate(o.pay);
-    setFace(faceFor(o));
-    busy = false;
-    sync();
+    setFace(faceFor(o)); scene.reveal(o.pay > 0); mark('reveal'); sync();
+    await wait(PACE.REVEAL_MS);
+    if (my !== session || !alive) return;
+    breathEnds = performance.now() + PACE.BREATH_MS;
+    busy = false; mark('idle'); sync();
+    if (queued) press();
   }
 
   function onKey(e) {
@@ -211,7 +218,7 @@ export async function mount(ctx) {
 
   async function open() {
     if (alive) return;
-    alive = true; busy = false; suspended = false; lastMelt = null;
+    alive = true; busy = false; suspended = false; lastMelt = null; pace = 'idle'; queued = false; breathEnds = 0;
     const my = ++session;
     el = build();
     ctx.root.append(el);
@@ -222,7 +229,7 @@ export async function mount(ctx) {
     const dealt = Promise.resolve().then(() => (typeof ctx.media === 'function' ? ctx.media() : null))
       .then(m => (my === session ? media.deal(m) : null)).catch(() => null);
     const [made, state] = await Promise.all([
-      createScene({ canvas: $('.slot-stage'), reduced, hint: $('.slot-hint'), canPull: () => !busy && !suspended,
+      createScene({ canvas: $('.slot-stage'), reduced, hint: $('.slot-hint'), canPull: () => (!busy || pace === 'reveal') && !suspended,
                     onLever: () => press(), onFreeze: col => toggleFreeze(col) }).catch(e => ({ error: e })),
       tape.open(),
     ]);
@@ -286,7 +293,7 @@ export async function mount(ctx) {
       document.querySelectorAll('link[data-slot-css]').forEach(l => l.remove());
     },
     /** For dev.html and CDP checks only. */
-    debug: () => ({ phase: el && el.dataset.phase, busy, alive, snapshot: tape && tape.snapshot(),
+    debug: () => ({ phase: el && el.dataset.phase, busy, alive, pace, marks, snapshot: tape && tape.snapshot(),
                     spinning: !!(scene && scene.spinning), sceneAlive: !!scene }),
   };
 }
