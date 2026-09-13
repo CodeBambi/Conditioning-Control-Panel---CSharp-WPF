@@ -30,7 +30,9 @@ public class FeatureDayEntry
     public static readonly string[] EventKeys =
     {
         "e_fl", "e_vd", "e_sb", "e_ov", "e_bb", "e_bc", "e_bt", "e_lk", "e_mw",
-        "e_pq", "e_bl", "e_cp", "e_ch", "e_dt", "e_rc", "e_pb"
+        "e_pq", "e_bl", "e_cp", "e_ch", "e_dt", "e_rc", "e_pb",
+        // The Back Room: one per station sit-down (BackRoomBridge, `station-open`).
+        "e_backroom_slot", "e_backroom_wheel", "e_backroom_scratcher", "e_backroom_cards", "e_backroom_counter"
     };
 
     public static bool IsEventKey(string key) => Array.IndexOf(EventKeys, key) >= 0;
