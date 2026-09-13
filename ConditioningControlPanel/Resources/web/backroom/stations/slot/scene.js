@@ -13,9 +13,10 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
 import { drawSymbol } from './symbols.js';
+import { PACE, reelStopMs, reelsMs } from './pace.js';
 
 export const FACES = { idle0_0: 3, hearts: 7, spirals: 8, melt: 9, jackpot: 10 };
-const RISE_MS = 620, CAMERA_MS = 620, SINK_MS = 340, THUD_MS = 340, PAINT_MS = 100;
+const RISE_MS = 620, CAMERA_MS = 620, SINK_MS = 340, PAINT_MS = 100, { THUD_MS } = PACE;
 const LENS_DEG = 20;           // vertical field; a narrow screen backs the camera off to keep the width
 const FIT_MARGIN = 1.2;         // breathing room around the reels + lever box
 const PULL_MAX = 0.5, PULL_COMMIT = 0.55;
@@ -31,6 +32,12 @@ function bezier(x, a, b, c, d) {
   let lo = 0, hi = 1, t = x;
   for (let i = 0; i < 14; i++) { t = (lo + hi) / 2; const v = 3 * (1 - t) ** 2 * t * a + 3 * (1 - t) * t * t * c + t ** 3; if (v < x) lo = t; else hi = t; }
   return 3 * (1 - t) ** 2 * t * b + 3 * (1 - t) * t * t * d + t ** 3;
+}
+/** 0..1 of a reel's travel at `dt`: spin up, blur at a steady speed, decelerate into the stop. */
+function travel(dt, dur, up = 180, down = Math.min(PACE.DECEL_MS, dur * 0.5)) {
+  const v = 1 / (dur - up / 2 - (2 * down) / 3);
+  if (dt <= up) return v * dt * dt / (2 * up);
+  return dt <= dur - down ? v * (dt - up / 2) : v * (dur - down - up / 2) + (v * down / 3) * (1 - (1 - clamp((dt - dur + down) / down)) ** 3);
 }
 const reveal = x => bezier(clamp(x), 0.2, 1.35, 0.35, 1), thud = x => bezier(clamp(x), 0.2, 1.5, 0.4, 1);
 const asset = p => new URL(p, import.meta.url).href;
@@ -218,7 +225,7 @@ export async function createScene(o) {
   // Timeline state.
   let phase = 'hidden', tl = null, spin = null, pull = null, pullBack = null, hold = null, mood = 'idle', moodAt = 0;
   settle = () => { const t = tl, s = spin; tl = null; spin = null; if (t && t.done) t.done(); if (s && s.resolve) s.resolve(); };
-  let celebrateAt = -Infinity, celebrateAmount = 0;
+  let celebrateAt = -Infinity, celebrateAmount = 0, revealAt = -Infinity, revealGain = 0;
   const pulse = [-Infinity, -Infinity, -Infinity];
   const sparks = [];
   const spawn = get('payout_spawn');
@@ -265,19 +272,25 @@ export async function createScene(o) {
     }
     if (spin) {
       const s = spin, dt = t - s.start;
-      lever.rotation.x = s.leverFrom ? s.leverFrom * (1 - ease(dt / THUD_MS)) : 0.4 * Math.sin(Math.PI * clamp(dt / 420));
+      lever.rotation.x = reduced ? 0 : s.leverFrom ? s.leverFrom * (1 - ease(dt / THUD_MS)) : 0.4 * Math.sin(Math.PI * clamp(dt / 420));
       let all = true;
       for (let i = 0; i < 3; i++) {
         if (s.held === i) continue;
-        const n = strips[i].length || 13, dur = 1050 + i * 230, q = clamp(dt / dur);
-        const target = angle(s.stops[i], n) + Math.PI * 2 * (4 + i);
-        let x = THREE.MathUtils.lerp(s.from[i], target, ease(q));
-        if (q === 1) { const k = clamp((dt - dur) / THUD_MS); x = target + (1 - thud(k)) * 0.035; if (k < 1) all = false; } else all = false;
+        const n = strips[i].length || 13, dur = reelStopMs(i), home = angle(s.stops[i], n);
+        // Reduced motion: the reel rests, then eases the short way into its stop in its thud window.
+        const target = reduced ? s.from[i] + ((home - s.from[i]) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI : home + Math.PI * 2 * (6 + 2 * i);
+        let x = reduced ? s.from[i] : THREE.MathUtils.lerp(s.from[i], target, travel(dt, dur));
+        if (dt >= dur) { const k = clamp((dt - dur) / THUD_MS); x = reduced ? THREE.MathUtils.lerp(s.from[i], target, ease(k)) : target + (1 - thud(k)) * 0.035; if (k < 1) all = false; } else all = false;
         reels[i].rotation.x = restX[i] + x;
       }
-      if (all) settleSpin();
+      if (all && dt >= reelsMs()) settleSpin();   // a held column never shortens the pace
     } else if (pull) lever.rotation.x = PULL_MAX * pull.amount;
     else if (pullBack) { const q = clamp((t - pullBack.start) / 200); lever.rotation.x = pullBack.angle * (1 - ease(q)); if (q === 1) pullBack = null; }
+    else lever.rotation.x = reduced || phase !== 'play' || t - celebrateAt < 1000 ? 0 : 0.018 * (1 - Math.cos(t / 900)); // THE BREATH
+
+    // The payline reveal: the reels lift (a win) or dim (nothing) for REVEAL_MS; reduced holds a flat step.
+    const rq = (t - revealAt) / PACE.REVEAL_MS, glow = rq < 0 || rq > 1 ? 1 : 1 + revealGain * (reduced ? 0.6 : Math.sin(Math.PI * rq));
+    reels.forEach(r => r.material && r.material.color && r.material.color.setScalar(glow));
 
     freezers.forEach((f, i) => {
       if (!f) return;
@@ -393,6 +406,8 @@ export async function createScene(o) {
     setLook(next) { look = { ...next, reduced, face: atlas && atlas.image }; paint(performance.now()); },
     setHold(col) { if (col !== hold && col !== null) pulse[col] = performance.now(); hold = col; },
     celebrate(amount) { celebrateAt = performance.now(); celebrateAmount = amount; },
+    /** Light the landed payline for PACE.REVEAL_MS (a win lifts, nothing dims). The caller holds the pace. */
+    reveal(win) { revealAt = performance.now(); revealGain = win ? 0.45 : -0.25; },
     /** Rise over the dimmed room, then ease to the seat. Resolves when interactive. */
     rise() {
       if (reduced) { rig.position.y = 0; phase = 'play'; aim(poses.play.pos, poses.play.look); return Promise.resolve(); }
@@ -406,14 +421,14 @@ export async function createScene(o) {
       const prev = tl; phase = 'sink';
       return new Promise(done => { tl = { kind: 'sink', start: performance.now(), fromY: rig.position.y, done: () => { done(); if (prev && prev.done) prev.done(); } }; });
     },
-    /** Spin to `stops`, the held column stays put. Resolves when the last reel has thudded. */
+    /** Spin to `stops`, the held column stays put. Resolves when the last reel has thudded, reelsMs() from
+     *  now with or without reduced motion (the pace is economy, not animation). */
     spin(stops, held = null) {
       settleSpin();
       return new Promise(resolve => {
-        spin = { start: performance.now(), stops, held, leverFrom: lever.rotation.x, resolve,
+        spin = { start: performance.now(), stops, held, leverFrom: pull || pullBack ? lever.rotation.x : 0, resolve,
                  from: reels.map((r, i) => r.rotation.x - restX[i]) };
         pull = null; pullBack = null;
-        if (reduced) settleSpin();
       });
     },
     settle: settleSpin,
