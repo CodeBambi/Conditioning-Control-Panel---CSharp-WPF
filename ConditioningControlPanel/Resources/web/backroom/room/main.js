@@ -106,7 +106,35 @@ async function leave(reason) {
   await settle();
 }
 
+const HUD = '.br-hud, #br-room-ui';
+const hudButton = (t) => {
+  const b = t && t.closest ? t.closest('button') : null;
+  return b && b.closest(HUD) ? b : null;
+};
+/** Walking, or a station or card on screen. Only the room view and a boot that never finished take HUD keys. */
+const hudKeysOff = () => visiting || !!(loader && loader.current)
+  || (document.documentElement.classList.contains('br-ready') && !(scene && scene.overview));
+
+/* Space and Enter never re-press the room's chrome (desk run: a clicked Back kept focus, and a later
+ * Space closed the station, then the whole room). A HUD button drops focus when the pointer lets go,
+ * and while walking or visiting the two keys on a HUD button are eaten and the focus dropped, so the
+ * station's own keys (Space spins) reach it from the next press on. */
+function wireHudKeys() {
+  document.addEventListener('pointerup', (e) => { const b = hudButton(e.target); if (b) b.blur(); }, true);
+  const guard = (e) => {
+    if (e.code !== 'Space' && e.key !== ' ' && e.key !== 'Enter') return;
+    const b = hudButton(e.target);
+    if (!b || !hudKeysOff()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    b.blur();
+  };
+  window.addEventListener('keydown', guard, true);
+  window.addEventListener('keyup', guard, true);
+}
+
 function wireExits() {
+  wireHudKeys();
   $('#br-back').addEventListener('click', () => back('back'));
   window.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
