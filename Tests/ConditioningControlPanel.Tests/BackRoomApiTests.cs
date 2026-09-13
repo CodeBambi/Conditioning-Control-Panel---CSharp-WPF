@@ -144,13 +144,19 @@ public class BackRoomApiTests
         Assert.Equal((false, 403, "closed"), (closed.Ok, closed.Status, closed.Reason));
     }
 
-    [Fact]
-    public async Task NonJsonReply_IsBadReply()
+    [Theory]
+    [InlineData(502, "<html>gateway</html>")]
+    [InlineData(504, "")]
+    [InlineData(200, "{\"ok\":false}")]
+    [InlineData(500, "{\"error\":\"boom\"}")]
+    [InlineData(200, "[1,2]")]
+    public async Task UnwordedReplies_AreRefusedOffline(int status, string body)
     {
+        // CONTRACT 2.2: the host's own reasons are offline, closed, bad_op and timeout, nothing else.
         var (api, h, sp) = Make();
-        h.Answer = _ => Json(502, "<html>gateway</html>");
+        h.Answer = _ => Json(status, body);
         var r = await api.RelayAsync("slot", "state", null, null, TestContext.Current.CancellationToken);
-        Assert.Equal((false, 502, "bad_reply"), (r.Ok, r.Status, r.Reason));
+        Assert.Equal((false, status, "offline"), (r.Ok, r.Status, r.Reason));
         Assert.Empty(sp);
     }
 }

@@ -161,11 +161,17 @@ public sealed class BackRoomApi : IBackRoomRelay
         return req;
     }
 
+    /// <summary>
+    /// Host refusals are only ever <c>offline</c>, <c>closed</c>, <c>bad_op</c> or <c>timeout</c>
+    /// (CONTRACT section 2.2). A reply the server did not word itself (a gateway HTML page, a JSON
+    /// refusal with no reason) is the server being unreachable in all but name, so it is <c>offline</c>;
+    /// the HTTP status still rides along for the log.
+    /// </summary>
     private BackRoomStationResult Read(int status, bool success, string text)
     {
         JObject? o = null;
         try { o = JsonConvert.DeserializeObject(text) as JObject; } catch { }
-        if (o == null) return new BackRoomStationResult(false, status, "bad_reply", null);
+        if (o == null) return new BackRoomStationResult(false, status, "offline", null);
 
         if (o["sp"] is JValue { Type: JTokenType.Integer } sp)
         {
@@ -174,7 +180,7 @@ public sealed class BackRoomApi : IBackRoomRelay
         }
         bool ok = success && o.Value<bool?>("ok") == true;
         var reason = o.Value<string?>("reason");
-        if (!ok && string.IsNullOrEmpty(reason)) reason = success ? "refused" : "http_" + status;
+        if (!ok && string.IsNullOrEmpty(reason)) reason = "offline";
         return new BackRoomStationResult(ok, status, ok ? null : reason, o);
     }
 }
