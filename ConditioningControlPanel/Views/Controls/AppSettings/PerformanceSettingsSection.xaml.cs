@@ -97,6 +97,11 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
                 CmbMotionLevel.SelectedIndex =
                     index >= 0 && index < CmbMotionLevel.Items.Count ? index : 0;
 
+                // Back Room effects intensity: ordinal IS the item index (Calm=0, Normal=1, Full=2).
+                var fx = (int)s.BackRoomFxIntensity;
+                CmbBackRoomFxIntensity.SelectedIndex =
+                    fx >= 0 && fx < CmbBackRoomFxIntensity.Items.Count ? fx : 1;
+
                 // Do-not-disturb. The textbox is a VIEW of the normalised list, so it is repainted
                 // from settings rather than left holding whatever the user last typed - a cloud
                 // restore or a factory reset has to be visible here like everywhere else.
@@ -273,6 +278,20 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
                 mw.ChkVideoHwDecode_Changed(sender, e);
                 App.Settings?.Save();
             }
+        }
+
+        /// <summary>
+        /// Back Room effects intensity. No MainWindow twin: the room reads it straight off settings on
+        /// every fire, so the handler writes and saves itself.
+        /// </summary>
+        private void CmbBackRoomFxIntensity_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            int i = CmbBackRoomFxIntensity.SelectedIndex;
+            if (s == null || i < 0) return;
+            s.BackRoomFxIntensity = (Services.BackRoom.BackRoomFxIntensity)i;
+            App.Settings?.Save();
         }
 
         /// <summary>
