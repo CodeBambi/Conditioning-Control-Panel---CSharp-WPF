@@ -33,6 +33,10 @@ export async function mount(ctx) {
     return String(s ?? fallback).replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : `{${k}}`));
   };
   const reduced = !!ctx.reduced || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  // CONTRACT 7: inside the room, the room's Back is the only Back (ctx.hostBack). Standalone (dev.html) keeps ours.
+  const hostBack = ctx.hostBack === true;
+  // CONTRACT 7: one station, three cabinets in the room. variant = { id, name, palette } or null.
+  const variant = ctx.variant && typeof ctx.variant === 'object' ? ctx.variant : null;
   loadCss();
 
   let el = null, scene = null, tape = null, media = null, session = 0, alive = false;
@@ -74,6 +78,11 @@ export async function mount(ctx) {
       <div class="slot-loading">${t('br_slot_loading', 'Preparing the cabinet')}</div>`;
     root.querySelector('.slot-back').onclick = back;
     root.querySelector('.slot-card-back').onclick = back;
+    if (hostBack) {
+      root.dataset.hostBack = '';
+      root.querySelector('.slot-back').hidden = true;
+      root.querySelector('.slot-card-back').hidden = true;
+    }
     root.querySelector('.slot-spin').onclick = () => press();
     root.querySelectorAll('[data-col]').forEach(b => { b.onclick = () => toggleFreeze(Number(b.dataset.col)); });
     return root;
@@ -124,7 +133,7 @@ export async function mount(ctx) {
       : t('br_slot_cost', '{n} SP', { n: s.stake });
     if (scene) {
       scene.setHold(s.hold);
-      scene.screen('marquee', t('br_slot_marquee', 'CANDY'));   // the slot name is still open (6)
+      scene.screen('marquee', variant && variant.name ? String(variant.name).toUpperCase() : t('br_slot_marquee', 'CANDY'));
       scene.screen('screen_jackpot', t('br_slot_screen_jackpot', 'JACKPOT {n}', { n: fmt(s.jackpot) }));
       scene.screen('screen_status', s.melt ? t('br_slot_screen_melt', 'MELT · {n} SPINS AT HALF', { n: s.melt })
         : t('br_slot_screen_status', 'WIN {n} · FREE {m}', { n: fmt(s.lastWin), m: s.free }));
@@ -229,7 +238,7 @@ export async function mount(ctx) {
     const dealt = Promise.resolve().then(() => (typeof ctx.media === 'function' ? ctx.media() : null))
       .then(m => (my === session ? media.deal(m) : null)).catch(() => null);
     const [made, state] = await Promise.all([
-      createScene({ canvas: $('.slot-stage'), reduced, hint: $('.slot-hint'), canPull: () => (!busy || pace === 'reveal') && !suspended,
+      createScene({ canvas: $('.slot-stage'), reduced, palette: variant && variant.palette, hint: $('.slot-hint'), canPull: () => (!busy || pace === 'reveal') && !suspended,
                     onLever: () => press(), onFreeze: col => toggleFreeze(col) }).catch(e => ({ error: e })),
       tape.open(),
     ]);
@@ -294,6 +303,7 @@ export async function mount(ctx) {
     },
     /** For dev.html and CDP checks only. */
     debug: () => ({ phase: el && el.dataset.phase, busy, alive, pace, marks, snapshot: tape && tape.snapshot(),
+                    hostBack, variant: variant && variant.id, palette: !!(scene && scene.recoloured),
                     spinning: !!(scene && scene.spinning), sceneAlive: !!scene }),
   };
 }

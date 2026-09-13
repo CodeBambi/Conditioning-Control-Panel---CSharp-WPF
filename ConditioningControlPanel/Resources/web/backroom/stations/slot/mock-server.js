@@ -12,7 +12,7 @@ const STRIPS = [
 ];
 
 const LINES = [
-  { id: 'emi3', pays: 2500, odds: '1 in 25,000', fx: ['fx.jackpot'] },
+  { id: 'emi3', pays: 400, odds: '1 in 12,987', weight: 77, fx: ['fx.jackpot'] },   // table v5 (10.1), 77 per million
   { id: 'gif3same', pays: 40, odds: '1 in 150', fx: ['fx.gif_storm'] },
   { id: 'sub3', pays: 15, odds: '1 in 120', fx: ['fx.sub_cascade'] },
   { id: 'spiral3', pays: 10, odds: '1 in 120', fx: ['fx.spiral_full'], free: 3 },
@@ -45,21 +45,31 @@ function mulberry32(a) {
   };
 }
 
-export function createMockServer({ sp = 57, melt = 0, seed = 9013, floorMs = 800, now = () => Date.now(),
-                                   open = true } = {}) {
+export function createMockServer({ sp = 57, melt = 0, seed = 9013, floorMs = 3000, freezeFloorMs = 3000,
+                                   now = () => Date.now(), open = true } = {}) {
   const rnd = mulberry32(seed);
-  const user = { sp, melt, tape: null, freezes: [], shown: ['gif0', 'spiral1', 'sub2'], nextBuyAt: 0, lastBuyAt: -1e9 };
+  const jackRnd = mulberry32(seed ^ 0x5bd1e995);   // its own stream, so the strip draws stay seed-stable
+  const JACK = LINES.find(l => l.id === 'emi3');
+  const user = { sp, melt, tape: null, freezes: [], shown: ['gif0', 'spiral1', 'sub2'], nextBuyAt: 0, lastBuyAt: -1e9,
+                 freezeReadyAt: 0 };
   const receipts = new Map();
   const faults = [];          // { op, reason, times, apply, body }
   const script = [];          // forced symbol rows for the next draws, e.g. ['emi','emi','emi']
   const log = [];
 
-  const table = () => ({ v: 3, stake: 1, freezeCost: 1, jackpot: 2500, rtp: 1.02, rtpFrozen: 1.02,
+  const table = () => ({ v: 5, stake: 1, freezeCost: 1, jackpot: JACK.pays, rtp: 1.02, rtpFrozen: 1.02,
                          lines: LINES.map(({ id, pays, odds }) => ({ id, pays, odds })) });
 
   function drawRow(held) {
     if (script.length) return script.shift().map((s, c) => (held && held.col === c ? held.sym : s));
-    return [0, 1, 2].map(c => (held && held.col === c ? held.sym : STRIPS[c][Math.floor(rnd() * 13)]));
+    if (jackRnd() < JACK.weight / 1e6) return [0, 1, 2].map(c => (held && held.col === c ? held.sym : 'emi'));
+    // EMI x3 comes only from its weight; a strip row that lands on it is drawn again.
+    let row;
+    for (let tries = 0; tries < 20; tries++) {
+      row = [0, 1, 2].map(c => (held && held.col === c ? held.sym : STRIPS[c][Math.floor(rnd() * 13)]));
+      if (lineFor(row) !== 'emi3') break;
+    }
+    return row;
   }
 
   /** One spin plus everything it expands into, in draw order. A freeze is sealed from melt (10.2)
@@ -111,7 +121,8 @@ export function createMockServer({ sp = 57, melt = 0, seed = 9013, floorMs = 800
     if (!freeze && tp && tp.played < tp.outcomes.length) {
       return { ok: false, reason: 'tape_unplayed', sp: user.sp, melt: user.melt, tape: structuredClone(tp) };
     }
-    const t = now(), readyAt = freeze ? user.lastBuyAt + 700 : user.nextBuyAt;
+    // 10.12: 3000 ms per outcome; a freeze waits 3000 ms after the last buy, and after a freeze max(3000, its outcomes x 3000).
+    const t = now(), readyAt = freeze ? Math.max(user.lastBuyAt + freezeFloorMs, user.freezeReadyAt) : user.nextBuyAt;
     if (t < readyAt) return { ok: false, reason: 'too_fast', retryInMs: Math.ceil(readyAt - t) };
     const cost = freeze ? 1 + table().freezeCost : count;
     if (user.sp < cost) return { ok: false, reason: 'insufficient', sp: user.sp };
@@ -121,10 +132,11 @@ export function createMockServer({ sp = 57, melt = 0, seed = 9013, floorMs = 800
     else for (let i = 0; i < count; i++) spin('paid', null, out);
     const raw = spBefore - cost + out.reduce((s, o) => s + o.pay, 0), capped = raw > 99999;
     user.sp = Math.max(0, Math.min(99999, raw));
-    const receipt = { ok: true, idem, sp: user.sp, spBefore, cost, capped, melt: user.melt, jackpot: 2500 };
+    const receipt = { ok: true, idem, sp: user.sp, spBefore, cost, capped, melt: user.melt, jackpot: JACK.pays };
     if (freeze) {
       user.freezes.push({ tapeId: tp ? tp.id : null, at: tp ? tp.played : 0, col: freeze.col, last: out.at(-1).symbols });
       user.nextBuyAt = Math.max(user.nextBuyAt, t) + out.length * floorMs;
+      user.freezeReadyAt = t + Math.max(freezeFloorMs, out.length * floorMs);
       receipt.tape = tp ? { id: tp.id, played: tp.played } : null;
       receipt.freeze = { col: freeze.col, held: held.sym, outcomes: out };
     } else {

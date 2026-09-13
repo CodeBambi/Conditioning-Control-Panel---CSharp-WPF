@@ -14,6 +14,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
 import { drawSymbol } from './symbols.js';
 import { PACE, reelStopMs, reelsMs } from './pace.js';
+import { applyPalette } from './palette.js';
 
 export const FACES = { idle0_0: 3, hearts: 7, spirals: 8, melt: 9, jackpot: 10 };
 const RISE_MS = 620, CAMERA_MS = 620, SINK_MS = 340, PAINT_MS = 100, { THUD_MS } = PACE;
@@ -104,6 +105,8 @@ export async function createScene(o) {
   } catch (e) { dispose(); throw e; }
   const rig = gltf.scene;
   scene.add(rig);
+  const recoloured = applyPalette(rig, o.palette);   // a room variant's cabinet colours, before any other swap
+  owned.push(...recoloured);
   const get = name => rig.getObjectByName(name) || null;
   const missing = REQUIRED.filter(n => !get(n));
   if (missing.length) return { missing, dispose };
@@ -399,6 +402,7 @@ export async function createScene(o) {
   return {
     missing: [],
     faceImage: atlas && atlas.image,
+    recoloured: recoloured.length > 0,
     get phase() { return phase; },
     get spinning() { return !!spin; },
     resize, setStrips, setStops, setFace, dispose, cancelPull,

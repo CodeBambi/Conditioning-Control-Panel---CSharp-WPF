@@ -23,6 +23,8 @@
   color: #f5cfe7; pointer-events: none; text-shadow: 0 2px 5px #160e20; }
 
 .slot-top { position: absolute; top: 18px; left: 22px; right: 22px; display: flex; align-items: center; gap: 14px; z-index: 4; }
+/* Inside the room (ctx.hostBack) the room's Back chip and SP chip sit in these corners, over the station. */
+.slot-station[data-host-back] .slot-top { left: 112px; right: 112px; }
 .slot-readouts { display: flex; gap: 8px; }
 .slot-readouts span { background: #201229e8; border: 1px solid #b77da247; padding: 8px 14px; border-radius: 30px; font-size: 13px; }
 .slot-sp { color: #ffe3f2; font-weight: 600; }

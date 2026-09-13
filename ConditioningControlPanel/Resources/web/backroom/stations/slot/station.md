@@ -17,6 +17,11 @@ The Candy cabinet (CONTRACT.md sections 2-7). Entry `station.js`, loaded by the 
 - `ctx.request(op, body, idem)` resolving a `station-result`, `ctx.fx(fxId, symbols)`, `ctx.media()`,
   `ctx.onSp(fn)`, `ctx.lex(key, fallback)`, `ctx.standUp()`.
 - The `melt` frame goes out through `ctx.melt(left)` when present, else `ctx.bridge.send({type:'melt', ...})`.
+- `ctx.hostBack === true` (the room sets it): the station hides its own Back chip and the card's Back button, because
+  the room's Back is the only one. Escape still stands up. Without it (dev.html) both buttons show.
+- `ctx.variant` `{ id, name, palette }` or null: `palette` (material name -> `rrggbb`) recolours `candy_rose`,
+  `candy_violet`, `candy_plum` and `wand_pink` through `palette.js` (one clone per name, the glb untouched), and
+  `name` goes on the marquee. Null keeps the rose cabinet and the `br_slot_marquee` text.
 
 ## Checks
 
@@ -29,4 +34,7 @@ Run the node check on every new `slot.glb` drop. Required nodes (`cabinet`, `ree
 `cam_seat`, `cam_target`) fail it and show "Model missing X" in the page; the rest only warn.
 
 Dev harness: serve `ConditioningControlPanel/Resources` as the web root and open
-`/web/backroom/stations/slot/dev.html` (`?sp=57&melt=0&floor=800&latency=120&reduced`).
+`/web/backroom/stations/slot/dev.html` (`?sp=57&melt=0&floor=3000&latency=120&reduced&variant=violet`).
+
+`mock-server.js` follows table v5 (CONTRACT 10.1: `emi3` pays 400, drawn at 77 per million on its own seeded
+stream) and the 3000 ms slot and freeze floors (10.12).
