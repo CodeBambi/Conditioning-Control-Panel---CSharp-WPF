@@ -333,7 +333,7 @@ Station module shape (the room calls nothing else):
 ```js
 export async function mount(ctx) {
   // ctx = { root, bridge, request(op, body, idem?), fx(fxId, symbols?), media(), sp(), onSp(fn),
-  //         reduced, motion, intensity, lex(key, fallback), standUp(), variant }
+  //         reduced, motion, intensity, lex(key, fallback), standUp(), variant, hostBack }
   return {
     open(),                 // take the screen; resolve when interactive (Back is live before this)
     close(),                // Promise, settles within 420 ms, flushes its own cursor
@@ -351,6 +351,9 @@ export async function mount(ctx) {
   `rrggbb`, null for the base colour) and `null` otherwise. Honouring it is optional: a station that
   ignores it shows its base colours. For C2: recolour the close-up cabinet by material name the way the
   room does (`material.clone(); color.set('#' + palette[name])`) and put `variant.name` on the marquee.
+- `ctx.hostBack === true` means the room draws the only Back (the HUD chip, always on top). The station
+  hides every Back of its own (chip and card buttons) and still stands up on Escape. A standalone
+  harness passes nothing and keeps the station's own Back.
 - It talks to the server only through `ctx.request`, which becomes `station-request` with its id.
 - It fires only global fx ids. A new effect is a new row in section 4 plus a C# recipe; unknown ids are
   skipped with `why:'unknown'`, so a page can ship ahead of the host.
@@ -374,8 +377,14 @@ export async function mount(ctx) {
   player picks Motion still. A `settings` frame applies live.
 - **Wall screens.** One `media-request` with `station: "room"` at boot. `gifs` that are not
   `src: "fallback"`, point at `ccp.assets` or the page's own origin, and load CORS-clean go on the four
-  screens (first frame, one turn every 18 s); otherwise the house art (`room/assets/ads/*.webp`) with
-  lexicon captions. The preview's local file picker is not carried over.
+  screens (one turn every 18 s); otherwise the house art (`room/assets/ads/*.webp`) with lexicon
+  captions. The preview's local file picker is not carried over.
+- **Playing GIFs (amended 2026-09-13).** Dealt GIFs play, decoded in the page with WebCodecs
+  `ImageDecoder` (Chromium 94+, no vendored decoder; a page without it shows the first frame). Caps: a
+  picture advances only while a screen showing it is inside the camera frustum (not in the room view,
+  not while a station holds the room), at most 12 frames a second, into a canvas texture of at most
+  384 px on the long edge, and at most one new decode per rendered frame. Still (reduced, Calm, Motion
+  still) shows the first frame.
 - **Budget.** At 1280x720 on the entry pose: 212 draw calls (the preview draws 1,268 there, 1,312 in its
   own check), no shadows, no post passes, pixel ratio capped at 1.5.
 

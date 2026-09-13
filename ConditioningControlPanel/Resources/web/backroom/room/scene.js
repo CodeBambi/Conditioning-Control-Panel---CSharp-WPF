@@ -171,7 +171,8 @@ export async function createScene(o) {
     }
     if (!still) ambient += dt;
     room.update(dt, ambient, still);
-    screens.update(ambient);
+    camera.updateMatrixWorld();
+    screens.update(ambient, overview ? null : camera, still);
     renderer.render(scene, camera);
   }
 
@@ -210,7 +211,7 @@ export async function createScene(o) {
       return {
         position: pos.slice(), yaw, pitch, overview, held: !!held, running: !!raf, still,
         nearest: nearest ? nearest.key : null, fixtures: room.fixtures, bulbs: room.bulbs, screens: room.screens.length,
-        pictures: screens.pictures, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
+        pictures: screens.pictures, animation: screens.animation, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
         floorAngle: room.floor ? room.floor.material.uniforms.angle.value : null, ambient, sway,
         frameMedian: sorted.length ? sorted[Math.floor(sorted.length / 2)] : null, buildMs: Math.round(buildMs),
         ceiling: room.ceiling ? room.ceiling.visible : null,

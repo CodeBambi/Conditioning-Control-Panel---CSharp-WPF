@@ -83,6 +83,8 @@ export function createLoader(room) {
       standUp: () => room.standUp(),
       /** { id, name, palette:{materialName: 'rrggbb'} | null } or null. Optional for a station to honour. */
       variant: variant || null,
+      /** The room draws the only Back (CONTRACT 7): a station hides its own. */
+      hostBack: true,
     };
   }
 

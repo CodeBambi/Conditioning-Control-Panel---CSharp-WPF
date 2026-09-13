@@ -81,7 +81,7 @@ const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Applic
 if (!existsSync(CHROME)) { console.error('FAIL no chrome at ' + CHROME); process.exit(1); }
 const PORT = 8891, DEBUG_PORT = 9391;
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
-  '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary' };
+  '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary' };
 const server = createServer(async (req, res) => {
   const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   if (path.indexOf('..') >= 0) { res.writeHead(400); return res.end(); }
@@ -94,7 +94,7 @@ const server = createServer(async (req, res) => {
 });
 await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
 
-/* The fake host. `?reduced=1` and `?calm=1` shape init; `?pictures=1` deals one same-origin picture. */
+/* The fake host. `?reduced=1` and `?calm=1` shape init; `?pictures=1` deals an animated GIF, a still WebP and a fallback. */
 const FAKE_HOST = `(() => {
   const q = new URLSearchParams(location.search);
   const listeners = [];
@@ -113,7 +113,8 @@ const FAKE_HOST = `(() => {
         stations: ['slot'], open: null });
       if (m.type === 'station-request') emit({ type: 'station-result', reqId: m.reqId, ok: true, status: 200, body: { ok: true, sp: 57 } });
       if (m.type === 'media-request') emit({ type: 'media', reqId: m.reqId, seed: 1, words: [],
-        gifs: q.get('pictures') === '1' ? [{ key: 'g0', url: '/backroom/room/assets/ads/dtrh.webp', w: 1280, h: 720, src: 'pool' },
+        gifs: q.get('pictures') === '1' ? [{ key: 'g0', url: '/dtrh/assets/bubbles/effects/spirals/sp6.gif', w: 0, h: 0, src: 'pool' },
+          { key: 'g2', url: '/backroom/room/assets/ads/dtrh.webp', w: 1280, h: 720, src: 'pool' },
           { key: 'g1', url: 'https://ccp.game/backroom/stations/slot/fallback/gif1.webp', src: 'fallback' }] : [] });
     },
   };
@@ -224,7 +225,8 @@ await key('KeyE'); await key('KeyE', 'keyUp');
 for (let i = 0; i < 40 && !(await ev(`!!(window.__mockStation && window.__mockStation.seen.state)`)); i++) await sleep(100);
 ok((await posted('station-open')).some((m) => m.station === 'slot'), 'E posts station-open slot');
 ok(await ev(`window.__mockStation.seen.variant && window.__mockStation.seen.variant.id === 'violet' && window.__mockStation.seen.variant.palette.candy_rose === 'ac83ed'`), 'ctx.variant carries violet and its palette');
-ok(await ev(`['root','bridge','request','fx','media','sp','onSp','reduced','motion','intensity','lex','standUp','variant'].every((k) => window.__mockStation.ctxKeys.includes(k))`), 'ctx carries every section 7 field');
+ok(await ev(`['root','bridge','request','fx','media','sp','onSp','reduced','motion','intensity','lex','standUp','variant','hostBack'].every((k) => window.__mockStation.ctxKeys.includes(k))`), 'ctx carries every section 7 field');
+ok(await ev(`window.__mockStation.seen.hostBack === true`), 'ctx.hostBack tells the station the room owns Back');
 d = await dbg();
 ok(d.held && !d.running, 'the room loop stops while the station is open');
 await sleep(300);
@@ -297,12 +299,27 @@ await ev(`window.__hostEmit({ type: 'settings', motion: 'full', intensity: 'norm
 await sleep(500);
 ok((await dbg()).floorAngle !== c0, 'a settings change back to Normal lets it turn');
 
-// 2i. the feed's pictures reach the walls; fallback entries do not
-await boot(1280, 720, '?pictures=1');
-await sleep(800);
-ok((await dbg()).pictures === 1, 'one dealt picture on the walls, the fallback entry skipped');
+// 2i. the feed's pictures reach the walls, the GIF plays while its screen is in view; fallback entries do not
+ok(await ev(`typeof ImageDecoder === 'function'`), 'this Chromium has ImageDecoder');
+await boot(1280, 720, '?reduced=1&pictures=1');
 await ev(`window.__backroom.scene.pose([0, 1.65, 2], Math.PI / 2, 0.25)`);
-await sleep(400);
+await sleep(1500);
+d = await dbg();
+ok(d.pictures === 2 && d.animation.animated === 1 && d.animation.frames === 0, 'reduced motion: the GIF is dealt but holds its first frame');
+await boot(1280, 720, '?pictures=1');
+for (let i = 0; i < 30 && (await dbg()).pictures !== 2; i++) await sleep(100);
+d = await dbg();
+ok(d.pictures === 2 && d.animation.animated === 1, 'two dealt pictures on the walls (one animated), the fallback entry skipped');
+await ev(`window.__backroom.scene.pose([0, 1.65, 2], -Math.PI / 2, 0.25)`);   // facing away from screen 0
+await sleep(700);
+const away = (await dbg()).animation.frames;
+await sleep(700);
+ok((await dbg()).animation.frames - away <= 2, 'a GIF whose screens are out of view does not advance');
+await ev(`window.__backroom.scene.pose([0, 1.65, 2], Math.PI / 2, 0.25)`);
+const f0 = (await dbg()).animation.frames;
+await sleep(1000);
+const f1 = (await dbg()).animation.frames;
+ok(f1 - f0 >= 5 && f1 - f0 <= 13, `in view it plays, capped: ${f1 - f0} frames in 1 s (max 12)`);
 await shot('wall-picture-from-feed.png');
 
 // 2j. Escape in the empty room leaves
