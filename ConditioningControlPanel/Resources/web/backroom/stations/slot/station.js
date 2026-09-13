@@ -90,6 +90,7 @@ export async function mount(ctx) {
   function refusalText(reason) {
     if (reason === 'insufficient') return t('br_slot_insufficient', 'Not enough SP for this spin.');
     if (reason === 'closed') return t('br_slot_closed', 'The cabinet is closed for a moment.');
+    if (reason === 'empty' || reason === 'tape_unplayed') return t('br_slot_stuck', 'The reels stuck. Pull again.');
     return t('br_slot_offline', 'The house is not answering. Try again in a moment.');
   }
 
@@ -204,7 +205,7 @@ export async function mount(ctx) {
     if (e.key === 'Escape') { e.preventDefault(); back(); return; }
     if (e.target && e.target.closest && e.target.closest('button, summary, input, select')) return;
     if (e.code === 'Space') { e.preventDefault(); press(); }
-    if (['1', '2', '3'].includes(e.key)) toggleFreeze(Number(e.key) - 1);
+    if (['1', '2', '3'].includes(e.key) && tape && tape.snapshot().canFreeze) toggleFreeze(Number(e.key) - 1);
   }
   const onResize = () => scene && scene.resize();
 
@@ -265,7 +266,7 @@ export async function mount(ctx) {
     unSp = null;
     const s = scene, root = el, m = media;
     if (root) root.dataset.phase = 'leaving';
-    if (s) await Promise.race([s.sink(), new Promise(r => setTimeout(r, 380))]);
+    if (s) await Promise.race([s.sink(), new Promise(r => setTimeout(r, 340))]);
     if (s) s.dispose();
     if (m) m.dispose();
     if (root) root.remove();

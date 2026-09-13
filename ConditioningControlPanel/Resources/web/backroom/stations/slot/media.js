@@ -16,6 +16,18 @@ function allowed(url) {
   } catch { return false; }
 }
 
+/** False when drawing the image would taint a canvas (served without CORS), checked once per img. */
+function readable(img) {
+  if (img.dataset.readable) return img.dataset.readable === '1';
+  let ok = true;
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 1;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0, 1, 1); g.getImageData(0, 0, 1, 1);
+  } catch { ok = false; console.warn('[slot] dealt GIF is not CORS-readable, using fallback art'); }
+  img.dataset.readable = ok ? '1' : '0';
+  return ok;
+}
+
 export function createMedia(holder, lex = (k, f) => f) {
   let gifs = [], words = [], imgs = [];
 
@@ -34,6 +46,9 @@ export function createMedia(holder, lex = (k, f) => f) {
         if (!g || typeof g.url !== 'string' || !allowed(g.url)) return null;
         const img = new Image();
         img.decoding = 'async'; img.alt = '';
+        // ccp.assets is another origin: without CORS mode the reel canvas is tainted and the WebGL
+        // upload throws (same rule as dtrh/engine/spawner.js). Set before src.
+        img.crossOrigin = 'anonymous';
         img.src = new URL(g.url, location.href).href;
         holder.append(img);
         return img;
@@ -47,7 +62,7 @@ export function createMedia(holder, lex = (k, f) => f) {
     /** A drawable for gif{i}, or null when missing or broken (the painter draws fallback art). */
     gif(i) {
       const img = imgs[i];
-      return img && img.complete && img.naturalWidth > 0 ? img : null;
+      return img && img.complete && img.naturalWidth > 0 && readable(img) ? img : null;
     },
     word(i) {
       const w = words[i];
