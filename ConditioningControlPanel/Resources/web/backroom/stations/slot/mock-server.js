@@ -1,7 +1,8 @@
 /* mock-server.js - a stand-in for /v2/backroom/slot/* (CONTRACT.md section 3) for dev.html and
  * the node tests. NOT the paytable (that is CCP-Server, lane S1): it only reproduces the body shapes
  * and the rules the page must cope with (tape_unplayed, idem receipts, too_fast, insufficient,
- * closed, melt in draw order, inline free spins, one-column freeze mid-tape).
+ * closed, melt in draw order, inline free spins, one-column freeze mid-tape answered as
+ * `freeze: {col, held, outcomes}` with `tape` as the stored tape's `{id, played}` only, section 10.10).
  * handle() resolves like the host relay: {ok:true, status, body} or a host refusal {ok:false, reason}. */
 
 const STRIPS = [
@@ -47,7 +48,7 @@ function mulberry32(a) {
 export function createMockServer({ sp = 57, melt = 0, seed = 9013, floorMs = 800, now = () => Date.now(),
                                    open = true } = {}) {
   const rnd = mulberry32(seed);
-  const user = { sp, melt, tape: null, shown: ['gif0', 'spiral1', 'sub2'], nextBuyAt: 0, lastBuyAt: -1e9 };
+  const user = { sp, melt, tape: null, freezes: [], shown: ['gif0', 'spiral1', 'sub2'], nextBuyAt: 0, lastBuyAt: -1e9 };
   const receipts = new Map();
   const faults = [];          // { op, reason, times, apply, body }
   const script = [];          // forced symbol rows for the next draws, e.g. ['emi','emi','emi']
@@ -61,15 +62,18 @@ export function createMockServer({ sp = 57, melt = 0, seed = 9013, floorMs = 800
     return [0, 1, 2].map(c => (held && held.col === c ? held.sym : STRIPS[c][Math.floor(rnd() * 13)]));
   }
 
-  /** One spin plus everything it expands into, consuming melt in draw order. */
+  /** One spin plus everything it expands into, in draw order. A freeze is sealed from melt (10.2)
+   *  and its re-spins keep the hold (10.3); a held melt reads as a blank (10.4). */
   function spin(kind, held, out) {
-    const queue = [kind];
+    const queue = [kind], sealed = kind === 'freeze';
     while (queue.length && out.length < 60) {
       const k = queue.shift();
-      const symbols = drawRow(k === 'freeze' || k === 'paid' ? held : null);
-      const line = lineFor(symbols), def = LINES.find(l => l.id === line);
-      let pay = def ? def.pays : 0, halved = false;
-      if (user.melt > 0) { user.melt--; if (pay) { pay = Math.floor(pay / 2); halved = true; } }
+      const symbols = drawRow(k === 'free' ? null : held);
+      let line = lineFor(symbols);
+      if (sealed && line === 'melt') line = 'none';
+      const def = LINES.find(l => l.id === line), halved = !sealed && user.melt > 0;
+      const pay = def ? (halved ? Math.floor(def.pays / 2) : def.pays) : 0;
+      if (!sealed && user.melt > 0) user.melt--;
       if (line === 'melt') user.melt = 3;
       for (let i = 0; i < (def && def.free || 0); i++) queue.push('free');
       for (let i = 0; i < (def && def.respin || 0); i++) queue.push('respin');
@@ -82,44 +86,62 @@ export function createMockServer({ sp = 57, melt = 0, seed = 9013, floorMs = 800
     return out;
   }
 
+  /** Forward only, clamped, ignored for any tape but the stored one (server applyCursor). */
+  function moveCursor(id, played) {
+    if (user.tape && id === user.tape.id) user.tape.played = Math.min(user.tape.outcomes.length, Math.max(user.tape.played, played | 0));
+  }
+
+  /** The payline as of the stored cursor, or the last freeze made at that same cursor (server shownAt). */
+  function shownAt() {
+    const tp = user.tape, f = user.freezes.at(-1);
+    let shown = tp ? (tp.played > 0 ? tp.outcomes[tp.played - 1].symbols : tp.before) : user.shown;
+    if (f && f.tapeId === (tp ? tp.id : null) && f.at === (tp ? tp.played : 0)) shown = f.last;
+    return shown;
+  }
+
+  /** Same order and body shapes as CCP-Server backroom-slot.js settle(). */
   function tape(body, idem) {
     if (!/^[A-Za-z0-9_-]{16,64}$/.test(idem || '')) return { ok: false, reason: 'bad_idem' };
     if (receipts.has(idem)) return receipts.get(idem);
-    const count = Math.floor(Number(body.count));
     const freeze = body.freeze && [0, 1, 2].includes(body.freeze.col) ? body.freeze : null;
-    if (!(count >= 1 && count <= 20) || (freeze && count !== 1)) return { ok: false, reason: 'bad_count' };
-    const cur = body.cursor;
-    if (cur && user.tape && cur.tapeId === user.tape.id) user.tape.played = Math.max(user.tape.played, cur.played | 0);
+    const count = freeze ? 1 : Math.floor(Number(body.count));
+    if (!(count >= 1 && count <= 20) || (freeze && body.count != null && body.count !== 1)) return { ok: false, reason: 'bad_count' };
+    const tp = user.tape;
+    if (body.cursor) moveCursor(body.cursor.tapeId, body.cursor.played);
+    if (!freeze && tp && tp.played < tp.outcomes.length) {
+      return { ok: false, reason: 'tape_unplayed', sp: user.sp, melt: user.melt, tape: structuredClone(tp) };
+    }
+    const t = now(), readyAt = freeze ? user.lastBuyAt + 700 : user.nextBuyAt;
+    if (t < readyAt) return { ok: false, reason: 'too_fast', retryInMs: Math.ceil(readyAt - t) };
     const cost = freeze ? 1 + table().freezeCost : count;
     if (user.sp < cost) return { ok: false, reason: 'insufficient', sp: user.sp };
-    const t = now();
-    if (!freeze && user.tape && user.tape.played !== user.tape.outcomes.length) {
-      return { ok: false, reason: 'tape_unplayed', sp: user.sp, tape: structuredClone(user.tape) };
-    }
-    if (!freeze && t < user.nextBuyAt) return { ok: false, reason: 'too_fast', retryInMs: user.nextBuyAt - t };
-    if (freeze && t - user.lastBuyAt < 700) return { ok: false, reason: 'too_fast', retryInMs: 700 - (t - user.lastBuyAt) };
     const spBefore = user.sp, out = [];
-    const tp = user.tape;
-    const at = tp && tp.played > 0 ? tp.outcomes[tp.played - 1].symbols : user.shown;
-    const held = freeze ? { col: freeze.col, sym: (user.lastFreeze || at)[freeze.col] } : null;
+    const held = freeze ? { col: freeze.col, sym: shownAt()[freeze.col] } : null;
     if (freeze) spin('freeze', held, out);
     else for (let i = 0; i < count; i++) spin('paid', null, out);
-    const won = out.reduce((s, o) => s + o.pay, 0);
-    const raw = spBefore - cost + won, capped = raw > 99999;
-    user.sp = Math.min(99999, raw);
-    const id = (freeze ? 'f_' : 't_') + Math.floor(rnd() * 0xffffffff).toString(16).padStart(8, '0');
-    const tapeOut = { id, played: 0, outcomes: out };
-    if (freeze) user.lastFreeze = out[out.length - 1].symbols;
-    else { user.tape = structuredClone(tapeOut); user.lastFreeze = null; user.nextBuyAt = t + out.length * floorMs; }
+    const raw = spBefore - cost + out.reduce((s, o) => s + o.pay, 0), capped = raw > 99999;
+    user.sp = Math.max(0, Math.min(99999, raw));
+    const receipt = { ok: true, idem, sp: user.sp, spBefore, cost, capped, melt: user.melt, jackpot: 2500 };
+    if (freeze) {
+      user.freezes.push({ tapeId: tp ? tp.id : null, at: tp ? tp.played : 0, col: freeze.col, last: out.at(-1).symbols });
+      user.nextBuyAt = Math.max(user.nextBuyAt, t) + out.length * floorMs;
+      receipt.tape = tp ? { id: tp.id, played: tp.played } : null;
+      receipt.freeze = { col: freeze.col, held: held.sym, outcomes: out };
+    } else {
+      const id = 't_' + Math.floor(rnd() * 0xffffffff).toString(16).padStart(8, '0');
+      user.tape = { id, played: 0, before: shownAt(), outcomes: out };
+      user.nextBuyAt = t + out.length * floorMs;
+      receipt.tape = structuredClone({ id, played: 0, outcomes: out });
+    }
     user.lastBuyAt = t;
-    const receipt = { ok: true, idem, sp: user.sp, spBefore, cost, capped, melt: user.melt, jackpot: 2500, tape: tapeOut };
     receipts.set(idem, receipt);
     return receipt;
   }
 
   function state() {
-    return { ok: true, sp: user.sp, open, melt: user.melt, tape: user.tape ? structuredClone(user.tape) : null,
-             shown: user.shown, table: table(), strips: STRIPS, floorMs };
+    const tp = user.tape;
+    return { ok: true, sp: user.sp, open, melt: user.melt, tape: tp ? structuredClone({ id: tp.id, played: tp.played, outcomes: tp.outcomes }) : null,
+             shown: shownAt(), table: table(), strips: STRIPS, floorMs };
   }
 
   async function handle(op, body = {}, idem) {
@@ -138,18 +160,13 @@ export function createMockServer({ sp = 57, melt = 0, seed = 9013, floorMs = 800
   handle.raw = async (op, body, idem) => {
     if (!open) return { ok: true, status: 403, body: { ok: false, reason: 'closed' } };
     if (op === 'state') return { ok: true, status: 200, body: state() };
-    if (op === 'cursor') {
-      if (user.tape && body.tapeId === user.tape.id) user.tape.played = Math.max(user.tape.played, body.played | 0);
-      return { ok: true, status: 200, body: { ok: true } };
-    }
+    if (op === 'cursor') { moveCursor(body.tapeId, body.played); return { ok: true, status: 200, body: { ok: true } }; }
     if (op === 'tape') return { ok: true, status: 200, body: tape(body, idem) };
     return { ok: false, status: 0, reason: 'bad_op' };
   };
 
   return {
-    handle,
-    log,
-    user,
+    handle, log, user,
     /** Next `times` calls to `op` fail with `reason`; apply:true runs the op first (a lost reply). */
     fail(op, reason, times = 1, { apply = false, body } = {}) { faults.push({ op, reason, times, apply, body }); },
     /** Force the payline rows of the next draws, in order. */
