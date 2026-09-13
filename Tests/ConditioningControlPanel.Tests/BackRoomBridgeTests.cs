@@ -46,8 +46,19 @@ public class BackRoomBridgeTests
         }
     }
 
+    /// <summary>The null fx object's answers, plus a count of every CancelAll.</summary>
+    internal sealed class CountingFx : IBackRoomFx
+    {
+        private readonly NullBackRoomFx _inner = new();
+        public int Cancelled;
+        public BackRoomFxAck Fire(string fxId, string station, IReadOnlyList<string> symbolKeys, BackRoomMediaDeal deal) =>
+            _inner.Fire(fxId, station, symbolKeys, deal);
+        public void CancelAll() => Cancelled++;
+    }
+
     internal sealed class Rig
     {
+        public readonly CountingFx Fx = new();
         public readonly List<JObject> Posted = new();
         public readonly Clock Clock = new();
         public readonly Relay Relay = new();
@@ -62,6 +73,7 @@ public class BackRoomBridgeTests
             {
                 Post = m => { lock (Posted) Posted.Add(JObject.FromObject(m)); },
                 Relay = Relay,
+                Fx = Fx,
                 BuildInit = () => new { type = "init", protocol = 1 },
                 CloseWindow = () => Closed++,
                 Schedule = Clock.Schedule,
@@ -143,6 +155,20 @@ public class BackRoomBridgeTests
         var r = Assert.Single(await rig.SettleAsync("station-result", 1));
         Assert.Equal((false, 0, "closed"), ((bool)r["ok"]!, (int)r["status"]!, (string?)r["reason"]));
         Assert.Empty(rig.Relay.Calls);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Close_CancelsEveryFxPrimitive_BeforeThePageSettles(bool hostClose)
+    {
+        // CONTRACT section 4: close (panic, app-exit) or a page exit stops overlays at once, not at
+        // exit-done or the 800 ms watchdog.
+        var rig = new Rig();
+        if (hostClose) rig.Bridge.RequestClose("panic");
+        else rig.Send("{\"type\":\"exit\",\"reason\":\"back\"}");
+        Assert.Equal(1, rig.Fx.Cancelled);
+        Assert.Equal(0, rig.Closed);
     }
 
     [Fact]

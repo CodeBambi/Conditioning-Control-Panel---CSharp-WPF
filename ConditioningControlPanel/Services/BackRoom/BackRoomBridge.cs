@@ -114,7 +114,8 @@ public sealed class BackRoomBridge
         if (_d.OnUi != null) _d.OnUi(Write); else Write();
     }
 
-    /// <summary>The host wants the window gone (<c>app-exit</c> or <c>panic</c>).</summary>
+    /// <summary>The host wants the window gone (<c>app-exit</c> or <c>panic</c>). Every running fx
+    /// primitive stops now, not when the page settles or the watchdog fires (CONTRACT section 4).</summary>
     public void RequestClose(string reason)
     {
         lock (_gate)
@@ -122,6 +123,7 @@ public sealed class BackRoomBridge
             if (_closed || _cancelForce != null) return;
             _closing = true;
         }
+        CancelFx();
         _d.Post(new { type = "close", reason });
         FlushCursors(null);
         ArmForceClose();
@@ -144,6 +146,7 @@ public sealed class BackRoomBridge
             case "exit":
                 _d.Log?.Invoke("page exit (" + ((string?)m["reason"] ?? "?") + ")");
                 lock (_gate) _closing = true;
+                CancelFx();   // leaving: overlays stop now, not at exit-done or 800 ms (section 4)
                 NoteReportedCursor(m);
                 FlushCursors(null);
                 ArmForceClose();
