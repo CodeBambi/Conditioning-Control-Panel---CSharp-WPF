@@ -1,75 +1,89 @@
-/** Local collection preview only. Purchasing and ownership are handled elsewhere. */
-export function createCustomizationPanel({ mount, lex = (_, fallback) => fallback, select, onClose = () => {} }) {
-  const doc = mount.ownerDocument;
-  const L = (key, fallback) => lex('br_custom_' + key, fallback) || fallback;
-  const groups = [
-    { id: 'displays', label: 'Displays', items: [['gallery', 'Gallery frame'], ['portraits', 'Portrait pair'], ['billboard', 'Wide billboard']] },
-    { id: 'plants', label: 'Plants', items: [['monstera', 'Monstera'], ['ivy', 'Hanging ivy'], ['terrarium', 'Terrarium']] },
-    { id: 'statues', label: 'Statues', items: [['knight', 'Knight sculpture'], ['queen', 'Queen sculpture'], ['rook', 'Rook sculpture']] },
-  ];
-  const style = doc.createElement('style');
-  style.textContent = `
-.br-custom-panel{position:fixed;right:20px;top:80px;bottom:24px;z-index:30;width:min(350px,calc(100vw - 40px));box-sizing:border-box;overflow:auto;padding:24px;background:linear-gradient(145deg,#281631f7,#130b22fa);color:#f6e1f0;border:1px solid #a67495;border-radius:22px;box-shadow:0 18px 65px #0009;font:15px/1.45 system-ui,sans-serif;pointer-events:auto}
-.br-custom-panel[hidden]{display:none}.br-custom-panel h2{margin:0 0 8px;font:600 26px/1.2 Georgia,serif;color:#f4d29c}.br-custom-panel p{margin:0 0 20px;color:#cdb5ca;font-size:13px}.br-custom-panel .br-custom-close{float:right;padding:6px 10px;margin:-7px -8px 8px 10px}
-.br-custom-panel button{font:inherit;color:inherit;background:#392344;border:1px solid #79556f;border-radius:12px;padding:11px 12px;cursor:pointer}.br-custom-panel button:hover{background:#513050}.br-custom-panel button:focus-visible{outline:2px solid #8de7d5;outline-offset:3px}.br-custom-panel button[aria-pressed=true]{background:#66395d;border-color:#e6b277;color:#fff0ce}
-.br-custom-categories{display:flex;gap:6px;margin:22px 0 18px}.br-custom-categories button{flex:1;padding:9px 5px;font-size:13px}.br-custom-choices{display:grid;gap:10px}.br-custom-choices button{text-align:left;padding:16px}.br-custom-panel .br-custom-note{margin-top:24px;padding-top:16px;border-top:1px solid #674157;color:#baa6be}
-@media(max-height:520px){.br-custom-panel{top:60px;bottom:10px;padding:16px}.br-custom-categories{margin:10px 0}.br-custom-panel .br-custom-note{margin-top:12px}}
-`;
-  const panel = doc.createElement('section');
-  panel.className = 'br-custom-panel'; panel.hidden = true; panel.tabIndex = -1;
-  panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true');
-  panel.setAttribute('aria-label', L('title', 'Room Service'));
-  const make = (tag, value, cls) => { const node = doc.createElement(tag); node.textContent = value; if (cls) node.className = cls; panel.appendChild(node); return node; };
-  const closeButton = make('button', L('close', 'Close'), 'br-custom-close'); closeButton.type = 'button';
-  make('h2', L('title', 'Room Service'));
-  make('p', L('preview', 'Collection preview. Try a little change.'));
-  const categories = make('div', '', 'br-custom-categories');
-  categories.setAttribute('role', 'group'); categories.setAttribute('aria-label', L('categories', 'Categories'));
-  const choices = make('div', '', 'br-custom-choices');
-  make('p', L('unavailable', 'Local preview only. Purchases are not available yet.'), 'br-custom-note');
-  const selected = new Map(groups.map(g=>[g.id,0]));
-  let active = 0, previousFocus = null, disposed = false;
-  function paint() {
-    [...categories.children].forEach((button, i) => button.setAttribute('aria-pressed', String(i === active)));
-    choices.replaceChildren();
-    const group = groups[active];
-    group.items.forEach(([key, fallback], index) => {
-      const button = doc.createElement('button'); button.type = 'button'; button.textContent = L(key, fallback);
-      button.setAttribute('aria-pressed', String(selected.get(group.id) === index));
-      button.addEventListener('click', () => {
-        select(group.id, index); selected.set(group.id, index);
-        [...choices.children].forEach((item, i) => item.setAttribute('aria-pressed', String(i === index)));
-      });
-      choices.appendChild(button);
+import { catalogueStyle } from './customization-panel-style.js';
+
+/** The room is the live preview. No ownership or purchase is implied by selection. */
+export function createCustomizationPanel({ mount, lex = (_, fallback) => fallback, select, getState, restore, preview = () => {}, onClose = () => {} }) {
+  const doc = mount.ownerDocument, L = (key, fallback) => lex('br_custom_' + key, fallback) || fallback;
+  const pieces = [['knight', 'Knight sculpture'], ['queen', 'Queen sculpture'], ['rook', 'Rook sculpture']];
+  const groups = {
+    displays: [['gallery', 'Gallery frame'], ['portraits', 'Portrait pair'], ['billboard', 'Wide billboard']],
+    plants: [['monstera', 'Monstera'], ['ivy', 'Hanging ivy'], ['terrarium', 'Terrarium']],
+    statues: [['none', 'Empty pedestal'], ...pieces], handles: [['original', 'Original handle'], ...pieces],
+    floor: [['vortex', 'Velvet Vortex'], ['ribbon', 'Ribbon Galaxy'], ['bloom', 'Prism Bloom']],
+    palette: [['jewel', 'Jewel'], ['lagoon', 'Lagoon'], ['sunset', 'Sunset']],
+  };
+  const style = doc.createElement('style'); style.textContent = catalogueStyle;
+  const panel = doc.createElement('section'); panel.className = 'br-custom-panel'; panel.hidden = true; panel.tabIndex = -1;
+  panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', L('title', 'Room Service'));
+  const make = (tag, text, cls, parent = panel) => { const n = doc.createElement(tag); n.textContent = text; if (cls) n.className = cls; parent.append(n); return n; };
+  const button = (parent, text, action) => { const n = make('button', text, '', parent); n.type = 'button'; n.addEventListener('click', action); return n; };
+  const header = make('header', '', 'br-custom-header');
+  const closeButton = button(header, L('close', 'Close'), () => close()); closeButton.className = 'br-custom-close';
+  make('span', '01 / 03', 'br-custom-edition', header);
+  make('h2', L('title', 'Room Service'), '', header);
+  make('p', L('live', 'Your room is the preview.'), '', header);
+  const tabs = make('div', '', 'br-custom-tabs'); tabs.setAttribute('role', 'group'); tabs.setAttribute('aria-label', L('categories', 'Categories'));
+  const body = make('div', '', 'br-custom-body');
+  const sections = make('div', '', 'br-custom-sections', body);
+  const targets = make('div', '', 'br-custom-targets', body);
+  const choices = make('div', '', 'br-custom-choices', body);
+  const palettes = make('div', '', 'br-custom-palettes', body);
+  const footer = make('footer', '', 'br-custom-footer');
+  const itemName = make('strong', '', 'br-custom-name', footer); itemName.setAttribute('aria-live', 'polite');
+  const unavailable = button(footer, L('buy_unavailable', 'Purchases unavailable'), () => {}); unavailable.disabled = true;
+  const reset = button(footer, L('restore', 'Restore preview'), () => { restore?.(structuredClone(snapshot)); paint(); showPreview(); });
+  reset.className = 'br-custom-restore';
+  make('p', L('unavailable', 'Local preview only. Purchases are not available yet.'), 'br-custom-note', footer);
+  let tab = 'decor', group = 'displays', target = 0, snapshot, previousFocus, disposed = false;
+  const state = () => getState?.() || { displays: 0, plants: 0, statues: [0, 1, 2], handles: [-1, -1, -1], floor: 0, palette: 0 };
+  const current = () => { const value = state()[group]; return Array.isArray(value) ? value[target] : value; };
+  const showPreview = () => preview(group, current(), target);
+  function row(parent, entries, selected, action) {
+    parent.replaceChildren();
+    entries.forEach(([key, fallback], index) => {
+      const n = button(parent, L(key, fallback), () => { action(index); parent.children[index]?.focus({ preventScroll: true }); }); n.setAttribute('aria-pressed', String(selected === index));
     });
   }
-  groups.forEach((group, index) => {
-    const button = doc.createElement('button'); button.type = 'button'; button.textContent = L(group.id, group.label);
-    button.addEventListener('click', () => { active = index; paint(); }); categories.appendChild(button);
-  });
-  function close() {
-    if (panel.hidden) return;
-    panel.hidden = true; onClose();
-    if (previousFocus?.isConnected && typeof previousFocus.focus === 'function') previousFocus.focus({ preventScroll: true });
-    previousFocus = null;
+  function paintChoices() {
+    const offset = group === 'statues' || group === 'handles' ? -1 : 0;
+    row(choices, groups[group], current() - offset, index => { const pending=select(group, index + offset, target); paintChoices(); showPreview(); if(pending?.then)pending.then(()=>{if(!disposed)paintChoices();}); });
+    [...choices.children].forEach((n, i) => {
+      const number = doc.createElement('span'); number.className = 'br-custom-index'; number.textContent = String(i + 1).padStart(2, '0'); n.prepend(number);
+    });
+    const entry = groups[group][current() - offset]; itemName.textContent = entry ? L(...entry) : '';
+    palettes.hidden = tab !== 'floor';
+    if (tab === 'floor') {
+      row(palettes, groups.palette, state().palette, index => { select('palette', index); paintChoices(); showPreview(); });
+      [...palettes.children].forEach((n, i) => { n.className = 'br-custom-swatch swatch-' + i; });
+    }
   }
-  closeButton.addEventListener('click', close);
-  const keyDown = event => {
+  function paint() {
+    [...tabs.children].forEach((n, i) => n.setAttribute('aria-pressed', String(['decor', 'handles', 'floor'][i] === tab)));
+    header.querySelector('.br-custom-edition').textContent = '0' + (['decor', 'handles', 'floor'].indexOf(tab) + 1) + ' / 03';
+    sections.hidden = tab !== 'decor';
+    if (tab === 'decor') row(sections, [['displays', 'Displays'], ['plants', 'Plants'], ['statues', 'Statues']], ['displays', 'plants', 'statues'].indexOf(group), i => { group = ['displays', 'plants', 'statues'][i]; target = 0; paint(); showPreview(); });
+    targets.hidden = group !== 'statues' && group !== 'handles';
+    if (!targets.hidden) row(targets, group === 'handles' ? [['rose', 'Candy Rose'], ['violet', 'Candy Violet'], ['mint', 'Candy Mint']] : [['spot1', 'Pedestal 1'], ['spot2', 'Pedestal 2'], ['spot3', 'Pedestal 3']], target, i => { target = i; paint(); showPreview(); });
+    paintChoices();
+  }
+  [['decor', 'Decor'], ['handles', 'Slot handles'], ['floor', 'Floor']].forEach(([key, fallback]) => button(tabs, L(key, fallback), () => { tab = key; group = key === 'decor' ? 'displays' : key; target = 0; paint(); showPreview(); }));
+  function close() {
+    if (panel.hidden) return; panel.hidden = true; onClose();
+    if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true }); previousFocus = null;
+  }
+  panel.addEventListener('keydown', event => {
     event.stopPropagation();
     if (event.key === 'Escape') { event.preventDefault(); close(); return; }
     if (event.key !== 'Tab') return;
-    const buttons = [...panel.querySelectorAll('button:not([disabled])')], first = buttons[0], last = buttons.at(-1);
+    const nodes = [...panel.querySelectorAll('button:not([disabled])')].filter(n => !n.closest('[hidden]'));
+    const first = nodes[0], last = nodes.at(-1);
     if (event.shiftKey && (doc.activeElement === first || doc.activeElement === panel)) { event.preventDefault(); last.focus(); }
     else if (!event.shiftKey && doc.activeElement === last) { event.preventDefault(); first.focus(); }
-  };
-  panel.addEventListener('keydown', keyDown);
-  panel.addEventListener('keyup', event => event.stopPropagation());
-  for (const type of ['pointerdown', 'pointerup', 'click', 'wheel']) panel.addEventListener(type, event => event.stopPropagation());
+  });
+  for (const type of ['keyup', 'pointerdown', 'pointerup', 'click', 'wheel']) panel.addEventListener(type, event => event.stopPropagation());
   mount.append(style, panel); paint();
   return {
-    open() { if (disposed || !panel.hidden) return; previousFocus = doc.activeElement; panel.hidden = false; closeButton.focus({ preventScroll: true }); },
-    close,
-    get opened() { return !panel.hidden && !disposed; },
+    open() { if (disposed || !panel.hidden) return; snapshot = structuredClone(state()); previousFocus = doc.activeElement; panel.hidden = false; paint(); showPreview(); closeButton.focus({ preventScroll: true }); },
+    close, get opened() { return !panel.hidden && !disposed; },
     dispose() { if (disposed) return; close(); disposed = true; panel.remove(); style.remove(); },
   };
 }

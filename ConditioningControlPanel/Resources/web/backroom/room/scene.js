@@ -72,8 +72,8 @@ export async function createScene(o) {
   const t0 = performance.now();
   const room = await buildRoom({ scene, loader, stations: o.stations, base: o.base, faces: o.faces, label: o.label, onProgress: o.onProgress });
   const decor = createCasinoDecor({ scene });
-  let customization;
-  customization = await createCustomization({scene,loader,base:o.base,mount:o.mount,lex:o.lex,canvas,camera,isActive:()=>!held&&!halted&&!suspended&&!overview&&!customization?.opened});
+  let customization, catalogueView=null;
+  customization = await createCustomization({scene,loader,room,onPreview:view=>{catalogueView=view;},base:o.base,mount:o.mount,lex:o.lex,canvas,camera,isActive:()=>!held&&!halted&&!suspended&&!overview&&!customization?.opened});
   const screens = await createScreens({ meshes: [...room.screens,...customization.screens], ads: o.ads, media: o.media, log: say });
   for (const h of room.hubs) h.setDpr(dpr);
   const buildMs = performance.now() - t0;
@@ -186,6 +186,19 @@ export async function createScene(o) {
     room.update(dt, ambient, still);
     decor.update(dt, still);
     customization.update(dt, still);
+    if(catalogueView&&customization.opened){
+      const target=new T.Vector3(...catalogueView.look);
+      camera.position.fromArray(catalogueView.position);camera.lookAt(target);
+      const phone=window.innerWidth<=650;
+      let distance=camera.position.distanceTo(target);
+      if(phone&&catalogueView.width){
+        const fit=Math.max(distance,catalogueView.width/(2*Math.tan(camera.fov*Math.PI/360)*camera.aspect)*1.18,catalogueView.height*2.2);
+        camera.position.sub(target).normalize().multiplyScalar(fit).add(target);distance=fit;
+      }
+      // Centre the item in the area left visible by the catalogue.
+      const shift=new T.Vector3(phone?0:1,phone?-1:0,0).applyQuaternion(camera.quaternion).multiplyScalar(distance*(phone?.33:.28));
+      camera.position.add(shift);camera.lookAt(target.add(shift));
+    }
     camera.updateMatrixWorld();
     interaction.update(dt, still);
     screens.update(ambient, overview ? null : camera, still);
