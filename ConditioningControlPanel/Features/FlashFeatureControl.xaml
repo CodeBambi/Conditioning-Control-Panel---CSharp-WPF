@@ -216,6 +216,29 @@
                                            VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="13" FontWeight="Bold"/>
                             </Grid>
+
+                            <!-- Jackpot Remix (Back Room prize fx.jackpot_remix). Shown only while the prize is
+                                 owned (PrizeGrants, never settings); off by default, owning it never flips it. -->
+                            <Grid x:Name="RowJackpotRemix" Height="34" Background="Transparent" Visibility="Collapsed"
+                                  ToolTip="{loc:Str tooltip_jackpot_remix}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str setting_jackpot_remix}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <Border Margin="8,0,0,0" Padding="6,2,7,3" CornerRadius="7" Background="#D91A1A2E"
+                                            BorderBrush="{DynamicResource NeonPurpleBrush}" BorderThickness="1"
+                                            VerticalAlignment="Center" IsHitTestVisible="False">
+                                        <TextBlock Text="{loc:Str badge_v2}" FontSize="9" FontWeight="Bold"
+                                                   Foreground="{DynamicResource NeonPurpleBrush}"/>
+                                    </Border>
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" x:Name="ChkJackpotRemix"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkJackpotRemix_Changed" Unchecked="ChkJackpotRemix_Changed"/>
+                            </Grid>
                         </StackPanel>
                     </Grid>
                 </Border>
