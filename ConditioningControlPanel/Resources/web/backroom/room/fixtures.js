@@ -154,6 +154,8 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
 
   const holders = new Map();
   const hubs = [];
+  /** Every fixture label mesh, `rowKey/node` -> { mesh, text }, so one can be repainted later (10.16.E). */
+  const labels = new Map();
   const set = await Promise.all(stations.map(async (row) => {
     const f = row.fixture;
     const source = await fetchModel(f.file);
@@ -192,8 +194,10 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     for (const [node, key] of Object.entries(f.labels)) {
       const o = model.getObjectByName(node);
       if (!o || !o.isMesh) continue;
-      const t = labelTexture(String(label(row, key)).toUpperCase());
+      const text = String(label(row, key)).toUpperCase();
+      const t = labelTexture(text);
       o.material = new T.MeshStandardMaterial({ map: t, emissiveMap: t, emissive: 0xffffff, emissiveIntensity: 0.5, roughness: 0.5 });
+      labels.set(row.key + '/' + node, { mesh: o, text });
     }
     if (f.reels) {
       for (let i = 1; i <= 3; i++) {
@@ -278,5 +282,22 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     if (floor) floor.material.uniforms.angle.value = t * 0.09;
   }
 
-  return { shell, ceiling, floor, screens, holders, fixtures: set.length, bulbs: bulbs.length, update, auras, hubs };
+  /**
+   * Repaint one fixture label (CONTRACT 10.16.E: the wheel's screen reads MUST
+   * HIT while the pot has to fall). A no-op when nothing changed, so it is safe
+   * to call on every bell read. Law VII: the caller passes a lexicon string.
+   */
+  function setLabel(rowKey, node, text) {
+    const row = labels.get(rowKey + '/' + node);
+    const want = String(text == null ? '' : text).toUpperCase();
+    if (!row || !want || row.text === want) return false;
+    const t = labelTexture(want);
+    const old = row.mesh.material;
+    row.mesh.material = new T.MeshStandardMaterial({ map: t, emissiveMap: t, emissive: 0xffffff, emissiveIntensity: 0.5, roughness: 0.5 });
+    row.text = want;
+    try { if (old.map) old.map.dispose(); old.dispose(); } catch (e) { /* the new one is already on */ }
+    return true;
+  }
+
+  return { shell, ceiling, floor, screens, holders, fixtures: set.length, bulbs: bulbs.length, update, auras, hubs, labels, setLabel };
 }

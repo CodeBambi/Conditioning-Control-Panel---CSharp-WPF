@@ -53,8 +53,9 @@ const FAKE_HOST = `(() => {
   const listeners = [], emit = (data) => setTimeout(() => listeners.forEach((fn) => fn({ data })), 0);
   const gates = { flash: true, subliminal: true, spiral: true, brainDrain: true, tunnel: true };
   const made = {};
-  const mock = (id) => made[id] || (made[id] = import('/backroom/stations/' + id + '/mock-server.js').then((m) => {
-    const s = id === 'cards' ? m.createMockServer({ sp: 57, floorMs: 600 }) : id === 'roulette' ? m.createMockServer({ sp: 57, floorMs: 0 }) : m.createMockServer({ sp: 57 });
+  // The floor bell is not a station (10.16.B): the room reads it, and its mock lives in smoke/.
+  const mock = (id) => made[id] || (made[id] = import(id === 'bell' ? '/backroom/smoke/mock-bell.js' : '/backroom/stations/' + id + '/mock-server.js').then((m) => {
+    const s = id === 'bell' ? m.createBellMock({}) : id === 'cards' ? m.createMockServer({ sp: 57, floorMs: 600 }) : id === 'roulette' ? m.createMockServer({ sp: 57, floorMs: 0 }) : m.createMockServer({ sp: 57 });
     if (id === 'wheel') s.script('deep');
     if (id === 'cards') s.script('Th', '9d', '8c', '8s');
     if (id === 'roulette') s.script({ pocket: 36 });
@@ -66,7 +67,7 @@ const FAKE_HOST = `(() => {
     postMessage(m) {
       window.__posted.push(JSON.parse(JSON.stringify(m)));
       if (m.type === 'ready') emit({ type: 'init', protocol: 1, sp: 57, reduced: false, motion: 'full', intensity: 'normal', lang: 'en', gates,
-        lex: { br_back: 'Back', br_balance: 'SP' }, stations: ['slot', 'wheel', 'cards', 'roulette'], open: true });
+        lex: { br_back: 'Back', br_balance: 'SP' }, stations: ['slot', 'wheel', 'cards', 'roulette', 'bell'], open: true });
       if (m.type === 'station-request') mock(m.station).then((s) => s.handle(m.op, m.body || {}, m.idem))
         .then((r) => emit({ type: 'station-result', reqId: m.reqId, ok: r.ok, status: r.status, reason: r.reason, body: r.body || {} }));
       if (m.type === 'media-request') emit({ type: 'media', reqId: m.reqId, seed: 1, words: [],
