@@ -79,8 +79,12 @@ public class BackRoomFxTests
         public void BrainDrain(int durationMs, double level, bool melt) => Add(FormattableString.Invariant($"drain:{durationMs}:{level}:{melt}"));
         public void GifFull(BackRoomGif gif, int durationMs, bool still) => Add($"giffull:{gif.Key}:{durationMs}:{still}");
         public void Wash(FxRgb color, double peak, BackRoomGif? picture) => Add(FormattableString.Invariant($"wash:{color.Hex}:{peak:0.###}:{picture?.Key}"));
-        public void GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still)
-            => Add(FormattableString.Invariant($"giffrom:{gif.Key}:{(from is { } r ? $"{r.X},{r.Y},{r.W},{r.H}" : "centre")}:{durationMs}:{scale}:{dim}:{still}"));
+        public bool GifFromFound = true;
+        public bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still)
+        {
+            Add(FormattableString.Invariant($"giffrom:{gif.Key}:{(from is { } r ? $"{r.X},{r.Y},{r.W},{r.H}" : "centre")}:{durationMs}:{scale}:{dim}:{still}"));
+            return GifFromFound;
+        }
         public void SpiralLoom(string gifPath, int durationMs, double alpha, bool hold, bool still)
             => Add(FormattableString.Invariant($"spiral:{System.IO.Path.GetFileName(gifPath)}:{durationMs}:{alpha:0.###}:{hold}:{still}"));
         public void ReleaseSpiralLoom() => Add("spiral-release");

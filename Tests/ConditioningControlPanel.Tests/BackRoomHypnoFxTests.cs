@@ -172,6 +172,55 @@ public class BackRoomHypnoFxTests
     }
 
     [Fact]
+    public void GifFrom_ReleasedBeforeItsOnset_OrWithNoFile_FreesTheSlot()
+    {
+        var (fx, clock, sink) = Make();
+        Fire(fx, "fx.jackpot", "slot", "hero");
+        clock.Advance(500);
+        Assert.Single(Fire(fx, "fx.gif_from", "wheel", "g", new BackRoomFxArgs(Ms: 3400)).Fired);   // waits behind the hero
+        fx.Release("g", "wheel");
+        clock.Advance(2500);
+        Assert.DoesNotContain(sink.Calls, c => c.Call.StartsWith("giffrom"));
+        Assert.Single(Fire(fx, "fx.gif_from", "wheel", "g2").Fired);   // not busy for a gif that never showed
+
+        sink.GifFromFound = false;
+        clock.Advance(10_000);
+        Assert.Single(Fire(fx, "fx.gif_from", "wheel", "nofile").Fired);
+        clock.Advance(1);
+        Assert.Single(Fire(fx, "fx.gif_from", "wheel", "next").Fired);
+    }
+
+    [Fact]
+    public void MergedBehindAHero_TheSecondTokenSharesTheHold()
+    {
+        var (fx, clock, sink) = Make();
+        Fire(fx, "fx.jackpot", "slot", "hero");
+        clock.Advance(500);
+        Fire(fx, "fx.loom_spiral", "roulette", "s1", new BackRoomFxArgs(Hold: true));
+        Fire(fx, "fx.loom_spiral", "roulette", "s2", new BackRoomFxArgs(Hold: true));   // merged into s1's copy
+        clock.Advance(3000);
+        Assert.Single(sink.Calls, c => c.Call.StartsWith("spiral:") && c.Call.Contains(":True:"));   // the held one plays once
+        fx.Release("s1", "roulette");
+        Assert.DoesNotContain(sink.Calls, c => c.Call == "spiral-release");   // s2 still holds it
+        fx.Release("s2", "roulette");
+        Assert.Contains(sink.Calls, c => c.Call == "spiral-release");
+    }
+
+    [Fact]
+    public void Tunnel_BrainDrainTurnedOffMidTunnel_CancelsAtOnce()
+    {
+        var gates = FxGates.AllOn;
+        var clock = new FakeScheduler();
+        var sink = new RecordingSink(clock);
+        var fx = new BackRoomFx(sink, clock, () => new FxEnvironment(MotionLevel.Full, BackRoomFxIntensity.Normal, gates, BackRoomFxPlanTests.Woven));
+        fx.Tunnel("wheel", 0.6);
+        gates = gates with { BrainDrain = false };
+        fx.Tunnel(string.Empty, 0);
+        fx.Tunnel("wheel", 0.6);
+        Assert.Equal(new[] { "tunnel:0.6:False", "tunnel-cancel" }, sink.Calls.Select(c => c.Call));
+    }
+
+    [Fact]
     public void Holds_DoNotPileUp_OverALongSession()
     {
         var (fx, clock, _) = Make();

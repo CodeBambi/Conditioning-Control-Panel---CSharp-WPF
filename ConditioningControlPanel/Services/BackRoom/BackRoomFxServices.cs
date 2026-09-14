@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
@@ -50,14 +51,33 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
         if (s == null)
             return new FxEnvironment(MotionFx.Level, BackRoomFxIntensity.Calm, new FxGates(false, false, false, false, false, false));
         var spiralPath = s.SpiralPath;
-        string? Woven(string preset) => BackRoomSpiralSource.Resolve(preset, spiralPath,
-            Chaos.DtrhLoomStore.SpiralsFolder, WebRoot, File.Exists);
+        string? Woven(string preset) => WovenFor(preset, spiralPath);
         double opacity = s.SpiralOpacity > 0 ? Math.Clamp(s.SpiralOpacity / 100.0, 0.05, 1.0) : 0.85;
         // A woven GIF always has a first frame, so the spiral's still exists whenever its weave does.
         return new FxEnvironment(MotionFx.Level, s.BackRoomFxIntensity,
             new FxGates(s.FlashEnabled, s.SubliminalEnabled, s.SpiralEnabled, s.BrainDrainEnabled, s.BrainDrainMeltEnabled,
                 Woven(BackRoomSpiralSource.Screen) != null),
             Woven, opacity);
+    }
+
+    // The woven spiral's file probes, kept per SpiralPath for a few seconds: every fire and every tunnel
+    // update (up to 10 a second) reads the environment on the UI thread.
+    private const int WovenCacheMs = 5000;
+    private static readonly object WovenLock = new();
+    private static readonly Dictionary<string, string?> WovenHits = new(StringComparer.Ordinal);
+    private static string? _wovenFor;
+    private static long _wovenAt = long.MinValue / 2;
+
+    private static string? WovenFor(string preset, string? spiralPath)
+    {
+        lock (WovenLock)
+        {
+            if (_wovenFor != spiralPath || Now - _wovenAt > WovenCacheMs) { WovenHits.Clear(); _wovenFor = spiralPath; _wovenAt = Now; }
+            preset = BackRoomSpiralSource.Preset(preset);
+            if (!WovenHits.TryGetValue(preset, out var hit))
+                WovenHits[preset] = hit = BackRoomSpiralSource.Resolve(preset, spiralPath, Chaos.DtrhLoomStore.SpiralsFolder, WebRoot, File.Exists);
+            return hit;
+        }
     }
 
     /// <summary><c>Resources\web</c>, the folder <c>ccp.game</c> maps.</summary>
@@ -151,11 +171,12 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
     public void Wash(FxRgb color, double peak, BackRoomGif? picture)
         => BackRoomWashOverlay.Show(color, peak, LocalFile(picture), picture == null ? null : Target(null).ScreenPx, MotionFx.Level == MotionLevel.Off);
 
-    public void GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still)
+    public bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still)
     {
-        if (LocalFile(gif) is not { } path) return;
+        if (LocalFile(gif) is not { } path) return false;
         double aspect = gif.W > 0 && gif.H > 0 ? (double)gif.W / gif.H : 4.0 / 3;
         BackRoomGifFromOverlay.Show(path, aspect, Target(from), durationMs, scale, dim, still);
+        return true;
     }
 
     public void SpiralLoom(string gifPath, int durationMs, double alpha, bool hold, bool still)

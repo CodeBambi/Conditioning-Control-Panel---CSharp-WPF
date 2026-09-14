@@ -70,13 +70,16 @@ public sealed class BackRoomBridge
     private readonly Dictionary<string, (string TapeId, int Played)> _flushed = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _life = new();
     private Action? _cancelForce;
-    private bool _initPosted, _closing, _closed;
+    private bool _initPosted, _closing, _closed, _suspended;
     private bool _adopting;   // only touched inside OnUi, so on one thread
 
     public BackRoomBridge(Deps deps) => _d = deps;
 
     public bool IsClosing { get { lock (_gate) return _closing; } }
     public bool IsClosed { get { lock (_gate) return _closed; } }
+    /// <summary>Suspended (panic, minimise): <c>fx</c> is acked busy and <c>fx-tunnel</c> dropped, so an update
+    /// already in flight cannot reopen what the suspend just stopped.</summary>
+    private bool Quiet { get { lock (_gate) return _closing || _suspended; } }
 
     // ============================ host -> page ============================
 
@@ -93,6 +96,7 @@ public sealed class BackRoomBridge
     public void Suspend(bool on, string reason)
     {
         if (IsClosed) return;
+        lock (_gate) _suspended = on;
         if (on) CancelFx();
         _d.Post(new { type = "suspend", on, reason });
     }
@@ -185,7 +189,7 @@ public sealed class BackRoomBridge
                 break;
             case "fx-tunnel":
                 // No reply (10.13.B). A NaN or a string level is dropped by the dispatcher's own checks.
-                if (!IsClosing && Station(m) is { } tunnelAt && m["level"] is JValue { Type: JTokenType.Integer or JTokenType.Float } lv)
+                if (!Quiet && Station(m) is { } tunnelAt && m["level"] is JValue { Type: JTokenType.Integer or JTokenType.Float } lv)
                     Guard(() => _d.Fx.Tunnel(tunnelAt, lv.Value<double>()));
                 break;
             case "fx-release":
@@ -297,7 +301,7 @@ public sealed class BackRoomBridge
         var symbols = (m["symbols"] as JArray)?.Select(t => t.Type == JTokenType.String ? (string)t! : null)
             .Where(s => s != null).Cast<string>().ToList() ?? new List<string>();
         BackRoomFxAck ack;
-        if (IsClosing)
+        if (Quiet)
         {
             ack = new BackRoomFxAck(Array.Empty<string>(), new[] { new BackRoomFxSkip(fxId, BackRoomFxSkipReason.Busy) });
         }

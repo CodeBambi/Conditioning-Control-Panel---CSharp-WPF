@@ -21,7 +21,8 @@ public interface IBackRoomFxSink
     void GifFull(BackRoomGif gif, int durationMs, bool still);
     // Hypno v3 (10.13.B). GifFrom's rect is page CSS px, mapped at play time (null = the centre).
     void Wash(FxRgb color, double peak, BackRoomGif? picture);
-    void GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still);
+    /// <returns>False when nothing will show (no local file), so the one-at-a-time slot frees at once.</returns>
+    bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still);
     /// <summary>Replaces a running one; a hold's <paramref name="durationMs"/> is the 20 s cap.</summary>
     void SpiralLoom(string gifPath, int durationMs, double alpha, bool hold, bool still);
     void ReleaseSpiralLoom();
@@ -68,6 +69,8 @@ public sealed class BackRoomFx : IBackRoomFx
     private readonly HashSet<PendingOnset> _pending = new();
     // Every token that still has onsets waiting or owns what is on screen, by token.
     private readonly Dictionary<string, Hold> _holds = new(StringComparer.Ordinal);
+    // The hold of the last copy of each fxId queued behind a hero: a same-id fire merged into it shares it.
+    private readonly Dictionary<string, Hold> _queuedHolds = new(StringComparer.Ordinal);
     private string? _spiralToken, _hazeToken, _tunnelStation;
     private long _gifFromUntil = long.MinValue;
     private long _tunnelAppliedAt = long.MinValue / 2;
@@ -119,7 +122,15 @@ public sealed class BackRoomFx : IBackRoomFx
                         .Select(p => new BackRoomFxSkip(p, BackRoomFxSkipReason.Busy))).ToList();
                     return new BackRoomFxAck(Array.Empty<string>(), busy);
                 case FxAdmitKind.Merged:
-                    // It plays once, as the copy already on stage or in the queue.
+                    // It plays once, as the copy already on stage or in the queue; its token shares that copy's
+                    // hold, so its own fx-release still lets go instead of waiting out the 20 s cap.
+                    if (!string.IsNullOrEmpty(token))
+                        lock (_lock)
+                            if (_queuedHolds.TryGetValue(fxId, out var into) && into.Tokens.Count > 0 && into.Station == (station ?? string.Empty))
+                            {
+                                into.Tokens.Add(token);
+                                _holds[token] = into;
+                            }
                     return new BackRoomFxAck(plan.Fired, plan.Skipped);
             }
 
@@ -153,6 +164,7 @@ public sealed class BackRoomFx : IBackRoomFx
                 {
                     PruneHolds();
                     if (!_holds.TryGetValue(token, out hold)) _holds[token] = hold = new Hold(token, station ?? string.Empty);
+                    if (admission.Kind == FxAdmitKind.Queued) _queuedHolds[fxId] = hold;
                 }
             }
 
@@ -218,7 +230,8 @@ public sealed class BackRoomFx : IBackRoomFx
                 break;
             case FxPrim.GifFrom:
                 var grown = planned.Gif!;
-                At(at, () => _sink.GifFrom(grown, s.Look!.From, s.DurationMs, s.Look.Scale, s.Level, s.Still), hold);
+                long until = at + s.DurationMs;
+                At(at, () => { if (!_sink.GifFrom(grown, s.Look!.From, s.DurationMs, s.Look.Scale, s.Level, s.Still)) FreeGifFrom(until); }, hold, until);
                 break;
         }
     }
@@ -228,22 +241,31 @@ public sealed class BackRoomFx : IBackRoomFx
         lock (_lock) owner = hold?.Token;
     }
 
-    private sealed class PendingOnset { public IDisposable? Timer; public Hold? Hold; }
+    /// <summary>A gif-from that will not show frees the one-at-a-time slot it reserved (unless a later one took it).</summary>
+    private void FreeGifFrom(long until)
+    {
+        lock (_lock) if (_gifFromUntil == until) _gifFromUntil = long.MinValue;
+    }
+
+    private sealed class PendingOnset { public IDisposable? Timer; public Hold? Hold; public long GifFromUntil; }
 
     private sealed class Hold
     {
-        public Hold(string token, string station) { Token = token; Station = station; }
+        public Hold(string token, string station) { Token = token; Station = station; Tokens.Add(token); }
+        /// <summary>The token that fired it (what the spiral and haze owners name).</summary>
         public string Token { get; }
         public string Station { get; }
         public readonly List<PendingOnset> Onsets = new();
+        /// <summary>Every token not yet released that holds it: its own plus any merged into it.</summary>
+        public readonly HashSet<string> Tokens = new(StringComparer.Ordinal);
     }
 
-    private void At(long atMs, Action action, Hold? hold)
+    private void At(long atMs, Action action, Hold? hold, long gifFromUntil = 0)
     {
         int delay = (int)Math.Max(0, atMs - _scheduler.NowMs);
         // The token is pending BEFORE the timer exists, so a timer that fires early (or a scheduler
         // that runs inline) always finds it, and a CancelAll that wins the race always silences it.
-        var onset = new PendingOnset { Hold = hold };
+        var onset = new PendingOnset { Hold = hold, GifFromUntil = gifFromUntil };
         lock (_lock) { _pending.Add(onset); hold?.Onsets.Add(onset); }
         onset.Timer = _scheduler.After(delay, () =>
         {
@@ -261,8 +283,11 @@ public sealed class BackRoomFx : IBackRoomFx
     private void PruneHolds()
     {
         if (_holds.Count < 16) return;
-        foreach (var dead in _holds.Values.Where(h => h.Onsets.Count == 0 && h.Token != _spiralToken && h.Token != _hazeToken).ToList())
-            _holds.Remove(dead.Token);
+        foreach (var dead in _holds.Values.Distinct().Where(h => h.Onsets.Count == 0 && h.Token != _spiralToken && h.Token != _hazeToken).ToList())
+        {
+            foreach (var t in dead.Tokens) _holds.Remove(t);
+            dead.Tokens.Clear();
+        }
     }
 
     // ============================ holds (10.13.B) ============================
@@ -278,10 +303,14 @@ public sealed class BackRoomFx : IBackRoomFx
         {
             if (!_holds.TryGetValue(token, out var hold) || hold.Station != (station ?? string.Empty)) return;
             _holds.Remove(token);
+            hold.Tokens.Remove(token);
+            if (hold.Tokens.Count > 0) return;   // a token merged into the same play still holds it
             doomed = hold.Onsets.ToList();
             foreach (var o in doomed) _pending.Remove(o);
-            spiral = _spiralToken == token;
-            haze = _hazeToken == token;
+            // A gif-from that never started must not keep later ones busy for its whole length.
+            if (doomed.Any(o => o.GifFromUntil != 0 && o.GifFromUntil == _gifFromUntil)) _gifFromUntil = long.MinValue;
+            spiral = _spiralToken == hold.Token;
+            haze = _hazeToken == hold.Token;
             if (spiral) _spiralToken = null;
             if (haze) _hazeToken = null;
         }
@@ -301,7 +330,7 @@ public sealed class BackRoomFx : IBackRoomFx
         bool tunnel;
         lock (_lock)
         {
-            tokens = _holds.Values.Where(h => h.Station == station).Select(h => h.Token).ToList();
+            tokens = _holds.Where(kv => kv.Value.Station == station).Select(kv => kv.Key).ToList();
             tunnel = _tunnelStation != null && _tunnelStation == station;
         }
         foreach (var t in tokens) Release(t, station);
@@ -317,7 +346,14 @@ public sealed class BackRoomFx : IBackRoomFx
         FxEnvironment env;
         try { env = _env(); }
         catch (Exception ex) { App.Logger?.Warning(ex, "[BackRoom] fx environment failed"); return; }
-        if (!env.Gates.BrainDrain) return;
+        if (!env.Gates.BrainDrain)
+        {
+            // The toggle went off under a running tunnel: gone now, not after the 1500 ms self-release.
+            bool live;
+            lock (_lock) live = _tunnelStation != null;
+            if (live) CancelTunnel();
+            return;
+        }
 
         bool calm = BackRoomFxPlan.EffectiveIntensity(env.Intensity, env.Motion) == BackRoomFxIntensity.Calm;
         var next = (Math.Clamp(level, 0, 1) * (calm ? BackRoomFxPlan.CalmStrength : 1), env.Motion == MotionLevel.Off);
@@ -384,6 +420,7 @@ public sealed class BackRoomFx : IBackRoomFx
             doomed = _pending.ToList();
             _pending.Clear();
             _holds.Clear();
+            _queuedHolds.Clear();
             _spiralToken = _hazeToken = _tunnelStation = null;
             _gifFromUntil = long.MinValue;
             tunnel = _tunnelTimer;

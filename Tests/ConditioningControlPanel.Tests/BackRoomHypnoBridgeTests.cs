@@ -96,6 +96,21 @@ public class BackRoomHypnoBridgeTests
     }
 
     [Fact]
+    public void Suspended_DropsTunnelAndAcksFxBusy_UntilResumed()
+    {
+        var (bridge, fx, _, posted) = Make();
+        bridge.Suspend(true, "panic");
+        bridge.Handle(JObject.Parse("""{"type":"fx-tunnel","station":"wheel","level":0.8}"""));
+        bridge.Handle(JObject.Parse("""{"type":"fx","token":"t1","fxId":"fx.wash","station":"wheel"}"""));
+        Assert.Equal(new[] { "cancel" }, fx.Calls);
+        Assert.Equal("busy", (string?)posted.Last(p => (string?)p["type"] == "fx-ack")["skipped"]![0]!["why"]);
+
+        bridge.Suspend(false, "panic");
+        bridge.Handle(JObject.Parse("""{"type":"fx-tunnel","station":"wheel","level":0.8}"""));
+        Assert.Equal("tunnel:wheel:0.8", fx.Calls.Last());
+    }
+
+    [Fact]
     public void StationClose_ReleasesThatStation()
     {
         var (bridge, fx, _, _) = Make();

@@ -348,6 +348,8 @@ internal static class BackRoomHostService
     {
         if (_bridge == null || sender is not Models.AppSettings s) return;
         if (e.PropertyName == nameof(Models.AppSettings.SkillPoints)) _bridge.OnSpChanged(s.SkillPoints, "earn");
+        // Brain Drain off under a running tunnel: the dispatcher's gate check cancels it now.
+        if (e.PropertyName == nameof(Models.AppSettings.BrainDrainEnabled) && !s.BrainDrainEnabled) Fx.Tunnel(string.Empty, 0);
         else if (e.PropertyName != null && SettingsFrameProperties.Contains(e.PropertyName)) _bridge.PushSettings(SettingsMessage());
     }
 
