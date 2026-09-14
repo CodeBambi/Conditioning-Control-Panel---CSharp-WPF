@@ -38,14 +38,15 @@ no fx ids, no hypno kit, so it adds no context and no gate changes its dress.
   (`aria-busy`), a second press sends nothing and Cancel is disabled until the reply.
 - **Success.** The card flips to Owned, then `ctx.spReadout.set(sp)`, `set(null)` and `thud()` (skipped when the room has
   no `spReadout`), and one chime (the race's `chime1.mp3` through `dtrh/shared/audioSrc.js`, its AudioContext made inside
-  the Confirm press). A fresh `state` follows for live delivery.
+  the Confirm press). A fresh `state` follows for live delivery. A `state` sent before a buy settled that answers after
+  it is dropped and read again, so an owned card never turns back into Buy.
 - **Refusals** (all HTTP 200 unless noted):
   - `insufficient`, `owned`, `unavailable`, `discord_required`: the confirm closes and the cards repaint from the reply
     and a fresh `state`. Nothing is charged, no chip, no chime.
   - `catalog_changed`: the new `catalog` is adopted and, when the card is still buyable, a NEW confirm (new idem) asks
     again at the new price. Never an automatic buy. The same re-ask happens when any `state` refresh shows a new price
     or version under an open, idle confirm.
-  - `busy`, `too_fast`, a host `timeout` or `offline`: the confirm stays open with `br_counter_retry`; Confirm retries
+  - `busy`, `too_fast`, a host `timeout` or `offline` (a 5xx the host passes on with its body included): the confirm stays open with `br_counter_retry`; Confirm retries
     with the SAME idem (a lost reply replays the receipt, charged once).
   - `bad_input`, `idem_mismatch`, anything new: the confirm closes and `state` is read again.
   - 403 `closed`: the counter shows closed.

@@ -106,7 +106,8 @@ export function classify(res) {
   if (reason === 'closed') return { kind: 'closed', reason, body };
   if (REPAINT.includes(reason)) return { kind: 'repaint', reason, body };
   if (reason === 'catalog_changed') return { kind: 'catalog', reason, body };
-  if (reason === 'busy' || reason === 'too_fast' || !body) return { kind: 'retry', reason, body };   // busy, too_fast, timeout, offline, a lost reply
+  // busy, too_fast, a lost reply, and the host's timeout or offline even with a body (a 500 {error} is offline): the buy may have landed
+  if (reason === 'busy' || reason === 'too_fast' || reason === 'timeout' || reason === 'offline' || !body) return { kind: 'retry', reason, body };
   return { kind: 'refresh', reason, body };   // bad_input, idem_mismatch, anything new: read state again
 }
 
@@ -117,7 +118,7 @@ export function classify(res) {
  */
 export function createCounter(deps) {
   const mint = deps.mint || mintIdem, now = deps.now || Date.now;
-  let session = 0, st = null, phase = 'idle', confirm = null, flipped = null, log = [];
+  let session = 0, st = null, phase = 'idle', confirm = null, flipped = null, log = [], settled = 0;
   const changed = () => { try { deps.onChange && deps.onChange(); } catch (e) { /* a paint never breaks a buy */ } };
   const note = (what, extra = {}) => { log = [...log.slice(-49), { what, ...extra }]; };
   const spNow = () => { const v = typeof deps.sp === 'function' ? Number(deps.sp()) : NaN; return Number.isFinite(v) ? v : st ? st.sp : 0; };
@@ -132,8 +133,10 @@ export function createCounter(deps) {
   const send = (op, body, idem) => Promise.resolve().then(() => deps.request(op, body, idem)).catch(() => ({ ok: false, reason: 'offline' }));
 
   async function load(my) {
+    const seen = settled;
     const c = classify(await send('state', {}));
     if (my !== session) return false;
+    if (seen !== settled) return load(my);   // sent before a buy settled: its rows and sp are older than the page, read again
     const next = c.kind === 'ok' ? readState(c.body) : null;
     if (!next) { if (!st || c.kind === 'closed') { phase = 'closed'; confirm = null; } note('state', { kind: c.kind }); changed(); return false; }
     st = next; phase = 'ready';
@@ -144,6 +147,7 @@ export function createCounter(deps) {
 
   function adoptSuccess(b, prizeId) {
     const row = rowOf(prizeId);
+    settled++;
     if (st) {
       if (Number.isFinite(Number(b.sp))) st.sp = int(b.sp);
       if (row) row.owned = { at: now(), paidSp: int(b.paidSp, row.priceSp) };
