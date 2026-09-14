@@ -1,0 +1,41 @@
+{
+  "image": "emi-faces-slot.png",
+  "columns": 11,
+  "rows": 1,
+  "cell_width": 152,
+  "cell_height": 137,
+  "preserved_source_cells": 7,
+  "faces": {
+    "idle0_0": 3,
+    "hearts": 7,
+    "spirals": 8,
+    "melt": 9,
+    "jackpot": 10
+  },
+  "existing_cells": [
+    "happy",
+    "cute",
+    "squeeze",
+    "idle0_0",
+    "money",
+    "stars",
+    "dizzy"
+  ],
+  "source_glb_uv": {
+    "min": [
+      0.0006578947650268674,
+      0.0036496520042419434
+    ],
+    "max": [
+      0.19934210181236267,
+      0.9963503479957581
+    ],
+    "vertex_count": 225
+  },
+  "uv_contract": {
+    "build": "Normalize both U and V using (value-min)/(max-min) on EMI_glass. Embed emi-idle.png as material emi_face.",
+    "runtime": "For exact0..1 mesh UVs: repeat.set(151/1672,136/137); offset.set((index*152+0.5)/1672,0.5/137); flipY=false; colorSpace=THREE.SRGBColorSpace.",
+    "legacy_runtime": "For unmodified original GLB UVs ONLY: repeat.x=5/11; offset.x=index/11; repeat.y=1; offset.y=0. Original UVs already include half-texel insets.",
+    "filtering": "ClampToEdgeWrapping on both axes, NearestFilter min/mag, generateMipmaps=false to avoid adjacent expression bleed."
+  }
+}

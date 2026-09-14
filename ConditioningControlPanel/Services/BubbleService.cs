@@ -13,6 +13,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using NAudio.Wave;
 using ConditioningControlPanel.Helpers;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Chaos;
 
 namespace ConditioningControlPanel.Services;
@@ -1144,7 +1145,8 @@ public class BubbleService : IDisposable
         if (spec != null && _bubbles.Count(b => b.IsAmbientEffectBubble) >= MAX_TRIGGER_WINDOWS)
             spec = null;
         if (spec == null)
-            return new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss, OnDestroy, isClickable);
+            return new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss, OnDestroy, isClickable,
+                              ambientMotion: AmbientBubbleMotion.RollForSpawn(_random));
         // Trigger bubbles ride the shared ambient host like plain bubbles (hook-based pops via the
         // UsesHost/HostHitClickable snapshots). forceWindowMode was a relic of the host being
         // chaos-run-only: the per-pop layered-window Show/Close it forced was the residual "small
@@ -2470,6 +2472,12 @@ internal class Bubble
     // frame without allocating a new SolidColorBrush per tick (GC pressure at 30fps).
     private SolidColorBrush? _fuseStrokeBrush;
     private double _vx, _vy;                                   // RoamBounce velocity (DIPs/frame)
+    private readonly ChaosMotion _motion;                      // the travel table row this bubble runs (spec's, or the ambient v2 pick)
+    // Bubbles v2 Spiral In (ambient only): ring around the screen centre, radius shrinking to a core.
+    private readonly bool _spiralIn;
+    private double _spiralCx, _spiralCy, _spiralR0, _spiralRadial, _spiralTurns, _spiralDir;
+    private SpiralInPath.State _spiral;
+    private double _spiralFade = 1.0;                          // opacity multiplier over the last stretch of the spiral
     private double _screenBottom, _screenLeft, _screenRight;   // motion bounds (DIPs)
 
     private bool _hasVariantSprite;   // a per-variant sprite replaced the tinted bubble.png
@@ -2831,7 +2839,8 @@ internal class Bubble
                   Func<Bubble, bool>? canChannelDefuse = null, Action<Bubble, string>? onChannelBroken = null,
                   Action<Bubble>? onTeaseTouched = null, Action<Bubble>? onTeaseDenied = null,
                   Action<Bubble>? onBrittleShattered = null, bool forceWindowMode = false,
-                  bool ambientTrigger = false)
+                  bool ambientTrigger = false,
+                  BubbleMotionStyle ambientMotion = BubbleMotionStyle.FloatUp)
     {
         _random = random;
         _onPop = onPop;
@@ -2927,6 +2936,9 @@ internal class Bubble
             int speedBoost = App.Settings?.Current?.BubbleSpeedBoost ?? 0;
             if (speedBoost > 0) _speed *= 1.0 + Math.Clamp(speedBoost, 0, 500) / 100.0;
         }
+        // Bubbles v2: the owned styles honour MotionLevel.Reduced at half speed (FloatUp untouched).
+        if (spec == null && ambientMotion != BubbleMotionStyle.FloatUp)
+            _speed *= AmbientBubbleMotion.SpeedMult(MotionFx.Level);
         _animType = random.Next(4);
         _wobbleOffset = random.NextDouble() * 100;
         _angle = random.Next(360);
@@ -2941,8 +2953,11 @@ internal class Bubble
         _screenTop = area.Y / dpiScale - _size - 50;
         _screenBottom = (area.Y + area.Height) / dpiScale + 50;
 
-        // Position + initial velocity depend on motion (FloatUp is the ambient default).
-        var motion = spec?.Motion ?? ChaosMotion.FloatUp;
+        // Position + initial velocity depend on motion (FloatUp is the ambient default). An
+        // ambient bubble (spec == null) may carry a Bubbles v2 pick: Rain rides the existing
+        // RainDown row; Spiral In is its own path below and never enters the chaos table.
+        var motion = spec?.Motion ?? (ambientMotion == BubbleMotionStyle.Rain ? ChaosMotion.RainDown : ChaosMotion.FloatUp);
+        _motion = motion;
         _startX = (area.X + random.Next(50, Math.Max(100, area.Width - _size - 50))) / dpiScale;
         _posX = _startX;
         switch (motion)
@@ -2969,6 +2984,22 @@ internal class Bubble
             default: // FloatUp
                 _posY = (area.Y + area.Height) / dpiScale;          // start at the bottom
                 break;
+        }
+
+        // Bubbles v2 Spiral In: spawn on a ring around the screen centre (about 42% of the
+        // shorter dimension) at a random angle, either direction; the tick walks it inward.
+        if (spec == null && ambientMotion == BubbleMotionStyle.SpiralIn)
+        {
+            _spiralIn = true;
+            _spiralCx = (area.X + area.Width / 2.0) / dpiScale;
+            _spiralCy = (area.Y + area.Height / 2.0) / dpiScale;
+            _spiralR0 = SpiralInPath.StartRadius(Math.Min(area.Width, area.Height) / dpiScale);
+            _spiralRadial = _speed * SpiralInPath.RadialPerSpeed;
+            _spiralTurns = SpiralInPath.Turns(MotionFx.Level);
+            _spiralDir = random.Next(2) == 0 ? 1 : -1;
+            _spiral = SpiralInPath.Start(_spiralR0, random.NextDouble() * Math.PI * 2);
+            _posX = _startX = _spiralCx + Math.Cos(_spiral.Angle) * _spiral.Radius - _size / 2.0;
+            _posY = _spiralCy + Math.Sin(_spiral.Angle) * _spiral.Radius - _size / 2.0;
         }
 
         // Pinned spawn (Rabbit Caller): materialise centred on the given physical-px point,
@@ -3504,7 +3535,7 @@ internal class Bubble
         {
             // Normal travel animation (scaled for 30fps)
             _timeAlive += 0.02;
-            var motion = _spec?.Motion ?? ChaosMotion.FloatUp;
+            var motion = _motion;
             double ts = TimeScale;   // 1 normally; <1 during a darter slow-mo (chaos bubbles only)
 
             // The Chaperone's escort rides its live: position comes from the orbit, not the
@@ -3578,7 +3609,19 @@ internal class Bubble
             }
 
             bool exited = false;
-            switch (motion)
+            if (_spiralIn)
+            {
+                // Spiral In: angle on, radius in, fade over the last band; the core ends it.
+                // Reaching the core is an EXIT like floating off the top (miss, quiet Destroy):
+                // never a pop, so no sound, XP, achievement, haptic or lucky roll. A click
+                // before then pops it normally.
+                _spiral = SpiralInPath.Step(_spiral, _spiralR0, _spiralRadial, _spiralTurns, _spiralDir, ts);
+                _posX = _spiralCx + Math.Cos(_spiral.Angle) * _spiral.Radius - _size / 2.0;
+                _posY = _spiralCy + Math.Sin(_spiral.Angle) * _spiral.Radius - _size / 2.0;
+                _spiralFade = _spiral.Fade;
+                if (_spiral.Done) exited = true;
+            }
+            else switch (motion)
             {
                 case ChaosMotion.RainDown:
                     _posY += _speed * ts;
@@ -3829,7 +3872,7 @@ internal class Bubble
 
             // Blindfold: translucent effect bubbles. Magic Wand capstone: bubbles inside your
             // (enlarged) reach shimmer — cursor was sampled once for the whole tick.
-            double opacity = _fadeAlpha * _baseOpacity;
+            double opacity = _fadeAlpha * _baseOpacity * _spiralFade;
             if (BubbleService.WandShimmerOn && _spec != null && !_isDarter && !_isPopping)
             {
                 double cx = BubbleService.CursorPxX / _dpiScale, cy = BubbleService.CursorPxY / _dpiScale;

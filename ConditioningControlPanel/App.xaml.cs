@@ -2684,6 +2684,18 @@ namespace ConditioningControlPanel
                 Services.Dev.DoorShooter.Run(mainWindow, outDir);
             }
 
+            // `--backroom-fx-rig [outDir]`: fire every Back Room fx id at every intensity through the
+            // real dispatcher and services, without the room, grabbing the screen per effect and
+            // logging each ack. See Services/Dev/BackRoomFxRig.cs. Dead code in every normal launch.
+            if (e.Args.Contains("--backroom-fx-rig"))
+            {
+                var fidx = Array.IndexOf(e.Args, "--backroom-fx-rig");
+                var fxDir = fidx >= 0 && fidx + 1 < e.Args.Length && !e.Args[fidx + 1].StartsWith("--")
+                    ? e.Args[fidx + 1]
+                    : Path.Combine(AppContext.BaseDirectory, "logs", "backroom-fx");
+                Services.Dev.BackRoomFxRig.Run(fxDir, e.Args);
+            }
+
             // `--shoot-book [outDir]`: summon EMI, open her book, and render every card offscreen -
             // the reduced-motion still plus a five-frame walk across each demo loop. The book is a
             // DRAWN object (8-bit loops, an integer stage scale, a font loaded from a base URI) and
@@ -5323,6 +5335,8 @@ Application State:
             // exit-done, and that timer can never tick from inside OnExit - so the flush it guards
             // never happened and the last class's grades/streak went with the process.
             try { Services.Arcademy.ArcademyHostService.ShutdownFlush(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            // The Back Room: same posture - the last tape cursor goes out and the window is disposed now.
+            try { Services.BackRoom.BackRoomHostService.ShutdownFlush(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // The Emergency Exit's friction door: a WebView2 process outliving the app is a leak, and
             // Close() is safe from here - it has no state to flush and never touches the lockdown (any
