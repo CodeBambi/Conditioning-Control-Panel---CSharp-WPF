@@ -77,5 +77,8 @@ test('onSettings subscribes, unsubscribes, and a forgotten subscription goes wit
   assert.equal(settingsFns.size, 1);
   await loader.close();
   assert.equal(settingsFns.size, 0, 'close drops what the station left subscribed');
+  const late = ctx.onSettings((f) => got.push(f));
+  assert.equal(settingsFns.size, 0, 'a closed station (an open() resolving after Back) subscribes nothing');
+  late();
   assert.ok(posted.some((m) => m.type === 'station-close' && m.station === 'cards'));
 });

@@ -184,6 +184,35 @@ test('a gate going off releases what it holds; dispose unsubscribes', () => {
   assert.deepEqual(m.play('roulette.wake'), { tokens: [], page: [], held: false });
 });
 
+test('roulette.run played every frame holds one haze; the table strength wins over the caller', () => {
+  const host = createMockHost({ intensity: 'full' });
+  const m = createMoments(host.ctx, { station: 'roulette' });
+  for (let i = 0; i < 30; i++) m.play('roulette.run');
+  m.play('roulette.wake'); m.play('roulette.wake');
+  assert.deepEqual(host.fx.map((x) => x.fxId), ['fx.haze', 'fx.loom_spiral'], 'one hold per fx id while it is held');
+  m.play('roulette.land.win', { color: '#9b6bff', strength: 0.2 });
+  assert.deepEqual(calls(host).at(-1), ['fx.wash', null, { strength: 0.6, color: '#9b6bff' }], 'the ladder stays 0.6');
+  m.play('roulette.run');
+  assert.equal(host.fx.at(-1).fxId, 'fx.haze', 'a released haze can be held again');
+  m.play('wheel.land.jackpot', { color: '#9b6bff', strength: 0.3 });
+  assert.deepEqual(calls(host).at(-1), ['fx.wash', null, { color: '#e8c27a', strength: 1 }]);
+  m.dispose();
+});
+
+test('a settings frame below Full, or reduced motion, releases a running haze hold and keeps the spiral', () => {
+  for (const patch of [{ intensity: 'normal' }, { intensity: 'calm' }, { reduced: true }]) {
+    const host = createMockHost({ intensity: 'full' });
+    const m = createMoments(host.ctx, { station: 'roulette' });
+    m.play('roulette.run'); m.play('roulette.wake');
+    host.settings({ gates: { flash: true } });
+    assert.equal(host.release.length, 0, 'a Full frame keeps both holds');
+    host.settings(patch);
+    assert.deepEqual(host.release.map((r) => host.fx.find((f) => f.token === r.token).fxId), ['fx.haze'], JSON.stringify(patch));
+    assert.equal(m.debug().holds, 1);
+    m.dispose();
+  }
+});
+
 test('a ctx without the hypno members skips everything and never throws', () => {
   const m = createMoments({ intensity: 'normal' }, { station: 'wheel' });
   assert.deepEqual(m.play('wheel.land.gif', { from: RECT, gif: 'g0' }), { tokens: [], page: ['quiet_room'], held: false });

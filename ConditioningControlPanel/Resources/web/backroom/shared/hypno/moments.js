@@ -15,6 +15,17 @@
  * Tunnel vision is a level, not an fx: tunnel(level) posts fx-tunnel on a
  * change at most every 100 ms and re-posts every 1000 ms while it is above 0,
  * so the host's 1500 ms auto-release never fires on a moment that is still on.
+ *
+ * The two "continuous" moments, wheel.turn and roulette.run, are PLAYED ONCE when
+ * they start; the level that follows goes through tunnel(level) every frame. A
+ * hold step is idempotent anyway: while this instance still holds that fx id
+ * (a roulette.run haze, a roulette.wake spiral), playing it again fires nothing.
+ * Haze is Full only: a settings frame below Full, or with reduced motion,
+ * releases a running haze hold.
+ *
+ * Args: the table's colour and strength win over the caller's (the 10.13.F
+ * ladder stays fixed); a caller's colour or strength fills in only where the
+ * table sets none.
  * ==========================================================================*/
 
 const TUNNEL_GAP_MS = 100;
@@ -35,7 +46,7 @@ function deepFreeze(o) {
  * The table. host steps, in order:
  *   { fx, args, gif?: the caller's picture key rides in symbols, from?: the caller's rect goes in args.from,
  *     full?: only at Full intensity, bloomArgs?: args instead when this hand already bloomed }
- *   { tunnel: 'wheel' | 'ball' }       continuous: the station calls tunnel(level) (wheelTurnLevel, rouletteRunLevel)
+ *   { tunnel: 'wheel' | 'ball' }       continuous: played once, then the station calls tunnel(level) each frame (wheelTurnLevel, rouletteRunLevel)
  *   { tunnel: 'breath', peak, ms }     timed: this module runs peak x sin(PI x p) over ms, then 0
  * release: the moment first releases every hold this station still has (a roulette landing).
  * page: effect names; { name, when: 'full' | 'wake' } only at Full, or only when play() is given { wake: true }.
@@ -167,14 +178,21 @@ export function createMoments(ctx, { station = '' } = {}) {
   }
 
   const unsub = typeof c.onSettings === 'function' ? c.onSettings((f) => {
-    const g = f && f.gates;
-    if (!g) return;
+    if (!f) return;
+    const g = f.gates || {};
+    const belowFull = ('intensity' in f && f.intensity !== 'full') || f.reduced === true;
     if (g.brainDrain === false) { stopBreath(); tunnelNow0(); }
-    for (const [token, fxId] of Array.from(holds)) { if (g[GATE_OF[fxId]] === false) api.release(token); }
+    for (const [token, fxId] of Array.from(holds)) {
+      if (g[GATE_OF[fxId]] === false || (fxId === 'fx.haze' && belowFull)) api.release(token);
+    }
   }) : null;
+  const holding = (fxId) => { for (const v of holds.values()) { if (v === fxId) return true; } return false; };
 
   const api = {
-    /** Fire moment `id`. Returns the tokens fired, the page effects to run, and whether holdScreen stopped the host steps. */
+    /**
+     * Fire moment `id`. Returns the tokens fired, the page effects to run, and whether holdScreen stopped the host steps.
+     * `color` and `strength` fill in a wash only where the table sets none; `from` and `gif` ride on the steps that take them.
+     */
     play(id, { color, strength, from, gif, wake = false } = {}) {
       const m = Object.prototype.hasOwnProperty.call(MOMENTS, id) ? MOMENTS[id] : null;
       const out = { tokens: [], page: [], held: false };
@@ -198,9 +216,10 @@ export function createMoments(ctx, { station = '' } = {}) {
         if (typeof c.fx !== 'function') continue;
         const bloomStep = afterBloom && step.bloomArgs;
         const args = { ...(bloomStep ? step.bloomArgs : step.args) };
+        if (args.hold && holding(step.fx)) continue;   // still held from an earlier play: one hold per fx id
         if (step.fx === 'fx.wash') {
           if (!args.color && typeof color === 'string' && HEX_RE.test(color)) args.color = color;
-          if (Number.isFinite(strength)) args.strength = Math.min(1, Math.max(0.1, strength));
+          if (!Number.isFinite(args.strength) && Number.isFinite(strength)) args.strength = Math.min(1, Math.max(0.1, strength));
         }
         if (step.from) { const r = cleanRect(from); if (r) args.from = r; }
         const symbols = step.gif && !bloomStep && typeof gif === 'string' && KEY_RE.test(gif) ? [gif] : undefined;
