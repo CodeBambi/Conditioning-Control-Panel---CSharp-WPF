@@ -1201,7 +1201,7 @@ that sentence: jar spins are not sealed. Owner may revisit.)
 **Table v7 fields** (`TABLE_V7` in `backroom-slot.js`, replacing `TABLE_V6`):
 
 ```js
-jar: Object.freeze({ size: 25, free: 3 }),   // (owner may retune, see the cost table below)
+jar: Object.freeze({ size: 100, free: 3 }),   // (owner may retune, see the cost table below)
 ```
 
 `kind` (section 3.2) is amended to `paid | free | respin | freeze | jar | emi_respin`.
@@ -1211,7 +1211,7 @@ alongside `meltLeft` and `freeLeft`. A `freeze` outcome carries back the jar it 
 keeps its meaning (outcomes still queued) and now counts jar spins and the `emi_respin` too.
 
 **`state` route.** `GET /v2/backroom/slot/state` gains a top-level `"jar": 17` (the stored count) and
-`table.jar` = `{ "size": 25, "free": 3 }` in the published table. The page keeps no copy of either.
+`table.jar` = `{ "size": 100, "free": 3 }` in the published table. The page keeps no copy of either.
 
 **RTP.** The jar is pure added return: at table v6 dressing a plain outcome shows 0.642 spirals on average, so
 a 25-jar fills every 39.0 outcomes, and 3 free spins every 39 outcomes is +7.7% outcomes per paid spin. Left
@@ -1254,9 +1254,9 @@ What the jar size costs, for the owner (each row re-solved to 1.0200):
 
 | `jar.size` / `jar.free` | scale factor | jar fills every | hit frequency |
 |---|---|---|---|
-| **25 / 3 (decided)** | 0.916369 | 39.0 outcomes, 2.6 min | 22.81% |
+| 25 / 3 | 0.916369 | 39.0 outcomes, 2.6 min | 22.81% |
 | 50 / 3 | 0.957035 | 77.8 outcomes, 5.2 min | 23.82% |
-| 100 / 3 | 0.977450 | 155.4 outcomes, 10.4 min | 24.33% |
+| **100 / 3 (decided 2026-09-14 evening: a jar is a come-back reason, not a rhythm)** | 0.977450 | 155.4 outcomes, 10.4 min | 24.33% |
 | 200 / 5 | 0.980807 | 310.8 outcomes, 20.8 min | 24.41% |
 
 **Client.** There is no glb node for a jar and no model request is allowed (section 9.6), so the jar is a DOM
