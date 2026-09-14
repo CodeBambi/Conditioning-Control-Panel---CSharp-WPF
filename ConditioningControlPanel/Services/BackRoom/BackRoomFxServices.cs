@@ -55,8 +55,9 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
         double opacity = s.SpiralOpacity > 0 ? Math.Clamp(s.SpiralOpacity / 100.0, 0.05, 1.0) : 0.85;
         // A woven GIF always has a first frame, so the spiral's still exists whenever its weave does.
         return new FxEnvironment(MotionFx.Level, s.BackRoomFxIntensity,
-            new FxGates(s.FlashEnabled, s.SubliminalEnabled, s.SpiralEnabled, s.BrainDrainEnabled, s.BrainDrainMeltEnabled,
-                Woven(BackRoomSpiralSource.Screen) != null),
+            // Melt and Tunnel are the room's own switches (10.14), not the app's Brain Drain toggles.
+            new FxGates(s.FlashEnabled, s.SubliminalEnabled, s.SpiralEnabled, s.BrainDrainEnabled, s.BackRoomMelt,
+                Woven(BackRoomSpiralSource.Screen) != null, s.BackRoomTunnel),
             Woven, opacity);
     }
 

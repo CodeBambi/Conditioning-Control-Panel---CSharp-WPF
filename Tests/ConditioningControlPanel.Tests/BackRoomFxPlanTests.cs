@@ -167,20 +167,39 @@ public class BackRoomFxPlanTests
     }
 
     [Fact]
-    public void Melt_BrainDrainOff_SkipsWhole()
+    public void Melt_IsTheRoomsOwnSwitch_TheAppsBrainDrainOffStillMelts()
     {
+        // 10.14: the app's Brain Drain toggle defaults off, which kept every room melt dark.
         var p = Plan("fx.melt", g: FxGates.AllOn with { BrainDrain = false });
-        Assert.Empty(p.Fired);
-        Assert.Equal(BackRoomFxSkipReason.Toggle, Why(p, "brain-drain-melt"));
+        Assert.Equal(new[] { "brain-drain-melt" }, p.Fired);
+        Assert.Equal(6000, p.Steps.Single().Step.DurationMs);
+        Assert.Empty(p.Skipped);
     }
 
     [Fact]
-    public void Melt_MeltToggleOff_PlaysTheBlurOnly_AndReportsTheDrip()
+    public void Melt_RoomSwitchOff_SkipsWhole_EvenWithTheAppsBrainDrainOn()
     {
         var p = Plan("fx.melt", g: FxGates.AllOn with { Melt = false });
-        Assert.Equal(new[] { "brain-drain" }, p.Fired);
+        Assert.Empty(p.Fired);
         Assert.Equal(BackRoomFxSkipReason.Toggle, Why(p, "brain-drain-melt"));
-        Assert.Equal(6000, p.Steps.Single().Step.DurationMs);
+        var still = Plan("fx.melt", m: MotionLevel.Off, g: FxGates.AllOn with { Melt = false });
+        Assert.Empty(still.Fired);
+    }
+
+    [Fact]
+    public void Melt_AtOff_WithBrainDrainOff_StillPlaysTheStillBlur()
+    {
+        var p = Plan("fx.melt", m: MotionLevel.Off, g: FxGates.AllOn with { BrainDrain = false });
+        Assert.Equal(new[] { "brain-drain" }, p.Fired);
+        Assert.Equal(BackRoomFxSkipReason.Motion, Why(p, "brain-drain-melt"));
+    }
+
+    [Fact]
+    public void Haze_StaysOnTheAppsBrainDrain()
+    {
+        var p = Plan("fx.haze", BackRoomFxIntensity.Full, g: FxGates.AllOn with { BrainDrain = false, Melt = true, Tunnel = true });
+        Assert.Empty(p.Fired);
+        Assert.Equal(BackRoomFxSkipReason.Toggle, Why(p, "haze"));
     }
 
     [Fact]

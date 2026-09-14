@@ -339,16 +339,16 @@ public sealed class BackRoomFx : IBackRoomFx
 
     // ============================ tunnel (10.13.B) ============================
 
-    /// <summary><c>fx-tunnel</c>: gated by BrainDrain, halved under Calm, at most 10 a second.</summary>
+    /// <summary><c>fx-tunnel</c>: gated by the room's tunnel switch (10.14, not Brain Drain), halved under Calm, at most 10 a second.</summary>
     public void Tunnel(string station, double level)
     {
         if (!double.IsFinite(level)) return;
         FxEnvironment env;
         try { env = _env(); }
         catch (Exception ex) { App.Logger?.Warning(ex, "[BackRoom] fx environment failed"); return; }
-        if (!env.Gates.BrainDrain)
+        if (!env.Gates.Tunnel)
         {
-            // The toggle went off under a running tunnel: gone now, not after the 1500 ms self-release.
+            // The switch went off under a running tunnel: gone now, not after the 1500 ms self-release.
             bool live;
             lock (_lock) live = _tunnelStation != null;
             if (live) CancelTunnel();
