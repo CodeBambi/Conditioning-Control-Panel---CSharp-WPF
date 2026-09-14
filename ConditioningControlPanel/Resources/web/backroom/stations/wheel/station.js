@@ -4,7 +4,8 @@
  * frame (Law VI): it never waits on the glb, the server or an animation.
  *
  *   wheel.js    layout, landing, countdown, result reading, Law I (pure)
- *   feel.js     THE HOUSE BOOK for the wheel: tiers, fx, ladder, glance (pure)
+ *   feel.js     THE HOUSE BOOK for the wheel: tiers, sounds, ladder, glance (pure)
+ *   hypno.js    the v3 trance curves: last turn, quiet room, taffy, hub (pure)
  *   scene.js    the wheel glb close-up, one WebGL context per open()
  *   emi.js      EMI's face and poses on the perch
  *   readout.js  the one SP readout (ctx.spReadout when the room has it)
@@ -14,10 +15,19 @@
  * button inside 100 ms (the wheel starts turning), then retargets the
  * deceleration onto result.sliceIndex whatever the drag strength. A reopen
  * after spinning shows the day's stored landing and a countdown to nextResetAt.
+ *
+ * HYPNO v3 (CONTRACT 10.13.F). Fullscreen effects go only through the kit's
+ * moments: wheel.turn once when the long last turn starts (then its tunnel level
+ * every frame), and one wheel.land.<size> on the landing frame. The Loom hub is
+ * painted by the kit's one shared context; the deck deals 4 and only lends a key.
+ * Gates dress the page (spiral off: a brass star) from the first frame and live;
+ * suspend and close cancel the moments and free the kit and the deck.
  * ==========================================================================*/
 
 import { layoutOf, landingAngle, resultIndex, readResult, restRotation, countdown } from './wheel.js';
-import { recipe, tierOf, fxFor, usesGifs, winTokens, glance, landPose, pressPose, bezier, FEEL } from './feel.js';
+import { recipe, tierOf, winTokens, glance, landPose, pressPose, bezier, FEEL } from './feel.js';
+import { dressOf, edgeAlpha, captionAlpha } from './hypno.js';
+import { createLoomKit, createDeck, createMoments, wheelSize, strengthK, wheelTurnLevel, boxAround } from '../../shared/hypno/index.js';
 import { createScene } from './scene.js';
 import { createReadout } from './readout.js';
 import { createBank } from './bank.js';
@@ -40,15 +50,20 @@ export async function mount(ctx) {
     return String(s ?? fallback).replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : `{${k}}`));
   };
   const prefersReduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const reduced = !!ctx.reduced || prefersReduced;
-  const calm = String(ctx.intensity || '').toLowerCase() === 'calm';
-  const still = reduced || calm;                  // Law VI: reduced motion and Calm land at the settled state
+  // Law VI: reduced motion and Calm land at the settled state. Read at each open (the room's getters are live).
+  let reduced = false, calm = false, still = false;
+  const readMotion = () => {
+    reduced = !!ctx.reduced || prefersReduced; calm = String(ctx.intensity || '').toLowerCase() === 'calm'; still = reduced || calm;
+  };
+  readMotion();
   const hostBack = ctx.hostBack === true;
+  const hypnoCtx = () => ({ intensity: String(ctx.intensity || 'normal').toLowerCase(), reduced, gates: ctx.gates });
   loadCss();
 
   let el = null, scene = null, readout = null, bank = null, sound = null, session = 0, alive = false, suspended = false;
-  let st = null, layout = null, busy = false, pose = 'idle0_0', gifs = [], unSp = null, timer = 0, refreshAt = 0, lines = [], lineAt = 0;
+  let st = null, layout = null, busy = false, pose = 'idle0_0', unSp = null, timer = 0, refreshAt = 0, lines = [], lineAt = 0;
   let gainTimer = 0, glanceTimer = 0, feelLog = [], revealAt = -Infinity;
+  let moments = null, kit = null, deck = null, unSettings = null, dress = dressOf(), hubPainted = false, turnPlayed = false, lastMoment = null, dealSeq = 0;
   const $ = sel => el.querySelector(sel);
   const note = (what, extra = {}) => { feelLog = [...feelLog.slice(-79), { what, at: Math.round(performance.now()), ...extra }]; };
 
@@ -58,6 +73,8 @@ export async function mount(ctx) {
     root.innerHTML = `
       <div class="wheel-dim"></div>
       <canvas class="wheel-stage" aria-label="${t('br_wheel_stage', 'Daily Daze wheel. Drag the rim to spin.')}"></canvas>
+      <div class="wheel-edges" aria-hidden="true"></div>
+      <div class="wheel-slowly" aria-hidden="true">${t('br_wheel_slowly', 's l o w l y')}</div>
       <header class="wheel-top">
         <button class="wheel-back" type="button">&larr; ${t('br_wheel_back', 'Back')}</button>
         <span class="wheel-sp"></span><span class="wheel-jackpot"></span>
@@ -150,20 +167,73 @@ export async function mount(ctx) {
     g.textContent = text; g.hidden = false;
     clearTimeout(gainTimer); gainTimer = setTimeout(() => { if (el) $('.wheel-gain').hidden = true; }, 2400);
   }
-  function fire(r) {
-    if (suspended || typeof ctx.fx !== 'function') return;
-    for (const fxId of fxFor(r)) {
-      try { const p = ctx.fx(fxId, usesGifs(fxId) && gifs.length ? gifs : undefined); if (p && p.catch) p.catch(() => {}); note('fx', { fxId }); }
-      catch (e) { console.warn('[wheel] fx failed', e); }
-    }
+  /* --------------------------------------------------------------- hypno */
+  /** The kit's Loom context paints the hub; none while suspended, and a still hub is painted once. */
+  function paintHub(canvas, angle, now) {
+    if (!alive || suspended) return false;
+    if (dress.calm && hubPainted) return false;
+    if (!kit) { kit = createLoomKit({ still: dress.calm, log: m => note('loom', { m }) }); hubPainted = false; }
+    hubPainted = kit.paint(canvas, 'hub', { now, angle });
+    return hubPainted;
+  }
+  /** Every frame from the scene: the stage edges, the caption, and wheel.turn's tunnel level (10.13.F). */
+  function onFrame({ dim, slowing }) {
+    if (!el) return;
+    const edges = $('.wheel-edges'), cap = $('.wheel-slowly'), ea = edgeAlpha(dim, dress.k).toFixed(3), ca = captionAlpha(dim).toFixed(3);
+    if (edges.style.opacity !== ea) edges.style.opacity = ea;
+    if (cap.style.opacity !== ca) cap.style.opacity = ca;
+    if (!moments || suspended) return;
+    if (slowing && !turnPlayed) { turnPlayed = true; const out = moments.play('wheel.turn'); note('moment', { id: 'wheel.turn', tokens: out.tokens.length, page: out.page }); }
+    if (!slowing && dim < 0.01) turnPlayed = false;
+    moments.tunnel(wheelTurnLevel(dim));
+  }
+  function applyDress() {
+    dress = dressOf(hypnoCtx());
+    if (scene) scene.setDress(dress);
+    if (kit) kit.setStill(dress.calm);
+    if (deck) deck.setStill(dress.calm);
+    hubPainted = false;
+    if (el) el.dataset.hub = dress.hub;
+  }
+  function dealDeck(my) {
+    const mine = ++dealSeq;
+    createDeck(ctx, { count: 4, still: dress.calm }).then(d => {
+      if (mine !== dealSeq || my !== session || suspended || !alive) { d.dispose(); return null; }
+      if (deck) deck.dispose();
+      deck = d; return d;
+    }).catch(() => null);
+  }
+  /** Centre the stage edges on the wheel (on open and resize, never per frame). */
+  function centreEdges() {
+    const p = scene && el && scene.project('wheel_rotor'), r = el && el.getBoundingClientRect();
+    if (!p || !r) return;
+    el.style.setProperty('--wheel-x', `${Math.round(p.x - r.left)}px`); el.style.setProperty('--wheel-y', `${Math.round(p.y - r.top)}px`);
+  }
+  function freeHypno() {
+    if (moments) moments.cancel();
+    if (kit) { kit.dispose(); kit = null; }
+    if (deck) { deck.dispose(); deck = null; }
+    dealSeq++; hubPainted = false; turnPlayed = false;
+  }
+  /** The landing moment, sized to the prize, on the frame the result shows (Law I). */
+  function fire(raw, r, idx) {
+    if (suspended || !moments || !scene) return;
+    const id = 'wheel.land.' + wheelSize(raw);
+    const p = scene.project('landed');
+    const from = p ? boxAround(p.x, p.y, 60, 44) : undefined;
+    const gif = deck ? deck.pickKey(`${r.day}|${r.sliceId}|${idx}`) : 'g0';
+    const out = moments.play(id, { color: scene.sliceColor(idx), from, gif });
+    if (out.page.includes('quiet_room')) scene.quiet(strengthK(hypnoCtx()));
+    lastMoment = { id, gif, from, tokens: out.tokens.length, page: out.page };
+    note('moment', lastMoment);
   }
   /** The landing beat (Law X): THE THUD, the party the tier allows, the tokens and EMI, on one frame. */
-  function land(r, gained, fresh) {
+  function land(r, gained, fresh, raw, idx) {
     const rec = recipe(r, { still }), tier = tierOf(r);
     lineAt = performance.now();   // the result line shows first
     if (fresh && rec.reveal) { revealAt = lineAt; const step = () => { if (!alive || performance.now() - revealAt > FEEL.REVEAL_MS + 40) return; sync(); requestAnimationFrame(step); }; requestAnimationFrame(step); }
     sound.thud(tier === 0);
-    if (fresh) { scene.celebrate(rec); sound.win(rec.sound); fire(r); }
+    if (fresh) { scene.celebrate(rec); sound.win(rec.sound); fire(raw, r, idx); }
     glanceTo(landPose(r));
     $('.wheel-zzz').hidden = !r.snoozed;
     if (gained > 0 && fresh) {
@@ -224,7 +294,7 @@ export async function mount(ctx) {
     if (idx < 0) { await scene.windDown(); } else await scene.land(landingAngle(layout, idx, r.day), idx);
     if (my !== session || !alive) return;
     busy = false; st = next;
-    land(r, gained, a.kind === 'result');
+    land(r, gained, a.kind === 'result', b.result, idx);
     if (a.kind === 'already') card(t('br_wheel_already', 'Already spun today. Here is where it landed.'));
     renderOdds(); sync();
   }
@@ -235,7 +305,7 @@ export async function mount(ctx) {
     if (e.target && e.target.closest && e.target.closest('summary, input, select')) return;
     if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); press(); }   // the station owns Space and Enter while open
   }
-  const onResize = () => scene && scene.resize();
+  const onResize = () => { if (scene) { scene.resize(); centreEdges(); } };
 
   async function refresh(my) {
     const res = await Promise.resolve(ctx.request('state', {})).catch(() => null);
@@ -254,9 +324,12 @@ export async function mount(ctx) {
   /* ------------------------------------------------------------ lifecycle */
   async function open() {
     if (alive) return;
-    alive = true; busy = false; suspended = false; pose = 'idle0_0'; feelLog = []; lines = []; lineAt = performance.now();
+    alive = true; busy = false; suspended = false; pose = 'idle0_0'; feelLog = []; lines = []; lineAt = performance.now(); lastMoment = null;
     const my = ++session;
-    el = build(); ctx.root.append(el);
+    readMotion(); dress = dressOf(hypnoCtx());
+    el = build(); ctx.root.append(el); el.dataset.hub = dress.hub;
+    moments = createMoments(ctx, { station: 'wheel' });
+    if (typeof ctx.onSettings === 'function') unSettings = ctx.onSettings(() => { if (alive) applyDress(); });
     addEventListener('keydown', onKey); addEventListener('resize', onResize);
     readout = createReadout({ ctx, own: $('.wheel-sp'), format: n => t('br_wheel_sp', '{n} SP', { n: fmt(n) }) });
     if (readout.kind !== 'own') el.dataset.hostSp = '';
@@ -266,10 +339,9 @@ export async function mount(ctx) {
       onLand: () => { sound.token(true); readout.thud(still); },
       onDone: () => readout.settle() });
     if (typeof ctx.onSp === 'function') unSp = ctx.onSp(v => { if (readout) readout.setServer(v); });
-    Promise.resolve().then(() => (typeof ctx.media === 'function' ? ctx.media() : null))
-      .then(m => { if (my === session && m && Array.isArray(m.gifs)) gifs = m.gifs.map(g => String(g.key)).filter(Boolean); }).catch(() => {});
+    dealDeck(my);   // count 4: the wheel only lends fx.gif_from a key (10.13.C)
     const [made, res] = await Promise.all([
-      createScene({ canvas: $('.wheel-stage'), hud: $('.wheel-face'), reduced: still,
+      createScene({ canvas: $('.wheel-stage'), hud: $('.wheel-face'), reduced: still, dress, paintHub, onFrame,
         labels: s => ({ big: s.kind === 'jackpot' ? `★ ${fmt(s.pay)}` : s.kind === 'malus' ? 'Zz' : fmt(s.pay),
                         small: t(`br_wheel_slice_${s.id.replace(/_[a-z]$/, '')}`, s.label) }),
         canSpin: () => !busy && !suspended && !!st && !st.spun,
@@ -286,7 +358,7 @@ export async function mount(ctx) {
     if (!res || !res.ok || res.status === 403 || !res.body || !res.body.ok) return fail(closedText());   // no state, no fallback table
     st = res.body; layout = layoutOf(st.slices);
     if (!layout) return fail(closedText());
-    scene = made; scene.setLayout(layout); readout.setServer(st.sp); readout.settle();
+    scene = made; scene.setDress(dress); scene.setLayout(layout); readout.setServer(st.sp); readout.settle();
     renderOdds();
     const stored = st.spun ? readResult(st.result) : null;
     if (stored) {   // a reopen shows the day's landing, settled, no party and no second bank
@@ -298,7 +370,7 @@ export async function mount(ctx) {
     timer = setInterval(everySecond, 1000);
     await scene.rise();
     if (my !== session) return;
-    el.dataset.phase = 'play'; sync();
+    el.dataset.phase = 'play'; centreEdges(); sync();
   }
 
   async function close() {
@@ -308,7 +380,10 @@ export async function mount(ctx) {
     removeEventListener('keydown', onKey); removeEventListener('resize', onResize);
     clearInterval(timer); clearTimeout(gainTimer); clearTimeout(glanceTimer);
     if (typeof unSp === 'function') unSp();
-    unSp = null;
+    if (typeof unSettings === 'function') unSettings();
+    unSp = null; unSettings = null;
+    freeHypno();
+    if (moments) { moments.dispose(); moments = null; }
     // Law VI: Back skips every ceremony to its settled state and hands the readout the plain server number.
     if (bank) { bank.skip(); bank.dispose(); }
     if (readout) readout.dispose();
@@ -325,7 +400,10 @@ export async function mount(ctx) {
   return {
     open, close,
     suspend(on) {
+      const was = suspended;
       suspended = !!on;
+      if (suspended && !was) freeHypno();
+      else if (!suspended && was && alive) dealDeck(session);   // the kit comes back on the next hub paint
       if (sound) sound.suspend(suspended);
       if (suspended && bank) bank.skip();
       if (suspended && scene) scene.skip();
@@ -336,6 +414,8 @@ export async function mount(ctx) {
     debug: () => ({ phase: el && el.dataset.phase, alive, busy, still, hostBack, state: st, pose,
                     readout: readout && { kind: readout.kind, value: readout.value, server: readout.server, owed: readout.owed },
                     status: el && $('.wheel-status').textContent, spin: el && $('.wheel-spin').textContent,
-                    feel: { log: feelLog, cues: sound ? sound.trace.slice() : [], scene: scene && scene.debug() } }),
+                    feel: { log: feelLog, cues: sound ? sound.trace.slice() : [], scene: scene && scene.debug() },
+                    hypno: { dress, lastMoment, turnPlayed, moments: moments && moments.debug(), kit: kit && kit.debug(), deck: deck && deck.debug(),
+                             edges: el && Number($('.wheel-edges').style.opacity || 0), caption: el && Number($('.wheel-slowly').style.opacity || 0) } }),
   };
 }
