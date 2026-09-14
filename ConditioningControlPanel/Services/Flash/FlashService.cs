@@ -199,6 +199,13 @@ namespace ConditioningControlPanel.Services
             public float X, Y, W, H;   // world px
         }
         private volatile LayerHit[] _layerHits = Array.Empty<LayerHit>();
+        // Flashes v2 wave 2: the flash currently under a thumb. Written on the UI thread, read by
+        // the hook's move/up callbacks, so volatile. Null means nothing is being dragged and the
+        // hook is carrying no move/up callbacks at all (see BeginLayerDrag).
+        private volatile FlashWindow? _dragWindow;
+        // Whether a left-down should start a drag instead of popping. Refreshed on the heartbeat
+        // so the hook never reads AppSettings or PrizeGrants from its own callback.
+        private volatile bool _layerDragEnabled;
         // While a mandatory video is playing, the compositor host is pinned BELOW the video
         // (#497 reconciler), so a layer flash under the video rect is invisible — swallowing
         // clicks there would eat the user's attention-check clicks on a flash they can't see.
@@ -2245,13 +2252,18 @@ namespace ConditioningControlPanel.Services
             if (_layerHook != null) return;
             // Right-click dismisses too: layer flashes own no right-button verb, so the right
             // message routes into the same hit-test (a miss still passes the click through).
-            _layerHook = new GlobalMouseHook { LeftDown = OnLayerFlashLeftDown, RightDown = OnLayerFlashLeftDown };
+            _layerHook = new GlobalMouseHook
+            {
+                LeftDown = p => OnLayerFlashDown(p, right: false),
+                RightDown = p => OnLayerFlashDown(p, right: true),
+            };
             _layerHook.Start();
         }
 
         private void ReleaseLayerHook()
         {
             if (_layerHook == null) return;
+            CancelLayerDrag();
             try { _layerHook.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _layerHook = null;
             _layerHits = Array.Empty<LayerHit>();
@@ -2262,7 +2274,7 @@ namespace ConditioningControlPanel.Services
         /// (most recent spawn) first. A hit swallows the click — exactly what a clickable flash
         /// window did by consuming it — and pops on the dispatcher.
         /// </summary>
-        private bool OnLayerFlashLeftDown(System.Windows.Point px)
+        private bool OnLayerFlashDown(System.Windows.Point px, bool right)
         {
             // Clicks inside a playing mandatory video's rect belong to the video (attention
             // checks) — the flash there is pinned below it and invisible, so never swallow.
@@ -2279,13 +2291,19 @@ namespace ConditioningControlPanel.Services
                 if (px.X < hit.X || px.X > hit.X + hit.W || px.Y < hit.Y || px.Y > hit.Y + hit.H)
                     continue;
                 var win = hit.Win;
+                // Wave 2: a left press on a draggable flash takes hold of it instead of popping
+                // it, and the release decides between the pop, a placement and a throw. A right
+                // press still pops on the spot - that is the escape hatch while dragging is on.
+                var startDrag = !right && _layerDragEnabled;
+                var grab = px;
                 System.Windows.Application.Current?.Dispatcher?.BeginInvoke(() =>
                 {
                     try
                     {
                         // Re-check on the UI thread — the flash may have expired since the snapshot.
-                        if (!win.IsFadingOut && win.LayerItem != null)
-                            OnFlashClicked(win, App.Settings.Current);
+                        if (win.IsFadingOut || win.LayerItem == null) return;
+                        if (startDrag) BeginLayerDrag(win, grab);
+                        else OnFlashClicked(win, App.Settings.Current);
                     }
                     catch (Exception ex)
                     {
@@ -2296,6 +2314,126 @@ namespace ConditioningControlPanel.Services
             }
             return false;
         }
+
+        #region Flashes v2 wave 2 - drag and fling (compositor path)
+
+        /// <summary>
+        /// UI THREAD: take hold of a compositor flash. A still flash has no motion state yet, so
+        /// one is minted from its current rect; FlashDrag.Begin then converts whatever was there
+        /// into the rect-driven shape a hand can move. Only now are the hook's move and up
+        /// callbacks attached, so a session with nothing being dragged pays nothing per move.
+        /// </summary>
+        private void BeginLayerDrag(FlashWindow window, System.Windows.Point px)
+        {
+            if (_dragWindow != null) return;              // one thumb at a time
+            var item = window.LayerItem;
+            var hook = _layerHook;
+            if (item == null || hook == null) return;
+
+            var d = window.Monitor.DpiScale > 0 ? window.Monitor.DpiScale : 1.0;
+            var motion = item.Motion ??= new FlashMotionState
+            {
+                Style = FlashMotionStyle.Still,
+                X = item.X, Y = item.Y, W = item.W, H = item.H,
+                MediaW = item.W, MediaH = item.H,
+                BoundsX = window.Monitor.X * d, BoundsY = window.Monitor.Y * d,
+                BoundsW = window.Monitor.Width * d, BoundsH = window.Monitor.Height * d,
+            };
+            FlashDrag.Begin(motion, px.X, px.Y, Environment.TickCount64);
+            _dragWindow = window;
+            hook.MouseMove = OnLayerDragMove;
+            hook.LeftUp = OnLayerDragUp;
+        }
+
+        /// <summary>HOOK: feed the drag one pointer sample. The compositor tick reads it.</summary>
+        private void OnLayerDragMove(System.Windows.Point px)
+        {
+            var drag = _dragWindow?.LayerItem?.Motion?.Drag;
+            if (drag != null) FlashDrag.Sample(drag, px.X, px.Y, Environment.TickCount64);
+        }
+
+        /// <summary>HOOK: the thumb came off. Timestamp here, decide on the dispatcher.</summary>
+        private void OnLayerDragUp(System.Windows.Point px)
+        {
+            var window = _dragWindow;
+            if (window == null) return;
+            var nowMs = Environment.TickCount64;
+            System.Windows.Application.Current?.Dispatcher?.BeginInvoke(() =>
+            {
+                try { EndLayerDrag(window, px, nowMs); }
+                catch (Exception ex) { App.Logger?.Debug("Layer flash drop failed: {E}", ex.Message); }
+            });
+        }
+
+        /// <summary>
+        /// UI THREAD: finish the press. A tap pops the flash exactly as a click always did (hydra
+        /// and XP included); anything else either parks it or throws it, and neither of those ever
+        /// reaches OnFlashClicked - so a dragged flash spawns no hydra, and the Jackpot Remix roll
+        /// (which happens in the ambient scheduler, before any flash exists) can never see it.
+        /// </summary>
+        private void EndLayerDrag(FlashWindow window, System.Windows.Point px, long nowMs)
+        {
+            // Order matters: a cancel may already have handed the hook to a DIFFERENT flash while
+            // this release was in flight, and clearing first would strip that one's callbacks.
+            if (!ReferenceEquals(_dragWindow, window)) return;
+            _dragWindow = null;
+            ClearDragCallbacks();
+
+            var motion = window.LayerItem?.Motion;
+            var drag = motion?.Drag;
+            if (motion == null || drag == null) return;
+
+            FlashDrag.Sample(drag, px.X, px.Y, nowMs);
+            // A drag can cross screens, so the walls come from the monitor it was let go over -
+            // and from its WORK AREA, so a flung flash never vanishes behind the taskbar.
+            ApplyWorkAreaBounds(motion, px);
+
+            if (FlashDrag.Release(motion, nowMs, MotionFx.Level) == FlashDragOutcome.Tap
+                && !window.IsFadingOut)
+            {
+                OnFlashClicked(window, App.Settings.Current);
+            }
+        }
+
+        /// <summary>Point a fling's walls at the work area of the monitor under this point.</summary>
+        private static void ApplyWorkAreaBounds(FlashMotionState motion, System.Windows.Point px)
+        {
+            try
+            {
+                var wa = Screen.FromPoint(new System.Drawing.Point((int)px.X, (int)px.Y)).WorkingArea;
+                if (wa.Width <= 0 || wa.Height <= 0) return;
+                motion.BoundsX = wa.X; motion.BoundsY = wa.Y;
+                motion.BoundsW = wa.Width; motion.BoundsH = wa.Height;
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "no screen under the drop point"); }
+        }
+
+        /// <summary>Stop paying for move and up messages the instant the gesture is over.</summary>
+        private void ClearDragCallbacks()
+        {
+            var hook = _layerHook;
+            if (hook == null) return;
+            hook.MouseMove = null;
+            hook.LeftUp = null;
+        }
+
+        /// <summary>
+        /// End a drag that never got its release: the flash expired or was torn down under the
+        /// thumb, or the hook itself is going away. The picture parks where it was last seen.
+        /// Pass a window to cancel only that one. UI thread.
+        /// </summary>
+        private void CancelLayerDrag(FlashWindow? only = null)
+        {
+            var window = _dragWindow;
+            if (window == null) return;
+            if (only != null && !ReferenceEquals(only, window)) return;
+            _dragWindow = null;
+            ClearDragCallbacks();
+            var motion = window.LayerItem?.Motion;
+            if (motion != null) { motion.Drag = null; motion.Vx = 0; motion.Vy = 0; }
+        }
+
+        #endregion
 
         /// <summary>
         /// Refresh the hook-thread hit snapshot from the live layer items (heartbeat cadence),
@@ -2322,6 +2460,11 @@ namespace ConditioningControlPanel.Services
                 }
             }
             _layerHits = hits?.ToArray() ?? Array.Empty<LayerHit>();
+
+            // Wave 2: whether a press grabs or pops, resolved here so the hook's own callback
+            // never touches settings or ownership. Dragging rides the same clickable gate as the
+            // pop it replaces, so a click-through (solid mode) flash stays untouchable.
+            _layerDragEnabled = App.Settings?.Current?.FlashDraggable == true && OwnsFlashV2();
 
             // Publish the playing video's physical rect so the hook thread won't swallow
             // clicks on a flash the video is covering (the host sits pinned below the video).
@@ -4398,6 +4541,11 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                // Wave 2: this flash may be the one under a thumb (expired mid-drag, popped by gaze,
+                // swept by a teardown). Drop the drag before the item goes, or the hook keeps
+                // paying for move messages nothing reads.
+                CancelLayerDrag(window);
+
                 // Dispose CTS registration first to release the closure capturing this window
                 try { window.LifetimeRegistration?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 window.LifetimeRegistration = null;

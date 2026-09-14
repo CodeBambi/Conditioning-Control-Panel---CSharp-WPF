@@ -272,6 +272,21 @@
                                                   Checked="ChkFlashRoundedCorners_Changed" Unchecked="ChkFlashRoundedCorners_Changed"/>
                                     </Grid>
 
+                                    <!-- Draggable GIFs (wave 2). Same motion grants as rounded corners, and
+                                         the same clickable gate the pop it replaces already had. -->
+                                    <Grid x:Name="RowDraggable" Height="34" Background="Transparent" Visibility="Collapsed"
+                                          ToolTip="{loc:Str tooltip_flash_draggable}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_draggable}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkFlashDraggable"
+                                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                  Checked="ChkFlashDraggable_Changed" Unchecked="ChkFlashDraggable_Changed"/>
+                                    </Grid>
+
                                     <!-- Jackpot Remix (Back Room prize fx.jackpot_remix). Shown only while the prize is
                                          owned (PrizeGrants, never settings); off by default, owning it never flips it.
                                          The v2 pill it used to wear inline now heads the whole box. -->
