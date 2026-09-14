@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   TAU, LAST_TURN_SPEED, SLOW_FLOOR, timeScale, planSpeed, warpStep, warpedRotation, stepDim, edgeAlpha, captionAlpha,
   QUIET, distance01, quietMix, quietDone, outlineAlpha, mixRgb, taffyShear, stepShear, sliceU, trailOffset, ghostRotations,
-  HUB_DRIFT, hubAngle, moireRotations, moireSegments, dressOf,
+  HUB_DRIFT, HUB_FOLLOW, stepHub, moireRotations, moireSegments, dressOf,
 } from '../hypno.js';
 import { planLanding, rotationAt } from '../wheel.js';
 import { strengthK } from '../../../shared/hypno/moments.js';
@@ -60,7 +60,7 @@ test('quiet room: others grey fast, capped at 0.78, colour flows back nearest fi
   assert.equal(quietMix(-1, 0.5), 0);
   assert.equal(quietMix(0, 0.5), 0);
   assert.equal(quietMix(0.5, 1), QUIET.max, 'full strength caps at 0.78');
-  assert.ok(near(quietMix(0.5, 1, 0.5), 0.78), 'Calm: 0.5 x 1.6 = 0.8, still under the cap');
+  assert.ok(near(quietMix(0.5, 1, 0.5), 0.78), 'Calm: 0.5 x 1.6 = 0.8 is over the cap, so Calm peaks at the same 0.78 and k only slows the ramp');
   assert.ok(near(quietMix(0.1, 1, 0.5), 0.3 * 0.5 * 1.6));
   assert.ok(quietMix(2, 0.1) < quietMix(2, 0.9), 'the nearest slice gets its colour back first');
   assert.equal(quietMix(3.6, 1), 0);
@@ -89,10 +89,16 @@ test('taffy: shear by speed, capped, and it TRAILS (law 3)', () => {
   assert.ok(ghostRotations(1, -12).every(r => r > 1));
 });
 
-test('Loom hub turns clockwise with the wheel and drifts clockwise at rest', () => {
+test('Loom hub turns clockwise whichever way the wheel turns, and drifts clockwise at rest', () => {
   assert.equal(HUB_DRIFT, 0.35);
-  assert.ok(hubAngle(-1, 0) > hubAngle(0, 0), 'a clockwise wheel (rotation.z falling) grows the clockwise angle');
-  assert.ok(near(hubAngle(0, 2) - hubAngle(0, 1), 0.35), 'at rest it still turns clockwise');
+  assert.equal(HUB_FOLLOW, 0.9);
+  assert.ok(near(stepHub(0, 0, 1) - 0, 0.35), 'at rest it still turns clockwise');
+  assert.ok(near(stepHub(1, 10, 0.1), 1 + (9 + 0.35) * 0.1), 'a clockwise wheel adds 0.9 x its speed');
+  assert.equal(stepHub(1, -10, 0.1), stepHub(1, 10, 0.1), 'an anticlockwise fling turns the hub the same clockwise way');
+  let rot = 0;
+  for (const v of [-30, -12, -1.2, 0, 4, 30]) { const next = stepHub(rot, v, 1 / 60); assert.ok(next > rot, `never backward at ${v} rad/s`); rot = next; }
+  assert.ok(near(stepHub(0, 0, 1, 0.32), 0.35 * 0.32), 'the long last turn slows the drift with its clock');
+  assert.equal(stepHub(2, 5, -1), 2, 'no negative frame');
   const [a, b] = moireRotations(2);
   assert.equal(a, 2);
   assert.ok(near(b, 2.1));

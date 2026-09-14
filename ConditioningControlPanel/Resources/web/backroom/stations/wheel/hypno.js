@@ -4,8 +4,8 @@
  * (hypno-spins-v3.html, the wheel section).
  *
  * Angles: `rotorZ` is wheel_rotor.rotation.z (anticlockwise on screen as it grows, three's +Z faces the camera).
- * A clockwise screen angle is -rotorZ. Law 3 (handedness): the Loom hub turns clockwise with the wheel and keeps a
- * slow clockwise drift at rest, so its arms lead at the rim and it reads as pulling inward; physical trailing shapes
+ * A clockwise screen angle is -rotorZ. Law 3 (handedness): the Loom hub always turns clockwise, by the wheel's speed
+ * in either direction plus a slow drift at rest, so its arms lead at the rim and it reads as pulling inward; physical trailing shapes
  * (the taffy slices, their smear ghosts) bend AGAINST their motion, a = base - k * u. */
 
 import { easeOutQuart } from './wheel.js';
@@ -127,8 +127,17 @@ export function ghostRotations(rotorZ, omega, n = TAFFY.ghosts) {
 
 /** Idle drift of the hub spiral, rad/s clockwise, so it keeps pulling inward at rest. */
 export const HUB_DRIFT = 0.35;
-/** The hub's Loom angle (clockwise screen radians): the wheel's own angle plus the drift. */
-export const hubAngle = (rotorZ, seconds) => -(Number(rotorZ) || 0) + HUB_DRIFT * Math.max(0, Number(seconds) || 0);
+/** How much of the wheel's own speed the hub takes (the mockup's `vel * 0.9`). */
+export const HUB_FOLLOW = 0.9;
+/**
+ * One frame of the hub's Loom angle (clockwise screen radians). It ACCUMULATES the wheel's speed as a magnitude,
+ * so it turns clockwise whichever way the wheel goes: a player can fling the wheel anticlockwise, and a hub read off
+ * -rotation.z would then run backward with its arms still leading at the rim and push outward (law 3). `speed` is
+ * the rotor's rad/s (either sign), `scale` the long last turn's time scale, which slows the drift as the mockup's
+ * warped clock does: hubRot += (|vel| x 0.9 + 0.35) x dt.
+ */
+export const stepHub = (rot, speed, dtS, scale = 1) =>
+  (Number(rot) || 0) + (Math.abs(Number(speed) || 0) * HUB_FOLLOW + HUB_DRIFT * clamp01(scale)) * Math.max(0, Number(dtS) || 0);
 
 export const MOIRE = Object.freeze({ lines: 60, gold: '#e8c27a', goldAlpha: 0.75, mint: '#5fffd0', mintAlpha: 0.55 });
 /** The two moire rings' rotations: one at the rotor angle, one at 0.9 x angle + 0.3. */
