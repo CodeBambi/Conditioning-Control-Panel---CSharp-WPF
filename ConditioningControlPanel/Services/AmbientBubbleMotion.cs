@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Prizes;
 
@@ -62,7 +62,9 @@ public static class AmbientBubbleMotion
 
     public static bool RainOwned => PrizeGrants.IsGranted(PrizeGrants.BubbleRain);
     public static bool SpiralInOwned => PrizeGrants.IsGranted(PrizeGrants.BubbleSpiralIn);
-    public static bool AnyV2Owned => RainOwned || SpiralInOwned;
+    /// <summary>Either ambient prize style. One spelling, in <see cref="V2Badges"/>, because the
+    /// dashboard tile and the side rail's chips light off the very same question.</summary>
+    public static bool AnyV2Owned => V2Badges.BubbleOwned();
 
     /// <summary>The concrete style for one ambient spawn, from the current picker + grants + motion level.</summary>
     public static BubbleMotionStyle RollForSpawn(Random random) =>

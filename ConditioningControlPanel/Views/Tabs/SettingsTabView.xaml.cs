@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -43,13 +43,10 @@ namespace ConditioningControlPanel.Views.Tabs
             {
                 try
                 {
-                    // Jackpot Remix is a flash prize too, so the tile wears the pill for it as
-                    // well as for the two motion styles.
+                    // Which grants count as "flashes v2" (Jackpot Remix is a flash prize too) is
+                    // V2Badges', shared with the Bubble Pop tile and the side rail's chips.
                     if (CardFlash != null)
-                        CardFlash.ShowV2Badge =
-                            Services.Prizes.PrizeGrants.IsGranted(Services.Prizes.PrizeGrants.FlashDriftBounce)
-                            || Services.Prizes.PrizeGrants.IsGranted(Services.Prizes.PrizeGrants.FlashPendulum)
-                            || Services.Prizes.PrizeGrants.IsGranted(Services.Prizes.PrizeGrants.JackpotRemix);
+                        CardFlash.ShowV2Badge = Services.Prizes.V2Badges.FlashOwned();
                 }
                 catch (Exception ex) { App.Logger?.Debug("SettingsTabView.RefreshV2Badges: {E}", ex.Message); }
             }
