@@ -44,6 +44,8 @@ const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Applic
 const PORT = Number(process.env.WEAVE_PORT || 8894), DEBUG_PORT = PORT + 500;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fail = (msg) => { console.error('FAIL ' + msg); process.exitCode = 1; };
+// The sidecar is meant to be read and pasted: a float from normalizeParams2's snap (0.30000000000000004) is written short.
+const tidy = (k, v) => (typeof v === 'number' && !Number.isInteger(v) ? Number(v.toFixed(6)) : v);
 
 if (!existsSync(CHROME)) { fail('no chrome at ' + CHROME); process.exit(1); }
 
@@ -108,7 +110,7 @@ try {
     if (REPORT_ONLY) continue;
     if (r.bytes > MAX_BYTES) throw new Error(`${name}.gif is ${r.bytes} bytes, over the Loom store's 8 MB cap`);
     if (r.bytes > BUDGET_BYTES) console.warn(`  WARN ${name}.gif is over the contract's 4 MB budget (${r.bytes} bytes)`);
-    woven.push({ name, gif: Buffer.from(r.b64, 'base64'), sidecar: JSON.stringify(r.params, null, 2) + '\n' });
+    woven.push({ name, gif: Buffer.from(r.b64, 'base64'), sidecar: JSON.stringify(r.params, tidy, 2) + '\n' });
   }
 
   if (REPORT_ONLY) {
