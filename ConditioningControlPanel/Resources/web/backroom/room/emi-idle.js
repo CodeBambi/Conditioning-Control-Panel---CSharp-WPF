@@ -48,7 +48,9 @@ export function createEmiIdle({ model, row, atlas }) {
   }
   function update(dt, still=false) {
     if(disposed)return;
-    if(still){rest();return;}
+    // Still takes the settled pose (Law VI) and never ages a gesture, so drop the one in hand
+    // instead of parking it to replay whole when motion comes back.
+    if(still){action=null;age=0;rest();return;}
     const step=Math.max(0,Math.min(Number.isFinite(dt)?dt:0,.05));elapsed+=step;
     if(action){age+=step;if(age>=EMI_REACTIONS[action]){action=null;age=0;}}
     const t=elapsed+phase, gesture=action?sampleEmiReaction(action,age):sampleEmiGesture(row.id,t);

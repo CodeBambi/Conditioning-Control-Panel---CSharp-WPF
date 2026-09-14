@@ -644,6 +644,50 @@ await shot('wall-picture-from-feed.png');
   await boot(1280, 720);
 }
 
+// 2k. Room Service: the catalogue panel opens no second WebGL context, every item toggles, and the
+// room keeps drawing behind it (CONTRACT 7 and 10.13.7: the close-up is a scissored pass, not a context).
+{
+  const canvases = () => ev(`document.querySelectorAll('canvas').length`);
+  const errsBefore = errs.length;
+  const before = await canvases();
+  ok(before === 1, `the walking room owns one canvas (${before})`);
+  await ev(`window.__backroom.scene.customization.open()`);
+  await sleep(400);
+  ok(await ev(`!document.querySelector('.br-custom-panel').hidden`), 'Room Service opens its panel');
+  ok(await canvases() === 1, 'and adds no canvas of its own: the close-up draws on the room renderer');
+  // The Options pill and the floor bell are shifted out from under the panel, never hidden by it.
+  ok(await ev(`getComputedStyle(document.querySelector('.br-nav')).visibility === 'visible'
+    && getComputedStyle(document.querySelector('.br-bell')).visibility === 'visible'`), 'the nav pills and the bell stay visible');
+  ok(await ev(`(() => { const p = document.querySelector('.br-nav .br-pill:nth-child(3)').getBoundingClientRect();
+    const hit = document.elementFromPoint(p.left + p.width / 2, p.top + p.height / 2);
+    return !!hit && hit.closest('.br-nav') !== null && !document.querySelector('.br-custom-panel').contains(hit); })()`),
+    'and the Options pill is still the thing under its own pixels');
+  const seen = [];
+  for (let i = 0; i < 9; i++) {
+    await ev(`document.querySelectorAll('.br-custom-items button')[${i}].click()`);
+    await sleep(120);
+    await ev(`(document.querySelector('.br-custom-actions button') || {}).click?.()`);
+    await sleep(220);
+    const d = await dbg();
+    seen.push({ i, focus: d.customization.view.selected, calls: d.calls, triangles: d.triangles, chosen: JSON.stringify(d.customization.selected) });
+  }
+  ok(seen.every((s) => s.focus === s.i), 'each of the nine items pulls the close-up camera onto its own bay');
+  ok(seen.every((s) => s.calls > 0 && s.triangles > 0), `the room still submits work under every toggle (${seen.map((s) => s.calls).join(', ')} calls)`);
+  ok(new Set(seen.map((s) => s.chosen)).size >= 4, 'and the toggles change the room state, not just the panel');
+  ok(await canvases() === 1, 'still one canvas after the whole catalogue has been toggled');
+  await shot('room-service-panel.png');
+  const a0 = (await dbg()).ambient;
+  await sleep(500);
+  ok((await dbg()).ambient > a0, 'the room keeps advancing frames behind the panel');
+  ok(errs.length === errsBefore, 'no page errors while the panel is open' + (errs.length > errsBefore ? ': ' + errs.slice(errsBefore).join(' | ') : ''));
+  await key('Escape');
+  await sleep(400);
+  ok(await ev(`document.querySelector('.br-custom-panel').hidden`), 'Escape closes the panel');
+  ok(await canvases() === before, `the canvas count is back where it started (${await canvases()})`);
+  const after = await dbg();
+  ok(after.running && after.calls > 0 && !after.customization.opened, 'and the room is walking again, drawing the full width');
+}
+
 // 2l. Escape in the empty room leaves
 await key('Escape');
 await sleep(200);

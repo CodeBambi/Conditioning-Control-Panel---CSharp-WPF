@@ -323,6 +323,10 @@ Driven nodes (verified present in the glb 2026-09-13): `cabinet`, `reel_1..3` (X
 `screen_status`, `marquee` + `marquee_glow`, `lights_chase_00..29`, `payout_tray`, `payout_spawn`,
 `emi_topper` (face material `emi_face`), `cam_seat`, `cam_target`.
 
+Optional too (the page degrades with a console warning when either is missing): `wand_head`, the wand
+tip the room reads to find where a chess handle sits on the lever, and `wand_switch`, its companion in
+the same wand assembly, masked out of the merged cabinet geometry with it.
+
 - Reel cells: 13 cells along U, painted from `strips[r]` of `state`, rotated and reflected exactly as
   `preview/app.js` `paintStrips` does. Stop `k` rests at `((k + .5) / 13 - .5) * 2PI`.
 - Face atlas: `repeat (151/1672, 136/137)`, `offset ((i*152 + .5)/1672, .5/137)`, Nearest, no mips.

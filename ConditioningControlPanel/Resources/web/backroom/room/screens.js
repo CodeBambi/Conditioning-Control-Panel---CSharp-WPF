@@ -133,6 +133,8 @@ export async function createScreens(o) {
       disposed = true;
       for (const src of new Set([...house, ...gallery])) src.dispose ? src.dispose() : src.texture.dispose();
       captions.forEach(t => t.dispose());
+      // One cross-fade ShaderMaterial per screen, made here, so it is freed here too.
+      for (const mesh of o.meshes) if (mesh.material) mesh.material.dispose();
     },
     get pictures() { return custom ? gallery.length : 0; },
     /** Test seam: how many pictures can play, frames decoded so far, decodes started. */

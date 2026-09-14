@@ -20,3 +20,21 @@ test('station routines differ and invalid time never produces NaN',()=>{
  assert.equal(new Set(signatures).size,4);
  for(const v of [-1,NaN,Infinity])assert.equal(sampleEmiGesture('counter',v).yaw,0);
 });
+// The idle rotation now plays the authored reactions (look, bow, present, wave), so the old
+// "tiny sway" ceiling (yaw .085, pitch .05, roll .016) no longer describes it: `look` sweeps the
+// head .34 rad and `wave` lifts a whole shoulder. These are the bounds idle really needs, with
+// `present` kept in the rotation; anything wilder than a mascot pottering about still fails here.
+// Click-driven reactions (sampleEmiReaction) stay free: only the unattended loop is bounded.
+const IDLE_BOUNDS={yaw:.34,pitch:.16,roll:.045};
+const PERIODS={counter:27,wheel:19,cards:23,roulette:25};
+test('the unattended idle loop stays inside its bounds on every station',()=>{
+ for(const [id,period] of Object.entries(PERIODS)){
+  for(let t=0;t<=period*3;t+=1/60){
+   const g=sampleEmiGesture(id,t),where=id+' at '+t.toFixed(3)+' s';
+   for(const [key,bound] of Object.entries(IDLE_BOUNDS))assert.ok(Math.abs(g[key])<=bound+1e-9,where+' '+key+' '+g[key]);
+   assert.equal(g.lift,0,where+' lift');
+   // 3 is the rest face, so a routine naming it reads exactly like the null the others return.
+   assert.ok(g.face===null||g.face===3,where+' face '+g.face);
+  }
+ }
+});

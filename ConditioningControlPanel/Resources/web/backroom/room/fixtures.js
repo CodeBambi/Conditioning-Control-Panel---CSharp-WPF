@@ -135,7 +135,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     o.geometry.computeBoundingBox();
     warpBounds.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld);
     if(warpBounds.max.x<=6.5 || warpBounds.max.z<=0)return;
-    const g=o.geometry.clone(), a=g.attributes.position;
+    const previous=o.geometry, g=previous.clone(), a=g.attributes.position;
     const positions=new Float32Array(a.count*3), inverse=o.matrixWorld.clone().invert();
     for(let i=0;i<a.count;i++) {
       point.fromBufferAttribute(a,i).applyMatrix4(o.matrixWorld);
@@ -143,7 +143,8 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
       point.applyMatrix4(inverse).toArray(positions,i*3);
     }
     g.setAttribute('position',new T.BufferAttribute(positions,3));
-    g.computeVertexNormals();g.computeBoundingSphere();o.geometry=g;
+    // The bent copy replaces the loaded one, which nothing else reads: free it with the swap.
+    g.computeVertexNormals();g.computeBoundingSphere();o.geometry=g;previous.dispose();
   });
 
   shell.traverse(o => { o.updateMatrix(); o.matrixAutoUpdate=false; });

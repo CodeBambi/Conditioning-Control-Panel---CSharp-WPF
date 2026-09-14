@@ -97,7 +97,9 @@ export async function createScene(o) {
   const previewTarget = new T.Vector3();
 
   const interaction = createEmiInteraction({ canvas, camera, scene, emis: room.emis, mount: o.mount, label: o.lex,
-    isActive: () => !held && !halted && !suspended && !overview && !customization.opened });
+    isActive: () => !held && !halted && !suspended && !overview && !customization.opened,
+    // Law VI: a still room keeps every NPC at rest, so a click gets the bark without the gesture.
+    canGesture: () => !still });
 
   function topDown() { camera.position.set(0, Math.max(21, 19 / camera.aspect), 0.01); camera.lookAt(0, 0, 0); }
   function resize() {
@@ -218,6 +220,9 @@ export async function createScene(o) {
     camera.updateMatrixWorld();
     interaction.update(dt, still);
     screens.update(ambient, overview ? null : camera, still);
+    // The catalogue close-up shares this context (CONTRACT 7): its own scissored pass, drawn first so
+    // renderer.info still reports the room's own frame.
+    customization.draw(renderer);
     renderer.setViewport(0,0,previewWidth,height);
     renderer.setScissor(0,0,previewWidth,height);
     renderer.setScissorTest(customization.opened);
@@ -249,7 +254,7 @@ export async function createScene(o) {
       held = null; resetInput(); run();
     },
     pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); interaction.dismiss(); customization.dismiss(); } else run(); },
-    halt() { halted = true; stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); resetInput(); interaction.dispose(); customization.dispose(); decor.dispose(); for(const p of room.payouts.values())p.coins.dispose(); },
+    halt() { halted = true; stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); resetInput(); interaction.dispose(); for(const e of room.emis)e.dispose(); customization.dispose(); decor.dispose(); for(const p of room.payouts.values())p.coins.dispose(); },
     setStill(on) { still = !!on; },
     /** Repaint one fixture label, e.g. the wheel's screen for MUST HIT (10.16.E). */
     setLabel(rowKey, node, text) { return room.setLabel(rowKey, node, text); },

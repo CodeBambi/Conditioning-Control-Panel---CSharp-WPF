@@ -13,8 +13,8 @@ The cold total includes JS and art from the local no-cache test server, before H
 
 ## Device limits
 
-- Room and vending: 30 FPS at rest. Desktop movement/look may draw up to 60 FPS; phones stay at 30. Slot and wheel presentation is capped at 60/30 without changing settlement timelines.
-- Room, slot and wheel: at most 1.5 million pixels on desktop, 900,000 on phones/low-memory devices. DPR is capped at 1.25/1. Resolution falls gradually to 60% after sustained slow room frames. UI text stays at native resolution. Anti-aliasing remains enabled.
+- Room and the catalogue close-up: 30 FPS at rest, on one renderer (the close-up is a scissored second pass on the room's context, not a context of its own). Desktop movement/look may draw up to 60 FPS; phones stay at 30. Slot and wheel presentation is capped at 60/30 without changing settlement timelines.
+- Room, slot and wheel: at most 1.5 million pixels on desktop, 900,000 on phones/low-memory devices. DPR is capped at 1.25/1. Only the room samples its own frame times, so only the room's resolution falls, gradually, to 60% after sustained slow frames; the slot and the wheel keep the resolution they opened with. UI text stays at native resolution. Anti-aliasing remains enabled.
 - Hidden room tabs stop their animation loop. Opening a game holds the room. Resuming resets input and clocks.
 - Two minor cartridge transmission materials use their opaque reflective finish, avoiding a second whole-room refraction pass.
 - All wall and ceiling screens share media sources. GIFs are at most 384 px and there is one global budget of 12 new frame decodes per second, shared fairly among visible sources. Still images are capped at 512 px. At most two media files initialize concurrently. Exiting closes decoders.
@@ -27,7 +27,7 @@ No website configuration or deployment is included. The room is currently a loca
 1. Serve room JS, GLBs, textures and media directly as static CDN files. Do not route asset downloads through an authenticated server function. Keep authoritative SP/game endpoints separate.
 2. For the current stable asset filenames, emit ETag and `Cache-Control: public, max-age=0, must-revalidate`. A repeat visit can reuse unchanged browser bytes following a 304. Do not use year-long immutable caching on these mutable filenames.
 3. When the web build adopts content-hashed filenames, use `Cache-Control: public, max-age=31536000, immutable` for those files. Keep HTML and the asset manifest revalidated. Enable Brotli/gzip for JS/CSS/JSON and verify real response headers and a warm reload in the deployed browser.
-4. Package only referenced assets. Retired ivy, terrarium and other old catalogue GLBs are not loaded and need not be published. Player GIF sizes and traffic volume are separate inputs to a hosting estimate.
+4. Package only referenced assets. The retired ivy, terrarium and other old catalogue GLBs are gone from the collection. Player GIF sizes and traffic volume are separate inputs to a hosting estimate.
 
 Animations make no server calls. Room media is dealt once; the floor bell reads on entry and station return, never by polling. Existing slot tapes batch game requests. Real hosting cost still needs traffic, CDN pricing, player-media volume and game endpoint measurements; a local GPU test cannot establish it.
 
