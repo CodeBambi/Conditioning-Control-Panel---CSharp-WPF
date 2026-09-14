@@ -483,6 +483,40 @@ namespace ConditioningControlPanel.Avalonia
                 // A separate fresh picker proves the production labels are rendered in French and
                 // that the localized Oui route still saves without the recommended guard.
                 LocalizationManager.Instance.SetLanguage("fr");
+
+                noGuard.IsChecked = false;
+                Dispatcher.UIThread.RunJobs();
+                var frenchNoPrompt = OpenPrompt(noDialog);
+                var frenchNoButtons = frenchNoPrompt is null
+                    ? new List<(Button Button, string Caption)>()
+                    : PromptButtons(frenchNoPrompt);
+                check("awareness picker existing French guard prompt renders literal Oui/Non",
+                    frenchNoPrompt is not null && frenchNoButtons.Count == 2
+                    && frenchNoButtons[0].Caption == "Oui" && frenchNoButtons[1].Caption == "Non",
+                    $"open={frenchNoPrompt is not null}, captions={string.Join("|", frenchNoButtons.Select(button => button.Caption))}");
+                var frenchNoButton = frenchNoButtons.Count == 2 ? frenchNoButtons[1].Button : null;
+                check("awareness picker French guard prompt makes Non the default",
+                    frenchNoButton?.IsDefault == true,
+                    $"isDefault={frenchNoButton?.IsDefault.ToString() ?? "<missing>"}");
+                check("awareness picker French guard prompt focuses Non",
+                    frenchNoButton?.IsFocused == true,
+                    $"isFocused={frenchNoButton?.IsFocused.ToString() ?? "<missing>"}");
+
+                if (frenchNoPrompt is not null) PressKey(frenchNoPrompt, PhysicalKey.Enter);
+                check("awareness picker French guard prompt closes after actual Enter",
+                    OpenPrompt(noDialog) is null,
+                    $"open={OpenPrompt(noDialog) is not null}");
+                check("awareness picker stays open after French safe Enter",
+                    noDialog.IsVisible && !noCompletion.IsCompleted,
+                    $"visible={noDialog.IsVisible}, completed={noCompletion.IsCompleted}");
+                check("awareness picker French safe Enter leaves Result null",
+                    noDialog.Result is null,
+                    $"result={(noDialog.Result is null ? "<null>" : string.Join(",", noDialog.Result))}");
+                check("awareness picker French safe Enter rechecks the guard",
+                    noRow.IsListed && noGuard.IsChecked == true,
+                    $"listed={noRow.IsListed}, checked={noGuard.IsChecked}");
+                AnswerGuardNo(noDialog);
+
                 frenchDialog = new AwarenessAppPickerDialog(
                     AwarenessListKind.Deny,
                     new[] { "@passwords", "existing.exe" },
