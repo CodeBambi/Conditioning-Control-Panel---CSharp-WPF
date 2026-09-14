@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -1085,8 +1085,13 @@ public class BubbleService : IDisposable
     {
         var s = App.Settings?.Current;
         if (s?.BubbleTriggersEnabled != true) return null;
-        var ids = s.BubbleTriggerVariants;
-        if (ids == null || ids.Count == 0) return null;
+        // Bubbles v2 (wave 2): the Brain Drain bubble joins the pool as one more equally-weighted
+        // id when it is owned AND switched on. It is added here rather than stored in
+        // BubbleTriggerVariants so ownership stays live - a synced profile cannot smuggle it in,
+        // and losing the grant removes it without rewriting the user's chosen variant list.
+        var ids = BrainDrainBubble.RollPool(s.BubbleTriggerVariants,
+                                            AmbientBubbleMotion.AnyV2Owned, s.BubbleBrainDrainEnabled);
+        if (ids.Count == 0) return null;
         if (_random.Next(100) >= Math.Clamp(s.BubbleTriggerChance, 0, 100)) return null;
         return BuildTriggerSpec(ids[_random.Next(ids.Count)]);
     }
@@ -1120,6 +1125,22 @@ public class BubbleService : IDisposable
                     SizePx = 200,
                     Tint = System.Windows.Media.Color.FromRgb(0x9A, 0x40, 0xFF),
                     Label = "GLITCH",
+                    IsLive = false,
+                    FuseMs = 0,
+                    Motion = motion ?? ChaosMotion.FloatUp,
+                    TreatLifeMs = 7000,
+                };
+            }
+            if (id == BrainDrainBubble.VariantId)
+            {
+                return new EffectBubbleSpec
+                {
+                    VariantId = BrainDrainBubble.VariantId,   // no sprite ships: wears the tinted bubble.png
+                    Payload = new BrainDrainMeltPayload(),
+                    SizePx = 220,
+                    Tint = System.Windows.Media.Color.FromRgb(
+                        BrainDrainBubble.TintR, BrainDrainBubble.TintG, BrainDrainBubble.TintB),
+                    Label = "◍",
                     IsLive = false,
                     FuseMs = 0,
                     Motion = motion ?? ChaosMotion.FloatUp,
@@ -2481,6 +2502,7 @@ internal class Bubble
     private double _screenBottom, _screenLeft, _screenRight;   // motion bounds (DIPs)
 
     private bool _hasVariantSprite;   // a per-variant sprite replaced the tinted bubble.png
+    private bool _isDrainBubble;      // Bubbles v2 Brain Drain bubble: breathes, glows violet
 
     // ---- lifetime-boon extensions (neutral defaults; chaos effect bubbles only) ----
     private readonly int _hitSize;         // Magic Wand / Mesmer Reach: enlarged click target (>= _size)
@@ -2704,6 +2726,8 @@ internal class Bubble
             else if (_isDarter) { glowColor = tint; glowBlur = 26; glowOp = 0.9f; hasGlow = true; }
             else if (_spec.IsGolden) { glowColor = new SkiaSharp.SKColor(0xFF, 0xD7, 0x00); glowBlur = 20; glowOp = 0.55f; hasGlow = true; }
             else if (_spec.IsBrittle) { glowColor = new SkiaSharp.SKColor(0xBF, 0xE6, 0xFF); glowBlur = 22; glowOp = 0.6f; hasGlow = true; }
+            else if (_isDrainBubble && PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier))
+            { glowColor = new SkiaSharp.SKColor(0x8A, 0x3A, 0xD8); glowBlur = 18; glowOp = 0.5f; hasGlow = true; }
             else if (_spec.Spotlight)
             {
                 var tier = PerformanceProfile.CurrentTier;
@@ -2870,6 +2894,7 @@ internal class Bubble
         _isTease = spec?.IsTease == true;
         if (_isTease) _teaseLifeRemainingMs = ChaosTuning.TEASE_LIFE_MS;
         _isBrittle = spec?.IsBrittle == true;
+        _isDrainBubble = spec?.VariantId == Chaos.BrainDrainBubble.VariantId;
         if (_isBrittle) _brittleArmRemainingMs = ChaosTuning.BRITTLE_ARM_MS;
         // Treats (flash/subliminal/golden) rot: only so long on screen before they dissolve.
         // Hearts don't rot — they drift down once and exit; missing one carries no sting.
@@ -3271,6 +3296,24 @@ internal class Bubble
                 }
                 catch (Exception ex) { Diag.Swallowed(ex); }
             }
+        }
+
+        // Bubbles v2 Brain Drain bubble: a soft violet halo, the still half of the "something is
+        // about to go quiet" tell (the breathe above is the moving half). Perf-gated like every
+        // other glow; the compositor path takes the same colour through BuildLayerItem.
+        if (_isDrainBubble && PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier))
+        {
+            try
+            {
+                _bubbleImage.Effect = new DropShadowEffect
+                {
+                    Color = Color.FromRgb(0x8A, 0x3A, 0xD8),
+                    BlurRadius = Math.Min(18, PerformanceProfile.MaxGlowBlurRadius(PerformanceProfile.CurrentTier)),
+                    ShadowDepth = 0,
+                    Opacity = 0.5
+                };
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         // GG make more GG: sweeper rabbits are born spanked — ally-AMBER glow on the sprite itself
@@ -3884,6 +3927,11 @@ internal class Bubble
                     opacity *= 0.85 + 0.13 * Math.Sin(_shimmerPhase);
                 }
             }
+            // Bubbles v2 Brain Drain bubble: a slow, faint breathe so it reads as its own creature
+            // next to the indigo braindrain one. It rides the opacity this frame already computed,
+            // so neither render path gains an element and the compositor gains no work at all.
+            if (_isDrainBubble && !_isPopping)
+                opacity *= Chaos.BrainDrainBubble.PulseAt(_timeAlive);
             _fxTarget.Opacity = opacity;
             if (_useLayer)
             {

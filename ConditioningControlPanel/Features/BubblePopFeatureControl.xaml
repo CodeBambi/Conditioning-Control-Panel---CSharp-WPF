@@ -106,22 +106,6 @@
                                            FontSize="13" FontWeight="Bold"/>
                             </Grid>
 
-                            <!-- Motion (Bubbles v2, Back Room prizes). Collapsed until a v2 style is
-                                 owned; the code-behind fills the picker with Float up, the owned styles
-                                 (each with a v2 pill) and Mix, and refreshes it on PrizeGrants.GrantsChanged. -->
-                            <Grid x:Name="MotionRow" Height="36" Background="Transparent" Visibility="Collapsed"
-                                  ToolTip="{loc:Str tooltip_bubble_motion}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{loc:Str setting_bubble_motion}" FontSize="13" FontWeight="SemiBold"
-                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <ComboBox Grid.Column="1" x:Name="CmbMotion" Width="150" feat:SessionLock.Owned="True"
-                                          VerticalAlignment="Center"
-                                          Style="{DynamicResource DarkComboBoxStyle}"
-                                          SelectionChanged="CmbMotion_Changed"/>
-                            </Grid>
 
                             <!-- Size. Sits with Per Min / Speed rather than under an advanced
                                  header because "these are too big" is a first-minute reaction, and
@@ -200,6 +184,51 @@
                                           Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
                                           Checked="ChkTriggers_Changed" Unchecked="ChkTriggers_Changed"/>
                             </Grid>
+
+                            <!-- Bubbles v2 (Back Room prizes): its own box, so what the prizes added
+                                 reads as a thing you bought and not as two more dials lost among the
+                                 sliders. The whole box collapses when no v2 grant is owned - the
+                                 code-behind drives V2Box.Visibility from PrizeGrants and refreshes it
+                                 on GrantsChanged. The champagne pill in the header is the same badge
+                                 the feature cards wear (FeatureCard.NewV2Badge), injected by code. -->
+                            <Border x:Name="V2Box" Visibility="Collapsed" Margin="0,8,0,2"
+                                    CornerRadius="10" Padding="12,8,12,8"
+                                    Background="#14FFE08A" BorderBrush="#33FFE08A" BorderThickness="1">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                        <TextBlock Text="{loc:Str label_bubbles_v2_box}" FontSize="12.5" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <ContentControl x:Name="V2BoxBadge" Margin="7,0,0,0" VerticalAlignment="Center"/>
+                                    </StackPanel>
+
+                                    <Grid x:Name="MotionRow" Height="36" Background="Transparent"
+                                          ToolTip="{loc:Str tooltip_bubble_motion}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_bubble_motion}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <ComboBox Grid.Column="1" x:Name="CmbMotion" Width="150" feat:SessionLock.Owned="True"
+                                                  VerticalAlignment="Center"
+                                                  Style="{DynamicResource DarkComboBoxStyle}"
+                                                  SelectionChanged="CmbMotion_Changed"/>
+                                    </Grid>
+
+                                    <Grid x:Name="BrainDrainBubbleRow" Height="34" Background="Transparent"
+                                          ToolTip="{loc:Str tooltip_bubble_braindrain}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_bubble_braindrain}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkBrainDrainBubble"
+                                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                  Checked="ChkBrainDrainBubble_Changed" Unchecked="ChkBrainDrainBubble_Changed"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </Grid>
                 </Border>

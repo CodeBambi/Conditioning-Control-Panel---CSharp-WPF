@@ -3434,6 +3434,17 @@ namespace ConditioningControlPanel.Models
             get => _bubbleTriggerVariants;
             set { _bubbleTriggerVariants = value ?? new List<string>(); OnPropertyChanged(); }
         }
+        // Bubbles v2 (wave 2): the Brain Drain bubble in the trigger pool. Default ON so a bought
+        // prize shows up without a second opt-in; ownership itself is never read from here (that is
+        // PrizeGrants), so this switch grants nothing on its own.
+        private bool _bubbleBrainDrainEnabled = true;
+        [JsonProperty("BubbleBrainDrainEnabled")]
+        public bool BubbleBrainDrainEnabled
+        {
+            get => _bubbleBrainDrainEnabled;
+            set { _bubbleBrainDrainEnabled = value; OnPropertyChanged(); }
+        }
+
         // Easter egg: when an effect bubble lingers >4s, a 10% roll sends the companion to glide over,
         // narrate the effect, and pop it for you (50% louder). Gated under BubbleTriggersEnabled.
         private bool _bubbleAvatarEggEnabled = true;
