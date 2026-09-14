@@ -2,7 +2,7 @@
 /* ============================================================================
  * build-backroom-room-assets.mjs - the Back Room 3D room's speed pass.
  *
- *   node ConditioningControlPanel/Scripts/build-backroom-room-assets.mjs [--source DIR] [--tools DIR] [--check-only]
+ *   node ConditioningControlPanel/Scripts/build-backroom-room-assets.mjs [--source DIR] [--tools DIR] [--check-only] [--only counter.glb]
  *
  * READS blender-scripting (the shell and the five fixture glbs, the default wall
  * ads) and WRITES optimized copies into Resources/web/backroom/room/assets/.
@@ -42,14 +42,15 @@ const arg = (name, dflt) => { const i = process.argv.indexOf(name); return i > 0
 const SOURCE = resolve(arg('--source', 'C:/Projects/blender-scripting'));
 const TOOLS = resolve(arg('--tools', join(process.env.LOCALAPPDATA || join(HERE, '..', '..', '.tools'), 'ccp-tools', 'gltf-transform-4.5.0')));
 const CHECK_ONLY = process.argv.includes('--check-only');
+const ONLY = arg('--only', null);
 
 const PINS = ['@gltf-transform/core@4.5.0', '@gltf-transform/extensions@4.5.0', '@gltf-transform/functions@4.5.0',
   'meshoptimizer@1.2.0', 'sharp@0.35.4'];
 
 /** Names the room reads. Leaves matching these are never joined, and their counts are checked. */
-export const PROTECT = /^(sconce_globe|media_screen_\d|spiral_inlay|ceiling$|lights_chase_\d|bulb_\d|canopy_bulb_\d|rim_bulb_\d|EMI_glass|marquee$|screen_jackpot|screen_status|reel_\d|title_screen|status_screen|center_spiral|inset_spiral_|emi_dealer|golden_emi_attendant|alcove_return)/;
+export const PROTECT = /^(shelf_(?:jackpot_remix|rt_demo|high_roller|flashes_v2|bubbles_v2|rt_bundle_[123])$|sconce_globe|media_screen_\d|spiral_inlay|ceiling$|lights_chase_\d|bulb_\d|canopy_bulb_\d|rim_bulb_\d|EMI_glass|marquee$|screen_jackpot|screen_status|reel_\d|title_screen|status_screen|center_spiral|inset_spiral_|emi_dealer|golden_emi_attendant|alcove_return)/;
 /** Groups the room transforms or toggles as a whole: static leaves are pulled up to these, not past. */
-const KEEP_GROUP = /^(ceiling|center_spiral|emi_dealer|golden_emi_attendant|EMI_root)$/;
+const KEEP_GROUP = /^(shelf_(?:jackpot_remix|rt_demo|high_roller|flashes_v2|bubbles_v2|rt_bundle_[123])|ceiling|center_spiral|emi_dealer|golden_emi_attendant|EMI_root)$/;
 /** Materials whose textures the room replaces with its own shader. */
 const RUNTIME_TEXTURED = /^(screen_picture_\d|floor_spiral)$/;
 
@@ -57,11 +58,12 @@ const JOBS = [
   { from: 'backroom/out/shell.glb', to: 'shell.glb' },
   { from: 'slot/out/slot.glb', to: 'slot.glb' },
   { from: 'wheel/out/wheel.glb', to: 'wheel.glb' },
-  { from: 'counter/out/counter.glb', to: 'counter.glb' },
+  { from: 'counter/prize-build/out/counter-prizes.glb', to: 'counter.glb' },
   { from: 'card-table/out/card-table.glb', to: 'card-table.glb' },
   { from: 'roulette/out/roulette.glb', to: 'roulette.glb' },
 ];
 const ADS = ['arcademy', 'dtrh', 'focus-gaze'];
+if (ONLY && !JOBS.some((job) => job.to === ONLY)) throw new Error('Unknown --only asset: ' + ONLY);
 
 function inClient(p) {
   const r = relative(WEB, resolve(p));
@@ -162,7 +164,7 @@ async function main() {
   const rows = [];
   let failed = 0;
 
-  for (const job of JOBS) {
+  for (const job of JOBS.filter((job) => !ONLY || job.to === ONLY)) {
     const src = join(SOURCE, job.from);
     const dst = inClient(join(OUT, job.to));
     const srcBuf = readFileSync(src);
@@ -193,7 +195,7 @@ async function main() {
   }
 
   // Default wall art: WebP copies at 1280 px wide (the screens are 2.12 m, seen from 2 m away).
-  for (const ad of ADS) {
+  for (const ad of ONLY ? [] : ADS) {
     const src = join(SOURCE, 'backroom', 'out', 'ads', ad + '.png');
     const dst = inClient(join(OUT, 'ads', ad + '.webp'));
     if (!CHECK_ONLY) {

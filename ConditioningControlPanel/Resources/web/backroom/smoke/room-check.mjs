@@ -70,7 +70,8 @@ const NEED = {
   'shell.glb': ['ceiling', 'spiral_inlay', 'media_screen_0', 'media_screen_1', 'media_screen_2', 'media_screen_3', 'sconce_globe'],
   'slot.glb': ['EMI_glass', 'marquee', 'screen_jackpot', 'screen_status', 'reel_1', 'reel_2', 'reel_3', 'lights_chase_00', 'lights_chase_29'],
   'wheel.glb': ['EMI_glass', 'title_screen', 'status_screen', 'bulb_00'],
-  'counter.glb': ['golden_emi_attendant', 'EMI_glass'],
+  'counter.glb': ['golden_emi_attendant', 'EMI_glass', 'shelf_jackpot_remix', 'shelf_rt_demo',
+    'shelf_high_roller', 'shelf_flashes_v2', 'shelf_bubbles_v2', 'shelf_rt_bundle_1', 'shelf_rt_bundle_2', 'shelf_rt_bundle_3'],
   'card-table.glb': ['emi_dealer', 'alcove_return', 'EMI_glass'],
   'roulette.glb': ['center_spiral', 'emi_dealer', 'rim_bulb_0', 'canopy_bulb_0', 'inset_spiral_0', 'EMI_glass'],
 };
@@ -80,6 +81,16 @@ for (const [file, names] of Object.entries(NEED)) {
   ok(!!nodes && names.every((n) => nodes.has(n)), file + ' has ' + names.length + ' looked-up nodes');
 }
 ok(stations.every((s) => readdirSync(ASSETS).includes(s.fixture.file)), 'every registry fixture file is present');
+{
+  const b = readFileSync(join(ASSETS, 'counter.glb'));
+  const model = JSON.parse(b.subarray(20, 20 + b.readUInt32LE(12)).toString('utf8'));
+  const prizes = model.nodes.filter((n) => n.extras?.prize_id);
+  ok(prizes.length === 8 && new Set(prizes.map((n) => n.extras.prize_id)).size === 8,
+    'the counter has eight unique prize ids');
+  ok(prizes.every((n) => n.name === 'shelf_' + n.extras.prize_id && n.children?.length > 0),
+    'each prize id stays on its own populated shelf group');
+}
+
 
 /* ---------------------------------------------------------------- 2. page */
 const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
