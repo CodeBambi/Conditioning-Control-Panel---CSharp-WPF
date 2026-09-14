@@ -1,0 +1,127 @@
+/* backroom/room/room.css - the room shell over the 3D view. Plum and neon. */
+
+:root {
+  --br-ground: #120c1c;
+  --br-plum: #2a1838;
+  --br-ink: #f4e8ff;
+  --br-ink-dim: #bfa6d6;
+  --br-pink: #ff6fb5;
+  --br-gold: #ffcf6b;
+  --br-lav: #b99cff;
+  color-scheme: dark;
+}
+
+html, body { margin: 0; height: 100%; background: var(--br-ground); color: var(--br-ink); overflow: hidden;
+  font: 14px/1.35 "Segoe UI", system-ui, sans-serif; user-select: none; }
+
+.br-stage { position: fixed; inset: 0; }
+.br-canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+.br-canvas:active { cursor: grabbing; }
+html.br-overview .br-canvas { cursor: default; }
+
+/* The room's own chrome sits between the view and the station layer. */
+.br-room-ui { position: fixed; inset: 0; z-index: 10; pointer-events: none; }
+.br-room-ui > * { pointer-events: auto; }
+html.br-visiting .br-room-ui { visibility: hidden; }
+
+.br-loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; background: radial-gradient(ellipse, #422445, #160d1e); }
+.br-loading[hidden] { display: none; }
+.br-spark { font-size: 38px; color: #eaa3d4; }
+.br-loading-text { margin: 0; font-size: 18px; letter-spacing: .04em; color: var(--br-ink); }
+.br-loading-bar { width: 180px; height: 3px; border-radius: 3px; background: rgba(255, 255, 255, .12); overflow: hidden; }
+.br-loading-bar i { display: block; height: 100%; width: 0; background: var(--br-pink); transition: width 200ms ease-out; }
+
+.br-hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); pointer-events: none;
+  color: var(--br-ink-dim); font-size: 12px; white-space: nowrap; }
+.br-crosshair { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%;
+  background: rgba(255, 224, 240, .6); box-shadow: 0 0 5px #120914; pointer-events: none; }
+.br-crosshair[hidden] { display: none; }
+
+.br-visit { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); min-width: 210px;
+  font: 600 15px/1 "Segoe UI", system-ui, sans-serif; color: var(--br-ink); cursor: pointer;
+  background: linear-gradient(135deg, rgba(162, 92, 143, .92), rgba(84, 53, 101, .93)); border: 1px solid #dda9d4;
+  border-radius: 12px; padding: 14px 24px; }
+.br-visit[hidden] { display: none; }
+.br-visit:focus-visible, .br-pill:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 2px; }
+
+.br-nav { position: absolute; top: 12px; right: 120px; display: flex; gap: 8px; }
+.br-pill { font: 600 13px/1 "Segoe UI", system-ui, sans-serif; color: var(--br-ink); cursor: pointer;
+  background: rgba(42, 24, 56, .86); border: 1px solid rgba(185, 156, 255, .45); border-radius: 999px; padding: 9px 15px; }
+.br-pill:hover { border-color: var(--br-gold); }
+.br-pill:disabled { opacity: .6; cursor: default; }
+/* The room's Options (10.14): a small plum card hanging from the nav, right edge under the Options pill (the last pill). */
+.br-options { position: absolute; top: calc(100% + 8px); right: 0; width: 230px; padding: 12px 14px; border-radius: 12px;
+  background: rgba(30, 18, 42, .94); border: 1px solid rgba(185, 156, 255, .35); display: flex; flex-direction: column; gap: 8px; }
+.br-options[hidden], .br-opt-note[hidden] { display: none; }
+.br-opt-name { color: var(--br-ink-dim); font-size: 12px; }
+.br-opt-note { margin: -2px 0 0; color: var(--br-ink-dim); font-size: 11px; }
+.br-seg-row { display: flex; gap: 4px; }
+.br-seg, .br-switch { font: 600 12px/1 "Segoe UI", system-ui, sans-serif; color: var(--br-ink); cursor: pointer;
+  background: rgba(42, 24, 56, .9); border: 1px solid rgba(185, 156, 255, .35); border-radius: 999px; padding: 7px 10px; }
+.br-seg { flex: 1; }
+.br-seg[aria-pressed="true"], .br-switch[aria-pressed="true"] { border-color: var(--br-gold); color: var(--br-gold); }
+.br-seg:focus-visible, .br-switch:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 2px; }
+.br-opt-row { display: flex; align-items: center; justify-content: space-between; }
+.br-switch { min-width: 52px; }
+.br-map-list { position: absolute; left: 16px; right: 16px; bottom: 26px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.br-map-list[hidden] { display: none; }
+html.br-overview .br-hint { visibility: hidden; }
+
+/* The room view puts the Options card away with the rest of the walking chrome. */
+html.br-overview .br-options { visibility: hidden; }
+
+/* THE FLOOR BELL (CONTRACT 10.16.B). One line of text under the nav pills. It is
+ * somebody else's party (Brake 1): one colour, no background flash, no sound. */
+.br-bell { position: absolute; top: 50px; right: 120px; max-width: min(520px, calc(100vw - 150px));
+  pointer-events: none; text-align: right; color: var(--br-ink-dim); font-size: 12px; letter-spacing: .01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.br-bell[hidden] { display: none; }
+.br-bell span { opacity: 1; }
+.br-bell span.is-in { animation: br-bell-in 200ms ease-out; }
+html.br-overview .br-bell { visibility: hidden; }
+@keyframes br-bell-in { from { opacity: 0; } }
+/* Reduced motion and Calm: the line still rotates (it is text, not motion), it just lands at 0 ms. */
+html.br-reduced .br-bell span.is-in, html.br-still .br-bell span.is-in { animation: none; }
+@media (prefers-reduced-motion: reduce) { .br-bell span.is-in { animation: none; } }
+
+/* HUD: Back is always on top of everything, stations included (Law VI). */
+.br-hud { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; justify-content: space-between;
+  align-items: center; z-index: 30; pointer-events: none; }
+.br-back, .br-card-back { pointer-events: auto; font: 600 14px/1 "Segoe UI", system-ui, sans-serif; color: var(--br-ink);
+  background: rgba(42, 24, 56, .88); border: 1px solid rgba(255, 111, 181, .55); border-radius: 999px;
+  padding: 9px 18px; cursor: pointer; transition: transform 120ms cubic-bezier(.2, 1.5, .4, 1); }
+.br-back:hover, .br-card-back:hover { border-color: var(--br-gold); }
+.br-back:active, .br-card-back:active { transform: scale(.96); }
+.br-back:focus-visible, .br-card-back:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 2px; }
+.br-sp { pointer-events: auto; background: rgba(18, 12, 28, .8); border: 1px solid rgba(255, 207, 107, .4);
+  border-radius: 999px; padding: 7px 14px; color: var(--br-ink-dim); }
+.br-sp b { color: var(--br-gold); font-variant-numeric: tabular-nums; margin-left: 4px; }
+html.br-leaving .br-sp { opacity: .5; }
+
+/* The station layer: stations and cards sit over the room, under the HUD. */
+.br-layer { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
+.br-layer > * { pointer-events: auto; }
+.br-station { position: absolute; inset: 0; background: var(--br-ground); }
+
+.br-card-veil { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(12, 8, 20, .55);
+  animation: br-fade 220ms ease-out; }
+.br-card { position: relative; width: min(420px, calc(100vw - 48px)); padding: 26px 26px 22px; border-radius: 16px;
+  background: linear-gradient(160deg, #3a2550, #22152f); border: 1px solid rgba(185, 156, 255, .35);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .5); text-align: center; overflow: hidden;
+  animation: br-rise 340ms cubic-bezier(.2, 1.5, .4, 1); }
+/* The dust sheet: a pale cloth draped over the top of the card, folds by gradient only. */
+.br-card-sheet { position: absolute; left: -10%; right: -10%; top: -30px; height: 74px; border-radius: 0 0 50% 50% / 0 0 26px 26px;
+  background: repeating-linear-gradient(100deg, rgba(236, 226, 244, .20) 0 28px, rgba(236, 226, 244, .10) 28px 52px); }
+.br-card-veil.is-failed .br-card-sheet { display: none; }
+.br-card-title { position: relative; margin: 30px 0 8px; font-size: 20px; color: var(--br-ink); }
+.br-card-body { position: relative; margin: 0 0 18px; color: var(--br-ink-dim); }
+
+@keyframes br-fade { from { opacity: 0; } }
+@keyframes br-rise { from { transform: translateY(14px) scale(.96); opacity: 0; } }
+
+html.br-reduced .br-card, html.br-reduced .br-card-veil { animation: none; }
+html.br-reduced .br-back, html.br-reduced .br-loading-bar i { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .br-card, .br-card-veil { animation: none; }
+}
