@@ -192,9 +192,28 @@
     </Content>
   </ItemGroup>
 
+  <!-- THEMED SESSION PRESETS. Three of the four shipped sessions are BambiSleep programmes down to
+       their phrase lists (Good Girls Don't Cum, The Distant Doll, Gamer Girl), so they travel with
+       mod-bambi and rejoin the rack the moment that pack is installed - SessionFileService reads
+       both roots. morning_drift stays in the box as the neutral one.
+
+       Declared HERE rather than beside the other ContentPack* properties at the bottom of the file:
+       MSBuild evaluates a project body in document order, so a property used by an ItemGroup this
+       far up has to be defined above it or it expands to nothing and strips nothing at all.
+       There is no ...Abs twin because CopyContentAfterPublish never re-globs assets\sessions - the
+       <Content> item below is the only place these files are declared.
+       Mirrored in $CsprojStripPatterns (Scripts/build-content-packs.ps1), which hard-fails on drift. -->
+  <PropertyGroup>
+    <ContentPackSessionsExclude>
+      assets\sessions\distant_doll.session.json;
+      assets\sessions\gamer_girl.session.json;
+      assets\sessions\good_girls_dont_cum.session.json
+    </ContentPackSessionsExclude>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- Session files -->
-    <Content Include="assets\sessions\*.session.json">
+    <Content Include="assets\sessions\*.session.json" Exclude="$(ContentPackSessionsExclude)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>

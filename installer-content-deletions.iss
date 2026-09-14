@@ -7,7 +7,7 @@
 ; into a content pack, deleted from {app} by EXACT name on upgrade. No wildcards: files a
 ; user hand-dropped into these folders are never matched and survive. dirifempty removes
 ; only folders the sweep actually emptied.
-; 8569 files, 30 folder candidates.
+; 8572 files, 30 folder candidates.
 ; ============================================================================================
 Type: files;      Name: "{app}\DroneMod\drone-mode.ccpmod"
 Type: files;      Name: "{app}\InfectionMod\infection-control.ccpmod"
@@ -8578,6 +8578,9 @@ Type: files;      Name: "{app}\Resources\web\intake\assets\vo\sure_sissy_17.mp3"
 Type: files;      Name: "{app}\Resources\web\intake\assets\vo\sure_sissy_18.mp3"
 Type: files;      Name: "{app}\Resources\web\intake\assets\vo\sure_sissy_19.mp3"
 Type: files;      Name: "{app}\Resources\web\intake\assets\vo\sure_sissy_20.mp3"
+Type: files;      Name: "{app}\assets\sessions\distant_doll.session.json"
+Type: files;      Name: "{app}\assets\sessions\gamer_girl.session.json"
+Type: files;      Name: "{app}\assets\sessions\good_girls_dont_cum.session.json"
 Type: dirifempty; Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\portraits\0_base"
 Type: dirifempty; Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\portraits\1_l1"
 Type: dirifempty; Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\portraits\2_beach"
