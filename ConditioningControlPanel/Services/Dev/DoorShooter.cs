@@ -117,6 +117,10 @@ internal static class DoorShooter
                 // Shorter than the rail's 1000ms auto-collapse, longer than its 150ms tween.
                 await Task.Delay(TimeSpan.FromMilliseconds(500));
                 if (Capture(window, Path.Combine(outDir, "17-rail-expanded.png"))) written++;
+                // Paired, even though the run ends in Shutdown: an unreleased hold is the exact
+                // shape of the v6.9.5 stuck-rail bug, and this rig is where the next caller will
+                // copy the call from.
+                mw.ReleaseNavRailOpen();
             }
 
             // Home's audio drawer, open. Same reason as the rail: no pointer to click it with.

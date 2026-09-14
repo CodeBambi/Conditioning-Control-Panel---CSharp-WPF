@@ -442,9 +442,25 @@ namespace ConditioningControlPanel
                 };
                 item.Click += (_, _) => TogglePinned(id);
                 menu.Items.Add(item);
-                if (holdRail) HoldNavRailOpen();
             };
-            if (holdRail) menu.Closed += (_, _) => ReleaseNavRailOpen();
+            if (!holdRail) return;
+
+            // THE HOLD IS TAKEN ON **Opened**, NOT ON ContextMenuOpening. That one word is the
+            // v6.9.5 "the rail stops minimizing" bug: ContextMenuOpening is a REQUEST to show a
+            // menu and fires on every right-click WPF routes here, while Closed is only ever
+            // raised for a menu that really opened. WPF opens by setting IsOpen = true, which is a
+            // no-op on a menu that is already open, so a request that did not flip that property
+            // took a hold nothing would ever give back - and every collapse trigger in
+            // MainWindow.NavRail.cs bails out on a standing hold, so the flyout sat over the
+            // dashboard until the app was restarted. Opened and Closed are the two halves of one
+            // IsOpen transition and cannot come apart; the claim is keyed on the menu on top of
+            // that, so even a doubled Opened is one hold and a Closed with no Opened is nothing.
+            menu.Opened += (_, _) => HoldNavRailOpen(menu);
+            menu.Closed += (_, _) => ReleaseNavRailOpen(menu);
+
+            // And the rail is told this menu exists, so its watchdog can tell a pin menu that is
+            // genuinely up (leave the rail open) from a hold that outlived one (take it back).
+            RegisterNavRailPopup(menu);
         }
     }
 }
