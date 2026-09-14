@@ -122,7 +122,7 @@ try {
     $commit = Require-Success (Invoke-Owned $git @('-C', $repo, 'cat-file', '-p', 'HEAD') $repo 'commit-object') # Real parents even with shallow checkout.
     Save-Json "$root/identity.json" @{ checkout = $identity; commitObject = $commit; githubSha = $env:GITHUB_SHA; os = [Environment]::OSVersion.VersionString; powershell = "$($PSVersionTable.PSVersion)" }
     # Freeze the reviewed safe Program/App/null-lifetime route and every product dependency.
-    foreach ($entry in @(@('CCP.Avalonia', 'd7564c90f4ecd40ba520975560512f7f5ff9856b'), @('CCP.Core', 'ec2d4c2a60bf3683ce7ec97c4d9e1c5c6d84b0c3'))) {
+    foreach ($entry in @(@('CCP.Avalonia', '0dac4a26bdd5de913bf024f1150346798a33a002'), @('CCP.Core', 'ec2d4c2a60bf3683ce7ec97c4d9e1c5c6d84b0c3'))) {
         $tree = Require-Success (Invoke-Owned $git @('-C', $repo, 'rev-parse', "HEAD:$($entry[0])") $repo "tree-$($entry[0])")
         if ($tree -ne $entry[1]) { throw "Unreviewed source tree: $($entry[0])" }
     }
@@ -144,7 +144,7 @@ try {
             Require-Success (Invoke-Owned $git @('-C', $source, '-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'apply', '--unidiff-zero', $patch) $source 'inverse-apply') | Out-Null
         }
         $testHash = (Get-FileHash "$source/$tests" -Algorithm SHA256).Hash
-        if ($testHash -ne '2c3f8a2ebe2ccc6f0ab911e836de97fc5d7f907c3795b1278a6131b3c7bd8bab') { throw 'Test bytes changed' }
+        if ($testHash -ne '4c30c14ccd1bcc4cef6ddfd2b028b34b69a9837513fd6dc67f19d25329ba4aa1') { throw 'Test bytes changed' }
         $expectedDialog = if ($mode -eq 'red') { '4e135e6f3261b2ced8389ac5a584628afa19c00132b072a4cc1230ab0d3a0437' } else { 'e3944bb609bc6d110b3f362bb98043ccdb3fd6266d26475aeaa5c5329f0b5381' }
         if ((Get-FileHash "$source/$dialog" -Algorithm SHA256).Hash -ne $expectedDialog) { throw 'Dialog bytes changed' }
         $before = @(Manifest $source)

@@ -363,9 +363,11 @@ namespace ConditioningControlPanel.Avalonia
         {
             Window? owner = null;
             AwarenessAppPickerDialog? noDialog = null;
+            AwarenessAppPickerDialog? frenchDialog = null;
             AwarenessAppPickerDialog? yesDialog = null;
             AwarenessAppPickerDialog? noticeDialog = null;
             Task<bool?>? noCompletion = null;
+            Task<bool?>? frenchCompletion = null;
             Task<bool?>? yesCompletion = null;
             Task<bool?>? noticeCompletion = null;
             var previousLanguage = LocalizationManager.Instance.CurrentLanguage;
@@ -433,6 +435,7 @@ namespace ConditioningControlPanel.Avalonia
                 owner = new Window();
                 owner.Show();
                 Dispatcher.UIThread.RunJobs();
+                LocalizationManager.Instance.SetLanguage("en");
 
                 // A fresh picker keeps the safe-No route independent of the explicit-Yes route.
                 noDialog = new AwarenessAppPickerDialog(
@@ -447,24 +450,14 @@ namespace ConditioningControlPanel.Avalonia
                     noDialog.IsVisible && noGuard.IsChecked == true && noRow.IsRecommended,
                     $"visible={noDialog.IsVisible}, checked={noGuard.IsChecked}, recommended={noRow.IsRecommended}");
 
-                // French is selected before the real guard prompt is opened so hardcoded English
-                // labels fail at the rendered TextBlock seam.
-                LocalizationManager.Instance.SetLanguage("fr");
                 noGuard.IsChecked = false;
                 Dispatcher.UIThread.RunJobs();
                 var noPrompt = OpenPrompt(noDialog);
                 var noButtons = noPrompt is null ? new List<(Button Button, string Caption)>() : PromptButtons(noPrompt);
                 check("awareness picker opens its owned Yes/No guard prompt",
-                    noPrompt is not null && noButtons.Count == 2,
+                    noPrompt is not null && noButtons.Count == 2
+                    && noButtons[0].Caption == "Yes" && noButtons[1].Caption == "No",
                     $"open={noPrompt is not null}, captions={string.Join("|", noButtons.Select(button => button.Caption))}");
-                check("awareness picker guard prompt renders French app-locale labels",
-                    noButtons.Count == 2
-                    && noButtons[0].Caption == "Oui" && noButtons[1].Caption == "Non"
-                    && noButtons[0].Caption == Loc.Get("btn_yes")
-                    && noButtons[1].Caption == Loc.Get("btn_no")
-                    && noButtons[0].Caption != "btn_yes" && noButtons[1].Caption != "btn_no",
-                    $"captions={string.Join("|", noButtons.Select(button => button.Caption))}, "
-                    + $"btn_yes={Loc.Get("btn_yes")}, btn_no={Loc.Get("btn_no")}");
                 var noButton = noButtons.Count == 2 ? noButtons[1].Button : null;
                 check("awareness picker guard prompt makes No the default",
                     noButton?.IsDefault == true,
@@ -487,6 +480,40 @@ namespace ConditioningControlPanel.Avalonia
                     noRow.IsListed && noGuard.IsChecked == true,
                     $"listed={noRow.IsListed}, checked={noGuard.IsChecked}");
 
+                // A separate fresh picker proves the production labels are rendered in French and
+                // that the localized Oui route still saves without the recommended guard.
+                LocalizationManager.Instance.SetLanguage("fr");
+                frenchDialog = new AwarenessAppPickerDialog(
+                    AwarenessListKind.Deny,
+                    new[] { "@passwords", "existing.exe" },
+                    new[] { "synthetic.exe" });
+                frenchCompletion = frenchDialog.ShowDialog<bool?>(owner);
+                Dispatcher.UIThread.RunJobs();
+                var frenchGuard = GuardCheckBox(frenchDialog);
+                frenchGuard.IsChecked = false;
+                Dispatcher.UIThread.RunJobs();
+                var frenchPrompt = OpenPrompt(frenchDialog);
+                var frenchButtons = frenchPrompt is null
+                    ? new List<(Button Button, string Caption)>()
+                    : PromptButtons(frenchPrompt);
+                if (frenchButtons.Count == 2) ClickButton(frenchButtons[0].Button);
+                var frenchRow = Rows(frenchDialog).Single(row => row.Raw == "@passwords");
+                ClickButton(frenchDialog.FindControl<Button>("BtnSave")!);
+                check("awareness picker renders French Oui/Non and explicit Oui saves without the guard",
+                    frenchPrompt is not null && frenchButtons.Count == 2
+                    && frenchButtons[0].Caption == "Oui" && frenchButtons[1].Caption == "Non"
+                    && OpenPrompt(frenchDialog) is null && !frenchDialog.IsVisible
+                    && frenchCompletion.IsCompletedSuccessfully && frenchCompletion.Result == true
+                    && !frenchRow.IsListed && frenchDialog.Result is not null
+                    && !frenchDialog.Result.Contains("@passwords")
+                    && frenchDialog.Result.Contains("existing.exe"),
+                    $"open={OpenPrompt(frenchDialog) is not null}, captions={string.Join("|", frenchButtons.Select(button => button.Caption))}, "
+                    + $"visible={frenchDialog.IsVisible}, completed={frenchCompletion.Status}, "
+                    + $"result={string.Join(",", frenchDialog.Result ?? new List<string>())}");
+
+                LocalizationManager.Instance.SetLanguage("en");
+                Dispatcher.UIThread.RunJobs();
+
                 // Explicit Yes remains the only route that can remove a recommended guard.
                 yesDialog = new AwarenessAppPickerDialog(
                     AwarenessListKind.Deny,
@@ -499,9 +526,9 @@ namespace ConditioningControlPanel.Avalonia
                 Dispatcher.UIThread.RunJobs();
                 var yesPrompt = OpenPrompt(yesDialog);
                 var yesButtons = yesPrompt is null ? new List<(Button Button, string Caption)>() : PromptButtons(yesPrompt);
-                check("awareness picker exposes explicit French Oui for guard removal",
+                check("awareness picker exposes explicit Yes for guard removal",
                     yesPrompt is not null && yesButtons.Count == 2
-                    && yesButtons[0].Caption == "Oui" && yesButtons[1].Caption == "Non",
+                    && yesButtons[0].Caption == "Yes" && yesButtons[1].Caption == "No",
                     $"open={yesPrompt is not null}, captions={string.Join("|", yesButtons.Select(button => button.Caption))}");
                 if (yesButtons.Count == 2) ClickButton(yesButtons[0].Button);
                 var yesRow = Rows(yesDialog).Single(row => row.Raw == "@passwords");
@@ -547,6 +574,11 @@ namespace ConditioningControlPanel.Avalonia
             }
             finally
             {
+                if (frenchDialog is not null && frenchCompletion is not null)
+                {
+                    AnswerGuardNo(frenchDialog);
+                    ClosePicker(frenchDialog, frenchCompletion);
+                }
                 if (noDialog is not null && noCompletion is not null)
                 {
                     AnswerGuardNo(noDialog);
