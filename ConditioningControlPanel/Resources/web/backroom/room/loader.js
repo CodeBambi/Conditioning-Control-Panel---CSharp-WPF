@@ -15,7 +15,8 @@
  *
  * Hypno v3 (CONTRACT 10.13): ctx.gates, ctx.onSettings, fx args with the token
  * on the promise, fx-release, fx-tunnel and a media count. A settings
- * subscription a station forgets is dropped when it closes.
+ * subscription a station forgets is dropped when it closes, and one asked for
+ * after that (an open() that resolves after Back) is never made.
  * ==========================================================================*/
 
 import * as bridge from '../bridge.js';
@@ -34,8 +35,10 @@ export function createLoader(room) {
   let current = null;   // { station, handle, root, kind }
   let seq = 0;
 
+  /** Drop a station's settings subscriptions and mark it closed, so a late onSettings subscribes nothing. */
   function dropSubs(subs) {
     if (!subs) return;
+    subs.closed = true;
     for (const stop of Array.from(subs)) stop();
   }
 
@@ -118,7 +121,7 @@ export function createLoader(room) {
       get gates() { return s.gates; },
       /** Subscribe to { motion, intensity, reduced, gates } on every settings frame. Returns an unsubscribe. */
       onSettings(fn) {
-        if (typeof fn !== 'function' || typeof room.onSettings !== 'function') return () => {};
+        if (typeof fn !== 'function' || typeof room.onSettings !== 'function' || subs.closed) return () => {};
         const off = room.onSettings(fn);
         const stop = () => { subs.delete(stop); try { off(); } catch (e) { /* noop */ } };
         subs.add(stop);
@@ -148,7 +151,7 @@ export function createLoader(room) {
     root.className = 'br-station';
     root.dataset.station = station.id;
     room.layer.appendChild(root);
-    const subs = new Set();
+    const subs = new Set();   // .closed once dropSubs has run
     current = { station, handle: null, root, kind: 'live', subs };
     try {
       const mod = await import('../' + station.entry);
@@ -161,7 +164,7 @@ export function createLoader(room) {
       await (handle && typeof handle.open === 'function' ? handle.open() : null);
       return 'live';
     } catch (e) {
-      if (my !== seq) return 'superseded';
+      if (my !== seq) { dropSubs(subs); return 'superseded'; }
       room.log('warn', 'station ' + station.id + ' failed: ' + ((e && e.message) || e));
       dropSubs(subs);
       if (current && current.handle) {

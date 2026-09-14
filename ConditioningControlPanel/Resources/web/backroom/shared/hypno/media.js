@@ -55,6 +55,9 @@ function stillOf(url, maxEdge) {
     if (typeof Image === 'undefined') { resolve(null); return; }
     const img = new Image();
     img.decoding = 'async';
+    // ccp.assets is another origin: without CORS mode the still canvas is tainted, and image() is for a
+    // texture, where the WebGL upload throws (same rule as stations/slot/media.js). Set before src.
+    img.crossOrigin = 'anonymous';
     img.onload = () => {
       const iw = img.naturalWidth, ih = img.naturalHeight;
       if (!(iw > 0 && ih > 0)) { resolve(null); return; }
@@ -85,7 +88,8 @@ export async function createDeck(ctx, { count = 13, maxEdge = DECK_CAPS.maxEdge,
     const e = { key: g.key, url: drawableUrl(g.url) ? g.url : '', src: null, still: null, state: 'idle', drawn: false };
     entries.push(e); byKey.set(e.key, e);
   }
-  // An empty deal (no host, a lost reply) still has one key: the host swaps an unknown key for a dealt item.
+  // An empty deal (no host, a lost reply) still has one key, g0. The host resolves a key against its own
+  // deal for the station (ResolveSymbols: a random dealt item) and acks the picture skipped `unknown` when it dealt none.
   const keys = Object.freeze(entries.length ? entries.map((e) => e.key) : ['g0']);
   const size = keys.length;
   const seed = reply && Number.isFinite(reply.seed) ? reply.seed : 0;
