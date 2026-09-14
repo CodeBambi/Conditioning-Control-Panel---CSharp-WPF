@@ -298,7 +298,8 @@ function numOr(v, d) { const n = parseFloat(v); return isFinite(n) ? n : d; }
 
 /**
  * The API base a standalone launch falls back to when neither `?server=` nor a
- * stored pref names one. Non-empty ONLY on the public deployment (cclabs.app):
+ * stored pref names one. Non-empty ONLY on the public deployments (cclabs.app,
+ * and the GitHub Pages home this copy is served from):
  * an invite link is a bare `?join=CODE`, and a page that cannot find its server
  * from that link alone is a dead end for the person it was built to welcome.
  * Everywhere else (localhost, file://, forks) stays '' — the serverless dev
@@ -308,7 +309,7 @@ function numOr(v, d) { const n = parseFloat(v); return isFinite(n) ? n : d; }
 export function defaultServerBase() {
   try {
     const host = (typeof location !== 'undefined' && location.hostname) || '';
-    return /(^|\.)cclabs\.app$/i.test(host) ? 'https://codebambi-proxy.vercel.app' : '';
+    return /(^|\.)cclabs\.app$|^codebambi\.github\.io$/i.test(host) ? 'https://codebambi-proxy.vercel.app' : '';
   } catch (_e) { return ''; }
 }
 
