@@ -28,6 +28,29 @@ namespace ConditioningControlPanel.Views.Tabs
                 }
                 catch (Exception ex) { App.Logger?.Debug("SettingsTabView visibility hook: {E}", ex.Message); }
             };
+
+            // Flashes v2: the flash tile wears the v2 pill while a Back Room flash style is owned.
+            // PrizeGrants is the only ownership truth (never settings). The tab is mounted for the
+            // app's life, but the hook is balanced on Loaded/Unloaded all the same.
+            Loaded += (_, _) => { Services.Prizes.PrizeGrants.GrantsChanged += RefreshV2Badges; RefreshV2Badges(); };
+            Unloaded += (_, _) => Services.Prizes.PrizeGrants.GrantsChanged -= RefreshV2Badges;
+        }
+
+        /// <summary>Re-reads ownership onto the wall's v2 pills. Safe from any thread.</summary>
+        private void RefreshV2Badges()
+        {
+            void Apply()
+            {
+                try
+                {
+                    if (CardFlash != null)
+                        CardFlash.ShowV2Badge =
+                            Services.Prizes.PrizeGrants.IsGranted(Services.Prizes.PrizeGrants.FlashDriftBounce)
+                            || Services.Prizes.PrizeGrants.IsGranted(Services.Prizes.PrizeGrants.FlashPendulum);
+                }
+                catch (Exception ex) { App.Logger?.Debug("SettingsTabView.RefreshV2Badges: {E}", ex.Message); }
+            }
+            if (Dispatcher.CheckAccess()) Apply(); else Dispatcher.BeginInvoke((Action)Apply);
         }
 
         /// <summary>

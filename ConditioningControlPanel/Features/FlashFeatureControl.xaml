@@ -181,6 +181,23 @@
                                           Checked="ChkSolidMode_Changed" Unchecked="ChkSolidMode_Changed"/>
                             </Grid>
 
+                            <!-- Flashes v2 motion (Back Room prizes). Hidden until a v2 style is owned; the
+                                 choices are built in code from PrizeGrants: Still always, each owned style with
+                                 its v2 pill, Mix once anything is owned. Compositor flashes only. -->
+                            <Grid x:Name="RowMotion" Height="36" Background="Transparent" Visibility="Collapsed"
+                                  ToolTip="{loc:Str tooltip_flash_motion}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_motion}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <ComboBox Grid.Column="1" x:Name="CmbMotion" Width="170" Foreground="Black"
+                                          VerticalAlignment="Center"
+                                          Style="{DynamicResource DarkComboBoxStyle}"
+                                          SelectionChanged="CmbMotion_Changed"/>
+                            </Grid>
+
                             <!-- Avoid Screen Center (#770, re-homed for #859). This used to live in the legacy
                                  dashboard block in SettingsTabView, which has been Visibility=Collapsed since the
                                  velvet-mosaic rewire - the engine kept honouring FlashAvoidCenter but nobody could
