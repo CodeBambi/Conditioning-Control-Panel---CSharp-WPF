@@ -8,8 +8,9 @@
  * answer, THE THUD per reel, THE SHIVER, THE BREATH, THE MARQUEE heat on
  * marquee_glow, the payout_tray thud, and one cabinet celebration per win tier.
  *
- * Not ported from the preview: the jewellery trims and landing frames (they were
- * placed at hard-coded coordinates), the debug face strip and the view toggle.
+ * Not ported from the preview: the jewellery trims (hard-coded coordinates), the
+ * debug face strip and the view toggle. The payline frame IS here, but taken off
+ * live bounds (playbook A6), never off the preview's coordinates.
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -18,7 +19,7 @@ import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
 import { drawSymbol } from './symbols.js';
 import { PACE, reelStopMs, reelsMs } from './pace.js';
 import { applyPalette } from './palette.js';
-import { FEEL, ALMOST as FEEL_ALMOST, bezier, breath, shiverPx, chaseMs } from './feel.js';
+import { FEEL, ALMOST as FEEL_ALMOST, bezier, breath, shiverPx, chaseMs, paylineGlow, paylinePulses } from './feel.js';
 
 export const FACES = { idle0_0: 3, hearts: 7, spirals: 8, melt: 9, jackpot: 10 };
 const RISE_MS = 620, CAMERA_MS = 620, SINK_MS = 340, PAINT_MS = 100, { THUD_MS } = FEEL;
@@ -285,6 +286,28 @@ export async function createScene(o) {
   }
   function heatTo(level, gold) { const t = performance.now(); heat = { from: heatNow(t), to: level, at: t, gold: !!gold }; }
 
+  /* THE PAYLINE FRAME (playbook A6). The preview's landing frames sat at hard-coded coordinates and were not
+   * ported; this one comes off live bounds instead, like the lever hint. The row is the reel window's own
+   * spread, one drum cell tall (the chord of a 2PI/n cell on a drum of that radius), projected to client px,
+   * and o.payline (a DOM frame) is moved onto it. No new material, no geometry, nothing in the glb. */
+  let paylineAt = -Infinity, paylineHold = 0, paylinePulseN = 1;
+  function paylineRect() {
+    const box = new THREE.Box3();
+    if (glass) box.expandByObject(glass); else reels.forEach(r => box.expandByObject(r));
+    if (box.isEmpty()) return null;
+    const drum = new THREE.Box3().setFromObject(reels[1]), n = strips[1].length || 13;
+    const half = (drum.isEmpty() ? (box.max.y - box.min.y) : (drum.max.y - drum.min.y)) * Math.sin(Math.PI / n) / 2;
+    const mid = (box.min.y + box.max.y) / 2, w = canvas.clientWidth || 1, h = canvas.clientHeight || 1, pts = [];
+    for (const x of [box.min.x, box.max.x]) for (const y of [mid - half, mid + half]) for (const z of [box.min.z, box.max.z]) {
+      const p = new THREE.Vector3(x, y, z).project(camera);
+      pts.push([(p.x + 1) * w / 2, (1 - p.y) * h / 2]);
+    }
+    const left = Math.min(...pts.map(p => p[0])), right = Math.max(...pts.map(p => p[0]));
+    const top = Math.min(...pts.map(p => p[1])), bottom = Math.max(...pts.map(p => p[1]));
+    if (!(right > left && bottom > top)) return null;
+    return { left, top, width: right - left, height: bottom - top };
+  }
+
   function settleSpin() {
     if (!spin) return;
     const s = spin; spin = null;
@@ -415,6 +438,17 @@ export async function createScene(o) {
       const wpp = (2 * poses.play.dist * Math.tan(THREE.MathUtils.degToRad(LENS_DEG) / 2)) / (canvas.clientHeight || 1);
       rig.position.x = rigRest.x + poses.play.right.x * px * wpp; rig.position.z = rigRest.z + poses.play.right.z * px * wpp;
     }
+    if (o.payline) {   // A6: the winning row is framed for the rollup, then THE GLOW goes out over 480 ms
+      const lit = phase === 'play' ? paylineGlow(t - paylineAt, paylineHold, paylinePulseN) : 0;
+      const rect = lit > 0 ? paylineRect() : null;
+      o.payline.hidden = !rect;
+      if (rect) {
+        const s = o.payline.style;
+        s.left = `${rect.left.toFixed(1)}px`; s.top = `${rect.top.toFixed(1)}px`;
+        s.width = `${rect.width.toFixed(1)}px`; s.height = `${rect.height.toFixed(1)}px`;
+        s.opacity = lit.toFixed(3);
+      }
+    }
     if (!reduced && (ghost || t - lastPaint > PAINT_MS)) paint(t);   // A2's ghost repaints every frame while it runs
     if (ghost && t - ghost.at >= FEEL_ALMOST.TELL_MS) ghost = null;
     if (o.hint) {
@@ -506,8 +540,20 @@ export async function createScene(o) {
     },
     /** THE BANK touches the tray: when a win starts paying out, or when a spend lands in it. */
     trayThud() { trayAt = performance.now(); },
+    /** A6: frame the winning row for `ms` (THE BANK's rollup), then let THE GLOW out. It rides the landing
+     *  beat the reveal already owns (Law X): tier 1 takes one soft pulse, reduced motion and a melted spin
+     *  take a steady frame. `r` is feel.recipe's verdict for the outcome. */
+    payline(ms, r) {
+      paylineAt = performance.now();
+      // Reduced motion has no rollup to follow (THE BANK settles at once), so the frame is steady and holds
+      // the reveal's own beat instead of the whole count (Law VI: the STATE, not a longer version of it).
+      paylineHold = reduced ? PACE.REVEAL_MS : Math.max(0, Number(ms) || 0);
+      paylinePulseN = paylinePulses(r ? r.tier : 0, { reduced, melted: !!(r && r.melted) });
+    },
+    /** Law VI: a press or a new spin takes the frame straight to its settled end, never a faster pulse. */
+    paylineOut() { if (paylineAt > -Infinity) paylineHold = Math.max(0, Math.min(paylineHold, performance.now() - paylineAt)); },
     /** Law VI: Back and suspend skip every ceremony to its settled state. */
-    skip() { party = null; shiverAt = trayAt = -Infinity; stopAt.fill(-Infinity); revealAt = -Infinity; lean = null; ghost = null; teasing = false; heat = { ...heat, from: heat.to, at: -Infinity }; },
+    skip() { party = null; shiverAt = trayAt = -Infinity; stopAt.fill(-Infinity); revealAt = -Infinity; lean = null; ghost = null; teasing = false; heat = { ...heat, from: heat.to, at: -Infinity }; paylineAt = -Infinity; if (o.payline) o.payline.hidden = true; },
     /** A node's centre in client px (tokens fly from and to these), null when the glb lacks it. */
     project(name) {
       const n = get(name);
@@ -561,7 +607,8 @@ export async function createScene(o) {
                reelBrightness: reels.map(r => r.material && r.material.color ? r.material.color.r : 1), leaning: !!lean,
                tease: teasing, teaseMs: spin ? spin.teaseMs : 0, teaseGold: !!(spin && spin.teaseGold),
                almost: ghost ? { cell: ghost.j, reel: ghost.r, amt: Number(ghostAmt(t).toFixed(3)) } : null,
-               tray: !!tray, glow: !!glowMat, emiScale: emi ? emi.scale.x / emiRest.s.x : null };
+               tray: !!tray, glow: !!glowMat, emiScale: emi ? emi.scale.x / emiRest.s.x : null,
+               payline: { lit: paylineGlow(t - paylineAt, paylineHold, paylinePulseN), hold: paylineHold, pulses: paylinePulseN, rect: paylineRect() } };
     },
   };
 }
