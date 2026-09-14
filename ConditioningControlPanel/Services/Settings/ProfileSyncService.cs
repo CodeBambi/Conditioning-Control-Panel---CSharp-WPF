@@ -406,6 +406,43 @@ namespace ConditioningControlPanel.Services
         /// <param name="serverSeason">`current_season` off the same node, when present.</param>
         public void TryAdoptFromProfilePoll(int serverLevel, double serverTotalXp, string? serverSeason)
         {
+            TryAdoptFromServerProgression(serverLevel, serverTotalXp, serverSeason, "profile poll");
+        }
+
+        /// <summary>
+        /// Pull <c>progression.level/xp/current_season</c> off a heartbeat response body and
+        /// offer them to the clean-ledger adopt. Absent or malformed fields mean no offer -
+        /// never a guess. Older servers send no <c>progression</c> block, which is a no-op.
+        /// </summary>
+        internal void TryAdoptFromHeartbeatBody(string? body)
+        {
+            var parsed = ParseHeartbeatProgression(body);
+            if (parsed is null) return;
+            TryAdoptFromServerProgression(parsed.Value.level, parsed.Value.totalXp, parsed.Value.season, "heartbeat");
+        }
+
+        /// <summary>
+        /// The heartbeat response's <c>progression</c> block as (level, total xp, season), or null
+        /// when the body is empty, not JSON, has no block, or the block's numbers are not numbers.
+        /// Pure; pinned by ProfileSyncHeartbeatProgressionTests.
+        /// </summary>
+        internal static (int level, double totalXp, string? season)? ParseHeartbeatProgression(string? body)
+        {
+            if (string.IsNullOrWhiteSpace(body)) return null;
+            JObject root;
+            try { root = JObject.Parse(body); } catch { return null; }
+            if (root["progression"] is not JObject prog) return null;
+
+            var level = prog["level"]?.Type == JTokenType.Integer ? prog["level"]!.Value<int>() : 0;
+            var xpToken = prog["xp"];
+            if (level <= 0 || xpToken is null || (xpToken.Type != JTokenType.Integer && xpToken.Type != JTokenType.Float)) return null;
+            var season = prog["current_season"]?.Type == JTokenType.String ? prog["current_season"]!.Value<string>() : null;
+
+            return (level, xpToken.Value<double>(), season);
+        }
+
+        private void TryAdoptFromServerProgression(int serverLevel, double serverTotalXp, string? serverSeason, string source)
+        {
             try
             {
                 var settings = App.Settings?.Current;
@@ -423,8 +460,8 @@ namespace ConditioningControlPanel.Services
                 if (serverSeason != null &&
                     !string.Equals(serverSeason, settings.CurrentSeason ?? string.Empty, StringComparison.Ordinal))
                 {
-                    App.Logger?.Debug("Profile-poll adopt: server season {SS} is not the local scope {LS} — skipping",
-                        serverSeason, settings.CurrentSeason ?? "(none)");
+                    App.Logger?.Debug("{Source} adopt: server season {SS} is not the local scope {LS} — skipping",
+                        source, serverSeason, settings.CurrentSeason ?? "(none)");
                     return;
                 }
 
@@ -438,8 +475,8 @@ namespace ConditioningControlPanel.Services
                 if (pollWatermark <= 0) return;                     // clean cannot be proven — stand aside
                 if (localTotalXp > pollWatermark + 0.01)
                 {
-                    App.Logger?.Debug("Profile-poll adopt: local ledger is dirty ({Local} > agreed {Agreed}) — leaving the {Server} XP lead to the sync merge",
-                        (int)localTotalXp, (int)pollWatermark, (int)serverTotalXp);
+                    App.Logger?.Debug("{Source} adopt: local ledger is dirty ({Local} > agreed {Agreed}) — leaving the {Server} XP lead to the sync merge",
+                        source, (int)localTotalXp, (int)pollWatermark, (int)serverTotalXp);
                     return;
                 }
 
@@ -447,19 +484,19 @@ namespace ConditioningControlPanel.Services
                 settings.PlayerXP = App.Progression?.GetCurrentLevelXP(serverLevel, serverTotalXp) ?? 0;
 
                 var clientTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
-                RecordAgreedServerXp(settings, serverTotalXp, clientTotalXp, "profile poll");
+                RecordAgreedServerXp(settings, serverTotalXp, clientTotalXp, source);
                 App.Settings?.Save();
 
-                App.Logger?.Information("Profile-poll adopt: clean ledger, server ahead — Level {LL} ({LX} XP) -> Level {SL} ({SX} XP)",
-                    preLevel, (int)localTotalXp, serverLevel, (int)serverTotalXp);
+                App.Logger?.Information("{Source} adopt: clean ledger, server ahead — Level {LL} ({LX} XP) -> Level {SL} ({SX} XP)",
+                    source, preLevel, (int)localTotalXp, serverLevel, (int)serverTotalXp);
 
                 // Same repaint contract as the launch adopt: the header is imperative, not bound,
                 // and this raise marshals itself to the dispatcher (#879).
-                RaiseProfileLoadedIfProgressionChanged(settings, preLevel, preLevelXp, "profile poll");
+                RaiseProfileLoadedIfProgressionChanged(settings, preLevel, preLevelXp, source);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Profile-poll adopt failed");
+                App.Logger?.Warning(ex, "{Source} adopt failed", source);
             }
         }
 
@@ -689,6 +726,22 @@ namespace ConditioningControlPanel.Services
                         Encoding.UTF8, "application/json");
 
                     var v2Response = await _httpClient.SendAsync(v2Request);
+                    if (v2Response.IsSuccessStatusCode)
+                    {
+                        // THE HEARTBEAT'S SECOND READING (Redis bandwidth pass, 2026-09-15).
+                        // The server hands back level/xp/current_season with every accepted
+                        // heartbeat; this replaces the retired 60s profile poll as the feed
+                        // for the cross-device adopt. Same fields, same rules, same method.
+                        try
+                        {
+                            var body = await v2Response.Content.ReadAsStringAsync();
+                            TryAdoptFromHeartbeatBody(body);
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Debug("Heartbeat progression read skipped: {Error}", ex.Message);
+                        }
+                    }
                     var recovered = await HandleUnauthorizedAsync(v2Response);
                     if (v2Response.StatusCode == HttpStatusCode.Unauthorized && !recovered)
                     {

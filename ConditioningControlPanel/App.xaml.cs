@@ -2245,13 +2245,11 @@ namespace ConditioningControlPanel
             // next happens to sync.
             ProfileSync.AttachXpNudge();
             // Constructing it costs nothing and issues no request: it fetches only when a
-            // surface asks or its own background poll ticks. The poll started here is the
-            // ungated 60s profile read that feeds the cross-device XP adopt
-            // (ProfileSyncService.TryAdoptFromProfilePoll) — the service itself refuses to
-            // fetch while offline or logged out, and its floor coalesces this timer with the
-            // Trainer Card's own gated poll so the two can never double-fetch.
+            // surface asks. The ungated 60s background poll that used to start here was
+            // retired in the Redis bandwidth pass (2026-09-15) - the cross-device XP adopt
+            // it fed now reads level/xp off the heartbeat response instead
+            // (ProfileSyncService.SendHeartbeatAsync -> TryAdoptFromProfilePoll).
             Descent = new Services.Descent.DescentService();
-            Descent.StartBackgroundProfilePoll();
             // Costs one allocation and issues nothing. See the property doc: it cannot act until
             // a server offer arrives.
             DescentMigration = new Services.Descent.DescentMigrationService();
