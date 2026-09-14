@@ -19,6 +19,7 @@ const deg = (s) => (s / N) * 360;
 
 /** RGB samples on a circle of radius r around the centre of a w x h RGBA buffer. */
 export function ring(img, w, h, r) {
+  if (r < 1 || r >= Math.min(w, h) / 2) throw new Error(`ring radius ${r} does not fit a ${w}x${h} frame`);   // never sample off the picture
   const out = new Float32Array(N * 3), cx = w / 2, cy = h / 2;
   for (let i = 0; i < N; i++) {
     const a = (i / N) * TAU, x = Math.round(cx + r * Math.cos(a)), y = Math.round(cy + r * Math.sin(a)), o = (y * w + x) * 4;
@@ -58,7 +59,7 @@ function measureLayer2(name, A, B, w, h, rs, dr) {
   const hex = l2.colors[0], max = Math.floor(N / l2.arms / 2) - 1;
   const turn = rs.map((r) => deg(shift(maskRing(A, w, h, r, hex), maskRing(B, w, h, r, hex), max)));
   const rim = rs.map((r) => deg(shift(maskRing(A, w, h, r, hex), maskRing(A, w, h, r + dr, hex), max)));
-  return { color: hex, turn, rim, ok: turn.every((v) => v > 0) && rim.every((v) => v > 0) };
+  return { color: hex, radii: rs, turn, rim, ok: turn.every((v) => v > 0) && rim.every((v) => v > 0) };
 }
 
 /** A preset painted by the kit at angle 0.4 and 0.4 + delta, on a 512 square. */
@@ -94,5 +95,5 @@ export async function measureGif(url, name) {
   const rim = rs.map((r) => deg(shift(ring(A.data, A.w, A.h, r), ring(A.data, A.w, A.h, r + 3), max)));
   const expectDeg = (2 / frames) * spanRad(LOOM_PRESETS[name].layer) * (180 / Math.PI);
   const layer2 = measureLayer2(name, A.data, B.data, A.w, A.h, rs, 3);
-  return { name, frames, size: A.w + 'x' + A.h, expectDeg, turn, rim, layer2, ok: turn.every((v) => v > 0) && rim.every((v) => v > 0) && (!layer2 || layer2.ok) };
+  return { name, frames, size: A.w + 'x' + A.h, radii: rs, expectDeg, turn, rim, layer2, ok: turn.every((v) => v > 0) && rim.every((v) => v > 0) && (!layer2 || layer2.ok) };
 }

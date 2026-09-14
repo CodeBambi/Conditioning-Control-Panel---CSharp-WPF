@@ -740,9 +740,9 @@ export function createMoments(ctx, { station });
 ```
 
 - `play` looks the id up in `MOMENTS`, drops the host steps whose gate is off (`flash`: wash, gif_from; `spiral`:
-  loom_spiral; `brainDrain`: haze; `tunnel`: tunnel, the Back Room's own gate, amended 2026-09-14), fires the rest through `ctx.fx` with the table's Normal `args` merged with
-  the caller's, and returns the page effect names for the station to run at `strengthK(ctx)`. An unknown id fires
-  nothing and logs.
+  loom_spiral; `brainDrain`: haze; `tunnel`: tunnel, the Back Room's own gate, amended 2026-09-14), fires the rest
+  through `ctx.fx` with the table's Normal `args` merged with the caller's, and returns the page effect names for the
+  station to run at `strengthK(ctx)`. An unknown id fires nothing and logs.
 - Tests: `shared/hypno/tests/*.test.mjs` (node) and `shared/hypno/tests/kit-check.mjs` (headless, a mock host that
   records `fx`, `fx-tunnel` and `fx-release`; `KIT_PORT` default 8896, debug +500). K1 exports that mock as
   `shared/hypno/tests/mock-host.js` `createMockHost()` for the station checks.
