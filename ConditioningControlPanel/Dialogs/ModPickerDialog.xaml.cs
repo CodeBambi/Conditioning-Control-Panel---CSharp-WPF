@@ -170,8 +170,11 @@ namespace ConditioningControlPanel
     /// <item>Offline / manifest-unavailable is a first-class state: cards still render with the
     /// baked-in approximate sizes, the download button is disabled, and the hint says we retry next
     /// launch. <c>App.ReleaseContent</c> being null must not crash anything.</item>
-    /// <item>The audio-base pack is deliberately NOT a card — it downloads automatically in the
-    /// background at startup (<c>EnsureBaselineAsync</c>). This screen is mods only.</item>
+    /// <item>The audio-base pack is deliberately NOT a card. It is BambiSleep's recorded voice
+    /// lines, not a neutral library, so it is fetched as part of the mod that owns them rather than
+    /// offered on its own: <c>EnsureBaselineAsync</c> pulls it at startup when the ACTIVE mod owns
+    /// it, and <see cref="DownloadSelectedAsync"/> pulls it beside that mod's pack here. A picker
+    /// run that ends on CCP Default downloads nothing, which is the point of the baseline.</item>
     /// </list>
     /// </summary>
     public partial class ModPickerDialog : Window
@@ -507,6 +510,22 @@ namespace ConditioningControlPanel
                 catch (Exception ex)
                 {
                     App.Logger?.Warning(ex, "[ModPicker] Pack {Pack} download threw", card.PackId);
+                }
+
+                // The baseline voice pack travels with the mod whose voice it is, not on its own.
+                // Best-effort and unwatched: a failure here leaves that mod's idle voice lines
+                // silent, which is the same graceful state as skipping the picker entirely.
+                if (ok && ReleaseContentService.ModOwnsBaselineVoice(card.ModId))
+                {
+                    try
+                    {
+                        await svc.RequestPackAsync(ReleaseContentService.PackAudioBase, null, CancellationToken.None)
+                            .ConfigureAwait(true);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "[ModPicker] Baseline voice pack for {Mod} threw", card.ModId);
+                    }
                 }
 
                 if (ok) card.MarkInstalled();

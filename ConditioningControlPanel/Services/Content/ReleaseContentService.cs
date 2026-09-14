@@ -1242,9 +1242,36 @@ namespace ConditioningControlPanel.Services
         // ---------------------------------------------------------------- startup
 
         /// <summary>
-        /// Fire-and-forget at startup: makes sure the baseline avatar audio (<c>audio-base</c>) is on
-        /// disk, and — for upgraders (plan §5) — the pack for the ONE mod they were actually using,
-        /// whose bundled media the modular installer's <c>[InstallDelete]</c> sweep just removed.
+        /// Whether <c>audio-base</c> is <paramref name="modId"/>'s OWN voice.
+        ///
+        /// <c>Resources\soundslashes_audio</c> is not a neutral library: it is BambiSleep's
+        /// recorded VO, named line by line, and FlashService prints each clip's file name in the
+        /// companion's speech bubble as it plays. <see cref="Companion.CompanionContentResolver
+        /// .OwnsBaselineVoiceLines"/> is the one place that decides who may speak with it, so the
+        /// download decision defers to it rather than keeping a second list that can drift.
+        ///
+        /// The empty-id case diverges from that predicate on purpose. It answers "keep the baseline"
+        /// there, because a resolver called before the mod layer is up must hand back a real folder;
+        /// here it would mean spending a user's bandwidth on a guess, so an unknown mod fetches
+        /// nothing and the next launch, which has a concrete id, decides.
+        /// </summary>
+        internal static bool ModOwnsBaselineVoice(string? modId) =>
+            !string.IsNullOrWhiteSpace(modId)
+            && Companion.CompanionContentResolver.OwnsBaselineVoiceLines(modId);
+
+        /// <summary>
+        /// Fire-and-forget at startup: makes sure the active mod has the media that is ITS voice -
+        /// the baseline pack (<c>audio-base</c>) when that mod owns it, and - for upgraders (plan §5)
+        /// - the pack for the ONE mod they were actually using, whose bundled media the modular
+        /// installer's <c>[InstallDelete]</c> sweep just removed.
+        ///
+        /// <c>audio-base</c> is NOT unconditional any more. CCP Default, the out-of-the-box mod, does
+        /// not speak those lines (a fresh install used to say "be a good girl accept your
+        /// conditioning.mp3" in the speech bubble before that was fixed), so pulling 46 MB of them at
+        /// first launch bought a neutral install nothing. Its companion is simply silent on the
+        /// voice-line channel until a pack that owns one is installed, exactly as it already is on
+        /// the event-audio channel.
+        ///
         /// No-ops on a full/dev layout, under a debugger, in offline mode, or when everything is
         /// already stamped, so the common case costs zero network. <c>audio-web</c> and every OTHER
         /// mod pack stay lazy (<see cref="RequestPackAsync"/>). Never throws, never blocks startup.
@@ -1273,18 +1300,23 @@ namespace ConditioningControlPanel.Services
                     return;
                 }
 
-                var needsBaseline = !(GetStamp(PackAudioBase) != null && IsInstalled(PackAudioBase));
+                var wantsBaseline = ModOwnsBaselineVoice(App.Settings?.Current?.ActiveModId);
+                var needsBaseline = wantsBaseline
+                    && !(GetStamp(PackAudioBase) != null && IsInstalled(PackAudioBase));
                 var activeModPack = ResolveMissingActiveModPack();
 
                 if (!needsBaseline && activeModPack == null)
                 {
-                    App.Logger?.Debug("ReleaseContentService: baseline audio already installed, active mod has its media");
+                    App.Logger?.Debug(
+                        "ReleaseContentService: nothing to fetch at startup (baseline wanted {Wanted}), active mod has its media",
+                        wantsBaseline);
                     return;
                 }
 
                 App.Logger?.Information(
                     "ReleaseContentService: startup content check — baseline {Baseline}, active-mod pack {Pack} — fetching manifest",
-                    needsBaseline ? "MISSING" : "ok", activeModPack ?? "(none needed)");
+                    needsBaseline ? "MISSING" : (wantsBaseline ? "ok" : "not this mod's voice"),
+                    activeModPack ?? "(none needed)");
 
                 var manifest = await FetchManifestAsync(ct).ConfigureAwait(false);
                 if (manifest == null) return;
