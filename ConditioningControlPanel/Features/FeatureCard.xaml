@@ -177,9 +177,10 @@
             </Border>
 
             <!-- v2 pill (top-right, beside the help icon). The tier badge's pill family in a
-                 fancier metal, worn when the feature owns a Back Room v2 style (ShowV2Badge).
-                 Colour lives in FeatureCard.V2BadgeBrush so the option pickers can wear the
-                 same pill; the DP handler paints it. -->
+                 fancier metal, worn when the feature owns a Back Room v2 style (ShowV2Badge):
+                 the bubbles card and the flash card both wear it. Colour lives in
+                 FeatureCard.V2BadgeBrush so the option pickers can wear the same pill; the DP
+                 handler paints it. -->
             <Border x:Name="V2BadgeHost"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     Margin="0,8,34,0" Padding="6,2,7,3"

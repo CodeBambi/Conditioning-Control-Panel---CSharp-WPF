@@ -62,7 +62,7 @@ public class FeatureDayLogTests
     [Fact]
     public void AllEventKeys_HaveWireNamesAndNoOverlapWithCounters()
     {
-        Assert.Equal(16, FeatureDayEntry.EventKeys.Length);
+        Assert.Equal(21, FeatureDayEntry.EventKeys.Length);
         Assert.All(FeatureDayEntry.EventKeys, k => Assert.StartsWith("e_", k));
         Assert.Empty(FeatureDayEntry.EventKeys.Intersect(FeatureDayEntry.CounterKeys));
         Assert.Equal(FeatureDayEntry.EventKeys.Length, FeatureDayEntry.EventKeys.Distinct().Count());

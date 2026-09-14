@@ -106,6 +106,23 @@
                                            FontSize="13" FontWeight="Bold"/>
                             </Grid>
 
+                            <!-- Motion (Bubbles v2, Back Room prizes). Collapsed until a v2 style is
+                                 owned; the code-behind fills the picker with Float up, the owned styles
+                                 (each with a v2 pill) and Mix, and refreshes it on PrizeGrants.GrantsChanged. -->
+                            <Grid x:Name="MotionRow" Height="36" Background="Transparent" Visibility="Collapsed"
+                                  ToolTip="{loc:Str tooltip_bubble_motion}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_bubble_motion}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <ComboBox Grid.Column="1" x:Name="CmbMotion" Width="150" feat:SessionLock.Owned="True"
+                                          VerticalAlignment="Center"
+                                          Style="{DynamicResource DarkComboBoxStyle}"
+                                          SelectionChanged="CmbMotion_Changed"/>
+                            </Grid>
+
                             <!-- Size. Sits with Per Min / Speed rather than under an advanced
                                  header because "these are too big" is a first-minute reaction, and
                                  the row it belongs next to is the one the user is already dragging.

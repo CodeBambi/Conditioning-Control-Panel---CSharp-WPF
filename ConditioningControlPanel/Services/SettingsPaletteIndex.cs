@@ -294,6 +294,18 @@ namespace ConditioningControlPanel.Services
                           + "daily trigger lost and found deja vu impulse control grades attendance",
                 IsAvailable = () => Arcademy.ArcademyHostService.DoorAvailable,
             });
+            // THE BACK ROOM, the Arcademy's neighbour on the Play wall and built the same way. No
+            // gate: the room is free for every account (CONTRACT section 1).
+            list.Add(new SettingsPaletteEntry
+            {
+                Id = "card.backroom",
+                LabelKey = "play_backroom_title",
+                Glyph = "🎰",
+                TabKey = "play",
+                ElementNames = new[] { "BtnPlayBackRoom", "SlotBackRoom" },
+                ContextKeys = new[] { GroupNav, "nav_door_play" },
+                Aliases = "back room backroom casino slot slots machine sparkle points sp prize counter wheel scratcher cards",
+            });
             Tab("deeper", "tab_deeper", "🌊", "deeper", "deeper files audio video");
             Tab("exclusives", "tab_exclusives", "⭐", "exclusives", "premium exclusives velvet vault showcase");
             Tab("gradedintake", "tab_gradedintake", "📝", "gradedintake", "intake quiz graded pass");
