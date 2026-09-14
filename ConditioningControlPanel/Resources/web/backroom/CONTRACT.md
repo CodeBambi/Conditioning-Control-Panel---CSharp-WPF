@@ -951,9 +951,13 @@ hold; the only EV change is the slot table (decision 5), and it keeps 102%.
 
 **2. Fullscreen Loom spiral: one field per screen.** `spiral-loom` (and section 4's `spiral-full`, which plays through
 it) draws one field on every monitor, centred on that monitor, like the tunnel's vignettes, instead of one field over
-the virtual screen. Each field is the woven GIF at UniformToFill inside a cell clipped to its monitor. The cells are
-`BackRoomOverlayMath.ScreenCells`: physical monitor bounds mapped through the overlay window's OWN DPI (the mixed-DPI rule
-of 10.13.B's overlays), laid out again on a DPI or display change. One decode feeds every field; the fades, the
+the virtual screen. Each field is the woven GIF at UniformToFill, CENTRED, inside a cell clipped to its monitor
+(`BackRoomLoomSpiralOverlay.BuildCell`: the Image carries no size of its own and is centred both ways, so a weave whose
+shape differs from the monitor's, a square or tall Loom weave or a 16:10, 21:9 or portrait screen, is cropped from its
+middle and the eye sits at the monitor's centre). The cells are `BackRoomOverlayMath.ScreenCells`: physical monitor
+bounds mapped through the overlay window's OWN DPI (the mixed-DPI rule of 10.13.B's overlays), laid out again on a DPI
+change. The overlay window re-reads the virtual screen whenever it wakes from its idle hide, so a monitor plugged in or
+removed gets its cell from the next spiral after a quiet spell; one plugged in under a running spiral waits for that. One decode feeds every field; the fades, the
 replace-and-release rules and the 20 s hold cap are unchanged. The 10.13.B primitive row reads: `spiral-loom` | one
 field per screen, centred on each | Off: the woven GIF's first frame.
 
@@ -980,7 +984,7 @@ melt, freeze, tape and seed rules are unchanged. Plain RTP and every held symbol
 constant `TABLE_V6`. Published plain odds: `emi3` 1 in 6,494, `gif3same` 1 in 144, `sub3` 1 in 115, `spiral3` 1 in 115,
 `gif3` 1 in 12, `sub2` 1 in 14, `spiral2` 1 in 14, `melt` 1 in 17. Held odds are unchanged except the held spiral table
 (1 in 10 / 1 in 6 / 1 in 12, weights 100000 / 173593 / 86779). At the page pace (4.02 s an outcome, 896 outcomes an
-hour) a jackpot lands about once per 7.3 hours of play. The page prints `state.table`; it keeps no copy.
+hour) a jackpot lands about once per 7.2 hours of play. The page prints `state.table`; it keeps no copy.
 
 **6. Cards deal floor 5000 ms.** `CARDS_FLOOR_MS` defaults to 5000 (was 8000); `state.floorMs` echoes it. Rules and pays
 are unchanged. Bot estimate from the cards sim (`_evidence/hypno-followup/d-server/sims/sim-backroom-cards.log`, basic
@@ -993,14 +997,16 @@ a human at one hand per 12 s is 11.8.
 |---|---|---|
 | `flash-burst` | FlashService's own: 4 per image (8 with the flash sound), x the lucky flash roll, `XPSource.Flash` | FlashService (unchanged) |
 | `sub-single`, `sub-seq`, `sub-burst9` | 10 per word, `XPSource.Subliminal` | SubliminalService.FlashSubliminalCustom (unchanged) |
-| `gif-full`, `gif-from`, `wash` WITH a picture | 4 per picture shown (FlashService's base with no sound), x `SkillTree.RollLuckyFlash`, `XPSource.Flash` | the dispatcher, once the sink reports the picture showed (`BackRoomFxXp`) |
+| `gif-full`, `gif-from`, `wash` WITH a picture | 4 per picture shown (FlashService's base with no sound), x `SkillTree.RollLuckyFlash`, `XPSource.Flash` | the dispatcher, once the overlay reports the picture on screen (`BackRoomFxXp`) |
 | `wash` without a picture, `spiral-full`, `spiral-loom`, `brain-drain`, `brain-drain-melt`, `haze`, `tunnel`, `gif-rain`, `glitch-bubbles` | none (they pay nothing in normal play) | none |
 
 - No double counting: a primitive that reuses a service that already pays is never paid by the dispatcher.
-- Paid inside the onset: a busy-dropped wash or gif-from, a merged duplicate, a cancelled onset and a picture with no
-  local file pay nothing. Caps and gates are `ProgressionService.AddXP`'s own: login (or offline username), idle
+- Paid only when the picture is on screen: a busy-dropped wash or gif-from, a merged duplicate, a cancelled onset, a
+  picture with no local file, one an overlay refuses while a display change settles, and one that fails to decode or
+  comes too late pay nothing. The hero (`gif-full`) pays once its window has taken the picture. Caps and gates are `ProgressionService.AddXP`'s own: login (or offline username), idle
   suppression of `Flash` and `Subliminal`, the skill and Cycle multipliers.
-- `IBackRoomFxSink.GifFull` and `Wash` return whether a picture showed (as `GifFrom` already did).
+- `IBackRoomFxSink.GifFull`, `Wash` and `GifFrom` take a `shown` callback, which the overlay calls on the UI thread when
+  the picture is on; each onset pays at most once. `GifFrom` still returns false for no local file (the slot frees).
 
 **8. GIF shortfall: cycle the player's own GIFs in every game (amends section 5).** Section 5's "shortfall filled from
 built-in fallback art" is replaced, for every station and every `count`: with at least one pool GIF the host deals
