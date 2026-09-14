@@ -1674,3 +1674,193 @@ Four lanes, no shared file. Each can be briefed from this section alone.
 - Order: nothing blocks. The client lanes drive their own `mock-server.js`, so they can be built and tested
   before either server lane deploys. The server slot lane's table v7 and the server room lane's wheel v3 are
   independent re-sims.
+
+## 10.17 The Prize Parlour: buying (2026-09-14)
+
+The counter is the Back Room's only drain. This section is buying only: catalog, buy route, ownership on the
+server, the counter station page (2D cards), the C# ownership read and the Discord role. What a prize DOES
+(Jackpot Remix, Flashes v2, Bubbles v2, Racing Thoughts level locks) belongs to the prize effects work, which
+reads ownership only through `OwnershipService.IsGranted(grantId)` (10.17.E).
+
+Owner decisions (2026-09-14): bundles in any order (no prerequisites, no discount for a repeated 00);
+Discord role needs a linked Discord to buy, permanent, grant only, never revoked; prizes 4-8 priced at
+k = 2 over draft 1; prizes 1-3 fixed. One-time ownership, no refunds, no re-buys, no gifting. Prize spend
+stays outside prestige (`lifetime_points_spent` is not touched). Nothing is sold before it works: every row
+ships OFF and is switched on by env (10.17.B).
+
+### 10.17.A Catalog v1
+
+Prize ids are the `prize_id` metadata already baked into the approved shelf props (`counter.glb`
+`shelf_<prizeId>` groups, blender-scripting `counter/prize-build/out/prizes-manifest.json`), so the room,
+the cards and the server share one id. Ids are immutable; names are presentation (lexicon keys).
+
+| prizeId | priceSp | grants | order |
+|---|---:|---|---:|
+| `jackpot_remix` | 15 | `fx.jackpot_remix` | 1 |
+| `rt_demo` | 20 | `rt.original.00` | 2 |
+| `high_roller` | 40 | `discord.high_roller` | 3 |
+| `flashes_v2` | 240 | `fx.flash.drift_bounce`, `fx.flash.pendulum` | 4 |
+| `bubbles_v2` | 240 | `fx.bubble.rain`, `fx.bubble.spiral_in` | 5 |
+| `rt_bundle_1` | 1,200 | `rt.original.01`, `.02`, `.03` | 6 |
+| `rt_bundle_2` | 3,600 | `rt.original.00`, `.04`, `.05`, `.06` | 7 |
+| `rt_bundle_3` | 9,000 | `rt.original.00`, `.07`, `.08`, `.09`, `.10` | 8 |
+
+Whole shelf 14,355 SP. Grant ids are the client contract with the effects work and never change:
+`fx.jackpot_remix`, `fx.flash.drift_bounce`, `fx.flash.pendulum`, `fx.bubble.rain`, `fx.bubble.spiral_in`,
+`rt.original.00` .. `rt.original.10` (two digits, the race `trackNum`, NOT the display `n`), and the
+server-only `discord.high_roller`. An account's grants are the union over owned prizes, so `rt.original.00`
+owned twice is one grant.
+
+The catalog lives in server code (`proxy/backroom-counter.js`, `CATALOG_V1`), versioned by an integer
+`catalogVersion` (1). Changing any `priceSp` or `grants` bumps it. Lexicon keys per row:
+`br_prize_<prizeId>_name`, `br_prize_<prizeId>_blurb`. Racing Thoughts rows also carry
+`br_prize_rt_note` ("A first demo built on the original files. More themes and mods are coming, on request."),
+wording subject to the rights check before those rows go on sale.
+
+### 10.17.B On sale
+
+A row is buyable when its id is in env `BACKROOM_COUNTER_ON` (comma list, or `*`). Unset means every row
+is `soon`. The door (3) applies first: closed accounts get 403 `closed` like every station. The owner turns
+a row on only when its content works (`high_roller` first; the effect and RT rows when those lanes land).
+`high_roller` additionally needs `DISCORD_HIGH_ROLLER_ROLE_ID`; without it the row reports `soon`.
+
+### 10.17.C Server API
+
+Host `Ops` row: `["counter"] = new[] { ("GET","state"), ("POST","buy") }`.
+
+`GET /v2/backroom/counter/state` (a read under the shared 60/min limiter; it takes locks only to retry a
+pending role, 10.17.D):
+
+```json
+{ "ok": true, "open": true, "sp": 812, "catalogVersion": 1,
+  "discordLinked": true,
+  "prizes": { "revision": 3, "grants": ["fx.jackpot_remix", "rt.original.00"] },
+  "catalog": [
+    { "id": "jackpot_remix", "priceSp": 15, "grants": ["fx.jackpot_remix"], "order": 1,
+      "nameKey": "br_prize_jackpot_remix_name", "blurbKey": "br_prize_jackpot_remix_blurb",
+      "sale": "on", "owned": { "at": 1789400000000, "paidSp": 15 } },
+    { "id": "high_roller", "priceSp": 40, "grants": ["discord.high_roller"], "order": 3,
+      "nameKey": "br_prize_high_roller_name", "blurbKey": "br_prize_high_roller_blurb",
+      "sale": "on", "owned": null, "needs": "discord" },
+    { "id": "rt_bundle_3", "priceSp": 9000, "...": "...", "sale": "soon", "owned": null }
+  ],
+  "delivery": { "high_roller": { "status": "pending", "tries": 1, "at": 1789400000000 } } }
+```
+
+`sale` is `on | soon`. `needs: "discord"` appears on `high_roller` when `discordLinked` is false. `delivery`
+lists only prizes with an outside delivery (today only `high_roller`), `status` =
+`pending | granted | not_in_guild | failed`.
+
+`POST /v2/backroom/counter/buy` `{ unified_id, idem, prizeId, catalogVersion }`:
+
+- `idem` as 3.4. `prizeId` must be a catalog id and `catalogVersion` an integer, otherwise `bad_input`.
+- Order inside the locks (`purchase_lock` then `backroom_lock`, 3.4; a miss is HTTP 200 `busy`):
+  1. receipt: a seen `idem` replays its stored receipt byte-identical. The receipt stores the prizeId; the
+     same `idem` with a different `prizeId` is `idem_mismatch`, no write;
+  2. `catalogVersion` differs: `catalog_changed` plus the fresh `catalog` and `catalogVersion`;
+  3. row not `on`: `unavailable`;
+  4. already owned: `owned` plus `prizes`;
+  5. `high_roller` with no `user.discord_id`: `discord_required`;
+  6. `sp < priceSp`: `insufficient` plus `sp`;
+  7. settle in ONE atomic user write plus receipt: `sp -= priceSp`; `counter.owned[prizeId] = { at, paidSp,
+     catalogVersion }`; `counter.netSp -= priceSp`; `counter.revision += 1`; for `high_roller`
+     `counter.delivery.high_roller = { status: "pending", discordId, tries: 0, at }`.
+- Success:
+
+```json
+{ "ok": true, "idem": "...", "prizeId": "flashes_v2", "paidSp": 240, "spBefore": 812, "sp": 572,
+  "catalogVersion": 1, "prizes": { "revision": 4, "grants": ["..."] },
+  "delivery": null }
+```
+
+  For `high_roller`, `delivery` is the status after the bounded grant attempt (10.17.D). The receipt stores
+  the settle result; a replay returns it unchanged (the page refreshes `state` for live delivery).
+- Refusals (all HTTP 200 `{ok:false, reason}`): `bad_input`, `idem_mismatch`, `catalog_changed`,
+  `unavailable`, `owned`, `discord_required`, `insufficient`, `busy`; `closed` is 403. No rate floor
+  (buying is rare); the shared 60/min limiter applies.
+
+Storage: `user.backroom.counter = { netSp, revision, owned: { <prizeId>: { at, paidSp, catalogVersion } },
+delivery: { high_roller: { status, discordId, tries, at } } }`. `backroomNetSp` already sums every
+station's `netSp`, so `counter.netSp` joins the SkillPointBackfill sum and a later `/v2/user/sync` never
+refunds a purchase. Receipts share `backroom:ids:<uid>` under the key `counter:<idem>`.
+
+Pure module `proxy/backroom-counter.js`: `CATALOG_V1`, `CATALOG_VERSION`, `saleOf(id, env)`, `grantsOf(user)`
+(sorted, deduped), `prizesBlock(user)` returning `{revision, grants}`, `parseBuyBody(body)`,
+`settleBuy({ user, body, env, now })` returning `{ refusal }` or `{ user, receipt }`. Routes in
+`proxy/backroom-counter-routes.js`, registered from `backroom-routes.js` with one call, reusing auth, door,
+limiter, locks and the receipt helpers.
+
+### 10.17.D Ownership everywhere else (server)
+
+- **Profile sync.** `/v2/user/sync` and the auth validate response each gain the same `prizes` block
+  (`prizesBlock(user)`). Ownership is never read from an upload: any `prizes`, `backroom` or grant field a
+  client sends is ignored.
+- **Account merge.** `/admin/merge-accounts` unions `backroom.counter.owned` (keeping the earlier `at`),
+  sums `counter.netSp`, sets `revision` to the max plus 1, and keeps a `granted` delivery over a `pending`
+  one. Logged in `merge_audit_log` like the other merged fields.
+- **Discord role.** `discord-roles.js` gains `ensurePrizeRole({ unifiedId, discordId, reason }, deps)`: the
+  same bounded PUT (4 s abort, never rejects) with role `DISCORD_HIGH_ROLLER_ROLE_ID`, its own dedupe marker
+  namespace (`role_grant_prize:<uid>`, value `<discordId>:<roleId>`) and the same result statuses.
+  Delivery: the buy settles and RELEASES both locks, then AWAITS one attempt (no fire-and-forget: Vercel
+  freezes it), then writes the status under `user_write_lock` touching only `counter.delivery.high_roller`
+  (`tries += 1`, `status`, `at`). A failed attempt never loses ownership and never debits again.
+- **Retries.** A `pending`, `not_in_guild` or `failed` delivery is retried, awaited and bounded, from
+  (a) `GET counter/state` when the last try is older than 10 minutes, and (b) the existing
+  `queueSubscriberRoleSync` call sites (Discord link, login/validate), which also call `ensurePrizeRole` for
+  an owner of `high_roller`. The role goes to the CURRENTLY linked `discord_id`; a relink grants to the new
+  account and leaves the old account's role alone (grant only).
+
+### 10.17.E Client ownership (C#)
+
+- `OwnershipService` (PR H0, off main): `IsGranted(grantId)`, `Grants`, `OwnershipChanged`,
+  `ApplySnapshot(accountId, revision, grants)` (ignores another account's snapshot and any lower revision),
+  `Clear()`, constants `PrizeGrants.*` and `PrizeGrants.RacingTrack(trackNum)`. In-memory only, no settings
+  flag. DEBUG builds only: env `CCP_PRIZE_GRANTS` (`fx.*`, `rt.original.*`, `*`, exact ids) for desk tests.
+- **Feeds.** (1) ProfileSyncService applies the `prizes` block from sync and validate responses; logout and
+  account switch call `Clear()`. (2) `BackRoomApi` applies the `prizes` block from every `counter` reply
+  (state, buy success, `owned`) for the account it sent, so a buy unlocks in the app before the next sync.
+- Effects and RT code consume `IsGranted` and `OwnershipChanged` only and never touch ProfileSyncService.
+  The per-device arrival animation for new RT levels is effects/RT work, keyed on `OwnershipChanged`.
+
+### 10.17.F The counter station page
+
+`stations/counter/` (`station.js`, `cards.js`, `station.css`, `mock-server.js`, `station.md`, `tests/`,
+`art/<prizeId>.webp`). Module shape per 7. v1 is DOM only (no WebGL canvas), so it adds no context.
+
+- **Open.** `request('state')`, then one card per catalog row in `order`. Back is live before and during
+  the read (Law VI). A failed `state` shows `br_counter_closed` and Back.
+- **Card.** Art (`art/<prizeId>.webp`, a still rendered from the approved shelf prop; a CSS plate with the
+  name when missing), name, blurb, price, and one of: `Owned` (plus the Discord delivery line for
+  `high_roller`), `Soon` (dust sheet, no button), `Link Discord first` (`needs: "discord"`, no button),
+  `Short by N` (price over `ctx.sp()`, button disabled) or `Buy`. Racing Thoughts cards show `br_prize_rt_note`.
+- **Buy.** Buy opens an inline confirm on the card (name, price, balance after, Confirm / Cancel). Confirm
+  sends `request('buy', { prizeId, catalogVersion }, idem)` with ONE idem per confirm, reused on retry. The
+  button shows pending; Back still works (a buy in flight settles on the server; the next `state` shows
+  it). Success: the card flips to Owned, `ctx.spReadout.set(sp)` then `set(null)` and `thud()`, one
+  `sound.chime` (Brake 1: a small earned moment, no REVEAL, no tokens). Refusals `insufficient`, `owned`,
+  `unavailable` and `discord_required` repaint from the reply or a fresh `state`; `catalog_changed` repaints
+  the new catalog and asks again (never auto-buys at a new price); `busy` and network errors keep the
+  confirm open with `br_counter_retry`.
+- **Reduced / Calm.** No card tilt or flip animation; the state swap is instant.
+- **Lexicon.** `br_counter_title`, `br_counter_closed`, `br_counter_retry`, `br_counter_buy`,
+  `br_counter_confirm`, `br_counter_cancel`, `br_counter_after` ("Balance after: {0}"), `br_counter_owned`,
+  `br_counter_soon`, `br_counter_short` ("Short by {0}"), `br_counter_link_discord`,
+  `br_counter_delivery_pending`, `br_counter_delivery_granted`, `br_counter_delivery_not_in_guild`,
+  `br_counter_delivery_failed`, `br_prize_rt_note`, and the 16 `br_prize_<id>_name|_blurb`. English
+  fallbacks in the page; `en.json` rows by the integration pass; other locales later.
+- **Registry.** The `stations.json` counter row gains `"entry": "stations/counter/station.js"` and
+  `"state": "live"` in the integration pass only. Testers then see the counter live, even if every card is `Soon`.
+- **Later, not v1.** Clicking a shelf prop opens its card (room raycast on `shelf_<prizeId>`); a 3D hero of
+  the selected prop.
+
+### 10.17.G Lane split
+
+| Lane | Base | Files it may touch |
+|---|---|---|
+| **S-counter** (server core + routes) | server `feat/br2-bc-room` | `proxy/backroom-counter.js`, `proxy/backroom-counter-routes.js`, one register line in `proxy/backroom-routes.js`, `proxy/scripts/test-backroom-counter*.mjs` |
+| **S-reach** (sync block, merge, Discord) | S-counter | `proxy/server.js` (sync/validate `prizes`, merge union, role call sites), `proxy/discord-roles.js`, the counter routes' delivery step, their tests |
+| **H-own** (C# feeds) | `feat/br2-ownership-api` (H0) | `Services/Settings/ProfileSyncService.cs` (apply block, clear on logout/switch), its tests |
+| **C-counter** (page) | this contract branch | `Resources/web/backroom/stations/counter/**`, a still-render script under `Scripts/` |
+| **Integration** | merge of C-counter + H-own | `Services/BackRoom/BackRoomApi.cs` (Ops row, apply block), `stations.json` counter row, `Localization/Languages/en.json` counter rows, room smoke |
+
+No two lanes share a file. Every PR under 600 changed lines, draft only.
