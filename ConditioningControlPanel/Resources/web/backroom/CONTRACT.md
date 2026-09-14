@@ -1186,10 +1186,10 @@ spiral a spin, so a jar that filled on freeze spins would let a held-spiral free
 plain-play debt: only plain outcomes earn it, only plain outcomes are halved by it.)
 
 **What a full jar does.** When the count reaches `table.jar.size` it drops by `table.jar.size` (the remainder
-stays: 24 + 2 spirals fires at 25 and leaves 1) and pushes `table.jar.free` outcomes of `kind: 'jar'` onto the
+stays: 99 + 2 spirals fires at 100 and leaves 1) and pushes `table.jar.free` outcomes of `kind: 'jar'` onto the
 same expansion queue `spiral3` uses, so `drain()` expands them inline at the point the jar filled, in draw
 order, before the next paid spin. One outcome can fire the jar at most once (three spirals is at most 3 of
-25), and the queue cap `MAX_OUTCOMES` (500) is unchanged.
+100), and the queue cap `MAX_OUTCOMES` (500) is unchanged.
 
 **What a jar spin is.** Exactly a `spiral3` free spin with a different name: drawn from the plain table,
 costing 0, halved while melted, consuming melt in draw order, able to land the `melt` malus and able to
@@ -1214,40 +1214,43 @@ keeps its meaning (outcomes still queued) and now counts jar spins and the `emi_
 `table.jar` = `{ "size": 100, "free": 3 }` in the published table. The page keeps no copy of either.
 
 **RTP.** The jar is pure added return: at table v6 dressing a plain outcome shows 0.642 spirals on average, so
-a 25-jar fills every 39.0 outcomes, and 3 free spins every 39 outcomes is +7.7% outcomes per paid spin. Left
-alone it takes the whole game from 1.0200 to 1.1178. Table v7 must land back at 1.0200 over the whole game,
-jar spins and C1 included, with the jackpot at 1 in 6,494 per plain outcome (10.14). The retune is the same
+the decided 100-jar fills every 155.4 outcomes (the 25-jar of the first draft filled every 39.0, and took the
+whole game from 1.0200 to 1.1178 left alone). Table v7 must land back at 1.0200 over the whole game,
+jar spins and C1 included, with the jackpot at 1 in 6,493 per plain outcome (10.14). The retune is the same
 move v6 made on v5: **only the six everyday pay weights scale by one factor** (`gif3same`, `sub3`, `spiral3`,
 `gif3`, `sub2`, `spiral2`). `melt` stays 58,900, `emi3` and `emi2` are fixed by 10.16.D, pays, `meltSpins`,
 `freeSpins`, `respins`, `stake`, `freezeCost` and the strips do not move, and `none` takes the remainder.
-All five `frozen` tables are UNCHANGED (a freeze neither fills the jar nor draws `emi2`, so every held class
-stays at exactly 1.0200 with no re-tune).
+FOUR of the five `frozen` tables are UNCHANGED, and the held-SPIRAL one is re-tuned because its sealed free
+spins read the plain table: `spiral2` 173,593 -> **177,589** and `sub2` 86,779 -> **88,795**, with `spiral3`
+pinned and the 2:1 kept, so every held class still lands at exactly 1.0200 (CCP-Server #176).
 
-The solved factor is **0.916369**, giving the v7 plain weights over `DEN` 1,000,000:
+The solved factor for the decided 100 / 3 is **0.977450**, with `gif3` then polished ALONE to land the exact
+1.0200 (83,759 -> 83,746), giving the FINAL v7 plain weights over `DEN` 1,000,000 (CCP-Server #176):
 
 | Line | v6 | v7 | Published odds (v7) |
 |---|---|---|---|
 | `emi3` (drawn direct) | 154 | **92** | 1 in 10,870 |
 | `emi2` (new, 10.16.D) | - | **8,207** | 1 in 122 |
-| `gif3same` | 6,940 | **6,360** | 1 in 157 |
-| `sub3` | 8,675 | **7,950** | 1 in 126 |
-| `spiral3` | 8,675 | **7,950** | 1 in 126 |
-| `gif3` | 85,691 | **78,525** | 1 in 13 |
-| `sub2` | 69,394 | **63,591** | 1 in 16 |
-| `spiral2` | 69,394 | **63,591** | 1 in 16 |
+| `gif3same` | 6,940 | **6,784** | 1 in 147 |
+| `sub3` | 8,675 | **8,479** | 1 in 118 |
+| `spiral3` | 8,675 | **8,479** | 1 in 118 |
+| `gif3` | 85,691 | **83,746** | 1 in 12 |
+| `sub2` | 69,394 | **67,829** | 1 in 15 |
+| `spiral2` | 69,394 | **67,829** | 1 in 15 |
 | `melt` | 58,900 | **58,900** | 1 in 17 |
-| `none` | 692,177 | **704,834** | - |
+| `none` | 692,177 | **689,655** | - |
 
 Plus the re-spin weight `respin.emi` = **7,555** (1 in 132) from 10.16.D. The jackpot, counting both paths,
-stays 154.00 per million plain outcomes = **1 in 6,494**. The lane re-runs the sim and polishes `gif3`
-alone to land the exact 1.0200, the way v6 polished `gif3` (10.14).
+is 154.004 per million plain outcomes = **1 in 6,493** (the 6,494 was v6's exact-154 figure). The `gif3`
+polish that lands the exact 1.0200 is done, the way v6 polished `gif3` (10.14).
 
 **Sim requirement** (`scripts/sim-backroom-slot.mjs`, extended by the server slot lane): exact whole-game RTP
 1.0200 +- 0.0002 with the jar and the re-spin in, `exactFrozenRtp` still 1.0200 for all five held classes, the
-jackpot 1 in 6,494 per plain outcome with the re-spin's share reported, and three new reported figures:
-outcomes per paid spin, jar fires per 100 outcomes, and hit frequency. Expected: outcomes per paid spin
-1.1055 -> **1.2066**, jar fires every **39.0** outcomes (about 2.6 minutes at the 4.02 s pace), hit frequency
-24.89% -> **22.81%** (still inside the playbook's 20-40% band). A 10-spin tape becomes about 12.1 outcomes, so
+jackpot 1 in 6,493 per plain outcome with the re-spin's share reported, and three new reported figures:
+outcomes per paid spin, jar fires per 100 outcomes, and hit frequency. Expected at the decided 100 / 3: jar
+fires every **155.4** outcomes (about 10.4 minutes at the 4.02 s pace) and hit frequency 24.89% -> **24.33%**
+(still inside the playbook's 20-40% band); the 1.2066 outcomes per paid spin and the 12.1-outcome tape below
+were the 25 / 3 draft's and both come down with the bigger jar. A 10-spin tape still becomes more outcomes, so
 `nextBuyAt = outcomes.length * SLOT_FLOOR_MS` scales with it and nothing in 10.12 moves.
 
 What the jar size costs, for the owner (each row re-solved to 1.0200):
@@ -1428,7 +1431,9 @@ slot state route never mints; it reports what the ping stored.
 - On sit-down `station.js` reads `state.comp`. If it is there: the HUD status line reads `br_slot_comp` ("On
   the house: {0} spins"), a small chip `<span class="slot-comp">` sits on the cabinet beside the SP readout
   until the comp is spent, and EMI takes the `hearts` face for one `glanceHoldMs`.
-- The lever's FIRST press buys the comp tape (`request('tape', { comp: id })`) instead of a paid one; every
+- The first tape BUY of the sit-down is the comp (`request('tape', { comp: id })`), not the first press: a
+  press that only plays an outcome already on the tape buys nothing and never spends it, and neither does a
+  refused buy. Every
   press after that is a normal paid tape at `defaultTapeCount(sp)`. The spin button's `<small>` reads
   `br_slot_comp_cost` ("Free") for that one press.
 - No party: a glance and one chime (`sound.chime` at tier 1, `tokens: false`), never a fanfare, never a
@@ -1454,9 +1459,11 @@ So `emi, emi, melt` reads `emi2` and does NOT start the melt. `emi, X, emi` and 
 plain-band outcome in every other way: it is halved (of 0) and consumes one melt while melted, and its spirals
 fill the jar.
 
-**The re-spin.** An `emi2` outcome appends exactly ONE outcome of `kind: 'emi_respin'` to the expansion queue,
-so `drain()` plays it immediately after. It holds reels 1 and 2 as `emi` and redraws reel 3 only, from a
-dedicated two-band re-spin weight set, not from the plain table:
+**The re-spin.** An `emi2` outcome puts exactly ONE outcome of `kind: 'emi_respin'` at the FRONT of the
+expansion queue, so `drain()` plays it immediately after its parent even when free or jar spins are already
+queued behind it (jar spins themselves queue behind a line's own free spins, so a `spiral3` that also fills
+the jar drains `free, free, free, jar, jar, jar`). It holds reels 1 and 2 as `emi` and redraws reel 3 only,
+from a dedicated two-band re-spin weight set, not from the plain table:
 
 ```js
 respin: Object.freeze({ emi: 7555 }),   // over DEN; whatever is left draws a non-EMI, non-melt reel 3
@@ -1476,14 +1483,14 @@ dresses EMI onto reels 1 and 2 with reel 3 something else on 11 of the 945 `none
 **8,207**, so the pair shows exactly as often as it does today; all that changes is what happens next. The
 weight comes out of `none`, which pays 0, so lifting it costs no return.
 
-Target: the jackpot stays **1 in 6,494** (154.00 per million plain outcomes, 10.14), with about 40% of
-jackpots arriving through the re-spin.
+Target: the jackpot is **1 in 6,493** (154.004 per million plain outcomes; 10.14's 1 in 6,494 was v6's
+exact-154 figure), with about 40% of jackpots arriving through the re-spin.
 
 ```
  jackpot per plain outcome = P(emi3 drawn direct) + P(emi2) x P(re-spin lands emi)
                     154e-6 = 92e-6              + 8,207e-6 x q
                          q = 62e-6 / 8,207e-6 = 0.0075545   ->  respin.emi = 7,555 / 1,000,000  (1 in 132)
-                 delivered = 92.000 + 62.004 = 154.004 per million = 1 in 6,494
+                 delivered = 92.000 + 62.004 = 154.004 per million = 1 in 6,493
              re-spin share = 62.004 / 154.004 = 40.3%
 ```
 
@@ -1492,30 +1499,33 @@ missing 62 per million comes back through the re-spin.
 
 The re-spin's jackpot is never halved, while a direct `emi3` still is. 16.65% of plain outcomes are halved
 (the melt chain's stationary share, unchanged), so moving 62 per million of jackpot into an unhalvable band
-adds `62e-6 x 400 x 0.166497 = +0.00206` SP per outcome. That, plus the jar, is what the 0.916369 retune in
+adds `62e-6 x 400 x 0.166497 = +0.00206` SP per outcome. That, plus the jar, is what the 0.977450 retune in
 10.16.A absorbs. The re-spin also adds `8,207e-6` outcomes per plain outcome to the tape, which is inside the
 1.2066 outcomes-per-paid-spin figure.
 
 **Published table.** `publicTable()` gains an `emi2` row
 (`{ id: 'emi2', pays: 0, odds: '1 in 122', respin: 1 }`), a `respin` block
 (`{ emi: '1 in 132', jackpotShare: 0.40 }`), the `jar` block (10.16.A), and a headline
-`jackpotOdds: '1 in 6,494'` so the page prints the TOTAL jackpot chance next to the direct-draw row.
+`jackpotOdds: '1 in 6,493'` so the page prints the TOTAL jackpot chance next to the direct-draw row.
 Published odds must always be the total: the direct row alone would understate the jackpot, and published odds
 are a playbook "already in" (10.1).
 
 **Freeze.** A freeze spin never draws `emi2` and never starts a re-spin, and neither does a `spiral2` re-spin
-that repeats a frozen table. The five `frozen` tables gain no `emi2` band and keep their v6 weights exactly, so
-every held class stays at exactly 1.0200 with no re-tune (`exactFrozenRtp`). That also settles the held-reel-3
+that repeats a frozen table; under the seal `emi2` reads as `none`, exactly as `melt` does (10.10.2), so there
+is no chase from a 2 SP freeze. The five `frozen` tables gain no `emi2` band, and C1 moves none of their
+weights, so every held class stays at exactly 1.0200 (`exactFrozenRtp`); the one frozen re-tune in this
+amendment is the held-SPIRAL table's, and the jar is what moved it (10.16.A). That also settles the held-reel-3
 case the playbook asks about: a held reel 3 cannot be redrawn, so there could be no re-spin anyway; sealing the
 whole freeze from C1 gives the same answer in every column and keeps "a freeze buy is worth the same in every
 state" (`backroom-slot.js` header) literally true. (Owner may revisit: a chase moment on a 2 SP freeze would
 need all five conditional tables re-tuned.)
 
 **Sim requirement.** `sim-backroom-slot.mjs` reports, on top of 10.16.A's numbers: whole-game RTP 1.0200, the
-jackpot 1 in 6,494 per plain outcome, the re-spin's share of jackpots (expect 40.3%) and the `emi2` frequency
+jackpot 1 in 6,493 per plain outcome, the re-spin's share of jackpots (expect 40.3%) and the `emi2` frequency
 (expect 1 in 122, about one chase every 8 minutes at the 4.02 s pace). A 30,000,000 paid-spin Monte Carlo
 through the real draw pinned RTP 1.02024, 1.20658 outcomes per paid spin, `emi2` 1 in 122.9, jar fires 1 in
-39.3 outcomes and a re-spin share of 40.85% (jackpot-count noise at that size is about +- 0.001 RTP).
+39.3 outcomes and a re-spin share of 40.85% (run at 25 / 3; jackpot-count noise at that size is about
++- 0.001 RTP).
 
 **Client.** The re-spin is a second beat, not a second spin.
 
@@ -1527,10 +1537,12 @@ through the real draw pinned RTP 1.02024, 1.20658 outcomes per paid spin, `emi2`
   a muted thud and nothing else.
 - Then reels 1 and 2 stay exactly where they are, reel 3 spins again and takes the **full 1,400 ms gold hold**
   (`ANTICIPATION`'s EMI row, `pace.js`), **never halved here**, not even while melted: the Brake 5 halving in
-  10.15 applies to A1's anticipation, not to this beat, because this beat IS the event. Then THE THUD. On
+  10.15 applies to A1's anticipation, not to this beat, because this beat IS the event, so it stays GOLD while
+  melted as well (A1's own melted EMI hold is still halved and still never gold). Then THE THUD. On
   `emi3` the REVEAL plays exactly as any jackpot does (Law IX, once per sit-down).
 - `pace.js`: an `emi_respin` outcome costs `SPIN_MS` for reel 3 only, plus the 1,400 ms hold, plus `THUD_MS`,
-  `REVEAL_MS` and `BREATH_MS`: about 4,380 ms. `outcomeMs` takes a `kind` so the sim and the page agree.
+  `REVEAL_MS` and `BREATH_MS`: **4,660 ms** (1,800 + 1,400 + 340 + 600 + 520). `outcomeMs` takes a `kind` so
+  the sim and the page agree.
 - Reduced motion and Calm keep the hold and the tone and drop the light change, exactly as A1 does (10.15).
 - Lexicon: `br_slot_line_emi2` ("2 EMI"), `br_slot_respin` ("One more look").
 - `mock-server.js` gains the `emi2` class, the `emi_respin` outcome and the v7 weights, so the node tests and
