@@ -30,6 +30,12 @@ public sealed class FlashMotionState
     // angle = AmpRad * sin(Omega * Elapsed + Phase).
     public double PivotX, PivotY, Rope, AmpRad, Omega, Phase, AngleRad;
     public double Elapsed;
+
+    /// <summary>
+    /// Wave 2: non-null while a hand is on this flash, and for as long as the fling that follows
+    /// lasts. It overrides <see cref="Style"/> for its whole life - see <see cref="FlashDrag"/>.
+    /// </summary>
+    public FlashDragState? Drag;
 }
 
 /// <summary>
@@ -132,12 +138,15 @@ public static class FlashMotion
     public static bool Step(FlashMotionState s, double dt)
     {
         if (dt <= 0) return false;
+        // Wave 2: a held or flying flash answers to the hand, not to its style. FlashDrag drops
+        // the state once the flight settles, and the style below takes over again from there.
+        if (s.Drag != null) return FlashDrag.Step(s, dt);
         switch (s.Style)
         {
             case FlashMotionStyle.DriftBounce:
             {
-                var (nx, vx) = Reflect(s.X + s.Vx * dt, s.W, s.BoundsX, s.BoundsW, s.Vx);
-                var (ny, vy) = Reflect(s.Y + s.Vy * dt, s.H, s.BoundsY, s.BoundsH, s.Vy);
+                var (nx, vx, _) = Reflect(s.X + s.Vx * dt, s.W, s.BoundsX, s.BoundsW, s.Vx);
+                var (ny, vy, _) = Reflect(s.Y + s.Vy * dt, s.H, s.BoundsY, s.BoundsH, s.Vy);
                 bool moved = nx != s.X || ny != s.Y;
                 s.X = nx; s.Y = ny; s.Vx = vx; s.Vy = vy;
                 return moved;
@@ -195,14 +204,19 @@ public static class FlashMotion
         (s.X, s.Y, s.W, s.H) = HangingBounds(s.PivotX, s.PivotY, s.Rope, s.AngleRad, s.MediaW, s.MediaH);
     }
 
-    /// <summary>One axis of the bounce: mirror the overshoot back inside and flip the velocity.</summary>
-    private static (double Pos, double V) Reflect(double pos, double size, double min, double extent, double v)
+    /// <summary>
+    /// One axis of the bounce: mirror the overshoot back inside and flip the velocity. Bounced
+    /// says a wall was actually hit, which a drift ignores (it is perfectly elastic) and a fling
+    /// reads to take its 25% off the speed.
+    /// </summary>
+    internal static (double Pos, double V, bool Bounced) Reflect(double pos, double size, double min, double extent, double v)
     {
         var max = min + extent - size;
-        if (max <= min) return (min, 0);        // wider than the monitor: park it
-        if (pos < min) { pos = min + (min - pos); v = Math.Abs(v); }
-        else if (pos > max) { pos = max - (pos - max); v = -Math.Abs(v); }
-        return (Math.Clamp(pos, min, max), v);
+        if (max <= min) return (min, 0, false);        // wider than the monitor: park it
+        var bounced = false;
+        if (pos < min) { pos = min + (min - pos); v = Math.Abs(v); bounced = true; }
+        else if (pos > max) { pos = max - (pos - max); v = -Math.Abs(v); bounced = true; }
+        return (Math.Clamp(pos, min, max), v, bounced);
     }
 
     private static double Lerp(double a, double b, double t) => a + (b - a) * t;

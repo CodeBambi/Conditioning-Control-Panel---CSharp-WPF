@@ -1235,6 +1235,17 @@ namespace ConditioningControlPanel.Models
         // Flashes v2 wave 2 (Back Room prizes fx.flash.*): rounded corners on every flash GIF.
         // Off by default; owning a v2 style never flips it, and the renderers ignore it entirely
         // while nothing v2 is owned (ownership is PrizeGrants' word, never this flag).
+        // Flashes v2 wave 2: left-press a flash to pick it up, throw it to send it bouncing.
+        // Off by default and gated on owning a v2 motion grant, like rounded corners. Compositor
+        // path only, and only on flashes that were already clickable.
+        private bool _flashDraggable = false;
+        [JsonProperty("FlashDraggable")]
+        public bool FlashDraggable
+        {
+            get => _flashDraggable;
+            set { _flashDraggable = value; OnPropertyChanged(); }
+        }
+
         private bool _flashRoundedCorners = false;
         [JsonProperty("FlashRoundedCorners")]
         public bool FlashRoundedCorners
