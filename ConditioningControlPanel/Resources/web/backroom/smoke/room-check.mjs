@@ -388,6 +388,15 @@ ok(!(await dbg()).overview, 'M again walks');
   await key('Escape');
   await sleep(150);
   ok(await ev(`document.querySelector('.br-options').hidden`) && (await posted('exit')).length === exits, 'Escape closes the card and does not leave the room');
+  // Anchored to its pill, and a press outside closes it (a press inside does not).
+  await ev(`document.querySelector('.br-nav .br-pill:nth-child(3)').click()`);
+  const fit = await ev(`(() => { const p = document.querySelector('.br-nav .br-pill:nth-child(3)').getBoundingClientRect();
+    const c = document.querySelector('.br-options').getBoundingClientRect(); return { dr: Math.abs(c.right - p.right), gap: c.top - p.bottom }; })()`);
+  ok(fit && fit.dr <= 1 && fit.gap >= 0 && fit.gap <= 16, 'the card hangs under the Options pill, right edges aligned (' + JSON.stringify(fit) + ')');
+  await ev(`${q('[data-value="normal"]')}.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))`);
+  ok(await ev(`!document.querySelector('.br-options').hidden`), 'a press inside the card keeps it open');
+  await ev(`document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))`);
+  ok(await ev(`document.querySelector('.br-options').hidden && document.querySelector('.br-nav .br-pill:nth-child(3)').getAttribute('aria-expanded') === 'false'`), 'a press outside the card closes it');
   await ev(`window.__hostEmit({ type: 'settings', motion: 'full', intensity: 'normal', reduced: false })`);
   await sleep(100);
 }

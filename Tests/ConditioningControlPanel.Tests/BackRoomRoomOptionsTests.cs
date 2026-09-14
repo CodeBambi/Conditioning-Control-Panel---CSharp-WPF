@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Collections.Generic;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.BackRoom;
@@ -20,6 +21,14 @@ public class BackRoomRoomOptionsTests
         var s = new AppSettings();
         Assert.True(s.BackRoomTunnel);
         Assert.True(s.BackRoomMelt);
+    }
+
+    [Fact]
+    public void NoSettings_ShutsEveryGate_TheTunnelToo()
+    {
+        // FxGates.Tunnel defaults to true, so the no-settings fallback must name it.
+        foreach (var p in typeof(FxGates).GetProperties().Where(p => p.PropertyType == typeof(bool)))
+            Assert.False((bool)p.GetValue(FxGates.AllOff)!, p.Name);
     }
 
     [Fact]

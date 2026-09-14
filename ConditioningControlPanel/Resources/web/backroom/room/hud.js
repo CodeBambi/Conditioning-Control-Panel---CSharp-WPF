@@ -52,9 +52,14 @@ export function createHud(o) {
   const tunnel = switchRow('tunnel', L('br_opt_tunnel', 'Tunnel vision'));
   const melt = switchRow('melt', L('br_opt_melt', 'Melt'));
   panel.append(el('span', 'br-opt-name', L('br_opt_effects', 'Effects')), segRow, forcedNote, tunnel.row, melt.row);
-  o.root.append(veil, hint, cross, prompt, nav, list, panel);
+  nav.append(panel);   // anchored under the Options pill, whatever the nav's own offset
+  o.root.append(veil, hint, cross, prompt, nav, list);
   function setOptions(open) { panel.hidden = !open; optBtn.setAttribute('aria-expanded', String(!!open)); }
   optBtn.addEventListener('click', () => setOptions(panel.hidden));
+  // A press anywhere outside the card (and outside its pill, which toggles it) closes it.
+  document.addEventListener('pointerdown', (e) => {
+    if (!panel.hidden && !panel.contains(e.target) && !optBtn.contains(e.target)) setOptions(false);
+  }, true);
 
   let nearest = null, overview = false;
   prompt.addEventListener('click', () => { if (nearest) o.onVisit(nearest); });

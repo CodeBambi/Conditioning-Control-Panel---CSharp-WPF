@@ -63,6 +63,8 @@ public sealed record FxRecipe(int HeroMs, IReadOnlyList<FxStep> Steps)
 public sealed record FxGates(bool Flash, bool Subliminal, bool Spiral, bool BrainDrain, bool Melt, bool SpiralStill = true, bool Tunnel = true)
 {
     public static readonly FxGates AllOn = new(true, true, true, true, true);
+    /// <summary>Every gate shut, the tunnel included (its record default is on): what a fire reads with no settings.</summary>
+    public static readonly FxGates AllOff = new(false, false, false, false, false, SpiralStill: false, Tunnel: false);
 }
 
 /// <summary>A resolved step with the media it will use (words for sub primitives, one GIF for gif-full and

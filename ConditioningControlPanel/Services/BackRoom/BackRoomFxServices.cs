@@ -49,7 +49,7 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
     {
         var s = App.Settings?.Current;
         if (s == null)
-            return new FxEnvironment(MotionFx.Level, BackRoomFxIntensity.Calm, new FxGates(false, false, false, false, false, false));
+            return new FxEnvironment(MotionFx.Level, BackRoomFxIntensity.Calm, FxGates.AllOff);
         var spiralPath = s.SpiralPath;
         string? Woven(string preset) => WovenFor(preset, spiralPath);
         double opacity = s.SpiralOpacity > 0 ? Math.Clamp(s.SpiralOpacity / 100.0, 0.05, 1.0) : 0.85;

@@ -50,8 +50,8 @@ html.br-visiting .br-room-ui { visibility: hidden; }
   background: rgba(42, 24, 56, .86); border: 1px solid rgba(185, 156, 255, .45); border-radius: 999px; padding: 9px 15px; }
 .br-pill:hover { border-color: var(--br-gold); }
 .br-pill:disabled { opacity: .6; cursor: default; }
-/* The room's Options (10.14): a small plum card under the nav. */
-.br-options { position: absolute; top: 52px; right: 120px; width: 230px; padding: 12px 14px; border-radius: 12px;
+/* The room's Options (10.14): a small plum card hanging from the nav, right edge under the Options pill (the last pill). */
+.br-options { position: absolute; top: calc(100% + 8px); right: 0; width: 230px; padding: 12px 14px; border-radius: 12px;
   background: rgba(30, 18, 42, .94); border: 1px solid rgba(185, 156, 255, .35); display: flex; flex-direction: column; gap: 8px; }
 .br-options[hidden], .br-opt-note[hidden] { display: none; }
 .br-opt-name { color: var(--br-ink-dim); font-size: 12px; }
