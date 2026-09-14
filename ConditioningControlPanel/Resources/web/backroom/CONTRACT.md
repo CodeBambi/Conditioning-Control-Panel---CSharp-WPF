@@ -129,7 +129,7 @@ static readonly Dictionary<string, (string Method, string Path)[]> Ops = new() {
   "table": { "v": 3, "stake": 1, "freezeCost": 1, "jackpot": 2500, "rtp": 1.02, "rtpFrozen": 1.02,
              "lines": [ { "id": "emi3", "pays": 2500, "odds": "1 in 25,000" }, "..." ] },
   "strips": [ ["gif0","spiral0","sub0", "...13 ids"], ["..."], ["..."] ],
-  "floorMs": 800 }
+  "floorMs": 3000 }
 ```
 
 `table.lines` is the published odds (10.1) and is what the page prints. `strips` are server-owned and
@@ -145,7 +145,9 @@ Request:
   "freeze": { "col": 1 } }
 ```
 
-- `count` 1..20 paid spins (page default 10, lower if `sp < 10`). With `freeze`, `count` must be 1.
+- `count` 1..20 paid spins. The page default is `defaultTapeCount(sp) = clamp(floor(sp / 5), 1, 10)`
+  (16 SP -> 3, 50+ SP -> 10); a manual pick goes up to 20. The page never offers a count above what
+  the balance affords. With `freeze`, `count` must be 1.
 - Cost: `count` SP, or `1 + freezeCost` for a freeze spin. `sp < cost` -> `insufficient` + `sp`.
 - **Plain tape:** refused with `tape_unplayed` (body carries the stored tape) unless
   `cursor.played === stored.outcomes.length`. The page just resumes that tape.
@@ -192,9 +194,9 @@ means the player re-watches a few settled spins, nothing more.
   `drawTripleClass` -> `dressTriple` shape). The malus only dresses onto a `none` class.
 - **Order:** melt is consumed in DRAW order. A freeze bought mid-tape sees the melt left at the END of
   the stored tape. Playback may show a stale melt count for a few spins (Law I, display only).
-- **Rate floor:** `nextBuyAt = now + outcomes.length * SLOT_FLOOR_MS` (800 ms default, env). A plain
+- **Rate floor:** `nextBuyAt = now + outcomes.length * SLOT_FLOOR_MS` (3000 ms default, env; 10.12). A plain
   tape before `nextBuyAt` -> `{ok:false, reason:'too_fast', retryInMs}`; the page waits it out silently.
-  A freeze spin checks a 700 ms floor against the last buy. Plus the per-account 60/min limiter.
+  A freeze spin checks a 3000 ms floor against the last buy. Plus the per-account 60/min limiter.
 - **Cap (decided):** the SP cap rises from 9,999 to 99,999 for everyone. Server `SKILL_POINTS_CAP` and
   every client clamp (AppSettings, ProfileSyncService merge, anti-cheat) move together in one change,
   ahead of the slot. At 99,999 winnings above the cap are lost and `capped:true` is returned.
@@ -439,7 +441,44 @@ export async function mount(ctx) {
    time; picking another moves the hold. (The preview's multi-freeze is not carried over.)
 2. **Cap:** raised to 99,999 everywhere (section 3.4). Clip and flag above it.
 3. **Soft launch:** door flag `BACKROOM_OPEN` + `BACKROOM_TESTERS`.
-4. **Tape size:** default 10 spins, max 20.
+4. **Tape size:** default `defaultTapeCount(sp)` (at most 10, shorter on a small balance), manual max 20.
 5. **Intensity:** `Calm | Normal | Full`, default `Normal`.
 6. **Model requests:** none. Every node the page drives is present. Station approach points and bounds
    come from blender-scripting `backroom/out/placements.json`, not a model change.
+
+## 10. Checkpoint 1 amendments (2026-09-13)
+
+Where these disagree with the sections above, these win.
+
+1. **Table v5:** `emi3` pays 400 at 1 in 12,987 (was 2,500 at 1 in 25,000). Paytable constant `TABLE_V5`.
+2. **Freezes are sealed from melt:** a freeze spin and everything it expands into neither consume nor
+   start melt; `melt` comes back exactly as it went in.
+3. **A re-spin keeps the hold:** a `spiral2` re-spin won on a freeze spin repeats the frozen table with the
+   same held column.
+4. **A held melt is a blank:** a melt symbol in the held column is carried, not drawn, and counts as a
+   blank on the payline, never a malus.
+5. **`freeze.col` is 0-based:** 0, 1 or 2.
+6. **Keyed seed:** `rngFor(key, uid, n, 'slot')` = HMAC-SHA256 under `BACKROOM_SEED_KEY` (server only,
+   32+ chars). Without the key the door stays shut for everyone, testers included.
+7. **Third lock:** after `purchase_lock` and `backroom_lock`, `user_write_lock:<uid>` (NX EX 5), the lock
+   `/v2/user/sync` re-reads under. Any miss is `409 {reason:'busy'}`.
+8. **Receipts trimmed to 500:** arrival order in `backroom:idorder:<uid>`; above 500 the OLDEST are
+   trimmed, never the whole hash.
+9. **Tape default:** `defaultTapeCount(sp)` (section 3.2, decision 4).
+10. **Freeze response shape** (as S1 implemented it). The freeze outcomes are in `freeze.outcomes`, NOT
+    in `tape`; `tape` is the stored tape's id and cursor only (no `outcomes`), or `null` with no tape:
+
+```json
+{ "ok": true, "idem": "...", "sp": 49, "spBefore": 50, "cost": 2, "capped": false,
+  "melt": 0, "jackpot": 400,
+  "tape": { "id": "t_9f3c...", "played": 3 },
+  "freeze": { "col": 1, "held": "gif1", "outcomes": [
+    { "i": 0, "kind": "freeze", "...": "same outcome fields as 3.2, expansions inline" } ] } }
+```
+
+11. **Pace (owner decision):** the page plays one outcome in about 4 s (was about 2 s), every paid, free
+    and re-spin outcome included, so a small SP balance lasts about twice as long.
+12. **Server floor 3000 ms per outcome:** `SLOT_FLOOR_MS` defaults to 3000 (was 800) and
+    `SLOT_FREEZE_FLOOR_MS` to 3000 (was 700), env overrides kept; `state.floorMs` is 3000. A freeze right
+    after a freeze waits `max(3000, that freeze's outcomes x 3000)`. A modified client tops out near
+    1,200 outcomes an hour against the page's 900.
