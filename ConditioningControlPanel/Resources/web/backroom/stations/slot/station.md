@@ -45,13 +45,46 @@ Back (left) and EMI's HUD face sits under the room's SP chip (right), so the mar
 - **THE THUD** per reel stop, left to right, at 1800/2180/2560 ms: rotation overshoot on `cubic-bezier(.2,1.5,.4,1)`,
   reel brightness 2.2 -> 1 over 340 ms, the pitched cue (-2/0/+2 semis) on the same frame (`onReelStop`).
 - **THE BANK** on a pay: 3-7 tokens by tier (4 on Calm), 560 ms each, 70 ms stagger, readout ticks per landing,
-  mini-thud on the last, `payout_tray` thuds as the pay leaves it, `+N SP` text. Reversed for a tape or freeze
-  debit: ticks down as each token leaves, lands in `payout_tray`.
-- **THE CHIME LADDER**: one family (chime1..3), +1 semitone per consecutive win, cap 7, -12 while melted.
+  mini-thud at the end of the count, `payout_tray` thuds as the pay leaves it, `+N SP` text. Reversed for a tape
+  or freeze debit: ticks down as each token leaves, lands in `payout_tray`.
+- **Proportional rollup** (casino playbook A3): the count-up is scaled to the win, not flat 500 ms. The whole
+  table is `feel.ROLLUP_MS`, by tier: `[0, 500, 1200, 2000, 6000]` ms. The TOKENS never move for it (the House
+  Book caps stand: 3-7 tokens, 4 on Calm, 560 ms each, 70 ms stagger), only how long the READOUT counts. The
+  tokens tick it as they land exactly as before, and where the rollup outlasts their flight (tiers 2, 3 and 4,
+  whose flights are 770, 840 and 980 ms) the readout carries on counting from the last landing to the settled
+  value over the rest of the window, on a shallow ease-out and silently; the mini-thud and the readout THUD wait
+  for the end of the count (Law X: one gesture, one beat). The `+N SP` text goes up when the tokens land and
+  stays up until the count settles. Law I: the value it lands on is the tape's, `bank.js` only paints it.
+- **THE CHIME LADDER**: one family (chime1..3), +1 semitone per consecutive win, cap 7, -12 while melted. Across
+  a rollup it CLIMBS with the count (`feel.ladderPlan` -> `sound.climb`): 1 step at tier 1, then 3, 5 and 7,
+  spread over the rollup window a semitone apart and never closer than the 6 Hz strobe floor, so a big win
+  rises instead of ringing once. A melted win gets the landing note and no climb (Brake 5).
+- **THE PAYLINE FRAME** (casino playbook A6): after a win the winning row is framed for exactly the rollup
+  length, then THE GLOW goes out over 480 ms. It is a DOM frame (`.slot-payline`) that `scene.js` puts on the
+  reel window's live projected bounds every frame, one drum cell tall (the chord of a `2PI/13` cell on the
+  drum's own radius), so nothing is hard-coded and nothing is added to the glb. `scene.js` drives the pulse
+  itself on a cosine, never faster than 2 Hz (`feel.PAYLINE_PULSE_MIN_MS`), and it never goes dark before the
+  fade (Brake 9). Tier 1 takes a single soft pulse (Law IX: a small win is not confetti); a melted spin takes a
+  steady frame (Brake 5). It rides the reveal's beat, it does not add one (Law X).
 - **THE MASCOT GLANCE**: press -> spirals, landing -> jackpot / hearts / melt / idle, hold 600 ms (800 melted), then
   rest; `glance()` never repeats the current pose.
 - **THE BREATH**: only the lever at rest, 3.2 s ease-in-out, paused while a party runs. The old screen_jackpot
   pulse (a second breather) is gone.
+- **ATTRACT** (playbook A4, House Book deck II): 25 s seated with nothing running and the cabinet attracts itself.
+  The reels drift (about a cell every 3 s, the three drums at slightly different speeds), one chase sweeps the
+  bulbs every 8 s (brightness only, 1.4 s a pass), EMI winks at 4 s and then every 12 s. Nothing lands: the stops
+  never move, no SP moves and nothing is read from the tape. The lever keeps breathing (Law III: the drifting
+  reels are scenery, attract is not a celebration). Lever, freeze, Back, Escape, any key or any pointer press
+  ends it on that frame (Law VIII) and the reels ease home over 420 ms, never a thud (Brake 1, Law XI). Off on
+  Calm, off under reduced motion and off while `meltLeft > 0` (Brake 5). One `setTimeout` re-armed on input
+  (no polling) plus the self-re-arming wink; both are cleared by any input, by `suspend` and by `close`, and the
+  drift itself rides the render loop, so `destroy` leaves no rAF and no timeout alive.
+- **THE EMI LAND-WIGGLE** (playbook A5): EMI landing on any reel, a losing spin included, wiggles that cell once
+  after its own thud (`scene.wiggle(i, 340)`: two oscillations, 300 ms, 0.17 of a cell, back to the same stop) and
+  EMI's HUD face glances. It rides after the thud and holds no timer, so the next reel's thud is untouched
+  (Law X). A 3-EMI line is already THE REVEAL, so that spin wiggles nothing (Brake 2: one hero per beat). Calm
+  keeps it (it is tiny); reduced motion takes the settled state: no wiggle, no glance. `feel.emiLandings(outcome)`
+  is the pure list of reels, and a held column never thuds, so a frozen EMI never wiggles either.
 - **Law IX / THE MARQUEE**: tier 1 chime + win chase, tier 2 two notes + EMI jolt + `WIN +N` glow on
   screen_jackpot, tier 3 THE THUD on screen_jackpot + big chase, tier 4 THE REVEAL (EMI over-rotates, jackpot
   counts up 620 ms, sparks, gold). `marquee_glow` heat tracks the tier (in 80 ms, out 480 ms), gold at the top.
@@ -60,12 +93,39 @@ Back (left) and EMI's HUD face sits under the room's SP chip (right), so the mar
   once per sit-down; a no-pay spin gets THE SHIVER (+-4 px, 250 ms) and a muted last thud; no move over 620 ms
   but the jackpot hero; chase steps never faster than 6 Hz; every value is also text.
 - **Law VI**: reduced motion takes the state (reels on their stop at the thud frame, no tokens: the readout is on
-  the settled value with a lit ring, no shiver, heat steps). Back and suspend skip every ceremony to settled.
+  the settled value with a lit ring, no shiver, heat steps; no rollup, so no chime climb either, and the payline
+  frame is steady for the reveal beat with no pulse). Back and suspend skip every ceremony to settled.
+- **A1 THE ANTICIPATION REEL** (playbook Tier A, CONTRACT 10.15): a live pair on reels 1 and 2 (the same gif 900 ms,
+  two spirals or two subs 1,100 ms, two EMI 1,400 ms and gold) keeps reel 3 blurred past its normal stop before THE
+  THUD. From reel 2's thud a tone climbs (`sound.rise`, a synth sweep), the marquee takes the `tease` mood
+  (`tease_gold` on the EMI pair) and the bulbs drop to 0.62 emissive; THE BREATH is paused by the spin already.
+  Brake 5 halves the hold while melted and never lets it go gold. Reduced motion and Calm KEEP the hold and the tone
+  and drop the light change only: the hold is pace, not animation. A frozen reel 3 never holds. The outcome is on
+  the tape before a reel moves, so the hold is purely a delay (`feel.anticipation`, `pace.ANTICIPATION`).
+- **A2 THE ALMOST on the strip** (CONTRACT 10.15): a no-pay spin under a live pair, where the cell one above or one
+  below the payline on reel 3 would have completed the line, ghosts that cell gold and snaps it back once (620 ms,
+  gold in over 500, one 120 ms snap), on the same frame as the muted thud and THE SHIVER (Law X) with a ghost note
+  under it. Once a spin, the cell below read first. The reel window shows about half of each neighbour (drum r 0.43,
+  13 cells, window 0.39 tall), so nothing is nudged. Reduced motion: one 120 ms gold tint on the reel, no repaint.
+  `feel.almost` reads the server's own strip and stop: no stop weighting, ever. Natural rate on table v5: 9 of the
+  2,197 uniform rows, gif and EMI pairs only (a sub or spiral pair already pays).
+- **Skip to settled** (Law VI, Brake 7): one lever press, Back, suspend or a new spin puts a running rollup
+  straight on the settled value. `bank.skip()` reads the run's `settled` (the tape's number), never the tick
+  ladder, so a cut-short count can never leave the readout short or count a value twice; it is idempotent, and
+  `onDone` then hands the readout back to `tape.snapshot().shownSp`. A press takes the whole settled state
+  (`skip({ land: true })`: the mini-thud, the readout THUD and the `+N`), hushes the rest of the chime climb and
+  sends the frame into its fade. Back and suspend settle the number and leave quietly (leaving is a fade).
+
+## Follow-ups
+
+- The room's unattended cabinet marquee (attract seen from across the 3D room, playbook A4) is NOT part of this:
+  the station page owns only the seated cabinet. Room-side work is a separate pass.
 
 ## Checks
 
 ```
 node --test ConditioningControlPanel/Resources/web/backroom/stations/slot/tests/
+node --test ConditioningControlPanel/Resources/web/backroom/stations/slot/tests/*.test.mjs   # Node 24 on Windows
 node ConditioningControlPanel/Resources/web/backroom/stations/slot/tests/nodes-check.mjs [slot.glb]
 ```
 

@@ -15,7 +15,9 @@ import { createTape, stopsFor } from './tape.js';
 import { createScene, FACES } from './scene.js';
 import { createMedia, fxSymbols } from './media.js';
 import { PACE } from './pace.js';
-import { recipe, tierOf, meltedBy, ladderSemis, winTokens, spendTokens, glance, landPose, restPose, pressPose, glanceHoldMs } from './feel.js';
+import { recipe, tierOf, meltedBy, ladderSemis, ladderPlan, rollupMs, winTokens, spendTokens, glance, landPose, restPose, pressPose, glanceHoldMs } from './feel.js';
+import { anticipation, almost } from './feel.js';   // the playbook's Tier A (CONTRACT 10.15)
+import { ATTRACT, attractOk, emiLandings } from './feel.js';
 import { createBank } from './bank.js';
 import { createSound } from './sound.js';
 
@@ -54,7 +56,10 @@ export async function mount(ctx) {
   // Feel state for one sit-down (lane F1): the readout override while THE BANK flies, the win streak for
   // THE CHIME LADDER, how often each tier has partied (Brake 3), and EMI's current pose (THE MASCOT GLANCE).
   let sound = null, bank = null, shown = null, owing = false, streak = 0, seen = [0, 0, 0, 0, 0], jackpots = 0;
-  let pose = 'idle0_0', glanceTimer = 0, gainTimer = 0, playing = null, feelLog = [], bankFrom = 0, bankTo = 0;
+  let pose = 'idle0_0', glanceTimer = 0, gainTimer = 0, playing = null, feelLog = [], bankFrom = 0, bankTo = 0, bankHold = 1600;
+  // A4 attract: one idle timeout re-armed on input (no polling) and one self-re-arming wink, both cleared on
+  // any input, on suspend and on close, so a shut cabinet leaves nothing running.
+  let idleTimer = 0, winkTimer = 0, attracting = false;
   const $ = sel => el.querySelector(sel), wait = ms => new Promise(r => setTimeout(r, Math.max(0, ms)));
   function mark(phase) { pace = phase; marks = [...marks.slice(-79), { phase, at: Math.round(performance.now()) }]; }
   function note(what, extra = {}) { feelLog = [...feelLog.slice(-79), { what, at: Math.round(performance.now()), ...extra }]; }
@@ -82,6 +87,7 @@ export async function mount(ctx) {
       </header>
       <canvas class="slot-face" width="152" height="137" aria-hidden="true"></canvas>
       <span class="slot-gain" hidden></span>
+      <div class="slot-payline" aria-hidden="true" hidden></div>
       <div class="slot-tokens" aria-hidden="true"></div>
       <div class="slot-controls">
         <div class="slot-freeze">${[0, 1, 2].map(i => `<button type="button" data-col="${i}" aria-pressed="false"></button>`).join('')}</div>
@@ -98,12 +104,14 @@ export async function mount(ctx) {
       root.querySelector('.slot-back').hidden = true;
       root.querySelector('.slot-card-back').hidden = true;
     }
+    root.addEventListener('pointerdown', onPoke, true);   // A4: any pointer press ends attract (the lever included)
     root.querySelector('.slot-spin').onclick = () => press();
     root.querySelectorAll('[data-col]').forEach(b => { b.onclick = () => toggleFreeze(Number(b.dataset.col)); });
     return root;
   }
 
   function back() {
+    endAttract(true);
     // Law VIII: Back rings on the frame it is asked (standalone; in the room the room's chip answers its own press).
     if (el && !hostBack) $('.slot-back').classList.add('is-ringing');
     if (typeof ctx.standUp === 'function') ctx.standUp();
@@ -185,6 +193,43 @@ export async function mount(ctx) {
     if (rest) glanceTimer = setTimeout(() => { if (alive && pose !== rest) { setFace(rest); note('rest', { pose }); } }, holdMs);
   }
 
+  /* A4 ATTRACT (House Book deck II, playbook Tier A). After ATTRACT.IDLE_MS seated with nothing running the
+   * cabinet attracts itself: the reels drift, a chase sweeps every ~8 s, EMI winks. No SP moves and nothing is
+   * read from the tape, so it can end at any frame. Off on Calm, under reduced motion and while melted
+   * (Brake 5). Any input ends it on the frame it arrives (Law VIII) and the reels ease home (Brake 1). */
+  const attractState = () => ({
+    seated: !!el && el.dataset.phase === 'play', phase: pace, busy, banking: !!(bank && bank.busy),
+    meltLeft: tape ? tape.snapshot().melt : 0, calm: lite, reduced, suspended,
+  });
+  function armIdle() {
+    clearTimeout(idleTimer); idleTimer = 0;
+    if (!alive || suspended || lite || reduced) return;   // Calm and reduced motion never arm it at all
+    idleTimer = setTimeout(() => { idleTimer = 0; enterAttract(); }, ATTRACT.IDLE_MS);
+  }
+  function enterAttract() {
+    if (attracting || !scene || !attractOk(attractState()) || !scene.attract(true)) return;
+    attracting = true;
+    winkTimer = setTimeout(wink, ATTRACT.WINK_FIRST_MS);
+    note('attract', { on: true });
+  }
+  /** THE MASCOT GLANCE, unprompted: a short chain that returns to rest. Never the same pose twice (glance()). */
+  function wink() {
+    winkTimer = 0;
+    if (!attracting || !alive) return;
+    glanceTo('hearts', glanceHoldMs(false), restPose(0));
+    winkTimer = setTimeout(wink, ATTRACT.WINK_MS);
+  }
+  /** Ends it and drops both timers. `now` snaps the reels home instead of easing (Back, suspend: Law VI). */
+  function endAttract(now = false) {
+    clearTimeout(idleTimer); idleTimer = 0;
+    clearTimeout(winkTimer); winkTimer = 0;
+    if (!attracting) return;
+    attracting = false;
+    if (scene) scene.attract(false, now);
+    note('attract', { on: false });
+  }
+  const onPoke = () => { if (!alive) return; endAttract(); armIdle(); };
+
   /** THE THUD on the SP readout: the bank's last token (a mini-thud). Reduced motion: a lit state, no scale. */
   function thudReadout() {
     if (hostSp) { hostSp.thud(); return; }
@@ -194,24 +239,28 @@ export async function mount(ctx) {
     box.animate([{ transform: 'scale(1.3)', filter: 'brightness(2.2)' }, { transform: 'scale(.94)', offset: 0.55 }, { transform: 'scale(1)', filter: 'brightness(1)' }],
       { duration: 340, easing: 'cubic-bezier(.2,1.5,.4,1)' });
   }
-  function gain(n) {
+  /** Brake 9: every value is also text. `holdMs` keeps the +N up for a long rollup, so it is still there when
+   *  the count settles (playbook A3), not gone 1.6 s into a 6 s climb. */
+  function gain(n, holdMs = 1600) {
     const g = el && $('.slot-gain');
     if (!g) return;
     g.textContent = t(n >= 0 ? 'br_slot_gain' : 'br_slot_spent', n >= 0 ? '+{n} SP' : '-{n} SP', { n: fmt(Math.abs(n)) });
     g.hidden = false; g.dataset.sign = n >= 0 ? 'up' : 'down';
-    clearTimeout(gainTimer); gainTimer = setTimeout(() => { if (el) $('.slot-gain').hidden = true; }, 1600);
+    clearTimeout(gainTimer); gainTimer = setTimeout(() => { if (el) $('.slot-gain').hidden = true; }, Math.max(0, holdMs));
   }
   const readoutAt = () => { const b = readout() && readout().getBoundingClientRect(); return b && b.width ? { x: b.left + b.width / 2, y: b.top + b.height / 2 } : null; };
-  /** THE BANK forwards (a win) or reversed (a tape or freeze debit). */
-  function flyBank(kind, fromValue, toValue, n) {
+  /** THE BANK forwards (a win) or reversed (a tape or freeze debit). `roll` (playbook A3) is how long the
+   *  readout keeps counting: the tokens are the same either way, the count-up is what scales to the win. */
+  function flyBank(kind, fromValue, toValue, n, roll = 0) {
     shown = fromValue;
     const from = kind === 'pay' ? () => scene && (scene.project('payout_spawn') || scene.project('payout_tray')) : readoutAt;
     const to = kind === 'pay' ? readoutAt : () => scene && (scene.project('payout_tray') || scene.project('payout_spawn'));
     if (kind === 'pay' && scene) scene.trayThud();
     if (!(bank.busy && bank.kind === 'pay' && kind === 'pay')) bankFrom = fromValue;   // a merged pay keeps its first value
     bankTo = toValue;
-    const how = bank.start({ kind, n, fromValue, toValue, from, to });
-    note('bank', { kind, fromValue, toValue, n, how });
+    bankHold = Math.max(1600, roll + 600);
+    const how = bank.start({ kind, n, fromValue, toValue, from, to, rollupMs: roll });
+    note('bank', { kind, fromValue, toValue, n, roll, how });
     paintSp();
   }
 
@@ -229,6 +278,7 @@ export async function mount(ctx) {
   }
 
   function toggleFreeze(col) {
+    endAttract(); armIdle();
     if (!alive || busy || !tape || el.dataset.phase !== 'play') return;
     tape.toggleHold(col);
     sync();   // scene.setHold dips the button this frame (Law VIII)
@@ -250,18 +300,36 @@ export async function mount(ctx) {
   function land(landed, before) {
     const melt = tape.snapshot().melt, o = (landed.meltLeft || 0) === melt ? landed : { ...landed, meltLeft: melt };
     const tier = tierOf(o), melted = meltedBy(o), r = recipe(o, { seen: seen[tier], jackpots });
+    const semis = ladderSemis(streak, melted), roll = rollupMs(tier);   // playbook A3: the count-up scales to the win
     if (tier > 0) { seen[tier]++; if (tier === 4) jackpots++; }
-    if (tier > 0) { sound.win(r.sound, ladderSemis(streak, melted)); streak++; } else streak = 0;   // the no-pay cue was the last reel's muted thud
+    if (tier > 0) { sound.win(r.sound, semis); streak++; } else streak = 0;   // the no-pay cue was the last reel's muted thud
     scene.setMelted(melted);
     scene.celebrate(r, o.pay, t('br_slot_screen_win', 'WIN +{n}', { n: fmt(o.pay) }));
-    if (r.tokens) flyBank('pay', before, tape.snapshot().shownSp, winTokens(tier, lite));
+    if (r.tokens) {
+      flyBank('pay', before, tape.snapshot().shownSp, winTokens(tier, lite), roll);
+      // THE CHIME LADDER climbs while the readout counts. Law VI: reduced motion has no rollup to climb over
+      // and THE BANK has already settled, so the ladder is the landing note alone (no sound without a visual).
+      sound.climb(ladderPlan(tier, reduced ? 0 : roll, melted), semis);
+      scene.payline(roll, r);                                // A6: the winning row frames for the same window
+    }
     glanceTo(landPose(o), glanceHoldMs(melted), restPose(o.meltLeft));
-    note('land', { line: o.line, pay: o.pay, tier, party: r.party, sound: r.sound, melted, streak });
+    note('land', { line: o.line, pay: o.pay, tier, party: r.party, sound: r.sound, melted, streak, roll });
+  }
+
+  /** Tier A on a reel's thud frame (Law X, one gesture one beat): reel 2's thud opens A1's rising tone,
+   *  and the last reel's thud carries A2's ghost under the same muted thud. */
+  function stopFeel(p, i) {
+    if (i === 1 && p.ant && p.ant.holdMs > 0) { sound.rise(PACE.STAGGER_MS + p.ant.holdMs, lite); note('tease', { kind: p.ant.kind, holdMs: p.ant.holdMs }); }
+    if (i === p.lastReel && p.near) { scene.almost(p.near); sound.almost(lite); note('almost', p.near); }
   }
 
   async function press() {
     if (!alive || suspended || !scene || el.dataset.phase !== 'play') return;
+    endAttract();
     sound.arm();
+    // Law VI, Brake 7: one press settles a rollup that is still counting, straight to the tape's value, with
+    // the mini-thud and the +N it would have ended on. The rest of the climb and the frame's pulse go quiet.
+    if (bank && bank.kind === 'pay') { bank.skip({ land: true }); sound.hush(); scene.paylineOut(); note('skip', { rollup: true }); }
     if (busy) { if (pace === 'reveal') { queued = true; scene.answer(); note('answer', { queued: true }); } return; }
     const my = session, before = tape.snapshot();
     // Law VIII: the lever leans and EMI glances on this frame, before the tape or the server answers.
@@ -274,15 +342,19 @@ export async function mount(ctx) {
     if (r.kind !== 'play') {
       busy = false; mark('idle'); scene.letGo(); setFace(glance(pose, restPose(before.melt)));
       if (r.kind === 'refused') card(refusalText(r.reason));
-      sync();
+      sync(); armIdle();
       return;
     }
     const o = r.outcome, after = tape.snapshot();
     if (after.shownSp < before.shownSp) flyBank('spend', before.shownSp, after.shownSp, spendTokens(before.shownSp - after.shownSp, lite));
     scene.setMelted(before.melt > 0);
-    playing = { o, lastReel: [2, 1, 0].find(i => i !== r.held) };
+    // The playbook's Tier A. Both read the outcome the tape already carries: A1 only delays the third
+    // reel, A2 only reads the strip cell the server's own stop landed beside. No stop is ever weighted.
+    const ant = anticipation(o, before.strips, { melted: before.melt > 0, held: r.held });
+    playing = { o, lastReel: [2, 1, 0].find(i => i !== r.held), ant, near: almost(o, before.strips, { held: r.held }), emi: emiLandings(o) };   // A5: which reels wiggle
     mark('spin'); sync();
-    await scene.spin(Array.isArray(o.stops) ? o.stops : stopsFor(before.strips, o.symbols), r.held);
+    await scene.spin(Array.isArray(o.stops) ? o.stops : stopsFor(before.strips, o.symbols), r.held,
+                     { holdMs: ant.holdMs, gold: ant.gold && !lite, dim: !lite });
     if (my !== session || !alive) return;
     playing = null;
     const shownBefore = shownSp();
@@ -292,12 +364,13 @@ export async function mount(ctx) {
     await wait(PACE.REVEAL_MS);
     if (my !== session || !alive) return;
     breathEnds = performance.now() + PACE.BREATH_MS;
-    busy = false; mark('idle'); sync();
+    busy = false; mark('idle'); sync(); armIdle();
     if (queued) press();
   }
 
   function onKey(e) {
     if (!alive) return;
+    endAttract(); armIdle();   // A4: any key ends it, then the idle timer starts over
     if (e.key === 'Escape') { e.preventDefault(); back(); return; }
     if (e.target && e.target.closest && e.target.closest('button, summary, input, select')) return;
     if (e.code === 'Space') { e.preventDefault(); press(); }
@@ -309,6 +382,7 @@ export async function mount(ctx) {
     if (alive) return;
     alive = true; busy = false; suspended = false; lastMelt = null; pace = 'idle'; queued = false; breathEnds = 0;
     shown = null; streak = 0; seen = [0, 0, 0, 0, 0]; jackpots = 0; pose = 'idle0_0'; playing = null;
+    attracting = false; clearTimeout(idleTimer); clearTimeout(winkTimer); idleTimer = winkTimer = 0;
     const my = ++session;
     el = build();
     ctx.root.append(el);
@@ -319,17 +393,24 @@ export async function mount(ctx) {
     bank = createBank({
       layer: $('.slot-tokens'), reduced,
       onTick: (value, kind, quiet) => { shown = value; paintSp(); if (!quiet) sound.token(false); note('tick', { kind, value }); },
-      onLand: kind => { if (kind === 'spend' && scene) scene.trayThud(); else { sound.token(true); thudReadout(); }
-                        gain(bankTo - bankFrom); },
+      // `rolling` (playbook A3): the tokens are down but the readout is still counting, so the mini-thud
+      // waits for the end of the rollup (Law X). The +N goes up on the landing and stays out the count.
+      onLand: (kind, rolling) => { if (kind === 'spend' && scene) scene.trayThud(); else if (!rolling) { sound.token(true); thudReadout(); }
+                                   gain(bankTo - bankFrom, rolling ? bankHold : 1600); },
       onDone: () => { shown = null; paintSp(); },
     });
     if (typeof ctx.onSp === 'function') unSp = ctx.onSp(v => { if (tape) { tape.setServerSp(v); sync(); } });
     const dealt = Promise.resolve().then(() => (typeof ctx.media === 'function' ? ctx.media() : null))
       .then(m => (my === session ? media.deal(m) : null)).catch(() => null);
     const [made, state] = await Promise.all([
-      createScene({ canvas: $('.slot-stage'), reduced, palette: variant && variant.palette, hint: $('.slot-hint'), canPull: () => (!busy || pace === 'reveal') && !suspended,
+      createScene({ canvas: $('.slot-stage'), reduced, palette: variant && variant.palette, hint: $('.slot-hint'), payline: $('.slot-payline'),
+                    canPull: () => (!busy || pace === 'reveal') && !suspended,
                     onLever: () => press(), onFreeze: col => toggleFreeze(col),
-                    onReelStop: i => { const p = playing; sound.thud(i, !!p && i === p.lastReel && !(p.o.pay > 0)); note('thud', { reel: i }); } }).catch(e => ({ error: e })),
+                    onReelStop: i => { const p = playing; sound.thud(i, !!p && i === p.lastReel && !(p.o.pay > 0));
+                      // A5: EMI landed on this reel, so the cell wiggles after this thud and she glances. The next
+                      // reel's thud is untouched (Law X); reduced motion takes the settled state, so no wiggle.
+                      if (p && p.emi.includes(i) && !reduced) { scene.wiggle(i, PACE.THUD_MS); glanceTo('hearts', glanceHoldMs(meltedBy(p.o)), null); note('emi-wiggle', { reel: i }); }
+                      note('thud', { reel: i }); if (p) stopFeel(p, i); } }).catch(e => ({ error: e })),
       tape.open(),
     ]);
     if (my !== session) { if (made && made.dispose) made.dispose(); return; }
@@ -358,6 +439,7 @@ export async function mount(ctx) {
     if (my !== session) return;
     el.dataset.phase = 'play';
     sync();
+    armIdle();
   }
 
   async function close() {
@@ -373,6 +455,7 @@ export async function mount(ctx) {
     if (typeof unSp === 'function') unSp();
     unSp = null;
     // Law VI: Back skips every ceremony to its settled state, then hands the room its chip back.
+    endAttract(true);
     clearTimeout(glanceTimer); clearTimeout(gainTimer);
     if (bank) { bank.skip(); bank.dispose(); }
     // What a reopen will show: the stored tape's unplayed pays (a freeze's own outcomes are not stored).
@@ -396,7 +479,8 @@ export async function mount(ctx) {
     close,
     suspend(on) {
       suspended = !!on;
-      if (sound) sound.suspend(suspended);
+      if (suspended) endAttract(true); else armIdle();
+      if (sound) sound.suspend(suspended);   // the climb is hushed with it: a resumed context would replay the rest
       if (suspended && bank) bank.skip();
       if (suspended && scene) { scene.cancelPull(); scene.skip(); }
       if (el) sync();
@@ -410,6 +494,7 @@ export async function mount(ctx) {
                     hostBack, variant: variant && variant.id, palette: !!(scene && scene.recoloured),
                     spinning: !!(scene && scene.spinning), sceneAlive: !!scene,
                     feel: { log: feelLog, pose, streak, seen, shown, readout: String(shownSp()), hostSp: !!hostSp,
+                            attracting, idleArmed: !!idleTimer, emi: playing ? playing.emi : [],
                             cues: sound ? sound.trace.slice() : [], scene: scene && scene.debug() } }),
   };
 }

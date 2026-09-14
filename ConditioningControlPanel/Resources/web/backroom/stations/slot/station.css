@@ -42,6 +42,11 @@
   background: #2b1638ee; border: 1px solid #ffcf6b66; color: #ffcf6b; font-weight: 600; font-size: 13px; }
 .slot-gain[data-sign="down"] { color: #edc7df; border-color: #b77da255; }
 .slot-station[data-host-back] .slot-gain { top: 58px; left: auto; right: 74px; }
+/* THE PAYLINE FRAME (playbook A6): the winning row, framed for the length of THE BANK's rollup. scene.js puts
+   it on the reel window's live projected bounds every frame and drives the pulse itself (2 Hz at most, Brake 7),
+   so there is no CSS animation here to run away from the motion setting. */
+.slot-payline { position: absolute; z-index: 2; pointer-events: none; opacity: 0; border-radius: 10px;
+  border: 2px solid #ffcf6b; box-shadow: 0 0 20px #ffcf6b7a, inset 0 0 16px #ffcf6b3d; }
 .slot-tokens { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
 .slot-token { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; will-change: transform;
   background: radial-gradient(circle at 35% 30%, #fff6d8, #ffcf6b 45%, #d9689f 100%); box-shadow: 0 0 10px #ffcf6b99; }

@@ -6,6 +6,7 @@
  * arcademy/shell/counterfx.js so a thud is a thud in the Arcademy and in the Back Room. */
 
 import { CFX, bankCount } from '../../../arcademy/shell/counterfx.js';
+import { ANTICIPATION } from './pace.js';
 
 export const FEEL = Object.freeze({
   ANSWER_MS: 100,                 // Law VIII: every input answers inside this, before any network reply
@@ -72,6 +73,20 @@ export function ladderSemis(step, melted) {
   return melted ? s - 12 : s;
 }
 
+/** THE CHIME LADDER across THE BANK's rollup (playbook A3): the ladder climbs while the readout counts, so a
+ *  big win rises instead of ringing once. Step 0 is the landing cue sound.js has already played; the steps after
+ *  it follow a semitone apart, spread over `ms`, never closer than the strobe floor (Brake 7, 6 Hz) and never
+ *  more than LADDER_CAP. Tier 1 and a melted win get the landing note and nothing more (Law IX, Brake 5).
+ *  Returns `[{ at, semis }]` in ms from the landing, both rising. */
+const LADDER_STEPS = Object.freeze([0, 1, 3, 5, 7]);
+export function ladderPlan(tier, ms, melted = false) {
+  const t = Math.max(0, Math.min(4, Math.floor(Number(tier) || 0))), span = Math.max(0, Number(ms) || 0);
+  const want = melted || t <= 1 ? 1 : Math.min(FEEL.LADDER_CAP, LADDER_STEPS[t]);
+  const gap = Math.max(FEEL.STROBE_MIN_MS, span / want);
+  const n = Math.max(1, Math.min(want, Math.floor(span / gap) || 1));
+  return Array.from({ length: n }, (_, i) => ({ at: Math.round(i * gap), semis: i }));
+}
+
 /** THE BANK token count: a win by its tier, a spend by its cost (counterfx's reversed count). */
 export function winTokens(tier, lite) {
   const hi = lite ? FEEL.BANK_MAX_LITE : FEEL.BANK_MAX;
@@ -83,6 +98,40 @@ export const spendTokens = (cost, lite) => bankCount(cost, lite);
 export function tickValues(from, to, n) {
   const a = Math.round(Number(from) || 0), b = Math.round(Number(to) || 0), k = Math.max(1, n | 0);
   return Array.from({ length: k }, (_, i) => (i === k - 1 ? b : Math.round(a + (b - a) * ((i + 1) / k))));
+}
+
+/* THE BANK's proportional rollup (playbook A3). A casino scales the count-up to the win, and so does this:
+ * the token count and stagger never move (3-7 tokens, 4 on Calm, 560 ms each, 70 ms apart, House Book), only
+ * how long the READOUT keeps counting. The tokens tick it as they land, exactly as before; when the rollup is
+ * longer than their flight the readout carries on from the last landing to the settled value over the rest,
+ * and the mini-thud waits for the end. Law I: the value it lands on is the tape's, never this file's. */
+export const ROLLUP_MS = Object.freeze([0, 500, 1200, 2000, 6000]);   // by tier: nothing, 500, 1.2 s, 2 s, the 6 s jackpot climb
+
+/** How long the count-up runs. `x` is a tier (0-4), an outcome, or a raw pay read through tierOf's thresholds
+ *  (only a tier or an outcome can name the jackpot: a bare 400 is a big line, not `emi3`). */
+export function rollupMs(x) {
+  if (x && typeof x === 'object') return ROLLUP_MS[tierOf(x)];
+  const n = Math.max(0, Math.floor(Number(x) || 0));
+  if (n <= 4) return ROLLUP_MS[n];
+  return ROLLUP_MS[n >= 40 ? 3 : n >= 10 ? 2 : 1];
+}
+
+/** The tokens' whole flight, and when token `i` lands (both from the House Book's own two numbers). */
+export const bankFlightMs = n => FEEL.BANK_FLY_MS + Math.max(0, (n | 0) - 1) * FEEL.BANK_STAGGER_MS;
+export const bankLandMs = i => FEEL.BANK_FLY_MS + Math.max(0, i | 0) * FEEL.BANK_STAGGER_MS;
+
+/** The count-up curve: a shallow ease-out, so a big roll sprints and then settles. `q >= 1` is exactly `to`. */
+export function rollupAt(from, to, q) {
+  const a = Math.round(Number(from) || 0), b = Math.round(Number(to) || 0), k = Math.min(1, Math.max(0, Number(q) || 0));
+  return k >= 1 ? b : Math.round(a + (b - a) * (1 - (1 - k) ** 2));
+}
+
+/** The readout value at each token landing. Without a rollup longer than the flight this is the old even ladder,
+ *  the last one exactly `to`; with one, each landing is that moment's count and the tail finishes the job. */
+export function rollupTicks(from, to, n, ms) {
+  const k = Math.max(1, n | 0), flight = bankFlightMs(k);
+  if (!(Number(ms) > flight)) return tickValues(from, to, k);
+  return Array.from({ length: k }, (_, i) => rollupAt(from, to, bankLandMs(i) / Number(ms)));
 }
 
 /** THE MASCOT GLANCE. Poses from the face atlas. Never the same pose twice in a row: a repeat takes its alternate. */
@@ -115,10 +164,152 @@ export function shiverPx(ms) {
 /** THE MARQUEE: chase step period for a heat 0..4, never faster than the strobe floor. */
 export const chaseMs = heat => Math.max(FEEL.STROBE_MIN_MS * 2, 1900 - 340 * Math.max(0, Math.min(4, heat)));
 
+/* THE PAYLINE FRAME (playbook A6). After a win the winning row is framed for exactly the length of THE BANK's
+ * rollup, then THE GLOW goes out over 480 ms. Law X: it shares the beat with the reveal, it does not add one. */
+export const PAYLINE_PULSE_MIN_MS = 500;   // Brake 7: the pulse never runs faster than 2 Hz
+
+/** How many pulses the frame takes over a rollup. 0 means a steady frame: reduced motion takes the STATE
+ *  (Law VI) and a melted spin gets no ceremony (Brake 5). Tier 1 gets one soft pulse, never confetti (Law IX). */
+export function paylinePulses(tier, { reduced = false, melted = false } = {}) {
+  if (reduced || melted) return 0;
+  const t = Math.max(0, Math.min(4, Math.floor(Number(tier) || 0)));
+  if (t <= 1) return 1;
+  return Math.max(1, Math.floor(rollupMs(t) / 600));
+}
+
+/** The frame's lit level 0..1 at `ms` into it: `pulses` eases in and out across `hold`, then THE GLOW fades.
+ *  `pulses <= 0` holds it steady for the settled beat. It never goes dark before the fade (Brake 9). */
+export function paylineGlow(ms, hold, pulses = 1) {
+  const h = Math.max(0, Number(hold) || 0), at = Number(ms) || 0;
+  if (at < 0 || at >= h + FEEL.GLOW_OUT_MS) return 0;
+  const out = at > h ? 1 - (at - h) / FEEL.GLOW_OUT_MS : 1;
+  if (!(pulses > 0)) return out;
+  const period = Math.max(PAYLINE_PULSE_MIN_MS, h / pulses);
+  return out * (0.55 + 0.45 * (1 - Math.cos((2 * Math.PI * Math.min(at, h)) / period)) / 2);
+}
+
 /** A cubic-bezier(x1,y1,x2,y2) easing, solved for x. */
 export function bezier([a, b, c, d], x) {
   const q = Math.min(1, Math.max(0, x));
   let lo = 0, hi = 1, t = q;
   for (let i = 0; i < 16; i++) { t = (lo + hi) / 2; const v = 3 * (1 - t) ** 2 * t * a + 3 * (1 - t) * t * t * c + t ** 3; if (v < q) lo = t; else hi = t; }
   return 3 * (1 - t) ** 2 * t * b + 3 * (1 - t) * t * t * d + t ** 3;
+}
+
+/* ---------------------------------------------------------------------------------------------
+ * The playbook, Tier A (CONTRACT 10.15). Neither of these decides anything: the tape carries the
+ * outcome before a reel moves, so A1 is a delay over a known result and A2 only reads the strip the
+ * server already drew. No stop is weighted, moved or re-drawn anywhere in this file.
+ * ------------------------------------------------------------------------------------------ */
+
+const symKind = id => {
+  const m = /^(gif|sub|spiral)(\d+)$/.exec(id || '');
+  return m ? m[1] : id === 'emi' || id === 'melt' ? id : 'unknown';
+};
+/** What reel `r` shows: the outcome's own symbols, else the cell of `strips[r]` it stopped on. */
+function shows(o, strips, r) {
+  if (o && Array.isArray(o.symbols) && o.symbols[r]) return o.symbols[r];
+  const strip = strips && strips[r], k = o && Array.isArray(o.stops) ? o.stops[r] : -1;
+  return Array.isArray(strip) && strip.length && k >= 0 ? strip[k % strip.length] || null : null;
+}
+
+/** The live pair on reels 1 and 2: 'gif' (the SAME gif id), 'spiral', 'sub', 'emi', else 'none'. */
+export function livePair(o, strips) {
+  const a = shows(o, strips, 0), b = shows(o, strips, 1);
+  if (!a || !b) return 'none';
+  const ka = symKind(a), kb = symKind(b);
+  if (ka === 'gif' && kb === 'gif') return a === b ? 'gif' : 'none';
+  if (ka !== kb) return 'none';
+  return ka === 'spiral' || ka === 'sub' || ka === 'emi' ? ka : 'none';
+}
+
+/**
+ * A1 THE ANTICIPATION REEL. A live pair on reels 1 and 2 keeps reel 3 spinning `holdMs` past its
+ * normal stop (pace.ANTICIPATION), with a rising tone and the lights a notch down. `melted` is the
+ * melt BEFORE the spin: Brake 5 halves the hold and never lets it go gold.
+ * -> { kind: 'none'|'gif'|'spiral'|'sub'|'emi', holdMs, gold }
+ */
+export function anticipation(o, strips, { melted = false, held = null } = {}) {
+  const none = { kind: 'none', holdMs: 0, gold: false };
+  if (!o || held === 2) return none;                       // a frozen reel 3 never travels, so it never holds
+  const kind = livePair(o, strips), hold = ANTICIPATION[kind] || 0;
+  if (!hold) return none;
+  return { kind, holdMs: melted ? Math.round(hold / 2) : hold, gold: kind === 'emi' && !melted };
+}
+
+/**
+ * A2 THE ALMOST on the strip. A no-pay spin under a live pair, where the cell one above or one below
+ * the payline on reel 3 would have completed the line. The cell comes from the server's own strip and
+ * the stop it drew; the tell SHOWS that truth, it never manufactures it (no stop weighting, ever).
+ * -> { reel: 2, dir: -1|1, cell, symbol, kind } | null (at most one per spin: the first direction that fits)
+ */
+export function almost(o, strips, { held = null } = {}) {
+  if (!o || held === 2 || o.line !== 'none') return null;
+  const kind = livePair(o, strips);
+  if (kind === 'none') return null;
+  const strip = strips && strips[2], k = o && Array.isArray(o.stops) ? o.stops[2] : -1;
+  if (!Array.isArray(strip) || strip.length < 3 || !(k >= 0)) return null;
+  const n = strip.length, wanted = kind === 'gif' ? shows(o, strips, 0) : null;
+  const fits = id => (wanted ? id === wanted : symKind(id) === kind);
+  for (const dir of [-1, 1]) {
+    const cell = ((k + dir) % n + n) % n;                  // the strip is a ring: 0 and n-1 are neighbours
+    if (fits(strip[cell])) return { reel: 2, dir, cell, symbol: strip[cell], kind };
+  }
+  return null;
+}
+
+/** A2's tell: gold in, then ONE snap back (House Book THE ALMOST, 620-1,400 ms, 120 ms snap). */
+export const ALMOST = Object.freeze({ TELL_MS: 620, SNAP_MS: 120 });
+
+/* ---- Playbook Tier A (backroom-casino-playbook.md section 2): A4 attract mode, A5 the EMI land-wiggle.
+ * Both are presentation over an outcome the tape already holds: neither reads a stop, moves SP or changes
+ * a result. Pure here so the Brake keeps its word in node:test. --------------------------------------- */
+
+/** A4 ATTRACT, House Book deck II ("an autoplay ghost after ~25 s idle"). The reels drift, a chase sweeps,
+ *  EMI winks, and nothing lands. Entering and leaving it is not a party (Brake 1). */
+export const ATTRACT = Object.freeze({
+  IDLE_MS: 25000,            // seated and untouched this long before the cabinet starts attracting
+  CHASE_MS: 8000,            // one bulb chase this often...
+  CHASE_PASS_MS: 1400,       // ...each sweep taking this long (one pulse a bulb, nowhere near the strobe floor)
+  WINK_FIRST_MS: 4000,       // the first wink, so the drift is doing the talking first
+  WINK_MS: 12000,            // and a wink this often after it
+  DRIFT_CELLS_PER_S: 0.35,   // THE DRIFT: about a cell every 3 s, a continuous roll, never a spin
+  SETTLE_MS: 420,            // leaving it: a quiet ease-out back onto the current stops (Law XI utility motion)
+});
+
+/** A5 THE EMI LAND-WIGGLE: two small oscillations that damp back to the stop, a fraction of a cell. */
+export const WIGGLE = Object.freeze({ MS: 300, CELLS: 0.17, CYCLES: 2 });
+
+/**
+ * A4: may the cabinet attract right now? Seated, idle and quiet only; never while melted (Brake 5), never
+ * on Calm, never under reduced motion (Law VI: the settled state, not a slower one), never while suspended.
+ */
+export function attractOk({ seated = false, phase = 'idle', busy = false, banking = false,
+                            meltLeft = 0, calm = false, reduced = false, suspended = false } = {}) {
+  if (!seated || calm || reduced || suspended) return false;
+  if (busy || banking || phase !== 'idle') return false;
+  return !((meltLeft || 0) > 0);
+}
+
+/** A4: the drift offset in cells at `ms` into the attract (a continuous roll, so it just keeps counting). */
+export const attractCells = ms => (ms > 0 ? (ms / 1000) * ATTRACT.DRIFT_CELLS_PER_S : 0);
+
+/**
+ * A5: the reels showing EMI on this landing, left to right. Any reel counts, a losing spin included, so the
+ * jackpot symbol stays present between jackpots. A 3-EMI line IS the REVEAL, so that spin wiggles nothing
+ * (Brake 2: one hero per beat).
+ */
+export function emiLandings(o) {
+  if (!o || o.line === 'emi3') return [];
+  const syms = Array.isArray(o.symbols) ? o.symbols : [];
+  const out = [];
+  for (let i = 0; i < Math.min(3, syms.length); i++) if (syms[i] === 'emi') out.push(i);
+  return out;
+}
+
+/** A5: the wiggle offset in cells at `ms` into it (0 outside), damping to nothing exactly on the stop. */
+export function wiggleCells(ms) {
+  if (!(ms >= 0) || ms >= WIGGLE.MS) return 0;
+  const q = ms / WIGGLE.MS;
+  return WIGGLE.CELLS * Math.sin(q * Math.PI * 2 * WIGGLE.CYCLES) * (1 - q);
 }
