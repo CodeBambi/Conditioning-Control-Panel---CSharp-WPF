@@ -14,7 +14,7 @@ test('state has the binding shape, and the page can draw it', async () => {
   for (const k of ['sp', 'open', 'day', 'spun', 'result', 'snoozeCarry', 'nextResetAt', 'jackpot', 'slices', 'floorMs']) assert.ok(k in body, k);
   assert.equal(body.day, '2026-09-14');
   assert.equal(body.nextResetAt, '2026-09-15T00:00:00.000Z');
-  assert.deepEqual(Object.keys(body.jackpot).sort(), ['amount', 'eligible', 'odds', 'wonToday']);
+  assert.deepEqual(Object.keys(body.jackpot).sort(), ['amount', 'eligible', 'mustHit', 'odds', 'wonToday']);   // mustHit: 10.16.E
   assert.equal(body.floorMs, 3000);
   const L = layoutOf(body.slices);
   assert.equal(L.length, 14);
@@ -102,4 +102,50 @@ test('the day turns at 00:00 UTC on the injected clock', async () => {
   c.set(Date.parse('2026-09-15T00:00:00Z'));
   const st = (await c.s.handle('state')).body;
   assert.ok(!st.spun && st.result === null && st.day === '2026-09-15');
+});
+
+/* ------------------------------------ C2 must-hit-by in the mock (10.16.E) */
+
+test('the pot climbs to the cap, and mustHit turns on exactly there', async () => {
+  const day = 20000;
+  const at = (age) => {
+    const m = createMockServer({ now: () => (day + age) * 86400000, potSeedDay: day });
+    return m.handle('state').then(r => r.body.jackpot);
+  };
+  assert.deepEqual(await at(0).then(j => [j.amount, j.mustHit]), [250, false]);
+  assert.deepEqual(await at(29).then(j => [j.amount, j.mustHit]), [975, false]);
+  assert.deepEqual(await at(30).then(j => [j.amount, j.mustHit]), [1000, true], 'the cap is the must-hit line');
+  assert.deepEqual(await at(45).then(j => [j.amount, j.mustHit]), [1000, true], 'and it stays there');
+});
+
+test('an eligible spin on the must-hit day takes the pot, and the pot re-seeds', async () => {
+  const server = createMockServer({ sp: 0 });
+  server.mustHit();
+  const before = (await server.handle('state')).body.jackpot;
+  assert.equal(before.mustHit, true);
+  assert.equal(before.amount, 1000);
+  const spin = (await server.handle('spin', { idem: 'mustHitTakesThePot01' })).body;
+  assert.equal(spin.result.sliceId, 'jackpot');
+  assert.equal(spin.result.jackpot, true);
+  assert.equal(spin.result.pay, 1000);
+  assert.equal(spin.jackpot.mustHit, false, 'the pot is taken, so nothing must fall any more');
+  assert.equal(spin.jackpot.amount, 250, 'tomorrow starts at 250 again');
+});
+
+test('a pot already taken today is not must-hit, whatever the day', async () => {
+  const server = createMockServer();
+  server.mustHit();
+  server.wonToday();
+  assert.equal((await server.handle('state')).body.jackpot.mustHit, false);
+});
+
+test('a young account is never forced: the must-hit day does not mint it a pot', async () => {
+  const server = createMockServer({ eligible: false });
+  server.mustHit();
+  const j = (await server.handle('state')).body.jackpot;
+  assert.equal(j.mustHit, true, 'the room fact holds for everyone');
+  assert.equal(j.eligible, false);
+  const spin = (await server.handle('spin', { idem: 'youngOnTheMustHitDay1' })).body;
+  assert.notEqual(spin.result.sliceId, 'jackpot');
+  assert.equal((await server.handle('state')).body.jackpot.mustHit, true, 'and the pot is still there for someone else');
 });

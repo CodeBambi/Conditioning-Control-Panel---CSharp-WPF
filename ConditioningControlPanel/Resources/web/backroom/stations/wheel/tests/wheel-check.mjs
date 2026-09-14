@@ -408,6 +408,35 @@ await sleep(250);
 d = await dbg();
 ok(!d.still && d.hypno.dress.full && d.feel.scene.hypno.moire && d.hypno.kit && !d.hypno.kit.still, 'live motion: back to full motion, Full dress again, the hub turns');
 
+// 13. MUST HIT (CONTRACT 10.16.E, C2): the pot at the line reads MUST HIT in place of the odds, and nothing else moves.
+{
+  const chip = () => ev("document.querySelector('.wheel-jackpot').textContent");
+  const gold = () => ev("document.querySelector('.wheel-jackpot').classList.contains('is-must-hit')");
+  await boot('?musthit');
+  d = await dbg();
+  ok(d.state.jackpot.mustHit === true && d.state.jackpot.amount === 1000, 'the mock parks the pot at the must-hit line, 1,000 SP');
+  ok(await chip() === 'Jackpot 1,000 SP, MUST HIT', `the jackpot chip: "${await chip()}"`);
+  ok(await gold(), 'and takes the jackpot gold, with no new fx and no new sound');
+  ok((await fxCalls()).length === 0, 'nothing fired just for the sign');
+  await ev("document.querySelector('.wheel-odds summary').click()");
+  await sleep(150);
+  ok(await ev("/has to fall today/.test(document.querySelector('.wheel-odds p').textContent)"), 'the Odds panel says the pot has to fall today');
+  await still('st-wheel-19-must-hit.jpg', 'MUST HIT: the pot at the line, in place of the odds');
+  await ev("document.querySelector('.wheel-odds summary').click()");
+  await ev("document.querySelector('.wheel-spin').click()");
+  await waitLanded(20000);
+  await sleep(600);
+  d = await dbg();
+  ok(d.feel.scene.landed === 'jackpot' && d.state.jackpot.mustHit === false, 'an eligible spinner takes it, and nothing must fall any more');
+  ok(await chip() === 'Jackpot 250 SP, 1 in 6,644' && !(await gold()), `the chip goes back to the odds at the re-seeded pot: "${await chip()}"`);
+  // A young account still sees the room fact; its own spin is never forced (10.16.E).
+  await boot('?musthit&young&next=glow');
+  d = await dbg();
+  ok(d.state.jackpot.mustHit === true && d.state.jackpot.eligible === false, 'a young account sees MUST HIT too: it is a room fact');
+  ok(await chip() === 'Jackpot 1,000 SP, MUST HIT', 'the chip says so');
+  ok(await ev("/accounts a few days old/.test(document.querySelector('.wheel-odds p').textContent)"), 'and the Odds panel still says the jackpot is not open to it');
+}
+
 await writeFile(join(OUT, 'wheel-check.json'), JSON.stringify(summary, null, 2));
 ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
 console.log(fails ? `\n${fails} FAILED` : '\nall wheel checks passed');

@@ -24,7 +24,7 @@ Shared code is imported only from stable paths that exist on every branch: `arca
 
 ## Server API (binding, CCP-Server `backroom-wheel-routes.js`)
 
-- `GET state` -> `{ ok, sp, open, day, spun, result|null, snoozeCarry, nextResetAt, jackpot:{amount, odds, wonToday, eligible},
+- `GET state` -> `{ ok, sp, open, day, spun, result|null, snoozeCarry, nextResetAt, jackpot:{amount, odds, wonToday, eligible, mustHit},
   slices:[{id, label, pay, width, odds}], floorMs }`. `width` is the drawn width in degrees (the picture); `odds` is
   `"1 in N"` or `"never"` (the ledger, printed in the Odds panel). The jackpot slice's `pay` is the day's pot.
   Slices carry no kind: `jackpot` and `snooze` are known by id.
@@ -129,7 +129,26 @@ never names a section 4 id.
 - `ctx.spReadout` (optional): used for the SP chip when present. Without it the station writes the room's
   `#br-sp-value` directly (an observer puts a room repaint back), or its own chip standalone.
 - Lexicon: `br_wheel_*` keys with English fallbacks in the page. New in v3, for the integration pass into `en.json`:
-  `br_wheel_slowly` ("s l o w l y").
+  `br_wheel_slowly` ("s l o w l y"). New with C2 must-hit-by (10.16.E): `br_wheel_must_hit` ("MUST HIT") and
+  `br_wheel_must_hit_room` ("The pot has to fall today").
+
+## C2 must-hit-by (CONTRACT 10.16.E)
+
+`state.jackpot.mustHit` is a ROOM fact: the pot is at the must-hit line (`mustHitBy === cap === 1,000`) and nobody
+has taken it today, whatever THIS account's age. `eligible` still says whether this account can win it.
+
+- `readout.js` `jackpotChip(jackpot, t, fmt)` is the whole rule, pure: while `mustHit` is true the chip prints
+  `br_wheel_must_hit` ("MUST HIT") **in place of the odds**, and the amount is still shown (Law I). Only a real
+  boolean `true` turns it on, so a server that has not shipped the field reads as false.
+- `.wheel-jackpot` takes `is-must-hit`: the gold the jackpot slice already has, and nothing else. **No new fx, no
+  new sound, no new colour** (10.16.E), and the v3 hypno moments are untouched.
+- The Odds panel adds `br_wheel_must_hit_room` ("The pot has to fall today"), after the young-account and
+  pot-taken notes, so a young account still reads why the star is shut to it.
+- `mock-server.js` carries `TABLE_V3`'s jackpot (`start 250, perDay 25, cap 1000, mustHitBy 1000`), answers
+  `mustHit`, forces the draw for an eligible spinner on the must-hit day (spending the same rng call, so a seeded
+  re-draw stays aligned) and never for a young one. `server.mustHit()` and `?musthit` park the pot on the line.
+- The room's own MUST HIT (the wheel fixture's screen and the bell's standing line) is `room/main.js`, off the
+  bell's `state` body, not this station.
 
 ## Checks
 
@@ -141,5 +160,5 @@ node ConditioningControlPanel/Resources/web/backroom/stations/wheel/tests/room-m
 ```
 
 Dev harness: serve `ConditioningControlPanel/Resources` as the web root and open
-`/web/backroom/stations/wheel/dev.html` (`?sp=57&next=jackpot|snooze|deep&pot=12&young&taken&carry=2&spun&reduced&calm&full&gates=off&hook&day=<ISO>`).
+`/web/backroom/stations/wheel/dev.html` (`?sp=57&next=jackpot|snooze|deep&pot=12&musthit&young&taken&carry=2&spun&reduced&calm&full&gates=off&hook&day=<ISO>`).
 `dev.station.debug()` shows the state, the readout, the feel log, the cue trace and the scene.

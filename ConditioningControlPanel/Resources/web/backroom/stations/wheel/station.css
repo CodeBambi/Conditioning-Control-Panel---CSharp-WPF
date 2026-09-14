@@ -26,6 +26,8 @@
 .wheel-sp, .wheel-jackpot, .wheel-status { background: #201229e8; border: 1px solid #b77da247; padding: 6px 12px; border-radius: 30px; font-size: 12px; }
 .wheel-sp { color: #ffe3f2; font-weight: 600; font-variant-numeric: tabular-nums; }
 .wheel-jackpot { color: #f7d5af; }
+/* MUST HIT (10.16.E): the gold the jackpot slice already has, and nothing else. */
+.wheel-jackpot.is-must-hit { color: #ffcf6b; border-color: #ffcf6b66; }
 .wheel-status { color: #edc7df; border-radius: 12px; line-height: 1.4; font-variant-numeric: tabular-nums; white-space: pre-line; }
 .wheel-emi { position: absolute; top: 14px; right: 14px; z-index: 4; }
 .wheel-station[data-host-back] .wheel-emi { top: 58px; right: 12px; }
