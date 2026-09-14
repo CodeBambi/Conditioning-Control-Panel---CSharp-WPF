@@ -22,6 +22,7 @@ using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Flash;
 using ConditioningControlPanel.Services.Fyp.Online;
 using ConditioningControlPanel.Services.Prizes;
+using ConditioningControlPanel.Services.Remix;
 using SkiaSharp;
 using Image = System.Windows.Controls.Image;
 
@@ -135,6 +136,8 @@ namespace ConditioningControlPanel.Services
         private const int FLASH_SHELL_SLACK = 64;
         private static int BucketUp(int v) => ((Math.Max(0, v) + FLASH_SHELL_SLACK + FLASH_SHELL_BUCKET - 1) / FLASH_SHELL_BUCKET) * FLASH_SHELL_BUCKET;
         private List<string> _imageList = new();  // Cached image list for random selection
+        // Jackpot Remix (prize fx.jackpot_remix): rolls per scheduled flash, prebuilds while quiet.
+        private JackpotRemixDirector? _remix;
         private List<(string PackId, PackFileEntry File)> _packImageList = new();  // Cached pack images for random selection
         // Size of DisabledAssetPaths when the live pools were last reconciled against it. Every
         // asset-manager toggle moves that count, so one int compare per draw is enough to notice a
@@ -469,6 +472,7 @@ namespace ConditioningControlPanel.Services
 
             _runStartedUtc = DateTime.UtcNow;
             _isRunning = true;
+            EnsureRemixDirector().Start();
             _cancellationSource?.Dispose();
             _cancellationSource = new CancellationTokenSource();
             StartHeartbeat();
@@ -507,6 +511,7 @@ namespace ConditioningControlPanel.Services
             catch (ObjectDisposedException) { } // swallow: retired CTS already disposed
             StopHeartbeat();
             _schedulerTimer?.Stop();
+            _remix?.Stop();
 
             StopCurrentSound();
             CloseAllWindows();
@@ -855,6 +860,12 @@ namespace ConditioningControlPanel.Services
                     return;
                 }
 
+                // Jackpot Remix: only the ambient scheduler rolls (a one-shot asked for by a
+                // minigame or Autonomy keeps its own size and timing). A remix replaces the whole
+                // flash event with one centred composite per targeted monitor.
+                if (oneShotGen == null && amount == null && await TryShowRemixAsync(duration, suppressHaptic))
+                    return;
+
                 App.Logger.Information("FlashService: Displaying {Count} flash image(s)", images.Count);
 
                 // Fire pre-event so avatar can announce the flash
@@ -891,6 +902,75 @@ namespace ConditioningControlPanel.Services
                 App.Logger.Error(ex, "Error loading flash images");
                 _isBusy = false;
             }
+        }
+
+        private JackpotRemixDirector EnsureRemixDirector()
+            => _remix ??= new JackpotRemixDirector(
+                SnapshotGifPool,
+                () => ActiveWindowCount > 0,
+                () => App.Video?.IsPlaying == true || App.DualMonitorVideo?.IsPlaying == true || App.BrowserMedia?.IsPlaying == true,
+                () => App.Settings?.Current?.JackpotRemixEnabled == true,
+                Path.Combine(App.UserDataPath, "cache", "remix"));
+
+        /// <summary>The local flash pool's gifs under the assets root (what the remix page can read).</summary>
+        private IReadOnlyList<string> SnapshotGifPool()
+        {
+            lock (_lockObj)
+            {
+                if (_imageList.Count == 0 && _packImageList.Count == 0) RefreshImageLists();
+                var root = App.EffectiveAssetsPath;
+                return _imageList
+                    .Where(p => p.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) && JackpotRemixPlan.ToAssetUrl(root, p) != null)
+                    .ToList();
+            }
+        }
+
+        /// <summary>
+        /// Ask the director for a built remix and show it as ONE flash: the same gif loader as a
+        /// library gif, big and centred on every monitor the flash feature targets. Only the first
+        /// copy pays XP (the others are mirrors), no hydra children, no overlap re-roll. False
+        /// (with the roll spent) when there is nothing to show or the file would not load, so the
+        /// caller carries on with an ordinary flash.
+        /// </summary>
+        private async Task<bool> TryShowRemixAsync(int? duration, bool suppressHaptic)
+        {
+            var path = _remix?.TakeForFlash();
+            if (path == null) return false;
+
+            var data = await LoadImageAsync(path);
+            lock (_imageDecodeCache) _imageDecodeCache.Remove(path);
+            if (data == null || data.Frames.Count == 0)
+            {
+                App.Logger?.Warning("JackpotRemix: could not load {Path}, ordinary flash instead", path);
+                _remix?.LoadFailed(path);
+                return false;
+            }
+            _remix?.Consumed(path);   // frames are in memory now; the file is spent
+
+            FlashAboutToDisplay?.Invoke(this, EventArgs.Empty);
+            await Task.Delay(1000);
+            var soundPath = GetNextSound();
+
+            var shows = new List<LoadedImageData>();
+            foreach (var monitor in GetMonitors())
+            {
+                var copy = CloneImageData(data);
+                var (x, y, w, h) = JackpotRemixRoll.CentredGeometry(monitor.X, monitor.Y, monitor.Width, monitor.Height, data.Width, data.Height);
+                copy.Geometry = new ImageGeometry { X = x, Y = y, Width = w, Height = h };
+                copy.Monitor = monitor;
+                copy.IsRemix = true;
+                copy.RemixMirror = shows.Count > 0;
+                shows.Add(copy);
+            }
+            if (shows.Count == 0) return false;
+
+            App.Logger?.Information("JackpotRemix: showing {File} ({Frames} frames) on {N} monitor(s)",
+                Path.GetFileName(path), data.Frames.Count, shows.Count);
+            await DispatcherHelper.RunOnUIAsync(() =>
+            {
+                ShowImages(shows, soundPath, false, customDuration: duration, suppressHaptic: suppressHaptic);
+            });
+            return true;
         }
 
         /// <summary>
@@ -1365,7 +1445,7 @@ namespace ConditioningControlPanel.Services
             for (int i = 0; i < images.Count; i++)
             {
                 var imageData = images[i];
-                var delayMs = isMultiplication ? i * 100 : i * 300;
+                var delayMs = imageData.IsRemix ? 0 : isMultiplication ? i * 100 : i * 300;
                 
                 if (delayMs == 0)
                 {
@@ -1460,7 +1540,7 @@ namespace ConditioningControlPanel.Services
                 
                 for (int attempt = 0; attempt < 10; attempt++)
                 {
-                    if (!IsOverlapping(finalX, finalY, geom.Width, geom.Height))
+                    if (imageData.IsRemix || !IsOverlapping(finalX, finalY, geom.Width, geom.Height))
                         break;
 
                     // MUST go through PickSpawnPoint, not a raw re-randomize: this loop used to
@@ -1519,6 +1599,7 @@ namespace ConditioningControlPanel.Services
                 // Capture the monitor on the window so hydra children can inherit
                 // their parent's screen (TriggerMultiplication reads window.Monitor).
                 window.Monitor = monitor;
+                window.IsRemix = imageData.IsRemix;
 
                 // Register cancellation callback — when the token fires, mark this window for fade-out~ 🌙
                 // Store the registration so we can dispose it in SafeCloseFlashWindow
@@ -1584,7 +1665,7 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Debug("Hydra XP: gen {Gen}, xp {XP}", hydraGeneration, xpAmount);
                 }
 
-                multiplier = (hydraGeneration > 0) ? 1 : (App.SkillTree?.RollLuckyFlash() ?? 1);
+                multiplier = (hydraGeneration > 0 || imageData.RemixMirror) ? 1 : (App.SkillTree?.RollLuckyFlash() ?? 1);
                 var isLucky = multiplier > 1;
                 window.IsLucky = isLucky;
 
@@ -1831,6 +1912,9 @@ namespace ConditioningControlPanel.Services
                 }
                 return;
             }
+
+            // A remix is ONE flash: its copies on the other monitors pay and count nothing.
+            if (imageData.RemixMirror) return;
 
             App.Progression?.AddXP(xpAmount * multiplier, XPSource.Flash);
 
@@ -2232,7 +2316,7 @@ namespace ConditioningControlPanel.Services
             // flash (the documented "stare to pop = click, including hydra") and stop there;
             // children of a gaze pop just dismiss. Mouse clicks are unchanged — a human hand is
             // the throttle there.
-            if (settings.CorruptionMode && (!fromGaze || window.HydraGeneration == 0))
+            if (settings.CorruptionMode && !window.IsRemix && (!fromGaze || window.HydraGeneration == 0))
             {
                 var maxHydra = Math.Min(settings.HydraLimit, 20);
                 int currentCount;
@@ -4489,6 +4573,7 @@ namespace ConditioningControlPanel.Services
         public void Dispose()
         {
             Stop();
+            try { _remix?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             try { _flashLayer?.Clear(); } catch (Exception ex) { Diag.Swallowed(ex); }
             // Drain the recycled-window pool — the only place pooled hwnds actually close
             // (app shutdown; nothing else is animating, so the close is safe here).
@@ -4525,6 +4610,9 @@ namespace ConditioningControlPanel.Services
         public int CurrentFrameIndex { get; set; }
         public Image? ImageControl { get; set; }
         public bool IsClickable { get; set; }
+
+        /// <summary>Jackpot Remix: a click pops it like any flash but never spawns hydra children.</summary>
+        public bool IsRemix { get; set; }
 
         /// <summary>
         /// Solid mode: this instance is never Show()n — it stays a pure state bag (lifetime CTS,
@@ -4729,6 +4817,10 @@ namespace ConditioningControlPanel.Services
         public TimeSpan FrameDelay { get; set; }
         public ImageGeometry Geometry { get; set; } = new();
         public MonitorInfo Monitor { get; set; } = new();
+        /// <summary>Jackpot Remix composite: centred, no overlap re-roll, no hydra.</summary>
+        public bool IsRemix { get; set; }
+        /// <summary>A remix copy on a second monitor: shown, but pays no XP and counts nothing.</summary>
+        public bool RemixMirror { get; set; }
     }
 
     internal class ImageGeometry

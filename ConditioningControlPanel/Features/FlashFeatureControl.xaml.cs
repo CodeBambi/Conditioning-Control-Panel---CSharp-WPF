@@ -33,6 +33,7 @@ namespace ConditioningControlPanel.Features
             // mod switch must repaint them (a popup instance never lived long enough to care).
             ApplyFeatureArt();
             if (App.Mods != null) App.Mods.ModChanged += OnModChanged;
+            RefreshJackpotRemixRow();
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -40,6 +41,35 @@ namespace ConditioningControlPanel.Features
             PrizeGrants.GrantsChanged -= OnGrantsChanged;
             _settingsHook?.Unhook();
             if (App.Mods != null) App.Mods.ModChanged -= OnModChanged;
+        }
+
+        // Jackpot Remix row: visible only while the Back Room prize is owned. Ownership comes from
+        // PrizeGrants, never from settings. The dashboard flash card's v2 pill is not added here:
+        // TODO FeatureCard.ShowV2Badge (the Flashes v2 lane adds the property and sets it from
+        // ownership in SettingsTabView.RefreshV2Badges); fold this prize into that check on merge.
+        private void RefreshJackpotRemixRow()
+        {
+            RowJackpotRemix.Visibility = Services.Prizes.PrizeGrants.IsGranted(Services.Prizes.PrizeGrants.JackpotRemix)
+                ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        // One hook for both ownership-driven pieces of this control: the motion picker's rows
+        // (Flashes v2) and the Jackpot Remix toggle row. Each lane arrived with its own handler
+        // of this name; they are folded together here so the subscription stays single.
+        private void OnGrantsChanged() => Dispatcher.BeginInvoke(new Action(() =>
+        {
+            BuildMotionPicker();
+            RefreshJackpotRemixRow();
+        }));
+
+        private void ChkJackpotRemix_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.JackpotRemixEnabled = ChkJackpotRemix.IsChecked ?? false;
+            App.Settings?.Save();
+            // No service bounce: the director reads the setting on every roll and poll.
         }
 
         /// <inheritdoc/>
@@ -76,6 +106,7 @@ namespace ConditioningControlPanel.Features
                 ChkFlashAvoidCenter.IsChecked = s.FlashAvoidCenter;
                 SliderCenterExclusion.Value = s.FlashCenterExclusionPercent;
                 TxtCenterExclusion.Text = $"{s.FlashCenterExclusionPercent}%";
+                ChkJackpotRemix.IsChecked = s.JackpotRemixEnabled;
             }
             finally { _isLoading = false; }
         }
@@ -97,7 +128,8 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerExtensionMs) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashAvoidCenter) ||
-                e.PropertyName == nameof(Models.AppSettings.FlashCenterExclusionPercent))
+                e.PropertyName == nameof(Models.AppSettings.FlashCenterExclusionPercent) ||
+                e.PropertyName == nameof(Models.AppSettings.JackpotRemixEnabled))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
@@ -338,8 +370,6 @@ namespace ConditioningControlPanel.Features
             App.Settings?.Save();
             // No service bounce: every spawn resolves the picker, so the next flash uses it.
         }
-
-        private void OnGrantsChanged() => Dispatcher.BeginInvoke(new Action(BuildMotionPicker));
 
         // =====================================================================================
         //  feature art (mod-aware)
