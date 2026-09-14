@@ -29,19 +29,14 @@ export const FEEL = Object.freeze({
 });
 
 /** Law IX tiers for a landed result: 0 Snooze, 1 small (1-3 SP, a chime), 2 bigger (5-20, two notes and a jolt),
- *  3 big (40 and up, THE THUD), 4 the pot (THE REVEAL). A gated jackpot hit pays Dazed and is a tier 3. */
+ *  3 big (40 and up, THE THUD), 4 the pot (THE REVEAL). A gated jackpot hit pays Dazed and is a tier 3.
+ *  Tiers pick sounds, tokens and the bulbs only: the fullscreen moment is the kit's wheelSize (CONTRACT 10.13.F). */
 export function tierOf(r) {
   if (!r) return 0;
   if (r.jackpotWon) return 4;
   if (r.snoozed || !(r.pay > 0)) return 0;
   return r.pay >= 40 ? 3 : r.pay >= 5 ? 2 : 1;
 }
-
-/** Global fx ids by tier (CONTRACT section 4, no new rows). Snooze plays no overlay: EMI yawns on the page. */
-export const FX_BY_TIER = Object.freeze([[], ['fx.spiral_brief'], ['fx.gif_burst'], ['fx.gif_storm'], ['fx.jackpot']]);
-export const fxFor = r => FX_BY_TIER[tierOf(r)].slice();
-/** Which fx take the dealt GIFs as symbols (the host resolves keys from its own deal). */
-export const usesGifs = fxId => fxId === 'fx.gif_burst' || fxId === 'fx.gif_storm' || fxId === 'fx.jackpot';
 
 /**
  * The party for one landing. `still` = reduced motion or Calm (Law VI: the settled state, no travel).

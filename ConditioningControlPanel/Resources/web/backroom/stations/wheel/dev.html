@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
 <title>Daily Daze wheel - dev harness</title>
-<!-- Dev harness only: a mock ctx and mock-server.js stand in for the room, the host and the server.
+<!-- Dev harness only: a mock ctx, the hypno kit's mock host and mock-server.js stand in for the room, the host and the server.
      Serve ConditioningControlPanel/Resources as the web root, then open /web/backroom/stations/wheel/dev.html.
-     Query: ?sp=57&latency=120&reduced&calm&young&taken&pot=12&carry=2&next=jackpot|snooze|deep|glow&spun&day=2026-09-14T22:00:00Z&hook
+     Query: ?sp=57&latency=120&reduced&calm&full&gates=off&young&taken&pot=12&carry=2&next=jackpot|snooze|deep|glow&spun&day=2026-09-14T22:00:00Z&hook
+     #screen draws the host's fullscreen primitives from what the mock host recorded (tests/host-screen.js).
      Standalone, so no ctx.hostBack: the station shows its own Back and SP chip (?hook fakes the room's ctx.spReadout). -->
 <script type="importmap">{"imports":{"three":"../../../vendor/three/three.module.min.js","three/addons/":"../../../vendor/three/addons/"}}</script>
 <style>
@@ -20,12 +21,14 @@
   #dev button { font: 11px Segoe UI, Arial, sans-serif; padding: 3px 8px; }
   #dev summary { cursor: pointer; text-align: right; }
   #fakechip { position: fixed; top: 12px; right: 12px; z-index: 60; padding: 6px 12px; border-radius: 20px; background: #2a1838; }
+  #screen { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 40; }
 </style>
 </head>
 <body>
 <div id="room"></div>
 <div id="root"></div>
 <span id="fakechip" hidden>SP <b></b></span>
+<canvas id="screen" aria-hidden="true"></canvas>
 <button id="sit" type="button">Visit the wheel</button>
 <details id="dev"><summary>dev</summary>
   <button data-do="jackpot">next: jackpot</button>
@@ -40,6 +43,8 @@
 <script type="module">
 import { mount } from './station.js';
 import { createMockServer } from './mock-server.js';
+import { createMockHost } from '../../shared/hypno/tests/mock-host.js';
+import { createHostScreen } from './tests/host-screen.js';
 
 const q = new URLSearchParams(location.search);
 const num = (k, d) => (q.has(k) ? Number(q.get(k)) : d);
@@ -53,19 +58,21 @@ if (q.has('taken')) server.wonToday();
 if (q.has('next')) server.script(...q.get('next').split(','));
 if (q.has('spun')) await server.handle('spin', { idem: 'devspunalreadytoday01' });
 const latency = num('latency', 120), sent = [], spFns = new Set();
+const DEAL = [0, 1, 2, 3].map(i => new URL(`../slot/fallback/gif${i}.webp`, location.href).href);
+const off = q.get('gates') === 'off';
+const host = createMockHost({ deal: DEAL, latency: Math.min(latency, 60), reduced: q.has('reduced'),
+  intensity: q.has('calm') ? 'calm' : q.has('full') ? 'full' : 'normal',
+  gates: off ? { flash: false, subliminal: false, spiral: false, brainDrain: false } : null });
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const chip = document.getElementById('fakechip'), chipState = { owed: 0, shown: null };
 const paintChip = () => { chip.querySelector('b').textContent = String(chipState.shown ?? Math.max(0, server.user.sp - chipState.owed)); };
 
-const ctx = {
+const ctx = host.attach({
   root: document.getElementById('root'),
   bridge: { send: m => { sent.push(m); } },
   request: async (op, body, idem) => { await wait(latency); const r = await server.handle(op, body, idem); sent.push({ type: 'station-request', op, body, result: r }); return r; },
-  fx: async (fxId, symbols) => { sent.push({ type: 'fx', fxId, symbols }); console.log('[fx]', fxId, symbols || ''); return { fired: [fxId], skipped: [] }; },
-  media: async () => { await wait(latency); return { seed: 1, words: [], gifs: [0, 1, 2, 3].map(i => ({ key: 'g' + i, url: '', src: 'fallback' })) }; },
   sp: () => server.user.sp,
   onSp: fn => { spFns.add(fn); return () => spFns.delete(fn); },
-  reduced: q.has('reduced'), motion: q.has('reduced') ? 'reduced' : 'full', intensity: q.has('calm') ? 'calm' : 'normal',
   lex: (key, fallback) => fallback,
   standUp: () => stand(),
   variant: null,
@@ -74,7 +81,8 @@ const ctx = {
     set(v) { chipState.shown = v; paintChip(); }, owe(n) { chipState.owed = typeof n === 'function' ? n() : n; paintChip(); },
     thud() { sent.push({ type: 'chip-thud' }); }, target() { return chip; },
   } : undefined,
-};
+});
+const screen = createHostScreen({ host, canvas: document.getElementById('screen'), urls: DEAL });
 if (q.has('hook')) { chip.hidden = false; paintChip(); }
 
 const station = await mount(ctx);
@@ -93,7 +101,7 @@ document.getElementById('dev').addEventListener('click', e => {
   if (act === 'tomorrow') skew += 86400000;
 });
 
-window.dev = { server, station, ctx, sent, open, stand, setSkew: ms => { skew = ms; } };
+window.dev = { server, station, ctx, sent, host, screen, open, stand, setSkew: ms => { skew = ms; } };
 </script>
 </body>
 </html>

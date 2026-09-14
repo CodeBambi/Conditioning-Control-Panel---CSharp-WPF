@@ -74,3 +74,11 @@
   .wheel-odds { left: 12px; bottom: 12px; }
 }
 @media (prefers-reduced-motion: reduce) { .wheel-station * { transition: none !important; } }
+
+/* Hypno v3 (CONTRACT 10.13.F): the long last turn's stage edges and caption. Opacity only, set per frame by
+   station.js (0.65 x dim x k); no backdrop-filter. They stay with brainDrain off: the tunnel is the host's. */
+.wheel-edges { position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle at var(--wheel-x, 50%) var(--wheel-y, 50%), #06030c00 26%, #06030c 78%); }
+.wheel-slowly { position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); z-index: 3; pointer-events: none; opacity: 0;
+  padding: 3px 12px; border-radius: 20px; background: #140a1ccc; color: #e8c27a; font: 500 12px Consolas, "DM Mono", ui-monospace, monospace;
+  letter-spacing: .08em; white-space: nowrap; }

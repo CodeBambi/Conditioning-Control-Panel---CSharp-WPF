@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.BackRoom.Overlays;
 using ConditioningControlPanel.Services.Chaos;
 
 namespace ConditioningControlPanel.Services.BackRoom;
@@ -13,8 +15,8 @@ namespace ConditioningControlPanel.Services.BackRoom;
 ///
 /// It stops only what it started. The rain and the glitch wash are shared singletons with a chaos
 /// run, and the one-shot flash and subliminal generations are service-wide, so StopAll touches each
-/// of those only when the room fired one recently; the spiral and brain drain ride the sustained
-/// holds, which already release without tearing down another owner.
+/// of those only when the room fired one recently; the brain drain rides the sustained hold, and the
+/// Hypno v3 windows (10.13.B, every spiral Loom-woven) belong to the room alone.
 /// </summary>
 public sealed class BackRoomFxServices : IBackRoomFxSink
 {
@@ -35,8 +37,8 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
     private const int OwnershipMs = 12_000;
 
     private long _flashAt = long.MinValue / 2, _subAt = long.MinValue / 2, _rainAt = long.MinValue / 2, _washAt = long.MinValue / 2;
-    private long _spiralUntil, _drainUntil;
-    private DispatcherTimer? _spiralTimer, _drainTimer;
+    private long _drainUntil;
+    private DispatcherTimer? _drainTimer;
     private string? _drainKind;
 
     private static long Now => Environment.TickCount64;
@@ -48,24 +50,38 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
         var s = App.Settings?.Current;
         if (s == null)
             return new FxEnvironment(MotionFx.Level, BackRoomFxIntensity.Calm, new FxGates(false, false, false, false, false, false));
+        var spiralPath = s.SpiralPath;
+        string? Woven(string preset) => WovenFor(preset, spiralPath);
+        double opacity = s.SpiralOpacity > 0 ? Math.Clamp(s.SpiralOpacity / 100.0, 0.05, 1.0) : 0.85;
+        // A woven GIF always has a first frame, so the spiral's still exists whenever its weave does.
         return new FxEnvironment(MotionFx.Level, s.BackRoomFxIntensity,
             new FxGates(s.FlashEnabled, s.SubliminalEnabled, s.SpiralEnabled, s.BrainDrainEnabled, s.BrainDrainMeltEnabled,
-                SpiralStillPath(s) != null));
+                Woven(BackRoomSpiralSource.Screen) != null),
+            Woven, opacity);
     }
 
-    /// <summary>A spiral the gif-full window can hold as a still frame: the user's own spiral file, if
-    /// it is an image. A video spiral has no still here, so at Off it is skipped as motion.</summary>
-    internal static string? SpiralStillPath(AppSettings s)
+    // The woven spiral's file probes, kept per SpiralPath for a few seconds: every fire and every tunnel
+    // update (up to 10 a second) reads the environment on the UI thread.
+    private const int WovenCacheMs = 5000;
+    private static readonly object WovenLock = new();
+    private static readonly Dictionary<string, string?> WovenHits = new(StringComparer.Ordinal);
+    private static string? _wovenFor;
+    private static long _wovenAt = long.MinValue / 2;
+
+    private static string? WovenFor(string preset, string? spiralPath)
     {
-        try
+        lock (WovenLock)
         {
-            var p = s.SpiralPath;
-            if (string.IsNullOrEmpty(p) || !File.Exists(p)) return null;
-            var ext = Path.GetExtension(p).ToLowerInvariant();
-            return ext is ".gif" or ".png" or ".jpg" or ".jpeg" or ".webp" or ".bmp" ? p : null;
+            if (_wovenFor != spiralPath || Now - _wovenAt > WovenCacheMs) { WovenHits.Clear(); _wovenFor = spiralPath; _wovenAt = Now; }
+            preset = BackRoomSpiralSource.Preset(preset);
+            if (!WovenHits.TryGetValue(preset, out var hit))
+                WovenHits[preset] = hit = BackRoomSpiralSource.Resolve(preset, spiralPath, Chaos.DtrhLoomStore.SpiralsFolder, WebRoot, File.Exists);
+            return hit;
         }
-        catch (Exception ex) { Diag.Swallowed(ex, "spiral path probe"); return null; }
     }
+
+    /// <summary><c>Resources\web</c>, the folder <c>ccp.game</c> maps.</summary>
+    internal static string WebRoot => Path.Combine(AppContext.BaseDirectory, "Resources", "web");
 
     /// <summary>
     /// Map a dealt media url back to the local file behind it. Only the two origins the room maps
@@ -130,26 +146,49 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
         App.Subliminal?.FlashSubliminalCustom(text, null, null, true);
     }
 
-    public void Spiral(int durationMs, double level, bool still)
+    // ---- Hypno v3 primitives (CONTRACT 10.13.B), on the overlays in Services/BackRoom/Overlays ----
+
+    /// <summary>The room's WebView2 on screen, set by the host while the room is open (null = no room:
+    /// a gif-from grows from the primary screen's centre).</summary>
+    internal static Func<RoomViewport?>? Viewport { get; set; }
+
+    private static FxFromTarget Target(FxCssRect? from)
     {
-        var s = App.Settings?.Current;
-        double opacity = 0.85;
-        if (s != null && s.SpiralOpacity > 0) opacity = Math.Clamp(s.SpiralOpacity / 100.0, 0.05, 1.0);
-        opacity = Math.Clamp(opacity * level, 0.02, 1.0);
-
-        if (still)
-        {
-            var path = s != null ? SpiralStillPath(s) : null;
-            if (path != null) ChaosFlashOverlay.ShowHero(path, durationMs, opacity, still: true);
-            return;
-        }
-
-        // Sustained plus our own timer instead of ShowOverlayTimed: a timed overlay cannot be taken
-        // down early, and suspend/close must end the spiral now, not when its timer runs out.
-        App.Overlay?.ShowOverlaySustained("spiral", opacity);
-        _spiralUntil = Math.Max(_spiralUntil, Now + durationMs);
-        _spiralTimer = Rearm(_spiralTimer, _spiralUntil, StopSpiral);
+        RoomViewport? vp = null;
+        try { vp = Viewport?.Invoke(); } catch (Exception ex) { Diag.Swallowed(ex, "room viewport read"); }
+        return BackRoomOverlayMath.MapFrom(from, vp, BackRoomOverlayScreens.All());
     }
+
+    private static string? LocalFile(BackRoomGif? gif)
+    {
+        if (gif == null) return null;
+        var path = TryLocalPath(gif.Url, App.EffectiveAssetsPath, WebRoot);
+        if (path != null && File.Exists(path)) return path;
+        App.Logger?.Debug("[BackRoom] dealt item {Key} has no local file", gif.Key);
+        return null;
+    }
+
+    public void Wash(FxRgb color, double peak, BackRoomGif? picture)
+        => BackRoomWashOverlay.Show(color, peak, LocalFile(picture), picture == null ? null : Target(null).ScreenPx, MotionFx.Level == MotionLevel.Off);
+
+    public bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still)
+    {
+        if (LocalFile(gif) is not { } path) return false;
+        double aspect = gif.W > 0 && gif.H > 0 ? (double)gif.W / gif.H : 4.0 / 3;
+        BackRoomGifFromOverlay.Show(path, aspect, Target(from), durationMs, scale, dim, still);
+        return true;
+    }
+
+    public void SpiralLoom(string gifPath, int durationMs, double alpha, bool hold, bool still)
+        => BackRoomLoomSpiralOverlay.Show(gifPath, durationMs, alpha, still);
+
+    public void ReleaseSpiralLoom() => BackRoomLoomSpiralOverlay.Release();
+
+    public void ReleaseBrainDrain() => StopDrain();
+
+    public void Tunnel(double level, bool still) => BackRoomTunnelOverlay.Set(level, still);
+
+    public void CancelTunnel() => BackRoomTunnelOverlay.Cancel();
 
     public void BrainDrain(int durationMs, double level, bool melt)
     {
@@ -165,13 +204,7 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
 
     public void GifFull(BackRoomGif gif, int durationMs, bool still)
     {
-        var path = TryLocalPath(gif.Url, App.EffectiveAssetsPath, Path.Combine(AppContext.BaseDirectory, "Resources", "web"));
-        if (path == null || !File.Exists(path))
-        {
-            App.Logger?.Debug("[BackRoom] gif-full: dealt item {Key} has no local file", gif.Key);
-            return;
-        }
-        ChaosFlashOverlay.ShowHero(path, durationMs, 0.9, still);
+        if (LocalFile(gif) is { } path) ChaosFlashOverlay.ShowHero(path, durationMs, 0.9, still);
     }
 
     public void StopAll()
@@ -179,23 +212,17 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
         var disp = Application.Current?.Dispatcher;
         if (disp == null || disp.HasShutdownStarted) return;
         if (!disp.CheckAccess()) { disp.BeginInvoke(new Action(StopAll)); return; }
-        StopSpiral();
         StopDrain();
         ChaosFlashOverlay.StopHero();
+        BackRoomWashOverlay.Stop();
+        BackRoomGifFromOverlay.Stop();
+        BackRoomLoomSpiralOverlay.Stop();
+        BackRoomTunnelOverlay.Cancel();
         if (Recent(_flashAt)) App.Flash?.StopOneShotFlashes();
         if (Recent(_subAt)) App.Subliminal?.StopOneShotSubliminals();
         if (Recent(_rainAt) && App.Chaos?.IsRunning != true) ChaosGifCascadeOverlay.CloseActive();
         if (Recent(_washAt) && App.Chaos?.IsRunning != true) ChaosFlashOverlay.CloseActive();
         _flashAt = _subAt = _rainAt = _washAt = long.MinValue / 2;
-    }
-
-    private void StopSpiral()
-    {
-        _spiralTimer?.Stop();
-        _spiralTimer = null;
-        if (_spiralUntil == 0) return;
-        _spiralUntil = 0;
-        App.Overlay?.HideOverlaySustained("spiral");
     }
 
     private void StopDrain()

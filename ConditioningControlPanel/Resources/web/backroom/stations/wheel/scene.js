@@ -13,6 +13,13 @@
  * THE SHIVER for Snooze, THE REVEAL for the pot, THE BREATH on the jackpot star
  * alone, and the 32 bulbs' heat per tier. Reduced motion (or Calm) takes the
  * settled state: no travel, the landing is simply there (Law VI).
+ *
+ * Hypno v3 (CONTRACT 10.13.F), the curves in hypno.js: the Loom hub (a disc on
+ * the rotor fed by the kit through o.paintHub, a brass star with spiral off),
+ * the long last turn (the landing plan's clock warped under 1.6 rad/s, the dim
+ * reported through o.onFrame), the quiet room, and at Full the moire rim and
+ * the taffy slices (a vertex twist plus four smear ghosts). The fullscreen set
+ * is the host's: this file never fires an fx.
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -20,9 +27,11 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { REQUIRED, OPTIONAL } from './nodes.js';
 import { TAU, sliceAt, planLanding, rotationAt } from './wheel.js';
 import { FEEL, tick, breath, shiverPx, bezier } from './feel.js';
+import { warpStep, warpedRotation, stepDim, quietMix, quietDone, outlineAlpha, distance01, mixRgb, QUIET, taffyShear, stepShear,
+         trailOffset, sliceU, ghostRotations, TAFFY, stepHub, moireRotations, moireSegments, MOIRE, dressOf } from './hypno.js';
 import { createEmi } from './emi.js';
 
-const LENS_DEG = 30, FIT = 1.16, RISE_MS = 620, SINK_MS = 300, DEFAULT_OMEGA = -0.011;
+const LENS_DEG = 30, FIT = 1.16, RISE_MS = 620, SINK_MS = 300, DEFAULT_OMEGA = -0.011, HUB_AT_REST_MS = 33;
 const COLORS = ['#DE87B4', '#AE89DE', '#68BFB9', '#C35F9F'], GOLD = '#F4CA68', SNOOZE = '#553967';
 const CHASE = [0xff269f, 0x7840ff, 0x00cbb8, 0xff9a20].map(c => new THREE.Color(c));
 const asset = p => new URL(p, import.meta.url).href;
@@ -41,6 +50,39 @@ function haloTexture() {
   g.fillStyle = grad; g.fillRect(0, 0, 96, 96);
   return canvasTexture(c);
 }
+/** Law 3 on the GPU: every slice vertex turns about the hub by trailOffset (a = -brShear x u^1.25), normals too. */
+const TWIST_R0 = 0.185, TWIST_SPAN = 0.711 - 0.185;
+function twist(material, uniform) {
+  material.onBeforeCompile = sh => {
+    sh.uniforms.brShear = uniform;
+    const head = `uniform float brShear;
+      vec2 brTwist(vec2 p, vec2 v) { float u = clamp((length(p) - ${TWIST_R0.toFixed(3)}) / ${TWIST_SPAN.toFixed(3)}, 0.0, 1.0);
+        float a = -brShear * pow(u, ${TAFFY.curve.toFixed(2)}); float c = cos(a), s = sin(a); return mat2(c, s, -s, c) * v; }`;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + head)
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n transformed.xy = brTwist(position.xy, transformed.xy);');
+    if (sh.vertexShader.includes('#include <beginnormal_vertex>')) {
+      sh.vertexShader = sh.vertexShader.replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n objectNormal.xy = brTwist(position.xy, objectNormal.xy);');
+    }
+  };
+  material.customProgramCacheKey = () => 'br-wheel-twist';
+  return material;
+}
+/** A sector of the runtime slice ring as 2D points (clockwise-from-top angles, as the slices are built). */
+function sectorPoints(a0, a1, r0, r1) {
+  const n = Math.max(3, Math.ceil((a1 - a0) * 32)), pts = [];
+  for (let j = 0; j <= n; j++) { const a = a0 + ((a1 - a0) * j) / n; pts.push(new THREE.Vector2(Math.sin(a) * r1, Math.cos(a) * r1)); }
+  for (let j = n; j >= 0; j--) { const a = a0 + ((a1 - a0) * j) / n; pts.push(new THREE.Vector2(Math.sin(a) * r0, Math.cos(a) * r0)); }
+  return pts;
+}
+/** The hub's brass star (spiral off, 10.13.A), painted once into the hub canvas. */
+function paintStar(c) {
+  const g = c.getContext('2d'), w = c.width, h = c.height;
+  g.fillStyle = '#2a1a3c'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#e8c27a'; g.beginPath();
+  for (let i = 0; i < 10; i++) { const r = (i % 2 ? 0.2 : 0.44) * w, a = -Math.PI / 2 + (i * Math.PI) / 5; g.lineTo(w / 2 + Math.cos(a) * r, h / 2 + Math.sin(a) * r); }
+  g.closePath(); g.fill();
+}
+
 /** One slice's printed face: the pay as a number (Brake 9), the label under it; radial text on a narrow slice. */
 function sliceLabel(s, w, h, text) {
   const c = document.createElement('canvas'); c.height = 512; c.width = Math.max(48, Math.round((512 * w) / h));
@@ -67,11 +109,13 @@ function paintScreen(canvas, text, gold) {
 }
 
 /**
- * @param {{canvas, hud, reduced, labels:(slice)=>{big,small}, canSpin:()=>boolean, onRelease:(omega)=>void,
- *          onGrab?:()=>void, onTick?:(semis)=>void}} o
+ * @param {{canvas, hud, reduced (the travel flag at open; setReduced keeps it live), labels:(slice)=>{big,small}, canSpin:()=>boolean, onRelease:(omega)=>void,
+ *          onGrab?:()=>void, onTick?:(semis)=>void, dress?:object (hypno.dressOf),
+ *          paintHub?:(canvas, angle, now)=>boolean, onFrame?:({dim, slowing, speed, turning})=>void}} o
  */
 export async function createScene(o) {
-  const { canvas, reduced } = o;
+  const { canvas } = o;
+  let reduced = !!o.reduced;
   const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -148,18 +192,69 @@ export async function createScene(o) {
     s.position.copy(b.position); s.position.z += 0.038; s.scale.setScalar(0.24); b.parent.add(s);
     return s;
   });
-  // The neon hub spiral (a flowing tube, scenery, not a breather).
-  const pts = [];
-  for (let i = 0; i <= 150; i++) { const u = i / 150, a = u * TAU * 2.2, r = 0.008 + 0.132 * u; pts.push(new THREE.Vector3(r * Math.cos(a), r * Math.sin(a), 0.181)); }
+  // The Loom hub: a runtime disc on the rotor sized from hub_lip (else hub_spiral), a 256 CanvasTexture the kit paints.
+  // It replaces the neon tube, which stays only when neither hub node exists.
+  let dress = { ...dressOf(), ...(o.dress || {}) };
+  const hubNode = get('hub_lip') || get('hub_spiral');
+  let hub = null;
   const neon = { clock: { value: 0 }, energy: { value: 0 }, tint: { value: new THREE.Color(0xff72d1) } };
-  rotor.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 150, 0.011, 8, false), new THREE.ShaderMaterial({ uniforms: neon,
-    vertexShader: 'varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-    fragmentShader: `varying vec2 vUv; uniform float clock; uniform float energy; uniform vec3 tint;
-      void main(){float head=pow(.5+.5*cos(vUv.x*18.-clock),5.);vec3 c=mix(vec3(.12,.8,.92),tint,.5+.5*sin(vUv.x*9.-clock*.45));
-      c=mix(c,vec3(1.,.88,1.),head*.35);gl_FragColor=vec4(c*(1.15+energy*.6+head*.45),1.);
-      #include <tonemapping_fragment>
-      #include <colorspace_fragment>
-      }` })));
+  if (hubNode) {
+    rotor.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(hubNode).applyMatrix4(rotor.matrixWorld.clone().invert());
+    const tube = hubNode.name === 'hub_lip' ? (box.max.z - box.min.z) / 2 : 0;
+    const radius = Math.max(0.02, Math.min(box.max.x - box.min.x, box.max.y - box.min.y) / 2 - tube);
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const tex = canvasTexture(c); owned.push(tex);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(radius, 64), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+    disc.name = 'hub_loom'; disc.position.z = box.max.z + 0.0015; rotor.add(disc);
+    hub = { c, tex, disc, radius, mode: null, rot: 0, at: -Infinity };
+  } else {
+    // The neon hub spiral (a flowing tube, scenery, not a breather).
+    const pts = [];
+    for (let i = 0; i <= 150; i++) { const u = i / 150, a = u * TAU * 2.2, r = 0.008 + 0.132 * u; pts.push(new THREE.Vector3(r * Math.cos(a), r * Math.sin(a), 0.181)); }
+    rotor.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 150, 0.011, 8, false), new THREE.ShaderMaterial({ uniforms: neon,
+      vertexShader: 'varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+      fragmentShader: `varying vec2 vUv; uniform float clock; uniform float energy; uniform vec3 tint;
+        void main(){float head=pow(.5+.5*cos(vUv.x*18.-clock),5.);vec3 c=mix(vec3(.12,.8,.92),tint,.5+.5*sin(vUv.x*9.-clock*.45));
+        c=mix(c,vec3(1.,.88,1.),head*.35);gl_FragColor=vec4(c*(1.15+energy*.6+head*.45),1.);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+        }` })));
+  }
+  /** The hub disc on screen, client px (test seam for the on-screen handedness probe). */
+  function hubScreen() {
+    if (!hub) return null;
+    const c = hub.disc.getWorldPosition(new THREE.Vector3()), e = hub.disc.localToWorld(new THREE.Vector3(hub.radius, 0, 0));
+    const r = canvas.getBoundingClientRect(), px = v => { const q = v.clone().project(camera); return { x: r.left + ((q.x + 1) * r.width) / 2, y: r.top + ((1 - q.y) * r.height) / 2 }; };
+    const pc = px(c), pe = px(e);
+    return { x: pc.x, y: pc.y, r: Math.hypot(pe.x - pc.x, pe.y - pc.y) };
+  }
+  /** The hub's clockwise angle accumulates every frame; at rest it only drifts (0.35 rad/s), so it repaints every
+   *  HUB_AT_REST_MS (30 Hz) and skips half the Loom renders and readbacks. */
+  function paintHub(t, dtS) {
+    if (!hub) return;
+    const mode = dress.hub;
+    hub.rot = stepHub(hub.rot, frameSpeed, dtS, plan && plan.w ? plan.w.scale : 1);   // always clockwise (law 3)
+    // Loom: the disc holds still against the rotor, so the field's own angle is its whole turn on screen.
+    hub.disc.rotation.z = mode === 'loom' ? -rotor.rotation.z : 0;
+    if (mode === 'star') { if (hub.mode !== 'star') { paintStar(hub.c); hub.tex.needsUpdate = true; } hub.mode = mode; return; }
+    const fresh = hub.mode !== mode;
+    hub.mode = mode;
+    if (!fresh && !rotating() && t - hub.at < HUB_AT_REST_MS) return;
+    hub.at = t;
+    if (o.paintHub && o.paintHub(hub.c, hub.rot, t)) hub.tex.needsUpdate = true;
+  }
+
+  // Moire rim: two rings of 60 fine lines just outside the slices, Full only.
+  const moire = [[MOIRE.gold, MOIRE.goldAlpha], [MOIRE.mint, MOIRE.mintAlpha]].map(([color, opacity]) => {
+    const g = new THREE.BufferGeometry(), seg = moireSegments(0.745, 0.79), pos = [];
+    for (let i = 0; i < seg.length; i += 2) pos.push(seg[i], seg[i + 1], 0);
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    const l = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthWrite: false, toneMapped: false }));
+    l.position.copy(rotor.position); l.position.z += 0.1; l.visible = false; rotor.parent.add(l);
+    return l;
+  });
+
   // THE BREATH: the jackpot star's glow, the only breather on this screen (Law III).
   const star = get('star_mount'), starMat = star && star.isMesh ? (star.material = star.material.clone()) : null;
   if (starMat) { starMat.emissive = new THREE.Color(0xffc23a); owned.push(starMat); }
@@ -169,31 +264,63 @@ export async function createScene(o) {
   });
 
   // Runtime slices from the server's table.
-  let layout = null, sliceGroup = null;
+  let layout = null, sliceGroup = null, ghosts = null, outline = null;
+  const shearU = { value: 0 };
   function setLayout(next) {
     if (sliceGroup) { rotor.remove(sliceGroup); sliceGroup.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material) { if (n.material.map) n.material.map.dispose(); n.material.dispose(); } }); }
+    if (ghosts) { ghosts.forEach(g => { rotor.parent.remove(g); g.material.dispose(); }); ghosts[0].geometry.dispose(); ghosts = null; }
+    outline = null;
     layout = next; sliceGroup = new THREE.Group(); sliceGroup.name = 'runtime_sectors';
     let prize = 0;
+    const flat = [];
     for (const s of layout) {
       const color = s.kind === 'jackpot' ? GOLD : s.kind === 'malus' ? SNOOZE : COLORS[prize++ % COLORS.length];
       const gap = Math.min(0.003, s.span * 0.08), n = Math.max(3, Math.ceil(s.span * 32)), shape = new THREE.Shape();
       for (let j = 0; j <= n; j++) { const a = s.start + gap + ((s.span - 2 * gap) * j) / n; j ? shape.lineTo(Math.sin(a) * 0.711, Math.cos(a) * 0.711) : shape.moveTo(Math.sin(a) * 0.711, Math.cos(a) * 0.711); }
       for (let j = n; j >= 0; j--) { const a = s.start + gap + ((s.span - 2 * gap) * j) / n; shape.lineTo(Math.sin(a) * 0.185, Math.cos(a) * 0.185); }
-      const mat = new THREE.MeshPhysicalMaterial({ color, roughness: 0.3, metalness: 0.04, clearcoat: 0.6 });
+      const mat = twist(new THREE.MeshPhysicalMaterial({ color, roughness: 0.3, metalness: 0.04, clearcoat: 0.6 }), shearU);
       mat.emissive.set(color).lerp(new THREE.Color(0xffdca8), 0.35); mat.emissiveIntensity = 0;
       const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.018, bevelEnabled: true, bevelSegments: 2, steps: 1,
         bevelSize: Math.min(0.002, (0.185 * (s.span - 2 * gap)) / 4), bevelThickness: 0.002 }), mat);
-      mesh.position.z = 0.076; mesh.userData = { index: s.index, h: 0 };
+      mesh.position.z = 0.076; mesh.userData = { index: s.index, h: 0, base: color, mid: s.mid };
+      flat.push({ pts: sectorPoints(s.start + gap, s.end - gap, 0.185, 0.711), color });
       const w = Math.min(0.17, s.span * 0.5 * 0.82), h = 0.3;
       const label = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: sliceLabel(s, w, h, o.labels(s)), transparent: true, depthWrite: false }));
       label.position.set(Math.sin(s.mid) * 0.5, Math.cos(s.mid) * 0.5, 0.1); label.rotation.z = -s.mid;
+      label.userData = { a: s.mid, r: 0.5, spin: -s.mid, index: s.index };
       const prev = layout[(s.index + layout.length - 1) % layout.length], pr = Math.min(0.01, 0.738 * Math.min(s.span, prev.span) * 0.3);
       const peg = new THREE.Mesh(new THREE.CylinderGeometry(pr, pr, 0.038, 12), new THREE.MeshStandardMaterial({ color: 0xd7af6e, metalness: 0.65, roughness: 0.3 }));
       peg.rotation.x = Math.PI / 2; peg.position.set(Math.sin(s.start) * 0.738, Math.cos(s.start) * 0.738, 0.094);
+      peg.userData = { a: s.start, r: 0.738 };
       sliceGroup.add(mesh, label, peg);
     }
     rotor.add(sliceGroup);
     under = sliceAt(layout, rotor.rotation.z).index; lit = under;
+    // Taffy smear: the whole ring flattened into one vertex-coloured geometry, four ghosts at alpha 0.16 over the slices.
+    const pos = [], col = [];
+    for (const f of flat) {
+      const tri = THREE.ShapeUtils.triangulateShape(f.pts, []), c = new THREE.Color(f.color);
+      for (const face of tri) for (const i of face) { pos.push(f.pts[i].x, f.pts[i].y, 0); col.push(c.r, c.g, c.b); }
+    }
+    const gg = new THREE.BufferGeometry();
+    gg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); gg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    ghosts = Array.from({ length: TAFFY.ghosts }, () => {
+      const m = new THREE.Mesh(gg, twist(new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: TAFFY.ghostAlpha,
+        depthWrite: false, toneMapped: false, side: THREE.DoubleSide }), shearU));
+      m.position.copy(rotor.position); m.position.z += 0.098; m.visible = false; m.renderOrder = 1; rotor.parent.add(m);
+      return m;
+    });
+  }
+  /** The landed slice's mint outline: a band just inside its edge (built on the landing, freed with the layout). */
+  function outlineFor(index) {
+    if (outline && outline.userData.index === index) return outline;
+    if (outline) { sliceGroup.remove(outline); outline.geometry.dispose(); outline.material.dispose(); }
+    const s = layout[index], gap = Math.min(0.003, s.span * 0.08), w = 0.012, inset = Math.min((s.span - 2 * gap) * 0.25, w / 0.5);
+    const shape = new THREE.Shape(sectorPoints(s.start + gap, s.end - gap, 0.185, 0.711));
+    shape.holes.push(new THREE.Path(sectorPoints(s.start + gap + inset, s.end - gap - inset, 0.185 + w, 0.711 - w)));
+    outline = new THREE.Mesh(new THREE.ShapeGeometry(shape, 8), new THREE.MeshBasicMaterial({ color: 0x5fffd0, transparent: true, opacity: 0.6, depthWrite: false, toneMapped: false }));
+    outline.position.z = 0.0985; outline.userData = { index, outline: true }; outline.visible = false; sliceGroup.add(outline);
+    return outline;
   }
 
   // Framing: the bezel, both screens and EMI, straight on (cam_seat is on +Z).
@@ -217,11 +344,55 @@ export async function createScene(o) {
   let phase = 'hidden', tl = null, drag = null, coast = null, plan = null, under = 0, lit = 0, crossAt = -Infinity, ladder = null;
   let landed = -1, thudAt = -Infinity, kickAt = -Infinity, kickSign = 1, kickAmp = 0, shiverAt = -Infinity;
   let party = null, heat = 0, gold = false, energy = 0, lightMotion = 0, prev = performance.now();
+  let dim = 0, slowing = false, shear = 0, omega = 0, lastRot = null, quietAt = -Infinity, quietK = 1, frameSpeed = 0;
   settle = () => { const a = tl, b = plan; tl = null; plan = null; if (a && a.done) a.done(); if (b && b.done) b.done(); };
   const rotating = () => !!(drag || coast || plan);
 
+  /** The v3 page effects for one frame (CONTRACT 10.13.F): hub, taffy, moire, quiet room, and the dim for the station. */
+  function hypnoFrame(t, dtMs) {
+    paintHub(t, dtMs / 1000);
+    const turning = rotating() && frameSpeed > 0.05;
+    shear = stepShear(shear, dress.taffy && turning ? taffyShear(frameSpeed, dress.k) : 0, dtMs);
+    const sign = omega < 0 ? -1 : 1;
+    shearU.value = sign * shear;
+    if (sliceGroup) {
+      for (const n of sliceGroup.children) {
+        const u = n.userData;
+        if (!u || u.r === undefined) continue;
+        const d = trailOffset(shear, sliceU(u.r), sign);   // anticlockwise radians; slice angles run clockwise
+        n.position.x = Math.sin(u.a - d) * u.r; n.position.y = Math.cos(u.a - d) * u.r;
+        if (u.spin !== undefined) n.rotation.z = u.spin + d;
+      }
+    }
+    if (ghosts) {
+      const on = !!dress.taffy && turning && shear > 0.02, rots = ghostRotations(rotor.rotation.z, omega);
+      ghosts.forEach((g, i) => { g.visible = on; g.rotation.z = rots[i]; g.material.opacity = TAFFY.ghostAlpha * dress.k; });
+    }
+    const [m0, m1] = moireRotations(rotor.rotation.z);
+    moire[0].visible = moire[1].visible = !!dress.moire; moire[0].rotation.z = m0; moire[1].rotation.z = m1;
+    // Quiet room: every other slice greys, colour flows back by angular distance; the landed one keeps a mint outline.
+    const since = (performance.now() - quietAt) / 1000;
+    const quiet = !!layout && landed >= 0 && since >= 0 && !quietDone(since) && !rotating();
+    if (sliceGroup) {
+      for (const n of sliceGroup.children) {
+        const u = n.userData;
+        if (!u || u.outline) continue;
+        if (u.base === undefined) { if (u.spin !== undefined) n.material.opacity = quiet && u.index !== landed ? 0.75 : 1; continue; }
+        const q = quiet && u.index !== landed ? quietMix(since, distance01(u.mid, layout[landed].mid), quietK) : 0;
+        const [r, g, b] = mixRgb(u.base, QUIET.grey, q);
+        n.material.color.setRGB(r, g, b, THREE.SRGBColorSpace);
+      }
+      if (outline) {
+        outline.visible = landed === outline.userData.index && !rotating() && Number.isFinite(quietAt);
+        outline.material.opacity = outlineAlpha(Math.max(0, since), reduced);
+      }
+    }
+    if (o.onFrame) o.onFrame({ dim, slowing, speed: frameSpeed, turning });
+  }
+
   function update(t) {
     const dt = Math.min(0.05, Math.max(0, (t - prev) / 1000)); prev = t;
+    const dtMs = dt * 1000;
     if (tl) {
       const q = clamp((t - tl.start) / tl.ms), k = tl.kind === 'rise' ? 1 - (1 - q) ** 3 : q * q;
       const back = play.pos.clone().add(new THREE.Vector3(0, 0.25, 1.4));
@@ -229,10 +400,19 @@ export async function createScene(o) {
       if (q >= 1) { const done = tl.done; phase = tl.kind === 'rise' ? 'play' : 'hidden'; tl = null; done(); }
     }
     if (coast) rotor.rotation.z += coast.omega * dt * 1000;
-    if (plan) {
+    slowing = false;
+    if (plan && plan.warp) {
+      // The long last turn: the plan's own clock, read slower under 1.6 rad/s. Same path, same landing, same slice.
+      plan.w = warpStep(plan.w, dtMs, plan, { calm: !!dress.calm }); slowing = plan.w.slowing;
+      rotor.rotation.z = warpedRotation(plan, plan.w.elapsed);
+      if (plan.w.elapsed >= plan.ms) { const p = plan; plan = null; rotor.rotation.z = p.to; if (p.done) p.done(); }
+    } else if (plan) {
       rotor.rotation.z = rotationAt(plan, t - plan.start);
       if (t - plan.start >= plan.ms) { const p = plan; plan = null; rotor.rotation.z = p.to; if (p.done) p.done(); }
     }
+    omega = lastRot === null || dt <= 0 ? 0 : (rotor.rotation.z - lastRot) / dt; lastRot = rotor.rotation.z;
+    frameSpeed = Math.abs(omega);
+    dim = reduced ? 0 : stepDim(dim, slowing, dtMs);
     if (layout) {
       const now = sliceAt(layout, rotor.rotation.z).index;
       if (now !== under) {
@@ -277,6 +457,7 @@ export async function createScene(o) {
     // THE SHIVER: the whole wheel, +-4 px across the screen. Reduced motion plays nothing.
     const px = reduced ? 0 : shiverPx(t - shiverAt);
     if (play) model.position.x = modelRest.x + px * ((2 * camera.position.distanceTo(play.look) * Math.tan(THREE.MathUtils.degToRad(LENS_DEG) / 2)) / (canvas.clientHeight || 1));
+    hypnoFrame(t, dtMs);
     emi.update(t);
     renderer.render(scene, camera);
   }
@@ -330,18 +511,30 @@ export async function createScene(o) {
     get rotation() { return rotor.rotation.z; },
     get spinning() { return rotating(); },
     resize, screen, setLayout, dispose,
+    /** Live dress (hypno.dressOf): the hub mode, Full-only moire and taffy, k. */
+    setDress(d) { dress = { ...dress, ...(d || {}) }; },
+    /** Live reduced motion / Calm (a settings frame): the next gesture, landing, rise or sink takes the settled
+     *  state. A landing already in flight finishes its path (no jump mid-turn); the stage dim and EMI settle now. */
+    setReduced(on) { reduced = !!on; emi.setReduced(reduced); if (reduced) dim = 0; },
+    /** The slice's own colour, for the landing wash. */
+    sliceColor(index) {
+      const m = sliceGroup && sliceGroup.children.find(n => n.userData && n.userData.base !== undefined && n.userData.index === index);
+      return m ? m.userData.base : '#9b6bff';
+    },
+    /** Quiet room from this frame (a page effect of the landing moment), at strength k. */
+    quiet(k = 1) { if (landed < 0 || !layout) return; quietK = k; quietAt = performance.now(); outlineFor(landed); },
     setFace: name => emi.setFace(name),
     setMood: m => emi.setMode(m),
     /** Put the rotor at `r` with no travel (a replay, a reduced landing). */
-    setRotation(r, landedIndex = -1) { coast = null; plan = null; rotor.rotation.z = r; landed = landedIndex; if (layout) { under = sliceAt(layout, r).index; lit = under; } },
+    setRotation(r, landedIndex = -1) { coast = null; plan = null; rotor.rotation.z = r; lastRot = r; landed = landedIndex; quietAt = -Infinity; if (layout) { under = sliceAt(layout, r).index; lit = under; } },
     /** Law VIII: the wheel starts turning this frame, before the server answers. */
-    coast(omega = DEFAULT_OMEGA) { if (reduced) return; landed = -1; ladder = null; plan = null; coast = { omega }; },
+    coast(omega = DEFAULT_OMEGA) { if (reduced) return; landed = -1; quietAt = -Infinity; ladder = null; plan = null; coast = { omega }; },
     /** Retarget the coast (or a rest) onto `landing`; resolves when the pointer settles. Reduced: at once. */
     land(landing, index) {
       const omega = coast ? coast.omega : DEFAULT_OMEGA;
       coast = null;
       if (reduced) { this.setRotation(landing, index); thudAt = performance.now(); return Promise.resolve(); }
-      return new Promise(done => { plan = { ...planLanding({ from: rotor.rotation.z, omega, landing }), start: performance.now(), done: () => { landed = index; thudAt = performance.now(); kickAt = thudAt; kickAmp = 0.2; done(); } }; });
+      return new Promise(done => { plan = { ...planLanding({ from: rotor.rotation.z, omega, landing }), start: performance.now(), warp: true, w: null, done: () => { landed = index; thudAt = performance.now(); kickAt = thudAt; kickAmp = 0.2; done(); } }; });
     },
     /** No result came: the coast winds down where it is, nothing is lit. */
     windDown() {
@@ -360,7 +553,7 @@ export async function createScene(o) {
     /** Law VI: Back and suspend skip every ceremony to its settled state. */
     skip() {
       if (plan) { const p = plan; plan = null; rotor.rotation.z = p.to; if (p.done) p.done(); }
-      coast = null; party = null; shiverAt = thudAt = kickAt = -Infinity; energy = 0; emi.skip();
+      coast = null; party = null; shiverAt = thudAt = kickAt = -Infinity; energy = 0; dim = 0; shear = 0; emi.skip();
     },
     /** A point in client px: 'landed' is the landed slice's printed face, else a node's centre. */
     project(name) {
@@ -385,7 +578,11 @@ export async function createScene(o) {
       return { rotation: rotor.rotation.z, under: layout ? layout[under].id : null, lit: layout ? layout[lit].id : null, landed: landed >= 0 && layout ? layout[landed].id : null,
                coasting: !!coast, planning: !!plan, dragging: !!drag, energy, heat, gold, party: !!party, face: emi.face, mood: emi.mode,
                pointer: pointer.rotation.z - pointerRest, shiverPx: reduced ? 0 : shiverPx(performance.now() - shiverAt),
-               star: starMat ? starMat.emissiveIntensity : null, calls: renderer.info.render.calls };
+               star: starMat ? starMat.emissiveIntensity : null, calls: renderer.info.render.calls,
+               hypno: { hub: hub ? hub.mode : 'neon', hubRadius: hub ? hub.radius : null, dim, slowing, shear, speed: frameSpeed,
+                        timeScale: plan && plan.w ? plan.w.scale : 1, ghosts: !!(ghosts && ghosts[0].visible), moire: moire[0].visible,
+                        quiet: Number.isFinite(quietAt) ? (performance.now() - quietAt) / 1000 : null,
+                        outline: !!(outline && outline.visible), dress, hubScreen: hubScreen() } };
     },
   };
 }

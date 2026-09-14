@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FEEL, tierOf, fxFor, usesGifs, recipe, winTokens, tickValues, tick, glance, landPose, shiverPx, breath, POSES } from '../feel.js';
+import * as feel from '../feel.js';
+import { FEEL, tierOf, recipe, winTokens, tickValues, tick, glance, landPose, shiverPx, breath, POSES } from '../feel.js';
 import { readResult } from '../wheel.js';
 
 const R = (o) => readResult({ day: '2026-09-14', sliceId: 'x', sliceIndex: 1, pay: 0, snoozeCarryPaid: 0, jackpot: false, jackpotFallback: false, snoozed: false, ...o });
-const KNOWN_FX = ['fx.jackpot', 'fx.gif_storm', 'fx.sub_cascade', 'fx.spiral_full', 'fx.spiral_brief', 'fx.gif_burst', 'fx.sub_pair', 'fx.sub_single', 'fx.melt'];
 
 test('tiers by pay: Snooze 0, 1-3 small, 5-20 bigger, 40 and 100 big, the pot on top', () => {
   assert.equal(tierOf(R({ snoozed: true })), 0);
@@ -16,14 +16,8 @@ test('tiers by pay: Snooze 0, 1-3 small, 5-20 bigger, 40 and 100 big, the pot on
   assert.equal(tierOf(null), 0);
 });
 
-test('fx use only existing CONTRACT section 4 ids, one per landing, none for Snooze', () => {
-  assert.deepEqual(fxFor(R({ snoozed: true })), []);
-  assert.deepEqual(fxFor(R({ pay: 1 })), ['fx.spiral_brief']);
-  assert.deepEqual(fxFor(R({ pay: 12 })), ['fx.gif_burst']);
-  assert.deepEqual(fxFor(R({ pay: 40 })), ['fx.gif_storm']);
-  assert.deepEqual(fxFor(R({ pay: 250, jackpot: true })), ['fx.jackpot']);
-  for (const pay of [0, 1, 5, 40, 100]) for (const id of fxFor(R({ pay }))) assert.ok(KNOWN_FX.includes(id), id);
-  assert.ok(usesGifs('fx.gif_storm') && !usesGifs('fx.spiral_brief'));
+test('the old size-based fx table is gone: moments decide the fullscreen (CONTRACT 10.13.F)', () => {
+  for (const name of ['FX_BY_TIER', 'fxFor', 'usesGifs']) assert.equal(name in feel, false, name);
 });
 
 test('recipe: celebrate small on purpose, Snooze sleepy with a shiver, the reveal only for the pot', () => {
