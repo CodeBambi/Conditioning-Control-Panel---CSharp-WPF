@@ -6,32 +6,22 @@ using System.Windows;
 namespace ConditioningControlPanel.Services.Prizes
 {
     /// <summary>What changed in one ownership update.</summary>
-    public sealed class OwnershipChangedEventArgs : EventArgs
+    public sealed class OwnershipChangedEventArgs(IReadOnlyCollection<string> added, IReadOnlyCollection<string> removed, long revision) : EventArgs
     {
-        public OwnershipChangedEventArgs(IReadOnlyCollection<string> added, IReadOnlyCollection<string> removed, long revision)
-        {
-            Added = added;
-            Removed = removed;
-            Revision = revision;
-        }
-
         /// <summary>Grant ids held now that were not held before.</summary>
-        public IReadOnlyCollection<string> Added { get; }
-
+        public IReadOnlyCollection<string> Added { get; } = added;
         /// <summary>Grant ids held before that are gone now (a revoke, or <see cref="OwnershipService.Clear"/>).</summary>
-        public IReadOnlyCollection<string> Removed { get; }
-
+        public IReadOnlyCollection<string> Removed { get; } = removed;
         /// <summary>The revision now held (0 after a clear).</summary>
-        public long Revision { get; }
+        public long Revision { get; } = revision;
     }
 
     /// <summary>
     /// Which Back Room prizes the signed-in account owns. The server is the only authority: this
     /// service holds the last snapshot it was handed and answers <see cref="IsGranted"/> from it.
     ///
-    /// <para><b>In-memory only.</b> No persistence, no settings flag, no network, no profile sync.
-    /// A later lane fetches snapshots and calls <see cref="ApplySnapshot"/>; until then the only
-    /// source of grants is the DEBUG desk-test override below.</para>
+    /// <para><b>In-memory only.</b> No persistence, settings flag, network or profile sync. A later
+    /// lane fetches snapshots and calls <see cref="ApplySnapshot"/>.</para>
     ///
     /// <para><b>Snapshot rules.</b> A snapshot for any account other than the one signed in is
     /// dropped. For the account already held, a LOWER revision is stale and dropped, and an equal
@@ -88,29 +78,17 @@ namespace ConditioningControlPanel.Services.Prizes
         {
             if (string.IsNullOrWhiteSpace(grantId)) return false;
             if (_overridePatterns.Count > 0 && MatchesOverride(_overridePatterns, grantId)) return true;
-            lock (_gate)
-            {
-                return HeldForCurrentAccount() && _grants.Contains(grantId);
-            }
+            lock (_gate) return HeldForCurrentAccount() && _grants.Contains(grantId);
         }
 
         /// <summary>A copy of the server-granted ids for the signed-in account (the override is not listed).</summary>
         public IReadOnlyCollection<string> Grants
         {
-            get
-            {
-                lock (_gate)
-                {
-                    return HeldForCurrentAccount() ? _grants.ToArray() : Array.Empty<string>();
-                }
-            }
+            get { lock (_gate) return HeldForCurrentAccount() ? _grants.ToArray() : Array.Empty<string>(); }
         }
 
         /// <summary>The revision of the held snapshot, 0 when nothing is held.</summary>
-        public long Revision
-        {
-            get { lock (_gate) return _revision; }
-        }
+        public long Revision { get { lock (_gate) return _revision; } }
 
         /// <summary>
         /// Adopt a server snapshot (the seam the server lane calls). Dropped when it is for another
@@ -225,15 +203,19 @@ namespace ConditioningControlPanel.Services.Prizes
             foreach (var raw in spec.Split(','))
             {
                 var entry = raw.Trim();
-                if (entry.Length == 0 || entry.Any(char.IsWhiteSpace)) continue;
-
-                var star = entry.IndexOf('*');
-                var valid = star < 0
-                    || entry == "*"
-                    || (star == entry.Length - 1 && entry.Length > 2 && entry[^2] == '.' && entry[^3] != '.');
-                if (valid && !patterns.Contains(entry)) patterns.Add(entry);
+                if (IsValidPattern(entry) && !patterns.Contains(entry)) patterns.Add(entry);
             }
             return patterns;
+        }
+
+        /// <summary>One already-trimmed override entry: <c>*</c>, <c>some.prefix.*</c>, or an exact id.</summary>
+        internal static bool IsValidPattern(string? entry)
+        {
+            if (string.IsNullOrEmpty(entry) || entry.Any(char.IsWhiteSpace)) return false;
+            var star = entry.IndexOf('*');
+            return star < 0
+                || entry == "*"
+                || (star == entry.Length - 1 && entry.Length > 2 && entry[^2] == '.' && entry[^3] != '.');
         }
 
         /// <summary>True if any parsed pattern names <paramref name="grantId"/>. Pure, for the tests.</summary>

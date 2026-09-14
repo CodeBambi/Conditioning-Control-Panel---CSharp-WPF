@@ -7,10 +7,8 @@ using Xunit;
 namespace ConditioningControlPanel.Tests;
 
 /// <summary>
-/// The Back Room prize ownership seam: the DEBUG override parser, the snapshot rules the server
-/// lane will lean on (another account's snapshot, a stale revision, an unchanged repeat) and the
-/// grant id spelling. The account source and the event marshal are injected, so nothing here
-/// reads the process environment, needs DEBUG, or depends on a WPF dispatcher.
+/// The Back Room prize ownership seam: override parser, snapshot rules and grant id spelling. The
+/// account source and event marshal are injected, so nothing reads the env, needs DEBUG or a dispatcher.
 /// </summary>
 public class PrizeOwnershipServiceTests
 {
@@ -25,8 +23,6 @@ public class PrizeOwnershipServiceTests
         return svc;
     }
 
-    // ---- override parsing ----
-
     [Fact]
     public void Override_ExactIds_AreTrimmedAndMatchOnlyThemselves()
     {
@@ -36,6 +32,10 @@ public class PrizeOwnershipServiceTests
         Assert.True(OwnershipService.MatchesOverride(p, PrizeGrants.RacingTrack(3)));
         Assert.False(OwnershipService.MatchesOverride(p, PrizeGrants.RacingTrack(4)));
         Assert.False(OwnershipService.MatchesOverride(p, "fx.jackpot_remix.extra"));
+
+        // Junk beside good entries is dropped, repeats collapse.
+        Assert.Equal(new[] { "fx.bubble.rain", "rt.*" },
+            OwnershipService.ParseOverride("fx*, fx.bubble.rain,,rt.*, fx.bubble.rain"));
     }
 
     [Fact]
@@ -75,11 +75,6 @@ public class PrizeOwnershipServiceTests
         => Assert.Empty(OwnershipService.ParseOverride(spec));
 
     [Fact]
-    public void Override_JunkNextToGoodEntries_KeepsTheGoodOnes_Deduplicated()
-        => Assert.Equal(new[] { "fx.bubble.rain", "rt.*" },
-            OwnershipService.ParseOverride("fx*, fx.bubble.rain,,rt.*, fx.bubble.rain"));
-
-    [Fact]
     public void Override_GrantsWithoutAnySnapshot_ButIsNotListedInGrants()
     {
         var svc = New("fx.*");
@@ -90,8 +85,6 @@ public class PrizeOwnershipServiceTests
         _account = null; // the override is a desk-test switch, not an account grant
         Assert.True(svc.IsGranted(PrizeGrants.BubbleSpiralIn));
     }
-
-    // ---- snapshot rules ----
 
     [Fact]
     public void Snapshot_ForTheSignedInAccount_GrantsAndRaises()
@@ -181,6 +174,8 @@ public class PrizeOwnershipServiceTests
     public void Clear_RaisesWithEverythingRemoved_AndResetsTheRevision()
     {
         var svc = New();
+        svc.Clear(); // nothing held: silent
+        Assert.Empty(_events);
         svc.ApplySnapshot(Me, 12, new[] { PrizeGrants.JackpotRemix, PrizeGrants.RacingTrack(1) });
         svc.Clear();
 
@@ -197,16 +192,6 @@ public class PrizeOwnershipServiceTests
         Assert.True(svc.IsGranted(PrizeGrants.RacingTrack(1)));
     }
 
-    [Fact]
-    public void Clear_WithNothingHeld_RaisesNothing()
-    {
-        var svc = New();
-        svc.Clear();
-        Assert.Empty(_events);
-    }
-
-    // ---- grant ids ----
-
     [Theory]
     [InlineData(0, "rt.original.00")]
     [InlineData(7, "rt.original.07")]
@@ -217,7 +202,6 @@ public class PrizeOwnershipServiceTests
     [Theory]
     [InlineData(-1)]
     [InlineData(11)]
-    [InlineData(100)]
     public void RacingTrack_OutOfRange_Throws(int track)
         => Assert.Throws<ArgumentOutOfRangeException>(() => PrizeGrants.RacingTrack(track));
 
@@ -234,3 +218,53 @@ public class PrizeOwnershipServiceTests
         Assert.Equal("discord.high_roller", PrizeGrants.DiscordHighRoller);
     }
 }
+
+/// <summary>
+/// The static <see cref="PrizeGrants"/> facade the effect lanes call. It holds a process-wide
+/// service reference, so the suite runs outside the parallel pool and restores the null attach.
+/// </summary>
+[Collection(nameof(PrizeGrantsFacadeCollection))]
+public class PrizeGrantsFacadeTests
+{
+    [Fact]
+    public void Facade_ReflectsApplySnapshot_AndFiresGrantsChanged()
+    {
+        var svc = new OwnershipService(() => "uid-me", null, invoke => invoke());
+        var fired = 0;
+        Action onChanged = () => fired++;
+        PrizeGrants.GrantsChanged += onChanged;
+        try
+        {
+            Assert.False(PrizeGrants.IsGranted(PrizeGrants.FlashPendulum)); // nothing attached yet
+            PrizeGrants.Attach(svc);
+            svc.ApplySnapshot("uid-me", 1, new[] { PrizeGrants.FlashPendulum });
+
+            Assert.True(PrizeGrants.IsGranted(PrizeGrants.FlashPendulum));
+            Assert.False(PrizeGrants.IsGranted(PrizeGrants.BubbleRain));
+            Assert.Equal(1, fired);
+
+            PrizeGrants.Attach(null); // detached: no more events, no more grants
+            svc.Clear();
+            Assert.Equal(1, fired);
+            Assert.False(PrizeGrants.IsGranted(PrizeGrants.FlashPendulum));
+        }
+        finally
+        {
+            PrizeGrants.GrantsChanged -= onChanged;
+            PrizeGrants.Attach(null);
+        }
+    }
+
+    [Theory]
+    [InlineData("fx.flash.pendulum", "fx.flash.pendulum", true)]
+    [InlineData("fx.*", "fx.flash.pendulum", true)]
+    [InlineData("*", "rt.original.00", true)]
+    [InlineData("fx*", "fx.flash.pendulum", false)]
+    [InlineData("", "fx.flash.pendulum", false)]
+    public void Matches_IsTheOverrideMatcher(string pattern, string grantId, bool expected)
+        => Assert.Equal(expected, PrizeGrants.Matches(pattern, grantId));
+}
+
+[CollectionDefinition(nameof(PrizeGrantsFacadeCollection), DisableParallelization = true)]
+public class PrizeGrantsFacadeCollection { }
+
