@@ -314,17 +314,25 @@ test('table v7: the jar block, the emi2 row, the re-spin block and the TOTAL jac
   const s = r.tape.snapshot();
   assert.equal(s.jarSize, 100, '10.16.A, decided 2026-09-14 evening: a jar is a come-back reason');
   assert.equal(s.jarFree, 3);
-  assert.equal(s.jackpotOdds, '1 in 6,494', 'published odds are always the TOTAL, both paths counted');
+  assert.equal(s.jackpotOdds, '1 in 6,493', 'published odds are always the TOTAL, both paths counted');
   const emi2 = s.lines.find(l => l.id === 'emi2');
   assert.ok(emi2, 'emi2 joins LINES between emi3 and gif3same');
   assert.equal(emi2.pays, 0, 'the re-spin IS the event, so the line itself pays nothing');
   assert.equal(emi2.respin, 1);
   assert.equal(s.lines.findIndex(l => l.id === 'emi2'), 1);
   // The weights the server lane is re-solving live in one place, and they still add up to the denominator.
-  assert.equal(WEIGHTS_V7.emi3, 92);
-  assert.equal(WEIGHTS_V7.emi2, 8207);
+  assert.deepEqual({ ...WEIGHTS_V7 }, { emi3: 92, emi2: 8207, gif3same: 6784, sub3: 8479, spiral3: 8479,
+                                        gif3: 83746, sub2: 67829, spiral2: 67829, melt: 58900, none: 689655 },
+    'the server lane\'s own solved numbers (CCP-Server #176), mirrored');
   assert.equal(WEIGHTS_V7.melt, 58900, 'melt does not scale');
+  assert.equal(WEIGHTS_V7.gif3, 83746, 'gif3 is polished alone to land the exact 1.0200 (83,759 -> 83,746)');
   assert.equal(Object.values(WEIGHTS_V7).reduce((a, b) => a + b, 0), 1e6);
+  // Published odds are DEN / weight, rounded, exactly as 10.16.A's own table computes them.
+  for (const l of s.lines) {
+    if (l.id === 'emi3') continue;                      // its published row is the TOTAL, not its own weight
+    const w = WEIGHTS_V7[l.id];
+    assert.equal(l.odds, `1 in ${Math.round(1e6 / w).toLocaleString('en-US')}`, `${l.id} odds`);
+  }
 });
 
 test('C1 lineFor: emi2 is read before melt, and only on reels 1 and 2', () => {
@@ -513,4 +521,61 @@ test('C1 the re-spin comes immediately after its emi2, even when other spins are
   assert.equal(out[1].line, 'emi2');
   assert.equal(out[2].symbols[2], 'sub1');
   assert.equal(playsWithoutPress(out[2].kind), true, 'so the page plays it as the second beat of that press');
+});
+
+test('table v7: the expansion queue drains free spins first and jar spins behind them', async () => {
+  const r = rig({ sp: 30, jar: 98 });
+  await r.tape.open();
+  // Three spirals: spiral3 pays 10 and wins 3 free spins, and the same row fills the jar (98 + 3).
+  r.server.script(['spiral0', 'spiral1', 'spiral2']);
+  r.tape.pickCount(1);
+  const out = await play(r, 7);
+  assert.equal(out[0].line, 'spiral3');
+  assert.equal(out[0].jarN, 1, '98 + 3 fires at 100 and leaves 1');
+  assert.deepEqual(out.slice(1, 7).map(o => o.kind), ['free', 'free', 'free', 'jar', 'jar', 'jar'],
+    '10.16.A: the jar queues behind the line free spins it landed with');
+});
+
+test('10.16.A: an emi_respin can spill the jar too (it descends from a plain-band spin)', async () => {
+  const r = rig({ sp: 30, jar: 99 });
+  await r.tape.open();
+  r.server.script(['emi', 'emi', 'sub0']);
+  r.server.respin('spiral1');                 // the re-spin shows one spiral, and the jar is one short
+  r.tape.pickCount(1);
+  const out = await play(r, 5);
+  assert.equal(out[0].line, 'emi2');
+  assert.equal(out[0].jarN, 99, 'the pair showed no spiral of its own');
+  assert.equal(out[1].kind, 'emi_respin');
+  assert.equal(out[1].jarN, 0, 'and the re-spin\'s own spiral fires it');
+  assert.deepEqual(out.slice(2, 5).map(o => o.kind), ['jar', 'jar', 'jar']);
+});
+
+test('10.16.D: under a freeze seal emi2 reads as none, exactly as melt does', async () => {
+  const r = rig({ sp: 40 });
+  await r.tape.open();
+  r.tape.pickCount(1);
+  r.server.script(['gif0', 'sub1', 'gif2'], ['emi', 'emi', 'gif0']);
+  await play(r, 1);                           // lands gif2 on reel 3, which is what the hold then keeps
+  r.tape.toggleHold(2);                       // reel 3 held, so reels 1 and 2 keep the scripted EMI pair
+  const p = await r.tape.press();
+  assert.equal(p.outcome.kind, 'freeze');
+  assert.deepEqual(p.outcome.symbols.slice(0, 2), ['emi', 'emi']);
+  assert.equal(p.outcome.line, 'none', 'no chase from a 2 SP freeze');
+  assert.equal(p.outcome.pay, 0);
+  assert.equal(p.outcome.fx.length, 0);
+  assert.ok(r.tape.land(p.outcome));
+  assert.equal(r.server.user.freezes.length, 1);
+});
+
+test('10.16.A: the receipt carries the jar beside the melt', async () => {
+  const r = rig({ sp: 30, jar: 50 });
+  await r.tape.open();
+  r.server.script(['spiral0', 'gif1', 'sub0']);
+  r.tape.pickCount(1);
+  await play(r, 1);
+  const receipt = r.server.log.filter(x => x.op === 'tape').length;
+  assert.equal(receipt, 1);
+  const res = await r.server.handle('state');
+  assert.equal(res.body.jar, 51, 'and the state route reports the stored count');
+  assert.equal(typeof res.body.melt, 'number');
 });

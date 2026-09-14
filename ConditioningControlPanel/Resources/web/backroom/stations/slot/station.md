@@ -143,9 +143,9 @@ Back (left) and EMI's HUD face sits under the room's SP chip (right), so the mar
   they can still land the malus (a gift, not a cleanse), they fill the jar and they expand into free spins,
   re-spins, jar spins and an `emi_respin` like any paid spin. `comp_none` and `comp_used` fall back to a paid
   tape on the spot; `tape_unplayed` leaves the comp standing (finish the tape you have) and the offer waits.
-  **Decision the contract left open**: 10.16.C says "the lever's FIRST press", which this page reads as the first
-  press that actually BUYS, because a press that only plays an outcome already on the tape buys nothing and must
-  not burn a comp. A refused buy does not eat it either.
+  10.16.C now says this outright: the comp is spent on the first tape BUY of the sit-down, not on the first
+  press, because a press that only plays an outcome already on the tape buys nothing and must not burn a comp.
+  A refused buy does not eat it either.
 - **C1 THE EMI PAIR FREE RE-SPIN** (CONTRACT 10.16.D): two EMI on reels 1 and 2, and reel 3 comes back for a
   second look. Two beats, ONE press. The `emi2` landing plays first with A1's EMI-pair anticipation already on it
   (1,400 ms, bulbs gold, halved and never gold while melted, Brake 5) and lands as a muted thud and nothing else:
@@ -159,11 +159,28 @@ Back (left) and EMI's HUD face sits under the room's SP chip (right), so the mar
   instead of from a reel 2 thud that never comes. Reduced motion and Calm keep the hold and the tone and drop the
   light change, exactly as A1 does. The published `emi3` row prints the TOTAL jackpot odds (1 in 6,494, both
   paths), never the direct draw alone, and the `emi2` row says what it buys: "One more look".
-  **Decision the contract left open**: 10.16.D calls it "the full 1,400 ms gold hold" and exempts this beat from
-  Brake 5, so the re-spin stays GOLD while melted as well as unhalved (A1's melted EMI hold is never gold). Also,
-  10.16.D's worked pace ("about 4,380 ms") does not match its own formula with today's `PACE`:
-  `SPIN_MS 1800 + 1400 + THUD 340 + REVEAL 600 + BREATH 520` is **4,660 ms**, which is what `pace.outcomeMs(PACE,
-  0, 'emi_respin')` returns. The formula was followed, not the rounded total.
+  Both of these were open questions in the contract and are now settled in it (10.16.D): the re-spin stays GOLD
+  while melted as well as unhalved, because Brake 5 governs A1's anticipation and not this beat (A1's own melted
+  EMI hold is still halved and still never gold), and the beat is **4,660 ms**
+  (`SPIN_MS 1800 + 1400 + THUD 340 + REVEAL 600 + BREATH 520`), which is what
+  `pace.outcomeMs(PACE, 0, 'emi_respin')` returns; the contract's earlier "about 4,380" was a bad total.
+- **Table v7, and what the mock does with it** (CONTRACT 10.16.A, 10.16.D). `mock-server.js` carries the
+  server lane's FINAL solved numbers (CCP-Server #176) in one block: per million, `emi3` 92, `emi2` 8,207,
+  `gif3same` 6,784, `sub3` 8,479, `spiral3` 8,479, `gif3` 83,746, `sub2` 67,829, `spiral2` 67,829, `melt`
+  58,900 and `none` 689,655, plus `respin: { emi: 7555 }` and `jar: { size: 100, free: 3 }`. The factor is
+  0.977450 (the decided 100 / 3 row) and `gif3` is then polished ALONE to land the exact 1.0200
+  (83,759 -> 83,746), the same move v6 made on v5. The published jackpot is the TOTAL of both paths,
+  **1 in 6,493** (154.004 per million). The mock still DRESSES everyday lines off `STRIPS`, which is what the
+  page's A1 and A2 tells are sized against, so these weights are shapes and published odds for the page, not
+  a paytable, and nothing on the page reads an RTP. **The mock carries no frozen tables at all**: a sealed row
+  is dressed off the same strips and only its LINE is overridden (`melt` and `emi2` both read `none`), so the
+  server's five conditional tables (four unchanged from v6, the held-SPIRAL one retuned in #176 because its
+  sealed free spins read the plain table: `spiral2` 173,593 -> 177,589 and `sub2` 86,779 -> 88,795, `spiral3`
+  pinned and the 2:1 kept) have nothing here to land in. Held-class RTP is the server's to prove.
+- **The expansion queue's order.** An `emi_respin` goes to the FRONT, so it plays immediately after its parent
+  even when other spins are already queued; line free spins keep their place; jar spins queue BEHIND them. A
+  `spiral3` that also fills the jar therefore drains `free, free, free, jar, jar, jar`. A jar fill on an
+  `emi_respin` spills like any other, because the re-spin descends from a plain-band spin.
 - **Skip to settled** (Law VI, Brake 7): one lever press, Back, suspend or a new spin puts a running rollup
   straight on the settled value. `bank.skip()` reads the run's `settled` (the tape's number), never the tick
   ladder, so a cut-short count can never leave the readout short or count a value twice; it is idempotent, and

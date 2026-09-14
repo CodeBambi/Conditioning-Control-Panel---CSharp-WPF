@@ -12,34 +12,41 @@ const STRIPS = [
 ];
 
 /* ---------------------------------------------------------------------------------------------------
- * TABLE v7 (CONTRACT 10.16.A and 10.16.D), in ONE place so the server lane can reconcile it.
+ * TABLE v7, FINAL (CONTRACT 10.16.A and 10.16.D), in ONE place. These are the server lane's own solved
+ * numbers, mirrored from CCP-Server #176: not a placeholder any more.
  *
  * `jar` is the decided 100 / 3 (10.16.A cost table, "decided 2026-09-14 evening"): a jar is a come-back
- * reason, not a rhythm. Its row's scale factor is 0.977450, so the six EVERYDAY pay weights below are the
- * v6 numbers times that factor, as a PLACEHOLDER: the server slot lane (S-b1) is re-solving the exact
- * factor against the sim and will polish `gif3` alone to land 1.0200, exactly as v6 polished it (10.14).
- * `emi3` (92), `emi2` (8,207) and `respin.emi` (7,555) are FIXED by 10.16.D and never scale; `melt` stays
- * 58,900; `none` takes the remainder.
+ * reason, not a rhythm. Its row's factor is 0.977450, which is what scales the six EVERYDAY pay weights off
+ * v6, and `gif3` is then polished ALONE to land the exact 1.0200 (83,759 -> 83,746), the same move v6 made
+ * on v5 (10.14). `emi3` (92), `emi2` (8,207) and `respin.emi` (7,555) are fixed by 10.16.D and never scale;
+ * `melt` stays 58,900; `none` takes the remainder. The jackpot, counting both paths, is 154.004 per million
+ * plain outcomes = 1 in 6,493.
  *
  * The mock does not draw everyday lines from these weights (it dresses them off STRIPS, as it always has,
  * which is what the page's A1/A2 tells are sized against). They are here so the page, dev.html and the node
- * tests see the shapes and the published odds the real table will carry, and so one edit reconciles them.
+ * tests see the shapes and the published odds the real table carries, and so one edit reconciles them.
+ *
+ * NO FROZEN TABLES HERE. The server's five conditional tables (four unchanged from v6, the held-SPIRAL one
+ * retuned in #176 because its sealed free spins read the plain table: spiral2 173,593 -> 177,589 and sub2
+ * 86,779 -> 88,795, spiral3 pinned and the 2:1 kept) have nothing to land in: a sealed row here is dressed
+ * off the same STRIPS and only its LINE is overridden (`melt` and `emi2` both read `none`, 10.10.2 and
+ * 10.16.D). Held-class RTP is the server's to prove, and the page never reads a frozen weight.
  * ------------------------------------------------------------------------------------------------- */
 const DEN = 1e6;
 const V7_SCALE = 0.977450;                               // 10.16.A cost table, row "100 / 3"
 const scaled = v6 => Math.round(v6 * V7_SCALE);
 const W7 = {
-  emi3: 92,                     // 10.16.D: the direct draw, 1 in 10,870 (the TOTAL jackpot is 1 in 6,494)
+  emi3: 92,                     // 10.16.D: the direct draw, 1 in 10,870 (the TOTAL jackpot is 1 in 6,493)
   emi2: 8207,                   // 10.16.D: the natural rate of an EMI pair on reels 1+2, 1 in 122
-  gif3same: scaled(6940),
-  sub3: scaled(8675),
-  spiral3: scaled(8675),
-  gif3: scaled(85691),
-  sub2: scaled(69394),
-  spiral2: scaled(69394),
+  gif3same: scaled(6940),       // 6,784
+  sub3: scaled(8675),           // 8,479
+  spiral3: scaled(8675),        // 8,479
+  gif3: 83746,                  // scaled(85691) is 83,759; polished alone to land the exact 1.0200
+  sub2: scaled(69394),          // 67,829
+  spiral2: scaled(69394),       // 67,829
   melt: 58900,                  // does not scale
 };
-W7.none = DEN - Object.values(W7).reduce((a, b) => a + b, 0);
+W7.none = DEN - Object.values(W7).reduce((a, b) => a + b, 0);   // 689,655
 export const WEIGHTS_V7 = Object.freeze(W7);
 /** 10.16.D: reel 3's own two-band re-spin draw. Whatever is left of DEN draws a non-EMI, non-melt reel 3. */
 const RESPIN_W = Object.freeze({ emi: 7555 });
@@ -50,12 +57,13 @@ const LINES = [
   { id: 'emi3', pays: 400, odds: '1 in 10,870', weight: WEIGHTS_V7.emi3, fx: ['fx.jackpot'] },
   // 10.16.D: emi2 pays 0 and has no fx of its own, because the re-spin IS the event.
   { id: 'emi2', pays: 0, odds: '1 in 122', weight: WEIGHTS_V7.emi2, fx: [], respin: 1 },
-  { id: 'gif3same', pays: 40, odds: '1 in 157', fx: ['fx.gif_storm'] },
-  { id: 'sub3', pays: 15, odds: '1 in 126', fx: ['fx.sub_cascade'] },
-  { id: 'spiral3', pays: 10, odds: '1 in 126', fx: ['fx.spiral_full'], free: 3 },
-  { id: 'gif3', pays: 3, odds: '1 in 13', fx: ['fx.gif_burst'] },
-  { id: 'sub2', pays: 2, odds: '1 in 16', fx: ['fx.sub_pair'] },
-  { id: 'spiral2', pays: 1, odds: '1 in 16', fx: ['fx.spiral_brief'], respin: 1 },
+  // Published odds are DEN / weight, rounded, exactly as 10.16.A's own table computes them.
+  { id: 'gif3same', pays: 40, odds: '1 in 147', fx: ['fx.gif_storm'] },
+  { id: 'sub3', pays: 15, odds: '1 in 118', fx: ['fx.sub_cascade'] },
+  { id: 'spiral3', pays: 10, odds: '1 in 118', fx: ['fx.spiral_full'], free: 3 },
+  { id: 'gif3', pays: 3, odds: '1 in 12', fx: ['fx.gif_burst'] },
+  { id: 'sub2', pays: 2, odds: '1 in 15', fx: ['fx.sub_pair'] },
+  { id: 'spiral2', pays: 1, odds: '1 in 15', fx: ['fx.spiral_brief'], respin: 1 },
   { id: 'melt', pays: 0, odds: '1 in 17', fx: ['fx.melt'] },
 ];
 
@@ -112,7 +120,7 @@ export function createMockServer({ sp = 57, melt = 0, seed = 9013, floorMs = 300
   // 10.16.A/D: the published table carries jar, the re-spin block and the TOTAL jackpot odds, so the page
   // never has to add the direct draw and the re-spin's share together itself (published odds are the total).
   const table = () => ({ v: 7, stake: 1, freezeCost: 1, jackpot: JACK.pays, rtp: 1.02, rtpFrozen: 1.02,
-                         jackpotOdds: '1 in 6,494', jar: { ...JAR },
+                         jackpotOdds: '1 in 6,493', jar: { ...JAR },
                          respin: { emi: '1 in 132', jackpotShare: 0.4 },
                          lines: LINES.map(({ id, pays, odds, respin }) => ({ id, pays, odds, ...(respin ? { respin } : {}) })) });
 
@@ -164,6 +172,9 @@ export function createMockServer({ sp = 57, melt = 0, seed = 9013, floorMs = 300
       const pay = def ? (halved ? Math.floor(def.pays / 2) : def.pays) : 0;
       if (plain && user.melt > 0) user.melt--;
       if (line === 'melt') user.melt = 3;
+      // The expansion queue's order (10.16.D, 10.16.A): an emi_respin goes to the FRONT, so it plays
+      // immediately after its parent; line free spins keep their place; jar spins queue BEHIND them, so a
+      // spiral3 that also fills the jar drains `free, free, free, jar, jar, jar`.
       if (k !== 'emi_respin') {
         for (let i = 0; i < (def && def.free || 0); i++) queue.push('free');
         // 10.16.D: exactly one, and at the FRONT of the queue. The contract says "appends ... so drain() plays
@@ -174,8 +185,8 @@ export function createMockServer({ sp = 57, melt = 0, seed = 9013, floorMs = 300
         else for (let i = 0; i < (def && def.respin || 0); i++) queue.push('respin');
       }
       // 10.16.A THE SPIRAL JAR: the spirals SHOWN, in draw order, on plain-band outcomes only. A freeze and
-      // everything it expanded into earn nothing (the seal that keeps rtpFrozen at exactly 1.0200); the
-      // re-spin descends from a plain-band spin, so its spirals DO count.
+      // everything it expanded into earn nothing (the seal that keeps every held class at 1.0200); the
+      // re-spin descends from a plain-band spin, so its spirals DO count and an emi_respin CAN spill the jar.
       if (!sealed) {
         const spirals = row.filter(x => kindOf(x) === 'spiral').length;
         if (spirals) {
