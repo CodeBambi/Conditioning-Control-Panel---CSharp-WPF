@@ -2,7 +2,7 @@
  * draw (that is CCP-Server backroom-wheel.js, table v2): it reproduces the body shapes and the rules the page
  * must cope with, from the binding API and the server lane's routes (PRs #158-159):
  *   GET state  -> { ok, sp, open, day, spun, result|null, snoozeCarry, nextResetAt,
- *                   jackpot:{amount, odds, wonToday, eligible}, slices:[{id,label,pay,width,odds}], floorMs }
+ *                   jackpot:{amount, odds, wonToday, eligible, mustHit}, slices:[{id,label,pay,width,odds}], floorMs }
  *   POST spin  -> { ok, sp, result:{day, sliceId, sliceIndex, pay, snoozeCarryPaid, jackpot, jackpotFallback,
  *                   snoozed, total, capped}, jackpot, snoozeCarry, nextResetAt }
  *   refusals   -> already_spun (+ result, sp, jackpot, snoozeCarry, nextResetAt), bad_request, busy and
@@ -30,6 +30,9 @@ const fnv = s => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^=
 const oneIn = x => (x ? `1 in ${Math.round(x).toLocaleString('en-US')}` : 'never');
 const dayKey = day => new Date(day * DAY_MS).toISOString().slice(0, 10);
 
+/** CONTRACT 10.16.E: TABLE_V3's jackpot, with mustHitBy pinned to the cap. */
+const JACKPOT = Object.freeze({ start: 250, perDay: 25, cap: 1000, mustHitBy: 1000, targetDays: 10 });
+
 export function createMockServer({ sp = 57, now = () => Date.now(), uid = 'dev-uid', open = true, carry = 0, eligible = true,
                                    potSeedDay = null, spinners = 700, floorMs = 3000 } = {}) {
   const user = { sp, carry, day: -1, result: null, eligible };
@@ -39,10 +42,12 @@ export function createMockServer({ sp = 57, now = () => Date.now(), uid = 'dev-u
 
   function jackpot(day) {
     if (pot.seedDay == null) pot.seedDay = day;
-    const amount = Math.min(250 + 25 * Math.max(0, day - pot.seedDay), 1000);
-    const p = 1 - Math.pow(1 - 1 / 10, 1 / Math.max(100, spinners));
+    const amount = Math.min(JACKPOT.start + JACKPOT.perDay * Math.max(0, day - pot.seedDay), JACKPOT.cap);
+    const p = 1 - Math.pow(1 - 1 / JACKPOT.targetDays, 1 / Math.max(100, spinners));
     const wonToday = pot.wonDay === day;
-    return { amount, odds: oneIn(1 / p), wonToday, eligible: user.eligible, p };
+    // A room fact, whatever THIS account's age: the pot is at the line and nobody has taken it today.
+    const mustHit = amount >= JACKPOT.mustHitBy && !wonToday;
+    return { amount, odds: oneIn(1 / p), wonToday, eligible: user.eligible, mustHit, p };
   }
   const jackpotJson = day => { const { p, ...j } = jackpot(day); return j; };
 
@@ -58,7 +63,9 @@ export function createMockServer({ sp = 57, now = () => Date.now(), uid = 'dev-u
   function draw(day) {
     if (script.length) return script.shift();
     const rnd = mulberry32(fnv(`${uid}|${day}|wheel`)), j = jackpot(day);
-    if (rnd() < j.p) return 'jackpot';
+    // must-hit-by (10.16.E): the same rng call is still spent, so a seeded re-draw stays aligned.
+    const roll = rnd();
+    if ((j.mustHit && j.eligible) || roll < j.p) return 'jackpot';
     let r = Math.floor(rnd() * 10000);
     for (const s of SLICES) { if ((r -= s.weight) < 0) return s.id; }
     return SLICES.at(-1).id;
@@ -122,8 +129,10 @@ export function createMockServer({ sp = 57, now = () => Date.now(), uid = 'dev-u
     script(...ids) { script.push(...ids); },
     setOpen(v) { open = !!v; },
     setEligible(v) { user.eligible = !!v; },
-    /** The pot as if nobody has won it for `days` days. */
+    /** The pot as if nobody has won it for `days` days (30 puts it on the must-hit line). */
     potAge(days) { pot.seedDay = dayNow() - days; pot.wonDay = null; },
+    /** Park the pot at the cap with nobody having taken it: `jackpot.mustHit` reads true. */
+    mustHit() { pot.seedDay = dayNow() - Math.ceil((JACKPOT.cap - JACKPOT.start) / JACKPOT.perDay); pot.wonDay = null; },
     wonToday() { pot.wonDay = dayNow(); pot.seedDay = dayNow() + 1; },
   };
 }

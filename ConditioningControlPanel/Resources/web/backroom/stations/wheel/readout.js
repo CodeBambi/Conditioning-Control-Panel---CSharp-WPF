@@ -13,6 +13,30 @@
 
 import { shownSp } from './wheel.js';
 
+/**
+ * The jackpot chip (CONTRACT 10.16.E, C2 must-hit-by). While `jackpot.mustHit`
+ * is true the pot is at the must-hit line and nobody has taken it today, so the
+ * chip prints MUST HIT IN PLACE OF THE ODDS. The amount is still shown: the
+ * number that pays is the honest one (Law I), and nothing else about the chip
+ * moves - no new fx, no new sound, no colour beyond the gold the jackpot slice
+ * already has.
+ *
+ * `mustHit` is a ROOM fact (the pot is at the line, whoever is reading);
+ * `eligible` is this account's, and the Odds panel still says so separately.
+ *
+ * PURE: `t(key, fallback, vars)` is the station's lexicon reader.
+ *
+ * @param {Object} jackpot  { amount, odds, mustHit } off `state`/`spin`
+ * @param {Function} t      lexicon reader
+ * @param {Function} fmt    number formatter
+ */
+export function jackpotChip(jackpot, t, fmt = (n) => String(n)) {
+  const j = jackpot && typeof jackpot === 'object' ? jackpot : {};
+  const amount = fmt(Number(j.amount) || 0);
+  if (j.mustHit === true) return t('br_wheel_jackpot', 'Jackpot {n} SP, {odds}', { n: amount, odds: t('br_wheel_must_hit', 'MUST HIT') });
+  return t('br_wheel_jackpot', 'Jackpot {n} SP, {odds}', { n: amount, odds: String(j.odds || '') });
+}
+
 export function createReadout({ ctx, own, doc = globalThis.document, format = n => String(n) }) {
   const hook = ctx && ctx.spReadout && typeof ctx.spReadout.set === 'function' && typeof ctx.spReadout.owe === 'function' ? ctx.spReadout : null;
   const hostChip = !hook && ctx && ctx.hostBack === true && doc ? doc.getElementById('br-sp-value') : null;
