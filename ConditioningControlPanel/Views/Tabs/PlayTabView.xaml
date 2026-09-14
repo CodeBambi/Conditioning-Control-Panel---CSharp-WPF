@@ -1368,6 +1368,40 @@
                         </Grid>
                     </Border>
                 </Grid>
+                <!-- THE BACK ROOM: the Sparkle Points room (Services\BackRoom\BackRoomHostService).
+                     The Arcademy's strip, minus everything that gates: free for every account, so no
+                     tier badge, no lockband and no code-driven visibility. -->
+                <Grid x:Name="SlotBackRoom" x:FieldModifier="internal" Margin="0,0,0,10">
+                    <Border Style="{StaticResource PlayCard}" Padding="0" MinHeight="118">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="22,20,20,20">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <Border Style="{StaticResource PlayTitleGlyphPlate}">
+                                        <Image Width="18" Height="18" Source="{Binding Source='🎰', Converter={StaticResource EmojiToImageSource}}"/>
+                                    </Border>
+                                    <TextBlock Text="{loc:Str play_backroom_title}" Style="{StaticResource PlayCardTitle}"/>
+                                </StackPanel>
+                                <TextBlock Text="{loc:Str play_backroom_blurb}"
+                                           Style="{StaticResource PlayCardBlurb}" MaxWidth="560" HorizontalAlignment="Left"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" x:Name="BtnPlayBackRoom" x:FieldModifier="internal"
+                                    Content="{loc:Str play_backroom_cta}" Cursor="Hand"
+                                    VerticalAlignment="Center" Margin="0,0,24,0" Padding="24,10"
+                                    Background="{DynamicResource PinkBrush}" Foreground="White"
+                                    BorderThickness="0" FontWeight="Bold" FontSize="14"
+                                    ToolTip="{loc:Str play_backroom_tooltip}"
+                                    Click="BtnStartBackRoom_Click">
+                                <Button.Resources>
+                                    <Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style>
+                                </Button.Resources>
+                            </Button>
+                        </Grid>
+                    </Border>
+                </Grid>
                 <!-- PIECE BY PIECE: the 3D chess board (Services\PieceByPiece\
                      PieceByPieceHostService). A STRIP built to the Arcademy's pattern directly
                      above, for the same reason it is one: there is no Resources/features art for

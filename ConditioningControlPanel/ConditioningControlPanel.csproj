@@ -558,14 +558,16 @@
       Resources\web\arcademy\vn\demo.html;
       Resources\web\arcademy\emi\demo.html;
       Resources\web\arcademy\shell\recordsroom.demo.html;
-      Resources\web\arcademy\games\**\smoke\**\*
+      Resources\web\arcademy\games\**\smoke\**\*;
+      Resources\web\backroom\smoke\**\*
     </ArcademyHarnessExclude>
     <ArcademyHarnessExcludeAbs>
       $(MSBuildProjectDirectory)\Resources\web\arcademy\annex\demo.html;
       $(MSBuildProjectDirectory)\Resources\web\arcademy\vn\demo.html;
       $(MSBuildProjectDirectory)\Resources\web\arcademy\emi\demo.html;
       $(MSBuildProjectDirectory)\Resources\web\arcademy\shell\recordsroom.demo.html;
-      $(MSBuildProjectDirectory)\Resources\web\arcademy\games\**\smoke\**\*
+      $(MSBuildProjectDirectory)\Resources\web\arcademy\games\**\smoke\**\*;
+      $(MSBuildProjectDirectory)\Resources\web\backroom\smoke\**\*
     </ArcademyHarnessExcludeAbs>
   </PropertyGroup>
 

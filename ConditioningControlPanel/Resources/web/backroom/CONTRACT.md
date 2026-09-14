@@ -25,6 +25,8 @@ Not salvaged: the chips wallet, the cage, the pot, the Arcademy tier gate.
 | Piece | Repo / path | Lane |
 |---|---|---|
 | Room page, station loader, bridge | client `Resources/web/backroom/` (`index.html`, `room/`, `bridge.js`, `stations.json`) | C1 |
+| Walkable 3D room (`room/scene.js`, `fixtures.js`, `screens.js`, `walk.js`, `hud.js`, `room/assets/`) | same folder | R1 |
+| Room asset speed pass | client `Scripts/build-backroom-room-assets.mjs` (reads blender-scripting, never writes to it) | R1 |
 | Slot station page | client `Resources/web/backroom/stations/slot/` | C2 |
 | Host window + service | client `Services/BackRoom/BackRoomHostService.cs` on `ChaosWebViewHost` | C1 |
 | Station request relay | client `Services/BackRoom/BackRoomApi.cs` | C1 (shape), C2 (slot ops) |
@@ -35,6 +37,9 @@ Not salvaged: the chips wallet, the cage, the pot, the Arcademy tier gate.
 Origins, same scheme as the Arcademy host: `https://ccp.game/` maps `Resources\web` (Deny), page URL
 `https://ccp.game/backroom/index.html`, three.js from `https://ccp.game/vendor/three/` (identical build
 to the preview's vendored copy, md5 `5708ce5d`). Local media from `https://ccp.assets/` only.
+The room page maps `three` and `three/addons/` with an importmap to `/vendor/three/`. The one addon it
+added is `addons/libs/meshopt_decoder.module.js` (three r169, upstream md5 `cd7a7b72`, vendored with a
+provenance header) for the `EXT_meshopt_compression` glbs in `room/assets/`.
 The window is its own `ChaosWebViewHost` (not an Arcademy wing), windowed, `OwnedByMainWindow`, free for
 every user. Browser argument string is a constant (AGENTS.md: it must not vary per launch).
 
@@ -275,7 +280,17 @@ Rules the host enforces, not the page:
 
 Assets copied (never edited) from `blender-scripting/slot/out/` into `stations/slot/assets/`:
 `slot.glb` (627,560 bytes), `emi-faces-slot.png`, `emi-face-map.json`. Room art from `slot/refs/`:
-`backroom_final.png` into `backroom/room/`.
+`backroom_final.png` into `backroom/room/` (no longer drawn by the room; it is the EMI ring card art).
+
+The 3D room does NOT load the station's `slot.glb`. It reads optimized copies built by
+`Scripts/build-backroom-room-assets.mjs` into `room/assets/` (`shell.glb`, `slot.glb`, `wheel.glb`,
+`counter.glb`, `card-table.glb`, `roulette.glb`, `ads/*.webp`). The copies keep every node name the room
+looks up, checked by the script and by `smoke/room-check.mjs`: `ceiling`, `spiral_inlay`,
+`media_screen_0..3`, `sconce_globe*`, `lights_chase_*`, `bulb_*`, `canopy_bulb_*`, `rim_bulb_*`,
+`EMI_glass`, `marquee`, `screen_jackpot`, `screen_status`, `reel_1..3`, `title_screen`, `status_screen`,
+`center_spiral`, `inset_spiral_*`, `emi_dealer`, `golden_emi_attendant`, `alcove_return*`. Everything else
+in those copies is joined per material and may lose its name. The room never moves a node that carries
+a mesh (quantized offsets): the floor turns in its shader and reels rest by texture offset.
 
 Driven nodes (verified present in the glb 2026-09-13): `cabinet`, `reel_1..3` (X axle, `reel_mat_1..3`),
 `reel_window`, `lever` (hinge empty, X axis), `freeze_1..3` (`freeze_mat_1..3`), `screen_jackpot`,
@@ -293,23 +308,32 @@ Driven nodes (verified present in the glb 2026-09-13): `cabinet`, `reel_1..3` (X
 `backroom/stations.json` is the registry the room reads at boot:
 
 ```json
-[ { "id": "slot",      "spot": "bottom-left",  "state": "live", "entry": "stations/slot/station.js",
-    "hotspot": [x, y, w, h], "stand": [x, y], "labelKey": "br_station_slot" },
-  { "id": "wheel",     "spot": "top-left",     "state": "soon", "labelKey": "br_station_wheel" },
-  { "id": "scratcher", "spot": "bottom-right", "state": "soon", "labelKey": "br_station_scratcher" },
-  { "id": "cards",     "spot": "top-right",    "state": "soon", "labelKey": "br_station_cards" },
-  { "id": "counter",   "spot": "top-middle",   "state": "soon", "labelKey": "br_station_counter" } ]
+[ { "id": "slot", "variant": "violet", "name": "Candy Violet", "labelKey": "br_station_slot_violet",
+    "state": "live", "entry": "stations/slot/station.js",
+    "approach": [-3.95, 1.65, 2.3], "look": [-5.9, 1.4, 2.3],
+    "fixture": { "file": "slot.glb", "position": [-5.9, 0.026, 2.3], "yaw": 1.5708, "scale": 1.1,
+                 "palette": { "candy_rose": "ac83ed", "...": "rrggbb" },
+                 "faces": true, "reels": true, "labels": { "marquee": "@name" },
+                 "bounds": { "min": [x, y, z], "max": [x, y, z] } } },
+  { "id": "wheel", "name": "Daily Daze", "labelKey": "br_station_wheel", "state": "soon", "...": "..." } ]
 ```
 
-Coordinates are pixels of `backroom_final.png`; the room scales them. `soon` stations get a hotspot, a
-walk, and a dust-sheet card, and never load code.
+One row per fixture, metres, y up (numbers from blender-scripting `backroom/out/placements.json`). Rows:
+`counter` (The Prize Parlour), `wheel` (Daily Daze), `slot` x3 (`rose`, `violet`, `mint`: the SAME
+station in three colours), `cards` (Soft Hand, Twenty-One), `roulette` (Velvet Vortex). No scratcher.
+`id` is the station (and the host `Ops` key); `id` + `variant` is unique per row. `approach` is where
+E works (within 1.65 m) and where the room view drops you; `look` is what you face there; `bounds`
+(plus a 0.25 m body radius) is the fixture's collision box. Optional fixture fields: `heightScale`,
+`preserveCharacter {name, factor}`, `omitPrefixes`, `palette`, `faces`, `reels`, `labels`
+(node -> lexicon key, `@name` = the row's label), `hub` (the roulette idle spiral). `soon` rows get the
+fixture, a Visit prompt and a dust-sheet card, and never load code.
 
 Station module shape (the room calls nothing else):
 
 ```js
 export async function mount(ctx) {
   // ctx = { root, bridge, request(op, body, idem?), fx(fxId, symbols?), media(), sp(), onSp(fn),
-  //         reduced, motion, intensity, lex(key, fallback), standUp() }
+  //         reduced, motion, intensity, lex(key, fallback), standUp(), variant, hostBack }
   return {
     open(),                 // take the screen; resolve when interactive (Back is live before this)
     close(),                // Promise, settles within 420 ms, flushes its own cursor
@@ -319,8 +343,17 @@ export async function mount(ctx) {
 }
 ```
 
-- A station owns ONE WebGL canvas, created in `open` and disposed in `close`, so at most one context is
-  alive. Its glb, textures and node contract live in its own folder with its own `station.md`.
+- A station owns ONE WebGL canvas, created in `open` and disposed in `close`. The room keeps its own
+  context while a station is open, so at most TWO contexts are alive (the room, held and not drawing;
+  the station, drawing), never two drawing. Its glb, textures and node contract live in its own folder
+  with its own `station.md`.
+- `ctx.variant` is `{ id, name, palette }` for a row with a `variant` (palette = material name ->
+  `rrggbb`, null for the base colour) and `null` otherwise. Honouring it is optional: a station that
+  ignores it shows its base colours. For C2: recolour the close-up cabinet by material name the way the
+  room does (`material.clone(); color.set('#' + palette[name])`) and put `variant.name` on the marquee.
+- `ctx.hostBack === true` means the room draws the only Back (the HUD chip, always on top). The station
+  hides every Back of its own (chip and card buttons) and still stands up on Escape. A standalone
+  harness passes nothing and keeps the station's own Back.
 - It talks to the server only through `ctx.request`, which becomes `station-request` with its id.
 - It fires only global fx ids. A new effect is a new row in section 4 plus a C# recipe; unknown ids are
   skipped with `why:'unknown'`, so a page can ship ahead of the host.
@@ -329,6 +362,31 @@ export async function mount(ctx) {
   floor, cap, `netSp`.
 - Adding a station touches: `stations.json` (one row), the host `Ops` table (one row), the fx table if
   it needs new effects, and its own folders. The room, bridge and window never change.
+
+### 7.1 3D room amendments (2026-09-13, R1)
+
+- **Walk.** WASD or arrows (Shift runs at 4.8 m/s, else 3.25), drag to look, E visits the nearest station
+  within 1.65 m, M toggles the room view (ceiling off, one button per station that drops you at its
+  approach). Back / Escape closes, in order: an open station or card, the room view, the room. No touch
+  stick and no pointer lock (desktop WebView2 is the target).
+- **Visiting.** E holds the room: pose saved, render loop stopped (no rAF), context KEPT. Measured in the
+  smoke run: about 40 ms from Back to a drawing frame, against about 1.1 s to boot and decode the room
+  again, so the room keeps its context. Back puts you on the exact position and facing.
+- **Still.** The floor spiral, bulb chase, wall-picture turn and roulette hub freeze and the head sway is
+  off whenever `reduced` is true or `intensity` is `calm` (the Motion button is locked then), or when the
+  player picks Motion still. A `settings` frame applies live.
+- **Wall screens.** One `media-request` with `station: "room"` at boot. `gifs` that are not
+  `src: "fallback"`, point at `ccp.assets` or the page's own origin, and load CORS-clean go on the four
+  screens (one turn every 18 s); otherwise the house art (`room/assets/ads/*.webp`) with lexicon
+  captions. The preview's local file picker is not carried over.
+- **Playing GIFs (amended 2026-09-13).** Dealt GIFs play, decoded in the page with WebCodecs
+  `ImageDecoder` (Chromium 94+, no vendored decoder; a page without it shows the first frame). Caps: a
+  picture advances only while a screen showing it is inside the camera frustum (not in the room view,
+  not while a station holds the room), at most 12 frames a second, into a canvas texture of at most
+  384 px on the long edge, and at most one new decode per rendered frame. Still (reduced, Calm, Motion
+  still) shows the first frame.
+- **Budget.** At 1280x720 on the entry pose: 212 draw calls (the preview draws 1,268 there, 1,312 in its
+  own check), no shadows, no post passes, pixel ratio capped at 1.5.
 
 ## 8. Feel hooks (for F1, cited from THE HOUSE BOOK)
 
@@ -349,5 +407,5 @@ export async function mount(ctx) {
 3. **Soft launch:** door flag `BACKROOM_OPEN` + `BACKROOM_TESTERS`.
 4. **Tape size:** default 10 spins, max 20.
 5. **Intensity:** `Calm | Normal | Full`, default `Normal`.
-6. **Model requests:** none. Every node the page drives is present. Station hotspot rects are measured
-   on the room art by C1, not a model change.
+6. **Model requests:** none. Every node the page drives is present. Station approach points and bounds
+   come from blender-scripting `backroom/out/placements.json`, not a model change.
