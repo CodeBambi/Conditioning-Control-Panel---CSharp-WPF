@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { FEEL, tierOf, recipe, ladderSemis, winTokens, spendTokens, tickValues, glance, landPose, restPose,
          glanceHoldMs, breath, shiverPx, chaseMs, bezier, POSES, livePair, anticipation, almost, ALMOST,
          ROLLUP_MS, rollupMs, rollupAt, rollupTicks, bankFlightMs, bankLandMs, ladderPlan, paylinePulses, paylineGlow, PAYLINE_PULSE_MIN_MS,
-         ATTRACT, WIGGLE, attractOk, attractCells, emiLandings, wiggleCells } from '../feel.js';
+         ATTRACT, WIGGLE, attractOk, attractCells, emiLandings, wiggleCells,
+         RESPIN_KIND, isHold, playsWithoutPress, respinKeep, respinHold, spiralReels, jarPlan, jarParty, JAR_TIER,
+         COMP_ID, compOffer, compAvailable } from '../feel.js';
+import { ANTICIPATION, PACE, respinStopMs, respinMs, outcomeMs, reelsMs } from '../pace.js';
 
 const o = (line, pay, extra = {}) => ({ line, pay, meltLeft: 0, halved: false, ...extra });
 
@@ -379,4 +382,160 @@ test('A5 the wiggle: two oscillations, about 300 ms, a fraction of a cell, endin
   const signs = Array.from({ length: WIGGLE.MS }, (_, i) => Math.sign(wiggleCells(i)));
   const flips = signs.filter((v, i) => i > 0 && v !== 0 && signs[i - 1] !== 0 && v !== signs[i - 1]).length;
   assert.equal(flips, 3, 'two oscillations either side of the stop');
+});
+
+
+/* ---------------------------------------------------------------------------------------------------
+ * The playbook, Tier B and C (CONTRACT 10.16): B1 the spiral jar, B3 the welcome-back comp,
+ * C1 the EMI pair free re-spin.
+ * ------------------------------------------------------------------------------------------------ */
+
+const spin = (symbols, extra = {}) => ({ kind: 'paid', symbols, line: 'none', pay: 0, meltLeft: 0, halved: false, ...extra });
+
+test('B1 spiralReels: the spirals SHOWN, left to right, in the order their reels thud', () => {
+  assert.deepEqual(spiralReels(spin(['spiral0', 'gif1', 'sub0'])), [0]);
+  assert.deepEqual(spiralReels(spin(['gif1', 'spiral2', 'spiral1'])), [1, 2]);
+  assert.deepEqual(spiralReels(spin(['spiral0', 'spiral1', 'spiral2'])), [0, 1, 2]);
+  assert.deepEqual(spiralReels(spin(['gif0', 'sub1', 'emi'])), []);
+  assert.deepEqual(spiralReels(null), []);
+  assert.deepEqual(spiralReels({ line: 'none' }), [], 'an outcome with no symbols ticks nothing');
+});
+
+test('B1 jarPlan: one tick a spiral, and the last value is the tape\'s own jarN (Law I)', () => {
+  const p = jarPlan(spin(['spiral0', 'gif1', 'spiral2'], { jarN: 19 }), 17, 100);
+  assert.deepEqual(p.reels, [0, 2]);
+  assert.deepEqual(p.values, [18, 19]);
+  assert.equal(p.full, false);
+  assert.equal(p.from, 17);
+  assert.equal(p.to, 19);
+  assert.equal(p.size, 100);
+  // Law I: if the server disagrees with the page's arithmetic, the server wins.
+  assert.deepEqual(jarPlan(spin(['spiral0', 'gif1', 'spiral2'], { jarN: 30 }), 17, 100).values, [18, 30]);
+});
+
+test('B1 jarPlan: a full jar drops by the size and keeps the remainder (24 + 2 fires at 25 and leaves 1)', () => {
+  const p = jarPlan(spin(['spiral0', 'spiral1', 'gif2'], { jarN: 1 }), 24, 25);
+  assert.equal(p.full, true, 'it spilled');
+  assert.deepEqual(p.values, [0, 1], 'the tube wraps on the tick that fills it, and the remainder stays');
+  assert.equal(p.to, 1);
+  const at100 = jarPlan(spin(['spiral0', 'gif1', 'spiral2'], { jarN: 0 }), 98, 100);
+  assert.equal(at100.full, true);
+  assert.deepEqual(at100.values, [99, 0]);
+  // Three spirals is at most 3 of 100, so one outcome can never fire the jar twice.
+  assert.equal(jarPlan(spin(['spiral0', 'spiral1', 'spiral2'], { jarN: 2 }), 99, 100).values.length, 3);
+});
+
+test('B1 jarPlan: a freeze earns nothing, and neither does anything it expanded into', () => {
+  const held = { kind: 'freeze', symbols: ['spiral0', 'spiral1', 'spiral2'], line: 'spiral3', pay: 10, jarN: 40 };
+  assert.deepEqual(jarPlan(held, 40, 100).reels, [], 'a freeze never ticks the tube');
+  assert.equal(jarPlan(held, 40, 100).to, 40, 'it carries back the jar it did not change');
+  // A free spin a FREEZE won is sealed too, and the tape says so by carrying the same jarN back.
+  const sealedFree = spin(['spiral0', 'spiral1', 'sub0'], { kind: 'free', jarN: 40 });
+  assert.deepEqual(jarPlan(sealedFree, 40, 100).reels, []);
+  // A free spin a PLAIN spiral3 won does earn, and ticks.
+  assert.deepEqual(jarPlan(spin(['spiral0', 'spiral1', 'sub0'], { kind: 'free', jarN: 42 }), 40, 100).reels, [0, 1]);
+});
+
+test('B1 jarPlan: no jar in the table means no tube and no ticks', () => {
+  const p = jarPlan(spin(['spiral0', 'spiral1', 'spiral2'], { jarN: 3 }), 0, 0);
+  assert.equal(p.size, 0);
+  assert.equal(p.full, false, 'nothing can fill a jar that is not published');
+});
+
+test('B1 jarParty: a full jar is tier 2, and Brake 2 drops its note inside a bigger win', () => {
+  const r = jarParty({});
+  assert.equal(r.tier, JAR_TIER);
+  assert.equal(JAR_TIER, 2);
+  assert.equal(r.sound, 'two', 'two notes and a jolt (Law IX)');
+  assert.equal(r.jolt, true);
+  assert.equal(r.chase, true);
+  assert.equal(r.screen, true);
+  assert.equal(r.tokens, false, 'the jar pays free SPINS, so THE BANK flies nothing');
+  assert.equal(jarParty({ winTier: 2 }), null, 'the same outcome won tier 2: one hero per beat');
+  assert.equal(jarParty({ winTier: 4 }), null);
+  const over1 = jarParty({ winTier: 1 });
+  assert.ok(over1, 'the jar is the bigger of the two, so it is the one that plays');
+  assert.equal(over1.tier, 2);
+  assert.equal(over1.sound, null, 'Brake 2: the same outcome also won, so the jar note is dropped');
+  assert.equal(jarParty({}).sound, 'two', 'and on a no-pay spin it keeps its two notes');
+});
+
+test('B1 jarParty: Calm is the fill only, melted takes the melt party (Brake 5), Brake 3 shrinks it', () => {
+  assert.equal(jarParty({ calm: true }), null, 'Calm: no party at all (fx.spiral_full still fires)');
+  assert.equal(jarParty({ calm: true, winTier: 0 }), null);
+  assert.equal(jarParty({ melted: true }).party, 'melt');
+  assert.equal(jarParty({ melted: true }).heat, 1, 'no ceremonies while melted');
+  assert.equal(jarParty({ seen: 0 }).party, 'fanfare');
+  assert.equal(jarParty({ seen: FEEL.FANFARE_TIMES }).party, 'bead');
+  assert.equal(jarParty({ seen: FEEL.THUD_ONLY_FROM }).party, 'thud');
+});
+
+test('C1 the emi2 landing: a muted thud and nothing else, no shiver and no ALMOST', () => {
+  const pair = { line: 'emi2', pay: 0, meltLeft: 0, halved: false, symbols: ['emi', 'emi', 'melt'] };
+  assert.equal(isHold(pair), true);
+  assert.equal(isHold(o('none', 0)), false);
+  const r = recipe(pair);
+  assert.equal(r.tier, 0);
+  assert.equal(r.party, 'hold');
+  assert.equal(r.sound, 'muted', 'Brake 6: never silence');
+  assert.equal(r.shiver, false, 'A2 is the release when the pair MISSES; here it has not missed yet');
+  assert.equal(r.tokens, false);
+  assert.equal(r.heat, 0);
+  // and a plain no-pay spin still gets THE SHIVER, so the quiet party is the emi2's alone.
+  assert.equal(recipe(o('none', 0)).party, 'shiver');
+  assert.equal(recipe(o('none', 0)).shiver, true);
+  // THE ALMOST never fires on it: almost() only reads `line === 'none'`.
+  const strips = [['emi', 'gif0'], ['emi', 'gif0'], ['sub0', 'emi']];
+  assert.equal(almost({ ...pair, stops: [0, 0, 0] }, strips), null);
+});
+
+test('C1 the re-spin plays itself: no second press, reels 1 and 2 stay', () => {
+  assert.equal(RESPIN_KIND, 'emi_respin');
+  assert.equal(playsWithoutPress('emi_respin'), true);
+  for (const k of ['paid', 'free', 'respin', 'freeze', 'jar', null, undefined]) assert.equal(playsWithoutPress(k), false, String(k));
+  assert.deepEqual(respinKeep('emi_respin'), [0, 1]);
+  for (const k of ['paid', 'free', 'respin', 'freeze', 'jar']) assert.deepEqual(respinKeep(k), []);
+});
+
+test('C1 the re-spin hold: the FULL 1,400 ms EMI row, gold, never halved, not even while melted', () => {
+  const h = respinHold();
+  assert.equal(h.kind, 'emi');
+  assert.equal(h.holdMs, ANTICIPATION.emi);
+  assert.equal(h.holdMs, 1400);
+  assert.equal(h.gold, true);
+  assert.equal(h.respin, true);
+  // A1's own EMI hold IS halved and never gold while melted (10.15, Brake 5). This beat is not A1.
+  const pair = { line: 'emi2', pay: 0, symbols: ['emi', 'emi', 'sub0'], stops: [0, 0, 0] };
+  const a1 = anticipation(pair, null, { melted: true });
+  assert.equal(a1.holdMs, 700);
+  assert.equal(a1.gold, false);
+  assert.equal(respinHold().holdMs, 1400, 'the re-spin does not move');
+});
+
+test('C1 the pace: reel 3 alone takes no stagger, and outcomeMs knows the kind', () => {
+  assert.equal(respinStopMs(), PACE.SPIN_MS + ANTICIPATION.emi);
+  assert.equal(respinMs(), PACE.SPIN_MS + ANTICIPATION.emi + PACE.THUD_MS);
+  assert.equal(outcomeMs(PACE, 0, 'emi_respin'), respinMs() + PACE.REVEAL_MS + PACE.BREATH_MS);
+  assert.equal(outcomeMs(PACE, 0, 'paid'), reelsMs() + PACE.REVEAL_MS + PACE.BREATH_MS);
+  assert.ok(respinStopMs() < reelsMs(PACE, ANTICIPATION.emi), 'one reel is quicker than three');
+  assert.equal(outcomeMs(), 4020, 'a plain outcome is unchanged');
+});
+
+test('B3 compOffer: a stored comp, read defensively', () => {
+  assert.deepEqual(compOffer({ id: 'c_abcd_1z', spins: 5 }), { id: 'c_abcd_1z', spins: 5 });
+  assert.equal(compOffer(null), null);
+  assert.equal(compOffer({ id: 'c_abcd_1z', spins: 0 }), null);
+  assert.equal(compOffer({ id: 'nope', spins: 5 }), null, 'the id shape is the server\'s own');
+  assert.equal(compOffer({ id: 'c_ab', spins: 5 }), null, 'too short');
+  assert.equal(compOffer({ id: 'c_' + 'a'.repeat(49), spins: 5 }), null, 'too long');
+  assert.ok(COMP_ID.test('c_' + 'a'.repeat(48)));
+  assert.equal(compOffer('c_abcd_1z'), null, 'a bare string is not a comp');
+});
+
+test('B3 compAvailable: spendable once, and a spent one never comes back', () => {
+  const c = { id: 'c_abcd_1z', spins: 5 };
+  assert.equal(compAvailable(c), true);
+  assert.equal(compAvailable(c, true), false, 'already spent this sit-down');
+  assert.equal(compAvailable(null), false);
+  assert.equal(compAvailable({ id: 'x', spins: 5 }), false);
 });

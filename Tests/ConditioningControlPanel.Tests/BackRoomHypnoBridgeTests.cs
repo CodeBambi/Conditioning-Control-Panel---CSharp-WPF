@@ -158,13 +158,14 @@ public class BackRoomHypnoBridgeTests
         => Assert.False(BackRoomApi.TryResolve(station, op, out _, out _));
 
     [Fact]
-    public void Gates_AreTheFourToggles_AllFalseWithNoSettings()
+    public void Gates_AreTheFourTogglesAndTheRoomSwitches_AllFalseWithNoSettings()
     {
-        var s = new AppSettings { FlashEnabled = true, SubliminalEnabled = false, SpiralEnabled = true, BrainDrainEnabled = false };
-        Assert.Equal("""{"flash":true,"subliminal":false,"spiral":true,"brainDrain":false}""",
+        var s = new AppSettings { FlashEnabled = true, SubliminalEnabled = false, SpiralEnabled = true, BrainDrainEnabled = false, BackRoomMelt = false };
+        Assert.Equal("""{"flash":true,"subliminal":false,"spiral":true,"brainDrain":false,"tunnel":true,"melt":false}""",
             JObject.FromObject(BackRoomHostService.GatesWire(s)).ToString(Newtonsoft.Json.Formatting.None));
         Assert.All(JObject.FromObject(BackRoomHostService.GatesWire(null)).Properties(), p => Assert.False((bool)p.Value));
-        foreach (var name in new[] { "FlashEnabled", "SubliminalEnabled", "SpiralEnabled", "BrainDrainEnabled", "MotionLevel", "BackRoomFxIntensity" })
+        foreach (var name in new[] { "FlashEnabled", "SubliminalEnabled", "SpiralEnabled", "BrainDrainEnabled", "MotionLevel", "BackRoomFxIntensity",
+                     "BackRoomTunnel", "BackRoomMelt" })
             Assert.Contains(name, BackRoomHostService.SettingsFrameProperties);
     }
 

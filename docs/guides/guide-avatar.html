@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>companion_avatar.txt - Conditioning Control Panel</title>
+<meta name="description" content="The companion avatar in Conditioning Control Panel - who she is, how she talks, how to move her, and every setting that shuts her up.">
+<link rel="icon" href="images/logo.webp">
+<link rel="stylesheet" href="assets/cookie-consent.css">
+<link rel="stylesheet" href="guide-article.css">
+</head>
+<body>
+
+<a class="skip" href="#doc">skip to document</a>
+
+<header>
+  <div class="titlebar">
+    <span class="sysname">CCP community guides</span>
+    <span class="ver">v6.7.4 OK</span>
+    <nav class="menu">
+      <a href="https://cclabs.app/">dashboard</a>
+      <a href="https://cclabs.app/explore.html">explore</a>
+      <a href="../labs/loom/">the loom</a>
+      <a href="https://cclabs.app/tools.html">tools</a>
+      <a href="https://cclabs.app/leaderboard.html">leaderboard</a>
+      <a href="https://app.cclabs.app/catalogue">catalogue</a>
+      <a href="https://app.cclabs.app/">login</a>
+      <a class="dl" href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest">download</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <section class="pagehead wrap">
+    <div class="pagehead-inner">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="https://cclabs.app/">dashboard</a>
+        <span class="sep">/</span>
+        <a href="https://cclabs.app/guide.html">field_manual</a>
+        <span class="sep">/</span>
+        <span class="here">companion_avatar.txt</span>
+      </nav>
+      <div class="kicker">field_manual / companion.dir / gentle</div>
+      <h1>Companion <span class="pink">Avatar</span></h1>
+      <p class="lede">A small animated character who sits next to the app, comments on what you're doing, and will chat back if you double-click her. She's free, she's optional, and one checkbox turns her off.</p>
+    </div>
+  </section>
+
+  <article class="doc wrap" id="doc">
+
+    <div class="window toc">
+      <div class="bar">contents.idx - on this page<span class="lights"><i></i><i></i><i></i></span></div>
+      <div class="toc-body">
+        <ul>
+          <li><a href="#overview">Overview</a></li>
+          <li><a href="#avatar-features">Avatar Features</a></li>
+          <li><a href="#companions">Companions</a></li>
+          <li><a href="#personalities">AI Personalities</a></li>
+          <li><a href="#context-menu">Context Menu</a></li>
+          <li><a href="#trigger-mode">Trigger Mode</a></li>
+          <li><a href="#interactions">Avatar Interactions</a></li>
+          <li><a href="#companion-settings">Companion Settings</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <section id="overview">
+      <h2>Overview</h2>
+      <p>The companion is the character who lives beside the main window. She reacts to what you do in the app, pops up short speech bubbles, and plays a matching animation while she talks. Double-click her and she becomes a chat window.</p>
+
+      <p>She starts attached to the main window. You can pull her off, drag her onto any monitor, resize her, or dismiss her entirely. Her settings live in the <strong>Companion</strong> tab, which the app also calls "her room".</p>
+
+      <div class="feature-highlight">
+        <div class="feature-item">
+          <span>&#128172;</span>
+          <h5>Speech Bubbles</h5>
+          <p>Short reactions to what you're doing</p>
+        </div>
+        <div class="feature-item">
+          <span>&#128260;</span>
+          <h5>Detachable</h5>
+          <p>Float and resize her anywhere</p>
+        </div>
+        <div class="feature-item">
+          <span>&#9889;</span>
+          <h5>Trigger Mode</h5>
+          <p>Repeats your own phrases on a timer</p>
+        </div>
+        <div class="feature-item">
+          <span>&#129302;</span>
+          <h5>AI Chat</h5>
+          <p>Free, with a daily quota</p>
+        </div>
+      </div>
+
+      <div class="info-box success">
+        <h5>Free</h5>
+        <p>The companion, her art, her voice lines and AI chat are all free. The only Patreon-gated thing on this page is <strong>Takeover</strong>, where she starts pressing buttons for you. See <a href="guide-takeover.html">takeover_mode.txt</a>.</p>
+      </div>
+    </section>
+
+    <section id="avatar-features">
+      <h2>Avatar Features</h2>
+
+      <figure>
+        <img loading="lazy" decoding="async" src="images/screenshots/avatar/speech-bubble.webp" alt="Avatar in the corner of the main window with a speech bubble" class="guide-screenshot">
+        <figcaption>The avatar lives in the bottom-left of the main window and posts speech bubbles for events.</figcaption>
+      </figure>
+
+      <h3>Moving and resizing her</h3>
+      <p>By default she's anchored beside the main window. To set her loose:</p>
+      <ul>
+        <li><strong>Right-click</strong> her for the menu</li>
+        <li>Pick <strong>Detach</strong>. She becomes a floating, always-on-top widget</li>
+        <li><strong>Drag</strong> her anywhere, on any monitor. Her position is remembered between launches</li>
+        <li><strong>Ctrl+scroll</strong> (or the <strong>Shrink</strong> / <strong>Grow</strong> menu items, or the arrow keys) resizes her</li>
+        <li><strong>Attach to main window</strong> puts her back</li>
+        <li><strong>Dismiss</strong> hides her for now. <strong>Show Companion</strong> in the Companion tab brings her back</li>
+      </ul>
+
+      <p>She hides herself automatically while something is fullscreen, so she won't sit on top of a video.</p>
+
+      <h3>Speech bubbles</h3>
+      <p>Bubbles are short lines with an animation to match. They come from four places:</p>
+      <ul>
+        <li><strong>Idle chatter</strong> - when nothing has happened for a while</li>
+        <li><strong>Event reactions</strong> - level ups, achievements, popping a bubble, finishing a session, failing an attention check</li>
+        <li><strong>Trigger phrases</strong> - your own list, on a timer, when Trigger Mode is on</li>
+        <li><strong>AI replies</strong> - when you're chatting with her</li>
+      </ul>
+
+      <p>Most lines are pre-recorded, so she speaks as well as writes. Bubbles clear themselves after a couple of seconds; <strong>Speech Bubble Persistence</strong> in the Companion tab controls how long (1-10 seconds, 2 by default).</p>
+
+      <div class="info-box">
+        <h5>Two different mutes</h5>
+        <p><strong>Mute Avatar</strong> silences her completely - no bubbles, no sounds. <strong>Mute Voice Lines</strong> only kills the spoken audio; she keeps talking in text. Pick whichever suits the room you're in.</p>
+      </div>
+
+      <h3>Awareness (opt-in)</h3>
+      <p>If you switch on companion awareness, she can notice which app or browser tab is in front and comment on it. You choose how much leaves your PC: nothing, app names only, or app names plus page titles. There's an app picker, incognito detection, and a one-hour pause button. It is off until you turn it on.</p>
+    </section>
+
+    <section id="companions">
+      <h2>Companions</h2>
+
+      <p>Two different things in the app are called "companions", and it's worth separating them before you go looking in the wrong tab.</p>
+
+      <h3>Who she is: mods</h3>
+      <p>A mod re-skins the whole app - the companion, her art, her voice, her phrases, the colour scheme. Five ship with CCP and <strong>all of them are free</strong>. Pick one during first-run setup, or change your mind later in the Mod Manager.</p>
+
+      <table class="settings-table">
+        <thead>
+          <tr>
+            <th>Mod</th>
+            <th>She is called</th>
+            <th>Tone</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>CCP Default</strong></td>
+            <td>Companion</td>
+            <td>The neutral baseline. No theme, no accent, nothing extra to download.</td>
+          </tr>
+          <tr>
+            <td><strong>Bambi Sleep</strong></td>
+            <td>Bambi</td>
+            <td>The original. Pink, bubbly and relentlessly sweet.</td>
+          </tr>
+          <tr>
+            <td><strong>Sissy Hypno</strong></td>
+            <td>your Bimbo</td>
+            <td>Purple, teasing, all dress-up energy.</td>
+          </tr>
+          <tr>
+            <td><strong>Circe's Lock</strong></td>
+            <td>Circe</td>
+            <td>Kept and locked. A warm, possessive keyholder in magenta and black.</td>
+          </tr>
+          <tr>
+            <td><strong>Drone Mode</strong></td>
+            <td>DroneOS</td>
+            <td>Cold terminal aesthetic, green on black. You are a unit. Comply.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>Switching mods changes menu wording too. "Talk to Bambi" becomes "Talk to Circe" or "Query DroneOS"; "Takeover" becomes "Surrender Control" or "System Override".</p>
+
+      <div class="info-box">
+        <h5>Art and voice download separately</h5>
+        <p>Each mod's voice lines and art come as their own content pack, so the installer stays small. Everything else works before the pack finishes downloading. Bambi Sleep and Sissy Hypno share one animated art set; Circe has her own with four poses. <strong>Drone Mode has no voice lines yet</strong> - that companion is text only for now.</p>
+      </div>
+
+      <div class="info-box">
+        <h5>Premium programs, free mods</h5>
+        <p>Circe and Drone Mode each ship a multi-day training program that needs Premium. The mods themselves, and their companions, cost nothing.</p>
+      </div>
+
+      <h3>What she does for your XP: companion buffs</h3>
+      <p>Separately from the mods, five companion buffs change how you earn XP. Each has its own level, capped at 100, and XP only goes to the one you have active - switch between them if you want to level them all.</p>
+
+      <div class="info-box success">
+        <h5>All available from Level 1</h5>
+        <p>Since v5.8.0 none of these are locked. The levels below are flavour milestones - the tier of play each one was designed around.</p>
+      </div>
+
+      <table class="settings-table">
+        <thead>
+          <tr>
+            <th>Buff</th>
+            <th>Designed For</th>
+            <th>What it does</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Synthetic Blowdoll</strong></td>
+            <td>Level 50+</td>
+            <td>Bonus XP scaled to Pink Filter opacity - the pinker, the faster</td>
+          </tr>
+          <tr>
+            <td><strong>Bambi Cow</strong></td>
+            <td>Level 75+</td>
+            <td>+25% bonus XP from session completion</td>
+          </tr>
+          <tr>
+            <td><strong>Perfect Fuckpuppet</strong></td>
+            <td>Level 100+</td>
+            <td>+50% XP when Takeover fires an action</td>
+          </tr>
+          <tr>
+            <td><strong>Brainwashed Slavedoll</strong></td>
+            <td>Level 125+</td>
+            <td>Drains 3 XP/sec. Can you outpace it?</td>
+          </tr>
+          <tr>
+            <td><strong>Platinum Puppet</strong></td>
+            <td>Level 150+</td>
+            <td>-50% XP without Strict, +100% with No Escape, -25 XP on an attention fail</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="personalities">
+      <h2>AI Personalities (Prompts)</h2>
+
+      <p>A personality is the instruction sheet the AI reads before it answers you. Swap it and she changes how she talks without changing which mod you're using. Pick a shipped preset, install one from the community, or write your own.</p>
+
+      <h3>Where the AI runs</h3>
+      <p>Two options, and you can switch between them:</p>
+      <ul>
+        <li><strong>Hosted (default).</strong> Free with a CCP account. <strong>100 messages a day</strong>; Patreon raises that to <strong>1,000</strong>. Same model either way - the difference is the cap, not the quality.</li>
+        <li><strong>Local.</strong> Run the model yourself with Ollama. No quota, no account, nothing leaves your PC. Setup is on <a href="https://cclabs.app/guide-local-ai.html">local_ai.txt</a>.</li>
+      </ul>
+
+      <h3>Shipped presets</h3>
+      <table class="settings-table">
+        <thead>
+          <tr>
+            <th>Preset</th>
+            <th>Reads as</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Sweet bestie</strong></td>
+            <td>Warm and encouraging. The gentlest option.</td>
+          </tr>
+          <tr>
+            <td><strong>Playful tease</strong></td>
+            <td>Light, mischievous, never quite serious.</td>
+          </tr>
+          <tr>
+            <td><strong>Bimbo coach</strong></td>
+            <td>Bubbly cheerleader energy.</td>
+          </tr>
+          <tr>
+            <td><strong>Hypno guide</strong></td>
+            <td>Slow, calm, deepening.</td>
+          </tr>
+          <tr>
+            <td><strong>Strict domme</strong></td>
+            <td>Commanding and demanding.</td>
+          </tr>
+          <tr>
+            <td><strong>Bratty rival</strong></td>
+            <td>Competitive and needling.</td>
+          </tr>
+          <tr>
+            <td><strong>Drone handler</strong></td>
+            <td>Clipped and clinical. Pairs with Drone Mode.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>Mods can ship extra presets of their own, and those are never paywalled.</p>
+
+      <h3>Switching personality</h3>
+      <ol>
+        <li>Right-click the avatar and open the <strong>Personality</strong> submenu, or</li>
+        <li>Open the <strong>Companion</strong> tab and pick from the personality list there.</li>
+      </ol>
+      <p>The active personality is shown next to her name, so you always know who you're talking to.</p>
+
+      <h3>Writing your own</h3>
+      <p>A custom prompt is just a block of text describing how she should behave. Give it a name, write the instructions, save, activate. Custom prompts sit alongside the presets and can be swapped in and out the same way.</p>
+
+      <div class="info-box">
+        <h5>Slut Mode</h5>
+        <p>A separate switch that allows explicit replies. It's independent of the personality you picked, and it's off until you turn it on. Find it in the Companion tab.</p>
+      </div>
+    </section>
+
+    <section id="context-menu">
+      <h2>Context Menu</h2>
+
+      <figure>
+        <img loading="lazy" decoding="async" src="images/screenshots/avatar/context-menu.webp" alt="Right-click context menu on the avatar showing Detach, Start Engine, Trigger Mode, Show Chat History, System Override" class="guide-screenshot">
+        <figcaption>Right-click any avatar (here shown in Drone Mode) for the quick-action menu and the personality switcher.</figcaption>
+      </figure>
+
+      <p>Right-click her for the quick menu. Some item names change with the mod you're running - the Talk and Takeover entries in particular.</p>
+
+      <table class="settings-table">
+        <thead>
+          <tr>
+            <th>Option</th>
+            <th>What it does</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Talk to Companion</strong></td>
+            <td>Opens AI chat. Reads "Talk to Bambi", "Ask your Bimbo", "Talk to Circe" or "Query DroneOS" depending on your mod.</td>
+          </tr>
+          <tr>
+            <td><strong>Detach</strong> / <strong>Attach to main window</strong></td>
+            <td>Float her free, or snap her back</td>
+          </tr>
+          <tr>
+            <td><strong>Shrink</strong> / <strong>Grow</strong></td>
+            <td>Resize her. Only shown while detached.</td>
+          </tr>
+          <tr>
+            <td><strong>Dismiss</strong></td>
+            <td>Hide her. Only shown while detached.</td>
+          </tr>
+          <tr>
+            <td><strong>Start Engine</strong> / <strong>Stop Engine</strong></td>
+            <td>Start or stop the conditioning engine without going back to the main window</td>
+          </tr>
+          <tr>
+            <td><strong>Trigger Mode</strong></td>
+            <td>Turn the timed trigger phrases on or off</td>
+          </tr>
+          <tr>
+            <td><strong>Takeover</strong></td>
+            <td>Hands the controls to her. Patreon only, and the label changes per mod ("Bambi Takeover", "Surrender Control", "System Override").</td>
+          </tr>
+          <tr>
+            <td><strong>Personality</strong></td>
+            <td>Submenu. Switch her AI personality without leaving the avatar.</td>
+          </tr>
+          <tr>
+            <td><strong>Mute Avatar</strong></td>
+            <td>Silence her bubbles and sounds</td>
+          </tr>
+          <tr>
+            <td><strong>Show Chat History</strong></td>
+            <td>Reopen the transcript of your conversation</td>
+          </tr>
+          <tr>
+            <td><strong>Mute Whispers</strong></td>
+            <td>Mute the subliminal audio</td>
+          </tr>
+          <tr>
+            <td><strong>Pause Browser</strong></td>
+            <td>Pause audio and video in the in-app browser</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="small">On mods with animated art, the menu can also offer a handful of emotes to play on demand.</p>
+    </section>
+
+    <section id="trigger-mode">
+      <h2>Trigger Mode</h2>
+
+      <p>Trigger Mode makes her repeat phrases from a list you control, on a timer. It's the simplest conditioning loop in the app: pick your phrases, pick an interval, walk away.</p>
+
+      <table class="settings-table">
+        <thead>
+          <tr>
+            <th>Setting</th>
+            <th>Default</th>
+            <th>What it does</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Enable Trigger Mode</strong></td>
+            <td>Off</td>
+            <td>Starts the timer</td>
+          </tr>
+          <tr>
+            <td><strong>Trigger Interval</strong></td>
+            <td>15s</td>
+            <td>Seconds between phrases (10-600)</td>
+          </tr>
+          <tr>
+            <td><strong>Edit Triggers</strong></td>
+            <td>-</td>
+            <td>Your phrase list. Add, remove, rewrite.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Adding audio to a trigger</h3>
+      <p>If Audio Whispers is on, a phrase can play a matching sound file. The match is by filename:</p>
+      <ol>
+        <li>Record or find an audio clip of the phrase.</li>
+        <li>Name the file after the trigger. For the trigger "Good Girl", name it <code>GOOD GIRL.mp3</code>.</li>
+        <li>Drop it in <code>Resources/sub_audio/</code>.</li>
+      </ol>
+
+      <p>No file, no problem - the phrase still shows as text.</p>
+
+      <h3>Random Bubble</h3>
+      <p>A separate setting that lets her float the occasional unprompted bubble on her own, every few minutes. Lighter than Trigger Mode, and it uses her own phrase pool rather than your list.</p>
+    </section>
+
+    <section id="interactions">
+      <h2>Avatar Interactions</h2>
+
+      <table class="settings-table">
+        <thead>
+          <tr>
+            <th>Action</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Single click</strong></td>
+            <td>She glows, and on animated mods she rotates to a rare affectionate emote. Occasionally a pop sound.</td>
+          </tr>
+          <tr>
+            <td><strong>Double click</strong></td>
+            <td>Open AI chat. If chat is off or unavailable, she comments on what you're doing instead.</td>
+          </tr>
+          <tr>
+            <td><strong>Right click</strong></td>
+            <td>Open the context menu</td>
+          </tr>
+          <tr>
+            <td><strong>Drag</strong> (detached)</td>
+            <td>Move her. The position is saved.</td>
+          </tr>
+          <tr>
+            <td><strong>Ctrl+scroll</strong> (detached)</td>
+            <td>Resize her. Arrow keys work too.</td>
+          </tr>
+          <tr>
+            <td><strong>20 clicks</strong></td>
+            <td>Unlocks the "Neon Obsession" achievement. Flavour text: "Hey! I'm just a drawing... or am I?"</td>
+          </tr>
+          <tr>
+            <td><strong>50 clicks in a minute</strong></td>
+            <td>There is a second easter egg. Find it yourself.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="companion-settings">
+      <h2>Companion Settings</h2>
+
+      <p>Everything lives in the <strong>Companion</strong> tab.</p>
+
+      <h3>How she behaves</h3>
+      <table class="settings-table">
+        <thead>
+          <tr>
+            <th>Setting</th>
+            <th>Default</th>
+            <th>What it does</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Show Companion</strong></td>
+            <td>On</td>
+            <td>The master switch. Off means no avatar at all.</td>
+          </tr>
+          <tr>
+            <td><strong>Window Mode</strong></td>
+            <td>Anchored</td>
+            <td>Anchored to the main window, or detached and floating</td>
+          </tr>
+          <tr>
+            <td><strong>Idle Giggle Interval</strong></td>
+            <td>120s</td>
+            <td>How often she speaks up when nothing is happening (20-600s)</td>
+          </tr>
+          <tr>
+            <td><strong>Speech Bubble Persistence</strong></td>
+            <td>2s</td>
+            <td>How long a bubble stays on screen (1-10s)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Turning her down</h3>
+      <table class="settings-table">
+        <thead>
+          <tr>
+            <th>Control</th>
+            <th>What it does</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Mute Avatar</strong></td>
+            <td>No bubbles, no sounds. She goes fully quiet.</td>
+          </tr>
+          <tr>
+            <td><strong>Mute Voice Lines</strong></td>
+            <td>Kills the spoken audio only. She keeps talking in text.</td>
+          </tr>
+          <tr>
+            <td><strong>Mute Whispers</strong></td>
+            <td>Turns the subliminal audio off</td>
+          </tr>
+          <tr>
+            <td><strong>Pause Browser</strong></td>
+            <td>Pauses audio and video in the in-app browser</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="info-box">
+        <h5>Where to find your mods</h5>
+        <p>Switching mod (and therefore companion, art, voice and theme) happens in the <strong>Mod Manager</strong>, not the Companion tab. Downloaded content packs live there too.</p>
+      </div>
+    </section>
+
+    <nav class="guide-nav" aria-label="Document navigation">
+      <a href="https://cclabs.app/guide-scheduler.html" class="prev">
+        <span class="nav-label">Previous</span>
+        <span class="nav-title">scheduler.cfg</span>
+      </a>
+      <a href="guide-takeover.html" class="next">
+        <span class="nav-label">Next</span>
+        <span class="nav-title">takeover_mode.txt</span>
+      </a>
+    </nav>
+
+  </article>
+</main>
+
+<footer>
+  <div class="wrap taskbar">
+    <a class="btn88" href="./">guide_index</a>
+    <a href="https://cclabs.app">cclabs.app</a>
+    <a href="https://cclabs.app/subscribe.html">plans</a>
+    <a href="#" id="cc-footer-link">cookie preferences</a>
+    <span class="right">local time: <span id="clock">--:--:--</span>. session: annotated.</span>
+  </div>
+  <div class="wrap legal">Community documentation for the open-source Conditioning Control Panel project. Not the CC Labs S.r.l.s. storefront. Downloads and <a href="https://cclabs.app/subscribe.html">plans</a> live at <a href="https://cclabs.app">cclabs.app</a>.</div>
+</footer>
+
+<script>
+// taskbar clock, same contract as the hub
+(function () {
+  'use strict';
+  var clock = document.getElementById('clock');
+  if (!clock) return;
+  function p(n) { return (n < 10 ? '0' : '') + n; }
+  function tick() {
+    var d = new Date();
+    clock.textContent = p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
+
+<script src="assets/cookie-consent.js" defer></script>
+</body>
+</html>

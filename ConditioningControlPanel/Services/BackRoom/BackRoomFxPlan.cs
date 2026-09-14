@@ -57,10 +57,14 @@ public sealed record FxRecipe(int HeroMs, IReadOnlyList<FxStep> Steps)
     public bool IsHero => HeroMs > 0;
 }
 
-/// <summary>The feature toggles a plan is gated by, read once per fire.</summary>
-public sealed record FxGates(bool Flash, bool Subliminal, bool Spiral, bool BrainDrain, bool Melt, bool SpiralStill = true)
+/// <summary>The feature toggles a plan is gated by, read once per fire. <paramref name="Melt"/> is the room's own melt
+/// switch (<c>AppSettings.BackRoomMelt</c>) and <paramref name="Tunnel"/> its own tunnel vision switch
+/// (<c>AppSettings.BackRoomTunnel</c>), both on by default (CONTRACT 10.14).</summary>
+public sealed record FxGates(bool Flash, bool Subliminal, bool Spiral, bool BrainDrain, bool Melt, bool SpiralStill = true, bool Tunnel = true)
 {
     public static readonly FxGates AllOn = new(true, true, true, true, true);
+    /// <summary>Every gate shut, the tunnel included (its record default is on): what a fire reads with no settings.</summary>
+    public static readonly FxGates AllOff = new(false, false, false, false, false, SpiralStill: false, Tunnel: false);
 }
 
 /// <summary>A resolved step with the media it will use (words for sub primitives, one GIF for gif-full and
@@ -305,15 +309,15 @@ public static class BackRoomFxPlan
             var step = ApplyMotion(authored, motion, gates, out var motionSkip);
             if (step == null) { AddOnce(skipped, authored.Prim, motionSkip); continue; }
 
-            if (!ToggleAllows(step.Prim, gates))
+            // 10.14: a melt is the room's melt switch alone, the still blur it becomes at Off included.
+            if (authored.Prim == FxPrim.BrainDrainMelt ? !gates.Melt : !ToggleAllows(step.Prim, gates))
             {
                 AddOnce(skipped, authored.Prim, BackRoomFxSkipReason.Toggle);
                 continue;
             }
-            // The drip went, the blur stays: report the melt itself, with the rule that took it.
+            // The drip went, the blur stays (MotionLevel Off): report the melt itself, with the rule that took it.
             if (authored.Prim == FxPrim.BrainDrainMelt && step.Prim == FxPrim.BrainDrain)
-                AddOnce(skipped, FxPrim.BrainDrainMelt,
-                    motion == MotionLevel.Off ? BackRoomFxSkipReason.Motion : BackRoomFxSkipReason.Toggle);
+                AddOnce(skipped, FxPrim.BrainDrainMelt, BackRoomFxSkipReason.Motion);
 
             IReadOnlyList<string> words = Array.Empty<string>();
             BackRoomGif? gif = null;
@@ -365,8 +369,7 @@ public static class BackRoomFxPlan
                 if (!off) return s;
                 return gates.SpiralStill ? s with { Still = true } : null;
             case FxPrim.BrainDrainMelt:
-                if (off || !gates.Melt) return s with { Prim = FxPrim.BrainDrain };
-                return s;
+                return off ? s with { Prim = FxPrim.BrainDrain } : s;
             case FxPrim.GifFull:
             case FxPrim.GifFrom:     // Off: no growth, full size with a 300 ms fade, still frame
             case FxPrim.SpiralLoom:  // Off: the woven GIF's first frame
@@ -382,7 +385,8 @@ public static class BackRoomFxPlan
         FxPrim.FlashBurst or FxPrim.GifRain or FxPrim.GlitchBubbles or FxPrim.GifFull or FxPrim.Wash or FxPrim.GifFrom => g.Flash,
         FxPrim.SubSingle or FxPrim.SubSeq or FxPrim.SubBurst9 => g.Subliminal,
         FxPrim.SpiralFull or FxPrim.SpiralLoom => g.Spiral,
-        FxPrim.BrainDrainMelt or FxPrim.BrainDrain or FxPrim.Haze => g.BrainDrain,
+        FxPrim.BrainDrainMelt => g.Melt,
+        FxPrim.BrainDrain or FxPrim.Haze => g.BrainDrain,
         _ => false,
     };
 
@@ -403,8 +407,9 @@ public static class BackRoomFxPlan
     /// <summary>
     /// Resolve symbol keys ONLY through the host's own deal. Accepts tape symbol ids (<c>gif0..gif12</c>,
     /// <c>sub0..sub3</c>) and deal keys (<c>g0..g12</c>, <c>s0</c>), one or two digits (10.13.C). Non-media symbols (<c>spiral*</c>,
-    /// <c>emi*</c>, <c>melt</c>) are ignored. Anything else, including an index past the deal, is
-    /// replaced with a random dealt item: nothing the page sends is ever used as text or a path.
+    /// <c>emi*</c>, <c>melt</c>) are ignored. A GIF index past the deal cycles (<c>gifs[i % n]</c>, 10.14: the player's
+    /// own GIFs are cycled, never padded), exactly as the pages draw it. Anything else, including a word index past the
+    /// deal, is replaced with a random dealt item: nothing the page sends is ever used as text or a path.
     /// </summary>
     public static FxMedia ResolveSymbols(IReadOnlyList<string>? keys, BackRoomMediaDeal? deal, Random rng)
     {
@@ -426,7 +431,7 @@ public static class BackRoomFxPlan
             }
             else if (TryIndex(key, "gif", out int gi) || TryIndex(key, "g", out gi))
             {
-                var g = gi < dealGifs.Count ? dealGifs[gi] : Pick(dealGifs, rng);
+                var g = dealGifs.Count > 0 ? dealGifs[gi % dealGifs.Count] : null;
                 if (g != null) gifs.Add(g);
             }
             else if (rng.Next(2) == 0 && dealWords.Count > 0)

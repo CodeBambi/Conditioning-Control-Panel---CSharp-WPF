@@ -61,12 +61,12 @@ Single-zero roulette for SP (CONTRACT.md sections 2-7 and 10.13, binding spec `h
 - **Calm / reduced** (`ctx.intensity === 'calm'`, `ctx.reduced`, or `prefers-reduced-motion`): page strengths x0.5,
   the rotor eases to a stop and the beam holds at rest, the rattle floor is 0.7, chips appear or fade where they end
   (no travel). The ball still runs its plan (the mockup's reduced motion). Host args stay Normal (the host halves).
-- **Gates** are read live every frame: `flash` and `brainDrain` off simply drop host steps (moments); `spiral` off keeps
+- **Gates** are read live every frame: `flash`, `brainDrain` (haze) and `tunnel` (the run's fx-tunnel) off simply drop host steps (moments); `spiral` off keeps
   the dish velvet. A Spiral Wake always shows as text.
 - **Suspend** cancels the moments, pauses the station clock and disposes the Loom kit and the deck (their keys still
   pick); resuming makes a new kit and replays the running spin's holds.
 
-## Lexicon (`br_roulette_*`, English fallbacks in the page; the integration pass adds them to `en.json`)
+## Lexicon (`br_roulette_*`, English fallbacks in the page, the same text in `en.json`; `smoke/lexicon.test.mjs` keeps them equal)
 
 `br_roulette_back`, `br_roulette_stage`, `br_roulette_loading`, `br_roulette_closed`, `br_roulette_offline`,
 `br_roulette_ready`, `br_roulette_resume`, `br_roulette_watch`, `br_roulette_left`, `br_roulette_spin`,

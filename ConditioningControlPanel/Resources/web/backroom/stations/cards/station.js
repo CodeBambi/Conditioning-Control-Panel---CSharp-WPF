@@ -18,7 +18,7 @@
 import { createLoomKit, createDeck, createMoments, strengthK, viewportRect, DECK_VALUES } from '../../shared/hypno/index.js';
 import { readState, readHand, legalOf, controls, classify, createIntent, mayRetry, moveBody, owedFor, shownSp, defaultStake,
   readHintPref, writeHintPref, isOpen, totalOf, MOVES } from './hand.js';
-import { planSteps, momentOf, aceSlot, bestCard, vortexOf, resultLines, TIMING } from './feel.js';
+import { planSteps, momentOf, aceSlot, bestCard, vortexOf, resultLines, screenHoldMs, TIMING } from './feel.js';
 import { createTable } from './table.js';
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
@@ -47,8 +47,8 @@ export async function mount(ctx) {
 
   let el = null, table = null, kit = null, deck = null, moments = null, chip = null, raf = 0, session = 0, alive = false, suspended = false;
   let st = null, shownHand = null, queue = [], busy = false, decide = false, phase = 'loading', note = '', lines = [];
-  let stake = 1, stakePicked = false, hint = readHintPref(storage), dealReadyAt = 0, bloomUntil = 0, sitting = 0, firstSit = true;
-  let lastStill = null, unSp = null, feelLog = [], statusText = '', seat = 0, seating = false;
+  let stake = 1, stakePicked = false, hint = readHintPref(storage), dealReadyAt = 0, screenUntil = 0, sitting = 0, firstSit = true;
+  let lastStill = null, unSp = null, feelLog = [], statusText = '', seat = 0, seating = false, dropped = 0;
   const $ = (sel) => el.querySelector(sel);
   const log = (what, extra = {}) => { feelLog = [...feelLog.slice(-99), { what, at: Math.round(performance.now()), ...extra }]; };
 
@@ -56,7 +56,7 @@ export async function mount(ctx) {
   function dress() {
     const reduced = !!ctx.reduced || prefersReduced, intensity = String(ctx.intensity || 'normal').toLowerCase(), g = ctx.gates || {};
     return { still: reduced || intensity === 'calm', k: prefersReduced ? 0.5 : strengthK(ctx), full: intensity === 'full' && !reduced,
-      gates: { flash: g.flash !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false } };
+      gates: { flash: g.flash !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false, tunnel: g.tunnel !== false } };
   }
 
   function build() {
@@ -161,7 +161,7 @@ export async function mount(ctx) {
         const slot = aceSlot(h), r = table.cardRect(0, slot), canvas = $('.cards-stage');
         const out = moments.play('cards.bloom', { from: r ? viewportRect(canvas, r.x, r.y, r.w, r.h) : undefined, gif: deck ? deck.keyFor(h.hands[0].cards[slot]) : undefined });
         if (out.page.includes('ace_glow')) table.glowCard(0, slot, now);
-        bloomUntil = now + TIMING.bloomMs * (d.still ? 0.6 : 1);
+        holdScreenFor('cards.bloom', out, now);
         log('moment', { id: 'cards.bloom', tokens: out.tokens.length, page: out.page, held: out.held, from: r });
         break;
       }
@@ -174,6 +174,7 @@ export async function mount(ctx) {
         chip.thud();
         const id = momentOf(h), best = bestCard(h);
         const out = moments.play(id, { gif: best && deck ? deck.keyFor(best) : undefined });
+        holdScreenFor(id, out, now);
         if (out.page.includes('win_tunnel')) table.tunnel(now);
         const v = vortexOf(h);
         if (out.page.includes('chip_vortex') && v) table.vortex(v.dir, v.n, now);
@@ -182,6 +183,14 @@ export async function mount(ctx) {
       }
       default: break;
     }
+  }
+  /** A moment that put something fullscreen holds the next deal until it has ended (hand.controls 'screen'). The
+   *  bloom's picture is timed by the host, which shortens it only under its own Calm (ctx.reduced or intensity calm):
+   *  the OS prefers-reduced-motion alone never reaches the host, so it must not shorten the hold either. */
+  function holdScreenFor(id, out, now) {
+    const d = dress(), hostCalm = !!ctx.reduced || String(ctx.intensity || 'normal').toLowerCase() === 'calm';
+    const ms = out.held ? 0 : screenHoldMs(id, { fired: out.tokens.length, tunnel: d.gates.tunnel && typeof ctx.fxTunnel === 'function', still: hostCalm });
+    if (ms > 0) screenUntil = Math.max(screenUntil, now + ms);
   }
   /** Suspend: every step still owed goes down now, quietly (no moments). */
   function flush() { const now = performance.now(); const rest = queue; queue = []; for (const s of rest) apply({ ...s, quiet: true }, now); }
@@ -239,10 +248,16 @@ export async function mount(ctx) {
   }
 
   const view = (now) => controls({ phase, hand: st && st.hand, legal: st ? st.legal : [], sp: chip ? chip.server : 0, stake, busy,
-    animating: queue.length > 0, dealReadyAt: Math.max(dealReadyAt, bloomUntil), now });
+    animating: queue.length > 0, dealReadyAt, screenUntil, now });
 
+  /** A fullscreen moment still running: its timed hold, or a tunnel breath that has outlived it. */
+  const screenBusy = (now) => now < screenUntil || !!(moments && moments.breathing());
+
+  /** Every Deal path (the button, Space and Enter, a direct call) lands here. During a fullscreen moment the press is
+   *  dropped before anything else: no ring, no note, nothing kept for later (owner 2026-09-14, CONTRACT 10.14 item 10). */
   async function deal() {
     if (!alive || suspended) return;
+    if (screenBusy(performance.now())) { dropped++; log('deal-dropped', { why: 'screen' }); return; }
     ring($('.cards-deal'));
     const c = view(performance.now());
     if (!c.deal) { if (c.dealWhy === 'sp') note = t('br_cards_insufficient', 'You need {n} SP for that bet.', { n: stake }); return; }
@@ -325,8 +340,9 @@ export async function mount(ctx) {
     el.toggleAttribute('data-open', open);
     const dealBtn = $('.cards-deal');
     dealBtn.disabled = !c.deal;
-    const left = Math.max(dealReadyAt, bloomUntil) - now;
-    const small = c.dealWhy === 'floor' ? t('br_cards_wait', '{s} s', { s: Math.ceil(left / 1000) }) : t('br_cards_bet_line', '{n} SP', { n: stake });
+    dealBtn.toggleAttribute('data-held', c.dealWhy === 'screen');
+    const small = c.dealWhy === 'screen' ? t('br_cards_moment', 'One moment')
+      : c.dealWhy === 'floor' ? t('br_cards_wait', '{s} s', { s: Math.ceil((dealReadyAt - now) / 1000) }) : t('br_cards_bet_line', '{n} SP', { n: stake });
     if (dealBtn.querySelector('small').textContent !== small) dealBtn.querySelector('small').textContent = small;
     for (const b of el.querySelectorAll('.cards-move')) {
       const m = b.dataset.move;
@@ -351,6 +367,7 @@ export async function mount(ctx) {
     const now = performance.now(), d = dress();
     if (d.still !== lastStill) { kit.setStill(d.still); if (deck) deck.setStill(d.still); lastStill = d.still; }
     while (queue.length && queue[0].at <= now) apply(queue.shift(), now);
+    if (moments.breathing()) screenUntil = Math.max(screenUntil, now + TIMING.edgesTailMs);   // a late breath keeps the hold
     if (deck) deck.tick(now);
     table.draw({ now, k: d.k, still: d.still, full: d.full, gates: d.gates, deck, decide,
       print: t('br_cards_print', 'BLACKJACK PAYS 2 TO 1 · DEALER STANDS ON ALL 17s · SIX CARDS WIN'),
@@ -384,7 +401,7 @@ export async function mount(ctx) {
   async function open() {
     if (alive) return;
     alive = true; suspended = false; busy = false; decide = false; queue = []; shownHand = null; note = ''; lines = []; feelLog = [];
-    sitting = 0; seating = false; firstSit = true; stakePicked = false; dealReadyAt = 0; bloomUntil = 0; phase = 'loading'; statusText = ''; lastStill = null;
+    sitting = 0; seating = false; firstSit = true; stakePicked = false; dealReadyAt = 0; screenUntil = 0; dropped = 0; phase = 'loading'; statusText = ''; lastStill = null;
     const my = ++session;
     el = build(); ctx.root.append(el);
     addEventListener('keydown', onKey);
@@ -438,6 +455,7 @@ export async function mount(ctx) {
       if (suspended) {
         flush();
         moments.cancel();
+        screenUntil = 0;   // the moments are cancelled, and the host's own suspend stops every overlay (gif_from too)
         if (raf) cancelAnimationFrame(raf);
         raf = 0;
         kit.dispose(); kit = createLoomKit({ still: dress().still, log: say });   // the GL context goes; a new one is made on the next draw
@@ -446,7 +464,8 @@ export async function mount(ctx) {
     destroy() { close(); document.querySelectorAll('link[data-cards-css]').forEach((l) => l.remove()); },
     /** For dev.html and CDP checks only. */
     debug: () => ({
-      phase, alive, busy, decide, suspended, hostBack, stake, stakePicked, hint, sitting, seating, queue: queue.length, dress: dress(),
+      phase, alive, busy, decide, suspended, hostBack, stake, stakePicked, hint, sitting, seating, queue: queue.length, dress: dress(), dropped,
+      screenLeftMs: Math.max(0, Math.round(screenUntil - performance.now())), dealText: el ? $('.cards-deal small').textContent : null,
       state: st && { sp: st.sp, legal: st.legal, hint: st.hint, hand: st.hand }, shown: shownHand,
       chip: chip && { kind: chip.kind, value: chip.value, server: chip.server, owed: chip.owed },
       status: statusText, controls: el ? view(performance.now()) : null, table: table && table.debug(), kit: kit && kit.debug(),

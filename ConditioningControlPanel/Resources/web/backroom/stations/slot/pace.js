@@ -13,7 +13,18 @@ export const PACE = Object.freeze({
  *  `holdMs` is A1's anticipation hold (ANTICIPATION below), reel 3 only and 0 on every other spin. */
 export const reelStopMs = (i, p = PACE, holdMs = 0) => p.SPIN_MS + i * p.STAGGER_MS + (i === 2 ? Math.max(0, holdMs || 0) : 0);
 export const reelsMs = (p = PACE, holdMs = 0) => reelStopMs(2, p, holdMs) + p.THUD_MS;
-export const outcomeMs = (p = PACE, holdMs = 0) => reelsMs(p, holdMs) + p.REVEAL_MS + p.BREATH_MS;
+
+/* C1 THE EMI PAIR RE-SPIN (CONTRACT 10.16.D). Reels 1 and 2 stay exactly where they are and reel 3 alone
+ * comes back, so there is no stagger to wait through: SPIN_MS, then the FULL 1,400 ms gold hold (never
+ * halved here, not even while melted), then THE THUD. The hold is pace, not animation, so reduced motion and
+ * Calm keep it like every other duration above. */
+export const respinStopMs = (p = PACE, holdMs = ANTICIPATION.emi) => p.SPIN_MS + Math.max(0, holdMs || 0);
+export const respinMs = (p = PACE, holdMs = ANTICIPATION.emi) => respinStopMs(p, holdMs) + p.THUD_MS;
+
+/** One outcome, spin start to next spin start. `kind` is the tape's own kind: an `emi_respin` is reel 3
+ *  alone (about 4,660 ms with today's PACE), every other kind is all three reels. */
+export const outcomeMs = (p = PACE, holdMs = 0, kind = null) =>
+  (kind === 'emi_respin' ? respinMs(p, holdMs || ANTICIPATION.emi) : reelsMs(p, holdMs)) + p.REVEAL_MS + p.BREATH_MS;
 
 /* A1 THE ANTICIPATION REEL (playbook Tier A, CONTRACT 10.15). When reels 1 and 2 land a live pair,
  * reel 3 keeps spinning this much longer before its thud. The tape already carries the outcome, so a

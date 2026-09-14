@@ -55,7 +55,7 @@ const q = new URLSearchParams(location.search);
 const num = (k, d) => (q.has(k) ? Number(q.get(k)) : d);
 const latency = num('latency', 80), wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const server = createMockServer({ sp: num('sp', 40), floorMs: num('floor', 6000) });
-const OFF = { flash: false, subliminal: false, spiral: false, brainDrain: false };
+const OFF = { flash: false, subliminal: false, spiral: false, brainDrain: false, tunnel: false };
 const host = createMockHost({ intensity: q.has('calm') ? 'calm' : q.has('full') ? 'full' : 'normal', reduced: q.has('reduced'),
   gates: q.get('gates') === 'off' ? OFF : null });
 const parseNext = (s) => s.split(',').filter(Boolean).map((x) => ({ pocket: parseInt(x, 10), wake: /w$/.test(x) }));
@@ -100,7 +100,7 @@ document.getElementById('dev').addEventListener('click', (e) => {
   if (act === 'zero') server.script({ pocket: 0 });
   if (act === 'busy') server.fail('spin', 'busy', 2);
   if (act === 'door') server.setOpen(door = !door);
-  if (act === 'gates') { gatesOn = !gatesOn; host.settings({ gates: gatesOn ? { flash: true, subliminal: true, spiral: true, brainDrain: true } : OFF }); }
+  if (act === 'gates') { gatesOn = !gatesOn; host.settings({ gates: gatesOn ? { flash: true, subliminal: true, spiral: true, brainDrain: true, tunnel: true } : OFF }); }
   if (['calm', 'normal', 'full'].includes(act)) host.settings({ intensity: act });
 });
 
@@ -118,7 +118,7 @@ function frame(now) {
   for (; seen < host.fx.length; seen++) { const r = host.fx[seen]; if (r.ack.fired.length) shows.push({ ...r, t0: now }); }
   if (pdeck) pdeck.tick(now);
   const released = new Set(host.release.map((r) => r.token));
-  const want = host.tunnel.length && Date.now() - host.tunnel.at(-1).at < 1500 && host.ctx.gates.brainDrain ? host.tunnel.at(-1).level * K : 0;
+  const want = host.tunnel.length && Date.now() - host.tunnel.at(-1).at < 1500 && host.ctx.gates.tunnel ? host.tunnel.at(-1).level * K : 0;
   tunnel += (want - tunnel) * Math.min(1, dt * (want > tunnel ? 1.4 : 2.2));
   let hazing = false;
   for (let i = shows.length - 1; i >= 0; i--) {

@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>progression.log - Conditioning Control Panel</title>
+<meta name="description" content="Every XP source, formula, multiplier, and leveling detail in Conditioning Control Panel - the complete reference, including how XP feeds the Descent and why none of it ever resets.">
+<link rel="icon" href="images/logo.webp">
+<link rel="stylesheet" href="assets/cookie-consent.css">
+<link rel="stylesheet" href="guide-article.css">
+</head>
+<body>
+
+<a class="skip" href="#doc">skip to document</a>
+
+<header>
+  <div class="titlebar">
+    <span class="sysname">CCP community guides</span>
+    <span class="ver">v6.7.4 OK</span>
+    <nav class="menu">
+      <a href="https://cclabs.app/">dashboard</a>
+      <a href="https://cclabs.app/explore.html">explore</a>
+      <a href="../labs/loom/">the loom</a>
+      <a href="https://cclabs.app/tools.html">tools</a>
+      <a href="https://cclabs.app/leaderboard.html">leaderboard</a>
+      <a href="https://app.cclabs.app/catalogue">catalogue</a>
+      <a href="https://app.cclabs.app/">login</a>
+      <a class="dl" href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest">download</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <section class="pagehead wrap">
+    <div class="pagehead-inner">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="https://cclabs.app/">dashboard</a>
+        <span class="sep">/</span>
+        <a href="https://cclabs.app/guide.html">field_manual</a>
+        <span class="sep">/</span>
+        <span class="here">progression.log</span>
+      </nav>
+      <div class="kicker">field_manual / progression.dir / gentle</div>
+      <h1>XP &amp; <span class="pink">Progression</span></h1>
+      <p class="lede">Where XP comes from, what multiplies it, what each level gets you, and how the same XP carries you down the Descent. The full reference, numbers and all, and none of it ever resets.</p>
+    </div>
+  </section>
+
+  <article class="doc wrap" id="doc">
+
+    <div class="window toc">
+      <div class="bar">contents.idx - on this page<span class="lights"><i></i><i></i><i></i></span></div>
+      <div class="toc-body">
+        <ul>
+                    <li><a href="#how-xp-works">How XP Works</a></li>
+                    <li><a href="#xp-sources">XP Sources</a>
+                        <ul>
+                            <li><a href="#sessions">Sessions</a></li>
+                            <li><a href="#activities">Activities</a></li>
+                            <li><a href="#quests">Quests</a></li>
+                            <li><a href="#streaks">Daily Streak &amp; Perfect Week</a></li>
+                        </ul>
+                    </li>
+                    <li><a href="#xp-multipliers">XP Multipliers</a>
+                        <ul>
+                            <li><a href="#skill-tree-multipliers">Skill Tree Multipliers</a></li>
+                            <li><a href="#pink-rush">Pink Rush</a></li>
+                            <li><a href="#session-level-multiplier">Session Level Multiplier</a></li>
+                            <li><a href="#max-multiplier">Max Multiplier</a></li>
+                        </ul>
+                    </li>
+                    <li><a href="#leveling">Leveling</a>
+                        <ul>
+                            <li><a href="#xp-per-level">XP Per Level</a></li>
+                            <li><a href="#example-levels">Example Levels</a></li>
+                            <li><a href="#level-titles">Level Titles</a></li>
+                            <li><a href="#prestige">Prestige</a></li>
+                        </ul>
+                    </li>
+                    <li><a href="#descent">The Descent</a></li>
+                    <li><a href="#unlockables">Level Unlocks</a></li>
+                    <li><a href="#fair-play">Fair Play</a></li>
+                    <li><a href="#achievements">Achievements</a></li>
+                </ul>
+      </div>
+    </div>
+
+            <!-- ═══════════════════════════════════════════ -->
+            <!-- HOW XP WORKS                                -->
+            <!-- ═══════════════════════════════════════════ -->
+            <section id="how-xp-works">
+                <h2>How XP Works</h2>
+
+                <p>XP is the app's points system. Almost everything you do earns some: watching a session through, popping a bubble, finishing a quest, just opening the app on a new day. Enough XP and you level up.</p>
+
+                <p>Levelling up does three things. It hands you a <a href="guide-skill-tree.html">sparkle point</a> to spend on upgrades, it moves you up the <a href="https://cclabs.app/guide-leaderboard.html">leaderboard</a>, and past level 30 it quietly increases how much sessions pay out.</p>
+
+                <p>The same XP does a fourth job on the way past, because it also fills the daily jar that decides whether today gets banked on <a href="guide-descent.html">the Descent</a>. That is a separate count with its own seven stages, it reads nothing but banked days, and you do not have to do anything differently to feed it. There is a summary further down and the whole thing is written up in <a href="guide-descent.html">descent.log</a>.</p>
+
+                <p>Nothing in the app is locked behind a level. Since v5.8.0 every feature is available from level 1, so XP is a score and a pacing mechanism, not a gate. Nothing is ever taken back either, which is worth saying plainly because it did not always work that way: your level, your XP, your streak and everything you have unlocked carry forward, and they will keep doing that from here on.</p>
+
+                <div class="info-box">
+                    <h5>Three words worth knowing</h5>
+                    <p><strong>Base XP</strong> - the raw number before anything is applied to it. Every figure on this page is a base number unless it says otherwise.<br>
+                    <strong>Global multiplier</strong> - a single number from the Skill Tree that scales <em>every</em> XP award you get.<br>
+                    <strong>Session multiplier</strong> - an extra multiplier on top, based on your level, that only applies to finishing a session.</p>
+                </div>
+
+                <div class="info-box warning">
+                    <h5>You need to be signed in</h5>
+                    <p>XP is only awarded when you are logged into your CC Labs account, or running in offline mode with an offline username set. Use the app fully signed out and nothing is counted.</p>
+                </div>
+            </section>
+
+            <!-- ═══════════════════════════════════════════ -->
+            <!-- XP SOURCES                                  -->
+            <!-- ═══════════════════════════════════════════ -->
+            <section id="xp-sources">
+                <h2>XP Sources</h2>
+
+                <!-- ── Sessions ── -->
+                <h3 id="sessions">Sessions</h3>
+                <p>Sessions are by far the biggest XP source. Every session has a base payout set by its difficulty, and that base then gets scaled by your level and topped up by a bonus for how long the session ran.</p>
+
+                <h4>Session Base XP</h4>
+                <p>The base is capped at 2,500, and every time you pause costs you 100 XP:</p>
+
+                <div class="code-block">
+                    <pre>base = min(2500, sessionBaseXP) - (pauses &times; 100)</pre>
+                </div>
+
+                <p>It cannot go below 0. Abandoning a session part-way awards nothing at all. Base XP by difficulty:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Difficulty</th>
+                            <th>Typical Base XP</th>
+                            <th>Examples</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Easy</td>
+                            <td>400 XP</td>
+                            <td>Morning Drift</td>
+                        </tr>
+                        <tr>
+                            <td>Medium</td>
+                            <td>800 XP</td>
+                            <td>Random Drop, Gamer Girl</td>
+                        </tr>
+                        <tr>
+                            <td>Hard</td>
+                            <td>1,200 XP</td>
+                            <td>Good Girls Don't Cum, Deep Dive</td>
+                        </tr>
+                        <tr>
+                            <td>Extreme</td>
+                            <td>2,000 XP</td>
+                            <td>Bambi Time</td>
+                        </tr>
+                        <tr>
+                            <td>Remote Control</td>
+                            <td>200 XP</td>
+                            <td>Someone else is driving</td>
+                        </tr>
+                        <tr>
+                            <td>Custom (Timeline)</td>
+                            <td>Varies</td>
+                            <td><code>minutes &times; 10 + feature bonuses</code>, rounded to the nearest 50</td>
+                        </tr>
+                        <tr>
+                            <td>Training Program day</td>
+                            <td>300 - 1,000 XP</td>
+                            <td><code>300 + 700 &times; intensity</code>, then 1.5x on a boss day</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Duration Bonus</h4>
+                <p>Sessions longer than 2 minutes award extra XP based on duration and level:</p>
+                <div class="code-block">
+                    <pre>Duration Bonus = (minutes - 2) &times; (8 + level &times; 0.15)
+
+Example: Level 50, 30-minute session
+  = (30 - 2) &times; (8 + 50 &times; 0.15)
+  = 28 &times; 15.5
+  = 434 bonus XP</pre>
+                </div>
+
+                <h4>Final Session XP</h4>
+                <div class="code-block">
+                    <pre>Final = round(base &times; sessionLevelMultiplier) + durationBonus</pre>
+                </div>
+                <p>Order matters here. The <a href="#session-level-multiplier">session level multiplier</a> only touches the base, never the duration bonus. The global Skill Tree multiplier is applied last, to the whole thing.</p>
+
+                <!-- ── Activities ── -->
+                <h3 id="activities">Activities</h3>
+                <p>Everything you can do outside a full session. These all pay whether a session is running or not. Every figure is base XP, before the <a href="#skill-tree-multipliers">global multiplier</a>.</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Activity</th>
+                            <th>Base XP</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Flash image, sound playing</td>
+                            <td>8 XP</td>
+                            <td>5% Lucky Bimbo chance of 10x</td>
+                        </tr>
+                        <tr>
+                            <td>Flash image, silent</td>
+                            <td>4 XP</td>
+                            <td>5% Lucky Bimbo chance of 10x</td>
+                        </tr>
+                        <tr>
+                            <td>Flash - Hydra gen 1 (unlinked)</td>
+                            <td>75% of base</td>
+                            <td>6 XP with sound, 3 XP without</td>
+                        </tr>
+                        <tr>
+                            <td>Flash - Hydra gen 2 and up</td>
+                            <td>1 XP flat</td>
+                            <td>Lucky Bimbo never rolls on Hydra clones</td>
+                        </tr>
+                        <tr>
+                            <td>Bubble pop</td>
+                            <td>5 XP</td>
+                            <td>5% Lucky Bubbles chance of 20x. Also 1 sparkle point per 100 pops</td>
+                        </tr>
+                        <tr>
+                            <td>Avatar bubble pop</td>
+                            <td>5 XP</td>
+                            <td>Popping the companion's speech bubbles</td>
+                        </tr>
+                        <tr>
+                            <td>Subliminal (Bambi Freeze)</td>
+                            <td>20 XP</td>
+                            <td>The full-screen freeze variant</td>
+                        </tr>
+                        <tr>
+                            <td>Subliminal (normal)</td>
+                            <td>10 XP</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>Subliminal (custom or remote)</td>
+                            <td>10 XP</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>Video - target hit</td>
+                            <td>15 XP</td>
+                            <td>Per target you click during a video</td>
+                        </tr>
+                        <tr>
+                            <td>Video - attention check passed</td>
+                            <td><code>(penalties + 1) &times; 50 + 200</code></td>
+                            <td>250 XP first time. Every failed retry raises the payout by 50</td>
+                        </tr>
+                        <tr>
+                            <td>FYP clip viewed</td>
+                            <td>5 XP</td>
+                            <td>Capped at 12 paying clips a minute</td>
+                        </tr>
+                        <tr>
+                            <td>FYP attention hit</td>
+                            <td>15 XP</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>Bouncing text</td>
+                            <td>15 XP</td>
+                            <td>2s cooldown, 150 XP/min cap</td>
+                        </tr>
+                        <tr>
+                            <td>Lock card</td>
+                            <td><code>(50 &times; repeats) + 200</code></td>
+                            <td>1.5x in strict mode</td>
+                        </tr>
+                        <tr>
+                            <td>Bubble count - finishing a game</td>
+                            <td>100 XP</td>
+                            <td>Scaled by clip length (60s baseline). 3-minute cooldown</td>
+                        </tr>
+                        <tr>
+                            <td>Bubble count - correct answer</td>
+                            <td>250 XP</td>
+                            <td>Also scaled by clip length</td>
+                        </tr>
+                        <tr>
+                            <td>Mantra typed</td>
+                            <td><code>30 + min(streak &times; 5, 50)</code></td>
+                            <td>35 to 80 XP. Maxes at a 10-mantra streak. 20/min cap, 1.5s minimum gap</td>
+                        </tr>
+                        <tr>
+                            <td>Mantra spoken (mic verified)</td>
+                            <td>30 XP flat</td>
+                            <td>No streak bonus on this one</td>
+                        </tr>
+                        <tr>
+                            <td>Pop quiz answer</td>
+                            <td>25 XP</td>
+                            <td>Per correct answer. Test mode does not pay</td>
+                        </tr>
+                        <tr>
+                            <td>Graded Intake completed</td>
+                            <td>Up to 100 XP</td>
+                            <td><code>25 + depth&times;50 + affirmedMantras&times;5</code>, hard capped at 100</td>
+                        </tr>
+                        <tr>
+                            <td>Chaos / DTRH run</td>
+                            <td>Your run score</td>
+                            <td>Capped at <code>250 &times; minutes &times; difficulty</code></td>
+                        </tr>
+                        <tr>
+                            <td>Keyword trigger</td>
+                            <td>Whatever the trigger author set</td>
+                            <td>1.5x while a session is running</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="info-box">
+                    <h5>Bubble count duration scaling</h5>
+                    <p>Clips shorter than 60 seconds pay proportionally less, so a 30-second clip pays half. The floor is 10% of base, so a very short clip still pays something.</p>
+                </div>
+
+                <div class="info-box danger">
+                    <h5>One companion takes XP away</h5>
+                    <p>The Brainwashed Slavedoll, unlocked at level 125, drains 3 XP off your total on every tick while she is active. That is deliberate - the point is to out-earn her. Your XP is floored at 0, so she cannot put you in the red, but she can hold you still if you idle.</p>
+                </div>
+
+                <!-- ── Quests ── -->
+                <h3 id="quests">Quests</h3>
+                <p>Quests are the XP source that scales hardest with your level. See <a href="guide-quests.html">quests.log</a> for the full pool.</p>
+
+                <div class="code-block">
+                    <pre>Quest XP = baseXP &times; (1 + level &times; 0.04) &times; betterQuestsMult &times; (1 + questStreak &times; 0.03)</pre>
+                </div>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Factor</th>
+                            <th>Effect</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Level scaling</td>
+                            <td>+4% per level</td>
+                        </tr>
+                        <tr>
+                            <td>Better Quests skill</td>
+                            <td>1.25x quest XP</td>
+                        </tr>
+                        <tr>
+                            <td>Quest streak</td>
+                            <td>+3% for each consecutive day you have completed a daily quest</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Quest Type</th>
+                            <th>Base XP Range</th>
+                            <th>Scaling</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Daily quests</td>
+                            <td>100 - 450 XP</td>
+                            <td>+4% per level. The top of that range is Patreon-only</td>
+                        </tr>
+                        <tr>
+                            <td>Weekly quests</td>
+                            <td>500 - 1,200 XP</td>
+                            <td>+4% per level. Same again</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <!-- ── Streaks ── -->
+                <h3 id="streaks">Daily Streak &amp; Perfect Week</h3>
+                <p>Open the app on a new day and your login streak goes up by one. That is the whole requirement - no session needed. With the <strong>Milestone Rewards</strong> skill bought, the streak pays you every day:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Streak</th>
+                            <th>Daily Bonus</th>
+                            <th>Level 50 Example</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1 - 3 days</td><td>50 XP</td><td>124 XP</td></tr>
+                        <tr><td>4 - 6 days</td><td>100 XP</td><td>247 XP</td></tr>
+                        <tr><td>7 - 13 days</td><td>150 XP</td><td>371 XP</td></tr>
+                        <tr><td>14 - 29 days</td><td>200 XP</td><td>494 XP</td></tr>
+                        <tr><td>30+ days</td><td>300 XP</td><td>741 XP</td></tr>
+                    </tbody>
+                </table>
+
+                <div class="code-block">
+                    <pre>Streak Bonus = base &times; (1 + (level - 1) &times; 0.03)
+
+Example: 30+ day streak at Level 50
+  = 300 &times; (1 + 49 &times; 0.03)
+  = 300 &times; 2.47 = 741 XP</pre>
+                </div>
+
+                <p>There is a second, separate streak: the <strong>quest streak</strong>, which counts days you finished a daily quest. With the <strong>Perfect Bimbo Week</strong> skill, hitting a quest streak milestone pays a lump sum:</p>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Milestone</th>
+                            <th>Base Bonus</th>
+                            <th>Level Scaling</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>7-day quest streak</td><td>3,000 XP</td><td>+2% per level</td></tr>
+                        <tr><td>14-day quest streak</td><td>6,000 XP</td><td>+2% per level</td></tr>
+                        <tr><td>30-day quest streak</td><td>10,000 XP</td><td>+2% per level</td></tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- ═══════════════════════════════════════════ -->
+            <!-- XP MULTIPLIERS                              -->
+            <!-- ═══════════════════════════════════════════ -->
+            <section id="xp-multipliers">
+                <h2>XP Multipliers</h2>
+
+                <!-- ── Skill Tree Multipliers ── -->
+                <h3 id="skill-tree-multipliers">Skill Tree Multipliers</h3>
+                <p>Every XP award in the app passes through one global multiplier from the <a href="guide-skill-tree.html">Skill Tree</a>. The bonuses below add together first, then Pink Rush multiplies whatever total you ended up with:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Skill</th>
+                            <th>Bonus</th>
+                            <th>Condition</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Base</td><td>1.0x</td><td>Always</td></tr>
+                        <tr><td>Sparkle Boost 1</td><td>+10%</td><td>Skill unlocked</td></tr>
+                        <tr><td>Sparkle Boost 2</td><td>+15%</td><td>Skill unlocked</td></tr>
+                        <tr><td>Sparkle Boost 3</td><td>+20%</td><td>Skill unlocked</td></tr>
+                        <tr><td>Streak Power</td><td>+0.5% per streak day (max +15%)</td><td>Skill unlocked + active streak</td></tr>
+                        <tr><td>Night Shift</td><td>+50%</td><td>Active 11pm to 5am</td></tr>
+                        <tr><td>Early Bird Bimbo</td><td>+50%</td><td>Active 5am to 8am</td></tr>
+                    </tbody>
+                </table>
+
+                <!-- ── Pink Rush ── -->
+                <h3 id="pink-rush">Pink Rush</h3>
+                <div class="info-box warning">
+                    <h5>Pink Rush</h5>
+                    <p><strong>Everything is worth 3x for 60 seconds.</strong> The whole sum above gets tripled, not just the base.<br><br>
+                    <strong>When it fires:</strong> once you own the Pink Rush skill, the app rolls a 50% chance every 10 minutes.<br>
+                    <strong>How long:</strong> 60 seconds, then it ends by itself. It can fire again later in the same sitting.</p>
+                </div>
+
+                <!-- ── Session Level Multiplier ── -->
+                <h3 id="session-level-multiplier">Session Level Multiplier</h3>
+                <p>This one <em>only</em> touches session base XP. Not the duration bonus, not activities, not quests. It does nothing until level 30, then climbs:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Level Range</th>
+                            <th>Multiplier</th>
+                            <th>Growth Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1 - 29</td><td>1.0x</td><td>-</td></tr>
+                        <tr><td>30 - 79</td><td>1.0x &rarr; 1.5x</td><td>+1% per level</td></tr>
+                        <tr><td>80 - 124</td><td>1.5x &rarr; 2.4x</td><td>+2% per level</td></tr>
+                        <tr><td>125 - 149</td><td>2.4x &rarr; 3.15x</td><td>+3% per level</td></tr>
+                        <tr><td>150+</td><td>3.15x &rarr; 5.0x cap</td><td>+3% per level (capped)</td></tr>
+                    </tbody>
+                </table>
+
+                <div class="code-block">
+                    <pre>Level  30: 1.0x     Level  50: 1.20x    Level  80: 1.50x
+Level 100: 1.90x    Level 125: 2.40x    Level 150: 3.15x
+Level 200: 4.65x    Level 212+: 5.00x (cap)</pre>
+                </div>
+
+                <!-- ── Max Multiplier ── -->
+                <h3 id="max-multiplier">Maximum Multiplier</h3>
+                <div class="info-box success">
+                    <h5>Maximum Multiplier</h5>
+                    <p><strong>Without Pink Rush: 2.1x.</strong> That is all three Sparkle Boosts (+45%), Streak Power maxed out at a 30-day streak (+15%), and either Night Shift or Early Bird (+50%).<br>
+                    <strong>With Pink Rush: 6.3x.</strong> The 2.1x, tripled.<br><br>
+                    The session level multiplier stacks on top of that. At level 212 or above, during Pink Rush, in the small hours, a session base is worth 5.0 &times; 6.3 = <strong>31.5x</strong>. That is the ceiling, and it needs a lot of things to line up at once.</p>
+                </div>
+            </section>
+
+            <!-- ═══════════════════════════════════════════ -->
+            <!-- LEVELING                                    -->
+            <!-- ═══════════════════════════════════════════ -->
+            <section id="leveling">
+                <h2>Leveling</h2>
+
+                <!-- ── XP Per Level ── -->
+                <h3 id="xp-per-level">XP Per Level</h3>
+                <p>Each level costs more than the last. The rate changes at four points, and past 150 it goes exponential. There is <strong>no level cap</strong>.</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Level Range</th>
+                            <th>XP Per Level</th>
+                            <th>Formula</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>1 - 80</td>
+                            <td>800 &rarr; 2,500</td>
+                            <td><code>800 + (level - 1) &times; (1700 / 79)</code></td>
+                        </tr>
+                        <tr>
+                            <td>81 - 100</td>
+                            <td>2,500 &rarr; 4,000</td>
+                            <td><code>2500 + (level - 80) &times; (1500 / 20)</code></td>
+                        </tr>
+                        <tr>
+                            <td>101 - 125</td>
+                            <td>4,000 &rarr; 6,000</td>
+                            <td><code>4000 + (level - 100) &times; (2000 / 25)</code></td>
+                        </tr>
+                        <tr>
+                            <td>126 - 150</td>
+                            <td>6,000 &rarr; 10,000</td>
+                            <td><code>6000 + (level - 125) &times; (4000 / 25)</code></td>
+                        </tr>
+                        <tr>
+                            <td>151+</td>
+                            <td>10,000+ (exponential)</td>
+                            <td><code>10000 &times; 1.03^(level - 150)</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <!-- ── Example Levels ── -->
+                <h3 id="example-levels">Example Levels</h3>
+                <div class="code-block">
+                    <pre>Level   1 &rarr;   2:      800 XP
+Level  10 &rarr;  11:      994 XP
+Level  25 &rarr;  26:    1,316 XP
+Level  50 &rarr;  51:    1,854 XP
+Level  80 &rarr;  81:    2,500 XP
+Level 100 &rarr; 101:    4,000 XP
+Level 125 &rarr; 126:    6,000 XP
+Level 150 &rarr; 151:   10,000 XP
+Level 175 &rarr; 176:   20,938 XP
+Level 200 &rarr; 201:   43,839 XP</pre>
+                </div>
+
+                <div class="info-box">
+                    <h5>Total XP to get there</h5>
+                    <p>Level 25 is about <strong>25,000</strong> XP all in. Level 50 is about <strong>64,500</strong>. Level 100 is about <strong>194,000</strong>. Level 150 is about <strong>516,000</strong>. Level 200 is about <strong>1.64 million</strong>. Past 150 each level costs 3% more than the one before it, so the curve stops being a curve and starts being a wall.</p>
+                </div>
+
+                <!-- ── Level Titles ── -->
+                <h3 id="level-titles">Level Titles</h3>
+                <p>The app shows a rank title next to your level. There are six of them, and the noun on the end comes from your mod - Bambi Sleep calls you "Babe", Circe's Lock says "pet", Drone Mode says "Unit", and the default is "Subject":</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Level Range</th>
+                            <th>Title</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1 - 4</td><td>Beginner</td></tr>
+                        <tr><td>5 - 9</td><td>Training</td></tr>
+                        <tr><td>10 - 19</td><td>Eager</td></tr>
+                        <tr><td>20 - 29</td><td>Devoted</td></tr>
+                        <tr><td>30 - 49</td><td>Advanced</td></tr>
+                        <tr><td>50+</td><td>Perfect</td></tr>
+                    </tbody>
+                </table>
+
+                <h3 id="prestige">Prestige</h3>
+                <p>Prestige is a second number that sits alongside your level. It is not a reset button and there is nothing to click - it counts the sparkle points you have spent on skills, over your whole account life:</p>
+
+                <div class="code-block">
+                    <pre>Prestige rank = 1 + (lifetime sparkle points spent / 100)</pre>
+                </div>
+
+                <p>Spend your hundredth point and you hit Rank 2, and it climbs from there for as long as you keep buying skills. It is a spending record rather than a scoreboard, so it never goes down and nothing ever takes it off you.</p>
+
+                <div class="info-box">
+                    <h5>Level Up Sound</h5>
+                    <p>Drop an <code>lvlup.mp3</code> into <code>Resources/</code> or <code>assets/audio/</code> and the app will play it when you level up.</p>
+                </div>
+            </section>
+
+            <!-- ═══════════════════════════════════════════ -->
+            <!-- THE DESCENT                                 -->
+            <!-- ═══════════════════════════════════════════ -->
+            <section id="descent">
+                <h2>The Descent</h2>
+
+                <p>Levels measure how much you have earned, and the <a href="guide-descent.html">Descent</a> measures how long you have kept coming back. The two run side by side off the same XP, so nothing you read above is spent twice or split in half, and there is no separate grind to take up.</p>
+
+                <p>The short version is the one the app puts on the Trainer Card: everything you earn today lands in the <strong>tap</strong>, and you hold the tap to pour it into today's <strong>jar</strong>. The jar's capacity is set by the server and grows with your level so it never goes stale, and once the jar passes a fifth of that cap the day is <strong>banked</strong>. Banked days are the only thing that moves you down the Spiral, which is what makes a quiet evening that just clears the line count exactly as much as a heavy one.</p>
+
+                <div class="code-block">
+                    <pre>the day is banked once  jar &gt; 20% of today's cap</pre>
+                </div>
+
+                <p>Seven stages sit along your banked-day count, opening at days 1, 7, 21, 50, 100, 180 and 300, and they pull the app's palette a little deeper each time. Time away isn't wasted either, since your fill rate rises 4% for every day you miss up to a ceiling of double, and that raised rate is what you're pouring at for your first three days back.</p>
+
+                <div class="info-box success">
+                    <h5>Nothing on this page resets any more</h5>
+                    <p>The app used to wipe level, XP and half the skill tree every month, but that's finished and the server suppresses the wipe permanently, so your level, your XP, your streak and everything you've unlocked carry forward, and they'll keep doing that from here on. The monthly leaderboard table still rotates, and that's the only thing that does. The whole system is written up in <a href="guide-descent.html">descent.log</a>.</p>
+                </div>
+            </section>
+
+            <!-- ═══════════════════════════════════════════ -->
+            <!-- LEVEL UNLOCKS                               -->
+            <!-- ═══════════════════════════════════════════ -->
+            <section id="unlockables">
+                <h2>Level Milestones</h2>
+
+                <div class="info-box success">
+                    <h5>Nothing here is a gate</h5>
+                    <p>Since v5.8.0 every feature in the app works from level 1. The milestones below unlock <em>companions</em> and achievements, not features. If you never level up, you can still use the whole app.</p>
+                </div>
+
+                <p>The app also throws a small celebration at levels 10, 25, 50, 100, 125 and 150, then every 25 levels after that. Here is what the big ones actually give you:</p>
+
+                <div class="level-timeline">
+                    <div class="level-item">
+                        <div class="level-badge">10</div>
+                        <div class="level-content">
+                            <h5>Plastic Initiation</h5>
+                            <p>Your first level achievement, and the first milestone celebration</p>
+                        </div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-badge">20</div>
+                        <div class="level-content">
+                            <h5>Devoted</h5>
+                            <p>Your rank title moves up again. It first changes at level 5, then at 10, 20, 30 and 50</p>
+                        </div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-badge">50</div>
+                        <div class="level-content">
+                            <h5>Synthetic Blowdoll Companion</h5>
+                            <p>Your first companion. Earns more companion XP the stronger your Pink Filter is</p>
+                        </div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-badge">75</div>
+                        <div class="level-content">
+                            <h5>Bambi Cow Companion</h5>
+                            <p>Ditzy and docile. Her advertised session XP bonus is declared in the app but not currently wired up, so treat her as cosmetic for now</p>
+                        </div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-badge">100</div>
+                        <div class="level-content">
+                            <h5>Perfect Fuckpuppet Companion</h5>
+                            <p>Earns 1.5x companion XP while autonomy is running</p>
+                        </div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-badge">125</div>
+                        <div class="level-content">
+                            <h5>Brainwashed Slavedoll Companion</h5>
+                            <p>Drains 3 of your XP every tick while she is active. The challenge is out-earning her</p>
+                        </div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-badge">150</div>
+                        <div class="level-content">
+                            <h5>Platinum Puppet Companion</h5>
+                            <p>The last one. Halves her companion XP unless strict mode is on, doubles it with No Escape and attention checks running, and docks you 25 companion XP for every attention check you fail</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═══════════════════════════════════════════ -->
+            <!-- FAIR PLAY                                   -->
+            <!-- ═══════════════════════════════════════════ -->
+            <section id="fair-play">
+                <h2>Fair Play</h2>
+
+                <h3>Idle Suppression</h3>
+                <p>Leaving the app running while you go and do something else does not earn XP. After <strong>3 minutes</strong> with no keyboard or mouse input, the app marks you idle and stops paying out the passive stuff. Anything that needs a click or a keystroke keeps working, because doing it proves you are there.</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Suppressed When Idle</th>
+                            <th>Always Awards XP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Flash Images</td>
+                            <td>Bubble Pops (requires clicking)</td>
+                        </tr>
+                        <tr>
+                            <td>Subliminal Messages</td>
+                            <td>Video Attention Checks (requires interaction)</td>
+                        </tr>
+                        <tr>
+                            <td>Bouncing Text</td>
+                            <td>Lock Card (requires typing)</td>
+                        </tr>
+                        <tr>
+                            <td></td>
+                            <td>Bubble Count (requires answering)</td>
+                        </tr>
+                        <tr>
+                            <td></td>
+                            <td>Mantra (requires typing)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Rate Limits</h3>
+                <p>A few activities are cheap and repeatable, so they have ceilings. None of these will bother you in normal use:</p>
+                <ul>
+                    <li><strong>Bouncing text:</strong> 2-second cooldown, 150 XP per minute</li>
+                    <li><strong>Bubble count:</strong> 3 minutes between paying games</li>
+                    <li><strong>Mantras:</strong> 1.5 seconds minimum between them, 20 per minute</li>
+                    <li><strong>FYP clips:</strong> 12 paying clips per minute</li>
+                    <li><strong>Graded Intake:</strong> 100 XP total, however well you do</li>
+                    <li><strong>Chaos runs:</strong> score capped at 250 per minute, times the difficulty multiplier</li>
+                    <li><strong>Sessions:</strong> base capped at 2,500, minus 100 for every pause</li>
+                </ul>
+
+                <div class="info-box warning">
+                    <h5>The server checks your numbers</h5>
+                    <p>XP and stats are validated on the server before they sync. Impossible jumps, broken values and nonsense data get rejected. See <a href="https://cclabs.app/guide-leaderboard.html">leaderboard.htm</a> for what that means for rankings.</p>
+                </div>
+            </section>
+
+            <!-- ═══════════════════════════════════════════ -->
+            <!-- ACHIEVEMENTS                                -->
+            <!-- ═══════════════════════════════════════════ -->
+            <section id="achievements">
+                <h2>Achievements</h2>
+
+                <figure>
+                    <img loading="lazy" decoding="async" src="images/screenshots/progression/achievements-grid.webp" alt="Achievements tab grid with neon-styled unlocked and locked tiles" class="guide-screenshot">
+                    <figcaption>The Achievements tab - unlocked ones glow, locked ones stay dim until earned.</figcaption>
+                </figure>
+
+                <figure>
+                    <img loading="lazy" decoding="async" src="images/screenshots/progression/achievements-drone.webp" alt="Drone Mode variant of the Achievements tab with hex-shaped green icons" class="guide-screenshot">
+                    <figcaption>Bundled mods like Drone Mode re-skin the entire UI - same grid, different aesthetic.</figcaption>
+                </figure>
+
+                <p>There are 63 achievements you can earn: 52 open to everyone, plus 11 patron-exclusive ones that sit in their own section with their own counter. They are one-off, they do not pay XP, and they exist purely as a record of things you did. The full grid lives in the Achievements tab. A representative selection:</p>
+
+                <h3>Level Achievements</h3>
+                <div class="achievement-grid">
+                    <div class="achievement-card">
+                        <h5>Plastic Initiation</h5>
+                        <p>Reach Level 10</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Dumb Bimbo</h5>
+                        <p>Reach Level 20</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Fully Synthetic</h5>
+                        <p>Reach Level 50</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Docile Cow</h5>
+                        <p>Reach Level 75</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Perfect Plastic Puppet</h5>
+                        <p>Reach Level 100</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Brainwashed Slavedoll</h5>
+                        <p>Reach Level 125</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Platinum Puppet</h5>
+                        <p>Reach Level 150</p>
+                    </div>
+                </div>
+
+                <h3>Time &amp; Sessions Achievements</h3>
+                <div class="achievement-grid">
+                    <div class="achievement-card">
+                        <h5>Rose-Tinted Reality</h5>
+                        <p>Keep Pink Filter active for 10 cumulative hours</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Deep Sleep Mode</h5>
+                        <p>Complete a session lasting longer than 3 hours</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Daily Maintenance</h5>
+                        <p>Launch the app 7 days in a row</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Retinal Burn</h5>
+                        <p>Have 5,000 Flash Images displayed</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Morning Glory</h5>
+                        <p>Complete Morning Drift between 6-9 AM</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Player 2 Disconnected</h5>
+                        <p>Complete Gamer Girl without Alt+Tab</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Sofa Decor</h5>
+                        <p>Complete The Distant Doll session</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Look, But Don't Touch</h5>
+                        <p>Complete Good Girls Don't Cum with Strict Lock</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Spiral Eyes</h5>
+                        <p>Stare at the Spiral Overlay for 20 minutes</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Threadbare</h5>
+                        <p>Spend 10 cumulative hours under the Spiral</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Screen Time</h5>
+                        <p>Watch 10 cumulative hours of mandatory video</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Eyes Front</h5>
+                        <p>Pass 100 attention checks</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Thirty-Day Doll</h5>
+                        <p>Launch the app 30 days in a row</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>First Week</h5>
+                        <p>Finish the seven-day First Week program</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Window Shopping</h5>
+                        <p>Spend 100 Sparkle Points</p>
+                    </div>
+                </div>
+
+                <h3>Minigames Achievements</h3>
+                <div class="achievement-grid">
+                    <div class="achievement-card">
+                        <h5>Mathematician's Nightmare</h5>
+                        <p>Guess correct bubble count 5 times in a row</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Pop Goes The Thought</h5>
+                        <p>Pop 1,000 bubbles total</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Typing Tutor</h5>
+                        <p>Complete Lock Card with 100% accuracy</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Obedience Reflex</h5>
+                        <p>Complete Lock Card (3 phrases) in under 15 seconds</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Mercy Beggar</h5>
+                        <p>Fail the attention check 3 times</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Clean Slate</h5>
+                        <p>Let Mind Wipers run for 60 seconds</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Corner Hit</h5>
+                        <p>Watch Bouncing Text hit the exact corner</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Neon Obsession</h5>
+                        <p>Click on the Avatar 20 times rapidly</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Word Perfect</h5>
+                        <p>Complete 50 Lock Cards</p>
+                    </div>
+                </div>
+
+                <h3>Hardcore Achievements</h3>
+                <div class="achievement-grid">
+                    <div class="achievement-card">
+                        <h5>Panic Button? What Panic Button?</h5>
+                        <p>Complete any session with Disable Panic enabled</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Relapse</h5>
+                        <p>Press ESC to stop, then restart within 10 seconds</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Total Lockdown</h5>
+                        <p>Activate Strict Lock, No Panic, and Pink Filter together</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>System Overload</h5>
+                        <p>Have Bubbles, Bouncing Text, and Spiral all active</p>
+                    </div>
+                </div>
+            </section>
+
+    <nav class="guide-nav" aria-label="Document navigation">
+      <a href="https://cclabs.app/guide-subliminals.html" class="prev">
+        <span class="nav-label">Previous</span>
+        <span class="nav-title">subliminals.txt</span>
+      </a>
+      <a href="guide-descent.html" class="next">
+        <span class="nav-label">Next</span>
+        <span class="nav-title">descent.log</span>
+      </a>
+    </nav>
+
+  </article>
+</main>
+
+<footer>
+  <div class="wrap taskbar">
+    <a class="btn88" href="./">guide_index</a>
+    <a href="https://cclabs.app">cclabs.app</a>
+    <a href="https://cclabs.app/subscribe.html">plans</a>
+    <a href="#" id="cc-footer-link">cookie preferences</a>
+    <span class="right">local time: <span id="clock">--:--:--</span>. session: annotated.</span>
+  </div>
+  <div class="wrap legal">Community documentation for the open-source Conditioning Control Panel project. Not the CC Labs S.r.l.s. storefront. Downloads and <a href="https://cclabs.app/subscribe.html">plans</a> live at <a href="https://cclabs.app">cclabs.app</a>.</div>
+</footer>
+
+<script>
+// taskbar clock, same contract as the hub
+(function () {
+  'use strict';
+  var clock = document.getElementById('clock');
+  if (!clock) return;
+  function p(n) { return (n < 10 ? '0' : '') + n; }
+  function tick() {
+    var d = new Date();
+    clock.textContent = p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
+
+<script src="assets/cookie-consent.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>quests.log - Conditioning Control Panel</title>
+<meta name="description" content="Daily and weekly challenges that hand you bonus XP and keep your streak alive.">
+<link rel="icon" href="images/logo.webp">
+<link rel="stylesheet" href="assets/cookie-consent.css">
+<link rel="stylesheet" href="guide-article.css">
+</head>
+<body>
+
+<a class="skip" href="#doc">skip to document</a>
+
+<header>
+  <div class="titlebar">
+    <span class="sysname">CCP community guides</span>
+    <span class="ver">v6.7.4 OK</span>
+    <nav class="menu">
+      <a href="https://cclabs.app/">dashboard</a>
+      <a href="https://cclabs.app/explore.html">explore</a>
+      <a href="../labs/loom/">the loom</a>
+      <a href="https://cclabs.app/tools.html">tools</a>
+      <a href="https://cclabs.app/leaderboard.html">leaderboard</a>
+      <a href="https://app.cclabs.app/catalogue">catalogue</a>
+      <a href="https://app.cclabs.app/">login</a>
+      <a class="dl" href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest">download</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <section class="pagehead wrap">
+    <div class="pagehead-inner">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="https://cclabs.app/">dashboard</a>
+        <span class="sep">/</span>
+        <a href="https://cclabs.app/guide.html">field_manual</a>
+        <span class="sep">/</span>
+        <span class="here">quests.log</span>
+      </nav>
+      <div class="kicker">field_manual / progression.dir / gentle</div>
+      <h1>Daily &amp; Weekly <span class="pink">Quests</span></h1>
+      <p class="lede">Small goals the app hands you each day and week. Hit them, get bonus XP, keep your streak alive.</p>
+    </div>
+  </section>
+
+  <article class="doc wrap" id="doc">
+
+    <div class="window toc">
+      <div class="bar">contents.idx - on this page<span class="lights"><i></i><i></i><i></i></span></div>
+      <div class="toc-body">
+        <ul>
+          <li><a href="#overview">Overview</a></li>
+          <li><a href="#daily-quests">Daily Quests</a></li>
+          <li><a href="#weekly-quests">Weekly Quests</a></li>
+          <li><a href="#quest-xp">How Quest XP Is Calculated</a></li>
+          <li><a href="#quest-refresh">Quest Refresh</a></li>
+          <li><a href="#rerolls">Rerolls</a></li>
+          <li><a href="#streaks">Streaks</a></li>
+          <li><a href="#seasonal">Seasonal Quests</a></li>
+        </ul>
+      </div>
+    </div>
+
+            <section id="overview">
+                <h2>Overview</h2>
+
+                <p>Quests are small goals the app sets for you. Hit the target, get XP. They live in the <strong>Quests</strong> tab, and they exist so there is always something specific to aim at instead of just "use the app for a while".</p>
+
+                <p>There are only two kinds: <strong>daily</strong> and <strong>weekly</strong>. No story quests, no chains, no difficulty setting. Every quest is drawn at random from a pool.</p>
+
+                <ul>
+                    <li>You see <strong>one daily and one weekly quest at a time.</strong> Finish the daily and the next one appears immediately, up to <strong>3 dailies a day</strong>.</li>
+                    <li>The reward is always <strong>XP only</strong>. No sparkle points, no unlocks, no items.</li>
+                    <li>Quest XP scales <strong>+4% per level</strong>, so the same quest pays a level 80 player far more than a level 5 one.</li>
+                    <li>The quest pool turns over with the app's <strong>monthly calendar</strong>, though nothing you have earned turns over with it.</li>
+                </ul>
+
+                <div class="info-box warning">
+                    <h5>Quests need an account</h5>
+                    <p>The whole Quests tab sits behind a login. If you have not signed in with Discord or Patreon, the tab shows a prompt instead of quests. Most of the app works fine offline - quests do not, because the quest pool and your streak both live on the server.</p>
+                </div>
+            </section>
+
+            <section id="daily-quests">
+                <h2>Daily Quests</h2>
+
+                <figure>
+                    <img loading="lazy" decoding="async" src="images/screenshots/quests/daily-and-weekly.webp" alt="Quests tab showing a daily quest and a weekly quest side by side" class="guide-screenshot">
+                    <figcaption>The Quests tab - the daily card in gold, the weekly in purple, each with its own reroll button.</figcaption>
+                </figure>
+
+                <p>You get <strong>3 daily quests a day</strong>, one at a time. Complete the one on screen and the next rolls straight away, picked at random and never the one you just did. After the third, the card tells you to come back tomorrow.</p>
+
+                <p>Ten of the twenty daily quests are open to everyone. The other ten need Patreon, because they ask for Patreon-only features (Takeover, Lockdown, keyword triggers, remote control, the blink trainer). If you are not subscribed, those never turn up in your rolls at all.</p>
+
+                <div class="table-scroll">
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Quest</th>
+                            <th>What it wants</th>
+                            <th>Base XP</th>
+                            <th>Pool</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Bimbo Basics</td><td>View 25 flash images</td><td>100 XP</td><td>everyone</td></tr>
+                        <tr><td>Flash Rush</td><td>View 40 flash images</td><td>130 XP</td><td>everyone</td></tr>
+                        <tr><td>Pop Parade</td><td>Pop 40 bubbles</td><td>150 XP</td><td>everyone</td></tr>
+                        <tr><td>Count Along</td><td>Finish 2 bubble count games</td><td>175 XP</td><td>everyone</td></tr>
+                        <tr><td>Soft Static</td><td>Spend 25 minutes with any overlay active</td><td>175 XP</td><td>everyone</td></tr>
+                        <tr><td>Pink Haze</td><td>Use the pink filter for 15 minutes</td><td>175 XP</td><td>everyone</td></tr>
+                        <tr><td>Spiral Sink</td><td>Spend 12 minutes with the spiral overlay</td><td>200 XP</td><td>everyone</td></tr>
+                        <tr><td>Screen Trance</td><td>Watch 12 minutes of video</td><td>200 XP</td><td>everyone</td></tr>
+                        <tr><td>Lock It In</td><td>Complete 2 lock cards</td><td>200 XP</td><td>everyone</td></tr>
+                        <tr><td>Daily Devotion</td><td>Complete 1 session</td><td>250 XP</td><td>everyone</td></tr>
+                        <tr><td>Trigger Words</td><td>Fire 15 keyword triggers</td><td>200 XP</td><td>Patreon</td></tr>
+                        <tr><td>Blink Drill</td><td>Log 30 blinks in the live blink trainer</td><td>200 XP</td><td>Patreon</td></tr>
+                        <tr><td>Hands Off</td><td>Let Bambi Takeover run for 15 minutes</td><td>250 XP</td><td>Patreon</td></tr>
+                        <tr><td>Hand Over Control</td><td>Take 25 remote commands</td><td>250 XP</td><td>Patreon</td></tr>
+                        <tr><td>Word Slave</td><td>Fire 30 keyword triggers</td><td>300 XP</td><td>Patreon</td></tr>
+                        <tr><td>Obedient Eyes</td><td>Log 50 blinks in the live blink trainer</td><td>300 XP</td><td>Patreon</td></tr>
+                        <tr><td>Locked Away</td><td>Complete 1 lockdown</td><td>300 XP</td><td>Patreon</td></tr>
+                        <tr><td>On Autopilot</td><td>Let Bambi Takeover run for 25 minutes</td><td>350 XP</td><td>Patreon</td></tr>
+                        <tr><td>Remote Hands</td><td>Take 50 remote commands</td><td>350 XP</td><td>Patreon</td></tr>
+                        <tr><td>Surrender</td><td>Let Bambi Takeover run for 40 minutes</td><td>450 XP</td><td>Patreon</td></tr>
+                    </tbody>
+                </table>
+                </div>
+
+                <div class="info-box">
+                    <h5>These are base numbers</h5>
+                    <p>The XP column is the raw value before scaling. What lands in your account is always more than this - see <a href="#quest-xp">how quest XP is calculated</a> below.</p>
+                </div>
+            </section>
+
+            <section id="weekly-quests">
+                <h2>Weekly Quests</h2>
+
+                <p>One weekly quest at a time, bigger targets, bigger payouts. Same split: ten for everyone, ten for Patreon subscribers.</p>
+
+                <div class="table-scroll">
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Quest</th>
+                            <th>What it wants</th>
+                            <th>Base XP</th>
+                            <th>Pool</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Conditioning Champion</td><td>Earn 2,000 XP from activities</td><td>500 XP</td><td>everyone</td></tr>
+                        <tr><td>Flash Monsoon</td><td>View 600 flash images</td><td>600 XP</td><td>everyone</td></tr>
+                        <tr><td>Bubble Storm</td><td>Pop 500 bubbles</td><td>600 XP</td><td>everyone</td></tr>
+                        <tr><td>Streak Keeper</td><td>Maintain a 7-day streak</td><td>600 XP</td><td>everyone</td></tr>
+                        <tr><td>Pink World</td><td>Use the pink filter for 200 minutes</td><td>700 XP</td><td>everyone</td></tr>
+                        <tr><td>Total Submission</td><td>Complete 15 bubble count games</td><td>700 XP</td><td>everyone</td></tr>
+                        <tr><td>Spiral Descent</td><td>Spend 150 minutes with the spiral overlay</td><td>750 XP</td><td>everyone</td></tr>
+                        <tr><td>Phrase Mastery</td><td>Complete 15 lock cards</td><td>750 XP</td><td>everyone</td></tr>
+                        <tr><td>Marathon Trance</td><td>Watch 90 minutes of video</td><td>800 XP</td><td>everyone</td></tr>
+                        <tr><td>Weekly Devotion</td><td>Complete 7 sessions</td><td>1,000 XP</td><td>everyone</td></tr>
+                        <tr><td>Blink Century</td><td>Log 100 blinks in the live blink trainer</td><td>700 XP</td><td>Patreon</td></tr>
+                        <tr><td>Pavlov</td><td>Fire 300 keyword triggers</td><td>750 XP</td><td>Patreon</td></tr>
+                        <tr><td>Lockdown Habit</td><td>Complete 5 lockdowns</td><td>800 XP</td><td>Patreon</td></tr>
+                        <tr><td>Puppet Strings</td><td>Take 100 remote commands</td><td>800 XP</td><td>Patreon</td></tr>
+                        <tr><td>Set It and Forget It</td><td>Let Bambi Takeover run for 120 minutes</td><td>900 XP</td><td>Patreon</td></tr>
+                        <tr><td>Eyes Trained</td><td>Log 200 blinks in the live blink trainer</td><td>1,000 XP</td><td>Patreon</td></tr>
+                        <tr><td>Throw Away the Key</td><td>Complete 7 lockdowns</td><td>1,000 XP</td><td>Patreon</td></tr>
+                        <tr><td>Always On</td><td>Let Bambi Takeover run for 180 minutes</td><td>1,100 XP</td><td>Patreon</td></tr>
+                        <tr><td>Fully Remote</td><td>Take 200 remote commands</td><td>1,100 XP</td><td>Patreon</td></tr>
+                        <tr><td>Word-Conditioned</td><td>Fire 1,000 keyword triggers</td><td>1,200 XP</td><td>Patreon</td></tr>
+                    </tbody>
+                </table>
+                </div>
+            </section>
+
+            <section id="quest-xp">
+                <h2>How Quest XP Is Calculated</h2>
+
+                <p>The number on the card is not the base number. Three things multiply it:</p>
+
+                <div class="code-block">
+                    <pre>Quest XP = base &times; (1 + level &times; 0.04) &times; betterQuests &times; (1 + questStreak &times; 0.03)</pre>
+                </div>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Factor</th>
+                            <th>Effect</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Your level</td><td>+4% per level. This is the big one.</td></tr>
+                        <tr><td>Quest streak</td><td>+3% for every consecutive day you have finished a daily quest</td></tr>
+                        <tr><td>Better Quests skill</td><td>1.25x. The skill is described as a bonus on rerolled quests, but the app applies it to every quest completion.</td></tr>
+                    </tbody>
+                </table>
+
+                <p>A worked example. Daily Devotion has a base of 250 XP. At level 50, with a 10-day quest streak and the Better Quests skill:</p>
+
+                <div class="code-block">
+                    <pre>250 &times; (1 + 50 &times; 0.04) &times; 1.25 &times; (1 + 10 &times; 0.03)
+  = 250 &times; 3.0 &times; 1.25 &times; 1.30
+  = 1,219 XP</pre>
+                </div>
+
+                <div class="info-box success">
+                    <h5>Perfect Bimbo Week pays separately</h5>
+                    <p>If you own the Perfect Bimbo Week skill you also get a one-off lump sum when your daily quest streak hits a milestone: 3,000 XP at 7 days, 6,000 at 14, 10,000 at 30. Each of those scales a further +2% per level. This is paid on top of the quest itself.</p>
+                </div>
+            </section>
+
+            <section id="quest-refresh">
+                <h2>Quest Refresh</h2>
+
+                <ul>
+                    <li><strong>Dailies reset at local midnight.</strong> Your 3 slots come back and the streak clock ticks over.</li>
+                    <li><strong>Weeklies reset once a week.</strong> The card says Sunday, but the app's internal week actually starts on Monday, so that is when the swap happens.</li>
+                    <li>The quest pool is <strong>fetched from the server</strong> and cached on your machine for 24 hours, plus a forced refresh whenever the month rolls over.</li>
+                    <li>If you are <strong>offline</strong>, quests come from the last cached list, or from the copy built into the app if you have never been online.</li>
+                    <li>If a quest you are part-way through vanishes from the server pool, or you lose Patreon access mid-quest, the app quietly rolls you a replacement.</li>
+                </ul>
+            </section>
+
+            <section id="rerolls">
+                <h2>Rerolls</h2>
+
+                <p>If a quest asks for something you do not feel like doing, reroll it. There is a button on each card.</p>
+
+                <ul>
+                    <li><strong>Everyone gets 1 daily and 1 weekly reroll.</strong></li>
+                    <li><strong>Patreon subscribers get 3 of each.</strong></li>
+                    <li><strong>Quest Refresh</strong> skill: 1 more daily reroll</li>
+                    <li><strong>Reroll Addict</strong> skill: 2 more daily rerolls</li>
+                    <li><strong>Better Quests</strong> skill: +25% quest XP</li>
+                </ul>
+
+                <p>A finished quest cannot be rerolled, and a reroll never hands back the quest you just skipped.</p>
+
+                <div class="info-box">
+                    <h5>Tip</h5>
+                    <p>Quest Refresh and Reroll Addict sit at the ends of two different chains in the <a href="guide-skill-tree.html">skill_tree.dat</a>, so collecting every extra reroll means finishing both. Better Quests is the cheaper win if you only want one of them.</p>
+                </div>
+            </section>
+
+            <section id="streaks">
+                <h2>Streaks</h2>
+
+                <figure>
+                    <img loading="lazy" decoding="async" src="images/screenshots/quests/streak.webp" alt="Quest Streak strip showing a 7-day streak and the resulting XP bonus" class="guide-screenshot">
+                    <figcaption>The Quest Streak calendar. Each filled day is a day you finished at least one daily quest.</figcaption>
+                </figure>
+
+                <p>Complete at least <strong>one daily quest per day</strong> to keep your quest streak. That is the whole rule. The streak feeds back into quest XP at +3% per day and unlocks the Perfect Bimbo Week payouts.</p>
+
+                <div class="info-box">
+                    <h5>Two streaks, not one</h5>
+                    <p>The app tracks a <strong>quest streak</strong> (days you finished a daily quest) and a separate <strong>login streak</strong> (days you opened the app at all). Quest XP uses the quest streak. Streak Power and Milestone Rewards, below, use the login streak. Doing a daily quest keeps both alive at once.</p>
+                </div>
+
+                <h3>Streak Multiplier</h3>
+                <p>With the <strong>Streak Power</strong> skill, your login streak adds +0.5% to <em>all</em> XP per day, capped at +15%. It maxes out at a 30-day streak.</p>
+
+                <h3>Milestone Rewards</h3>
+                <p>The <strong>Milestone Rewards</strong> skill pays you a bonus each day just for having a login streak. The longer the streak, the bigger the tier:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Streak Days</th>
+                            <th>Daily Bonus</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1-3 days</td><td>50 XP</td></tr>
+                        <tr><td>4-6 days</td><td>100 XP</td></tr>
+                        <tr><td>7-13 days</td><td>150 XP</td></tr>
+                        <tr><td>14-29 days</td><td>200 XP</td></tr>
+                        <tr><td>30+ days</td><td>300 XP</td></tr>
+                    </tbody>
+                </table>
+
+                <p>These are base values too. They scale a further +3% per level on top.</p>
+
+                <h3>Streak Protection</h3>
+                <ul>
+                    <li><strong>Good Girl Streak</strong> skill: one streak shield a week, which forgives a single missed day automatically</li>
+                    <li><strong>Oopsie Insurance</strong> skill: gives you a streak fix charge that spends itself when your login streak breaks</li>
+                    <li><strong>Fix Day button</strong> on the streak calendar: spend a streak fix charge by hand to fill in a day you missed</li>
+                </ul>
+
+                <div class="info-box warning">
+                    <h5>Miss a day with nothing in reserve and the streak is gone</h5>
+                    <p>There is no grace period beyond the shields and charges above. If you know you are going to miss a day, one short daily quest is usually a few minutes of work.</p>
+                </div>
+            </section>
+
+            <section id="seasonal">
+                <h2>Seasonal Quests</h2>
+
+                <p>The quest pool follows the app's monthly calendar, which is the same calendar the <a href="https://cclabs.app/guide-leaderboard.html">leaderboard</a> rotates on:</p>
+
+                <ul>
+                    <li>Each month gets a silly themed name, shown as a banner at the top of the Quests tab</li>
+                    <li>The server can mark quests as <strong>seasonal</strong>, with a start and end date. They are not listed separately - they just get mixed into the normal daily and weekly pools while they are live</li>
+                    <li>Your <strong>quest streak, your quest history and your streak fix charges all carry straight through</strong> the turn of the month. The monthly rollover used to zero the first two of those, and it doesn't any more</li>
+                    <li>The only thing the rollover changes is which quests are in the pool and which standings table you are being ranked on</li>
+                </ul>
+
+                <div class="info-box success">
+                    <h5>Nothing is taken off you at the rollover</h5>
+                    <p>Your level, your XP, your streak and everything you have unlocked carry forward, and they will keep doing that from here on. <a href="guide-descent.html">descent.log</a> has the whole picture.</p>
+                </div>
+
+                <div class="info-box">
+                    <h5>The other half of the Quests tab</h5>
+                    <p>The tab has a second sub-tab, the <strong>Bimbo Journal</strong>. That is a different system: three fixed tracks of seven steps each, with a photo upload at every step and a boss step that unlocks the next track. It is not part of the quest pool, and none of the rules on this page apply to it.</p>
+                </div>
+
+                <div class="info-box">
+                    <h5>Note</h5>
+                    <p>See <a href="https://cclabs.app/guide-leaderboard.html">leaderboard.htm</a> for what the monthly rollover does to the standings table.</p>
+                </div>
+            </section>
+
+    <nav class="guide-nav" aria-label="Document navigation">
+      <a href="guide-descent.html" class="prev">
+        <span class="nav-label">Previous</span>
+        <span class="nav-title">descent.log</span>
+      </a>
+      <a href="guide-skill-tree.html" class="next">
+        <span class="nav-label">Next</span>
+        <span class="nav-title">skill_tree.dat</span>
+      </a>
+    </nav>
+
+  </article>
+</main>
+
+<footer>
+  <div class="wrap taskbar">
+    <a class="btn88" href="./">guide_index</a>
+    <a href="https://cclabs.app">cclabs.app</a>
+    <a href="https://cclabs.app/subscribe.html">plans</a>
+    <a href="#" id="cc-footer-link">cookie preferences</a>
+    <span class="right">local time: <span id="clock">--:--:--</span>. session: annotated.</span>
+  </div>
+  <div class="wrap legal">Community documentation for the open-source Conditioning Control Panel project. Not the CC Labs S.r.l.s. storefront. Downloads and <a href="https://cclabs.app/subscribe.html">plans</a> live at <a href="https://cclabs.app">cclabs.app</a>.</div>
+</footer>
+
+<script>
+// taskbar clock, same contract as the hub
+(function () {
+  'use strict';
+  var clock = document.getElementById('clock');
+  if (!clock) return;
+  function p(n) { return (n < 10 ? '0' : '') + n; }
+  function tick() {
+    var d = new Date();
+    clock.textContent = p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
+
+<script src="assets/cookie-consent.js" defer></script>
+</body>
+</html>

@@ -971,6 +971,19 @@ namespace ConditioningControlPanel.Models
             set { _bannerPoolEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _marqueeReadDebugFast;
+        /// <summary>
+        /// Desk knob for the marquee interludes, with no UI behind it on purpose: it collapses the
+        /// cadence (4 ticker loops, a 3 minute floor, a 2 minute launch delay) to twenty seconds so
+        /// the five acts can be watched in a minute instead of half an hour. Off in every shipped
+        /// build; set it in settings.json by hand, or export CCP_MARQUEE_READS_FAST=1.
+        /// </summary>
+        public bool MarqueeReadDebugFast
+        {
+            get => _marqueeReadDebugFast;
+            set { _marqueeReadDebugFast = value; OnPropertyChanged(); }
+        }
+
         private List<string> _bannerSeenIds = new();
         /// <summary>
         /// Ids of banner pool lines already shown to this user, oldest first. Capped at
@@ -4869,6 +4882,33 @@ namespace ConditioningControlPanel.Models
                 _backRoomFxIntensity = value;
                 OnPropertyChanged();
             }
+        }
+
+        private bool _backRoomTunnel = true;
+        /// <summary>
+        /// THE BACK ROOM tunnel vision (CONTRACT 10.14): the room's own switch, shown in the room's
+        /// Options and not in Settings, because nothing else uses it. ON by default; a settings file
+        /// written before the switch existed has no key, so it reads as on until the player turns it off.
+        /// </summary>
+        [JsonProperty]
+        public bool BackRoomTunnel
+        {
+            get => _backRoomTunnel;
+            set { _backRoomTunnel = value; OnPropertyChanged(); }
+        }
+
+        private bool _backRoomMelt = true;
+        /// <summary>
+        /// THE BACK ROOM melt (CONTRACT 10.14): whether the slot's <c>fx.melt</c> plays the Brain Drain
+        /// melt. The room's own switch in the room's Options, ON by default and independent of the
+        /// app-wide Brain Drain toggles (<see cref="BrainDrainEnabled"/> and <see cref="BrainDrainMeltEnabled"/>
+        /// both default off, which kept every room melt dark). A missing key reads as on; a player's off is kept.
+        /// </summary>
+        [JsonProperty]
+        public bool BackRoomMelt
+        {
+            get => _backRoomMelt;
+            set { _backRoomMelt = value; OnPropertyChanged(); }
         }
 
         private bool _videoForceHardwareDecoding = false;

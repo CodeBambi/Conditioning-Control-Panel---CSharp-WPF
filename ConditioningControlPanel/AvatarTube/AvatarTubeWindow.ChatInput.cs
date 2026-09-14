@@ -509,7 +509,7 @@ namespace ConditioningControlPanel
             ChatHistoryView.Visibility = Visibility.Collapsed;
             SpeechScroller.Visibility = Visibility.Visible;
             SpeechBubble.MaxWidth = 380; // Restore default bubble width.
-            SpeechBubble.Visibility = Visibility.Collapsed;
+            CollapseSpeechBubble();
         }
 
         private void ToggleInputPanel()

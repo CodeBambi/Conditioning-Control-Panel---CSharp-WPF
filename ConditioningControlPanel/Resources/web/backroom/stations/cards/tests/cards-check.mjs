@@ -8,7 +8,8 @@
  * mocks answer every call. The only process this stops is the Chrome it started, by its own handle.
  * Evidence: a screenshot of every key moment in CONTRACT 10.13.F (sit fan, Loom backs, your deck, a decision held,
  * win flash, win tunnel and chip vortex, losing edges, ace glow and blackjack bloom, ripple felt at Full, split),
- * a gated-off run, a Calm run, a resume, the sit latch, a settled reopen, the room visit, and cards-check.json.
+ * a gated-off run, a Calm run, an OS reduced-motion bloom hold, a resume, the sit latch, a settled reopen, the room visit,
+ * and cards-check.json.
  * CHROME: CHROME_PATH, else the usual Windows install.
  * ==========================================================================*/
 
@@ -136,6 +137,9 @@ await until('window.dev.station.debug().chip.owed > 0', 2000);
 d = await dbg();
 ok(d.chip.server === 59 && d.chip.owed === 4 && d.chip.value === 55, `Law I: the server says 59, the chip holds ${d.chip.value} until the hand shows`);
 await moment('cards.win');
+d = await dbg();
+ok(!d.controls.deal && d.controls.dealWhy === 'screen' && d.dealText === 'One moment' && d.screenLeftMs > 0 && d.screenLeftMs <= 900,
+  `the win wash holds the next deal: "${d.dealText}", ${d.screenLeftMs} ms left`);
 await shot('win-flash.png');
 await sleep(700);
 await shot('win-tunnel-chip-vortex.png');
@@ -152,11 +156,18 @@ await ev('window.dev.host.clear()');
 await mark();
 await click('.cards-move[data-move=stand]');
 await moment('cards.lose');
+const loseAt = Date.now();
 await sleep(1150);
-await shot('losing-edges.png');
-await sleep(1900);
 d = await dbg();
+ok(!d.controls.deal && d.controls.dealWhy === 'screen' && d.dealText === 'One moment', `the losing edges hold the next deal mid-breath: "${d.dealText}", ${d.screenLeftMs} ms left`);
+await shot('losing-edges-deal-held.png');
+await until('window.dev.station.debug().controls.deal', 4000);
+const loseHeld = Date.now() - loseAt;
 let lv = await levels();
+ok(loseHeld >= 2300 && lv.at(-1) === 0, `Deal comes back only once the edges have closed (${loseHeld} ms after the moment, the tunnel at ${lv.at(-1)})`);
+summary.loseHoldMs = loseHeld;
+d = await dbg();
+lv = await levels();
 ok((await fxList()).length === 0 && Math.max(...lv) > 0.6 && Math.max(...lv) <= 0.75 && lv.at(-1) === 0, `cards.lose: one slow breath of tunnel, peak ${Math.max(...lv)}, back to 0, no fx`);
 ok(/19 beats 17\. Emi takes 2 SP\./.test(d.status) && d.chip.value === 57, `"${d.status.split('\n')[0]}"`);
 summary.lose = { levels: lv };
@@ -192,8 +203,70 @@ ok(fx.length === 3 && fx[0].fxId === 'fx.gif_from' && fx[0].symbols[0] === d.dec
 ok(Math.abs(fx[0].args.from.x - bloom.from.x) <= 1 && Math.abs(fx[0].args.from.w - bloom.from.w) <= 1, `the bloom grows from the ace's rect (${JSON.stringify(fx[0].args.from)})`);
 ok(bloom.at - deal.at >= 1700 && bloom.at - deal.at <= 2200, `the bloom fires as the second player card finishes turning (${bloom.at - deal.at} ms after the reply)`);
 ok(fx[2].fxId === 'fx.wash' && fx[2].args.color === '#5fffd0' && fx[2].args.strength === 0.9 && !fx[2].symbols, 'cards.win after a bloom: mint 0.9, no picture');
-ok(d.controls.dealWhy === 'floor' && /Blackjack! \+4 SP\./.test(d.status), 'Deal waits out the bloom; "Blackjack! +4 SP."');
+ok(d.controls.dealWhy === 'screen' && d.dealText === 'One moment' && /Blackjack! \+4 SP\./.test(d.status), `Deal waits out the bloom ("${d.dealText}", ${d.screenLeftMs} ms left); "Blackjack! +4 SP."`);
+await until('window.dev.station.debug().controls.deal', 5000);
+d = await dbg();
+ok(d.screenLeftMs === 0, 'and deals again once the picture has gone');
 summary.blackjack = { fx, bloomAfterReplyMs: bloom.at - deal.at };
+
+/* ---------------------------------------------------------------- 1b. Deal cannot be pressed by any path during a fullscreen moment */
+// Owner 2026-09-14: "nip it in the bud". Every path is tried while the bloom runs; presses are dropped, never queued.
+const dealCount = () => ev("window.dev.sent.filter((m) => m.type === 'station-request' && m.op === 'deal').length");
+const trustedClick = async (sel) => {
+  const r = await ev(`(() => { const b = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; })()`);
+  await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', x: r.x, y: r.y, button: 'left', clickCount: 1 });
+  await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x: r.x, y: r.y, button: 'left', clickCount: 1 });
+  return r;
+};
+const KEYS = { Space: { key: ' ', code: 'Space', windowsVirtualKeyCode: 32, text: ' ' }, Enter: { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' } };
+const press = async (k) => { await cdp('Input.dispatchKeyEvent', { type: 'keyDown', ...KEYS[k] }); await cdp('Input.dispatchKeyEvent', { type: 'keyUp', ...KEYS[k] }); };
+await boot('?floor=600&script=As.9d.Kh.7c');
+await dealWhenReady();
+ok(await moment('cards.bloom'), 'a blackjack deal fires the bloom');
+const heldDeals0 = await dealCount();
+d = await dbg();
+const heldBtn = await ev(`(() => { const b = document.querySelector('.cards-deal'), r = b.getBoundingClientRect();
+  return { disabled: b.disabled, held: b.hasAttribute('data-held'), text: b.querySelector('small').textContent, opacity: Number(getComputedStyle(b).opacity),
+    hit: document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === b || b.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)) }; })()`);
+ok(d.controls.dealWhy === 'screen' && heldBtn.disabled && heldBtn.held && heldBtn.text === 'One moment' && heldBtn.opacity < 0.6 && d.screenLeftMs > 2000,
+  `the bloom disables Deal visibly, even while the hand is still being laid down: "${heldBtn.text}", opacity ${heldBtn.opacity}, ${d.screenLeftMs} ms left`);
+ok(heldBtn.hit, 'nothing covers the button, so the pointer presses below really reach it');
+for (let i = 0; i < 4; i++) await trustedClick('.cards-deal');
+ok((await dealCount()) === heldDeals0, 'four real mouse clicks on Deal: no deal');
+await ev("document.activeElement && document.activeElement.blur && document.activeElement.blur(); true");
+await press('Space'); await press('Enter'); await press('Space');
+ok((await dealCount()) === heldDeals0, 'Space and Enter on the table: no deal');
+await ev("document.querySelector('.cards-deal').focus(); true");
+await press('Space'); await press('Enter');
+ok((await dealCount()) === heldDeals0, 'Space and Enter with the focus on the Deal button: no deal');
+await ev("(() => { for (let i = 0; i < 6; i++) document.querySelector('.cards-deal').click(); return true; })()");
+ok((await dealCount()) === heldDeals0, 'six scripted clicks in one task: no deal');
+const heldDirect = await ev(`(async () => { const b = document.querySelector('.cards-deal'), before = window.dev.station.debug().dropped;
+  b.onclick(); b.disabled = false; b.click(); await new Promise((r) => setTimeout(r, 0)); return { dropped: window.dev.station.debug().dropped - before, ring: b.classList.contains('is-ringing') }; })()`);
+ok(heldDirect.dropped === 2 && !heldDirect.ring && (await dealCount()) === heldDeals0,
+  `a direct call into deal and a click on a re-enabled button are refused inside the deal action (${heldDirect.dropped} dropped, no ring)`);
+await until('window.dev.station.debug().controls.deal', 8000);
+const heldFor = await dbg();
+await sleep(700);
+d = await dbg();
+ok((await dealCount()) === heldDeals0 && d.busy === false && d.queue === 0 && heldFor.dropped >= 6,
+  `nothing was queued: the moment ends, no deal follows on its own (${heldFor.dropped} presses dropped, ${await dealCount()} deals)`);
+ok(!(await ev("document.querySelector('.cards-deal').hasAttribute('data-held')")) && d.dealText !== 'One moment', `Deal comes back as "${d.dealText}"`);
+await mark();
+await trustedClick('.cards-deal');
+ok(await until(`window.dev.sent.filter((m) => m.type === 'station-request' && m.op === 'deal').length === ${heldDeals0 + 1}`, 4000), 'and one real click after the moment deals once');
+{
+  // No other door: deal() is reached only from the button and the station's own Space/Enter; the room relays no input into a
+  // station (no gamepad polling, no HUD or host message that presses a station control).
+  const src = await readFile(join(HERE, '../station.js'), 'utf8');
+  const calls = src.split('\n').filter((l) => /\bdeal\(\)/.test(l) && !/function deal\(\)/.test(l)).map((l) => l.trim());
+  ok(calls.length === 2 && calls.some((l) => l.includes(".cards-deal').onclick = () => deal()")) && calls.some((l) => l.includes("e.code === 'Space' || e.key === 'Enter'")),
+    `deal() has exactly two callers, the button and Space/Enter (${calls.length})`);
+  const roomSrc = (await Promise.all(['room/main.js', 'room/loader.js', 'room/hud.js', 'bridge.js'].map((f) => readFile(join(WEB, 'backroom', f), 'utf8')))).join('\n');
+  const hostTypes = [...roomSrc.matchAll(/bridge\.on\('([\w-]+)'/g)].map((m) => m[1]);
+  ok(!/getGamepads|gamepadconnected/.test(roomSrc + src) && !/cards-deal|\.deal\b/.test(roomSrc) && hostTypes.every((x) => !/deal|key|press|input|pad/i.test(x)),
+    `no gamepad path, and no room or host message reaches Deal (host messages: ${[...new Set(hostTypes)].join(', ')})`);
+}
 
 /* ---------------------------------------------------------------- 2. split and double */
 await boot('?floor=600&sp=20&script=8h.6d.8c.Ts.3s.Td.9c.Kd');
@@ -282,7 +355,7 @@ await click('.cards-deal');
 ok(await until("!document.querySelector('.cards-card').hidden && /closed/.test(document.querySelector('.cards-card').textContent)", 3000), 'a closed door says so on a card');
 
 /* ---------------------------------------------------------------- 6. gates off */
-await boot('?off=flash,spiral,brainDrain&floor=600&script=As.9d.Kh.7c,Th.Td.7c.9s', { play: false });
+await boot('?off=flash,spiral,brainDrain,tunnel&floor=600&script=As.9d.Kh.7c,Th.Td.7c.9s', { play: false });
 await sleep(2200);
 d = await dbg();
 await shot('gated-off-sit-fan.png');
@@ -301,7 +374,7 @@ await shot('gated-off-decision.png');
 await click('.cards-move[data-move=stand]');
 await moment('cards.lose');
 await sleep(1500);
-ok((await ev('window.dev.host.tunnel.length')) === 0 && (await ev('window.dev.host.fx.length')) === 0, 'brainDrain off: losing edges send no tunnel');
+ok((await ev('window.dev.host.tunnel.length')) === 0 && (await ev('window.dev.host.fx.length')) === 0, 'tunnel gate off: losing edges send no tunnel');
 
 /* ---------------------------------------------------------------- 7. Calm */
 await boot('?calm&floor=600&script=As.9d.Kh.7c,Th.Td.7c.9s', { play: false });
@@ -325,6 +398,27 @@ await moment('cards.lose');
 await sleep(1200);
 await shot('calm-losing-edges.png');
 ok(Math.max(...(await levels())) > 0.6, 'Calm: the tunnel breath is posted at Normal levels');
+
+/* ---------------------------------------------------------------- 7b. OS reduced motion alone, app Motion Full */
+// The host is never told about prefers-reduced-motion, so its bloom picture runs the full 4 s: the deal hold must too.
+await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+await boot('?floor=600&script=As.9d.Kh.7c,Th.Td.7c.9s');
+d = await dbg();
+ok(d.dress.still && d.dress.k === 0.5, `OS reduced motion: the table is still at page strength ${d.dress.k}`);
+await ev('window.dev.host.clear()');
+await dealWhenReady();
+await moment('cards.bloom');
+const bloomAt = await ev("window.dev.station.debug().log.filter((x) => x.what === 'moment' && x.id === 'cards.bloom').at(-1).at");
+fx = await fxList();
+d = await dbg();
+ok(fx[0] && fx[0].fxId === 'fx.gif_from' && fx[0].args.ms === 4000 && !d.controls.deal && d.screenLeftMs > 3000,
+  `OS reduced motion: the host plays the bloom picture 4 s and Deal is held for all of it (${d.screenLeftMs} ms left)`);
+await shot('reduced-os-bloom-deal-held.png');
+await until('window.dev.station.debug().controls.deal', 8000);
+const reducedHeld = await ev(`Math.round(performance.now()) - ${bloomAt}`);
+ok(reducedHeld >= 3950, `OS reduced motion: Deal comes back only once the 4 s picture has gone (${reducedHeld} ms after the bloom)`);
+summary.reducedOsBloomHoldMs = reducedHeld;
+await cdp('Emulation.setEmulatedMedia', { features: [] });
 
 /* ---------------------------------------------------------------- 8. live settings */
 await boot('?floor=600&script=Th.9d.8c.8s');
@@ -370,6 +464,40 @@ await shot('reopen-finished-hand-settled.png');
 ok(d.shown && d.shown.done && d.queue === 0 && d.table.cards.length === 4 && d.table.cards.every((c) => c.landed && c.face) && d.controls.deal,
   `reopen with a finished last hand: it lies settled on the first frame, Deal live (${d.table.cards.length} cards)`);
 
+/* ---------------------------------------------------------------- 8c. suspend keeps the deck; a suspended moment holds nothing */
+await boot('?floor=600&script=Th.9d.8c.8s,Th.9d.7c.Ts');
+await dealWhenReady();
+await decideNow();
+let sus = { media: await ev('window.dev.host.media.length'), keys: (await dbg()).deck.keys.join() };
+await ev('window.dev.station.suspend(true)');
+await sleep(300);
+await ev('window.dev.station.suspend(false)');
+await sleep(400);
+d = await dbg();
+ok((await ev('window.dev.host.media.length')) === sus.media && d.deck && d.deck.keys.join() === sus.keys && d.decide && d.moments.held,
+  `suspend keeps the deck: no new deal (${sus.media} media requests), the same 13 keys, the decision still open and held`);
+await click('.cards-move[data-move=stand]');
+await settledNow();
+await dealWhenReady();
+await decideNow();
+await ev('window.dev.host.clear()');
+await mark();
+await click('.cards-move[data-move=stand]');
+await moment('cards.lose');
+await sleep(500);
+const heldBefore = (await dbg()).screenLeftMs;
+await ev('window.dev.station.suspend(true)');
+await sleep(200);
+d = await dbg();
+ok(heldBefore > 0 && d.screenLeftMs === 0 && (await levels()).at(-1) === 0, `suspend mid-breath: the tunnel goes to 0 and the deal hold with it (${heldBefore} ms -> ${d.screenLeftMs})`);
+await ev('window.dev.station.suspend(false)');
+const mediaBeforeLeave = await ev('window.dev.host.media.length');
+await ev('window.dev.stand()');
+await ev('window.dev.open()');
+await until("window.dev.station.debug().phase === 'sit' || window.dev.station.debug().phase === 'play'", 6000);
+ok((await ev('window.dev.host.media.length')) === mediaBeforeLeave + 1 && (await ev('window.dev.host.media.at(-1).count')) === 13,
+  'leaving the station and sitting down again re-deals the 13 pictures');
+
 /* ---------------------------------------------------------------- 9. through the room */
 const PICS = ['/backroom/stations/slot/fallback/gif0.webp', '/dtrh/assets/bubbles/effects/spirals/sp6.gif', '/arcademy/art/bugle/g1.webp', '/backroom/stations/slot/fallback/gif1.webp',
   '/backroom/room/assets/ads/dtrh.webp', '/arcademy/art/bugle/g2.webp', '/backroom/stations/slot/fallback/gif2.webp', '/dtrh/assets/bubbles/effects/spirals/sp7.gif',
@@ -385,7 +513,7 @@ const FAKE_HOST = `(() => {
     postMessage(m) {
       window.__posted.push(m);
       if (m.type === 'ready') emit({ type: 'init', protocol: 1, sp: 57, reduced: false, motion: 'full', intensity: 'normal', lang: 'en', open: null,
-        gates: { flash: true, subliminal: true, spiral: true, brainDrain: true }, lex: { br_back: 'Back', br_balance: 'SP' }, stations: ['slot', 'wheel', 'cards'] });
+        gates: { flash: true, subliminal: true, spiral: true, brainDrain: true, tunnel: true }, lex: { br_back: 'Back', br_balance: 'SP' }, stations: ['slot', 'wheel', 'cards'] });
       if (m.type === 'station-request') serverP.then((s) => s.handle(m.op, m.body, m.idem)).then((r) => emit({ type: 'station-result', reqId: m.reqId, ok: r.ok, status: r.status, reason: r.reason, body: r.body || {} }));
       if (m.type === 'media-request') { const n = m.count || 4; emit({ type: 'media', reqId: m.reqId, seed: 1, words: [], gifs: PICS.slice(0, n).map((url, i) => ({ key: 'g' + i, url, w: 0, h: 0, src: 'pool' })) }); }
       if (m.type === 'fx') emit({ type: 'fx-ack', token: m.token, fired: [m.fxId], skipped: [] });

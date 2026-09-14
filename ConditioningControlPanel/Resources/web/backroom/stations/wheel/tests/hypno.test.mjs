@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   TAU, LAST_TURN_SPEED, SLOW_FLOOR, timeScale, planSpeed, warpStep, warpedRotation, stepDim, edgeAlpha, captionAlpha,
   QUIET, distance01, quietMix, quietDone, outlineAlpha, mixRgb, taffyShear, stepShear, sliceU, trailOffset, ghostRotations,
-  HUB_DRIFT, HUB_FOLLOW, stepHub, moireRotations, moireSegments, dressOf,
+  HUB_DRIFT, HUB_FOLLOW, stepHub, hubStill, moireRotations, moireSegments, dressOf,
 } from '../hypno.js';
 import { planLanding, rotationAt } from '../wheel.js';
 import { strengthK } from '../../../shared/hypno/moments.js';
@@ -99,12 +99,23 @@ test('Loom hub turns clockwise whichever way the wheel turns, and drifts clockwi
   for (const v of [-30, -12, -1.2, 0, 4, 30]) { const next = stepHub(rot, v, 1 / 60); assert.ok(next > rot, `never backward at ${v} rad/s`); rot = next; }
   assert.ok(near(stepHub(0, 0, 1, 0.32), 0.35 * 0.32), 'the long last turn slows the drift with its clock');
   assert.equal(stepHub(2, 5, -1), 2, 'no negative frame');
+  assert.ok(near(stepHub(0, 0, 1, 1, 0.5), 0.35 * 0.5), 'Calm (k 0.5): the hub keeps drifting clockwise at half strength');
+  assert.ok(near(stepHub(0, 10, 0.1, 1, 0.5), (9 + 0.35) * 0.1 * 0.5), 'Calm halves the follow too');
+  assert.ok(stepHub(0, 0, 1, 1, 0.5) > 0, 'Calm never stills it');
   const [a, b] = moireRotations(2);
   assert.equal(a, 2);
   assert.ok(near(b, 2.1));
   const seg = moireSegments(0.72, 0.76);
   assert.equal(seg.length, 240);
   assert.ok(near(Math.hypot(seg[0], seg[1]), 0.72) && near(Math.hypot(seg[2], seg[3]), 0.76));
+});
+
+test('only OS reduced motion (or the app Motion Off) holds the hub still; Calm and MotionLevel Reduced keep it turning', () => {
+  assert.equal(hubStill({ osReduced: true }), true, 'prefers-reduced-motion stills it');
+  assert.equal(hubStill({ motion: 'off' }), true, 'Motion Off stills it');
+  assert.equal(hubStill({ motion: 'reduced' }), false, 'MotionLevel Reduced (Calm) keeps it turning');
+  assert.equal(hubStill({ motion: 'full' }), false);
+  assert.equal(hubStill(), false);
 });
 
 test('dress: moire and taffy are Full only, the hub is a brass star with spiral off, k matches the kit', () => {

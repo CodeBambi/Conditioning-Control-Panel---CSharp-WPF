@@ -47,6 +47,23 @@
    so there is no CSS animation here to run away from the motion setting. */
 .slot-payline { position: absolute; z-index: 2; pointer-events: none; opacity: 0; border-radius: 10px;
   border: 2px solid #ffcf6b; box-shadow: 0 0 20px #ffcf6b7a, inset 0 0 16px #ffcf6b3d; }
+/* B1 THE SPIRAL JAR (CONTRACT 10.16.A): a narrow upright tube beside the cabinet, filling with the spirals
+   this account has already seen. There is no glb node for it and no model request is allowed (9.6), so it is
+   DOM on live projected bounds, the same pattern the payline frame uses; scene.js moves it every frame and
+   station.js paints the fill and the count. The fill eases on a tick (one gesture, one beat, Law X); reduced
+   motion takes the settled fill with no travel at all (Law VI). */
+.slot-jar { position: absolute; z-index: 2; pointer-events: none; overflow: hidden; border-radius: 9px;
+  border: 1px solid #e0b0ff5c; background: #170c24d9; box-shadow: inset 0 0 14px #00000073, 0 2px 12px #07030d66; }
+.slot-jar i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; border-radius: 0 0 8px 8px;
+  background: linear-gradient(180deg, #e7b6ff, #9a6bdd 42%, #5f38a8); box-shadow: 0 0 12px #c48dff66;
+  transition: height 420ms cubic-bezier(.2,1.5,.4,1); }
+/* Brake 9: the count is text as well as a fill, so the jar survives motion level 0. */
+.slot-jar span { position: absolute; left: 0; right: 0; bottom: 4px; text-align: center; font-size: 10px; line-height: 1.2;
+  color: #ffeafd; font-variant-numeric: tabular-nums; text-shadow: 0 1px 3px #0d0616, 0 0 6px #0d0616; }
+.slot-station[data-reduced] .slot-jar i { transition: none; }
+/* 10.16.C: the comp chip sits beside the SP readout until the comp is spent. A label, never a badge that pulses. */
+.slot-comp { background: #241634e8; border: 1px solid #ffcf6b5c; color: #ffcf6b; padding: 5px 11px; border-radius: 30px;
+  font-size: 11px; letter-spacing: .4px; }
 .slot-tokens { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
 .slot-token { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; will-change: transform;
   background: radial-gradient(circle at 35% 30%, #fff6d8, #ffcf6b 45%, #d9689f 100%); box-shadow: 0 0 10px #ffcf6b99; }

@@ -398,6 +398,45 @@ await key('KeyM'); await key('KeyM', 'keyUp');
 await sleep(200);
 ok(!(await dbg()).overview, 'M again walks');
 
+// 2f2. the room's Options (CONTRACT 10.14): effects intensity, tunnel vision and melt, each a room-option to the host
+{
+  const q = (sel) => `document.querySelector('.br-options ${sel}')`;
+  const pressed = (sel) => ev(`${q(sel)}.getAttribute('aria-pressed')`);
+  ok(await ev(`document.querySelector('.br-nav .br-pill:nth-child(3)').textContent === 'Options' && document.querySelector('.br-options').hidden`), 'an Options pill, its card closed');
+  await ev(`document.querySelector('.br-nav .br-pill:nth-child(3)').click()`);
+  ok(await ev(`!document.querySelector('.br-options').hidden`), 'Options opens the card');
+  ok(await pressed('[data-option="tunnel"]') === 'true' && await pressed('[data-option="melt"]') === 'true' && await pressed('[data-value="normal"]') === 'true',
+    'a host with no gates reads tunnel vision and melt on, Normal chosen');
+  await ev(`${q('[data-option="tunnel"]')}.click()`);
+  let sent = (await posted('room-option')).at(-1);
+  ok(sent && sent.key === 'tunnel' && sent.value === false && await ev(`${q('[data-option="tunnel"]')}.textContent`) === 'Off', 'tunnel vision off: room-option {tunnel:false}, the switch reads Off');
+  await ev(`${q('[data-value="calm"]')}.click()`);
+  sent = (await posted('room-option')).at(-1);
+  ok(sent && sent.key === 'intensity' && sent.value === 'calm', 'Calm: room-option {intensity:calm}');
+  await ev(`window.__hostEmit({ type: 'settings', motion: 'reduced', intensity: 'calm', intensityChoice: 'full', reduced: true,
+    gates: { flash: true, subliminal: true, spiral: true, brainDrain: false, tunnel: true, melt: false } })`);
+  await sleep(150);
+  ok(await pressed('[data-option="tunnel"]') === 'true' && await pressed('[data-option="melt"]') === 'false' && await pressed('[data-value="full"]') === 'true'
+    && await ev(`!${q('.br-opt-note')}.hidden`), 'the host frame has the last word: tunnel on, melt off, Full chosen, the forced-Calm note shown');
+  ok(await ev(`JSON.stringify(Object.keys(window.__backroom.state.gates))`) === '["flash","subliminal","spiral","brainDrain","tunnel","melt"]', 'the room gates carry tunnel and melt');
+  await shot('room-options.png');
+  const exits = (await posted('exit')).length;
+  await key('Escape');
+  await sleep(150);
+  ok(await ev(`document.querySelector('.br-options').hidden`) && (await posted('exit')).length === exits, 'Escape closes the card and does not leave the room');
+  // Anchored to its pill, and a press outside closes it (a press inside does not).
+  await ev(`document.querySelector('.br-nav .br-pill:nth-child(3)').click()`);
+  const fit = await ev(`(() => { const p = document.querySelector('.br-nav .br-pill:nth-child(3)').getBoundingClientRect();
+    const c = document.querySelector('.br-options').getBoundingClientRect(); return { dr: Math.abs(c.right - p.right), gap: c.top - p.bottom }; })()`);
+  ok(fit && fit.dr <= 1 && fit.gap >= 0 && fit.gap <= 16, 'the card hangs under the Options pill, right edges aligned (' + JSON.stringify(fit) + ')');
+  await ev(`${q('[data-value="normal"]')}.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))`);
+  ok(await ev(`!document.querySelector('.br-options').hidden`), 'a press inside the card keeps it open');
+  await ev(`document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))`);
+  ok(await ev(`document.querySelector('.br-options').hidden && document.querySelector('.br-nav .br-pill:nth-child(3)').getAttribute('aria-expanded') === 'false'`), 'a press outside the card closes it');
+  await ev(`window.__hostEmit({ type: 'settings', motion: 'full', intensity: 'normal', reduced: false })`);
+  await sleep(100);
+}
+
 // 2g. host close with a station open: exit-done inside the 300 ms budget
 await ev(`window.__backroom.scene.go(${row('slot:mint')})`);
 await sleep(150);
@@ -503,22 +542,28 @@ await shot('wall-picture-from-feed.png');
   await sleep(300);
   ok(await vis() === 'visible', 'and walking shows it again');
 
-  // the Options pill, and the opt-in posting bell/opt
+  // the opt-in: one more switch row in the 10.14 Options panel, after Melt, posting bell/opt
+  const sw = `document.querySelector('.br-options button.br-switch[data-option=\"bellOptIn\"]')`;
   ok(await ev(`document.querySelectorAll('.br-nav .br-pill').length === 3`), 'a third nav pill: Options');
   await ev(`document.querySelector('.br-nav .br-pill:nth-child(3)').click()`);
   await sleep(200);
   ok(await ev(`!document.querySelector('.br-options').hidden`), 'it opens the Options panel');
-  ok(await ev(`document.querySelector('.br-options .br-option span').textContent === 'Show my name on the floor bell'`),
-    'whose first row is the floor bell opt-in');
-  ok(await ev(`document.querySelector('.br-options input[data-option="bellName"]').checked === false`), 'off by default');
+  ok(await ev(`(() => { const rows = [...document.querySelectorAll('.br-options .br-opt-row')], last = rows[rows.length - 1];
+    return rows.length === 3 && last === ${sw}.closest('.br-opt-row') && last.querySelector('.br-opt-name').textContent === 'Show my name on the floor bell'; })()`),
+    'whose last row, under Tunnel vision and Melt, is the floor bell opt-in');
+  ok(await ev(`${sw}.getAttribute('aria-pressed') === 'false' && ${sw}.textContent === 'Off'`), 'off by default');
   await shot('room-options-panel.png');
-  await ev(`document.querySelector('.br-options input[data-option="bellName"]').click()`);
+  const hostOpts = (await posted('room-option')).length;
+  await ev(`${sw}.click()`);
   for (let i = 0; i < 30 && !(await ev(`window.__bell.opts.length`)); i++) await sleep(100);
-  ok(await ev(`JSON.stringify(window.__bell.opts) === '[{"on":true}]'`), 'ticking it posts bell/opt { on: true } once');
-  ok(await ev(`window.__bell.optIn === true`), 'and the server holds the flag');
-  await ev(`document.querySelector('.br-options input[data-option="bellName"]').click()`);
+  ok(await ev(`JSON.stringify(window.__bell.opts) === '[{"on":true}]'`), 'pressing it posts bell/opt { on: true } once');
+  ok(await ev(`window.__bell.optIn === true`) && await ev(`${sw}.getAttribute('aria-pressed') === 'true' && ${sw}.textContent === 'On'`),
+    'the server holds the flag and the switch reads On');
+  ok((await posted('room-option')).length === hostOpts, 'and it is never a room-option: the floor bell is the user own setting, not the host one');
+  await ev(`${sw}.click()`);
   for (let i = 0; i < 30 && (await ev(`window.__bell.opts.length`)) < 2; i++) await sleep(100);
-  ok(await ev(`window.__bell.optIn === false && window.__bell.opts.length === 2`), 'unticking it posts { on: false }');
+  ok(await ev(`window.__bell.optIn === false && window.__bell.opts.length === 2`), 'pressing it again posts { on: false }');
+  ok(await ev(`${sw}.getAttribute('aria-pressed') === 'false'`), 'and the switch goes back to Off');
 
   // MUST HIT: the room's bell line and the wheel fixture's screen (10.16.E)
   ok((await labels())['wheel/status_screen'] === 'YOUR DAILY DETOUR', 'the wheel fixture reads its everyday label');

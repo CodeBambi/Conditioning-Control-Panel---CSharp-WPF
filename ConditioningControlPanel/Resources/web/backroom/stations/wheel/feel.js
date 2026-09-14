@@ -103,6 +103,17 @@ export function shiverPx(ms) {
   return FEEL.SHIVER_PX * Math.sin((ms / FEEL.SHIVER_MS) * Math.PI * 6) * (1 - ms / FEEL.SHIVER_MS);
 }
 
+/**
+ * THE REVEAL's count-up on the wheel screen, `q` 0..1 into it. The ease overshoots (y 1.35) for the motion; a number
+ * must never read above the pay (it showed JACKPOT +551 for +550), so the count is clamped to 0..pay.
+ */
+export function revealCount(pay, q) {
+  const p = Math.max(0, Math.round(Number(pay) || 0));
+  if (!(q > 0)) return 0;
+  if (q >= 1) return p;
+  return Math.max(0, Math.min(p, Math.round(p * bezier(FEEL.REVEAL_EASE, q))));
+}
+
 /** A cubic-bezier(x1,y1,x2,y2) easing, solved for x. */
 export function bezier([a, b, c, d], x) {
   const q = Math.min(1, Math.max(0, x));

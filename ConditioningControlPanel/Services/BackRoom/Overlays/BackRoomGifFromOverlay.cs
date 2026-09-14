@@ -11,7 +11,8 @@ namespace ConditioningControlPanel.Services.BackRoom.Overlays;
 /// last 900 ms while that screen dims to 45% behind it (no dim below full scale, where it sits inside a
 /// running spiral). Still (MotionLevel Off): no growth, full size, 300 ms fades, first frame. One at a time;
 /// the dispatcher acks a second one busy. The clock starts when the picture's first frame is on, so the
-/// growth always carries the picture; one that is not decoded within a second never shows.
+/// growth always carries the picture; one that is not decoded within a second never shows. The caller's
+/// <c>shown</c> runs when the growth starts on its first frame, never for a refused, failed or late picture.
 /// </summary>
 internal sealed class BackRoomGifFromOverlay : BackRoomOverlayWindow
 {
@@ -40,15 +41,15 @@ internal sealed class BackRoomGifFromOverlay : BackRoomOverlayWindow
         Clear();
     }
 
-    public static void Show(string path, double aspect, FxFromTarget target, int durationMs, double scale, double dim, bool still) => OnUi(() =>
+    public static void Show(string path, double aspect, FxFromTarget target, int durationMs, double scale, double dim, bool still, Action? shown = null) => OnUi(() =>
     {
         if (target.ScreenIndex < 0 || !MayCreate(_instance)) return;
-        (_instance ??= new BackRoomGifFromOverlay()).Start(path, aspect, target, durationMs, scale, dim, still);
+        (_instance ??= new BackRoomGifFromOverlay()).Start(path, aspect, target, durationMs, scale, dim, still, shown);
     });
 
     public static void Stop() => OnUi(() => { if (_instance is { _active: true } w) { w.Clear(); w.Sleep(); } });
 
-    private void Start(string path, double aspect, FxFromTarget target, int durationMs, double scale, double dim, bool still)
+    private void Start(string path, double aspect, FxFromTarget target, int durationMs, double scale, double dim, bool still, Action? shown)
     {
         _target = target;
         _aspect = aspect;
@@ -70,6 +71,7 @@ internal sealed class BackRoomGifFromOverlay : BackRoomOverlayWindow
             if (!ok) { Clear(); return; }
             _startedAt = Environment.TickCount64;
             Frame(_startedAt, 0);
+            shown?.Invoke();
         });
     }
 

@@ -98,7 +98,7 @@ never names a section 4 id.
 - **The long last turn**: the landing plan's own clock is read at `lerp(0.32, 1, speed / 1.6)` while the planned
   speed is under 1.6 rad/s (0.6 floor under Calm). Same path, same landing angle, same slice (hypno.test). The spin
   runs about 6-7 s instead of 4. The edges (`.wheel-edges`, a radial gradient centred on the rotor) take opacity
-  0.65 x dim x k; no backdrop-filter. They stay with brainDrain off; the tunnel does not.
+  0.65 x dim x k; no backdrop-filter. They stay with the `tunnel` gate off; the tunnel does not.
 - **Quiet room**: slice colours mix toward #2a2238 by `min(0.78, clamp(since x 3) x k x 1.6)`, colour flows back from
   1.1 s by angular distance over 0.8 s, labels of grey slices at 0.75; the landed slice keeps its colour with a mint
   band outline.
@@ -112,8 +112,10 @@ never names a section 4 id.
   frame re-reads `ctx.reduced` and `ctx.intensity`, so taffy, ghosts, moire, the hub, the edges, the quiet room and
   the landing moment's k follow a MotionLevel or intensity change at once. Reduced motion and Calm keep the base
   station's settled landing (no travel), so the 0.6 floor is there for a travel that Calm never starts; the quiet room
-  runs at k 0.5, the Loom hub holds still (owner to confirm for Calm intensity; the mockup's OS reduced motion still
-  turned it at half strength). A live switch hands the scene the travel flag too (`scene.setReduced`): the next spin,
+  runs at k 0.5 and the Loom hub keeps turning at half strength (`stepHub` x k; owner, 2026-09-14, as the mockup).
+  Only OS reduced motion (`prefers-reduced-motion`) or the app's Motion Off holds the hub still (`hypno.hubStill`).
+  THE REVEAL's count-up goes through `feel.revealCount`, clamped to the pay (the overshooting ease once read +551
+  for +550). A live switch hands the scene the travel flag too (`scene.setReduced`): the next spin,
   landing and sink take the new state, a landing already turning finishes its path, the token bank reads it per run.
 - A landing with no slice to point at (`resultIndex < 0`, the wheel winds down) plays no moment (Law I).
 - **Lifecycle**: `suspend(true)` and `close()` call `moments.cancel()` (tunnel 0, holds released) and dispose the kit

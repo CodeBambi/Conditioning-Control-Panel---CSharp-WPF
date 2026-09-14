@@ -76,8 +76,42 @@ public class QuestDefinitionService : IDisposable
         (_cache?.FetchedAt is { } fetched
             && fetched.Year == DateTime.UtcNow.Year
             && fetched.Month == DateTime.UtcNow.Month
+            && IsSeasonKeyCurrent(_cache?.SeasonKey)
             ? _cache?.SeasonTitle : null)
         ?? DefaultMonthNames.GetValueOrDefault(DateTime.Now.Month, DateTime.Now.ToString("MMMM"));
+
+    /// <summary>
+    /// THE SECOND HALF OF #480, and the "Airhead August in September" the Quest panel was still
+    /// showing on 2026-09-13. The fetched-this-month guard above only proves the TITLE ARRIVED
+    /// this month; it says nothing about which month the title is FOR. A season_config the owner
+    /// never rotated keeps serving last month's name, a launch on the 3rd refetches it, the guard
+    /// is satisfied, and the stale header survives the rollover it was written to catch.
+    ///
+    /// The server now stamps the season the title belongs to ("yyyy-MM", the same key the
+    /// leaderboard rotates on). When it is present and names a different month, the title is last
+    /// season's and the local month name is used instead.
+    ///
+    /// FAILS OPEN, twice over. A null/blank key means an older server that does not send one yet,
+    /// and an unparseable one means a hand-edited config - both keep today's behaviour rather
+    /// than blanking a title that may well be right. And because the month boundary falls at a
+    /// different instant in UTC and in the player's zone, EITHER month key is accepted: the one
+    /// hour where they disagree must not flash a header nobody asked for.
+    /// </summary>
+    internal static bool IsSeasonKeyCurrent(string? seasonKey)
+    {
+        if (string.IsNullOrWhiteSpace(seasonKey)) return true;
+        var key = seasonKey.Trim();
+
+        // Only a well-formed key is an opinion. Anything else - a word, a truncated date, a
+        // hand-edited config - is not something to blank a title over.
+        if (!DateTime.TryParseExact(key, "yyyy-MM",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out _))
+            return true;
+
+        return key == DateTime.UtcNow.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture)
+            || key == DateTime.Now.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture);
+    }
 
     public QuestDefinitionService()
     {
@@ -199,6 +233,7 @@ public class QuestDefinitionService : IDisposable
                 Version = serverResponse.Version,
                 FetchedAt = DateTime.UtcNow,
                 SeasonTitle = serverResponse.SeasonTitle,
+                SeasonKey = serverResponse.SeasonKey,
                 Daily = ParseQuests(serverResponse.Quests.Daily),
                 Weekly = ParseQuests(serverResponse.Quests.Weekly),
                 Seasonal = ParseQuests(serverResponse.Quests.Seasonal)
@@ -476,6 +511,12 @@ public class QuestDefinitionService : IDisposable
         public int Version { get; set; }
         public DateTime? FetchedAt { get; set; }
         public string? SeasonTitle { get; set; }
+
+        /// <summary>The month the season title belongs to ("yyyy-MM"), as stamped by the server.
+        /// Null on a cache written before this field existed, or by a server that does not send
+        /// it - both read as "no opinion" (see IsSeasonKeyCurrent).</summary>
+        public string? SeasonKey { get; set; }
+
         public List<QuestDefinition> Daily { get; set; } = new();
         public List<QuestDefinition> Weekly { get; set; } = new();
         public List<QuestDefinition> Seasonal { get; set; } = new();
@@ -497,6 +538,9 @@ public class QuestDefinitionService : IDisposable
 
         [JsonProperty("seasonTitle")]
         public string? SeasonTitle { get; set; }
+
+        [JsonProperty("seasonKey")]
+        public string? SeasonKey { get; set; }
 
         [JsonProperty("quests")]
         public ServerQuests? Quests { get; set; }

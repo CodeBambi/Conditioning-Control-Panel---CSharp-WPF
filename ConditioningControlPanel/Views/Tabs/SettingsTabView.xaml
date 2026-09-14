@@ -2150,6 +2150,18 @@
                     </TextBlock.RenderTransform>
                 </TextBlock>
             </Canvas>
+
+            <!-- The interlude stage. A sibling of the canvas INSIDE the fade host, so a read is
+                 clipped and edge-faded by exactly the same mask as the ticker and needs no
+                 geometry of its own. Empty and invisible until MainWindow.MarqueeReads.cs takes
+                 the ticker off stage; the acts build their own strip into it and clear it after.
+                 Not hit-testable: nothing here is ever a target. -->
+            <Grid x:Name="MarqueeRead" x:FieldModifier="internal" Opacity="0"
+                  IsHitTestVisible="False" ClipToBounds="True">
+                <Grid.RenderTransform>
+                    <TranslateTransform x:Name="MarqueeReadTransform" x:FieldModifier="internal"/>
+                </Grid.RenderTransform>
+            </Grid>
             </Grid>
         </Border>
         </Grid>

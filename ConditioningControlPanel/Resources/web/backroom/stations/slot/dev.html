@@ -8,6 +8,7 @@
 <!-- Dev harness only: a mock ctx and mock-server.js stand in for the room, the host and the server.
      Serve ConditioningControlPanel/Resources as the web root (the dev GIFs come from avatar0_emotes),
      then open /web/backroom/stations/slot/dev.html. Query: ?sp=57&melt=0&floor=3000&latency=120&reduced&variant=violet|mint
+     Tier B and C (CONTRACT 10.16): ?jar=97 seeds the spiral jar, ?comp=1 mints a welcome-back comp.
      Standalone, so no ctx.hostBack: the station shows its own Back here. -->
 <script type="importmap">{"imports":{"three":"../../../vendor/three/three.module.min.js","three/addons/":"../../../vendor/three/addons/"}}</script>
 <style>
@@ -29,6 +30,10 @@
   <button data-do="jackpot">next: EMI x3</button>
   <button data-do="melt">next: melt</button>
   <button data-do="spirals">next: 3 spirals</button>
+  <button data-do="emi2">next: 2 EMI (re-spin)</button>
+  <button data-do="emi2hit">next: 2 EMI, re-spin hits</button>
+  <button data-do="jar">jar to 99</button>
+  <button data-do="comp">give a comp</button>
   <button data-do="too_fast">fault: too_fast</button>
   <button data-do="timeout">fault: lost reply</button>
   <button data-do="door">toggle door</button>
@@ -40,12 +45,19 @@ import { createMockServer } from './mock-server.js';
 
 const q = new URLSearchParams(location.search);
 const num = (k, d) => (q.has(k) ? Number(q.get(k)) : d);
-const server = createMockServer({ sp: num('sp', 57), melt: num('melt', 0), floorMs: num('floor', 3000), freezeFloorMs: num('floor', 3000) });
+const server = createMockServer({ sp: num('sp', 57), melt: num('melt', 0), floorMs: num('floor', 3000), freezeFloorMs: num('floor', 3000),
+                                 jar: num('jar', 0), comp: compArg() });
 // The room's palettes (blender-scripting backroom/out/placements.json), for trying a variant without the room.
 const VARIANTS = {
   violet: { id: 'violet', name: 'Candy Violet', palette: { candy_rose: 'ac83ed', candy_violet: '7255ad', candy_plum: '372557', wand_pink: 'cab0ff' } },
   mint: { id: 'mint', name: 'Candy Mint', palette: { candy_rose: '78d3c1', candy_violet: '439b9b', candy_plum: '254a56', wand_pink: 'a8f1d6' } },
 };
+// ?comp or ?comp=1 mints the default 5-spin comp; ?comp=3 mints a 3-spin one.
+function compArg() {
+  if (!q.has('comp')) return null;
+  const n = num('comp', 5);
+  return { spins: n > 1 ? n : 5 };
+}
 const latency = num('latency', 120);
 const sent = [];
 const spFns = new Set();
@@ -80,7 +92,8 @@ async function open() { sit.hidden = true; await station.open(); }
 sit.onclick = open;
 
 let door = true;
-const rows = { jackpot: ['emi', 'emi', 'emi'], melt: ['gif1', 'melt', 'spiral2'], spirals: ['spiral0', 'spiral1', 'spiral2'] };
+const rows = { jackpot: ['emi', 'emi', 'emi'], melt: ['gif1', 'melt', 'spiral2'], spirals: ['spiral0', 'spiral1', 'spiral2'],
+               emi2: ['emi', 'emi', 'melt'], emi2hit: ['emi', 'emi', 'sub0'] };
 document.getElementById('dev').addEventListener('click', e => {
   const act = e.target.dataset && e.target.dataset.do;
   if (rows[act]) server.script(rows[act]);
@@ -88,6 +101,9 @@ document.getElementById('dev').addEventListener('click', e => {
   if (act === 'timeout') server.fail('tape', 'timeout', 1, { apply: true });
   if (act === 'door') server.setOpen(door = !door);
   if (act === 'broke') { server.user.sp = 0; spFns.forEach(fn => fn(0)); }
+  if (act === 'emi2hit') server.respin('emi');                                  // reel 3 comes back EMI: the jackpot
+  if (act === 'jar') console.log('[jar]', server.setJar(99), 'of', server.table().jar.size);
+  if (act === 'comp') console.log('[comp]', JSON.stringify(server.giveComp()), '- sit down again to be handed it');
 });
 
 window.dev = { server, station, ctx, sent, open, stand };

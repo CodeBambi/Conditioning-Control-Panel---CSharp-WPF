@@ -941,16 +941,31 @@ public class QuestService : IDisposable
     }
 
     /// <summary>
-    /// Premium-gated quests (RequiresPremium) are only offered to users with Patreon
-    /// premium access. Free users never roll a quest tied to an exclusive feature they
-    /// can't complete. Premium users get the blended pool (free + premium).
+    /// Premium-gated quests are only offered to users with premium access. Free users never roll
+    /// a quest tied to an exclusive feature they can't complete. Premium users get the blended
+    /// pool (free + premium).
+    ///
+    /// Reads the bar through <see cref="TierGate.HasPremium"/> - the SAME read the locked door
+    /// itself makes - so the board and the feature can never disagree about who may open what.
+    /// Deliberately NOT the keyed <c>TierGate.RequiresPremium(name, dailyKey)</c> overload: the
+    /// daily-free rotation opens a feature for ONE day, and a weekly quest dealt on that day
+    /// would be unfinishable for the other six.
     /// </summary>
     private static bool IsQuestAvailableForTier(QuestDefinition quest)
-        => IsQuestAvailableForTier(quest, App.Patreon?.HasPremiumAccess == true);
+        => IsQuestAvailableForTier(quest, TierGate.HasPremium);
 
-    /// <summary>Pure form of the tier test, split out so it is testable without a live App.</summary>
+    /// <summary>
+    /// Pure form of the tier test, split out so it is testable without a live App.
+    ///
+    /// Asks <see cref="QuestDefinition.NeedsPremium"/>, not the raw <c>RequiresPremium</c> flag
+    /// (ccp-bugs#1186 / #1192): a definition published without the flag but carrying a
+    /// premium-only CATEGORY is still premium, so a free board cannot be poisoned by a payload
+    /// that forgot to say so. Every gate in the service runs through here - the roll filter, the
+    /// per-slot keep gate on the daily board and the weekly keep gate - so the safety net that
+    /// re-rolls an impossible seat and the filter that stops dealing one are the same rule.
+    /// </summary>
     internal static bool IsQuestAvailableForTier(QuestDefinition quest, bool hasPremium)
-        => !quest.RequiresPremium || hasPremium;
+        => !quest.NeedsPremium || hasPremium;
 
     /// <summary>
     /// THE SOLO-USER GATE. A quest in <see cref="QuestCategory.Remote"/> only moves when

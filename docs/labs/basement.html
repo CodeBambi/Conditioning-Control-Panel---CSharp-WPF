@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>sublevel - do not catalogue</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="images/logo.webp">
+<link rel="stylesheet" href="assets/cookie-consent.css">
+<style>
+/*
+  ACT 4 - "the basement". One set-piece page. The site drops the mask,
+  reads the visitor their own file, and issues the certificate.
+  Design language copied from index.html (CCP OS rev 2:
+  3px chrome, HUD brackets, neon glow, pink/teal chromatic shadows).
+*/
+:root {
+  --crt-black: #140f13;
+  --panel: #1e1620;
+  --panel-raised: #281c29;
+  --ink: #f1e8ee;
+  --ink-dim: #a893a6;
+  --phosphor: #e84a97;
+  --phosphor-bright: #ff7dc0;
+  --phosphor-deep: #7e2c59;
+  --amber: #e9a53d;
+  --ok: #6cc184;
+  --teal: #35e0c8;
+  --teal-deep: #1a4a44;
+  --glow-pink: rgba(232,74,151,.30);
+  --glow-teal: rgba(53,224,200,.25);
+  --font-ui: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
+  --font-display: "Segoe UI", Arial, sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: var(--crt-black);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.65;
+}
+body::before {
+  content:''; position:fixed; inset:0; z-index:999; pointer-events:none;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,.14) 0 1px, transparent 1px 3px);
+  opacity:.55;
+}
+body::after {
+  content:''; position:fixed; inset:0; z-index:998; pointer-events:none; opacity:.06;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+a { color: var(--phosphor-bright); }
+a:hover { color: var(--ink); background: var(--phosphor-deep); }
+img { max-width:100%; display:block; }
+.wrap { max-width:1180px; margin:0 auto; padding:0 24px; }
+::selection { background:var(--phosphor); color:var(--crt-black); }
+::-webkit-scrollbar { width:13px; background:var(--panel); }
+::-webkit-scrollbar-thumb { background:var(--phosphor-deep); border:3px solid var(--panel); }
+::-webkit-scrollbar-thumb:hover { background:var(--phosphor); }
+
+/* masthead - present, but the basement dims it. you are below the site now. */
+header {
+  border-bottom: 3px solid var(--phosphor);
+  background: var(--panel);
+  box-shadow: 0 3px 0 var(--teal-deep), 0 8px 30px rgba(232,74,151,.14);
+  position: relative; z-index: 5;
+  opacity:.38; transition:opacity .4s ease;
+}
+header:hover, header:focus-within { opacity:1; }
+.titlebar { display:flex; align-items:center; gap:18px; flex-wrap:wrap; padding:14px 24px; max-width:1180px; margin:0 auto; }
+.titlebar .sysname { font-weight:700; letter-spacing:.06em; text-transform:uppercase; font-size:.95rem; }
+.titlebar .sysname img { display:inline-block; height:26px; vertical-align:-7px; margin-right:9px; }
+.ver { font-size:.75rem; color:var(--crt-black); background:var(--ok); padding:1px 8px; font-weight:700; letter-spacing:.05em; }
+.menu { display:flex; gap:2px; margin-left:auto; flex-wrap:wrap; }
+.menu a { text-decoration:none; color:var(--ink-dim); padding:6px 12px; font-size:.85rem; text-transform:lowercase; }
+.menu a:hover { color:var(--crt-black); background:var(--phosphor); }
+.menu a.dl { color:var(--crt-black); background:var(--phosphor); font-weight:700; border:2px solid var(--ink); box-shadow:4px 4px 0 var(--phosphor-deep), 0 0 16px var(--glow-pink); }
+.menu a.dl:hover { background:var(--phosphor-bright); transform:translate(2px,2px); box-shadow:2px 2px 0 var(--phosphor-deep), 0 0 22px rgba(232,74,151,.45); }
+
+/* window chrome, mockup issue */
+.window {
+  border:3px solid var(--phosphor-deep); background:var(--panel);
+  box-shadow:8px 8px 0 rgba(0,0,0,.55), 0 0 18px var(--glow-pink), inset 0 0 0 1px rgba(53,224,200,.10);
+  position:relative;
+}
+.window::before, .window::after { content:''; position:absolute; width:16px; height:16px; pointer-events:none; z-index:4; }
+.window::before { top:-9px; left:-9px; border-top:3px solid var(--phosphor); border-left:3px solid var(--phosphor); }
+.window::after { bottom:-9px; right:-9px; border-bottom:3px solid var(--teal); border-right:3px solid var(--teal); }
+.window .bar {
+  display:flex; align-items:center; gap:10px; padding:10px 14px;
+  background:var(--panel-raised); border-bottom:3px solid var(--phosphor-deep);
+  font-size:.78rem; color:var(--ink-dim); text-transform:lowercase; letter-spacing:.06em;
+}
+.window .bar::before {
+  content:''; width:22px; height:10px; flex:0 0 22px;
+  background:repeating-linear-gradient(90deg, var(--phosphor-deep) 0 3px, transparent 3px 6px);
+}
+.window .bar .lights { display:flex; gap:5px; margin-left:auto; }
+.window .bar .lights i { width:10px; height:10px; background:var(--phosphor-deep); display:block; }
+.window .bar .lights i:first-child { background:var(--phosphor); box-shadow:0 0 8px var(--glow-pink); }
+.window .bar .lights i:nth-child(2) { background:var(--teal); box-shadow:0 0 8px var(--glow-teal); }
+
+.btn-big {
+  display:inline-block; text-decoration:none; font-weight:700; font-family:var(--font-ui);
+  color:var(--crt-black); background:var(--phosphor); padding:14px 26px; font-size:1rem;
+  border:3px solid var(--ink); box-shadow:6px 6px 0 var(--phosphor-deep), 0 0 22px var(--glow-pink);
+}
+.btn-big:hover { background:var(--phosphor-bright); color:var(--crt-black); transform:translate(3px,3px); box-shadow:3px 3px 0 var(--phosphor-deep), 0 0 30px rgba(232,74,151,.45); }
+.btn-big:active { transform:translate(6px,6px); box-shadow:0 0 0 var(--phosphor-deep); }
+
+/* ============ the file room ============ */
+main { min-height:72vh; padding:58px 0 70px; }
+.bsm-stage { max-width:780px; margin:0 auto; padding:0 24px; }
+.bsm-crumb {
+  font-size:.72rem; letter-spacing:.22em; text-transform:uppercase; color:var(--ink-dim);
+  margin-bottom:26px;
+}
+.bsm-crumb b { color:var(--amber); font-weight:400; }
+.bsm-room .bar .bsm-q { margin-left:auto; margin-right:12px; color:var(--phosphor-bright); letter-spacing:.1em; text-transform:none; }
+.bsm-room .bar .lights { margin-left:0; }
+.bsm-body { padding:26px 28px 30px; }
+.bsm-type { min-height:3.2em; color:var(--ink); }
+.bsm-type .caret {
+  display:inline-block; width:.55em; height:1em; background:var(--phosphor);
+  vertical-align:-2px; margin-left:2px; animation:bsmcaret 1.1s steps(2) infinite;
+}
+@keyframes bsmcaret { 50% { opacity:0; } }
+
+.bsm-file {
+  margin:22px 0 4px; padding:18px 20px; background:var(--crt-black);
+  border:1px dashed var(--phosphor-deep); font-size:.85rem; line-height:2;
+  display:none;
+}
+.bsm-file .fl { display:block; opacity:0; }
+.bsm-file .fl.on { opacity:1; transition:opacity .3s ease; }
+.bsm-file .fk { color:var(--teal); letter-spacing:.08em; }
+.bsm-file .fv { color:var(--ink); }
+.bsm-file .fq { color:var(--phosphor-bright); }
+.bsm-file .fdim { color:var(--ink-dim); }
+
+.bsm-route {
+  display:none; margin:30px 0 6px;
+  font-family:var(--font-display); font-weight:900; text-transform:uppercase;
+  font-size:clamp(1.7rem, 4vw, 2.6rem); line-height:1.05; letter-spacing:-0.01em;
+  text-shadow:-3px 0 0 rgba(232,74,151,.32), 3px 0 0 rgba(53,224,200,.28);
+}
+.bsm-routenote { display:none; color:var(--ink-dim); margin-bottom:8px; max-width:52ch; }
+
+.bsm-gradezone { display:none; margin:26px 0 4px; text-align:left; }
+.bsm-grade {
+  font-family:var(--font-display); font-weight:900;
+  font-size:clamp(5rem, 14vw, 9rem); line-height:1; color:var(--phosphor);
+  text-shadow:-5px 0 0 rgba(255,125,192,.35), 5px 0 0 rgba(53,224,200,.30), 0 0 40px var(--glow-pink);
+}
+.bsm-gradenote { color:var(--ink-dim); font-size:.88rem; opacity:0; }
+.bsm-gradenote.on { opacity:1; transition:opacity .4s ease; }
+
+/* certificate */
+.bsm-cert { display:none; margin-top:40px; }
+.bsm-cert .bsm-body { position:relative; }
+.bsm-certblock { font-size:.95rem; line-height:2.1; letter-spacing:.04em; }
+.bsm-certblock .ck { color:var(--ink-dim); }
+.bsm-certblock .cv { color:var(--ink); font-weight:700; }
+.bsm-certblock .cv.pink { color:var(--phosphor-bright); }
+.bsm-stamp {
+  position:absolute; top:26px; right:26px; transform:rotate(-6deg);
+  border:2px dashed var(--phosphor); color:var(--phosphor);
+  padding:8px 16px; font-size:.8rem; letter-spacing:.28em; text-transform:uppercase;
+  text-shadow:0 0 10px var(--glow-pink); pointer-events:none;
+}
+.bsm-actions { display:flex; gap:18px; align-items:center; flex-wrap:wrap; margin-top:26px; }
+.bsm-actions .quiet { color:var(--ink-dim); text-decoration:underline; background:none; }
+.bsm-actions .quiet:hover { color:var(--ink); background:var(--phosphor-deep); }
+
+/* aftermath (return visits) */
+.bsm-after { color:var(--ink-dim); }
+
+/* footer taskbar, dimmed like the header */
+footer {
+  border-top:3px solid var(--phosphor); background:var(--panel); padding:22px 0;
+  box-shadow:0 -3px 0 var(--teal-deep), 0 -8px 30px rgba(232,74,151,.10);
+  opacity:.38; transition:opacity .4s ease;
+}
+footer:hover, footer:focus-within { opacity:1; }
+.taskbar { display:flex; align-items:center; gap:20px; flex-wrap:wrap; font-size:.8rem; color:var(--ink-dim); }
+.taskbar a { color:var(--ink-dim); text-decoration:none; }
+.taskbar a:hover { color:var(--crt-black); background:var(--phosphor); }
+.btn88 { display:inline-block; width:88px; height:31px; border:1px solid var(--phosphor); color:var(--phosphor); font-size:.6rem; text-align:center; line-height:29px; letter-spacing:.12em; text-transform:uppercase; text-decoration:none; }
+.taskbar .right { margin-left:auto; }
+
+/* toasts (API parity with the other pages; nothing on this page calls it) */
+#toasts { position:fixed; right:18px; bottom:18px; z-index:1000; display:flex; flex-direction:column; gap:10px; }
+.toast {
+  display:flex; gap:12px; align-items:center; width:320px;
+  background:var(--panel); border:3px solid var(--phosphor-deep); box-shadow:6px 6px 0 rgba(0,0,0,.55), 0 0 16px var(--glow-pink);
+  padding:10px 14px 10px 10px; animation:toastin .28s ease both;
+}
+.toast img { width:54px; height:54px; object-fit:contain; background:var(--crt-black); border:1px solid var(--phosphor-deep); flex:0 0 54px; }
+.toast .tt { font-size:.64rem; color:var(--amber); text-transform:uppercase; letter-spacing:.14em; }
+.toast .tn { font-size:.88rem; color:var(--ink); }
+.toast.out { animation:toastout .3s ease both; }
+@keyframes toastin { from { transform:translateX(120%); } }
+@keyframes toastout { to { transform:translateX(120%); opacity:0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .bsm-type .caret { animation:none; }
+  .bsm-file .fl.on, .bsm-gradenote.on { transition:none; }
+  header, footer { transition:none; }
+}
+@media (max-width:700px) {
+  .bsm-stamp { position:static; display:inline-block; margin-bottom:14px; }
+  .bsm-body { padding:20px 16px 24px; }
+}
+</style>
+</head>
+<body>
+
+<div id="toasts" aria-live="polite"></div>
+
+<header>
+  <div class="titlebar">
+    <span class="sysname"><img src="images/logo.webp" alt="CCP dial logo">Conditioning Control Panel</span>
+    <span class="ver">v6.7.4 OK</span>
+    <nav class="menu">
+      <a href="https://cclabs.app/">dashboard</a>
+      <a href="https://cclabs.app/tools.html">tools</a>
+      <a href="https://cclabs.app/guide.html">guide</a>
+      <a href="https://cclabs.app/leaderboard.html">leaderboard</a>
+      <a href="https://app.cclabs.app/catalogue">catalogue</a>
+      <a class="dl" href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest">download</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="bsm-stage">
+    <div class="bsm-crumb">sublevel 1 / <b>this floor is not on the directory</b></div>
+
+    <div class="window bsm-room" id="bsm-room">
+      <div class="bar">sublevel_1 - the file room<span class="bsm-q" id="bsm-q">Q ?</span><span class="lights"><i></i><i></i><i></i></span></div>
+      <div class="bsm-body">
+        <p class="bsm-type" id="bsm-type" aria-live="polite"><span class="caret" id="bsm-caret"></span></p>
+        <div class="bsm-file" id="bsm-file" aria-live="polite"></div>
+        <div class="bsm-route" id="bsm-route"></div>
+        <p class="bsm-routenote" id="bsm-routenote"></p>
+        <div class="bsm-gradezone" id="bsm-gradezone">
+          <div class="bsm-grade" id="bsm-grade"></div>
+          <p class="bsm-gradenote" id="bsm-gradenote">the grade is made up. the file is real.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="window bsm-cert" id="bsm-cert">
+      <div class="bar">certificate - do not frame this<span class="lights"><i></i><i></i><i></i></span></div>
+      <div class="bsm-body">
+        <span class="bsm-stamp">CRA certified</span>
+        <div class="bsm-certblock" id="bsm-certblock"></div>
+        <div class="bsm-actions">
+          <a class="btn-big" href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest">download</a>
+          <a class="quiet" href="https://cclabs.app/records.html">visit the records office</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap taskbar">
+    <a class="btn88" href="https://cclabs.app/">cclabs.app</a>
+    <a href="https://cclabs.app/privacy-policy.html">privacy</a>
+    <a href="https://cclabs.app/terms-of-service.html">terms</a>
+    <a href="https://cclabs.app/records.html">records office</a>
+    <span class="right">local time: <span id="clock">--:--:--</span>. session: on file.</span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- storage helpers, everything through try/catch ---------- */
+  function lsGet(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} }
+  function ssGet(k) { try { return window.sessionStorage.getItem(k); } catch (e) { return null; } }
+
+  var reduced = false;
+  try { reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) {}
+
+  /* footer clock */
+  (function clock() {
+    var el = document.getElementById('clock');
+    if (!el) return;
+    function tick() {
+      var d = new Date();
+      function p(n) { return (n < 10 ? '0' : '') + n; }
+      el.textContent = p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+    }
+    tick(); setInterval(tick, 1000);
+  })();
+
+  /* toast API parity; this page never calls it itself */
+  var granted = {};
+  window.ccpToast = function (name, img) {
+    if (granted[name]) return;
+    granted[name] = true;
+    var wrap = document.getElementById('toasts');
+    if (!wrap) return;
+    var t = document.createElement('div');
+    t.className = 'toast';
+    t.innerHTML = '<img src="' + img + '" alt="">' +
+      '<div><div class="tt">achievement unlocked</div><div class="tn">' + name + '</div></div>';
+    wrap.appendChild(t);
+    setTimeout(function () {
+      t.classList.add('out');
+      setTimeout(function () { if (t.parentNode) { t.parentNode.removeChild(t); } }, 320);
+    }, 4200);
+  };
+
+  /* ---------- read the file ---------- */
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function readFile() {
+    var f = {};
+    f.subject = lsGet('ccp_intake_id');
+    var v = parseInt(lsGet('ccp_visits'), 10);
+    f.visits = (isNaN(v) || v < 1) ? null : v;
+    var pages = null;
+    try {
+      var raw = ssGet('ccp_pages');
+      if (raw) { var arr = JSON.parse(raw); if (arr && arr.length) { pages = arr.length; } }
+    } catch (e) {}
+    f.pages = pages;
+    f.i1done = lsGet('ccp_intake_done') !== null;
+    f.i2done = lsGet('ccp_intake2_done') !== null;
+    /* the first assessment moved its dismissal to localStorage so closed
+       stays closed. old sessions may still carry the session copy. */
+    f.i1dis = lsGet('ccp_intake_dismissed') !== null || ssGet('ccp_intake_dismissed') !== null;
+    f.i2dis = ssGet('ccp_intake2_dismissed') !== null;
+    f.cookie = lsGet('ccp_cookie_choice');
+    f.notes = [];
+    try {
+      var nraw = lsGet('ccp_notes');
+      if (nraw) {
+        var notes = JSON.parse(nraw);
+        if (notes && notes.length) {
+          for (var i = 0; i < notes.length && f.notes.length < 4; i++) {
+            var n = notes[i];
+            if (typeof n === 'string') { f.notes.push({ text: n, t: null }); }
+            else if (n && typeof n.text === 'string') { f.notes.push({ text: n.text, t: n.t || n.time || null }); }
+          }
+        }
+      }
+    } catch (e) {}
+    return f;
+  }
+
+  function computeRoute(f) {
+    var onFile = f.subject !== null || f.visits !== null || f.i1done || f.i2done || f.i1dis || f.i2dis || f.cookie !== null || f.notes.length > 0;
+    if (f.i1done && f.i2done) {
+      return { name: 'the cooperative', note: 'You answered everything. Twice. The file practically wrote itself.' };
+    }
+    if (f.i2done && !f.i1done) {
+      return { name: 'the late convert', note: 'You ignored the first form and folded on the second. It happens in that order more often than you would think.' };
+    }
+    if (f.i1done && !f.i2done) {
+      return { name: 'the almost', note: 'One form finished, one skipped. The little face got you halfway.' };
+    }
+    if (onFile) {
+      return { name: 'the unassessed (impressive, honestly)', note: 'Two assessments offered. Two declined. The strongest data point in this file is the refusal.' };
+    }
+    return { name: 'the ghost', note: 'There is no file. You walked through without touching anything. This page is guessing that you exist.' };
+  }
+
+  function computeGrade(f) {
+    var score = 0;
+    if (f.i1done) score += 2;
+    if (f.i2done) score += 3;
+    if (f.visits) score += Math.min(f.visits, 5);
+    score += Math.min(f.notes.length * 2, 6);
+    if (f.pages) score += Math.min(f.pages, 4);
+    if (score >= 12) return 'S';
+    if (score >= 9) return 'A';
+    if (score >= 6) return 'B';
+    if (score >= 3) return 'C';
+    return 'D';
+  }
+
+  function fileLines(f) {
+    var out = [];
+    out.push({ k: 'SUBJECT', v: f.subject ? esc(f.subject) : 'unregistered', dim: !f.subject });
+    if (f.visits !== null) out.push({ k: 'DASHBOARD LOADS', v: String(f.visits) });
+    if (f.pages !== null) out.push({ k: 'PAGES THIS SESSION', v: String(f.pages) });
+    if (f.i1done) out.push({ k: 'ASSESSMENT 1', v: 'complete' });
+    else if (f.i1dis) out.push({ k: 'ASSESSMENT 1', v: 'declined. noted.' });
+    if (f.i2done) out.push({ k: 'ASSESSMENT 2', v: 'complete' });
+    else if (f.i2dis) out.push({ k: 'ASSESSMENT 2', v: 'declined. also noted.' });
+    if (f.cookie === 'reject' || f.cookie === 'rejected') {
+      out.push({ k: 'COOKIES', v: 'rejected. tracked nothing. we keep our word about the little things.' });
+    } else if (f.cookie !== null) {
+      out.push({ k: 'COOKIES', v: 'accepted. they were never real.' });
+    }
+    if (f.notes.length) {
+      for (var i = 0; i < f.notes.length; i++) {
+        var stamp = f.notes[i].t ? ' <span class="fdim">(' + esc(f.notes[i].t) + ')</span>' : '';
+        out.push({ k: 'STATEMENT', v: '<span class="fq">&quot;' + esc(f.notes[i].text) + '&quot;</span>' + stamp, html: true });
+      }
+    } else {
+      out.push({ k: 'STATEMENTS', v: 'none on file. you kept quiet. also data.', dim: true });
+    }
+    return out;
+  }
+
+  /* ---------- typewriter ---------- */
+  var typeEl = document.getElementById('bsm-type');
+  var caret = document.getElementById('bsm-caret');
+  var typeText = document.createTextNode('');
+  typeEl.insertBefore(typeText, caret);
+
+  /* rare touch: 10% of ceremony runs the typewriter corrects itself once. */
+  var doCorrection = !reduced && Math.random() < 0.10;
+
+  function typeLine(str, done) {
+    typeText.textContent = '';
+    if (reduced) { typeText.textContent = str; setTimeout(done, 500); return; }
+    var i = 0;
+    var corrected = doCorrection;
+    function step() {
+      /* mid-line stumble: types "chance." then erases it and types the right word */
+      if (corrected && str.indexOf('question.') !== -1 && i === str.indexOf('question.')) {
+        corrected = false; doCorrection = false;
+        var wrong = 'chance.';
+        var w = 0;
+        (function typeWrong() {
+          if (w < wrong.length) { typeText.textContent += wrong.charAt(w); w++; setTimeout(typeWrong, 46); return; }
+          setTimeout(function erase() {
+            if (w > 0) { typeText.textContent = typeText.textContent.slice(0, -1); w--; setTimeout(erase, 30); return; }
+            setTimeout(step, 180);
+          }, 420);
+        })();
+        return;
+      }
+      if (i < str.length) {
+        typeText.textContent += str.charAt(i);
+        i++;
+        setTimeout(step, str.charAt(i - 1) === ' ' ? 24 : 34);
+      } else {
+        setTimeout(done, 420);
+      }
+    }
+    step();
+  }
+
+  /* ---------- ceremony ---------- */
+  var f = readFile();
+  var route = computeRoute(f);
+  var grade = computeGrade(f);
+
+  var qEl = document.getElementById('bsm-q');
+  var fileEl = document.getElementById('bsm-file');
+  var routeEl = document.getElementById('bsm-route');
+  var routeNoteEl = document.getElementById('bsm-routenote');
+  var gradeZone = document.getElementById('bsm-gradezone');
+  var gradeEl = document.getElementById('bsm-grade');
+  var gradeNote = document.getElementById('bsm-gradenote');
+  var certEl = document.getElementById('bsm-cert');
+  var certBlock = document.getElementById('bsm-certblock');
+
+  function renderCert() {
+    certBlock.innerHTML =
+      '<span class="ck">SUBJECT:</span> <span class="cv pink">' + (f.subject ? esc(f.subject) : 'unregistered') + '</span><br>' +
+      '<span class="ck">ROUTE:</span> <span class="cv">' + esc(route.name) + '</span><br>' +
+      '<span class="ck">GRADE:</span> <span class="cv">' + grade + '</span><br>' +
+      '<span class="ck">ASSESSMENT:</span> <span class="cv">ONGOING</span>';
+    certEl.style.display = 'block';
+  }
+
+  function showFile(done) {
+    var lines = fileLines(f);
+    fileEl.style.display = 'block';
+    var i = 0;
+    function next() {
+      if (i >= lines.length) { setTimeout(done, 700); return; }
+      var l = lines[i];
+      var span = document.createElement('span');
+      span.className = 'fl';
+      span.innerHTML = '<span class="fk">' + l.k + ':</span> ' +
+        (l.html ? l.v : '<span class="' + (l.dim ? 'fdim' : 'fv') + '">' + l.v + '</span>');
+      fileEl.appendChild(span);
+      /* force layout so the fade transition runs */
+      void span.offsetWidth;
+      span.className = 'fl on';
+      i++;
+      setTimeout(next, reduced ? 60 : 430);
+    }
+    next();
+  }
+
+  function ceremony() {
+    typeLine('You were told not to come down here. That was the last question.', function () {
+      qEl.textContent = 'Q done';
+      setTimeout(function () {
+        typeLine('This is your file. It was assembled from nothing you were forced to give.', function () {
+          showFile(function () {
+            typeLine('Classification follows.', function () {
+              routeEl.textContent = route.name;
+              routeEl.style.display = 'block';
+              routeNoteEl.textContent = route.note;
+              routeNoteEl.style.display = 'block';
+              setTimeout(function () {
+                gradeZone.style.display = 'block';
+                gradeEl.textContent = grade;
+                setTimeout(function () {
+                  gradeNote.className = 'bsm-gradenote on';
+                  setTimeout(function () {
+                    caret.style.display = 'none';
+                    renderCert();
+                    lsSet('ccp_ceremony_done', '1');
+                    try { certEl.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'nearest' }); } catch (e) {}
+                  }, 1200);
+                }, 900);
+              }, 1100);
+            });
+          });
+        });
+      }, 800);
+    });
+  }
+
+  function aftermath() {
+    caret.style.display = 'none';
+    typeText.textContent = 'You have already been down here. The file remembers, even when the room is quiet.';
+    typeEl.className = 'bsm-type bsm-after';
+    qEl.textContent = 'Q done';
+    renderCert();
+  }
+
+  var rerun = false;
+  try { rerun = window.location.search.indexOf('ceremonytest') !== -1; } catch (e) {}
+
+  if (lsGet('ccp_ceremony_done') !== null && !rerun) {
+    aftermath();
+  } else {
+    setTimeout(ceremony, reduced ? 200 : 900);
+  }
+})();
+</script>
+
+<!-- ============ GAME STATE MODULE (shared) ============ -->
+<!-- =====================================================================
+     GAME MODULE - block 1 of 2: STYLE
+     Shared cross-page state layer for the multi-page game.
+     Inject both blocks immediately before </body> on EVERY game page
+     (index.html, tools.html, and any later levels).
+     Selectors prefixed .gm- . No images, no deps, no gradients.
+     ===================================================================== -->
+<style>
+/* Header level chip. Appears from level 2 (second page this session). */
+.gm-chip {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 2px 7px;
+  border: 1px solid #7e2c59;
+  color: #e84a97;
+  background: transparent;
+  font-family: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
+  font-size: .68rem;
+  letter-spacing: .08em;
+  white-space: nowrap;
+}
+
+/* Nav links to pages already visited this session (level 3+). */
+.gm-done {
+  text-decoration: line-through;
+  text-decoration-color: #e84a97;
+  color: #a893a6;
+}
+</style>
+
+<!-- =====================================================================
+     GAME MODULE - block 2 of 2: SCRIPT
+     Exposes window.ccpGame = { level, pages, subjectId }.
+     Sets data-ccp-level on <html>. Storage failure degrades to level 1.
+     ===================================================================== -->
+<script>
+(function () {
+  'use strict';
+
+  var PAGES_KEY = 'ccp_pages';        /* sessionStorage: JSON array of pathnames */
+  var LV2_KEY = 'ccp_lv2_seen';       /* sessionStorage: lv2 toast fired guard   */
+  var ID_KEY = 'ccp_intake_id';       /* localStorage: subject id from Act 1     */
+  var PING_KEY = 'ccp_tab_ping';      /* localStorage: multi-tab fallback signal */
+  var TAKEOVER = "she's with the other you now.";
+
+  function ready(fn) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', fn);
+    } else {
+      fn();
+    }
+  }
+
+  /* ---------------------------------------------------------------
+     1. PAGE TRACKING / LEVEL
+     Level = how many distinct pages this session. The site pretends
+     every page is a fresh start; this is where it stops pretending.
+     --------------------------------------------------------------- */
+  var pages = [];
+  var level = 1;
+  try {
+    var raw = window.sessionStorage.getItem(PAGES_KEY);
+    if (raw) {
+      var parsed = JSON.parse(raw);
+      if (Object.prototype.toString.call(parsed) === '[object Array]') {
+        for (var i = 0; i < parsed.length; i++) {
+          if (typeof parsed[i] === 'string') { pages.push(parsed[i]); }
+        }
+      }
+    }
+    var here = window.location.pathname;
+    var known = false;
+    for (var j = 0; j < pages.length; j++) {
+      if (pages[j] === here) { known = true; break; }
+    }
+    if (!known) { pages.push(here); }
+    window.sessionStorage.setItem(PAGES_KEY, JSON.stringify(pages));
+    level = pages.length > 0 ? pages.length : 1;
+  } catch (err) {
+    pages = [window.location.pathname];
+    level = 1;
+  }
+
+  var subjectId = null;
+  try {
+    subjectId = window.localStorage.getItem(ID_KEY) || null;
+  } catch (err2) { subjectId = null; }
+
+  document.documentElement.setAttribute('data-ccp-level', String(level));
+
+  window.ccpGame = { level: level, pages: pages, subjectId: subjectId };
+
+  /* ---------------------------------------------------------------
+     2. HEADER CHIP (level 2+)
+     Displayed level caps at 4; the real one keeps counting silently.
+     --------------------------------------------------------------- */
+  ready(function () {
+    if (level < 2) { return; }
+
+    var shown = level < 4 ? level : 4;
+    var chip = document.createElement('span');
+    chip.className = 'gm-chip';
+    chip.textContent = 'lv' + shown + ' - subject ' + (subjectId || 'pending');
+
+    var ver = document.querySelector('header .titlebar .ver');
+    var bar = document.querySelector('header .titlebar');
+    if (ver && ver.parentNode) {
+      ver.parentNode.insertBefore(chip, ver.nextSibling);
+    } else if (bar) {
+      bar.appendChild(chip);
+    } else {
+      return; /* no header to haunt on this page */
+    }
+
+    /* First time the counter surfaces this session: say so, once. */
+    if (level === 2) {
+      var seen = false;
+      try { seen = window.sessionStorage.getItem(LV2_KEY) === '1'; } catch (e) { seen = true; }
+      if (!seen) {
+        try { window.sessionStorage.setItem(LV2_KEY, '1'); } catch (e2) { /* repeats, harmless */ }
+        setTimeout(function () {
+          if (typeof window.ccpToast === 'function') {
+            window.ccpToast('it kept count', 'achievements/she_remembers.webp');
+          }
+        }, 1200);
+      }
+    }
+  });
+
+  /* ---------------------------------------------------------------
+     3. NAV MEMORY (level 3+)
+     Same-origin nav links to pages already in the trail get struck.
+     --------------------------------------------------------------- */
+  ready(function () {
+    if (level < 3) { return; }
+    var links = document.querySelectorAll('header nav a');
+    for (var i = 0; i < links.length; i++) {
+      var a = links[i];
+      var href = a.getAttribute('href') || '';
+      if (href === '' || href.charAt(0) === '#') { continue; }
+      if (/^https?:/i.test(href) && a.host !== window.location.host) { continue; }
+      for (var j = 0; j < pages.length; j++) {
+        if (a.pathname === pages[j]) {
+          a.className += (a.className ? ' ' : '') + 'gm-done';
+          a.setAttribute('title', 'you already did this one');
+          break;
+        }
+      }
+    }
+  });
+
+  /* ---------------------------------------------------------------
+     4. MULTI-TAB HAUNT
+     A new tab announces itself; any hidden older tab notices.
+     Only touches the title if it owns it, so the Act 1 tab
+     possession module keeps priority.
+     --------------------------------------------------------------- */
+  (function multiTab() {
+    var savedTitle = null;
+    var restoreTimer = null;
+
+    function onHello() {
+      if (!document.hidden) { return; }        /* visible tabs stay polite */
+      if (document.title === TAKEOVER) { return; }
+      savedTitle = document.title;
+      document.title = TAKEOVER;
+    }
+
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) { return; }
+      if (restoreTimer) { clearTimeout(restoreTimer); restoreTimer = null; }
+      if (savedTitle === null) { return; }
+      restoreTimer = setTimeout(function () {
+        restoreTimer = null;
+        /* Restore only if we still own the title; another module
+           (tab possession) may have rewritten it since. */
+        if (document.title === TAKEOVER) {
+          document.title = savedTitle;
+        }
+        savedTitle = null;
+      }, 1500);
+    });
+
+    var chan = null;
+    try {
+      if (typeof window.BroadcastChannel === 'function') {
+        chan = new window.BroadcastChannel('ccp_game');
+        chan.onmessage = function (ev) {
+          if (ev && ev.data && ev.data.type === 'hello') { onHello(); }
+        };
+      }
+    } catch (e) { chan = null; }
+
+    /* localStorage fallback: 'storage' fires in other tabs only. */
+    window.addEventListener('storage', function (ev) {
+      if (ev && ev.key === PING_KEY) { onHello(); }
+    });
+
+    /* Announce this tab. */
+    try {
+      window.localStorage.setItem(PING_KEY, String(new Date().getTime()));
+    } catch (e2) { /* private mode: channel path still announces */ }
+    if (chan) {
+      try { chan.postMessage({ type: 'hello' }); } catch (e3) { /* ignore */ }
+    }
+  })();
+
+})();
+</script>
+
+<script src="assets/cookie-consent.js" defer></script>
+</body>
+</html>
