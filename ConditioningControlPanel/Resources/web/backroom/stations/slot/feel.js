@@ -56,6 +56,9 @@ export function recipe(o, { seen = 0, jackpots = 0 } = {}) {
   const tier = tierOf(o), melted = meltedBy(o);
   const r = { tier, melted, party: 'fanfare', sound: 'chime', tokens: tier > 0, heat: tier, gold: false,
               chase: false, screen: false, jolt: false, reveal: false, sparks: false, shiver: false };
+  // C1 (10.16.D): an emi2 landing has not missed yet, so it takes neither THE SHIVER nor THE ALMOST. It is a
+  // muted thud and nothing else - `hold`, a quiet party - and the re-spin that follows IS the event.
+  if (isHold(o)) return { ...r, tier: 0, party: 'hold', sound: 'muted', tokens: false, heat: 0 };
   if (tier === 0) return { ...r, party: 'shiver', sound: 'muted', heat: 0, shiver: true };   // Brake 6: never silence
   if (melted) return { ...r, party: 'melt', heat: Math.min(1, tier) };                         // Brake 5: no ceremonies
   if (tier === 4 && jackpots === 0) {
@@ -313,3 +316,93 @@ export function wiggleCells(ms) {
   const q = ms / WIGGLE.MS;
   return WIGGLE.CELLS * Math.sin(q * Math.PI * 2 * WIGGLE.CYCLES) * (1 - q);
 }
+
+/* ---------------------------------------------------------------------------------------------
+ * The playbook, Tier B and C (CONTRACT 10.16): B1 the spiral jar, B3 the welcome-back comp, C1 the
+ * EMI pair free re-spin. Same rule as Tier A: none of this decides anything. The jar count, the comp
+ * and every re-spin symbol are settled on the server before the page sees them (Law I); these helpers
+ * only say WHEN the tube ticks, WHICH beat plays and what the readouts read.
+ * ------------------------------------------------------------------------------------------ */
+
+/* ---- C1 the EMI pair free re-spin (10.16.D) ---- */
+
+export const RESPIN_KIND = 'emi_respin';
+/** The emi2 landing: reels 1 and 2 hold EMI and reel 3 is about to come back. It pays 0 by design. */
+export const isHold = o => !!o && o.line === 'emi2';
+/** The re-spin plays on its own, right after the emi2 that queued it: no second lever press (10.16.D). */
+export const playsWithoutPress = kind => kind === RESPIN_KIND;
+/** Which reels stay exactly where they are: the re-spin holds 1 and 2 and redraws reel 3 alone. */
+export const respinKeep = kind => (kind === RESPIN_KIND ? [0, 1] : []);
+/**
+ * The re-spin's own hold: A1's EMI row at FULL length, gold, never halved, not even while melted. Brake 5's
+ * halving in 10.15 applies to A1's anticipation, not to this beat, because this beat IS the event (10.16.D).
+ * Calm and reduced motion drop the light change only, exactly as A1 does; the hold and the tone stay.
+ */
+export const respinHold = () => ({ kind: 'emi', holdMs: ANTICIPATION.emi, gold: true, respin: true });
+
+/* ---- B1 the spiral jar (10.16.A) ---- */
+
+/** The reels showing a spiral on this outcome, left to right (the order they thud in). */
+export function spiralReels(o) {
+  const syms = o && Array.isArray(o.symbols) ? o.symbols : [];
+  const out = [];
+  for (let i = 0; i < Math.min(3, syms.length); i++) if (symKind(syms[i]) === 'spiral') out.push(i);
+  return out;
+}
+
+/**
+ * THE SPIRAL JAR, per landed outcome. The tube ticks once per spiral SHOWN, on that reel's own THUD (Law X),
+ * and only on an outcome that actually earned: a freeze and everything it expanded into are sealed from the
+ * jar (10.16.A), which the tape says plainly by carrying the same `jarN` it came in with.
+ *   -> { reels, values, full, from, to, size }
+ * `values[i]` is the count the tube reads after reel `reels[i]` thuds; the last one is the tape's own `jarN`,
+ * never this file's arithmetic (Law I).
+ */
+export function jarPlan(o, before = 0, size = 0) {
+  const sz = Math.max(0, Math.floor(Number(size) || 0));
+  const from = Math.max(0, Math.floor(Number(before) || 0));
+  const raw = o && o.jarN;
+  const to = Number.isFinite(Number(raw)) && raw !== null ? Math.max(0, Math.floor(Number(raw))) : null;
+  const sealed = !!o && (o.kind === 'freeze' || (to !== null && to === from));
+  const reels = sealed ? [] : spiralReels(o);
+  const values = reels.map((_, i) => (sz > 0 ? (from + i + 1) % sz : from + i + 1));
+  if (to !== null && values.length) values[values.length - 1] = to;
+  return { reels, values, full: sz > 0 && reels.length > 0 && from + reels.length >= sz,
+           from, to: values.length ? values[values.length - 1] : (to ?? from), size: sz };
+}
+
+/** The jar borrows spiral3's shape because it IS that event: 3 free spins, one tier 2 party (10.16.A). */
+export const JAR_TIER = 2;
+const jarOutcome = melted => ({ line: 'spiral3', pay: 10, meltLeft: melted ? 1 : 0, halved: !!melted });
+/**
+ * The party a full jar gets: tier 2 (two notes, a jolt, a chase and the screen) plus `fx.spiral_full`, and
+ * THEN the free spins play. Brake 2, exactly as 10.16.A puts it: when the same outcome ALSO won a line, the
+ * two merge into the higher party and THE JAR'S OWN NOTE IS DROPPED, so the landing keeps one note and the
+ * jar keeps the bigger party when it is the bigger one. A win of tier 2 or better takes the whole beat and
+ * the jar plays nothing at all. Calm: the fill only, no party (`fx.spiral_full` still fires at its Calm
+ * recipe). Brake 5: melted takes the melt party like any other win.
+ * -> a recipe (`sound: null` meaning no note of its own), or null for no party at all.
+ */
+export function jarParty({ melted = false, calm = false, winTier = 0, seen = 0 } = {}) {
+  const won = Math.max(0, Math.floor(Number(winTier) || 0));
+  if (calm || won >= JAR_TIER) return null;
+  // No tokens: the jar pays free SPINS, not SP, and THE BANK only ever flies value that moved (Law XII).
+  return { ...recipe(jarOutcome(melted), { seen, jackpots: 0 }), tokens: false, sound: won > 0 ? null : 'two' };
+}
+
+/* ---- B3 the welcome-back comp (10.16.C) ---- */
+
+/** The id the server mints: `c_` + the grant day + the account hash, both base 36. */
+export const COMP_ID = /^c_[A-Za-z0-9_-]{4,48}$/;
+/** A stored comp, read defensively -> { id, spins } or null. */
+export function compOffer(comp) {
+  if (!comp || typeof comp !== 'object') return null;
+  const id = String(comp.id || ''), spins = Math.floor(Number(comp.spins) || 0);
+  return COMP_ID.test(id) && spins >= 1 ? { id, spins } : null;
+}
+/**
+ * Is the comp still spendable? It is spent on the first tape BUY of the sit-down and never stacks, so a press
+ * that only plays an outcome already on the tape leaves it standing (10.16.C says "the lever's FIRST press";
+ * a press that buys nothing cannot buy a comp, and a refused buy must not eat it either).
+ */
+export const compAvailable = (comp, spent = false) => !spent && !!compOffer(comp);
