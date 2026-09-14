@@ -510,6 +510,8 @@ namespace ConditioningControlPanel
         public static IntakePassService IntakePass { get; private set; } = null!;
         /// <summary>The ? box's daily free premium feature (see DailyFreeService).</summary>
         public static DailyFreeService? DailyFree { get; private set; }
+        /// <summary>Back Room prize ownership, server snapshots held in memory (see Services/Prizes/OwnershipService).</summary>
+        public static Services.Prizes.OwnershipService Ownership { get; private set; } = null!;
         /// <summary>Eight-hole intake punch card (see IntakePunchCardService).</summary>
         public static IntakePunchCardService IntakePunchCard { get; private set; } = null!;
         public static TutorialService Tutorial { get; private set; } = null!;
@@ -2039,6 +2041,9 @@ namespace ConditioningControlPanel
             // endpoint not existing yet - costs nothing but the override.
             DailyFree = new DailyFreeService();
             _ = DailyFree.RefreshAsync();
+            // Prize ownership. Pure constructor: no I/O, no network; it only reads the DEBUG
+            // CCP_PRIZE_GRANTS desk-test override. Snapshots arrive later from the server lane.
+            Ownership = new Services.Prizes.OwnershipService();
             Roadmap = new RoadmapService();
             // Needs Settings, Progression and Quests (all above); Patreon is constructed above too.
             Programs = new Services.Program.ProgramService();
