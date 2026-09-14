@@ -819,6 +819,10 @@ namespace ConditioningControlPanel
                     App.Settings.Current.MarqueeMessage = ResolveDefaultMarqueeMessage();
                 }
 
+                // The interlude beat (MainWindow.MarqueeReads.cs). Armed before the first
+                // StartMarqueeAnimation, which is what hands it the loop duration to count.
+                InitializeMarqueeReads();
+
                 // Need to wait for layout to measure text width
                 SettingsTab.MarqueeText.Loaded += (s, e) => StartMarqueeAnimation();
                 SettingsTab.MarqueeCanvas.SizeChanged += (s, e) => StartMarqueeAnimation();
@@ -1287,8 +1291,14 @@ namespace ConditioningControlPanel
         {
             try
             {
-                // Stop existing animation
-                _marqueeStoryboard?.Stop();
+                // An interlude holds the banner and a PAUSED storyboard. Rebuilding the string
+                // under it would leave the ticker faded out forever, so the act is cancelled and
+                // the ticker restored first, and only then does the loop start over.
+                CancelMarqueeInterlude();
+
+                // Stop existing animation. Controllable storyboards need the same containing
+                // object they were begun with, or the Stop silently does nothing.
+                _marqueeStoryboard?.Stop(SettingsTab);
 
                 var canvasWidth = SettingsTab.MarqueeCanvas.ActualWidth;
                 if (canvasWidth <= 0) return;
@@ -1337,6 +1347,9 @@ namespace ConditioningControlPanel
                         park.X = 0;
                     }
                     _marqueeStoryboard = null;
+                    // No scroll to count, so the interludes fall back to a plain clock. They still
+                    // play; the acts just drop to crossfades (MarqueeReadStage.AllowAmbient).
+                    ArmMarqueeReadClock(0);
                     return;
                 }
 
@@ -1357,7 +1370,11 @@ namespace ConditioningControlPanel
                 System.Windows.Media.Animation.Storyboard.SetTargetProperty(animation,
                     new PropertyPath("(UIElement.RenderTransform).(TranslateTransform.X)"));
 
-                _marqueeStoryboard.Begin();
+                // isControllable, so the interlude can Pause and Resume the scroll instead of
+                // restarting it (a restart snaps the ticker back to the start of the string).
+                _marqueeStoryboard.Begin(SettingsTab, true);
+
+                ArmMarqueeReadClock(segmentWidth / 80);
             }
             catch (Exception ex)
             {

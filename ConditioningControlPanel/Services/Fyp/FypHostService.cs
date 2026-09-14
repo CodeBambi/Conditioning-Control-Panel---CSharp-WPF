@@ -842,7 +842,23 @@ internal static class FypHostService
             if (_ghostDiagTimer == null)
                 throw new InvalidOperationException("ghost watchdog timer failed to start");
 
-            _ghost.Show();
+            bool mirrored = _ghost.Show();
+            // The diag line goes out on EVERY enter, working or not. Five "ghost mode is just a
+            // black screen" reports (#1157 #1158 #1166 #1211 #1219) arrived with logs that could
+            // not tell a rejected colour key from an unregistered thumbnail from a source DWM
+            // never composed - because none of those calls was checked. They are now.
+            App.Logger?.Information("FypGhost enter: {Diag}", _ghost.Diag);
+            if (!mirrored)
+            {
+                // The window is already parked and the mirror refused to compose: showing it
+                // anyway is the black screen. Give the real window straight back instead.
+                string why = _ghost.FailureReason ?? "unknown";
+                App.Logger?.Information(
+                    "FypHostService: ghost mode unavailable ({Why}) - staying solid", why);
+                ExitGhost();
+                NotifyGhostUnavailable(why);
+                return;
+            }
             GetWindowRect(hwnd, out var applied);
             App.Logger?.Information(
                 "FypHostService: ghost mode ON (mirror on {Mon}, park requested {X}x{Y} {W}x{H}px, applied {AW}x{AH}px)",
@@ -854,6 +870,15 @@ internal static class FypHostService
             App.Logger?.Warning("FypHost.EnterGhost failed: {E}", ex.Message);
             ExitGhost();   // never leave the real window parked off-screen with no mirror
         }
+    }
+
+    /// <summary>Tell the page ghost mode could not be made to work, so it can say so on the feed.
+    /// A note, never a dialog - the feed itself is fine, it just stays solid. The toggle has
+    /// already snapped back off: ExitGhost posts clickThrough:false before this runs.</summary>
+    private static void NotifyGhostUnavailable(string reason)
+    {
+        try { _host?.Post(new { type = "ghost-unavailable", reason }); }
+        catch (Exception ex) { App.Logger?.Debug("FypHost: ghost-unavailable post failed: {E}", ex.Message); }
     }
 
     /// <summary>The ghost gear button: give the window back and open the options popover in one
@@ -1047,6 +1072,19 @@ internal static class FypHostService
                 try
                 {
                     if (!_ghosted) { StopGhostDiagnostics(); return; }
+                    // The mirror going opaque mid-session IS the black screen, and it is
+                    // invisible to every check below (the window stays visible, un-iconic and
+                    // un-cloaked while it paints a solid sheet over the monitor). Ask the one
+                    // question that separates them, and take the ghost down rather than leave it.
+                    if (_ghost?.ColorKeyStillApplied() == false)
+                    {
+                        App.Logger?.Information(
+                            "FypHostService: ghost colour key stopped applying - dropping ghost mode "
+                            + "before the mirror composes as a black sheet");
+                        ExitGhost();
+                        NotifyGhostUnavailable("colorkey-lost");
+                        return;
+                    }
                     DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, out int cloaked, sizeof(int));
                     GetWindowRect(hwnd, out var r);
                     App.Logger?.Information(

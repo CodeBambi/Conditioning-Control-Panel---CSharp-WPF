@@ -579,17 +579,23 @@ namespace ConditioningControlPanel
                 var currentSource = source;
                 var currentLength = (text ?? "").Length;
 
+                // When the hover hold started, so it can be capped. A collapsed bubble raises no
+                // MouseLeave, so without a cap one missed leave parks the latch up forever.
+                DateTime? hoverHoldSince = null;
+
                 _speechTimer.Tick += (s, e) =>
                 {
                     // If mouse is over speech bubble, keep it open - recheck in 1 second
-                    if (_isMouseOverSpeechBubble)
+                    hoverHoldSince ??= DateTime.UtcNow;
+                    if (Services.Companion.SpeechLatchRule.HoldForHover(
+                            _isMouseOverSpeechBubble, DateTime.UtcNow - hoverHoldSince.Value))
                     {
                         _speechTimer.Interval = TimeSpan.FromSeconds(1);
                         return; // Don't stop timer, keep checking
                     }
 
                     _speechTimer.Stop();
-                    SpeechBubble.Visibility = Visibility.Collapsed;
+                    CollapseSpeechBubble();
                     _isShowingAiBubble = false; // Clear AI bubble flag when any bubble hides
 
                     // Track this speech's properties for delay calculation on next speech
@@ -796,7 +802,7 @@ namespace ConditioningControlPanel
                     if (!_isListeningBubble) return; // a real bubble already took over
                     _isListeningBubble = false;
 
-                    SpeechBubble.Visibility = Visibility.Collapsed;
+                    CollapseSpeechBubble();
                     _lastSpeechEndTime = DateTime.Now;
                     ProcessNextSpeech();
                 }
@@ -831,7 +837,7 @@ namespace ConditioningControlPanel
             _mutedIndicatorTimer.Tick += (s, e) =>
             {
                 _mutedIndicatorTimer.Stop();
-                SpeechBubble.Visibility = Visibility.Collapsed;
+                CollapseSpeechBubble();
             };
             _mutedIndicatorTimer.Start();
         }
@@ -1383,6 +1389,10 @@ namespace ConditioningControlPanel
                 _idleTimer.Interval = TimeSpan.FromSeconds(configured);
             }
 
+            // A wedged latch would make IsSpeechReady() false for the rest of the session, and this
+            // timer is the only beat still running once she is stuck, so the watchdog lives here.
+            ClearStaleSpeechLatch();
+
             // Skip if speech is on cooldown or currently showing
             if (!IsSpeechReady()) return;
 
@@ -1669,7 +1679,7 @@ namespace ConditioningControlPanel
             catch { }
             try
             {
-                SpeechBubble.Visibility = Visibility.Collapsed;
+                CollapseSpeechBubble();
                 _lastSpeechEndTime = DateTime.Now;
             }
             catch { }
@@ -1840,7 +1850,7 @@ namespace ConditioningControlPanel
                     _speechTimer.Stop();
                     _isGiggling = false;
                     _isShowingAiBubble = false; // Clear AI bubble flag when any bubble hides
-                    SpeechBubble.Visibility = Visibility.Collapsed;
+                    CollapseSpeechBubble();
 
                     _lastSpeechEndTime = DateTime.Now;
                     _lastSpeechSource = SpeechSource.Preset;
@@ -1966,17 +1976,23 @@ namespace ConditioningControlPanel
                 // Capture trigger length for delay calculation
                 var triggerLength = trigger.Length;
 
+                // When the hover hold started, so it can be capped. A collapsed bubble raises no
+                // MouseLeave, so without a cap one missed leave parks the latch up forever.
+                DateTime? hoverHoldSince = null;
+
                 _speechTimer.Tick += (s, e) =>
                 {
                     // If mouse is over speech bubble, keep it open - recheck in 1 second
-                    if (_isMouseOverSpeechBubble)
+                    hoverHoldSince ??= DateTime.UtcNow;
+                    if (Services.Companion.SpeechLatchRule.HoldForHover(
+                            _isMouseOverSpeechBubble, DateTime.UtcNow - hoverHoldSince.Value))
                     {
                         _speechTimer.Interval = TimeSpan.FromSeconds(1);
                         return; // Don't stop timer, keep checking
                     }
 
                     _speechTimer.Stop();
-                    SpeechBubble.Visibility = Visibility.Collapsed;
+                    CollapseSpeechBubble();
                     _isShowingAiBubble = false; // Clear AI bubble flag when any bubble hides
 
                     // Track this speech's properties for delay calculation on next speech
@@ -2862,6 +2878,39 @@ namespace ConditioningControlPanel
         // ============================================================
         // SPEECH BUBBLE MOUSE HANDLERS
         // ============================================================
+
+        /// <summary>
+        /// The one way this window takes the bubble off screen. Collapsing it also drops the hover
+        /// latch: WPF raises no <c>MouseLeave</c> for an element that vanishes from under the
+        /// pointer, and a latch left up there stops the hide tick forever - which stops
+        /// <c>ProcessNextSpeech</c>, which never lowers <c>_isGiggling</c>, which silences her.
+        /// </summary>
+        private void CollapseSpeechBubble()
+        {
+            SpeechBubble.Visibility = Visibility.Collapsed;
+            _isMouseOverSpeechBubble = false;
+        }
+
+        /// <summary>
+        /// Drops a speech latch that nothing can lower any more (see <c>SpeechLatchRule</c>). Called
+        /// from the idle tick, which is the one beat guaranteed to keep running while she is wedged.
+        /// </summary>
+        private void ClearStaleSpeechLatch()
+        {
+            if (!Services.Companion.SpeechLatchRule.IsLatchStale(
+                    isGiggling: _isGiggling,
+                    bubbleVisible: SpeechBubble.Visibility == Visibility.Visible,
+                    waitingForAi: _isWaitingForAi,
+                    queueEmpty: _speechQueue.Count == 0,
+                    leadInPending: _speechLeadInTimer != null,
+                    delayPending: _speechDelayTimer?.IsEnabled == true))
+                return;
+
+            _isGiggling = false;
+            _isMouseOverSpeechBubble = false;
+            _lastSpeechEndTime = DateTime.Now;
+            App.Logger?.Warning("[Speech] stale speech latch cleared - the companion was wedged silent");
+        }
 
         private void SpeechBubble_MouseEnter(object sender, MouseEventArgs e)
         {

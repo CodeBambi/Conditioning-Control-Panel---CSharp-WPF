@@ -55,6 +55,16 @@ internal sealed class FypGhostOverlay
     private double _opacity;
     private bool _closed;
 
+    /// <summary>Why <see cref="Show"/> refused, or null when the mirror is live. One of the
+    /// strings <see cref="Diagnose"/> returns; the host logs it and tells the page.</summary>
+    public string? FailureReason { get; private set; }
+
+    /// <summary>Everything measured at ghost enter, in one line: composition state, the colour
+    /// key readback, and the DWM HRESULTs. Logged at Info on EVERY enter, success or not - five
+    /// "ghost mode is just a black screen" reports (ccp-bugs #1157 #1158 #1166 #1211 #1219)
+    /// arrived with nothing in the log to tell the branches apart.</summary>
+    public string Diag { get; private set; } = "(not measured)";
+
     /// <param name="sourceHwnd">HWND of the real feed window (the thumbnail source). Must still
     /// be on its home monitor when this runs — the ctor captures that monitor, so construct the
     /// overlay BEFORE parking the window.</param>
@@ -79,22 +89,64 @@ internal sealed class FypGhostOverlay
 
     /// <summary>Show the mirror fullscreen on the feed's home monitor and start the live
     /// thumbnail. The thumbnail letterboxes at the source's aspect ratio; the bars are invisible
-    /// because the color-keyed surface never composes.</summary>
-    public void Show()
+    /// because the color-keyed surface never composes.
+    ///
+    /// <para>Returns FALSE when the mirror could not be made to compose - and then leaves NOTHING
+    /// on screen. Both halves of this window are load-bearing and both can fail on a machine that
+    /// is not this one: if the colour key does not drop the surface out of composition, the
+    /// RGB(1,1,1) sheet stands as an opaque monitor-sized topmost pane, and if the thumbnail never
+    /// registers there is not even a picture over it. That combination is a black screen, which is
+    /// exactly what five reports describe. A ghost nobody can see through is worse than no ghost
+    /// at all, so the caller un-ghosts instead.</para></summary>
+    public bool Show()
     {
-        if (_closed) return;
+        if (_closed) return false;
         try
         {
+            int compHr = DwmIsCompositionEnabled(out bool composed);
             // Manual monitor-fill bounds in physical px (covers the taskbar too — fine, the
             // mirror is click-through). Never a Maximized state change: frameworks reassert
             // their cached styles on state transitions.
             _form.Bounds = _screen.Bounds;
             _form.Show();
-            ApplyColorKey();
-            EnsureThumbnail();
+            bool keyOk = ApplyColorKey(out int keyErr, out uint keyBack, out int keyFlags);
+            int regHr = RegisterThumbnail(out int srcHr, out int srcW, out int srcH);
+            Diag = $"composition={composed} (0x{compHr:X8}), colorkey={keyOk} err={keyErr} "
+                 + $"readback=0x{keyBack:X6}/flags=0x{keyFlags:X2}, register=0x{regHr:X8}, "
+                 + $"sourceSize={srcW}x{srcH} (0x{srcHr:X8}), "
+                 + $"dest={_form.ClientSize.Width}x{_form.ClientSize.Height}, opacity={_opacity:0.00}";
+            FailureReason = Diagnose(compHr == 0 && composed, keyOk, regHr, srcW, srcH);
+            if (FailureReason != null) { Close(); return false; }
             ShowButtons();
+            return true;
         }
-        catch (Exception ex) { App.Logger?.Debug("FypGhostOverlay.Show: {E}", ex.Message); }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("FypGhostOverlay.Show: {E}", ex.Message);
+            Diag = $"threw: {ex.Message}";
+            FailureReason = "mirror-threw";
+            Close();
+            return false;
+        }
+    }
+
+    /// <summary>The verdict, as a pure function of what the native calls said - so the decision
+    /// itself is testable without a desktop, a GPU or a DWM.
+    ///
+    /// <para>Order matters: composition off explains every other failure downstream of it, and a
+    /// rejected colour key explains a black sheet whether or not the thumbnail registered. A zero
+    /// source size means DWM holds a registration but has nothing to draw through it (the source
+    /// was never composed), which paints the destination black at the default opacity of 1.0.</para>
+    /// </summary>
+    /// <returns>null when the mirror is good to show.</returns>
+    internal static string? Diagnose(bool compositionEnabled, bool colorKeyApplied, int registerHr,
+        int sourceWidth, int sourceHeight)
+    {
+        if (!compositionEnabled) return "composition-disabled";
+        if (!colorKeyApplied) return "colorkey-rejected";
+        if (registerHr != 0) return $"thumbnail-register-failed-0x{registerHr:X8}";
+        if (sourceWidth <= 0 || sourceHeight <= 0) return "thumbnail-source-empty";
+        return null;
     }
 
     /// <summary>The two controls that stay CLICKABLE in ghost mode. They cannot live on the
@@ -160,36 +212,96 @@ internal sealed class FypGhostOverlay
         catch (Exception ex) { App.Logger?.Debug("FypGhostOverlay.Close: {E}", ex.Message); }
     }
 
-    private void ApplyColorKey()
+    /// <summary>Key out the RGB(1,1,1) surface — NOT LWA_ALPHA, which would multiply the
+    /// thumbnail too (see the class comment). With the surface gone, the thumbnail's
+    /// DWM_TNP_OPACITY blends the feed straight against the desktop behind the window.
+    ///
+    /// <para>The call was fire-and-forget for three releases. It is READ BACK now: a colour key
+    /// that did not take is the difference between a see-through ghost and an opaque black pane
+    /// over the user's whole monitor, and nothing else in this class can tell the two apart.</para>
+    /// </summary>
+    private bool ApplyColorKey(out int win32Error, out uint readback, out int readbackFlags)
     {
+        win32Error = 0;
+        readback = 0;
+        readbackFlags = 0;
         try
         {
-            // Key out the RGB(1,1,1) surface — NOT LWA_ALPHA, which would multiply the
-            // thumbnail too (see the class comment). With the surface gone, the thumbnail's
-            // DWM_TNP_OPACITY blends the feed straight against the desktop behind the window.
-            SetLayeredWindowAttributes(_form.Handle, COLOR_KEY, 0, LWA_COLORKEY);
+            if (!SetLayeredWindowAttributes(_form.Handle, COLOR_KEY, 0, LWA_COLORKEY))
+            {
+                win32Error = Marshal.GetLastWin32Error();
+                return false;
+            }
+            if (!GetLayeredWindowAttributes(_form.Handle, out readback, out _, out readbackFlags))
+            {
+                win32Error = Marshal.GetLastWin32Error();
+                return false;
+            }
+            return (readbackFlags & LWA_COLORKEY) != 0 && readback == COLOR_KEY;
         }
-        catch (Exception ex) { App.Logger?.Debug("FypGhostOverlay.ApplyColorKey: {E}", ex.Message); }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("FypGhostOverlay.ApplyColorKey: {E}", ex.Message);
+            return false;
+        }
     }
 
-    private void EnsureThumbnail()
+    /// <summary>Is the surface still keyed out of composition? The host's watchdog tick asks,
+    /// because a handle recreation behind the framework's back re-applies the ex-styles from
+    /// CreateParams but NOT the layered attributes - and the first frame after that is the black
+    /// sheet. Never answers false on a diagnostic that itself failed: the ghost is only worth
+    /// taking down on a definite verdict.</summary>
+    public bool ColorKeyStillApplied()
     {
         try
         {
-            if (_closed || _sourceHwnd == IntPtr.Zero) return;
+            if (_closed || !_form.IsHandleCreated) return true;
+            if (!GetLayeredWindowAttributes(_form.Handle, out uint key, out _, out int flags)) return true;
+            return (flags & LWA_COLORKEY) != 0 && key == COLOR_KEY;
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("FypGhostOverlay.ColorKeyStillApplied: {E}", ex.Message);
+            return true;
+        }
+    }
+
+    private void EnsureThumbnail() => RegisterThumbnail(out _, out _, out _);
+
+    /// <summary>Register (once) and point the live thumbnail, reporting what DWM said. The source
+    /// SIZE is queried as well as the registration: DwmRegisterThumbnail succeeds against a window
+    /// DWM is not composing, and the thumbnail then draws nothing at all - which at the default
+    /// opacity of 1.0 is a full-screen black rectangle, not a missing picture.</summary>
+    /// <returns>The DwmRegisterThumbnail HRESULT (0 when already registered).</returns>
+    private int RegisterThumbnail(out int sourceSizeHr, out int sourceWidth, out int sourceHeight)
+    {
+        sourceSizeHr = unchecked((int)0x80004005);   // E_FAIL until something says otherwise
+        sourceWidth = 0;
+        sourceHeight = 0;
+        try
+        {
+            if (_closed || _sourceHwnd == IntPtr.Zero) return unchecked((int)0x80070006);  // E_HANDLE
             if (_thumb == IntPtr.Zero)
             {
                 int hr = DwmRegisterThumbnail(_form.Handle, _sourceHwnd, out var thumb);
-                if (hr != 0 || thumb == IntPtr.Zero)
+                if (hr == 0 && thumb == IntPtr.Zero) hr = unchecked((int)0x80004005);
+                if (hr != 0)
                 {
                     App.Logger?.Warning("FypGhostOverlay: DwmRegisterThumbnail failed (0x{HR:X8})", hr);
-                    return;
+                    return hr;
                 }
                 _thumb = thumb;
             }
+            sourceSizeHr = DwmQueryThumbnailSourceSize(_thumb, out var size);
+            if (sourceSizeHr == 0) { sourceWidth = size.cx; sourceHeight = size.cy; }
             UpdateThumbnailBounds();
+            return 0;
         }
-        catch (Exception ex) { App.Logger?.Debug("FypGhostOverlay.EnsureThumbnail: {E}", ex.Message); }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("FypGhostOverlay.EnsureThumbnail: {E}", ex.Message);
+            return unchecked((int)0x80004005);
+        }
     }
 
     /// <summary>Point the thumbnail at our client area (physical px throughout — WinForms and
@@ -403,6 +515,12 @@ internal sealed class FypGhostOverlay
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    private struct SIZE
+    {
+        public int cx, cy;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     private struct DWM_THUMBNAIL_PROPERTIES
     {
         public int dwFlags;
@@ -422,8 +540,17 @@ internal sealed class FypGhostOverlay
     [DllImport("dwmapi.dll", PreserveSig = true)]
     private static extern int DwmUpdateThumbnailProperties(IntPtr thumb, ref DWM_THUMBNAIL_PROPERTIES props);
 
+    [DllImport("dwmapi.dll", PreserveSig = true)]
+    private static extern int DwmQueryThumbnailSourceSize(IntPtr thumb, out SIZE size);
+
+    [DllImport("dwmapi.dll", PreserveSig = true)]
+    private static extern int DwmIsCompositionEnabled([MarshalAs(UnmanagedType.Bool)] out bool enabled);
+
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte alpha, int dwFlags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool GetLayeredWindowAttributes(IntPtr hwnd, out uint crKey, out byte alpha, out int dwFlags);
 
     [DllImport("user32.dll")]
     private static extern bool GetClientRect(IntPtr hWnd, out RECT rect);

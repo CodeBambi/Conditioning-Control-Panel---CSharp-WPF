@@ -1,0 +1,131 @@
+/* Remix Room help: tooltips, (?) buttons, the cards.
+   Tokens come from remix.css. This file is appended to <head> by ui/help.js. */
+
+/* ---- tooltip ---- */
+.help-tip {
+  position:fixed; left:0; top:0; z-index:95; max-width:264px; padding:8px 11px; border-radius:8px;
+  background:var(--panel); border:1px solid var(--line); color:var(--ink);
+  font:12px/1.45 var(--mono); letter-spacing:.01em; box-shadow:0 12px 28px rgba(0,0,0,.55);
+  pointer-events:none; opacity:0; transform:translateY(3px);
+  transition:opacity 120ms var(--ease), transform 120ms var(--ease);
+}
+.help-tip.on { opacity:1; transform:none; }
+.help-tip > i {
+  position:absolute; bottom:-4px; width:8px; height:8px; margin-left:-4px; background:var(--panel);
+  border-right:1px solid var(--line); border-bottom:1px solid var(--line); transform:rotate(45deg);
+}
+.help-tip.below > i { bottom:auto; top:-4px; border:0; border-left:1px solid var(--line); border-top:1px solid var(--line); }
+
+/* ---- (?) marks ---- */
+.help-q {
+  position:relative; flex:0 0 auto; width:24px; height:24px; border-radius:50%;
+  border:1px solid var(--line); background:var(--ground); color:var(--ink-faint);
+  font:13px/1 var(--mono); display:inline-flex; align-items:center; justify-content:center;
+  transition:color var(--t) var(--ease), border-color var(--t) var(--ease), background var(--t) var(--ease);
+}
+.help-q::after { content:""; position:absolute; left:50%; top:50%; width:44px; height:44px; transform:translate(-50%,-50%); }
+.help-q:hover { color:var(--pink); border-color:var(--pink); background:rgba(255,105,180,.10); }
+.help-q:active { transform:scale(.94); }
+.help-q.small { width:20px; height:20px; font-size:11px; }
+.top-left .help-q { margin-left:2px; }
+.vibes-title .help-q { margin:10px auto 0; display:flex; }
+.panel-head .help-q { margin-left:auto; }
+
+/* ---- card ---- */
+.help-veil {
+  position:fixed; inset:0; z-index:70; background:rgba(20,20,43,.66);
+  display:flex; align-items:center; justify-content:center; padding:20px;
+  animation:fade 160ms var(--ease);
+}
+.help-card {
+  width:min(640px,100%); max-height:100%; overflow:auto; background:var(--navy);
+  border:1px solid var(--line); border-radius:16px; padding:20px;
+  display:flex; flex-direction:column; gap:14px; color:var(--ink);
+  box-shadow:0 2px 0 rgba(255,255,255,.03) inset, 0 24px 80px rgba(0,0,0,.62), 0 4px 18px rgba(0,0,0,.4);
+  animation:pop var(--t) var(--ease);
+}
+.help-card.wide { width:min(720px,100%); }
+.help-head { display:flex; align-items:center; gap:12px; }
+.help-title {
+  margin:0; flex:1 1 auto; font-family:var(--disp); font-weight:400; font-size:28px; line-height:1;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--ink);
+}
+.help-back, .help-close {
+  flex:0 0 auto; min-height:36px; padding:0 12px; border-radius:8px; border:1px solid var(--line);
+  color:var(--ink-dim); font:11px/1 var(--mono); letter-spacing:.1em; text-transform:uppercase;
+  display:inline-flex; align-items:center; transition:color var(--t), border-color var(--t);
+}
+.help-back { order:-1; }
+.help-back:hover, .help-close:hover { color:var(--ink); border-color:var(--lav); }
+
+.help-prev { display:flex; flex-direction:column; align-items:center; gap:6px; }
+.help-prev-canvas {
+  display:block; max-width:100%; border-radius:10px; border:1px solid var(--line); background:var(--well);
+}
+.help-prev-note { font:10px/1 var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--ink-faint); }
+
+.help-lead { margin:0; font-family:var(--disp); font-size:18px; letter-spacing:.03em; color:var(--pink); line-height:1.25; }
+.help-body { margin:0; font-size:14px; line-height:1.55; color:var(--ink-dim); }
+
+.help-cols { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; }
+.help-col h3 {
+  margin:0 0 8px; font:10px/1 var(--mono); letter-spacing:.16em; text-transform:uppercase; color:var(--ink-faint);
+}
+.help-row {
+  display:block; width:100%; text-align:left; padding:8px 10px; border-radius:10px;
+  border:1px solid transparent; background:var(--ground); margin-bottom:6px;
+  transition:border-color var(--t), background var(--t);
+}
+.help-row.pick { cursor:pointer; min-height:44px; }
+.help-row.pick:hover { border-color:var(--lav); }
+.help-row.on { border-color:var(--pink); background:rgba(255,105,180,.10); }
+.help-word {
+  display:block; font-family:var(--disp); font-size:15px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink);
+}
+.help-row.on .help-word { color:var(--pink); }
+.help-line { display:block; margin-top:2px; font-size:12px; line-height:1.45; color:var(--ink-dim); }
+
+.help-tipbox {
+  display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border-radius:10px;
+  border:1px solid var(--pink); background:rgba(255,105,180,.07); font-size:13px; line-height:1.5; color:var(--ink-dim);
+}
+.help-tipmark { flex:0 0 auto; font:10px/1.6 var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--pink); }
+.help-actions { display:flex; }
+.help-try {
+  flex:1 1 auto; min-height:48px; border-radius:12px; background:var(--pink); color:var(--ground);
+  font-size:15px; font-weight:700; box-shadow:0 10px 30px rgba(255,105,180,.28);
+  transition:background var(--t), transform 80ms;
+}
+.help-try:hover { background:#ff86c6; }
+.help-try:active { transform:scale(.98); }
+
+/* ---- index ---- */
+.help-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; }
+.help-tile {
+  text-align:left; padding:12px; min-height:44px; border-radius:12px; border:1px solid var(--line);
+  background:var(--ground); transition:border-color var(--t), transform 80ms, background var(--t);
+}
+.help-tile:hover { border-color:var(--pink); background:rgba(255,105,180,.06); }
+.help-tile:active { transform:scale(.99); }
+.help-tile-name { display:block; font-family:var(--disp); font-size:18px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); }
+.help-tile-line { display:block; margin-top:4px; font-size:12px; line-height:1.4; color:var(--ink-dim); }
+.help-rules { border-top:1px solid var(--line); padding-top:14px; }
+.help-rules h3 { margin:0 0 8px; font:10px/1 var(--mono); letter-spacing:.16em; text-transform:uppercase; color:var(--ink-faint); }
+.help-rule { padding:6px 0; }
+
+/* ---- phone: the card is the screen ---- */
+html.is-mobile .help-veil { padding:0; align-items:stretch; }
+html.is-mobile .help-card {
+  width:100%; max-height:none; border:0; border-radius:0; animation:slideup 200ms var(--ease);
+  padding:calc(14px + var(--sat)) 16px calc(24px + var(--sab));
+}
+html.is-mobile .help-title { font-size:24px; }
+html.is-mobile .help-back, html.is-mobile .help-close { min-height:44px; padding:0 14px; }
+html.is-mobile .help-cols { grid-template-columns:1fr; }
+html.is-mobile .help-grid { grid-template-columns:1fr; }
+html.is-mobile .help-q { width:28px; height:28px; font-size:14px; }
+html.is-mobile .help-tip { display:none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .help-veil, .help-card, .help-tip { animation:none !important; transition:none !important; }
+}

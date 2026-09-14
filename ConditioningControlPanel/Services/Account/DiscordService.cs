@@ -443,6 +443,7 @@ namespace ConditioningControlPanel.Services
                 // rides along without polluting DefaultRequestHeaders; the server
                 // uses it to heal a divergent/mismatched token (BUG-7DCJHDP3JZ).
                 using var validateRequest = new HttpRequestMessage(HttpMethod.Get, "/discord/validate");
+                var prizesFor = App.Settings?.Current?.UnifiedId;
                 validateRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
                 var currentAuthToken = App.Settings?.Current?.AuthToken;
                 if (!string.IsNullOrEmpty(currentAuthToken))
@@ -482,6 +483,8 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Warning("Discord validation error: {Error}", user?.Error);
                     return;
                 }
+
+                ProfileSyncService.ApplyValidatePrizes(prizesFor, user.UnifiedId, user.Prizes, "Discord validate");
 
                 // Server healed a divergent auth token — store immediately. Only
                 // present on mismatch; not cached, so no stale replay (BUG-7DCJHDP3JZ).

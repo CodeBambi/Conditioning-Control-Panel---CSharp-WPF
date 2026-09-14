@@ -19,8 +19,10 @@
 
          Pre-Train 3 the spotlight is present but *sleeping*: the shimmer
          still sweeps once on load, the CTA is unfilled, the fill loses
-         its heat, and the copy says interviews start next update. That is
-         designed content, not a disabled control.
+         its heat, and the copy says interviews are coming. It carries no
+         date on purpose: the feature is not scheduled, and a teaser that
+         names an update becomes a broken promise the moment that update
+         ships. That is designed content, not a disabled control.
 
          After the interview the spotlight compresses to a chip row
          (design §3 Z4: "Interviewed <date> · re-interview me~ · adjust

@@ -177,6 +177,7 @@ namespace ConditioningControlPanel
                 _bannerRotationTimer?.Stop();
                 _bannerPoolTimer?.Stop();
                 _marqueeRefreshTimer?.Stop();
+                ShutdownMarqueeReads();
                 _statPillUpdateTimer?.Stop();
                 _conditioningTimeTimer?.Stop();
                 _conditioningTimeSyncTimer?.Stop();
