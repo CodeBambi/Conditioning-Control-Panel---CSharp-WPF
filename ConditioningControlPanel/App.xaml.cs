@@ -1784,7 +1784,10 @@ namespace ConditioningControlPanel
             // Create Resources directories (these are bundled with app, not user content)
             var resourcesPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources");
             Directory.CreateDirectory(resourcesPath);
-            Directory.CreateDirectory(Path.Combine(resourcesPath, "sub_audio"));
+            // sub_audio is NOT scaffolded any more: the whisper clips ship in the mod-bambi content
+            // pack, so on a stock install they live under the content root. An empty folder beside
+            // the exe is the first thing ContentLocator finds and would shadow the pack for every
+            // directory-shaped resolve (the ccp.subaudio virtual host, the intake inliner).
             Directory.CreateDirectory(Path.Combine(resourcesPath, "sounds", "mindwipe"));
 
             splash?.SetProgress(0.2, "Loading settings...");

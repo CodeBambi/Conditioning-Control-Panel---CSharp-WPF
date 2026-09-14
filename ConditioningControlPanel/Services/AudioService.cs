@@ -488,7 +488,10 @@ namespace ConditioningControlPanel.Services
             {
                 var baseDir = AppDomain.CurrentDomain.BaseDirectory;
                 var soundsDir = Path.Combine(baseDir, "Resources", "sounds");
-                var subAudioDir = Path.Combine(baseDir, "Resources", "sub_audio");
+                // Resolved across both roots: sub_audio ships in the mod-bambi content pack, so on
+                // a stock install "missing beside the exe" is the NORMAL state and must not be
+                // logged as a fault - that warning is what a real no-audio report is read against.
+                var subAudioDir = ContentLocator.ResolveDirectory(Path.Combine("Resources", "sub_audio"));
 
                 // Check sound directories exist and have files
                 if (!Directory.Exists(soundsDir))
@@ -503,14 +506,11 @@ namespace ConditioningControlPanel.Services
                 }
 
                 if (!Directory.Exists(subAudioDir))
-                    App.Logger?.Warning("[AudioDiag] Resources/sub_audio/ directory is MISSING at {Path}", subAudioDir);
+                    App.Logger?.Information("[AudioDiag] Resources/sub_audio/: absent (whisper clips ship in the mod-bambi content pack)");
                 else
                 {
                     var subCount = Directory.GetFiles(subAudioDir, "*.*").Length;
-                    if (subCount == 0)
-                        App.Logger?.Warning("[AudioDiag] Resources/sub_audio/ directory exists but contains NO audio files");
-                    else
-                        App.Logger?.Information("[AudioDiag] Resources/sub_audio/: {Count} files found", subCount);
+                    App.Logger?.Information("[AudioDiag] Resources/sub_audio/: {Count} files found", subCount);
                 }
 
                 // Check WaveOutEvent can be created (tests audio device availability).
@@ -554,7 +554,7 @@ namespace ConditioningControlPanel.Services
         {
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
             var soundsDir = Path.Combine(baseDir, "Resources", "sounds");
-            var subAudioDir = Path.Combine(baseDir, "Resources", "sub_audio");
+            var subAudioDir = ContentLocator.ResolveDirectory(Path.Combine("Resources", "sub_audio"));
 
             var diagnostics = new System.Text.StringBuilder();
             diagnostics.AppendLine("=== Audio Diagnostics ===");
@@ -569,7 +569,7 @@ namespace ConditioningControlPanel.Services
             }
 
             if (!Directory.Exists(subAudioDir))
-                diagnostics.AppendLine("WARNING: Resources/sub_audio/ directory MISSING");
+                diagnostics.AppendLine("Resources/sub_audio/: absent (whisper clips ship in the mod-bambi content pack)");
             else
             {
                 var count = CountFilesBounded(subAudioDir, SearchOption.TopDirectoryOnly);

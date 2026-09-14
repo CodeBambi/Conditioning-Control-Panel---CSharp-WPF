@@ -129,6 +129,9 @@ internal static class EmiBookDeckDesk
         // (21 mp3, verified 2026-08-30). It is worth the risk because "a stock pool ships" - the
         // phrasing SUBLIMINALS uses - tells a reader nothing about whether they need to go and
         // record anything. If that folder is ever repacked, this number has to move with it.
+        // THEY NO LONGER SHIP IN THE BOX. Those 21 clips are the BambiSleep trigger words spoken
+        // aloud, so they ride in the mod-bambi content pack and the default phrase pool is neutral.
+        // The line names the pack rather than promising the clips, in all 9 language files.
         //
         // 20% IS THE SHIPPED DEFAULT, NOT A CEILING. DuckingLevel defaults to 80, and both the
         // model's own comment and the settings tooltip gloss 80% as "reduce other audio to 20%". A
@@ -144,7 +147,7 @@ internal static class EmiBookDeckDesk
             "whispers", 1, "emi_book_whispers",
             "WHISPERS",
             "*whispered audio*, matched to the *trigger phrase* it flashes.",
-            new[] { "*21 clips* ship. add an *mp3* named after your phrase",
+            new[] { "*21 clips* come with the *bambi sleep* pack. add an *mp3* named after your phrase",
                    "*audio whispers* switches them on, one slider sets the *volume*",
                    "*ducking* drops every other app to *20%* while it plays",
                    "*mute whispers* silences them *instantly*, even inside a locked session" },

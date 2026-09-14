@@ -99,6 +99,39 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// Every root that actually holds <paramref name="relDir"/>, install dir first. Empty when
+        /// neither does. Use it where a lookup probes named files one by one rather than listing a
+        /// folder: an install dir that holds the folder but not the FILE (the trigger clips ship in
+        /// mod-bambi, and older builds left an empty Resources\sub_audio behind) would otherwise
+        /// end the search at the first root that merely exists.
+        /// </summary>
+        public static IEnumerable<string> ResolveDirectories(string relDir)
+        {
+            var result = new List<string>(2);
+            try
+            {
+                if (string.IsNullOrWhiteSpace(relDir)) return result;
+                if (Path.IsPathRooted(relDir))
+                {
+                    if (Directory.Exists(relDir)) result.Add(relDir);
+                    return result;
+                }
+
+                var rel = Normalize(relDir);
+                foreach (var root in new[] { InstallRoot, ContentRoot })
+                {
+                    var dir = Combine(root, rel);
+                    if (dir != null && Directory.Exists(dir)) result.Add(dir);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ContentLocator.ResolveDirectories failed for {Path}: {Error}", relDir, ex.Message);
+            }
+            return result;
+        }
+
         /// <summary>True when either root has this relative directory.</summary>
         public static bool DirectoryExists(string relDir)
         {
