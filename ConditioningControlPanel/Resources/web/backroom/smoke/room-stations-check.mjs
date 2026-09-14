@@ -5,7 +5,7 @@
  *
  * What it proves that the per-station checks cannot: the room reads stations.json and sets out every fixture,
  * the fake host answers init with the stations the C# host whitelists (BackRoomApi.Ops keys: slot, wheel,
- * cards, roulette), and each of the four stations mounts from its stations.json entry through the loader,
+ * cards, roulette, counter), and each of the five stations mounts from its stations.json entry through the loader,
  * opens (station-open, hostBack), plays one moment against its own mock-server.js, and closes on the room's
  * Back (station-close, the loader empty, the room loop running again, no tunnel left above 0). The slot here
  * is the REAL slot station, not smoke/mock-station.js.
@@ -55,7 +55,8 @@ const FAKE_HOST = `(() => {
   const made = {};
   // The floor bell is not a station (10.16.B): the room reads it, and its mock lives in smoke/.
   const mock = (id) => made[id] || (made[id] = import(id === 'bell' ? '/backroom/smoke/mock-bell.js' : '/backroom/stations/' + id + '/mock-server.js').then((m) => {
-    const s = id === 'bell' ? m.createBellMock({}) : id === 'cards' ? m.createMockServer({ sp: 57, floorMs: 600 }) : id === 'roulette' ? m.createMockServer({ sp: 57, floorMs: 0 }) : m.createMockServer({ sp: 57 });
+    const s = id === 'bell' ? m.createBellMock({}) : id === 'cards' ? m.createMockServer({ sp: 57, floorMs: 600 }) : id === 'roulette' ? m.createMockServer({ sp: 57, floorMs: 0 })
+      : id === 'counter' ? m.createMockServer({ sp: 57, on: 'jackpot_remix,rt_demo,high_roller' }) : m.createMockServer({ sp: 57 });
     if (id === 'wheel') s.script('deep');
     if (id === 'cards') s.script('Th', '9d', '8c', '8s');
     if (id === 'roulette') s.script({ pocket: 36 });
@@ -67,7 +68,7 @@ const FAKE_HOST = `(() => {
     postMessage(m) {
       window.__posted.push(JSON.parse(JSON.stringify(m)));
       if (m.type === 'ready') emit({ type: 'init', protocol: 1, sp: 57, reduced: false, motion: 'full', intensity: 'normal', lang: 'en', gates,
-        lex: { br_back: 'Back', br_balance: 'SP' }, stations: ['slot', 'wheel', 'cards', 'roulette', 'bell'], open: true });
+        lex: { br_back: 'Back', br_balance: 'SP' }, stations: ['slot', 'wheel', 'cards', 'roulette', 'counter', 'bell'], open: true });
       if (m.type === 'station-request') mock(m.station).then((s) => s.handle(m.op, m.body || {}, m.idem))
         .then((r) => emit({ type: 'station-result', reqId: m.reqId, ok: r.ok, status: r.status, reason: r.reason, body: r.body || {} }));
       if (m.type === 'media-request') emit({ type: 'media', reqId: m.reqId, seed: 1, words: [],
@@ -118,10 +119,9 @@ ok(await until(`document.documentElement.classList.contains('br-ready')`, 45000,
 const rows = await ev(`window.__backroom.stations.map((s) => ({ key: s.key, id: s.id, state: s.state, entry: s.entry || null }))`);
 report.rows = rows;
 ok(rows.length === REGISTRY.length, `the room holds all ${REGISTRY.length} stations.json rows`);
-for (const id of ['slot', 'wheel', 'cards', 'roulette']) {
+for (const id of ['slot', 'wheel', 'cards', 'roulette', 'counter']) {
   ok(rows.some((r) => r.id === id && r.state === 'live' && r.entry === `stations/${id}/station.js`), `${id} is live from stations.json with entry stations/${id}/station.js`);
 }
-ok(rows.some((r) => r.id === 'counter' && r.state === 'soon'), 'the counter stays soon');
 ok(await ev(`window.__backroom.stations.every((s) => !!window.__backroom.scene.scene.getObjectByName('station_' + s.key))`), 'every row has its fixture set out in the scene');
 await sleep(1500);
 await shot('room-00-boot.png');
@@ -164,6 +164,19 @@ const STATIONS = [
       await shot('roulette-02-run.png');
       ok(await until(`(document.querySelector('.roul-history') || {}).childElementCount >= 1`, 14000), 'roulette: the ball lands');
       await sleep(400); await shot('roulette-03-landed.png');
+    } },
+  { key: 'counter', id: 'counter', root: '.counter-station', ready: `!!document.querySelector('.counter-station[data-phase=ready] .counter-card')`,
+    async moment() {
+      const card = (id) => `document.querySelector('.counter-card[data-id=${id}]')`;
+      ok(await ev(`${card('rt_bundle_3')}.dataset.face === 'soon' && ${card('jackpot_remix')}.dataset.face === 'buy'`), 'counter: a soon card and a buyable card');
+      ok(await clickSel('.counter-card[data-id=jackpot_remix] .counter-buy'), 'counter: Buy on Jackpot Remix opens the confirm');
+      ok(await until(`!!document.querySelector('.counter-card[data-id=jackpot_remix] .counter-yes')`, 3000), 'counter: Confirm is on the card');
+      await shot('counter-02-confirm.png');
+      ok(await clickSel('.counter-card[data-id=jackpot_remix] .counter-yes'), 'counter: Confirm pressed');
+      ok(await until(`window.__posted.some((m) => m.type === 'station-request' && m.station === 'counter' && m.op === 'buy' && m.body.prizeId === 'jackpot_remix' && m.idem)`, 5000), 'counter: the buy is relayed with an idem');
+      ok(await until(`${card('jackpot_remix')}.dataset.face === 'owned'`, 5000), 'counter: the card flips to Owned');
+      ok(await until(`document.querySelector('#br-sp-value').textContent === '42'`, 3000), 'counter: the room chip reads 57 - 15 = 42');
+      await sleep(500); await shot('counter-03-owned.png');
     } },
 ];
 

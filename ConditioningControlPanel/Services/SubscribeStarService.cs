@@ -380,6 +380,7 @@ namespace ConditioningControlPanel.Services
                 // Per-request message so the Bearer header doesn't accumulate on
                 // DefaultRequestHeaders across calls.
                 using var validateRequest = new HttpRequestMessage(HttpMethod.Post, "/substar/validate");
+                var prizesFor = App.Settings?.Current?.UnifiedId;
                 validateRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
                 var currentAuthToken = App.Settings?.Current?.AuthToken;
                 if (!string.IsNullOrEmpty(currentAuthToken))
@@ -414,6 +415,8 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Warning("SubscribeStar validation error: {Error}", subscription?.Error);
                     return CurrentTier;
                 }
+
+                ProfileSyncService.ApplyValidatePrizes(prizesFor, subscription.UnifiedId, subscription.Prizes, "SubscribeStar validate");
 
                 // Server may heal a divergent auth token (present only on mismatch; never cached).
                 if (!string.IsNullOrEmpty(subscription.AuthToken) && App.Settings?.Current != null)
