@@ -2147,12 +2147,20 @@ namespace ConditioningControlPanel
         {
             try
             {
-                // Use mod resource resolver for logo — allows mod overrides.
-                // logo.png is the Bambi-branded wordmark; logo2.png is the neutral
-                // "Conditioning Control Panel" wordmark used by CCP Default and Sissy.
-                var useNeutralLogo = App.Mods?.IsCCPDefault == true
-                                     || App.Settings?.Current?.IsSissyMode == true;
-                var logoFile = useNeutralLogo ? "logo2.png" : "logo.png";
+                // WHICH MARK, AND WHY IT IS NOT A "is this CCP Default" TEST.
+                // logo.png is BAMBI SLEEP's mark - the dial with that name across the bottom -
+                // and logo2.png is the same dial reading CONDITIONING CONTROL PANEL. The old test
+                // named the two mods that should NOT see Bambi's brand (CCP Default, Sissy),
+                // which quietly left Drone, Locked, Infection and every user mod showing it.
+                //
+                // Asking for "logo.png" whenever the active mod overrides it keeps a creator
+                // mod's own brand working (ModResourceResolver prefers the mod's copy); without
+                // an override only the mod the file belongs to gets it, and everyone else falls
+                // back to the neutral dial.
+                var hasOwnLogo = Services.ModResourceResolver.HasModOverride("logo.png");
+                var isBambi = string.Equals(App.Mods?.ActiveModId, Models.BuiltInMods.BambiSleepId,
+                    StringComparison.OrdinalIgnoreCase);
+                var logoFile = (hasOwnLogo || isBambi) ? "logo.png" : "logo2.png";
                 var image = Services.ModResourceResolver.ResolveImage(logoFile);
                 if (image != null)
                     SettingsTab.ImgLogo.Source = image;
@@ -3247,19 +3255,29 @@ namespace ConditioningControlPanel
                         return Services.ModResourceResolver.ResolveUri(relativePath);
                 }
 
-                // Legacy mode-specific swaps for built-in mods
+                // logo.png is BAMBI SLEEP's mark - the dial with that name across the bottom.
+                // logo2.png is the same dial reading CONDITIONING CONTROL PANEL. The uncategorised
+                // quest fallback (QuestDefinitionService.GetFallbackImagePath) resolves "logo.png",
+                // so EVERY mod that is not BambiSleep used to get Bambi's brand on its generic
+                // quest tiles. Sissy and CCP Default were special-cased out of that one at a time;
+                // Drone, Locked, Infection and every user mod were not.
+                //
+                // Inverted: the themed mark belongs to the mod it names, everyone else gets the
+                // neutral one. A mod that ships its OWN logo.png never reaches here - the
+                // HasModOverride check above returns first, which is what keeps this from
+                // painting over a creator mod's art.
+                if (imagePath.Contains("logo.png")
+                    && !string.Equals(App.Mods?.ActiveModId, Models.BuiltInMods.BambiSleepId,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return "pack://application:,,,/Resources/logo2.png";
+                }
+
+                // Legacy mode-specific swap, Sissy only: its takeover art is the generic one.
                 if (App.Settings?.Current?.IsSissyMode == true)
                 {
-                    if (imagePath.Contains("logo.png"))
-                        return "pack://application:,,,/Resources/logo2.png";
                     if (imagePath.Contains("bambi takeover.png"))
                         return "pack://application:,,,/Resources/features/mandatory_videos.png";
-                }
-                // CCP Default uses the same neutral wordmark as Sissy.
-                if (App.Mods?.IsCCPDefault == true)
-                {
-                    if (imagePath.Contains("logo.png"))
-                        return "pack://application:,,,/Resources/logo2.png";
                 }
             }
 

@@ -51,7 +51,7 @@ namespace ConditioningControlPanel
     ///
     /// Art note: every <see cref="ModPackEntry.ArtUri"/> points at a file declared as
     /// <c>&lt;Resource Include=...&gt;</c> in ConditioningControlPanel.csproj (Resources\intake\
-    /// pass_card_*.png and Resources\logo.png). Resource items are compiled into the assembly and are
+    /// pass_card_*.png and Resources\logo2.png). Resource items are compiled into the assembly and are
     /// untouched by $(ContentPackSoundsExclude)/$(ContentPackWebExclude), which only strip
     /// &lt;Content&gt; globs — so these thumbnails can never be the thing that is missing on a fresh
     /// modular install.
@@ -69,7 +69,13 @@ namespace ConditioningControlPanel
                 PackId = null, // ships in the box — the neutral baseline is what "skip everything" gives you
                 NameLocKey = "modpicker_name_ccp_default",
                 DescriptionLocKey = "modpicker_desc_ccp_default",
-                ArtUri = "pack://application:,,,/Resources/logo.png",
+                // logo2.png, NOT logo.png. Same dial, different lettering: logo.png says BAMBI
+                // SLEEP across the bottom and is the Bambi mod's own mark, logo2.png says
+                // CONDITIONING CONTROL PANEL and is the neutral one. This card is the baseline's
+                // own face on the first screen a new user sees, sitting next to four themed cards,
+                // so it has to be the neutral mark - the picker was showing another mod's brand as
+                // the "no mod" option.
+                ArtUri = "pack://application:,,,/Resources/logo2.png",
                 AccentHex = "#E84393",
                 ApproxBytes = 0
             },

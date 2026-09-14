@@ -304,4 +304,84 @@ public class NeutralInstallerBaselineTests
         Assert.Contains("ContentLocator.EnumerateFiles(BuiltInSessionsRelativeDir", loader, StringComparison.Ordinal);
         Assert.DoesNotContain("Directory.GetFiles(BuiltInSessionsFolder", loader, StringComparison.Ordinal);
     }
+    // ---- the themed mark belongs to the mod it names (item 5) ---------------------------
+
+    /// <summary>
+    /// Two marks, same dial: `logo.png` reads BAMBI SLEEP across the bottom, `logo2.png` reads
+    /// CONDITIONING CONTROL PANEL. Both ship, because the first is BambiSleep's own art. The bug
+    /// this pins is the DEFAULT: every site that picks between them used to name the mods that
+    /// should NOT see Bambi's brand, which left Drone, Locked, Infection and every user mod
+    /// showing it. Both files have to exist for the choice to mean anything.
+    /// </summary>
+    [Fact]
+    public void BothMarksShip()
+    {
+        var resources = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources");
+        Assert.True(File.Exists(Path.Combine(resources, "logo.png")));
+        Assert.True(File.Exists(Path.Combine(resources, "logo2.png")));
+
+        var csproj = AppText("ConditioningControlPanel.csproj");
+        Assert.Contains(@"<Resource Include=""Resources\logo.png"" />", csproj, StringComparison.Ordinal);
+        Assert.Contains(@"<Resource Include=""Resources\logo2.png"" />", csproj, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// CCP Default's card in the mod picker is the baseline's own face, shown next to the four
+    /// themed cards on the first screen a new user sees. It was drawing BambiSleep's mark, so the
+    /// picker offered another mod's brand as the "no mod" option.
+    /// </summary>
+    [Fact]
+    public void TheBaselinePickerCardUsesTheNeutralMark()
+    {
+        var catalogue = AppText("Dialogs", "ModPackCatalog.cs");
+        var entry = catalogue.IndexOf("ModId = BuiltInMods.CCPDefaultId", StringComparison.Ordinal);
+        Assert.True(entry > 0, "the CCP Default entry is gone from ModPackCatalog");
+
+        var block = catalogue.Substring(entry, Math.Min(900, catalogue.Length - entry));
+        Assert.Contains("pack://application:,,,/Resources/logo2.png", block, StringComparison.Ordinal);
+        Assert.DoesNotContain("pack://application:,,,/Resources/logo.png", block, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The three sites that choose between the marks must all key on "is the active mod the one
+    /// this file is named after", never on an allow-list of mods to spare. An allow-list is what
+    /// let three built-in mods and every creator mod keep showing the Bambi dial.
+    /// </summary>
+    [Theory]
+    [InlineData("MainWindow/MainWindow.xaml.cs")]
+    [InlineData("Windows/FirstRunWizard.xaml.cs")]
+    public void TheMarkIsChosenByNamingTheModItBelongsTo(string relPath)
+    {
+        var text = AppText(relPath.Split('/'));
+        var pick = text.IndexOf("var logoFile =", StringComparison.Ordinal);
+        Assert.True(pick > 0, relPath + " no longer picks a logo file");
+
+        var block = text.Substring(Math.Max(0, pick - 700), Math.Min(900, text.Length - Math.Max(0, pick - 700)));
+        Assert.Contains("BuiltInMods.BambiSleepId", block, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsCCPDefault", block, StringComparison.Ordinal);
+
+        // A creator mod that ships its own logo.png still outranks both bundled files.
+        Assert.Contains("HasModOverride(\"logo.png\")", block, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The uncategorised quest fallback resolves "logo.png"
+    /// (QuestDefinitionService.GetFallbackImagePath), so the same inversion has to hold on the
+    /// quest tiles - and it must stay BELOW the mod-override check, or it would paint over a
+    /// creator mod's own art.
+    /// </summary>
+    [Fact]
+    public void TheQuestArtFallbackDoesNotHandOutAnotherModsBrand()
+    {
+        var text = AppText("MainWindow", "MainWindow.xaml.cs");
+
+        var over = text.IndexOf("ModResourceResolver.HasModOverride(relativePath)", StringComparison.Ordinal);
+        var swap = text.IndexOf("return \"pack://application:,,,/Resources/logo2.png\";", StringComparison.Ordinal);
+        Assert.True(over > 0 && swap > over,
+            "the logo swap must come after the mod-override check, or a creator mod loses its art");
+
+        var block = text.Substring(over, swap - over);
+        Assert.Contains("BuiltInMods.BambiSleepId", block, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsCCPDefault", block, StringComparison.Ordinal);
+    }
 }

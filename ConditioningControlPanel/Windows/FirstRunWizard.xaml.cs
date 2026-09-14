@@ -536,19 +536,22 @@ namespace ConditioningControlPanel
         /// (The mod cards on step 2 cannot use the resolver - it resolves against the ACTIVE
         /// mod only, and that step is showing five candidates.)
         /// <para>
-        /// Which wordmark is the same branch <c>MainWindow.LoadLogo</c> takes: logo.png is
-        /// the Bambi-branded mark, logo2.png the neutral "Conditioning Control Panel" one used by
-        /// CCP Default and Sissy - and a fresh install IS CCP Default, so the wizard must not
-        /// hardcode logo.png.
+        /// Which mark is the same question <c>MainWindow.LoadLogo</c> answers, and it gets the
+        /// same answer: logo.png is BAMBI SLEEP's dial, logo2.png the neutral one, and a mod that
+        /// ships its own logo.png outranks both. A fresh install IS CCP Default and this is the
+        /// very first screen it draws, so the wizard must never hardcode logo.png.
         /// </para>
         /// </summary>
         private void RefreshWelcomeLogo()
         {
             try
             {
-                var useNeutralLogo = App.Mods?.IsCCPDefault == true
-                                     || App.Settings?.Current?.IsSissyMode == true;
-                var logoFile = useNeutralLogo ? "logo2.png" : "logo.png";
+                // Mirrors MainWindow.LoadLogo - see the remarks above. A mod's own logo.png wins;
+                // without one, only BambiSleep gets the mark that carries its name.
+                var hasOwnLogo = ModResourceResolver.HasModOverride("logo.png");
+                var isBambi = string.Equals(App.Mods?.ActiveModId, Models.BuiltInMods.BambiSleepId,
+                    StringComparison.OrdinalIgnoreCase);
+                var logoFile = (hasOwnLogo || isBambi) ? "logo.png" : "logo2.png";
 
                 // ResolveUri + DecodePixelWidth instead of ResolveImage: the frame is 46 DIP, so a
                 // 2x decode is plenty and the full-res PNG never reaches memory.
