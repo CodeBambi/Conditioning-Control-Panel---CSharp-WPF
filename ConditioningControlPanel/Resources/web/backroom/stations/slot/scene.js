@@ -17,7 +17,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
 import { drawSymbol } from './symbols.js';
-import { PACE, reelStopMs, reelsMs } from './pace.js';
+import { PACE, reelStopMs, reelsMs, respinStopMs, respinMs } from './pace.js';
 import { applyPalette } from './palette.js';
 import { FEEL, ALMOST as FEEL_ALMOST, ATTRACT, bezier, breath, shiverPx, chaseMs, paylineGlow, paylinePulses, wiggleCells } from './feel.js';
 
@@ -316,6 +316,40 @@ export async function createScene(o) {
     return { left, top, width: right - left, height: bottom - top };
   }
 
+  /* B1 THE SPIRAL JAR (playbook Tier B, CONTRACT 10.16.A). There is no glb node for a jar and no model
+   * request is allowed (section 9.6), so it is a DOM tube on live projected bounds, exactly the pattern the
+   * payline frame uses: the payout_tray's middle (the cabinet's own box when the tray is absent), at the
+   * CABINET's left edge in screen space, one reel_window tall. No new material, no geometry, nothing added
+   * to the glb. Brake 9: the count is printed inside it, so the jar survives motion level 0. */
+  const JAR_W = 0.17;          // of its own height: a narrow upright tube
+  function screenBox(node) {
+    if (!node) return null;
+    const box = new THREE.Box3().setFromObject(node);
+    if (box.isEmpty()) return null;
+    const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1, pts = [];
+    for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
+      const p = new THREE.Vector3(x, y, z).project(camera);
+      pts.push([(p.x + 1) * w / 2, (1 - p.y) * h / 2]);
+    }
+    const left = Math.min(...pts.map(q => q[0])), right = Math.max(...pts.map(q => q[0]));
+    const top = Math.min(...pts.map(q => q[1])), bottom = Math.max(...pts.map(q => q[1]));
+    return right > left && bottom > top ? { left, top, width: right - left, height: bottom - top } : null;
+  }
+  function jarRect() {
+    const cab = screenBox(cabinet);
+    if (!cab) return null;
+    const anchor = screenBox(tray) || cab, win = screenBox(glass);
+    const height = Math.max(24, win ? win.height : cab.height * 0.3), width = Math.max(12, height * JAR_W);
+    const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1, m = 8;
+    // The play camera frames the marquee and the reels, so payout_tray's projected middle sits BELOW the
+    // viewport entirely at 16:9 (measured: y 930 of 720). Brake 9 says the count has to be readable, so the
+    // tray is where the tube wants to stand and the screen is where it has to: held inside the canvas and
+    // never lower than the reel window's own bottom, so it reads as a jar standing beside the reels.
+    const floor = win ? win.top + win.height - height : h - height - m;
+    const top = Math.min(anchor.top + anchor.height / 2 - height / 2, floor, Math.max(m, h - height - m));
+    return { left: Math.min(Math.max(cab.left, m), Math.max(m, w - width - m)), top: Math.max(m, top), width, height };
+  }
+
   function settleSpin() {
     if (!spin) return;
     const s = spin; spin = null;
@@ -340,17 +374,23 @@ export async function createScene(o) {
     }
     // A1 THE ANTICIPATION REEL: from reel 2's thud to reel 3's, with reel 3 alone and holding. The tape
     // already carries the outcome, so this window only delays it; nothing here can change what lands.
-    teasing = !!spin && spin.teaseMs > 0 && spin.teaseDim && !reduced
-      && t - spin.start >= reelStopMs(1) && t - spin.start < reelStopMs(2, PACE, spin.teaseMs);
+    // C1 (10.16.D): a solo re-spin has no reels 1 and 2 to wait for, so the whole travel is the tease window:
+    // reel 3 alone, gold, for SPIN_MS and the full hold.
+    teasing = !!spin && spin.teaseMs > 0 && spin.teaseDim && !reduced && (spin.solo
+      ? t - spin.start < respinStopMs(PACE, spin.teaseMs)
+      : t - spin.start >= reelStopMs(1) && t - spin.start < reelStopMs(2, PACE, spin.teaseMs));
     const partying = !!party && t < party.end, pr = partying ? party.r : null;
     if (spin) {
       const s = spin, dt = t - s.start;
       // The pull carries on from wherever the Law VIII lean (or the drag) left the lever.
-      lever.rotation.x = reduced ? (dt < reelsMs(PACE, s.teaseMs) ? LEAN : 0) : Math.max(0.4 * Math.sin(Math.PI * clamp(dt / 420)), s.leverFrom * (1 - ease(dt / 420)));
+      const wholeMs = s.solo ? respinMs(PACE, s.teaseMs) : reelsMs(PACE, s.teaseMs);
+      lever.rotation.x = reduced ? (dt < wholeMs ? LEAN : 0) : Math.max(0.4 * Math.sin(Math.PI * clamp(dt / 420)), s.leverFrom * (1 - ease(dt / 420)));
       let all = true;
       for (let i = 0; i < 3; i++) {
-        if (s.held === i) continue;
-        const n = strips[i].length || 13, dur = reelStopMs(i, PACE, s.teaseMs), home = angle(s.stops[i], n);
+        if (s.held === i || s.keep.includes(i)) continue;
+        // C1: the re-spin is reel 3 alone, so it takes no stagger (pace.respinStopMs).
+        const n = strips[i].length || 13, home = angle(s.stops[i], n);
+        const dur = s.solo ? respinStopMs(PACE, s.teaseMs) : reelStopMs(i, PACE, s.teaseMs);
         const target = home + Math.PI * 2 * (6 + 2 * i);
         // Law VI: reduced motion takes the STATE. The reel rests, then is simply on its stop at its thud frame.
         let x = reduced ? s.from[i] : THREE.MathUtils.lerp(s.from[i], target, reelTravel(dt, dur));
@@ -362,7 +402,7 @@ export async function createScene(o) {
         } else all = false;
         reels[i].rotation.x = restX[i] + x;
       }
-      if (all && dt >= reelsMs(PACE, s.teaseMs)) settleSpin();   // a held column never shortens the pace
+      if (all && dt >= wholeMs) settleSpin();   // a held column never shortens the pace
     } else if (pull) lever.rotation.x = PULL_MAX * pull.amount;
     else if (pullBack) { const q = clamp((t - pullBack.start) / 200); lever.rotation.x = pullBack.angle * (1 - ease(q)); if (q === 1) pullBack = null; }
     else if (lean) lever.rotation.x = reduced ? LEAN : lean.from + (LEAN - lean.from) * ease((t - lean.start) / FEEL.LEAN_MS);   // Law VIII
@@ -468,6 +508,15 @@ export async function createScene(o) {
     if (poses && phase === 'play') {
       const wpp = (2 * poses.play.dist * Math.tan(THREE.MathUtils.degToRad(LENS_DEG) / 2)) / (canvas.clientHeight || 1);
       rig.position.x = rigRest.x + poses.play.right.x * px * wpp; rig.position.z = rigRest.z + poses.play.right.z * px * wpp;
+    }
+    if (o.jar) {   // B1: the tube rides the cabinet's live bounds; the station paints the fill and the count
+      const jr = phase === 'play' && o.jar.dataset.on != null ? jarRect() : null;
+      o.jar.hidden = !jr;
+      if (jr) {
+        const js = o.jar.style;
+        js.left = `${jr.left.toFixed(1)}px`; js.top = `${jr.top.toFixed(1)}px`;
+        js.width = `${jr.width.toFixed(1)}px`; js.height = `${jr.height.toFixed(1)}px`;
+      }
     }
     if (o.payline) {   // A6: the winning row is framed for the rollup, then THE GLOW goes out over 480 ms
       const lit = phase === 'play' ? paylineGlow(t - paylineAt, paylineHold, paylinePulseN) : 0;
@@ -616,8 +665,12 @@ export async function createScene(o) {
       settleSpin();
       ghost = null;
       wiggleAt.fill(-Infinity);
+      // C1 (10.16.D): `keep` are reels that do not travel at all (the re-spin holds 1 and 2 as EMI), and
+      // `solo` drops the stagger, because there is nothing before reel 3 to stagger behind.
+      const keep = Array.isArray(tease && tease.keep) ? tease.keep.filter(i => [0, 1, 2].includes(i)) : [];
       return new Promise(resolve => {
-        spin = { start: performance.now(), stops, held, leverFrom: lever.rotation.x, resolve, stopped: [false, false, false],
+        spin = { start: performance.now(), stops, held, keep, solo: keep.length > 0, leverFrom: lever.rotation.x,
+                 resolve, stopped: [false, false, false],
                  teaseMs: Math.max(0, (tease && tease.holdMs) || 0), teaseGold: !!(tease && tease.gold),
                  teaseDim: tease ? tease.dim !== false : true,
                  from: reels.map((r, i) => r.rotation.x - restX[i]) };
@@ -658,6 +711,7 @@ export async function createScene(o) {
                almost: ghost ? { cell: ghost.j, reel: ghost.r, amt: Number(ghostAmt(t).toFixed(3)) } : null,
                tray: !!tray, glow: !!glowMat, emiScale: emi ? emi.scale.x / emiRest.s.x : null,
                payline: { lit: paylineGlow(t - paylineAt, paylineHold, paylinePulseN), hold: paylineHold, pulses: paylinePulseN, rect: paylineRect() },
+               jar: jarRect(), solo: !!(spin && spin.solo), keep: spin ? spin.keep : [],
                attract: !!attract, drifting: !!(attract || attractOut), wiggling: wiggleAt.map(a => wiggleCells(t - a) !== 0) };
     },
   };

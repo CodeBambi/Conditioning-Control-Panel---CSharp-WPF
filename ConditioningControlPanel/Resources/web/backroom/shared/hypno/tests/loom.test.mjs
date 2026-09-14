@@ -33,7 +33,7 @@ test('the presets are the mockup values from CONTRACT 10.13.D', () => {
   assert.deepEqual(pick(wake.layer), [4, 3, 0.5, 'log', 1, '#5fffd0 #3a1f5c', 'hard']);
   assert.deepEqual([wake.bg.color, wake.glow, wake.wobble.amp, wake.wobble.freq, wake.wobble.cycles, wake.speed], ['#0a0614', 0.45, 0.15, 2, 1, 2]);
   assert.deepEqual(pick(screen.layer), [6, 2.5, 0.5, 'log', 1, '#ff5fa2 #9b6bff #5fffd0', 'gradient']);
-  assert.deepEqual([screen.layer2.enabled, ...pick(screen.layer2)], [true, 3, 1.5, 0.3, 'log', -1, '#e8c27a', 'hard']);
+  assert.deepEqual([screen.layer2.enabled, ...pick(screen.layer2)], [true, 3, 1.5, 0.3, 'log', 1, '#e8c27a', 'hard']);
   assert.deepEqual([screen.bg.kind, screen.bg.color, screen.bg.outer, screen.glow, screen.pulse.amp, screen.pulse.cycles, screen.speed],
     ['radial', '#14060f', '#08040e', 0.5, 0.08, 1, 1]);
   for (const n of ['backs', 'hub', 'whirl', 'wake']) assert.equal(LOOM_PRESETS[n].layer2.enabled, false, n + ' has one layer');

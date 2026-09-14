@@ -64,7 +64,7 @@ const DEAL = [0, 1, 2, 3].map(i => new URL(`../slot/fallback/gif${i}.webp`, loca
 const off = q.get('gates') === 'off';
 const host = createMockHost({ deal: DEAL, latency: Math.min(latency, 60), reduced: q.has('reduced'),
   intensity: q.has('calm') ? 'calm' : q.has('full') ? 'full' : 'normal',
-  gates: off ? { flash: false, subliminal: false, spiral: false, brainDrain: false } : null });
+  gates: off ? { flash: false, subliminal: false, spiral: false, brainDrain: false, tunnel: false } : null });
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const chip = document.getElementById('fakechip'), chipState = { owed: 0, shown: null };
 const paintChip = () => { chip.querySelector('b').textContent = String(chipState.shown ?? Math.max(0, server.user.sp - chipState.owed)); };

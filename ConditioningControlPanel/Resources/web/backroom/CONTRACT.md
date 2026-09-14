@@ -720,9 +720,10 @@ export function createLoomKit({ still = false, log = null } = {});
   `hub` {3, 1.5, 0.55, golden, 1, #e8c27a #ff5fa2 #9b6bff, hard}, bg #1a0f2b, glow 0.35, speed 3 (driven by angle);
   `whirl` {2, 2.5, 0.45, ribbon, 1, #5fffd0 #9b6bff, hard}, bg #1c1230, glow 0.4, wobble {amp 0.12, freq 3, cycles 1}
   (driven by angle); `wake` {4, 3, 0.5, log, 1, #5fffd0 #3a1f5c, hard}, bg #0a0614, glow 0.45, wobble {0.15, 2, 1},
-  speed 2; `screen` {6, 2.5, 0.5, log, 1, #ff5fa2 #9b6bff #5fffd0, gradient}, layer2 {enabled, 3, 1.5, 0.3, log, -1,
+  speed 2; `screen` {6, 2.5, 0.5, log, 1, #ff5fa2 #9b6bff #5fffd0, gradient}, layer2 {enabled, 3, 1.5, 0.3, log, 1,
   #e8c27a}, bg radial #14060f -> #08040e, glow 0.5, pulse {amp 0.08, cycles 1}, speed 1. `wake` and `screen` are the
-  two the host plays woven.
+  two the host plays woven. The gold layer2 of `screen` turns the SAME way as layer 1 (owner, 2026-09-14; the mockup
+  counter-turned it).
 
 ```js
 // media.js - the dealt GIFs drawn in the page (cards: 13; wheel and roulette: keys only)
@@ -757,9 +758,9 @@ export function createMoments(ctx, { station });
 ```
 
 - `play` looks the id up in `MOMENTS`, drops the host steps whose gate is off (`flash`: wash, gif_from; `spiral`:
-  loom_spiral; `brainDrain`: haze, tunnel), fires the rest through `ctx.fx` with the table's Normal `args` merged with
-  the caller's, and returns the page effect names for the station to run at `strengthK(ctx)`. An unknown id fires
-  nothing and logs.
+  loom_spiral; `brainDrain`: haze; `tunnel`: tunnel, the Back Room's own gate, amended 2026-09-14), fires the rest
+  through `ctx.fx` with the table's Normal `args` merged with the caller's, and returns the page effect names for the
+  station to run at `strengthK(ctx)`. An unknown id fires nothing and logs.
 - Tests: `shared/hypno/tests/*.test.mjs` (node) and `shared/hypno/tests/kit-check.mjs` (headless, a mock host that
   records `fx`, `fx-tunnel` and `fx-release`; `KIT_PORT` default 8896, debug +500). K1 exports that mock as
   `shared/hypno/tests/mock-host.js` `createMockHost()` for the station checks.
@@ -940,29 +941,151 @@ Each spin of a tape plays `roulette.run` (plus `roulette.wake` when it wakes) an
 `roulette.land.*`, which releases that spin's holds first. The beam, the rim and the turret keep turning at rest; Calm
 shows them still.
 
-## 10.14 Follow-up amendment (2026-09-14, owner "Path to play" and build question 6)
+## 10.14 Owner decisions after the v3 build (2026-09-14)
 
-Where this section disagrees with anything above, it wins.
+Binding: the owner's "Hypno v3 build questions" and "Path to play" surveys (`_evidence/brainstorm/DECISIONS.md`, afternoon
+of 2026-09-14). Where this section disagrees with anything above, 10.13 included, it wins. Laws 1 to 8 of 10.13 still
+hold; the only EV change is the slot table (decision 5), and it keeps 102%.
 
-1. **Slot table v6:** `emi3` pays 400 at 1 in 6,494 (154 per million, was 1 in 12,987). Every other plain pay
-   weight is the v5 weight scaled by about 0.9715; pays, melt, freeze, tape and seed rules are unchanged. Plain
-   RTP and every held symbol class stay exactly 1.0200. Paytable constant `TABLE_V6`. Published plain odds:
-   `emi3` 1 in 6,494, `gif3same` 1 in 144, `sub3` 1 in 115, `spiral3` 1 in 115, `gif3` 1 in 12, `sub2` 1 in 14,
-   `spiral2` 1 in 14, `melt` 1 in 17. Held odds are unchanged except the held spiral table (1 in 10 / 1 in 6 /
-   1 in 12, weights 100000 / 173593 / 86779). At the page pace (4.02 s an outcome, 896 outcomes an hour) a
-   jackpot lands about once per 7.3 hours of play. The page prints `state.table`; it keeps no copy.
-2. **Cards deal floor:** `CARDS_FLOOR_MS` defaults to 5000 (was 8000); `state.floorMs` echoes it.
+**1. Tunnel vision is the Back Room's own switch (`gates.tunnel`).**
+
+- `AppSettings.BackRoomTunnel`, default `true`. It is shown only in the room's Options (decision 12), never in the main
+  Settings window, because nothing outside the Back Room uses it. A settings file written before the key existed reads
+  as on; a player's off is kept.
+- `init.gates` and every `settings.gates` carry `tunnel` (and `melt`, decision 3) beside the four toggles of 10.13.A:
+  `{ "flash", "subliminal", "spiral", "brainDrain", "tunnel", "melt" }`, sent in full every time. The host pushes a
+  full `settings` frame when either switch changes.
+- `fx-tunnel` is gated by `tunnel`, NOT by `brainDrain`: the message is dropped while it is off, and turning it off
+  under a running tunnel cancels the tunnel at once (not after the 1500 ms self-release). `FxGates.Tunnel` enforces it
+  in `BackRoomFx.Tunnel`; the page gate is for dressing only, as in 10.13.A.
+- Pages (K1 kit, `room/main.js`, `room/loader.js`): `ctx.gates.tunnel`, a missing key reads as `true`. `createMoments`
+  drops its tunnel steps (the wheel's long last turn, the roulette run, the cards' losing edges) when `tunnel` is off.
+  The 10.13.A plain-dress table becomes:
+
+| Gate off | Plain dress |
+|---|---|
+| `brainDrain` | no `fx.haze`; in-station dims (the long last turn's stage edges) stay |
+| `tunnel` | no `fx-tunnel`; in-station dims stay |
+
+**2. Fullscreen Loom spiral: one field per screen.** `spiral-loom` (and section 4's `spiral-full`, which plays through
+it) draws one field on every monitor, centred on that monitor, like the tunnel's vignettes, instead of one field over
+the virtual screen. Each field is the woven GIF at UniformToFill, CENTRED, inside a cell clipped to its monitor
+(`BackRoomLoomSpiralOverlay.BuildCell`: the Image carries no size of its own and is centred both ways, so a weave whose
+shape differs from the monitor's, a square or tall Loom weave or a 16:10, 21:9 or portrait screen, is cropped from its
+middle and the eye sits at the monitor's centre). The cells are `BackRoomOverlayMath.ScreenCells`: physical monitor
+bounds mapped through the overlay window's OWN DPI (the mixed-DPI rule of 10.13.B's overlays), laid out again on a DPI
+change. The overlay window re-reads the virtual screen whenever it wakes from its idle hide, so a monitor plugged in or
+removed gets its cell from the next spiral after a quiet spell; one plugged in under a running spiral waits for that. One decode feeds every field; the fades, the
+replace-and-release rules and the 20 s hold cap are unchanged. The 10.13.B primitive row reads: `spiral-loom` | one
+field per screen, centred on each | Off: the woven GIF's first frame.
+
+**3. Brain Drain melt is ON by default in the Back Room.**
+
+- What kept it dark: `fx.melt` (the slot's melt) needed the app-wide `AppSettings.BrainDrainEnabled` (default `false`)
+  and lost its drip without `AppSettings.BrainDrainMeltEnabled` (default `false`), so a player who never opened Brain
+  Drain never saw a Back Room melt.
+- Now `AppSettings.BackRoomMelt`, default `true`, is the ONLY gate on `fx.melt` (`FxGates.Melt`): on, the melt plays
+  (the drip included; MotionLevel Off still turns it into the still blur, reported `motion`); off, the whole melt is
+  skipped `toggle`. The app-wide Brain Drain toggles no longer gate it, and nothing about the app's own Brain Drain
+  feature or its defaults changed. A settings file without the key reads as on, so new AND existing players get it;
+  a player who turns it off in the room's Options keeps that off. `fx.haze` stays on `brainDrain`.
+- The page sees it as `gates.melt` (dressing only).
+
+**4. Screen preset: both layers turn the same way.** `LOOM_PRESETS.screen` layer2 (the thin gold layer) runs
+`direction: 1` like layer 1, so everything in the jackpot spiral reads inward; the mockup counter-turned it and is not
+copied. `shared/hypno/spirals/screen.gif` is re-woven from it with the Loom's own encoder (512 x 288, 72 frames,
+5,693,013 bytes); `wake.gif` is unchanged. `kit-check.mjs` measures layer 2 on the kit and on the woven file.
+
+**5. Slot jackpot about 1 in 6,500, table v6 at 102%.** `emi3` pays 400 at 1 in 6,494 (154 per million, was 1 in
+12,987 in table v5, section 10 item 1). Every other plain pay weight is the v5 weight scaled by about 0.9715; pays,
+melt, freeze, tape and seed rules are unchanged. Plain RTP and every held symbol class stay exactly 1.0200. Paytable
+constant `TABLE_V6`. Published plain odds: `emi3` 1 in 6,494, `gif3same` 1 in 144, `sub3` 1 in 115, `spiral3` 1 in 115,
+`gif3` 1 in 12, `sub2` 1 in 14, `spiral2` 1 in 14, `melt` 1 in 17. Held odds are unchanged except the held spiral table
+(1 in 10 / 1 in 6 / 1 in 12, weights 100000 / 173593 / 86779). At the page pace (4.02 s an outcome, 896 outcomes an
+hour) a jackpot lands about once per 7.2 hours of play. The page prints `state.table`; it keeps no copy.
+
+**6. Cards deal floor 5000 ms.** `CARDS_FLOOR_MS` defaults to 5000 (was 8000); `state.floorMs` echoes it. Rules and pays
+are unchanged. Bot estimate from the cards sim (`_evidence/hypno-followup/d-server/sims/sim-backroom-cards.log`, basic
+strategy, stake 2 SP): 720 hands an hour at the floor, expected 28.2 SP an hour (was 17.6 at 450 hands under 8000 ms);
+a human at one hand per 12 s is 11.8.
+
+**7. XP: Back Room effects pay like the app's own effects.** Through the app's award path, never a new one:
+
+| Primitive | XP | Paid by |
+|---|---|---|
+| `flash-burst` | FlashService's own: 4 per image (8 with the flash sound), x the lucky flash roll, `XPSource.Flash` | FlashService (unchanged) |
+| `sub-single`, `sub-seq`, `sub-burst9` | 10 per word, `XPSource.Subliminal` | SubliminalService.FlashSubliminalCustom (unchanged) |
+| `gif-full`, `gif-from`, `wash` WITH a picture | 4 per picture shown (FlashService's base with no sound), x `SkillTree.RollLuckyFlash`, `XPSource.Flash` | the dispatcher, once the overlay reports the picture on screen (`BackRoomFxXp`) |
+| `wash` without a picture, `spiral-full`, `spiral-loom`, `brain-drain`, `brain-drain-melt`, `haze`, `tunnel`, `gif-rain`, `glitch-bubbles` | none (they pay nothing in normal play) | none |
+
+- No double counting: a primitive that reuses a service that already pays is never paid by the dispatcher.
+- Paid only when the picture is on screen: a busy-dropped wash or gif-from, a merged duplicate, a cancelled onset, a
+  picture with no local file, one an overlay refuses while a display change settles, and one that fails to decode or
+  comes too late pay nothing. The hero (`gif-full`) pays once its window has taken the picture. Caps and gates are `ProgressionService.AddXP`'s own: login (or offline username), idle
+  suppression of `Flash` and `Subliminal`, the skill and Cycle multipliers.
+- `IBackRoomFxSink.GifFull`, `Wash` and `GifFrom` take a `shown` callback, which the overlay calls on the UI thread when
+  the picture is on; each onset pays at most once. `GifFrom` still returns false for no local file (the slot frees).
+
+**8. GIF shortfall: cycle the player's own GIFs in every game (amends section 5).** Section 5's "shortfall filled from
+built-in fallback art" is replaced, for every station and every `count`: with at least one pool GIF the host deals
+`min(count, found)` pool GIFs and never pads with fallback art (10.13.C's rule, now for the slot's 4-GIF deal too);
+with none it deals the 4 fallback loops. Pages cycle: the slot's symbol `gifN` wears `gifs[N % gifs.length]`, a card
+value `i` wears `gifs[i % gifs.length]` (10.13.C). The host's `ResolveSymbols` cycles a GIF index past the deal the same way (`gif3` on a 2-GIF
+deal is `g1`), so the fullscreen picture always matches the one on the page. Word indexes past the deal still resolve
+to a random dealt word.
+
+**9. Daily Daze hub under Calm.** The Loom hub keeps turning under Calm at half strength, as in the mockup; only the
+OS reduced-motion setting (`prefers-reduced-motion`) or the app's Motion Off holds it still. The hub angle ACCUMULATES
+(`stations/wheel/hypno.js` `stepHub`): each frame `hubRot += (abs(speed) x 0.9 + 0.35 x clamp01(scale)) x k x dtS`,
+with `speed` the rotor's rad/s (either sign), `scale` the long last turn's time scale, `k` 1 (Calm 0.5) and `dtS` the
+frame in seconds. So it always turns clockwise whichever way the wheel is flung, keeps its drift at rest and slows with
+the warped clock. This replaces 10.13.F's `angle = -rotor.rotation.z` plus 0.35 rad/s row.
+
+**10. Soft Hand.**
+
+- Suspend (panic press 1, minimise) keeps the dealt deck and the sit-down; only leaving the station (Back, `close`,
+  "Stand up, sit back down") re-deals on the next sit-down.
+- The dealer is named Emi in every line and label that names the dealer.
+- Deal cannot be pressed by any path while a fullscreen moment runs; presses are dropped, not queued. While the last
+  hand's bloom, win flash or losing edges are on screen, Deal is disabled and reads "One moment", and the Space and
+  Enter keys, repeated clicks, any room or host relay and a direct call into the deal action all do nothing (the page
+  refuses inside the deal action, not only on the button). Once the moment ends the player presses Deal again. The
+  server floor of decision 6 still applies.
+
+**11. Unchanged and confirmed.** The slot's `spiral-full` plays the Loom weave (10.13.B, kept). Roulette under
+Calm/reduced: the ball still runs at the slow-motion floor; rotor, beam and chips still. Roulette pace fits 8 s a spin.
+Wheel taffy ghosts drawn over the slices. Fullscreen spiral budget (amends 10.13.B): the Loom encoder's own output is
+accepted, long side 640 (512 when a weave runs past the worker's 6 MB soft cap), at most the Loom store's 8 MB cap,
+judged on screen; `screen.gif` is 5.69 MB at 512.
+
+**12. The room's Options.** The room HUD gets an Options pill beside Room view and Motion, opening a small card:
+Effects (Calm / Normal / Full, the existing `AppSettings.BackRoomFxIntensity`, still also in Settings), Tunnel vision
+(On/Off) and Melt (On/Off). While MotionLevel is below Full the card notes that Calm is in use. Escape or Back closes
+the card before anything else in the room. Lexicon keys `br_opt_title`, `br_opt_effects`, `br_opt_calm`,
+`br_opt_normal`, `br_opt_full`, `br_opt_calm_forced`, `br_opt_tunnel`, `br_opt_melt`, `br_opt_on`, `br_opt_off`.
+
+- Page -> host (section 2.1): `{ "type": "room-option", "key": "tunnel" | "melt", "value": true | false }` or
+  `{ "type": "room-option", "key": "intensity", "value": "calm" | "normal" | "full" }`. No reply. Any other shape (a
+  string `"false"`, a number, another key) is dropped; nothing is written once the room is closing. The host writes
+  the setting and saves.
+- Host -> page (section 2.2): `init` and `settings` gain `intensityChoice` (`calm` | `normal` | `full`, the player's
+  own choice), because `intensity` reads `calm` whenever MotionLevel is below Full. The page shows a press at once
+  and the next `settings` frame has the last word.
 
 ## 10.15 Playbook Tier A amendment (2026-09-14)
 
 Source: `backroom-casino-playbook.md` section 2, Tier A: the six page-side items that need no table change and no
-server work. Where this disagrees with sections 6, 8 or 10.13 for the slot, this wins. Everything here is
+server work. Where this disagrees with sections 6, 8 or 10.13 for the slot, this wins; the owner's decisions in 10.14
+win over this. Everything here is
 presentation over an outcome the tape already carries (section 3.2): the page never weights, moves or re-draws a
-stop, it only changes how long it takes to show what the server drew (Law I). The 4 s pace (10.11) and the jackpot
-retune owed in `_evidence/brainstorm/DECISIONS.md` both still hold; A1 rides on top of that pace, it does not replace
-the decision.
+stop, it only changes how long it takes to show what the server drew (Law I). The 4 s pace (10.11) and table v6
+(10.14 item 5: `emi3` 400 at 1 in 6,494, kept by the owner with no retune to 8 h) both still hold; A1 rides on top of
+that pace, it does not replace either decision. A1's hold stretches the average outcome by about 5% (the table
+below), so the table's jackpot lands about once per 7.6 h of play at the page pace instead of 7.25 h; the odds and
+the pays do not move.
 
-Measured over all 2,197 uniform stop combinations of the table v5 strips (`mock-server.js` STRIPS, 13 cells a reel),
+Measured over all 2,197 uniform stop combinations of the slot strips (`mock-server.js` STRIPS, 13 cells a reel; table
+v6 changed pay weights only, the strips are the v5 strips),
 which is what the numbers below are sized against:
 
 | | Rate | Notes |
@@ -1004,7 +1127,7 @@ is r 0.43 with 13 cells (27.7 deg each) and `reel_window` is 0.39 tall on the sa
 **No stop weighting anywhere.** The stops are whatever the server drew; the tell shows that truth, it never
 manufactures it. The sim may REPORT the natural near-miss rate per table version (an optional `table.almostRate`
 field is allowed, and is not required; nothing on the page reads it). Note for the owner, from the table above: under
-table v5 a sub pair already pays `sub2` and a spiral pair already pays `spiral2`, so those two can never be an
+tables v5 and v6 a sub pair already pays `sub2` and a spiral pair already pays `spiral2`, so those two can never be an
 ALMOST, which leaves the tell to gif and EMI pairs at about 1 spin in 244. Widening it to "one short of a BETTER
 line" (a spiral pair that was one cell off `spiral3`) is a table-shaped decision and is NOT built.
 
@@ -1063,10 +1186,10 @@ spiral a spin, so a jar that filled on freeze spins would let a held-spiral free
 plain-play debt: only plain outcomes earn it, only plain outcomes are halved by it.)
 
 **What a full jar does.** When the count reaches `table.jar.size` it drops by `table.jar.size` (the remainder
-stays: 24 + 2 spirals fires at 25 and leaves 1) and pushes `table.jar.free` outcomes of `kind: 'jar'` onto the
+stays: 99 + 2 spirals fires at 100 and leaves 1) and pushes `table.jar.free` outcomes of `kind: 'jar'` onto the
 same expansion queue `spiral3` uses, so `drain()` expands them inline at the point the jar filled, in draw
 order, before the next paid spin. One outcome can fire the jar at most once (three spirals is at most 3 of
-25), and the queue cap `MAX_OUTCOMES` (500) is unchanged.
+100), and the queue cap `MAX_OUTCOMES` (500) is unchanged.
 
 **What a jar spin is.** Exactly a `spiral3` free spin with a different name: drawn from the plain table,
 costing 0, halved while melted, consuming melt in draw order, able to land the `melt` malus and able to
@@ -1091,40 +1214,43 @@ keeps its meaning (outcomes still queued) and now counts jar spins and the `emi_
 `table.jar` = `{ "size": 100, "free": 3 }` in the published table. The page keeps no copy of either.
 
 **RTP.** The jar is pure added return: at table v6 dressing a plain outcome shows 0.642 spirals on average, so
-a 25-jar fills every 39.0 outcomes, and 3 free spins every 39 outcomes is +7.7% outcomes per paid spin. Left
-alone it takes the whole game from 1.0200 to 1.1178. Table v7 must land back at 1.0200 over the whole game,
-jar spins and C1 included, with the jackpot at 1 in 6,494 per plain outcome (10.14). The retune is the same
+the decided 100-jar fills every 155.4 outcomes (the 25-jar of the first draft filled every 39.0, and took the
+whole game from 1.0200 to 1.1178 left alone). Table v7 must land back at 1.0200 over the whole game,
+jar spins and C1 included, with the jackpot at 1 in 6,493 per plain outcome (10.14). The retune is the same
 move v6 made on v5: **only the six everyday pay weights scale by one factor** (`gif3same`, `sub3`, `spiral3`,
 `gif3`, `sub2`, `spiral2`). `melt` stays 58,900, `emi3` and `emi2` are fixed by 10.16.D, pays, `meltSpins`,
 `freeSpins`, `respins`, `stake`, `freezeCost` and the strips do not move, and `none` takes the remainder.
-All five `frozen` tables are UNCHANGED (a freeze neither fills the jar nor draws `emi2`, so every held class
-stays at exactly 1.0200 with no re-tune).
+FOUR of the five `frozen` tables are UNCHANGED, and the held-SPIRAL one is re-tuned because its sealed free
+spins read the plain table: `spiral2` 173,593 -> **177,589** and `sub2` 86,779 -> **88,795**, with `spiral3`
+pinned and the 2:1 kept, so every held class still lands at exactly 1.0200 (CCP-Server #176).
 
-The solved factor is **0.916369**, giving the v7 plain weights over `DEN` 1,000,000:
+The solved factor for the decided 100 / 3 is **0.977450**, with `gif3` then polished ALONE to land the exact
+1.0200 (83,759 -> 83,746), giving the FINAL v7 plain weights over `DEN` 1,000,000 (CCP-Server #176):
 
 | Line | v6 | v7 | Published odds (v7) |
 |---|---|---|---|
 | `emi3` (drawn direct) | 154 | **92** | 1 in 10,870 |
 | `emi2` (new, 10.16.D) | - | **8,207** | 1 in 122 |
-| `gif3same` | 6,940 | **6,360** | 1 in 157 |
-| `sub3` | 8,675 | **7,950** | 1 in 126 |
-| `spiral3` | 8,675 | **7,950** | 1 in 126 |
-| `gif3` | 85,691 | **78,525** | 1 in 13 |
-| `sub2` | 69,394 | **63,591** | 1 in 16 |
-| `spiral2` | 69,394 | **63,591** | 1 in 16 |
+| `gif3same` | 6,940 | **6,784** | 1 in 147 |
+| `sub3` | 8,675 | **8,479** | 1 in 118 |
+| `spiral3` | 8,675 | **8,479** | 1 in 118 |
+| `gif3` | 85,691 | **83,746** | 1 in 12 |
+| `sub2` | 69,394 | **67,829** | 1 in 15 |
+| `spiral2` | 69,394 | **67,829** | 1 in 15 |
 | `melt` | 58,900 | **58,900** | 1 in 17 |
-| `none` | 692,177 | **704,834** | - |
+| `none` | 692,177 | **689,655** | - |
 
 Plus the re-spin weight `respin.emi` = **7,555** (1 in 132) from 10.16.D. The jackpot, counting both paths,
-stays 154.00 per million plain outcomes = **1 in 6,494**. The lane re-runs the sim and polishes `gif3`
-alone to land the exact 1.0200, the way v6 polished `gif3` (10.14).
+is 154.004 per million plain outcomes = **1 in 6,493** (the 6,494 was v6's exact-154 figure). The `gif3`
+polish that lands the exact 1.0200 is done, the way v6 polished `gif3` (10.14).
 
 **Sim requirement** (`scripts/sim-backroom-slot.mjs`, extended by the server slot lane): exact whole-game RTP
 1.0200 +- 0.0002 with the jar and the re-spin in, `exactFrozenRtp` still 1.0200 for all five held classes, the
-jackpot 1 in 6,494 per plain outcome with the re-spin's share reported, and three new reported figures:
-outcomes per paid spin, jar fires per 100 outcomes, and hit frequency. Expected: outcomes per paid spin
-1.1055 -> **1.2066**, jar fires every **39.0** outcomes (about 2.6 minutes at the 4.02 s pace), hit frequency
-24.89% -> **22.81%** (still inside the playbook's 20-40% band). A 10-spin tape becomes about 12.1 outcomes, so
+jackpot 1 in 6,493 per plain outcome with the re-spin's share reported, and three new reported figures:
+outcomes per paid spin, jar fires per 100 outcomes, and hit frequency. Expected at the decided 100 / 3: jar
+fires every **155.4** outcomes (about 10.4 minutes at the 4.02 s pace) and hit frequency 24.89% -> **24.33%**
+(still inside the playbook's 20-40% band); the 1.2066 outcomes per paid spin and the 12.1-outcome tape below
+were the 25 / 3 draft's and both come down with the bigger jar. A 10-spin tape still becomes more outcomes, so
 `nextBuyAt = outcomes.length * SLOT_FLOOR_MS` scales with it and nothing in 10.12 moves.
 
 What the jar size costs, for the owner (each row re-solved to 1.0200):
@@ -1244,12 +1370,13 @@ texture and a new uniform per screen. The bell goes in the HUD.
   `br_bell_slot_emi3`, `br_bell_slot_gif3same`, `br_bell_slot_sub3`, `br_bell_slot_spiral3`,
   `br_bell_wheel_jackpot`, `br_bell_wheel_slice`, `br_bell_cards_blackjack`, `br_bell_roulette_wake`,
   `br_bell_ago_now`, `br_bell_ago_min`, `br_bell_ago_hour`, `br_bell_ago_day`.
-- **Room Options.** The opt-in toggle is a row in the room's Options panel. That panel does not exist yet: the
-  room lane builds it as a third `br-pill` in `hud.js`'s `br-nav`, opening a `.br-options` panel beside the
-  `br-map-list`, with `onOptions(open)` and `options(rows)` on the HUD. Its first row is `br_bell_optin`
-  ("Show my name on the floor bell"), off by default, posting `bell/opt`. It is also where the tunnel-vision
-  toggle owed by the hypno v3 build survey (DECISIONS, build question 1) goes: whichever lane lands first
-  builds the panel, the other adds a row.
+- **Room Options.** The opt-in toggle is a row in the room's Options panel, which 10.14 built (the third
+  `br-pill` in `hud.js`'s `br-nav`, the `.br-options` card with the Effects intensity control and the Tunnel
+  vision and Melt switch rows, `onOption(key, value)` -> `room-option`, painted by `options(v)`). The bell
+  opt-in is the LAST switch row of that panel, `br_bell_optin` ("Show my name on the floor bell"), off by
+  default. It is the player's own server setting, not a host setting: its press goes to a separate HUD
+  callback `onBellOpt(on)`, which posts `bell/opt`, and the server's answer is painted back by
+  `hud.bellOptIn(checked)` (an optimistic tick is put back on refusal).
 
 ### 10.16.C B3 the welcome-back comp
 
@@ -1305,7 +1432,9 @@ slot state route never mints; it reports what the ping stored.
 - On sit-down `station.js` reads `state.comp`. If it is there: the HUD status line reads `br_slot_comp` ("On
   the house: {0} spins"), a small chip `<span class="slot-comp">` sits on the cabinet beside the SP readout
   until the comp is spent, and EMI takes the `hearts` face for one `glanceHoldMs`.
-- The lever's FIRST press buys the comp tape (`request('tape', { comp: id })`) instead of a paid one; every
+- The first tape BUY of the sit-down is the comp (`request('tape', { comp: id })`), not the first press: a
+  press that only plays an outcome already on the tape buys nothing and never spends it, and neither does a
+  refused buy. Every
   press after that is a normal paid tape at `defaultTapeCount(sp)`. The spin button's `<small>` reads
   `br_slot_comp_cost` ("Free") for that one press.
 - No party: a glance and one chime (`sound.chime` at tier 1, `tokens: false`), never a fanfare, never a
@@ -1331,9 +1460,11 @@ So `emi, emi, melt` reads `emi2` and does NOT start the melt. `emi, X, emi` and 
 plain-band outcome in every other way: it is halved (of 0) and consumes one melt while melted, and its spirals
 fill the jar.
 
-**The re-spin.** An `emi2` outcome appends exactly ONE outcome of `kind: 'emi_respin'` to the expansion queue,
-so `drain()` plays it immediately after. It holds reels 1 and 2 as `emi` and redraws reel 3 only, from a
-dedicated two-band re-spin weight set, not from the plain table:
+**The re-spin.** An `emi2` outcome puts exactly ONE outcome of `kind: 'emi_respin'` at the FRONT of the
+expansion queue, so `drain()` plays it immediately after its parent even when free or jar spins are already
+queued behind it (jar spins themselves queue behind a line's own free spins, so a `spiral3` that also fills
+the jar drains `free, free, free, jar, jar, jar`). It holds reels 1 and 2 as `emi` and redraws reel 3 only,
+from a dedicated two-band re-spin weight set, not from the plain table:
 
 ```js
 respin: Object.freeze({ emi: 7555 }),   // over DEN; whatever is left draws a non-EMI, non-melt reel 3
@@ -1353,14 +1484,14 @@ dresses EMI onto reels 1 and 2 with reel 3 something else on 11 of the 945 `none
 **8,207**, so the pair shows exactly as often as it does today; all that changes is what happens next. The
 weight comes out of `none`, which pays 0, so lifting it costs no return.
 
-Target: the jackpot stays **1 in 6,494** (154.00 per million plain outcomes, 10.14), with about 40% of
-jackpots arriving through the re-spin.
+Target: the jackpot is **1 in 6,493** (154.004 per million plain outcomes; 10.14's 1 in 6,494 was v6's
+exact-154 figure), with about 40% of jackpots arriving through the re-spin.
 
 ```
  jackpot per plain outcome = P(emi3 drawn direct) + P(emi2) x P(re-spin lands emi)
                     154e-6 = 92e-6              + 8,207e-6 x q
                          q = 62e-6 / 8,207e-6 = 0.0075545   ->  respin.emi = 7,555 / 1,000,000  (1 in 132)
-                 delivered = 92.000 + 62.004 = 154.004 per million = 1 in 6,494
+                 delivered = 92.000 + 62.004 = 154.004 per million = 1 in 6,493
              re-spin share = 62.004 / 154.004 = 40.3%
 ```
 
@@ -1369,30 +1500,33 @@ missing 62 per million comes back through the re-spin.
 
 The re-spin's jackpot is never halved, while a direct `emi3` still is. 16.65% of plain outcomes are halved
 (the melt chain's stationary share, unchanged), so moving 62 per million of jackpot into an unhalvable band
-adds `62e-6 x 400 x 0.166497 = +0.00206` SP per outcome. That, plus the jar, is what the 0.916369 retune in
+adds `62e-6 x 400 x 0.166497 = +0.00206` SP per outcome. That, plus the jar, is what the 0.977450 retune in
 10.16.A absorbs. The re-spin also adds `8,207e-6` outcomes per plain outcome to the tape, which is inside the
 1.2066 outcomes-per-paid-spin figure.
 
 **Published table.** `publicTable()` gains an `emi2` row
 (`{ id: 'emi2', pays: 0, odds: '1 in 122', respin: 1 }`), a `respin` block
 (`{ emi: '1 in 132', jackpotShare: 0.40 }`), the `jar` block (10.16.A), and a headline
-`jackpotOdds: '1 in 6,494'` so the page prints the TOTAL jackpot chance next to the direct-draw row.
+`jackpotOdds: '1 in 6,493'` so the page prints the TOTAL jackpot chance next to the direct-draw row.
 Published odds must always be the total: the direct row alone would understate the jackpot, and published odds
 are a playbook "already in" (10.1).
 
 **Freeze.** A freeze spin never draws `emi2` and never starts a re-spin, and neither does a `spiral2` re-spin
-that repeats a frozen table. The five `frozen` tables gain no `emi2` band and keep their v6 weights exactly, so
-every held class stays at exactly 1.0200 with no re-tune (`exactFrozenRtp`). That also settles the held-reel-3
+that repeats a frozen table; under the seal `emi2` reads as `none`, exactly as `melt` does (10.10.2), so there
+is no chase from a 2 SP freeze. The five `frozen` tables gain no `emi2` band, and C1 moves none of their
+weights, so every held class stays at exactly 1.0200 (`exactFrozenRtp`); the one frozen re-tune in this
+amendment is the held-SPIRAL table's, and the jar is what moved it (10.16.A). That also settles the held-reel-3
 case the playbook asks about: a held reel 3 cannot be redrawn, so there could be no re-spin anyway; sealing the
 whole freeze from C1 gives the same answer in every column and keeps "a freeze buy is worth the same in every
 state" (`backroom-slot.js` header) literally true. (Owner may revisit: a chase moment on a 2 SP freeze would
 need all five conditional tables re-tuned.)
 
 **Sim requirement.** `sim-backroom-slot.mjs` reports, on top of 10.16.A's numbers: whole-game RTP 1.0200, the
-jackpot 1 in 6,494 per plain outcome, the re-spin's share of jackpots (expect 40.3%) and the `emi2` frequency
+jackpot 1 in 6,493 per plain outcome, the re-spin's share of jackpots (expect 40.3%) and the `emi2` frequency
 (expect 1 in 122, about one chase every 8 minutes at the 4.02 s pace). A 30,000,000 paid-spin Monte Carlo
 through the real draw pinned RTP 1.02024, 1.20658 outcomes per paid spin, `emi2` 1 in 122.9, jar fires 1 in
-39.3 outcomes and a re-spin share of 40.85% (jackpot-count noise at that size is about +- 0.001 RTP).
+39.3 outcomes and a re-spin share of 40.85% (run at 25 / 3; jackpot-count noise at that size is about
++- 0.001 RTP).
 
 **Client.** The re-spin is a second beat, not a second spin.
 
@@ -1404,10 +1538,12 @@ through the real draw pinned RTP 1.02024, 1.20658 outcomes per paid spin, `emi2`
   a muted thud and nothing else.
 - Then reels 1 and 2 stay exactly where they are, reel 3 spins again and takes the **full 1,400 ms gold hold**
   (`ANTICIPATION`'s EMI row, `pace.js`), **never halved here**, not even while melted: the Brake 5 halving in
-  10.15 applies to A1's anticipation, not to this beat, because this beat IS the event. Then THE THUD. On
+  10.15 applies to A1's anticipation, not to this beat, because this beat IS the event, so it stays GOLD while
+  melted as well (A1's own melted EMI hold is still halved and still never gold). Then THE THUD. On
   `emi3` the REVEAL plays exactly as any jackpot does (Law IX, once per sit-down).
 - `pace.js`: an `emi_respin` outcome costs `SPIN_MS` for reel 3 only, plus the 1,400 ms hold, plus `THUD_MS`,
-  `REVEAL_MS` and `BREATH_MS`: about 4,380 ms. `outcomeMs` takes a `kind` so the sim and the page agree.
+  `REVEAL_MS` and `BREATH_MS`: **4,660 ms** (1,800 + 1,400 + 340 + 600 + 520). `outcomeMs` takes a `kind` so
+  the sim and the page agree.
 - Reduced motion and Calm keep the hold and the tone and drop the light change, exactly as A1 does (10.15).
 - Lexicon: `br_slot_line_emi2` ("2 EMI"), `br_slot_respin` ("One more look").
 - `mock-server.js` gains the `emi2` class, the `emi_respin` outcome and the v7 weights, so the node tests and

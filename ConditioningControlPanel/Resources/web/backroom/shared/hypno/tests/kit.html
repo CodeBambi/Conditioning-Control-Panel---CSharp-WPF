@@ -39,7 +39,7 @@ const DEAL = ['../../../stations/slot/fallback/gif0.webp', '../../../stations/sl
   '../../../stations/slot/fallback/gif2.webp', '../../../room/assets/ads/dtrh.webp', '../../../stations/slot/fallback/gif3.webp',
   '../../../room/assets/ads/arcademy.webp', '../../../room/assets/ads/focus-gaze.webp'].map(rel);
 const host = createMockHost({ deal: DEAL, intensity: calm ? 'calm' : 'normal',
-  gates: off ? { flash: false, subliminal: false, spiral: false, brainDrain: false } : null });
+  gates: off ? { flash: false, subliminal: false, spiral: false, brainDrain: false, tunnel: false } : null });
 const ctx = host.attach({ root: document.body });
 const kit = createLoomKit({ still: false, log: (m) => host.logs.push(m) });
 const stage = document.getElementById('stage'), screen = document.getElementById('screen'), cap = document.getElementById('cap');
@@ -107,6 +107,7 @@ const boards = {
         sg.font = '13px Consolas, monospace'; sg.fillStyle = m.ok ? '#5fffd0' : '#ff5fa2';
         sg.fillText(`turn +${m.turnDeg.toFixed(1)} deg for +${(m.delta * 180 / Math.PI).toFixed(1)} (clockwise ${m.turnDeg > 0 ? 'yes' : 'NO'})`, 610, y + s / 2 - 10);
         sg.fillText(`rim lead ${m.rim.map((v) => (v > 0 ? '+' : '') + v.toFixed(1)).join(' ')} deg (arms lead at the rim ${m.rim.every((v) => v > 0) ? 'yes' : 'NO'})`, 610, y + s / 2 + 12);
+        if (m.layer2) sg.fillText(`layer 2 ${m.layer2.color}: turn ${m.layer2.turn.map((v) => (v > 0 ? '+' : '') + v.toFixed(1)).join(' ')}, rim ${m.layer2.rim.map((v) => (v > 0 ? '+' : '') + v.toFixed(1)).join(' ')} (same way, reads inward ${m.layer2.ok ? 'yes' : 'NO'})`, 610, y + s / 2 + 34);
       }
     });
     label(sg, 'handedness: phase grows with a clockwise angle, the pattern turns clockwise, arms lead at the rim (reads inward)', W / 2, H - 8);

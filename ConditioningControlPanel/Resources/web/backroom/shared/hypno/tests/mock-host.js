@@ -23,9 +23,9 @@ let seq = 0;
 const mint = () => (Date.now().toString(16) + (++seq).toString(16).padStart(8, '0')).padStart(32, '0').slice(-32);
 const readGates = (g, prev) => {
   const q = g && typeof g === 'object' ? g : {};
-  const p = prev || { flash: true, subliminal: true, spiral: true, brainDrain: true };
+  const p = prev || { flash: true, subliminal: true, spiral: true, brainDrain: true, tunnel: true };
   const pick = (k) => (k in q ? q[k] !== false : p[k]);
-  return Object.freeze({ flash: pick('flash'), subliminal: pick('subliminal'), spiral: pick('spiral'), brainDrain: pick('brainDrain') });
+  return Object.freeze({ flash: pick('flash'), subliminal: pick('subliminal'), spiral: pick('spiral'), brainDrain: pick('brainDrain'), tunnel: pick('tunnel') });
 };
 
 /**
@@ -78,7 +78,7 @@ export function createMockHost({ gates = null, intensity = 'normal', reduced = f
     fxTunnel(level) {
       const n = Number(level);
       if (!Number.isFinite(n)) return;
-      const rec = { type: 'fx-tunnel', at: now(), level: Math.min(1, Math.max(0, n)), applied: st.gates.brainDrain };
+      const rec = { type: 'fx-tunnel', at: now(), level: Math.min(1, Math.max(0, n)), applied: st.gates.tunnel };
       host.calls.push(rec); host.tunnel.push(rec);
     },
     media(opts) {

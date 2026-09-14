@@ -29,8 +29,16 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
         get
         {
             lock (SharedLock)
-                return _shared ??= new BackRoomFx(new BackRoomFxServices(), new DispatcherFxScheduler(), ReadEnvironment);
+                return _shared ??= new BackRoomFx(new BackRoomFxServices(), new DispatcherFxScheduler(), ReadEnvironment, xp: PayPictureXp);
         }
+    }
+
+    /// <summary>A Back Room picture pays as a flash image does in FlashService: the base times the lucky flash roll,
+    /// <c>XPSource.Flash</c>, through AddXP (idle suppression, skill multiplier, login gate). CONTRACT 10.14.</summary>
+    internal static void PayPictureXp(int baseXp)
+    {
+        int lucky = App.SkillTree?.RollLuckyFlash() ?? 1;
+        App.Progression?.AddXP(baseXp * lucky, XPSource.Flash);
     }
 
     /// <summary>How long after a fire StopAll still considers a shared one-shot channel the room's.</summary>
@@ -49,14 +57,15 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
     {
         var s = App.Settings?.Current;
         if (s == null)
-            return new FxEnvironment(MotionFx.Level, BackRoomFxIntensity.Calm, new FxGates(false, false, false, false, false, false));
+            return new FxEnvironment(MotionFx.Level, BackRoomFxIntensity.Calm, FxGates.AllOff);
         var spiralPath = s.SpiralPath;
         string? Woven(string preset) => WovenFor(preset, spiralPath);
         double opacity = s.SpiralOpacity > 0 ? Math.Clamp(s.SpiralOpacity / 100.0, 0.05, 1.0) : 0.85;
         // A woven GIF always has a first frame, so the spiral's still exists whenever its weave does.
         return new FxEnvironment(MotionFx.Level, s.BackRoomFxIntensity,
-            new FxGates(s.FlashEnabled, s.SubliminalEnabled, s.SpiralEnabled, s.BrainDrainEnabled, s.BrainDrainMeltEnabled,
-                Woven(BackRoomSpiralSource.Screen) != null),
+            // Melt and Tunnel are the room's own switches (10.14), not the app's Brain Drain toggles.
+            new FxGates(s.FlashEnabled, s.SubliminalEnabled, s.SpiralEnabled, s.BrainDrainEnabled, s.BackRoomMelt,
+                Woven(BackRoomSpiralSource.Screen) != null, s.BackRoomTunnel),
             Woven, opacity);
     }
 
@@ -168,14 +177,14 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
         return null;
     }
 
-    public void Wash(FxRgb color, double peak, BackRoomGif? picture)
-        => BackRoomWashOverlay.Show(color, peak, LocalFile(picture), picture == null ? null : Target(null).ScreenPx, MotionFx.Level == MotionLevel.Off);
+    public void Wash(FxRgb color, double peak, BackRoomGif? picture, Action shown)
+        => BackRoomWashOverlay.Show(color, peak, LocalFile(picture), picture == null ? null : Target(null).ScreenPx, MotionFx.Level == MotionLevel.Off, shown);
 
-    public bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still)
+    public bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still, Action shown)
     {
         if (LocalFile(gif) is not { } path) return false;
         double aspect = gif.W > 0 && gif.H > 0 ? (double)gif.W / gif.H : 4.0 / 3;
-        BackRoomGifFromOverlay.Show(path, aspect, Target(from), durationMs, scale, dim, still);
+        BackRoomGifFromOverlay.Show(path, aspect, Target(from), durationMs, scale, dim, still, shown);
         return true;
     }
 
@@ -202,9 +211,9 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
         _drainTimer = Rearm(_drainTimer, _drainUntil, StopDrain);
     }
 
-    public void GifFull(BackRoomGif gif, int durationMs, bool still)
+    public void GifFull(BackRoomGif gif, int durationMs, bool still, Action shown)
     {
-        if (LocalFile(gif) is { } path) ChaosFlashOverlay.ShowHero(path, durationMs, 0.9, still);
+        if (LocalFile(gif) is { } path) ChaosFlashOverlay.ShowHero(path, durationMs, 0.9, still, shown);
     }
 
     public void StopAll()

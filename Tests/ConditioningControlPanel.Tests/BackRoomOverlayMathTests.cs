@@ -69,6 +69,43 @@ public class BackRoomOverlayMathTests
             BackRoomOverlayMath.ToLocalDip(new PxRect(-3720, 75, 150, 37.5), Screens[0].BoundsPx, 1.5));
     }
 
+    // ---- one field per screen (10.14) -------------------------------------------------------------
+
+    [Fact]
+    public void ScreenCells_OnePerMonitor_CentredOnThatMonitor_MixedDpiThroughTheWindowsOwnScale()
+    {
+        // A 4K panel at 150% on the left (physical px), a 1080p primary at 100% on the right, lower down.
+        var screens = new[]
+        {
+            new FxScreenInfo(new PxRect(-3840, 0, 3840, 2160), false),
+            new FxScreenInfo(new PxRect(0, 540, 1920, 1080), true),
+        };
+        var virtualPx = new PxRect(-3840, 0, 5760, 2160);
+        // The overlay window sits on the 150% monitor's scale: every cell goes through 1.5, never a per-monitor one.
+        var cells = BackRoomOverlayMath.ScreenCells(screens, virtualPx, 1.5);
+        Assert.Equal(new[] { new PxRect(0, 0, 2560, 1440), new PxRect(2560, 360, 1280, 720) }, cells);
+        // Each field's eye is its own monitor's centre, not the virtual screen's.
+        Assert.Equal((1280.0, 720.0), (cells[0].Cx, cells[0].Cy));
+        Assert.Equal((3200.0, 720.0), (cells[1].Cx, cells[1].Cy));
+        Assert.NotEqual(BackRoomOverlayMath.ToLocalDip(virtualPx, virtualPx, 1.5).Cx, cells[0].Cx);
+
+        // Laid back out in physical px, the cells land exactly on the monitors at any window scale.
+        foreach (var scale in new[] { 1.0, 1.25, 1.5, 2.0 })
+        {
+            var at = BackRoomOverlayMath.ScreenCells(screens, virtualPx, scale);
+            for (int i = 0; i < screens.Length; i++)
+                Assert.Equal(screens[i].BoundsPx, new PxRect(at[i].X * scale + virtualPx.X, at[i].Y * scale + virtualPx.Y, at[i].W * scale, at[i].H * scale));
+        }
+    }
+
+    [Fact]
+    public void ScreenCells_NoMonitorReported_IsOneCellOverTheSurface()
+    {
+        var virtualPx = new PxRect(0, 0, 1920, 1080);
+        Assert.Equal(new[] { new PxRect(0, 0, 1280, 720) }, BackRoomOverlayMath.ScreenCells(Array.Empty<FxScreenInfo>(), virtualPx, 1.5));
+        Assert.Single(BackRoomOverlayMath.ScreenCells(new[] { new FxScreenInfo(new PxRect(0, 0, 0, 0), true) }, virtualPx, 1));
+    }
+
     private static void Near(PxRect want, PxRect got)
     {
         Assert.Equal(want.X, got.X, 4);

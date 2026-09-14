@@ -67,17 +67,46 @@ test('the wheel landings fire the table, Normal args, the caller colour, rect an
 });
 
 test('gates drop their steps; a moment with nothing left fires nothing', () => {
-  const host = createMockHost({ gates: { flash: false, spiral: false, brainDrain: false } });
+  const host = createMockHost({ gates: { flash: false, spiral: false, brainDrain: false, tunnel: false } });
   const m = createMoments(host.ctx, { station: 'wheel' });
   const r = m.play('wheel.land.jackpot', { from: RECT, gif: 'g0' });
   assert.deepEqual(r, { tokens: [], page: ['quiet_room', 'reveal'], held: false });
   m.play('roulette.wake'); m.play('roulette.land.big', { color: '#ff5fa2', from: RECT, gif: 'g1' });
   assert.equal(host.fx.length, 0);
   m.tunnel(0.8);
-  assert.equal(host.tunnel.length, 0, 'brainDrain off: no fx-tunnel');
+  assert.equal(host.tunnel.length, 0, 'tunnel off: no fx-tunnel');
   host.settings({ gates: { flash: true } });
   m.play('wheel.land.jackpot', { from: RECT, gif: 'g0' });
   assert.deepEqual(host.fx.map((x) => x.fxId), ['fx.gif_from', 'fx.wash'], 'flash back on, spiral still off');
+});
+
+test('fx-tunnel reads the tunnel gate, not brainDrain; haze stays on brainDrain', async () => {
+  const drainOff = createMockHost({ intensity: 'full', gates: { brainDrain: false } });
+  const a = createMoments(drainOff.ctx, { station: 'roulette' });
+  a.play('roulette.run'); a.tunnel(0.6);
+  assert.deepEqual(drainOff.fx.map((x) => x.fxId), [], 'brainDrain off: no haze');
+  assert.deepEqual(drainOff.tunnel.map((x) => x.level), [0.6], 'brainDrain off, tunnel on: the run still posts its tunnel');
+  a.dispose();
+
+  const tunnelOff = createMockHost({ intensity: 'full', gates: { tunnel: false } });
+  const b = createMoments(tunnelOff.ctx, { station: 'roulette' });
+  b.play('roulette.run'); b.tunnel(0.6); b.play('cards.lose');
+  await new Promise((r) => setTimeout(r, 120));
+  assert.deepEqual(tunnelOff.fx.map((x) => x.fxId), ['fx.haze'], 'tunnel off, brainDrain on: the haze still holds');
+  assert.equal(tunnelOff.tunnel.length, 0, 'tunnel off: no fx-tunnel from a level or the losing breath');
+  b.dispose();
+
+  const live = createMockHost();
+  const c = createMoments(live.ctx, { station: 'cards' });
+  c.play('cards.lose');
+  await new Promise((r) => setTimeout(r, 160));
+  assert.ok(live.tunnel.some((x) => x.level > 0), 'the losing edges breathe');
+  live.settings({ gates: { tunnel: false } });
+  const n = live.tunnel.length;
+  assert.equal(live.tunnel.at(-1).level, 0, 'a settings frame with tunnel off closes it at once');
+  await new Promise((r) => setTimeout(r, 160));
+  assert.equal(live.tunnel.length, n, 'and the breath stops');
+  c.dispose();
 });
 
 test('cards: holdScreen stops host fx and the tunnel; bloom then win drops the picture and raises the wash', () => {

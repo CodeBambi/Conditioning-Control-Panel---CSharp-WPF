@@ -1,25 +1,27 @@
 /* ============================================================================
  * backroom/room/hud.js - the room's own chrome over the 3D view: the loading
  * veil, the walk hint, the Visit prompt, the Room view button and list, the
- * Motion button, the Options panel and the floor bell. Back and the SP chip
- * stay in index.html (Law VI: they exist before any of this loads).
+ * Motion button and the room's Options (CONTRACT 10.14: effects intensity, tunnel
+ * vision, melt). Back and the SP chip stay in index.html (Law VI: they exist
+ * before any of this loads).
  *
  * THE FLOOR BELL (CONTRACT 10.16.B). One line under the nav pills, role=status,
  * rotating through the entries every 8,000 ms, newest first, wrapping. No sound
  * at any intensity (Brake 1: it is somebody else's party). Hidden while a
  * station holds the screen (`br-visiting`) and in the room view (`br-overview`),
  * exactly as the Visit prompt is. Reduced motion and Calm keep the rotation (it
- * is text, not motion) and cross-fade in 0 ms instead of 200 ms.
- *
- * THE OPTIONS PANEL (CONTRACT 10.16.B, 10.14). A third pill in `br-nav` opening
- * `.br-options` beside the map list. Its first row is the floor bell opt-in;
- * the tunnel-vision toggle owed by the hypno v3 build survey adds a second.
+ * is text, not motion) and cross-fade in 0 ms instead of 200 ms. Its opt-in is
+ * one more switch row inside the 10.14 Options panel, after Melt: it is the
+ * user's own setting, so that press goes to `onBellOpt`, never to the host as
+ * `room-option`.
  *
  * LEXICON KEYS this file shows, for the integration pass into en.json (Law VII;
  * every one has an English fallback here):
  *   br_loading, br_walk_hint, br_visit, br_back, br_room_view, br_room_walk,
  *   br_motion_still, br_motion_on
- *   br_options ("Options")
+ *   br_opt_title ("Options"), br_opt_effects, br_opt_calm, br_opt_normal,
+ *   br_opt_full, br_opt_calm_forced, br_opt_tunnel, br_opt_melt,
+ *   br_opt_on, br_opt_off
  *   br_bell_optin ("Show my name on the floor bell")
  *   br_bell_line ("{who} {what} {ago}"), br_bell_someone ("someone"),
  *   br_bell_slot_emi3, br_bell_slot_gif3same, br_bell_slot_sub3,
@@ -36,8 +38,8 @@ import { bellLines, ROTATE_MS } from './bell.js';
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
 
 /**
- * @param {Object} o  { root, lex(key, fallback), label(row), onVisit(row), onGo(row), onOverview(on),
- *                      onMotion(), onOptions(open), now() }
+ * @param {Object} o  { root, lex(key, fallback), label(row), onVisit(row), onGo(row), onOverview(on), onMotion(),
+ *                      onOption(key, value), onBellOpt(on), now() }
  */
 export function createHud(o) {
   const L = o.lex;
@@ -54,31 +56,59 @@ export function createHud(o) {
   const nav = el('nav', 'br-nav');
   const viewBtn = el('button', 'br-pill'); viewBtn.type = 'button';
   const motionBtn = el('button', 'br-pill'); motionBtn.type = 'button';
-  const optionsBtn = el('button', 'br-pill'); optionsBtn.type = 'button';
-  optionsBtn.textContent = L('br_options', 'Options');
-  optionsBtn.setAttribute('aria-expanded', 'false');
-  nav.append(viewBtn, motionBtn, optionsBtn);
+  const optBtn = el('button', 'br-pill', L('br_opt_title', 'Options')); optBtn.type = 'button';
+  optBtn.setAttribute('aria-expanded', 'false');
+  nav.append(viewBtn, motionBtn, optBtn);
   const bell = el('div', 'br-bell');
   bell.setAttribute('role', 'status'); bell.setAttribute('aria-live', 'polite'); bell.hidden = true;
   const bellText = el('span');
   bell.appendChild(bellText);
   const list = el('div', 'br-map-list'); list.hidden = true;
-  const options = el('div', 'br-options'); options.hidden = true;
-  o.root.append(veil, hint, cross, prompt, nav, bell, list, options);
 
-  let nearest = null, overview = false, optionsOpen = false;
+  // THE ROOM'S OPTIONS (10.14). Every press goes to the host as `room-option`; the host's settings frame paints it back.
+  // The floor bell opt-in (10.16.B) is the one row that does not: it is the user's own, and goes to `onBellOpt`.
+  const panel = el('div', 'br-options'); panel.hidden = true; panel.setAttribute('role', 'group');
+  panel.setAttribute('aria-label', L('br_opt_title', 'Options'));
+  const segs = [['calm', 'Calm'], ['normal', 'Normal'], ['full', 'Full']].map(([v, name]) => {
+    const b = el('button', 'br-seg', L('br_opt_' + v, name)); b.type = 'button';
+    b.dataset.value = v;
+    b.addEventListener('click', () => o.onOption('intensity', v));
+    return b;
+  });
+  const segRow = el('div', 'br-seg-row'); segRow.append(...segs);
+  const forcedNote = el('p', 'br-opt-note', L('br_opt_calm_forced', 'Calm while Motion is not Full'));
+  const paintSwitch = (b, on) => {
+    b.setAttribute('aria-pressed', String(!!on));
+    b.textContent = on ? L('br_opt_on', 'On') : L('br_opt_off', 'Off');
+  };
+  const switchRow = (key, name, press) => {
+    const row = el('div', 'br-opt-row'); const b = el('button', 'br-switch'); b.type = 'button';
+    b.dataset.option = key;
+    const fire = typeof press === 'function' ? press : ((on) => o.onOption(key, on));
+    b.addEventListener('click', () => fire(b.getAttribute('aria-pressed') !== 'true'));
+    row.append(el('span', 'br-opt-name', name), b);
+    return { row, b };
+  };
+  const tunnel = switchRow('tunnel', L('br_opt_tunnel', 'Tunnel vision'));
+  const melt = switchRow('melt', L('br_opt_melt', 'Melt'));
+  const bellOpt = switchRow('bellOptIn', L('br_bell_optin', 'Show my name on the floor bell'),
+    (on) => { if (typeof o.onBellOpt === 'function') o.onBellOpt(on); });
+  paintSwitch(bellOpt.b, false);
+  panel.append(el('span', 'br-opt-name', L('br_opt_effects', 'Effects')), segRow, forcedNote, tunnel.row, melt.row, bellOpt.row);
+  nav.append(panel);   // anchored under the Options pill, whatever the nav's own offset
+  o.root.append(veil, hint, cross, prompt, nav, bell, list);
+  function setOptions(open) { panel.hidden = !open; optBtn.setAttribute('aria-expanded', String(!!open)); }
+  optBtn.addEventListener('click', () => setOptions(panel.hidden));
+  // A press anywhere outside the card (and outside its pill, which toggles it) closes it.
+  document.addEventListener('pointerdown', (e) => {
+    if (!panel.hidden && !panel.contains(e.target) && !optBtn.contains(e.target)) setOptions(false);
+  }, true);
+
+  let nearest = null, overview = false;
   prompt.addEventListener('click', () => { if (nearest) o.onVisit(nearest); });
   viewBtn.addEventListener('click', () => o.onOverview(!overview));
   motionBtn.addEventListener('click', () => o.onMotion());
-  optionsBtn.addEventListener('click', () => setOptions(!optionsOpen));
   // Focus: main.js drops it from every HUD button on pointerup and eats Space/Enter on them while walking.
-
-  function setOptions(open) {
-    optionsOpen = !!open;
-    options.hidden = !optionsOpen;
-    optionsBtn.setAttribute('aria-expanded', String(optionsOpen));
-    if (typeof o.onOptions === 'function') { try { o.onOptions(optionsOpen); } catch (e) { /* the panel still opened */ } }
-  }
 
   /* ------------------------------------------------------------- the bell */
   // One line at a time. This timer is text only and never makes a request:
@@ -138,28 +168,22 @@ export function createHud(o) {
       motionBtn.disabled = !!forced;
       document.documentElement.classList.toggle('br-still', !!still);   // the bell cross-fades in 0 ms while still
     },
-    /* --------------------------------------------------- the Options panel */
-    /**
-     * Rows, in order. Each { key, label, fallback, checked, onChange(on) }. The
-     * floor bell opt-in is the first; the tunnel-vision toggle joins it here.
-     */
-    options(rows) {
-      options.textContent = '';
-      for (const row of Array.isArray(rows) ? rows : []) {
-        const line = el('label', 'br-option');
-        const box = el('input'); box.type = 'checkbox'; box.checked = !!row.checked;
-        if (row.key) box.dataset.option = String(row.key);
-        box.addEventListener('change', () => { if (typeof row.onChange === 'function') row.onChange(box.checked); });
-        line.append(box, el('span', null, L(row.label, row.fallback)));
-        options.appendChild(line);
-      }
+    /** { intensityChoice: 'calm'|'normal'|'full', forcedCalm, tunnel, melt } from init / settings. */
+    options(v) {
+      for (const b of segs) b.setAttribute('aria-pressed', String(b.dataset.value === v.intensityChoice));
+      forcedNote.hidden = !v.forcedCalm;
+      paintSwitch(tunnel.b, v.tunnel);
+      paintSwitch(melt.b, v.melt);
     },
-    /** The server's answer for one row (an optimistic tick is put back when it refuses). */
-    option(key, checked) {
-      const box = options.querySelector('input[data-option="' + String(key).replace(/["\\]/g, '') + '"]');
-      if (box) box.checked = !!checked;
+    /** The floor bell opt-in row (10.16.B): the server's answer, an optimistic tick put back when it refuses. */
+    bellOptIn(checked) { paintSwitch(bellOpt.b, checked); },
+    get optionsOpen() { return !panel.hidden; },
+    closeOptions() { setOptions(false); },
+    hideWhileVisiting(on) {
+      if (on) setOptions(false);
+      document.documentElement.classList.toggle('br-visiting', !!on);
+      if (on) prompt.hidden = true; else prompt.hidden = !nearest || overview;
     },
-    optionsOpen(on) { setOptions(on); },
     /* ------------------------------------------------------- the floor bell */
     /** The entries off `GET bell/state`, newest first. Starts the 8,000 ms rotation. */
     bell(rows) {
@@ -181,6 +205,5 @@ export function createHud(o) {
     bellDebug() { return { lines: lines.slice(), at, rotateMs: ROTATE_MS, running: !!spin, text: bellText.textContent, hidden: bell.hidden }; },
     /** The room is leaving: the rotation stops with it. */
     stop() { if (spin) clearInterval(spin); spin = 0; },
-    hideWhileVisiting(on) { document.documentElement.classList.toggle('br-visiting', !!on); if (on) prompt.hidden = true; else prompt.hidden = !nearest || overview; },
   };
 }

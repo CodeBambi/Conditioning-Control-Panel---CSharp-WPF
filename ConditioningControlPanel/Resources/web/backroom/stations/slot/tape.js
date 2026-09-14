@@ -7,6 +7,8 @@
  * and whatever it expanded into) drains before `main` (the bought tape) resumes, so a freeze bought
  * mid-tape never skips, voids or reorders a tape outcome, and never moves the tape's cursor. */
 
+import { compOffer } from './feel.js';
+
 export const TAPE_DEFAULT = 10;   // the default tape at a healthy balance (50 SP and up)
 export const TAPE_MAX = 20;       // the most spins the server sells in one tape
 
@@ -68,6 +70,9 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
   let hold = null;          // ONE frozen column (9.1), null when none
   let pending = null;       // { key, idem, op, body }: kept until a definitive answer
   let melt = 0, free = 0, lastWin = 0, last = null;
+  // 10.16: the jar count and the welcome-back comp, both the server's (Law I). `jar` follows the tape cursor
+  // exactly as `melt` does; `comp` is spent on the first tape BUY of the sit-down and never comes back.
+  let jar = 0, comp = null, compSpent = false;
   let epoch = 0;            // abort() bumps it; a press from an older epoch resolves 'aborted'
   let reported = null;
   let picked = null;        // a count the player chose this sit-down; null follows defaultTapeCount(sp)
@@ -93,6 +98,7 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
   async function open() {
     const my = ++epoch;
     pending = null; side = null; hold = null; main = null; last = null; picked = null;
+    jar = 0; comp = null; compSpent = false;
     let res, tries = 0;
     for (;;) {
       res = normalize(await request('state', {}));
@@ -108,6 +114,9 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
     // Nothing played yet: the server's own melt (section 3.1) is the carried state.
     last = main && main.played > 0 ? main.outcomes[main.played - 1] : null;
     melt = last ? last.meltLeft || 0 : Number(res.body.melt) || 0;
+    // 10.16.A: the jar the tape's last landed spin left behind, else the stored count off `state`.
+    jar = last && Number.isFinite(Number(last.jarN)) ? Math.max(0, Math.floor(Number(last.jarN))) : Math.max(0, Math.floor(Number(res.body.jar) || 0));
+    comp = compOffer(res.body.comp);   // 10.16.C: `state` reports what the room's visit ping stored
     free = last ? last.freeLeft || 0 : 0;
     lastWin = last ? last.pay || 0 : 0;
     reported = null;
@@ -158,7 +167,30 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
   const cursorBody = () => (main ? { cursor: { tapeId: main.id, played: main.played } } : {});
   const refuse = reason => ({ kind: 'refused', reason });
 
+  /** 10.16.C: the comp tape. 0 SP, so a player at 0 SP can still play it, which is the whole point; the
+   *  server draws its five spins from the normal plain table and `settle()` clears the stored comp. */
+  async function buyComp(my) {
+    const id = comp.id;
+    const r = await send(`comp:${id}`, 'tape', { comp: id, ...cursorBody() }, my);
+    if (r.kind) return r;
+    if (!r.ok && (r.reason === 'comp_none' || r.reason === 'comp_used')) {
+      comp = null; compSpent = true;         // already spent, or from an older grant: fall back to a paid tape
+      return buyTape(my);
+    }
+    if (!r.ok && r.reason === 'tape_unplayed' && r.body.tape) {
+      adopt(r.body);                          // finish the tape you have; the comp is untouched and waits
+      main = adoptTape(r.body.tape);
+      return next() ? play() : refuse('tape_unplayed');
+    }
+    if (!r.ok) return refuse(r.reason);
+    adopt(r.body);
+    comp = null; compSpent = true;
+    main = adoptTape(r.body.tape);
+    return next() ? play() : refuse('empty');
+  }
+
   async function buyTape(my) {
+    if (comp) return buyComp(my);
     const count = tapeCount();
     if (count < 1) return refuse('insufficient');
     const r = await send('tape', 'tape', { count, ...cursorBody() }, my);
@@ -217,6 +249,8 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
       // melt (10.2) and carry the melt left at the END of the stored tape (3.4, settled up front), so a
       // freeze landing mid-tape leaves the readout where the tape's last landed spin put it.
       if (fromMain) melt = outcome.meltLeft || 0;
+      // 10.16.A: every outcome carries the jar AFTER it, a freeze carrying back the one it did not change.
+      if (Number.isFinite(Number(outcome.jarN))) jar = Math.max(0, Math.floor(Number(outcome.jarN)));
       free = outcome.freeLeft || 0;
       lastWin = outcome.pay || 0;
       if (Array.isArray(outcome.symbols)) shown = outcome.symbols;
@@ -244,6 +278,9 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
       const n = next();
       return {
         sp, shownSp: shownSpOf(sp, main, side), melt, free, lastWin, last, hold,
+        // 10.16: the jar as of the cursor, the table's jar block, and the comp still standing.
+        jar, jarSize: (table && table.jar && table.jar.size) || 0, jarFree: (table && table.jar && table.jar.free) || 0,
+        comp, compSpent, jackpotOdds: (table && table.jackpotOdds) || null,
         // What the chip still owes (Law I): every unplayed pay, and the stored tape's share alone (a reopen sees only that).
         owed: sp - shownSpOf(sp, main, side), tapeOwed: sp - shownSpOf(sp, main),
         jackpot: table ? table.jackpot : 0, lines: table ? table.lines || [] : [],
