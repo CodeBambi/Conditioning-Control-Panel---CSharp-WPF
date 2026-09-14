@@ -164,6 +164,14 @@ await sleep(1500);
 ok((await ev('window.dev.server.user.sp')) === 480, 'the buy still settled on the server');
 await ev('window.dev.open()');
 ok(await until("document.querySelector('.counter-card[data-id=rt_demo]')?.dataset.face === 'owned'"), 'reopen shows it owned');
+// Keyboard: Enter on Buy opens the confirm, the same Enter held (auto-repeat) never confirms, busy keeps focus on Confirm.
+await boot('?sp=500&on=*&latency=60');
+const enter = (type, autoRepeat = false) => cdp('Input.dispatchKeyEvent', { type, key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: type === 'keyDown' ? '\r' : undefined, autoRepeat });
+await ev("document.querySelector('.counter-card[data-id=rt_demo] .counter-buy').focus()");
+await enter('keyDown'); await enter('keyDown', true); await enter('keyDown', true); await enter('keyUp'); await sleep(300);
+ok((await ev("window.dev.sent.filter(m => m.op === 'buy').length")) === 0 && (await ev('document.activeElement.className')) === 'counter-yes', 'a held Enter opens the confirm and never confirms');
+await ev("window.dev.server.fail('buy', 'busy')"); await enter('keyDown'); await enter('keyUp');
+ok(await until("!!document.querySelector('.counter-card[data-id=rt_demo] .counter-retry') && document.activeElement.className === 'counter-yes'"), 'busy by keyboard: the retry Confirm keeps the focus');
 await size(400, 800);
 await boot('?sp=260&on=jackpot_remix,rt_demo,flashes_v2&latency=60');
 ok(await ev('document.documentElement.scrollWidth <= 400'), 'phone width: no sideways scroll');

@@ -102,6 +102,29 @@ test('a busy reply keeps the confirm with the retry line', async () => {
   st.destroy();
 });
 
+test('keyboard: a repeated Enter or Space presses nothing; busy and a balance repaint keep focus on Confirm', async () => {
+  const r = room({ sp: 100, on: '*' });
+  const st = await mount(r.ctx);
+  await st.open();
+  const key = (k, repeat) => { const e = { key: k, repeat, defaultPrevented: false, preventDefault() { e.defaultPrevented = true; } }; dom.dispatch('keydown', e); return e.defaultPrevented; };
+  assert.equal(key('Enter', true), true, 'a held Enter never reaches the focused Confirm');
+  assert.equal(key(' ', true), true);
+  assert.equal(key('Enter', false), false, 'a fresh press still works');
+  const c = card(r.root, 'rt_demo');
+  c.one('counter-buy').click();
+  r.server.fail('buy', 'busy');
+  c.one('counter-yes').click();
+  await wait(5);
+  assert.ok(c.one('counter-retry'));
+  assert.equal(dom.document.activeElement, c.one('counter-yes'), 'the retry Confirm has the focus');
+  r.server.setSp(90);
+  for (const fn of r.spSubs) fn(90);
+  assert.equal(c.one('counter-after').textContent, 'Balance after: 70');
+  assert.equal(dom.document.activeElement, c.one('counter-yes'), 'a balance repaint keeps it');
+  assert.equal(r.stood, 0);
+  st.destroy();
+});
+
 test('Back during an in-flight buy closes at once; the late reply touches nothing', async () => {
   const r = room({ sp: 100, on: '*' });
   const st = await mount(r.ctx);
