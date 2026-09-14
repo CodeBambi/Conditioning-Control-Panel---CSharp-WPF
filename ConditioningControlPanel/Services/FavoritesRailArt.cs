@@ -152,6 +152,7 @@ namespace ConditioningControlPanel.Services
             ["tab.programs"] = Cover("programs/plate_default.png"),    // the default program plate
             ["tab.leaderboard"] = Cover("skills/trophy_case.png"),
             ["card.arcademy"] = Cover("achievements/teachers_pet.png"),// the Arcademy is a school; its own plate is Content, not a pack Resource
+            ["card.backroom"] = Cover("skills/lucky_bubbles.png"),     // a lucky node with a slot machine on its label; the room render is Content too
             ["launch.mods"] = Cover("achievements/modder.png"),
             ["launch.catalogue"] = Cover("achievements/curator.png"),  // a wall of cards under a glass
             ["launch.phrases"] = Cover("achievements/word_perfect.png"),

@@ -451,11 +451,12 @@ namespace ConditioningControlPanel.Models
         /// <summary>
         /// Available skill points to spend on the enhancement tree.
         /// Earned per level-up (SkillTreeService.PointsPerLevel) and per 100 bubbles popped.
+        /// Clamped to [0, SparklePoints.Cap] so every write path shares the server's ceiling.
         /// </summary>
         public int SkillPoints
         {
             get => _skillPoints;
-            set { _skillPoints = Math.Max(0, value); OnPropertyChanged(); }
+            set { _skillPoints = SparklePoints.Clamp(value); OnPropertyChanged(); }
         }
 
         /// <summary>
@@ -4863,6 +4864,24 @@ namespace ConditioningControlPanel.Models
         {
             get => _motionLevel;
             set { _motionLevel = value; OnPropertyChanged(); }
+        }
+
+        private Services.BackRoom.BackRoomFxIntensity _backRoomFxIntensity = Services.BackRoom.BackRoomFxIntensity.Normal;
+        /// <summary>
+        /// THE BACK ROOM effects intensity (CONTRACT section 4): Calm, Normal or Full. Calm is also
+        /// forced whenever the effective motion level is not Full, and Full never breaks the Brake
+        /// (no strobe over 6 Hz, one hero at a time, feature toggles still win).
+        /// </summary>
+        [JsonProperty]
+        public Services.BackRoom.BackRoomFxIntensity BackRoomFxIntensity
+        {
+            get => _backRoomFxIntensity;
+            set
+            {
+                if (!Enum.IsDefined(typeof(Services.BackRoom.BackRoomFxIntensity), value)) value = Services.BackRoom.BackRoomFxIntensity.Normal;
+                _backRoomFxIntensity = value;
+                OnPropertyChanged();
+            }
         }
 
         private bool _videoForceHardwareDecoding = false;

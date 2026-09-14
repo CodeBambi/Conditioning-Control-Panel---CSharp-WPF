@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Back Room</title>
+  <link rel="stylesheet" href="room/room.css">
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three/three.module.min.js", "three/addons/": "/vendor/three/addons/" } }
+  </script>
+</head>
+<body>
+  <main id="br-stage" class="br-stage"></main>
+  <div id="br-room-ui" class="br-room-ui"></div>
+  <header class="br-hud">
+    <button id="br-back" type="button" class="br-back">Back</button>
+    <div class="br-sp" aria-live="polite"><span id="br-sp-label">SP</span> <b id="br-sp-value">0</b></div>
+  </header>
+  <div id="br-layer" class="br-layer"></div>
+  <script type="module" src="room/main.js"></script>
+</body>
+</html>
