@@ -136,8 +136,14 @@ export const HUB_FOLLOW = 0.9;
  * the rotor's rad/s (either sign), `scale` the long last turn's time scale, which slows the drift as the mockup's
  * warped clock does: hubRot += (|vel| x 0.9 + 0.35) x dt.
  */
-export const stepHub = (rot, speed, dtS, scale = 1) =>
-  (Number(rot) || 0) + (Math.abs(Number(speed) || 0) * HUB_FOLLOW + HUB_DRIFT * clamp01(scale)) * Math.max(0, Number(dtS) || 0);
+export const stepHub = (rot, speed, dtS, scale = 1, k = 1) =>
+  (Number(rot) || 0) + (Math.abs(Number(speed) || 0) * HUB_FOLLOW + HUB_DRIFT * clamp01(scale)) * clamp01(k) * Math.max(0, Number(dtS) || 0);
+
+/**
+ * Whether the Loom hub holds still. Calm keeps it turning at half strength (k 0.5, the mockup's reduced motion, owner
+ * 2026-09-14); only the OS reduced-motion setting (prefers-reduced-motion) or the app's Motion Off stills it.
+ */
+export const hubStill = ({ osReduced = false, motion = 'full' } = {}) => !!osReduced || String(motion || '').toLowerCase() === 'off';
 
 export const MOIRE = Object.freeze({ lines: 60, gold: '#e8c27a', goldAlpha: 0.75, mint: '#5fffd0', mintAlpha: 0.55 });
 /** The two moire rings' rotations: one at the rotor angle, one at 0.9 x angle + 0.3. */
