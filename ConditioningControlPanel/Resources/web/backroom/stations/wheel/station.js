@@ -50,7 +50,8 @@ export async function mount(ctx) {
     return String(s ?? fallback).replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : `{${k}}`));
   };
   const prefersReduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  // Law VI: reduced motion and Calm land at the settled state. Read at each open (the room's getters are live).
+  // Law VI: reduced motion and Calm land at the settled state. Read at each open and on every settings frame (the
+  // room's getters are live), so a player lowering MotionLevel mid-visit gets the plain dress at once.
   let reduced = false, calm = false, still = false;
   const readMotion = () => {
     reduced = !!ctx.reduced || prefersReduced; calm = String(ctx.intensity || '').toLowerCase() === 'calm'; still = reduced || calm;
@@ -188,8 +189,9 @@ export async function mount(ctx) {
     moments.tunnel(wheelTurnLevel(dim));
   }
   function applyDress() {
+    readMotion();
     dress = dressOf(hypnoCtx());
-    if (scene) scene.setDress(dress);
+    if (scene) { scene.setReduced(still); scene.setDress(dress); }
     if (kit) kit.setStill(dress.calm);
     if (deck) deck.setStill(dress.calm);
     hubPainted = false;
@@ -217,7 +219,7 @@ export async function mount(ctx) {
   }
   /** The landing moment, sized to the prize, on the frame the result shows (Law I). */
   function fire(raw, r, idx) {
-    if (suspended || !moments || !scene) return;
+    if (suspended || !moments || !scene || idx < 0) return;   // no slice to point at: the wheel wound down, no moment
     const id = 'wheel.land.' + wheelSize(raw);
     const p = scene.project('landed');
     const from = p ? boxAround(p.x, p.y, 60, 44) : undefined;
@@ -334,7 +336,7 @@ export async function mount(ctx) {
     readout = createReadout({ ctx, own: $('.wheel-sp'), format: n => t('br_wheel_sp', '{n} SP', { n: fmt(n) }) });
     if (readout.kind !== 'own') el.dataset.hostSp = '';
     sound = createSound();
-    bank = createBank({ layer: $('.wheel-tokens'), reduced: still,
+    bank = createBank({ layer: $('.wheel-tokens'), reduced: () => still,
       onTick: (v, quiet) => { readout.show(v); if (!quiet) sound.token(false); },
       onLand: () => { sound.token(true); readout.thud(still); },
       onDone: () => readout.settle() });

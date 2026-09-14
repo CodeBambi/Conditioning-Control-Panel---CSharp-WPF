@@ -54,7 +54,7 @@ export function createBank({ layer, reduced, onTick, onLand, onDone }) {
     /** from()/to() give client px each frame. Returns 'flying' or 'state' (reduced). */
     start({ n, fromValue, toValue, from, to }) {
       if (run) this.skip();
-      if (reduced) { onTick(toValue, true); onLand(); if (onDone) onDone(); return 'state'; }
+      if (typeof reduced === 'function' ? reduced() : reduced) { onTick(toValue, true); onLand(); if (onDone) onDone(); return 'state'; }
       const origin = layer.getBoundingClientRect();
       const tokens = Array.from({ length: n }, () => {
         const el = document.createElement('i');

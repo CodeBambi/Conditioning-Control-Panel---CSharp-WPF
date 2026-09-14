@@ -89,10 +89,12 @@ never names a section 4 id.
 - `from` is `scene.project('landed')` as a 60 x 44 CSS px box. The picture is `deck.pickKey('<day>|<sliceId>|<index>')`
   from a 4-GIF deal (`createDeck(ctx, {count: 4})`), so one result always names the same key.
 - **Loom hub**: a CircleGeometry disc on `wheel_rotor`, radius from `hub_lip` (0.166) at its top face, a 256 px
-  CanvasTexture painted by `kit.paint('hub', {now, angle})`, `angle = -rotor.rotation.z + 0.35 x seconds`. The disc
-  holds still against the rotor, so that angle is its whole turn on screen (a disc carried by the rotor as well would
-  turn twice as fast). `wheel-check.mjs` measures it on screenshots: clockwise, arms leading at the rim, so it reads
-  inward (law 3). Spiral gate off: a brass star painted once. The neon tube only stays for a model with neither node.
+  CanvasTexture painted by `kit.paint('hub', {now, angle})`. The angle accumulates, as the mockup's `hubRot`:
+  `angle += (|rotor speed| x 0.9 + 0.35 x timeScale) x dt` (`hypno.stepHub`), so it turns clockwise whichever way the
+  wheel is flung (an angle read off `-rotation.z` ran backward on an anticlockwise drag and read outward). The disc
+  holds still against the rotor, so that angle is its whole turn on screen. At rest it repaints at 30 Hz.
+  `wheel-check.mjs` measures it on screenshots at rest, turning clockwise, and in the long last turn after a clockwise
+  and an anticlockwise drag: clockwise, arms leading at the rim, so it reads inward (law 3). Spiral gate off: a brass star painted once. The neon tube only stays for a model with neither node.
 - **The long last turn**: the landing plan's own clock is read at `lerp(0.32, 1, speed / 1.6)` while the planned
   speed is under 1.6 rad/s (0.6 floor under Calm). Same path, same landing angle, same slice (hypno.test). The spin
   runs about 6-7 s instead of 4. The edges (`.wheel-edges`, a radial gradient centred on the rotor) take opacity
@@ -106,9 +108,14 @@ never names a section 4 id.
   moved to match, shear `min(speed x 0.11, 1.9) x k` easing at 2.5/s, bending against the motion. Four smear ghosts (one
   merged vertex-coloured geometry, 4 draw calls) at alpha 0.16 x k where the wheel was 2 to 5 frames ago, drawn over
   the slices so the smear shows (the mockup drew them under opaque slices, where they could not be seen).
-- **Dress**: `hypno.dressOf({intensity, reduced, gates})` at open and on every `ctx.onSettings` frame (live).
-  Reduced motion and Calm keep the base station's settled landing (no travel), so the 0.6 floor is there for a travel
-  that Calm never starts; the quiet room runs at k 0.5, the Loom hub holds still.
+- **Dress**: `hypno.dressOf({intensity, reduced, gates})` at open and on every `ctx.onSettings` frame (live): the
+  frame re-reads `ctx.reduced` and `ctx.intensity`, so taffy, ghosts, moire, the hub, the edges, the quiet room and
+  the landing moment's k follow a MotionLevel or intensity change at once. Reduced motion and Calm keep the base
+  station's settled landing (no travel), so the 0.6 floor is there for a travel that Calm never starts; the quiet room
+  runs at k 0.5, the Loom hub holds still (owner to confirm for Calm intensity; the mockup's OS reduced motion still
+  turned it at half strength). A live switch hands the scene the travel flag too (`scene.setReduced`): the next spin,
+  landing and sink take the new state, a landing already turning finishes its path, the token bank reads it per run.
+- A landing with no slice to point at (`resultIndex < 0`, the wheel winds down) plays no moment (Law I).
 - **Lifecycle**: `suspend(true)` and `close()` call `moments.cancel()` (tunnel 0, holds released) and dispose the kit
   and the deck; resuming re-deals and the hub paints again on the next frame.
 
@@ -127,7 +134,7 @@ never names a section 4 id.
 ## Checks
 
 ```
-node --test ConditioningControlPanel/Resources/web/backroom/stations/wheel/tests/
+node --test ConditioningControlPanel/Resources/web/backroom/stations/wheel/tests/*.test.mjs   (the glob: a directory argument fails on Node 24)
 node ConditioningControlPanel/Resources/web/backroom/stations/wheel/tests/nodes-check.mjs [wheel.glb]
 node ConditioningControlPanel/Resources/web/backroom/stations/wheel/tests/wheel-check.mjs [evidenceDir]   (headless Chrome, WHEEL_PORT 8897)
 node ConditioningControlPanel/Resources/web/backroom/stations/wheel/tests/room-mount-check.mjs [evidenceDir]   (the real room, WHEEL_ROOM_PORT 8894)

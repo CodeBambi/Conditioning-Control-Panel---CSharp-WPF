@@ -28,10 +28,10 @@ import { REQUIRED, OPTIONAL } from './nodes.js';
 import { TAU, sliceAt, planLanding, rotationAt } from './wheel.js';
 import { FEEL, tick, breath, shiverPx, bezier } from './feel.js';
 import { warpStep, warpedRotation, stepDim, quietMix, quietDone, outlineAlpha, distance01, mixRgb, QUIET, taffyShear, stepShear,
-         trailOffset, sliceU, ghostRotations, TAFFY, hubAngle, moireRotations, moireSegments, MOIRE, dressOf } from './hypno.js';
+         trailOffset, sliceU, ghostRotations, TAFFY, stepHub, moireRotations, moireSegments, MOIRE, dressOf } from './hypno.js';
 import { createEmi } from './emi.js';
 
-const LENS_DEG = 30, FIT = 1.16, RISE_MS = 620, SINK_MS = 300, DEFAULT_OMEGA = -0.011;
+const LENS_DEG = 30, FIT = 1.16, RISE_MS = 620, SINK_MS = 300, DEFAULT_OMEGA = -0.011, HUB_AT_REST_MS = 33;
 const COLORS = ['#DE87B4', '#AE89DE', '#68BFB9', '#C35F9F'], GOLD = '#F4CA68', SNOOZE = '#553967';
 const CHASE = [0xff269f, 0x7840ff, 0x00cbb8, 0xff9a20].map(c => new THREE.Color(c));
 const asset = p => new URL(p, import.meta.url).href;
@@ -109,12 +109,13 @@ function paintScreen(canvas, text, gold) {
 }
 
 /**
- * @param {{canvas, hud, reduced, labels:(slice)=>{big,small}, canSpin:()=>boolean, onRelease:(omega)=>void,
+ * @param {{canvas, hud, reduced (the travel flag at open; setReduced keeps it live), labels:(slice)=>{big,small}, canSpin:()=>boolean, onRelease:(omega)=>void,
  *          onGrab?:()=>void, onTick?:(semis)=>void, dress?:object (hypno.dressOf),
  *          paintHub?:(canvas, angle, now)=>boolean, onFrame?:({dim, slowing, speed, turning})=>void}} o
  */
 export async function createScene(o) {
-  const { canvas, reduced } = o;
+  const { canvas } = o;
+  let reduced = !!o.reduced;
   const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -206,7 +207,7 @@ export async function createScene(o) {
     const tex = canvasTexture(c); owned.push(tex);
     const disc = new THREE.Mesh(new THREE.CircleGeometry(radius, 64), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
     disc.name = 'hub_loom'; disc.position.z = box.max.z + 0.0015; rotor.add(disc);
-    hub = { c, tex, disc, radius, mode: null };
+    hub = { c, tex, disc, radius, mode: null, rot: 0, at: -Infinity };
   } else {
     // The neon hub spiral (a flowing tube, scenery, not a breather).
     const pts = [];
@@ -228,14 +229,20 @@ export async function createScene(o) {
     const pc = px(c), pe = px(e);
     return { x: pc.x, y: pc.y, r: Math.hypot(pe.x - pc.x, pe.y - pc.y) };
   }
-  function paintHub(t) {
+  /** The hub's clockwise angle accumulates every frame; at rest it only drifts (0.35 rad/s), so it repaints every
+   *  HUB_AT_REST_MS (30 Hz) and skips half the Loom renders and readbacks. */
+  function paintHub(t, dtS) {
     if (!hub) return;
     const mode = dress.hub;
+    hub.rot = stepHub(hub.rot, frameSpeed, dtS, plan && plan.w ? plan.w.scale : 1);   // always clockwise (law 3)
     // Loom: the disc holds still against the rotor, so the field's own angle is its whole turn on screen.
     hub.disc.rotation.z = mode === 'loom' ? -rotor.rotation.z : 0;
     if (mode === 'star') { if (hub.mode !== 'star') { paintStar(hub.c); hub.tex.needsUpdate = true; } hub.mode = mode; return; }
+    const fresh = hub.mode !== mode;
     hub.mode = mode;
-    if (o.paintHub && o.paintHub(hub.c, hubAngle(rotor.rotation.z, t / 1000), t)) hub.tex.needsUpdate = true;
+    if (!fresh && !rotating() && t - hub.at < HUB_AT_REST_MS) return;
+    hub.at = t;
+    if (o.paintHub && o.paintHub(hub.c, hub.rot, t)) hub.tex.needsUpdate = true;
   }
 
   // Moire rim: two rings of 60 fine lines just outside the slices, Full only.
@@ -343,7 +350,7 @@ export async function createScene(o) {
 
   /** The v3 page effects for one frame (CONTRACT 10.13.F): hub, taffy, moire, quiet room, and the dim for the station. */
   function hypnoFrame(t, dtMs) {
-    paintHub(t);
+    paintHub(t, dtMs / 1000);
     const turning = rotating() && frameSpeed > 0.05;
     shear = stepShear(shear, dress.taffy && turning ? taffyShear(frameSpeed, dress.k) : 0, dtMs);
     const sign = omega < 0 ? -1 : 1;
@@ -506,6 +513,9 @@ export async function createScene(o) {
     resize, screen, setLayout, dispose,
     /** Live dress (hypno.dressOf): the hub mode, Full-only moire and taffy, k. */
     setDress(d) { dress = { ...dress, ...(d || {}) }; },
+    /** Live reduced motion / Calm (a settings frame): the next gesture, landing, rise or sink takes the settled
+     *  state. A landing already in flight finishes its path (no jump mid-turn); the stage dim and EMI settle now. */
+    setReduced(on) { reduced = !!on; emi.setReduced(reduced); if (reduced) dim = 0; },
     /** The slice's own colour, for the landing wash. */
     sliceColor(index) {
       const m = sliceGroup && sliceGroup.children.find(n => n.userData && n.userData.base !== undefined && n.userData.index === index);
