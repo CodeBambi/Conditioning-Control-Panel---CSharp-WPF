@@ -8,7 +8,7 @@ function Test-SmokeResult($Mode, $Code, [string]$Output, [string]$Errors) {
     $fails = @([regex]::Matches($Output, '(?m)^  \[FAIL\] (.*)\r?$') | ForEach-Object { $_.Groups[1].Value.TrimEnd("`r") })
     if ($Errors.Trim() -or $Output -notmatch '(?m)^  \[PASS\] URL prompt bootstrap has no desktop lifetime\r?$') { return $false }
     if ($Mode -eq 'green') {
-        return $Code -eq 0 -and $passes -eq 159 -and $fails.Count -eq 0 -and
+        return $Code -eq 0 -and $passes -eq 171 -and $fails.Count -eq 0 -and
             $Output.TrimEnd().EndsWith('Linux head can produce every value it renders.')
     }
     $expected = @(
@@ -23,12 +23,12 @@ function Test-SmokeResult($Mode, $Code, [string]$Output, [string]$Errors) {
             "URL prompt $dismiss (invalid first: True): rejects without completing  (Result=not a URL, visible=False, completed=True, errorVisible=False, error=)"
         }
     )
-    return $Code -eq 1 -and $passes -eq 135 -and $fails.Count -eq 18 -and
+    return $Code -eq 1 -and $passes -eq 147 -and $fails.Count -eq 18 -and
         ($fails -join "`n") -ceq ($expected -join "`n") -and $Output.TrimEnd().EndsWith('18 assertion(s) failed.')
 }
 
 if ($SelfCheck) {
-    $ok = "  [PASS] URL prompt bootstrap has no desktop lifetime`n" + ("  [PASS] fixture`n" * 158) + 'Linux head can produce every value it renders.'
+    $ok = "  [PASS] URL prompt bootstrap has no desktop lifetime`n" + ("  [PASS] fixture`n" * 170) + 'Linux head can produce every value it renders.'
     if (!(Test-SmokeResult green 0 $ok '') -or (Test-SmokeResult red 1 $ok '') -or
         (Test-SmokeResult green 0 $ok 'startup error') -or (Test-SmokeResult green 1 $ok '') -or
         (Test-SmokeResult green 0 ($ok.Replace('no desktop lifetime', 'desktop lifetime')) '') -or

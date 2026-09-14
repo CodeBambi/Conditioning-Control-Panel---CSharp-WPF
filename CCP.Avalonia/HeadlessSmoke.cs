@@ -72,6 +72,7 @@ namespace ConditioningControlPanel.Avalonia
             CheckAttentionGaugeLocalization(Check);
             CheckTextEditor(Check);
             CheckTriggerControls(Check);
+            CheckCompanionStaticLocalization(Check);
             Console.WriteLine();
             Console.WriteLine(failures == 0
                 ? "Linux head can produce every value it renders."
@@ -1134,6 +1135,128 @@ namespace ConditioningControlPanel.Avalonia
             {
                 owner?.Close();
                 if (owner is not null) Dispatcher.UIThread.RunJobs();
+            }
+        }
+
+        /// <summary>
+        /// #496/#498 chrome and #497 expert-link localization at the public rendered-control seam.
+        /// These are the real views, shown in separate windows and held in place while the shared
+        /// manager switches English to German. Expected literals are copied independently from
+        /// the language tables; the assertions read materialized TextBlocks on the same controls.
+        /// No host VM, provider, command, personality action, key field, or external service is
+        /// involved.
+        /// </summary>
+        private static void CheckCompanionStaticLocalization(Action<string, bool, string?> check)
+        {
+            Window? workshopHost = null;
+            Window? engineHost = null;
+            Window? personalityHost = null;
+            var previousLanguage = LocalizationManager.Instance.CurrentLanguage;
+
+            static TextBlock? FindShownText(Control root, string expected) =>
+                root.GetVisualDescendants().OfType<TextBlock>()
+                    .FirstOrDefault(block => block.IsVisible && block.Text == expected);
+
+            static string Actual(TextBlock? block) => block?.Text ?? "<missing>";
+
+            try
+            {
+                LocalizationManager.Instance.SetLanguage("en");
+
+                var workshop = new WorkshopAccordion();
+                workshopHost = new Window { Content = workshop, Width = 1160, Height = 120 };
+                workshopHost.Show();
+
+                var engine = new EngineRoomDrawer();
+                engineHost = new Window { Content = engine, Width = 1160, Height = 160 };
+                engineHost.Show();
+
+                var personality = new MakeHerYoursView();
+                personalityHost = new Window { Content = personality, Width = 430, Height = 560 };
+                personalityHost.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var workshopEnglish = FindShownText(workshop, "WORKSHOP — EVERY DIAL SHE HAS");
+                var engineEnglish = FindShownText(engine, "ENGINE ROOM — HOW SHE THINKS");
+                var titleEnglish = FindShownText(personality, "Make her yours");
+                var viewEnglish = FindShownText(personality, "View compiled prompt");
+                var forkEnglish = FindShownText(personality, "Fork & edit by hand");
+                var communityEnglish = FindShownText(personality, "Community prompts");
+
+                check("Workshop shows its independent English header",
+                    workshop.IsVisible && workshopEnglish is not null,
+                    $"visible={workshop.IsVisible}, text={Actual(workshopEnglish)}");
+                check("Engine Room shows its independent English header",
+                    engine.IsVisible && engineEnglish is not null,
+                    $"visible={engine.IsVisible}, text={Actual(engineEnglish)}");
+                check("Make Her Yours shows its independent English title",
+                    personality.IsVisible && titleEnglish is not null,
+                    $"visible={personality.IsVisible}, text={Actual(titleEnglish)}");
+                check("Make Her Yours shows its independent English View link",
+                    viewEnglish is not null,
+                    $"text={Actual(viewEnglish)}");
+                check("Make Her Yours shows its independent English Fork link",
+                    forkEnglish is not null,
+                    $"text={Actual(forkEnglish)}");
+                check("Make Her Yours shows its independent English Community link",
+                    communityEnglish is not null,
+                    $"text={Actual(communityEnglish)}");
+
+                LocalizationManager.Instance.SetLanguage("de");
+                Dispatcher.UIThread.RunJobs();
+
+                var workshopGerman = FindShownText(workshop, "WERKSTATT — JEDER REGLER, DEN SIE HAT");
+                var engineGerman = FindShownText(engine, "MASCHINENRAUM — WIE SIE DENKT");
+                var titleGerman = FindShownText(personality, "Mach sie zu deiner");
+                var viewGerman = FindShownText(personality, "Kompilierten Prompt ansehen");
+                var forkGerman = FindShownText(personality, "Forken & von Hand bearbeiten");
+                var communityGerman = FindShownText(personality, "Community-Prompts");
+
+                check("Workshop refreshes its shown header in German",
+                    workshopGerman is not null && ReferenceEquals(workshopEnglish, workshopGerman),
+                    $"text={Actual(workshopGerman)}");
+                check("Engine Room refreshes its shown header in German",
+                    engineGerman is not null && ReferenceEquals(engineEnglish, engineGerman),
+                    $"text={Actual(engineGerman)}");
+                check("Make Her Yours refreshes its shown title in German",
+                    titleGerman is not null && ReferenceEquals(titleEnglish, titleGerman),
+                    $"text={Actual(titleGerman)}");
+                check("Make Her Yours refreshes its shown View link in German",
+                    viewGerman is not null && ReferenceEquals(viewEnglish, viewGerman),
+                    $"text={Actual(viewGerman)}");
+                check("Make Her Yours refreshes its shown Fork link in German",
+                    forkGerman is not null && ReferenceEquals(forkEnglish, forkGerman),
+                    $"text={Actual(forkGerman)}");
+                check("Make Her Yours refreshes its shown Community link in German",
+                    communityGerman is not null && ReferenceEquals(communityEnglish, communityGerman),
+                    $"text={Actual(communityGerman)}");
+            }
+            finally
+            {
+                try
+                {
+                    LocalizationManager.Instance.SetLanguage(previousLanguage);
+                    Dispatcher.UIThread.RunJobs();
+                }
+                finally
+                {
+                    try
+                    {
+                        workshopHost?.Close();
+                    }
+                    finally
+                    {
+                        try
+                        {
+                            engineHost?.Close();
+                        }
+                        finally
+                        {
+                            personalityHost?.Close();
+                            Dispatcher.UIThread.RunJobs();
+                        }
+                    }
+                }
             }
         }
 

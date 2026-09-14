@@ -30,6 +30,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:conv="clr-namespace:Avalonia.Data.Converters;assembly=Avalonia.Base"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Companion.EngineRoomDrawer"
              x:Name="Root"
              mc:Ignorable="d"
@@ -80,7 +81,7 @@
         <Expander.Header>
             <StackPanel Orientation="Horizontal">
                 <TextBlock FontSize="14" Margin="0,0,10,0" VerticalAlignment="Center" Text="⚙"/>
-                <TextBlock Text="{ReflectionBinding #Root.Strings.LocHeader}"
+                <TextBlock Text="{loc:Str companion_engine_header}"
                            Theme="{StaticResource CmpDrawerHeaderTextStyle}"/>
             </StackPanel>
         </Expander.Header>
