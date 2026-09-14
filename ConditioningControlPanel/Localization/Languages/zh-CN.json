@@ -5782,5 +5782,22 @@
   "br_preset_drop": "Drop",
   "br_preset_relax": "Relax",
   "br_preset_let_go": "Let Go",
-  "br_preset_sink": "Sink"
+  "br_preset_sink": "Sink",
+  "br_custom_title": "客房服务",
+  "br_custom_close": "关闭",
+  "br_custom_preview": "藏品预览。试着做一点小改变。",
+  "br_custom_categories": "分类",
+  "br_custom_unavailable": "仅限本地预览，购买功能尚未开放。",
+  "br_custom_displays": "显示屏",
+  "br_custom_plants": "植物",
+  "br_custom_statues": "雕像",
+  "br_custom_gallery": "画廊相框",
+  "br_custom_portraits": "双幅肖像框",
+  "br_custom_billboard": "宽屏灯牌",
+  "br_custom_monstera": "龟背竹",
+  "br_custom_ivy": "垂吊常春藤",
+  "br_custom_terrarium": "微景观瓶",
+  "br_custom_knight": "骑士雕像",
+  "br_custom_queen": "王后雕像",
+  "br_custom_rook": "城堡雕像"
 }

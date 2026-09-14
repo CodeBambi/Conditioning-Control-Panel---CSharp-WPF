@@ -20,6 +20,7 @@ import { buildRoom } from './fixtures.js';
 import { createScreens } from './screens.js';
 import { createEmiInteraction } from './emi-interaction.js';
 import { createCasinoDecor } from './casino-decor.js';
+import { createCustomization } from './customization.js';
 import { START, WALK_SPEED, RUN_SPEED, step, worldDelta, nearestStation, facing } from './walk.js';
 
 const KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
@@ -71,7 +72,9 @@ export async function createScene(o) {
   const t0 = performance.now();
   const room = await buildRoom({ scene, loader, stations: o.stations, base: o.base, faces: o.faces, label: o.label, onProgress: o.onProgress });
   const decor = createCasinoDecor({ scene });
-  const screens = await createScreens({ meshes: room.screens, ads: o.ads, media: o.media, log: say });
+  let customization;
+  customization = await createCustomization({scene,loader,base:o.base,mount:o.mount,lex:o.lex,canvas,camera,isActive:()=>!held&&!halted&&!suspended&&!overview&&!customization?.opened});
+  const screens = await createScreens({ meshes: [...room.screens,...customization.screens], ads: o.ads, media: o.media, log: say });
   for (const h of room.hubs) h.setDpr(dpr);
   const buildMs = performance.now() - t0;
 
@@ -86,7 +89,7 @@ export async function createScene(o) {
   const frames = [];
 
   const interaction = createEmiInteraction({ canvas, camera, scene, emis: room.emis, mount: o.mount, label: o.lex,
-    isActive: () => !held && !halted && !suspended && !overview });
+    isActive: () => !held && !halted && !suspended && !overview && !customization.opened });
 
   function topDown() { camera.position.set(0, Math.max(21, 19 / camera.aspect), 0.01); camera.lookAt(0, 0, 0); }
   function resize() {
@@ -101,7 +104,7 @@ export async function createScene(o) {
 
   function resetInput() { keys.clear(); vel.set(0, 0); drag = null; }
   window.addEventListener('keydown', (e) => {
-    if (held || halted || suspended || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (held || halted || suspended || customization.opened || e.ctrlKey || e.altKey || e.metaKey) return;
     if (KEYS.has(e.code)) { e.preventDefault(); keys.add(e.code); }
     if (e.repeat) return;
     if (e.code === 'KeyE' && !overview && nearest) { e.preventDefault(); visit(nearest); }
@@ -110,12 +113,12 @@ export async function createScene(o) {
   window.addEventListener('keyup', (e) => keys.delete(e.code));
   window.addEventListener('blur', resetInput);
   canvas.addEventListener('pointerdown', (e) => {
-    if (held || overview || e.button !== 0) return;
+    if (held || overview || customization.opened || e.button !== 0) return;
     drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
   });
   canvas.addEventListener('pointermove', (e) => {
-    if (!drag || drag.id !== e.pointerId || overview || held) return;
+    if (!drag || drag.id !== e.pointerId || overview || held || customization.opened) return;
     yaw -= (e.clientX - drag.x) * 0.003;
     pitch = T.MathUtils.clamp(pitch - (e.clientY - drag.y) * 0.003, -1.12, 1.2);
     drag.x = e.clientX; drag.y = e.clientY;
@@ -130,12 +133,14 @@ export async function createScene(o) {
 
   function visit(row) {
     if (!row || held || halted) return;
+    if(row.key==='customization'){resetInput();customization.open();return;}
     try { o.onVisit(row); } catch (e) { say('onVisit threw: ' + ((e && e.message) || e)); }
   }
 
   function setOverview(on) {
     if (held || halted || !!on === overview) return;
     resetInput();
+    customization.dismiss();
     overview = !!on;
     decor.setOverview(overview);
     interaction.dismiss();
@@ -163,6 +168,7 @@ export async function createScene(o) {
     const dt = Math.min(0.035, Math.max(0, raw / 1000));
     frames.push(raw);
     if (frames.length > 240) frames.shift();
+    if(customization.opened)resetInput();
     if (!overview) {
       const x = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
       let z = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
@@ -174,11 +180,12 @@ export async function createScene(o) {
       walkPhase += vel.length() * dt * 3.1;
       camera.position.set(pos[0], pos[1] + Math.sin(walkPhase * 2) * 0.01 * sway, pos[2]);
       camera.rotation.set(pitch + Math.sin(walkPhase * 2) * 0.002 * sway, yaw, Math.sin(walkPhase) * 0.0035 * sway, 'YXZ');
-      setNearest(nearestStation(pos, o.stations));
+      setNearest(customization.opened?null:nearestStation(pos,[...o.stations,customization.row]));
     }
     if (!still) ambient += dt;
     room.update(dt, ambient, still);
     decor.update(dt, still);
+    customization.update(dt, still);
     camera.updateMatrixWorld();
     interaction.update(dt, still);
     screens.update(ambient, overview ? null : camera, still);
@@ -199,21 +206,21 @@ export async function createScene(o) {
   return {
     renderer, camera, scene, buildMs,
     /** A station is taking the screen: keep the pose, stop drawing, keep the context. */
-    hold() { if (held) return; held = { pos: pos.slice(), yaw, pitch }; resetInput(); interaction.dismiss(); stop(); setNearest(null); },
+    hold() { if (held) return; held = { pos: pos.slice(), yaw, pitch }; resetInput(); interaction.dismiss(); customization.dismiss(); stop(); setNearest(null); },
     /** Back from a station: the exact spot and facing, on the next frame. */
     release() {
       if (!held) return;
       pos.splice(0, 3, ...held.pos); yaw = held.yaw; pitch = held.pitch;
       held = null; resetInput(); run();
     },
-    pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); interaction.dismiss(); } else run(); },
-    halt() { halted = true; stop(); resetInput(); interaction.dispose(); decor.dispose(); for(const p of room.payouts.values())p.coins.dispose(); },
+    pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); interaction.dismiss(); customization.dismiss(); } else run(); },
+    halt() { halted = true; stop(); resetInput(); interaction.dispose(); customization.dispose(); decor.dispose(); for(const p of room.payouts.values())p.coins.dispose(); },
     setStill(on) { still = !!on; },
     /** Repaint one fixture label, e.g. the wheel's screen for MUST HIT (10.16.E). */
     setLabel(rowKey, node, text) { return room.setLabel(rowKey, node, text); },
-    dismissEmi() { const open = !!interaction.debug().id; interaction.dismiss(); return open; },
+    dismissEmi() { if(customization.dismiss())return true; const open = !!interaction.debug().id; interaction.dismiss(); return open; },
     celebrate: (key,amount,tier,text)=>room.celebrate(key,amount,tier,text),
-    setOverview, go, visit,
+    customization, setOverview, go, visit,
     pose(p, y = 0, tilt = 0) { pos.splice(0, 3, ...p); yaw = y; pitch = tilt; },
     get nearest() { return nearest; },
     get overview() { return overview; },
@@ -225,7 +232,7 @@ export async function createScene(o) {
         position: pos.slice(), yaw, pitch, overview, held: !!held, running: !!raf, still,
         nearest: nearest ? nearest.key : null, fixtures: room.fixtures, bulbs: room.bulbs, screens: room.screens.length,
         pictures: screens.pictures, animation: screens.animation, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
-        decor: decor.debug(),
+        decor: decor.debug(), customization: customization.debug(),
         payouts: Object.fromEntries([...room.payouts].map(([key,p])=>[key,p.coins.debug()])),
         emiBubble: interaction.debug(),
         emis: room.emis.map((e) => e.debug()),

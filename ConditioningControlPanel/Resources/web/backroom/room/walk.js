@@ -18,6 +18,9 @@ export const RUN_SPEED = 4.8;
 /** Walls (inner faces less the radius) and the architecture no fixture bounds cover. */
 export const WALLS = Object.freeze({ x: 6.65, z: 7.55 });
 export const BLOCKERS = Object.freeze([
+  Object.freeze({ min: [6.45, 5.62], max: [7.95, 7.72] }), // customization cabinet
+  Object.freeze({ min: [3.0, 6.65], max: [4.2, 7.75] }), // sculpture spot
+  Object.freeze({ min: [1.35, 6.65], max: [2.55, 7.75] }), // planter spot
   Object.freeze({ min: [-3.24, -7.44], max: [3.24, -4.06] }),   // prize counter platform
   Object.freeze({ min: [-6.54, -3.94], max: [-4.46, -0.06] }),  // wheel plinth
 ]);
@@ -72,7 +75,7 @@ export function normaliseStations(rows) {
 
 /** Would a body centred at (x, z) overlap a wall, the architecture or a fixture? */
 export function blocked(x, z, stations) {
-  if (Math.abs(x) > WALLS.x || Math.abs(z) > WALLS.z) return true;
+  if (x < -WALLS.x || x > WALLS.x + 1.2*Math.max(0,z)/8 || Math.abs(z) > WALLS.z) return true;
   for (const b of BLOCKERS) if (x > b.min[0] && x < b.max[0] && z > b.min[1] && z < b.max[1]) return true;
   for (const s of stations || []) {
     const { min, max } = s.fixture.bounds;

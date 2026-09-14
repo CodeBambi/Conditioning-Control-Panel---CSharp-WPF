@@ -140,9 +140,27 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
   }
   scene.add(shell);
   shell.updateMatrixWorld(true);
+  // Widen the southeast corner gently, preserving all game fixture positions.
+  const point = new T.Vector3();
+  shell.traverse(o => {
+    if (!o.isMesh) return;
+    const g=o.geometry.clone(), a=g.attributes.position;
+    const positions=new Float32Array(a.count*3), inverse=o.matrixWorld.clone().invert();
+    for(let i=0;i<a.count;i++) {
+      point.fromBufferAttribute(a,i).applyMatrix4(o.matrixWorld);
+      point.x += 1.2*Math.max(0,Math.min(1,(point.x-6.5)/.5))*Math.max(0,point.z)/8;
+      point.applyMatrix4(inverse).toArray(positions,i*3);
+    }
+    g.setAttribute('position',new T.BufferAttribute(positions,3));
+    g.computeVertexNormals();g.computeBoundingSphere();o.geometry=g;
+  });
 
-  const floor = shell.getObjectByName('spiral_inlay');
-  if (floor) floor.material = spiralFloorMaterial();
+  const oldFloor = shell.getObjectByName('spiral_inlay');
+  if (oldFloor) oldFloor.visible = false;
+  shell.traverse(n => { if(n.name.startsWith('floor_brass_inlay')) n.visible=false; });
+  const floor = new T.Mesh(new T.PlaneGeometry(14,16), spiralFloorMaterial());
+  const fp=floor.geometry.attributes.position; for(let i=0;i<fp.count;i++) {const x=fp.getX(i),z=-fp.getY(i);if(x>0)fp.setX(i,x+1.2*Math.max(0,z)/8);} fp.needsUpdate=true;floor.geometry.computeBoundingSphere();
+  floor.name='room_spiral_floor'; floor.rotation.x=-Math.PI/2; floor.position.y=.012; scene.add(floor);
   const ceiling = shell.getObjectByName('ceiling');
   const screens = [], sconces = [], bulbs = [];
   shell.traverse((o) => {

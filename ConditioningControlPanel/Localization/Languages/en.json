@@ -6094,5 +6094,22 @@
   "br_preset_drop": "Drop",
   "br_preset_relax": "Relax",
   "br_preset_let_go": "Let Go",
-  "br_preset_sink": "Sink"
+  "br_preset_sink": "Sink",
+  "br_custom_title": "Room Service",
+  "br_custom_close": "Close",
+  "br_custom_preview": "Collection preview. Try a little change.",
+  "br_custom_categories": "Categories",
+  "br_custom_unavailable": "Local preview only. Purchases are not available yet.",
+  "br_custom_displays": "Displays",
+  "br_custom_plants": "Plants",
+  "br_custom_statues": "Statues",
+  "br_custom_gallery": "Gallery frame",
+  "br_custom_portraits": "Portrait pair",
+  "br_custom_billboard": "Wide billboard",
+  "br_custom_monstera": "Monstera",
+  "br_custom_ivy": "Hanging ivy",
+  "br_custom_terrarium": "Terrarium",
+  "br_custom_knight": "Knight sculpture",
+  "br_custom_queen": "Queen sculpture",
+  "br_custom_rook": "Rook sculpture"
 }

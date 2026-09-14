@@ -178,8 +178,8 @@ async function main() {
       }
       // The room supplies one decorated counter marquee, replacing the overlapping baked titles.
       const retired = job.to === 'counter.glb' ? ['header_title', 'service_title']
-        : job.to === 'shell.glb' ? ['house_title', 'house_sign_frame', 'house_sign_face'] : [];
-      for (const n of doc.getRoot().listNodes()) if (retired.includes(n.getName())) n.dispose();
+        : job.to === 'shell.glb' ? ['house_title', 'house_sign_frame', 'house_sign_face', 'arrival_rug', 'arrival_mark'] : [];
+      for (const n of doc.getRoot().listNodes()) if (retired.includes(n.getName()) || (job.to === 'shell.glb' && n.getName().startsWith('floor_brass_inlay'))) n.dispose();
       // Fit the east wall display inside its bay, clear of the card niche.
       if (job.to === 'shell.glb') {
         const screen = doc.getRoot().listNodes().find((n) => n.getName() === 'screen_mount_1');
