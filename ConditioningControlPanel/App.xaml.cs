@@ -5326,6 +5326,9 @@ Application State:
             // DtRH browser game: dispose the WebView2 window/process if it's up.
             try { Services.Chaos.DtrhHostService.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
+            // Jackpot Remix: the hidden builder's browser process, if a build ever started it.
+            try { Services.Remix.JackpotRemixBuilder.DisposeDefault(); } catch (Exception ex) { Diag.Swallowed(ex); }
+
             // The Arcademy: same reason - a WebView2 process outliving the app is a leak, and its
             // meta store has a debounced write that must be flushed before we go. ShutdownFlush, NOT
             // CloseActive: the graceful close waits on a 1200ms DispatcherTimer for the page's
