@@ -503,4 +503,84 @@ public class NeutralInstallerBaselineTests
         Assert.DoesNotContain("- Enable strict lock", waiver, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("can NEVER enable Strict Lock", waiver, StringComparison.Ordinal);
     }
+    // ---- the app icon is the neutral dial (item 8) --------------------------------------
+
+    /// <summary>
+    /// Reads the ICONDIR at the head of an .ico and returns (width, height, bitsPerPixel) per
+    /// frame. Deliberately parses the bytes rather than going through System.Drawing: the Icon
+    /// class silently picks ONE frame, which is the opposite of what needs checking here, and it
+    /// will not hand back a 256px frame at all.
+    /// </summary>
+    private static List<(int W, int H, int Bpp)> IconFrames(string path)
+    {
+        var bytes = File.ReadAllBytes(path);
+        var count = BitConverter.ToUInt16(bytes, 4);
+        var frames = new List<(int, int, int)>(count);
+        for (var i = 0; i < count; i++)
+        {
+            var o = 6 + i * 16;
+            // 0 in the byte-wide dimension fields means 256 - the field cannot hold the value.
+            var w = bytes[o] == 0 ? 256 : bytes[o];
+            var h = bytes[o + 1] == 0 ? 256 : bytes[o + 1];
+            frames.Add((w, h, BitConverter.ToUInt16(bytes, o + 6)));
+        }
+        return frames;
+    }
+
+    /// <summary>
+    /// app.ico is the mark a person meets BEFORE the app opens: taskbar, tray, Alt-Tab, the
+    /// shortcuts Inno creates, and the installer's own icon. It used to be the BAMBI SLEEP dial.
+    /// Seven frames at 32bpp, covering every size Windows asks for from a 16px list row to the
+    /// 256px Explorer preview.
+    /// </summary>
+    [Fact]
+    public void TheAppIconCoversEverySizeWindowsAsksFor()
+    {
+        var ico = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources", "app.ico");
+        Assert.True(File.Exists(ico));
+
+        var frames = IconFrames(ico);
+        Assert.Equal(new[] { 16, 24, 32, 48, 64, 128, 256 }, frames.Select(f => f.W).ToArray());
+
+        foreach (var f in frames)
+        {
+            Assert.Equal(f.W, f.H);
+            Assert.Equal(32, f.Bpp);
+        }
+    }
+
+    /// <summary>
+    /// The filename is the contract. Three separate consumers hardcode it, and keeping it is the
+    /// whole reason swapping the art needed no path change anywhere: the SDK embeds it into the
+    /// exe, Inno stamps it on Setup, and the tray service loads it at runtime.
+    /// </summary>
+    [Fact]
+    public void EverythingStillPointsAtResourcesAppIco()
+    {
+        var csproj = AppText("ConditioningControlPanel.csproj");
+        Assert.Contains(@"<ApplicationIcon>Resources\app.ico</ApplicationIcon>", csproj, StringComparison.Ordinal);
+        Assert.Contains(@"<Resource Include=""Resources\app.ico"" />", csproj, StringComparison.Ordinal);
+
+        var iss = File.ReadAllText(Path.Combine(RepoRoot(), "installer.iss"));
+        Assert.Contains(@"SetupIconFile=ConditioningControlPanel\Resources\app.ico", iss, StringComparison.Ordinal);
+
+        Assert.Contains("Resources/app.ico",
+            AppText("Services", "Notifications", "TrayIconService.cs"), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The generator has to build from logo2.png. Pointing it back at logo.png would rebuild the
+    /// BAMBI SLEEP icon from a script that looks like it is doing the right thing.
+    /// </summary>
+    [Fact]
+    public void TheIconIsGeneratedFromTheNeutralArt()
+    {
+        var script = AppText("Scripts", "make-app-icon.ps1");
+        Assert.Contains(@"'Resources\logo2.png'", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"'Resources\logo.png'", script, StringComparison.Ordinal);
+
+        // The small frames drop the lettering, which is mush below 128. If someone raises this
+        // to include every size, the 16px taskbar icon goes back to three illegible pink bars.
+        Assert.Contains("$LetteringLegibleAbove = 64", script, StringComparison.Ordinal);
+    }
 }
