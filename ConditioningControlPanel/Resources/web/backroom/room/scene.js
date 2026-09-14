@@ -178,8 +178,8 @@ export async function createScene(o) {
       step(pos, dx, dz, o.stations);
       sway = T.MathUtils.damp(sway, still ? 0 : Math.min(1, vel.length() / WALK_SPEED), 10, dt);
       walkPhase += vel.length() * dt * 3.1;
-      camera.position.set(pos[0], pos[1] + Math.sin(walkPhase * 2) * 0.008 * sway, pos[2]);
-      camera.rotation.set(pitch + Math.sin(walkPhase * 2) * 0.0016 * sway, yaw, Math.sin(walkPhase) * 0.0028 * sway, 'YXZ');
+      camera.position.set(pos[0], pos[1] + Math.sin(walkPhase * 2) * 0.004 * sway, pos[2]);
+      camera.rotation.set(pitch + Math.sin(walkPhase * 2) * 0.0008 * sway, yaw, Math.sin(walkPhase) * 0.0014 * sway, 'YXZ');
       setNearest(customization.opened?null:nearestStation(pos,[...o.stations,customization.row]));
     }
     if (!still) ambient += dt;
