@@ -19,7 +19,7 @@ import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
 import { drawSymbol } from './symbols.js';
 import { PACE, reelStopMs, reelsMs } from './pace.js';
 import { applyPalette } from './palette.js';
-import { FEEL, ALMOST as FEEL_ALMOST, bezier, breath, shiverPx, chaseMs, paylineGlow, paylinePulses } from './feel.js';
+import { FEEL, ALMOST as FEEL_ALMOST, ATTRACT, bezier, breath, shiverPx, chaseMs, paylineGlow, paylinePulses, wiggleCells } from './feel.js';
 
 export const FACES = { idle0_0: 3, hearts: 7, spirals: 8, melt: 9, jackpot: 10 };
 const RISE_MS = 620, CAMERA_MS = 620, SINK_MS = 340, PAINT_MS = 100, { THUD_MS } = FEEL;
@@ -38,6 +38,8 @@ const PARTY_MS = [0, 700, 900, 1000, 1400];   // per tier: how long the cabinet 
 const TEASE_DIM = 0.62;   // A1: the cabinet drops a notch while reel 3 holds (never under Calm or reduced motion)
 
 const clamp = x => Math.min(1, Math.max(0, x)), ease = x => 1 - (1 - clamp(x)) ** 3;
+const TAU = Math.PI * 2, ATTRACT_SPEED = [1, 0.86, 1.13];   // A4: the three drums drift at slightly different speeds
+const wrapRad = a => { const x = ((a % TAU) + TAU) % TAU; return x > Math.PI ? x - TAU : x; };   // ...so home is never half a turn away
 /** 0..1 of a reel's travel at `dt`: spin up, blur at a steady speed, decelerate into the stop. */
 function reelTravel(dt, dur, up = 180, down = Math.min(PACE.DECEL_MS, dur * 0.5)) {
   const v = 1 / (dur - up / 2 - (2 * down) / 3);
@@ -256,6 +258,12 @@ export async function createScene(o) {
   settle = () => { const t = tl, s = spin; tl = null; spin = null; if (t && t.done) t.done(); if (s && s.resolve) s.resolve(); };
   let revealAt = -Infinity, revealGain = 0, lean = null, party = null, shiverAt = -Infinity, trayAt = -Infinity, melted = false;
   let teasing = false;   // A1: reel 3 is alone and holding (the marquee's tease mood, the lights a notch down)
+  // A4 attract and A5 the EMI land-wiggle: both live on the loop, so neither holds a timer of its own.
+  let attract = null, attractOut = null;
+  const wiggleAt = [-Infinity, -Infinity, -Infinity];
+  const cellRad = i => TAU / (strips[i].length || 13);
+  const restAngle = i => restX[i] + angle(stopsNow[i], strips[i].length || 13);
+  const attractRad = (i, age) => (age / 1000) * ATTRACT.DRIFT_CELLS_PER_S * ATTRACT_SPEED[i] * cellRad(i);
   let heat = { from: 0, to: 0, at: -Infinity, gold: false };
   const pulse = [-Infinity, -Infinity, -Infinity], stopAt = [-Infinity, -Infinity, -Infinity];
   const sparks = [];
@@ -360,6 +368,20 @@ export async function createScene(o) {
     else if (lean) lever.rotation.x = reduced ? LEAN : lean.from + (LEAN - lean.from) * ease((t - lean.start) / FEEL.LEAN_MS);   // Law VIII
     else lever.rotation.x = reduced || phase !== 'play' || partying ? 0 : BREATH_RAD * breath(t);   // THE BREATH, the only breather
 
+    // A4 THE DRIFT while attracting: the drums roll slowly and the payline lands nothing (the stops never move).
+    // Leaving it eases home over SETTLE_MS, never a thud: entering or leaving attract is not a party (Brake 1).
+    if (!spin && (attract || attractOut)) {
+      const q = attractOut ? clamp((t - attractOut.start) / ATTRACT.SETTLE_MS) : 0;
+      for (let i = 0; i < 3; i++) reels[i].rotation.x = restAngle(i) + (attract ? attractRad(i, t - attract.start) : attractOut.from[i] * (1 - ease(q)));
+      if (attractOut && q >= 1) attractOut = null;
+    }
+    // A5 THE EMI LAND-WIGGLE: a cell that landed EMI shrugs once after its own reel's thud and comes back to
+    // the same stop. It rides after the thud, so no other reel waits on it (Law X). Reduced motion: nothing.
+    if (!reduced) for (let i = 0; i < 3; i++) {
+      const w = wiggleCells(t - wiggleAt[i]);
+      if (w) reels[i].rotation.x = (spin ? reels[i].rotation.x : restAngle(i)) + w * cellRad(i);
+    }
+
     // The payline reveal lifts (a win) or dims (nothing) for REVEAL_MS; THE THUD flashes each reel 2.2 -> 1.
     const rq = (t - revealAt) / PACE.REVEAL_MS, glow = rq < 0 || rq > 1 ? 1 : 1 + revealGain * (reduced ? 0.6 : Math.sin(Math.PI * rq));
     reels.forEach((r, i) => {
@@ -387,6 +409,15 @@ export async function createScene(o) {
       b.material.color.setHex(colors[step % colors.length]).lerp(nextColor.setHex(colors[(step + 1) % colors.length]), mix * mix * (3 - 2 * mix));
       b.material.emissive.copy(b.material.color); b.material.emissiveIntensity = (0.1 + 0.04 * h) * (teasing ? TEASE_DIM : 1);
     });
+    // A4: one chase sweeps the bulbs every ~8 s while attracting. Brightness only, one pulse a bulb, no colour
+    // change and nothing near the strobe floor.
+    if (attract && !reduced) {
+      const pass = ((t - attract.start) % ATTRACT.CHASE_MS) / ATTRACT.CHASE_PASS_MS;
+      if (pass <= 1) bulbs.forEach((b, i) => {
+        const d = Math.abs(pass * (bulbs.length + 8) - 4 - i);
+        if (d < 4) b.material.emissiveIntensity += 0.9 * (1 - d / 4) ** 2;
+      });
+    }
     if (glowMat) {
       glowMat.emissive.copy(glowRest.color).lerp(GOLD, heat.gold ? clamp(h / 4) : 0);
       glowMat.emissiveIntensity = glowRest.intensity * (0.55 + 0.45 * h);
@@ -584,6 +615,7 @@ export async function createScene(o) {
     spin(stops, held = null, tease = null) {
       settleSpin();
       ghost = null;
+      wiggleAt.fill(-Infinity);
       return new Promise(resolve => {
         spin = { start: performance.now(), stops, held, leverFrom: lever.rotation.x, resolve, stopped: [false, false, false],
                  teaseMs: Math.max(0, (tease && tease.holdMs) || 0), teaseGold: !!(tease && tease.gold),
@@ -598,6 +630,23 @@ export async function createScene(o) {
       if (!near || !(near.cell >= 0)) return;
       ghost = { r: near.reel === undefined ? 2 : near.reel, j: near.cell, at: performance.now() };
     },
+    /** A4: the attract drift on or off (the station owns the idle timer and EMI's wink). `now` snaps back to
+     *  the stops instead of easing home (Law VI: Back and suspend skip to the settled state). */
+    attract(on, now = false) {
+      if (on) {
+        if (attract || attractOut || spin || reduced || phase !== 'play') return false;
+        attract = { start: performance.now() };
+        return true;
+      }
+      const was = !!attract, at = performance.now();
+      if (attract && !now) attractOut = { start: at, from: [0, 1, 2].map(i => wrapRad(attractRad(i, at - attract.start))) };
+      attract = null;
+      if (now) { attractOut = null; setStops(stopsNow); }
+      return was;
+    },
+    get attracting() { return !!attract; },
+    /** A5: reel `i` wiggles `delay` ms from now (its own thud goes first). The loop owns it: no timer. */
+    wiggle(i, delay = 0) { if (!reduced && i >= 0 && i < 3) wiggleAt[i] = performance.now() + Math.max(0, delay); },
     settle: settleSpin,
     /** For dev.html and CDP checks only. */
     debug() {
@@ -608,7 +657,8 @@ export async function createScene(o) {
                tease: teasing, teaseMs: spin ? spin.teaseMs : 0, teaseGold: !!(spin && spin.teaseGold),
                almost: ghost ? { cell: ghost.j, reel: ghost.r, amt: Number(ghostAmt(t).toFixed(3)) } : null,
                tray: !!tray, glow: !!glowMat, emiScale: emi ? emi.scale.x / emiRest.s.x : null,
-               payline: { lit: paylineGlow(t - paylineAt, paylineHold, paylinePulseN), hold: paylineHold, pulses: paylinePulseN, rect: paylineRect() } };
+               payline: { lit: paylineGlow(t - paylineAt, paylineHold, paylinePulseN), hold: paylineHold, pulses: paylinePulseN, rect: paylineRect() },
+               attract: !!attract, drifting: !!(attract || attractOut), wiggling: wiggleAt.map(a => wiggleCells(t - a) !== 0) };
     },
   };
 }

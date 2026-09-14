@@ -70,6 +70,21 @@ Back (left) and EMI's HUD face sits under the room's SP chip (right), so the mar
   rest; `glance()` never repeats the current pose.
 - **THE BREATH**: only the lever at rest, 3.2 s ease-in-out, paused while a party runs. The old screen_jackpot
   pulse (a second breather) is gone.
+- **ATTRACT** (playbook A4, House Book deck II): 25 s seated with nothing running and the cabinet attracts itself.
+  The reels drift (about a cell every 3 s, the three drums at slightly different speeds), one chase sweeps the
+  bulbs every 8 s (brightness only, 1.4 s a pass), EMI winks at 4 s and then every 12 s. Nothing lands: the stops
+  never move, no SP moves and nothing is read from the tape. The lever keeps breathing (Law III: the drifting
+  reels are scenery, attract is not a celebration). Lever, freeze, Back, Escape, any key or any pointer press
+  ends it on that frame (Law VIII) and the reels ease home over 420 ms, never a thud (Brake 1, Law XI). Off on
+  Calm, off under reduced motion and off while `meltLeft > 0` (Brake 5). One `setTimeout` re-armed on input
+  (no polling) plus the self-re-arming wink; both are cleared by any input, by `suspend` and by `close`, and the
+  drift itself rides the render loop, so `destroy` leaves no rAF and no timeout alive.
+- **THE EMI LAND-WIGGLE** (playbook A5): EMI landing on any reel, a losing spin included, wiggles that cell once
+  after its own thud (`scene.wiggle(i, 340)`: two oscillations, 300 ms, 0.17 of a cell, back to the same stop) and
+  EMI's HUD face glances. It rides after the thud and holds no timer, so the next reel's thud is untouched
+  (Law X). A 3-EMI line is already THE REVEAL, so that spin wiggles nothing (Brake 2: one hero per beat). Calm
+  keeps it (it is tiny); reduced motion takes the settled state: no wiggle, no glance. `feel.emiLandings(outcome)`
+  is the pure list of reels, and a held column never thuds, so a frozen EMI never wiggles either.
 - **Law IX / THE MARQUEE**: tier 1 chime + win chase, tier 2 two notes + EMI jolt + `WIN +N` glow on
   screen_jackpot, tier 3 THE THUD on screen_jackpot + big chase, tier 4 THE REVEAL (EMI over-rotates, jackpot
   counts up 620 ms, sparks, gold). `marquee_glow` heat tracks the tier (in 80 ms, out 480 ms), gold at the top.
@@ -100,6 +115,11 @@ Back (left) and EMI's HUD face sits under the room's SP chip (right), so the mar
   `onDone` then hands the readout back to `tape.snapshot().shownSp`. A press takes the whole settled state
   (`skip({ land: true })`: the mini-thud, the readout THUD and the `+N`), hushes the rest of the chime climb and
   sends the frame into its fade. Back and suspend settle the number and leave quietly (leaving is a fade).
+
+## Follow-ups
+
+- The room's unattended cabinet marquee (attract seen from across the 3D room, playbook A4) is NOT part of this:
+  the station page owns only the seated cabinet. Room-side work is a separate pass.
 
 ## Checks
 
