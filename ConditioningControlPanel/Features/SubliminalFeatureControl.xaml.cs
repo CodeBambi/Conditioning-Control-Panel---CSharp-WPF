@@ -172,9 +172,10 @@ namespace ConditioningControlPanel.Features
             var oldKeys = new HashSet<string>(s.SubliminalPool.Keys);
             // OrdinalIgnoreCase: the removed-set and ModService's top-up compare
             // case-insensitively, so detection must too or modded defaults slip through.
+            // Neutral fallback, not BambiSleep's - see MainWindow.UiUpdates.BtnManageMessages_Click.
             var defaults = new HashSet<string>(
                 (App.Mods?.GetDefaultSubliminalPool()
-                 ?? Models.BuiltInMods.BambiSleep.SubliminalPool
+                 ?? Models.BuiltInMods.CCPDefault.SubliminalPool
                  ?? new Dictionary<string, bool>()).Keys,
                 StringComparer.OrdinalIgnoreCase);
             var dialog = new TextEditorDialog("Subliminal Messages", s.SubliminalPool)
