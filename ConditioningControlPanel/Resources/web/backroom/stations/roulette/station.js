@@ -1,0 +1,452 @@
+/* ============================================================================
+ * station.js - the Velvet Vortex roulette station (CONTRACT 7 and 10.13.F). The
+ * room calls mount(ctx) once, then open()/close() per visit. Back is live at
+ * every frame (Law VI): it never waits on the server, a spin or a picture.
+ *
+ *   tape.js   bets, the client cover-all check, Law I, retries (pure)
+ *   feel.js   timings, the Lighthouse clock, the ball's run planned back from
+ *             the server's pocket (pure)
+ *   bowl.js   the canvas bowl and its page effects
+ *   mat.js    the canvas mat and the chips
+ *   shared/hypno  the Loom kit (turret whirl), the deal (a picture key for
+ *             fx.gif_from) and the moments (every host fx goes through them)
+ *
+ * A spin: chips on the mat (1 to 3 SP), 1 to 5 spins, Spin. The bowl answers on
+ * the press (Law VIII), the server settles every spin at once, and the page
+ * plays them one at a time, about 8 s each. Each spin plays roulette.run (plus
+ * roulette.wake on a Spiral Wake) at its launch, and exactly one
+ * roulette.land.* on the frame the ball drops into the pocket. The SP chip owes
+ * the tape's unplayed pays until each lands (Law I).
+ * ==========================================================================*/
+
+import { createLoomKit, createDeck, createMoments, strengthK, rouletteRunLevel, pocketColor, viewportRect } from '../../shared/hypno/index.js';
+import { MAX_CHIPS, MAX_SPINS, addChip, removeChip, chipsOf, chipTotal, checkLayout, adoptTape, owed, shownSp, cursorOf, readOutcome, classify, spinBody, mintId, ROWS } from './tape.js';
+import { FEEL, planRun, seedFor, landMoment, nextLaunchAt } from './feel.js';
+import { createBowl } from './bowl.js';
+import { createMat } from './mat.js';
+
+const fmt = (n) => Number(n || 0).toLocaleString('en-US');
+const wait = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
+
+function loadCss() {
+  if (document.querySelector('link[data-roulette-css]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet'; link.href = new URL('./station.css', import.meta.url).href; link.dataset.rouletteCss = '';
+  document.head.append(link);
+}
+
+export async function mount(ctx) {
+  const t = (key, fallback, vars = {}) => {
+    const s = typeof ctx.lex === 'function' ? ctx.lex(key, fallback) : fallback;
+    return String(s ?? fallback).replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : `{${k}}`));
+  };
+  const prefersReduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const stillNow = () => !!ctx.reduced || prefersReduced || String(ctx.intensity || '').toLowerCase() === 'calm';
+  const fullNow = () => ctx.intensity === 'full' && !ctx.reduced && !prefersReduced;
+  const kNow = () => (prefersReduced ? 0.5 : strengthK(ctx));
+  const gates = () => { const g = ctx.gates || {}; return { flash: g.flash !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false }; };
+  const hostBack = ctx.hostBack === true;
+  const hook = ctx.spReadout && typeof ctx.spReadout.owe === 'function' ? ctx.spReadout : null;
+  loadCss();
+
+  let el = null, cv = null, g = null, bowl = null, mat = null, kit = null, deck = null, moments = null;
+  let alive = false, suspended = false, session = 0, phase = 'loading', raf = 0, unSp = null, unSettings = null;
+  let st = null, sp = 0, tape = null, chips = {}, count = 1, why = null, hover = null, cur = null, resume = false;
+  let status = '', history = [], feelLog = [], cursorSent = null, pausedAt = 0, pausedMs = 0, size = { w: 0, h: 0, dpr: 1 };
+  const $ = (sel) => el.querySelector(sel);
+  const clock = () => (suspended ? pausedAt : performance.now()) - pausedMs;
+  const note = (what, extra = {}) => { feelLog = [...feelLog.slice(-99), { what, at: Math.round(performance.now()), ...extra }]; };
+  const owedNow = () => owed(tape);
+  const reader = () => owedNow();
+
+  /* ------------------------------------------------------------ readouts */
+  const spotName = (spot) => (/^s\d+$/.test(spot) ? spot.slice(1)
+    : spot === 'rose' ? t('br_roulette_spot_rose', 'Rose') : spot === 'plum' ? t('br_roulette_spot_plum', 'Plum')
+    : t('br_roulette_spot_' + spot, { sip: 'Sip 1-12', sink: 'Sink 13-24', deep: 'Deep 25-36' }[spot] || spot));
+  const matLabel = (spot) => (spot === 'rose' || spot === 'plum' ? spotName(spot)
+    : t('br_roulette_mat_' + spot, { sip: 'SIP 1-12', sink: 'SINK 13-24', deep: 'DEEP 25-36' }[spot] || spot));
+  function pocketLine(r) {
+    if (r.pocket === 0) return t('br_roulette_pocket_zero', '0, the house pocket.');
+    const color = r.color === 'rose' ? t('br_roulette_spot_rose', 'Rose') : t('br_roulette_spot_plum', 'Plum');
+    const row = t('br_roulette_row_' + r.row, { sip: 'Sip row', sink: 'Sink row', deep: 'Deep row' }[r.row]);
+    return t('br_roulette_pocket', '{n} {color}, {row}.', { n: r.pocket, color, row });
+  }
+  function resultLine(r) {
+    let s = pocketLine(r);
+    if (r.wake) s += ' ' + t('br_roulette_wake', 'Spiral Wake: winning chips pay double.');
+    s += ' ' + (r.pay > 0 ? t('br_roulette_won', 'Your {spots} won {n} SP.', { spots: r.hits.map(spotName).join(', '), n: fmt(r.pay) })
+      : t('br_roulette_lost', 'Nothing won this spin.'));
+    return s;
+  }
+  function whyText(reason, extra = {}) {
+    switch (reason) {
+      case 'empty': return t('br_roulette_why_empty', 'Place chips on the mat to bet. Right click takes one off.');
+      case 'covers_all': return t('br_roulette_why_covers_all', 'The house refuses a layout that covers every number from 1 to 36.');
+      case 'stake_cap': return t('br_roulette_why_stake_cap', '{n} SP a spin at most.', { n: MAX_CHIPS });
+      case 'insufficient': return t('br_roulette_why_insufficient', 'That needs {n} SP.', { n: fmt(extra.cost) });
+      case 'too_fast': return t('br_roulette_why_too_fast', 'The wheel needs a moment. Try again in {s} s.', { s: Math.ceil((Number(extra.retryInMs) || 1000) / 1000) });
+      case 'bad_layout': return extra.why === 'covers_all' ? whyText('covers_all')
+        : t('br_roulette_why_bad_layout', 'The house refused that layout ({why}).', { why: extra.why || 'bad_layout' });
+      case 'bad_request': return t('br_roulette_why_bad_request', 'That bet did not go through. Try again.');
+      default: return t('br_roulette_offline', 'The house is not answering. Try again in a moment.');
+    }
+  }
+  const check = () => checkLayout(chips, { rose: st && st.rose, count, sp: shownSp(sp, tape) });
+
+  function sync() {
+    if (!el) return;
+    el.dataset.phase = phase;
+    el.dataset.still = stillNow() ? '1' : '';
+    const c = st ? check() : { ok: false, why: 'empty', stake: 0, cost: 0 };
+    const left = tape ? tape.outcomes.length - tape.played : 0;
+    let line = status;
+    if (!line) line = resume ? t('br_roulette_resume', 'Your last spins are still on the table. {n} left to watch.', { n: left })
+      : t('br_roulette_ready', 'Place your chips, pick the spins, then Spin.');
+    if ($('.roul-status').textContent !== line) $('.roul-status').textContent = line;
+    if (!hook) $('.roul-sp').textContent = t('br_roulette_sp', '{n} SP', { n: fmt(shownSp(sp, tape)) });
+    const pips = el.querySelectorAll('.roul-pips i'), used = chipTotal(chips);
+    pips.forEach((p, i) => p.classList.toggle('is-used', i < used));
+    $('.roul-chips-label').textContent = t('br_roulette_chips', 'Chips {n} of {max}', { n: used, max: MAX_CHIPS });
+    const locked = phase !== 'bet' || resume;
+    $('.roul-clear').disabled = locked || used === 0;
+    el.querySelectorAll('.roul-spins button').forEach((b) => { b.setAttribute('aria-pressed', String(Number(b.dataset.n) === count)); b.disabled = locked; });
+    const shownWhy = why || (phase === 'bet' && !resume && !c.ok && c.why !== 'empty' ? whyText(c.why, c) : '');
+    $('.roul-why').textContent = shownWhy; $('.roul-why').hidden = !shownWhy;
+    const spin = $('.roul-spin');
+    spin.disabled = phase !== 'bet' || (!resume && !c.ok);
+    spin.querySelector('span').textContent = phase === 'playing' || phase === 'asking' ? t('br_roulette_spinning', 'No more bets')
+      : resume ? t('br_roulette_watch', 'Watch the rest') : t('br_roulette_spin', 'Spin');
+    spin.querySelector('small').textContent = resume ? t('br_roulette_left', '{n} left', { n: left })
+      : t('br_roulette_cost', '{stake} SP x {count} = {cost} SP', { stake: c.stake, count, cost: c.cost });
+    const hist = $('.roul-history');
+    if (hist.childElementCount !== history.length || (history.length && hist.lastElementChild.textContent !== history[history.length - 1])) {
+      hist.replaceChildren(...history.map((h) => { const li = document.createElement('li'); li.textContent = h; return li; }));
+    }
+  }
+  function card(text) { if (!el) return; $('.roul-card p').textContent = text || ''; $('.roul-card').hidden = !text; }
+  function renderOdds() {
+    const kinds = (st.table && Array.isArray(st.table.kinds)) ? st.table.kinds : [];
+    const names = { straight: t('br_roulette_odds_straight', 'One number'), row: t('br_roulette_odds_row', 'A row of twelve'), color: t('br_roulette_odds_color', 'Rose or plum') };
+    const rows = kinds.map((k) => {
+      const tr = document.createElement('tr');
+      for (const [tag, text] of [['th', names[k.kind] || k.kind], ['td', t('br_roulette_odds_pays', 'pays {n}', { n: k.pays })],
+        ['td', t('br_roulette_odds_woken', 'woken {n}', { n: k.woken })], ['td', String(k.odds || '')]]) {
+        const cell = document.createElement(tag); cell.textContent = text; tr.append(cell);
+      }
+      return tr;
+    });
+    $('.roul-odds table').replaceChildren(...rows);
+    $('.roul-odds p').textContent = t('br_roulette_odds_note', 'Pays are the SP a chip returns, the chip included. Spiral Wake {wake}: every winning chip pays double. 1 to {max} SP a spin, up to {spins} spins. A layout covering all of 1-36 is refused.',
+      { wake: String((st.table && st.table.wake) || ''), max: MAX_CHIPS, spins: MAX_SPINS });
+  }
+
+  /* ---------------------------------------------------------------- build */
+  function build() {
+    const root = document.createElement('div');
+    root.className = 'roul-station'; root.dataset.phase = 'loading';
+    const spinsBtns = Array.from({ length: MAX_SPINS }, (_, i) => `<button type="button" data-n="${i + 1}" aria-pressed="false">${i + 1}</button>`).join('');
+    root.innerHTML = `
+      <canvas class="roul-stage"></canvas>
+      <header class="roul-top">
+        <button class="roul-back" type="button">&larr; <span></span></button>
+        <span class="roul-sp"></span>
+        <div class="roul-status" aria-live="polite"></div>
+        <ol class="roul-history"></ol>
+      </header>
+      <div class="roul-controls">
+        <div class="roul-row"><span class="roul-chips-label"></span><span class="roul-pips" aria-hidden="true"><i></i><i></i><i></i></span><button class="roul-clear" type="button"></button></div>
+        <div class="roul-row roul-spins" role="group"><span class="roul-spins-label"></span>${spinsBtns}</div>
+        <p class="roul-why" hidden></p>
+        <button class="roul-spin" type="button"><span></span><small></small></button>
+      </div>
+      <details class="roul-odds"><summary></summary><table></table><p></p></details>
+      <div class="roul-card" role="status" hidden><p></p><button class="roul-card-back" type="button"></button></div>
+      <div class="roul-loading"></div>`;
+    const set = (sel, text) => { root.querySelector(sel).textContent = text; };
+    root.querySelector('.roul-stage').setAttribute('aria-label', t('br_roulette_stage', 'Velvet Vortex roulette. Click the mat to place chips.'));
+    set('.roul-back span', t('br_roulette_back', 'Back')); set('.roul-card-back', t('br_roulette_back', 'Back'));
+    set('.roul-clear', t('br_roulette_clear', 'Clear')); set('.roul-spins-label', t('br_roulette_spins', 'Spins'));
+    set('.roul-odds summary', t('br_roulette_odds', 'Odds')); set('.roul-loading', t('br_roulette_loading', 'Brushing the velvet'));
+    root.querySelector('.roul-history').setAttribute('aria-label', t('br_roulette_history', 'Last spins'));
+    root.querySelector('.roul-spins').setAttribute('aria-label', t('br_roulette_spins', 'Spins'));
+    root.querySelector('.roul-back').onclick = back;
+    root.querySelector('.roul-card-back').onclick = back;
+    if (hostBack) { root.dataset.hostBack = ''; root.querySelector('.roul-back').hidden = true; root.querySelector('.roul-card-back').hidden = true; }
+    if (hook) root.dataset.hostSp = '';
+    root.querySelector('.roul-spin').onclick = () => press();
+    root.querySelector('.roul-clear').onclick = () => { if (phase === 'bet' && !resume) { chips = {}; why = null; sync(); } };
+    root.querySelectorAll('.roul-spins button').forEach((b) => { b.onclick = () => setCount(Number(b.dataset.n)); });
+    return root;
+  }
+
+  function back() {
+    if (el && !hostBack) $('.roul-back').classList.add('is-ringing');   // Law VIII
+    if (typeof ctx.standUp === 'function') ctx.standUp(); else close();
+  }
+  function setCount(n) { if (phase !== 'bet' || resume) return; count = Math.max(1, Math.min(MAX_SPINS, Math.trunc(n) || 1)); why = null; sync(); }
+  function place(spot, remove = false) {
+    if (phase !== 'bet' || resume || !st) return false;
+    if (remove) { chips = removeChip(chips, spot); why = null; sync(); return true; }
+    const r = addChip(chips, spot, { spots: st.spots });
+    chips = r.chips; why = r.ok ? null : whyText(r.why);
+    sync();
+    return r.ok;
+  }
+  function ring(sel) { const b = el && $(sel); if (!b) return; b.classList.add('is-ringing'); setTimeout(() => b.classList.remove('is-ringing'), 400); }
+
+  /* ----------------------------------------------------------------- spin */
+  async function press() {
+    if (!alive || suspended || !st || phase !== 'bet') return;
+    const pressedAt = performance.now();
+    if (resume) { resume = false; ring('.roul-spin'); note('answer', { ms: Math.round(performance.now() - pressedAt), resume: true }); playTape(); return; }
+    const c = check();
+    if (!c.ok) { ring('.roul-spin'); why = whyText(c.why, c); sync(); return; }
+    // Law VIII: the rotor picks up and the button rings on this frame, before any reply.
+    phase = 'asking'; why = null; status = t('br_roulette_no_more', 'No more bets...'); bowl.kick(); ring('.roul-spin'); sync();
+    note('answer', { ms: Math.round(performance.now() - pressedAt) });
+    const my = session, idem = mintId(), body = spinBody({ idem, count, chips, spots: st.spots, tape });
+    for (let tries = 1; ; tries++) {
+      const res = await Promise.resolve(ctx.request('spin', body, idem)).catch(() => ({ ok: false, reason: 'offline' }));
+      if (my !== session || !alive) return;
+      const a = classify(res, tries);
+      note('reply', { kind: a.kind, reason: a.reason || null, tries });
+      if (a.kind === 'retry') { await wait(a.waitMs); if (my !== session || !alive) return; continue; }
+      if (a.kind === 'ok') {
+        sp = Number(a.body.sp) || 0; tape = adoptTape(a.body.tape); cursorSent = null;
+        if (!tape) { phase = 'bet'; status = ''; why = whyText('bad_request'); sync(); return; }
+        chips = chipsOf(tape.bets);
+        if (hook) hook.owe(reader);
+        playTape();
+        return;
+      }
+      if (a.kind === 'tape') {   // spins bought earlier and never watched: play those, nothing new was bought
+        if (Number.isFinite(Number(a.body.sp))) sp = Number(a.body.sp);
+        tape = a.tape; chips = chipsOf(tape.bets); cursorSent = null;
+        if (hook) hook.owe(reader);
+        history.push(t('br_roulette_history_resume', 'Earlier spins, still on the table'));
+        playTape();
+        return;
+      }
+      phase = a.kind === 'closed' ? 'closed' : 'bet'; status = '';
+      if (a.kind === 'closed') card(t('br_roulette_closed', 'The Velvet Vortex is closed for a moment.'));
+      else { why = whyText(a.reason, { ...a.body, cost: c.cost, why: a.why }); if (a.reason === 'insufficient' && Number.isFinite(Number(a.body.sp))) sp = Number(a.body.sp); }
+      sync();
+      return;
+    }
+  }
+
+  function playTape() {
+    if (!tape || tape.played >= tape.outcomes.length) { endTape(); return; }
+    phase = 'playing';
+    launch(tape.played, clock());
+  }
+
+  function launch(i, now) {
+    const o = tape.outcomes[i], read = readOutcome(o, tape.bets, { rose: st.rose, wheel: st.wheel });
+    if (read.index < 0) { note('skip', { pocket: read.pocket }); tape.played = i + 1; playTape(); return; }
+    mat.clearAnims();
+    bowl.kick();
+    const plan = planRun({ index: read.index, seed: seedFor(tape.id, i), calm: stillNow(), rotVel0: FEEL.ROTOR_KICK });
+    bowl.launch(plan, now, { wake: read.wake });
+    const run = moments.play('roulette.run');
+    const wake = read.wake ? moments.play('roulette.wake', { wake: true }) : null;
+    cur = { i, read, plan, launchAt: now, landed: false, restAt: null, page: [...run.page, ...(wake ? wake.page : [])] };
+    status = (read.wake ? t('br_roulette_waking', 'No more bets... the bowl is waking.') : t('br_roulette_no_more', 'No more bets...'))
+      + '\n' + t('br_roulette_progress', 'Spin {i} of {n}', { i: i + 1, n: tape.outcomes.length });
+    note('launch', { i, pocket: read.pocket, wake: read.wake, hits: plan.hits, restAt: Math.round(plan.restAt * 1000), page: cur.page });
+    sync();
+  }
+
+  /** The landing frame: tunnel off, one roulette.land.*, the chips, the text, and Law I lets this spin's pay land. */
+  function land(now) {
+    const r = cur.read;
+    cur.landed = true;
+    moments.tunnel(0);
+    const id = landMoment(r), box = bowl.pocketBox(r.index);
+    const m = moments.play(id, { color: pocketColor(r.pocket, st.rose), from: viewportRect(cv, box.x, box.y, box.w, box.h),
+      gif: deck ? deck.pickKey(tape.id + ':' + r.i) : undefined, wake: r.wake });
+    const list = tape.bets.filter((b) => !r.hits.includes(b.spot)).map((b) => ({ kind: 'lose', spot: b.spot }));
+    for (const spot of r.hits) {
+      if (m.page.includes('chips_in')) list.push({ kind: 'in', spot }, { kind: 'in', spot });
+      if (m.page.includes('pulled_pair')) list.push({ kind: 'pull', spot }, { kind: 'pull', spot });
+    }
+    mat.animate(list, now);
+    tape.played = r.i + 1;
+    if (hook) { hook.owe(reader); if (r.pay > 0 && typeof hook.thud === 'function') hook.thud(); }
+    const line = resultLine(r);
+    history = [...history.slice(-4), `${r.pocket} ${r.pocket === 0 ? '' : spotName(r.color) + ' '}${r.pay > 0 ? '+' + fmt(r.pay) : '+0'}${r.wake ? ' ~' : ''}`.replace(/\s+/g, ' ')];
+    status = line + '\n' + t('br_roulette_progress', 'Spin {i} of {n}', { i: r.i + 1, n: tape.outcomes.length });
+    note('land', { i: r.i, pocket: r.pocket, pay: r.pay, wake: r.wake, straight: r.straight, moment: id, page: m.page, fx: m.tokens.length, text: line });
+    sync();
+  }
+
+  function endTape() {
+    phase = 'bet'; cur = null;
+    if (tape && cursorSent !== tape.played && tape.played > 0) flushCursor();
+    note('tape-end', { played: tape ? tape.played : 0 });
+    sync();
+  }
+  function flushCursor() {
+    const c = cursorOf(tape);
+    if (!c) return;
+    cursorSent = c.played;
+    Promise.resolve(ctx.request('cursor', c)).catch(() => {});
+  }
+
+  /* ---------------------------------------------------------------- frame */
+  function layout() {
+    const w = cv.clientWidth, h = cv.clientHeight, dpr = Math.min(1.5, globalThis.devicePixelRatio || 1);
+    if (w === size.w && h === size.h && dpr === size.dpr) return;
+    size = { w, h, dpr };
+    cv.width = Math.max(1, Math.round(w * dpr)); cv.height = Math.max(1, Math.round(h * dpr));
+    const wide = w >= h * 1.1;
+    if (wide) {
+      bowl.layout(w * 0.27, h * 0.52, Math.min(h * 0.32, w * 0.19));
+      mat.layout(w * 0.5, h * 0.16, w * 0.47, h * 0.46);
+    } else {
+      bowl.layout(w / 2, h * 0.27, Math.min(w * 0.3, h * 0.16));
+      mat.layout(16, h * 0.47, w - 32, h * 0.24);
+    }
+  }
+
+  function frame() {
+    if (!alive) return;
+    raf = requestAnimationFrame(frame);
+    if (suspended || !bowl) return;
+    const now = clock(), still = stillNow(), k = kNow();
+    layout();
+    if (kit) kit.setStill(still);
+    const u = bowl.update(now, { still });
+    if (cur && !cur.landed) {
+      if (u.speed > 0) moments.tunnel(rouletteRunLevel(u.speed));
+      if (u.landed) land(now);
+    }
+    if (cur && cur.landed && cur.restAt == null && u.phase === 'rest') cur.restAt = now;
+    if (cur && cur.restAt != null && now >= nextLaunchAt(cur.launchAt, cur.restAt)) {
+      if (tape && tape.played < tape.outcomes.length) launch(tape.played, now);
+      else { mat.clearAnims(); endTape(); }
+    }
+    g.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
+    const bgr = g.createRadialGradient(bowl.geo.cx, bowl.geo.cy, bowl.geo.R * 0.5, bowl.geo.cx, bowl.geo.cy, Math.max(size.w, size.h) * 0.8);
+    bgr.addColorStop(0, '#1d1233'); bgr.addColorStop(1, '#0a0614');
+    g.fillStyle = bgr; g.fillRect(0, 0, size.w, size.h);
+    const gt = gates();
+    bowl.draw(g, { dpr: size.dpr, now, k, full: fullNow(), spiral: gt.spiral, kit,
+      still, slowText: t('br_roulette_slowly', 's l o w l y') });
+    const landedShown = cur && cur.landed ? cur.read : null;
+    mat.draw(g, { now, chips, hover, hits: landedShown ? landedShown.hits : [], landed: landedShown ? landedShown.pocket : null, k, still,
+      bowl: bowl.geo, locked: phase !== 'bet' || resume });
+  }
+
+  /* ---------------------------------------------------------------- input */
+  function onKey(e) {
+    if (!alive) return;
+    if (e.key === 'Escape') { e.preventDefault(); back(); return; }
+    if (e.target && e.target.closest && e.target.closest('button, summary, input, select')) return;
+    if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); press(); return; }
+    if (/^[1-5]$/.test(e.key)) { setCount(Number(e.key)); return; }
+    if (e.key === 'Backspace' || e.key === 'Delete') { if (phase === 'bet' && !resume) { chips = {}; why = null; sync(); } }
+  }
+  const local = (e) => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  function onPointer(e) {
+    if (!mat) return;
+    const p = local(e), spot = mat.hit(p.x, p.y);
+    if (e.type === 'pointermove') { hover = spot; cv.style.cursor = spot && phase === 'bet' && !resume ? 'pointer' : 'default'; return; }
+    if (e.type === 'pointerdown' && spot) { e.preventDefault(); place(spot, e.button === 2 || e.shiftKey); }
+  }
+  const onContext = (e) => { if (mat && mat.hit(local(e).x, local(e).y)) e.preventDefault(); };
+
+  /* ------------------------------------------------------------ lifecycle */
+  async function open() {
+    if (alive) return;
+    alive = true; suspended = false; phase = 'loading'; status = ''; why = null; history = []; feelLog = []; cur = null; resume = false; pausedMs = 0;
+    const my = ++session;
+    el = build(); ctx.root.append(el);
+    cv = $('.roul-stage'); g = cv.getContext('2d'); size = { w: 0, h: 0, dpr: 1 };
+    addEventListener('keydown', onKey);
+    cv.addEventListener('pointermove', onPointer); cv.addEventListener('pointerdown', onPointer); cv.addEventListener('contextmenu', onContext);
+    moments = createMoments(ctx, { station: 'roulette' });
+    kit = createLoomKit({ still: stillNow(), log: (m) => note('loom', { m }) });
+    createDeck(ctx, { count: 4 }).then((d) => { if (my === session && alive) deck = d; else d.dispose(); }).catch(() => {});
+    if (typeof ctx.onSp === 'function') unSp = ctx.onSp((v) => { if (Number.isFinite(Number(v)) && phase !== 'asking') { sp = Number(v); if (el) sync(); } });
+    if (typeof ctx.onSettings === 'function') unSettings = ctx.onSettings(() => { if (el) sync(); });
+    const res = await Promise.resolve(ctx.request('state', {})).catch(() => null);
+    if (my !== session || !alive) return;
+    $('.roul-loading').hidden = true;
+    const b = res && res.ok && res.status !== 403 && res.body && res.body.ok ? res.body : null;
+    if (!b || b.open === false || !Array.isArray(b.wheel) || b.wheel.length !== 37 || !Array.isArray(b.spots)) {
+      phase = 'closed'; card(t('br_roulette_closed', 'The Velvet Vortex is closed for a moment.')); sync();
+      return;
+    }
+    st = b; sp = Number(b.sp) || 0; tape = adoptTape(b.tape);
+    bowl = createBowl({ wheel: st.wheel, rose: st.rose });
+    mat = createMat({ spots: st.spots, rose: st.rose, label: matLabel });
+    if (tape) {
+      chips = chipsOf(tape.bets); resume = tape.played < tape.outcomes.length;
+      if (tape.played > 0) { const last = readOutcome(tape.outcomes[tape.played - 1], tape.bets, { rose: st.rose, wheel: st.wheel }); bowl.seat(last.index); }
+    }
+    if (hook) hook.owe(reader);   // registered once the tape state is back (CONTRACT 7.1)
+    renderOdds();
+    layout();   // the mat takes clicks from the first interactive frame
+    phase = 'bet'; sync();
+    raf = requestAnimationFrame(frame);
+    note('open', { resume, sp, still: stillNow(), gates: gates() });
+  }
+
+  async function close() {
+    if (!alive) return;
+    alive = false;
+    const my = ++session;
+    cancelAnimationFrame(raf); raf = 0;
+    removeEventListener('keydown', onKey);
+    if (cv) { cv.removeEventListener('pointermove', onPointer); cv.removeEventListener('pointerdown', onPointer); cv.removeEventListener('contextmenu', onContext); }
+    if (typeof unSp === 'function') unSp();
+    if (typeof unSettings === 'function') unSettings();
+    unSp = null; unSettings = null;
+    // Law VI: Back drops every ceremony. What has landed is flushed; a spin still running stays unplayed.
+    if (moments) { moments.cancel(); moments.dispose(); }
+    if (tape && tape.played > 0 && cursorSent !== tape.played) flushCursor();
+    if (hook) { hook.owe(owedNow()); if (typeof hook.set === 'function') hook.set(null); }   // a plain number for the room
+    if (kit) kit.dispose();
+    if (deck) deck.dispose();
+    if (el) el.dataset.phase = 'leaving';
+    const root = el;
+    if (root) root.remove();
+    if (my === session) { el = null; cv = null; g = null; kit = null; deck = null; moments = null; cur = null; bowl = null; mat = null; phase = 'loading'; }
+  }
+
+  return {
+    open, close,
+    suspend(on) {
+      if (!!on === suspended) return;
+      if (on) {
+        suspended = true; pausedAt = performance.now();
+        if (moments) moments.cancel();
+        if (kit) { kit.dispose(); kit = null; }
+        if (deck) deck.dispose();   // its keys still pick (pickKey needs no pictures)
+      } else {
+        pausedMs += performance.now() - pausedAt; suspended = false;
+        if (alive) {
+          kit = createLoomKit({ still: stillNow(), log: (m) => note('loom', { m }) });
+          if (cur && !cur.landed && moments) { moments.play('roulette.run'); if (cur.read.wake) moments.play('roulette.wake', { wake: true }); }
+        }
+      }
+      note('suspend', { on: !!on });
+      if (el) sync();
+    },
+    async destroy() { await close(); document.querySelectorAll('link[data-roulette-css]').forEach((l) => l.remove()); },
+    /** For dev.html and the CDP checks only. */
+    debug: () => ({
+      phase, alive, suspended, still: stillNow(), full: fullNow(), k: kNow(), gates: gates(), hostBack, hook: !!hook,
+      sp, shown: shownSp(sp, tape), owed: owedNow(), chips: { ...chips }, count, resume,
+      check: st ? check() : null, why: el ? $('.roul-why').textContent : null, status: el ? $('.roul-status').textContent : null,
+      history: history.slice(), spin: el ? $('.roul-spin').textContent : null, spinDisabled: el ? $('.roul-spin').disabled : null,
+      tape: tape && { id: tape.id, played: tape.played, n: tape.outcomes.length, bets: tape.bets, outcomes: tape.outcomes },
+      cur: cur && { i: cur.i, landed: cur.landed, pocket: cur.read.pocket, wake: cur.read.wake, page: cur.page },
+      bowl: bowl && bowl.debug(), mat: mat && { ...mat.debug(), rects: Object.fromEntries((st ? st.spots : []).map((s) => [s, mat.rectOf(s)])) },
+      kit: kit && kit.debug(), moments: moments && moments.debug(), deck: deck && { keys: deck.keys }, log: feelLog.slice(), rows: ROWS,
+    }),
+    /** Test seams for the checks: the same paths the mat and buttons take. */
+    dev: { place, setCount, press, clock, clearChips: () => { if (phase === 'bet' && !resume) { chips = {}; sync(); } } },
+  };
+}

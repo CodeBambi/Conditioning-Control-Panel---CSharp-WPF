@@ -37,7 +37,8 @@ await mkdir(OUT, { recursive: true });
 /* ---------------------------------------------------------------- 1. pure */
 const stations = normaliseStations(JSON.parse(readFileSync(join(BACKROOM, 'stations.json'), 'utf8')));
 ok(stations.length === 7, 'stations.json has seven fixture rows');
-ok(['counter', 'cards', 'roulette'].every((id) => stations.some((s) => s.id === id && s.state === 'soon')), 'counter, cards and roulette are soon');
+ok(['counter', 'cards'].every((id) => stations.some((s) => s.id === id && s.state === 'soon')), 'counter and cards are soon');
+ok(stations.some((s) => s.id === 'roulette' && s.state === 'live' && s.entry === 'stations/roulette/station.js'), 'the roulette is live on its own station');
 ok(stations.some((s) => s.id === 'wheel' && s.state === 'live' && s.entry === 'stations/wheel/station.js'), 'the wheel is live on its own station');
 ok(!stations.some((s) => s.id === 'scratcher'), 'no scratcher');
 const slots = stations.filter((s) => s.id === 'slot');
@@ -338,14 +339,14 @@ await sleep(300);
 }
 
 // 2e. a soon station: the dust-sheet card, no code
-await ev(`window.__backroom.scene.go(${row('roulette')})`);
+await ev(`window.__backroom.scene.go(${row('counter')})`);
 await sleep(150);
 await key('KeyE'); await key('KeyE', 'keyUp');
 for (let i = 0; i < 20 && !(await ev(`!!document.querySelector('.br-card-veil.is-soon')`)); i++) await sleep(100);
-ok(await ev(`!!document.querySelector('.br-card-veil.is-soon')`), 'the roulette shows its coming-soon card');
-ok((await posted('station-open')).every((m) => m.station !== 'roulette'), 'a soon station never posts station-open');
+ok(await ev(`!!document.querySelector('.br-card-veil.is-soon')`), 'the counter shows its coming-soon card');
+ok((await posted('station-open')).every((m) => m.station !== 'counter'), 'a soon station never posts station-open');
 await sleep(400);
-await shot('soon-roulette-card.png');
+await shot('soon-counter-card.png');
 await key('Escape');
 await sleep(200);
 ok(!(await ev(`!!document.querySelector('.br-card-veil')`)) && (await dbg()).running, 'Escape closes the card and the room walks again');
