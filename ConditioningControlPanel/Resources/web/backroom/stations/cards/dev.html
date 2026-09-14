@@ -67,7 +67,7 @@ if (q.has('hook')) { chip.hidden = false; paintChip(); }
 const screen = document.getElementById('screen'), sg = screen.getContext('2d');
 const imgs = PICS.map((u) => { const i = new Image(); i.src = u; return i; });
 const pic = (key) => { const m = /^g(\d+)$/.exec(key || ''); return m && !q.has('nopics') ? imgs[Number(m[1]) % imgs.length] : null; };
-const fx = { seen: 0, washes: [], gifs: [], level: 0, want: 0, wantAt: 0, last: performance.now() };
+const fx = { seen: new WeakSet(), washes: [], gifs: [], level: 0, want: 0, wantAt: 0, last: performance.now() };
 function drawPic(im, x, y, w, h) {
   if (!im || !im.naturalWidth) { sg.fillStyle = '#3a1f5c'; sg.fillRect(x, y, w, h); return; }
   const s = Math.max(w / im.naturalWidth, h / im.naturalHeight), dw = im.naturalWidth * s, dh = im.naturalHeight * s;
@@ -76,8 +76,8 @@ function drawPic(im, x, y, w, h) {
 function overlay(now) {
   const W = innerWidth, H = innerHeight, calm = host.ctx.intensity === 'calm' || host.ctx.reduced, K = calm ? 0.5 : 1, D = calm ? 0.6 : 1;
   if (screen.width !== W || screen.height !== H) { screen.width = W; screen.height = H; }
-  for (; fx.seen < host.fx.length; fx.seen++) {
-    const r = host.fx[fx.seen];
+  for (const r of host.fx) {   // by record, not index: host.clear() empties the list and an index would skip what comes next
+    if (fx.seen.has(r)) continue; fx.seen.add(r);
     if (!r.ack.fired.length) continue;
     if (r.fxId === 'fx.wash') fx.washes.push({ t0: now, color: (r.args && r.args.color) || '#9b6bff', k: ((r.args && r.args.strength) || 0.7) * K, im: pic(r.symbols && r.symbols[0]) });
     if (r.fxId === 'fx.gif_from') fx.gifs.push({ t0: now, from: r.args.from || { x: W / 2, y: H / 2, w: 8, h: 8 }, ms: (r.args.ms || 3400) * D, scale: r.args.scale || 1, im: pic(r.symbols && r.symbols[0]) });
