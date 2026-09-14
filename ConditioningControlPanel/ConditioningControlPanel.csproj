@@ -560,6 +560,15 @@
       Resources\web\arcademy\shell\recordsroom.demo.html;
       Resources\web\arcademy\games\**\smoke\**\*
     </ArcademyHarnessExclude>
+    <!-- Remix engine (Resources\web\remix, vendored from cclabs-site/remix for the Jackpot Remix
+         flash): its node tests ride along so the vendored copy stays checkable, but they are
+         dead weight in the installer. Same two-place rule as the harness pages above. -->
+    <RemixTestExclude>
+      Resources\web\remix\test\**\*
+    </RemixTestExclude>
+    <RemixTestExcludeAbs>
+      $(MSBuildProjectDirectory)\Resources\web\remix\test\**\*
+    </RemixTestExcludeAbs>
     <ArcademyHarnessExcludeAbs>
       $(MSBuildProjectDirectory)\Resources\web\arcademy\annex\demo.html;
       $(MSBuildProjectDirectory)\Resources\web\arcademy\vn\demo.html;
@@ -597,6 +606,7 @@
     <Content Include="Resources\web\**\*"
              Exclude="Resources\web\**\CLAUDE.md;Resources\web\**\CAPTCHA_*.md;Resources\web\**\BUILD_PLAN.md;
                       $(ArcademyHarnessExclude);
+                      $(RemixTestExclude);
                       $(ContentPackWebExclude)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
@@ -688,6 +698,7 @@
       <WebFiles Include="$(ProjectDir)Resources\web\**\*"
                 Exclude="$(ProjectDir)Resources\web\**\CLAUDE.md;$(ProjectDir)Resources\web\**\CAPTCHA_*.md;$(ProjectDir)Resources\web\**\BUILD_PLAN.md;
                          $(ContentPackWebExcludeAbs);
+                         $(RemixTestExcludeAbs);
                          $(ArcademyHarnessExcludeAbs)" />
       <SubAudioFiles Include="$(ProjectDir)Resources\sub_audio\**\*" />
       <AwarenessPresetFiles Include="$(ProjectDir)Resources\AwarenessPresets\**\*" />
