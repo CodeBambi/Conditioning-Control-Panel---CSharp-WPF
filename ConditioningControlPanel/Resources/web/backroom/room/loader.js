@@ -12,22 +12,32 @@
  * LAW VI: Back is live before open() resolves and while close() runs. close()
  * gets CLOSE_BUDGET_MS; a station that has not settled by then is destroyed
  * anyway, because nobody waits on a station to leave a room.
+ *
+ * Hypno v3 (CONTRACT 10.13): ctx.gates, ctx.onSettings, fx args with the token
+ * on the promise, fx-release, fx-tunnel and a media count. A settings
+ * subscription a station forgets is dropped when it closes.
  * ==========================================================================*/
 
 import * as bridge from '../bridge.js';
 
 export const CLOSE_BUDGET_MS = 420;
 export const REQUEST_TIMEOUT_MS = 6000;
+export const MEDIA_COUNT_MAX = 13;
 
 const withTimeout = (p, ms) => Promise.race([Promise.resolve(p).catch(() => {}), new Promise((r) => setTimeout(r, ms))]);
 
 /**
- * @param {Object} room  { layer, state, lex(key, fallback), onSp(fn), spReadout, spChanged(), chipSettle(),
- *                        standUp(), log(level,msg) }
+ * @param {Object} room  { layer, state, lex(key, fallback), onSp(fn), onSettings(fn), spReadout, spChanged(),
+ *                        chipSettle(), standUp(), log(level,msg) }
  */
 export function createLoader(room) {
   let current = null;   // { station, handle, root, kind }
   let seq = 0;
+
+  function dropSubs(subs) {
+    if (!subs) return;
+    for (const stop of Array.from(subs)) stop();
+  }
 
   function card(kind, station, title, body) {
     const root = document.createElement('div');
@@ -48,7 +58,7 @@ export function createLoader(room) {
     return root;
   }
 
-  function buildCtx(station, root, variant) {
+  function buildCtx(station, root, variant, subs) {
     const s = room.state;
     return {
       root,
@@ -66,16 +76,35 @@ export function createLoader(room) {
           return res;
         });
       },
-      fx(fxId, symbols) {
+      /** Fire an fx id. The ack promise carries its token at once (`p.token`) for fx-release. */
+      fx(fxId, symbols, args) {
         const token = bridge.mintId();
         const msg = { type: 'fx', token, fxId: String(fxId), station: station.id };
         if (Array.isArray(symbols)) msg.symbols = symbols.map(String);
-        return bridge.request(msg, 'fx-ack', (m) => m.token === token, REQUEST_TIMEOUT_MS,
+        if (args && typeof args === 'object' && !Array.isArray(args)) msg.args = args;
+        const p = bridge.request(msg, 'fx-ack', (m) => m.token === token, REQUEST_TIMEOUT_MS,
           { token, fired: [], skipped: [{ prim: String(fxId), why: 'unknown' }] });
+        p.token = token;
+        return p;
       },
-      media() {
+      /** Fade out what that fx token still holds on screen. No reply. */
+      fxRelease(token) {
+        if (typeof token !== 'string' || !token) return;
+        bridge.send({ type: 'fx-release', token, station: station.id });
+      },
+      /** Tunnel vision level 0..1. No reply; the kit throttles it to 10 a second. */
+      fxTunnel(level) {
+        const n = Number(level);
+        if (!Number.isFinite(n)) return;
+        bridge.send({ type: 'fx-tunnel', station: station.id, level: Math.round(Math.min(1, Math.max(0, n)) * 1000) / 1000 });
+      },
+      /** Deal media for this sit-down. `count` 1..13 (the host's default is 4). */
+      media(opts) {
         const reqId = bridge.mintId();
-        return bridge.request({ type: 'media-request', reqId, station: station.id }, 'media',
+        const msg = { type: 'media-request', reqId, station: station.id };
+        const count = opts && opts.count;
+        if (Number.isInteger(count) && count >= 1 && count <= MEDIA_COUNT_MAX) msg.count = count;
+        return bridge.request(msg, 'media',
           (m) => m.reqId === reqId, REQUEST_TIMEOUT_MS, { reqId, seed: 0, gifs: [], words: [], timeout: true });
       },
       sp: () => s.sp,
@@ -85,6 +114,16 @@ export function createLoader(room) {
       get reduced() { return s.reduced; },
       get motion() { return s.motion; },
       get intensity() { return s.intensity; },
+      /** The host's hypno toggles, frozen { flash, subliminal, spiral, brainDrain }, live on every read (10.13.A). */
+      get gates() { return s.gates; },
+      /** Subscribe to { motion, intensity, reduced, gates } on every settings frame. Returns an unsubscribe. */
+      onSettings(fn) {
+        if (typeof fn !== 'function' || typeof room.onSettings !== 'function') return () => {};
+        const off = room.onSettings(fn);
+        const stop = () => { subs.delete(stop); try { off(); } catch (e) { /* noop */ } };
+        subs.add(stop);
+        return stop;
+      },
       lex: (key, fallback) => room.lex(key, fallback),
       standUp: () => room.standUp(),
       /** { id, name, palette:{materialName: 'rrggbb'} | null } or null. Optional for a station to honour. */
@@ -109,13 +148,14 @@ export function createLoader(room) {
     root.className = 'br-station';
     root.dataset.station = station.id;
     room.layer.appendChild(root);
-    current = { station, handle: null, root, kind: 'live' };
+    const subs = new Set();
+    current = { station, handle: null, root, kind: 'live', subs };
     try {
       const mod = await import('../' + station.entry);
       if (my !== seq) return 'superseded';
       if (typeof mod.mount !== 'function') throw new Error('no mount export');
-      const handle = await mod.mount(buildCtx(station, root, extra && extra.variant));
-      if (my !== seq) { try { handle && handle.destroy && handle.destroy(); } catch (e) { /* noop */ } return 'superseded'; }
+      const handle = await mod.mount(buildCtx(station, root, extra && extra.variant, subs));
+      if (my !== seq) { dropSubs(subs); try { handle && handle.destroy && handle.destroy(); } catch (e) { /* noop */ } return 'superseded'; }
       current.handle = handle;
       bridge.send({ type: 'station-open', station: station.id });
       await (handle && typeof handle.open === 'function' ? handle.open() : null);
@@ -123,6 +163,7 @@ export function createLoader(room) {
     } catch (e) {
       if (my !== seq) return 'superseded';
       room.log('warn', 'station ' + station.id + ' failed: ' + ((e && e.message) || e));
+      dropSubs(subs);
       if (current && current.handle) {
         try { current.handle.destroy(); } catch (err) { /* noop */ }
         bridge.send({ type: 'station-close', station: station.id });
@@ -145,6 +186,7 @@ export function createLoader(room) {
       try { if (typeof c.handle.destroy === 'function') c.handle.destroy(); } catch (e) { room.log('warn', 'destroy threw: ' + e); }
       bridge.send({ type: 'station-close', station: c.station.id });
     }
+    dropSubs(c.subs);
     if (room.chipSettle) room.chipSettle();
     try { c.root.remove(); } catch (e) { /* noop */ }
   }
