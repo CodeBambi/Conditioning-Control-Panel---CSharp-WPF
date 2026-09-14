@@ -5193,5 +5193,12 @@
   "billboard_exclusives_line": "что сейчас можно попробовать бесплатно",
   "billboard_support_eyebrow": "если захотите",
   "billboard_support_title": "Поддержать проект",
-  "billboard_support_line": "ссылки, на которых всё это держится"
+  "billboard_support_line": "ссылки, на которых всё это держится",
+  "setting_bubble_motion": "Движение",
+  "tooltip_bubble_motion": "Как движутся пузыри. Стили, которые у вас есть, появляются здесь.",
+  "bubble_motion_float_up": "Всплытие",
+  "bubble_motion_rain": "Дождь",
+  "bubble_motion_spiral_in": "Спираль к центру",
+  "bubble_motion_mix": "Микс",
+  "fx_v2_badge": "v2"
 }

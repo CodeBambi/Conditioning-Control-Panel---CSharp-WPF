@@ -5186,5 +5186,12 @@
   "billboard_exclusives_line": "いま無料で試せるもの",
   "billboard_support_eyebrow": "よければ",
   "billboard_support_title": "プロジェクトを支援する",
-  "billboard_support_line": "これを続けさせているリンク"
+  "billboard_support_line": "これを続けさせているリンク",
+  "setting_bubble_motion": "動き",
+  "tooltip_bubble_motion": "バブルの動き方。所有しているスタイルがここに表示されます。",
+  "bubble_motion_float_up": "上昇",
+  "bubble_motion_rain": "雨",
+  "bubble_motion_spiral_in": "内向きスパイラル",
+  "bubble_motion_mix": "ミックス",
+  "fx_v2_badge": "v2"
 }

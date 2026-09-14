@@ -5195,5 +5195,12 @@
   "billboard_exclusives_line": "was du gerade kostenlos testen kannst",
   "billboard_support_eyebrow": "wenn du magst",
   "billboard_support_title": "Das Projekt unterstützen",
-  "billboard_support_line": "die Links, die das hier am Laufen halten"
+  "billboard_support_line": "die Links, die das hier am Laufen halten",
+  "setting_bubble_motion": "Bewegung",
+  "tooltip_bubble_motion": "Wie die Blasen unterwegs sind. Stile, die du besitzt, erscheinen hier.",
+  "bubble_motion_float_up": "Aufsteigen",
+  "bubble_motion_rain": "Regen",
+  "bubble_motion_spiral_in": "Spirale nach innen",
+  "bubble_motion_mix": "Mix",
+  "fx_v2_badge": "v2"
 }

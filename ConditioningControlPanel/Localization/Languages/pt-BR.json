@@ -5194,5 +5194,12 @@
   "billboard_exclusives_line": "o que dá para testar de graça agora",
   "billboard_support_eyebrow": "se você quiser",
   "billboard_support_title": "Apoie o projeto",
-  "billboard_support_line": "os links que mantêm isso de pé"
+  "billboard_support_line": "os links que mantêm isso de pé",
+  "setting_bubble_motion": "Movimento",
+  "tooltip_bubble_motion": "Como as bolhas se movem. Os estilos que você possui aparecem aqui.",
+  "bubble_motion_float_up": "Flutuar para cima",
+  "bubble_motion_rain": "Chuva",
+  "bubble_motion_spiral_in": "Espiral para dentro",
+  "bubble_motion_mix": "Mistura",
+  "fx_v2_badge": "v2"
 }

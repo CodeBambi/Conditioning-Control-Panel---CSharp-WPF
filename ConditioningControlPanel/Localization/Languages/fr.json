@@ -5195,5 +5195,12 @@
   "billboard_exclusives_line": "ce qui est gratuit à essayer maintenant",
   "billboard_support_eyebrow": "si tu veux",
   "billboard_support_title": "Soutenir le projet",
-  "billboard_support_line": "les liens qui font tenir tout ça"
+  "billboard_support_line": "les liens qui font tenir tout ça",
+  "setting_bubble_motion": "Mouvement",
+  "tooltip_bubble_motion": "Comment les bulles se déplacent. Les styles que vous possédez apparaissent ici.",
+  "bubble_motion_float_up": "Monter",
+  "bubble_motion_rain": "Pluie",
+  "bubble_motion_spiral_in": "Spirale vers le centre",
+  "bubble_motion_mix": "Mélange",
+  "fx_v2_badge": "v2"
 }
