@@ -138,11 +138,16 @@ public class BackRoomHypnoFxTests
     }
 
     [Fact]
-    public void Tunnel_GatedByBrainDrain_HalvedUnderCalm_StillAtOff()
+    public void Tunnel_GatedByTheRoomsTunnelSwitch_HalvedUnderCalm_StillAtOff()
     {
-        var (off, _, offSink) = Make(gates: FxGates.AllOn with { BrainDrain = false });
+        var (off, _, offSink) = Make(gates: FxGates.AllOn with { Tunnel = false });
         off.Tunnel("wheel", 0.9);
         Assert.Empty(offSink.Calls);
+
+        // 10.14: not Brain Drain any more.
+        var (drainOff, _, drainOffSink) = Make(gates: FxGates.AllOn with { BrainDrain = false });
+        drainOff.Tunnel("wheel", 0.9);
+        Assert.Equal("tunnel:0.9:False", Assert.Single(drainOffSink.Calls).Call);
 
         var (calm, _, calmSink) = Make(BackRoomFxIntensity.Calm);
         calm.Tunnel("cards", 0.75);
@@ -207,14 +212,14 @@ public class BackRoomHypnoFxTests
     }
 
     [Fact]
-    public void Tunnel_BrainDrainTurnedOffMidTunnel_CancelsAtOnce()
+    public void Tunnel_SwitchTurnedOffMidTunnel_CancelsAtOnce()
     {
         var gates = FxGates.AllOn;
         var clock = new FakeScheduler();
         var sink = new RecordingSink(clock);
         var fx = new BackRoomFx(sink, clock, () => new FxEnvironment(MotionLevel.Full, BackRoomFxIntensity.Normal, gates, BackRoomFxPlanTests.Woven));
         fx.Tunnel("wheel", 0.6);
-        gates = gates with { BrainDrain = false };
+        gates = gates with { Tunnel = false };
         fx.Tunnel(string.Empty, 0);
         fx.Tunnel("wheel", 0.6);
         Assert.Equal(new[] { "tunnel:0.6:False", "tunnel-cancel" }, sink.Calls.Select(c => c.Call));

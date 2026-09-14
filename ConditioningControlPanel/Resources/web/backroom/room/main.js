@@ -31,13 +31,17 @@ const ADS = [
   { file: 'focus-gaze', key: 'br_ad_focus_gaze', fallback: 'Focus Gaze' },
 ];
 
-/** CONTRACT 10.13.A: the host's hypno toggles. A missing frame or key reads as on (the host is the enforcer). */
+/** CONTRACT 10.13.A + 10.14: the host's hypno toggles and the room's own tunnel and melt switches. A missing frame or
+ * key reads as on (the host is the enforcer). */
 const readGates = (g) => {
   const q = g && typeof g === 'object' ? g : {};
-  return Object.freeze({ flash: q.flash !== false, subliminal: q.subliminal !== false, spiral: q.spiral !== false, brainDrain: q.brainDrain !== false });
+  return Object.freeze({ flash: q.flash !== false, subliminal: q.subliminal !== false, spiral: q.spiral !== false,
+    brainDrain: q.brainDrain !== false, tunnel: q.tunnel !== false, melt: q.melt !== false });
 };
+const INTENSITIES = ['calm', 'normal', 'full'];
+const readChoice = (v, fallback) => (INTENSITIES.includes(v) ? v : fallback);
 
-const state = { sp: 0, reduced: false, motion: 'full', intensity: 'normal', gates: readGates(null), lex: {}, open: null, suspended: false, userStill: false };
+const state = { sp: 0, reduced: false, motion: 'full', intensity: 'normal', intensityChoice: 'normal', gates: readGates(null), lex: {}, open: null, suspended: false, userStill: false };
 const spListeners = new Set();
 const settingsListeners = new Set();
 let scene = null, loader = null, hud = null, leaving = false, visiting = false;
@@ -110,7 +114,21 @@ function spChanged() {
 
 function paintMotion() {
   if (scene) scene.setStill(still());
-  if (hud) hud.motion(still(), forcedStill());
+  if (!hud) return;
+  hud.motion(still(), forcedStill());
+  hud.options({ intensityChoice: state.intensityChoice, forcedCalm: !!state.reduced, tunnel: state.gates.tunnel, melt: state.gates.melt });
+}
+
+/** The room's Options (10.14): tell the host and show the press at once; the host's settings frame has the last word. */
+function setOption(key, value) {
+  if (key === 'intensity') {
+    if (!INTENSITIES.includes(value)) return;
+    state.intensityChoice = value;
+  } else if (key === 'tunnel' || key === 'melt') {
+    state.gates = readGates({ ...state.gates, [key]: !!value });
+  } else return;
+  bridge.send({ type: 'room-option', key, value });
+  paintMotion();
 }
 
 function setSp(sp) {
@@ -140,6 +158,7 @@ async function returnToRoom() {
 async function back(reason) {
   if (leaving) return;
   if (loader && (loader.current || visiting)) { await returnToRoom(); return; }
+  if (hud && hud.optionsOpen) { hud.closeOptions(); return; }
   if (scene && scene.overview) { scene.setOverview(false); hud.overview(false); return; }
   leave(reason || 'back');
 }
@@ -224,6 +243,7 @@ async function start(init) {
     motion: String(init.motion || 'full'),
     intensity: String(init.intensity || 'normal'),
     gates: readGates(init.gates),
+    intensityChoice: readChoice(init.intensityChoice, readChoice(init.intensity, 'normal')),
     lex: (init.lex && typeof init.lex === 'object') ? init.lex : {},
     open: typeof init.open === 'boolean' ? init.open : null,
   });
@@ -236,6 +256,7 @@ async function start(init) {
     state.intensity = String(m.intensity || state.intensity);
     state.reduced = !!m.reduced;
     if (m.gates && typeof m.gates === 'object') state.gates = readGates(m.gates);
+    state.intensityChoice = readChoice(m.intensityChoice, state.intensityChoice);
     paintChrome();
     paintMotion();
     const frame = { motion: state.motion, intensity: state.intensity, reduced: state.reduced, gates: state.gates };
@@ -254,8 +275,9 @@ async function start(init) {
     onGo: (row) => { if (scene) { scene.go(row); hud.overview(false); } },
     onOverview: (on) => { if (scene) { scene.setOverview(on); hud.overview(scene.overview); } },
     onMotion: () => { if (forcedStill()) return; state.userStill = !state.userStill; paintMotion(); },
+    onOption: setOption,
   });
-  hud.motion(still(), forcedStill());
+  paintMotion();
 
   const stations = await readStations();
   if (leaving) return;

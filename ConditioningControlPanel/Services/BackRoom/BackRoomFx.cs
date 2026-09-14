@@ -18,11 +18,15 @@ public interface IBackRoomFxSink
     void Subliminal(string text);
     /// <summary><paramref name="level"/> is a fraction of the user's own brain drain intensity.</summary>
     void BrainDrain(int durationMs, double level, bool melt);
-    void GifFull(BackRoomGif gif, int durationMs, bool still);
+    // The picture primitives take `shown`: call it (on the UI thread) when the picture is actually on screen, never for
+    // a picture that is refused (no local file, a display change settling), fails to decode or is stopped first.
+    // The XP award keys off it (10.14).
+    void GifFull(BackRoomGif gif, int durationMs, bool still, Action shown);
     // Hypno v3 (10.13.B). GifFrom's rect is page CSS px, mapped at play time (null = the centre).
-    void Wash(FxRgb color, double peak, BackRoomGif? picture);
+    /// <summary><paramref name="shown"/> runs only for a wash WITH a picture, once that picture is on.</summary>
+    void Wash(FxRgb color, double peak, BackRoomGif? picture, Action shown);
     /// <returns>False when nothing will show (no local file), so the one-at-a-time slot frees at once.</returns>
-    bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still);
+    bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still, Action shown);
     /// <summary>Replaces a running one; a hold's <paramref name="durationMs"/> is the 20 s cap.</summary>
     void SpiralLoom(string gifPath, int durationMs, double alpha, bool hold, bool still);
     void ReleaseSpiralLoom();
@@ -48,6 +52,25 @@ public sealed record FxEnvironment(MotionLevel Motion, BackRoomFxIntensity Inten
     Func<string, string?>? SpiralSource = null, double SpiralOpacity = 0.85);
 
 /// <summary>
+/// XP for what the Back Room shows (CONTRACT 10.14: Back Room effects award XP like normal app effects), on the app's
+/// own award path. In normal play only two of the room's effects pay, and both keep paying from inside their service:
+/// a flash image (FlashService, 4 base XP per image shown without its sound, times the lucky flash roll, XPSource.Flash)
+/// and a subliminal (SubliminalService.FlashSubliminalCustom, 10 XP, XPSource.Subliminal). So flash-burst and the
+/// sub primitives are NOT paid here (no double count). The Hypno pictures that bypass FlashService are one flash
+/// image each: gif-full, gif-from and a wash with a picture. Spirals, Brain Drain (melt, haze), tunnel vision, the
+/// gif rain and the glitch wash pay nothing in normal play, so nothing here either. Idle suppression, the skill
+/// multiplier and the login gate all live inside ProgressionService.AddXP.
+/// </summary>
+public static class BackRoomFxXp
+{
+    /// <summary>FlashService's base per image with no flash sound playing (the room's pictures never play one).</summary>
+    public const int PictureXp = 4;
+
+    /// <summary>Base XP the dispatcher pays once a primitive has actually shown (the sink's <c>shown</c>), or null when it pays nothing itself.</summary>
+    public static int? For(FxPrim prim) => prim is FxPrim.GifFull or FxPrim.GifFrom or FxPrim.Wash ? PictureXp : null;
+}
+
+/// <summary>
 /// The effect dispatcher (C3, H1). Resolves an fx id through <see cref="BackRoomFxPlan"/>, admits it
 /// through the hero gate, paces every repeated onset under the 6 Hz ceiling, and schedules the
 /// primitives on the sink. The ack goes back synchronously: what will play, and every skip.
@@ -62,6 +85,7 @@ public sealed class BackRoomFx : IBackRoomFx
     private readonly IBackRoomFxSink _sink;
     private readonly IFxScheduler _scheduler;
     private readonly Func<FxEnvironment> _env;
+    private readonly Action<int>? _xp;
     private readonly Random _rng;
     private readonly FxHeroGate _gate;
     private readonly FxStrobePacer _pacer = new();
@@ -77,11 +101,13 @@ public sealed class BackRoomFx : IBackRoomFx
     private (double Level, bool Still)? _tunnelNext;
     private IDisposable? _tunnelTimer;
 
-    public BackRoomFx(IBackRoomFxSink sink, IFxScheduler scheduler, Func<FxEnvironment> env, Random? rng = null)
+    /// <param name="xp">Pays a primitive's base XP (<see cref="BackRoomFxXp"/>) once it has shown. Null = no XP (tests, rig).</param>
+    public BackRoomFx(IBackRoomFxSink sink, IFxScheduler scheduler, Func<FxEnvironment> env, Random? rng = null, Action<int>? xp = null)
     {
         _sink = sink;
         _scheduler = scheduler;
         _env = env;
+        _xp = xp;
         _rng = rng ?? new Random();
         _gate = new FxHeroGate(() => _scheduler.NowMs);
     }
@@ -223,17 +249,31 @@ public sealed class BackRoomFx : IBackRoomFx
                 break;
             case FxPrim.GifFull:
                 var gif = planned.Gif!;
-                At(at, () => _sink.GifFull(gif, s.DurationMs, s.Still), hold);
+                At(at, () => _sink.GifFull(gif, s.DurationMs, s.Still, PayOnce(s.Prim)), hold);
                 break;
             case FxPrim.Wash:
-                At(at, () => _sink.Wash(s.Look!.Color, s.Level, planned.Gif), hold);
+                At(at, () => _sink.Wash(s.Look!.Color, s.Level, planned.Gif, PayOnce(s.Prim)), hold);
                 break;
             case FxPrim.GifFrom:
                 var grown = planned.Gif!;
                 long until = at + s.DurationMs;
-                At(at, () => { if (!_sink.GifFrom(grown, s.Look!.From, s.DurationMs, s.Look.Scale, s.Level, s.Still)) FreeGifFrom(until); }, hold, until);
+                At(at, () => { if (!_sink.GifFrom(grown, s.Look!.From, s.DurationMs, s.Look.Scale, s.Level, s.Still, PayOnce(s.Prim))) FreeGifFrom(until); }, hold, until);
                 break;
         }
+    }
+
+    /// <summary>One shown picture, one award (10.14): the sink's <c>shown</c> for one onset. Made inside the onset, so a
+    /// cancelled or busy one never pays, and it pays at most once however often it is called.</summary>
+    private Action PayOnce(FxPrim prim)
+    {
+        int paid = 0;
+        return () =>
+        {
+            if (System.Threading.Interlocked.Exchange(ref paid, 1) != 0) return;
+            if (_xp == null || BackRoomFxXp.For(prim) is not { } amount) return;
+            try { _xp(amount); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "[BackRoom] fx xp failed"); }
+        };
     }
 
     private void Own(ref string? owner, Hold? hold)
@@ -339,16 +379,16 @@ public sealed class BackRoomFx : IBackRoomFx
 
     // ============================ tunnel (10.13.B) ============================
 
-    /// <summary><c>fx-tunnel</c>: gated by BrainDrain, halved under Calm, at most 10 a second.</summary>
+    /// <summary><c>fx-tunnel</c>: gated by the room's tunnel switch (10.14, not Brain Drain), halved under Calm, at most 10 a second.</summary>
     public void Tunnel(string station, double level)
     {
         if (!double.IsFinite(level)) return;
         FxEnvironment env;
         try { env = _env(); }
         catch (Exception ex) { App.Logger?.Warning(ex, "[BackRoom] fx environment failed"); return; }
-        if (!env.Gates.BrainDrain)
+        if (!env.Gates.Tunnel)
         {
-            // The toggle went off under a running tunnel: gone now, not after the 1500 ms self-release.
+            // The switch went off under a running tunnel: gone now, not after the 1500 ms self-release.
             bool live;
             lock (_lock) live = _tunnelStation != null;
             if (live) CancelTunnel();

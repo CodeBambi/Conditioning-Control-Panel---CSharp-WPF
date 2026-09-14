@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -11,8 +12,9 @@ namespace ConditioningControlPanel.Services.BackRoom.Overlays;
 
 /// <summary>
 /// Hypno v3 <c>spiral-loom</c> (CONTRACT 10.13.B, owner law: every Back Room spiral is Loom-woven): one
-/// woven spiral GIF as one field over the whole virtual screen (UniformToFill, so on a multi-monitor
-/// desktop its eye sits at the middle of the whole desktop), in over 800 ms, out over 1200 ms when its
+/// woven spiral GIF as one field PER SCREEN (10.14, like the tunnel: UniformToFill, centred, inside a clipped cell the
+/// size of that monitor, so every screen has its own eye at its own centre; cells come from physical bounds
+/// through this window's own DPI, so a mixed-DPI desktop stays aligned), in over 800 ms, out over 1200 ms when its
 /// time or the 20 s hold cap runs out or it is released. A new spiral replaces the running one, which
 /// fades out on its own layer while the new one fades in; a third layer keeps a quick third spiral from
 /// cutting a fade short. Section 4's spiral-full plays here too.
@@ -33,7 +35,12 @@ internal sealed class BackRoomLoomSpiralOverlay : BackRoomOverlayWindow
 
     private sealed class Layer
     {
-        public readonly Image Image = new() { Stretch = Stretch.UniformToFill, IsHitTestVisible = false, Opacity = 0 };
+        /// <summary>The layer's fade: one opacity over every screen's cell.</summary>
+        public readonly Canvas Root = new() { IsHitTestVisible = false, Opacity = 0 };
+        /// <summary>One image per screen, all playing the same decoded frames.</summary>
+        public readonly List<Image> Images = new();
+        public List<BitmapSource>? Frames;
+        public TimeSpan Delay;
         public object? Token;
         public string? Path;
         public bool Still;
@@ -46,12 +53,13 @@ internal sealed class BackRoomLoomSpiralOverlay : BackRoomOverlayWindow
 
     private readonly Layer[] _layers = { new(), new(), new() };
     private int _current;
+    private IReadOnlyList<PxRect>? _cells;
     private (string Path, List<BitmapSource> Frames, TimeSpan Delay)? _decoded;
     private readonly HashSet<string> _decoding = new(StringComparer.OrdinalIgnoreCase);
 
     private BackRoomLoomSpiralOverlay() : base(frameMs: 33, zRank: 0)
     {
-        foreach (var l in _layers) Stage.Children.Add(l.Image);
+        foreach (var l in _layers) Stage.Children.Add(l.Root);
     }
 
     public static void Show(string gifPath, int durationMs, double alpha, bool still) => OnUi(() =>
@@ -76,7 +84,7 @@ internal sealed class BackRoomLoomSpiralOverlay : BackRoomOverlayWindow
         ReleaseCurrent();
         // An idle layer if there is one, else the faintest fading one (never a cut on a bright layer).
         var others = _layers.Where((_, i) => i != _current).ToList();
-        var layer = others.FirstOrDefault(l => !l.Active) ?? others.OrderBy(l => l.Image.Opacity).First();
+        var layer = others.FirstOrDefault(l => !l.Active) ?? others.OrderBy(l => l.Root.Opacity).First();
         _current = Array.IndexOf(_layers, layer);
         End(layer);
         var token = layer.Token = new object();
@@ -152,19 +160,52 @@ internal sealed class BackRoomLoomSpiralOverlay : BackRoomOverlayWindow
 
     private void Attach(Layer layer, List<BitmapSource> frames, TimeSpan delay)
     {
-        PlayFrames(layer.Image, frames, delay, layer.Still);
+        layer.Frames = frames;
+        layer.Delay = delay;
+        foreach (var img in layer.Images) PlayFrames(img, frames, delay, layer.Still);
         // The fades count from the first frame on screen, so a slow decode never eats the fade in.
         layer.StartedAt = Environment.TickCount64;
     }
 
+    /// <summary>One clipped cell per monitor in every layer, checked on each start and on a DPI change. Unchanged cells
+    /// keep the images (a fading spiral never restarts its loop under a new one); changed ones are rebuilt, and a layer
+    /// already playing restarts its frames on the new images.</summary>
     protected override void OnRescaled()
     {
-        var surface = Surface;
+        var cells = BackRoomOverlayMath.ScreenCells(BackRoomOverlayScreens.All(), VirtualPx, PxPerDip);
+        if (_cells != null && _cells.SequenceEqual(cells)) return;
+        _cells = cells;
         foreach (var l in _layers)
         {
-            l.Image.Width = surface.W;
-            l.Image.Height = surface.H;
+            foreach (var img in l.Images) ClearPicture(img);
+            l.Root.Children.Clear();
+            l.Images.Clear();
+            foreach (var c in cells)
+            {
+                var (cell, img) = BuildCell(c);
+                l.Root.Children.Add(cell);
+                l.Images.Add(img);
+                if (l.Active && l.Frames is { } f) PlayFrames(img, f, l.Delay, l.Still);
+            }
         }
+    }
+
+    /// <summary>One monitor's cell: a clipped Grid at the monitor's place and size, its Image at UniformToFill and
+    /// CENTRED in it. The Image must carry no Width/Height of its own: WPF caps the render size at an explicit size and
+    /// aligns the scaled-up picture from the top-left, so a weave whose shape differs from the monitor's (a square or
+    /// tall Loom weave, a 16:10 or 21:9 or portrait screen) would be cropped from its corner, the eye off centre.</summary>
+    internal static (Grid Cell, Image Image) BuildCell(PxRect c)
+    {
+        var img = new Image
+        {
+            Stretch = Stretch.UniformToFill, IsHitTestVisible = false,
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+        };
+        var cell = new Grid { Width = c.W, Height = c.H, ClipToBounds = true, IsHitTestVisible = false };
+        cell.Children.Add(img);
+        Canvas.SetLeft(cell, c.X);
+        Canvas.SetTop(cell, c.Y);
+        return (cell, img);
     }
 
     private void ReleaseCurrent()
@@ -188,7 +229,7 @@ internal sealed class BackRoomLoomSpiralOverlay : BackRoomOverlayWindow
             double age = nowMs - l.StartedAt;
             double? released = l.ReleasedAt is { } r ? Math.Max(0, r - l.StartedAt) : null;
             if (BackRoomOverlayMath.SpiralDone(age, l.HoldMs, released)) { End(l); continue; }
-            l.Image.Opacity = BackRoomOverlayMath.SpiralEnvelope(age, l.HoldMs, released) * l.Alpha;
+            l.Root.Opacity = BackRoomOverlayMath.SpiralEnvelope(age, l.HoldMs, released) * l.Alpha;
             any = true;
         }
         return any;
@@ -201,10 +242,14 @@ internal sealed class BackRoomLoomSpiralOverlay : BackRoomOverlayWindow
         l.Path = null;
         l.StartedAt = 0;
         l.ReleasedAt = null;
-        l.Image.Opacity = 0;
-        l.Image.BeginAnimation(Image.SourceProperty, null);
-        l.Image.Source = null;
+        l.Frames = null;
+        l.Root.Opacity = 0;
+        foreach (var img in l.Images) ClearPicture(img);
     }
 
-    protected override void OnIdleHidden() => _decoded = null;
+    protected override void OnIdleHidden()
+    {
+        _decoded = null;
+        _cells = null;   // re-read the monitors next time
+    }
 }
