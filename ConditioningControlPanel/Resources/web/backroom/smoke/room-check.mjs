@@ -23,6 +23,8 @@ import { tmpdir } from 'node:os';
 import { join, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { START, normaliseStations, blocked, reachable, nearestStation, facing } from '../room/walk.js';
+import { bellLines, ROTATE_MS } from '../room/bell.js';
+import { BELL_FIXTURE } from './mock-bell.js';
 
 let fails = 0;
 const ok = (c, what) => { if (!c) { console.error('FAIL ' + what); fails++; } else console.log('  ok  ' + what); };
@@ -97,9 +99,28 @@ const server = createServer(async (req, res) => {
 });
 await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
 
-/* The fake host. `?reduced=1` and `?calm=1` shape init; `?pictures=1` deals an animated GIF, a still WebP and a fallback. */
+/* The fake host. `?reduced=1` and `?calm=1` shape init; `?pictures=1` deals an animated GIF, a still WebP and a fallback.
+ * The floor bell (10.16.B) is answered from smoke/mock-bell.js's fixture, resolved against the page clock. The check
+ * drives it through `window.__bell` (reads, opts, optIn, mustHit, refuse) and `?bell=off` empties the list. */
 const FAKE_HOST = `(() => {
   const q = new URLSearchParams(location.search);
+  window.__bell = { reads: 0, opts: [], optIn: false, mustHit: q.get('musthit') === '1', open: true, refuse: null,
+    rows: q.get('bell') === 'off' ? [] : ${JSON.stringify(BELL_FIXTURE)} };
+  const bellBody = (op, body) => {
+    const b = window.__bell;
+    if (op === 'state') {
+      b.reads++;
+      return { ok: true, open: b.open, optIn: b.optIn, visit: { day: Math.floor(Date.now() / 86400000), comp: 0 },
+        jackpot: { mustHit: b.mustHit }, entries: b.rows.map((e) => Object.assign({}, e, { t: Date.now() + e.t })) };
+    }
+    if (op === 'opt') {
+      b.opts.push(body);
+      if (typeof (body && body.on) !== 'boolean') return { ok: false, reason: 'bad_input' };
+      b.optIn = body.on;
+      return { ok: true, optIn: b.optIn };
+    }
+    return { ok: false, reason: 'bad_op' };
+  };
   const listeners = [];
   const emit = (data) => setTimeout(() => listeners.forEach((fn) => fn({ data })), 0);
   window.__hostEmit = emit;
@@ -114,7 +135,11 @@ const FAKE_HOST = `(() => {
         intensity: reduced || q.get('calm') === '1' ? 'calm' : 'normal', lang: 'en',
         lex: { br_back: 'Back', br_balance: 'SP', br_station_slot_rose: 'Candy Rose', br_soon_body: 'Under a dust sheet for now. This one opens soon.' },
         stations: ['slot'], open: null });
-      if (m.type === 'station-request') emit({ type: 'station-result', reqId: m.reqId, ok: true, status: 200, body: { ok: true, sp: 57 } });
+      if (m.type === 'station-request') {
+        if (m.station === 'bell' && window.__bell.refuse) { window.__bell.reads++; emit({ type: 'station-result', reqId: m.reqId, ok: false, status: 0, reason: window.__bell.refuse }); }
+        else emit({ type: 'station-result', reqId: m.reqId, ok: true, status: 200,
+          body: m.station === 'bell' ? bellBody(m.op, m.body) : { ok: true, sp: 57 } });
+      }
       if (m.type === 'media-request') emit({ type: 'media', reqId: m.reqId, seed: 1, words: [],
         gifs: q.get('pictures') === '1' ? [{ key: 'g0', url: '/dtrh/assets/bubbles/effects/spirals/sp6.gif', w: 0, h: 0, src: 'pool' },
           { key: 'g2', url: '/backroom/room/assets/ads/dtrh.webp', w: 1280, h: 720, src: 'pool' },
@@ -412,7 +437,115 @@ const f1 = (await dbg()).animation.frames;
 ok(f1 - f0 >= 5 && f1 - f0 <= 13, `in view it plays, capped: ${f1 - f0} frames in 1 s (max 12)`);
 await shot('wall-picture-from-feed.png');
 
-// 2j. Escape in the empty room leaves
+// 2j. THE FLOOR BELL (CONTRACT 10.16.B) and MUST HIT on the room's jackpot chip (10.16.E)
+{
+  const bellText = () => ev(`document.querySelector('.br-bell span').textContent`);
+  const bellShown = () => ev(`!document.querySelector('.br-bell').hidden`);
+  const vis = () => ev(`getComputedStyle(document.querySelector('.br-bell')).visibility`);
+  const reads = () => ev(`window.__bell.reads`);
+  const labels = async () => (await dbg()).labels;
+  const at = Date.now();
+  const want = bellLines(BELL_FIXTURE.map((e) => ({ ...e, t: at + e.t })), at, (k, f) => f);
+
+  await boot(1280, 720);
+  ok(await reads() === 1, `the room reads the bell once on open (reads ${await reads()})`);
+  ok(await bellShown(), 'the ticker shows a line');
+  ok(await bellText() === want[0], `the newest entry first: "${await bellText()}"`);
+  ok(await ev(`window.__backroom.hud.bellDebug().lines.length`) === want.length,
+    `${want.length} printable lines off the ${BELL_FIXTURE.length} the mock sent (the unknown station is dropped)`);
+  await shot('bell-ticker.png');
+
+  // the 8 s rotation, and nothing it does is a request: two consecutive turns, timed in the page
+  const turns = await ev(`(async () => {
+    const h = window.__backroom.hud, out = [];
+    let a = h.bellDebug().at, t = performance.now();
+    for (let i = 0; i < 500 && out.length < 2; i++) {
+      await new Promise((r) => setTimeout(r, 40));
+      const b = h.bellDebug().at;
+      if (b !== a) { const n = performance.now(); out.push({ gap: Math.round(n - t), at: b, text: h.bellDebug().text }); t = n; a = b; }
+    }
+    return out; })()`);
+  ok(turns.length === 2 && Math.abs(turns[1].gap - ROTATE_MS) < 400,
+    `the line turns every ${ROTATE_MS} ms (measured ${turns.map((x) => x.gap).join(', ')} ms)`);
+  ok(turns.length === 2 && turns.every((x) => want[x.at] === x.text), 'and it walks the entries newest first');
+  ok(await reads() === 1, 'the rotation never asks the server for anything');
+
+  // never while seated, and a refresh after each station close
+  await ev(`window.__backroom.scene.go(${row('slot:violet')})`);
+  await sleep(150);
+  await key('KeyE'); await key('KeyE', 'keyUp');
+  for (let i = 0; i < 40 && !(await ev(`!!window.__backroom.loader.current`)); i++) await sleep(100);
+  ok(await vis() === 'hidden', 'the bell is hidden while a station holds the screen');
+  await ev(`window.__backroom.refreshBell('while-seated')`);
+  await sleep(400);
+  ok(await reads() === 1, 'and a read asked for while seated is refused, not sent');
+  await key('Escape');
+  for (let i = 0; i < 40 && (await reads()) === 1; i++) await sleep(100);
+  ok(await reads() === 2, 'closing the station reads the bell again');
+  ok(await bellShown() && (await bellText()) === want[0], 'the ticker is back on the newest line');
+
+  // the room view hides it, exactly as it hides the Visit prompt
+  await key('KeyM'); await key('KeyM', 'keyUp');
+  await sleep(300);
+  ok(await vis() === 'hidden', 'the room view hides the bell');
+  await key('KeyM'); await key('KeyM', 'keyUp');
+  await sleep(300);
+  ok(await vis() === 'visible', 'and walking shows it again');
+
+  // the Options pill, and the opt-in posting bell/opt
+  ok(await ev(`document.querySelectorAll('.br-nav .br-pill').length === 3`), 'a third nav pill: Options');
+  await ev(`document.querySelector('.br-nav .br-pill:nth-child(3)').click()`);
+  await sleep(200);
+  ok(await ev(`!document.querySelector('.br-options').hidden`), 'it opens the Options panel');
+  ok(await ev(`document.querySelector('.br-options .br-option span').textContent === 'Show my name on the floor bell'`),
+    'whose first row is the floor bell opt-in');
+  ok(await ev(`document.querySelector('.br-options input[data-option="bellName"]').checked === false`), 'off by default');
+  await shot('room-options-panel.png');
+  await ev(`document.querySelector('.br-options input[data-option="bellName"]').click()`);
+  for (let i = 0; i < 30 && !(await ev(`window.__bell.opts.length`)); i++) await sleep(100);
+  ok(await ev(`JSON.stringify(window.__bell.opts) === '[{"on":true}]'`), 'ticking it posts bell/opt { on: true } once');
+  ok(await ev(`window.__bell.optIn === true`), 'and the server holds the flag');
+  await ev(`document.querySelector('.br-options input[data-option="bellName"]').click()`);
+  for (let i = 0; i < 30 && (await ev(`window.__bell.opts.length`)) < 2; i++) await sleep(100);
+  ok(await ev(`window.__bell.optIn === false && window.__bell.opts.length === 2`), 'unticking it posts { on: false }');
+
+  // MUST HIT: the room's bell line and the wheel fixture's screen (10.16.E)
+  ok((await labels())['wheel/status_screen'] === 'YOUR DAILY DETOUR', 'the wheel fixture reads its everyday label');
+  await ev(`window.__bell.mustHit = true`);
+  await ev(`window.__backroom.refreshBell('must-hit')`);
+  for (let i = 0; i < 30 && (await labels())['wheel/status_screen'] !== 'MUST HIT'; i++) await sleep(100);
+  ok((await labels())['wheel/status_screen'] === 'MUST HIT', "the room's jackpot chip reads MUST HIT");
+  ok(await bellText() === 'The pot has to fall today', 'and the bell carries it as a standing first line');
+  ok(await ev(`window.__backroom.hud.bellDebug().lines[0] === 'The pot has to fall today'`), 'first of the rotation');
+  await shot('room-must-hit.png');
+  await ev(`window.__bell.mustHit = false`);
+  await ev(`window.__backroom.refreshBell('pot-taken')`);
+  for (let i = 0; i < 30 && (await labels())['wheel/status_screen'] === 'MUST HIT'; i++) await sleep(100);
+  ok((await labels())['wheel/status_screen'] === 'YOUR DAILY DETOUR', 'the pot taken puts the everyday label back');
+  ok(await bellText() === want[0], 'and the standing line is gone from the ticker');
+
+  // a refusal keeps the lines the page has (the wheel's soft convention, 10.16.B)
+  const held = await bellText(), before = await reads();
+  await ev(`window.__bell.refuse = 'timeout'`);
+  await ev(`window.__backroom.refreshBell('refused')`);
+  for (let i = 0; i < 30 && (await reads()) === before; i++) await sleep(100);
+  ok((await reads()) === before + 1 && (await bellText()) === held, 'a refused read is sent and changes nothing on screen');
+  await ev(`window.__bell.refuse = null`);
+
+  // an empty bell says nothing at all
+  await boot(1280, 720, '?bell=off');
+  ok(!(await bellShown()) && (await reads()) === 1, 'an empty bell shows no line, and still only one read');
+
+  // reduced motion and Calm keep the rotation, at 0 ms (10.16.B)
+  await boot(1280, 720, '?calm=1');
+  ok(await bellShown(), 'Calm still shows the bell');
+  ok(await ev(`document.documentElement.classList.contains('br-still')`), 'the room is still');
+  ok(await ev(`getComputedStyle(document.querySelector('.br-bell span')).animationName === 'none'`),
+    'and the line cross-fades in 0 ms instead of 200');
+  await boot(1280, 720);
+}
+
+// 2l. Escape in the empty room leaves
 await key('Escape');
 await sleep(200);
 ok((await posted('exit')).some((m) => m.reason === 'key') && (await posted('exit-done')).length === 1, 'Escape in the room posts exit (key) and exit-done');

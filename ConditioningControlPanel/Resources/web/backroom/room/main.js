@@ -15,6 +15,12 @@
  *   Back / Escape in the room view     -> back to walking.
  *   Back / Escape in the room          -> `exit`, then `exit-done` once settled.
  *   host `close` (app exit, panic)     -> settle inside 300 ms, `exit-done`.
+ *
+ * THE FLOOR BELL (CONTRACT 10.16.B). `GET bell/state` on room open and again
+ * after each station close. NEVER polled, and never while a station holds the
+ * screen: the rotation in hud.js is a text timer that makes no request. The
+ * same reply carries the opt-in for the Options panel and, when the server room
+ * lane sends it, the wheel's must-hit flag (10.16.E).
  * ==========================================================================*/
 
 import * as bridge from '../bridge.js';
@@ -24,7 +30,10 @@ import { createLoader } from './loader.js';
 import { createHud } from './hud.js';
 
 const PAGE_SETTLE_MS = 300;
+const BELL_TIMEOUT_MS = 6000;
 const LABEL_FALLBACK = { br_room_label_jackpot: 'A little luck', br_room_label_status: 'Pull me', br_room_label_wheel_status: 'Your daily detour' };
+/** The wheel fixture's own screen, the room's jackpot chip while the pot must fall (10.16.E). */
+const WHEEL_SCREEN = Object.freeze({ key: 'wheel', node: 'status_screen', key_off: 'br_room_label_wheel_status' });
 const ADS = [
   { file: 'arcademy', key: 'br_ad_arcademy', fallback: 'The Arcademy' },
   { file: 'dtrh', key: 'br_ad_dtrh', fallback: 'Down the Rabbit Hole' },
@@ -38,6 +47,8 @@ const readGates = (g) => {
 };
 
 const state = { sp: 0, reduced: false, motion: 'full', intensity: 'normal', gates: readGates(null), lex: {}, open: null, suspended: false, userStill: false };
+/** The floor bell: what the last `bell/state` said. Never a timer, never a poll. */
+const bell = { entries: [], optIn: false, mustHit: false, fetching: false, fetches: 0 };
 const spListeners = new Set();
 const settingsListeners = new Set();
 let scene = null, loader = null, hud = null, leaving = false, visiting = false;
@@ -134,6 +145,7 @@ async function returnToRoom() {
   if (leaving || visiting) return;
   hud.hideWhileVisiting(false);
   if (scene) scene.release();
+  refreshBell('station-close');   // the only other time the bell is read (10.16.B)
 }
 
 /** Back, from anywhere. A station closes first, then the room view; an empty room is left. */
@@ -145,6 +157,7 @@ async function back(reason) {
 }
 
 async function settle() {
+  if (hud) hud.stop();
   if (scene) scene.halt();
   if (loader) await loader.close(PAGE_SETTLE_MS - 60);
   bridge.send({ type: 'exit-done' });
@@ -210,6 +223,69 @@ async function readStations() {
   }
 }
 
+/* --------------------------------------------------------------- THE FLOOR BELL
+ * CONTRACT 10.16.B. The room is the only caller: `GET bell/state` on room open
+ * and after each station close, and nothing else. `seated()` is the whole fetch
+ * policy, so a station holding the screen never costs a request. */
+
+const seated = () => visiting || !!(loader && loader.current);
+
+/** The relay, under the station id `bell` (host Ops row: GET state, POST opt). */
+function bellRequest(op, body) {
+  const reqId = bridge.mintId();
+  return bridge.request(
+    { type: 'station-request', reqId, station: 'bell', op, body: body || {} },
+    'station-result', (m) => m.reqId === reqId, BELL_TIMEOUT_MS);
+}
+
+/** The wheel fixture's screen and the bell's standing line, both off `bell.mustHit` (10.16.E). */
+function paintMustHit() {
+  if (hud) hud.bellStanding(bell.mustHit ? lex('br_wheel_must_hit_room', 'The pot has to fall today') : null);
+  if (!scene || typeof scene.setLabel !== 'function') return;
+  scene.setLabel(WHEEL_SCREEN.key, WHEEL_SCREEN.node,
+    bell.mustHit ? lex('br_wheel_must_hit', 'MUST HIT') : lex(WHEEL_SCREEN.key_off, LABEL_FALLBACK[WHEEL_SCREEN.key_off]));
+}
+
+function paintOptions() {
+  if (!hud) return;
+  hud.options([
+    { key: 'bellName', label: 'br_bell_optin', fallback: 'Show my name on the floor bell', checked: bell.optIn, onChange: (on) => setBellOptIn(on) },
+  ]);
+}
+
+/** Read the bell. Refuses itself while seated (Law: never a request behind a station). */
+async function refreshBell(why) {
+  if (leaving || seated() || bell.fetching) return;
+  bell.fetching = true;
+  bell.fetches++;
+  try {
+    const res = await bellRequest('state', {});
+    const b = res && res.ok && res.body && typeof res.body === 'object' ? res.body : null;
+    if (!b || b.ok === false) return;   // closed, too_fast, offline: keep the lines we have
+    if (Array.isArray(b.entries)) bell.entries = b.entries;
+    bell.optIn = b.optIn === true;
+    bell.mustHit = !!(b.jackpot && b.jackpot.mustHit === true);
+    if (leaving || !hud) return;
+    hud.bell(bell.entries);
+    paintOptions();
+    paintMustHit();
+  } catch (e) {
+    bridge.log('warn', 'bell ' + (why || '') + ' threw: ' + ((e && e.message) || e));
+  } finally {
+    bell.fetching = false;
+  }
+}
+
+/** The opt-in row. The tick goes on at once and the server's answer puts it back if it refuses. */
+async function setBellOptIn(on) {
+  const want = !!on;
+  bell.optIn = want;
+  const res = await bellRequest('opt', { on: want });
+  const b = res && res.ok && res.body && typeof res.body === 'object' ? res.body : null;
+  bell.optIn = b && b.ok !== false ? b.optIn === true : !want;
+  if (hud) hud.option('bellName', bell.optIn);
+}
+
 /** The wall pictures' deal, under its own station id so it never replaces a sit-down deal. */
 function media() {
   const reqId = bridge.mintId();
@@ -254,8 +330,10 @@ async function start(init) {
     onGo: (row) => { if (scene) { scene.go(row); hud.overview(false); } },
     onOverview: (on) => { if (scene) { scene.setOverview(on); hud.overview(scene.overview); } },
     onMotion: () => { if (forcedStill()) return; state.userStill = !state.userStill; paintMotion(); },
+    onOptions: () => {},
   });
   hud.motion(still(), forcedStill());
+  paintOptions();
 
   const stations = await readStations();
   if (leaving) return;
@@ -273,7 +351,7 @@ async function start(init) {
     log: (level, msg) => bridge.log(level, msg),
   });
   // Test seam for the smoke checks (never read by the room itself).
-  window.__backroom = { state, stations, loader, back, lex, visit, get scene() { return scene; } };
+  window.__backroom = { state, stations, loader, back, lex, visit, bell, refreshBell, get hud() { return hud; }, get scene() { return scene; } };
 
   try {
     scene = await createScene({
@@ -301,6 +379,8 @@ async function start(init) {
   if (state.suspended) scene.pause(true);
   paintMotion();
   hud.ready();
+  paintMustHit();
+  refreshBell('room-open');
   document.documentElement.classList.add('br-ready');
   bridge.log('info', 'room up: ' + stations.length + ' fixtures, ' + stations.filter((s) => s.state === 'live').length
     + ' live, built in ' + Math.round(scene.buildMs) + ' ms');
