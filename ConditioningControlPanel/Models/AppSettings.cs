@@ -131,6 +131,20 @@ namespace ConditioningControlPanel.Models
     }
 
     /// <summary>
+    /// Flashes v2 (Back Room prizes): how a compositor flash moves while it is up. Still is the
+    /// base; DriftBounce and Pendulum are owned styles (Services/Prizes/PrizeGrants); Mix rolls
+    /// per flash among Still plus whatever is owned. Ownership is never read from settings: an
+    /// unowned pick (synced profile) plays as Still. See Services/Flash/FlashMotion.cs.
+    /// </summary>
+    public enum FlashMotionStyle
+    {
+        Still,
+        DriftBounce,
+        Pendulum,
+        Mix
+    }
+
+    /// <summary>
     /// How the ambient dashboard bubbles travel (Back Room prize styles). FloatUp is the free
     /// base; Rain and SpiralIn are owned styles; Mix rolls per bubble among FloatUp plus the
     /// owned styles. Ownership is never read from here: an unowned pick behaves as FloatUp
@@ -1205,6 +1219,15 @@ namespace ConditioningControlPanel.Models
         {
             get => _flashSolidMode;
             set { _flashSolidMode = value; OnPropertyChanged(); }
+        }
+
+        private FlashMotionStyle _flashMotionStyle = FlashMotionStyle.Still;
+        /// <summary>Flashes v2 motion picker. Compositor path only; resolved per spawn through FlashMotion.Resolve.</summary>
+        [JsonProperty("FlashMotionStyle")]
+        public FlashMotionStyle FlashMotionStyle
+        {
+            get => _flashMotionStyle;
+            set { _flashMotionStyle = value; OnPropertyChanged(); }
         }
 
         private int _flashDuration = 5; // Duration in seconds when audio is disabled (1-30)
