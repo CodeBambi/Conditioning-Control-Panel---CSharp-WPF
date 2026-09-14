@@ -28,11 +28,13 @@ Not salvaged: the chips wallet, the cage, the pot, the Arcademy tier gate.
 | Walkable 3D room (`room/scene.js`, `fixtures.js`, `screens.js`, `walk.js`, `hud.js`, `room/assets/`) | same folder | R1 |
 | Room asset speed pass | client `Scripts/build-backroom-room-assets.mjs` (reads blender-scripting, never writes to it) | R1 |
 | Slot station page | client `Resources/web/backroom/stations/slot/` | C2 |
+| Daily Daze wheel station page | client `Resources/web/backroom/stations/wheel/` (`station.md`) | CW |
 | Host window + service | client `Services/BackRoom/BackRoomHostService.cs` on `ChaosWebViewHost` | C1 |
 | Station request relay | client `Services/BackRoom/BackRoomApi.cs` | C1 (shape), C2 (slot ops) |
 | Effect dispatcher | client `Services/BackRoom/BackRoomFx.cs` | C3 |
 | Media feed | client `Services/BackRoom/BackRoomMedia.cs` | C4 |
 | Slot server | CCP-Server `proxy/backroom-slot.js` (pure), `proxy/backroom-routes.js`, `proxy/scripts/sim-backroom-slot.mjs` | S1 |
+| Wheel server | CCP-Server `proxy/backroom-wheel.js` (pure, table v2), `proxy/backroom-wheel-routes.js` | S-wheel |
 
 Origins, same scheme as the Arcademy host: `https://ccp.game/` maps `Resources\web` (Deny), page URL
 `https://ccp.game/backroom/index.html`, three.js from `https://ccp.game/vendor/three/` (identical build
@@ -112,7 +114,7 @@ Host relay whitelist (the only C# that changes when a station is added, one row 
 ```csharp
 static readonly Dictionary<string, (string Method, string Path)[]> Ops = new() {
   ["slot"] = new[] { ("GET","state"), ("POST","tape"), ("POST","cursor") },
-  // ["wheel"] = new[] { ("GET","state"), ("POST","spin") },   // later stations append a row
+  ["wheel"] = new[] { ("GET","state"), ("POST","spin") },
 };
 // op -> {METHOD} /v2/backroom/{station}/{op}
 ```
@@ -201,6 +203,23 @@ means the player re-watches a few settled spins, nothing more.
   client never sends SP to these routes.
 - **Paytable is server code** (`backroom-slot.js` `TABLE_V3`), versioned. The client has no fallback
   table: if `state` fails, the cabinet shows "closed for a moment" and Back.
+
+### 3.5 Daily Daze wheel (`/v2/backroom/wheel/*`, amended 2026-09-14)
+
+One free spin per account per UTC day (owner decision, wheel option A). No stake, no floor enforced.
+
+- `GET state` -> `{ ok, sp, open, day:"YYYY-MM-DD", spun, result|null, snoozeCarry, nextResetAt, jackpot:{ amount,
+  odds:"1 in N"|"never", wonToday, eligible }, slices:[ { id, label, pay, width, odds } ], floorMs }`. `width` is the
+  drawn width in degrees (the picture), `odds` the published chance (the ledger; `"never"` when it cannot be won
+  now). The jackpot slice's `pay` is the day's pot. Slices carry no kind: `jackpot` and `snooze` are known by id.
+- `POST spin {idem}` -> `{ ok, sp, result:{ day, sliceId, sliceIndex, pay, snoozeCarryPaid, jackpot, jackpotFallback,
+  snoozed, total, capped }, jackpot, snoozeCarry, nextResetAt }`. `total` is pay + carry before the cap; `sp` is
+  the balance after it.
+- Refusals: `already_spun` (+ `result, sp, jackpot, snoozeCarry, nextResetAt`), `bad_request`, and `busy` and
+  `too_fast` as HTTP 200 (not the slot's 409); `closed` is 403.
+- The page lands on `result.sliceIndex` whatever the drag, seeded inside the drawn slice by the day, and shows the
+  stored landing and a countdown on reopen. Effects are existing ids only (section 4): 1-3 SP `fx.spiral_brief`,
+  5-20 `fx.gif_burst`, 40 and 100 `fx.gif_storm`, the pot `fx.jackpot`, Snooze none. Details: `stations/wheel/station.md`.
 
 ## 4. Lines and effect ids
 
@@ -315,7 +334,8 @@ Driven nodes (verified present in the glb 2026-09-13): `cabinet`, `reel_1..3` (X
                  "palette": { "candy_rose": "ac83ed", "...": "rrggbb" },
                  "faces": true, "reels": true, "labels": { "marquee": "@name" },
                  "bounds": { "min": [x, y, z], "max": [x, y, z] } } },
-  { "id": "wheel", "name": "Daily Daze", "labelKey": "br_station_wheel", "state": "soon", "...": "..." } ]
+  { "id": "wheel", "name": "Daily Daze", "labelKey": "br_station_wheel", "state": "live",
+    "entry": "stations/wheel/station.js", "...": "..." } ]
 ```
 
 One row per fixture, metres, y up (numbers from blender-scripting `backroom/out/placements.json`). Rows:
@@ -333,7 +353,7 @@ Station module shape (the room calls nothing else):
 ```js
 export async function mount(ctx) {
   // ctx = { root, bridge, request(op, body, idem?), fx(fxId, symbols?), media(), sp(), onSp(fn),
-  //         reduced, motion, intensity, lex(key, fallback), standUp(), variant, hostBack }
+  //         reduced, motion, intensity, lex(key, fallback), standUp(), variant, hostBack, spReadout }
   return {
     open(),                 // take the screen; resolve when interactive (Back is live before this)
     close(),                // Promise, settles within 420 ms, flushes its own cursor
@@ -385,6 +405,20 @@ export async function mount(ctx) {
   not while a station holds the room), at most 12 frames a second, into a canvas texture of at most
   384 px on the long edge, and at most one new decode per rendered frame. Still (reduced, Calm, Motion
   still) shows the first frame.
+- **The SP chip (`ctx.spReadout`, amended 2026-09-14).** The room's HUD chip is the only SP on screen
+  and the room owns its rule: it always shows Law I `shownSp` = `state.sp` minus what the tape still
+  owes, on every repaint (init, a `balance` frame, a `station-result` that carried `sp`, a station
+  closing, a station reopening). `ctx.spReadout` is `{ set(value), owe(n), thud(), target() }`:
+  `owe(n)` is the pays still unplayed on the tape, a number or a reader `() => n` the room calls on each
+  repaint while the station is open; `set(value)` shows a number as is while THE BANK flies and
+  `set(null)` goes back to the rule; `thud()` is the landing mini-thud on the chip (lit, not scaled, when
+  reduced); `target()` is the chip's box for token flights. When a station closes the room freezes a
+  reader to its last answer and drops any `set` value, so the chip neither dips on Back nor on reopen
+  before the station has its tape. A station hands over a plain number in `close()` and registers its
+  reader only once its tape state is back. A `station-result` repaints the chip on the next frame, after
+  the station has adopted the same reply. Stations never look the chip up by id or observe it.
+- **HUD keys (amended 2026-09-14).** Room HUD buttons drop focus on pointerup, and while walking or with
+  a station open, Space and Enter on a HUD button do nothing (the station's keys are the station's).
 - **Budget.** At 1280x720 on the entry pose: 212 draw calls (the preview draws 1,268 there, 1,312 in its
   own check), no shadows, no post passes, pixel ratio capped at 1.5.
 

@@ -37,7 +37,8 @@ await mkdir(OUT, { recursive: true });
 /* ---------------------------------------------------------------- 1. pure */
 const stations = normaliseStations(JSON.parse(readFileSync(join(BACKROOM, 'stations.json'), 'utf8')));
 ok(stations.length === 7, 'stations.json has seven fixture rows');
-ok(['counter', 'wheel', 'cards', 'roulette'].every((id) => stations.some((s) => s.id === id && s.state === 'soon')), 'counter, wheel, cards and roulette are soon');
+ok(['counter', 'cards', 'roulette'].every((id) => stations.some((s) => s.id === id && s.state === 'soon')), 'counter, cards and roulette are soon');
+ok(stations.some((s) => s.id === 'wheel' && s.state === 'live' && s.entry === 'stations/wheel/station.js'), 'the wheel is live on its own station');
 ok(!stations.some((s) => s.id === 'scratcher'), 'no scratcher');
 const slots = stations.filter((s) => s.id === 'slot');
 ok(slots.length === 3 && slots.every((s) => s.state === 'live' && s.entry === 'stations/slot/station.js'), 'three live slot rows, one station');
@@ -225,7 +226,7 @@ await key('KeyE'); await key('KeyE', 'keyUp');
 for (let i = 0; i < 40 && !(await ev(`!!(window.__mockStation && window.__mockStation.seen.state)`)); i++) await sleep(100);
 ok((await posted('station-open')).some((m) => m.station === 'slot'), 'E posts station-open slot');
 ok(await ev(`window.__mockStation.seen.variant && window.__mockStation.seen.variant.id === 'violet' && window.__mockStation.seen.variant.palette.candy_rose === 'ac83ed'`), 'ctx.variant carries violet and its palette');
-ok(await ev(`['root','bridge','request','fx','media','sp','onSp','reduced','motion','intensity','lex','standUp','variant','hostBack'].every((k) => window.__mockStation.ctxKeys.includes(k))`), 'ctx carries every section 7 field');
+ok(await ev(`['root','bridge','request','fx','media','sp','onSp','reduced','motion','intensity','lex','standUp','variant','hostBack','spReadout'].every((k) => window.__mockStation.ctxKeys.includes(k))`), 'ctx carries every section 7 field');
 ok(await ev(`window.__mockStation.seen.hostBack === true`), 'ctx.hostBack tells the station the room owns Back');
 d = await dbg();
 ok(d.held && !d.running, 'the room loop stops while the station is open');
@@ -248,6 +249,93 @@ for (let i = 0; i < 40 && !(await ev(`!!(window.__mockStation && window.__mockSt
 ok(await ev(`window.__mockStation && window.__mockStation.seen.variant && window.__mockStation.seen.variant.id === 'rose' && window.__mockStation.seen.variant.palette === null`), 'the rose slot opens the same station, no palette');
 await key('Escape');
 await sleep(300);
+
+// 2d2. Back never keeps the keys (desk run: a clicked Back kept focus, a later Space closed the station, then the room)
+{
+  const press = async (which) => {
+    const k = which === 'Space' ? { code: 'Space', key: ' ', text: ' ', windowsVirtualKeyCode: 32 } : { code: 'Enter', key: 'Enter', text: '\r', windowsVirtualKeyCode: 13 };
+    await cdp('Input.dispatchKeyEvent', { type: 'keyDown', ...k });
+    await sleep(40);
+    await cdp('Input.dispatchKeyEvent', { type: 'keyUp', code: k.code, key: k.key, windowsVirtualKeyCode: k.windowsVirtualKeyCode });
+    await sleep(160);
+  };
+  const openSlot = async () => {
+    await ev(`window.__mockStation = null`);
+    await ev(`window.__backroom.scene.go(${row('slot:violet')})`);
+    await sleep(150);
+    await key('KeyE'); await key('KeyE', 'keyUp');
+    for (let i = 0; i < 40 && !(await ev(`!!(window.__mockStation && window.__mockStation.seen.opened)`)); i++) await sleep(100);
+  };
+  const stationOpen = () => ev(`!!window.__backroom.loader.current`);
+  const counts = async () => [(await posted('station-close')).length, (await posted('exit')).length];
+  await openSlot();
+  const closed0 = (await counts())[0];
+  const [bx, by] = await ev(`(() => { const r = document.querySelector('#br-back').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()`);
+  await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: bx, y: by });
+  await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', x: bx, y: by, button: 'left', clickCount: 1, buttons: 1 });
+  await sleep(40);
+  await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x: bx, y: by, button: 'left', clickCount: 1 });
+  for (let i = 0; i < 20 && ((await stationOpen()) || (await counts())[0] === closed0); i++) await sleep(50);
+  await sleep(200);
+  ok(!(await stationOpen()), 'a real click on Back closes the station');
+  ok(await ev(`document.activeElement !== document.querySelector('#br-back')`), 'and Back does not keep the focus');
+  let before = await counts();
+  await press('Space'); await press('Enter');
+  ok(JSON.stringify(await counts()) === JSON.stringify(before) && (await dbg()).running, 'Space and Enter while walking leave nothing and keep walking');
+  await openSlot();
+  await ev(`document.querySelector('#br-back').focus()`);
+  before = await counts();
+  await press('Space'); await press('Enter');
+  ok((await stationOpen()) && JSON.stringify(await counts()) === JSON.stringify(before), 'Space and Enter on a focused Back with a station open do not close it');
+  ok(await ev(`document.activeElement !== document.querySelector('#br-back')`), 'and the focus is dropped for the station');
+  await key('Escape');
+  await sleep(600);
+  await ev(`document.querySelector('#br-back').focus()`);
+  before = await counts();
+  await press('Space'); await press('Enter');
+  ok(JSON.stringify(await counts()) === JSON.stringify(before), 'Space and Enter on a focused Back while walking do not leave the room');
+  await ev(`document.querySelector('.br-nav .br-pill').focus()`);
+  await press('Enter');
+  ok(!(await dbg()).overview, 'Enter on a focused Room view button while walking does nothing');
+}
+
+// 2d3. the SP chip is the room's: Law I shownSp through a flight, a station-result, Back, a balance frame and a reopen
+{
+  const chipText = () => ev(`document.querySelector('#br-sp-value').textContent`);
+  const frame = () => ev(`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))`);
+  const openViolet = async () => {
+    await ev(`window.__mockStation = null`);
+    await ev(`window.__backroom.scene.go(${row('slot:violet')})`);
+    await sleep(150);
+    await key('KeyE'); await key('KeyE', 'keyUp');
+    for (let i = 0; i < 40 && !(await ev(`!!(window.__mockStation && window.__mockStation.seen.state)`)); i++) await sleep(100);
+  };
+  await openViolet();
+  ok(await ev(`(() => { const r = window.__mockStation.ctx.spReadout; return ['set','owe','thud','target'].every((k) => typeof r[k] === 'function') && r.target() === document.querySelector('.br-sp'); })()`), 'ctx.spReadout has set, owe, thud and target (the chip box)');
+  await ev(`window.__mockStation.ctx.spReadout.owe(() => 12)`);
+  ok(await chipText() === '45', 'owe 12 at SP 57: the chip reads 45');
+  await ev(`window.__mockStation.ctx.spReadout.set(50)`);
+  ok(await chipText() === '50', 'set(50) shows a bank tick as is');
+  await ev(`window.__mockStation.ctx.spReadout.set(null)`);
+  await ev(`window.__mockStation.ctx.request('state', {})`);
+  await frame();
+  ok(await chipText() === '45', 'set(null) and a station-result that carried sp both repaint to the rule, 45');
+  await ev(`window.__mockStation.ctx.spReadout.thud()`);
+  await key('Escape');
+  await sleep(500);
+  ok(!(await ev(`!!window.__backroom.loader.current`)) && await chipText() === '45', 'Back with wins unplayed: the chip stays 45');
+  await ev(`window.__hostEmit({ type: 'balance', sp: 60, why: 'earn' })`);
+  await sleep(100);
+  ok(await chipText() === '48', 'a balance frame after close keeps what the tape owes: 60 - 12 = 48');
+  await ev(`window.__hostEmit({ type: 'balance', sp: 57, why: 'spend' })`);
+  await openViolet();
+  await frame();
+  ok(await chipText() === '45', 'reopen (its state reply carried sp 57): the chip does not dip before the station has its tape');
+  await ev(`window.__mockStation.ctx.spReadout.owe(0)`);
+  ok(await chipText() === '57', 'the tape played out (owe 0): the chip meets the balance');
+  await key('Escape');
+  await sleep(500);
+}
 
 // 2e. a soon station: the dust-sheet card, no code
 await ev(`window.__backroom.scene.go(${row('roulette')})`);

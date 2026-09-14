@@ -24,7 +24,7 @@ import { createLoader } from './loader.js';
 import { createHud } from './hud.js';
 
 const PAGE_SETTLE_MS = 300;
-const LABEL_FALLBACK = { br_slot_jackpot: 'A little luck', br_slot_status: 'Pull me', br_wheel_status: 'Your daily detour' };
+const LABEL_FALLBACK = { br_room_label_jackpot: 'A little luck', br_room_label_status: 'Pull me', br_room_label_wheel_status: 'Your daily detour' };
 const ADS = [
   { file: 'arcademy', key: 'br_ad_arcademy', fallback: 'The Arcademy' },
   { file: 'dtrh', key: 'br_ad_dtrh', fallback: 'Down the Rabbit Hole' },
@@ -50,10 +50,55 @@ function paintChrome() {
   back.textContent = lex('br_back', 'Back');
   back.setAttribute('aria-label', lex('br_back', 'Back'));
   $('#br-sp-label').textContent = lex('br_balance', 'SP');
-  $('#br-sp-value').textContent = String(state.sp);
+  paintSpChip();
   document.title = lex('br_room_title', 'The Back Room');
   document.documentElement.classList.toggle('br-reduced', !!state.reduced);
   document.documentElement.classList.toggle('br-suspended', !!state.suspended);
+}
+
+/* THE SP CHIP (CONTRACT 7.1). It always shows Law I shownSp: the server balance minus the wins still
+ * on a tape. The station tells the room what the tape still owes (spReadout.owe) and, while THE BANK
+ * flies, the number to show (spReadout.set). The rule is the room's, so it holds on every repaint: a
+ * balance frame, a station-result that moved state.sp, a closed station and a reopened one. */
+const chip = { owed: 0, shown: null };
+let chipFrame = 0;
+function owedNow() {
+  let n = chip.owed;
+  if (typeof n === 'function') { try { n = n(); } catch (e) { n = 0; } }
+  n = Number(n);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+function paintSpChip() {
+  const node = $('#br-sp-value');
+  const v = String(chip.shown != null ? chip.shown : Math.max(0, state.sp - owedNow()));
+  if (node && node.textContent !== v) node.textContent = v;
+}
+const spReadout = Object.freeze({
+  /** A number shown as is (a BANK tick), or null to go back to the rule. */
+  set(value) { const n = Number(value); chip.shown = value == null || !Number.isFinite(n) ? null : n; paintSpChip(); },
+  /** The pays still on the tape: a number, or a reader the room calls on each repaint while the station is open. */
+  owe(n) { chip.owed = typeof n === 'function' ? n : (Number(n) || 0); paintSpChip(); },
+  /** THE THUD: a bank token landing on the chip. Reduced motion lights it instead of scaling it. */
+  thud() {
+    const box = $('.br-sp');
+    if (!box || typeof box.animate !== 'function') return;
+    if (state.reduced) { box.animate([{ boxShadow: '0 0 0 2px #ffcf6b' }, { boxShadow: '0 0 0 2px #ffcf6b' }], { duration: 520 }); return; }
+    box.animate([{ transform: 'scale(1.3)', filter: 'brightness(2.2)' }, { transform: 'scale(.94)', offset: 0.55 }, { transform: 'scale(1)', filter: 'brightness(1)' }],
+      { duration: 340, easing: 'cubic-bezier(.2,1.5,.4,1)' });
+  },
+  /** The chip's box, where THE BANK's tokens fly to and from. */
+  target() { return $('.br-sp'); },
+});
+/** A station is gone: a reader freezes to its last answer and any flight value is dropped. */
+function chipSettle() {
+  chip.owed = owedNow();
+  chip.shown = null;
+  paintSpChip();
+}
+/** state.sp moved under a station-result: repaint next frame, after the station adopted the same reply. */
+function spChanged() {
+  if (chipFrame) return;
+  chipFrame = requestAnimationFrame(() => { chipFrame = 0; paintSpChip(); });
 }
 
 function paintMotion() {
@@ -106,7 +151,35 @@ async function leave(reason) {
   await settle();
 }
 
+const HUD = '.br-hud, #br-room-ui';
+const hudButton = (t) => {
+  const b = t && t.closest ? t.closest('button') : null;
+  return b && b.closest(HUD) ? b : null;
+};
+/** Walking, or a station or card on screen. Only the room view and a boot that never finished take HUD keys. */
+const hudKeysOff = () => visiting || !!(loader && loader.current)
+  || (document.documentElement.classList.contains('br-ready') && !(scene && scene.overview));
+
+/* Space and Enter never re-press the room's chrome (desk run: a clicked Back kept focus, and a later
+ * Space closed the station, then the whole room). A HUD button drops focus when the pointer lets go,
+ * and while walking or visiting the two keys on a HUD button are eaten and the focus dropped, so the
+ * station's own keys (Space spins) reach it from the next press on. */
+function wireHudKeys() {
+  document.addEventListener('pointerup', (e) => { const b = hudButton(e.target); if (b) b.blur(); }, true);
+  const guard = (e) => {
+    if (e.code !== 'Space' && e.key !== ' ' && e.key !== 'Enter') return;
+    const b = hudButton(e.target);
+    if (!b || !hudKeysOff()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    b.blur();
+  };
+  window.addEventListener('keydown', guard, true);
+  window.addEventListener('keyup', guard, true);
+}
+
 function wireExits() {
+  wireHudKeys();
   $('#br-back').addEventListener('click', () => back('back'));
   window.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
@@ -181,6 +254,9 @@ async function start(init) {
     state,
     lex,
     onSp: (fn) => { spListeners.add(fn); return () => spListeners.delete(fn); },
+    spReadout,
+    spChanged,
+    chipSettle,
     standUp: () => back('back'),
     log: (level, msg) => bridge.log(level, msg),
   });

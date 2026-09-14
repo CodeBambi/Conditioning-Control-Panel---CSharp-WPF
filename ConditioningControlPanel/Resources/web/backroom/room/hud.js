@@ -32,8 +32,7 @@ export function createHud(o) {
   prompt.addEventListener('click', () => { if (nearest) o.onVisit(nearest); });
   viewBtn.addEventListener('click', () => o.onOverview(!overview));
   motionBtn.addEventListener('click', () => o.onMotion());
-  // Buttons must not keep focus: Space/Enter would re-press them while walking.
-  for (const b of [prompt, viewBtn, motionBtn]) b.addEventListener('pointerup', () => b.blur());
+  // Focus: main.js drops it from every HUD button on pointerup and eats Space/Enter on them while walking.
 
   function paintView() {
     viewBtn.textContent = overview ? L('br_room_walk', 'Back to walking') : L('br_room_view', 'Room view');

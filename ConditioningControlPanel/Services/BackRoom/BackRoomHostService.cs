@@ -35,10 +35,34 @@ internal static class BackRoomHostService
         "br_station_slot", "br_station_wheel", "br_station_scratcher", "br_station_cards", "br_station_counter",
         "br_station_slot_rose", "br_station_slot_violet", "br_station_slot_mint", "br_station_roulette",
         "br_visit", "br_room_view", "br_room_walk", "br_motion_on", "br_motion_still", "br_loading",
-        "br_slot_jackpot", "br_slot_status", "br_wheel_status", "br_ad_arcademy", "br_ad_dtrh", "br_ad_focus_gaze",
+        "br_room_label_jackpot", "br_room_label_status", "br_room_label_wheel_status", "br_ad_arcademy", "br_ad_dtrh", "br_ad_focus_gaze",
         "br_station_failed", "br_station_closed", "br_model_missing", "br_suspended",
         "br_preset_drop", "br_preset_relax", "br_preset_let_go", "br_preset_sink",
+        // Daily Daze station (stations/wheel): the page keeps an English fallback for each.
+        "br_wheel_title", "br_wheel_stage", "br_wheel_loading", "br_wheel_back", "br_wheel_sp", "br_wheel_spin",
+        "br_wheel_free", "br_wheel_come_back", "br_wheel_ready", "br_wheel_spinning", "br_wheel_won",
+        "br_wheel_jackpot_won", "br_wheel_snoozed", "br_wheel_fallback", "br_wheel_carry_paid", "br_wheel_capped",
+        "br_wheel_next", "br_wheel_already", "br_wheel_jackpot", "br_wheel_gain", "br_wheel_gain_snooze",
+        "br_wheel_odds", "br_wheel_odds_note", "br_wheel_odds_snooze", "br_wheel_young", "br_wheel_taken",
+        "br_wheel_carry", "br_wheel_closed", "br_wheel_offline", "br_wheel_model_missing", "br_wheel_screen_ready",
+        "br_wheel_screen_spinning", "br_wheel_screen_pot", "br_wheel_screen_win", "br_wheel_screen_jackpot",
+        "br_wheel_screen_snooze", "br_wheel_screen_next", "br_wheel_slice_jackpot", "br_wheel_slice_sip",
+        "br_wheel_slice_glow", "br_wheel_slice_sparkle", "br_wheel_slice_dreamy", "br_wheel_slice_shimmer",
+        "br_wheel_slice_snooze", "br_wheel_slice_twinkle", "br_wheel_slice_deep", "br_wheel_slice_dazzle",
+        "br_wheel_slice_dazed",
     };
+
+    /// <summary>DEBUG only: <c>CCP_BACKROOM_CDP_PORT</c> opens a remote debugging port on the room's
+    /// own browser process (its own user data folder, so no other host shares these arguments) for
+    /// desk-run screenshots. Release builds add nothing.</summary>
+    private static string DebugBrowserArguments()
+    {
+#if DEBUG
+        var port = Environment.GetEnvironmentVariable("CCP_BACKROOM_CDP_PORT");
+        if (int.TryParse(port, out var p) && p is > 1024 and < 65536) return " --remote-debugging-port=" + p;
+#endif
+        return string.Empty;
+    }
 
     private static readonly TimeSpan PanicDoublePressWindow = TimeSpan.FromSeconds(2);
 
@@ -51,9 +75,17 @@ internal static class BackRoomHostService
     private static bool _minimised;
     private static DateTime _lastPanicPressUtc;
 
-    /// <summary>C3 and C4 replace these at integration; until then the null objects answer.</summary>
-    internal static IBackRoomFx Fx { get; set; } = new NullBackRoomFx();
-    internal static IBackRoomMedia Media { get; set; } = new NullBackRoomMedia(Loc.Get);
+    /// <summary>The real dispatcher (C3, shared with the dev rig so they share one hero gate) and the
+    /// real media feed (C4). Tests may swap either for a null object.</summary>
+    internal static IBackRoomFx Fx { get; set; } = BackRoomFxServices.Shared;
+    internal static IBackRoomMedia Media { get; set; } = new BackRoomMedia(LexOrFallback);
+
+    /// <summary>Loc.Get returns the key itself on a miss; the feed wants the fallback then.</summary>
+    private static string LexOrFallback(string key, string fallback)
+    {
+        var s = Loc.Get(key);
+        return string.IsNullOrWhiteSpace(s) || s == key ? fallback : s;
+    }
 
     public static bool IsActive => _host != null;
 
@@ -80,6 +112,7 @@ internal static class BackRoomHostService
                 NoteEvent = key => App.FeatureDayLog?.Note(key),
                 SetSp = sp => { if (App.Settings?.Current is { } s) s.SkillPoints = sp; },
                 OnUi = OnUi,
+                OffUi = work => System.Threading.Tasks.Task.Run(work),
                 Log = msg => App.Logger?.Debug("BackRoom: {Msg}", msg),
             });
 
@@ -90,6 +123,10 @@ internal static class BackRoomHostService
                 // The player's own media (the C4 feed deals ccp.assets urls). Allow, because the
                 // slot paints dealt GIFs into reel textures and a tainted image cannot reach WebGL.
                 ("ccp.assets", App.EffectiveAssetsPath, CoreWebView2HostResourceAccessKind.Allow),
+                // Downloaded audio packs mirror the ccp.game tree. The slot's chimes and thud are the
+                // race's own sfx (dtrh/shared/audioSrc.js); without this host CCP_CONTENT_READY never
+                // arrives and a pack-only clip is silent. Same helper as the Arcademy and DTRH hosts.
+                ChaosWebViewHost.ContentMapping(),
             };
 
             _host = new ChaosWebViewHost(new ChaosWebViewHost.Options
@@ -104,7 +141,7 @@ internal static class BackRoomHostService
                 CenterOnMainWindow = true,
                 WindowTitle = ProductName,
                 LogTag = "BackRoom",
-                ExtraBrowserArguments = BrowserArguments,
+                ExtraBrowserArguments = BrowserArguments + DebugBrowserArguments(),
                 OnReady = () => _bridge?.OnReady(),
                 OnMessage = m => _bridge?.Handle(m),
                 OnProcessFailed = kind => { App.Logger?.Warning("BackRoom: process failed ({Kind}), closing", kind); OnUi(DisposeAll); },

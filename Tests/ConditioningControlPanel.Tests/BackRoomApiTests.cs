@@ -46,6 +46,8 @@ public class BackRoomApiTests
     [InlineData("slot", "state", "GET")]
     [InlineData("slot", "tape", "POST")]
     [InlineData("slot", "cursor", "POST")]
+    [InlineData("wheel", "state", "GET")]
+    [InlineData("wheel", "spin", "POST")]
     public void Whitelist_ResolvesTheContractRows(string station, string op, string method)
     {
         Assert.True(BackRoomApi.TryResolve(station, op, out var m, out var path));
@@ -56,7 +58,8 @@ public class BackRoomApiTests
     [Theory]
     [InlineData("slot", "spin")]
     [InlineData("slot", "STATE")]
-    [InlineData("wheel", "state")]
+    [InlineData("wheel", "tape")]
+    [InlineData("wheel", "cursor")]
     [InlineData("slot", "../admin")]
     [InlineData("", "state")]
     [InlineData(null, null)]
