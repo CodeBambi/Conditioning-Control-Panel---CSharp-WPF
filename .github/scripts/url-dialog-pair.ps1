@@ -144,7 +144,7 @@ try {
             Require-Success (Invoke-Owned $git @('-C', $source, '-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'apply', '--unidiff-zero', $patch) $source 'inverse-apply') | Out-Null
         }
         $testHash = (Get-FileHash "$source/$tests" -Algorithm SHA256).Hash
-        if ($testHash -ne 'f3c292d57435bc711dee64fb0e5b47103a20da9cb44d2803c9033b0857f6d561') { throw 'Test bytes changed' }
+        if ($testHash -ne 'a55d7ab586f43ad1110f0bf15c9269be7e13681672a09fd3f7d172e8fd2b20ef') { throw 'Test bytes changed' }
         $expectedDialog = if ($mode -eq 'red') { '4e135e6f3261b2ced8389ac5a584628afa19c00132b072a4cc1230ab0d3a0437' } else { 'e3944bb609bc6d110b3f362bb98043ccdb3fd6266d26475aeaa5c5329f0b5381' }
         if ((Get-FileHash "$source/$dialog" -Algorithm SHA256).Hash -ne $expectedDialog) { throw 'Dialog bytes changed' }
         $before = @(Manifest $source)
