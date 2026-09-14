@@ -50,7 +50,7 @@ export function createHud(o) {
   bar.appendChild(fill);
   veil.append(el('span', 'br-spark', '✦'), veilText, bar);
 
-  const hint = el('div', 'br-hint', L('br_walk_hint', 'WASD to walk, drag to look, E to visit'));
+  const hint = el('div', 'br-hint', L('br_walk_hint', 'W/S or up/down to walk, A/D or left/right to move sideways, drag to look, E to visit'));
   const cross = el('div', 'br-crosshair'); cross.setAttribute('aria-hidden', 'true');
   const prompt = el('button', 'br-visit'); prompt.type = 'button'; prompt.hidden = true;
   const nav = el('nav', 'br-nav');

@@ -12,14 +12,14 @@ export const RADIUS = 0.25;
 export const START = Object.freeze([0, EYE, 6.5]);
 /** Stand within this many metres of an approach point and E visits. */
 export const VISIT_RANGE = 1.65;
-export const WALK_SPEED = 3.25;
+export const WALK_SPEED = 3.575;
 export const RUN_SPEED = 4.8;
 
 /** Walls (inner faces less the radius) and the architecture no fixture bounds cover. */
 export const WALLS = Object.freeze({ x: 6.65, z: 7.55 });
 export const BLOCKERS = Object.freeze([
   Object.freeze({ min: [-3.24, -7.44], max: [3.24, -4.06] }),   // prize counter platform
-  Object.freeze({ min: [-6.54, -6.54], max: [-4.46, -2.66] }),  // wheel plinth
+  Object.freeze({ min: [-6.54, -3.94], max: [-4.46, -0.06] }),  // wheel plinth
 ]);
 
 const ID = /^[a-z0-9_]{1,24}$/;

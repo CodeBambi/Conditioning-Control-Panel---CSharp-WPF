@@ -12,10 +12,11 @@
  * ==========================================================================*/
 
 import * as T from 'three';
+import { createPrizeMarquee } from './prize-marquee.js';
+import { createEmiIdle } from './emi-idle.js';
 
 const BULB = /^(lights_chase_\d|bulb_\d|canopy_bulb_|rim_bulb_)/;
 const CHASE = [0xff62be, 0xb381ff, 0x58dccf, 0xffca78].map((c) => new T.Color(c));
-const ROSE = new T.Color('#ff63bb'), VIOLET = new T.Color('#985aff');
 
 export function labelTexture(text) {
   const c = document.createElement('canvas');
@@ -154,6 +155,8 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
 
   const holders = new Map();
   const hubs = [];
+  const emis = [];
+  let marquee = null;
   /** Every fixture label mesh, `rowKey/node` -> { mesh, text }, so one can be repainted later (10.16.E). */
   const labels = new Map();
   const set = await Promise.all(stations.map(async (row) => {
@@ -219,10 +222,25 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
       }
     }
     if (f.hub) { const spiral = model.getObjectByName('center_spiral'); if (spiral) hubs.push(createHub(spiral)); }
+    if (row.id === 'counter') { marquee = createPrizeMarquee(label(row, '@name')); model.add(marquee); }
+    const emi = createEmiIdle({ model, row, atlas });
+    if (emi) emis.push(emi);
     holders.set(row.key, holder);
     tick();
     return holder;
   }));
+
+  // Number bulbs within each fixture circuit so the bright trail follows its physical order.
+  const circuits = new Map();
+  for (const b of bulbs) {
+    const key = b.row.key + '/' + b.mesh.name.replace(/\d+$/, '');
+    if (!circuits.has(key)) circuits.set(key, []);
+    circuits.get(key).push(b);
+  }
+  for (const list of circuits.values()) {
+    list.sort((a, b) => Number(a.mesh.name.match(/\d+$/)?.[0]) - Number(b.mesh.name.match(/\d+$/)?.[0]));
+    list.forEach((b, i) => { b.phase = i / list.length; });
+  }
 
   // ---- bulbs: one InstancedMesh per (geometry, material) ----
   const groups = new Map();
@@ -259,17 +277,12 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
   const sconceColor = new T.Color(0xff79ce);
   function update(dt, t, still) {
     for (const b of bulbs) {
-      let power, op;
-      if (b.row.fixture.hub) {
-        const breath = still ? 0.5 : 0.5 + 0.5 * Math.sin(t * 0.65);
-        target.copy(VIOLET).lerp(ROSE, b.rim ? 0.5 : 0.25);
-        c.copy(target); power = 0.42 + breath * 0.28; op = 0.4 + power * 0.18;
-      } else {
-        const phase = t * 0.15 + b.index * 0.035, i = Math.floor(phase) % 4;
-        c.copy(CHASE[i]).lerp(CHASE[(i + 1) % 4], T.MathUtils.smoothstep(phase % 1, 0, 1));
-        const wave = Math.sin(t * 0.7 + b.index * 0.4);
-        power = 0.6 + 0.25 * wave; op = 0.45 + 0.12 * wave;
-      }
+      const offset = b.row.variant === 'violet' ? .33 : b.row.variant === 'mint' ? .66 : 0;
+      const travel = t / (b.row.id === 'wheel' ? 6 : 8) * (b.rim ? -1 : 1) + offset;
+      const wave = Math.pow(.5 + .5 * Math.cos((b.phase - travel) * Math.PI * 2), 8);
+      const power = .25 + wave * 1.65, op = .22 + wave * .66;
+      const phase = (t / 12 + b.phase * .5 + offset) % 4, i = Math.floor(phase);
+      c.copy(CHASE[i]).lerp(CHASE[(i + 1) % 4], T.MathUtils.smoothstep(phase % 1, 0, 1));
       auras.set(b.aura, c, op);
       b.im.setColorAt(b.slot, c.multiplyScalar(power));
     }
@@ -279,6 +292,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     for (const i of sconceAuras) auras.set(i, sconceColor, so);
     auras.commit();
     for (const h of hubs) h.update(dt, still);
+    for (const emi of emis) emi.update(dt, still);
     if (floor) floor.material.uniforms.angle.value = t * 0.09;
   }
 
@@ -299,5 +313,5 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     return true;
   }
 
-  return { shell, ceiling, floor, screens, holders, fixtures: set.length, bulbs: bulbs.length, update, auras, hubs, labels, setLabel };
+  return { shell, ceiling, floor, screens, holders, fixtures: set.length, bulbs: bulbs.length, update, auras, hubs, labels, setLabel, emis, marquee };
 }

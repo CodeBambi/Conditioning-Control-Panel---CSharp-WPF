@@ -5691,7 +5691,7 @@
   "br_room_title": "The Back Room",
   "br_back": "Back",
   "br_balance": "SP",
-  "br_walk_hint": "WASD to walk, drag to look, E to visit.",
+  "br_walk_hint": "W/S 或上下键前后移动，A/D 或左右键横向移动，拖动环视，E 进入。",
   "br_soon_title": "Coming soon",
   "br_soon_body": "Under a dust sheet for now. This one opens soon.",
   "br_station_slot": "The Slot",

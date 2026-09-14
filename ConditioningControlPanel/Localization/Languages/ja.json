@@ -5226,7 +5226,7 @@
   "br_room_title": "The Back Room",
   "br_back": "Back",
   "br_balance": "SP",
-  "br_walk_hint": "WASD to walk, drag to look, E to visit.",
+  "br_walk_hint": "W/S・上下で前後移動、A/D・左右で横移動、ドラッグで視点移動、Eで入る。",
   "br_soon_title": "Coming soon",
   "br_soon_body": "Under a dust sheet for now. This one opens soon.",
   "br_station_slot": "The Slot",
