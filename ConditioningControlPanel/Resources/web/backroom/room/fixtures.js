@@ -129,9 +129,12 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
   scene.add(shell);
   shell.updateMatrixWorld(true);
   // Widen the southeast corner gently, preserving all game fixture positions.
-  const point = new T.Vector3();
+  const point = new T.Vector3(), warpBounds = new T.Box3();
   shell.traverse(o => {
     if (!o.isMesh) return;
+    o.geometry.computeBoundingBox();
+    warpBounds.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld);
+    if(warpBounds.max.x<=6.5 || warpBounds.max.z<=0)return;
     const g=o.geometry.clone(), a=g.attributes.position;
     const positions=new Float32Array(a.count*3), inverse=o.matrixWorld.clone().invert();
     for(let i=0;i<a.count;i++) {
@@ -143,6 +146,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     g.computeVertexNormals();g.computeBoundingSphere();o.geometry=g;
   });
 
+  shell.traverse(o => { o.updateMatrix(); o.matrixAutoUpdate=false; });
   const oldFloor = shell.getObjectByName('spiral_inlay');
   if (oldFloor) oldFloor.visible = false;
   shell.traverse(n => { if(n.name.startsWith('floor_brass_inlay')) n.visible=false; });

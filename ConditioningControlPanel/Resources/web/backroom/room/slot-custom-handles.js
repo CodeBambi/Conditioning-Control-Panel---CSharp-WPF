@@ -72,9 +72,9 @@ function roomSocket(rig) {
   return {mount,originals:[],height:headBounds.max.y,restore(){restored.forEach(fn=>fn());}};
 }
 
-export async function attachSlotCustomHandle({rig,loader,base,style}) {
+export async function attachSlotCustomHandle({rig,loader,base,style,source=null}) {
   if (!Number.isInteger(style) || style < 0 || style > 2) return {dispose(){}};
-  const model = (await loader.loadAsync(base + 'customization/' + KINDS[style] + '.glb')).scene;
+  const model = source || (await loader.loadAsync(base + 'customization/' + KINDS[style] + '.glb')).scene;
   const handle = sculpture(model,KINDS[style]), slot = socket(rig);
   const box = new T.Box3().setFromObject(handle), size = box.getSize(new T.Vector3());
   const factor = slot.height / size.y;
@@ -83,11 +83,12 @@ export async function attachSlotCustomHandle({rig,loader,base,style}) {
   wrapper.add(handle); slot.mount.add(wrapper);
   slot.originals.forEach(([node])=>node.visible=false);
   return {dispose(){slot.originals.forEach(([node,visible])=>node.visible=visible);slot.mount.removeFromParent();slot.restore?.();
+    if(source)return; // Shared sculpture resources belong to the room catalogue.
     const geometries=new Set(),materials=new Set();model.traverse(n=>{if(n.geometry)geometries.add(n.geometry);[].concat(n.material||[]).forEach(m=>materials.add(m));});
     geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}};
 }
 
-export async function createSlotCustomHandles({holders,loader,base}) {
+export async function createSlotCustomHandles({holders,loader,base,sources=[]}) {
   const active = [null,null,null], revisions = [0,0,0], queues = [Promise.resolve(),Promise.resolve(),Promise.resolve()]; let disposed=false;
   function set(index,style) {
     if(disposed || !Number.isInteger(index) || index<0 || index>2 || !Number.isInteger(style) || style < -1 || style>2)return Promise.resolve(false);
@@ -98,7 +99,7 @@ export async function createSlotCustomHandles({holders,loader,base}) {
       active[index]?.dispose();active[index]=null;
       if(style<0)return true;
       let next;
-      try {next=await attachSlotCustomHandle({rig,loader,base,style});}
+      try {next=await attachSlotCustomHandle({rig,loader,base,style,source:sources[style]});}
       catch {if(revision===revisions[index])styles[index]=-1;return false;}
       if(disposed || revision!==revisions[index]){next.dispose();return false;}
       active[index]=next;return true;

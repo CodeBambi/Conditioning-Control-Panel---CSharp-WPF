@@ -14,6 +14,7 @@
  * ==========================================================================*/
 
 import * as T from 'three';
+import { createRenderBudget } from './render-budget.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { buildRoom } from './fixtures.js';
@@ -38,8 +39,9 @@ export async function createScene(o) {
   o.mount.appendChild(canvas);
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); say('room webgl context lost'); });
 
-  const renderer = new T.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  const budget = createRenderBudget(navigator, window.devicePixelRatio || 1);
+  const renderer = new T.WebGLRenderer({ canvas, antialias: true, powerPreference: 'default' });
+  let dpr = budget.dpr(o.mount.clientWidth, o.mount.clientHeight);
   renderer.setPixelRatio(dpr);
   renderer.toneMapping = T.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
@@ -75,6 +77,10 @@ export async function createScene(o) {
   let customization, catalogueView=null;
   customization = await createCustomization({scene,loader,room,onPreview:view=>{catalogueView=view;},base:o.base,mount:o.mount,lex:o.lex,canvas,camera,isActive:()=>!held&&!halted&&!suspended&&!overview&&!customization?.opened});
   const screens = await createScreens({ meshes: [...room.screens,...customization.screens], ads: o.ads, media: o.media, log: say });
+  // Subtle cartridge refraction otherwise renders the entire room a second time.
+  scene.traverse(node => { for (const m of [].concat(node.material || [])) {
+    if (m.transmission > 0) { m.transmission = 0; m.needsUpdate = true; }
+  }});
   for (const h of room.hubs) h.setDpr(dpr);
   const buildMs = performance.now() - t0;
 
@@ -82,11 +88,13 @@ export async function createScene(o) {
   const pos = START.slice();
   let yaw = 0, pitch = 0, sway = 0, walkPhase = 0, ambient = 0;
   let still = !!o.still, overview = false, held = null, halted = false, suspended = false;
-  let raf = 0, last = performance.now(), nearest = null, drag = null;
+  let raf = 0, last = performance.now(), lastTick = last, nearest = null, drag = null;
   const saved = { pos: null, yaw: 0, pitch: 0 };
   const keys = new Set();
   const vel = new T.Vector2(), want = new T.Vector2();
   const frames = [];
+  const stationRows = [...o.stations, customization.row];
+  const previewTarget = new T.Vector3();
 
   const interaction = createEmiInteraction({ canvas, camera, scene, emis: room.emis, mount: o.mount, label: o.lex,
     isActive: () => !held && !halted && !suspended && !overview && !customization.opened });
@@ -94,7 +102,9 @@ export async function createScene(o) {
   function topDown() { camera.position.set(0, Math.max(21, 19 / camera.aspect), 0.01); camera.lookAt(0, 0, 0); }
   function resize() {
     const w = Math.max(1, o.mount.clientWidth || window.innerWidth), h = Math.max(1, o.mount.clientHeight || window.innerHeight);
+    dpr = budget.dpr(w, h); renderer.setPixelRatio(dpr);
     renderer.setSize(w, h, false);
+    for (const hub of room.hubs) hub.setDpr(dpr);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     room.auras.resize(h * dpr, camera.fov);
@@ -163,9 +173,14 @@ export async function createScene(o) {
     if (held || halted || suspended) return;
     raf = requestAnimationFrame(frame);
     const raw = now - last;
-    last = now;
+    const active = keys.size > 0 || drag || customization.opened;
+    const gap = 1000 / (active && !budget.mobile ? 60 : 30);
+    if (raw < gap - 1) return;
+    last = raw < gap ? now : now - (raw % gap);
     if (document.hidden) return;
-    const dt = Math.min(0.035, Math.max(0, raw / 1000));
+    if (budget.sample(now - lastTick, gap)) resize();
+    const dt = Math.min(0.1, Math.max(0, (now - lastTick) / 1000));
+    lastTick = now;
     frames.push(raw);
     if (frames.length > 240) frames.shift();
     if(customization.opened)resetInput();
@@ -178,9 +193,9 @@ export async function createScene(o) {
       step(pos, dx, dz, o.stations);
       sway = T.MathUtils.damp(sway, still ? 0 : Math.min(1, vel.length() / WALK_SPEED), 10, dt);
       walkPhase += vel.length() * dt * 3.1;
-      camera.position.set(pos[0], pos[1] + Math.sin(walkPhase * 2) * 0.01 * sway, pos[2]);
-      camera.rotation.set(pitch + Math.sin(walkPhase * 2) * 0.002 * sway, yaw, Math.sin(walkPhase) * 0.0035 * sway, 'YXZ');
-      setNearest(customization.opened?null:nearestStation(pos,[...o.stations,customization.row]));
+      camera.position.set(pos[0], pos[1] + Math.sin(walkPhase * 2) * 0.004 * sway, pos[2]);
+      camera.rotation.set(pitch + Math.sin(walkPhase * 2) * 0.0008 * sway, yaw, Math.sin(walkPhase) * 0.0014 * sway, 'YXZ');
+      setNearest(customization.opened?null:nearestStation(pos,stationRows));
     }
     if (!still) ambient += dt;
     room.update(dt, ambient, still);
@@ -189,9 +204,9 @@ export async function createScene(o) {
     const fullWidth=Math.max(1,o.mount.clientWidth||window.innerWidth);
     const height=Math.max(1,o.mount.clientHeight||window.innerHeight);
     const previewWidth=customization.opened?Math.floor(fullWidth*2/3):fullWidth;
-    camera.aspect=previewWidth/height;camera.updateProjectionMatrix();
+    if(camera.aspect!==previewWidth/height){camera.aspect=previewWidth/height;camera.updateProjectionMatrix();}
     if(catalogueView&&customization.opened){
-      const target=new T.Vector3(...catalogueView.look);
+      const target=previewTarget.fromArray(catalogueView.look);
       camera.position.fromArray(catalogueView.position);
       if(catalogueView.width){
         const distance=camera.position.distanceTo(target);
@@ -211,12 +226,14 @@ export async function createScene(o) {
   }
 
   function run() {
-    if (raf || held || halted || suspended) return;
-    last = performance.now();
+    if (raf || held || halted || suspended || document.hidden) return;
+    last = lastTick = performance.now();
     raf = requestAnimationFrame(frame);
   }
   const stop = () => { if (raf) cancelAnimationFrame(raf); raf = 0; };
 
+  const visibility = () => { resetInput(); if(document.hidden) stop(); else run(); };
+  document.addEventListener('visibilitychange', visibility);
   resize();
   run();
   screens.deal(() => ambient).catch(() => {});
@@ -232,7 +249,7 @@ export async function createScene(o) {
       held = null; resetInput(); run();
     },
     pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); interaction.dismiss(); customization.dismiss(); } else run(); },
-    halt() { halted = true; stop(); resetInput(); interaction.dispose(); customization.dispose(); decor.dispose(); for(const p of room.payouts.values())p.coins.dispose(); },
+    halt() { halted = true; stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); resetInput(); interaction.dispose(); customization.dispose(); decor.dispose(); for(const p of room.payouts.values())p.coins.dispose(); },
     setStill(on) { still = !!on; },
     /** Repaint one fixture label, e.g. the wheel's screen for MUST HIT (10.16.E). */
     setLabel(rowKey, node, text) { return room.setLabel(rowKey, node, text); },
@@ -247,7 +264,7 @@ export async function createScene(o) {
     debug() {
       const sorted = frames.slice().sort((a, b) => a - b);
       return {
-        position: pos.slice(), yaw, pitch, overview, held: !!held, running: !!raf, still,
+        renderBudget: {...budget.debug(), dpr}, position: pos.slice(), yaw, pitch, overview, held: !!held, running: !!raf, still,
         nearest: nearest ? nearest.key : null, fixtures: room.fixtures, bulbs: room.bulbs, screens: room.screens.length,
         pictures: screens.pictures, animation: screens.animation, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
         decor: decor.debug(), customization: customization.debug(),

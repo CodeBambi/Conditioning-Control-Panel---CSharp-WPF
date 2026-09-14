@@ -13,7 +13,7 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
   const selected={statues:[0,1,2]};let floorEnabled=true;
   const load=async file=>(await loader.loadAsync(base+'customization/'+file+'.glb')).scene;
   const vending=await load('vending');vending.name='customization_vending';
-  vending.position.set(7.05,.02,6.4);vending.rotation.y=-Math.PI/2;vending.scale.setScalar(.92);root.add(vending);
+  vending.position.set(7.05,.02,6.4);vending.rotation.y=-Math.PI/2;vending.scale.setScalar(1.08);root.add(vending);
   for(const name of ['header_title','header_subtitle','delivery_label']){const n=vending.getObjectByName(name);if(n)n.visible=false;}
   const titleCanvas=document.createElement('canvas');titleCanvas.width=1024;titleCanvas.height=128;
   const tx=titleCanvas.getContext('2d');tx.fillStyle='#180c25';tx.fillRect(0,0,1024,128);tx.fillStyle='#f4d29c';tx.font='600 82px Georgia';tx.textAlign='center';tx.textBaseline='middle';tx.fillText(lex('br_custom_title','Room Service'),512,64,970);
@@ -32,12 +32,12 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     mini.position.set(-(box.min.x+size.x/2)*scale,-box.min.y*scale,-(box.min.z+size.z/2)*scale);
     vending.getObjectByName('bay_'+String(index+1).padStart(2,'0'))?.add(mini);
   });
-  const statueSpots=[3.05,4.3,5.55].map((x,spot)=>sculptures.map((source,index)=>{
+  const statueSpots=[[-4.1,.03,-6.85],[4.1,.03,-6.85],[3.7,.03,7.25]].map((position,spot)=>sculptures.map((source,index)=>{
     const model=source.clone(true);root.add(model);
-    model.name='statue_spot_'+spot+'_'+PIECES[index];model.rotation.y=Math.PI;
-    model.position.set(x,.03,7.25);model.visible=index===spot;return model;
+    model.name='statue_spot_'+spot+'_'+PIECES[index];model.rotation.y=spot===2?Math.PI:0;
+    model.position.fromArray(position);model.visible=index===spot;return model;
   }));
-  const handles=await createSlotCustomHandles({holders:room.holders,loader,base});
+  const handles=await createSlotCustomHandles({holders:room.holders,loader,base,sources:sculptures});
   const getState=()=>({screens:extras.getState(),statues:[...selected.statues],handles:handles.getState(),floor:floorEnabled?room.getFloorStyle().design:-1,palette:room.getFloorStyle().palette});
   const select=(category,index,target=0)=>{
     if(category==='screens')return extras.set(target,index);
@@ -72,7 +72,7 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     const object=statueSpots[target]?.[Math.max(0,index)];if(!object)return;
     const bounds=new T.Box3().setFromObject(object),center=bounds.getCenter(new T.Vector3()),size=bounds.getSize(new T.Vector3());
     const distance=Math.max(1.5,size.y*1.6,size.x*1.15);
-    onPreview({position:[center.x,center.y+.12,center.z-distance],look:center.toArray(),width:size.x,height:size.y});
+    onPreview({position:[center.x,center.y+.12,center.z+Math.cos(object.rotation.y)*distance],look:center.toArray(),width:size.x,height:size.y});
   };
   const panel=createCustomizationPanel({mount,lex,vending,select,getState,restore,preview,onClose:()=>onPreview(null)});
   const ray=new T.Raycaster(),pointer=new T.Vector2();let down=null;

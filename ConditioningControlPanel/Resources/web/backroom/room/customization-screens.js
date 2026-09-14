@@ -39,11 +39,26 @@ export async function createCustomizationScreens({scene,root,room}) {
     for(let i=0;i<count;i++) {const m=display(.32,.18,'sample_'+pack+'_'+i,false);m.position.set((i%columns-(columns-1)/2)*.38,Math.floor(i/columns)*.26,0);mini.add(m);}
     models.push(mini);
   }
-  const mega=display(7.6,4.275,'ceiling_mega');mega.position.set(0,4.35,0);mega.rotation.x=Math.PI/2;
-  // Child of the existing ceiling, so Room view hides it with the roof.
+  const projectionGeometry=new T.PlaneGeometry(14,16);geometries.add(projectionGeometry);
+  const positions=projectionGeometry.attributes.position;
+  for(let i=0;i<positions.count;i++)if(positions.getX(i)>0)positions.setX(i,positions.getX(i)+1.2*Math.max(0,positions.getY(i))/8);
+  projectionGeometry.computeBoundingSphere();
+  const projectionUV=projectionGeometry.attributes.uv;for(let i=0;i<projectionUV.count;i++)projectionUV.setY(i,1-projectionUV.getY(i));
+  const projectionMaterial=new T.MeshBasicMaterial({color:0x251334});materials.add(projectionMaterial);
+  const mega=new T.Mesh(projectionGeometry,projectionMaterial);mega.name='screen_surface_ceiling_projection';
+  mega.userData.screenAspect=14/16;mega.userData.screenCover=true;mega.userData.screenTurn=4.5;mega.userData.screenNoTitles=true;screens.push(mega);
+  mega.position.set(0,4.35,0);mega.rotation.x=Math.PI/2;
   const ceilingParent=room.ceiling||root;ceilingParent.updateWorldMatrix(true,false);
-  root.add(mega);root.updateWorldMatrix(true,true);ceilingParent.attach(mega);mega.visible=false;groups.push(mega);
-  const miniature=display(.74,.41625,'sample_ceiling',false);models.push(miniature);
+  ceilingParent.add(mega);ceilingParent.worldToLocal(mega.position);mega.visible=false;groups.push(mega);
+  // A miniature projector with a brass lens, cooling grille, feet and power light.
+  const projector=new T.Group();projector.name='sample_ceiling_projector';
+  projector.add(box(.42,.15,.29,brass,0,.095,0),box(.40,.145,.285,casing,0,.105,.006));
+  const lensMaterial=new T.MeshBasicMaterial({color:0x59dbfa,toneMapped:false});materials.add(lensMaterial);
+  function cylinder(radius,depth,material,x,y,z){const g=new T.CylinderGeometry(radius,radius,depth,32);geometries.add(g);const m=new T.Mesh(g,material);m.rotation.x=Math.PI/2;m.position.set(x,y,z);projector.add(m);}
+  cylinder(.063,.09,brass,-.095,.11,.17);cylinder(.045,.012,lensMaterial,-.095,.11,.222);
+  for(let i=0;i<5;i++)projector.add(box(.075,.007,.009,brass,.09,.07+i*.017,.155));
+  for(const x of [-.15,.15])for(const z of [-.09,.09])projector.add(box(.045,.025,.045,casing,x,.0125,z));
+  projector.add(box(.024,.008,.015,lensMaterial,.13,.183,.08));models.push(projector);
   function ceilingDecor(on) {
     if(on) {
       const candidates=[];
