@@ -207,11 +207,12 @@ export async function createScene(o) {
       held = null; resetInput(); run();
     },
     pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); interaction.dismiss(); } else run(); },
-    halt() { halted = true; stop(); resetInput(); interaction.dispose(); decor.dispose(); },
+    halt() { halted = true; stop(); resetInput(); interaction.dispose(); decor.dispose(); for(const p of room.payouts.values())p.coins.dispose(); },
     setStill(on) { still = !!on; },
     /** Repaint one fixture label, e.g. the wheel's screen for MUST HIT (10.16.E). */
     setLabel(rowKey, node, text) { return room.setLabel(rowKey, node, text); },
     dismissEmi() { const open = !!interaction.debug().id; interaction.dismiss(); return open; },
+    celebrate: (key,amount,tier,text)=>room.celebrate(key,amount,tier,text),
     setOverview, go, visit,
     pose(p, y = 0, tilt = 0) { pos.splice(0, 3, ...p); yaw = y; pitch = tilt; },
     get nearest() { return nearest; },
@@ -225,6 +226,7 @@ export async function createScene(o) {
         nearest: nearest ? nearest.key : null, fixtures: room.fixtures, bulbs: room.bulbs, screens: room.screens.length,
         pictures: screens.pictures, animation: screens.animation, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
         decor: decor.debug(),
+        payouts: Object.fromEntries([...room.payouts].map(([key,p])=>[key,p.coins.debug()])),
         emiBubble: interaction.debug(),
         emis: room.emis.map((e) => e.debug()),
         marquee: room.marquee?.userData.text,

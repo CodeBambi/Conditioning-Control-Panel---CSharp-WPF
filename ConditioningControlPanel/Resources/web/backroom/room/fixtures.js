@@ -14,9 +14,10 @@
 import * as T from 'three';
 import { createPrizeMarquee } from './prize-marquee.js';
 import { createEmiIdle } from './emi-idle.js';
+import { createCoinShower } from './coin-shower.js';
 
 const BULB = /^(lights_chase_\d|bulb_\d|canopy_bulb_|rim_bulb_)/;
-const CHASE = [0xff62be, 0xb381ff, 0x58dccf, 0xffca78].map((c) => new T.Color(c));
+const CHASE = [0xff168e, 0x852bff, 0x00e6b8, 0xff9d08].map((c) => new T.Color(c));
 
 export function labelTexture(text) {
   const c = document.createElement('canvas');
@@ -33,10 +34,10 @@ export function labelTexture(text) {
 
 function spiralFloorMaterial() {
   return new T.ShaderMaterial({
-    uniforms: { angle: { value: 0 } },
+    uniforms: { angle: { value: 0 }, colorPhase: { value: 0 } },
     vertexShader: 'varying vec2 p;void main(){p=uv*2.-1.;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-    fragmentShader: `uniform float angle;varying vec2 p;void main(){float c=cos(angle),s=sin(angle);vec2 q=mat2(c,-s,s,c)*p;
-float r=length(q);float a=atan(q.y,q.x);float wave=pow(.5+.5*sin(a*3.-r*22.),2.8);vec3 base=vec3(.052,.025,.080);vec3 band=vec3(.20,.068,.235);
+    fragmentShader: `uniform float angle,colorPhase;varying vec2 p;void main(){float c=cos(angle),s=sin(angle);vec2 q=mat2(c,-s,s,c)*p;
+float r=length(q);float a=atan(q.y,q.x);float wave=pow(.5+.5*sin(a*3.-r*22.),2.8);vec3 base=vec3(.025,.009,.065);vec3 band=.10+.32*(.5+.5*cos(vec3(0.,2.1,4.2)+r*4.-colorPhase));
 float fleck=.5+.5*sin(q.x*700.)*sin(q.y*700.);gl_FragColor=vec4(mix(base,band,wave)+fleck*.005,1.);
 #include <colorspace_fragment>
 }`,
@@ -74,7 +75,7 @@ function createAuras(count) {
 function patchInstancedEmissive(material) {
   material.onBeforeCompile = (s) => {
     s.fragmentShader = s.fragmentShader.replace('vec3 totalEmissiveRadiance = emissive;',
-      'vec3 totalEmissiveRadiance = emissive;\n#ifdef USE_COLOR\ntotalEmissiveRadiance *= vColor;\n#endif');
+      'vec3 totalEmissiveRadiance = emissive;\n#if defined(USE_COLOR) || defined(USE_INSTANCING_COLOR)\ntotalEmissiveRadiance *= vColor;\n#endif');
   };
   material.customProgramCacheKey = () => 'br-bulb';
 }
@@ -156,6 +157,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
   const holders = new Map();
   const hubs = [];
   const emis = [];
+  const payouts = new Map();
   let marquee = null;
   /** Every fixture label mesh, `rowKey/node` -> { mesh, text }, so one can be repainted later (10.16.E). */
   const labels = new Map();
@@ -225,6 +227,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     if (row.id === 'counter') { marquee = createPrizeMarquee(label(row, '@name')); model.add(marquee); }
     const emi = createEmiIdle({ model, row, atlas });
     if (emi) emis.push(emi);
+    if(row.id==='slot') payouts.set(row.key,{coins:createCoinShower(model),rest:labels.get(row.key+'/screen_status')?.text||'',showing:false});
     holders.set(row.key, holder);
     tick();
     return holder;
@@ -253,8 +256,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
   const tmp = new T.Vector3();
   const instanced = [];
   for (const list of groups.values()) {
-    const mat = list[0].mesh.material.clone();
-    mat.color.set(0xffffff); mat.emissive.set(0xffffff); mat.emissiveIntensity = 1;
+    const mat = new T.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: .55, roughness: .5, metalness: 0, toneMapped: false });
     patchInstancedEmissive(mat);
     const im = new T.InstancedMesh(list[0].mesh.geometry, mat, list.length);
     im.name = 'bulbs_' + list[0].row.id;
@@ -280,7 +282,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
       const offset = b.row.variant === 'violet' ? .33 : b.row.variant === 'mint' ? .66 : 0;
       const travel = t / (b.row.id === 'wheel' ? 6 : 8) * (b.rim ? -1 : 1) + offset;
       const wave = Math.pow(.5 + .5 * Math.cos((b.phase - travel) * Math.PI * 2), 8);
-      const power = .25 + wave * 1.65, op = .22 + wave * .66;
+      const power = .30 + wave * .65, op = .16 + wave * .36;
       const phase = (t / 12 + b.phase * .5 + offset) % 4, i = Math.floor(phase);
       c.copy(CHASE[i]).lerp(CHASE[(i + 1) % 4], T.MathUtils.smoothstep(phase % 1, 0, 1));
       auras.set(b.aura, c, op);
@@ -293,7 +295,12 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     auras.commit();
     for (const h of hubs) h.update(dt, still);
     for (const emi of emis) emi.update(dt, still);
-    if (floor) floor.material.uniforms.angle.value = t * 0.09;
+    for(const [key,p] of payouts){p.coins.update(dt,still);const d=p.coins.debug();
+      if(d.active){setLabel(key,'screen_status','✦ '+d.label+' ✦');p.showing=true;
+        const m=labels.get(key+'/screen_status')?.mesh.material;if(m)m.emissive.setHSL(still ? .1 :(d.age*.18)%1,.8,.6);}
+      else if(p.showing){setLabel(key,'screen_status',p.rest);p.showing=false;}
+    }
+    if (floor) { floor.material.uniforms.angle.value = t * .36; floor.material.uniforms.colorPhase.value = t * .22; }
   }
 
   /**
@@ -313,5 +320,5 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     return true;
   }
 
-  return { shell, ceiling, floor, screens, holders, fixtures: set.length, bulbs: bulbs.length, update, auras, hubs, labels, setLabel, emis, marquee };
+  return { shell, ceiling, floor, screens, holders, fixtures: set.length, bulbs: bulbs.length, update, auras, hubs, labels, setLabel, emis, marquee, payouts, celebrate(key,amount,tier,text){const p=payouts.get(key);if(!p)return false;if(amount<=0){p.coins.clear();return false;}return p.coins.start(amount,tier,text);} };
 }

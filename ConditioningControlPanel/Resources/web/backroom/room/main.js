@@ -368,6 +368,7 @@ async function start(init) {
     spReadout,
     spChanged,
     chipSettle,
+    revealedWin: (key,amount,tier,text)=>scene?.celebrate(key,amount,tier,text),
     standUp: () => back('back'),
     log: (level, msg) => bridge.log(level, msg),
   });

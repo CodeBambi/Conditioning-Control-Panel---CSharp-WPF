@@ -18,8 +18,8 @@ function duster(shoulder) {
   const group = new T.Group(); group.name = 'emi_feather_duster'; group.position.set(0,-.246,.003);
   const gold = new T.MeshStandardMaterial({color:0xd7af6e,metalness:.55,roughness:.4});
   const pink = new T.MeshStandardMaterial({color:0xe8add8,roughness:.85});
-  const handle = new T.Mesh(new T.CylinderGeometry(.014,.017,.43,8),gold); handle.position.y=-.18;group.add(handle);
-  const fluff = new T.Mesh(new T.SphereGeometry(.10,10,8),pink);fluff.position.y=-.42;fluff.scale.set(.8,1.65,.8);group.add(fluff);
+  const handle = new T.Mesh(new T.CylinderGeometry(.012,.017,.72,8),gold); handle.position.y=-.35;group.add(handle);
+  const fluff = new T.Mesh(new T.SphereGeometry(.10,10,8),pink);fluff.position.y=-.75;fluff.scale.set(.8,1.65,.8);group.add(fluff);
   shoulder.add(group); group.visible=false; gold.transparent=pink.transparent=true; return { group, show(amount) {group.visible=amount>.01;gold.opacity=pink.opacity=amount;}, dispose() {group.removeFromParent();group.traverse(o=>{if(o.isMesh)o.geometry.dispose();});gold.dispose();pink.dispose();} };
 }
 export function createEmiIdle({ model, row, atlas }) {
@@ -28,6 +28,9 @@ export function createEmiIdle({ model, row, atlas }) {
   const body = hinge(root), pivot = body.pivot; pivot.name = 'emi_idle_' + row.id;
   const left = hinge(root.getObjectByName('shoulderL')), right = hinge(root.getObjectByName('shoulderR')), antenna = hinge(root.getObjectByName('ant0'));
   const tool = row.id === 'counter' ? duster(root.getObjectByName('shoulderR')) : null;
+  const shoulder = root.getObjectByName('shoulderR');
+  const restAxis = shoulder ? new T.Vector3(0,-1,0).applyQuaternion(shoulder.quaternion) : null;
+  const origin = new T.Vector3(), aim = new T.Vector3(), inverse = new T.Matrix4(), targetRotation = new T.Quaternion();
   const face = root.getObjectByName('EMI_glass'), originalMaterial = face?.material;
   const texture = atlas && face ? atlas.clone() : null;
   if (texture && originalMaterial) {
@@ -54,6 +57,18 @@ export function createEmiIdle({ model, row, atlas }) {
     ease(body,.014*Math.sin(t*1.25)+gesture.pitch,.055*Math.sin(t*.43)+gesture.yaw,.018*Math.sin(t*.71)+gesture.roll);
     ease(left,gesture.reach,0,-gesture.left-.025*Math.sin(t*.85));
     ease(right,gesture.reach,gesture.sweep,gesture.right+.025*Math.sin(t*.85));
+    if (tool && gesture.dust > 0) {
+      model.updateWorldMatrix(true,true);
+      right.pivot.getWorldPosition(origin);
+      // Fixed-height arc: the feather head clears the tray throughout every stroke.
+      const surface = model.localToWorld(new T.Vector3(0,.839,0)).y;
+      const scale = shoulder.getWorldScale(new T.Vector3()).y, reach = .996 * scale;
+      const dy = surface + .10 - origin.y, dx = -.20 + gesture.brushX;
+      aim.set(dx,dy,Math.sqrt(Math.max(.01,reach*reach-dx*dx-dy*dy))).normalize();
+      inverse.copy(right.pivot.parent.matrixWorld).invert(); aim.transformDirection(inverse);
+      targetRotation.setFromUnitVectors(restAxis,aim);
+      right.pivot.quaternion.slerp(targetRotation,gesture.dust);
+    }
     if(antenna)antenna.pivot.rotation.z=.045*Math.sin(t*1.7)+gesture.roll*.4;
     expression(t%5.9<.14?2:(gesture.face??3));
   }

@@ -1,6 +1,6 @@
 /** Rigid mascot choreography, sampled on the paused room clock. */
 export const EMI_REACTIONS = Object.freeze({ greet: 3.2, wave: 3.2, look: 4.2, bow: 3.4, present: 4, dust: 6.8, handout: 5.2 });
-const REST = Object.freeze({ yaw: 0, pitch: 0, roll: 0, lift: 0, face: null, left: 0, right: 0, reach: 0, sweep: 0, tool: 0 });
+const REST = Object.freeze({ yaw: 0, pitch: 0, roll: 0, lift: 0, face: null, left: 0, right: 0, reach: 0, sweep: 0, tool: 0, dust: 0, brushX: 0 });
 const PERIOD = { counter: 27, wheel: 19, cards: 23, roulette: 25 };
 const ROUTINES = { counter: ['look', 'dust', 'present'], wheel: ['wave', 'look', 'bow'], cards: ['present', 'look', 'bow'], roulette: ['bow', 'present', 'look'] };
 const smooth = v => { const x = Math.max(0, Math.min(1, v)); return x * x * (3 - 2 * x); };
@@ -21,11 +21,11 @@ export function sampleEmiReaction(kind, t) {
     p.yaw = -.20 * e; p.left = .85 * e; p.right = .45 * e; p.reach = -.7 * e;
     p.roll = .025 * Math.sin(t*3) * e;
   } else if (kind === 'dust') {
-    // Turn, raise the duster, three brushing strokes, lower, then face the visitor.
-    const turn = hold(t, .1, 5.55, .85), brush = hold(t, 1.25, 4.9, .55);
-    p.tool = hold(t, .7, 5.1, .45); p.yaw = -.65 * turn; p.right = .30 * brush; p.left = .15 * turn;
-    p.reach = -1.48 * brush; p.sweep = .25 * Math.sin((t-1.25)*6) * brush;
-    p.pitch = .025 * brush; p.roll = .025 * Math.sin(t*6) * brush;
+    // Raise behind the counter, sweep horizontally above the tray, then retract.
+    p.dust = hold(t, .15, 5.5, .8);
+    p.tool = hold(t, 1.25, 4.8, .35);
+    p.brushX = .20 * Math.sin((t-1.6)*4.2);
+    p.left = .12 * p.dust;
   } else if (kind === 'handout') {
     // Cosmetic presentation only. The purchase service owns any real reward transfer.
     const reach = hold(t, .6, 3.65, .8);
