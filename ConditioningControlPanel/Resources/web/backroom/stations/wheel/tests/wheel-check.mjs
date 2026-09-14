@@ -269,7 +269,8 @@ await strip('strip-already-spun-reopen.png', [0, 1000], t0);
 d = await dbg();
 ok(d.state.spun && d.feel.scene.landed === 'twinkle' && /Next spin in/.test(d.status) && (await fxCalls()).length === 0, 'fresh open after spinning shows the landing and the countdown, fires nothing');
 
-// 8. Drag both ways: the direction is kept, the landing is the server's.
+// 8. Drag both ways: the direction is kept, the landing is the server's, and the Loom hub still pulls inward (law 3).
+summary.hubAfterDrag = {};
 for (const [dir, next] of [[1, 'dazzle'], [-1, 'sip_b']]) {
   await boot(`?next=${next}`);
   const c = await ev("(() => { const r = document.querySelector('.wheel-stage').getBoundingClientRect(); return { x: r.width / 2, y: r.height / 2 }; })()");
@@ -281,6 +282,13 @@ for (const [dir, next] of [[1, 'dazzle'], [-1, 'sip_b']]) {
   const s0 = await dbg(), r0 = s0.feel.scene.rotation;
   await sleep(300);
   const r1 = (await dbg()).feel.scene.rotation;
+  // In the long last turn the wheel is slow enough to read on screenshots 200 ms apart: an anticlockwise fling must
+  // still turn the hub clockwise with its arms leading at the rim (a hub read off -rotation.z ran backward here).
+  const slow = await until('(() => { const h = window.dev.station.debug().feel.scene.hypno; return h.slowing && h.speed < 1.2 && h.speed > 0.2; })()', 15000, 20);
+  const hand = slow ? await hubHandedness(200) : null;
+  summary.hubAfterDrag[dir > 0 ? 'anticlockwise' : 'clockwise'] = hand;
+  ok(slow && hand.turn.every(v => v > 0) && hand.rim.every(v => v > 0), `hub in the long last turn after a${dir > 0 ? 'n anticlockwise' : ' clockwise'} drag: turns clockwise ${hand ? hand.turn.map(v => v.toFixed(1)) : '-'} deg, arms lead at the rim ${hand ? hand.rim.map(v => v.toFixed(1)) : '-'} deg (reads inward)`);
+  if (dir > 0 && hand) await still('st-wheel-17-anticlockwise-last-turn-hub.jpg', 'After an anticlockwise drag: the Loom hub still turns clockwise in the long last turn');
   await waitLanded(20000);
   d = await dbg();
   const ans7 = s0.feel.log.find(x => x.what === 'answer');
@@ -374,6 +382,31 @@ const media0 = await ev('window.dev.host.media.length');
 await ev('window.dev.station.suspend(false)');
 await sleep(600);
 ok((await ev('window.dev.host.media.length')) === media0 + 1 && (await dbg()).hypno.kit, 'resume: a fresh deal, the hub paints again');
+
+// 15. A live settings frame lowers motion mid-visit (law 6): Full dress off at once, the next spin lands settled, halved.
+await boot('?full&next=glow');
+d = await dbg();
+ok(d.hypno.dress.full && d.feel.scene.hypno.moire && !d.still, 'live motion: opens at Full with the moire rim');
+await ev("window.dev.host.settings({ reduced: true, motion: 'reduced' })");
+await sleep(250);
+d = await dbg();
+ok(d.still && !d.hypno.dress.full && d.hypno.dress.calm && d.hypno.dress.k === 0.5 && !d.feel.scene.hypno.moire && d.hypno.kit && d.hypno.kit.still,
+  'live motion: a reduced settings frame drops Full, k 0.5, no moire, the hub held still, without a reopen');
+await ev('window.dev.host.clear()');
+await ev("document.querySelector('.wheel-spin').click()");
+await sleep(120);
+d = await dbg();
+ok(!d.feel.scene.coasting, 'live motion: the next press does not travel (the scene took the flag)');
+await waitLanded(6000);
+await sleep(300);
+d = await dbg();
+ok(d.feel.scene.landed === 'glow' && !d.feel.scene.hypno.ghosts && d.feel.scene.hypno.shear === 0 && !(await tunnels()).some(v => v > 0) && d.feel.scene.hypno.quiet !== null,
+  'live motion: settled on Glow, no taffy, no tunnel, the quiet room at k 0.5');
+await still('st-wheel-18-live-reduced-landed.jpg', 'A reduced settings frame mid-visit: Full texture gone, settled landing');
+await ev("window.dev.host.settings({ reduced: false, motion: 'full' })");
+await sleep(250);
+d = await dbg();
+ok(!d.still && d.hypno.dress.full && d.feel.scene.hypno.moire && d.hypno.kit && !d.hypno.kit.still, 'live motion: back to full motion, Full dress again, the hub turns');
 
 await writeFile(join(OUT, 'wheel-check.json'), JSON.stringify(summary, null, 2));
 ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
