@@ -7,7 +7,7 @@
 <title>Daily Daze wheel - dev harness</title>
 <!-- Dev harness only: a mock ctx, the hypno kit's mock host and mock-server.js stand in for the room, the host and the server.
      Serve ConditioningControlPanel/Resources as the web root, then open /web/backroom/stations/wheel/dev.html.
-     Query: ?sp=57&latency=120&reduced&calm&full&gates=off&young&taken&pot=12&carry=2&next=jackpot|snooze|deep|glow&spun&day=2026-09-14T22:00:00Z&hook
+     Query: ?sp=57&latency=120&reduced&calm&full&gates=off&young&taken&pot=12&musthit&carry=2&next=jackpot|snooze|deep|glow&spun&day=2026-09-14T22:00:00Z&hook
      #screen draws the host's fullscreen primitives from what the mock host recorded (tests/host-screen.js).
      Standalone, so no ctx.hostBack: the station shows its own Back and SP chip (?hook fakes the room's ctx.spReadout). -->
 <script type="importmap">{"imports":{"three":"../../../vendor/three/three.module.min.js","three/addons/":"../../../vendor/three/addons/"}}</script>
@@ -37,6 +37,7 @@
   <button data-do="glow">next: glow 5</button>
   <button data-do="busy">fault: busy x2</button>
   <button data-do="timeout">fault: lost reply</button>
+  <button data-do="musthit">pot: must hit</button>
   <button data-do="door">toggle door</button>
   <button data-do="tomorrow">clock: next day</button>
 </details>
@@ -54,6 +55,7 @@ const realNow = Date.now.bind(Date);
 Date.now = () => realNow() + skew;
 const server = createMockServer({ sp: num('sp', 57), carry: num('carry', 0), eligible: !q.has('young'), now: () => Date.now() });
 if (q.has('pot')) server.potAge(num('pot', 0));
+if (q.has('musthit')) server.mustHit();   // 10.16.E: the pot at the line, nobody has taken it
 if (q.has('taken')) server.wonToday();
 if (q.has('next')) server.script(...q.get('next').split(','));
 if (q.has('spun')) await server.handle('spin', { idem: 'devspunalreadytoday01' });
@@ -97,6 +99,7 @@ document.getElementById('dev').addEventListener('click', e => {
   if (['jackpot', 'snooze', 'deep', 'glow'].includes(act)) server.script(act);
   if (act === 'busy') server.fail('spin', 'busy', 2);
   if (act === 'timeout') server.fail('spin', 'timeout', 1, { apply: true });
+  if (act === 'musthit') server.mustHit();
   if (act === 'door') server.setOpen(door = !door);
   if (act === 'tomorrow') skew += 86400000;
 });

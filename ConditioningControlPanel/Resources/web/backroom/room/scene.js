@@ -200,6 +200,8 @@ export async function createScene(o) {
     pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); } else run(); },
     halt() { halted = true; stop(); resetInput(); },
     setStill(on) { still = !!on; },
+    /** Repaint one fixture label, e.g. the wheel's screen for MUST HIT (10.16.E). */
+    setLabel(rowKey, node, text) { return room.setLabel(rowKey, node, text); },
     setOverview, go, visit,
     pose(p, y = 0, tilt = 0) { pos.splice(0, 3, ...p); yaw = y; pitch = tilt; },
     get nearest() { return nearest; },
@@ -215,6 +217,7 @@ export async function createScene(o) {
         floorAngle: room.floor ? room.floor.material.uniforms.angle.value : null, ambient, sway,
         frameMedian: sorted.length ? sorted[Math.floor(sorted.length / 2)] : null, buildMs: Math.round(buildMs),
         ceiling: room.ceiling ? room.ceiling.visible : null,
+        labels: Object.fromEntries(Array.from(room.labels, ([k, v]) => [k, v.text])),
       };
     },
   };

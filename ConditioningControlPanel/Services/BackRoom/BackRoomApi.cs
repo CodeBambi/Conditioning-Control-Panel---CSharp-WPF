@@ -78,6 +78,9 @@ public sealed class BackRoomApi : IBackRoomRelay
             // 10.13.E: Soft Hand and Velvet Vortex.
             ["cards"] = new[] { ("GET", "state"), ("POST", "deal"), ("POST", "hit"), ("POST", "stand"), ("POST", "double"), ("POST", "split") },
             ["roulette"] = new[] { ("GET", "state"), ("POST", "spin"), ("POST", "cursor") },
+            // 10.16.B: the floor bell. Not a station: the ROOM reads it on open and after
+            // each station close, and posts the display-name opt-in.
+            ["bell"] = new[] { ("GET", "state"), ("POST", "opt") },
         };
 
     private static readonly HttpClient SharedHttp = new() { Timeout = System.Threading.Timeout.InfiniteTimeSpan };

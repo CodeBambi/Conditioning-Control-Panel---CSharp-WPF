@@ -29,7 +29,7 @@ import { recipe, tierOf, winTokens, glance, landPose, pressPose, revealCount, FE
 import { dressOf, edgeAlpha, captionAlpha, hubStill } from './hypno.js';
 import { createLoomKit, createDeck, createMoments, wheelSize, strengthK, wheelTurnLevel, boxAround } from '../../shared/hypno/index.js';
 import { createScene } from './scene.js';
-import { createReadout } from './readout.js';
+import { createReadout, jackpotChip } from './readout.js';
 import { createBank } from './bank.js';
 import { createSound } from './sound.js';
 
@@ -120,7 +120,8 @@ export async function mount(ctx) {
   function sync() {
     if (!el || !st) return;
     const c = clock(), r = st.spun ? readResult(st.result) : null, j = st.jackpot || {};
-    $('.wheel-jackpot').textContent = t('br_wheel_jackpot', 'Jackpot {n} SP, {odds}', { n: fmt(j.amount), odds: String(j.odds || '') });
+    $('.wheel-jackpot').textContent = jackpotChip(j, t, fmt);   // MUST HIT in place of the odds (10.16.E)
+    $('.wheel-jackpot').classList.toggle('is-must-hit', j.mustHit === true);
     const status = busy ? t('br_wheel_spinning', 'Round it goes...')
       : r ? `${resultLine(r, st.snoozeCarry)}\n${c ? t('br_wheel_next', 'Next spin in {time}.', { time: c.text }) : ''}`
       : t('br_wheel_ready', 'Your free spin is ready. Drag the rim or press Spin.');
@@ -153,6 +154,7 @@ export async function mount(ctx) {
     const j = st.jackpot || {}, notes = [t('br_wheel_odds_note', 'One free spin a day. The slice sizes are the picture; these are the real odds.')];
     if (j.eligible === false) notes.push(t('br_wheel_young', 'The jackpot opens to accounts a few days old.'));
     else if (j.wonToday) notes.push(t('br_wheel_taken', "Today's jackpot is taken. It starts again tomorrow."));
+    else if (j.mustHit === true) notes.push(t('br_wheel_must_hit_room', 'The pot has to fall today'));
     if (st.snoozeCarry > 0) notes.push(t('br_wheel_carry', 'Snooze carry: +{n} SP on your next spin.', { n: fmt(st.snoozeCarry) }));
     $('.wheel-odds p').textContent = notes.join(' ');
   }

@@ -68,6 +68,23 @@ html.br-visiting .br-room-ui { visibility: hidden; }
 .br-map-list[hidden] { display: none; }
 html.br-overview .br-hint { visibility: hidden; }
 
+/* The room view puts the Options card away with the rest of the walking chrome. */
+html.br-overview .br-options { visibility: hidden; }
+
+/* THE FLOOR BELL (CONTRACT 10.16.B). One line of text under the nav pills. It is
+ * somebody else's party (Brake 1): one colour, no background flash, no sound. */
+.br-bell { position: absolute; top: 50px; right: 120px; max-width: min(520px, calc(100vw - 150px));
+  pointer-events: none; text-align: right; color: var(--br-ink-dim); font-size: 12px; letter-spacing: .01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.br-bell[hidden] { display: none; }
+.br-bell span { opacity: 1; }
+.br-bell span.is-in { animation: br-bell-in 200ms ease-out; }
+html.br-overview .br-bell { visibility: hidden; }
+@keyframes br-bell-in { from { opacity: 0; } }
+/* Reduced motion and Calm: the line still rotates (it is text, not motion), it just lands at 0 ms. */
+html.br-reduced .br-bell span.is-in, html.br-still .br-bell span.is-in { animation: none; }
+@media (prefers-reduced-motion: reduce) { .br-bell span.is-in { animation: none; } }
+
 /* HUD: Back is always on top of everything, stations included (Law VI). */
 .br-hud { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; justify-content: space-between;
   align-items: center; z-index: 30; pointer-events: none; }
