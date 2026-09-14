@@ -47,13 +47,14 @@ ok(!stations.some((s) => s.id === 'scratcher'), 'no scratcher');
 const slots = stations.filter((s) => s.id === 'slot');
 ok(slots.length === 3 && slots.every((s) => s.state === 'live' && s.entry === 'stations/slot/station.js'), 'three live slot rows, one station');
 ok(slots.map((s) => s.variant).join() === 'rose,violet,mint', 'with the rose, violet and mint variants');
+ok(slots.map((s) => s.fixture.position[2]).join() === '3.1,4.9,6.7' && stations.find((s) => s.id === 'wheel').fixture.position[2] === -2, 'the approved 2.6 metre left-wall shift is retained');
 ok(normaliseStations([{ ...JSON.parse(JSON.stringify(slots[0])), entry: 'https://evil/x.js' }])[0].state === 'soon', 'a live row with a foreign entry is demoted to soon');
 for (const s of stations) {
   ok(!blocked(s.approach[0], s.approach[2], stations), s.key + ': approach stands clear of every body');
   ok(reachable(START, s.approach, stations), s.key + ': approach is reachable from the door');
   ok(nearestStation(s.approach, stations) === s, s.key + ': standing there makes it the nearest');
 }
-ok(blocked(0, -5, stations) && blocked(-5.9, 0.5, stations) && blocked(7, 0, stations), 'the counter, a slot and the wall block');
+ok(blocked(0, -5, stations) && blocked(-5.9, 3.1, stations) && blocked(7, 0, stations), 'the counter, a slot and the wall block');
 {
   const f = facing([0, 1.65, 0], [0, 1.65, -1]);
   ok(Math.abs(f.yaw) < 1e-9 && Math.abs(f.pitch) < 1e-9, 'facing -z is yaw 0');
@@ -95,7 +96,7 @@ ok(stations.every((s) => readdirSync(ASSETS).includes(s.fixture.file)), 'every r
 /* ---------------------------------------------------------------- 2. page */
 const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 if (!existsSync(CHROME)) { console.error('FAIL no chrome at ' + CHROME); process.exit(1); }
-const PORT = 8891, DEBUG_PORT = 9391;
+const PORT = Number(process.env.BR_ROOM_TEST_PORT || 8891), DEBUG_PORT = Number(process.env.BR_ROOM_DEBUG_PORT || 9391);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
   '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary' };
 const server = createServer(async (req, res) => {
@@ -279,7 +280,7 @@ for (const s of stations) {
 
 // 2d. E at the violet slot opens the one slot station with the violet variant; Back restores the pose
 await ev(`window.__backroom.scene.go(${row('slot:violet')})`);
-await ev(`window.__backroom.scene.pose([-3.9, 1.65, 2.25], 1.4, -0.1)`);
+await ev(`window.__backroom.scene.pose(${row('slot:violet')}.approach, 1.4, -0.1)`);
 await sleep(200);
 const before = await dbg();
 ok(before.nearest === 'slot:violet', 'standing by the violet slot makes it nearest');
