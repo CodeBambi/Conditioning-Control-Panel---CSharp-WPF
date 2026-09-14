@@ -149,7 +149,7 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
     }
 
     public void Wash(FxRgb color, double peak, BackRoomGif? picture)
-        => BackRoomWashOverlay.Show(color, peak, LocalFile(picture), picture == null ? null : Target(null).ScreenPx);
+        => BackRoomWashOverlay.Show(color, peak, LocalFile(picture), picture == null ? null : Target(null).ScreenPx, MotionFx.Level == MotionLevel.Off);
 
     public void GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still)
     {
