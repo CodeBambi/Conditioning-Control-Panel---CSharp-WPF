@@ -651,4 +651,90 @@ public class NeutralInstallerBaselineTests
                     lang + ".json still describes the in-box session with '" + word + "'");
         }
     }
+    // ---- the compiled themed sessions wait for their pack (item 10) ----------------------
+
+    private static readonly string[] PackedSessions =
+        { "gamer_girl", "distant_doll", "good_girls_dont_cum", "bambi_time" };
+
+    /// <summary>
+    /// The three themed presets left the installer in item 4, but Session.cs still holds compiled
+    /// twins of them and six callers read those directly, bypassing SessionManager. Without the
+    /// gate, a machine that never downloaded mod-bambi still lists Gamer Girl, Distant Doll and
+    /// Good Girls Don't Cum - to the remote controller most of all.
+    /// </summary>
+    [Fact]
+    public void AStrippedInstallIsNotOfferedTheSessionsItDoesNotHave()
+    {
+        var ids = Session.GetAllSessions(includePackedSessions: false).Select(s => s.Id).ToList();
+
+        foreach (var packed in PackedSessions)
+            Assert.DoesNotContain(packed, ids);
+
+        // The baseline keeps its own session and the two neutral placeholders.
+        Assert.Contains("morning_drift", ids);
+        Assert.Contains("deep_dive", ids);
+        Assert.Contains("random_drop", ids);
+    }
+
+    /// <summary>
+    /// The other half of the promise: the definitions stay compiled in, so installing the pack
+    /// brings them back without shipping code in the zip and without a reinstall.
+    /// </summary>
+    [Fact]
+    public void APackHolderLosesNothing()
+    {
+        var ids = Session.GetAllSessions(includePackedSessions: true).Select(s => s.Id).ToList();
+
+        foreach (var packed in PackedSessions)
+            Assert.Contains(packed, ids);
+
+        Assert.Equal(Session.PackedSessionIds.OrderBy(x => x), PackedSessions.OrderBy(x => x));
+    }
+
+    /// <summary>
+    /// The gate has to be the same probe the mod picker uses, not a second opinion that can drift
+    /// from it - a card offering a session the picker says needs a 331 MB download is worse than
+    /// no card at all.
+    /// </summary>
+    [Fact]
+    public void TheGateIsTheCheckTheModPickerAlreadyMakes()
+    {
+        var session = AppText("Models", "Session.cs");
+        Assert.Contains("GetAllSessions(ModPackCatalog.ContentAvailableFor(BuiltInMods.BambiSleepId))",
+            session, StringComparison.Ordinal);
+
+        var catalog = AppText("Dialogs", "ModPackCatalog.cs");
+        Assert.Contains("public static bool ContentAvailableFor(string? modId) => !NeedsDownload(modId);",
+            catalog, StringComparison.Ordinal);
+        Assert.Contains("return !svc.IsInstalled(packId!);", catalog, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Nothing in the app may reach past the gate by naming the overload. If a call site ever wants
+    /// the themed three unconditionally it has to say so here first, in this test.
+    /// </summary>
+    [Fact]
+    public void NoCallerOptsOutOfTheGate()
+    {
+        var root = Path.Combine(RepoRoot(), "ConditioningControlPanel");
+        var offenders = new List<string>();
+
+        foreach (var file in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+        {
+            var rel = file.Substring(root.Length).Replace('\\', '/');
+            if (rel.Contains("/bin/") || rel.Contains("/obj/")) continue;
+            if (rel.EndsWith("/Models/Session.cs", StringComparison.OrdinalIgnoreCase)) continue;
+
+            foreach (var line in File.ReadAllLines(file))
+            {
+                var at = line.IndexOf("GetAllSessions(", StringComparison.Ordinal);
+                if (at < 0) continue;
+                if (line.IndexOf("GetAllSessions()", StringComparison.Ordinal) >= 0) continue;
+                offenders.Add(rel + ": " + line.Trim());
+            }
+        }
+
+        Assert.True(offenders.Count == 0,
+            "these call sites pass their own answer to the pack gate: " + string.Join(" | ", offenders));
+    }
 }

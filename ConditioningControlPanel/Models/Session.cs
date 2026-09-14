@@ -556,12 +556,48 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
         };
 
         /// <summary>
+        /// The compiled sessions that belong to mod-bambi rather than to the baseline install.
+        /// Their .session.json files travel in the pack (ContentPackSessionsExclude in the
+        /// csproj strips them from the build), but these twins are compiled into the exe, and
+        /// six callers read them straight out of GetAllSessions() without going through
+        /// SessionManager - most visibly the remote controller's session list. Without a gate
+        /// they surface on a machine that never downloaded the pack.
+        ///
+        /// bambi_time is in the list for the same reason even though it is an IsAvailable=false
+        /// teaser: a baseline install has no business showing a card that reads 'Full Bambi mode'.
+        /// </summary>
+        public static readonly IReadOnlyList<string> PackedSessionIds = new[]
+        {
+            "gamer_girl", "distant_doll", "good_girls_dont_cum", "bambi_time"
+        };
+
+        /// <summary>True for a session id that only exists once mod-bambi is installed.</summary>
+        public static bool IsPackedSessionId(string? id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return false;
+            foreach (var packed in PackedSessionIds)
+                if (string.Equals(packed, id, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        /// <summary>
         /// Gets all sessions including placeholders
         /// </summary>
-        /// </summary>
         public static List<Session> GetAllSessions()
+            => GetAllSessions(ModPackCatalog.ContentAvailableFor(BuiltInMods.BambiSleepId));
+
+        /// <summary>
+        /// The same list, with the pack-owned sessions in or out by the caller's choice.
+        /// Split out so the gate can be tested without an installed pack or a live App.
+        /// </summary>
+        /// <param name="includePackedSessions">
+        /// False on a modular install whose mod-bambi pack has not been downloaded. The
+        /// themed definitions below stay compiled in either way, so a pack holder loses
+        /// nothing and the pack does not have to carry code.
+        /// </param>
+        public static List<Session> GetAllSessions(bool includePackedSessions)
         {
-            return new List<Session>
+            var sessions = new List<Session>
             {
                 MorningDrift,
                 GamerGirl,
@@ -601,6 +637,11 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
                     Description = "You won't know what's coming. That's the point. Let go of control completely."
                 }
             };
+
+            if (!includePackedSessions)
+                sessions.RemoveAll(s => IsPackedSessionId(s?.Id));
+
+            return sessions;
         }
 
         /// <summary>
