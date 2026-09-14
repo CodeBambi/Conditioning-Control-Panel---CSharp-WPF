@@ -2,7 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createTape, shownSpOf, stopsFor, normalize, defaultTapeCount, affordableTapeCount, TAPE_MAX } from '../tape.js';
-import { createMockServer } from '../mock-server.js';
+import { createMockServer, lineFor, WEIGHTS_V7 } from '../mock-server.js';
+import { jarPlan, playsWithoutPress, respinKeep } from '../feel.js';
 
 function rig(opts = {}) {
   let t = 0;
@@ -299,4 +300,217 @@ test('the tape follows the balance until the player picks a count, and any pick 
   assert.equal(r2.tape.pickCount(null), 0, 'back to the default, and 0 SP affords nothing');
   await r2.tape.open();
   assert.equal(r2.tape.snapshot().tapePicked, null, 'a new sit-down forgets the pick');
+});
+
+
+/* ---------------------------------------------------------------------------------------------------
+ * The playbook, Tier B and C (CONTRACT 10.16), against the mock's table v7. The client never weights,
+ * mints or invents any of this: every number below is the server's and the page only shows it (Law I).
+ * ------------------------------------------------------------------------------------------------ */
+
+test('table v7: the jar block, the emi2 row, the re-spin block and the TOTAL jackpot odds', async () => {
+  const r = rig();
+  await r.tape.open();
+  const s = r.tape.snapshot();
+  assert.equal(s.jarSize, 100, '10.16.A, decided 2026-09-14 evening: a jar is a come-back reason');
+  assert.equal(s.jarFree, 3);
+  assert.equal(s.jackpotOdds, '1 in 6,494', 'published odds are always the TOTAL, both paths counted');
+  const emi2 = s.lines.find(l => l.id === 'emi2');
+  assert.ok(emi2, 'emi2 joins LINES between emi3 and gif3same');
+  assert.equal(emi2.pays, 0, 'the re-spin IS the event, so the line itself pays nothing');
+  assert.equal(emi2.respin, 1);
+  assert.equal(s.lines.findIndex(l => l.id === 'emi2'), 1);
+  // The weights the server lane is re-solving live in one place, and they still add up to the denominator.
+  assert.equal(WEIGHTS_V7.emi3, 92);
+  assert.equal(WEIGHTS_V7.emi2, 8207);
+  assert.equal(WEIGHTS_V7.melt, 58900, 'melt does not scale');
+  assert.equal(Object.values(WEIGHTS_V7).reduce((a, b) => a + b, 0), 1e6);
+});
+
+test('C1 lineFor: emi2 is read before melt, and only on reels 1 and 2', () => {
+  assert.equal(lineFor(['emi', 'emi', 'melt']), 'emi2', 'the chase does NOT start the melt');
+  assert.equal(lineFor(['emi', 'emi', 'sub0']), 'emi2');
+  assert.equal(lineFor(['emi', 'emi', 'emi']), 'emi3', 'three is still the jackpot');
+  assert.equal(lineFor(['emi', 'sub0', 'emi']), 'none', 'the pair is about reels 1 and 2');
+  assert.equal(lineFor(['melt', 'emi', 'emi']), 'melt');
+  assert.equal(lineFor(['spiral0', 'spiral1', 'spiral2']), 'spiral3', 'nothing else moved');
+});
+
+test('C1 an emi2 queues exactly one emi_respin, inline, and it holds reels 1 and 2', async () => {
+  const r = rig({ sp: 20 });
+  await r.tape.open();
+  r.server.script(['emi', 'emi', 'melt']);
+  r.server.respin('sub1');
+  r.tape.pickCount(1);
+  const out = await play(r, 2);
+  assert.equal(out[0].line, 'emi2');
+  assert.equal(out[0].pay, 0);
+  assert.equal(out[0].meltLeft, 0, 'emi, emi, melt reads emi2 and never starts the melt');
+  assert.equal(out[1].kind, 'emi_respin');
+  assert.equal(playsWithoutPress(out[1].kind), true, 'it plays on its own, with no second lever press');
+  assert.deepEqual(respinKeep(out[1].kind), [0, 1]);
+  assert.deepEqual(out[1].symbols.slice(0, 2), ['emi', 'emi'], 'reels 1 and 2 stay exactly where they are');
+  assert.equal(out[1].symbols[2], 'sub1');
+  assert.equal(out[1].line, 'none');
+  assert.equal(out[1].halved, false);
+  // exactly one: an emi_respin never queues a further re-spin, free spin or a second emi2.
+  assert.equal(out.filter(o => o.kind === 'emi_respin').length, 1);
+});
+
+test('C1 the re-spin can land the jackpot, and it is never halved even while melted', async () => {
+  const r = rig({ sp: 20, melt: 3 });
+  await r.tape.open();
+  r.server.script(['emi', 'emi', 'sub0']);
+  r.server.respin('emi');
+  r.tape.pickCount(1);
+  const out = await play(r, 2);
+  assert.equal(out[0].line, 'emi2');
+  assert.equal(out[0].halved, true, 'the pair itself is a plain-band outcome: halved of 0 while melted');
+  const hit = out[1];
+  assert.equal(hit.kind, 'emi_respin');
+  assert.equal(hit.line, 'emi3');
+  assert.equal(hit.pay, 400, 'the re-spin\'s jackpot is never halved');
+  assert.equal(hit.halved, false);
+  assert.ok(hit.fx.includes('fx.jackpot'));
+});
+
+test('C1 a freeze never draws emi2 and never re-spins (the seal that keeps rtpFrozen at 1.0200)', async () => {
+  const r = rig({ sp: 30 });
+  await r.tape.open();
+  r.tape.pickCount(1);
+  await play(r, 1);
+  r.tape.toggleHold(0);
+  r.server.script(['emi', 'emi', 'melt']);
+  const p = await r.tape.press();
+  assert.equal(p.kind, 'play');
+  assert.ok(r.tape.land(p.outcome));
+  assert.equal(p.outcome.kind, 'freeze');
+  assert.notEqual(p.outcome.line, 'emi2', 'a sealed row never reads emi2');
+  assert.equal(r.server.user.tape.outcomes.every(o => o.kind !== 'emi_respin'), true);
+});
+
+test('B1 the jar: every spiral shown ticks it, and the tape carries jarN after every outcome', async () => {
+  const r = rig({ sp: 30, jar: 10 });
+  await r.tape.open();
+  assert.equal(r.tape.snapshot().jar, 10, 'the stored count arrives with the state');
+  r.server.script(['spiral0', 'gif1', 'spiral2'], ['gif0', 'sub1', 'gif2']);
+  r.tape.pickCount(2);
+  const before = r.tape.snapshot().jar;
+  const out = await play(r, 2);
+  assert.equal(out[0].jarN, 12, 'two spirals shown, two ticks');
+  assert.equal(out[1].jarN, 12, 'a spin with no spiral leaves it alone');
+  assert.equal(r.tape.snapshot().jar, 12, 'the readout follows the tape cursor, exactly as melt does');
+  const plan = jarPlan(out[0], before, r.tape.snapshot().jarSize);
+  assert.deepEqual(plan.reels, [0, 2], 'and the tube ticks on those two reels\' own thuds');
+  assert.deepEqual(plan.values, [11, 12]);
+});
+
+test('B1 a full jar spills inline: 3 jar spins in draw order, before the next paid spin', async () => {
+  const r = rig({ sp: 30, jar: 99 });
+  await r.tape.open();
+  r.server.script(['spiral0', 'gif1', 'sub0'], ['gif0', 'sub1', 'gif2']);
+  r.tape.pickCount(2);
+  const before = r.tape.snapshot().jar;
+  const out = await play(r, 5);
+  assert.equal(out[0].line, 'none', 'one spiral, no line of its own to expand');
+  assert.equal(out[0].jarN, 0, '99 + 1 fires at 100 and the remainder stays');
+  assert.equal(jarPlan(out[0], before, 100).full, true);
+  assert.deepEqual(out.slice(1, 4).map(o => o.kind), ['jar', 'jar', 'jar'], 'three of them, inline');
+  assert.equal(out[4].kind, 'paid', 'and only then the next paid spin');
+  assert.equal(out[0].freeLeft >= 3, true, 'freeLeft counts the jar spins too');
+  assert.equal(r.tape.snapshot().jar, out[4].jarN, 'and the readout follows the tape cursor throughout');
+});
+
+test('B1 the jar is sealed from a freeze: its spirals earn nothing and jarN comes back unchanged', async () => {
+  const r = rig({ sp: 40, jar: 50 });
+  await r.tape.open();
+  r.tape.pickCount(1);
+  await play(r, 1);
+  const at = r.tape.snapshot().jar;
+  r.tape.toggleHold(1);
+  r.server.script(['spiral0', 'spiral1', 'spiral2']);
+  const p = await r.tape.press();
+  assert.equal(p.outcome.kind, 'freeze');
+  assert.ok(r.tape.land(p.outcome));
+  assert.equal(p.outcome.jarN, at, 'a freeze carries back the jar it did not change');
+  assert.deepEqual(jarPlan(p.outcome, at, 100).reels, [], 'so the tube does not tick');
+  assert.equal(r.tape.snapshot().jar, at);
+});
+
+test('B3 the comp: the first buy is 0 SP, playable at 0 SP, and it is spent once', async () => {
+  const r = rig({ sp: 0, comp: { id: 'c_mock_welcome', spins: 5 } });
+  await r.tape.open();
+  const s = r.tape.snapshot();
+  assert.deepEqual(s.comp, { id: 'c_mock_welcome', spins: 5 });
+  assert.equal(s.compSpent, false);
+  assert.equal(s.tapeCount, 0, 'a paid tape is not affordable at 0 SP...');
+  const p = await r.tape.press();
+  assert.equal(p.kind, 'play', '...but the comp is, which is the whole point of a comp');
+  const sent = tapeCalls(r).at(-1);
+  assert.equal(sent.body.comp, 'c_mock_welcome');
+  assert.equal(sent.body.count, undefined, '10.16.C: with comp, count is absent or exactly 5');
+  const receipt = r.server.user;
+  assert.equal(receipt.comp, null, 'settle() clears the stored comp');
+  assert.equal(r.tape.snapshot().comp, null);
+  assert.equal(r.tape.snapshot().compSpent, true);
+  assert.equal(r.server.user.tape.outcomes.length >= 5, true, 'five spins, drawn from the NORMAL plain table');
+  assert.equal(r.server.user.tape.outcomes.filter(o => o.kind === 'paid').length, 5);
+});
+
+test('B3 the comp is halved by the melt like any other spin: a gift, not a cleanse', async () => {
+  const r = rig({ sp: 0, melt: 3, comp: true });
+  await r.tape.open();
+  r.server.script(['gif1', 'gif1', 'gif1']);
+  const out = await play(r, 1);
+  assert.equal(out[0].line, 'gif3same');
+  assert.equal(out[0].halved, true);
+  assert.equal(out[0].pay, 20, 'half of 40');
+  assert.equal(out[0].meltLeft, 2, 'and it consumed one melt in draw order');
+});
+
+test('B3 comp refusals: comp_used falls back to a paid tape, and a refused buy never eats it', async () => {
+  const r = rig({ sp: 20, comp: { id: 'c_mock_welcome', spins: 5 } });
+  await r.tape.open();
+  // The server forgot it (already spent, or an older grant): the page falls back to a paid tape at once.
+  r.server.user.comp = { id: 'c_other_one', spins: 5, day: 0 };
+  r.tape.pickCount(2);
+  const p = await r.tape.press();
+  assert.equal(p.kind, 'play');
+  const calls = tapeCalls(r);
+  assert.equal(calls[0].body.comp, 'c_mock_welcome');
+  assert.equal(calls[1].body.count, 2, 'and the paid tape it fell back to');
+  assert.notEqual(calls[0].idem, calls[1].idem, 'a fresh intent mints a fresh idem');
+  assert.equal(r.tape.snapshot().comp, null);
+});
+
+test('B3 the comp waits behind an unplayed tape (finish the tape you have)', async () => {
+  const r = rig({ sp: 20 });
+  await r.tape.open();
+  r.tape.pickCount(2);
+  await r.tape.press();                       // a paid tape is bought and left unplayed
+  r.server.user.comp = { id: 'c_mock_welcome', spins: 5, day: 0 };
+  const r2 = rig();
+  // a fresh sit-down on the same server, with the tape still unplayed
+  const tape2 = createTape({ request: (op, body, idem) => r.server.handle(op, body, idem), sleep: async () => {} });
+  await tape2.open();
+  assert.deepEqual(tape2.snapshot().comp, { id: 'c_mock_welcome', spins: 5 });
+  const p = await tape2.press();
+  assert.equal(p.kind, 'play', 'the stored tape plays first');
+  assert.deepEqual(tape2.snapshot().comp, { id: 'c_mock_welcome', spins: 5 }, 'and the comp is still standing');
+  assert.ok(r2);
+});
+
+test('C1 the re-spin comes immediately after its emi2, even when other spins are already queued', async () => {
+  const r = rig({ sp: 30 });
+  await r.tape.open();
+  // spiral2 queues a re-spin of its own; that re-spin draws the EMI pair, so the emi_respin is queued while
+  // three more outcomes are already waiting. The chase is the point: it plays next, not after them.
+  r.server.script(['spiral0', 'gif1', 'spiral2'], ['emi', 'emi', 'sub0']);
+  r.server.respin('sub1');
+  r.tape.pickCount(1);
+  const out = await play(r, 3);
+  assert.deepEqual(out.map(o => o.kind), ['paid', 'respin', 'emi_respin']);
+  assert.equal(out[1].line, 'emi2');
+  assert.equal(out[2].symbols[2], 'sub1');
+  assert.equal(playsWithoutPress(out[2].kind), true, 'so the page plays it as the second beat of that press');
 });

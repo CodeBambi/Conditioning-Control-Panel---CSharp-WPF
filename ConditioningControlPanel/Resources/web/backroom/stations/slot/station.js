@@ -18,14 +18,17 @@ import { PACE } from './pace.js';
 import { recipe, tierOf, meltedBy, ladderSemis, ladderPlan, rollupMs, winTokens, spendTokens, glance, landPose, restPose, pressPose, glanceHoldMs } from './feel.js';
 import { anticipation, almost } from './feel.js';   // the playbook's Tier A (CONTRACT 10.15)
 import { ATTRACT, attractOk, emiLandings } from './feel.js';
+// The playbook's Tier B and C (CONTRACT 10.16): B1 the spiral jar, B3 the comp, C1 the EMI pair re-spin.
+import { jarPlan, jarParty, JAR_TIER, playsWithoutPress, respinKeep, respinHold } from './feel.js';
 import { createBank } from './bank.js';
 import { createSound } from './sound.js';
 
 const STATION = 'slot';
 const LINE_LABELS = {
-  emi3: '3 EMI', gif3same: '3 of the same GIF', sub3: '3 subliminals', spiral3: '3 spirals',
+  emi3: '3 EMI', emi2: '2 EMI', gif3same: '3 of the same GIF', sub3: '3 subliminals', spiral3: '3 spirals',
   gif3: '3 GIFs', sub2: '2 subliminals', spiral2: '2 spirals', melt: 'Melt',
 };
+const FREE_KINDS = new Set(['free', 'respin', 'jar', 'emi_respin']);   // every kind that costs no SP
 const fmt = n => Number(n || 0).toLocaleString('en-US');
 
 function loadCss() {
@@ -60,6 +63,9 @@ export async function mount(ctx) {
   // A4 attract: one idle timeout re-armed on input (no polling) and one self-re-arming wink, both cleared on
   // any input, on suspend and on close, so a shut cabinet leaves nothing running.
   let idleTimer = 0, winkTimer = 0, attracting = false;
+  // B1: the jar count the tube is currently showing, while the ticks run ahead of the tape's own count
+  // (the same override `shown` is for the SP readout). null follows the tape (Law I).
+  let jarShown = null;
   const $ = sel => el.querySelector(sel), wait = ms => new Promise(r => setTimeout(r, Math.max(0, ms)));
   function mark(phase) { pace = phase; marks = [...marks.slice(-79), { phase, at: Math.round(performance.now()) }]; }
   function note(what, extra = {}) { feelLog = [...feelLog.slice(-79), { what, at: Math.round(performance.now()), ...extra }]; }
@@ -75,6 +81,7 @@ export async function mount(ctx) {
   function build() {
     const root = document.createElement('div');
     root.className = 'slot-station'; root.dataset.phase = 'loading';
+    if (reduced) root.dataset.reduced = '';   // Law VI: the jar takes the settled fill, never a slower one
     root.innerHTML = `
       <div class="slot-dim"></div>
       <canvas class="slot-stage" aria-label="${t('br_slot_stage', 'Slot cabinet')}"></canvas>
@@ -82,12 +89,13 @@ export async function mount(ctx) {
       <div class="slot-hint" hidden>${t('br_slot_pull', 'Pull down')} &darr;</div>
       <header class="slot-top">
         <button class="slot-back" type="button">&larr; ${t('br_slot_back', 'Back')}</button>
-        <span class="slot-sp"></span><span class="slot-jackpot"></span>
+        <span class="slot-sp"></span><span class="slot-comp" hidden></span><span class="slot-jackpot"></span>
         <div class="slot-status" aria-live="polite"></div>
       </header>
       <canvas class="slot-face" width="152" height="137" aria-hidden="true"></canvas>
       <span class="slot-gain" hidden></span>
       <div class="slot-payline" aria-hidden="true" hidden></div>
+      <div class="slot-jar" aria-hidden="true" hidden><i></i><span></span></div>
       <div class="slot-tokens" aria-hidden="true"></div>
       <div class="slot-controls">
         <div class="slot-freeze">${[0, 1, 2].map(i => `<button type="button" data-col="${i}" aria-pressed="false"></button>`).join('')}</div>
@@ -142,12 +150,33 @@ export async function mount(ctx) {
     if (node && node.textContent !== text) node.textContent = text;
   }
 
+  /** B1 THE SPIRAL JAR (10.16.A). Brake 9: the count is text as well as a fill, so it survives motion level 0.
+   *  `jarShown` is the tick override while the reels are still stopping; null follows the tape (Law I). */
+  function paintJar() {
+    const box = el && $('.slot-jar');
+    if (!box || !tape) return;
+    const s = tape.snapshot(), size = s.jarSize;
+    if (!(size > 0)) { delete box.dataset.on; box.hidden = true; return; }
+    box.dataset.on = '';
+    const v = Math.max(0, Math.min(size, jarShown ?? s.jar));
+    box.querySelector('i').style.height = `${((v / size) * 100).toFixed(2)}%`;
+    const text = t('br_slot_jar_count', '{n} / {m}', { n: fmt(v), m: fmt(size) });
+    if (box.querySelector('span').textContent !== text) box.querySelector('span').textContent = text;
+  }
+
   function sync() {
     if (!el || !tape) return;
     const s = tape.snapshot();
     paintSp();
+    paintJar();
     $('.slot-jackpot').textContent = t('br_slot_jackpot', 'Jackpot {n}', { n: fmt(s.jackpot) });
-    const parts = [t('br_slot_last_win', 'Last win {n}', { n: fmt(s.lastWin) }), t('br_slot_free_left', 'Free spins {n}', { n: s.free })];
+    // 10.16.C: EMI hands the comp over, there is no ceremony. A chip beside the SP readout until it is spent.
+    const chip = $('.slot-comp');
+    chip.hidden = !s.comp;
+    if (s.comp) chip.textContent = t('br_slot_comp_chip', 'On the house');
+    const parts = [];
+    if (s.comp) parts.push(t('br_slot_comp', 'On the house: {n} spins', { n: s.comp.spins }));
+    parts.push(t('br_slot_last_win', 'Last win {n}', { n: fmt(s.lastWin) }), t('br_slot_free_left', 'Free spins {n}', { n: s.free }));
     parts.push(s.melt ? t('br_slot_melt_left', 'Melt: {n} spins at half', { n: s.melt }) : t('br_slot_ready', 'Ready'));
     $('.slot-status').textContent = parts.join('  ·  ');
     const playable = el.dataset.phase === 'play';
@@ -163,8 +192,10 @@ export async function mount(ctx) {
     spin.querySelector('span').textContent = t('br_slot_spin', 'Spin');
     spin.querySelector('small').textContent =
       s.hold !== null ? t('br_slot_cost', '{n} SP', { n: s.freezeCost })
-      : s.nextKind === 'free' || s.nextKind === 'respin' ? t('br_slot_free_spin', 'Free spin')
+      : FREE_KINDS.has(s.nextKind) ? t('br_slot_free_spin', 'Free spin')
       : s.onTape ? t('br_slot_on_tape', '{n} left on tape', { n: s.onTape })
+      // 10.16.C: the next buy is the comp, at 0 SP. Every press after that is a normal paid tape.
+      : s.comp ? t('br_slot_comp_cost', 'Free')
       : s.tapeCount >= 1 ? t('br_slot_tape_cost', '{n} SP for {n} spins', { n: s.tapeCount })
       : t('br_slot_cost', '{n} SP', { n: s.stake });
     if (scene) {
@@ -269,12 +300,19 @@ export async function mount(ctx) {
     const table = $('.slot-odds table');
     table.replaceChildren(...s.lines.map(l => {
       const tr = document.createElement('tr');
-      for (const [tag, text] of [['th', t(`br_slot_line_${l.id}`, LINE_LABELS[l.id] || String(l.id))], ['td', fmt(l.pays)], ['td', String(l.odds || '')]]) {
+      // 10.16.D: the jackpot's published odds are the TOTAL (the direct draw plus the re-spin's share), so the
+      // direct-draw row never understates it; the emi2 row says what it actually buys.
+      const odds = l.id === 'emi3' && s.jackpotOdds ? s.jackpotOdds
+        : l.id === 'emi2' ? `${l.odds || ''} · ${t('br_slot_respin', 'One more look')}` : String(l.odds || '');
+      for (const [tag, text] of [['th', t(`br_slot_line_${l.id}`, LINE_LABELS[l.id] || String(l.id))], ['td', fmt(l.pays)], ['td', odds]]) {
         const cell = document.createElement(tag); cell.textContent = text; tr.append(cell);
       }
       return tr;
     }));
-    $('.slot-odds p').textContent = t('br_slot_stake', 'Each spin costs {n} SP. A freeze costs {m} SP.', { n: s.stake, m: s.freezeCost });
+    const stake = t('br_slot_stake', 'Each spin costs {n} SP. A freeze costs {m} SP.', { n: s.stake, m: s.freezeCost });
+    $('.slot-odds p').textContent = s.jarSize > 0
+      ? `${stake} ${t('br_slot_jar_odds', 'The jar pays {n} free spins every {m} spirals.', { n: s.jarFree, m: fmt(s.jarSize) })}`
+      : stake;
   }
 
   function toggleFreeze(col) {
@@ -284,15 +322,15 @@ export async function mount(ctx) {
     sync();   // scene.setHold dips the button this frame (Law VIII)
   }
 
-  function fire(o) {
+  function fireFx(fxId, keys) {
     if (suspended || typeof ctx.fx !== 'function') return;
-    for (const fxId of Array.isArray(o.fx) ? o.fx : []) {
-      try {
-        const keys = fxSymbols(fxId, o, media);
-        const p = ctx.fx(fxId, keys.length ? keys : undefined);   // never awaited: fx-ack is advisory
-        if (p && typeof p.catch === 'function') p.catch(() => {});
-      } catch (e) { console.warn('[slot] fx failed', e); }
-    }
+    try {
+      const p = ctx.fx(fxId, keys && keys.length ? keys : undefined);   // never awaited: fx-ack is advisory
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch (e) { console.warn('[slot] fx failed', e); }
+  }
+  function fire(o) {
+    for (const fxId of Array.isArray(o.fx) ? o.fx : []) fireFx(fxId, fxSymbols(fxId, o, media));
   }
 
   /** The landing beat (Law X): the party the Brake allows, the ladder, the tokens and EMI, all on one frame.
@@ -316,11 +354,80 @@ export async function mount(ctx) {
     note('land', { line: o.line, pay: o.pay, tier, party: r.party, sound: r.sound, melted, streak, roll });
   }
 
-  /** Tier A on a reel's thud frame (Law X, one gesture one beat): reel 2's thud opens A1's rising tone,
-   *  and the last reel's thud carries A2's ghost under the same muted thud. */
+  /**
+   * B1: the jar spills. A tier 2 party (feel.jarParty) plus fx.spiral_full, and THEN the free spins play as
+   * any free spins do. Brake 2: an outcome that also won tier 2 or better keeps its own party and the jar's
+   * note is dropped. Calm: the fill only, no party, though fx.spiral_full still fires at its Calm recipe.
+   */
+  function jarSpill(p) {
+    const s = tape.snapshot();
+    fireFx('fx.spiral_full');
+    const r = jarParty({ melted: meltedBy(p.o), calm: lite, winTier: tierOf(p.o), seen: seen[JAR_TIER] });
+    if (r) {
+      seen[JAR_TIER]++;
+      // Brake 2: the outcome won a line as well, so the jar's own note is dropped and the win's note, a beat
+      // later on its own landing, is the one that sounds. The party is still the jar's, the bigger of the two.
+      if (r.sound) sound.win(r.sound, ladderSemis(streak, r.melted));
+      scene.celebrate(r, 0, t('br_slot_jar_full', 'The jar spills: {n} free spins', { n: s.jarFree }));
+      glanceTo('spirals', glanceHoldMs(r.melted), restPose(s.melt));
+      // The tube's own flash rides the same frame (Law X). Reduced motion takes the settled fill and no flash.
+      const box = el && $('.slot-jar');
+      if (box && !reduced && typeof box.animate === 'function') {
+        box.animate([{ filter: 'brightness(2.4)' }, { filter: 'brightness(1)' }], { duration: 480, easing: 'ease-out' });
+      }
+    }
+    note('jar-full', { free: s.jarFree, party: r ? r.party : null, winTier: tierOf(p.o) });
+  }
+
+  /** Tier A and B on a reel's thud frame (Law X, one gesture one beat): reel 2's thud opens A1's rising tone,
+   *  the last reel's thud carries A2's ghost under the same muted thud, and every spiral ticks the jar on the
+   *  thud of the reel it landed on, never before (10.16.A). */
   function stopFeel(p, i) {
-    if (i === 1 && p.ant && p.ant.holdMs > 0) { sound.rise(PACE.STAGGER_MS + p.ant.holdMs, lite); note('tease', { kind: p.ant.kind, holdMs: p.ant.holdMs }); }
+    if (i === 1 && !p.respin && p.ant && p.ant.holdMs > 0) { sound.rise(PACE.STAGGER_MS + p.ant.holdMs, lite); note('tease', { kind: p.ant.kind, holdMs: p.ant.holdMs }); }
     if (i === p.lastReel && p.near) { scene.almost(p.near); sound.almost(lite); note('almost', p.near); }
+    const k = p.jar ? p.jar.reels.indexOf(i) : -1;
+    if (k >= 0) {
+      jarShown = p.jar.values[k];
+      paintJar();
+      note('jar-tick', { reel: i, value: jarShown });
+      if (p.jar.full && k === p.jar.reels.length - 1) jarSpill(p);
+    }
+  }
+
+  /**
+   * ONE BEAT: the reels travel, the outcome lands, the reveal holds. `before` is the snapshot from before the
+   * tape was asked, so the spend, the melt, the strips and the jar are all read at the right moment.
+   * Answers false when the sit-down moved on under it.
+   */
+  async function beat(r, before, my) {
+    const o = r.outcome, after = tape.snapshot();
+    if (after.shownSp < before.shownSp) flyBank('spend', before.shownSp, after.shownSp, spendTokens(before.shownSp - after.shownSp, lite));
+    scene.setMelted(before.melt > 0);
+    // C1 (10.16.D): the re-spin holds reels 1 and 2 as EMI and brings reel 3 back for the FULL 1,400 ms gold
+    // hold, never halved, not even while melted, because this beat IS the event. It gets no ALMOST tell.
+    const respin = playsWithoutPress(o.kind), keep = respinKeep(o.kind);
+    // The playbook's Tier A. Both read the outcome the tape already carries: A1 only delays the third
+    // reel, A2 only reads the strip cell the server's own stop landed beside. No stop is ever weighted.
+    const ant = respin ? respinHold() : anticipation(o, before.strips, { melted: before.melt > 0, held: r.held });
+    playing = { o, respin, keep, lastReel: respin ? 2 : [2, 1, 0].find(i => i !== r.held), ant,
+                near: respin ? null : almost(o, before.strips, { held: r.held }),
+                emi: emiLandings(o),                                  // A5: which reels wiggle
+                jar: jarPlan(o, before.jar, before.jarSize) };        // B1: which reels tick the tube
+    mark('spin'); sync();
+    // Reel 3 is alone here, so the rising tone runs from the start of its travel: there is no reel 2 thud to
+    // open it (A1's own tone still opens on that thud for every other spin, in stopFeel).
+    if (respin) { sound.rise(PACE.SPIN_MS + ant.holdMs, lite); note('tease', { kind: ant.kind, holdMs: ant.holdMs, respin: true }); }
+    await scene.spin(Array.isArray(o.stops) ? o.stops : stopsFor(before.strips, o.symbols), r.held,
+                     { holdMs: ant.holdMs, gold: ant.gold && !lite, dim: !lite, keep });
+    if (my !== session || !alive) return false;
+    playing = null;
+    const shownBefore = shownSp();
+    tape.land(o); fire(o);
+    land(o, shownBefore);
+    jarShown = null; paintJar();          // Law I: whatever the ticks showed, the tube settles on the tape's count
+    scene.reveal(o.pay > 0); mark('reveal'); sync();
+    await wait(PACE.REVEAL_MS);
+    return my === session && alive;
   }
 
   async function press() {
@@ -345,25 +452,21 @@ export async function mount(ctx) {
       sync(); armIdle();
       return;
     }
-    const o = r.outcome, after = tape.snapshot();
-    if (after.shownSp < before.shownSp) flyBank('spend', before.shownSp, after.shownSp, spendTokens(before.shownSp - after.shownSp, lite));
-    scene.setMelted(before.melt > 0);
-    // The playbook's Tier A. Both read the outcome the tape already carries: A1 only delays the third
-    // reel, A2 only reads the strip cell the server's own stop landed beside. No stop is ever weighted.
-    const ant = anticipation(o, before.strips, { melted: before.melt > 0, held: r.held });
-    playing = { o, lastReel: [2, 1, 0].find(i => i !== r.held), ant, near: almost(o, before.strips, { held: r.held }), emi: emiLandings(o) };   // A5: which reels wiggle
-    mark('spin'); sync();
-    await scene.spin(Array.isArray(o.stops) ? o.stops : stopsFor(before.strips, o.symbols), r.held,
-                     { holdMs: ant.holdMs, gold: ant.gold && !lite, dim: !lite });
-    if (my !== session || !alive) return;
-    playing = null;
-    const shownBefore = shownSp();
-    tape.land(o); fire(o);
-    land(o, shownBefore);
-    scene.reveal(o.pay > 0); mark('reveal'); sync();
-    await wait(PACE.REVEAL_MS);
-    if (my !== session || !alive) return;
-    breathEnds = performance.now() + PACE.BREATH_MS;
+    let step = r, from = before;
+    for (;;) {
+      if (!(await beat(step, from, my))) return;
+      breathEnds = performance.now() + PACE.BREATH_MS;
+      // C1 (10.16.D): the re-spin is the SECOND BEAT of this same press. The lever is never asked twice and
+      // nothing is bought: the outcome is already on the tape, queued by the emi2 that just landed.
+      if (!playsWithoutPress(tape.snapshot().nextKind)) break;
+      mark('breath'); sync();
+      await wait(PACE.BREATH_MS);
+      if (my !== session || !alive) return;
+      from = tape.snapshot();
+      step = await tape.press();
+      if (step.kind !== 'play') break;
+      note('respin', { kind: step.outcome.kind });
+    }
     busy = false; mark('idle'); sync(); armIdle();
     if (queued) press();
   }
@@ -381,7 +484,7 @@ export async function mount(ctx) {
   async function open() {
     if (alive) return;
     alive = true; busy = false; suspended = false; lastMelt = null; pace = 'idle'; queued = false; breathEnds = 0;
-    shown = null; streak = 0; seen = [0, 0, 0, 0, 0]; jackpots = 0; pose = 'idle0_0'; playing = null;
+    shown = null; streak = 0; seen = [0, 0, 0, 0, 0]; jackpots = 0; pose = 'idle0_0'; playing = null; jarShown = null;
     attracting = false; clearTimeout(idleTimer); clearTimeout(winkTimer); idleTimer = winkTimer = 0;
     const my = ++session;
     el = build();
@@ -403,7 +506,8 @@ export async function mount(ctx) {
     const dealt = Promise.resolve().then(() => (typeof ctx.media === 'function' ? ctx.media() : null))
       .then(m => (my === session ? media.deal(m) : null)).catch(() => null);
     const [made, state] = await Promise.all([
-      createScene({ canvas: $('.slot-stage'), reduced, palette: variant && variant.palette, hint: $('.slot-hint'), payline: $('.slot-payline'),
+      createScene({ canvas: $('.slot-stage'), reduced, palette: variant && variant.palette, hint: $('.slot-hint'),
+                    payline: $('.slot-payline'), jar: $('.slot-jar'),
                     canPull: () => (!busy || pace === 'reveal') && !suspended,
                     onLever: () => press(), onFreeze: col => toggleFreeze(col),
                     onReelStop: i => { const p = playing; sound.thud(i, !!p && i === p.lastReel && !(p.o.pay > 0));
@@ -439,6 +543,15 @@ export async function mount(ctx) {
     if (my !== session) return;
     el.dataset.phase = 'play';
     sync();
+    // 10.16.C: EMI hands the comp over. No party, no REVEAL: a glance and one chime (Brake 1, arriving is not
+    // an earned moment). The five spins themselves celebrate on their own merits.
+    const offered = tape.snapshot().comp;
+    if (offered) {
+      sound.arm();
+      sound.win('chime', 0);
+      glanceTo('hearts', glanceHoldMs(s.melt > 0), restPose(s.melt));
+      note('comp', { id: offered.id, spins: offered.spins });
+    }
     armIdle();
   }
 
@@ -491,6 +604,14 @@ export async function mount(ctx) {
     },
     /** For dev.html and CDP checks only. */
     debug: () => ({ phase: el && el.dataset.phase, busy, alive, pace, marks, snapshot: tape && tape.snapshot(),
+                  jar: { shown: jarShown, plan: playing ? playing.jar : null,
+                         text: el && $('.slot-jar span') ? $('.slot-jar span').textContent : null,
+                         fill: el && $('.slot-jar i') ? $('.slot-jar i').style.height : null,
+                         on: !!(el && $('.slot-jar') && $('.slot-jar').dataset.on != null),
+                         hidden: !!(el && $('.slot-jar') && $('.slot-jar').hidden) },
+                  respin: playing ? !!playing.respin : false,
+                  comp: { chip: !!(el && $('.slot-comp') && !$('.slot-comp').hidden),
+                          label: el && $('.slot-spin small') ? $('.slot-spin small').textContent : null },
                     hostBack, variant: variant && variant.id, palette: !!(scene && scene.recoloured),
                     spinning: !!(scene && scene.spinning), sceneAlive: !!scene,
                     feel: { log: feelLog, pose, streak, seen, shown, readout: String(shownSp()), hostSp: !!hostSp,

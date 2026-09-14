@@ -109,12 +109,99 @@ Back (left) and EMI's HUD face sits under the room's SP chip (right), so the mar
   13 cells, window 0.39 tall), so nothing is nudged. Reduced motion: one 120 ms gold tint on the reel, no repaint.
   `feel.almost` reads the server's own strip and stop: no stop weighting, ever. Natural rate on the strips (tables v5 and v6): 9 of the
   2,197 uniform rows, gif and EMI pairs only (a sub or spiral pair already pays).
+- **B1 THE SPIRAL JAR** (playbook Tier B, CONTRACT 10.16.A): the melt is the carried debt, the jar is the carried
+  credit. A narrow upright tube beside the cabinet fills one notch per spiral SHOWN, on that reel's own THUD
+  (Law X, never before it and never all at once), and at `table.jar.size` it spills `table.jar.free` free spins.
+  The size is the owner's decided **100 / 3**: a jar is a come-back reason, not a rhythm (about 155 outcomes, 10
+  minutes of play). Law I throughout: the count is `outcome.jarN`, the server's own, and the tube's last tick is
+  that number whatever the page's arithmetic said (`feel.jarPlan`); the page keeps no copy of the size or the
+  count. A freeze earns nothing and neither does anything a freeze expanded into, which the tape says plainly by
+  carrying the same `jarN` back, so a held spiral can never farm free spins (it is the same seal that keeps
+  `rtpFrozen` at exactly 1.0200). There is no glb node for a jar and no model request is allowed (section 9.6),
+  so `.slot-jar` is DOM on live projected bounds, exactly the pattern the payline frame uses: `scene.jarRect()`
+  takes `payout_tray`'s projected middle (the cabinet's own box when the tray is absent) at the CABINET's left
+  edge in screen space, one `reel_window` tall, every frame. Nothing is added to the glb, no new material and no
+  new geometry. **Decision the contract could not know**: the play camera frames the marquee and the reels, so
+  the tray's projected middle is BELOW the viewport at 16:9 (measured at 1280x720: y 930 of 720), which would
+  have left the tube off screen. Brake 9 says the count has to be readable, so the tray is where the tube wants
+  to stand and the canvas is where it has to: it is held inside the canvas and never lower than the reel
+  window's own bottom, which reads as a jar standing beside the reels. Brake 9: the count is printed inside the tube (`17 / 100`), so it survives motion level 0.
+  A spill is a tier 2 party (`feel.jarParty`: two notes, a jolt, a chase, the screen) plus `fx.spiral_full`, and
+  THEN the `kind: 'jar'` outcomes play exactly as free spins do, one lever press each. Brake 2: an outcome that
+  also won tier 2 or better keeps its own party and the jar's note is dropped. Brake 5: melted takes the melt
+  party. Brake 3 counts the spill against the tier 2 party budget. Calm: the fill only, no party at all, though
+  `fx.spiral_full` still fires at its own Calm recipe. Reduced motion: the settled fill and the settled count,
+  no travel (the CSS transition is off under `[data-reduced]`) and no flash.
+- **B3 THE WELCOME-BACK COMP** (CONTRACT 10.16.C): EMI hands a returning player five spins on the house. There is
+  no ceremony, because arriving is not an earned moment (Brake 1): on sit-down the HUD status line reads "On the
+  house: {n} spins", a `.slot-comp` chip sits beside the SP readout until it is spent, EMI takes the `hearts`
+  face for one `glanceHoldMs` and ONE chime sounds. No fanfare, no REVEAL, no tokens. The next tape BUY of the
+  sit-down is the comp (`request('tape', { comp: id })`, no `count`), and the spin button's `<small>` reads
+  "Free" for exactly that one press; every buy after it is a normal paid tape at `defaultTapeCount(sp)`. It costs
+  0 SP, so `insufficient` cannot happen and a player at 0 SP can still play, which is the whole point. The five
+  spins are drawn from the NORMAL plain table: melt still halves them, they still consume melt in draw order and
+  they can still land the malus (a gift, not a cleanse), they fill the jar and they expand into free spins,
+  re-spins, jar spins and an `emi_respin` like any paid spin. `comp_none` and `comp_used` fall back to a paid
+  tape on the spot; `tape_unplayed` leaves the comp standing (finish the tape you have) and the offer waits.
+  **Decision the contract left open**: 10.16.C says "the lever's FIRST press", which this page reads as the first
+  press that actually BUYS, because a press that only plays an outcome already on the tape buys nothing and must
+  not burn a comp. A refused buy does not eat it either.
+- **C1 THE EMI PAIR FREE RE-SPIN** (CONTRACT 10.16.D): two EMI on reels 1 and 2, and reel 3 comes back for a
+  second look. Two beats, ONE press. The `emi2` landing plays first with A1's EMI-pair anticipation already on it
+  (1,400 ms, bulbs gold, halved and never gold while melted, Brake 5) and lands as a muted thud and nothing else:
+  `feel.recipe` answers `tier: 0, party: 'hold'`, with NO SHIVER and NO ALMOST tell, because A2 is the release
+  when the pair MISSES and here it has not missed yet. Then, with no second lever press and nothing bought (the
+  outcome is already on the tape, queued by the server), reels 1 and 2 stay exactly where they are and reel 3
+  alone spins again for the **full 1,400 ms gold hold, never halved, not even while melted**: Brake 5's halving
+  in 10.15 applies to A1's anticipation, not to this beat, because this beat IS the event. Then THE THUD, and on
+  `emi3` THE REVEAL plays exactly as any jackpot does (Law IX, once per sit-down). Reel 3 is alone, so it takes
+  no stagger (`pace.respinStopMs`: `SPIN_MS` then the hold) and the rising tone runs from the start of its travel
+  instead of from a reel 2 thud that never comes. Reduced motion and Calm keep the hold and the tone and drop the
+  light change, exactly as A1 does. The published `emi3` row prints the TOTAL jackpot odds (1 in 6,494, both
+  paths), never the direct draw alone, and the `emi2` row says what it buys: "One more look".
+  **Decision the contract left open**: 10.16.D calls it "the full 1,400 ms gold hold" and exempts this beat from
+  Brake 5, so the re-spin stays GOLD while melted as well as unhalved (A1's melted EMI hold is never gold). Also,
+  10.16.D's worked pace ("about 4,380 ms") does not match its own formula with today's `PACE`:
+  `SPIN_MS 1800 + 1400 + THUD 340 + REVEAL 600 + BREATH 520` is **4,660 ms**, which is what `pace.outcomeMs(PACE,
+  0, 'emi_respin')` returns. The formula was followed, not the rounded total.
 - **Skip to settled** (Law VI, Brake 7): one lever press, Back, suspend or a new spin puts a running rollup
   straight on the settled value. `bank.skip()` reads the run's `settled` (the tape's number), never the tick
   ladder, so a cut-short count can never leave the readout short or count a value twice; it is idempotent, and
   `onDone` then hands the readout back to `tape.snapshot().shownSp`. A press takes the whole settled state
   (`skip({ land: true })`: the mini-thud, the readout THUD and the `+N`), hushes the rest of the chime climb and
   sends the frame into its fade. Back and suspend settle the number and leave quietly (leaving is a fade).
+
+## Lexicon keys this lane adds
+
+English fallbacks ship in the page (Law VII); the integration pass adds them to `Localization/Languages/en.json`
+and the host sends every `br_*` key in `init.lex` (10.13). This lane touches no C# and no `en.json`.
+
+| Key | English |
+|---|---|
+| `br_slot_jar_count` | `{n} / {m}` (the count inside the tube) |
+| `br_slot_jar_full` | `The jar spills: {n} free spins` |
+| `br_slot_jar_odds` | `The jar pays {n} free spins every {m} spirals.` |
+| `br_slot_comp` | `On the house: {n} spins` |
+| `br_slot_comp_chip` | `On the house` |
+| `br_slot_comp_cost` | `Free` |
+| `br_slot_line_emi2` | `2 EMI` |
+| `br_slot_respin` | `One more look` |
+
+`br_slot_jar` ("Spiral jar") from 10.16.A is NOT used: the tube is `aria-hidden` and carries its own count as
+text, so there is nothing for a label to add. It is left to the integration pass to drop or keep.
+
+## dev.html query flags
+
+| Flag | What |
+|---|---|
+| `?sp=57` `?melt=0` `?floor=3000` `?latency=120` | as before |
+| `?reduced` `?variant=violet\|mint` | as before |
+| `?jar=97` | seeds the stored spiral jar (0 .. size - 1, clamped like `ensureSlot`) |
+| `?comp=1` | mints a welcome-back comp; `?comp=3` mints one of 3 spins |
+
+Dev buttons: **next: 2 EMI (re-spin)** scripts `emi, emi, melt` (the chase that does not start the melt),
+**next: 2 EMI, re-spin hits** also forces reel 3 back as EMI, **jar to 99** puts the jar one spiral from
+spilling, **give a comp** stores one (sit down again to be handed it).
 
 ## Follow-ups
 
