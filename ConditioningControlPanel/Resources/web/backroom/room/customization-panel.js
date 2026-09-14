@@ -1,89 +1,47 @@
 import { catalogueStyle } from './customization-panel-style.js';
+import { createVendingView } from './vending-view.js';
 
-/** The room is the live preview. No ownership or purchase is implied by selection. */
-export function createCustomizationPanel({ mount, lex = (_, fallback) => fallback, select, getState, restore, preview = () => {}, onClose = () => {} }) {
-  const doc = mount.ownerDocument, L = (key, fallback) => lex('br_custom_' + key, fallback) || fallback;
-  const pieces = [['knight', 'Knight sculpture'], ['queen', 'Queen sculpture'], ['rook', 'Rook sculpture']];
-  const groups = {
-    displays: [['gallery', 'Gallery frame'], ['portraits', 'Portrait pair'], ['billboard', 'Wide billboard']],
-    plants: [['monstera', 'Monstera'], ['ivy', 'Hanging ivy'], ['terrarium', 'Terrarium']],
-    statues: [['none', 'Empty pedestal'], ...pieces], handles: [['original', 'Original handle'], ...pieces],
-    floor: [['vortex', 'Velvet Vortex'], ['ribbon', 'Ribbon Galaxy'], ['bloom', 'Prism Bloom']],
-    palette: [['jewel', 'Jewel'], ['lagoon', 'Lagoon'], ['sunset', 'Sunset']],
-  };
-  const style = doc.createElement('style'); style.textContent = catalogueStyle;
-  const panel = doc.createElement('section'); panel.className = 'br-custom-panel'; panel.hidden = true; panel.tabIndex = -1;
-  panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', L('title', 'Room Service'));
-  const make = (tag, text, cls, parent = panel) => { const n = doc.createElement(tag); n.textContent = text; if (cls) n.className = cls; parent.append(n); return n; };
-  const button = (parent, text, action) => { const n = make('button', text, '', parent); n.type = 'button'; n.addEventListener('click', action); return n; };
-  const header = make('header', '', 'br-custom-header');
-  const closeButton = button(header, L('close', 'Close'), () => close()); closeButton.className = 'br-custom-close';
-  make('span', '01 / 03', 'br-custom-edition', header);
-  make('h2', L('title', 'Room Service'), '', header);
-  make('p', L('live', 'Your room is the preview.'), '', header);
-  const tabs = make('div', '', 'br-custom-tabs'); tabs.setAttribute('role', 'group'); tabs.setAttribute('aria-label', L('categories', 'Categories'));
-  const body = make('div', '', 'br-custom-body');
-  const sections = make('div', '', 'br-custom-sections', body);
-  const targets = make('div', '', 'br-custom-targets', body);
-  const choices = make('div', '', 'br-custom-choices', body);
-  const palettes = make('div', '', 'br-custom-palettes', body);
-  const footer = make('footer', '', 'br-custom-footer');
-  const itemName = make('strong', '', 'br-custom-name', footer); itemName.setAttribute('aria-live', 'polite');
-  const unavailable = button(footer, L('buy_unavailable', 'Purchases unavailable'), () => {}); unavailable.disabled = true;
-  const reset = button(footer, L('restore', 'Restore preview'), () => { restore?.(structuredClone(snapshot)); paint(); showPreview(); });
-  reset.className = 'br-custom-restore';
-  make('p', L('unavailable', 'Local preview only. Purchases are not available yet.'), 'br-custom-note', footer);
-  let tab = 'decor', group = 'displays', target = 0, snapshot, previousFocus, disposed = false;
-  const state = () => getState?.() || { displays: 0, plants: 0, statues: [0, 1, 2], handles: [-1, -1, -1], floor: 0, palette: 0 };
-  const current = () => { const value = state()[group]; return Array.isArray(value) ? value[target] : value; };
-  const showPreview = () => preview(group, current(), target);
-  function row(parent, entries, selected, action) {
-    parent.replaceChildren();
-    entries.forEach(([key, fallback], index) => {
-      const n = button(parent, L(key, fallback), () => { action(index); parent.children[index]?.focus({ preventScroll: true }); }); n.setAttribute('aria-pressed', String(selected === index));
-    });
-  }
-  function paintChoices() {
-    const offset = group === 'statues' || group === 'handles' ? -1 : 0;
-    row(choices, groups[group], current() - offset, index => { const pending=select(group, index + offset, target); paintChoices(); showPreview(); if(pending?.then)pending.then(()=>{if(!disposed)paintChoices();}); });
-    [...choices.children].forEach((n, i) => {
-      const number = doc.createElement('span'); number.className = 'br-custom-index'; number.textContent = String(i + 1).padStart(2, '0'); n.prepend(number);
-    });
-    const entry = groups[group][current() - offset]; itemName.textContent = entry ? L(...entry) : '';
-    palettes.hidden = tab !== 'floor';
-    if (tab === 'floor') {
-      row(palettes, groups.palette, state().palette, index => { select('palette', index); paintChoices(); showPreview(); });
-      [...palettes.children].forEach((n, i) => { n.className = 'br-custom-swatch swatch-' + i; });
+/** Selection previews an item; the contextual controls apply it to the room. */
+export function createCustomizationPanel({mount,vending,lex=(_,f)=>f,select,getState,restore,preview=()=>{},onClose=()=>{}}){
+  const doc=mount.ownerDocument,L=(k,f)=>lex('br_custom_'+k,f)||f;
+  const items=[['screens4','4 extra screens'],['screens6','6 extra screens'],['mega','Ceiling screen'],['knight','Knight sculpture'],['queen','Queen sculpture'],['rook','Rook sculpture'],['vortex','Velvet Vortex'],['ribbon','Ribbon Galaxy'],['bloom','Prism Bloom']];
+  const style=doc.createElement('style');style.textContent=catalogueStyle;
+  const panel=doc.createElement('section');panel.className='br-custom-panel';panel.hidden=true;panel.tabIndex=-1;panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label',L('title','Room Service'));
+  const make=(tag,text,cls,parent=panel)=>{const e=doc.createElement(tag);e.textContent=text;if(cls)e.className=cls;parent.append(e);return e;};
+  const button=(parent,text,fn)=>{const e=make('button',text,'',parent);e.type='button';e.onclick=fn;return e;};
+  const header=make('header','','br-custom-header');make('h2',L('title','Room Service'),'',header);
+  const closeButton=button(header,L('close','Close'),()=>close());
+  const stage=make('div','','br-custom-stage');
+  const overview=button(stage,L('all_items','All items'),()=>{chosen=-1;view.focus(-1);paint();});overview.className='br-custom-overview';
+  const chooser=make('div','','br-custom-items');chooser.setAttribute('role','group');chooser.setAttribute('aria-label',L('choose_item','Choose an item'));
+  const hud=make('div','','br-custom-hud');
+  const footer=make('footer','','br-custom-footer');button(footer,L('restore','Restore preview'),async()=>{await restore?.(structuredClone(snapshot));paint();if(chosen>=0)showPreview();});
+  make('span',L('buy_unavailable','Purchases unavailable'),'br-custom-note',footer);
+  let chosen=-1,target=0,use='statues',snapshot,previousFocus,disposed=false;
+  const state=()=>getState();
+  const view=createVendingView({mount:stage,vending,onSelect:choose});
+  function showPreview(){if(chosen<0)return;preview(chosen<3?'screens':chosen<6?use:'floor',chosen<3?chosen:chosen<6?chosen-3:chosen-6,chosen<3?chosen:target);}
+  function choose(i){chosen=i;target=0;use='statues';view.focus(i);paint();showPreview();}
+  function apply(category,value,index=0){const pending=select(category,value,index);paint();showPreview();if(pending?.then)pending.then(()=>{if(!disposed)paint();});}
+  function row(parent,entries,active,fn){entries.forEach(([key,label],i)=>{const b=button(parent,L(key,label),()=>fn(i));b.setAttribute('aria-pressed',String(active===i));});}
+  function paint(){
+    const focused=hud.contains(doc.activeElement)?[...hud.querySelectorAll('button')].indexOf(doc.activeElement):-1;
+    [...chooser.children].forEach((b,i)=>b.setAttribute('aria-pressed',String(chosen===i)));hud.replaceChildren();overview.hidden=chosen<0;
+    if(chosen<0){make('p',L('choose_item','Choose an item'),'br-custom-prompt',hud);return;}
+    const title=make('h3',L(...items[chosen]),'',hud);title.setAttribute('aria-live','polite');
+    if(chosen<3){const actions=make('div','','br-custom-actions',hud);row(actions,[['on','On'],['off','Off']],state().screens[chosen]?0:1,i=>apply('screens',i===0,chosen));}
+    else if(chosen<6){const modes=make('div','','br-custom-actions',hud);row(modes,[['statues','Statues'],['lever','Slot lever']],use==='statues'?0:1,i=>{use=i?'handles':'statues';paint();showPreview();});
+      const targets=make('div','','br-custom-actions',hud);row(targets,use==='statues'?[['spot1','Pedestal 1'],['spot2','Pedestal 2'],['spot3','Pedestal 3']]:[['rose','Candy Rose'],['violet','Candy Violet'],['mint','Candy Mint']],target,i=>{target=i;paint();showPreview();});
+      const actions=make('div','','br-custom-actions',hud);row(actions,[['use','Use'],[use==='statues'?'remove':'original',use==='statues'?'Remove':'Original handle']],state()[use][target]===chosen-3?0:state()[use][target]===-1?1:-1,i=>apply(use,i?-1:chosen-3,target));
+    }else{const actions=make('div','','br-custom-actions',hud);row(actions,[['on','On'],['off','Off']],state().floor===chosen-6?0:state().floor===-1?1:-1,i=>apply('floor',i?-1:chosen-6));
+      const palette=make('div','','br-custom-actions br-custom-palettes',hud);row(palette,[['jewel','Jewel'],['lagoon','Lagoon'],['sunset','Sunset']],state().palette,i=>apply('palette',i));
     }
+    if(focused>=0)hud.querySelectorAll('button')[focused]?.focus({preventScroll:true});
   }
-  function paint() {
-    [...tabs.children].forEach((n, i) => n.setAttribute('aria-pressed', String(['decor', 'handles', 'floor'][i] === tab)));
-    header.querySelector('.br-custom-edition').textContent = '0' + (['decor', 'handles', 'floor'].indexOf(tab) + 1) + ' / 03';
-    sections.hidden = tab !== 'decor';
-    if (tab === 'decor') row(sections, [['displays', 'Displays'], ['plants', 'Plants'], ['statues', 'Statues']], ['displays', 'plants', 'statues'].indexOf(group), i => { group = ['displays', 'plants', 'statues'][i]; target = 0; paint(); showPreview(); });
-    targets.hidden = group !== 'statues' && group !== 'handles';
-    if (!targets.hidden) row(targets, group === 'handles' ? [['rose', 'Candy Rose'], ['violet', 'Candy Violet'], ['mint', 'Candy Mint']] : [['spot1', 'Pedestal 1'], ['spot2', 'Pedestal 2'], ['spot3', 'Pedestal 3']], target, i => { target = i; paint(); showPreview(); });
-    paintChoices();
-  }
-  [['decor', 'Decor'], ['handles', 'Slot handles'], ['floor', 'Floor']].forEach(([key, fallback]) => button(tabs, L(key, fallback), () => { tab = key; group = key === 'decor' ? 'displays' : key; target = 0; paint(); showPreview(); }));
-  function close() {
-    if (panel.hidden) return; panel.hidden = true; onClose();
-    if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true }); previousFocus = null;
-  }
-  panel.addEventListener('keydown', event => {
-    event.stopPropagation();
-    if (event.key === 'Escape') { event.preventDefault(); close(); return; }
-    if (event.key !== 'Tab') return;
-    const nodes = [...panel.querySelectorAll('button:not([disabled])')].filter(n => !n.closest('[hidden]'));
-    const first = nodes[0], last = nodes.at(-1);
-    if (event.shiftKey && (doc.activeElement === first || doc.activeElement === panel)) { event.preventDefault(); last.focus(); }
-    else if (!event.shiftKey && doc.activeElement === last) { event.preventDefault(); first.focus(); }
-  });
-  for (const type of ['keyup', 'pointerdown', 'pointerup', 'click', 'wheel']) panel.addEventListener(type, event => event.stopPropagation());
-  mount.append(style, panel); paint();
-  return {
-    open() { if (disposed || !panel.hidden) return; snapshot = structuredClone(state()); previousFocus = doc.activeElement; panel.hidden = false; paint(); showPreview(); closeButton.focus({ preventScroll: true }); },
-    close, get opened() { return !panel.hidden && !disposed; },
-    dispose() { if (disposed) return; close(); disposed = true; panel.remove(); style.remove(); },
-  };
+  items.forEach(([key,label],i)=>{const b=button(chooser,String(i+1).padStart(2,'0'),()=>choose(i));b.setAttribute('aria-label',L(key,label));b.title=L(key,label);});
+  function close(){if(panel.hidden)return;panel.hidden=true;onClose();previousFocus?.isConnected&&previousFocus.focus({preventScroll:true});previousFocus=null;}
+  panel.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Escape'){e.preventDefault();close();return;}if(e.key==='Tab'){const nodes=[...panel.querySelectorAll('button:not([disabled])')].filter(n=>!n.closest('[hidden]')),first=nodes[0],last=nodes.at(-1);if(e.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){e.preventDefault();last.focus();}else if(!e.shiftKey&&doc.activeElement===last){e.preventDefault();first.focus();}}});
+  for(const type of ['keyup','pointerdown','pointerup','click','wheel'])panel.addEventListener(type,e=>e.stopPropagation());
+  mount.append(style,panel);paint();
+  return {open(){if(disposed||!panel.hidden)return;snapshot=structuredClone(state());previousFocus=doc.activeElement;panel.hidden=false;chosen=-1;view.focus(-1);paint();preview('room',0,0);closeButton.focus({preventScroll:true});},close,get opened(){return !disposed&&!panel.hidden;},get selectedItem(){return chosen;},update(dt,still){if(!panel.hidden)view.update(dt,still);},dispose(){if(disposed)return;close();disposed=true;view.dispose();panel.remove();style.remove();}};
 }

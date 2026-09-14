@@ -5819,5 +5819,15 @@
   "br_custom_mint": "Candy Mint",
   "br_custom_spot1": "底座 1",
   "br_custom_spot2": "底座 2",
-  "br_custom_spot3": "底座 3"
+  "br_custom_spot3": "底座 3",
+  "br_custom_screens4": "4个额外屏幕",
+  "br_custom_screens6": "6个额外屏幕",
+  "br_custom_mega": "天花板屏幕",
+  "br_custom_all_items": "全部物品",
+  "br_custom_choose_item": "选择物品",
+  "br_custom_on": "开启",
+  "br_custom_off": "关闭",
+  "br_custom_lever": "老虎机拉杆",
+  "br_custom_use": "使用",
+  "br_custom_remove": "移除"
 }

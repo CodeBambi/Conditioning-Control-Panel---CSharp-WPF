@@ -5361,5 +5361,15 @@
   "br_custom_mint": "Candy Mint",
   "br_custom_spot1": "Постамент 1",
   "br_custom_spot2": "Постамент 2",
-  "br_custom_spot3": "Постамент 3"
+  "br_custom_spot3": "Постамент 3",
+  "br_custom_screens4": "4 дополнительных экрана",
+  "br_custom_screens6": "6 дополнительных экранов",
+  "br_custom_mega": "Потолочный экран",
+  "br_custom_all_items": "Все предметы",
+  "br_custom_choose_item": "Выберите предмет",
+  "br_custom_on": "Вкл.",
+  "br_custom_off": "Выкл.",
+  "br_custom_lever": "Рычаг автомата",
+  "br_custom_use": "Применить",
+  "br_custom_remove": "Убрать"
 }

@@ -6131,5 +6131,15 @@
   "br_custom_mint": "Candy Mint",
   "br_custom_spot1": "Pedestal 1",
   "br_custom_spot2": "Pedestal 2",
-  "br_custom_spot3": "Pedestal 3"
+  "br_custom_spot3": "Pedestal 3",
+  "br_custom_screens4": "4 extra screens",
+  "br_custom_screens6": "6 extra screens",
+  "br_custom_mega": "Ceiling screen",
+  "br_custom_all_items": "All items",
+  "br_custom_choose_item": "Choose an item",
+  "br_custom_on": "On",
+  "br_custom_off": "Off",
+  "br_custom_lever": "Slot lever",
+  "br_custom_use": "Use",
+  "br_custom_remove": "Remove"
 }
