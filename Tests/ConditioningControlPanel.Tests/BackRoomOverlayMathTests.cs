@@ -38,7 +38,8 @@ public class BackRoomOverlayMathTests
     [Fact]
     public void Rect_MissingOrBad_GrowsFromTheRoomsCentre()
     {
-        foreach (var bad in new FxCssRect?[] { null, new FxCssRect(0, 0, 4000, 44), new FxCssRect(double.NaN, 0, 60, 44), new FxCssRect(0, 0, 60, 2) })
+        foreach (var bad in new FxCssRect?[] { null, new FxCssRect(0, 0, 4000, 44), new FxCssRect(double.NaN, 0, 60, 44), new FxCssRect(0, 0, 60, 2),
+                     new FxCssRect(-5000, 10, 60, 44), new FxCssRect(10, 4000, 60, 44) })
         {
             var t = BackRoomOverlayMath.MapFrom(bad, Room, Screens);
             Assert.True(t.Centred);

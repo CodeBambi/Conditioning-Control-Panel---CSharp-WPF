@@ -66,7 +66,7 @@ public static class BackRoomOverlayMath
 
     /// <summary>
     /// Map a page rect onto the desktop. The screen is the one holding the room control's centre (else
-    /// the one it overlaps most). A missing rect, one that is not inside the viewport's size, or a rect
+    /// the one it overlaps most). A missing rect, one larger than the viewport or wholly outside it, or a rect
     /// with no viewport grows from the centre of the room control; a minimised or off-screen room grows
     /// from the centre of the primary screen.
     /// </summary>
@@ -90,11 +90,13 @@ public static class BackRoomOverlayMath
         return new FxFromTarget(idx, screen, CentreBox(vp.ControlPx.Cx, vp.ControlPx.Cy, k), true);
     }
 
-    /// <summary>Finite, w and h between 8 and the viewport's own size.</summary>
+    /// <summary>Finite, w and h between 8 and the viewport's own size, and at least partly inside the viewport
+    /// (a rect far outside it would start the growth off the room window, maybe on another monitor).</summary>
     internal static bool Usable(FxCssRect r, RoomViewport vp)
         => double.IsFinite(r.X) && double.IsFinite(r.Y) && double.IsFinite(r.W) && double.IsFinite(r.H)
            && r.W >= BackRoomFxPlan.MinFromPx && r.H >= BackRoomFxPlan.MinFromPx
-           && r.W <= vp.CssWidth + 0.5 && r.H <= vp.CssHeight + 0.5;
+           && r.W <= vp.CssWidth + 0.5 && r.H <= vp.CssHeight + 0.5
+           && new PxRect(r.X, r.Y, r.W, r.H).OverlapArea(new PxRect(0, 0, vp.CssWidth, vp.CssHeight)) > 0;
 
     private static PxRect CentreBox(double cx, double cy, double k)
         => new(cx - CentreBoxW * k / 2, cy - CentreBoxH * k / 2, CentreBoxW * k, CentreBoxH * k);
