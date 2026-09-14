@@ -37,6 +37,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Companion"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              mc:Ignorable="d"
              d:DesignWidth="430" d:DesignHeight="560">
 
@@ -135,10 +136,10 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
                     <TextBlock Text="🪞" FontSize="16" Margin="0,0,9,0" VerticalAlignment="Center"/>
-                    <TextBlock Text="{Binding LocPersonalityTitle}" Theme="{StaticResource CmpSectionTitleStyle}"/>
+                    <TextBlock Text="{loc:Str companion_personality_title}" Theme="{StaticResource CmpSectionTitleStyle}"/>
                 </StackPanel>
                 <Border Grid.Column="2" Theme="{StaticResource CmpTrainTagStyle}">
-                    <TextBlock Text="{Binding LocTagTrain3}" Theme="{StaticResource CmpTrainTagTextStyle}"/>
+                    <TextBlock Text="{loc:Str companion_tag_train3}" Theme="{StaticResource CmpTrainTagTextStyle}"/>
                 </Border>
             </Grid>
 
@@ -219,16 +220,16 @@
                 <Border Theme="{StaticResource CmpTraitChipStyle}">
                     <TextBlock Text="{Binding InterviewedLine}" Theme="{StaticResource CmpTraitChipTextStyle}"/>
                 </Border>
-                <Button Content="{Binding LocReinterview}" VerticalAlignment="Center"
+                <Button Content="{loc:Str companion_personality_reinterview}" VerticalAlignment="Center"
                         Theme="{StaticResource CmpLinkButtonStyle}" Command="{Binding StartInterviewCommand}"/>
-                <Button Content="{Binding LocAdjust}" VerticalAlignment="Center"
+                <Button Content="{loc:Str companion_personality_adjust}" VerticalAlignment="Center"
                         Theme="{StaticResource CmpLinkButtonStyle}" Command="{Binding OpenTraitDashboardCommand}"/>
             </WrapPanel>
 
             <!-- ========== trait glance (read-only; the dashboard is one click down) ========== -->
             <Button Theme="{StaticResource CmpLinkButtonStyle}" Padding="0" HorizontalAlignment="Stretch"
                     Command="{Binding OpenTraitDashboardCommand}"
-                    ToolTip.Tip="{Binding LocTraitsTip}"
+                    ToolTip.Tip="{loc:Str companion_personality_traits_tip}"
                     IsVisible="{Binding AreTraitsAvailable}">
                 <Button.Template>
                     <ControlTemplate TargetType="Button">
@@ -294,11 +295,11 @@
             <!-- ========== expert door ========== -->
             <Border BorderBrush="#12FFFFFF" BorderThickness="0,1,0,0" Padding="0,10,0,0">
                 <WrapPanel Orientation="Horizontal">
-                    <Button Content="{Binding LocViewPrompt}" Theme="{StaticResource CmpLinkButtonStyle}"
+                    <Button Content="{loc:Str companion_personality_view_prompt}" Theme="{StaticResource CmpLinkButtonStyle}"
                             Command="{Binding ViewCompiledPromptCommand}"/>
-                    <Button Content="{Binding LocFork}" Theme="{StaticResource CmpLinkButtonStyle}"
+                    <Button Content="{loc:Str companion_personality_fork}" Theme="{StaticResource CmpLinkButtonStyle}"
                             Command="{Binding ForkPromptCommand}"/>
-                    <Button Content="{Binding LocCommunity}" Theme="{StaticResource CmpLinkButtonStyle}"
+                    <Button Content="{loc:Str companion_personality_community}" Theme="{StaticResource CmpLinkButtonStyle}"
                             Command="{Binding CommunityPromptsCommand}"/>
                 </WrapPanel>
             </Border>
