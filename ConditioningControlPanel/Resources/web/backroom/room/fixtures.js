@@ -15,6 +15,7 @@ import * as T from 'three';
 import { createPrizeMarquee } from './prize-marquee.js';
 import { createEmiIdle } from './emi-idle.js';
 import { createCoinShower } from './coin-shower.js';
+import { createFloorStyle } from './floor-style.js';
 
 const BULB = /^(lights_chase_\d|bulb_\d|canopy_bulb_|rim_bulb_)/;
 const CHASE = [0xff168e, 0x852bff, 0x00e6b8, 0xff9d08].map((c) => new T.Color(c));
@@ -30,19 +31,6 @@ export function labelTexture(text) {
   const t = new T.CanvasTexture(c);
   t.colorSpace = T.SRGBColorSpace; t.flipY = false;
   return t;
-}
-
-function spiralFloorMaterial() {
-  return new T.ShaderMaterial({
-    uniforms: { angle: { value: 0 }, colorPhase: { value: 0 } },
-    vertexShader: 'varying vec2 p;void main(){p=uv*2.-1.;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-    fragmentShader: `uniform float angle,colorPhase;varying vec2 p;void main(){float c=cos(angle),s=sin(angle);vec2 q=mat2(c,-s,s,c)*p;
-float r=length(q);float a=atan(q.y,q.x);float wave=pow(.5+.5*sin(a*3.-r*22.),2.8);vec3 base=vec3(.025,.009,.065);vec3 band=.10+.32*(.5+.5*cos(vec3(0.,2.1,4.2)+r*4.-colorPhase));
-float fleck=.5+.5*sin(q.x*700.)*sin(q.y*700.);gl_FragColor=vec4(mix(base,band,wave)+fleck*.005,1.);
-#include <colorspace_fragment>
-}`,
-    side: T.DoubleSide,
-  });
 }
 
 /** One additive Points draw for every glow in the room. */
@@ -158,7 +146,8 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
   const oldFloor = shell.getObjectByName('spiral_inlay');
   if (oldFloor) oldFloor.visible = false;
   shell.traverse(n => { if(n.name.startsWith('floor_brass_inlay')) n.visible=false; });
-  const floor = new T.Mesh(new T.PlaneGeometry(14,16), spiralFloorMaterial());
+  const floorStyle = createFloorStyle();
+  const floor = new T.Mesh(new T.PlaneGeometry(14,16), floorStyle.material);
   const fp=floor.geometry.attributes.position; for(let i=0;i<fp.count;i++) {const x=fp.getX(i),z=-fp.getY(i);if(x>0)fp.setX(i,x+1.2*Math.max(0,z)/8);} fp.needsUpdate=true;floor.geometry.computeBoundingSphere();
   floor.name='room_spiral_floor'; floor.rotation.x=-Math.PI/2; floor.position.y=.012; scene.add(floor);
   const ceiling = shell.getObjectByName('ceiling');
@@ -318,7 +307,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
         const m=labels.get(key+'/screen_status')?.mesh.material;if(m)m.emissive.setHSL(still ? .1 :(d.age*.18)%1,.8,.6);}
       else if(p.showing){setLabel(key,'screen_status',p.rest);p.showing=false;}
     }
-    if (floor) { floor.material.uniforms.angle.value = t * .36; floor.material.uniforms.colorPhase.value = t * .22; }
+    floorStyle.update(dt, still);
   }
 
   /**
@@ -338,5 +327,5 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     return true;
   }
 
-  return { shell, ceiling, floor, screens, holders, fixtures: set.length, bulbs: bulbs.length, update, auras, hubs, labels, setLabel, emis, marquee, payouts, celebrate(key,amount,tier,text){const p=payouts.get(key);if(!p)return false;if(amount<=0){p.coins.clear();return false;}return p.coins.start(amount,tier,text);} };
+  return { shell, ceiling, floor, setFloorStyle: floorStyle.setFloorStyle, getFloorStyle: floorStyle.getFloorStyle, screens, holders, fixtures: set.length, bulbs: bulbs.length, update, auras, hubs, labels, setLabel, emis, marquee, payouts, celebrate(key,amount,tier,text){const p=payouts.get(key);if(!p)return false;if(amount<=0){p.coins.clear();return false;}return p.coins.start(amount,tier,text);} };
 }

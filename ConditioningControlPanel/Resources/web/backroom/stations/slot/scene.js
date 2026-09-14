@@ -14,6 +14,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { attachSlotCustomHandle, slotHandleStyle } from '../../room/slot-custom-handles.js';
 import { createCoinShower } from '../../room/coin-shower.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
@@ -95,6 +96,7 @@ export async function createScene(o) {
     if (settle) settle();         // a rise, sink or spin cut short by dispose still resolves its promise
     canvas.removeEventListener('pointerdown', onDown); canvas.removeEventListener('pointermove', onMove);
     canvas.removeEventListener('pointerup', onUp); canvas.removeEventListener('pointercancel', cancelPull);
+    customHandle?.dispose();
     scene.traverse(n => {
       if (n.geometry) n.geometry.dispose();
       for (const m of [].concat(n.material || [])) { for (const k of Object.keys(m)) if (m[k] && m[k].isTexture) m[k].dispose(); m.dispose(); }
@@ -103,6 +105,7 @@ export async function createScene(o) {
     renderer.dispose(); renderer.forceContextLoss();
   }
 
+  let customHandle = null;
   let gltf, atlas = null;
   try {
     [gltf, atlas] = await Promise.all([
@@ -122,6 +125,7 @@ export async function createScene(o) {
   const absent = OPTIONAL.filter(n => !get(n));
   if (absent.length) console.warn(`[slot] glb lacks optional nodes, degrading: ${absent.join(', ')}`);
 
+  customHandle = await attachSlotCustomHandle({rig,loader:new GLTFLoader(),base:asset('../../room/assets/'),style:slotHandleStyle(o.variant)}).catch(()=>null);
   const cabinet = get('cabinet'), lever = get('lever'), rigRest = rig.position.clone();
   const reels = [1, 2, 3].map(i => get(`reel_${i}`)), restX = reels.map(r => r.rotation.x);
   const freezers = [1, 2, 3].map(i => get(`freeze_${i}`));
