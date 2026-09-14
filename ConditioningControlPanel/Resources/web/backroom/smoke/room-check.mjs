@@ -37,7 +37,8 @@ await mkdir(OUT, { recursive: true });
 /* ---------------------------------------------------------------- 1. pure */
 const stations = normaliseStations(JSON.parse(readFileSync(join(BACKROOM, 'stations.json'), 'utf8')));
 ok(stations.length === 7, 'stations.json has seven fixture rows');
-ok(['counter', 'cards', 'roulette'].every((id) => stations.some((s) => s.id === id && s.state === 'soon')), 'counter, cards and roulette are soon');
+ok(['counter', 'roulette'].every((id) => stations.some((s) => s.id === id && s.state === 'soon')), 'counter and roulette are soon');
+ok(stations.some((s) => s.id === 'cards' && s.state === 'live' && s.entry === 'stations/cards/station.js'), 'cards (Soft Hand) is live');
 ok(stations.some((s) => s.id === 'wheel' && s.state === 'live' && s.entry === 'stations/wheel/station.js'), 'the wheel is live on its own station');
 ok(!stations.some((s) => s.id === 'scratcher'), 'no scratcher');
 const slots = stations.filter((s) => s.id === 'slot');
