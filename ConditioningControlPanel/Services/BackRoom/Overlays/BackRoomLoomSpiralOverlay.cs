@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -11,7 +12,7 @@ namespace ConditioningControlPanel.Services.BackRoom.Overlays;
 
 /// <summary>
 /// Hypno v3 <c>spiral-loom</c> (CONTRACT 10.13.B, owner law: every Back Room spiral is Loom-woven): one
-/// woven spiral GIF as one field PER SCREEN (10.14, like the tunnel: UniformToFill inside a clipped cell the
+/// woven spiral GIF as one field PER SCREEN (10.14, like the tunnel: UniformToFill, centred, inside a clipped cell the
 /// size of that monitor, so every screen has its own eye at its own centre; cells come from physical bounds
 /// through this window's own DPI, so a mixed-DPI desktop stays aligned), in over 800 ms, out over 1200 ms when its
 /// time or the 20 s hold cap runs out or it is released. A new spiral replaces the running one, which
@@ -181,16 +182,30 @@ internal sealed class BackRoomLoomSpiralOverlay : BackRoomOverlayWindow
             l.Images.Clear();
             foreach (var c in cells)
             {
-                var img = new Image { Stretch = Stretch.UniformToFill, IsHitTestVisible = false, Width = c.W, Height = c.H };
-                var cell = new Grid { Width = c.W, Height = c.H, ClipToBounds = true, IsHitTestVisible = false };
-                cell.Children.Add(img);
-                Canvas.SetLeft(cell, c.X);
-                Canvas.SetTop(cell, c.Y);
+                var (cell, img) = BuildCell(c);
                 l.Root.Children.Add(cell);
                 l.Images.Add(img);
                 if (l.Active && l.Frames is { } f) PlayFrames(img, f, l.Delay, l.Still);
             }
         }
+    }
+
+    /// <summary>One monitor's cell: a clipped Grid at the monitor's place and size, its Image at UniformToFill and
+    /// CENTRED in it. The Image must carry no Width/Height of its own: WPF caps the render size at an explicit size and
+    /// aligns the scaled-up picture from the top-left, so a weave whose shape differs from the monitor's (a square or
+    /// tall Loom weave, a 16:10 or 21:9 or portrait screen) would be cropped from its corner, the eye off centre.</summary>
+    internal static (Grid Cell, Image Image) BuildCell(PxRect c)
+    {
+        var img = new Image
+        {
+            Stretch = Stretch.UniformToFill, IsHitTestVisible = false,
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+        };
+        var cell = new Grid { Width = c.W, Height = c.H, ClipToBounds = true, IsHitTestVisible = false };
+        cell.Children.Add(img);
+        Canvas.SetLeft(cell, c.X);
+        Canvas.SetTop(cell, c.Y);
+        return (cell, img);
     }
 
     private void ReleaseCurrent()

@@ -18,13 +18,15 @@ public interface IBackRoomFxSink
     void Subliminal(string text);
     /// <summary><paramref name="level"/> is a fraction of the user's own brain drain intensity.</summary>
     void BrainDrain(int durationMs, double level, bool melt);
-    /// <returns>True when the picture shows (a local file behind it): the XP award keys off it (10.14).</returns>
-    bool GifFull(BackRoomGif gif, int durationMs, bool still);
+    // The picture primitives take `shown`: call it (on the UI thread) when the picture is actually on screen, never for
+    // a picture that is refused (no local file, a display change settling), fails to decode or is stopped first.
+    // The XP award keys off it (10.14).
+    void GifFull(BackRoomGif gif, int durationMs, bool still, Action shown);
     // Hypno v3 (10.13.B). GifFrom's rect is page CSS px, mapped at play time (null = the centre).
-    /// <returns>True when a picture shows in the middle of the wash (a plain colour wash is false).</returns>
-    bool Wash(FxRgb color, double peak, BackRoomGif? picture);
-    /// <returns>False when nothing will show (no local file), so the one-at-a-time slot frees at once and no XP is paid.</returns>
-    bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still);
+    /// <summary><paramref name="shown"/> runs only for a wash WITH a picture, once that picture is on.</summary>
+    void Wash(FxRgb color, double peak, BackRoomGif? picture, Action shown);
+    /// <returns>False when nothing will show (no local file), so the one-at-a-time slot frees at once.</returns>
+    bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still, Action shown);
     /// <summary>Replaces a running one; a hold's <paramref name="durationMs"/> is the 20 s cap.</summary>
     void SpiralLoom(string gifPath, int durationMs, double alpha, bool hold, bool still);
     void ReleaseSpiralLoom();
@@ -64,7 +66,7 @@ public static class BackRoomFxXp
     /// <summary>FlashService's base per image with no flash sound playing (the room's pictures never play one).</summary>
     public const int PictureXp = 4;
 
-    /// <summary>Base XP the dispatcher pays once a primitive has actually shown, or null when it pays nothing itself.</summary>
+    /// <summary>Base XP the dispatcher pays once a primitive has actually shown (the sink's <c>shown</c>), or null when it pays nothing itself.</summary>
     public static int? For(FxPrim prim) => prim is FxPrim.GifFull or FxPrim.GifFrom or FxPrim.Wash ? PictureXp : null;
 }
 
@@ -247,29 +249,31 @@ public sealed class BackRoomFx : IBackRoomFx
                 break;
             case FxPrim.GifFull:
                 var gif = planned.Gif!;
-                At(at, () => { if (_sink.GifFull(gif, s.DurationMs, s.Still)) Pay(s.Prim); }, hold);
+                At(at, () => _sink.GifFull(gif, s.DurationMs, s.Still, PayOnce(s.Prim)), hold);
                 break;
             case FxPrim.Wash:
-                At(at, () => { if (_sink.Wash(s.Look!.Color, s.Level, planned.Gif)) Pay(s.Prim); }, hold);
+                At(at, () => _sink.Wash(s.Look!.Color, s.Level, planned.Gif, PayOnce(s.Prim)), hold);
                 break;
             case FxPrim.GifFrom:
                 var grown = planned.Gif!;
                 long until = at + s.DurationMs;
-                At(at, () =>
-                {
-                    if (_sink.GifFrom(grown, s.Look!.From, s.DurationMs, s.Look.Scale, s.Level, s.Still)) Pay(s.Prim);
-                    else FreeGifFrom(until);
-                }, hold, until);
+                At(at, () => { if (!_sink.GifFrom(grown, s.Look!.From, s.DurationMs, s.Look.Scale, s.Level, s.Still, PayOnce(s.Prim))) FreeGifFrom(until); }, hold, until);
                 break;
         }
     }
 
-    /// <summary>One shown picture, one award (10.14). Runs inside the onset, so a cancelled or busy one never pays.</summary>
-    private void Pay(FxPrim prim)
+    /// <summary>One shown picture, one award (10.14): the sink's <c>shown</c> for one onset. Made inside the onset, so a
+    /// cancelled or busy one never pays, and it pays at most once however often it is called.</summary>
+    private Action PayOnce(FxPrim prim)
     {
-        if (_xp == null || BackRoomFxXp.For(prim) is not { } amount) return;
-        try { _xp(amount); }
-        catch (Exception ex) { App.Logger?.Warning(ex, "[BackRoom] fx xp failed"); }
+        int paid = 0;
+        return () =>
+        {
+            if (System.Threading.Interlocked.Exchange(ref paid, 1) != 0) return;
+            if (_xp == null || BackRoomFxXp.For(prim) is not { } amount) return;
+            try { _xp(amount); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "[BackRoom] fx xp failed"); }
+        };
     }
 
     private void Own(ref string? owner, Hold? hold)

@@ -11,7 +11,7 @@ namespace ConditioningControlPanel.Tests;
 /// <summary>
 /// THE BACK ROOM effects pay XP the way the app's own effects do (CONTRACT 10.14). Flash images and subliminals already
 /// pay inside FlashService / SubliminalService, so the dispatcher pays only the pictures that bypass them (gif-full,
-/// gif-from, a wash with a picture), once each, and only when they actually show. Spirals, Brain Drain, the tunnel,
+/// gif-from, a wash with a picture), once each, and only when the overlay reports the picture on screen. Spirals, Brain Drain, the tunnel,
 /// the rain and the glitch wash pay nothing, as in normal play. Also: a GIF index past the deal cycles.
 /// </summary>
 public class BackRoomFxXpTests
@@ -50,6 +50,27 @@ public class BackRoomFxXpTests
         Fire(fx, "fx.gif_from", "b", null, "g2");
         clock.Advance(4000);
         Assert.Equal(new[] { 4 }, paid);
+    }
+
+    [Fact]
+    public void APicture_PaysWhenTheOverlayPutsItOn_NotWhenItIsHanded_AndOnlyOnce()
+    {
+        // The overlay can still refuse a picture after the sink took it (a display change settling, a decode that
+        // fails or comes too late): it then never calls shown, and nothing is paid.
+        var (fx, clock, sink, paid) = Make(BackRoomFxIntensity.Full);
+        sink.ShowsAtOnce = false;
+        Fire(fx, "fx.gif_from", "a", null, "g1");
+        fx.Fire("fx.jackpot", "slot", new[] { "gif1" }, Deal);
+        clock.Advance(20_000);
+        Assert.Contains(sink.Calls, c => c.Call.StartsWith("giffrom:"));
+        Assert.Contains(sink.Calls, c => c.Call.StartsWith("giffull:"));
+        Assert.Equal(2, sink.Pending.Count);
+        Assert.Empty(paid);   // handed over, not yet on screen
+
+        sink.Pending[0]();
+        sink.Pending[0]();   // a second call for the same picture pays nothing more
+        Assert.Equal(new[] { 4 }, paid);
+        // Pending[1] (the jackpot's gif-full) was refused by its overlay: never called, never paid.
     }
 
     [Fact]

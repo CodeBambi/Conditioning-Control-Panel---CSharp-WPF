@@ -177,18 +177,14 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
         return null;
     }
 
-    public bool Wash(FxRgb color, double peak, BackRoomGif? picture)
-    {
-        var file = LocalFile(picture);
-        BackRoomWashOverlay.Show(color, peak, file, picture == null ? null : Target(null).ScreenPx, MotionFx.Level == MotionLevel.Off);
-        return file != null;
-    }
+    public void Wash(FxRgb color, double peak, BackRoomGif? picture, Action shown)
+        => BackRoomWashOverlay.Show(color, peak, LocalFile(picture), picture == null ? null : Target(null).ScreenPx, MotionFx.Level == MotionLevel.Off, shown);
 
-    public bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still)
+    public bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still, Action shown)
     {
         if (LocalFile(gif) is not { } path) return false;
         double aspect = gif.W > 0 && gif.H > 0 ? (double)gif.W / gif.H : 4.0 / 3;
-        BackRoomGifFromOverlay.Show(path, aspect, Target(from), durationMs, scale, dim, still);
+        BackRoomGifFromOverlay.Show(path, aspect, Target(from), durationMs, scale, dim, still, shown);
         return true;
     }
 
@@ -215,11 +211,9 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
         _drainTimer = Rearm(_drainTimer, _drainUntil, StopDrain);
     }
 
-    public bool GifFull(BackRoomGif gif, int durationMs, bool still)
+    public void GifFull(BackRoomGif gif, int durationMs, bool still, Action shown)
     {
-        if (LocalFile(gif) is not { } path) return false;
-        ChaosFlashOverlay.ShowHero(path, durationMs, 0.9, still);
-        return true;
+        if (LocalFile(gif) is { } path) ChaosFlashOverlay.ShowHero(path, durationMs, 0.9, still, shown);
     }
 
     public void StopAll()

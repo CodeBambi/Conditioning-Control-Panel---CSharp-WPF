@@ -85,9 +85,10 @@ public sealed class ChaosFlashOverlay : Window
     /// Back Room <c>gif-full</c>: hold one specific LOCAL image over every screen for
     /// <paramref name="durationMs"/>. <paramref name="still"/> decodes only the first frame
     /// (MotionLevel Off). The caller resolves the path from its own dealt media; nothing else is
-    /// accepted. Any thread.
+    /// accepted. <paramref name="shown"/> runs on the UI thread once the hero window has taken the picture (not for a
+    /// remote path, a dead dispatcher or a window that failed to show). Any thread.
     /// </summary>
-    public static void ShowHero(string path, int durationMs, double opacity, bool still)
+    public static void ShowHero(string path, int durationMs, double opacity, bool still, Action? shown = null)
     {
         try
         {
@@ -103,6 +104,7 @@ public sealed class ChaosFlashOverlay : Window
                     ChaosWindowZ.RaiseAboveVideo(_hero);
                     ChaosWindowZ.ForceTopmost(_hero);
                     _hero.Display(path, durationMs, opacity, still);
+                    shown?.Invoke();
                 }
                 catch (Exception ex) { App.Logger?.Debug("ChaosFlashOverlay.ShowHero: {E}", ex.Message); }
             }));

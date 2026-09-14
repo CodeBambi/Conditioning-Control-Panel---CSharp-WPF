@@ -11,7 +11,8 @@ namespace ConditioningControlPanel.Services.BackRoom.Overlays;
 /// and dropped anything inside 360 ms of the previous wash). An optional dealt picture sits in the
 /// middle of the room window's screen at 42% of its height. With a picture the wash's clock starts
 /// when the picture's first frame is on (or after a short wait without it), so a slow decode never
-/// leaves an empty wash; still (MotionLevel Off) shows the picture's first frame.
+/// leaves an empty wash; still (MotionLevel Off) shows the picture's first frame. The caller's <c>shown</c> runs
+/// only when the picture itself goes on (its first frame in time), never for a refused or picture-less wash.
 /// </summary>
 internal sealed class BackRoomWashOverlay : BackRoomOverlayWindow
 {
@@ -36,15 +37,15 @@ internal sealed class BackRoomWashOverlay : BackRoomOverlayWindow
         Clear();
     }
 
-    public static void Show(FxRgb color, double peak, string? picturePath, PxRect? pictureScreenPx, bool still) => OnUi(() =>
+    public static void Show(FxRgb color, double peak, string? picturePath, PxRect? pictureScreenPx, bool still, Action? shown = null) => OnUi(() =>
     {
         if (!MayCreate(_instance)) return;
-        (_instance ??= new BackRoomWashOverlay()).Start(color, peak, picturePath, pictureScreenPx, still);
+        (_instance ??= new BackRoomWashOverlay()).Start(color, peak, picturePath, pictureScreenPx, still, shown);
     });
 
     public static void Stop() => OnUi(() => { if (_instance is { _active: true } w) { w.Clear(); w.Sleep(); } });
 
-    private void Start(FxRgb color, double peak, string? picturePath, PxRect? screenPx, bool still)
+    private void Start(FxRgb color, double peak, string? picturePath, PxRect? screenPx, bool still, Action? shown)
     {
         var brush = new SolidColorBrush(Color.FromRgb(color.R, color.G, color.B));
         brush.Freeze();
@@ -69,6 +70,7 @@ internal sealed class BackRoomWashOverlay : BackRoomOverlayWindow
             if (!_active || _startedAt != 0) return;   // it already went on without the picture
             _hasPicture = ok;
             _startedAt = Environment.TickCount64;
+            if (ok) shown?.Invoke();
         });
     }
 
