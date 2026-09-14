@@ -1221,6 +1221,17 @@ namespace ConditioningControlPanel.Models
             set { _flashSolidMode = value; OnPropertyChanged(); }
         }
 
+        // Jackpot Remix (Back Room prize fx.jackpot_remix): 1 flash in 100 becomes a remix of the
+        // user's own GIFs. Off by default on purpose: owning the prize never auto-enables it, the
+        // row inside the Flashes options does. Ownership is never read from here (PrizeGrants).
+        private bool _jackpotRemixEnabled = false;
+        [JsonProperty("JackpotRemixEnabled")]
+        public bool JackpotRemixEnabled
+        {
+            get => _jackpotRemixEnabled;
+            set { _jackpotRemixEnabled = value; OnPropertyChanged(); }
+        }
+
         private FlashMotionStyle _flashMotionStyle = FlashMotionStyle.Still;
         /// <summary>Flashes v2 motion picker. Compositor path only; resolved per spawn through FlashMotion.Resolve.</summary>
         [JsonProperty("FlashMotionStyle")]
