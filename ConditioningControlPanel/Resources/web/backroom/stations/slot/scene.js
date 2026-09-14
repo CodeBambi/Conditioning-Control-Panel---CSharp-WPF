@@ -18,7 +18,7 @@ import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
 import { drawSymbol } from './symbols.js';
 import { PACE, reelStopMs, reelsMs } from './pace.js';
 import { applyPalette } from './palette.js';
-import { FEEL, bezier, breath, shiverPx, chaseMs } from './feel.js';
+import { FEEL, ALMOST as FEEL_ALMOST, bezier, breath, shiverPx, chaseMs } from './feel.js';
 
 export const FACES = { idle0_0: 3, hearts: 7, spirals: 8, melt: 9, jackpot: 10 };
 const RISE_MS = 620, CAMERA_MS = 620, SINK_MS = 340, PAINT_MS = 100, { THUD_MS } = FEEL;
@@ -31,8 +31,10 @@ const PALETTES = {
   pull: [0x7920c4, 0xff197c], freeze: [0x0049a8, 0x00c7f2, 0x74f4ff], win: [0xe37100, 0xffd32b, 0xff4b24],
   big: [0xff4b24, 0xffd32b, 0xff126e, 0xffb000], jackpot: [0xffbd00, 0xffe27a, 0xffa000, 0xfff1b8],
   melt: [0x351369, 0xa32d99, 0x6230a0], free: [0x006ca0, 0x00dda8, 0x8726e5],
+  tease: [0x3d1550, 0x6a2178, 0x2a1040, 0x59206b], tease_gold: [0xffbd00, 0x8a5a00, 0xffe27a, 0xa06c00],
 };
 const PARTY_MS = [0, 700, 900, 1000, 1400];   // per tier: how long the cabinet celebrates (THE BREATH waits it out)
+const TEASE_DIM = 0.62;   // A1: the cabinet drops a notch while reel 3 holds (never under Calm or reduced motion)
 
 const clamp = x => Math.min(1, Math.max(0, x)), ease = x => 1 - (1 - clamp(x)) ** 3;
 /** 0..1 of a reel's travel at `dt`: spin up, blur at a steady speed, decelerate into the stop. */
@@ -157,6 +159,16 @@ export async function createScene(o) {
 
   // Reels: one canvas per drum, N cells along U, painted in strip order.
   let strips = [[], [], []], look = { reduced }, lastPaint = -Infinity;
+  // A2 THE ALMOST: the off-by-one cell on reel 3 going gold, {r, j, at}. Set by almost(), cleared when it ends.
+  let ghost = null;
+  /** The gold on that cell: in over the tell, then ONE snap back. Reduced motion takes a single tint (Law VI). */
+  function ghostAmt(t) {
+    if (!ghost) return 0;
+    const age = t - ghost.at, rise = FEEL_ALMOST.TELL_MS - FEEL_ALMOST.SNAP_MS;
+    if (!(age >= 0) || age >= FEEL_ALMOST.TELL_MS) return 0;
+    if (reduced) return age < FEEL_ALMOST.SNAP_MS ? 1 : 0;
+    return age < rise ? ease(age / rise) : 1 - clamp((age - rise) / FEEL_ALMOST.SNAP_MS);
+  }
   const reelCanvas = [], reelTex = [];
   const angle = (k, n) => ((k + 0.5) / n - 0.5) * Math.PI * 2;
   function paint(t) {
@@ -173,6 +185,10 @@ export async function createScene(o) {
         glaze.addColorStop(0.88, '#ffffff08'); glaze.addColorStop(1, '#07040f99');
         ctx.fillStyle = glaze; ctx.fillRect(-128, -128, 256, 256);
         ctx.strokeStyle = '#e8bbd526'; ctx.lineWidth = 1; ctx.strokeRect(-116, -116, 232, 232);
+        // A2: the cell one step off the payline ghosts gold. The reel window shows about half of each
+        // neighbour (drum r 0.43, 13 cells, window 0.39 tall), so the tell reads without moving a stop.
+        const gh = ghost && ghost.r === r && ghost.j === j ? ghostAmt(t) : 0;
+        if (gh > 0) { ctx.fillStyle = `rgba(255,194,58,${(0.62 * gh).toFixed(3)})`; ctx.fillRect(-128, -128, 256, 256); }
         ctx.restore();
       }
       if (n) reelTex[r].needsUpdate = true;
@@ -238,6 +254,7 @@ export async function createScene(o) {
   let phase = 'hidden', tl = null, spin = null, pull = null, pullBack = null, hold = null, mood = 'idle', moodAt = 0;
   settle = () => { const t = tl, s = spin; tl = null; spin = null; if (t && t.done) t.done(); if (s && s.resolve) s.resolve(); };
   let revealAt = -Infinity, revealGain = 0, lean = null, party = null, shiverAt = -Infinity, trayAt = -Infinity, melted = false;
+  let teasing = false;   // A1: reel 3 is alone and holding (the marquee's tease mood, the lights a notch down)
   let heat = { from: 0, to: 0, at: -Infinity, gold: false };
   const pulse = [-Infinity, -Infinity, -Infinity], stopAt = [-Infinity, -Infinity, -Infinity];
   const sparks = [];
@@ -290,15 +307,19 @@ export async function createScene(o) {
         if (dt >= SINK_MS) { const done = tl.done; tl = null; phase = 'hidden'; done(); }
       }
     }
+    // A1 THE ANTICIPATION REEL: from reel 2's thud to reel 3's, with reel 3 alone and holding. The tape
+    // already carries the outcome, so this window only delays it; nothing here can change what lands.
+    teasing = !!spin && spin.teaseMs > 0 && spin.teaseDim && !reduced
+      && t - spin.start >= reelStopMs(1) && t - spin.start < reelStopMs(2, PACE, spin.teaseMs);
     const partying = !!party && t < party.end, pr = partying ? party.r : null;
     if (spin) {
       const s = spin, dt = t - s.start;
       // The pull carries on from wherever the Law VIII lean (or the drag) left the lever.
-      lever.rotation.x = reduced ? (dt < reelsMs() ? LEAN : 0) : Math.max(0.4 * Math.sin(Math.PI * clamp(dt / 420)), s.leverFrom * (1 - ease(dt / 420)));
+      lever.rotation.x = reduced ? (dt < reelsMs(PACE, s.teaseMs) ? LEAN : 0) : Math.max(0.4 * Math.sin(Math.PI * clamp(dt / 420)), s.leverFrom * (1 - ease(dt / 420)));
       let all = true;
       for (let i = 0; i < 3; i++) {
         if (s.held === i) continue;
-        const n = strips[i].length || 13, dur = reelStopMs(i), home = angle(s.stops[i], n);
+        const n = strips[i].length || 13, dur = reelStopMs(i, PACE, s.teaseMs), home = angle(s.stops[i], n);
         const target = home + Math.PI * 2 * (6 + 2 * i);
         // Law VI: reduced motion takes the STATE. The reel rests, then is simply on its stop at its thud frame.
         let x = reduced ? s.from[i] : THREE.MathUtils.lerp(s.from[i], target, reelTravel(dt, dur));
@@ -310,7 +331,7 @@ export async function createScene(o) {
         } else all = false;
         reels[i].rotation.x = restX[i] + x;
       }
-      if (all && dt >= reelsMs()) settleSpin();   // a held column never shortens the pace
+      if (all && dt >= reelsMs(PACE, s.teaseMs)) settleSpin();   // a held column never shortens the pace
     } else if (pull) lever.rotation.x = PULL_MAX * pull.amount;
     else if (pullBack) { const q = clamp((t - pullBack.start) / 200); lever.rotation.x = pullBack.angle * (1 - ease(q)); if (q === 1) pullBack = null; }
     else if (lean) lever.rotation.x = reduced ? LEAN : lean.from + (LEAN - lean.from) * ease((t - lean.start) / FEEL.LEAN_MS);   // Law VIII
@@ -321,6 +342,8 @@ export async function createScene(o) {
     reels.forEach((r, i) => {
       const k = (t - stopAt[i]) / THUD_MS, flash = k < 0 || k >= 1 ? 1 : reduced ? 1.3 : 1 + 1.2 * (1 - ease(k));
       if (r.material && r.material.color) r.material.color.setScalar(glow * flash);
+      // A2 under reduced motion: no travel and no repaint, the reel takes one gold tint and settles (Law VI).
+      if (reduced && ghost && ghost.r === i && r.material && r.material.color) r.material.color.lerp(GOLD, 0.6 * ghostAmt(t));
     });
 
     freezers.forEach((f, i) => {
@@ -332,13 +355,14 @@ export async function createScene(o) {
     // THE MARQUEE: the chase runs at the heat of the last win, the tier's own palette while it celebrates.
     const h = heatNow(t);
     const partyMood = pr && pr.chase ? (pr.gold ? 'jackpot' : pr.tier >= 3 ? 'big' : 'win') : null;
-    const m = spin ? 'spin' : partyMood || (mood !== 'idle' ? mood : hold !== null ? 'freeze' : pull ? 'pull' : 'idle');
+    const m = spin ? (teasing ? (spin.teaseGold ? 'tease_gold' : 'tease') : 'spin')
+      : partyMood || (mood !== 'idle' ? mood : hold !== null ? 'freeze' : pull ? 'pull' : 'idle');
     const colors = PALETTES[m], period = m === 'spin' ? 420 : chaseMs(partyMood ? Math.max(h, pr.tier) : h);
     const travel = reduced ? 0 : (t - (partyMood ? party.start : moodAt)) / period;
     bulbs.forEach((b, i) => {
       const p = i * 0.65 + travel, step = Math.floor(p), mix = p - step;
       b.material.color.setHex(colors[step % colors.length]).lerp(nextColor.setHex(colors[(step + 1) % colors.length]), mix * mix * (3 - 2 * mix));
-      b.material.emissive.copy(b.material.color); b.material.emissiveIntensity = 0.1 + 0.04 * h;
+      b.material.emissive.copy(b.material.color); b.material.emissiveIntensity = (0.1 + 0.04 * h) * (teasing ? TEASE_DIM : 1);
     });
     if (glowMat) {
       glowMat.emissive.copy(glowRest.color).lerp(GOLD, heat.gold ? clamp(h / 4) : 0);
@@ -391,7 +415,8 @@ export async function createScene(o) {
       const wpp = (2 * poses.play.dist * Math.tan(THREE.MathUtils.degToRad(LENS_DEG) / 2)) / (canvas.clientHeight || 1);
       rig.position.x = rigRest.x + poses.play.right.x * px * wpp; rig.position.z = rigRest.z + poses.play.right.z * px * wpp;
     }
-    if (!reduced && t - lastPaint > PAINT_MS) paint(t);
+    if (!reduced && (ghost || t - lastPaint > PAINT_MS)) paint(t);   // A2's ghost repaints every frame while it runs
+    if (ghost && t - ghost.at >= FEEL_ALMOST.TELL_MS) ghost = null;
     if (o.hint) {
       o.hint.hidden = phase !== 'play' || !!spin;
       if (!o.hint.hidden) {
@@ -482,7 +507,7 @@ export async function createScene(o) {
     /** THE BANK touches the tray: when a win starts paying out, or when a spend lands in it. */
     trayThud() { trayAt = performance.now(); },
     /** Law VI: Back and suspend skip every ceremony to its settled state. */
-    skip() { party = null; shiverAt = trayAt = -Infinity; stopAt.fill(-Infinity); revealAt = -Infinity; lean = null; heat = { ...heat, from: heat.to, at: -Infinity }; },
+    skip() { party = null; shiverAt = trayAt = -Infinity; stopAt.fill(-Infinity); revealAt = -Infinity; lean = null; ghost = null; teasing = false; heat = { ...heat, from: heat.to, at: -Infinity }; },
     /** A node's centre in client px (tokens fly from and to these), null when the glb lacks it. */
     project(name) {
       const n = get(name);
@@ -507,14 +532,25 @@ export async function createScene(o) {
       return new Promise(done => { tl = { kind: 'sink', start: performance.now(), fromY: rig.position.y, done: () => { done(); if (prev && prev.done) prev.done(); } }; });
     },
     /** Spin to `stops`, the held column stays put. Resolves when the last reel has thudded, reelsMs() from
-     *  now with or without reduced motion (the pace is economy, not animation). */
-    spin(stops, held = null) {
+     *  now with or without reduced motion (the pace is economy, not animation).
+     *  `tease` is A1 from feel.anticipation: `{holdMs, gold, dim}`. Reel 3 keeps its blur for holdMs longer
+     *  and thuds late; reduced motion and Calm keep the hold, they only drop the light change. */
+    spin(stops, held = null, tease = null) {
       settleSpin();
+      ghost = null;
       return new Promise(resolve => {
         spin = { start: performance.now(), stops, held, leverFrom: lever.rotation.x, resolve, stopped: [false, false, false],
+                 teaseMs: Math.max(0, (tease && tease.holdMs) || 0), teaseGold: !!(tease && tease.gold),
+                 teaseDim: tease ? tease.dim !== false : true,
                  from: reels.map((r, i) => r.rotation.x - restX[i]) };
         pull = null; pullBack = null; lean = null;
       });
+    },
+    /** A2 THE ALMOST, from feel.almost: the off-by-one cell the server's own strip put next to the line
+     *  ghosts gold and snaps back, once. Nothing is weighted, nudged or re-drawn; this shows what landed. */
+    almost(near) {
+      if (!near || !(near.cell >= 0)) return;
+      ghost = { r: near.reel === undefined ? 2 : near.reel, j: near.cell, at: performance.now() };
     },
     settle: settleSpin,
     /** For dev.html and CDP checks only. */
@@ -523,6 +559,8 @@ export async function createScene(o) {
       return { lever: lever.rotation.x, heat: heatNow(t), gold: heat.gold, party: party && t < party.end ? party.r.party : null,
                tier: party && t < party.end ? party.r.tier : 0, face: faceName, shiverPx: reduced ? 0 : shiverPx(t - shiverAt),
                reelBrightness: reels.map(r => r.material && r.material.color ? r.material.color.r : 1), leaning: !!lean,
+               tease: teasing, teaseMs: spin ? spin.teaseMs : 0, teaseGold: !!(spin && spin.teaseGold),
+               almost: ghost ? { cell: ghost.j, reel: ghost.r, amt: Number(ghostAmt(t).toFixed(3)) } : null,
                tray: !!tray, glow: !!glowMat, emiScale: emi ? emi.scale.x / emiRest.s.x : null };
     },
   };
