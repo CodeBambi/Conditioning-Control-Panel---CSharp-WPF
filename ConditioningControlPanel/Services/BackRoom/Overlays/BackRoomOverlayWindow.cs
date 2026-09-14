@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
@@ -33,6 +35,10 @@ internal static class BackRoomOverlayScreens
 /// DIPs. Same keep-alive discipline as ChaosFlashOverlay: made once on first use, idles invisible, hides
 /// after a quiet spell, never closed or resized mid-run (a layered window torn down or resized mid-run can
 /// wedge the shared render thread). A frame loop runs only while something is drawing, capped per overlay.
+/// Content is laid out in the window's OWN DIPs, which on a mixed-DPI desktop are neither the primary
+/// monitor's nor the system's: every size comes from <see cref="Local"/> after <see cref="Wake"/> (the HWND
+/// exists and is stamped by then) and is laid out again on a DPI change. The overlays stack in the
+/// mockup's order whatever order they wake in: spiral, gif-from, wash, tunnel on top.
 /// UI thread only; the static entry points marshal.
 /// </summary>
 internal abstract class BackRoomOverlayWindow : Window
@@ -41,13 +47,18 @@ internal abstract class BackRoomOverlayWindow : Window
     private readonly DispatcherTimer _hideGrace;
     private readonly int _frameMs;
     private readonly PxRect _virtualPx;
+    private readonly int _zRank;
+    private static readonly List<BackRoomOverlayWindow> Live = new();
+    private (string Key, List<BitmapSource> Frames, TimeSpan Delay)? _lastDecode;
     private bool _framing;
     private long _lastFrame;
     private int _dpiRestamps;
 
-    protected BackRoomOverlayWindow(int frameMs)
+    /// <param name="zRank">Higher sits above lower (spiral 0, gif-from 1, wash 2, tunnel 3).</param>
+    protected BackRoomOverlayWindow(int frameMs, int zRank)
     {
         _frameMs = frameMs;
+        _zRank = zRank;
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
@@ -73,8 +84,10 @@ internal abstract class BackRoomOverlayWindow : Window
             _hideGrace.Stop();
             if (_framing) return;
             try { Hide(); } catch (Exception ex) { Diag.Swallowed(ex, "overlay hide"); }
+            _lastDecode = null;
             OnIdleHidden();
         };
+        Live.Add(this);
     }
 
     /// <summary>The virtual screen's physical origin, which <see cref="Local"/> measures from.</summary>
@@ -89,8 +102,14 @@ internal abstract class BackRoomOverlayWindow : Window
         }
     }
 
-    /// <summary>Physical px -> this window's canvas DIPs.</summary>
+    /// <summary>Physical px -> this window's canvas DIPs. Only true once the HWND exists (after <see cref="Wake"/>).</summary>
     protected PxRect Local(PxRect px) => BackRoomOverlayMath.ToLocalDip(px, _virtualPx, PxPerDip);
+
+    /// <summary>The whole window in its own DIPs, what a full-screen layer is sized to.</summary>
+    protected PxRect Surface => Local(_virtualPx);
+
+    /// <summary>The window's DPI changed under it: lay the content out again from <see cref="Local"/>.</summary>
+    protected virtual void OnRescaled() { }
 
     /// <summary>Make the window a new effect's home. False while a display change is settling and the
     /// window does not exist yet (a fresh layered surface then is the crash the coordinator prevents).</summary>
@@ -105,12 +124,15 @@ internal abstract class BackRoomOverlayWindow : Window
         if (d.CheckAccess()) Run(); else d.BeginInvoke(new Action(Run));
     }
 
-    /// <summary>Start drawing: visible, on top, frame loop on.</summary>
+    /// <summary>Start drawing: visible, on top of the band yet under any higher-ranked overlay, frame loop on.
+    /// Call it BEFORE laying anything out, so <see cref="Local"/> reads the window's own DPI.</summary>
     protected void Wake()
     {
         _hideGrace.Stop();
         if (!IsVisible) { try { Show(); } catch (Exception ex) { Diag.Swallowed(ex, "overlay show"); } }
         ChaosWindowZ.ForceTopmost(this);
+        foreach (var above in Live.Where(o => o._zRank > _zRank && o.IsVisible).OrderBy(o => o._zRank))
+            ChaosWindowZ.ForceTopmost(above);
         if (_framing) return;
         _framing = true;
         _lastFrame = 0;
@@ -148,40 +170,78 @@ internal abstract class BackRoomOverlayWindow : Window
     protected virtual void OnIdleHidden() { }
 
     /// <summary>
-    /// Put a local picture on <paramref name="img"/>: animated through the shared capped, off-thread
-    /// decoder, or (still) its first frame decoded off the UI thread at <paramref name="maxDim"/>.
+    /// Put a local picture on <paramref name="img"/> off the UI thread: every frame the budget keeps (through
+    /// the shared decode gate), or (still, or not animated) its first frame. <paramref name="onReady"/> runs on
+    /// the UI thread with true once the first frame is on, false when nothing could be decoded, so an effect
+    /// starts its clock at its picture. The last decode is kept until the window hides.
     /// </summary>
-    protected static void SetPicture(Image img, string path, bool still, int maxDim)
+    protected void SetPicture(Image img, string path, bool still, int maxDim, int maxFrames, double budgetMb, Action<bool> onReady)
     {
         ClearPicture(img);
-        if (!still)
-        {
-            AnimatedWebp.AttachAnimation(img, path, maxDim, maxFrames: 40);
-            return;
-        }
         var token = new object();
         img.Tag = token;
+        string key = path + "|" + maxDim + "|" + maxFrames + "|" + budgetMb;
+        if (!still && _lastDecode is { } hit && hit.Key == key) { Put(hit.Frames, hit.Delay); return; }
         Task.Run(() =>
         {
+            (List<BitmapSource> Frames, TimeSpan Delay)? frames = null;
+            BitmapSource? first = null;
             try
             {
-                var bmp = new BitmapImage();
-                bmp.BeginInit();
-                bmp.CacheOption = BitmapCacheOption.OnLoad;
-                bmp.DecodePixelWidth = maxDim;
-                bmp.UriSource = new Uri(path, UriKind.Absolute);
-                bmp.EndInit();
-                if (bmp.CanFreeze) bmp.Freeze();
-                OnUi(() => { if (ReferenceEquals(img.Tag, token)) img.Source = bmp; });
+                if (!still) frames = AnimatedWebp.DecodeFrames(path, maxDim, maxFrames, budgetMb);
+                if (frames == null) first = DecodeStill(path, maxDim);
             }
-            catch (Exception ex) { App.Logger?.Debug("[BackRoom] overlay still decode: {E}", ex.Message); }
+            catch (Exception ex) { App.Logger?.Debug("[BackRoom] overlay picture decode: {E}", ex.Message); }
+            OnUi(() =>
+            {
+                if (!ReferenceEquals(img.Tag, token)) return;
+                if (frames is { } f) { _lastDecode = (key, f.Frames, f.Delay); Put(f.Frames, f.Delay); }
+                else if (first != null) Put(new List<BitmapSource> { first }, TimeSpan.Zero);
+                else onReady(false);
+            });
         });
+
+        void Put(List<BitmapSource> f, TimeSpan delay)
+        {
+            PlayFrames(img, f, delay, still);
+            onReady(true);
+        }
+    }
+
+    /// <summary>Frame 0 now, then (unless still) the loop at <paramref name="delay"/> a frame.</summary>
+    protected static void PlayFrames(Image img, List<BitmapSource> frames, TimeSpan delay, bool still)
+    {
+        img.BeginAnimation(Image.SourceProperty, null);
+        img.Source = frames[0];
+        if (still || frames.Count < 2) return;
+        var anim = new ObjectAnimationUsingKeyFrames
+        {
+            Duration = TimeSpan.FromMilliseconds(delay.TotalMilliseconds * frames.Count),
+            RepeatBehavior = RepeatBehavior.Forever,
+        };
+        for (int i = 0; i < frames.Count; i++)
+            anim.KeyFrames.Add(new DiscreteObjectKeyFrame(frames[i], KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(delay.TotalMilliseconds * i))));
+        anim.Freeze();
+        img.BeginAnimation(Image.SourceProperty, anim);
+    }
+
+    /// <summary>The first frame at <paramref name="maxDim"/> wide. Off the UI thread.</summary>
+    protected static BitmapSource DecodeStill(string path, int maxDim)
+    {
+        var bmp = new BitmapImage();
+        bmp.BeginInit();
+        bmp.CacheOption = BitmapCacheOption.OnLoad;
+        bmp.DecodePixelWidth = maxDim;
+        bmp.UriSource = new Uri(path, UriKind.Absolute);
+        bmp.EndInit();
+        if (bmp.CanFreeze) bmp.Freeze();
+        return bmp;
     }
 
     protected static void ClearPicture(Image img)
     {
         img.Tag = null;
-        AnimatedWebp.Detach(img);
+        img.BeginAnimation(Image.SourceProperty, null);
         img.Source = null;
     }
 
@@ -220,9 +280,14 @@ internal abstract class BackRoomOverlayWindow : Window
     {
         base.OnDpiChanged(oldDpi, newDpi);
         // Same capped re-stamp as ChaosFlashOverlay: WPF re-applies the DIP size on a majority-monitor change.
-        if (_dpiRestamps >= 4) return;
-        _dpiRestamps++;
-        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(PlacePhysical));
+        // The content follows the new scale either way.
+        bool restamp = _dpiRestamps < 4;
+        if (restamp) _dpiRestamps++;
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            if (restamp) PlacePhysical();
+            try { OnRescaled(); } catch (Exception ex) { App.Logger?.Debug("[BackRoom] overlay rescale: {E}", ex.Message); }
+        }));
     }
 
     private const int GWL_EXSTYLE = -20;

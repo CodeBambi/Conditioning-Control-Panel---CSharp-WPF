@@ -38,7 +38,7 @@ internal sealed class BackRoomTunnelOverlay : BackRoomOverlayWindow
     private readonly List<Vignette> _screens = new();
     private bool _still;
 
-    private BackRoomTunnelOverlay() : base(frameMs: 33) { }
+    private BackRoomTunnelOverlay() : base(frameMs: 33, zRank: 3) { }
 
     public static void Set(double level, bool still) => OnUi(() =>
     {
@@ -61,8 +61,15 @@ internal sealed class BackRoomTunnelOverlay : BackRoomOverlayWindow
     {
         _still = still;
         _model.Set(level, Environment.TickCount64);
+        Wake();   // first, so the vignettes are laid out in this window's own DPI
         if (_screens.Count == 0) Layout();
-        Wake();
+    }
+
+    protected override void OnRescaled()
+    {
+        if (_screens.Count == 0) return;
+        Layout();
+        Paint(_model.Level);
     }
 
     /// <summary>One vignette per monitor, laid out when the tunnel first opens after a quiet spell (the
