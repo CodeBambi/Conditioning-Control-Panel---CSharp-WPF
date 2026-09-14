@@ -68,7 +68,7 @@ test('classify: retries keep the idem, stale adopts, closed and too_fast', () =>
   assert.equal(fast.kind, 'wait'); assert.equal(fast.waitMs, 4200);
   assert.equal(classify({ ok: true, body: { ok: false, reason: 'too_fast', retryInMs: 999999 } }).waitMs, RETRY.fastCapMs);
   for (const r of ['stale', 'illegal', 'hand_open', 'auto_stood']) assert.equal(classify({ ok: true, body: { ok: false, reason: r } }).kind, 'adopt', r);
-  assert.equal(classify({ ok: true, body: { ok: false, reason: 'no_hand' } }).kind, 'refresh');
+  assert.deepEqual(['no_hand', 'bad_request', 'bad_op'].map((r) => classify({ ok: true, body: { ok: false, reason: r } }).kind), ['refresh', 'refresh', 'closed']);
   assert.equal(classify({ ok: true, body: { ok: false, reason: 'insufficient', sp: 0 } }).kind, 'insufficient');
   assert.equal(classify({ ok: false, reason: 'offline' }).kind, 'failed');
   assert.equal(classify(null).kind, 'failed');

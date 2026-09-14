@@ -112,7 +112,8 @@ export function resultLines(hand) {
  *   { at, op: 'active', index }                           the hand the player is on
  *   { at, op: 'ready' }                                   decisions are live
  *   { at, op: 'settle' }                                  the result shows (moments fire here)
- * `still` (Calm, reduced) puts every step at 0: the settled state, in order.
+ * `still` (Calm, reduced) puts every step at 0: the settled state, in order. A bloom keeps its gaps to the reveal and
+ * the settle, so the settle's wash is never inside the host's 360 ms wash gap after the bloom's.
  */
 export function planSteps(shown, next, { still = false } = {}) {
   const T = TIMING, g = still ? 0 : 1, steps = [];
@@ -151,10 +152,10 @@ export function planSteps(shown, next, { still = false } = {}) {
     return steps;
   }
   if (bloomAt >= 0) { const keep = t; t = bloomAt; push('bloom'); t = keep; }
-  t = bloomAt >= 0 ? bloomAt + T.bjRevealMs * g : lastCardAt >= 0 ? lastCardAt + T.revealMs * g : t + T.firstMs * g;
+  t = bloomAt >= 0 ? bloomAt + T.bjRevealMs : lastCardAt >= 0 ? lastCardAt + T.revealMs * g : t + T.firstMs * g;
   push('reveal', { code: next.dealer[1] });
   for (let j = 2; j < next.dealer.length; j++) { t += T.hitGapMs * g; push('card', { owner: 'd', slot: j, code: next.dealer[j] }); }
-  t += T.settleMs * g;
+  t += T.settleMs * (bloomAt >= 0 ? 1 : g);
   push('settle');
   return steps.sort((a, b) => a.at - b.at);
 }

@@ -121,8 +121,9 @@ export const moveBody = (hand) => ({ handId: hand.id, step: hand.step });
  *   retry     same idem after waitMs (busy, a lost reply)
  *   wait      same idem after waitMs (too_fast: the deal floor or the limiter)
  *   adopt     the body carries the server's hand (stale, illegal, hand_open, auto_stood): show it
- *   refresh   no hand on the server (no_hand): read state again
- *   insufficient, closed, failed
+ *   refresh   read state again (no_hand; bad_request, a body this page shaped wrong)
+ *   closed    the door is shut, or the host has no such op (bad_op)
+ *   insufficient, failed
  */
 export function classify(res) {
   const body = res && res.body && typeof res.body === 'object' ? res.body : null;
@@ -130,12 +131,12 @@ export function classify(res) {
   if (res && res.ok && body && body.ok === true) return { kind: 'ok', body };
   const reason = String((body && body.reason) || (res && res.reason) || 'offline');
   switch (reason) {
-    case 'closed': return { kind: 'closed', reason, body };
+    case 'closed': case 'bad_op': return { kind: 'closed', reason, body };
     case 'busy': return { kind: 'retry', reason, waitMs: RETRY.busyMs, body };
     case 'timeout': return { kind: 'retry', reason, waitMs: RETRY.timeoutMs, body };
     case 'too_fast': return { kind: 'wait', reason, waitMs: Math.min(RETRY.fastCapMs, Math.max(250, int(body && body.retryInMs, 1000))), body };
     case 'stale': case 'illegal': case 'hand_open': case 'auto_stood': return { kind: 'adopt', reason, body };
-    case 'no_hand': return { kind: 'refresh', reason, body };
+    case 'no_hand': case 'bad_request': return { kind: 'refresh', reason, body };
     case 'insufficient': return { kind: 'insufficient', reason, body };
     default: return { kind: 'failed', reason, body };
   }
