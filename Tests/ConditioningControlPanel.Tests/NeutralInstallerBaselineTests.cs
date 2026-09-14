@@ -583,4 +583,72 @@ public class NeutralInstallerBaselineTests
         // to include every size, the 16px taskbar icon goes back to three illegible pink bars.
         Assert.Contains("$LetteringLegibleAbove = 64", script, StringComparison.Ordinal);
     }
+    // ---- the preset that stays in the box says neutral things (item 9) -------------------
+
+    private static readonly string[] MorningDriftPhrases =
+        { "BREATHE", "RELAX", "DEEPER", "QUIET MIND", "DROP" };
+
+    /// <summary>
+    /// morning_drift is the one session a stripped install still has, so its phrase list is the
+    /// only session copy a stranger can read out of the box. Every phrase has to come out of the
+    /// neutral pool - not merely dodge the themed words, but actually be something CCP Default
+    /// already says, so the shipped preset and the baseline cannot drift apart.
+    /// </summary>
+    [Fact]
+    public void TheOneSessionLeftInTheBoxDrawsOnlyOnTheNeutralPool()
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(
+            AppText("assets", "sessions", "morning_drift.session.json"));
+
+        var phrases = doc.RootElement.GetProperty("settings").GetProperty("subliminalPhrases")
+            .EnumerateArray().Select(e => e.GetString() ?? "").ToArray();
+
+        AssertNeutral(phrases, "morning_drift.subliminalPhrases");
+        Assert.Equal(MorningDriftPhrases, phrases);
+        foreach (var phrase in phrases)
+            Assert.True(BuiltInMods.CCPDefault.SubliminalPool!.ContainsKey(phrase),
+                phrase + " is not in CCPDefault.SubliminalPool - the in-box preset must not invent its own vocabulary");
+
+        AssertNeutral(new[] { doc.RootElement.GetProperty("description").GetString() ?? "" },
+            "morning_drift.description");
+    }
+
+    /// <summary>
+    /// Session.cs carries a compiled twin of the same preset and it is what every caller that
+    /// bypasses SessionManager reads. Neutralising the JSON alone would leave the themed list
+    /// compiled into the exe, one Session.GetAllSessions() away from the remote controller.
+    /// </summary>
+    [Fact]
+    public void TheCompiledTwinSaysTheSameNeutralThings()
+    {
+        var twin = Session.MorningDrift;
+        var phrases = twin.Settings.SubliminalPhrases?.ToArray() ?? Array.Empty<string>();
+
+        AssertNeutral(phrases, "Session.MorningDrift.SubliminalPhrases");
+        Assert.Equal(MorningDriftPhrases, phrases);
+        AssertNeutral(new[] { twin.Description ?? "" }, "Session.MorningDrift.Description");
+    }
+
+    /// <summary>
+    /// The same description also ships pre-translated in nine language files. Leaving the themed
+    /// copy there would put 'Bambi Sleep' back into the installer in nine languages, on a key the
+    /// UI reads the moment anyone binds Session.LocalizedDescription.
+    /// </summary>
+    [Fact]
+    public void TheTranslatedPresetCopyIsNeutralToo()
+    {
+        foreach (var lang in LanguageFiles)
+        {
+            var path = Path.Combine(RepoRoot(), "ConditioningControlPanel",
+                "Localization", "Languages", lang + ".json");
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+            Assert.True(doc.RootElement.TryGetProperty("session_morning_drift_desc", out var value),
+                lang + ".json lost session_morning_drift_desc");
+
+            var text = value.GetString() ?? "";
+            foreach (var word in new[] { "Bambi", "Giggletime", "Good Girl" })
+                Assert.False(text.IndexOf(word, StringComparison.OrdinalIgnoreCase) >= 0,
+                    lang + ".json still describes the in-box session with '" + word + "'");
+        }
+    }
 }

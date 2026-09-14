@@ -145,9 +145,9 @@ namespace ConditioningControlPanel.Models
             BonusXP = 400,
             Description = @"Let the morning carry you gently into that soft, floaty space...
 
-This session is designed for your morning routine - while you work, browse, or prepare for the day. No interruptions, no demands. Just gentle whispers and soft reminders that help good girls drift into that comfortable, familiar headspace.
+This session is designed for your morning routine - while you work, browse, or prepare for the day. No interruptions, no demands. Just gentle whispers and soft reminders that help you drift into that comfortable, familiar headspace.
 
-Features gentle subliminals like 'Good Girl', 'Bambi Sleep', and 'Giggletime' to help you start your day in a blissful, obedient haze.
+Features gentle subliminals like 'Breathe', 'Relax' and 'Quiet Mind' to help you start your day calm, soft and receptive.
 
 You don't need to do anything special. Just... let it happen. \U0001f497",
 
@@ -168,13 +168,17 @@ You don't need to do anything special. Just... let it happen. \U0001f497",
                 SubliminalPerMin = 2,
                 SubliminalFrames = 3,
                 SubliminalOpacity = 45,
+                // Neutral by construction: every phrase here is in
+                // BuiltInMods.CCPDefault.SubliminalPool, so the preset that ships in the box
+                // says the same things the baseline pool does. The themed list this replaced
+                // travels with mod-bambi, in the three sessions that moved into the pack.
                 SubliminalPhrases = new List<string>
                 {
-                    "GOOD GIRL",
-                    "BAMBI SLEEP",
-                    "BIMBO DOLL",
-                    "PRIMPED AND PAMPERED",
-                    "GIGGLETIME"
+                    "BREATHE",
+                    "RELAX",
+                    "DEEPER",
+                    "QUIET MIND",
+                    "DROP"
                 },
 
                 // Audio Whispers
