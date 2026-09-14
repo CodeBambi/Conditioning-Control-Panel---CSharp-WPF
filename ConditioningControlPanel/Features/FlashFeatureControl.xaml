@@ -181,23 +181,6 @@
                                           Checked="ChkSolidMode_Changed" Unchecked="ChkSolidMode_Changed"/>
                             </Grid>
 
-                            <!-- Flashes v2 motion (Back Room prizes). Hidden until a v2 style is owned; the
-                                 choices are built in code from PrizeGrants: Still always, each owned style with
-                                 its v2 pill, Mix once anything is owned. Compositor flashes only. -->
-                            <Grid x:Name="RowMotion" Height="36" Background="Transparent" Visibility="Collapsed"
-                                  ToolTip="{loc:Str tooltip_flash_motion}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_motion}" FontSize="13" FontWeight="SemiBold"
-                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <ComboBox Grid.Column="1" x:Name="CmbMotion" Width="170" Foreground="Black"
-                                          VerticalAlignment="Center"
-                                          Style="{DynamicResource DarkComboBoxStyle}"
-                                          SelectionChanged="CmbMotion_Changed"/>
-                            </Grid>
-
                             <!-- Avoid Screen Center (#770, re-homed for #859). This used to live in the legacy
                                  dashboard block in SettingsTabView, which has been Visibility=Collapsed since the
                                  velvet-mosaic rewire - the engine kept honouring FlashAvoidCenter but nobody could
@@ -234,28 +217,78 @@
                                            FontSize="13" FontWeight="Bold"/>
                             </Grid>
 
-                            <!-- Jackpot Remix (Back Room prize fx.jackpot_remix). Shown only while the prize is
-                                 owned (PrizeGrants, never settings); off by default, owning it never flips it. -->
-                            <Grid x:Name="RowJackpotRemix" Height="34" Background="Transparent" Visibility="Collapsed"
-                                  ToolTip="{loc:Str tooltip_jackpot_remix}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="{loc:Str setting_jackpot_remix}" FontSize="13" FontWeight="SemiBold"
-                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                    <Border Margin="8,0,0,0" Padding="6,2,7,3" CornerRadius="7" Background="#D91A1A2E"
-                                            BorderBrush="{DynamicResource NeonPurpleBrush}" BorderThickness="1"
-                                            VerticalAlignment="Center" IsHitTestVisible="False">
-                                        <TextBlock Text="{loc:Str badge_v2}" FontSize="9" FontWeight="Bold"
-                                                   Foreground="{DynamicResource NeonPurpleBrush}"/>
-                                    </Border>
+                            <!-- Flashes v2 (Back Room prizes fx.flash.* and fx.jackpot_remix). The prize
+                                 dials live in ONE box so they read as a set rather than as loose switches
+                                 scattered through the flash options. The box collapses whole while the
+                                 account owns no v2 grant, and each row still hides on its own grant, so an
+                                 account that bought only Jackpot Remix sees only that row. Ownership is
+                                 PrizeGrants' word, never a setting - see RefreshV2Box. -->
+                            <Border x:Name="BoxFlashV2" Visibility="Collapsed" Margin="0,10,0,2"
+                                    CornerRadius="10" Padding="12,8,12,6" BorderThickness="1"
+                                    Background="#14FFE08A" BorderBrush="#33FFE08A"
+                                    ToolTip="{loc:Str tooltip_flash_v2}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                        <Border Padding="6,2,7,3" CornerRadius="7" Background="#D91A1A2E"
+                                                BorderBrush="#FFE08A" BorderThickness="1"
+                                                VerticalAlignment="Center" IsHitTestVisible="False">
+                                            <TextBlock Text="{loc:Str badge_v2}" FontSize="9" FontWeight="Bold"
+                                                       Foreground="#FFE08A"/>
+                                        </Border>
+                                        <TextBlock Text="{loc:Str section_flash_v2}" Margin="8,0,0,0" FontSize="12"
+                                                   FontWeight="SemiBold" Foreground="#FFE08A" Opacity="0.92"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+
+                                    <!-- Flashes v2 motion (Back Room prizes). Hidden until a v2 style is owned; the
+                                         choices are built in code from PrizeGrants: Still always, each owned style with
+                                         its v2 pill, Mix once anything is owned. Compositor flashes only. -->
+                                    <Grid x:Name="RowMotion" Height="36" Background="Transparent" Visibility="Collapsed"
+                                          ToolTip="{loc:Str tooltip_flash_motion}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_motion}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <ComboBox Grid.Column="1" x:Name="CmbMotion" Width="170" Foreground="Black"
+                                                  VerticalAlignment="Center"
+                                                  Style="{DynamicResource DarkComboBoxStyle}"
+                                                  SelectionChanged="CmbMotion_Changed"/>
+                                    </Grid>
+
+                                    <!-- Rounded corners (wave 2). Rides the motion grants, like the picker
+                                         above it: nothing to round on an account with no v2 style. -->
+                                    <Grid x:Name="RowRoundedCorners" Height="34" Background="Transparent" Visibility="Collapsed"
+                                          ToolTip="{loc:Str tooltip_flash_rounded_corners}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_rounded_corners}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkFlashRoundedCorners"
+                                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                  Checked="ChkFlashRoundedCorners_Changed" Unchecked="ChkFlashRoundedCorners_Changed"/>
+                                    </Grid>
+
+                                    <!-- Jackpot Remix (Back Room prize fx.jackpot_remix). Shown only while the prize is
+                                         owned (PrizeGrants, never settings); off by default, owning it never flips it.
+                                         The v2 pill it used to wear inline now heads the whole box. -->
+                                    <Grid x:Name="RowJackpotRemix" Height="34" Background="Transparent" Visibility="Collapsed"
+                                          ToolTip="{loc:Str tooltip_jackpot_remix}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_jackpot_remix}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkJackpotRemix"
+                                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                  Checked="ChkJackpotRemix_Changed" Unchecked="ChkJackpotRemix_Changed"/>
+                                    </Grid>
                                 </StackPanel>
-                                <CheckBox Grid.Column="1" x:Name="ChkJackpotRemix"
-                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                          Checked="ChkJackpotRemix_Changed" Unchecked="ChkJackpotRemix_Changed"/>
-                            </Grid>
+                            </Border>
                         </StackPanel>
                     </Grid>
                 </Border>

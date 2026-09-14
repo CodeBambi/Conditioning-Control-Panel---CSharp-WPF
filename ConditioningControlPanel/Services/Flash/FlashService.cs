@@ -1643,6 +1643,11 @@ namespace ConditioningControlPanel.Services
                 // Stays null in layer mode (no WPF visual), which never reaches the attach branches.
                 FrameworkElement content = null!;
 
+                // Wave 2 rounded corners: the switch plus ownership, read once per spawn. The
+                // compositor path resolves its own radius inside SpawnLayerVisual.
+                bool roundedWpf = settings.FlashRoundedCorners;
+                bool ownsFlashV2 = OwnsFlashV2();
+
                 // Layer-mode glow parameters, filled by the glow branch below and consumed at
                 // the layer spawn (the WPF DropShadow content build is skipped entirely).
                 double layerGlowRadius = 0, layerGlowOpacity = 0;
@@ -1727,10 +1732,16 @@ namespace ConditioningControlPanel.Services
                         Opacity = glowOpacity
                     };
 
-                    // Clip the image with rounded corners so the glow wraps softly
+                    // Clip the image with rounded corners so the glow wraps softly. Wave 2: the
+                    // radius comes from the shared resolver (12 px card, or 14 with the switch on),
+                    // and the IMAGE carries a rounded Clip - a Border's CornerRadius rounds its own
+                    // chrome, never its child, so ClipToBounds alone left square picture corners.
+                    var wpfRadius = FlashCorners.Resolve(roundedWpf, ownsFlashV2, hasGlow: true,
+                        Math.Min(trueW, trueH), dpiScale: 1.0);
+                    ApplyCornerClip(image, trueW, trueH, wpfRadius);
                     var clipBorder = new Border
                     {
-                        CornerRadius = new CornerRadius(12),
+                        CornerRadius = new CornerRadius(wpfRadius),
                         ClipToBounds = true,
                         Child = image
                     };
@@ -1739,7 +1750,7 @@ namespace ConditioningControlPanel.Services
                     {
                         Background = System.Windows.Media.Brushes.Transparent,
                         Effect = glowEffect,
-                        CornerRadius = new CornerRadius(12),
+                        CornerRadius = new CornerRadius(wpfRadius),
                         Padding = new Thickness(blurRadius / 2),
                         Child = clipBorder
                     };
@@ -1786,7 +1797,17 @@ namespace ConditioningControlPanel.Services
                     // The image gets the black backing the window shell used to provide directly: the
                     // per-window shell background is Transparent now (so the bucket padding stays
                     // invisible), and host mode needs it because the image is a bare Canvas child.
-                    content = new Border { Background = System.Windows.Media.Brushes.Black, Child = image };
+                    // Wave 2: the black backing rounds with the picture, so a rounded flash has no
+                    // square black shoulders poking out behind its corners (classic AND solid host).
+                    var plainRadius = FlashCorners.Resolve(roundedWpf, ownsFlashV2, hasGlow: false,
+                        Math.Min(trueW, trueH), dpiScale: 1.0);
+                    ApplyCornerClip(image, trueW, trueH, plainRadius);
+                    content = new Border
+                    {
+                        Background = System.Windows.Media.Brushes.Black,
+                        CornerRadius = new CornerRadius(plainRadius),
+                        Child = image
+                    };
                 }
 
                 if (useLayer)
@@ -1798,7 +1819,8 @@ namespace ConditioningControlPanel.Services
                     // MotionLevel. The classic and solid paths never move.
                     window.MotionStyle = ResolveMotionStyle(settings, inheritMotion);
                     SpawnLayerVisual(window, imageData, monitor,
-                        layerGlowColor, layerGlowRadius, layerGlowOpacity, isLucky, window.MotionStyle);
+                        layerGlowColor, layerGlowRadius, layerGlowOpacity, isLucky, window.MotionStyle,
+                        roundedWpf && ownsFlashV2);
 
                     if (!suppressHaptic)
                         _ = App.Haptics?.FlashDecayVibeAsync();
@@ -2061,6 +2083,30 @@ namespace ConditioningControlPanel.Services
         /// original takes the picker. Both go through FlashMotion.Resolve, which asks PrizeGrants
         /// (never settings) and MotionFx.Level, so an unowned or Off pick plays as Still.
         /// </summary>
+        /// <summary>
+        /// Flashes v2 wave 2: true when the account owns ANY Flashes v2 motion grant. The wave-2
+        /// dials (rounded corners, draggable GIFs) ride the same ownership as the motion picker,
+        /// so nothing v2 shows up on an account that bought none of it.
+        /// </summary>
+        internal static bool OwnsFlashV2()
+            => PrizeGrants.IsGranted(PrizeGrants.FlashDriftBounce)
+               || PrizeGrants.IsGranted(PrizeGrants.FlashPendulum);
+
+        /// <summary>
+        /// Round the corners of a WPF flash picture. A Border's CornerRadius rounds its own chrome
+        /// and never its child, so the image itself needs the geometry; a zero radius clears any
+        /// clip a pooled/recycled Image control is still carrying.
+        /// </summary>
+        private static void ApplyCornerClip(System.Windows.Controls.Image? image, double w, double h, double radius)
+        {
+            if (image == null) return;
+            if (radius <= 0 || w <= 0 || h <= 0) { image.Clip = null; return; }
+            var clip = new System.Windows.Media.RectangleGeometry(
+                new Rect(0, 0, w, h), radius, radius);
+            clip.Freeze();
+            image.Clip = clip;
+        }
+
         private FlashMotionStyle ResolveMotionStyle(AppSettings settings, FlashMotionStyle? inherit)
         {
             var picked = inherit ?? settings.FlashMotionStyle;
@@ -2083,7 +2129,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void SpawnLayerVisual(FlashWindow window, LoadedImageData imageData, MonitorInfo monitor,
             System.Windows.Media.Color glowColor, double glowRadius, double glowOpacity, bool luckyPulse,
-            FlashMotionStyle motion = FlashMotionStyle.Still)
+            FlashMotionStyle motion = FlashMotionStyle.Still, bool roundedCorners = false)
         {
             if (_flashLayer == null)
             {
@@ -2103,7 +2149,10 @@ namespace ConditioningControlPanel.Services
             var w = (float)(window.Width * dpi);
             var h = (float)(window.Height * dpi);
             var paddingPx = (float)(hasGlow ? glowRadius / 2 * dpi : 0);
-            var cornerRadiusPx = hasGlow ? (float)(12 * dpi) : 0f;
+            // Wave 2: one resolver for all three render paths (glow keeps its 12 px card unless
+            // the Rounded corners switch is on). The cap reads the IMAGE box, glow inset removed.
+            var cornerRadiusPx = (float)FlashCorners.Resolve(roundedCorners, OwnsFlashV2(), hasGlow,
+                Math.Min(w - 2 * paddingPx, h - 2 * paddingPx), dpi);
             var skGlowColor = new SkiaSharp.SKColor(glowColor.R, glowColor.G, glowColor.B);
             var glowSigmaPx = (float)(glowRadius * dpi / 3.0);   // WPF blur radius -> sigma (R/3)
 

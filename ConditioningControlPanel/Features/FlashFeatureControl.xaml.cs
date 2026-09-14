@@ -33,7 +33,7 @@ namespace ConditioningControlPanel.Features
             // mod switch must repaint them (a popup instance never lived long enough to care).
             ApplyFeatureArt();
             if (App.Mods != null) App.Mods.ModChanged += OnModChanged;
-            RefreshJackpotRemixRow();
+            RefreshV2Box();
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -43,13 +43,21 @@ namespace ConditioningControlPanel.Features
             if (App.Mods != null) App.Mods.ModChanged -= OnModChanged;
         }
 
-        // Jackpot Remix row: visible only while the Back Room prize is owned. Ownership comes from
-        // PrizeGrants, never from settings. The dashboard flash card's v2 pill counts this prize
-        // too; that check lives in SettingsTabView.RefreshV2Badges.
-        private void RefreshJackpotRemixRow()
+        // The Flashes v2 box and its rows: visibility is ownership, never settings (the dashboard
+        // flash card's own v2 pill counts these prizes too - that check lives in
+        // SettingsTabView.RefreshV2Badges). Each row hides on its own grant and the box collapses
+        // once no row is left, so an account with nothing v2 sees the flash options unchanged.
+        // BuildMotionPicker owns RowMotion's visibility; it runs alongside this on every refresh.
+        private void RefreshV2Box()
         {
-            RowJackpotRemix.Visibility = Services.Prizes.PrizeGrants.IsGranted(Services.Prizes.PrizeGrants.JackpotRemix)
-                ? Visibility.Visible : Visibility.Collapsed;
+            bool remix = PrizeGrants.IsGranted(PrizeGrants.JackpotRemix);
+            bool motion = PrizeGrants.IsGranted(PrizeGrants.FlashDriftBounce)
+                          || PrizeGrants.IsGranted(PrizeGrants.FlashPendulum);
+            RowJackpotRemix.Visibility = remix ? Visibility.Visible : Visibility.Collapsed;
+            // Rounded corners dresses the picture the motion prizes animate, so it rides those
+            // grants rather than Jackpot Remix.
+            RowRoundedCorners.Visibility = motion ? Visibility.Visible : Visibility.Collapsed;
+            BoxFlashV2.Visibility = (remix || motion) ? Visibility.Visible : Visibility.Collapsed;
         }
 
         // One hook for both ownership-driven pieces of this control: the motion picker's rows
@@ -58,8 +66,19 @@ namespace ConditioningControlPanel.Features
         private void OnGrantsChanged() => Dispatcher.BeginInvoke(new Action(() =>
         {
             BuildMotionPicker();
-            RefreshJackpotRemixRow();
+            RefreshV2Box();
         }));
+
+        // Rounded corners: every render path reads the setting at spawn, so live flashes finish
+        // out square and the next one is round. No service bounce.
+        private void ChkFlashRoundedCorners_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.FlashRoundedCorners = ChkFlashRoundedCorners.IsChecked ?? false;
+            App.Settings?.Save();
+        }
 
         private void ChkJackpotRemix_Changed(object sender, RoutedEventArgs e)
         {
@@ -106,6 +125,7 @@ namespace ConditioningControlPanel.Features
                 SliderCenterExclusion.Value = s.FlashCenterExclusionPercent;
                 TxtCenterExclusion.Text = $"{s.FlashCenterExclusionPercent}%";
                 ChkJackpotRemix.IsChecked = s.JackpotRemixEnabled;
+                ChkFlashRoundedCorners.IsChecked = s.FlashRoundedCorners;
             }
             finally { _isLoading = false; }
         }
@@ -123,6 +143,7 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.FlashGlowEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashSolidMode) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashMotionStyle) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashRoundedCorners) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazePopEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerExtensionMs) ||
