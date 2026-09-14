@@ -111,8 +111,9 @@ export async function mount(ctx) {
   }
 
   function actFor(v, c) {
-    const nodes = [];
-    c.buy = null; c.yes = null;
+    const nodes = [], ae = typeof document !== 'undefined' ? document.activeElement : null;
+    if (ae && (ae === c.yes || ae === c.no)) c.refocus = ae === c.no ? 'no' : 'yes';   // a repaint never drops the keyboard off the confirm
+    c.buy = null; c.yes = null; c.no = null;
     if (v.face === 'owned') {
       nodes.push(h('span', 'counter-badge is-owned', L('br_counter_owned')));
       if (v.deliveryKey) nodes.push(h('p', 'counter-delivery', L(v.deliveryKey)));
@@ -127,7 +128,7 @@ export async function mount(ctx) {
       c.buy = b;
     }
     c.act.replaceChildren(...nodes);
-    if (!v.confirm) { c.confirm.replaceChildren(); c.confirm.hidden = true; return; }
+    if (!v.confirm) { c.refocus = null; c.confirm.replaceChildren(); c.confirm.hidden = true; return; }
     const k = v.confirm;
     const yes = h('button', 'counter-yes', L('br_counter_confirm')), no = h('button', 'counter-no', L('br_counter_cancel'));
     yes.type = 'button'; no.type = 'button';
@@ -135,7 +136,7 @@ export async function mount(ctx) {
     if (k.pending) yes.setAttribute('aria-busy', 'true');
     yes.onclick = () => { chime.arm(); counter.buy(); };
     no.onclick = () => { if (counter.cancel()) focus(cards.get(v.id).buy); };
-    c.yes = yes;
+    c.yes = yes; c.no = no;
     const row = h('div', 'counter-yesno');
     row.append(yes, no);
     const lines = [h('strong', 'counter-confirm-name', t(v.nameKey, LEX[v.nameKey] || v.id)),
@@ -144,6 +145,7 @@ export async function mount(ctx) {
     if (k.retry) lines.push(h('p', 'counter-retry', L('br_counter_retry')));
     c.confirm.replaceChildren(...lines, row);
     c.confirm.hidden = false;
+    if (c.refocus && !k.pending) { focus(c.refocus === 'no' ? no : yes); c.refocus = null; }
   }
 
   function focus(b) { try { if (b && typeof b.focus === 'function') b.focus(); } catch (e) { /* noop */ } }
@@ -169,7 +171,10 @@ export async function mount(ctx) {
   }
 
   function onKey(e) {
-    if (!alive || e.key !== 'Escape' || e.defaultPrevented) return;
+    if (!alive || e.defaultPrevented) return;
+    // A held Enter on Buy would auto-repeat straight onto the focused Confirm: a repeat never presses a button.
+    if (e.repeat && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); return; }
+    if (e.key !== 'Escape') return;
     e.preventDefault();
     back();
   }
