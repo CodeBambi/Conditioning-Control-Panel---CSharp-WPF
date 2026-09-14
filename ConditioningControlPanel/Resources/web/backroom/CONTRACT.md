@@ -1367,12 +1367,13 @@ texture and a new uniform per screen. The bell goes in the HUD.
   `br_bell_slot_emi3`, `br_bell_slot_gif3same`, `br_bell_slot_sub3`, `br_bell_slot_spiral3`,
   `br_bell_wheel_jackpot`, `br_bell_wheel_slice`, `br_bell_cards_blackjack`, `br_bell_roulette_wake`,
   `br_bell_ago_now`, `br_bell_ago_min`, `br_bell_ago_hour`, `br_bell_ago_day`.
-- **Room Options.** The opt-in toggle is a row in the room's Options panel. That panel does not exist yet: the
-  room lane builds it as a third `br-pill` in `hud.js`'s `br-nav`, opening a `.br-options` panel beside the
-  `br-map-list`, with `onOptions(open)` and `options(rows)` on the HUD. Its first row is `br_bell_optin`
-  ("Show my name on the floor bell"), off by default, posting `bell/opt`. It is also where the tunnel-vision
-  toggle owed by the hypno v3 build survey (DECISIONS, build question 1) goes: whichever lane lands first
-  builds the panel, the other adds a row.
+- **Room Options.** The opt-in toggle is a row in the room's Options panel, which 10.14 built (the third
+  `br-pill` in `hud.js`'s `br-nav`, the `.br-options` card with the Effects intensity control and the Tunnel
+  vision and Melt switch rows, `onOption(key, value)` -> `room-option`, painted by `options(v)`). The bell
+  opt-in is the LAST switch row of that panel, `br_bell_optin` ("Show my name on the floor bell"), off by
+  default. It is the player's own server setting, not a host setting: its press goes to a separate HUD
+  callback `onBellOpt(on)`, which posts `bell/opt`, and the server's answer is painted back by
+  `hud.bellOptIn(checked)` (an optimistic tick is put back on refusal).
 
 ### 10.16.C B3 the welcome-back comp
 
