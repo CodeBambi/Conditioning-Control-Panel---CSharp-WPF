@@ -1,15 +1,16 @@
 import * as T from 'three';
 import { createCustomizationPanel } from './customization-panel.js';
+import { createSlotCustomHandles } from './slot-custom-handles.js';
 
 const FILES={displays:['gallery-landscape','portrait-pair','deco-billboard'],plants:['monstera','hanging_ivy','terrarium'],statues:['knight','queen','rook']};
 const ASPECT=[16/9,3/4,21/9];
-const SPOTS={displays:[2.7,2.85,7.86],plants:[1.95,.03,7.2],statues:[3.6,.03,7.2]};
+const SPOTS={displays:[2.7,2.85,7.86],plants:[1.95,.03,7.2],statues:[3.05,.03,7.25]};
 
 /** A local layout preview. No ownership or SP mutations occur here. */
-export async function createCustomization({scene,loader,base,mount,lex,canvas,camera,isActive}) {
+export async function createCustomization({scene,loader,base,mount,lex,canvas,camera,isActive,room,onPreview=()=>{}}) {
   const row={key:'customization',id:'customization',name:'Room Service',labelKey:'br_custom_title',approach:[5.5,1.65,6.6],look:[7.05,1.4,6.7]};
   const root=new T.Group();root.name='room_customization';scene.add(root);
-  const screens=[],groups={},selected={displays:0,plants:0,statues:0},leaves=[];
+  const screens=[],groups={},selected={displays:0,plants:0,statues:[0,1,2]},leaves=[];
   const load=async file=>(await loader.loadAsync(base+'customization/'+file+'.glb')).scene;
   const vending=await load('vending');vending.name='customization_vending';
   vending.position.set(7.05,.02,6.4);vending.rotation.y=-Math.PI/2;vending.scale.setScalar(.92);root.add(vending);
@@ -45,13 +46,53 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
   const stand=new T.Mesh(new T.CylinderGeometry(.25,.30,.66,24),new T.MeshStandardMaterial({color:0x40215e,metalness:.25,roughness:.4}));
   stand.position.set(1.95,.36,7.2);root.add(stand);stand.visible=false;
   groups.plants[2].position.y=.69;
-  const select=(category,index)=>{
-    if(!groups[category]||!Number.isInteger(index)||!groups[category][index])return false;
+  // Each pedestal is independent; the original three assets remain shared templates.
+  const statueSpots=[3.05,4.3,5.55].map((x,spot)=>groups.statues.map((source,index)=>{
+    const model=spot===0?source:source.clone(true);
+    if(spot)root.add(model);
+    model.name='statue_spot_'+spot+'_'+FILES.statues[index];
+    model.position.set(x,.03,7.25);model.visible=index===spot;
+    return model;
+  }));
+  const handles=await createSlotCustomHandles({holders:room.holders,loader,base});
+  const getState=()=>({displays:selected.displays,plants:selected.plants,statues:[...selected.statues],handles:handles.getState(),floor:room.getFloorStyle().design,palette:room.getFloorStyle().palette});
+  const select=(category,index,target=0)=>{
+    if(!Number.isInteger(index))return false;
+    if(category==='handles')return handles.set(target,index);
+    if(category==='floor'||category==='palette'){
+      const current=room.getFloorStyle();
+      return room.setFloorStyle(category==='floor'?index:current.design,category==='palette'?index:current.palette);
+    }
+    if(category==='statues'){
+      if(!statueSpots[target]||index< -1||index>2)return false;
+      selected.statues[target]=index;statueSpots[target].forEach((g,i)=>{
+        g.visible=i===Math.max(0,index);
+        g.traverse(o=>{if(o.isMesh&&o.name.includes('_original_'))o.visible=index!==-1;});
+      });return true;
+    }
+    if(!groups[category]?.[index])return false;
     selected[category]=index;groups[category].forEach((g,i)=>g.visible=i===index);
     hanger.visible=selected.plants===1;stand.visible=selected.plants===2;
     return true;
   };
-  const panel=createCustomizationPanel({mount,lex,select,onClose:()=>{}});
+  const restore=state=>{
+    for(const category of ['displays','plants','floor','palette'])select(category,state[category]);
+    for(let spot=0;spot<3;spot++){select('statues',state.statues[spot],spot);select('handles',state.handles[spot],spot);}
+  };
+  const preview=(category,index,target=0)=>{
+    if(category==='floor'||category==='palette'){onPreview({position:[0,4.2,5.5],look:[0,0,0]});return;}
+    if(category==='handles'){
+      const holder=room.holders.get(['slot:rose','slot:violet','slot:mint'][target]);
+      const center=holder.getWorldPosition(new T.Vector3());
+      onPreview({position:[center.x+2.4,1.55,center.z+.35],look:[center.x,1.5,center.z]});return;
+    }
+    const object=category==='statues'?statueSpots[target][Math.max(0,index)]:groups[category]?.[index];
+    if(!object)return;
+    const bounds=new T.Box3().setFromObject(object),center=bounds.getCenter(new T.Vector3()),size=bounds.getSize(new T.Vector3());
+    const distance=Math.max(1.5,size.y*1.6,size.x*1.15);
+    onPreview({position:[center.x,center.y+.12,center.z-distance],look:center.toArray(),width:size.x,height:size.y});
+  };
+  const panel=createCustomizationPanel({mount,lex,select,getState,restore,preview,onClose:()=>onPreview(null)});
   const ray=new T.Raycaster(),pointer=new T.Vector2();let down=null,time=0;
   const onDown=e=>{if(e.button===0&&isActive())down={x:e.clientX,y:e.clientY,t:performance.now()};};
   const onUp=e=>{
@@ -68,10 +109,10 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     if(!obstructed)panel.open();
   };
   canvas.addEventListener('pointerdown',onDown);canvas.addEventListener('pointerup',onUp);
-  return {row,screens,select,open:()=>panel.open(),get opened(){return panel.opened;},
+  return {row,screens,select,getState,restore,preview,open:()=>panel.open(),get opened(){return panel.opened;},
     dismiss(){if(!panel.opened)return false;panel.close();return true;},
     update(dt,still){if(!still)time+=dt;for(const {o,base,phase} of leaves){o.quaternion.copy(base);if(!still)o.rotateZ(Math.sin(time*.8+phase)*.018);}},
-    debug:()=>({selected:{...selected},opened:panel.opened,models:Object.values(groups).reduce((n,g)=>n+g.length,0)}),
-    dispose(){titleMap.dispose();panel.dispose();canvas.removeEventListener('pointerdown',onDown);canvas.removeEventListener('pointerup',onUp);root.removeFromParent();const gs=new Set(),ms=new Set();root.traverse(o=>{if(o.geometry)gs.add(o.geometry);for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m)ms.add(m);});gs.forEach(g=>g.dispose());ms.forEach(m=>m.dispose());}
+    debug:()=>({selected:getState(),opened:panel.opened,models:Object.values(groups).reduce((n,g)=>n+g.length,0)}),
+    dispose(){handles.dispose();titleMap.dispose();panel.dispose();canvas.removeEventListener('pointerdown',onDown);canvas.removeEventListener('pointerup',onUp);root.removeFromParent();const gs=new Set(),ms=new Set();root.traverse(o=>{if(o.geometry)gs.add(o.geometry);for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m)ms.add(m);});gs.forEach(g=>g.dispose());ms.forEach(m=>m.dispose());}
   };
 }

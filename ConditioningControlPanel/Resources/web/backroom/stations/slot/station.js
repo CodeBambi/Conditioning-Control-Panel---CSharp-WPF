@@ -507,7 +507,7 @@ export async function mount(ctx) {
     const dealt = Promise.resolve().then(() => (typeof ctx.media === 'function' ? ctx.media() : null))
       .then(m => (my === session ? media.deal(m) : null)).catch(() => null);
     const [made, state] = await Promise.all([
-      createScene({ canvas: $('.slot-stage'), reduced, palette: variant && variant.palette, hint: $('.slot-hint'),
+      createScene({ canvas: $('.slot-stage'), reduced, variant: variant && variant.id, palette: variant && variant.palette, hint: $('.slot-hint'),
                     payline: $('.slot-payline'), jar: $('.slot-jar'),
                     canPull: () => (!busy || pace === 'reveal') && !suspended,
                     onLever: () => press(), onFreeze: col => toggleFreeze(col),
