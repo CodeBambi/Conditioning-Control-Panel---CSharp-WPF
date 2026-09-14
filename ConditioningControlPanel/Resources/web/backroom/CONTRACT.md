@@ -1028,8 +1028,11 @@ the warped clock. This replaces 10.13.F's `angle = -rotor.rotation.z` plus 0.35 
 - Suspend (panic press 1, minimise) keeps the dealt deck and the sit-down; only leaving the station (Back, `close`,
   "Stand up, sit back down") re-deals on the next sit-down.
 - The dealer is named Emi in every line and label that names the dealer.
-- The next deal is held until a running fullscreen moment ends: a deal asked for while the last hand's fullscreen
-  moment is still on screen waits for it to end, then goes. The server floor of decision 6 still applies.
+- Deal cannot be pressed by any path while a fullscreen moment runs; presses are dropped, not queued. While the last
+  hand's bloom, win flash or losing edges are on screen, Deal is disabled and reads "One moment", and the Space and
+  Enter keys, repeated clicks, any room or host relay and a direct call into the deal action all do nothing (the page
+  refuses inside the deal action, not only on the button). Once the moment ends the player presses Deal again. The
+  server floor of decision 6 still applies.
 
 **11. Unchanged and confirmed.** The slot's `spiral-full` plays the Loom weave (10.13.B, kept). Roulette under
 Calm/reduced: the ball still runs at the slow-motion floor; rotor, beam and chips still. Roulette pace fits 8 s a spin.
