@@ -102,10 +102,12 @@ test('planSteps: a split slides the pair apart, deals each a card and moves the 
   assert.deepEqual(planSteps(next, stand0).map((x) => x.op), ['active', 'ready']);
 });
 
-test('planSteps still (Calm, reduced): the settled state, every step at 0, same order', () => {
-  const s = planSteps(null, bj, { still: true });
-  assert.ok(s.every((x) => x.at === 0));
+test('planSteps still (Calm, reduced): the settled state at 0, same order; a bloom keeps its gaps to the reveal and settle', () => {
+  const s = planSteps(null, bj, { still: true }), at = (op) => s.find((x) => x.op === op).at;
+  assert.ok(s.filter((x) => !['reveal', 'settle'].includes(x.op)).every((x) => x.at === 0));
   assert.deepEqual(s.map((x) => x.op), ['clear', 'card', 'card', 'card', 'card', 'bloom', 'reveal', 'settle']);
+  assert.equal(at('reveal'), TIMING.bjRevealMs); assert.ok(at('settle') - at('bloom') >= 360, 'the win wash clears the host wash gap');
+  assert.ok(planSteps(null, lose, { still: true }).every((x) => x.at === 0), 'no bloom: everything at 0');
 });
 
 test('sit fan: out, face up in a row, back into the shoe inside 4.4 s; still fades in place', () => {
