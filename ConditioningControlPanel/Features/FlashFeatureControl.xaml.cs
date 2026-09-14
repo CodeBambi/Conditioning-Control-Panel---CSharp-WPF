@@ -33,7 +33,6 @@ namespace ConditioningControlPanel.Features
             // mod switch must repaint them (a popup instance never lived long enough to care).
             ApplyFeatureArt();
             if (App.Mods != null) App.Mods.ModChanged += OnModChanged;
-            Services.Prizes.PrizeGrants.GrantsChanged += OnGrantsChanged;
             RefreshJackpotRemixRow();
         }
 
@@ -42,7 +41,6 @@ namespace ConditioningControlPanel.Features
             PrizeGrants.GrantsChanged -= OnGrantsChanged;
             _settingsHook?.Unhook();
             if (App.Mods != null) App.Mods.ModChanged -= OnModChanged;
-            Services.Prizes.PrizeGrants.GrantsChanged -= OnGrantsChanged;
         }
 
         // Jackpot Remix row: visible only while the Back Room prize is owned. Ownership comes from
@@ -55,7 +53,14 @@ namespace ConditioningControlPanel.Features
                 ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        private void OnGrantsChanged() => Dispatcher.BeginInvoke(new Action(RefreshJackpotRemixRow));
+        // One hook for both ownership-driven pieces of this control: the motion picker's rows
+        // (Flashes v2) and the Jackpot Remix toggle row. Each lane arrived with its own handler
+        // of this name; they are folded together here so the subscription stays single.
+        private void OnGrantsChanged() => Dispatcher.BeginInvoke(new Action(() =>
+        {
+            BuildMotionPicker();
+            RefreshJackpotRemixRow();
+        }));
 
         private void ChkJackpotRemix_Changed(object sender, RoutedEventArgs e)
         {
@@ -365,8 +370,6 @@ namespace ConditioningControlPanel.Features
             App.Settings?.Save();
             // No service bounce: every spawn resolves the picker, so the next flash uses it.
         }
-
-        private void OnGrantsChanged() => Dispatcher.BeginInvoke(new Action(BuildMotionPicker));
 
         // =====================================================================================
         //  feature art (mod-aware)
