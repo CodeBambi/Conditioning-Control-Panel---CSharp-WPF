@@ -28,7 +28,8 @@ Shared code comes only through the hypno kit (`shared/hypno/index.js`): `createL
   - `too_fast`: "Shuffling. The next deal is ready in N s.", then the same idem after `retryInMs` (capped 9 s), at most twice.
   - `stale`, `illegal`, `hand_open`: the returned hand is adopted and animated from what is on the felt.
   - `auto_stood`: the returned hand is adopted quietly (no moments) with a line saying it was stood.
-  - `no_hand`: GET state again. `insufficient`: a line. `closed` (403): a card. `bad_request`, `offline`: a line.
+  - `no_hand`, `bad_request`: GET state again. `insufficient`: a line. `closed` (403) and a host `bad_op`: a card, the
+    controls close. `offline` and anything else: a line.
 - Host Ops row (H1): `["cards"] = { ("GET","state"), ("POST","deal"), ("POST","hit"), ("POST","stand"), ("POST","double"), ("POST","split") }`.
 - Rules, odds and pays are the server's (RULES_V1). The page never computes a pay, a legal move or a hint; the only
   arithmetic is the display total of face-up cards while the dealer's hand is being turned.
@@ -38,12 +39,15 @@ Shared code comes only through the hypno kit (`shared/hypno/index.js`): `createL
 - **Controls.** Bet chip 1 or 2 SP (`rules.stakes`), starting on 1 below 30 SP and on 2 from 30. Deal (Space or Enter).
   Hit, Stand, Double, Split exactly as `legal` says, shown only while a hand is open. The basic-strategy hint is off by
   default, remembered in `localStorage` `br_cards_hint`, and shows the server's `hint` as a line and a mint ring on
-  that button. "Stand up, sit back down" while no hand is open. Moves have no letter keys (the room walks on WASD).
+  that button. "Stand up, sit back down" while no hand is open; it latches on the press (Deal, the moves and a second
+  Sit are refused while the 13 pictures are dealt), and each sit owns its deck (the last one is disposed when the new one
+  is in; a late deck from an older sit is disposed, never adopted). Moves have no letter keys (the room walks on WASD).
 - **Law VIII.** Every press rings its button on the frame. **Law VI.** Back (the room's, or the station's own
   standalone) and Escape work at every frame; `close()` is synchronous and hands the room the plain server number.
 - **Law I.** A reply that settles a hand owes its `returned` (never more than the balance really moved) until the
   settle frame shows it; the stake shows at once.
-- **Resume.** Opening with an open hand plays the sit fan, then deals the hand out and reopens its decisions.
+- **Resume.** Opening with an open hand plays the sit fan, then deals the hand out and reopens its decisions. A finished
+  last hand, a `no_hand` re-read and an auto-stood hand go down settled on one frame, with no moments.
 - **Deal floor.** Deal waits out `floorMs` locally after a deal, and a blackjack bloom (4 s) on top of that, so the
   bloom never overlaps the next decision. The server's floor is the authority (`too_fast`).
 
@@ -69,11 +73,16 @@ Moments, through `createMoments` only, on the frame the page shows them:
   highest card (ace highest) over the winning hands, or no picture after a bloom.
 - `moments.holdScreen(true)` whenever a reply shows `hand.done === false`, `holdScreen(false)` on the settle frame.
 - `suspend(true)` lays every queued step down quietly, cancels the moments and frees the Loom context; `close()` cancels
-  and disposes the moments, the kit and the deck.
+  and disposes the moments, the kit and the deck. **Deviation:** `suspend(true)` keeps the deck (10.13.F says dispose it):
+  re-dealing on resume would ask the host for 13 new pictures and swap them under an open hand. Needs a contract
+  amendment or an owner nod.
 
 **Calm and reduced motion** (`reduced`, `intensity: calm`, or `prefers-reduced-motion`): every step lands at once in
-order (cards on their spots, face up), the fan fades in place for 2.4 s, the Loom and the pictures hold still, chips
-fade in place, page strengths x0.5. Host args stay Normal (the host halves). **Gates** are read live on every frame.
+order (cards on their spots, face up), except that a blackjack keeps the bloom's 1.6 s to the reveal and 0.9 s to the
+settle, so the win wash is never inside the host's 360 ms wash gap and the bloom never shares a frame with the result.
+The fan fades in place for 2.4 s, the Loom and the pictures hold still, chips fade in place, page strengths x0.5. Host
+args stay Normal (the host halves). The OS `prefers-reduced-motion` alone halves page strength but the host is not told,
+so host washes and tunnels stay Normal there (as the wheel does). **Gates** are read live on every frame.
 
 ## Lexicon (`br_cards_*`, English fallbacks in the page; the integration pass adds them to `en.json`)
 
