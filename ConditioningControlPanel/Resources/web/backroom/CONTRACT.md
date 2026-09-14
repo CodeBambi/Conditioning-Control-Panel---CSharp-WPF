@@ -441,6 +441,13 @@ export async function mount(ctx) {
 - THE BREATH: exactly one element (the lever handle at rest), paused during celebrations.
 - Brake 3: repetition shrinks the party. Brake 6: `none` gets a shiver and a muted thud, never silence.
 - Law VI: reduced motion takes the settled STATE; a tape still plays one outcome per press.
+- THE ALMOST (A1 + A2, 10.15): a live pair on reels 1 and 2 holds reel 3 (900-1,400 ms, halved while melted), and a
+  no-pay spin one cell off the line ghosts that cell gold and snaps back once. The tape already holds the outcome.
+- THE BANK, proportional (A3, 10.15): the count-up is sized to the win (500 ms to about 6 s), the chime ladder
+  climbs with it, one press settles it at once (Law VI, Brake 7).
+- Law VIII (A4, 10.15): attract mode drifts after 25 s seated idle and any press ends it inside 100 ms. No SP moves.
+- THE MASCOT GLANCE (A5, 10.15): EMI wiggles wherever she lands, after that reel's thud, and glances.
+- Law IX (A6, 10.15): a win frames its own row and the frame pulses for the length of the rollup.
 
 ## 9. Owner decisions (2026-09-13) and requests
 
@@ -1054,3 +1061,83 @@ the card before anything else in the room. Lexicon keys `br_opt_title`, `br_opt_
 - Host -> page (section 2.2): `init` and `settings` gain `intensityChoice` (`calm` | `normal` | `full`, the player's
   own choice), because `intensity` reads `calm` whenever MotionLevel is below Full. The page shows a press at once
   and the next `settings` frame has the last word.
+
+## 10.15 Playbook Tier A amendment (2026-09-14)
+
+Source: `backroom-casino-playbook.md` section 2, Tier A: the six page-side items that need no table change and no
+server work. Where this disagrees with sections 6, 8 or 10.13 for the slot, this wins; the owner's decisions in 10.14
+win over this. Everything here is
+presentation over an outcome the tape already carries (section 3.2): the page never weights, moves or re-draws a
+stop, it only changes how long it takes to show what the server drew (Law I). The 4 s pace (10.11) and table v6
+(10.14 item 5: `emi3` 400 at 1 in 6,494, kept by the owner with no retune to 8 h) both still hold; A1 rides on top of
+that pace, it does not replace either decision. A1's hold stretches the average outcome by about 5% (the table
+below), so the table's jackpot lands about once per 7.6 h of play at the page pace instead of 7.25 h; the odds and
+the pays do not move.
+
+Measured over all 2,197 uniform stop combinations of the slot strips (`mock-server.js` STRIPS, 13 cells a reel; table
+v6 changed pay weights only, the strips are the v5 strips),
+which is what the numbers below are sized against:
+
+| | Rate | Notes |
+|---|---|---|
+| A live pair on reels 1 and 2 | 390 of 2,197, 17.8% (about 1 in 6) | gif 52, spiral 117, sub 208, EMI 13 |
+| A1's cost | +192 ms a spin on average | about +0.2 s, one outcome about 4.2 s instead of 4.0 s |
+| A natural near miss (A2) | 9 of 2,197, 0.41% of spins, 0.95% of the 945 no-pay rows | gif 7, EMI 2 |
+
+**A1 The anticipation reel** (built, lane F1-A). A live pair on reels 1 and 2 keeps reel 3 spinning past its normal
+stop before THE THUD. Live pair, and the hold (`pace.js` `ANTICIPATION`, chosen by `feel.anticipation`):
+
+| Pair | Hold | Melted (Brake 5) |
+|---|---|---|
+| The SAME gif id on both reels | 900 ms | 450 ms |
+| Two spirals, any mix | 1,100 ms | 550 ms |
+| Two subliminals, any mix | 1,100 ms | 550 ms |
+| Two EMI | 1,400 ms, the bulbs go gold | 700 ms, never gold |
+
+Two different gifs are NOT a live pair: `gif3same` is the line a gif pair is live for. During the hold reel 3 keeps
+its blur, the marquee takes a `tease` mood (`tease_gold` on the EMI pair), the cabinet bulbs drop to 0.62 of their
+emissive, and a tone climbs from reel 2's thud to reel 3's (`STAGGER_MS` + the hold, `sound.rise`, a synth sweep, no
+new files). THE BREATH is already paused for the whole spin (Law III), and stays paused. **Reduced motion and Calm
+keep the hold and keep the tone** (the economy pace never depends on the motion setting, `pace.js` header); they drop
+the light change only. A frozen reel 3 never holds. `reelStopMs(i, PACE, holdMs)`, `reelsMs` and `outcomeMs` take the
+hold; `PACE` itself is unchanged.
+
+**A2 THE ALMOST on the strip** (built, lane F1-A; House Book move THE ALMOST, Law X). After reel 3 thuds on a spin
+that pays nothing (`line === 'none'`) under a live pair, if the cell one step above or below the payline on reel 3
+would have completed the line (the same gif for a gif pair, any spiral for a spiral pair, any sub for a sub pair, EMI
+for an EMI pair), that cell ghosts to gold and snaps back once: 620 ms in total, gold in over 500 ms and ONE 120 ms
+snap back, sharing the frame with the no-pay muted thud and THE SHIVER (Law X, one gesture one beat). A ghost note
+sits under that thud; no second beat is added. It fires at most once a spin, and the cell below the line is read
+first. Reduced motion: no travel and no repaint, one gold tint on the reel for 120 ms, then settled (Law VI).
+
+The reel window shows the neighbouring cells, so the ghost needs no nudge: measured from `assets/slot.glb`, the drum
+is r 0.43 with 13 cells (27.7 deg each) and `reel_window` is 0.39 tall on the same centre, so the payline cell fills
+0.206 of the window and roughly half of each neighbour is inside it, foreshortened by the curve.
+
+**No stop weighting anywhere.** The stops are whatever the server drew; the tell shows that truth, it never
+manufactures it. The sim may REPORT the natural near-miss rate per table version (an optional `table.almostRate`
+field is allowed, and is not required; nothing on the page reads it). Note for the owner, from the table above: under
+tables v5 and v6 a sub pair already pays `sub2` and a spiral pair already pays `spiral2`, so those two can never be an
+ALMOST, which leaves the tell to gif and EMI pairs at about 1 spin in 244. Widening it to "one short of a BETTER
+line" (a spiral pair that was one cell off `spiral3`) is a table-shaped decision and is NOT built.
+
+**A3 Proportional rollup** (sibling lane; THE BANK, Law XII). THE BANK's count-up scales with the win instead of a
+flat 500 ms: tier 1 unchanged at 500 ms, tier 2 about 1,200 ms, tier 3 about 2,000 ms, the jackpot about 6,000 ms.
+The chime ladder's pitch follows the rollup. One lever press, or Back, skips to settled (Law VI, Brake 7); reduced
+motion is settled at once. Token flight (560 ms each, 70 ms stagger) and the counts by tier are unchanged.
+
+**A4 Attract mode** (sibling lane; Law VIII, House Book deck II). After 25 s seated and idle the reels drift slowly,
+the lights chase once and EMI winks. No SP moves and no tape is touched. Any press ends it within 100 ms (Law VIII).
+Off under Calm, off under reduced motion, and off while melted (Brake 5).
+
+**A5 EMI land-wiggle** (sibling lane; THE MASCOT GLANCE, Law XIII). Whenever the EMI symbol lands on any reel it
+wiggles once after that reel's thud, and EMI glances. It pays nothing and says nothing about the next spin. Reduced
+motion: none.
+
+**A6 Payline frame** (sibling lane; Law IX). After a win the winning row gets a frame that pulses for the length of
+the rollup (A3), so the two end together. No frame on a no-pay spin: that beat belongs to THE SHIVER.
+
+**Kept out, by design** (playbook section 3, and this stays true for every later lane): near-miss stop weighting
+(virtual reel mapping that parks a symbol just off the line more often than chance), losses disguised as wins
+(celebrating a pay smaller than the stake), time-on-device design (no clocks removed, no moved exits), bet nudges and
+denomination tricks, and low-balance nudges. The room mints SP and sells nothing; insufficient stays a quiet state.

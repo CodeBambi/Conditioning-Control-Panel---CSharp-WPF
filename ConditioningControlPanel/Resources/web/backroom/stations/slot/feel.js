@@ -6,6 +6,7 @@
  * arcademy/shell/counterfx.js so a thud is a thud in the Arcademy and in the Back Room. */
 
 import { CFX, bankCount } from '../../../arcademy/shell/counterfx.js';
+import { ANTICIPATION } from './pace.js';
 
 export const FEEL = Object.freeze({
   ANSWER_MS: 100,                 // Law VIII: every input answers inside this, before any network reply
@@ -122,3 +123,68 @@ export function bezier([a, b, c, d], x) {
   for (let i = 0; i < 16; i++) { t = (lo + hi) / 2; const v = 3 * (1 - t) ** 2 * t * a + 3 * (1 - t) * t * t * c + t ** 3; if (v < q) lo = t; else hi = t; }
   return 3 * (1 - t) ** 2 * t * b + 3 * (1 - t) * t * t * d + t ** 3;
 }
+
+/* ---------------------------------------------------------------------------------------------
+ * The playbook, Tier A (CONTRACT 10.15). Neither of these decides anything: the tape carries the
+ * outcome before a reel moves, so A1 is a delay over a known result and A2 only reads the strip the
+ * server already drew. No stop is weighted, moved or re-drawn anywhere in this file.
+ * ------------------------------------------------------------------------------------------ */
+
+const symKind = id => {
+  const m = /^(gif|sub|spiral)(\d+)$/.exec(id || '');
+  return m ? m[1] : id === 'emi' || id === 'melt' ? id : 'unknown';
+};
+/** What reel `r` shows: the outcome's own symbols, else the cell of `strips[r]` it stopped on. */
+function shows(o, strips, r) {
+  if (o && Array.isArray(o.symbols) && o.symbols[r]) return o.symbols[r];
+  const strip = strips && strips[r], k = o && Array.isArray(o.stops) ? o.stops[r] : -1;
+  return Array.isArray(strip) && strip.length && k >= 0 ? strip[k % strip.length] || null : null;
+}
+
+/** The live pair on reels 1 and 2: 'gif' (the SAME gif id), 'spiral', 'sub', 'emi', else 'none'. */
+export function livePair(o, strips) {
+  const a = shows(o, strips, 0), b = shows(o, strips, 1);
+  if (!a || !b) return 'none';
+  const ka = symKind(a), kb = symKind(b);
+  if (ka === 'gif' && kb === 'gif') return a === b ? 'gif' : 'none';
+  if (ka !== kb) return 'none';
+  return ka === 'spiral' || ka === 'sub' || ka === 'emi' ? ka : 'none';
+}
+
+/**
+ * A1 THE ANTICIPATION REEL. A live pair on reels 1 and 2 keeps reel 3 spinning `holdMs` past its
+ * normal stop (pace.ANTICIPATION), with a rising tone and the lights a notch down. `melted` is the
+ * melt BEFORE the spin: Brake 5 halves the hold and never lets it go gold.
+ * -> { kind: 'none'|'gif'|'spiral'|'sub'|'emi', holdMs, gold }
+ */
+export function anticipation(o, strips, { melted = false, held = null } = {}) {
+  const none = { kind: 'none', holdMs: 0, gold: false };
+  if (!o || held === 2) return none;                       // a frozen reel 3 never travels, so it never holds
+  const kind = livePair(o, strips), hold = ANTICIPATION[kind] || 0;
+  if (!hold) return none;
+  return { kind, holdMs: melted ? Math.round(hold / 2) : hold, gold: kind === 'emi' && !melted };
+}
+
+/**
+ * A2 THE ALMOST on the strip. A no-pay spin under a live pair, where the cell one above or one below
+ * the payline on reel 3 would have completed the line. The cell comes from the server's own strip and
+ * the stop it drew; the tell SHOWS that truth, it never manufactures it (no stop weighting, ever).
+ * -> { reel: 2, dir: -1|1, cell, symbol, kind } | null (at most one per spin: the first direction that fits)
+ */
+export function almost(o, strips, { held = null } = {}) {
+  if (!o || held === 2 || o.line !== 'none') return null;
+  const kind = livePair(o, strips);
+  if (kind === 'none') return null;
+  const strip = strips && strips[2], k = o && Array.isArray(o.stops) ? o.stops[2] : -1;
+  if (!Array.isArray(strip) || strip.length < 3 || !(k >= 0)) return null;
+  const n = strip.length, wanted = kind === 'gif' ? shows(o, strips, 0) : null;
+  const fits = id => (wanted ? id === wanted : symKind(id) === kind);
+  for (const dir of [-1, 1]) {
+    const cell = ((k + dir) % n + n) % n;                  // the strip is a ring: 0 and n-1 are neighbours
+    if (fits(strip[cell])) return { reel: 2, dir, cell, symbol: strip[cell], kind };
+  }
+  return null;
+}
+
+/** A2's tell: gold in, then ONE snap back (House Book THE ALMOST, 620-1,400 ms, 120 ms snap). */
+export const ALMOST = Object.freeze({ TELL_MS: 620, SNAP_MS: 120 });

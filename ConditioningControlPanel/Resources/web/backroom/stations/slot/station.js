@@ -16,6 +16,7 @@ import { createScene, FACES } from './scene.js';
 import { createMedia, fxSymbols } from './media.js';
 import { PACE } from './pace.js';
 import { recipe, tierOf, meltedBy, ladderSemis, winTokens, spendTokens, glance, landPose, restPose, pressPose, glanceHoldMs } from './feel.js';
+import { anticipation, almost } from './feel.js';   // the playbook's Tier A (CONTRACT 10.15)
 import { createBank } from './bank.js';
 import { createSound } from './sound.js';
 
@@ -259,6 +260,13 @@ export async function mount(ctx) {
     note('land', { line: o.line, pay: o.pay, tier, party: r.party, sound: r.sound, melted, streak });
   }
 
+  /** Tier A on a reel's thud frame (Law X, one gesture one beat): reel 2's thud opens A1's rising tone,
+   *  and the last reel's thud carries A2's ghost under the same muted thud. */
+  function stopFeel(p, i) {
+    if (i === 1 && p.ant && p.ant.holdMs > 0) { sound.rise(PACE.STAGGER_MS + p.ant.holdMs, lite); note('tease', { kind: p.ant.kind, holdMs: p.ant.holdMs }); }
+    if (i === p.lastReel && p.near) { scene.almost(p.near); sound.almost(lite); note('almost', p.near); }
+  }
+
   async function press() {
     if (!alive || suspended || !scene || el.dataset.phase !== 'play') return;
     sound.arm();
@@ -280,9 +288,13 @@ export async function mount(ctx) {
     const o = r.outcome, after = tape.snapshot();
     if (after.shownSp < before.shownSp) flyBank('spend', before.shownSp, after.shownSp, spendTokens(before.shownSp - after.shownSp, lite));
     scene.setMelted(before.melt > 0);
-    playing = { o, lastReel: [2, 1, 0].find(i => i !== r.held) };
+    // The playbook's Tier A. Both read the outcome the tape already carries: A1 only delays the third
+    // reel, A2 only reads the strip cell the server's own stop landed beside. No stop is ever weighted.
+    const ant = anticipation(o, before.strips, { melted: before.melt > 0, held: r.held });
+    playing = { o, lastReel: [2, 1, 0].find(i => i !== r.held), ant, near: almost(o, before.strips, { held: r.held }) };
     mark('spin'); sync();
-    await scene.spin(Array.isArray(o.stops) ? o.stops : stopsFor(before.strips, o.symbols), r.held);
+    await scene.spin(Array.isArray(o.stops) ? o.stops : stopsFor(before.strips, o.symbols), r.held,
+                     { holdMs: ant.holdMs, gold: ant.gold && !lite, dim: !lite });
     if (my !== session || !alive) return;
     playing = null;
     const shownBefore = shownSp();
@@ -329,7 +341,7 @@ export async function mount(ctx) {
     const [made, state] = await Promise.all([
       createScene({ canvas: $('.slot-stage'), reduced, palette: variant && variant.palette, hint: $('.slot-hint'), canPull: () => (!busy || pace === 'reveal') && !suspended,
                     onLever: () => press(), onFreeze: col => toggleFreeze(col),
-                    onReelStop: i => { const p = playing; sound.thud(i, !!p && i === p.lastReel && !(p.o.pay > 0)); note('thud', { reel: i }); } }).catch(e => ({ error: e })),
+                    onReelStop: i => { const p = playing; sound.thud(i, !!p && i === p.lastReel && !(p.o.pay > 0)); note('thud', { reel: i }); if (p) stopFeel(p, i); } }).catch(e => ({ error: e })),
       tape.open(),
     ]);
     if (my !== session) { if (made && made.dispose) made.dispose(); return; }

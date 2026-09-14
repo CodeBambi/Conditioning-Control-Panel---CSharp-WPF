@@ -12,7 +12,7 @@ const LEVEL = { thud: 0.5, muted: 0.22, chime: 0.34, token: 0.12 };
 const rate = s => 2 ** (s / 12);
 
 export function createSound() {
-  let ctx = null, out = null, noise = null, suspended = false, disposed = false;
+  let ctx = null, out = null, noise = null, suspended = false, disposed = false, rising = null;
   const buffers = new Map();
   const trace = [];   // the last cues with their page time, for dev.html and CDP checks
 
@@ -63,6 +63,13 @@ export function createSound() {
     } catch { /* a beat never breaks the spin */ }
   }
 
+  /** A1's tone, stopped early when a spin is skipped, disposed or suspended. */
+  function stopRise() {
+    if (!rising) return;
+    try { rising.g.gain.cancelScheduledValues(ctx.currentTime); rising.osc.stop(); } catch { /* already done */ }
+    rising = null;
+  }
+
   const api = {
     /** Wake the context inside a gesture (a press or a pull). */
     arm() { if (live() && ctx.state === 'suspended') ctx.resume().catch(() => {}); },
@@ -90,11 +97,38 @@ export function createSound() {
       if (last) { if (!play('thud', { semis: 5, level: LEVEL.thud * 0.6 })) thump(LEVEL.thud * 0.6, 5); }
       else play('chime3', { semis: 12, level: LEVEL.token });
     },
+    /** A1 THE ANTICIPATION REEL: a tone climbing across reel 3's hold (a synth sweep, no new files).
+     *  Quiet under Calm, and it still plays under reduced motion: the hold is pace, not animation. */
+    rise(ms, calm = false) {
+      const dur = Math.max(0.12, (Number(ms) || 0) / 1000), peak = (calm ? LEVEL.token : LEVEL.muted) * 0.9;
+      note('rise', 0, peak);
+      if (!live()) return;
+      try {
+        stopRise();
+        const t = ctx.currentTime, osc = ctx.createOscillator(), g = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(196, t); osc.frequency.exponentialRampToValueAtTime(660, t + dur);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(peak, t + Math.min(0.2, dur * 0.45));
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        osc.connect(g); g.connect(out); osc.start(t); osc.stop(t + dur + 0.02);
+        rising = { osc, g };
+        osc.onended = () => { if (rising && rising.osc === osc) rising = null; };
+      } catch { /* a beat never breaks the spin */ }
+    },
+    /** A2 THE ALMOST: a ghost note UNDER the no-pay muted thud, on the same frame (Law X, one beat). */
+    almost(calm = false) {
+      const level = LEVEL.muted * (calm ? 0.4 : 0.7);
+      note('almost', -7, level);
+      if (!live()) return;
+      if (!play('chime3', { semis: -7, level, lowpass: 900 })) thump(level, -7);
+    },
     suspend(on) {
       suspended = !!on;
+      if (suspended) stopRise();
       if (ctx && ctx.state !== 'closed') (suspended ? ctx.suspend() : ctx.resume()).catch(() => {});
     },
-    dispose() { disposed = true; if (ctx) ctx.close().catch(() => {}); ctx = null; buffers.clear(); },
+    dispose() { disposed = true; stopRise(); if (ctx) ctx.close().catch(() => {}); ctx = null; buffers.clear(); },
     trace,
   };
   return api;
