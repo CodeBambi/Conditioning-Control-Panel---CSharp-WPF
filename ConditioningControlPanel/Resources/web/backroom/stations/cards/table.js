@@ -309,7 +309,7 @@ export function createTable(canvas, { kit = null } = {}) {
         // turns below the spot are squashed flat so the path stays on the table (a smooth squash: no bend where it starts)
         const pos = (uu) => { const r = R0 * (1 - uu), a = a0 + uu * TAU * 1.25, s = Math.sin(a); return [from.x + Math.cos(a) * r, from.y + s * r * (0.575 - 0.425 * Math.tanh(s * 4))]; };
         g.save(); g.strokeStyle = c.col; g.globalAlpha = 0.35 * k; g.lineWidth = 2; g.beginPath();
-        for (let q = 0; q <= 12; q++) { const [px, py] = pos(clamp(u - c.dir * q * 0.02, 0, 1)); if (q === 0) g.moveTo(px, py); else g.lineTo(px, py); }
+        for (let q = 0; q <= 24; q++) { const [px, py] = pos(clamp(u - c.dir * q * 0.01, 0, 1)); if (q === 0) g.moveTo(px, py); else g.lineTo(px, py); }
         g.stroke(); g.restore();
         const [x, y] = pos(u);
         chipDisc(x, y, L.spot.r * (0.8 + 0.2 * (1 - Math.abs(u - 0.5) * 2)), c.col, c.dir > 0 ? 1 : 1 - t * 0.7);
