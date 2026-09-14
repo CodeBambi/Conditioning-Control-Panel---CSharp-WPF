@@ -45,3 +45,15 @@ test('NPC faces are independent, blink and shared atlas remain isolated', () => 
 test('slot cabinet face screens are not animated as NPCs', () => {
   assert.equal(createEmiIdle({model:new T.Group(),row:{id:'slot'}}),null);
 });
+
+test('real shoulder children articulate without changing authored mesh transforms',()=>{
+ const model=new T.Group(),root=new T.Group();root.name='golden_emi_attendant';model.add(root);
+ for(const side of ['L','R']) {const shoulder=new T.Group();shoulder.name='shoulder'+side;shoulder.position.set(side==='L'?-.39:.39,.49,0);const hand=new T.Mesh(new T.BoxGeometry(.1,.1,.1),new T.MeshBasicMaterial());hand.name='hand'+side;hand.position.y=-.25;shoulder.add(hand);root.add(shoulder);}
+ model.updateMatrixWorld(true);const hand=root.getObjectByName('handR'),local=hand.matrix.clone(),initial=hand.getWorldPosition(new T.Vector3());
+ const actor=createEmiIdle({model,row:{id:'counter'}});assert.ok(actor.debug().articulated);assert.ok(actor.trigger('greet'));
+ for(let i=0;i<60;i++)actor.update(1/60);model.updateMatrixWorld(true);
+ nearMatrix(hand.matrix,local);assert.ok(hand.getWorldPosition(new T.Vector3()).y>initial.y+.2);
+ assert.equal(root.getObjectByName('emi_feather_duster').visible,false);
+ actor.update(.01,true);model.updateMatrixWorld(true);assert.ok(hand.getWorldPosition(new T.Vector3()).distanceTo(initial)<1e-10);
+ assert.deepEqual(actor.debug().arms,[0,0]);actor.dispose();
+});
