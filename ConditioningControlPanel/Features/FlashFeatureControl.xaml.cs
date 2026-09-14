@@ -54,9 +54,10 @@ namespace ConditioningControlPanel.Features
             bool motion = PrizeGrants.IsGranted(PrizeGrants.FlashDriftBounce)
                           || PrizeGrants.IsGranted(PrizeGrants.FlashPendulum);
             RowJackpotRemix.Visibility = remix ? Visibility.Visible : Visibility.Collapsed;
-            // Rounded corners dresses the picture the motion prizes animate, so it rides those
-            // grants rather than Jackpot Remix.
+            // Rounded corners dresses the picture the motion prizes animate and dragging replaces
+            // the way it moves, so both ride those grants rather than Jackpot Remix.
             RowRoundedCorners.Visibility = motion ? Visibility.Visible : Visibility.Collapsed;
+            RowDraggable.Visibility = motion ? Visibility.Visible : Visibility.Collapsed;
             BoxFlashV2.Visibility = (remix || motion) ? Visibility.Visible : Visibility.Collapsed;
         }
 
@@ -77,6 +78,17 @@ namespace ConditioningControlPanel.Features
             var s = App.Settings?.Current;
             if (s == null) return;
             s.FlashRoundedCorners = ChkFlashRoundedCorners.IsChecked ?? false;
+            App.Settings?.Save();
+        }
+
+        // Draggable GIFs: the flash heartbeat re-reads this every tick to decide whether a press
+        // grabs or pops, so the switch takes effect on flashes that are already up. No bounce.
+        private void ChkFlashDraggable_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.FlashDraggable = ChkFlashDraggable.IsChecked ?? false;
             App.Settings?.Save();
         }
 
@@ -126,6 +138,7 @@ namespace ConditioningControlPanel.Features
                 TxtCenterExclusion.Text = $"{s.FlashCenterExclusionPercent}%";
                 ChkJackpotRemix.IsChecked = s.JackpotRemixEnabled;
                 ChkFlashRoundedCorners.IsChecked = s.FlashRoundedCorners;
+                ChkFlashDraggable.IsChecked = s.FlashDraggable;
             }
             finally { _isLoading = false; }
         }
@@ -144,6 +157,7 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.FlashSolidMode) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashMotionStyle) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashRoundedCorners) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashDraggable) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazePopEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerExtensionMs) ||

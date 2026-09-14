@@ -5039,6 +5039,8 @@
   "badge_v2": "v2",
   "section_flash_v2": "Flashes v2",
   "tooltip_flash_v2": "Extras from the Back Room. Each row appears once you own the prize behind it, and every one of them is off until you switch it on.",
+  "setting_flash_draggable": "Draggable GIFs",
+  "tooltip_flash_draggable": "Press a flash and it comes with your cursor instead of popping, so you can put it where you want it. Let go with a flick and it sails off, bouncing around the desktop until it slows to a stop. A quick press still pops it, and right-click always does. Needs a Flashes v2 motion prize.",
   "setting_flash_rounded_corners": "Rounded corners",
   "tooltip_flash_rounded_corners": "Softens the corners of every flash so a GIF sits on the screen like a card instead of a pasted rectangle. Needs a Flashes v2 motion prize.",
   "setting_stare_to_pop": "Regarder pour faire éclater",
