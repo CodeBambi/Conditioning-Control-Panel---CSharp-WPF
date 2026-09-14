@@ -42,8 +42,9 @@ namespace ConditioningControlPanel.Services.Banner
     /// resolves to zero all take the line out of the draw. The banner never guesses a figure at
     /// the user.</para>
     ///
-    /// <para>Buckets are weighted 40 taglines / 35 trivia / 25 reads, two reads never land back to
-    /// back, and unseen lines are preferred until a bucket is exhausted, at which point only that
+    /// <para>The header draw is weighted 40 taglines / 35 trivia / 0 reads: the reads bucket
+    /// belongs to the marquee interludes now and is only ever handed out when it is asked for by
+    /// name. Unseen lines are preferred until a bucket is exhausted, at which point only that
     /// bucket's seen entries are forgotten (see <see cref="AppSettings.ResetBannerSeen"/>).</para>
     ///
     /// <para>Pure logic and disk: no timers, no UI. MainWindow.Marquee.cs owns the beat.</para>
@@ -54,9 +55,15 @@ namespace ConditioningControlPanel.Services.Banner
         private const string Trivia = "trivia";
         private const string Reads = "reads";
 
+        /// <summary>
+        /// The header draw's weights. "reads" is 0 on purpose: the reads left the header's 4th beat
+        /// when the marquee interludes took them over (a read is a five second act now, not a line
+        /// that flicks past in a 4s crossfade), and showing the same line in both places would read
+        /// as a bug. The interlude asks for them by name through <see cref="NextLine(string?)"/>.
+        /// </summary>
         private static readonly (string Bucket, int Weight)[] BucketWeights =
         {
-            (Taglines, 40), (Trivia, 35), (Reads, 25)
+            (Taglines, 40), (Trivia, 35), (Reads, 0)
         };
 
         private readonly Random _rng = new();
@@ -70,7 +77,16 @@ namespace ConditioningControlPanel.Services.Banner
         /// Pick the next line to show, or null when nothing is eligible (no pool file, everything
         /// gated out, or the user turned the pool off). The chosen id is recorded as seen.
         /// </summary>
-        public string? NextLine()
+        public string? NextLine() => NextLine(null);
+
+        /// <summary>
+        /// Draw from ONE named bucket ("taglines", "trivia", "reads"), or from the weighted header
+        /// order when <paramref name="bucket"/> is null. A single-bucket draw records the seen id
+        /// and the last bucket exactly like the header draw, so the two share one memory and one
+        /// exhaustion cycle. Returns null when that bucket has nothing eligible: the caller skips
+        /// its beat rather than showing a line whose numbers we do not hold.
+        /// </summary>
+        public string? NextLine(string? bucket)
         {
             try
             {
@@ -82,12 +98,12 @@ namespace ConditioningControlPanel.Services.Banner
                     EnsureLoaded();
                     if (_pool == null) return null;
 
-                    foreach (var bucket in DrawOrder())
+                    foreach (var candidate in DrawOrder(bucket))
                     {
-                        var picked = PickFrom(bucket, settings);
+                        var picked = PickFrom(candidate, settings);
                         if (picked == null) continue;
 
-                        _lastBucket = bucket;
+                        _lastBucket = candidate;
                         settings.RecordBannerSeen(picked.Value.Line.Id);
                         App.Settings?.Save();
                         App.Logger?.Debug("[BannerPool] line {Id}", picked.Value.Line.Id);
@@ -105,16 +121,27 @@ namespace ConditioningControlPanel.Services.Banner
         // ------------------------------------------------------------------ picking
 
         /// <summary>
-        /// The weighted bucket first, then the others behind it as fallbacks, so an exhausted or
-        /// fully gated bucket still yields a line instead of a blank beat. "reads" is dropped from
-        /// the draw entirely when it just went out, which is the whole no-two-reads-in-a-row rule.
+        /// A named bucket is the whole order: an interlude that cannot find a read shows nothing,
+        /// it never falls back to a tagline. Otherwise the weighted bucket comes first and the rest
+        /// sit behind it as fallbacks, so an exhausted or fully gated bucket still yields a line
+        /// instead of a blank beat. A zero-weight bucket (reads, since the interludes took them)
+        /// is out of the header order altogether, fallbacks included.
         /// </summary>
-        private List<string> DrawOrder()
+        private List<string> DrawOrder(string? only) => BuildDrawOrder(only, _lastBucket, _rng.Next);
+
+        /// <summary>
+        /// The pure half of <see cref="DrawOrder"/>, so the rule can be pinned without a settings
+        /// service or a pool file behind it. <paramref name="roll"/> is Random.Next(exclusiveMax).
+        /// </summary>
+        internal static List<string> BuildDrawOrder(string? only, string lastBucket, Func<int, int> roll)
         {
+            if (!string.IsNullOrEmpty(only)) return new List<string> { only! };
+
             var pool = new List<(string Bucket, int Weight)>();
             foreach (var bw in BucketWeights)
             {
-                if (bw.Bucket == Reads && _lastBucket == Reads) continue;
+                if (bw.Weight <= 0) continue;
+                if (bw.Bucket == Reads && lastBucket == Reads) continue;
                 pool.Add(bw);
             }
             if (pool.Count == 0) pool.Add((Taglines, 1));
@@ -124,18 +151,21 @@ namespace ConditioningControlPanel.Services.Banner
             {
                 int total = 0;
                 foreach (var bw in pool) total += bw.Weight;
-                int roll = _rng.Next(Math.Max(1, total));
+                int pick = roll(Math.Max(1, total));
                 int i = 0;
                 for (; i < pool.Count - 1; i++)
                 {
-                    roll -= pool[i].Weight;
-                    if (roll < 0) break;
+                    pick -= pool[i].Weight;
+                    if (pick < 0) break;
                 }
                 order.Add(pool[i].Bucket);
                 pool.RemoveAt(i);
             }
             return order;
         }
+
+        /// <summary>The bucket name the interludes ask for. One spelling, in one place.</summary>
+        internal const string ReadsBucket = Reads;
 
         /// <summary>
         /// One bucket's draw: eligible lines only, unseen preferred, and when every eligible line
