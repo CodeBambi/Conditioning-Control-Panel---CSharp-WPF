@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JustDrop - a walkthrough | CC Labs</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="A short walkthrough of JustDrop - order a conditioning session off the menu and have it delivered to your Conditioning Control Panel.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💗</text></svg>">
+<meta property="og:title" content="JustDrop - a walkthrough">
+<meta property="og:description" content="Order a session off the menu. It gets cooked and delivered to your Control Panel.">
+<meta property="og:type" content="video.other">
+<meta property="og:image" content="https://cclabs.app/videos/tutorials/justdrop-poster.jpg">
+<style>
+:root{
+  --crt-black:#140f13; --panel:#1e1620; --panel-deep:#181119;
+  --ink:#f1e8ee; --ink-dim:#a893a6;
+  --phosphor:#e84a97; --phosphor-bright:#ff7dc0; --phosphor-deep:#7e2c59;
+  --amber:#e9a53d; --teal:#35e0c8;
+  --glow-pink:rgba(232,74,151,.55);
+  --font-ui:"Cascadia Mono","Cascadia Code",Consolas,monospace;
+  --r:12px; --r-sm:7px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{overflow-x:hidden;}
+body{
+  background:var(--crt-black); color:var(--ink); font-family:var(--font-ui);
+  overflow-x:hidden; min-height:100vh;
+  background-image:
+    radial-gradient(900px 500px at 50% -10%, rgba(232,74,151,.13), transparent 70%),
+    radial-gradient(700px 400px at 90% 110%, rgba(53,224,200,.06), transparent 70%);
+}
+body::after{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:9000;
+  background:repeating-linear-gradient(0deg, rgba(0,0,0,.45) 0, rgba(0,0,0,.45) 1px, transparent 1px, transparent 3px);
+  opacity:.30;
+}
+a{color:var(--phosphor-bright); text-decoration:none;}
+a:hover{text-decoration:underline;}
+
+.wrap{max-width:1080px; margin:0 auto; padding:34px 20px 70px;}
+
+/* ---- header ---- */
+.tag.warn{color:var(--amber); border-color:rgba(233,165,61,.42); background:rgba(233,165,61,.07); margin-left:8px;}
+.tag{
+  display:inline-block; font-size:11px; letter-spacing:.22em; text-transform:uppercase;
+  color:var(--phosphor); border:1px solid var(--phosphor-deep);
+  padding:5px 11px; border-radius:var(--r-sm); background:rgba(232,74,151,.07);
+}
+h1{
+  font-size:clamp(30px,6vw,52px); line-height:1.05; margin:16px 0 10px;
+  letter-spacing:-.01em;
+  text-shadow:0 0 26px var(--glow-pink);
+}
+h1 .dim{color:var(--ink-dim); text-shadow:none; font-size:.5em; letter-spacing:.04em; display:block; margin-top:10px;}
+.blurb{color:var(--ink-dim); font-size:15px; line-height:1.65; max-width:64ch;}
+.blurb b{color:var(--ink); font-weight:600;}
+
+/* ---- player ---- */
+.crt{
+  position:relative; margin:30px 0 0;
+  border:3px solid var(--phosphor-deep); border-radius:var(--r);
+  background:var(--panel-deep);
+  box-shadow:0 0 0 1px rgba(0,0,0,.7), 0 18px 60px rgba(0,0,0,.65), 0 0 70px rgba(232,74,151,.11);
+  padding:10px;
+}
+.crt::before,.crt::after{
+  content:""; position:absolute; width:20px; height:20px; pointer-events:none;
+  border-color:var(--phosphor); opacity:.85;
+}
+.crt::before{top:-3px; left:-3px; border-top:3px solid; border-left:3px solid; border-top-left-radius:var(--r);}
+.crt::after{bottom:-3px; right:-3px; border-bottom:3px solid; border-right:3px solid; border-bottom-right-radius:var(--r);}
+.bar{
+  display:flex; align-items:center; gap:9px; padding:2px 4px 9px;
+  font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-dim);
+}
+.led{width:8px; height:8px; border-radius:50%; background:var(--phosphor); box-shadow:0 0 9px var(--phosphor); flex:none;}
+.bar .right{margin-left:auto; color:var(--phosphor); letter-spacing:.12em;}
+video{
+  display:block; width:100%; height:auto; border-radius:calc(var(--r) - 6px);
+  background:#000; outline:none;
+}
+
+/* ---- notes ---- */
+.notes{
+  display:grid; gap:14px; margin-top:30px;
+  grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+}
+.note{
+  background:var(--panel); border:1px solid rgba(232,74,151,.20); border-radius:var(--r-sm);
+  padding:15px 16px 16px;
+}
+.note h3{
+  font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--phosphor-bright);
+  margin-bottom:8px; font-weight:600;
+}
+.note p{font-size:13.5px; line-height:1.6; color:var(--ink-dim);}
+.note p b{color:var(--ink); font-weight:600;}
+
+/* ---- footer ---- */
+footer{
+  margin-top:38px; padding-top:20px; border-top:1px solid rgba(232,74,151,.16);
+  display:flex; flex-wrap:wrap; gap:10px 22px; align-items:center;
+  font-size:12px; color:var(--ink-dim); letter-spacing:.04em;
+}
+footer .sep{opacity:.4;}
+.cta{
+  display:inline-block; padding:9px 16px; border-radius:var(--r-sm);
+  border:2px solid var(--phosphor); color:var(--phosphor-bright);
+  background:rgba(232,74,151,.08); letter-spacing:.1em; text-transform:uppercase; font-size:11px;
+}
+.cta:hover{background:rgba(232,74,151,.18); text-decoration:none;}
+@media (max-width:600px){
+  .wrap{padding:24px 14px 50px;}
+  .crt{padding:7px;}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="tag">Conditioning Control Panel &middot; walkthrough</span>
+  <span class="tag warn">18+ &middot; adult content</span>
+
+  <h1>JustDrop
+    <span class="dim">order a session. it gets delivered.</span>
+  </h1>
+
+  <p class="blurb">
+    A minute and a half of the whole loop: pick a <b>flavor</b>, pick a <b>size</b>,
+    fill the bag off the menu, and send it to the kitchen. What lands in your
+    Control Panel is cooked to that order and different every time.
+  </p>
+
+  <div class="crt">
+    <div class="bar">
+      <span class="led"></span>
+      <span>JustDrop &middot; walkthrough</span>
+      <span class="right">01:49</span>
+    </div>
+    <video controls playsinline preload="metadata"
+           poster="../videos/tutorials/justdrop-poster.jpg">
+      <source src="../videos/tutorials/justdrop.mp4" type="video/mp4">
+      Your browser cannot play this video.
+      <a href="../videos/tutorials/justdrop.mp4">Open the file directly.</a>
+    </video>
+  </div>
+
+  <div class="notes">
+    <div class="note">
+      <h3>1 &middot; Flavor &amp; size</h3>
+      <p>Sissy, Bambi, Drone or Circe up top, then <b>Small</b> through <b>XXL</b> &mdash; 5 minutes and 7 slots at the low end, an hour and 20 slots at the top.</p>
+    </div>
+    <div class="note">
+      <h3>2 &middot; Fill the bag</h3>
+      <p>Dressings, soundtrack, plating, visual bases, overlays, audio beds. Spend <b>Pocket Money</b>, or hit <b>Surprise me</b> and let the kitchen choose.</p>
+    </div>
+    <div class="note">
+      <h3>3 &middot; Send it</h3>
+      <p>The order goes to the kitchen and comes back as a real session. The last stretch of the clip is that session <b>actually playing</b> &mdash; same order twice never plates the same way.</p>
+    </div>
+  </div>
+
+  <footer>
+    <a class="cta" href="https://cclabs.app/">Get the Control Panel</a>
+    <span>Free Windows app</span>
+    <span class="sep">&middot;</span>
+    <span>cclabs.app</span>
+    <span class="sep">&middot;</span>
+    <span>Unlisted page &mdash; the clip contains adult material. 18+ only.</span>
+  </footer>
+
+</div>
+</body>
+</html>

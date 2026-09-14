@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="referrer" content="no-referrer">
+<title>The Deep End — teaser</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>">
+<style>
+/* the Arcademy shell's token block (styles.css :root) - the class's own
+   stylesheet hangs off these names */
+:root {
+  --ground:#14142B; --navy:#1A1A2E; --panel:#252542; --panel2:#2E2E55;
+  --line:#3A3A5E; --ink:#F2EBDD; --ink-dim:#B9B3CE; --ink-faint:#8A84A8;
+  --pink:#FF69B4; --pink-deep:#D4488F; --lav:#B8A6E8; --gold:#F0C24B;
+  --verified:#F0A04B;   /* shared "probed, exists" orange - NOT --gold */
+  --slate:#7A7594;
+  --gS:var(--gold); --gA:var(--pink); --gB:var(--lav); --gC:var(--slate);
+  --gPass:var(--lav);
+  --flap-face:#31315E; --flap-fold:#262649; --flap-well:#101024;
+  --disp:'Copperplate Gothic Bold','Bahnschrift Condensed','Arial Black',Impact,serif;
+  --body:'Segoe UI Variable Text','Segoe UI',system-ui,-apple-system,sans-serif;
+  --mono:'Cascadia Mono','Consolas','IBM Plex Mono','Courier New',monospace;
+  --radius:12px; --hairline:1px solid var(--line);
+}
+[hidden] { display:none !important; }
+* { box-sizing:border-box; }
+html, body { margin:0; height:100%; background:var(--ground); overflow:hidden;
+             font-family:var(--body); color:var(--ink); }
+button { font:inherit; }
+
+/* ---- screens ---- */
+.screen { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:20px; overflow:auto; }
+.card { width:min(640px, 100%); background:linear-gradient(180deg, var(--panel), var(--navy));
+        border:1px solid var(--line); border-radius:18px; padding:26px 26px 22px;
+        box-shadow:0 24px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,105,180,.08) inset; }
+.kicker { font:700 11px/1 var(--mono); letter-spacing:.22em; color:var(--pink); text-transform:uppercase; margin:0 0 10px; }
+h1 { font-family:var(--disp); font-weight:700; letter-spacing:.06em; font-size:clamp(26px, 5vw, 40px); margin:0 0 8px; color:var(--ink);
+     text-shadow:0 0 18px rgba(184,166,232,.45); }
+p { margin:0 0 12px; color:var(--ink-dim); line-height:1.5; font-size:15px; }
+p.small { font-size:12.5px; color:var(--ink-faint); }
+.row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:6px 0 14px; }
+.label { font:700 11px/1 var(--mono); letter-spacing:.16em; color:var(--ink-faint); text-transform:uppercase; width:100%; margin:10px 0 2px; }
+.chip, .seg { background:var(--panel2); color:var(--ink-dim); border:1px solid var(--line); border-radius:999px;
+              padding:7px 13px; cursor:pointer; font-size:13.5px; transition:all .15s ease; }
+.chip:hover, .seg:hover { border-color:var(--lav); color:var(--ink); }
+.chip.on { background:var(--pink); color:#1a0a14; border-color:var(--pink); font-weight:700; box-shadow:0 0 16px rgba(255,105,180,.45); }
+/* a custom sub that answered the probe; dashed while it is still being probed */
+.chip.verified { background:transparent; color:var(--verified); border-color:var(--verified); font-weight:700; }
+.chip.verified:hover { color:var(--ink); border-color:var(--verified); }
+.chip.pending { border-style:dashed; color:var(--ink-faint); cursor:default; }
+/* the collapsed sub list under the selected preset */
+.substat { font:12px/1.4 var(--mono); color:var(--ink-faint); margin:2px 0 4px; cursor:pointer; user-select:none; }
+.substat:hover { color:var(--ink-dim); }
+.subrow input { background:var(--panel2); color:var(--ink); border:1px solid var(--line); border-radius:999px;
+                padding:7px 13px; font:inherit; font-size:13.5px; width:min(230px, 62%); }
+.subrow input:focus { outline:none; border-color:var(--lav); }
+.subrow input::placeholder { color:var(--ink-faint); }
+.seg { border-radius:10px; }
+.seg.on { background:var(--lav); color:#17122a; border-color:var(--lav); font-weight:700; }
+.btnp { background:linear-gradient(180deg, #ff86c6, var(--pink)); color:#1d0a17; border:0; border-radius:14px;
+        font:700 17px/1 var(--disp); letter-spacing:.08em; padding:16px 28px; cursor:pointer;
+        box-shadow:0 10px 30px rgba(255,105,180,.35); transition:transform .12s ease; }
+.btnp:hover { transform:translateY(-1px); }
+.btnp.alt { background:transparent; color:var(--ink-dim); border:1px solid var(--line); box-shadow:none; }
+.btnp.alt:hover { color:var(--ink); border-color:var(--lav); }
+.actions { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:16px; }
+.stat { font:12px/1.4 var(--mono); color:var(--ink-faint); margin-top:10px; min-height:1.4em; }
+.stat.busy { color:var(--lav); } .stat.ok { color:#8fd7a2; } .stat.bad { color:#ff8a8a; }
+label.tog { display:inline-flex; align-items:center; gap:8px; color:var(--ink-dim); font-size:13.5px; cursor:pointer; }
+input[type=range] { accent-color:var(--pink); width:130px; }
+input[type=checkbox] { accent-color:var(--pink); width:16px; height:16px; }
+.legal { border-top:1px dashed var(--line); margin-top:16px; padding-top:12px; }
+
+/* ---- the stage ---- */
+#stage { padding:0; display:block; }
+#mount { position:fixed; inset:0; }
+#hud { position:fixed; right:12px; bottom:12px; z-index:60; display:flex; gap:6px; }
+#hud button { background:rgba(26,26,46,.72); color:var(--ink-dim); border:1px solid var(--line); border-radius:8px;
+              width:36px; height:32px; cursor:pointer; font-size:15px; line-height:1; backdrop-filter:blur(6px); }
+#hud button:hover { color:var(--ink); border-color:var(--lav); }
+#pause { position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center;
+         background:rgba(20,20,43,.72); backdrop-filter:blur(8px); }
+#pause .card { text-align:center; width:min(380px, 92%); }
+
+/* ---- the result ---- */
+#result .card { text-align:center; }
+.grade { font-family:var(--disp); font-size:96px; line-height:1; margin:6px 0 2px; text-shadow:0 0 28px currentColor; }
+.g-S { color:var(--gold); } .g-A { color:var(--pink); } .g-B { color:var(--lav); } .g-C { color:var(--slate); } .g-free { color:var(--lav); }
+#delog { position:fixed; left:0; top:0; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none; }
+</style>
+</head>
+<body>
+
+<!-- THE GATE -->
+<section id="gate" class="screen" hidden>
+  <div class="card">
+    <div class="kicker">CC Labs · The Arcademy · tester preview</div>
+    <h1>The Deep End</h1>
+    <p>A five-minute class from the Arcademy, the Conditioning Control Panel's mini-game hall: 2048 with trance-depth tiers. The deeper the tile, the more of CCP's own effects the room throws at you.</p>
+    <p>This preview is <b>18+</b>. Its tile faces and bursts are adult media your <b>browser fetches straight from scrolller.com</b> - CC Labs servers never touch, store or relay any of it. Nothing you do here is saved anywhere but this browser.</p>
+    <p class="small">Unlisted teaser build. Expect rough edges; the real class lives inside the app.</p>
+    <div class="actions">
+      <button id="gate-yes" class="btnp" type="button">I'm 18+ · continue</button>
+      <button id="gate-no" class="btnp alt" type="button">Take me back</button>
+    </div>
+  </div>
+</section>
+
+<!-- THE LOBBY -->
+<section id="lobby" class="screen" hidden>
+  <div class="card">
+    <div class="kicker">CC Labs · The Arcademy · tester preview</div>
+    <h1>The Deep End</h1>
+    <p>Slide the tiles - arrows, WASD, or swipe. Match two of a depth to sink one deeper. Every new depth you reach turns the pressure up; the bell rings at five minutes.</p>
+
+    <div class="label">Media</div>
+    <div id="niches" class="row"></div>
+    <div id="nichesubs" class="substat" hidden></div>
+    <div id="customsubs" class="row" hidden></div>
+    <div class="row subrow">
+      <input id="customsub" type="text" maxlength="60" autocomplete="off" autocapitalize="off" spellcheck="false"
+             placeholder="add a subreddit (e.g. gonewild)">
+      <button id="customsub-add" class="chip" type="button">+ add</button>
+    </div>
+    <div id="customstat" class="stat" hidden></div>
+    <div id="mediastat" class="stat"></div>
+
+    <div class="label">Year (difficulty)</div>
+    <div id="tier" class="row"></div>
+    <div class="label">Board</div>
+    <div id="size" class="row"></div>
+    <div class="label">Mode</div>
+    <div id="mode" class="row"></div>
+    <div class="label">Tile faces</div>
+    <div id="faces" class="row"></div>
+    <div class="label">Performance</div>
+    <div id="perf" class="row"></div>
+    <p class="small">Auto drops to Lite if your GPU struggles (fewer live tiles, calmer backdrop)</p>
+
+    <div class="row" style="margin-top:10px">
+      <label class="tog"><input id="sound" type="checkbox"> sound</label>
+      <input id="volume" type="range" min="0" max="100" step="1" title="volume">
+    </div>
+
+    <div class="actions">
+      <button id="dive" class="btnp" type="button">DIVE IN</button>
+      <span class="small" style="color:var(--ink-faint);font-size:12.5px">Esc pauses · ⛶ fullscreen in the corner</span>
+    </div>
+    <p class="small legal">Unlisted preview. Your browser loads media from scrolller.com directly; CC Labs never proxies it. 18+ only.</p>
+  </div>
+</section>
+
+<!-- THE STAGE -->
+<section id="stage" class="screen" hidden>
+  <div id="mount"></div>
+  <div id="hud">
+    <button id="hud-pause" type="button" title="pause (Esc)">⏸</button>
+    <button id="hud-full" type="button" title="fullscreen">⛶</button>
+  </div>
+  <div id="pause" hidden>
+    <div class="card">
+      <div class="kicker">paused</div>
+      <h1 style="font-size:26px">Holding your breath</h1>
+      <div class="actions" style="justify-content:center">
+        <button id="p-resume" class="btnp" type="button">Resume</button>
+        <button id="p-surface" class="btnp alt" type="button">Surface · back to lobby</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- THE RESULT -->
+<section id="result" class="screen" hidden>
+  <div class="card">
+    <div class="kicker" id="res-title">Class dismissed</div>
+    <div class="grade" id="res-grade">—</div>
+    <p id="res-sub"></p>
+    <div class="actions" style="justify-content:center">
+      <button id="res-new" class="btnp" type="button">Dive again</button>
+      <button id="res-again" class="btnp alt" type="button">Same water (replay seed)</button>
+      <button id="res-lobby" class="btnp alt" type="button">Lobby</button>
+    </div>
+  </div>
+</section>
+
+<pre id="delog" aria-hidden="true"></pre>
+<script type="module" src="./app.js"></script>
+<script>
+/* a module that fails to load leaves a blank ground colour; say so */
+window.addEventListener('error', function (e) {
+  var t = e && e.target;
+  if (t && t !== window && t.tagName) { console.warn('resource failed', t.src || t.href); return; }
+  var m = document.getElementById('gate'); if (!m) return;
+  var box = document.createElement('div');
+  box.style.cssText = 'position:fixed;left:12px;top:12px;z-index:999;background:#3a0f1e;color:#ffd7ee;border:1px solid #ff5577;border-radius:8px;padding:8px 12px;font:12px/1.4 monospace;max-width:70vw;white-space:pre-wrap;';
+  box.textContent = 'ERROR: ' + (e.message || e.type) + (e.filename ? '\n' + e.filename + ':' + e.lineno : '');
+  document.body.appendChild(box);
+});
+</script>
+</body>
+</html>
