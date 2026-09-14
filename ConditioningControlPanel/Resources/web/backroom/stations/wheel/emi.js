@@ -12,7 +12,8 @@ import { FEEL, bezier } from './feel.js';
 export const FACES = { idle0_0: 3, hearts: 7, spirals: 8, melt: 9, jackpot: 10 };
 const W = 152, H = 137;
 
-export function createEmi({ root, faceMesh, atlas, hud, reduced }) {
+export function createEmi({ root, faceMesh, atlas, hud, reduced: reducedAtOpen }) {
+  let reduced = !!reducedAtOpen;
   const topper = root.getObjectByName('emi_topper'), left = root.getObjectByName('shoulderL'), right = root.getObjectByName('shoulderR');
   const rest = topper && { p: topper.position.clone(), s: topper.scale.clone(), r: topper.rotation.clone(),
                            l: left && left.rotation.clone(), rr: right && right.rotation.clone() };
@@ -52,6 +53,8 @@ export function createEmi({ root, faceMesh, atlas, hud, reduced }) {
       face = next;
       if (reduced || !img) paintCell(face);
     },
+    /** Live reduced motion: poses and blends stop, the face shows as a plain cell. */
+    setReduced(on) { reduced = !!on; if (reduced) { blend = null; paintCell(face); } },
     /** 'idle' | 'spin' | 'win' | 'jackpot' | 'sleepy'. */
     setMode(m) { if (m !== mode) { mode = m; modeAt = performance.now(); if (m === 'spin') spinAt = modeAt; } },
     skip() { blend = null; modeAt = -Infinity; paintCell(face); },
