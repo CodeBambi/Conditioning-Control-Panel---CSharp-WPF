@@ -199,5 +199,13 @@ namespace ConditioningControlPanel
             }
             catch { return false; }
         }
+
+        /// <summary>
+        /// The inverse of <see cref="NeedsDownload"/>, named for the question callers outside the
+        /// picker actually ask: may this mod's content be shown yet. True for CCP Default and for
+        /// user mods (they own no pack), true on a full or dev layout where nothing was stripped,
+        /// and true once the pack is stamped on disk.
+        /// </summary>
+        public static bool ContentAvailableFor(string? modId) => !NeedsDownload(modId);
     }
 }
