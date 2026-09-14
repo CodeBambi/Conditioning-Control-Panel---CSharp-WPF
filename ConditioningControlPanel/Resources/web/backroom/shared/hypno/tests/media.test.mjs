@@ -88,3 +88,21 @@ test('drawableUrl: ccp.assets and ccp.game only (no page origin in node)', () =>
   assert.ok(!drawableUrl('C:/Users/x.gif'));
   assert.ok(!drawableUrl(''));
 });
+
+test('no decoder: the still comes from a CORS <img>, so a texture upload of image() is not tainted', async () => {
+  const imgs = [];
+  const canvas = () => ({ width: 0, height: 0, getContext: () => ({ drawImage() {} }) });
+  globalThis.document = { createElement: canvas };
+  globalThis.Image = class { constructor() { imgs.push(this); this.naturalWidth = 400; this.naturalHeight = 200; this.order = []; }
+    set crossOrigin(v) { this.order.push('crossOrigin'); this.cors = v; }
+    set src(v) { this.order.push('src'); this.url = v; setTimeout(() => this.onload(), 0); } };
+  try {
+    const deck = await createDeck(createMockHost({ deal: urls(1) }).ctx, { count: 1 });
+    for (let i = 0; i < 20 && !deck.image('g0'); i++) await new Promise((r) => setTimeout(r, 5));
+    assert.equal(imgs.length, 1);
+    assert.equal(imgs[0].cors, 'anonymous');
+    assert.deepEqual(imgs[0].order, ['crossOrigin', 'src'], 'crossOrigin is set before src');
+    assert.deepEqual([deck.image('g0').width, deck.image('g0').height], [192, 96]);
+    deck.dispose();
+  } finally { delete globalThis.document; delete globalThis.Image; }
+});
