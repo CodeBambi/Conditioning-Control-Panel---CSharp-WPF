@@ -22,14 +22,27 @@
  * lost on the last kit's dispose. Its backing store is at most 512 px on the
  * long side (256 for card backs), resized to the aspect asked for (quantised to
  * 0.05). The same preset at the same phase, aspect and backing renders once:
- * thirteen card backs in a frame cost one render. No WebGL, or a lost context:
- * loomField's drawFallbackFrame (loomSpiral.js) into a small 2D store instead.
+ * thirteen card backs in a frame cost one render. Pass the frame's one `now`
+ * to every draw; a draw without it reads a clock held for the current task, so
+ * backs drawn in one rAF callback still share a phase. No WebGL, or a lost
+ * context: loomField's drawFallbackFrame (loomSpiral.js) into a small 2D store
+ * until the browser restores the context, then the field again.
  * ==========================================================================*/
 
 import { createFieldRenderer, normalizeParams2, loopMs2, drawFallbackFrame } from '../../../arcademy/engine/loom/loomField.js';
 
 const TWO_PI = Math.PI * 2;
 const FALLBACK_LONG = 256;   // the 2D wedge renderer is CPU work: never more than this
+
+let taskNow = NaN;
+/** performance.now(), read once per task (a rAF callback) and held until its microtasks run. */
+function taskClock() {
+  if (Number.isNaN(taskNow)) {
+    taskNow = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    queueMicrotask(() => { taskNow = NaN; });
+  }
+  return taskNow;
+}
 
 function deepFreeze(o) {
   if (o && typeof o === 'object' && !Object.isFrozen(o)) {
@@ -92,7 +105,7 @@ const longOf = (backing) => (backing === 'small' ? LOOM_BACKING.small
 
 /* ---- the one field per page -------------------------------------------- */
 
-let shared = null;   // { canvas, field, lost, users:Set, key, renders, onLost }
+let shared = null;   // { canvas, field, lost, users:Set, key, renders, onLost, onRestored }
 
 function acquire(kit, say) {
   if (shared) { shared.users.add(kit); return shared; }
@@ -101,15 +114,24 @@ function acquire(kit, say) {
   canvas.width = canvas.height = LOOM_BACKING.small;
   let field = null;
   try { field = createFieldRenderer(canvas); } catch (e) { say('loom shader failed (' + ((e && e.message) || e) + '), 2D fallback'); field = null; }
-  const s = { canvas, field, lost: !field, users: new Set([kit]), key: '', renders: 0, onLost: null };
+  const s = { canvas, field, lost: !field, users: new Set([kit]), key: '', renders: 0, onLost: null, onRestored: null };
   shared = s;
   if (!field) { say('loom: no WebGL, 2D fallback'); return s; }
   s.onLost = (ev) => {
-    try { ev.preventDefault(); } catch (e) { /* noop */ }
+    try { ev.preventDefault(); } catch (e) { /* noop */ }   // without it the browser never restores
     s.lost = true; s.key = '';
     say('loom: webgl context lost, 2D fallback');
   };
+  s.onRestored = () => {
+    if (shared !== s) return;
+    let f = null;
+    try { f = createFieldRenderer(canvas); } catch (e) { f = null; }   // programs and buffers died with the old context
+    if (!f) { say('loom: webgl context restored but the field would not rebuild, 2D fallback'); return; }
+    s.field = f; s.lost = false; s.key = '';
+    say('loom: webgl context restored');
+  };
   canvas.addEventListener('webglcontextlost', s.onLost, false);
+  canvas.addEventListener('webglcontextrestored', s.onRestored, false);
   return s;
 }
 
@@ -117,7 +139,10 @@ function release(kit) {
   const s = shared;
   if (!s || !s.users.delete(kit) || s.users.size) return;
   shared = null;
-  if (s.onLost) { try { s.canvas.removeEventListener('webglcontextlost', s.onLost); } catch (e) { /* noop */ } }
+  try {
+    if (s.onLost) s.canvas.removeEventListener('webglcontextlost', s.onLost);
+    if (s.onRestored) s.canvas.removeEventListener('webglcontextrestored', s.onRestored);
+  } catch (e) { /* noop */ }
   try {
     const gl = s.field && s.field.gl;
     const ext = gl && gl.getExtension ? gl.getExtension('WEBGL_lose_context') : null;
@@ -141,8 +166,7 @@ export function createLoomKit({ still = false, log = null } = {}) {
   function phaseOf(name, o) {
     if (isStill) return held.has(name) ? phaseForAngle(name, held.get(name)) : 0;
     if (Number.isFinite(o.angle)) { held.set(name, o.angle); return phaseForAngle(name, o.angle); }
-    const now = Number.isFinite(o.now) ? o.now : (typeof performance !== 'undefined' ? performance.now() : Date.now());
-    return phaseAt(name, now);
+    return phaseAt(name, Number.isFinite(o.now) ? o.now : taskClock());
   }
 
   /** The surface holding `name` at `phase` for a w x h draw, rendered only when it is not already there. */
@@ -174,10 +198,13 @@ export function createLoomKit({ still = false, log = null } = {}) {
   }
 
   Object.assign(kit, {
-    /** True while the page's one context draws the field (reading it makes the context). */
-    get webgl() { const s = ensure(); return !!(s && s.field && !s.lost); },
+    /** True while the page's one context draws this kit's fields. False until the first draw or paint makes it: reading never does. */
+    get webgl() { const s = shared; return !!(!disposed && s && s.users.has(kit) && s.field && !s.lost); },
 
-    /** Draw preset `name` covering x, y, w, h of a 2D context. `angle` (clockwise rad) drives the spin, else `now`. */
+    /**
+     * Draw preset `name` covering x, y, w, h of a 2D context. `angle` (clockwise rad) drives the spin, else `now`
+     * (ms). Give every draw of a frame the same `now` so they share one render; without it the task's clock is used.
+     */
     draw(ctx2d, name, x, y, w, h, { now, angle, alpha = 1, backing = 'long' } = {}) {
       if (disposed || !ctx2d || !LOOM_PRESETS[name] || !(w > 0 && h > 0)) return false;
       const src = surface(name, phaseOf(name, { now, angle }), w, h, longOf(backing));
@@ -222,6 +249,8 @@ export function createLoomKit({ still = false, log = null } = {}) {
       return { renders: s ? s.renders : 0, users: s ? s.users.size : 0, lost: s ? s.lost : null,
         backing: s ? s.canvas.width + 'x' + s.canvas.height : null, still: isStill, disposed, ...stats };
     },
+    /** Test seam: the page's GL context, or null. */
+    debugGl() { const s = shared; return s && s.field ? s.field.gl || null : null; },
   });
   return kit;
 }
