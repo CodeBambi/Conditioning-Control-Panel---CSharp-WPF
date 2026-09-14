@@ -4718,6 +4718,7 @@
   "ee_window_title": "Salida de emergencia",
   "lockdown_ee_button": "SALIDA DE EMERGENCIA",
   "lockdown_ee_sub": "púlsalo si quieres salir",
+  "lockdown_exit_hint": "para terminar antes, haz clic en el temporizador y escribe: let me out",
   "lockdown_ee_tooltip": "Abre la salida. Atravesarla sigue dependiendo de ti.",
   "lockdown_badge_label": "ENCIERRO",
   "lockdown_badge_end": "Terminar",

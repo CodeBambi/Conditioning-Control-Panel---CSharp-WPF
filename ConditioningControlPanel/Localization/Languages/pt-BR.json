@@ -4726,6 +4726,7 @@
   "ee_window_title": "Saída de emergência",
   "lockdown_ee_button": "SAÍDA DE EMERGÊNCIA",
   "lockdown_ee_sub": "aperte se você quer sair",
+  "lockdown_exit_hint": "para terminar antes, clique no cronômetro e digite: let me out",
   "lockdown_ee_tooltip": "Abre a saída. Atravessar ainda é com você.",
   "lockdown_badge_label": "CONFINAMENTO",
   "lockdown_badge_end": "Encerrar",

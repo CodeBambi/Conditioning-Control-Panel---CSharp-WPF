@@ -384,4 +384,54 @@ public class NeutralInstallerBaselineTests
         Assert.Contains("BuiltInMods.BambiSleepId", block, StringComparison.Ordinal);
         Assert.DoesNotContain("IsCCPDefault", block, StringComparison.Ordinal);
     }
+
+    // ---- the way out is written on the tab (item 6) -------------------------------------
+
+    private static readonly string[] LanguageFiles =
+        { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" };
+
+    /// <summary>
+    /// A safety valve nobody can find is not a safety valve. The exit hint has to be on the tab for
+    /// the whole lockdown, in every language, and it has to name the phrase the code actually
+    /// compares against - LockdownService.TryExitWithPhrase matches the literal English "let me
+    /// out", so that half of the string is not translatable and must survive in all nine files.
+    /// </summary>
+    [Fact]
+    public void TheExitHintIsOnTheLockdownTabInEveryLanguage()
+    {
+        var xaml = AppText("Views", "Tabs", "LockdownTabView.xaml");
+        Assert.Contains("{loc:Str lockdown_exit_hint}", xaml, StringComparison.Ordinal);
+
+        // Inside the panel that is only visible while a lockdown runs, not the setup panel.
+        var active = xaml.IndexOf("x:Name=\"LockdownActivePanel\"", StringComparison.Ordinal);
+        var hint = xaml.IndexOf("lockdown_exit_hint", StringComparison.Ordinal);
+        Assert.True(active > 0 && hint > active, "the exit hint is outside LockdownActivePanel");
+
+        foreach (var lang in LanguageFiles)
+        {
+            var path = Path.Combine(RepoRoot(), "ConditioningControlPanel",
+                "Localization", "Languages", lang + ".json");
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+            Assert.True(doc.RootElement.TryGetProperty("lockdown_exit_hint", out var value),
+                lang + ".json has no lockdown_exit_hint - the tab would render the raw key");
+            Assert.Contains("let me out", value.GetString() ?? "", StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// The hint states the mechanic; it must not become the mechanic. Possession rewrites visible
+    /// text during a lockdown, so this one line is excluded the same way the emergency-exit button
+    /// is - the way out may not be edited by the thing the user is trying to get out of.
+    /// </summary>
+    [Fact]
+    public void TheExitMechanicIsUnchangedAndTheHintCannotBePossessed()
+    {
+        var xaml = AppText("Views", "Tabs", "LockdownTabView.xaml");
+        var hint = xaml.IndexOf("lockdown_exit_hint", StringComparison.Ordinal);
+        var block = xaml.Substring(Math.Max(0, hint - 200), Math.Min(400, xaml.Length - Math.Max(0, hint - 200)));
+        Assert.Contains("poss:Possession.Exclude=\"True\"", block, StringComparison.Ordinal);
+
+        Assert.Contains("\"let me out\"", AppText("Services", "Haptics", "LockdownService.cs"), StringComparison.Ordinal);
+        Assert.Contains("_lockdownTimerClickCount >= 5", AppText("MainWindow", "MainWindow.Lab.cs"), StringComparison.Ordinal);
+    }
 }

@@ -5321,6 +5321,7 @@
   "ee_window_title": "Emergency Exit",
   "lockdown_ee_button": "EMERGENCY EXIT",
   "lockdown_ee_sub": "press it if you want out",
+  "lockdown_exit_hint": "to end early, click the timer and type: let me out",
   "lockdown_ee_tooltip": "Opens the way out. Getting through it is still up to you.",
   "lockdown_badge_label": "LOCKDOWN",
   "lockdown_badge_end": "End",

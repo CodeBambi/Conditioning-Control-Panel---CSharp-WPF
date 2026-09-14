@@ -4718,6 +4718,7 @@
   "ee_window_title": "非常口",
   "lockdown_ee_button": "非常口",
   "lockdown_ee_sub": "出たいなら押して",
+  "lockdown_exit_hint": "早く終えたいときはタイマーをクリックして入力: let me out",
   "lockdown_ee_tooltip": "出口を開きます。通り抜けられるかはあなた次第です。",
   "lockdown_badge_label": "ロックダウン",
   "lockdown_badge_end": "終了",

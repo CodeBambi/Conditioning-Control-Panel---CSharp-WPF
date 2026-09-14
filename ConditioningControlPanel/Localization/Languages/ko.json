@@ -4725,6 +4725,7 @@
   "ee_window_title": "비상구",
   "lockdown_ee_button": "비상 탈출구",
   "lockdown_ee_sub": "나가고 싶으면 눌러",
+  "lockdown_exit_hint": "일찍 끝내려면 타이머를 클릭하고 입력하세요: let me out",
   "lockdown_ee_tooltip": "출구를 엽니다. 통과하는 것은 여전히 당신의 몫입니다.",
   "lockdown_badge_label": "락다운",
   "lockdown_badge_end": "종료",
