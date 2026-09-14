@@ -23,7 +23,7 @@ function total(cards) { let t = 0, a = false; for (const c of cards) { t += val(
 const natural = (cards) => cards.length === 2 && total(cards).total === 21;
 const clone = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)));
 
-export function createMockServer({ sp = 57, now = () => Date.now(), open = true, floorMs = 8000, seed = 11, autoStandMs = DAY_MS } = {}) {
+export function createMockServer({ sp = 57, now = () => Date.now(), open = true, floorMs = 5000, seed = 11, autoStandMs = DAY_MS } = {}) {
   const user = { sp, hand: null, openedAt: 0, n: 0, nextDealAt: 0, netSp: 0 };
   const receipts = new Map(), faults = [], scripts = [], log = [];
   let rnd = mulberry32(seed);

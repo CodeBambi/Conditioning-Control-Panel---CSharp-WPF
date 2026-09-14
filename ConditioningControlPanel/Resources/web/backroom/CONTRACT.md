@@ -458,6 +458,7 @@ export async function mount(ctx) {
 Where these disagree with the sections above, these win.
 
 1. **Table v5:** `emi3` pays 400 at 1 in 12,987 (was 2,500 at 1 in 25,000). Paytable constant `TABLE_V5`.
+   Superseded by table v6 (10.14).
 2. **Freezes are sealed from melt:** a freeze spin and everything it expands into neither consume nor
    start melt; `melt` comes back exactly as it went in.
 3. **A re-spin keeps the hold:** a `spiral2` re-spin won on a freeze spin repeats the frozen table with the
@@ -786,7 +787,7 @@ auto-stand after 24 h.
   publicHand, autoStandAt }`. `cost` = SP this call took, `returned` = SP this call credited (0 while the hand is
   open), `sp` after both, `netSp += sp - spBefore`.
 - Refusals: `closed` (403), `bad_request`, `hand_open`, `no_hand`, `stale`, `illegal`, `insufficient`, `too_fast`,
-  `auto_stood`, `busy`. Env `CARDS_FLOOR_MS`, default 8000 (the sim's bot floor), between deals only; moves have no
+  `auto_stood`, `busy`. Env `CARDS_FLOOR_MS`, default 5000 (the sim's bot floor; 10.14), between deals only; moves have no
   floor beyond the 60/min limiter. `state.floorMs` echoes it.
 
 **Velvet Vortex (`/v2/backroom/roulette/*`, `proxy/backroom-roulette-routes.js`).** Rules = `backroom-roulette.js`
@@ -921,3 +922,16 @@ and `state.rose`, and a mat with the 37 straights, rose, plum, sip, sink and dee
 Each spin of a tape plays `roulette.run` (plus `roulette.wake` when it wakes) and ends in exactly one
 `roulette.land.*`, which releases that spin's holds first. The beam, the rim and the turret keep turning at rest; Calm
 shows them still.
+
+## 10.14 Follow-up amendment (2026-09-14, owner "Path to play" and build question 6)
+
+Where this section disagrees with anything above, it wins.
+
+1. **Slot table v6:** `emi3` pays 400 at 1 in 6,494 (154 per million, was 1 in 12,987). Every other plain pay
+   weight is the v5 weight scaled by about 0.9715; pays, melt, freeze, tape and seed rules are unchanged. Plain
+   RTP and every held symbol class stay exactly 1.0200. Paytable constant `TABLE_V6`. Published plain odds:
+   `emi3` 1 in 6,494, `gif3same` 1 in 144, `sub3` 1 in 115, `spiral3` 1 in 115, `gif3` 1 in 12, `sub2` 1 in 14,
+   `spiral2` 1 in 14, `melt` 1 in 17. Held odds are unchanged except the held spiral table (1 in 10 / 1 in 6 /
+   1 in 12, weights 100000 / 173593 / 86779). At the page pace (4.02 s an outcome, 896 outcomes an hour) a
+   jackpot lands about once per 7.3 hours of play. The page prints `state.table`; it keeps no copy.
+2. **Cards deal floor:** `CARDS_FLOOR_MS` defaults to 5000 (was 8000); `state.floorMs` echoes it.
