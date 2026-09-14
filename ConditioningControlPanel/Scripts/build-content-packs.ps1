@@ -174,6 +174,7 @@ $PackSpecs = @(
         # vocabulary read aloud, and the out-of-box phrase pool is neutral now, so nothing in a
         # stock install ever asks for them. Entry paths are the install-relative ones, so an
         # installed pack puts them back exactly where ContentLocator probes.
+        # It also carries the three BambiSleep session presets, for the same reason.
         Id        = 'mod-bambi'
         File      = 'mod-bambi.zip'
         Label     = 'BambiSleep companion voice + trigger words'
@@ -184,6 +185,9 @@ $PackSpecs = @(
         )
         Files     = @()
         LooseFiles = @(
+            'assets\sessions\distant_doll.session.json'
+            'assets\sessions\gamer_girl.session.json'
+            'assets\sessions\good_girls_dont_cum.session.json'
             'Resources\sounds\00 Bimbo Drone.mp3'
             'Resources\sounds\BAMBI CUM AND COLLAPSE.MP3'
             'Resources\sounds\Bambi Does As Shes Told.mp3'
@@ -424,6 +428,10 @@ $CsprojStripPatterns = @(
     'Resources\sounds\PRIMPED AND PAMPERED.MP3'
     'Resources\sounds\SNAP AND FORGET.MP3'
     'Resources\sounds\ZAP COCK DRAIN OBEY.mp3'
+    # $(ContentPackSessionsExclude) -- the three BambiSleep session presets.
+    'assets\sessions\distant_doll.session.json'
+    'assets\sessions\gamer_girl.session.json'
+    'assets\sessions\good_girls_dont_cum.session.json'
     # $(ContentPackWebExclude)
     'Resources\web\intake\assets\vo\**\*.mp3'
     'Resources\web\intake\assets\sfx\**\*.mp3'

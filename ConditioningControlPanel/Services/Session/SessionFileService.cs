@@ -34,16 +34,19 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Path to built-in sessions in app assets
+        /// Install-dir-relative anchor for the shipped sessions. Resolved through
+        /// <see cref="ContentLocator"/> rather than joined onto the base directory, because this
+        /// folder is SPLIT: morning_drift ships in the installer, and the three BambiSleep presets
+        /// ride in the mod-bambi content pack under the content root.
         /// </summary>
-        public static string BuiltInSessionsFolder
-        {
-            get
-            {
-                var appDir = AppDomain.CurrentDomain.BaseDirectory;
-                return Path.Combine(appDir, "assets", "sessions");
-            }
-        }
+        public static readonly string BuiltInSessionsRelativeDir = Path.Combine("assets", "sessions");
+
+        /// <summary>
+        /// Path to built-in sessions in app assets. The install-dir copy when it exists, else the
+        /// downloaded-pack copy. Prefer <see cref="LoadBuiltInSessions"/>, which reads BOTH roots -
+        /// this single-folder view cannot see a split.
+        /// </summary>
+        public static string BuiltInSessionsFolder => ContentLocator.ResolveDirectory(BuiltInSessionsRelativeDir);
 
         /// <summary>
         /// Ensure the custom sessions folder exists
@@ -197,16 +200,20 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Load all built-in sessions from the Assets folder
+        /// Load all built-in sessions from the Assets folder - the UNION of the install dir and the
+        /// downloaded content packs, deduped by file name with the install dir winning. That union
+        /// is what makes a pack-provided session appear in the rack: installing mod-bambi drops its
+        /// three presets under the content root and the next reload picks them up, while a user who
+        /// never installs it sees only the neutral one that ships in the box.
+        ///
+        /// A root that has no such folder contributes nothing, so "no packs installed" is an
+        /// ordinary short list rather than an error.
         /// </summary>
         public List<SessionDefinition> LoadBuiltInSessions()
         {
             var sessions = new List<SessionDefinition>();
 
-            if (!Directory.Exists(BuiltInSessionsFolder))
-                return sessions;
-
-            foreach (var file in Directory.GetFiles(BuiltInSessionsFolder, "*.session.json"))
+            foreach (var file in ContentLocator.EnumerateFiles(BuiltInSessionsRelativeDir, "*.session.json"))
             {
                 var session = ImportSession(file);
                 if (session != null)

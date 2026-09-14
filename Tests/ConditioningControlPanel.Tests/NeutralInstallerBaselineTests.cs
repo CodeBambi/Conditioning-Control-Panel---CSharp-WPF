@@ -242,4 +242,66 @@ public class NeutralInstallerBaselineTests
         Assert.Contains("ModOwnsBaselineVoice(card.ModId)",
             AppText("Dialogs", "ModPickerDialog.xaml.cs"), StringComparison.Ordinal);
     }
+    // ---- themed session presets travel with their mod (item 4) --------------------------
+
+    private static readonly string[] ThemedSessionFiles =
+        { "distant_doll.session.json", "gamer_girl.session.json", "good_girls_dont_cum.session.json" };
+
+    /// <summary>
+    /// Three of the four shipped presets are BambiSleep programmes down to their phrase lists, so
+    /// they leave the installer with the rest of that mod's content. The files stay in the repo -
+    /// they are the pack build's inputs - so this checks the BUILD, not the tree.
+    /// </summary>
+    [Fact]
+    public void TheThemedSessionPresetsAreStrippedFromTheBuild()
+    {
+        var csproj = AppText("ConditioningControlPanel.csproj");
+        var script = AppText("Scripts", "build-content-packs.ps1");
+
+        foreach (var file in ThemedSessionFiles)
+        {
+            Assert.Contains(@"assets\sessions\" + file, csproj, StringComparison.Ordinal);
+            Assert.Contains(@"'assets\sessions\" + file + "'", script, StringComparison.Ordinal);
+            Assert.True(
+                File.Exists(Path.Combine(RepoRoot(), "ConditioningControlPanel", "assets", "sessions", file)),
+                file + " is gone from the repo - it is the pack build's input, not build output");
+        }
+    }
+
+    /// <summary>
+    /// The property has to be declared ABOVE the ItemGroup that uses it. MSBuild evaluates a project
+    /// body in document order, so a ContentPack* property defined with the others at the bottom of
+    /// the file expands to nothing here and strips nothing at all - a silent no-op that ships the
+    /// themed presets anyway.
+    /// </summary>
+    [Fact]
+    public void TheSessionStripPropertyIsDeclaredBeforeItIsUsed()
+    {
+        var csproj = AppText("ConditioningControlPanel.csproj");
+        var declared = csproj.IndexOf("<ContentPackSessionsExclude>", StringComparison.Ordinal);
+        var used = csproj.IndexOf("$(ContentPackSessionsExclude)", StringComparison.Ordinal);
+
+        Assert.True(declared > 0, "the session strip property is gone");
+        Assert.True(used > declared,
+            "$(ContentPackSessionsExclude) is used before it is declared - it would expand to nothing");
+    }
+
+    /// <summary>
+    /// morning_drift is the one that stays in the box, so the rack is never empty on a fresh
+    /// install, and the loader reads BOTH roots so an installed pack's presets rejoin it.
+    /// </summary>
+    [Fact]
+    public void TheNeutralSessionStaysAndTheLoaderReadsBothRoots()
+    {
+        var csproj = AppText("ConditioningControlPanel.csproj");
+        var start = csproj.IndexOf("<ContentPackSessionsExclude>", StringComparison.Ordinal);
+        var end = csproj.IndexOf("</ContentPackSessionsExclude>", StringComparison.Ordinal);
+        Assert.DoesNotContain("morning_drift", csproj.Substring(start, end - start), StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "assets", "sessions", "morning_drift.session.json")));
+
+        var loader = AppText("Services", "Session", "SessionFileService.cs");
+        Assert.Contains("ContentLocator.EnumerateFiles(BuiltInSessionsRelativeDir", loader, StringComparison.Ordinal);
+        Assert.DoesNotContain("Directory.GetFiles(BuiltInSessionsFolder", loader, StringComparison.Ordinal);
+    }
 }
