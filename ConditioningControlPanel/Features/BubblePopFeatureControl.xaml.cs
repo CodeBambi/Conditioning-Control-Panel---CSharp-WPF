@@ -152,6 +152,7 @@ namespace ConditioningControlPanel.Features
                 ChkSolidMode.IsChecked = s.BubbleSharedHost;
                 SelectMotion(s.BubbleMotionStyle);
                 ChkBubbleGazePop.IsChecked = s.BubbleGazePopEnabled;
+                ChkBrainDrainBubble.IsChecked = s.BubbleBrainDrainEnabled;
 
                 // Easter-egg hint (companion auto-pops a lingering effect bubble): name the active persona.
                 var persona = App.Mods?.ActiveModId switch
@@ -305,7 +306,10 @@ namespace ConditioningControlPanel.Features
         {
             bool rain = Services.AmbientBubbleMotion.RainOwned;
             bool spiral = Services.AmbientBubbleMotion.SpiralInOwned;
-            MotionRow.Visibility = rain || spiral ? Visibility.Visible : Visibility.Collapsed;
+            // The BOX is what collapses now, not the row: Motion and the Brain Drain bubble both
+            // arrive with the v2 prizes, so with none owned there is nothing in here to show.
+            V2Box.Visibility = rain || spiral ? Visibility.Visible : Visibility.Collapsed;
+            V2BoxBadge.Content ??= FeatureCard.NewV2Badge(new Thickness(0));
             bool wasLoading = _isLoading;
             _isLoading = true;
             try
@@ -401,6 +405,20 @@ namespace ConditioningControlPanel.Features
                 App.Bubbles.Stop();
                 App.Bubbles.Start();
             }
+        }
+
+        /// <summary>
+        /// The Brain Drain bubble (Bubbles v2, wave 2). Default ON, so buying the prize is the only
+        /// opt-in; this row is the way back out. It grants nothing on its own - the roll also asks
+        /// PrizeGrants every time (see BrainDrainBubble.RollPool).
+        /// </summary>
+        private void ChkBrainDrainBubble_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.BubbleBrainDrainEnabled = ChkBrainDrainBubble.IsChecked ?? false;
+            App.Settings?.Save();
         }
 
         private void ChkTriggers_Changed(object sender, RoutedEventArgs e)

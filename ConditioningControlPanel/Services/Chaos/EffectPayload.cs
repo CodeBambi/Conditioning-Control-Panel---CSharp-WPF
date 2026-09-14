@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 
 namespace ConditioningControlPanel.Services.Chaos;
@@ -155,6 +155,45 @@ public sealed class OverlayPayload : EffectPayload
             }
         }
         catch (Exception ex) { App.Logger?.Debug("OverlayPayload: {E}", ex.Message); }
+    }
+}
+
+/// <summary>
+/// Bubbles v2, wave 2: the Brain Drain bubble's pop. Ten seconds of the real Brain Drain
+/// overlay - the melting-glass one at full motion, the plain blur under Reduced/Off - at the
+/// user's own blur strength. Deliberately NOT <see cref="OverlayPayload"/>'s "braindrain" arm,
+/// which is a full-screen wash of a flash image and never touches the drain at all.
+///
+/// Every decision here lives in <see cref="BrainDrainBubble"/>; this is only the wiring.
+/// </summary>
+public sealed class BrainDrainMeltPayload : EffectPayload
+{
+    public override string DisplayName => "braindrain melt";
+    public override EffectBubblePayloadKind Kind => EffectBubblePayloadKind.Overlay;
+
+    public override void Fire()
+    {
+        try
+        {
+            var overlay = App.Overlay;
+            if (overlay == null) return;
+
+            // One drain at a time. The user's own loop wins outright - it has no duration, so a
+            // timed overlay landing on top of it would end by tearing THEIR drain down ten seconds
+            // later. The pop still paid its XP before we got here, so nothing is lost.
+            bool userDrainUp = App.BrainDrain?.IsRunning == true || overlay.BrainDrainVisualUp;
+            if (!BrainDrainBubble.ShouldPlayOverlay(overlay.TimedBrainDrainActive, userDrainUp))
+            {
+                App.Logger?.Information("Bubble: brain drain pop paid XP only - a drain is already up");
+                return;
+            }
+
+            var kind = BrainDrainBubble.OverlayKindFor(MotionFx.Level);
+            overlay.ShowOverlayTimed(kind, BrainDrainBubble.OverlayMs,
+                                     BrainDrainBubble.OverlayOpacity(
+                                         App.Settings?.Current?.BrainDrainBlurStrength ?? 50));
+        }
+        catch (Exception ex) { App.Logger?.Debug("BrainDrainMeltPayload: {E}", ex.Message); }
     }
 }
 
