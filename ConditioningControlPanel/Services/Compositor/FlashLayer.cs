@@ -1,3 +1,5 @@
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.Flash;
 using SkiaSharp;
 
 namespace ConditioningControlPanel.Services.Compositor;
@@ -18,6 +20,11 @@ namespace ConditioningControlPanel.Services.Compositor;
 /// Renders on the MAIN surface (flashes stay visible in recordings, like every non-braindrain
 /// effect). Mouse clicks can't reach the click-through host: FlashService runs a global-hook
 /// hit-test over these items (like the shared-host bubbles) for clickable flashes.
+///
+/// Flashes v2: an item may carry a <see cref="FlashMotionState"/>. The layer steps it in Update
+/// (the one place with delta time) and keeps the item's X/Y/W/H at the media's current
+/// axis-aligned bounds, so the click snapshot and the heartbeat's state-bag mirror read the live
+/// rect. A moving item dirties the layer only when the maths actually moved it.
 /// </summary>
 public sealed class FlashLayer : BaseLayer
 {
@@ -41,6 +48,9 @@ public sealed class FlashLayer : BaseLayer
         public int FrameIndex;
         /// <summary>Gaze-dwell inflate about center, 1.0..1.1 (SetGazeDwellProgress parity).</summary>
         public double DwellScale = 1.0;
+
+        /// <summary>Flashes v2 motion, null or Still for a classic held flash. Stepped by Update.</summary>
+        public FlashMotionState? Motion;
 
         // Glow (lucky / sparkle-boost tiers). Sigma is the WPF DropShadow blur radius / 3
         // (same conversion as the brain-drain layer). LuckyPulse replicates the 400ms
@@ -94,12 +104,14 @@ public sealed class FlashLayer : BaseLayer
     /// </summary>
     public FlashItem Spawn(SKImage[] frames, float x, float y, float w, float h,
         float paddingPx, float cornerRadiusPx,
-        SKColor glowColor, float glowSigmaPx, double glowOpacity, bool luckyPulse)
+        SKColor glowColor, float glowSigmaPx, double glowOpacity, bool luckyPulse,
+        FlashMotionState? motion = null)
     {
         var item = new FlashItem
         {
             Frames = frames,
             X = x, Y = y, W = w, H = h,
+            Motion = motion,
             PaddingPx = paddingPx,
             CornerRadiusPx = cornerRadiusPx,
             HasGlow = glowSigmaPx > 0,
@@ -108,6 +120,9 @@ public sealed class FlashLayer : BaseLayer
             GlowOpacity = glowOpacity,
             LuckyPulse = luckyPulse
         };
+        // A pendulum re-homes the picture under its pivot at spawn: start from the motion's rect.
+        if (motion != null && motion.Style != FlashMotionStyle.Still)
+            SyncRect(item, motion);
         _items.Add(item);
         _dirty = true;
         SetActive(true);
@@ -147,6 +162,14 @@ public sealed class FlashLayer : BaseLayer
             var item = _items[i];
             item.ElapsedSec += delta.TotalSeconds;
 
+            // Flashes v2: step the motion here (the one place with delta time). Step answers
+            // false for a Still item and for a zero delta, so a held flash stays clean.
+            if (item.Motion != null && FlashMotion.Step(item.Motion, delta.TotalSeconds))
+            {
+                SyncRect(item, item.Motion);
+                _dirty = true;
+            }
+
             // Compare against what was last drawn instead of having FlashService announce its
             // writes: a missed call site there would be a STUCK-CLEAN (visually frozen) flash,
             // whereas a state compare self-heals on the next tick. A lucky pulse animates its
@@ -173,12 +196,24 @@ public sealed class FlashLayer : BaseLayer
             if (frames == null || frames.Length == 0 || item.Opacity <= 0) continue;
 
             var rect = new SKRect(item.X, item.Y, item.X + item.W, item.Y + item.H);
-            if (!rect.IntersectsWith(boundsPx)) continue;   // cull to this monitor
+            if (!rect.IntersectsWith(boundsPx)) continue;   // cull to this monitor (the AABB)
 
             var alpha = (byte)Math.Clamp(item.Opacity * 255, 0, 255);
             var image = frames[Math.Clamp(item.FrameIndex, 0, frames.Length - 1)];
 
             int saves = canvas.Save();
+            // Pendulum: rotate the canvas about the pivot and draw the media hanging straight
+            // down the rope in that frame. item.X..H stays the axis-aligned bounds of the rotated
+            // picture (for gaze/click); the draw rect is the unrotated media in pivot space.
+            if (item.Motion is { Style: FlashMotionStyle.Pendulum } pend)
+            {
+                canvas.RotateDegrees((float)(pend.AngleRad * 180.0 / Math.PI), (float)pend.PivotX, (float)pend.PivotY);
+                var cx = (float)pend.PivotX;
+                var cy = (float)(pend.PivotY + pend.Rope);
+                var hw = (float)(pend.MediaW / 2.0);
+                var hh = (float)(pend.MediaH / 2.0);
+                rect = new SKRect(cx - hw, cy - hh, cx + hw, cy + hh);
+            }
             // Gaze-dwell inflate about the rect center (RenderTransform ScaleTransform parity).
             if (item.DwellScale > 1.001)
             {
@@ -237,6 +272,12 @@ public sealed class FlashLayer : BaseLayer
             canvas.DrawImage(image, fit, _imagePaint);
             canvas.RestoreToCount(saves);
         }
+    }
+
+    /// <summary>Copy the motion's current axis-aligned bounds onto the item's bookkeeping rect.</summary>
+    private static void SyncRect(FlashItem item, FlashMotionState m)
+    {
+        item.X = (float)m.X; item.Y = (float)m.Y; item.W = (float)m.W; item.H = (float)m.H;
     }
 
     private static SKRect UniformFit(int srcW, int srcH, SKRect dest)

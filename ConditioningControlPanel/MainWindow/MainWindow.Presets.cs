@@ -1145,6 +1145,9 @@ namespace ConditioningControlPanel
                 // star in the same change, so the two can never disagree.
                 RefreshMysteryTile();
                 RefreshWallActiveStates();
+                // Bubbles v2: the Bubble Pop tile wears the v2 pill while any prize style is owned.
+                if (dash.CardBubblePop != null)
+                    dash.CardBubblePop.ShowV2Badge = Services.AmbientBubbleMotion.AnyV2Owned;
 
                 // Opportunistic server-override check: the 6h gate inside makes this free on
                 // every repaint, and it is exactly the cadence the ? box needs to catch a

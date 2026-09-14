@@ -1,6 +1,7 @@
 <UserControl x:Class="ConditioningControlPanel.Features.FeatureCard"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              Cursor="Hand"
              MouseLeftButtonUp="OnClick"
              MouseRightButtonUp="OnRightClick">
@@ -171,6 +172,26 @@
                 <TextBlock x:Name="TxtTierBadge"
                            Text="TIER 1"
                            Foreground="{DynamicResource PinkBrush}"
+                           FontSize="9"
+                           FontWeight="Bold"/>
+            </Border>
+
+            <!-- v2 pill (top-right, beside the help icon). The tier badge's pill family in a
+                 fancier metal, worn when the feature owns a Back Room v2 style (ShowV2Badge):
+                 the bubbles card and the flash card both wear it. Colour lives in
+                 FeatureCard.V2BadgeBrush so the option pickers can wear the same pill; the DP
+                 handler paints it. -->
+            <Border x:Name="V2BadgeHost"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Margin="0,8,34,0" Padding="6,2,7,3"
+                    CornerRadius="7"
+                    Background="#D91A1A2E"
+                    BorderThickness="1"
+                    IsHitTestVisible="False"
+                    Panel.ZIndex="11"
+                    Visibility="Collapsed">
+                <TextBlock x:Name="TxtV2Badge"
+                           Text="{loc:Str badge_v2}"
                            FontSize="9"
                            FontWeight="Bold"/>
             </Border>

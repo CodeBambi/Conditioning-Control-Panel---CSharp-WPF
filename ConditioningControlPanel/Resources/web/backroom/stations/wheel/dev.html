@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Daily Daze wheel - dev harness</title>
+<!-- Dev harness only: a mock ctx, the hypno kit's mock host and mock-server.js stand in for the room, the host and the server.
+     Serve ConditioningControlPanel/Resources as the web root, then open /web/backroom/stations/wheel/dev.html.
+     Query: ?sp=57&latency=120&reduced&calm&full&gates=off&young&taken&pot=12&musthit&carry=2&next=jackpot|snooze|deep|glow&spun&day=2026-09-14T22:00:00Z&hook
+     #screen draws the host's fullscreen primitives from what the mock host recorded (tests/host-screen.js).
+     Standalone, so no ctx.hostBack: the station shows its own Back and SP chip (?hook fakes the room's ctx.spReadout). -->
+<script type="importmap">{"imports":{"three":"../../../vendor/three/three.module.min.js","three/addons/":"../../../vendor/three/addons/"}}</script>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #160e20; font: 12px Segoe UI, Arial, sans-serif; color: #fce5f3; }
+  #room { position: fixed; inset: 0; background: #160e20 url(../../room/backroom_final.png) center / cover no-repeat; }
+  #root { position: fixed; inset: 0; }
+  #sit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 12px 22px; border-radius: 20px;
+         background: #28172fea; color: inherit; border: 1px solid #edb1d177; font: inherit; font-size: 14px; cursor: pointer; }
+  #dev { position: fixed; top: 130px; right: 8px; z-index: 50; display: flex; flex-direction: column; gap: 4px; opacity: .85; }
+  #dev button { font: 11px Segoe UI, Arial, sans-serif; padding: 3px 8px; }
+  #dev summary { cursor: pointer; text-align: right; }
+  #fakechip { position: fixed; top: 12px; right: 12px; z-index: 60; padding: 6px 12px; border-radius: 20px; background: #2a1838; }
+  #screen { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 40; }
+</style>
+</head>
+<body>
+<div id="room"></div>
+<div id="root"></div>
+<span id="fakechip" hidden>SP <b></b></span>
+<canvas id="screen" aria-hidden="true"></canvas>
+<button id="sit" type="button">Visit the wheel</button>
+<details id="dev"><summary>dev</summary>
+  <button data-do="jackpot">next: jackpot</button>
+  <button data-do="snooze">next: snooze</button>
+  <button data-do="deep">next: deep 40</button>
+  <button data-do="glow">next: glow 5</button>
+  <button data-do="busy">fault: busy x2</button>
+  <button data-do="timeout">fault: lost reply</button>
+  <button data-do="musthit">pot: must hit</button>
+  <button data-do="door">toggle door</button>
+  <button data-do="tomorrow">clock: next day</button>
+</details>
+<script type="module">
+import { mount } from './station.js';
+import { createMockServer } from './mock-server.js';
+import { createMockHost } from '../../shared/hypno/tests/mock-host.js';
+import { createHostScreen } from './tests/host-screen.js';
+
+const q = new URLSearchParams(location.search);
+const num = (k, d) => (q.has(k) ? Number(q.get(k)) : d);
+// ?day= moves the whole page clock (the station's countdown and the mock's day), so a midnight can be watched.
+let skew = q.has('day') ? Date.parse(q.get('day')) - Date.now() : 0;
+const realNow = Date.now.bind(Date);
+Date.now = () => realNow() + skew;
+const server = createMockServer({ sp: num('sp', 57), carry: num('carry', 0), eligible: !q.has('young'), now: () => Date.now() });
+if (q.has('pot')) server.potAge(num('pot', 0));
+if (q.has('musthit')) server.mustHit();   // 10.16.E: the pot at the line, nobody has taken it
+if (q.has('taken')) server.wonToday();
+if (q.has('next')) server.script(...q.get('next').split(','));
+if (q.has('spun')) await server.handle('spin', { idem: 'devspunalreadytoday01' });
+const latency = num('latency', 120), sent = [], spFns = new Set();
+const DEAL = [0, 1, 2, 3].map(i => new URL(`../slot/fallback/gif${i}.webp`, location.href).href);
+const off = q.get('gates') === 'off';
+const host = createMockHost({ deal: DEAL, latency: Math.min(latency, 60), reduced: q.has('reduced'),
+  intensity: q.has('calm') ? 'calm' : q.has('full') ? 'full' : 'normal',
+  gates: off ? { flash: false, subliminal: false, spiral: false, brainDrain: false, tunnel: false } : null });
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const chip = document.getElementById('fakechip'), chipState = { owed: 0, shown: null };
+const paintChip = () => { chip.querySelector('b').textContent = String(chipState.shown ?? Math.max(0, server.user.sp - chipState.owed)); };
+
+const ctx = host.attach({
+  root: document.getElementById('root'),
+  bridge: { send: m => { sent.push(m); } },
+  request: async (op, body, idem) => { await wait(latency); const r = await server.handle(op, body, idem); sent.push({ type: 'station-request', op, body, result: r }); return r; },
+  sp: () => server.user.sp,
+  onSp: fn => { spFns.add(fn); return () => spFns.delete(fn); },
+  lex: (key, fallback) => fallback,
+  standUp: () => stand(),
+  variant: null,
+  hostBack: q.has('hook') || undefined,
+  spReadout: q.has('hook') ? {
+    set(v) { chipState.shown = v; paintChip(); }, owe(n) { chipState.owed = typeof n === 'function' ? n() : n; paintChip(); },
+    thud() { sent.push({ type: 'chip-thud' }); }, target() { return chip; },
+  } : undefined,
+});
+const screen = createHostScreen({ host, canvas: document.getElementById('screen'), urls: DEAL });
+if (q.has('hook')) { chip.hidden = false; paintChip(); }
+
+const station = await mount(ctx);
+const sit = document.getElementById('sit');
+async function stand() { await station.close(); sit.hidden = false; sit.focus(); }
+async function open() { sit.hidden = true; await station.open(); }
+sit.onclick = open;
+
+let door = true;
+document.getElementById('dev').addEventListener('click', e => {
+  const act = e.target.dataset && e.target.dataset.do;
+  if (['jackpot', 'snooze', 'deep', 'glow'].includes(act)) server.script(act);
+  if (act === 'busy') server.fail('spin', 'busy', 2);
+  if (act === 'timeout') server.fail('spin', 'timeout', 1, { apply: true });
+  if (act === 'musthit') server.mustHit();
+  if (act === 'door') server.setOpen(door = !door);
+  if (act === 'tomorrow') skew += 86400000;
+});
+
+window.dev = { server, station, ctx, sent, host, screen, open, stand, setSkew: ms => { skew = ms; } };
+</script>
+</body>
+</html>

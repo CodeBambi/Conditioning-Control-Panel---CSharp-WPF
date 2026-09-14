@@ -19,7 +19,9 @@ using NAudio.Wave;
 using Serilog;
 using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.Flash;
 using ConditioningControlPanel.Services.Fyp.Online;
+using ConditioningControlPanel.Services.Prizes;
 using ConditioningControlPanel.Services.Remix;
 using SkiaSharp;
 using Image = System.Windows.Controls.Image;
@@ -1345,7 +1347,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         /// <param name="overrideLifetimeMs">If provided, overrides the calculated lifetime (used for hydra linked timing)~ 🔗</param>
         /// <param name="hydraGeneration">How many hydra hops deep these spawns are (0 = original flash)~ 🐙</param>
-        private void ShowImages(List<LoadedImageData> images, string? soundPath, bool isMultiplication, int? overrideLifetimeMs = null, int hydraGeneration = 0, int? customDuration = null, bool suppressHaptic = false, int? oneShotGen = null)
+        private void ShowImages(List<LoadedImageData> images, string? soundPath, bool isMultiplication, int? overrideLifetimeMs = null, int hydraGeneration = 0, int? customDuration = null, bool suppressHaptic = false, int? oneShotGen = null, FlashMotionStyle? inheritMotion = null)
         {
             // #1045: this load was dispatched by a point-fired flash that has since been cancelled.
             // Checked BEFORE the _isRunning/_oneShotActive pair because that pair is inert while the
@@ -1447,7 +1449,7 @@ namespace ConditioningControlPanel.Services
                 
                 if (delayMs == 0)
                 {
-                    SpawnFlashWindow(imageData, settings, lifetimeMs, hydraGeneration, suppressHaptic, oneShotGen);
+                    SpawnFlashWindow(imageData, settings, lifetimeMs, hydraGeneration, suppressHaptic, oneShotGen, inheritMotion);
                 }
                 else
                 {
@@ -1456,6 +1458,7 @@ namespace ConditioningControlPanel.Services
                     var capturedGeneration = hydraGeneration;
                     var capturedSuppressHaptic = suppressHaptic;
                     var capturedOneShotGen = oneShotGen;
+                    var capturedMotion = inheritMotion;
                     var spawnToken = CurrentRunToken();
                     Task.Delay(delayMs, spawnToken).ContinueWith(_ =>
                     {
@@ -1467,7 +1470,7 @@ namespace ConditioningControlPanel.Services
                                 if (OneShotGate.IsRetired(capturedOneShotGen, Volatile.Read(ref _oneShotGeneration)))
                                     return;
                                 if (_isRunning || _oneShotActive)
-                                    SpawnFlashWindow(capturedData, settings, capturedLifetime, capturedGeneration, capturedSuppressHaptic, capturedOneShotGen);
+                                    SpawnFlashWindow(capturedData, settings, capturedLifetime, capturedGeneration, capturedSuppressHaptic, capturedOneShotGen, capturedMotion);
                             });
                         }
                         catch (Exception ex) { Diag.Swallowed(ex); }
@@ -1498,7 +1501,7 @@ namespace ConditioningControlPanel.Services
         /// CopilotNotes: Each window gets a CTS that fires after lifetimeMs, triggering independent fade-out.
         /// When hydraGeneration > 0 and independent timing is active, XP is reduced by 25% per generation (floor 10%).
         /// </summary>
-        private void SpawnFlashWindow(LoadedImageData imageData, AppSettings settings, int lifetimeMs, int hydraGeneration = 0, bool suppressHaptic = false, int? oneShotGen = null)
+        private void SpawnFlashWindow(LoadedImageData imageData, AppSettings settings, int lifetimeMs, int hydraGeneration = 0, bool suppressHaptic = false, int? oneShotGen = null, FlashMotionStyle? inheritMotion = null)
         {
             // #1045: the point-fired flash that asked for this spawn has been cancelled since.
             if (OneShotGate.IsRetired(oneShotGen, Volatile.Read(ref _oneShotGeneration))) return;
@@ -1790,8 +1793,12 @@ namespace ConditioningControlPanel.Services
                 {
                     // Convert frames + spawn the layer item; the heartbeat drives it from here
                     // via window.LayerItem (fade, GIF frames, gaze dwell).
+                    // Flashes v2: a hydra child inherits the parent's kind (its own start state
+                    // is rolled at spawn); an original resolves the picker through ownership and
+                    // MotionLevel. The classic and solid paths never move.
+                    window.MotionStyle = ResolveMotionStyle(settings, inheritMotion);
                     SpawnLayerVisual(window, imageData, monitor,
-                        layerGlowColor, layerGlowRadius, layerGlowOpacity, isLucky);
+                        layerGlowColor, layerGlowRadius, layerGlowOpacity, isLucky, window.MotionStyle);
 
                     if (!suppressHaptic)
                         _ = App.Haptics?.FlashDecayVibeAsync();
@@ -2050,6 +2057,21 @@ namespace ConditioningControlPanel.Services
         #endregion
 
         /// <summary>
+        /// Flashes v2: the style one flash plays. A hydra child takes the parent's kind; an
+        /// original takes the picker. Both go through FlashMotion.Resolve, which asks PrizeGrants
+        /// (never settings) and MotionFx.Level, so an unowned or Off pick plays as Still.
+        /// </summary>
+        private FlashMotionStyle ResolveMotionStyle(AppSettings settings, FlashMotionStyle? inherit)
+        {
+            var picked = inherit ?? settings.FlashMotionStyle;
+            if (picked == FlashMotionStyle.Still) return FlashMotionStyle.Still;
+            return FlashMotion.Resolve(picked,
+                PrizeGrants.IsGranted(PrizeGrants.FlashDriftBounce),
+                PrizeGrants.IsGranted(PrizeGrants.FlashPendulum),
+                MotionFx.Level, _random);
+        }
+
+        /// <summary>
         /// COMPOSITOR: convert the decoded frames and spawn this flash's layer item. The
         /// bookkeeping rect on <paramref name="window"/> (DIPs, already glow-expanded) converts
         /// to world px with the spawn monitor's own scale — the same math as host mode's Place.
@@ -2060,7 +2082,8 @@ namespace ConditioningControlPanel.Services
         /// from sweeping the still-itemless window during the conversion window.
         /// </summary>
         private void SpawnLayerVisual(FlashWindow window, LoadedImageData imageData, MonitorInfo monitor,
-            System.Windows.Media.Color glowColor, double glowRadius, double glowOpacity, bool luckyPulse)
+            System.Windows.Media.Color glowColor, double glowRadius, double glowOpacity, bool luckyPulse,
+            FlashMotionStyle motion = FlashMotionStyle.Still)
         {
             if (_flashLayer == null)
             {
@@ -2083,6 +2106,14 @@ namespace ConditioningControlPanel.Services
             var cornerRadiusPx = hasGlow ? (float)(12 * dpi) : 0f;
             var skGlowColor = new SkiaSharp.SKColor(glowColor.R, glowColor.G, glowColor.B);
             var glowSigmaPx = (float)(glowRadius * dpi / 3.0);   // WPF blur radius -> sigma (R/3)
+
+            // Flashes v2: roll the motion here on the UI thread (MotionFx.Level, _random) before the
+            // off-thread conversion. The spawn monitor converts to world px like the window rect;
+            // a pendulum re-homes under the monitor's top centre and the rope is clamped on screen.
+            FlashMotionState? motionState = motion == FlashMotionStyle.Still ? null
+                : FlashMotion.Create(motion, x, y, w, h,
+                    monitor.X * dpi, monitor.Y * dpi, monitor.Width * dpi, monitor.Height * dpi,
+                    MotionFx.Level, _random);
 
             window.LayerSpawnPending = true;
 
@@ -2133,7 +2164,7 @@ namespace ConditioningControlPanel.Services
 
                         window.LayerItem = layer.Spawn(frames, x, y, w, h,
                             paddingPx, cornerRadiusPx, skGlowColor, glowSigmaPx,
-                            glowOpacity, luckyPulse);
+                            glowOpacity, luckyPulse, motionState);
                         frames = null;   // ownership transferred — FlashLayer.Remove disposes them
 
                         if (window.IsClickable)
@@ -2298,7 +2329,7 @@ namespace ConditioningControlPanel.Services
                 {
                     // Calculate remaining lifetime from the clicked window for linked timing~ 🔗
                     var remainingMs = Math.Max(1000, (int)(window.ExpiresAt - DateTime.Now).TotalMilliseconds);
-                    TriggerMultiplication(maxHydra, currentCount, window.OriginalLifetimeMs, remainingMs, window.HydraGeneration, window.Monitor, window.OneShotGeneration);
+                    TriggerMultiplication(maxHydra, currentCount, window.OriginalLifetimeMs, remainingMs, window.HydraGeneration, window.Monitor, window.OneShotGeneration, window.MotionStyle);
                 }
             }
         }
@@ -2309,7 +2340,7 @@ namespace ConditioningControlPanel.Services
         /// When HydraLinkedTiming is true, children get parentRemainingMs; when false, they get a fresh full lifetime.
         /// parentGeneration is the clicked window's generation — children will be parentGeneration + 1.
         /// </summary>
-        private async void TriggerMultiplication(int maxHydra, int currentCount, int parentLifetimeMs, int parentRemainingMs, int parentGeneration, MonitorInfo? parentMonitor = null, int? oneShotGen = null)
+        private async void TriggerMultiplication(int maxHydra, int currentCount, int parentLifetimeMs, int parentRemainingMs, int parentGeneration, MonitorInfo? parentMonitor = null, int? oneShotGen = null, FlashMotionStyle parentMotion = FlashMotionStyle.Still)
         {
             try
             {
@@ -2365,7 +2396,8 @@ namespace ConditioningControlPanel.Services
                     await DispatcherHelper.RunOnUIAsync(() =>
                     {
                         // Pass null for sound - NO AUDIO FOR HYDRA
-                        ShowImages(loadedImages, null, true, capturedLifetime, capturedGeneration, oneShotGen: oneShotGen);
+                        // Flashes v2: children inherit the parent's motion kind, own start state.
+                        ShowImages(loadedImages, null, true, capturedLifetime, capturedGeneration, oneShotGen: oneShotGen, inheritMotion: parentMotion);
                     });
                 }
             }
@@ -2569,6 +2601,19 @@ namespace ConditioningControlPanel.Services
                         }
                     }
 
+                    // Flashes v2: a moving layer item owns its rect. Mirror it back into the state
+                    // bag in this monitor's DIPs so GazeFocusService (Left/Top/Width/Height) and the
+                    // overlap check keep reading the live picture; the click snapshot below reads
+                    // the item directly. A state bag has no hwnd, so these are plain properties.
+                    if (window.LayerItem is { Motion: { Style: not FlashMotionStyle.Still } } moving)
+                    {
+                        var d = window.Monitor.DpiScale > 0 ? window.Monitor.DpiScale : 1.0;
+                        window.Left = moving.X / d;
+                        window.Top = moving.Y / d;
+                        window.Width = moving.W / d;
+                        window.Height = moving.H / d;
+                    }
+
                     // Animate GIF frames
                     if (window.Frames.Count > 1 && (window.ImageControl != null || window.LayerItem != null))
                     {
@@ -2606,8 +2651,8 @@ namespace ConditioningControlPanel.Services
             if (toRemove.Count > 0)
                 App.Overlay?.NotifyTopWindowClosed();
 
-            // Layer flashes: refresh the click-hook hit snapshot (positions are static but
-            // items expire), and release the hook once the last one is gone.
+            // Layer flashes: refresh the click-hook hit snapshot (a v2 flash moves, and items
+            // expire), and release the hook once the last one is gone.
             RebuildLayerHitSnapshot();
 
             // Clear stale references in snapshot so removed windows can be GC'd
@@ -3219,6 +3264,23 @@ namespace ConditioningControlPanel.Services
                     }
                 }
                 return result;
+            }
+        }
+
+        /// <summary>
+        /// The DISK half of the flash pool as a copy, after the same refresh and deselection prune
+        /// <see cref="GetChaosImagePaths"/> runs. The Back Room media feed deals from this instead:
+        /// it needs the whole list to run a seeded shuffle (a random draw cannot be replayed), and
+        /// only disk files have a <c>ccp.assets</c> url behind them - pack entries decrypt to temp
+        /// copies and remote entries are https urls, neither of which the page can be pointed at.
+        /// </summary>
+        internal List<string> SnapshotLocalImagePaths()
+        {
+            lock (_lockObj)
+            {
+                if (_imageList.Count == 0 && _packImageList.Count == 0) RefreshImageLists();
+                PruneDeselectedFromPools();
+                return new List<string>(_imageList);
             }
         }
 
@@ -4588,6 +4650,9 @@ namespace ConditioningControlPanel.Services
         /// not sweep it. Cleared by the spawn continuation whether it spawns or bails.
         /// </summary>
         public bool LayerSpawnPending { get; set; }
+
+        /// <summary>Flashes v2: the motion kind this flash resolved to; hydra children inherit it.</summary>
+        public FlashMotionStyle MotionStyle { get; set; }
 
         /// <summary>
         /// The fade alpha the heartbeat animates: window Opacity in per-window mode, the hosted

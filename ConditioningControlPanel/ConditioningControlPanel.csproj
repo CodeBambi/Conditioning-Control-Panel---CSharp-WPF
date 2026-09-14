@@ -549,7 +549,8 @@
       $(MSBuildProjectDirectory)\Resources\web\dtrh\assets\**\*.mp3
     </ContentPackWebExcludeAbs>
     <!-- The four arcademy *demo.html browser harnesses, plus the games' node smoke
-         checks (games\*\smoke\*.mjs). Listed once here and referenced by
+         checks (games\*\smoke\*.mjs), the Back Room smoke and the hypno kit's test pages
+         (shared\hypno\tests: kit.html, the mock host, the probe station). Listed once here and referenced by
          BOTH the <Content> Exclude below AND the CopyContentAfterPublish WebFiles Exclude,
          which re-globs Resources\web independently - miss the second one and the
          harness pages come straight back into the publish tree (and so the installer). -->
@@ -558,7 +559,9 @@
       Resources\web\arcademy\vn\demo.html;
       Resources\web\arcademy\emi\demo.html;
       Resources\web\arcademy\shell\recordsroom.demo.html;
-      Resources\web\arcademy\games\**\smoke\**\*
+      Resources\web\arcademy\games\**\smoke\**\*;
+      Resources\web\backroom\smoke\**\*;
+      Resources\web\backroom\shared\hypno\tests\**\*
     </ArcademyHarnessExclude>
     <!-- Remix engine (Resources\web\remix, vendored from cclabs-site/remix for the Jackpot Remix
          flash): its node tests ride along so the vendored copy stays checkable, but they are
@@ -574,7 +577,9 @@
       $(MSBuildProjectDirectory)\Resources\web\arcademy\vn\demo.html;
       $(MSBuildProjectDirectory)\Resources\web\arcademy\emi\demo.html;
       $(MSBuildProjectDirectory)\Resources\web\arcademy\shell\recordsroom.demo.html;
-      $(MSBuildProjectDirectory)\Resources\web\arcademy\games\**\smoke\**\*
+      $(MSBuildProjectDirectory)\Resources\web\arcademy\games\**\smoke\**\*;
+      $(MSBuildProjectDirectory)\Resources\web\backroom\smoke\**\*;
+      $(MSBuildProjectDirectory)\Resources\web\backroom\shared\hypno\tests\**\*
     </ArcademyHarnessExcludeAbs>
   </PropertyGroup>
 
