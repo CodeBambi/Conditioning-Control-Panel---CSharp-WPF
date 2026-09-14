@@ -5226,7 +5226,7 @@
   "br_room_title": "The Back Room",
   "br_back": "Back",
   "br_balance": "SP",
-  "br_walk_hint": "WASD to walk, drag to look, E to visit.",
+  "br_walk_hint": "W/S o arriba/abajo para caminar, A/D o izquierda/derecha para girar, arrastra para mirar, E para visitar.",
   "br_soon_title": "Coming soon",
   "br_soon_body": "Under a dust sheet for now. This one opens soon.",
   "br_station_slot": "The Slot",

@@ -1,7 +1,7 @@
 [
   { "id": "counter", "name": "The Prize Parlour", "labelKey": "br_station_counter", "state": "live",
     "entry": "stations/counter/station.js",
-    "approach": [0, 1.65, -3.1], "look": [0, 1.4, -6.2],
+    "approach": [0, 1.65, -2.4], "look": [0, 1.9, -6.2],
     "fixture": { "file": "counter.glb", "position": [0, 0.14, -6.2], "yaw": 0, "scale": 1.1,
       "preserveCharacter": { "name": "golden_emi_attendant", "factor": 0.8181818181818181 },
       "bounds": { "min": [-2.8382, 0.14, -7.0525], "max": [2.8382, 2.9462, -4.44] } } },

@@ -232,6 +232,30 @@ Object.assign(perf, { calls: d.calls, triangles: d.triangles, frameMedianMs: d.f
 ok(d.calls < 1312, `draw calls ${d.calls} (preview 1,312), triangles ${d.triangles}, frame median ${d.frameMedian?.toFixed(1)} ms`);
 await shot('room-entry-1280x720.png');
 
+// Ambient presentation stays independent of game state and respects Motion off.
+const idleStart = await dbg();
+await sleep(700);
+const idleEnd = await dbg();
+ok(idleEnd.emis.length === 4 && idleEnd.emis.every((e) => idleStart.emis.some((a) => a.id === e.id && JSON.stringify(a.pose) !== JSON.stringify(e.pose))), 'all four EMI NPCs idle independently');
+ok(JSON.stringify(idleStart.bulbColors) !== JSON.stringify(idleEnd.bulbColors), 'booth light trails advance');
+ok(idleEnd.marquee === 'THE PRIZE PARLOUR', 'one decorated counter marquee');
+await ev(`window.__backroom.scene.setStill(true)`);
+await sleep(100);
+const resting = await dbg();
+await sleep(350);
+const restingLater = await dbg();
+ok(resting.emis.every((e) => e.pose.every((v) => v === 0)) && JSON.stringify(resting.emis) === JSON.stringify(restingLater.emis), 'Motion off returns all NPCs to rest and freezes their clocks');
+ok(JSON.stringify(resting.bulbColors) === JSON.stringify(restingLater.bulbColors), 'Motion off freezes booth lights');
+await ev(`window.__backroom.scene.setStill(false)`);
+for (const [key, direction] of [['ArrowLeft', 1], ['KeyD', -1]]) {
+  const beforeTurn = await dbg();
+  await hold(key, 350);
+  const afterTurn = await dbg();
+  ok((afterTurn.yaw - beforeTurn.yaw) * direction > .25 && afterTurn.position.every((v, i) => Math.abs(v - beforeTurn.position[i]) < .001), key + ' turns without strafing');
+}
+await ev(`window.__backroom.scene.pose([0, 1.65, 6.5], 0)`);
+d = await dbg();
+
 // 2b. walk and look
 const z0 = d.position[2];
 await hold('KeyW', 600);
