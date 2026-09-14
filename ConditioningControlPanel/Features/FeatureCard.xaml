@@ -176,21 +176,22 @@
                            FontWeight="Bold"/>
             </Border>
 
-            <!-- v2 badge: a Back Room prize style is owned for this feature (ShowV2Badge).
-                 Same pill family as the tier badge, in the fancier neon purple. Sits under the
-                 tier pill when both show (FeatureCard.LayoutV2Badge), alone in its slot otherwise. -->
+            <!-- v2 pill (top-right, beside the help icon). The tier badge's pill family in a
+                 fancier metal, worn when the feature owns a Back Room v2 style (ShowV2Badge):
+                 the bubbles card and the flash card both wear it. Colour lives in
+                 FeatureCard.V2BadgeBrush so the option pickers can wear the same pill; the DP
+                 handler paints it. -->
             <Border x:Name="V2BadgeHost"
-                    HorizontalAlignment="Left" VerticalAlignment="Top"
-                    Margin="8,8,0,0" Padding="6,2,7,3"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Margin="0,8,34,0" Padding="6,2,7,3"
                     CornerRadius="7"
                     Background="#D91A1A2E"
-                    BorderBrush="{DynamicResource NeonPurpleBrush}"
                     BorderThickness="1"
                     IsHitTestVisible="False"
                     Panel.ZIndex="11"
                     Visibility="Collapsed">
-                <TextBlock Text="{loc:Str fx_v2_badge}"
-                           Foreground="{DynamicResource NeonPurpleBrush}"
+                <TextBlock x:Name="TxtV2Badge"
+                           Text="{loc:Str badge_v2}"
                            FontSize="9"
                            FontWeight="Bold"/>
             </Border>

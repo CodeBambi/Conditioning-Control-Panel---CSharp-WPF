@@ -106,13 +106,51 @@ namespace ConditioningControlPanel.Features
             DependencyProperty.Register(nameof(TierBadge), typeof(string), typeof(FeatureCard),
                 new PropertyMetadata(null, OnTierBadgeChanged));
 
-        public static readonly DependencyProperty ShowV2BadgeProperty =
-            DependencyProperty.Register(nameof(ShowV2Badge), typeof(bool), typeof(FeatureCard),
-                new PropertyMetadata(false, (d, e) => (d as FeatureCard)?.LayoutV2Badge()));
-
         public static readonly DependencyProperty TeaseTierProperty =
             DependencyProperty.Register(nameof(TeaseTier), typeof(int), typeof(FeatureCard),
                 new PropertyMetadata(0, OnTeaseTierChanged));
+
+        public static readonly DependencyProperty ShowV2BadgeProperty =
+            DependencyProperty.Register(nameof(ShowV2Badge), typeof(bool), typeof(FeatureCard),
+                new PropertyMetadata(false, OnShowV2BadgeChanged));
+
+        /// <summary>
+        /// The v2 pill's metal: one step fancier than the pink accent (champagne). Shared with
+        /// <see cref="NewV2Badge"/> so the option pickers wear the very same pill as the card.
+        /// </summary>
+        internal static readonly System.Windows.Media.Brush V2BadgeBrush = MakeV2Brush();
+
+        private static System.Windows.Media.Brush MakeV2Brush()
+        {
+            var b = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(0xFF, 0xE0, 0x8A));
+            b.Freeze();
+            return b;
+        }
+
+        /// <summary>A loose copy of the card's v2 pill for other surfaces (the Flashes motion picker).</summary>
+        internal static Border NewV2Badge(Thickness margin)
+        {
+            return new Border
+            {
+                Margin = margin,
+                Padding = new Thickness(6, 2, 7, 3),
+                CornerRadius = new CornerRadius(7),
+                Background = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromArgb(0xD9, 0x1A, 0x1A, 0x2E)),
+                BorderBrush = V2BadgeBrush,
+                BorderThickness = new Thickness(1),
+                VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false,
+                Child = new TextBlock
+                {
+                    Text = Localization.Loc.Get("badge_v2"),
+                    Foreground = V2BadgeBrush,
+                    FontSize = 9,
+                    FontWeight = FontWeights.Bold,
+                },
+            };
+        }
 
         public static readonly RoutedEvent ClickEvent =
             EventManager.RegisterRoutedEvent(nameof(Click), RoutingStrategy.Bubble,
@@ -208,19 +246,14 @@ namespace ConditioningControlPanel.Features
             set => SetValue(TierBadgeProperty, value);
         }
 
-        /// <summary>Bubbles/Flashes v2: a Back Room prize style is owned for this feature. Presentation only.</summary>
+        /// <summary>
+        /// Flashes/Bubbles v2: the card wears the "v2" pill while the feature owns a Back Room
+        /// v2 style. Presentation only; the picker inside the feature is where the style is set.
+        /// </summary>
         public bool ShowV2Badge
         {
             get => (bool)GetValue(ShowV2BadgeProperty);
             set => SetValue(ShowV2BadgeProperty, value);
-        }
-
-        /// <summary>Shows/hides the v2 pill and drops it under the tier pill when both are worn.</summary>
-        private void LayoutV2Badge()
-        {
-            V2BadgeHost.Visibility = ShowV2Badge ? Visibility.Visible : Visibility.Collapsed;
-            bool tierShown = TierBadgeHost.Visibility == Visibility.Visible;
-            V2BadgeHost.Margin = tierShown ? new Thickness(8, 30, 0, 0) : new Thickness(8, 8, 0, 0);
         }
 
         /// <summary>
@@ -351,17 +384,23 @@ namespace ConditioningControlPanel.Features
             if (string.IsNullOrWhiteSpace(text))
             {
                 c.TierBadgeHost.Visibility = Visibility.Collapsed;
-                c.LayoutV2Badge();
                 return;
             }
             c.TxtTierBadge.Text = text;
             c.TierBadgeHost.Visibility = Visibility.Visible;
-            c.LayoutV2Badge();
             // A teased card's badge is worn in the livery metal, not in pink. Re-applied here
             // (not only on the TeaseTier change) because the two properties are written in
             // whichever order the caller happens to use, and the badge is rewritten far more
             // often than the tease is.
             if (c.TeaseTier > 0) c.ApplyTeaseState();
+        }
+
+        private static void OnShowV2BadgeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is not FeatureCard c || c.V2BadgeHost == null) return;
+            c.V2BadgeHost.BorderBrush = V2BadgeBrush;
+            c.TxtV2Badge.Foreground = V2BadgeBrush;
+            c.V2BadgeHost.Visibility = (bool)e.NewValue ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private static void OnTeaseTierChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
