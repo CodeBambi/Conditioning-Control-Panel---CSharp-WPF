@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using ConditioningControlPanel.Models;
@@ -27,7 +28,7 @@ public class ProfileSyncPrizesFeedTests
     {
         _ownership = new OwnershipService(() => _account, null, invoke => invoke());
         _ownership.OwnershipChanged += (_, e) => _events.Add(e);
-        _feed = new ProfileSyncService.PrizesFeed(() => _ownership);
+        _feed = new ProfileSyncService.PrizesFeed(() => _ownership, () => _account, invoke => invoke());
     }
 
     private static PrizesBlock Block(long revision, params string[] grants)
@@ -101,6 +102,55 @@ public class ProfileSyncPrizesFeedTests
         Assert.False(_ownership.IsGranted(PrizeGrants.JackpotRemix));
         Assert.Empty(_ownership.Grants);
         Assert.Empty(_events);
+    }
+
+    [Fact]
+    public void LateResponseForThePreviousAccount_DoesNotClearTheCurrentOne()
+    {
+        // Me was signed in, then the session switched to Other and Other's first sync landed.
+        _feed.Apply(Me, Me, Block(3, PrizeGrants.JackpotRemix), "V2 sync");
+        _account = Other;
+        _feed.NoteAccount(Other);
+        _feed.Apply(Other, Other, Block(1, "fx.bubble.rain"), "V2 sync");
+        _events.Clear();
+
+        // A sync or validate that went out for Me before the switch answers now.
+        _feed.Apply(Me, Me, Block(9, PrizeGrants.JackpotRemix), "Patreon validate");
+        _feed.NoteAccount(Me);
+
+        Assert.True(_ownership.IsGranted("fx.bubble.rain"));
+        Assert.False(_ownership.IsGranted(PrizeGrants.JackpotRemix));
+        Assert.Empty(_events);
+
+        // Other's next sync is not taken for a switch either.
+        _feed.NoteAccount(Other);
+        Assert.Empty(_events);
+        Assert.Equal(1, _ownership.Revision);
+    }
+
+    [Fact]
+    public void PoolThreadSnapshot_ThenUiThreadLogout_ListenersEndWithNothing()
+    {
+        // One dispatcher queue. OwnershipService raises inline on the UI thread and queues from a
+        // pool thread; the feed queues every change on that same queue.
+        var queue = new Queue<Action>();
+        var onUi = false;
+        string? account = Me;
+        var ownership = new OwnershipService(() => account, null, invoke => { if (onUi) invoke(); else queue.Enqueue(invoke); });
+        var heard = new HashSet<string>();
+        ownership.OwnershipChanged += (_, e) => { heard.UnionWith(e.Added); heard.ExceptWith(e.Removed); };
+        var feed = new ProfileSyncService.PrizesFeed(() => ownership, () => account, queue.Enqueue);
+
+        // A Task.Run sync answers on a pool thread...
+        feed.Apply(Me, Me, Block(3, PrizeGrants.JackpotRemix), "V2 sync");
+        // ...and the UI thread signs out before the dispatcher drains.
+        onUi = true;
+        account = null;
+        feed.Clear();
+        while (queue.Count > 0) queue.Dequeue()();
+
+        Assert.Empty(ownership.Grants);
+        Assert.Empty(heard);
     }
 
     [Fact]
