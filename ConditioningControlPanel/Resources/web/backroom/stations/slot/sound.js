@@ -13,6 +13,7 @@ const rate = s => 2 ** (s / 12);
 
 export function createSound() {
   let ctx = null, out = null, noise = null, suspended = false, disposed = false, rising = null;
+  let climbing = [];   // ladder notes scheduled ahead across a rollup, so a skip can silence them (Law VI)
   const buffers = new Map();
   const trace = [];   // the last cues with their page time, for dev.html and CDP checks
 
@@ -37,7 +38,7 @@ export function createSound() {
   }
 
   const live = () => !disposed && !suspended && graph() && ctx.state !== 'closed';
-  function note(name, semis, level) { trace.push({ name, semis, level, at: Math.round(performance.now()) }); if (trace.length > 60) trace.shift(); }
+  function note(name, semis, level, inMs = 0) { trace.push({ name, semis, level, at: Math.round(performance.now()), in: Math.round(inMs) }); if (trace.length > 60) trace.shift(); }
 
   function play(key, { semis = 0, level = 0.3, at = 0, lowpass = 0 } = {}) {
     const buf = buffers.get(key);
@@ -48,7 +49,7 @@ export function createSound() {
       let head = src;
       if (lowpass) { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lowpass; head.connect(f); head = f; }
       head.connect(g); g.connect(out); src.start(t);
-      return true;
+      return src;   // truthy as before; the source itself so a note scheduled ahead can be stopped (climb/hush)
     } catch { return false; }
   }
   /** The race's bank thump, for a clip that is not there. */
@@ -68,6 +69,12 @@ export function createSound() {
     if (!rising) return;
     try { rising.g.gain.cancelScheduledValues(ctx.currentTime); rising.osc.stop(); } catch { /* already done */ }
     rising = null;
+  }
+
+  /** Take back every ladder note that has not sounded yet (a skip, Back, suspend). */
+  function hush() {
+    for (const src of climbing) { try { src.stop(); } catch { /* already played or closed */ } }
+    climbing = [];
   }
 
   const api = {
@@ -90,6 +97,22 @@ export function createSound() {
       else if (sound === 'thud') { if (!play('thud', { semis: semis - 3, level: LEVEL.thud })) thump(LEVEL.thud); c('chime2', 0, 0.9, 0.02); }
       else if (sound === 'reveal') { ['chime1', 'chime2', 'chime3'].forEach((k, i) => c(k, 0, 0.9, i * 0.08)); c('chime3', 12, 0.7, 0.3); }
     },
+    /** THE CHIME LADDER climbing across THE BANK's rollup (playbook A3). `plan` is feel.ladderPlan: step 0 is
+     *  the landing note win() has already played, so only the steps after it sound, each a semitone up on
+     *  `base`. They are scheduled ahead, and hush() takes back whatever has not sounded yet. */
+    climb(plan, base = 0) {
+      hush();
+      const steps = (Array.isArray(plan) ? plan : []).slice(1);
+      if (!steps.length) return;
+      for (const s of steps) note('climb', base + s.semis, LEVEL.chime * 0.8, s.at);
+      if (!live()) return;
+      for (const s of steps) {
+        const src = play('chime2', { semis: base + s.semis, level: LEVEL.chime * 0.8, at: s.at / 1000 });
+        if (src) climbing.push(src);
+      }
+    },
+    /** Law VI: a skip silences the rest of the climb; it never plays a faster version of it. */
+    hush,
     /** A token landing (THE BANK); the last one gets the mini-thud. */
     token(last) {
       note(last ? 'bank-thud' : 'token', last ? 5 : 12, last ? LEVEL.thud * 0.6 : LEVEL.token);
@@ -125,10 +148,10 @@ export function createSound() {
     },
     suspend(on) {
       suspended = !!on;
-      if (suspended) stopRise();
+      if (suspended) { stopRise(); hush(); }
       if (ctx && ctx.state !== 'closed') (suspended ? ctx.suspend() : ctx.resume()).catch(() => {});
     },
-    dispose() { disposed = true; stopRise(); if (ctx) ctx.close().catch(() => {}); ctx = null; buffers.clear(); },
+    dispose() { disposed = true; stopRise(); hush(); if (ctx) ctx.close().catch(() => {}); ctx = null; buffers.clear(); },
     trace,
   };
   return api;

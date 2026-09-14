@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FEEL, tierOf, recipe, ladderSemis, winTokens, spendTokens, tickValues, glance, landPose, restPose,
-         glanceHoldMs, breath, shiverPx, chaseMs, bezier, POSES, livePair, anticipation, almost, ALMOST } from '../feel.js';
+         glanceHoldMs, breath, shiverPx, chaseMs, bezier, POSES, livePair, anticipation, almost, ALMOST,
+         ROLLUP_MS, rollupMs, rollupAt, rollupTicks, bankFlightMs, bankLandMs, ladderPlan, paylinePulses, paylineGlow, PAYLINE_PULSE_MIN_MS } from '../feel.js';
 
 const o = (line, pay, extra = {}) => ({ line, pay, meltLeft: 0, halved: false, ...extra });
 
@@ -196,3 +197,117 @@ test('A2 tell fits the House Book: 620-1,400 ms, one 120 ms snap back', () => {
   assert.ok(ALMOST.SNAP_MS < ALMOST.TELL_MS);
 });
 
+/* ---- playbook A3: THE BANK's proportional rollup, and the ladder that climbs with it ---- */
+
+test('A3 rollup: one frozen table, 500 ms at tier 1 up to the 6 s jackpot climb', () => {
+  assert.ok(Object.isFrozen(ROLLUP_MS));
+  assert.deepEqual([...ROLLUP_MS], [0, 500, 1200, 2000, 6000]);
+  assert.deepEqual([0, 1, 2, 3, 4].map(t => rollupMs(t)), [0, 500, 1200, 2000, 6000]);
+  for (let t = 1; t <= 4; t++) assert.ok(rollupMs(t) > rollupMs(t - 1), `tier ${t} must roll longer than ${t - 1}`);
+  assert.equal(rollupMs(1), 500, 'tier 1 keeps the flat House Book count-up');
+});
+
+test('A3 rollup: an outcome or a raw pay reads through the same tiers', () => {
+  assert.equal(rollupMs({ line: 'emi3', pay: 400 }), 6000);
+  assert.equal(rollupMs({ line: 'gif3same', pay: 40 }), 2000);
+  assert.equal(rollupMs({ line: 'none', pay: 0 }), 0);
+  assert.equal(rollupMs(40), 2000); assert.equal(rollupMs(12), 1200); assert.equal(rollupMs(5), 500);
+  assert.equal(rollupMs(null), 0); assert.equal(rollupMs('nonsense'), 0);
+});
+
+test('A3: the tokens never move, only the count-up runs past them', () => {
+  assert.equal(bankFlightMs(1), FEEL.BANK_FLY_MS);
+  assert.equal(bankFlightMs(7), FEEL.BANK_FLY_MS + 6 * FEEL.BANK_STAGGER_MS);
+  assert.equal(bankLandMs(0), FEEL.BANK_FLY_MS);
+  assert.equal(bankLandMs(3), FEEL.BANK_FLY_MS + 3 * FEEL.BANK_STAGGER_MS);
+  for (const tier of [1, 2, 3, 4]) {
+    const n = winTokens(tier);
+    assert.ok(n >= FEEL.BANK_MIN && n <= FEEL.BANK_MAX, 'the token count stays inside the House Book caps');
+    assert.ok(winTokens(tier, true) <= FEEL.BANK_MAX_LITE, 'Calm still flies 4 at most');
+  }
+  // Only tiers 2 and up outlast their tokens; tier 1's flat count-up is already inside the flight.
+  assert.ok(rollupMs(1) < bankFlightMs(winTokens(1)));
+  for (const tier of [2, 3, 4]) assert.ok(rollupMs(tier) > bankFlightMs(winTokens(tier)));
+});
+
+test('A3: the count-up curve lands exactly on the settled value (Law I)', () => {
+  assert.equal(rollupAt(50, 90, 0), 50);
+  assert.equal(rollupAt(50, 90, 1), 90);
+  assert.equal(rollupAt(50, 90, 2), 90);
+  assert.equal(rollupAt(50, 90, -1), 50);
+  let prev = -Infinity;
+  for (let q = 0; q <= 1.0001; q += 0.05) { const v = rollupAt(50, 90, q); assert.ok(v >= prev); prev = v; }
+});
+
+test('A3: without a longer rollup the landings are the old even ladder, ending on `to`', () => {
+  assert.deepEqual(rollupTicks(50, 90, 4, 0), tickValues(50, 90, 4));
+  assert.deepEqual(rollupTicks(50, 90, 4, 100), tickValues(50, 90, 4));
+  assert.deepEqual(rollupTicks(57, 47, 3, 0), tickValues(57, 47, 3));
+  assert.equal(rollupTicks(10, 13, 7, 0).at(-1), 13);
+});
+
+test('A3: with a rollup the landings are the count at that moment and the tail finishes the job', () => {
+  const n = winTokens(4), ms = rollupMs(4), ticks = rollupTicks(0, 400, n, ms);
+  assert.equal(ticks.length, n);
+  assert.ok(ticks.every((v, i) => i === 0 || v >= ticks[i - 1]), 'the readout never counts backwards');
+  assert.ok(ticks[0] > 0, 'it has started counting by the first landing');
+  assert.ok(ticks.at(-1) < 400, 'the tokens land well before the jackpot count settles');
+  assert.equal(rollupAt(ticks.at(-1), 400, 1), 400, 'the tail still ends on the settled value');
+  const two = rollupTicks(0, 15, winTokens(2), rollupMs(2));
+  assert.ok(two.at(-1) < 15 && two.at(-1) > 0);
+});
+
+test('A3: THE CHIME LADDER spreads across the rollup, never over 6 Hz, never over the cap', () => {
+  for (const tier of [1, 2, 3, 4]) {
+    const plan = ladderPlan(tier, rollupMs(tier));
+    assert.ok(plan.length >= 1 && plan.length <= FEEL.LADDER_CAP, `tier ${tier} plan length`);
+    assert.equal(plan[0].at, 0); assert.equal(plan[0].semis, 0);
+    assert.ok(plan.at(-1).at <= rollupMs(tier), 'the ladder finishes inside the rollup');
+    for (let i = 1; i < plan.length; i++) {
+      assert.ok(plan[i].at - plan[i - 1].at >= FEEL.STROBE_MIN_MS - 0.5, `tier ${tier} step ${i} under the strobe floor`);
+      assert.equal(plan[i].semis, plan[i - 1].semis + 1, 'a semitone a step');
+    }
+  }
+  assert.equal(ladderPlan(1, rollupMs(1)).length, 1, 'Law IX: a small win rings once');
+  assert.ok(ladderPlan(4, rollupMs(4)).length > ladderPlan(2, rollupMs(2)).length, 'a bigger win climbs further');
+  assert.equal(ladderPlan(4, rollupMs(4), true).length, 1, 'Brake 5: melted gets no climb');
+  assert.equal(ladderPlan(4, 0).length, 1);
+});
+
+/* ---- playbook A6: the payline frame ---- */
+
+test('A6: tier 1 gets one soft pulse, reduced motion and melt get a steady frame', () => {
+  assert.equal(paylinePulses(1), 1);
+  assert.equal(paylinePulses(0), 1);
+  assert.equal(paylinePulses(4, { reduced: true }), 0);
+  assert.equal(paylinePulses(4, { melted: true }), 0);
+  assert.ok(paylinePulses(4) > paylinePulses(2), 'a bigger win pulses more over its longer rollup');
+});
+
+test('A6: the frame never pulses faster than 2 Hz', () => {
+  for (const tier of [1, 2, 3, 4]) {
+    const pulses = paylinePulses(tier), hold = Math.max(rollupMs(tier), 1);
+    assert.ok(hold / pulses >= PAYLINE_PULSE_MIN_MS - 1e-9, `tier ${tier} pulse period under 500 ms`);
+  }
+  assert.ok(PAYLINE_PULSE_MIN_MS >= 500);
+});
+
+test('A6: the frame holds for the rollup, then THE GLOW goes out over 480 ms', () => {
+  const hold = rollupMs(3), pulses = paylinePulses(3);
+  assert.equal(paylineGlow(-1, hold, pulses), 0);
+  assert.equal(paylineGlow(hold + FEEL.GLOW_OUT_MS, hold, pulses), 0);
+  assert.ok(paylineGlow(hold + FEEL.GLOW_OUT_MS - 1, hold, pulses) > 0, 'it is still fading a frame before the end');
+  for (let ms = 0; ms <= hold + FEEL.GLOW_OUT_MS; ms += 17) {
+    const lit = paylineGlow(ms, hold, pulses);
+    assert.ok(lit >= 0 && lit <= 1, `lit out of range at ${ms}`);
+    if (ms < hold) assert.ok(lit > 0, 'Brake 9: the frame never goes dark before the fade');
+  }
+  assert.ok(Math.abs(paylineGlow(hold + FEEL.GLOW_OUT_MS / 2, hold, 0) - 0.5) < 1e-9, 'the fade is linear across 480 ms');
+});
+
+test('A6: a steady frame is steady, and a pulsed one breathes without going dark', () => {
+  const hold = 1200;
+  for (let ms = 0; ms <= hold; ms += 37) assert.equal(paylineGlow(ms, hold, 0), 1);
+  const lit = Array.from({ length: 40 }, (_, i) => paylineGlow((i * hold) / 39, hold, 2));
+  assert.ok(Math.max(...lit) > 0.98 && Math.min(...lit) >= 0.55);
+});
