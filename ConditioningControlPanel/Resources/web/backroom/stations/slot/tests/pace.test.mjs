@@ -10,7 +10,7 @@ test('one outcome takes about 4 s: reels stop left to right, each thud 340 ms, t
   assert.ok(outcomeMs() >= 3800 && outcomeMs() <= 4400 && PACE.SPIN_MS > PACE.DECEL_MS, `outcomeMs ${outcomeMs()}`);
 });
 
-/* ---- A1 THE ANTICIPATION REEL (CONTRACT 10.14): reel 3's hold on a live pair. ---- */
+/* ---- A1 THE ANTICIPATION REEL (CONTRACT 10.15): reel 3's hold on a live pair. ---- */
 
 // The mock server's table v5 strips (mock-server.js STRIPS), 13 cells a reel.
 const STRIPS = [

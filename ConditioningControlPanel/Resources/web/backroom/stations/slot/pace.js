@@ -15,7 +15,7 @@ export const reelStopMs = (i, p = PACE, holdMs = 0) => p.SPIN_MS + i * p.STAGGER
 export const reelsMs = (p = PACE, holdMs = 0) => reelStopMs(2, p, holdMs) + p.THUD_MS;
 export const outcomeMs = (p = PACE, holdMs = 0) => reelsMs(p, holdMs) + p.REVEAL_MS + p.BREATH_MS;
 
-/* A1 THE ANTICIPATION REEL (playbook Tier A, CONTRACT 10.14). When reels 1 and 2 land a live pair,
+/* A1 THE ANTICIPATION REEL (playbook Tier A, CONTRACT 10.15). When reels 1 and 2 land a live pair,
  * reel 3 keeps spinning this much longer before its thud. The tape already carries the outcome, so a
  * hold is PURELY a delay: nothing here can change what lands. Reduced motion keeps the hold like every
  * other duration above; only the animation inside it is calmer. Brake 5 halves it while melted. */

@@ -61,19 +61,19 @@ Back (left) and EMI's HUD face sits under the room's SP chip (right), so the mar
   but the jackpot hero; chase steps never faster than 6 Hz; every value is also text.
 - **Law VI**: reduced motion takes the state (reels on their stop at the thud frame, no tokens: the readout is on
   the settled value with a lit ring, no shiver, heat steps). Back and suspend skip every ceremony to settled.
-- **A1 THE ANTICIPATION REEL** (playbook Tier A, CONTRACT 10.14): a live pair on reels 1 and 2 (the same gif 900 ms,
+- **A1 THE ANTICIPATION REEL** (playbook Tier A, CONTRACT 10.15): a live pair on reels 1 and 2 (the same gif 900 ms,
   two spirals or two subs 1,100 ms, two EMI 1,400 ms and gold) keeps reel 3 blurred past its normal stop before THE
   THUD. From reel 2's thud a tone climbs (`sound.rise`, a synth sweep), the marquee takes the `tease` mood
   (`tease_gold` on the EMI pair) and the bulbs drop to 0.62 emissive; THE BREATH is paused by the spin already.
   Brake 5 halves the hold while melted and never lets it go gold. Reduced motion and Calm KEEP the hold and the tone
   and drop the light change only: the hold is pace, not animation. A frozen reel 3 never holds. The outcome is on
   the tape before a reel moves, so the hold is purely a delay (`feel.anticipation`, `pace.ANTICIPATION`).
-- **A2 THE ALMOST on the strip** (CONTRACT 10.14): a no-pay spin under a live pair, where the cell one above or one
+- **A2 THE ALMOST on the strip** (CONTRACT 10.15): a no-pay spin under a live pair, where the cell one above or one
   below the payline on reel 3 would have completed the line, ghosts that cell gold and snaps it back once (620 ms,
   gold in over 500, one 120 ms snap), on the same frame as the muted thud and THE SHIVER (Law X) with a ghost note
   under it. Once a spin, the cell below read first. The reel window shows about half of each neighbour (drum r 0.43,
   13 cells, window 0.39 tall), so nothing is nudged. Reduced motion: one 120 ms gold tint on the reel, no repaint.
-  `feel.almost` reads the server's own strip and stop: no stop weighting, ever. Natural rate on table v5: 9 of the
+  `feel.almost` reads the server's own strip and stop: no stop weighting, ever. Natural rate on the strips (tables v5 and v6): 9 of the
   2,197 uniform rows, gif and EMI pairs only (a sub or spiral pair already pays).
 
 ## Checks

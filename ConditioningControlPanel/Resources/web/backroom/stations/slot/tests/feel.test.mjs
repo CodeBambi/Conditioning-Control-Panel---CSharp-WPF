@@ -94,7 +94,7 @@ test('No strobe over 6 Hz in the marquee chase; the thud curve overshoots', () =
   assert.ok(peak > 1.05 && Math.abs(bezier(FEEL.THUD_EASE, 1) - 1) < 1e-6);
 });
 
-/* ---- The playbook's Tier A (CONTRACT 10.14): A1 the anticipation reel, A2 THE ALMOST on the strip.
+/* ---- The playbook's Tier A (CONTRACT 10.15): A1 the anticipation reel, A2 THE ALMOST on the strip.
  *      Both read a result the tape already carries, so every case below is a pure read. ---- */
 
 // The mock server's table v5 strips (mock-server.js STRIPS), 13 cells a reel.

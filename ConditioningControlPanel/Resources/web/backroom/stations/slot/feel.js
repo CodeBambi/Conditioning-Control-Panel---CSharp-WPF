@@ -125,7 +125,7 @@ export function bezier([a, b, c, d], x) {
 }
 
 /* ---------------------------------------------------------------------------------------------
- * The playbook, Tier A (CONTRACT 10.14). Neither of these decides anything: the tape carries the
+ * The playbook, Tier A (CONTRACT 10.15). Neither of these decides anything: the tape carries the
  * outcome before a reel moves, so A1 is a delay over a known result and A2 only reads the strip the
  * server already drew. No stop is weighted, moved or re-drawn anywhere in this file.
  * ------------------------------------------------------------------------------------------ */

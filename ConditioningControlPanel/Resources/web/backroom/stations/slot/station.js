@@ -16,7 +16,7 @@ import { createScene, FACES } from './scene.js';
 import { createMedia, fxSymbols } from './media.js';
 import { PACE } from './pace.js';
 import { recipe, tierOf, meltedBy, ladderSemis, winTokens, spendTokens, glance, landPose, restPose, pressPose, glanceHoldMs } from './feel.js';
-import { anticipation, almost } from './feel.js';   // the playbook's Tier A (CONTRACT 10.14)
+import { anticipation, almost } from './feel.js';   // the playbook's Tier A (CONTRACT 10.15)
 import { createBank } from './bank.js';
 import { createSound } from './sound.js';
 
