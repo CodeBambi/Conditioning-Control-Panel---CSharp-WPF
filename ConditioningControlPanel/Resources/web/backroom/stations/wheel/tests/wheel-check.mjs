@@ -329,7 +329,7 @@ await sleep(1200);
 d = await dbg();
 ok(d.readout.kind === 'hook' && chipMid === '57' && (await ev("document.querySelector('#fakechip b').textContent")) === '65' && (await ev("window.dev.sent.some(m => m.type === 'chip-thud')")), `spReadout hook: chip ${chipMid} while turning, 65 after the bank, chip thud`);
 
-// 12. Gated off (flash, spiral, brainDrain all off): plain dress from the first frame, no fx, no tunnel; the in-station dim stays.
+// 12. Gated off (flash, spiral, brainDrain, tunnel all off): plain dress from the first frame, no fx, no tunnel; the in-station dim stays.
 await boot('?gates=off&next=deep');
 d = await dbg();
 ok(d.feel.scene.hypno.hub === 'star' && d.hypno.dress.hub === 'star', 'spiral off: the hub is a brass star');
@@ -343,7 +343,7 @@ await still('st-wheel-14-gated-off-landed.jpg', 'Gated off: 40 SP lands with the
 d = await dbg();
 ok((await fxCalls()).length === 0 && !(await tunnels()).some(v => v > 0) && d.hypno.lastMoment.id === 'wheel.land.gif' && d.feel.scene.hypno.quiet !== null, 'gated off: wheel.land.gif fires no host fx and no tunnel, the quiet room still runs');
 ok(/Deep: \+40 SP/.test(d.status), `gated off: the result as text "${d.status}"`);
-await ev("window.dev.host.settings({ gates: { flash: true, spiral: true, brainDrain: true } })");
+await ev("window.dev.host.settings({ gates: { flash: true, spiral: true, brainDrain: true, tunnel: true } })");
 await sleep(300);
 ok((await hyp()).hub === 'loom', 'a live settings frame turns the Loom hub back on');
 await ev("window.dev.host.settings({ gates: { spiral: false } })");

@@ -57,7 +57,7 @@ export const warpedRotation = (plan, elapsed) => plan.from + (plan.to - plan.fro
 
 /** The stage dim eases toward 1 while slowing, back to 0 after (per `dtMs`). */
 export const stepDim = (dim, slowing, dtMs) => dim + ((slowing ? 1 : 0) - dim) * Math.min(1, (Math.max(0, dtMs) / 1000) * DIM_RATE);
-/** The in-station edge vignette's alpha: 0.65 x dim x k. It stays with brainDrain off (10.13.A). */
+/** The in-station edge vignette's alpha: 0.65 x dim x k. It stays with the tunnel gate off (10.13.A). */
 export const edgeAlpha = (dim, k = 1) => 0.65 * clamp01(dim) * k;
 /** The "s l o w l y" caption's alpha, as the mockup: 0.7 x dim, hidden under 0.05. */
 export const captionAlpha = dim => (dim > 0.05 ? 0.7 * clamp01(dim) : 0);

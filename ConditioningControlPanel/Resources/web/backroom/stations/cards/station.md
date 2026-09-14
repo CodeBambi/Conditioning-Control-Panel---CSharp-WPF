@@ -135,6 +135,6 @@ node ConditioningControlPanel/Resources/web/backroom/stations/cards/tests/cards-
 ```
 
 Dev harness: serve `ConditioningControlPanel/Resources/web` as the web root and open `/backroom/stations/cards/dev.html`
-(`?sp=57&latency=80&floor=8000&calm&reduced&full&off=flash,spiral,brainDrain&nopics&hook&script=As.9d.Kh.7c,Th.9d.8c.8s`).
+(`?sp=57&latency=80&floor=8000&calm&reduced&full&off=flash,spiral,brainDrain,tunnel&nopics&hook&script=As.9d.Kh.7c,Th.9d.8c.8s`).
 `dev.station.debug()` shows the state, the felt, the kit, the deck, the moments and the feel log; `dev.host` is the
 kit's mock host (what fired), and the page's `#screen` draws what the host would.

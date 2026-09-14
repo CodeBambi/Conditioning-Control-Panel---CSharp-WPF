@@ -16,7 +16,7 @@
  * Budget: CONTRACT 10.13.B asks for at most 4 MB and a 720 long side. The
  * worker's long side is fixed at 640 (512 when a weave runs past its 6 MB soft
  * cap), so the files come out at 640 or 512. A file over 4 MB is written with a
- * warning (screen.gif, 72 frames of gradient threads, weaves to about 5.3 MB
+ * warning (screen.gif, 72 frames of gradient threads, weaves to about 5.4 MB
  * at 512); over the Loom store's own 8 MB cap the run fails and writes nothing.
  * --report weaves and prints sizes only. --check-only re-weaves in memory and
  * fails when a file on disk differs in size by more than 2% or a sidecar differs.

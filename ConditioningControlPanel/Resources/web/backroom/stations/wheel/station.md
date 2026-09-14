@@ -98,7 +98,7 @@ never names a section 4 id.
 - **The long last turn**: the landing plan's own clock is read at `lerp(0.32, 1, speed / 1.6)` while the planned
   speed is under 1.6 rad/s (0.6 floor under Calm). Same path, same landing angle, same slice (hypno.test). The spin
   runs about 6-7 s instead of 4. The edges (`.wheel-edges`, a radial gradient centred on the rotor) take opacity
-  0.65 x dim x k; no backdrop-filter. They stay with brainDrain off; the tunnel does not.
+  0.65 x dim x k; no backdrop-filter. They stay with the `tunnel` gate off; the tunnel does not.
 - **Quiet room**: slice colours mix toward #2a2238 by `min(0.78, clamp(since x 3) x k x 1.6)`, colour flows back from
   1.1 s by angular distance over 0.8 s, labels of grey slices at 0.75; the landed slice keeps its colour with a mint
   band outline.

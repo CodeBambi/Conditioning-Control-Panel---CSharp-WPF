@@ -117,7 +117,7 @@ export function createLoader(room) {
       get reduced() { return s.reduced; },
       get motion() { return s.motion; },
       get intensity() { return s.intensity; },
-      /** The host's hypno toggles, frozen { flash, subliminal, spiral, brainDrain }, live on every read (10.13.A). */
+      /** The host's hypno toggles, frozen { flash, subliminal, spiral, brainDrain, tunnel }, live on every read (10.13.A). */
       get gates() { return s.gates; },
       /** Subscribe to { motion, intensity, reduced, gates } on every settings frame. Returns an unsubscribe. */
       onSettings(fn) {

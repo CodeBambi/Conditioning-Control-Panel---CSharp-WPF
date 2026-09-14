@@ -15,8 +15,9 @@
  * HANDEDNESS (law 3). loomField's field turns clockwise on screen as the
  * phase grows with direction 1, and its arms lead at the rim (the band angle
  * grows with the radius), so it reads as pulling inward. Every preset's layer 1
- * is direction 1; the thin gold layer 2 of `screen` counter-turns by design, as
- * in the mockup. kit-check.mjs measures both on every preset, WebGL and 2D.
+ * is direction 1, and so is the thin gold layer 2 of `screen` (owner decision,
+ * 2026-09-14: both layers turn the same way, everything reads inward).
+ * kit-check.mjs measures both on every preset, WebGL and 2D.
  *
  * COST (law 7). One GL canvas for the page, made on the first draw or paint and
  * lost on the last kit's dispose. Its backing store is at most 512 px on the
@@ -63,7 +64,7 @@ export const LOOM_PRESETS = deepFreeze({
   wake: normalizeParams2({ layer: layer(4, 3, 0.5, 'log', 1, ['#5fffd0', '#3a1f5c']), bg: { kind: 'solid', color: '#0a0614' }, glow: 0.45,
     wobble: { amp: 0.15, freq: 2, cycles: 1 }, speed: 2 }),
   screen: normalizeParams2({ layer: layer(6, 2.5, 0.5, 'log', 1, ['#ff5fa2', '#9b6bff', '#5fffd0'], 'gradient'),
-    layer2: { enabled: true, ...layer(3, 1.5, 0.3, 'log', -1, ['#e8c27a']) },
+    layer2: { enabled: true, ...layer(3, 1.5, 0.3, 'log', 1, ['#e8c27a']) },
     bg: { kind: 'radial', color: '#14060f', outer: '#08040e' }, glow: 0.5, pulse: { amp: 0.08, cycles: 1 }, speed: 1 }),
 });
 

@@ -61,7 +61,7 @@ Single-zero roulette for SP (CONTRACT.md sections 2-7 and 10.13, binding spec `h
 - **Calm / reduced** (`ctx.intensity === 'calm'`, `ctx.reduced`, or `prefers-reduced-motion`): page strengths x0.5,
   the rotor eases to a stop and the beam holds at rest, the rattle floor is 0.7, chips appear or fade where they end
   (no travel). The ball still runs its plan (the mockup's reduced motion). Host args stay Normal (the host halves).
-- **Gates** are read live every frame: `flash` and `brainDrain` off simply drop host steps (moments); `spiral` off keeps
+- **Gates** are read live every frame: `flash`, `brainDrain` (haze) and `tunnel` (the run's fx-tunnel) off simply drop host steps (moments); `spiral` off keeps
   the dish velvet. A Spiral Wake always shows as text.
 - **Suspend** cancels the moments, pauses the station clock and disposes the Loom kit and the deck (their keys still
   pick); resuming makes a new kit and replays the running spin's holds.

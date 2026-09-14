@@ -41,7 +41,7 @@ await new Promise(r => server.listen(PORT, '127.0.0.1', r));
 
 const FAKE_HOST = `(() => {
   const listeners = [], emit = (data) => setTimeout(() => listeners.forEach((fn) => fn({ data })), 0);
-  const gates = { flash: true, subliminal: true, spiral: true, brainDrain: true };
+  const gates = { flash: true, subliminal: true, spiral: true, brainDrain: true, tunnel: true };
   let server = null;
   const mock = import('/backroom/stations/wheel/mock-server.js').then((m) => { server = m.createMockServer({ sp: 57 }); server.script('deep'); return server; });
   window.__hostEmit = emit; window.__posted = []; window.__gates = gates;
@@ -104,9 +104,9 @@ ok(await ev(`document.querySelector('.wheel-station').hasAttribute('data-host-ba
 ok(await ev(`document.querySelector('.wheel-station').dataset.hub === 'loom'`), 'init.gates spiral on: the Loom hub');
 await sleep(400);
 await shot('room-01-wheel-open.jpg');
-await ev(`window.__hostEmit({ type: 'settings', motion: 'full', intensity: 'normal', reduced: false, gates: { flash: true, subliminal: true, spiral: false, brainDrain: true } })`);
+await ev(`window.__hostEmit({ type: 'settings', motion: 'full', intensity: 'normal', reduced: false, gates: { flash: true, subliminal: true, spiral: false, brainDrain: true, tunnel: true } })`);
 ok(await until(`document.querySelector('.wheel-station').dataset.hub === 'star'`, 3000), 'a live settings frame with spiral off: the brass star');
-await ev(`window.__hostEmit({ type: 'settings', motion: 'full', intensity: 'normal', reduced: false, gates: { flash: true, subliminal: true, spiral: true, brainDrain: true } })`);
+await ev(`window.__hostEmit({ type: 'settings', motion: 'full', intensity: 'normal', reduced: false, gates: { flash: true, subliminal: true, spiral: true, brainDrain: true, tunnel: true } })`);
 ok(await until(`document.querySelector('.wheel-station').dataset.hub === 'loom'`, 3000), 'and back on');
 await ev(`document.querySelector('.wheel-spin').click()`);
 ok(await until(`window.__posted.some((m) => m.type === 'fx-tunnel' && m.station === 'wheel' && m.level > 0.3)`, 15000), 'the long last turn posts fx-tunnel through the bridge');

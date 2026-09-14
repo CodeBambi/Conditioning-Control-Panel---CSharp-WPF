@@ -8,7 +8,9 @@
  * table's Normal args, after dropping every step whose gate is off:
  *   flash      -> fx.wash, fx.gif_from
  *   spiral     -> fx.loom_spiral
- *   brainDrain -> fx.haze, fx-tunnel
+ *   brainDrain -> fx.haze
+ *   tunnel     -> fx-tunnel (the Back Room's own tunnel vision toggle, owner
+ *                 2026-09-14; a host that sends no `tunnel` reads as on)
  * A page always sends Normal values; the host applies Calm (law 6: nobody
  * halves twice). The host still enforces every toggle; gates only dress.
  *
@@ -127,7 +129,8 @@ export function createMoments(ctx, { station = '' } = {}) {
   const say = (m) => { try { if (c.bridge && typeof c.bridge.log === 'function') c.bridge.log('warn', m); else if (typeof c.log === 'function') c.log(m); } catch (e) { /* noop */ } };
   const gates = () => {
     const g = c.gates;
-    return g && typeof g === 'object' ? { flash: g.flash !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false } : { flash: true, spiral: true, brainDrain: true };
+    return g && typeof g === 'object' ? { flash: g.flash !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false, tunnel: g.tunnel !== false }
+      : { flash: true, spiral: true, brainDrain: true, tunnel: true };
   };
   const holds = new Map();   // token -> fxId
   let held = false, bloomed = false, disposed = false;
@@ -157,7 +160,7 @@ export function createMoments(ctx, { station = '' } = {}) {
   function stopBreath() { if (breathTimer) { clearInterval(breathTimer); breathTimer = 0; } }
   function setTunnel(level) {
     let v = Math.round(clamp01(Number(level)) * 100) / 100;
-    if (!gates().brainDrain || typeof c.fxTunnel !== 'function') v = 0;
+    if (!gates().tunnel || typeof c.fxTunnel !== 'function') v = 0;
     if (held && v > 0) return;
     want = v;
     flushTunnel();
@@ -181,7 +184,7 @@ export function createMoments(ctx, { station = '' } = {}) {
     if (!f) return;
     const g = f.gates || {};
     const belowFull = ('intensity' in f && f.intensity !== 'full') || f.reduced === true;
-    if (g.brainDrain === false) { stopBreath(); tunnelNow0(); }
+    if (g.tunnel === false) { stopBreath(); tunnelNow0(); }
     for (const [token, fxId] of Array.from(holds)) {
       if (g[GATE_OF[fxId]] === false || (fxId === 'fx.haze' && belowFull)) api.release(token);
     }
@@ -208,7 +211,7 @@ export function createMoments(ctx, { station = '' } = {}) {
       if (held) { out.held = true; return out; }
       const g = gates();
       for (const step of m.host) {
-        if (step.tunnel === 'breath') { if (g.brainDrain) breath(step.peak, step.ms); continue; }
+        if (step.tunnel === 'breath') { if (g.tunnel) breath(step.peak, step.ms); continue; }
         if (step.tunnel) continue;
         if (step.full && !full) continue;
         const gate = GATE_OF[step.fx];
@@ -233,7 +236,7 @@ export function createMoments(ctx, { station = '' } = {}) {
       }
       return out;
     },
-    /** Tunnel vision 0..1 (Normal values). Throttled; ignored while the screen is held; 0 when brainDrain is off. */
+    /** Tunnel vision 0..1 (Normal values). Throttled; ignored while the screen is held; 0 when the tunnel gate is off. */
     tunnel(level) {
       if (disposed) return;
       if (Number(level) > 0) stopBreath();   // a live level takes over from a running breath; 0 leaves it be

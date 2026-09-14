@@ -31,10 +31,12 @@ const ADS = [
   { file: 'focus-gaze', key: 'br_ad_focus_gaze', fallback: 'Focus Gaze' },
 ];
 
-/** CONTRACT 10.13.A: the host's hypno toggles. A missing frame or key reads as on (the host is the enforcer). */
+/** CONTRACT 10.13.A: the host's hypno toggles. A missing frame or key reads as on (the host is the enforcer).
+ *  `tunnel` is the Back Room's own tunnel vision toggle (owner, 2026-09-14): fx-tunnel reads it, not brainDrain. */
 const readGates = (g) => {
   const q = g && typeof g === 'object' ? g : {};
-  return Object.freeze({ flash: q.flash !== false, subliminal: q.subliminal !== false, spiral: q.spiral !== false, brainDrain: q.brainDrain !== false });
+  return Object.freeze({ flash: q.flash !== false, subliminal: q.subliminal !== false, spiral: q.spiral !== false, brainDrain: q.brainDrain !== false,
+    tunnel: q.tunnel !== false });
 };
 
 const state = { sp: 0, reduced: false, motion: 'full', intensity: 'normal', gates: readGates(null), lex: {}, open: null, suspended: false, userStill: false };

@@ -282,7 +282,7 @@ await click('.cards-deal');
 ok(await until("!document.querySelector('.cards-card').hidden && /closed/.test(document.querySelector('.cards-card').textContent)", 3000), 'a closed door says so on a card');
 
 /* ---------------------------------------------------------------- 6. gates off */
-await boot('?off=flash,spiral,brainDrain&floor=600&script=As.9d.Kh.7c,Th.Td.7c.9s', { play: false });
+await boot('?off=flash,spiral,brainDrain,tunnel&floor=600&script=As.9d.Kh.7c,Th.Td.7c.9s', { play: false });
 await sleep(2200);
 d = await dbg();
 await shot('gated-off-sit-fan.png');
@@ -301,7 +301,7 @@ await shot('gated-off-decision.png');
 await click('.cards-move[data-move=stand]');
 await moment('cards.lose');
 await sleep(1500);
-ok((await ev('window.dev.host.tunnel.length')) === 0 && (await ev('window.dev.host.fx.length')) === 0, 'brainDrain off: losing edges send no tunnel');
+ok((await ev('window.dev.host.tunnel.length')) === 0 && (await ev('window.dev.host.fx.length')) === 0, 'tunnel gate off: losing edges send no tunnel');
 
 /* ---------------------------------------------------------------- 7. Calm */
 await boot('?calm&floor=600&script=As.9d.Kh.7c,Th.Td.7c.9s', { play: false });
@@ -385,7 +385,7 @@ const FAKE_HOST = `(() => {
     postMessage(m) {
       window.__posted.push(m);
       if (m.type === 'ready') emit({ type: 'init', protocol: 1, sp: 57, reduced: false, motion: 'full', intensity: 'normal', lang: 'en', open: null,
-        gates: { flash: true, subliminal: true, spiral: true, brainDrain: true }, lex: { br_back: 'Back', br_balance: 'SP' }, stations: ['slot', 'wheel', 'cards'] });
+        gates: { flash: true, subliminal: true, spiral: true, brainDrain: true, tunnel: true }, lex: { br_back: 'Back', br_balance: 'SP' }, stations: ['slot', 'wheel', 'cards'] });
       if (m.type === 'station-request') serverP.then((s) => s.handle(m.op, m.body, m.idem)).then((r) => emit({ type: 'station-result', reqId: m.reqId, ok: r.ok, status: r.status, reason: r.reason, body: r.body || {} }));
       if (m.type === 'media-request') { const n = m.count || 4; emit({ type: 'media', reqId: m.reqId, seed: 1, words: [], gifs: PICS.slice(0, n).map((url, i) => ({ key: 'g' + i, url, w: 0, h: 0, src: 'pool' })) }); }
       if (m.type === 'fx') emit({ type: 'fx-ack', token: m.token, fired: [m.fxId], skipped: [] });

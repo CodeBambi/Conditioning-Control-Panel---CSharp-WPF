@@ -56,7 +56,7 @@ export async function mount(ctx) {
   function dress() {
     const reduced = !!ctx.reduced || prefersReduced, intensity = String(ctx.intensity || 'normal').toLowerCase(), g = ctx.gates || {};
     return { still: reduced || intensity === 'calm', k: prefersReduced ? 0.5 : strengthK(ctx), full: intensity === 'full' && !reduced,
-      gates: { flash: g.flash !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false } };
+      gates: { flash: g.flash !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false, tunnel: g.tunnel !== false } };
   }
 
   function build() {
