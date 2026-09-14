@@ -542,6 +542,12 @@ body.clickthrough .chev { display: none !important; }
 
 /* ---------- empty / crash / boot ---------- */
 
+/* BELOW the chrome (10) and the options popover (20), deliberately. This is an OPAQUE
+   full-bleed sheet, and at z-index 30 it covered the gear button and rendered over the
+   options card - so a feed that came up empty had no reachable way back to another
+   content source. A user whose online feed was unreachable was stuck in it across
+   restarts, because the source setting persists and every launch came up empty again.
+   Nothing in here is worth burying the app's only chrome for. */
 #empty, #crash {
   position: absolute;
   inset: 0;
@@ -552,7 +558,7 @@ body.clickthrough .chev { display: none !important; }
   gap: 14px;
   text-align: center;
   padding: 40px;
-  z-index: 30;
+  z-index: 8;
   background: #12121f;
 }
 #empty h1, #crash h1 { font-size: 26px; }
