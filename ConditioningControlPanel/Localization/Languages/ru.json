@@ -5233,7 +5233,7 @@
   "br_room_title": "The Back Room",
   "br_back": "Back",
   "br_balance": "SP",
-  "br_walk_hint": "W/S или вверх/вниз: идти, A/D или влево/вправо: поворот, перетаскивание: осмотр, E: войти.",
+  "br_walk_hint": "W/S или вверх/вниз: идти, A/D или влево/вправо: движение вбок, перетаскивание: осмотр, E: войти.",
   "br_soon_title": "Coming soon",
   "br_soon_body": "Under a dust sheet for now. This one opens soon.",
   "br_station_slot": "The Slot",

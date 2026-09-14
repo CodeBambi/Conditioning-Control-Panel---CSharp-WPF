@@ -248,11 +248,12 @@ const restingLater = await dbg();
 ok(resting.emis.every((e) => e.pose.every((v) => v === 0)) && JSON.stringify(resting.emis) === JSON.stringify(restingLater.emis), 'Motion off returns all NPCs to rest and freezes their clocks');
 ok(JSON.stringify(resting.bulbColors) === JSON.stringify(restingLater.bulbColors), 'Motion off freezes booth lights');
 await ev(`window.__backroom.scene.setStill(false)`);
-for (const [key, direction] of [['ArrowLeft', 1], ['KeyD', -1]]) {
+await ev(`window.__backroom.scene.pose([0, 1.65, 6.5], 0)`);
+for (const [key, direction] of [['ArrowLeft', -1], ['KeyD', 1]]) {
   const beforeTurn = await dbg();
   await hold(key, 350);
   const afterTurn = await dbg();
-  ok((afterTurn.yaw - beforeTurn.yaw) * direction > .25 && afterTurn.position.every((v, i) => Math.abs(v - beforeTurn.position[i]) < .001), key + ' turns without strafing');
+  ok((afterTurn.position[0] - beforeTurn.position[0]) * direction > .25 && afterTurn.yaw === beforeTurn.yaw && Math.abs(afterTurn.position[2] - beforeTurn.position[2]) < .001, key + ' strafes without turning');
 }
 await ev(`window.__backroom.scene.pose([0, 1.65, 6.5], 0)`);
 d = await dbg();

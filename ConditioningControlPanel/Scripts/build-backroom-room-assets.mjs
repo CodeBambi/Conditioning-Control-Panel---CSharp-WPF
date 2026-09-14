@@ -180,6 +180,14 @@ async function main() {
       const retired = job.to === 'counter.glb' ? ['header_title', 'service_title']
         : job.to === 'shell.glb' ? ['house_title', 'house_sign_frame', 'house_sign_face'] : [];
       for (const n of doc.getRoot().listNodes()) if (retired.includes(n.getName())) n.dispose();
+      // Fit the east wall display inside its bay, clear of the card niche.
+      if (job.to === 'shell.glb') {
+        const screen = doc.getRoot().listNodes().find((n) => n.getName() === 'screen_mount_1');
+        if (!screen) throw new Error('East wall screen mount missing');
+        const p = screen.getTranslation();
+        screen.setTranslation([p[0], p[1], p[2] + .65]);
+        screen.setScale(screen.getScale().map((v) => v * .75));
+      }
       await doc.transform(t.fn.dedup());
       liftStatics(doc);
       await doc.transform(

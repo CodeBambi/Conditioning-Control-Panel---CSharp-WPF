@@ -2,7 +2,7 @@
  * backroom/room/scene.js - the walkable room: one renderer, one camera, the
  * walk, the room view and the render loop.
  *
- * W/S or up/down walk (Shift runs), A/D or left/right turn, drag looks, E visits the nearest station,
+ * W/S or up/down walk (Shift runs), A/D or left/right strafe, drag looks, E visits the nearest station,
  * M toggles the room view. Collision and proximity are walk.js (pure).
  *
  * THE VISIT: `hold()` saves the pose and STOPS the loop (no rAF at all); the
@@ -156,11 +156,10 @@ export async function createScene(o) {
     frames.push(raw);
     if (frames.length > 240) frames.shift();
     if (!overview) {
-      const turn = (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) - (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0);
-      yaw += turn * 1.65 * dt;
+      const x = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
       let z = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
       const speed = keys.has('ShiftLeft') || keys.has('ShiftRight') ? RUN_SPEED : WALK_SPEED;
-      vel.lerp(want.set(0, z * speed), 1 - Math.exp(-dt * 12));
+      vel.lerp(want.set(x, z).clampLength(0, 1).multiplyScalar(speed), 1 - Math.exp(-dt * 12));
       const [dx, dz] = worldDelta(yaw, vel.x * dt, vel.y * dt);
       step(pos, dx, dz, o.stations);
       sway = T.MathUtils.damp(sway, still ? 0 : Math.min(1, vel.length() / WALK_SPEED), 10, dt);
