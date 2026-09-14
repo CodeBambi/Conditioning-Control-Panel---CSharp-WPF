@@ -247,6 +247,7 @@ await sleep(350);
 const restingLater = await dbg();
 ok(resting.emis.every((e) => e.pose.every((v) => v === 0)) && JSON.stringify(resting.emis) === JSON.stringify(restingLater.emis), 'Motion off returns all NPCs to rest and freezes their clocks');
 ok(JSON.stringify(resting.bulbColors) === JSON.stringify(restingLater.bulbColors), 'Motion off freezes booth lights');
+ok(resting.decor.time === restingLater.decor.time, 'Motion off freezes decoration lighting');
 await ev(`window.__backroom.scene.setStill(false)`);
 await ev(`window.__backroom.scene.pose([0, 1.65, 6.5], 0)`);
 for (const [key, direction] of [['ArrowLeft', -1], ['KeyD', 1]]) {
@@ -267,6 +268,22 @@ await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', x: 640, y: 360, bu
 await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 740, y: 360, button: 'left', buttons: 1 });
 await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 740, y: 360, button: 'left', clickCount: 1 });
 ok(Math.abs((await dbg()).yaw) > 0.2, 'a drag turns the view');
+
+// A visible mascot reacts to a real click, without opening a game or spending SP.
+ok((await dbg()).emis.every(e => e.articulated), 'all four mascots retain their shoulder joints');
+await ev(`window.__backroom.scene.go(${row('counter')})`);
+await sleep(300);
+const emiPoint = await ev(`import('/vendor/three/three.module.min.js').then(T => { const s=window.__backroom.scene;
+  const face=s.scene.getObjectByName('emi_idle_counter').getObjectByName('EMI_glass');
+  const p=new T.Box3().setFromObject(face).getCenter(new T.Vector3()).project(s.camera);
+  return {x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2}; })`);
+const opensBeforeEmi = (await posted('station-open')).length;
+for (const type of ['mousePressed', 'mouseReleased']) await cdp('Input.dispatchMouseEvent', { type, ...emiPoint, button:'left', clickCount:1 });
+await sleep(800);
+ok((await dbg()).emiBubble.id === 'counter' && (await dbg()).emis.find(e=>e.id==='counter').action === 'greet', 'clicking EMI shows a bark and triggers a wave');
+await shot('emi-click-wave.png');
+await key('Escape'); await key('Escape', 'keyUp');
+ok(!(await dbg()).emiBubble.id && (await posted('exit')).length === 0 && (await posted('station-open')).length === opensBeforeEmi, 'Escape dismisses the bark without exiting or opening a station');
 
 // 2c. every approach: stand there, shot, push forward into the fixture, never clip
 for (const s of stations) {

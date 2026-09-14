@@ -1,47 +1,40 @@
-/** Station personality over the shared EMI idle. Angles are local radians.
- * Sample from the controller's paused clock, never wall time. These gestures
- * acknowledge the room without implying a spin, card deal or prize award.
- */
-const REST = Object.freeze({ yaw: 0, pitch: 0, roll: 0, lift: 0, face: null });
-const TIMING = Object.freeze({
-  counter: { period: 19, start: 4, duration: 4.8 },
-  wheel: { period: 17, start: 7, duration: 4.2 },
-  cards: { period: 23, start: 10, duration: 5.5 },
-  roulette: { period: 21, start: 2, duration: 4.6 },
-});
-
-// A zero-velocity arrival and departure, including every periodic seam.
-function pulse(t, start, end) {
-  if (t <= start || t >= end) return 0;
-  return Math.sin(Math.PI * (t - start) / (end - start)) ** 2;
-}
-
-export function sampleEmiGesture(stationId, elapsedSeconds) {
-  const timing = TIMING[stationId];
-  if (!timing || !Number.isFinite(elapsedSeconds) || elapsedSeconds < 0) return REST;
-  const t = (elapsedSeconds % timing.period - timing.start) / timing.duration;
-  if (t <= 0 || t >= 1) return REST;
-  let yaw = 0, pitch = 0, roll = 0;
-  if (stationId === 'counter') {
-    // Two polite dips, then a small glance towards the prize shelves.
-    pitch = .025 * (pulse(t, 0, .32) + pulse(t, .22, .55));
-    yaw = .075 * pulse(t, .38, 1);
-    roll = -.012 * pulse(t, .4, 1);
-  } else if (stationId === 'wheel') {
-    // Check the wheel, linger, then turn back to the visitor.
-    yaw = -.085 * pulse(t, 0, 1);
-    pitch = -.018 * pulse(t, .16, .9);
-    roll = .012 * pulse(t, .2, .95);
-  } else if (stationId === 'cards') {
-    // Survey both sides of the felt without moving cards or chips.
-    yaw = .065 * pulse(t, 0, .56) - .065 * pulse(t, .42, 1);
-    pitch = .022 * pulse(t, .1, .9);
-    roll = .016 * pulse(t, .3, .85);
-  } else {
-    // A restrained host's bow followed by a sideways acknowledgement.
-    pitch = .05 * pulse(t, 0, .66);
-    yaw = -.06 * pulse(t, .42, 1);
-    roll = -.013 * pulse(t, .5, 1);
+/** Rigid mascot choreography, sampled on the paused room clock. */
+export const EMI_REACTIONS = Object.freeze({ greet: 3.2, wave: 3.2, look: 4.2, bow: 3.4, present: 4, dust: 6.8, handout: 5.2 });
+const REST = Object.freeze({ yaw: 0, pitch: 0, roll: 0, lift: 0, face: null, left: 0, right: 0, reach: 0, sweep: 0, tool: 0 });
+const PERIOD = { counter: 27, wheel: 19, cards: 23, roulette: 25 };
+const ROUTINES = { counter: ['look', 'dust', 'present'], wheel: ['wave', 'look', 'bow'], cards: ['present', 'look', 'bow'], roulette: ['bow', 'present', 'look'] };
+const smooth = v => { const x = Math.max(0, Math.min(1, v)); return x * x * (3 - 2 * x); };
+const hold = (t, a, b, fade = .5) => smooth((t-a)/fade) * (1-smooth((t-b)/fade));
+export function sampleEmiReaction(kind, t) {
+  const duration = EMI_REACTIONS[kind];
+  if (!duration || !Number.isFinite(t) || t <= 0 || t >= duration) return REST;
+  const e = hold(t, 0, duration-.65, .65), p = { ...REST };
+  if (kind === 'greet' || kind === 'wave') {
+    p.right = (2.65 + .20 * Math.sin(t * 11)) * e; p.left = .13 * e;
+    p.roll = -.045 * e; p.yaw = .12 * e; p.face = 3;
+  } else if (kind === 'look') {
+    p.yaw = .34 * Math.sin(t * 1.8) * e; p.pitch = -.035 * e;
+    p.left = .12 * e; p.right = .07 * e;
+  } else if (kind === 'bow') {
+    p.pitch = .16 * e; p.left = .25 * e; p.right = .25 * e; p.reach = -.28 * e;
+  } else if (kind === 'present') {
+    p.yaw = -.20 * e; p.left = .85 * e; p.right = .45 * e; p.reach = -.7 * e;
+    p.roll = .025 * Math.sin(t*3) * e;
+  } else if (kind === 'dust') {
+    // Turn, raise the duster, three brushing strokes, lower, then face the visitor.
+    const turn = hold(t, .1, 5.55, .85), brush = hold(t, 1.25, 4.9, .55);
+    p.tool = hold(t, .7, 5.1, .45); p.yaw = -.65 * turn; p.right = .30 * brush; p.left = .15 * turn;
+    p.reach = -1.48 * brush; p.sweep = .25 * Math.sin((t-1.25)*6) * brush;
+    p.pitch = .025 * brush; p.roll = .025 * Math.sin(t*6) * brush;
+  } else if (kind === 'handout') {
+    // Cosmetic presentation only. The purchase service owns any real reward transfer.
+    const reach = hold(t, .6, 3.65, .8);
+    p.left = .20 * e; p.right = .20 * e; p.reach = -1.55 * reach; p.pitch = .085 * reach;
   }
-  return { yaw, pitch, roll, lift: 0, face: null };
+  return p;
+}
+export function sampleEmiGesture(id, time) {
+  if (!PERIOD[id] || !Number.isFinite(time) || time < 0) return REST;
+  const cycle = Math.floor(time / PERIOD[id]), kind = ROUTINES[id][cycle % 3];
+  return sampleEmiReaction(kind, time % PERIOD[id] - 5);
 }

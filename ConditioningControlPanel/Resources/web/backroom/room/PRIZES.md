@@ -24,7 +24,7 @@ The optimizer preserves these populated groups and their `prize_id` extras:
 
 These are visual asset identifiers. They are not a purchase API or an entitlement contract. The station stays `soon` until the prize system is implemented.
 
-The optimized counter has 118,962 triangles and 75 mesh primitives, down from 420 source primitives. Its GLB is about 1.65 MiB. Transparent materials can require extra render passes in the room; primitive count is not total scene draw calls.
+The optimized counter has 118,962 triangles and 82 mesh primitives, down from 420 source primitives. Its GLB is about 1.65 MiB. Transparent materials can require extra render passes in the room; primitive count is not total scene draw calls.
 
 Validation: the room smoke check verifies named runtime nodes, eight unique prize ids and populated prize groups. The full browser check covers room navigation, station lifecycle, reduced motion, bell UI and page errors. Owner WPF desk verification remains separate.
 
@@ -36,7 +36,9 @@ Rebuild both `counter.glb` and `shell.glb` after changing this policy. Original
 Blender sources stay unchanged.
 
 Room motion uses smooth traveling bulb trails and four independent EMI idle
-controllers. NPCs blink, breathe through subtle rocking, and perform station-specific
-nods or glances. Added parent pivots preserve the optimized GLB transforms; these
-assets have no limb articulation. Motion off, Calm and reduced motion settle NPCs
+controllers. NPCs blink, wobble, look around, wave and perform station-specific
+gestures. The optimizer preserves authored shoulder and antenna groups; neutral
+wrapper hinges animate these groups without altering quantized mesh transforms.
+The counter has a cosmetic dusting routine. Prize purchase and handover wiring
+remain unimplemented. Motion off, Calm and reduced motion settle NPCs
 and freeze the ambient clock. Entering a game pauses the room entirely.

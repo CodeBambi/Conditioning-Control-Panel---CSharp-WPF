@@ -48,9 +48,9 @@ const PINS = ['@gltf-transform/core@4.5.0', '@gltf-transform/extensions@4.5.0', 
   'meshoptimizer@1.2.0', 'sharp@0.35.4'];
 
 /** Names the room reads. Leaves matching these are never joined, and their counts are checked. */
-export const PROTECT = /^(shelf_(?:jackpot_remix|rt_demo|high_roller|flashes_v2|bubbles_v2|rt_bundle_[123])$|sconce_globe|media_screen_\d|spiral_inlay|ceiling$|lights_chase_\d|bulb_\d|canopy_bulb_\d|rim_bulb_\d|EMI_glass|marquee$|screen_jackpot|screen_status|reel_\d|title_screen|status_screen|center_spiral|inset_spiral_|emi_topper|emi_dealer|golden_emi_attendant|alcove_return)/;
+export const PROTECT = /^(shelf_(?:jackpot_remix|rt_demo|high_roller|flashes_v2|bubbles_v2|rt_bundle_[123])$|sconce_globe|media_screen_\d|spiral_inlay|ceiling$|lights_chase_\d|bulb_\d|canopy_bulb_\d|rim_bulb_\d|shoulder[LR]$|ant0$|EMI_glass|marquee$|screen_jackpot|screen_status|reel_\d|title_screen|status_screen|center_spiral|inset_spiral_|emi_topper|emi_dealer|golden_emi_attendant|alcove_return)/;
 /** Groups the room transforms or toggles as a whole: static leaves are pulled up to these, not past. */
-const KEEP_GROUP = /^(shelf_(?:jackpot_remix|rt_demo|high_roller|flashes_v2|bubbles_v2|rt_bundle_[123])|ceiling|center_spiral|emi_topper|emi_dealer|golden_emi_attendant|EMI_root)$/;
+const KEEP_GROUP = /^(shelf_(?:jackpot_remix|rt_demo|high_roller|flashes_v2|bubbles_v2|rt_bundle_[123])|ceiling|center_spiral|emi_topper|emi_dealer|golden_emi_attendant|EMI_root|shoulder[LR]|ant0)$/;
 /** Materials whose textures the room replaces with its own shader. */
 const RUNTIME_TEXTURED = /^(screen_picture_\d|floor_spiral)$/;
 

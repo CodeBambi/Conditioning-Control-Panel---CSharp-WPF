@@ -18,6 +18,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { buildRoom } from './fixtures.js';
 import { createScreens } from './screens.js';
+import { createEmiInteraction } from './emi-interaction.js';
 import { createCasinoDecor } from './casino-decor.js';
 import { START, WALK_SPEED, RUN_SPEED, step, worldDelta, nearestStation, facing } from './walk.js';
 
@@ -84,6 +85,9 @@ export async function createScene(o) {
   const vel = new T.Vector2(), want = new T.Vector2();
   const frames = [];
 
+  const interaction = createEmiInteraction({ canvas, camera, scene, emis: room.emis, mount: o.mount, label: o.lex,
+    isActive: () => !held && !halted && !suspended && !overview });
+
   function topDown() { camera.position.set(0, Math.max(21, 19 / camera.aspect), 0.01); camera.lookAt(0, 0, 0); }
   function resize() {
     const w = Math.max(1, o.mount.clientWidth || window.innerWidth), h = Math.max(1, o.mount.clientHeight || window.innerHeight);
@@ -134,6 +138,7 @@ export async function createScene(o) {
     resetInput();
     overview = !!on;
     decor.setOverview(overview);
+    interaction.dismiss();
     if (room.ceiling) room.ceiling.visible = !overview;
     if (overview) { saved.pos = pos.slice(); saved.yaw = yaw; saved.pitch = pitch; topDown(); setNearest(null); }
     else if (saved.pos) { pos.splice(0, 3, ...saved.pos); yaw = saved.yaw; pitch = saved.pitch; }
@@ -175,6 +180,7 @@ export async function createScene(o) {
     room.update(dt, ambient, still);
     decor.update(dt, still);
     camera.updateMatrixWorld();
+    interaction.update(dt, still);
     screens.update(ambient, overview ? null : camera, still);
     renderer.render(scene, camera);
   }
@@ -193,18 +199,19 @@ export async function createScene(o) {
   return {
     renderer, camera, scene, buildMs,
     /** A station is taking the screen: keep the pose, stop drawing, keep the context. */
-    hold() { if (held) return; held = { pos: pos.slice(), yaw, pitch }; resetInput(); stop(); setNearest(null); },
+    hold() { if (held) return; held = { pos: pos.slice(), yaw, pitch }; resetInput(); interaction.dismiss(); stop(); setNearest(null); },
     /** Back from a station: the exact spot and facing, on the next frame. */
     release() {
       if (!held) return;
       pos.splice(0, 3, ...held.pos); yaw = held.yaw; pitch = held.pitch;
       held = null; resetInput(); run();
     },
-    pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); } else run(); },
-    halt() { halted = true; stop(); resetInput(); decor.dispose(); },
+    pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); interaction.dismiss(); } else run(); },
+    halt() { halted = true; stop(); resetInput(); interaction.dispose(); decor.dispose(); },
     setStill(on) { still = !!on; },
     /** Repaint one fixture label, e.g. the wheel's screen for MUST HIT (10.16.E). */
     setLabel(rowKey, node, text) { return room.setLabel(rowKey, node, text); },
+    dismissEmi() { const open = !!interaction.debug().id; interaction.dismiss(); return open; },
     setOverview, go, visit,
     pose(p, y = 0, tilt = 0) { pos.splice(0, 3, ...p); yaw = y; pitch = tilt; },
     get nearest() { return nearest; },
@@ -218,6 +225,7 @@ export async function createScene(o) {
         nearest: nearest ? nearest.key : null, fixtures: room.fixtures, bulbs: room.bulbs, screens: room.screens.length,
         pictures: screens.pictures, animation: screens.animation, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
         decor: decor.debug(),
+        emiBubble: interaction.debug(),
         emis: room.emis.map((e) => e.debug()),
         marquee: room.marquee?.userData.text,
         bulbColors: scene.children.filter((o) => o.isInstancedMesh && o.instanceColor).slice(0, 2).map((o) => Array.from(o.instanceColor.array.slice(0, 9))),
