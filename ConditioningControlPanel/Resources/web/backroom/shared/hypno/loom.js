@@ -197,10 +197,14 @@ export function createLoomKit({ still = false, log = null } = {}) {
     return fb;
   }
 
-  Object.assign(kit, {
+  // A getter, not an Object.assign member: assign would read it once at creation and copy a fixed boolean.
+  Object.defineProperty(kit, 'webgl', {
     /** True while the page's one context draws this kit's fields. False until the first draw or paint makes it: reading never does. */
-    get webgl() { const s = shared; return !!(!disposed && s && s.users.has(kit) && s.field && !s.lost); },
+    get() { const s = shared; return !!(!disposed && s && s.users.has(kit) && s.field && !s.lost); },
+    enumerable: true,
+  });
 
+  Object.assign(kit, {
     /**
      * Draw preset `name` covering x, y, w, h of a 2D context. `angle` (clockwise rad) drives the spin, else `now`
      * (ms). Give every draw of a frame the same `now` so they share one render; without it the task's clock is used.
