@@ -147,16 +147,15 @@ public sealed class BackRoomMediaTests : IDisposable
     }
 
     [Fact]
-    public void Shortfall_FillsFallbackArtAndPresetsInOrder()
+    public void Shortfall_NeverPadsRealPictures_WordsFillFromPresetsInOrder()
     {
         var deal = Media(new[] { Gif("a.gif", 64, 48), Webp("still.webp", animated: false), Gif("b.gif") },
                 new[] { "Relax", "Obey" })
             .Deal("slot", 42);
 
-        Assert.Equal(new[] { "g0", "g1", "g2", "g3" }, deal.Gifs.Select(g => g.Key));
-        Assert.Equal(new[] { "pool", "pool", "fallback", "fallback" }, deal.Gifs.Select(g => g.Src));
-        Assert.Equal(BackRoomMedia.FallbackBase + "gif2.webp", deal.Gifs[2].Url);
-        Assert.Equal(BackRoomMedia.FallbackBase + "gif3.webp", deal.Gifs[3].Url);
+        // 10.13.C: with at least one pool GIF there is no fallback art in the deal.
+        Assert.Equal(new[] { "g0", "g1" }, deal.Gifs.Select(g => g.Key));
+        Assert.All(deal.Gifs, g => Assert.Equal("pool", g.Src));
         Assert.Contains(deal.Gifs, g => g.W == 64 && g.H == 48);
 
         // Pool words first (shuffled), then presets in contract order, skipping one already dealt.
@@ -173,7 +172,9 @@ public sealed class BackRoomMediaTests : IDisposable
                 (key, fallback) => key == "br_word_sink" ? "Melt" : fallback)
             .Deal("slot", 0);
 
+        Assert.Equal(new[] { "g0", "g1", "g2", "g3" }, deal.Gifs.Select(g => g.Key));
         Assert.All(deal.Gifs, g => Assert.Equal("fallback", g.Src));
+        Assert.Equal(BackRoomMedia.FallbackBase + "gif3.webp", deal.Gifs[3].Url);
         Assert.Equal(new[] { "Drop", "Relax", "Let Go", "Melt" }, deal.Words.Select(w => w.Text));
         Assert.All(deal.Words, w => Assert.Equal("preset", w.Src));
     }
@@ -222,10 +223,46 @@ public sealed class BackRoomMediaTests : IDisposable
         Assert.Equal(918273, a.Seed);
         Assert.Equal(4, a.Gifs.Select(g => g.Url).Distinct().Count());
 
+        // 10.13.C: a 13-GIF deal takes the same shuffle further, distinct pictures keyed in deal order.
+        var deck = Media(files, words).Deal("cards", 918273, 13);
+        Assert.Equal(Enumerable.Range(0, 13).Select(i => "g" + i), deck.Gifs.Select(g => g.Key));
+        Assert.Equal(13, deck.Gifs.Select(g => g.Url).Distinct().Count());
+        Assert.Equal(a.Gifs.Select(g => g.Url), deck.Gifs.Take(4).Select(g => g.Url));
+        Assert.Equal(4, deck.Words.Count);
+
         // And the seed actually matters.
         var hands = Enumerable.Range(1, 8)
             .Select(s => string.Join("|", Media(files, words).Deal("slot", s).Gifs.Select(g => g.Url)))
             .Distinct().Count();
         Assert.True(hands > 1);
     }
+
+    [Fact]
+    public void ThirteenAsked_FiveAnimated_DealsFiveAndNoFallback()
+    {
+        var files = Enumerable.Range(0, 5).Select(i => Gif($"a{i}.gif"))
+            .Concat(Enumerable.Range(0, 6).Select(i => Webp($"still{i}.webp", animated: false))).ToList();
+        var deal = Media(files).Deal("cards", 7, 13);
+        Assert.Equal(5, deal.Gifs.Count);
+        Assert.All(deal.Gifs, g => Assert.Equal("pool", g.Src));
+        Assert.Equal(5, deal.Gifs.Select(g => g.Url).Distinct().Count());
+    }
+
+    [Fact]
+    public void ProbeBudget_IsMax48OrCountTimesFour()
+    {
+        Assert.Equal(48, BackRoomMedia.ProbeBudgetFor(4));
+        Assert.Equal(52, BackRoomMedia.ProbeBudgetFor(13));
+        // A big library of stills: the reads stop at the budget and the deal is the four fallback loops.
+        var stills = Enumerable.Range(0, 60).Select(i => Webp($"s{i:D2}.webp", animated: false)).ToList();
+        var deal = Media(stills).Deal("cards", 1, 13);
+        Assert.Equal(4, deal.Gifs.Count);
+        Assert.All(deal.Gifs, g => Assert.Equal("fallback", g.Src));
+    }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(99, 13)]
+    public void Count_IsClampedToTheDeck(int asked, int dealt)
+        => Assert.Equal(dealt, Media(Enumerable.Range(0, 20).Select(i => Gif($"c{i}.gif"))).Deal("cards", 3, asked).Gifs.Count);
 }

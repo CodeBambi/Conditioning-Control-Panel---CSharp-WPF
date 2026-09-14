@@ -70,7 +70,7 @@ internal static class BackRoomFxRig
 
                     var real = BackRoomFxServices.ReadEnvironment();
                     var gates = allToggles ? FxGates.AllOn with { SpiralStill = real.Gates.SpiralStill } : real.Gates;
-                    var ack = fx.Fire(id, SymbolsFor(id), deal, new FxEnvironment(motion, intensity, gates));
+                    var ack = fx.Fire(id, SymbolsFor(id), deal, real with { Motion = motion, Intensity = intensity, Gates = gates });
                     File.AppendAllText(log, JsonConvert.SerializeObject(new
                     {
                         fxId = id, intensity = intensity.ToString(), motion = motion.ToString(),
