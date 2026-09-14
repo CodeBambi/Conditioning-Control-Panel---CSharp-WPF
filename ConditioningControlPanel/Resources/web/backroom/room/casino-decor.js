@@ -39,7 +39,7 @@ export function createCasinoDecor({ scene }) {
     put('stem', material, mid.toArray(), [thickness, direction.length(), thickness], [rotation.x, rotation.y, rotation.z]);
   }
   // Open, tiered chandeliers leave the centre of every room sightline transparent.
-  for (const z of [-1.5, 4.4]) {
+  for (const z of [0]) {
     rod([0, 4.53, z], [0, 4.05, z], .035);
     for (const [radius, y] of [[1.2, 4.03], [.77, 3.78]]) {
       put('ring', 'brass', [0, y, z], [radius, radius, radius], [Math.PI / 2, 0, 0]);
@@ -82,12 +82,25 @@ export function createCasinoDecor({ scene }) {
       put('diamond', 'pink', [x, 3.85 - i * .28, -7.675], [.065, .09, .025]);
     }
   }
-  // A flush entrance runner with fine geometric inlay. No raised walking obstacles.
-  for (const x of [-1.52, 1.52]) put('box', 'brass', [x, .016, 4.25], [.018, .005, 6.3]);
-  for (const z of [1.1, 7.4]) put('box', 'brass', [0, .016, z], [3.05, .005, .018]);
-  for (const z of [1.3, 7.2]) for (const x of [-1.3, 1.3]) {
-    put('box', 'brass', [x, .019, z], [.16, .004, .16], [0, Math.PI / 4, 0]);
+  // A filled woven runner, with repeating jewel motifs and a full contrasting border.
+  const cloth = document.createElement('canvas'); cloth.width = 640; cloth.height = 352;
+  const ctx = cloth.getContext('2d'), dye = ctx.createLinearGradient(0,0,640,352);
+  dye.addColorStop(0,'#a92373'); dye.addColorStop(.45,'#392777'); dye.addColorStop(1,'#087f83');
+  ctx.fillStyle=dye;ctx.fillRect(0,0,640,352);
+  ctx.strokeStyle='#e9af57';ctx.lineWidth=9;ctx.strokeRect(13,13,614,326);
+  ctx.strokeStyle='#e26ba6';ctx.lineWidth=3;ctx.strokeRect(28,28,584,296);
+  for(let y=75;y<310;y+=100)for(let x=80;x<610;x+=96){
+    ctx.save();ctx.translate(x,y);ctx.rotate(Math.PI/4);
+    ctx.fillStyle=['#d64193','#24b3ad','#dca552'][Math.floor(x/96+y/100)%3];
+    ctx.fillRect(-17,-17,34,34);ctx.strokeStyle='#efc681';ctx.lineWidth=2;ctx.strokeRect(-24,-24,48,48);
+    ctx.fillStyle='#3b195c';ctx.fillRect(-6,-6,12,12);ctx.restore();
   }
+  ctx.fillStyle='#170f3820';for(let y=0;y<352;y+=4)ctx.fillRect(0,y,640,1);
+  const clothMap=new T.CanvasTexture(cloth);clothMap.colorSpace=T.SRGBColorSpace;clothMap.anisotropy=8;
+  shapes.carpet=new T.PlaneGeometry(2.1,1.15);
+  materials.carpet=new T.MeshBasicMaterial({map:clothMap,toneMapped:false});
+  const carpet=new T.Mesh(shapes.carpet,materials.carpet);carpet.name='casino_runner';
+  carpet.rotation.x=-Math.PI/2;carpet.position.set(0,.07,7.18);root.add(carpet);
   // Sculptural palms occupy the counter platform's already blocked front corners.
   for (const x of [-2.96, 2.96]) {
     const z = -4.4;
@@ -125,7 +138,7 @@ export function createCasinoDecor({ scene }) {
     debug: () => ({ draws: batches.size, instances, time }),
     dispose() {
       root.removeFromParent();
-      Object.values(shapes).forEach(g => g.dispose()); Object.values(materials).forEach(m => m.dispose());
+      clothMap.dispose(); Object.values(shapes).forEach(g => g.dispose()); Object.values(materials).forEach(m => m.dispose());
     },
   };
 }

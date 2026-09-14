@@ -152,6 +152,7 @@ function setSp(sp) {
 }
 
 async function visit(row) {
+  if(row?.key==='customization'){scene?.customization.open();return;}
   if (leaving || visiting || !scene || !loader || scene.overview) return;
   visiting = true;
   scene.hold();
@@ -171,6 +172,7 @@ async function returnToRoom() {
 /** Back, from anywhere. A station closes first, then the room view; an empty room is left. */
 async function back(reason) {
   if (leaving) return;
+  if(scene?.customization?.dismiss())return;
   if (loader && (loader.current || visiting)) { await returnToRoom(); return; }
   if (hud && hud.optionsOpen) { hud.closeOptions(); return; }
   if (scene && scene.overview) { scene.setOverview(false); hud.overview(false); return; }
@@ -368,6 +370,7 @@ async function start(init) {
     spReadout,
     spChanged,
     chipSettle,
+    revealedWin: (key,amount,tier,text)=>scene?.celebrate(key,amount,tier,text),
     standUp: () => back('back'),
     log: (level, msg) => bridge.log(level, msg),
   });

@@ -5317,5 +5317,22 @@
   "br_preset_drop": "Drop",
   "br_preset_relax": "Relax",
   "br_preset_let_go": "Let Go",
-  "br_preset_sink": "Sink"
+  "br_preset_sink": "Sink",
+  "br_custom_title": "ルームサービス",
+  "br_custom_close": "閉じる",
+  "br_custom_preview": "コレクションのプレビュー。少し模様替えしてみよう。",
+  "br_custom_categories": "カテゴリー",
+  "br_custom_unavailable": "ローカルプレビューのみ。購入はまだ利用できません。",
+  "br_custom_displays": "ディスプレイ",
+  "br_custom_plants": "植物",
+  "br_custom_statues": "彫像",
+  "br_custom_gallery": "ギャラリーフレーム",
+  "br_custom_portraits": "ペアのポートレート",
+  "br_custom_billboard": "ワイド看板",
+  "br_custom_monstera": "モンステラ",
+  "br_custom_ivy": "吊り下げアイビー",
+  "br_custom_terrarium": "テラリウム",
+  "br_custom_knight": "ナイトの彫像",
+  "br_custom_queen": "クイーンの彫像",
+  "br_custom_rook": "ルークの彫像"
 }

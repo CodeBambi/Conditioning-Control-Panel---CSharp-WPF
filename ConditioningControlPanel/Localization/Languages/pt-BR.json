@@ -5325,5 +5325,22 @@
   "br_preset_drop": "Drop",
   "br_preset_relax": "Relax",
   "br_preset_let_go": "Let Go",
-  "br_preset_sink": "Sink"
+  "br_preset_sink": "Sink",
+  "br_custom_title": "Serviço de quarto",
+  "br_custom_close": "Fechar",
+  "br_custom_preview": "Prévia da coleção. Experimente uma pequena mudança.",
+  "br_custom_categories": "Categorias",
+  "br_custom_unavailable": "Apenas prévia local. As compras ainda não estão disponíveis.",
+  "br_custom_displays": "Telas",
+  "br_custom_plants": "Plantas",
+  "br_custom_statues": "Estátuas",
+  "br_custom_gallery": "Moldura de galeria",
+  "br_custom_portraits": "Par de retratos",
+  "br_custom_billboard": "Painel panorâmico",
+  "br_custom_monstera": "Costela-de-adão",
+  "br_custom_ivy": "Hera pendente",
+  "br_custom_terrarium": "Terrário",
+  "br_custom_knight": "Escultura de cavalo",
+  "br_custom_queen": "Escultura de rainha",
+  "br_custom_rook": "Escultura de torre"
 }

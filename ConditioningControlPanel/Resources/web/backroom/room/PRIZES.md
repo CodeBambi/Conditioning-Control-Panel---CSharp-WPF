@@ -42,3 +42,9 @@ wrapper hinges animate these groups without altering quantized mesh transforms.
 The counter has a cosmetic dusting routine. Prize purchase and handover wiring
 remain unimplemented. Motion off, Calm and reduced motion settle NPCs
 and freeze the ambient clock. Entering a game pauses the room entirely.
+
+Dusting uses a shoulder arc at a fixed height over the serving tray, with a longer
+hand-attached duster. Coins in the slot payout basin are cosmetic (7/16/32/64
+by revealed win tier); the lower tag celebrates the same revealed amount. The
+room receives only the latest revealed result and plays its matching cabinet
+celebration after returning from the station. No-pay clears an older queued win.

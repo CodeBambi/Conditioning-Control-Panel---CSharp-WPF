@@ -9,11 +9,11 @@ test('reactions return smoothly to neutral at both ends',()=>{
   }
  }
 });
-test('wave raises a real shoulder and dust turns before brushing',()=>{
+test('wave raises a real shoulder and dust raises before showing the brush',()=>{
  assert.ok(sampleEmiReaction('wave',1).right>1.5);
  const before=sampleEmiReaction('dust',.7),brush=sampleEmiReaction('dust',2.5);
- assert.ok(before.yaw<-.25);assert.ok(before.reach===0);
- assert.ok(brush.yaw<-.6);assert.ok(brush.reach<-1);
+ assert.ok(before.dust>0);assert.equal(before.tool,0);
+ assert.equal(brush.dust,1);assert.equal(brush.tool,1);assert.notEqual(brush.brushX,sampleEmiReaction('dust',3).brushX);
 });
 test('station routines differ and invalid time never produces NaN',()=>{
  const signatures=['counter','wheel','cards','roulette'].map(id=>JSON.stringify(Array.from({length:150},(_,i)=>sampleEmiGesture(id,i))));

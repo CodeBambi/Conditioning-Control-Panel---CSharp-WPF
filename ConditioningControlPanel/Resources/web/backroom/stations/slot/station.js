@@ -343,6 +343,7 @@ export async function mount(ctx) {
     if (tier > 0) { sound.win(r.sound, semis); streak++; } else streak = 0;   // the no-pay cue was the last reel's muted thud
     scene.setMelted(melted);
     scene.celebrate(r, o.pay, t('br_slot_screen_win', 'WIN +{n}', { n: fmt(o.pay) }));
+    ctx.revealedWin?.(o.pay,tier,t('br_slot_screen_win','WIN +{n}',{n:fmt(o.pay)}));
     if (r.tokens) {
       flyBank('pay', before, tape.snapshot().shownSp, winTokens(tier, lite), roll);
       // THE CHIME LADDER climbs while the readout counts. Law VI: reduced motion has no rollup to climb over

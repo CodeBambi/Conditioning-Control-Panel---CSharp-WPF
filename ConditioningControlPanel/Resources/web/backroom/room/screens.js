@@ -66,7 +66,7 @@ export async function createScreens(o) {
     house.push(still(prep(new T.CanvasTexture(c)))); captions.push(labelTexture(''));
   }
   let gallery = house, custom = false, epoch = 0, decodes = 0;
-  for (const m of o.meshes) m.material = material(house[0].texture, captions[0]);
+  for (const m of o.meshes) { m.material = material(house[0].texture, captions[0]); m.material.uniforms.screen.value=m.userData.screenAspect||SCREEN_ASPECT; }
   const frustum = new T.Frustum(), viewProj = new T.Matrix4();
   const due = new Set();
 
@@ -84,7 +84,8 @@ export async function createScreens(o) {
       u.mixAmount.value = blend;
       u.showTitles.value = custom ? 0 : 1;
       u.titleA.value = captions[(n + i) % captions.length]; u.titleB.value = captions[(n + i + 1) % captions.length];
-      if (camera && (a.tick || b.tick) && frustum.intersectsObject(mesh)) { due.add(a); if (blend > 0) due.add(b); }
+      let visible=true;for(let p=mesh;p;p=p.parent)if(!p.visible)visible=false;
+      if (visible && camera && (a.tick || b.tick) && frustum.intersectsObject(mesh)) { due.add(a); if (blend > 0) due.add(b); }
     });
     let started = 0;
     for (const src of due) {

@@ -14,6 +14,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { createCoinShower } from '../../room/coin-shower.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
 import { drawSymbol } from './symbols.js';
@@ -110,6 +111,8 @@ export async function createScene(o) {
     ]);
   } catch (e) { dispose(); throw e; }
   const rig = gltf.scene;
+  const coinShower = createCoinShower(rig);
+  let coinTick = performance.now();
   scene.add(rig);
   const recoloured = applyPalette(rig, o.palette);   // a room variant's cabinet colours, before any other swap
   owned.push(...recoloured);
@@ -359,6 +362,7 @@ export async function createScene(o) {
   }
 
   function update(t) {
+    coinShower.update((t-coinTick)/1000,reduced); coinTick=t;
     if (tl) {
       const dt = t - tl.start;
       if (tl.kind === 'rise') {
@@ -490,6 +494,10 @@ export async function createScene(o) {
       sj.mesh.material.emissiveIntensity = lit;
       screen('screen_jackpot', text);
     }
+    const payout=coinShower.debug();
+    screen('screen_status',payout.active?'✦ '+payout.label+' ✦':screens.screen_status?.base||'');
+    if(screens.screen_status) {const m=screens.screen_status.mesh.material;
+      if(payout.active)m.emissive.setHSL(reduced ? .1 :(payout.age*.18)%1,.8,.6);else m.emissive.set(0xffffff);}
     sparks.forEach((s, i) => {
       const age = partying && pr.sparks && !reduced ? t - party.start - i * 55 : -1;
       s.visible = age >= 0 && age < 570;   // THE SPARKLE BURST, under 600 ms
@@ -611,6 +619,7 @@ export async function createScene(o) {
     setMelted(on) { melted = !!on; },
     /** One cabinet celebration per landed outcome (feel.recipe). Brake 2: a lesser party inside a running one merges. */
     celebrate(r, amount = 0, label = '') {
+      coinShower.start(amount,r.tier,label);
       const t = performance.now();
       heatTo(Math.max(r.heat, party && t < party.end ? heat.to : 0), r.gold || (party && t < party.end && heat.gold));
       if (r.shiver) shiverAt = t;
@@ -662,6 +671,7 @@ export async function createScene(o) {
      *  `tease` is A1 from feel.anticipation: `{holdMs, gold, dim}`. Reel 3 keeps its blur for holdMs longer
      *  and thuds late; reduced motion and Calm keep the hold, they only drop the light change. */
     spin(stops, held = null, tease = null) {
+      coinShower.clear();
       settleSpin();
       ghost = null;
       wiggleAt.fill(-Infinity);

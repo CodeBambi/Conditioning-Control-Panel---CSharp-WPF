@@ -5326,5 +5326,22 @@
   "br_preset_drop": "Drop",
   "br_preset_relax": "Relax",
   "br_preset_let_go": "Let Go",
-  "br_preset_sink": "Sink"
+  "br_preset_sink": "Sink",
+  "br_custom_title": "Service en chambre",
+  "br_custom_close": "Fermer",
+  "br_custom_preview": "Aperçu de la collection. Essayez un petit changement.",
+  "br_custom_categories": "Catégories",
+  "br_custom_unavailable": "Aperçu local uniquement. Les achats ne sont pas encore disponibles.",
+  "br_custom_displays": "Écrans",
+  "br_custom_plants": "Plantes",
+  "br_custom_statues": "Statues",
+  "br_custom_gallery": "Cadre de galerie",
+  "br_custom_portraits": "Paire de portraits",
+  "br_custom_billboard": "Panneau panoramique",
+  "br_custom_monstera": "Monstera",
+  "br_custom_ivy": "Lierre suspendu",
+  "br_custom_terrarium": "Terrarium",
+  "br_custom_knight": "Sculpture de cavalier",
+  "br_custom_queen": "Sculpture de reine",
+  "br_custom_rook": "Sculpture de tour"
 }

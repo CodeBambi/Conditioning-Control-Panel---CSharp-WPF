@@ -114,6 +114,7 @@ export function createLoader(room) {
       onSp: (fn) => room.onSp(fn),
       /** The room's SP chip (CONTRACT 7.1): { set(value|null), owe(n | () => n), thud(), target() }. */
       spReadout: room.spReadout,
+      revealedWin: (amount,tier,text) => { if(!subs.closed) room.revealedWin?.(station.key,amount,tier,text); },
       get reduced() { return s.reduced; },
       get motion() { return s.motion; },
       get intensity() { return s.intensity; },

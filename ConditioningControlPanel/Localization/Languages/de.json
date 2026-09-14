@@ -5326,5 +5326,22 @@
   "br_preset_drop": "Drop",
   "br_preset_relax": "Relax",
   "br_preset_let_go": "Let Go",
-  "br_preset_sink": "Sink"
+  "br_preset_sink": "Sink",
+  "br_custom_title": "Zimmerservice",
+  "br_custom_close": "Schließen",
+  "br_custom_preview": "Kollektion als Vorschau. Probiere eine kleine Veränderung.",
+  "br_custom_categories": "Kategorien",
+  "br_custom_unavailable": "Nur lokale Vorschau. Käufe sind noch nicht verfügbar.",
+  "br_custom_displays": "Displays",
+  "br_custom_plants": "Pflanzen",
+  "br_custom_statues": "Statuen",
+  "br_custom_gallery": "Galerierahmen",
+  "br_custom_portraits": "Porträtpaar",
+  "br_custom_billboard": "Breite Leuchttafel",
+  "br_custom_monstera": "Monstera",
+  "br_custom_ivy": "Hängender Efeu",
+  "br_custom_terrarium": "Terrarium",
+  "br_custom_knight": "Springer-Skulptur",
+  "br_custom_queen": "Damen-Skulptur",
+  "br_custom_rook": "Turm-Skulptur"
 }
