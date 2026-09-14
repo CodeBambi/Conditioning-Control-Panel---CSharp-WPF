@@ -18,6 +18,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { buildRoom } from './fixtures.js';
 import { createScreens } from './screens.js';
+import { createCasinoDecor } from './casino-decor.js';
 import { START, WALK_SPEED, RUN_SPEED, step, worldDelta, nearestStation, facing } from './walk.js';
 
 const KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
@@ -68,6 +69,7 @@ export async function createScene(o) {
   loader.setMeshoptDecoder(MeshoptDecoder);
   const t0 = performance.now();
   const room = await buildRoom({ scene, loader, stations: o.stations, base: o.base, faces: o.faces, label: o.label, onProgress: o.onProgress });
+  const decor = createCasinoDecor({ scene });
   const screens = await createScreens({ meshes: room.screens, ads: o.ads, media: o.media, log: say });
   for (const h of room.hubs) h.setDpr(dpr);
   const buildMs = performance.now() - t0;
@@ -131,6 +133,7 @@ export async function createScene(o) {
     if (held || halted || !!on === overview) return;
     resetInput();
     overview = !!on;
+    decor.setOverview(overview);
     if (room.ceiling) room.ceiling.visible = !overview;
     if (overview) { saved.pos = pos.slice(); saved.yaw = yaw; saved.pitch = pitch; topDown(); setNearest(null); }
     else if (saved.pos) { pos.splice(0, 3, ...saved.pos); yaw = saved.yaw; pitch = saved.pitch; }
@@ -139,7 +142,7 @@ export async function createScene(o) {
   /** Stand at a station's approach point, facing it. */
   function go(row) {
     if (!row || held) return;
-    if (overview) { overview = false; if (room.ceiling) room.ceiling.visible = true; }
+    if (overview) { overview = false; decor.setOverview(false); if (room.ceiling) room.ceiling.visible = true; }
     resetInput();
     pos.splice(0, 3, ...row.approach);
     ({ yaw, pitch } = facing(row.approach, row.look));
@@ -170,6 +173,7 @@ export async function createScene(o) {
     }
     if (!still) ambient += dt;
     room.update(dt, ambient, still);
+    decor.update(dt, still);
     camera.updateMatrixWorld();
     screens.update(ambient, overview ? null : camera, still);
     renderer.render(scene, camera);
@@ -197,7 +201,7 @@ export async function createScene(o) {
       held = null; resetInput(); run();
     },
     pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); } else run(); },
-    halt() { halted = true; stop(); resetInput(); },
+    halt() { halted = true; stop(); resetInput(); decor.dispose(); },
     setStill(on) { still = !!on; },
     /** Repaint one fixture label, e.g. the wheel's screen for MUST HIT (10.16.E). */
     setLabel(rowKey, node, text) { return room.setLabel(rowKey, node, text); },
@@ -213,6 +217,7 @@ export async function createScene(o) {
         position: pos.slice(), yaw, pitch, overview, held: !!held, running: !!raf, still,
         nearest: nearest ? nearest.key : null, fixtures: room.fixtures, bulbs: room.bulbs, screens: room.screens.length,
         pictures: screens.pictures, animation: screens.animation, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
+        decor: decor.debug(),
         emis: room.emis.map((e) => e.debug()),
         marquee: room.marquee?.userData.text,
         bulbColors: scene.children.filter((o) => o.isInstancedMesh && o.instanceColor).slice(0, 2).map((o) => Array.from(o.instanceColor.array.slice(0, 9))),
