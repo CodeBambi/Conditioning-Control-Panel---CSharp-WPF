@@ -1108,6 +1108,12 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// Why <c>enable_strict_lock</c> never lands. Short on purpose: <see cref="ReportCommandRefused"/>
+        /// truncates the emote it sends back to the controller at 60 characters.
+        /// </summary>
+        private const string StrictLockRefusal = "strict lock is the subject's switch only";
+
         private void ExecuteCommand(string action, JObject? parameters)
         {
             _lastCommandStatus = "ok";
@@ -1368,14 +1374,11 @@ namespace ConditioningControlPanel.Services
                             {
                                 MainWindowRef.StartSessionFromRemote(session);
                             }
+                            // strict_lock IS IGNORED HERE. See the enable_strict_lock case below:
+                            // a remote participant may start the subject's session, but may not
+                            // take away the subject's ability to close what it plays.
                             if (parameters?["strict_lock"]?.Value<bool>() == true)
-                            {
-                                if (App.Settings?.Current != null)
-                                {
-                                    App.Settings.Current.StrictLockEnabled = true;
-                                    App.Settings.Save();
-                                }
-                            }
+                                ReportCommandRefused(action, StrictLockRefusal);
                             break;
 
                         case "pause_session":
@@ -1393,12 +1396,29 @@ namespace ConditioningControlPanel.Services
                                 ?.StopSessionFromRemote();
                             break;
 
+                        // ============================================================
+                        // STRICT LOCK IS NOT REMOTE-CONTROLLABLE. Owner decision, and the
+                        // asymmetry is the whole point.
+                        //
+                        // Strict Lock removes SKIP and CLOSE from a mandatory video: with it on,
+                        // the panic key is the only way out of a clip (see
+                        // label_strict_only_panic_key_closes). Every other Full-tier command
+                        // changes what the subject SEES; this one changes what they can still DO
+                        // about it, and a second person on the far end of a pairing code is not
+                        // someone the app can let make that call for them. The subject can still
+                        // turn it on themselves, on their own machine, at any time.
+                        //
+                        // Refused on the client REGARDLESS of what the server sends. The tier
+                        // allowlist lives server-side; this is not a belt-and-braces duplicate of
+                        // it, it is the half that cannot be reconfigured from outside. The
+                        // controller gets a refusal, not silence, so the far end knows the command
+                        // did not land rather than believing it did. The server lane should drop
+                        // the action from the "full" tier too - see REVIEW.md.
+                        //
+                        // disable_strict_lock STAYS. It only ever gives the subject a way out.
+                        // ============================================================
                         case "enable_strict_lock":
-                            if (App.Settings?.Current != null)
-                            {
-                                App.Settings.Current.StrictLockEnabled = true;
-                                App.Settings.Save();
-                            }
+                            ReportCommandRefused(action, StrictLockRefusal);
                             break;
 
                         case "disable_strict_lock":

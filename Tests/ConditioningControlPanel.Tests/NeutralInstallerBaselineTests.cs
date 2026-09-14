@@ -434,4 +434,73 @@ public class NeutralInstallerBaselineTests
         Assert.Contains("\"let me out\"", AppText("Services", "Haptics", "LockdownService.cs"), StringComparison.Ordinal);
         Assert.Contains("_lockdownTimerClickCount >= 5", AppText("MainWindow", "MainWindow.Lab.cs"), StringComparison.Ordinal);
     }
+    // ---- a remote participant can never enable Strict Lock (item 7) ----------------------
+
+    /// <summary>
+    /// Owner decision: no. Strict Lock removes SKIP and CLOSE from a mandatory video - every other
+    /// Full-tier command changes what the subject sees, this one changes what they can still do
+    /// about it. The client refuses it whatever the server's tier allowlist says, so this reads the
+    /// dispatch directly: neither entry point may still write StrictLockEnabled = true.
+    /// </summary>
+    [Fact]
+    public void NoRemoteCommandPathTurnsStrictLockOn()
+    {
+        var svc = AppText("Services", "RemoteControlService.cs");
+
+        Assert.DoesNotContain("StrictLockEnabled = true", svc, StringComparison.Ordinal);
+        Assert.Contains("case \"enable_strict_lock\":", svc, StringComparison.Ordinal);
+        Assert.Contains("ReportCommandRefused(action, StrictLockRefusal)", svc, StringComparison.Ordinal);
+
+        // The other half: start_session used to carry a strict_lock parameter that bypassed the
+        // command entirely. It is refused, not honoured.
+        var start = svc.IndexOf("parameters?[\"strict_lock\"]", StringComparison.Ordinal);
+        Assert.True(start > 0, "the start_session strict_lock parameter handling is gone - check it was not silently dropped");
+        Assert.Contains("ReportCommandRefused", svc.Substring(start, 220), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Turning it OFF stays remote-controllable. The asymmetry is the point: that direction only
+    /// ever hands the subject a way out of a clip.
+    /// </summary>
+    [Fact]
+    public void TurningStrictLockOffIsStillAllowed()
+    {
+        var svc = AppText("Services", "RemoteControlService.cs");
+        var off = svc.IndexOf("case \"disable_strict_lock\":", StringComparison.Ordinal);
+        Assert.True(off > 0);
+        Assert.Contains("StrictLockEnabled = false", svc.Substring(off, 250), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A refused command must not be announced as a change. The toast and the command log both read
+    /// CommandLabels, so enable_strict_lock has to map to the refusal string in all 9 languages or
+    /// the subject is told a safety setting flipped when it did not.
+    /// </summary>
+    [Fact]
+    public void ARefusedStrictLockIsNotReportedAsEnabled()
+    {
+        Assert.Contains("[\"enable_strict_lock\"] = \"cmd_strict_lock_refused\"",
+            AppText("MainWindow", "MainWindow.xaml.cs"), StringComparison.Ordinal);
+
+        foreach (var lang in LanguageFiles)
+        {
+            var path = Path.Combine(RepoRoot(), "ConditioningControlPanel",
+                "Localization", "Languages", lang + ".json");
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+            Assert.True(doc.RootElement.TryGetProperty("cmd_strict_lock_refused", out _),
+                lang + ".json has no cmd_strict_lock_refused");
+        }
+    }
+
+    /// <summary>
+    /// The waiver is where the subject decides how far this goes, so it must no longer promise a
+    /// power the app refuses, and it should say what the controller can never do.
+    /// </summary>
+    [Fact]
+    public void TheWaiverNoLongerOffersStrictLock()
+    {
+        var waiver = AppText("MainWindow", "MainWindow.RemoteControl.cs");
+        Assert.DoesNotContain("- Enable strict lock", waiver, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("can NEVER enable Strict Lock", waiver, StringComparison.Ordinal);
+    }
 }

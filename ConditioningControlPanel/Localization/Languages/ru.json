@@ -2271,6 +2271,7 @@
   "cmd_session_resumed": "Сессия возобновлена",
   "cmd_session_stopped": "Сессия остановлена",
   "cmd_strict_lock_enabled": "Строгий замок включён",
+  "cmd_strict_lock_refused": "Запрос строгого замка проигнорирован",
   "cmd_strict_lock_disabled": "Строгий замок выключен",
   "cmd_panic_key_disabled": "Тревожная клавиша отключена",
   "cmd_panic_key_enabled": "Тревожная клавиша включена",

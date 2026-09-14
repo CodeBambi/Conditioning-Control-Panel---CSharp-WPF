@@ -2271,6 +2271,7 @@
   "cmd_session_resumed": "Sessão retomada",
   "cmd_session_stopped": "Sessão parada",
   "cmd_strict_lock_enabled": "Bloqueio Rigoroso ativado",
+  "cmd_strict_lock_refused": "Pedido de Bloqueio Rigoroso ignorado",
   "cmd_strict_lock_disabled": "Bloqueio Rigoroso desativado",
   "cmd_panic_key_disabled": "Tecla de pânico desativada",
   "cmd_panic_key_enabled": "Tecla de pânico ativada",
