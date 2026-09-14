@@ -35,6 +35,7 @@ Not salvaged: the chips wallet, the cage, the pot, the Arcademy tier gate.
 | Media feed | client `Services/BackRoom/BackRoomMedia.cs` | C4 |
 | Slot server | CCP-Server `proxy/backroom-slot.js` (pure), `proxy/backroom-routes.js`, `proxy/scripts/sim-backroom-slot.mjs` | S1 |
 | Wheel server | CCP-Server `proxy/backroom-wheel.js` (pure, table v2), `proxy/backroom-wheel-routes.js` | S-wheel |
+| Hypno v3: host primitives, gates, kit, Soft Hand and Velvet Vortex stations and routes | see 10.13 (pieces table) | H1, K1, G-*, S-* |
 
 Origins, same scheme as the Arcademy host: `https://ccp.game/` maps `Resources\web` (Deny), page URL
 `https://ccp.game/backroom/index.html`, three.js from `https://ccp.game/vendor/three/` (identical build
@@ -62,21 +63,23 @@ request never rejects: a missing reply resolves as `{ok:false, reason:'timeout'}
 | `exit-done` | | Page has settled (cursor flushed, overlays released). |
 | `station-open` | `station` | Station took the screen. Host logs day-log event `e_backroom_<station>`. |
 | `station-close` | `station` | Station gave the screen back. |
-| `media-request` | `reqId, station` | Deal media for a sit-down. Reply `media`. |
+| `media-request` | `reqId, station, count?` | Deal media for a sit-down (`count` 1..13, default 4, 10.13.C). Reply `media`. |
 | `station-request` | `reqId, station, op, idem?, body` | Relay to the server (section 3). Reply `station-result`. |
-| `fx` | `token, fxId, station, symbols?` | Fire an effect (section 4). Reply `fx-ack`. |
+| `fx` | `token, fxId, station, symbols?, args?` | Fire an effect (section 4, `args` 10.13.B). Reply `fx-ack`. |
+| `fx-tunnel` | `station, level` | Continuous tunnel vision level 0..1, at most 10 a second, no reply (10.13.B). |
+| `fx-release` | `token, station` | Fade out what that `fx` token still holds on screen, no reply (10.13.B). |
 | `melt` | `station, left` | Current melted spins left, sent whenever it changes. |
 
 ### 2.2 Host -> page
 
 | type | Fields | Meaning |
 |---|---|---|
-| `init` | `protocol, sp, reduced, motion, intensity, lang, lex, stations[], open` | Boot state. `open` = server door flag. |
+| `init` | `protocol, sp, reduced, motion, intensity, gates, lang, lex, stations[], open` | Boot state. `open` = server door flag. `gates` 10.13.A. |
 | `balance` | `sp, why:'server'\|'earn'\|'sync'` | Authoritative SP changed outside a station result. |
 | `media` | `reqId, gifs[4], words[4], seed` | Sit-down media (section 5). |
 | `station-result` | `reqId, ok, status, reason?, body` | Server answer, or a host refusal (`offline`, `closed`, `bad_op`). |
 | `fx-ack` | `token, fired[], skipped[]` | What actually played. `skipped` entries: `{prim, why:'toggle'\|'motion'\|'calm'\|'busy'\|'unknown'}`. |
-| `settings` | `motion, intensity, reduced` | A setting changed while open. |
+| `settings` | `motion, intensity, reduced, gates` | A setting changed while open (`gates` 10.13.A). |
 | `suspend` | `on, reason:'panic'\|'focus'\|'minimise'` | Stop audio and fx now; `on:false` resumes. |
 | `close` | `reason:'app-exit'\|'panic'` | Host wants the window gone. Page answers `exit-done` within 300 ms; host force-closes at 800 ms. |
 
@@ -115,6 +118,8 @@ Host relay whitelist (the only C# that changes when a station is added, one row 
 static readonly Dictionary<string, (string Method, string Path)[]> Ops = new() {
   ["slot"] = new[] { ("GET","state"), ("POST","tape"), ("POST","cursor") },
   ["wheel"] = new[] { ("GET","state"), ("POST","spin") },
+  ["cards"] = new[] { ("GET","state"), ("POST","deal"), ("POST","hit"), ("POST","stand"), ("POST","double"), ("POST","split") },
+  ["roulette"] = new[] { ("GET","state"), ("POST","spin"), ("POST","cursor") },   // 10.13.E
 };
 // op -> {METHOD} /v2/backroom/{station}/{op}
 ```
@@ -220,8 +225,8 @@ One free spin per account per UTC day (owner decision, wheel option A). No stake
 - Refusals: `already_spun` (+ `result, sp, jackpot, snoozeCarry, nextResetAt`), `bad_request`, and `busy` and
   `too_fast` as HTTP 200 (not the slot's 409); `closed` is 403.
 - The page lands on `result.sliceIndex` whatever the drag, seeded inside the drawn slice by the day, and shows the
-  stored landing and a countdown on reopen. Effects are existing ids only (section 4): 1-3 SP `fx.spiral_brief`,
-  5-20 `fx.gif_burst`, 40 and 100 `fx.gif_storm`, the pot `fx.jackpot`, Snooze none. Details: `stations/wheel/station.md`.
+  stored landing and a countdown on reopen. ~~Effects are existing ids only~~ SUPERSEDED by 10.13.F (wheel): the landing
+  fires the v3 moments sized by `wheelSize(result)`, no section 4 ids. Details: `stations/wheel/station.md`.
 
 ## 4. Lines and effect ids
 
@@ -265,7 +270,7 @@ Primitives (C3 maps them onto existing services; `gif-full` is the only new over
 | `glitch-bubbles n` | `ChaosFlashOverlay.Show(ms, 0.3)` | skipped at `Off` |
 | `sub-single` | `App.Subliminal.FlashSubliminalCustom(text, null, null, true)` | always |
 | `sub-seq n` / `sub-burst9` | the same, looped at >= 220 ms per word (Brake: no strobe over 6 Hz) | `Reduced` -> `sub-seq 2` |
-| `spiral-full s` | `OverlayService.ShowOverlayTimed("spiral", ms, opacity)` | `Off` -> static frame |
+| `spiral-full s` | ~~`OverlayService.ShowOverlayTimed("spiral", ms, opacity)`~~ amended 10.13.B: plays `spiral-loom` (preset `screen`), a Loom-woven spiral | `Off` -> static frame |
 | `brain-drain-melt s` | `ShowOverlayTimed("braindrain_melt", ms, BrainDrainIntensity)` | `Off` -> `braindrain` (no drip) |
 | `gif-full s` | NEW: fullscreen single-GIF overlay across screens | `Off` -> still frame |
 
@@ -292,7 +297,7 @@ Rules the host enforces, not the page:
   deduped by FULL PATH (trap 147), shuffled with `seed`; shortfall filled from built-in fallback art.
 - Up to 4 words from the active `SubliminalPool` (mode/mod variant as the app uses), shortfall filled
   from presets `Drop, Relax, Let Go, Sink` in that order. Preset text is a lexicon key (Law VII).
-- Symbol id -> media: `gif0..gif3` = `gifs[0..3]`, `sub0..sub3` = `words[0..3]`. Dealt once per sit-down
+- Symbol id -> media: `gif0..gif3` = `gifs[0..3]`, `sub0..sub3` = `words[0..3]` (a 13-GIF deal: 10.13.C). Dealt once per sit-down
   and kept until the player stands up, so a reel cell never changes face mid-tape.
 - URLs point only at `ccp.assets` (the user's folders, mapped read-only) or `ccp.game`. Keys, never
   paths or URLs, go back to the host in `fx.symbols`. Nothing in `media` is ever sent to the server.
@@ -354,8 +359,9 @@ Station module shape (the room calls nothing else):
 
 ```js
 export async function mount(ctx) {
-  // ctx = { root, bridge, request(op, body, idem?), fx(fxId, symbols?), media(), sp(), onSp(fn),
-  //         reduced, motion, intensity, lex(key, fallback), standUp(), variant, hostBack, spReadout }
+  // ctx = { root, bridge, request(op, body, idem?), fx(fxId, symbols?, args?), media({count}?), sp(), onSp(fn),
+  //         reduced, motion, intensity, lex(key, fallback), standUp(), variant, hostBack, spReadout,
+  //         gates, onSettings(fn), fxTunnel(level), fxRelease(token) }   // the last four and args/count: 10.13
   return {
     open(),                 // take the screen; resolve when interactive (Back is live before this)
     close(),                // Promise, settles within 420 ms, flushes its own cursor
@@ -367,7 +373,8 @@ export async function mount(ctx) {
 
 - A station owns ONE WebGL canvas, created in `open` and disposed in `close`. The room keeps its own
   context while a station is open, so at most TWO contexts are alive (the room, held and not drawing;
-  the station, drawing), never two drawing. Its glb, textures and node contract live in its own folder
+  the station, drawing), never two drawing. Amended 10.13.D: plus the hypno kit's ONE shared Loom context,
+  created on first use inside `open` and freed in `close`, so at most three alive and two drawing. Its glb, textures and node contract live in its own folder
   with its own `station.md`.
 - `ctx.variant` is `{ id, name, palette }` for a row with a `variant` (palette = material name ->
   `rrggbb`, null for the base colour) and `null` otherwise. Honouring it is optional: a station that
@@ -482,3 +489,435 @@ Where these disagree with the sections above, these win.
     `SLOT_FREEZE_FLOOR_MS` to 3000 (was 700), env overrides kept; `state.floorMs` is 3000. A freeze right
     after a freeze waits `max(3000, that freeze's outcomes x 3000)`. A modified client tops out near
     1,200 outcomes an hour against the page's 900.
+
+## 10.13 Hypno v3 amendment (2026-09-14)
+
+Binding spec: the owner-approved playable mockup `hypno-spins-v3.html` and its notes `hypno-spins-v3-notes.md` (owner
+verdict: "seems good, implement this inside our game"). Where this section disagrees with anything above, it wins. The
+"Hypno decisions (2026-09-14)" in `_evidence/brainstorm/DECISIONS.md` (Spiral Dial, suits carrying words, Dealt Mat,
+existing fx ids only) are SUPERSEDED and are not built.
+
+**Laws for every v3 lane**
+
+1. **Looks only.** Rules, odds, pays, stakes, floors and tables stay exactly as the sims ship them (`backroom-cards.js`
+   RULES_V1, `backroom-roulette.js` TABLE_V1, `backroom-wheel.js` TABLE_V2). Anything that would change EV stops the
+   lane and is reported. A landing always shows the server's result; choreography only decorates the way there.
+2. **Every spiral comes from the Loom.** Pages draw fields only through `arcademy/engine/loom/loomField.js`
+   (`createFieldRenderer`, `normalizeParams2`, `loopMs2`, `drawFallbackFrame`, which uses `loomSpiral.js`), imported
+   through the kit (10.13.D), never forked or copied. Host fullscreen spirals are Loom-woven GIFs (10.13.B).
+3. **Handedness.** A Loom field that pulls inward runs with `direction: 1` and a phase that increases while the object
+   turns clockwise on screen: its arms lead at the rim, so it reads inward (the owner checks this on screen). Physical
+   trailing shapes (taffy slices, smear ghosts, turret arms, chip vortex paths, velvet wake) bend AGAINST their motion:
+   `a = base - k * u`, `base` growing in the direction of motion, `u` 0 at the hub to 1 at the rim.
+4. **The Lighthouse beam turns on its own clock**, never locked to the rotor: `beamAngle = -0.7 * t` rad (t in s,
+   against the rotor), half-width 0.24 rad, lighting every number it passes. The mockup's rotor-locked first cut (which
+   only ever lit 0 and 32) is a known bug and is not copied.
+5. **The Brake.** Colour washes at most one per 360 ms, peak alpha 0.42, never white. Tunnel vision never closes: the
+   centre stays clear. Sparks are single 0.5 s fades at least 340 ms apart. Bulb chases at most 2.4 steps a second.
+6. **Calm is the mockup's reduced motion.** Whenever `intensity` is `calm` or `reduced` is true (section 4 forces Calm
+   below MotionLevel Full): every strength x0.5, every fullscreen duration x0.6, settled states instead of travel,
+   slow-motion floors raised (wheel 0.32 -> 0.6, roulette 0.42 -> 0.7). The page halves what it draws itself; the host
+   halves what it draws. Nobody halves twice: a page always sends Normal values in `args`.
+7. **Integrated GPUs in WebView2.** One shared Loom WebGL context per page (the kit's), backing store at most 512 px on
+   the long side (card backs 256), no per-frame `backdrop-filter` in any page. The mockup's "Soft room" page blur is not
+   built; it is the host `haze` primitive, Full only.
+8. **Out of scope:** the notes' six "its own game" ideas (the deck is the player, the hole card thins, sittings as
+   sessions, faceless tells, insurance as look closer, doubling doubles the moment), subliminal words on the screen
+   overlay (not wired in v3), a fullscreen GIF on ordinary card wins, the kaleidoscope win and the tilted bowl.
+
+**Pieces and lanes**
+
+| Piece | Repo / path | Lane |
+|---|---|---|
+| `init.gates`, the five new primitives, `fx.args`, `fx-tunnel`, `fx-release`, the 13-GIF deal, Ops rows, spiral source, `br_*` lexicon prefix | client `Services/BackRoom/*`, new overlays in `Services/BackRoom/Overlays/` | H1 |
+| Hypno kit, loader ctx additions, `room/gif-decode.js`, woven spirals | client `Resources/web/backroom/shared/hypno/`, `room/loader.js`, `room/gif.js`, `Scripts/weave-backroom-spirals.mjs` | K1 |
+| Daily Daze v3 | client `stations/wheel/` | G-wheel |
+| Soft Hand station | client `stations/cards/` + its `stations.json` row | G-cards |
+| Velvet Vortex station | client `stations/roulette/` + its `stations.json` row | G-roulette |
+| Soft Hand routes | CCP-Server `proxy/backroom-cards-routes.js` (pure `backroom-cards.js` as on `feat/br2-sim-cards-b`) | S-cards |
+| Velvet Vortex routes | CCP-Server `proxy/backroom-roulette-routes.js` (pure `backroom-roulette.js` as on `feat/br2-sim-roulette-b`) | S-roulette |
+
+Station lanes never touch C#. They ship English fallbacks in the page and list their `br_cards_*` / `br_roulette_*` keys
+in `station.md`; the integration pass adds them to `Localization/Languages/en.json`. H1 sends every `en.json` key that
+starts with `br_` in `init.lex` (the `LexKeys` list stops growing per station). A page may ship ahead of the kit or the
+host: a missing `ctx` member is feature-detected and the effect is skipped, never faked.
+
+### 10.13.A `init.gates`
+
+```json
+{ "type": "init", "...": "section 2.2 fields", "gates": { "flash": true, "subliminal": true, "spiral": true, "brainDrain": false } }
+{ "type": "settings", "motion": "full", "intensity": "normal", "reduced": false, "gates": { "flash": true, "...": "all four, every time" } }
+```
+
+- Sources: `AppSettings.FlashEnabled`, `SubliminalEnabled`, `SpiralEnabled`, `BrainDrainEnabled`. The host pushes a
+  full `settings` frame when any of the four, `MotionLevel` or `BackRoomFxIntensity` changes, and on `CurrentReplaced`.
+- Gates are for DRESSING. The host still enforces every toggle in `BackRoomFxPlan` (its `FxGates` keeps `Melt` and
+  `SpiralStill`). A page never forces an effect because a gate said true.
+- Page side (K1, `room/loader.js`): `ctx.gates` is a live frozen `{flash, subliminal, spiral, brainDrain}` getter;
+  `ctx.onSettings(fn)` subscribes to `{motion, intensity, reduced, gates}` and returns an unsubscribe. A host that sends
+  no `gates` reads as all `true` (the host is the enforcer).
+- What a station dresses plain when a gate is off (from the first frame, and live on `settings`):
+
+| Gate off | Plain dress |
+|---|---|
+| `flash` | no `fx.wash` / `fx.gif_from`; card faces show rank and suit with no picture, the sit fan too |
+| `spiral` | no `fx.loom_spiral`; card backs are a brass crosshatch, the wheel hub a brass star, the roulette turret dish stays velvet (a Spiral Wake still shows as text and a gold rim glow) |
+| `brainDrain` | no `fx-tunnel`, no `fx.haze`; in-station dims (the long last turn's stage edges) stay |
+| `subliminal` | nothing in v3 |
+
+### 10.13.B Fullscreen effects: host primitives and page effects
+
+**Rule.** The app's signature effects (colour flash, fullscreen spiral, fullscreen GIF, tunnel vision, the soft room
+blur) are real app overlays on the desktop, fired through fx ids and gated by the app toggles. Everything drawn inside
+the station view is the page's own.
+
+| v3 effect (mockup) | Owner | fx / message |
+|---|---|---|
+| Flash (soft colour wash, optional picture in the middle) | host `wash` | `fx.wash` |
+| Fullscreen GIF growing out of a card, slice or pocket | host `gif-from` | `fx.gif_from` |
+| Fullscreen Loom spiral (wheel jackpot, Spiral Wake screen) | host `spiral-loom` | `fx.loom_spiral` |
+| Tunnel vision (tunnel turn, losing edges, tunnel run) | host `tunnel` | `fx-tunnel` |
+| Soft room (roulette haze) | host `haze` (the app's BrainDrain blur, no drip) | `fx.haze`, Full only |
+| Subliminal words | not wired in v3 | none |
+| Loom hub, moire rim, taffy, long last turn, quiet room, Loom backs, your deck, breathing lamp, ripple felt, chip vortex, win tunnel, ace glow, sit fan, drifting rim, lighthouse, fret rattle, velvet wake, turret whirl | page | none |
+
+**Wire.** `fx` gains an optional `args` object; a picture rides in `symbols` as a dealt key (`g0`..`g12`), as in
+section 4. The host validates everything and never uses page text as a path.
+
+```json
+{ "type": "fx", "token": "32-hex", "fxId": "fx.gif_from", "station": "wheel", "symbols": ["g2"],
+  "args": { "from": { "x": 612, "y": 188, "w": 60, "h": 44 }, "ms": 3400, "scale": 1 } }
+{ "type": "fx", "token": "...", "fxId": "fx.wash", "station": "cards", "symbols": ["g11"], "args": { "color": "#5fffd0", "strength": 0.7 } }
+{ "type": "fx", "token": "...", "fxId": "fx.loom_spiral", "station": "roulette", "args": { "preset": "wake", "hold": true, "alpha": 0.65 } }
+{ "type": "fx-release", "token": "<that token>", "station": "roulette" }
+{ "type": "fx-tunnel", "station": "wheel", "level": 0.62 }
+```
+
+| `args` field | Used by | Host validation |
+|---|---|---|
+| `color` | `fx.wash` | `^#[0-9a-fA-F]{6}$`, else `#9b6bff`; HSL lightness capped at 0.72, saturation floored at 0.30, so never white |
+| `strength` | `fx.wash` | clamped 0.1..1, default 0.7 |
+| `from` | `fx.gif_from` | `{x,y,w,h}` CSS px of the page viewport (`getBoundingClientRect` space), finite, w and h 8..viewport; missing or bad = grow from the window centre |
+| `ms` | `fx.gif_from` 1500..5000 (default 3400), `fx.loom_spiral` 1000..20000 (default 4200), `fx.haze` 1000..20000 | clamped |
+| `scale` | `fx.gif_from` | 0.3..1, default 1 (below 1: no dim, it sits inside a running spiral) |
+| `preset` | `fx.loom_spiral` | `screen` or `wake`, else `screen` |
+| `hold` | `fx.loom_spiral`, `fx.haze` | `true` = stays until `fx-release` or the 20 s cap; `ms` ignored |
+| `alpha` | `fx.loom_spiral` | 0.3..0.9, default 0.85 |
+
+**Recipes** (new `BackRoomFxPlan` rows; none is a hero, so they open no hero window and wait behind a running slot hero
+like any non-hero, section 4):
+
+| fxId | Calm | Normal (the mockup) | Full | Gated by |
+|---|---|---|---|---|
+| `fx.wash` | `wash`, peak x0.5 | `wash`: 80 ms up, exponential decay 4.5/s, gone at 900 ms, peak 0.42 x strength; with a gif key the picture sits in the middle at 42% of the screen height (4:3 cover box), alpha min(1, env x 1.3) x 0.85 x strength | as Normal | Flash |
+| `fx.gif_from` | `gif-from`, duration x0.6, dim x0.8 | `gif-from`: grows from `from` to cover the screen over 700 ms (ease in-out), holds, fades over the last 900 ms; the screen dims to 45% behind it unless `scale < 1` | as Normal | Flash |
+| `fx.loom_spiral` | `spiral-loom`, alpha x0.5, duration x0.6 | `spiral-loom`: fade in 800 ms, hold `ms` or until released, fade out 1200 ms | as Normal | Spiral |
+| `fx.haze` | skipped `calm` | skipped `calm` | `haze`: BrainDrain blur without drip at 0.5 x the user's BrainDrainIntensity, until released | BrainDrain |
+| message `fx-tunnel` | `tunnel`, level x0.5 | `tunnel`, level as sent | as Normal | BrainDrain |
+
+**Primitives** (H1; sink methods on `IBackRoomFxSink`, overlays in `Services/BackRoom/Overlays/`):
+
+| Primitive | Sink call | Screens | Motion rule |
+|---|---|---|---|
+| `wash` | `Wash(Color rgb, double peak, BackRoomGif? picture)` | the virtual screen, like the `gif-full` hero; the picture on the room window's screen | Off keeps it (a wash is not motion) |
+| `gif-from` | `GifFrom(BackRoomGif gif, Rect fromScreenDip, int ms, double scale, bool still)` | the screen holding the room window | Off: no growth, full size with a 300 ms fade, still frame |
+| `spiral-loom` | `SpiralLoom(string gifPath, int ms, double alpha, bool hold, bool still)` | one field over the virtual screen | Off: the woven GIF's first frame |
+| `haze` | `BrainDrain(ms, 0.5, melt: false)` (existing) | as the app's BrainDrain | as `brain-drain` |
+| `tunnel` | `Tunnel(double level)` | one vignette per screen, centred on that screen | Off: the level steps without easing |
+
+- **Tunnel shape** (per screen, `R = hypot(w, h) / 2`, `k` = the eased level): a radial gradient, transparent at
+  `R x (1 - 0.72k)` to `rgba(6,3,12, 0.94 x min(1, 1.3k))` at `R x (1.12 - 0.5k)`. It eases toward the wanted level at
+  1.4/s closing and 2.2/s opening. A level not refreshed within 1500 ms eases back to 0 by itself; `suspend`, `close`,
+  `exit` and that station's `station-close` cancel it at once. At most 10 updates a second are applied (a later one in
+  the same 100 ms replaces the earlier).
+- **Wash gap.** A wash inside 360 ms of the previous one is dropped and acked `{prim:'wash', why:'busy'}` (the mockup
+  drops, it does not delay). New strobe channel `Wash`, 360 ms.
+- **One at a time.** At most one `gif-from` on screen: another while it shows is acked `busy`. At most one
+  `spiral-loom`: a new one replaces the running one (the old fades out over 1200 ms). `fx-release` fades out whatever
+  the token still holds (`spiral-loom` 1200 ms, `haze` as BrainDrain releases); a hold ends by itself at 20 s.
+  `station-close` releases every hold that station started. `CancelAll` stops all five.
+- **Coordinates.** `from` is CSS px in the page viewport. The host maps it to screen DIPs through the WebView2
+  control's on-screen origin and `CoreWebView2Controller.ZoomFactor` / `RasterizationScale`. A minimised or off-screen
+  room window grows from the centre of the primary screen.
+- **Spiral source (owner law).** `OverlayService` `"spiral"` plays `GetSpiralPath()`: the user's `SpiralPath`, a random
+  pick from its folder or the Spirals library when `SpiralRandomize` is on, else the mod default from
+  `ModResourceResolver.ResolveSpiralUri()`. None of those is guaranteed to be Loom-woven, so the Back Room stops using
+  it. `spiral-loom` plays, in order: (1) the player's own weave, when `SpiralPath` is a `loom_<slug>.gif` inside
+  `DtrhLoomStore.SpiralsFolder` (the CCP Spirals library the Loom writes); (2) the bundled weave for the preset,
+  `Resources/web/backroom/shared/hypno/spirals/<preset>.gif` (`screen.gif`, `wake.gif`), woven by K1 from
+  `LOOM_PRESETS.screen` / `.wake` with the Loom's own encoder (`dtrh/engine/loomWorker.js`, driven headless by
+  `Scripts/weave-backroom-spirals.mjs`, never at runtime), each with its `.json` Loom v2 sidecar, format `wide`, long
+  side 720, at most 4 MB. A missing file is skipped `unknown`. Frames decode off the UI thread.
+- **`spiral-full` (section 4) moves to the same source.** Its recipes are unchanged; its call becomes
+  `SpiralLoom(<preset screen path>, ms, opacity x level, hold: false, still)`, so the slot's spirals are Loom-woven too.
+
+Page side (K1, `room/loader.js`): `ctx.fx(fxId, symbols?, args?)` posts `fx` (with `args` when given) and returns the
+ack promise carrying the token synchronously (`p.token`); `ctx.fxRelease(token)` posts `fx-release`;
+`ctx.fxTunnel(level)` posts `fx-tunnel` (the kit throttles it, 10.13.D).
+
+### 10.13.C Media for a sit-down
+
+- `media-request` gains `count` (integer 1..13, default 4; anything else reads as 4). The host deals `count` GIFs for
+  that station and keeps the deal until that station's next `media-request`. Words stay 4.
+- A sit-down is one station visit: `open` asks, standing up (`close`, Back) ends it, sitting down again re-deals.
+  Soft Hand may also re-deal in the station with "Stand up, sit back down" (only while no hand is open).
+- **The 13-GIF deal (cards).** The host shuffles the pool with `seed` exactly as section 5 and deals distinct pool GIFs
+  until it has `count` or the pool runs out (probe budget `max(48, count x 4)`). With at least one pool GIF it does NOT
+  pad with fallback art: `gifs.length = min(count, found)`. With none it deals the 4 fallback loops. Keys are
+  `g0`..`g{n-1}` in deal order.
+- **Value mapping (page).** Values in `DECK_VALUES` order `A 2 3 4 5 6 7 8 9 T J Q K` (index 0..12, the pure module's
+  rank order) wear `gifs[i % gifs.length]`: fewer than 13 GIFs cycle. A re-deal changes the mapping.
+- **Wheel and roulette** ask `count: 4` and give `fx.gif_from` the key `deck.pickKey(<result string>)`, so the picture
+  is stable for a result.
+- H1: `IBackRoomMedia.Deal(station, seed, count = 4)`; `BackRoomBridge` reads `count`;
+  `BackRoomFxPlan.ResolveSymbols` accepts one or two digit indexes (`g0`..`g12`, `gif0`..`gif12`); `MaxSymbolKeys`
+  stays 8.
+
+### 10.13.D The hypno kit (`Resources/web/backroom/shared/hypno/`, K1)
+
+Plain ES modules with no three.js import (three stations upload the kit's canvases themselves). `index.js` re-exports
+every name below. Imports: `../../../arcademy/engine/loom/loomField.js` and `../../room/gif-decode.js`.
+
+```js
+// loom.js - one shared Loom GL context per page, over the real loomField.js
+export const LOOM_PRESETS;   // frozen, normalizeParams2'd Loom schema v2: { backs, hub, whirl, wake, screen }
+export const LOOM_BACKING;   // frozen { long: 512, small: 256 }
+export function phaseForAngle(presetName, rad);   // clockwise screen radians -> phase 0..1 whose layer-1 rotation is rad
+export function createLoomKit({ still = false, log = null } = {});
+//   -> { webgl,                                   // boolean
+//        draw(ctx2d, presetName, x, y, w, h, { now, angle, alpha = 1, backing = 'long' } = {}),
+//        paint(canvas, presetName, { now, angle } = {}),   // into a caller-owned canvas (a CanvasTexture), <= 512 px
+//        setStill(on), dispose() }
+```
+
+- Phase: with `angle`, `phaseForAngle(name, angle)`; else `(now % loopMs2(q)) / loopMs2(q)`. `still` holds phase 0 (or
+  the last `angle`). `phaseForAngle` uses loomField's own span rule (`2PI / arms x (arms % n === 0 ? n : arms)`,
+  `n = min(colors, 6)`, times `speedMul`, signed by `direction`): a helper beside the module, not a fork of it.
+- One GL canvas for the page, made on first `draw`/`paint`, its backing resized to the requested aspect (quantized to
+  0.05) at the `backing` long side. The same preset at the same phase and aspect inside one frame renders once (every
+  card back shares one render). No WebGL: `drawFallbackFrame`. `dispose()` loses the context (`WEBGL_lose_context`) and
+  is called from the station's `close`.
+- `LOOM_PRESETS` (the mockup's presets, in schema v2, `bg` solid unless noted):
+  `backs` layer {arms 4, turns 2, duty 0.5, log, direction 1, #ff69b4 #8a5cff, hard}, bg #14060f, glow 0.25, speed 2;
+  `hub` {3, 1.5, 0.55, golden, 1, #e8c27a #ff5fa2 #9b6bff, hard}, bg #1a0f2b, glow 0.35, speed 3 (driven by angle);
+  `whirl` {2, 2.5, 0.45, ribbon, 1, #5fffd0 #9b6bff, hard}, bg #1c1230, glow 0.4, wobble {amp 0.12, freq 3, cycles 1}
+  (driven by angle); `wake` {4, 3, 0.5, log, 1, #5fffd0 #3a1f5c, hard}, bg #0a0614, glow 0.45, wobble {0.15, 2, 1},
+  speed 2; `screen` {6, 2.5, 0.5, log, 1, #ff5fa2 #9b6bff #5fffd0, gradient}, layer2 {enabled, 3, 1.5, 0.3, log, -1,
+  #e8c27a}, bg radial #14060f -> #08040e, glow 0.5, pulse {amp 0.08, cycles 1}, speed 1. `wake` and `screen` are the
+  two the host plays woven.
+
+```js
+// media.js - the dealt GIFs drawn in the page (cards: 13; wheel and roulette: keys only)
+export const DECK_VALUES;   // frozen ['A','2','3','4','5','6','7','8','9','T','J','Q','K']
+export async function createDeck(ctx, { count = 13, maxEdge = 192, still = false } = {});
+//   -> { seed, keys, size,                        // keys: string[] in deal order; size = keys.length >= 1
+//        keyFor(value), keyAt(i),                 // value 'A'..'K' or a card code 'Qh'; index i % size
+//        pickKey(seedString),                     // stable key for a result (FNV-1a of the string)
+//        draw(ctx2d, key, x, y, w, h, { alpha = 1 } = {}),   // cover fit, clipped to the rect
+//        image(key),                              // the source canvas, or an <img> still, for a texture
+//        tick(now), setStill(on), dispose() }
+```
+
+- `createDeck` calls `ctx.media({ count })`. Decoding reuses the room's: K1 moves the three-free part of `room/gif.js`
+  into `room/gif-decode.js` as `decodedSource(url, { maxEdge = 384, maxFps = 12 }) -> { canvas, animated, frames, index,
+  tick(now, still), dispose() } | null`, and `room/gif.js` `animatedSource` wraps it with the CanvasTexture exactly as
+  today (room smoke unchanged). Deck caps: at most 13 sources, `maxEdge` 192, 12 fps each, at most ONE decode started
+  per `tick`, only sources drawn since the last tick advance; no decoder (or a failure) draws an `<img>` still.
+
+```js
+// moments.js - a game moment + size -> host fx calls and page effects, with the gates applied
+export const MOMENTS;              // frozen table, 10.13.F
+export function wheelSize(result); // 'quiet' | 'flash' | 'gif' | 'jackpot'
+export function strengthK(ctx);    // 0.5 when ctx.reduced or ctx.intensity === 'calm', else 1 (page-drawn effects only)
+export function createMoments(ctx, { station });
+//   -> { play(id, { color, strength, from, gif } = {}),   // -> { tokens: string[], page: string[], held: boolean }
+//        tunnel(level),     // 0..1; posts on change at most every 100 ms and re-posts every 1000 ms while > 0
+//        holdScreen(on),    // cards: while on, play() fires no host fx ({held: true}) and tunnel(> 0) is ignored
+//        release(tokens),   // fx-release each
+//        cancel(),          // tunnel(0) now, release every hold, stop timers (suspend, close)
+//        dispose() }
+```
+
+- `play` looks the id up in `MOMENTS`, drops the host steps whose gate is off (`flash`: wash, gif_from; `spiral`:
+  loom_spiral; `brainDrain`: haze, tunnel), fires the rest through `ctx.fx` with the table's Normal `args` merged with
+  the caller's, and returns the page effect names for the station to run at `strengthK(ctx)`. An unknown id fires
+  nothing and logs.
+- Tests: `shared/hypno/tests/*.test.mjs` (node) and `shared/hypno/tests/kit-check.mjs` (headless, a mock host that
+  records `fx`, `fx-tunnel` and `fx-release`; `KIT_PORT` default 8896, debug +500). K1 exports that mock as
+  `shared/hypno/tests/mock-host.js` `createMockHost()` for the station checks.
+
+### 10.13.E Server API: Soft Hand and Velvet Vortex
+
+Shared, exactly as 3.4, 3.5 and section 10: base url and auth; `gate(req, res, { soft: true })` (the limiter's
+`too_fast` and a lock miss's `busy` answer HTTP 200, like the wheel); the door (`backroomOpenFor`: `BACKROOM_OPEN`,
+`BACKROOM_TESTERS`, no `BACKROOM_SEED_KEY` = shut; closed = `403 {ok:false, reason:'closed'}` before any lock, but a
+settled `idem` still replays); the three locks in order (`withLocks`); receipts in `backroom:ids:<uid>` checked under
+the locks and before any floor, replayed byte for byte; `idem` `^[A-Za-z0-9_-]{16,64}$`; keyed rng
+`rngFor(key, uid, n, <station>)`, never `Math.random`; `CAP` = `SKILL_POINTS_CAP` 99,999 (winnings above it are lost,
+`capped: true`); `netSp` on the station ledger (`backroomNetSp` already sums every station into the SkillPointBackfill,
+so a later sync never refunds a stake or erases a win). The client never sends SP. Both files register from
+`backroom-routes.js` with the helper object the wheel gets. Logs: counts and results only, uid through `clean`.
+
+**Soft Hand (`/v2/backroom/cards/*`, `proxy/backroom-cards-routes.js`).** Rules = `backroom-cards.js` RULES_V1: 6 decks
+shuffled for every hand, dealer peek, S17, blackjack 2:1, double on any two cards, split once, double after split,
+split aces one card each, six-card Charlie pays 1:1, no surrender, no insurance, stake 1 or 2 SP, one open hand,
+auto-stand after 24 h.
+
+- Ledger `user.backroom.cards = { v: 1, hand: <engine state, hole card and shoe pointer included> | null, openedAt: ms,
+  n: lifetime hands, nextDealAt: ms, netSp }`. A finished hand stays in `hand` until the next deal. Only
+  `publicHand(hand)` ever leaves the server.
+- `GET state` -> `{ ok, sp, open, hand: publicHand | null, legal: string[], hint: 'hit'|'stand'|'double'|'split'|null,
+  autoStandAt: ISO | null, rules: { v, decks, dealerHitsSoft17, blackjackPays, charlie, stakes, doubleAfterSplit,
+  splitAcesOneCard, maxHands }, floorMs }`. Read-only (an expired hand is auto-stood by the next POST).
+  `legal = legalActions(hand, sp)`, `hint = hint(hand, sp)`, always sent; the page shows the hint only when the player
+  turned it on (off by default).
+- `POST deal {idem, stake}`. A bad `idem` or a stake outside `rules.stakes` -> `bad_request`. Under the locks: the
+  receipt; an open hand older than `autoStandMs` is `autoStand`ed and settled first (its return credited, sent back as
+  `autoStood`); `canDeal` -> `hand_open` (+ `hand, legal, hint`); `now < nextDealAt` -> `too_fast` + `retryInMs`;
+  `sp < stake` -> `insufficient` + `sp`. Then `deal({ id: 'h_' + n.toString(36) + '_' + <idem hash base 36>, n, stake },
+  shoeFor(key, uid, n))`, debit the stake, credit `result.returned` if the deal settled at once (a blackjack on either
+  side), `n += 1`, `openedAt = now`, `nextDealAt = now + CARDS_FLOOR_MS`.
+- `POST hit | stand | double | split {idem, handId, step}`. Under the locks: the receipt; an expired hand -> auto-stand,
+  settle, refuse `auto_stood` (+ `hand, sp`); no hand, a finished hand or a `handId` mismatch -> `no_hand`;
+  `step !== hand.step` -> `stale` (+ `hand, legal, hint`: a double submit); `act(hand, move, shoeFor(key, uid, hand.n),
+  sp)` not ok -> `illegal` (+ `hand, legal, hint`). Debit `cost` (double and split cost one more bet); if the hand is now
+  done, credit `result.returned`.
+- Every success: `{ ok, idem, sp, spBefore, cost, returned, capped, hand: publicHand, legal, hint, autoStood?:
+  publicHand, autoStandAt }`. `cost` = SP this call took, `returned` = SP this call credited (0 while the hand is
+  open), `sp` after both, `netSp += sp - spBefore`.
+- Refusals: `closed` (403), `bad_request`, `hand_open`, `no_hand`, `stale`, `illegal`, `insufficient`, `too_fast`,
+  `auto_stood`, `busy`. Env `CARDS_FLOOR_MS`, default 8000 (the sim's bot floor), between deals only; moves have no
+  floor beyond the 60/min limiter. `state.floorMs` echoes it.
+
+**Velvet Vortex (`/v2/backroom/roulette/*`, `proxy/backroom-roulette-routes.js`).** Rules = `backroom-roulette.js`
+TABLE_V1: 5 bet kinds (straight `s0`..`s36` pays 36; `rose`, `plum` pay 2; rows `sip` 1-12, `sink` 13-24, `deep` 25-36
+pay 3; totals returned, chip included), Spiral Wake 29 in 600 doubles every winning chip, whole SP, 1..3 per spot and
+1..3 per spin, any layout covering all of 1-36 refused, 1..5 spins of one layout per request, all debited and settled
+at once.
+
+- Ledger `user.backroom.roulette = ensureRoulette(...)` = `{ tape, n: lifetime spins, nextBuyAt: ms, netSp }`.
+- `GET state` -> `{ ok, sp, open, tape: tapeJson | null (only while unplayed), table: publicTable(), wheel: WHEEL,
+  rose: ROSE, spots: SPOT_IDS, floorMs }`. The page paints pocket order and colours from this, never its own copy.
+- `POST spin {idem, count, bets: [{spot, amt}], cursor?: {tapeId, played}}`. `parseSpinBody` null -> `bad_request`.
+  Under the locks: the receipt, then `settle({ uid, seedKey, roulette, sp, req, now, floorMs: ROULETTE_FLOOR_MS,
+  cap: CAP })` with its refusals verbatim: `bad_layout` + `why` (`empty | too_many_spots | unknown_spot | bad_amount |
+  duplicate_spot | stake_cap | covers_all | bad_count`), `tape_unplayed` + `sp, tape`, `too_fast` + `retryInMs`,
+  `insufficient` + `sp`. Success = the receipt verbatim: `{ ok, idem, sp, spBefore, cost, won, capped, tape: { id, bets,
+  played: 0, outcomes: [{ i, pocket, color, wake, pay, fx }] } }`. `pay` is the total a spin returns. `fx` stays in the
+  receipt as the pure module writes it; the v3 page does not fire it.
+- `POST cursor {tapeId, played}` -> `{ ok }` (`applyCursor`, forward only; a bad shape is `bad_request`). The host
+  flushes it on `station-close` like the slot's, and it is folded into the next `spin`.
+- Env `ROULETTE_FLOOR_MS`, default 6000 per spin (`nextBuyAt = now + count x floor`). Refusals: `closed` (403),
+  `bad_request`, `bad_layout`, `tape_unplayed`, `too_fast`, `insufficient`, `busy`.
+- Law I on the page: `shownSp = sp - sum(outcomes[played..].pay)`.
+
+S-lane tests: `scripts/test-backroom-cards-routes.mjs`, `scripts/test-backroom-roulette-routes.mjs` (receipts, locks,
+door, floors, cap, auto-stand, stale step, cover-all), plus rows in `proxy/docs/env-vars.md`.
+
+### 10.13.F Station specs
+
+**Common.** A station fires moments only through `createMoments` and never calls the section 4 ids. A moment fires on
+the frame the page SHOWS the result (Law I), never on the server reply. `suspend(true)` and `close()` call
+`moments.cancel()` and dispose the Loom kit and the deck. Headless checks use the kit's mock host; evidence goes under
+`_evidence/hypno/<lane>/`.
+
+**MOMENTS** (Normal `args`; Calm is applied by the host and by `strengthK`):
+
+| id | Fires on | Host, same frame, in order | Page |
+|---|---|---|---|
+| `wheel.turn` | continuous while the long last turn runs | `tunnel(dim x 0.85)` | `last_turn` |
+| `wheel.land.quiet` | Snooze, 1, 2, 3 | none | `quiet_room` |
+| `wheel.land.flash` | 5, 8, 12 | `fx.wash {color: slice colour, strength 0.55}` | `quiet_room` |
+| `wheel.land.gif` | 20, 40, 100 (Dazed, the jackpot fallback included) | `fx.wash {slice colour, 0.9}`, `fx.gif_from {from: slice rect, ms 3400}` | `quiet_room` |
+| `wheel.land.jackpot` | the pot | `fx.loom_spiral {preset screen, ms 4200, alpha 0.9}`, `fx.gif_from {from: slice rect, ms 4600, scale 0.46}`, `fx.wash {#e8c27a, 1}` | `quiet_room`, THE REVEAL |
+| `cards.sit` | open, and "Stand up, sit back down" | none | `sit_fan` |
+| `cards.bloom` | a paid player blackjack (`outcome === 'blackjack'`), the frame the second player card finishes turning | `fx.gif_from {from: ace rect, ms 4000}` with the ace's key, `fx.wash {#ff5fa2, 0.8}` | `ace_glow` |
+| `cards.win` | the settled hand shows `result.net > 0` | `fx.wash {#5fffd0, 0.7}` with the key of the highest-value card (ace highest) in the player's winning hands; after a bloom, `fx.wash {#5fffd0, 0.9}` with no picture | `win_tunnel`, `chip_vortex` |
+| `cards.lose` | `net < 0` | `tunnel` 0.75 x sin(PI x p) over 2600 ms, then 0 | `chip_vortex` to the dealer |
+| `cards.push` | `net === 0` | none | none |
+| `roulette.run` | continuous from Spin to the landing frame | `tunnel(0.75 x clamp(0.35 + abs(ballSpeed) / 8, 0, 1))`, ball speed in rad/s; Full: `fx.haze {hold}` | `lighthouse`, `fret_rattle`, `velvet_wake` (Full) |
+| `roulette.wake` | a spin with `outcome.wake`, at its Spin frame | `fx.loom_spiral {preset wake, hold, alpha 0.65}` | `turret_whirl` |
+| `roulette.land.miss` | landing, `pay === 0` | release the spin's holds | `chip_vortex` to the bowl |
+| `roulette.land.win` | `pay > 0`, no wake, no straight on the pocket | release; `fx.wash {pocket colour, 0.6}` | chips slide in |
+| `roulette.land.big` | `pay > 0` and (`wake` or a straight on the pocket) | release; `fx.wash {pocket colour, 1}`, `fx.gif_from {from: pocket rect, ms 3600}` | chips, plus the pulled pair on a wake |
+
+`wheelSize(result)`: `jackpot` when `result.jackpot`; `quiet` when `snoozed` or `pay <= 3`; `flash` when `pay <= 12`;
+else `gif`. Pocket colour: 0 `#5fffd0`, rose `#ff5fa2`, plum `#9b6bff`. **Nothing fullscreen while a cards decision is
+open:** the station calls `moments.holdScreen(true)` when a reply shows `hand.done === false`, and `holdScreen(false)`
+on the frame the settled hand is shown (a bloom comes only with a hand that is already decided).
+
+**Daily Daze (`stations/wheel/`, G-wheel).** Model: `assets/wheel.glb` (node contract `nodes.js`), the three.js close-up
+as today. New `hypno.js` (pure: the slow-motion time warp, the quiet room colour curve, the taffy shear, the hub phase)
+with `tests/hypno.test.mjs`. `feel.js` loses `FX_BY_TIER`, `fxFor` and `usesGifs` (tiers, sounds and tokens stay).
+`station.js` plays moments. `scene.js` draws:
+
+| Effect | Where | When | Rule |
+|---|---|---|---|
+| Loom hub | a runtime disc on `wheel_rotor` over the hub, sized from `hub_lip` (else `hub_spiral`) bounds, CanvasTexture 256 fed by `kit.paint('hub')`; it replaces the neon tube, which stays when neither node exists | always | `angle = -rotor.rotation.z` (clockwise on screen) plus 0.35 rad/s of idle drift, so it keeps pulling inward at rest; `spiral` off: brass star |
+| The long last turn | the landing plan's clock | while the planned speed is under 1.6 rad/s | time scale `lerp(0.32, 1, clamp(speed / 1.6))` (Calm 0.6); the landing angle and slice never change; stage edges dim to 0.65 x dim x k; caption `br_wheel_slowly` ("s l o w l y") |
+| Quiet room | slice materials | landing | every other slice mixes toward #2a2238 by `min(0.78, clamp(since x 3) x k x 1.6)`; colour flows back from 1.1 s, by angular distance, over 0.8 s; the landed slice keeps its colour with a mint outline |
+| Moire rim | two runtime line rings at the rim | always, Full only | 60 lines each, one ring at the rotor angle, one at 0.9 x angle + 0.3 |
+| Taffy slices | runtime sector geometry plus up to 4 ghost copies at alpha 0.16 | while turning, Full only | shear `min(speed x 0.11, 1.9) x k`, trailing (law 3) |
+
+The `from` rect is `scene.project('landed')` as a 60 x 44 CSS px box. A reopen after spinning fires nothing. Snooze
+keeps THE SHIVER and the yawn. `wheel-check.mjs` adds strips for the flash, gif and jackpot moments and asserts the
+calls the mock host recorded.
+
+**Soft Hand (`stations/cards/`, G-cards).** Model situation: the `cards` row in `stations.json` uses the room fixture
+`card-table.glb` (a room copy with no page node contract), and `blender-scripting/card-table/out/card-table.glb` has no
+station contract either. So the station draws a **2D canvas table** filling the station view, the mockup's table with
+no three.js and no guessed geometry: felt under a lamp pool, the printed arc `br_cards_print` ("BLACKJACK PAYS 2 TO 1 ·
+DEALER STANDS ON ALL 17s · SIX CARDS WIN"), the shoe, the chip spot, the dealer's and the player's hands (split hands
+side by side). A 3D close-up is a later amendment with its own node contract.
+
+| File | What |
+|---|---|
+| `station.js` | `mount(ctx)`; DOM, buttons (Deal; Hit, Stand, Double, Split from `legal`; bet chip 1 or 2, default 1 below 30 SP; hint toggle off by default, remembered in `localStorage` `br_cards_hint`; "Stand up, sit back down" while no hand is open), the request flow, moments |
+| `hand.js` | pure: reading `publicHand`, the button set, the same idem on `busy`/`timeout` retries, `stale` adopts the returned hand, Law I |
+| `table.js` | the canvas renderer: lamp, felt, print, cards, shoe, chips, win tunnel, chip vortex, sit fan |
+| `feel.js` | pure: result -> moment id, the highest-card key, timings |
+| `mock-server.js`, `dev.html` | harness on the 10.13.E shapes with scripted fixture shoes (never a copy of the server rules) |
+| `tests/*.test.mjs`, `tests/cards-check.mjs` | node tests; headless check, `CARDS_PORT` default 8898, debug +500 |
+| `station.md`, `station.css` | as the wheel's |
+
+| Effect | When | Rule |
+|---|---|---|
+| Loom backs | always | `kit.draw(ctx2d, 'backs', ...)` clipped to each face-down card, one render per frame for all; `spiral` off: crosshatch |
+| Your deck | always | the value's dealt picture at 85% under a pale wash (#f7f0fb at 0.3) and a corner halo, rank and suit on top with a white glow, classic layout untouched; `flash` off: plain faces |
+| Breathing lamp | always, held during a celebration | the lamp pool breathes on a 10 s period (six a minute), amplitude x k; shadows follow |
+| Ripple felt | a card lands, Full only | one ripple per landed card, 3.2 s |
+| Chip vortex | after settle | winnings spiral to the player, a lost bet to the dealer, 2 s, trailing |
+| Win tunnel | after a win settles | seven nested frames zooming for 3 s, `lighter`, alpha 0.5 x k |
+| Ace glow | with `cards.bloom` | rose glow around the ace, 1.4 s |
+| Sit fan | `cards.sit` | the 13 values fly out of the shoe face down, flip face up in a row, hold about 2 s while the lamp brightens, fly back; 4.4 s total; Back is live throughout |
+
+The dealer's hole card stays a Loom back until `hand.done`. Reopening with an open hand plays the sit fan, then shows
+the hand with its decisions live (and `holdScreen(true)`).
+
+**Velvet Vortex (`stations/roulette/`, G-roulette).** Model situation: the `roulette` row uses the room fixture
+`roulette.glb` (`hub: true` drives the room's idle hub only; no page node contract), and
+`blender-scripting/roulette/out/roulette.glb` with `wheel-layout.json` has no station contract. So the station draws a
+**2D canvas bowl and mat** filling the station view, the mockup's bowl, with pocket order and colours from `state.wheel`
+and `state.rose`, and a mat with the 37 straights, rose, plum, sip, sink and deep.
+
+| File | What |
+|---|---|
+| `station.js` | `mount(ctx)`; DOM, chip picker (total 1..3), spins picker 1..5, Spin, tape playback (about 8 s a spin, the sim's page pace), cursor, moments |
+| `tape.js` | pure: building a layout, a client cover-all check that only disables Spin (the server decides), Law I, idem reuse, `tape_unplayed` resume |
+| `bowl.js` | the canvas bowl: drifting rim cache, rotor, pockets, lighthouse, the ball's run, rattle, sparks, turret whirl, velvet wake |
+| `mat.js` | the canvas mat and chip stacks |
+| `feel.js` | pure: outcome -> moment id, pocket colour, timings |
+| `mock-server.js`, `dev.html`, `tests/*.test.mjs`, `tests/roulette-check.mjs` | harness with seeded fixture outcomes; node tests; headless check, `ROULETTE_PORT` default 8899, debug +500 |
+| `station.md`, `station.css` | as the wheel's |
+
+| Effect | When | Rule |
+|---|---|---|
+| Drifting rim | always | peripheral-drift print on two rim rings, drawn once into an offscreen cache per size |
+| Lighthouse turret | always | law 4; the check asserts at least 30 distinct numbers lit over 10 s |
+| Fret rattle | every drop | slow motion 0.42 (Calm 0.7), up to three fret clips each with a spark (law 5), planned BACKWARDS from `outcome.pocket` so the ball always settles there |
+| Velvet wake | the ball run, Full only | brushed-nap sheen behind the ball, settling over 1.3 s |
+| Turret whirl (Spiral Wake) | spins with `outcome.wake`, from Spin to rest | the turret dish becomes `kit.draw('whirl')` at 0.85 x fade x k with `angle` = the rotor's clockwise angle x 2.2; a winning stack gets a second pair of chips pulled out of the whirlpool; the turret arms trail the rotor |
+
+Each spin of a tape plays `roulette.run` (plus `roulette.wake` when it wakes) and ends in exactly one
+`roulette.land.*`, which releases that spin's holds first. The beam, the rim and the turret keep turning at rest; Calm
+shows them still.
