@@ -2271,6 +2271,7 @@
   "cmd_session_resumed": "세션 재개됨",
   "cmd_session_stopped": "세션 정지됨",
   "cmd_strict_lock_enabled": "엄격 잠금 활성화됨",
+  "cmd_strict_lock_refused": "엄격 잠금 요청을 무시했어요",
   "cmd_strict_lock_disabled": "엄격 잠금 비활성화됨",
   "cmd_panic_key_disabled": "패닉 키 비활성화됨",
   "cmd_panic_key_enabled": "패닉 키 활성화됨",

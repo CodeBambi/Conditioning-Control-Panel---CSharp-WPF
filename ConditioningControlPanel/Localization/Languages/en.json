@@ -3305,6 +3305,7 @@
   "cmd_session_resumed": "Session resumed",
   "cmd_session_stopped": "Session stopped",
   "cmd_strict_lock_enabled": "Strict Lock enabled",
+  "cmd_strict_lock_refused": "Strict Lock request ignored",
   "cmd_strict_lock_disabled": "Strict Lock disabled",
   "cmd_panic_key_disabled": "Panic key disabled",
   "cmd_panic_key_enabled": "Panic key enabled",

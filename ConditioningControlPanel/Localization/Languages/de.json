@@ -2272,6 +2272,7 @@
   "cmd_session_resumed": "Sitzung fortgesetzt",
   "cmd_session_stopped": "Sitzung gestoppt",
   "cmd_strict_lock_enabled": "Strenge Sperre aktiviert",
+  "cmd_strict_lock_refused": "Anfrage für Strenge Sperre ignoriert",
   "cmd_strict_lock_disabled": "Strenge Sperre deaktiviert",
   "cmd_panic_key_disabled": "Panik-Taste deaktiviert",
   "cmd_panic_key_enabled": "Panik-Taste aktiviert",

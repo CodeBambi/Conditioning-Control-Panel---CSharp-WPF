@@ -153,7 +153,9 @@ namespace ConditioningControlPanel
             ["pause_session"] = "cmd_session_paused",
             ["resume_session"] = "cmd_session_resumed",
             ["stop_session"] = "cmd_session_stopped",
-            ["enable_strict_lock"] = "cmd_strict_lock_enabled",
+            // Refused, never applied (RemoteControlService.ExecuteCommand), so the toast and the
+            // command log must not tell the subject a safety setting just changed when it did not.
+            ["enable_strict_lock"] = "cmd_strict_lock_refused",
             ["disable_strict_lock"] = "cmd_strict_lock_disabled",
             ["disable_panic"] = "cmd_panic_key_disabled",
             ["enable_panic"] = "cmd_panic_key_enabled",

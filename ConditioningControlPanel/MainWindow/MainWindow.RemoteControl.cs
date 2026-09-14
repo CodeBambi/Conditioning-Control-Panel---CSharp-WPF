@@ -180,12 +180,19 @@ namespace ConditioningControlPanel
             {
                 actions.AppendLine("  - Start/stop autonomy mode");
                 actions.AppendLine("  - Start/pause/stop sessions");
-                actions.AppendLine("  - Enable strict lock (videos cannot be skipped)");
                 actions.AppendLine("  - Disable panic button (ESC key won't work)");
             }
 
+            // Named because the waiver is where a subject decides how far this goes, and the ONE
+            // thing a controller cannot do is worth as much there as the list of things they can.
+            // See RemoteControlService.ExecuteCommand: enable_strict_lock is refused on the client
+            // whatever the server sends, at every tier.
+            var limits = "The Controller can NEVER enable Strict Lock. Skip and close stay yours "
+                       + "on every video, at every tier.\n\n";
+
             var message = $"You are about to allow another person to remotely control parts of your app.\n\n" +
                           $"The Controller will be able to:\n{actions}\n" +
+                          limits +
                           $"All media content shown comes from YOUR local files and settings.\n" +
                           $"You assume full responsibility for this interaction.\n" +
                           $"You can stop the session at ANY time by clicking \"Stop Session\" or closing the app.\n" +

@@ -2272,6 +2272,7 @@
   "cmd_session_resumed": "Session reprise",
   "cmd_session_stopped": "Session arrêtée",
   "cmd_strict_lock_enabled": "Verrouillage Strict activé",
+  "cmd_strict_lock_refused": "Demande de Verrouillage Strict ignorée",
   "cmd_strict_lock_disabled": "Verrouillage Strict désactivé",
   "cmd_panic_key_disabled": "Touche panique désactivée",
   "cmd_panic_key_enabled": "Touche panique activée",

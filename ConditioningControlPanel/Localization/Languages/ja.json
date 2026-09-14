@@ -2271,6 +2271,7 @@
   "cmd_session_resumed": "セッションを再開",
   "cmd_session_stopped": "セッションを停止",
   "cmd_strict_lock_enabled": "厳格ロックを有効化",
+  "cmd_strict_lock_refused": "厳格ロックの要求を無視しました",
   "cmd_strict_lock_disabled": "厳格ロックを無効化",
   "cmd_panic_key_disabled": "パニックキーを無効化",
   "cmd_panic_key_enabled": "パニックキーを有効化",
