@@ -13,6 +13,7 @@ using System.Threading.Tasks;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Descent;
+using ConditioningControlPanel.Services.Prizes;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -524,6 +525,82 @@ namespace ConditioningControlPanel.Services
         {
             _hasLoadedProfile = false;
             App.Logger?.Debug("Profile sync: loaded-profile flag reset (logout) - defaults guard re-armed");
+            // Prize ownership belongs to the account signing out (backroom CONTRACT 10.17.E).
+            PrizeFeed.Clear();
+        }
+
+        /// <summary>The one prize feed for this process, bound to <c>App.Ownership</c>.</summary>
+        private static readonly PrizesFeed PrizeFeed = new(() => App.Ownership);
+
+        /// <summary>
+        /// Apply the <c>prizes</c> block of a provider validate response (Patreon, Discord,
+        /// SubscribeStar). <paramref name="requestedFor"/> is the session's unified id when the
+        /// request went out, <paramref name="answeredFor"/> the <c>unified_id</c> the server
+        /// resolved; a block for any other record is ignored.
+        /// </summary>
+        public static void ApplyValidatePrizes(string? requestedFor, string? answeredFor, PrizesBlock? prizes, string source)
+            => PrizeFeed.Apply(requestedFor, answeredFor, prizes, source);
+
+        /// <summary>
+        /// Back Room prize ownership feed 1 (backroom CONTRACT 10.17.E): hands the server's
+        /// <c>prizes</c> block to <see cref="OwnershipService"/> for the account the request
+        /// was made for, and clears it on logout or when the account in play changes. Grants are
+        /// never persisted and never uploaded; the service itself drops stale revisions and any
+        /// snapshot for an account other than the one signed in.
+        /// </summary>
+        internal sealed class PrizesFeed
+        {
+            private readonly Func<OwnershipService?> _ownership;
+            private readonly object _gate = new();
+            private string? _accountId;
+
+            internal PrizesFeed(Func<OwnershipService?> ownership)
+                => _ownership = ownership ?? throw new ArgumentNullException(nameof(ownership));
+
+            /// <summary>Record the account a request is about to be made for; a different account than last time clears what is held.</summary>
+            internal void NoteAccount(string? accountId)
+            {
+                if (string.IsNullOrEmpty(accountId)) return;
+                bool switched;
+                lock (_gate)
+                {
+                    switched = _accountId != null && !string.Equals(_accountId, accountId, StringComparison.Ordinal);
+                    _accountId = accountId;
+                }
+                if (switched)
+                {
+                    App.Logger?.Information("[Prizes] account changed, clearing held ownership");
+                    _ownership()?.Clear();
+                }
+            }
+
+            /// <summary>
+            /// Apply one response's block. Returns true when a snapshot was handed on. A missing
+            /// block leaves the held state alone; a block answered for another record is ignored.
+            /// </summary>
+            internal bool Apply(string? requestedFor, string? answeredFor, PrizesBlock? prizes, string source)
+            {
+                if (string.IsNullOrEmpty(requestedFor)) return false;
+                NoteAccount(requestedFor);
+                if (prizes?.Grants == null) return false;
+                if (!string.Equals(requestedFor, answeredFor, StringComparison.Ordinal))
+                {
+                    App.Logger?.Debug("[Prizes] {Source} answered for another account, block ignored", source);
+                    return false;
+                }
+                var ownership = _ownership();
+                if (ownership == null) return false;
+                ownership.ApplySnapshot(requestedFor, prizes.Revision, prizes.Grants);
+                App.Logger?.Debug("[Prizes] {Source} snapshot rev {Revision}, {Count} grants", source, prizes.Revision, prizes.Grants.Count);
+                return true;
+            }
+
+            /// <summary>Logout: forget the account and drop every held grant.</summary>
+            internal void Clear()
+            {
+                lock (_gate) _accountId = null;
+                _ownership()?.Clear();
+            }
         }
 
         /// <summary>
@@ -1439,6 +1516,8 @@ namespace ConditioningControlPanel.Services
                 var unifiedId = App.Settings?.Current?.UnifiedId;
                 if (!string.IsNullOrEmpty(unifiedId))
                 {
+                    // An account switch drops the previous account's prizes before this request.
+                    PrizeFeed.NoteAccount(unifiedId);
                     raiseSource = "V2 sync";
                     var questProgress = App.Quests?.Progress;
                     var v2SyncData = new
@@ -1627,6 +1706,9 @@ namespace ConditioningControlPanel.Services
                             v2Result?.Success, v2Result?.SkillPoints, v2Result?.UnlockedSkills?.Count ?? 0,
                             v2Result?.TotalXpEarned, v2Result?.TotalConditioningMinutes,
                             v2Result?.Cosmetics != null, v2Result?.WebXp != null);
+                        // Prize ownership first, so a later throw in this block cannot skip it.
+                        // /v2/user/sync answers for the unified_id it was sent.
+                        PrizeFeed.Apply(unifiedId, unifiedId, v2Result?.Prizes, "V2 sync");
                         if (v2Result?.ResetWeeklyQuest == true)
                         {
                             App.Logger?.Information("V2 Sync: Server requested weekly quest reset");
@@ -4999,6 +5081,10 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("user")]
             public V2SyncUser? User { get; set; }
+
+            /// <summary>Back Room prize ownership (backroom CONTRACT 10.17.D); applied, never stored.</summary>
+            [JsonProperty("prizes")]
+            public PrizesBlock? Prizes { get; set; }
         }
 
         /// <summary>

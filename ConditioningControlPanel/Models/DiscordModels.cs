@@ -147,6 +147,11 @@ namespace ConditioningControlPanel.Models
         [JsonPropertyName("auth_token")]
         public string? AuthToken { get; set; }
 
+        /// <summary>Back Room prize ownership for <see cref="UnifiedId"/> (backroom CONTRACT 10.17.D). Never cached.</summary>
+        [JsonProperty("prizes")]
+        [JsonPropertyName("prizes")]
+        public PrizesBlock? Prizes { get; set; }
+
         /// <summary>
         /// Server-side whitelist status. Whitelisted Discord-only users get premium
         /// access (Tier 2) without Patreon OAuth. Delivered here so access does not

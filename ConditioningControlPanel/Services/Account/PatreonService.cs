@@ -552,6 +552,7 @@ namespace ConditioningControlPanel.Services
                 // The server uses this token to detect a divergent/mismatched token
                 // and heal it in the response (BUG-7DCJHDP3JZ).
                 using var validateRequest = new HttpRequestMessage(HttpMethod.Get, "/patreon/validate");
+                var prizesFor = App.Settings?.Current?.UnifiedId;
                 validateRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
                 var currentAuthToken = App.Settings?.Current?.AuthToken;
                 if (!string.IsNullOrEmpty(currentAuthToken))
@@ -591,6 +592,8 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Warning("Patreon validation error: {Error}", subscription?.Error);
                     return CurrentTier;
                 }
+
+                ProfileSyncService.ApplyValidatePrizes(prizesFor, subscription.UnifiedId, subscription.Prizes, "Patreon validate");
 
                 // Server healed a divergent auth token — store it immediately so
                 // subsequent authed requests stop 401ing. Only present on mismatch;

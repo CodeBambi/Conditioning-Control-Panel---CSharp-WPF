@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Newtonsoft.Json;
 using System.Text.Json.Serialization;
 
@@ -129,6 +130,27 @@ namespace ConditioningControlPanel.Models
         [JsonProperty("auth_token")]
         [JsonPropertyName("auth_token")]
         public string? AuthToken { get; set; }
+
+        /// <summary>Back Room prize ownership for <see cref="UnifiedId"/> (backroom CONTRACT 10.17.D). Never cached.</summary>
+        [JsonProperty("prizes")]
+        [JsonPropertyName("prizes")]
+        public PrizesBlock? Prizes { get; set; }
+    }
+
+    /// <summary>
+    /// The server's Back Room prize snapshot, the same shape on /v2/user/sync, the provider
+    /// validate responses and every counter reply (backroom CONTRACT 10.17.C/D). Read only:
+    /// the client applies it to <c>App.Ownership</c> and never stores or uploads it.
+    /// </summary>
+    public class PrizesBlock
+    {
+        [JsonProperty("revision")]
+        [JsonPropertyName("revision")]
+        public long Revision { get; set; }
+
+        [JsonProperty("grants")]
+        [JsonPropertyName("grants")]
+        public List<string>? Grants { get; set; }
     }
 
     /// <summary>
