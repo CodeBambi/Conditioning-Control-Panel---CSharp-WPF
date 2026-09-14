@@ -43,10 +43,13 @@ namespace ConditioningControlPanel.Views.Tabs
             {
                 try
                 {
+                    // Jackpot Remix is a flash prize too, so the tile wears the pill for it as
+                    // well as for the two motion styles.
                     if (CardFlash != null)
                         CardFlash.ShowV2Badge =
                             Services.Prizes.PrizeGrants.IsGranted(Services.Prizes.PrizeGrants.FlashDriftBounce)
-                            || Services.Prizes.PrizeGrants.IsGranted(Services.Prizes.PrizeGrants.FlashPendulum);
+                            || Services.Prizes.PrizeGrants.IsGranted(Services.Prizes.PrizeGrants.FlashPendulum)
+                            || Services.Prizes.PrizeGrants.IsGranted(Services.Prizes.PrizeGrants.JackpotRemix);
                 }
                 catch (Exception ex) { App.Logger?.Debug("SettingsTabView.RefreshV2Badges: {E}", ex.Message); }
             }
