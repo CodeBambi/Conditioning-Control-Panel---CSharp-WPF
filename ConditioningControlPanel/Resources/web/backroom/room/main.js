@@ -225,6 +225,7 @@ function wireExits() {
   window.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     e.preventDefault();
+    if (scene?.dismissEmi()) return;
     back('key');
   }, true);
   bridge.on('close', async () => {
@@ -381,7 +382,7 @@ async function start(init) {
       faces: 'stations/slot/assets/emi-faces-slot.png',
       ads: ADS.map((a) => ({ url: 'room/assets/ads/' + a.file + '.webp', caption: lex(a.key, a.fallback) })),
       label: (row, key) => (key === '@name' ? label(row) : lex(key, LABEL_FALLBACK[key])),
-      media,
+      media, lex,
       still: still(),
       onProgress: (f) => hud.progress(f),
       onNearest: (row) => hud.nearest(row),
