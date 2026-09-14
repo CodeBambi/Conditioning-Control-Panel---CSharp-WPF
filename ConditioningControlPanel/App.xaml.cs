@@ -4091,6 +4091,16 @@ namespace ConditioningControlPanel
                 // resumes, so the Mod Manager joins this task rather than starting a second one.
                 _ = ReleaseContent.RequestPackAsync(packId!, null, System.Threading.CancellationToken.None);
 
+                // audio-base is no longer fetched unconditionally at startup, so the mod that OWNS
+                // those voice lines has to ask for them here or it would arrive voiceless on the
+                // idle channel until the next launch.
+                if (Services.ReleaseContentService.ModOwnsBaselineVoice(modId))
+                {
+                    _ = ReleaseContent.RequestPackAsync(
+                        Services.ReleaseContentService.PackAudioBase, null, System.Threading.CancellationToken.None);
+                    Logger?.Information("Welcome-back: {Mod} owns the baseline voice - fetching it too", modId);
+                }
+
                 Logger?.Information("Welcome-back: fetching {Pack} so {Mod} can take over when it lands", packId, modId);
             }
             catch (Exception ex)

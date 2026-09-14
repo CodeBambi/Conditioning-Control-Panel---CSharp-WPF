@@ -3,6 +3,7 @@ using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 using Xunit;
 
 namespace ConditioningControlPanel.Tests;
@@ -191,5 +192,54 @@ public class NeutralInstallerBaselineTests
         Assert.DoesNotContain("resourcesPath, \"sub_audio\"", AppText("App.xaml.cs"), StringComparison.Ordinal);
         Assert.DoesNotContain("Directory.CreateDirectory(_audioPath)",
             AppText("Services", "Subliminal", "SubliminalService.cs"), StringComparison.Ordinal);
+    }
+    // ---- audio-base follows the mod that owns it (item 3) ------------------------------
+
+    /// <summary>
+    /// Resources\sounds\flashes_audio is BambiSleep's recorded VO, not a neutral library, and
+    /// CompanionContentResolver.OwnsBaselineVoiceLines is the single place that says so. The
+    /// download decision has to defer to that predicate rather than keep a second list.
+    /// </summary>
+    [Fact]
+    public void OnlyTheModThatOwnsTheBaselineVoiceAsksForIt()
+    {
+        Assert.True(ReleaseContentService.ModOwnsBaselineVoice(BuiltInMods.BambiSleepId));
+
+        foreach (var other in new[]
+                 {
+                     BuiltInMods.CCPDefaultId, BuiltInMods.SissyHypnoId, BuiltInMods.LockedId,
+                     BuiltInMods.DronificationId, BuiltInMods.InfectionControlId, "some-creator-mod",
+                 })
+            Assert.False(ReleaseContentService.ModOwnsBaselineVoice(other),
+                other + " would pull 46MB of another character's voice lines at first launch");
+    }
+
+    /// <summary>
+    /// The empty-id case diverges from OwnsBaselineVoiceLines deliberately: that predicate answers
+    /// "keep the baseline" so a resolver called before the mod layer is up still gets a real folder,
+    /// but spending a user's bandwidth on the same guess is a different question.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void AnUnknownModDownloadsNothing(string? modId)
+        => Assert.False(ReleaseContentService.ModOwnsBaselineVoice(modId));
+
+    /// <summary>
+    /// Startup only pays for the baseline voice when the active mod speaks it, and the mod that DOES
+    /// speak it still gets it outside startup - otherwise a mid-session switch to BambiSleep leaves
+    /// the idle voice channel silent until the next launch.
+    /// </summary>
+    [Fact]
+    public void TheBaselineFetchIsGatedOnTheActiveMod()
+    {
+        var text = AppText("Services", "Content", "ReleaseContentService.cs");
+        Assert.Contains("var wantsBaseline = ModOwnsBaselineVoice(", text, StringComparison.Ordinal);
+        Assert.Contains("var needsBaseline = wantsBaseline", text, StringComparison.Ordinal);
+
+        Assert.Contains("ModOwnsBaselineVoice(modId)", AppText("App.xaml.cs"), StringComparison.Ordinal);
+        Assert.Contains("ModOwnsBaselineVoice(card.ModId)",
+            AppText("Dialogs", "ModPickerDialog.xaml.cs"), StringComparison.Ordinal);
     }
 }
