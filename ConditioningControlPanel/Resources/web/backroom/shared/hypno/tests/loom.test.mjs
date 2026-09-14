@@ -85,6 +85,7 @@ test('backingFor: long side capped at 512, aspect quantised to 0.05', () => {
 test('without a document the kit draws nothing and never throws', () => {
   const kit = createLoomKit({ still: true });
   assert.equal(kit.webgl, false);
+  assert.equal(typeof Object.getOwnPropertyDescriptor(kit, 'webgl').get, 'function', 'webgl is live, not a value copied at creation');
   assert.equal(kit.draw({ drawImage() { throw new Error('no'); } }, 'hub', 0, 0, 10, 10), false);
   assert.equal(kit.paint({ width: 8, height: 8, getContext: () => null }, 'hub'), false);
   kit.setStill(false);
