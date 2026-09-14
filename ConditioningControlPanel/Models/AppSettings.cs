@@ -131,6 +131,20 @@ namespace ConditioningControlPanel.Models
     }
 
     /// <summary>
+    /// How the ambient dashboard bubbles travel (Back Room prize styles). FloatUp is the free
+    /// base; Rain and SpiralIn are owned styles; Mix rolls per bubble among FloatUp plus the
+    /// owned styles. Ownership is never read from here: an unowned pick behaves as FloatUp
+    /// (Services/AmbientBubbleMotion.Resolve), so a synced profile can carry any value safely.
+    /// </summary>
+    public enum BubbleMotionStyle
+    {
+        FloatUp,
+        Rain,
+        SpiralIn,
+        Mix
+    }
+
+    /// <summary>
     /// Application settings model - matches Python DEFAULT_SETTINGS
     /// </summary>
     public class AppSettings : INotifyPropertyChanged
@@ -3268,6 +3282,14 @@ namespace ConditioningControlPanel.Models
         {
             get => _bubblesEnabled;
             set { _bubblesEnabled = value; OnPropertyChanged(); }
+        }
+        private BubbleMotionStyle _bubbleMotionStyle = BubbleMotionStyle.FloatUp;
+        /// <summary>Ambient bubble travel style (Bubbles v2). Unowned styles degrade to FloatUp at spawn.</summary>
+        [JsonProperty("BubbleMotionStyle")]
+        public BubbleMotionStyle BubbleMotionStyle
+        {
+            get => _bubbleMotionStyle;
+            set { _bubbleMotionStyle = value; OnPropertyChanged(); }
         }
         private int _bubblesFrequency = 5;
         public int BubblesFrequency
