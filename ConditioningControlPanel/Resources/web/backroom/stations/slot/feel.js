@@ -73,6 +73,20 @@ export function ladderSemis(step, melted) {
   return melted ? s - 12 : s;
 }
 
+/** THE CHIME LADDER across THE BANK's rollup (playbook A3): the ladder climbs while the readout counts, so a
+ *  big win rises instead of ringing once. Step 0 is the landing cue sound.js has already played; the steps after
+ *  it follow a semitone apart, spread over `ms`, never closer than the strobe floor (Brake 7, 6 Hz) and never
+ *  more than LADDER_CAP. Tier 1 and a melted win get the landing note and nothing more (Law IX, Brake 5).
+ *  Returns `[{ at, semis }]` in ms from the landing, both rising. */
+const LADDER_STEPS = Object.freeze([0, 1, 3, 5, 7]);
+export function ladderPlan(tier, ms, melted = false) {
+  const t = Math.max(0, Math.min(4, Math.floor(Number(tier) || 0))), span = Math.max(0, Number(ms) || 0);
+  const want = melted || t <= 1 ? 1 : Math.min(FEEL.LADDER_CAP, LADDER_STEPS[t]);
+  const gap = Math.max(FEEL.STROBE_MIN_MS, span / want);
+  const n = Math.max(1, Math.min(want, Math.floor(span / gap) || 1));
+  return Array.from({ length: n }, (_, i) => ({ at: Math.round(i * gap), semis: i }));
+}
+
 /** THE BANK token count: a win by its tier, a spend by its cost (counterfx's reversed count). */
 export function winTokens(tier, lite) {
   const hi = lite ? FEEL.BANK_MAX_LITE : FEEL.BANK_MAX;
@@ -84,6 +98,40 @@ export const spendTokens = (cost, lite) => bankCount(cost, lite);
 export function tickValues(from, to, n) {
   const a = Math.round(Number(from) || 0), b = Math.round(Number(to) || 0), k = Math.max(1, n | 0);
   return Array.from({ length: k }, (_, i) => (i === k - 1 ? b : Math.round(a + (b - a) * ((i + 1) / k))));
+}
+
+/* THE BANK's proportional rollup (playbook A3). A casino scales the count-up to the win, and so does this:
+ * the token count and stagger never move (3-7 tokens, 4 on Calm, 560 ms each, 70 ms apart, House Book), only
+ * how long the READOUT keeps counting. The tokens tick it as they land, exactly as before; when the rollup is
+ * longer than their flight the readout carries on from the last landing to the settled value over the rest,
+ * and the mini-thud waits for the end. Law I: the value it lands on is the tape's, never this file's. */
+export const ROLLUP_MS = Object.freeze([0, 500, 1200, 2000, 6000]);   // by tier: nothing, 500, 1.2 s, 2 s, the 6 s jackpot climb
+
+/** How long the count-up runs. `x` is a tier (0-4), an outcome, or a raw pay read through tierOf's thresholds
+ *  (only a tier or an outcome can name the jackpot: a bare 400 is a big line, not `emi3`). */
+export function rollupMs(x) {
+  if (x && typeof x === 'object') return ROLLUP_MS[tierOf(x)];
+  const n = Math.max(0, Math.floor(Number(x) || 0));
+  if (n <= 4) return ROLLUP_MS[n];
+  return ROLLUP_MS[n >= 40 ? 3 : n >= 10 ? 2 : 1];
+}
+
+/** The tokens' whole flight, and when token `i` lands (both from the House Book's own two numbers). */
+export const bankFlightMs = n => FEEL.BANK_FLY_MS + Math.max(0, (n | 0) - 1) * FEEL.BANK_STAGGER_MS;
+export const bankLandMs = i => FEEL.BANK_FLY_MS + Math.max(0, i | 0) * FEEL.BANK_STAGGER_MS;
+
+/** The count-up curve: a shallow ease-out, so a big roll sprints and then settles. `q >= 1` is exactly `to`. */
+export function rollupAt(from, to, q) {
+  const a = Math.round(Number(from) || 0), b = Math.round(Number(to) || 0), k = Math.min(1, Math.max(0, Number(q) || 0));
+  return k >= 1 ? b : Math.round(a + (b - a) * (1 - (1 - k) ** 2));
+}
+
+/** The readout value at each token landing. Without a rollup longer than the flight this is the old even ladder,
+ *  the last one exactly `to`; with one, each landing is that moment's count and the tail finishes the job. */
+export function rollupTicks(from, to, n, ms) {
+  const k = Math.max(1, n | 0), flight = bankFlightMs(k);
+  if (!(Number(ms) > flight)) return tickValues(from, to, k);
+  return Array.from({ length: k }, (_, i) => rollupAt(from, to, bankLandMs(i) / Number(ms)));
 }
 
 /** THE MASCOT GLANCE. Poses from the face atlas. Never the same pose twice in a row: a repeat takes its alternate. */
@@ -115,6 +163,30 @@ export function shiverPx(ms) {
 
 /** THE MARQUEE: chase step period for a heat 0..4, never faster than the strobe floor. */
 export const chaseMs = heat => Math.max(FEEL.STROBE_MIN_MS * 2, 1900 - 340 * Math.max(0, Math.min(4, heat)));
+
+/* THE PAYLINE FRAME (playbook A6). After a win the winning row is framed for exactly the length of THE BANK's
+ * rollup, then THE GLOW goes out over 480 ms. Law X: it shares the beat with the reveal, it does not add one. */
+export const PAYLINE_PULSE_MIN_MS = 500;   // Brake 7: the pulse never runs faster than 2 Hz
+
+/** How many pulses the frame takes over a rollup. 0 means a steady frame: reduced motion takes the STATE
+ *  (Law VI) and a melted spin gets no ceremony (Brake 5). Tier 1 gets one soft pulse, never confetti (Law IX). */
+export function paylinePulses(tier, { reduced = false, melted = false } = {}) {
+  if (reduced || melted) return 0;
+  const t = Math.max(0, Math.min(4, Math.floor(Number(tier) || 0)));
+  if (t <= 1) return 1;
+  return Math.max(1, Math.floor(rollupMs(t) / 600));
+}
+
+/** The frame's lit level 0..1 at `ms` into it: `pulses` eases in and out across `hold`, then THE GLOW fades.
+ *  `pulses <= 0` holds it steady for the settled beat. It never goes dark before the fade (Brake 9). */
+export function paylineGlow(ms, hold, pulses = 1) {
+  const h = Math.max(0, Number(hold) || 0), at = Number(ms) || 0;
+  if (at < 0 || at >= h + FEEL.GLOW_OUT_MS) return 0;
+  const out = at > h ? 1 - (at - h) / FEEL.GLOW_OUT_MS : 1;
+  if (!(pulses > 0)) return out;
+  const period = Math.max(PAYLINE_PULSE_MIN_MS, h / pulses);
+  return out * (0.55 + 0.45 * (1 - Math.cos((2 * Math.PI * Math.min(at, h)) / period)) / 2);
+}
 
 /** A cubic-bezier(x1,y1,x2,y2) easing, solved for x. */
 export function bezier([a, b, c, d], x) {
