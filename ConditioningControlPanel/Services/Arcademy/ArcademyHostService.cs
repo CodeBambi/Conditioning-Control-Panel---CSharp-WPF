@@ -257,7 +257,10 @@ internal static class ArcademyHostService
                 // ccp.assets is: shell/audio.js routes the media element through the WebAudio
                 // bus graph, and a tainted stream cannot feed a MediaElementSource - it would
                 // fall back to raw element volume and slip the mixer's laws.
-                ("ccp.subaudio", Path.Combine(AppContext.BaseDirectory, "Resources", "sub_audio"),
+                // Resolved, not hardcoded to the install dir: these clips ship in the mod-bambi
+                // content pack. A folder that exists in neither root maps a path that is simply not
+                // there, and the page's own missing-audio branch (text-only pads) handles it.
+                ("ccp.subaudio", ContentLocator.ResolveDirectory(Path.Combine("Resources", "sub_audio")),
                     CoreWebView2HostResourceAccessKind.Allow),
             };
             try { Directory.CreateDirectory(Chaos.DtrhLoomStore.SpiralsFolder); }
@@ -1388,7 +1391,7 @@ internal static class ArcademyHostService
         var audible = App.Settings?.Current?.SubAudioAudible == true;
         var modDir = audible ? ModAudioRoot() : null;
         var defaultDir = audible
-            ? Path.Combine(AppContext.BaseDirectory, "Resources", "sub_audio")
+            ? ContentLocator.ResolveDirectory(Path.Combine("Resources", "sub_audio"))
             : null;
         var rows = new List<object>(phrases.Length);
         foreach (var text in phrases)

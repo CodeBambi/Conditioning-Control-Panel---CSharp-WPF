@@ -169,14 +169,39 @@ $PackSpecs = @(
         Files   = @()
     },
     @{
-        Id      = 'mod-bambi'
-        File    = 'mod-bambi.zip'
-        Label   = 'BambiSleep companion voice'
-        Folders = @(
+        # Also carries the SPOKEN TRIGGER WORDS: Resources\sub_audio (the 21 whisper clips) and the
+        # 17 loose copies of the same named triggers at the Resources\sounds root. They are Bambi's
+        # vocabulary read aloud, and the out-of-box phrase pool is neutral now, so nothing in a
+        # stock install ever asks for them. Entry paths are the install-relative ones, so an
+        # installed pack puts them back exactly where ContentLocator probes.
+        Id        = 'mod-bambi'
+        File      = 'mod-bambi.zip'
+        Label     = 'BambiSleep companion voice + trigger words'
+        Folders   = @(
             @{ Path = 'Resources\sounds\companion_audio\mods\builtin-bambisleep'; Ext = $AudioExt }
             @{ Path = 'Resources\web\dtrh\assets\vn\vo\builtin-bambisleep';       Ext = $AudioExt }
+            @{ Path = 'Resources\sub_audio';                                      Ext = @('.mp3') }
         )
-        Files   = @()
+        Files     = @()
+        LooseFiles = @(
+            'Resources\sounds\00 Bimbo Drone.mp3'
+            'Resources\sounds\BAMBI CUM AND COLLAPSE.MP3'
+            'Resources\sounds\Bambi Does As Shes Told.mp3'
+            'Resources\sounds\BAMBI DOES AS SHE''S TOLD.MP3'
+            'Resources\sounds\BAMBI FREEZE.mp3'
+            'Resources\sounds\BAMBI RESET.mp3'
+            'Resources\sounds\BAMBI SLEEP.mp3'
+            'Resources\sounds\BAMBI UNIFORM LOCK.mp3'
+            'Resources\sounds\BIMBO DOLL.mp3'
+            'Resources\sounds\COCK ZOMBIE NOW.mp3'
+            'Resources\sounds\DROP FOR COCK.mp3'
+            'Resources\sounds\Giggle Time.mp3'
+            'Resources\sounds\GIGGLETIME.mp3'
+            'Resources\sounds\GOOD GIRL.mp3'
+            'Resources\sounds\PRIMPED AND PAMPERED.MP3'
+            'Resources\sounds\SNAP AND FORGET.MP3'
+            'Resources\sounds\ZAP COCK DRAIN OBEY.mp3'
+        )
     },
     @{
         # Sissy moves its portraits too -- the whole payload except the three .json manifests.
@@ -268,8 +293,26 @@ function Resolve-PackFiles($spec) {
             # Kind='folder' = swept out of the source tree by a csproj strip glob, and therefore
             # subject to the drift self-check. Kind='file' = the .ccpmod archives, which left the
             # build by deleting their <Content> item, not by an exclude glob.
-            $result.Add([pscustomobject]@{ Source = $f.FullName; Entry = $rel.Replace('\', '/'); Kind = 'folder' })
+            $result.Add([pscustomobject]@{ Source = $f.FullName; Entry = $rel.Replace('\', '/'); Kind = 'folder'; Loose = $false })
         }
+    }
+
+    # Named single files that a csproj EXACT-PATH exclude strips, living in a folder whose other
+    # files stay (the trigger mp3s at the Resources\sounds root). Kind='folder' because the drift
+    # self-check must see them: they are stripped by the build, so they must be packed exactly once.
+    foreach ($loose in @(if ($spec.ContainsKey('LooseFiles')) { $spec['LooseFiles'] })) {
+        $rel = [string]$loose
+        $abs = Join-Path $ProjectDir $rel
+        if (-not (Test-Path -LiteralPath $abs)) {
+            throw "Pack '$($spec.Id)': loose source file missing: $abs`n" +
+                  "       It is named in `$PackSpecs and stripped by the csproj, so it would ship NOWHERE."
+        }
+        $result.Add([pscustomobject]@{
+            Source = (Get-Item -LiteralPath $abs).FullName
+            Entry  = $rel.Replace('\', '/')
+            Kind   = 'folder'
+            Loose  = $true
+        })
     }
 
     foreach ($file in $spec.Files) {
@@ -277,7 +320,7 @@ function Resolve-PackFiles($spec) {
         if (-not (Test-Path -LiteralPath $abs)) {
             throw "Pack '$($spec.Id)': source file missing: $abs"
         }
-        $result.Add([pscustomobject]@{ Source = $abs; Entry = $file.Entry; Kind = 'file' })
+        $result.Add([pscustomobject]@{ Source = $abs; Entry = $file.Entry; Kind = 'file'; Loose = $false })
     }
 
     # Deterministic ordering. This MUST be ORDINAL. Sort-Object collates with the CURRENT CULTURE,
@@ -340,7 +383,9 @@ function New-PackZip($spec, [string]$ZipPath, $Files) {
 # lands in is a product decision (persona gating), not something a glob can infer. So we keep the
 # enumeration AND fail loudly the moment it stops matching the csproj.
 #
-# Pattern shape: <dir>\**\<filemask>  (the only shape the csproj uses).
+# Pattern shapes, both of which the csproj uses:
+#   <dir>\**\<filemask>   a recursive glob
+#   <dir>\<file name>     ONE exact file, for a folder whose other files stay in the box
 $CsprojStripPatterns = @(
     # $(ContentPackSoundsExclude)
     'Resources\sounds\flashes_audio\**\*.mp3'
@@ -358,6 +403,27 @@ $CsprojStripPatterns = @(
     'Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.ogg'
     'Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.m4a'
     'Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.png'
+    # $(ContentPackTriggerAudioExclude) -- the spoken trigger words.
+    # The sounds\ entries are EXACT NAMES on purpose: chime*, giggle1-8, faucet_*, lvup and
+    # result share that folder and stay in the installer, so no glob can describe this set.
+    'Resources\sub_audio\**\*.mp3'
+    'Resources\sounds\00 Bimbo Drone.mp3'
+    'Resources\sounds\BAMBI CUM AND COLLAPSE.MP3'
+    'Resources\sounds\Bambi Does As Shes Told.mp3'
+    'Resources\sounds\BAMBI DOES AS SHE''S TOLD.MP3'
+    'Resources\sounds\BAMBI FREEZE.mp3'
+    'Resources\sounds\BAMBI RESET.mp3'
+    'Resources\sounds\BAMBI SLEEP.mp3'
+    'Resources\sounds\BAMBI UNIFORM LOCK.mp3'
+    'Resources\sounds\BIMBO DOLL.mp3'
+    'Resources\sounds\COCK ZOMBIE NOW.mp3'
+    'Resources\sounds\DROP FOR COCK.mp3'
+    'Resources\sounds\Giggle Time.mp3'
+    'Resources\sounds\GIGGLETIME.mp3'
+    'Resources\sounds\GOOD GIRL.mp3'
+    'Resources\sounds\PRIMPED AND PAMPERED.MP3'
+    'Resources\sounds\SNAP AND FORGET.MP3'
+    'Resources\sounds\ZAP COCK DRAIN OBEY.mp3'
     # $(ContentPackWebExclude)
     'Resources\web\intake\assets\vo\**\*.mp3'
     'Resources\web\intake\assets\sfx\**\*.mp3'
@@ -365,12 +431,30 @@ $CsprojStripPatterns = @(
     'Resources\web\dtrh\assets\**\*.mp3'
 )
 
+# The '\**' separator, as a regex, in ONE place: Get-StrippedFileSet both tests for it (to
+# tell a glob pattern from an exact file name) and splits on it, and those two must agree.
+$RecursiveGlobMarker = '\\\*\*\\'
+
 # Expands $CsprojStripPatterns against the SOURCE TREE. Returns a hashtable of full path -> $true
 # (lower-cased keys; NTFS is case-insensitive and MSBuild globs are too).
 function Get-StrippedFileSet {
     $set = @{}
     foreach ($pattern in $CsprojStripPatterns) {
-        $split = $pattern -split '\\\*\*\\'
+        # Exact-path shape: no recursive wildcard anywhere in the pattern. ONE named file,
+        # matched as itself, for a folder whose other files stay in the box. A missing one is
+        # fatal for the same reason a missing glob folder is: the csproj is stripping something
+        # that no longer exists, so the two files have drifted.
+        if ($pattern -notmatch $RecursiveGlobMarker) {
+            $exact = Join-Path $ProjectDir $pattern
+            if (-not (Test-Path -LiteralPath $exact -PathType Leaf)) {
+                throw "Strip pattern '$pattern': source file missing: $exact`n" +
+                      "       The csproj strips a file that no longer exists - drop it from BOTH files."
+            }
+            $set[(Get-Item -LiteralPath $exact).FullName.ToLowerInvariant()] = $true
+            continue
+        }
+
+        $split = $pattern -split $RecursiveGlobMarker
         if ($split.Count -ne 2) {
             throw "Strip pattern '$pattern' is not of the form <dir>\**\<filemask>. " +
                   "Either fix the pattern or teach Get-StrippedFileSet the new shape."
@@ -458,9 +542,15 @@ function Write-InstallerDeletions($Resolved, [string]$Path) {
     # Install-relative source paths, both kinds: loose audio AND the two .ccpmod archives
     # ($f.Source is always under $ProjectDir; $f.Entry is the ZIP path, wrong for ccpmods).
     $rels = New-Object System.Collections.Generic.List[string]
+    # Loose files are deleted by name like everything else, but they contribute NO dirifempty
+    # candidate: they sit in a folder (Resources\sounds) that keeps shipping content, so the chain
+    # walk below has no pack-spec root to stop at and must not invent one.
+    $looseRels = @{}
     foreach ($id in $Resolved.Keys) {
         foreach ($f in @($Resolved[$id])) {
-            $rels.Add($f.Source.Substring($ProjectDir.Length).TrimStart('\'))
+            $rel = $f.Source.Substring($ProjectDir.Length).TrimStart('\')
+            $rels.Add($rel)
+            if ($f.Loose) { $looseRels[$rel.ToLowerInvariant()] = $true }
         }
     }
     $files = $rels.ToArray()
@@ -479,6 +569,7 @@ function Write-InstallerDeletions($Resolved, [string]$Path) {
 
     $dirSet = @{}
     foreach ($rel in $files) {
+        if ($looseRels.ContainsKey($rel.ToLowerInvariant())) { continue }
         $dir = Split-Path -Parent $rel
         $best = $null
         foreach ($r in $roots) {

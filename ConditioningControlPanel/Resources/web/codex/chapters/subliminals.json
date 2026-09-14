@@ -30,7 +30,7 @@
     },
     {
       "type": "p",
-      "text": "Audio Whispers plays a matching clip with each flash. The app looks for a file named after the phrase, GOOD GIRL.mp3 for GOOD GIRL, in Resources/sub_audio inside the install folder, and clips ship for every default phrase. If nothing matches, the text flashes alone, no error, no gap. Mute Whispers is a separate switch kept reachable even in locked sessions, the way a volume knob should be. If a toy is paired, every phrase can fire a pulse timed to land with the text."
+      "text": "Audio Whispers plays a matching clip with each flash. The app looks for a file named after the phrase, FOCUS.mp3 for FOCUS, in Resources/sub_audio. The installer ships no clips of its own; the Bambi Sleep pack brings one for each of its trigger phrases, and your own mp3 named after a phrase works the same way. If nothing matches, the text flashes alone, no error, no gap. Mute Whispers is a separate switch kept reachable even in locked sessions, the way a volume knob should be. If a toy is paired, every phrase can fire a pulse timed to land with the text."
     },
     {
       "type": "callout",

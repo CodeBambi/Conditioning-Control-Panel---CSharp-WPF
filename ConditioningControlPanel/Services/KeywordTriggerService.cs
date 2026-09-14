@@ -36,11 +36,14 @@ namespace ConditioningControlPanel.Services
 
         // Audio file search cache
         private string[]? _audioFilesCache;
+        private string? _audioFilesCacheDir;
         private DateTime _audioFilesCacheTime = DateTime.MinValue;
         private string[]? _modAudioFilesCache;
         private DateTime _modAudioFilesCacheTime = DateTime.MinValue;
         private string? _modAudioCacheModId;
-        private readonly string _audioPath;
+        /// <summary>Whisper clips, install-dir-relative. See SubliminalService.SubAudioRelDir -
+        /// they ship in the mod-bambi content pack, so the absolute path is a per-lookup question.</summary>
+        private static readonly string SubAudioRelDir = Path.Combine("Resources", "sub_audio");
 
         // Session awareness callback
         private Func<bool>? _isSessionActive;
@@ -209,7 +212,6 @@ namespace ConditioningControlPanel.Services
 
         public KeywordTriggerService()
         {
-            _audioPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sub_audio");
             App.Logger?.Debug("KeywordTriggerService initialized");
         }
 
@@ -370,8 +372,14 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            // Fall back to default sub_audio directory
-            return SearchAudioDirectory(_audioPath, cleanText, textVariants, extensions, isModCache: false);
+            // Fall back to the default whisper clips in whichever root holds them. None = null,
+            // and every caller already treats null as "fire the trigger without audio".
+            foreach (var dir in ContentLocator.ResolveDirectories(SubAudioRelDir))
+            {
+                var hit = SearchAudioDirectory(dir, cleanText, textVariants, extensions, isModCache: false);
+                if (hit != null) return hit;
+            }
+            return null;
         }
 
         private string? SearchAudioDirectory(string directory, string cleanText, string[] textVariants, string[] extensions, bool isModCache)
@@ -405,9 +413,13 @@ namespace ConditioningControlPanel.Services
                     }
                     else
                     {
-                        if (_audioFilesCache == null || (DateTime.UtcNow - _audioFilesCacheTime).TotalSeconds > 60)
+                        // Keyed on the directory: there can be two roots now (install + pack).
+                        if (_audioFilesCache == null ||
+                            !string.Equals(_audioFilesCacheDir, directory, StringComparison.OrdinalIgnoreCase) ||
+                            (DateTime.UtcNow - _audioFilesCacheTime).TotalSeconds > 60)
                         {
                             _audioFilesCache = Directory.GetFiles(directory);
+                            _audioFilesCacheDir = directory;
                             _audioFilesCacheTime = DateTime.UtcNow;
                         }
                         files = _audioFilesCache;

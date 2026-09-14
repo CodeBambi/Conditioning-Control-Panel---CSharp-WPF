@@ -56,8 +56,14 @@ namespace ConditioningControlPanel.Services
         // (host churn is exactly what solid mode exists to remove). Released on Stop/Dispose,
         // or when a one-shot's card fades out with the service not running.
         private bool _hostRefHeld;
-        private readonly string _audioPath;
+        /// <summary>
+        /// Whisper clips, install-dir-relative. Resolved through <see cref="ContentLocator"/> on
+        /// every lookup rather than cached as one absolute path: the clips ship in the mod-bambi
+        /// content pack, so on a stock install they live under the content root, not beside the exe.
+        /// </summary>
+        private static readonly string SubAudioRelDir = Path.Combine("Resources", "sub_audio");
         private string[]? _audioFilesCache;
+        private string? _audioFilesCacheDir;
         private DateTime _audioFilesCacheTime;
         private string[]? _modAudioFilesCache;
         private DateTime _modAudioFilesCacheTime;
@@ -92,15 +98,11 @@ namespace ConditioningControlPanel.Services
 
         public SubliminalService()
         {
-            _audioPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sub_audio");
-            // Best effort only: the install dir is read-only under Program Files, so a missing folder
-            // here must NOT take the app down at startup — the lookups below already degrade to
-            // "no linked audio" when the folder isn't there.
-            try { Directory.CreateDirectory(_audioPath); }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning("SubliminalService: could not create {Path} - {Error}", _audioPath, ex.Message);
-            }
+            // NO Directory.CreateDirectory HERE. It used to scaffold Resources\sub_audio beside the
+            // exe, which was harmless when the clips shipped in the box and is actively wrong now
+            // that they ride in mod-bambi: an empty install-dir folder is the first root
+            // ContentLocator finds, and anything resolving a DIRECTORY would stop there and never
+            // reach the pack. File lookups below probe both roots, so no folder needs to exist.
 
             _timer = new DispatcherTimer();
             _timer.Tick += Timer_Tick;
@@ -523,8 +525,15 @@ namespace ConditioningControlPanel.Services
                 if (result != null) return result;
             }
 
-            // Fall back to default sub_audio directory
-            return SearchAudioDirectory(_audioPath, cleanText, textVariants, extensions, isModCache: false);
+            // Fall back to the default whisper clips, wherever they live - the install dir on a
+            // legacy/dev layout, the downloaded mod-bambi pack on a modular install, or neither,
+            // in which case every branch below returns null and the phrase flashes text-only.
+            foreach (var dir in ContentLocator.ResolveDirectories(SubAudioRelDir))
+            {
+                var hit = SearchAudioDirectory(dir, cleanText, textVariants, extensions, isModCache: false);
+                if (hit != null) return hit;
+            }
+            return null;
         }
 
         private string? GetModAudioPath()
@@ -568,9 +577,14 @@ namespace ConditioningControlPanel.Services
                     }
                     else
                     {
-                        if (_audioFilesCache == null || (DateTime.UtcNow - _audioFilesCacheTime).TotalSeconds > 60)
+                        // Keyed on the directory now that there can be two of them: without it a
+                        // machine holding both roots would refill the cache on every other lookup.
+                        if (_audioFilesCache == null ||
+                            !string.Equals(_audioFilesCacheDir, directory, StringComparison.OrdinalIgnoreCase) ||
+                            (DateTime.UtcNow - _audioFilesCacheTime).TotalSeconds > 60)
                         {
                             _audioFilesCache = Directory.GetFiles(directory);
+                            _audioFilesCacheDir = directory;
                             _audioFilesCacheTime = DateTime.UtcNow;
                         }
                         files = _audioFilesCache;

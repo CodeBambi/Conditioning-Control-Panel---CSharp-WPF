@@ -1153,7 +1153,11 @@ namespace ConditioningControlPanel.Services.Quiz
 
                 // Resolve the two audio dirs once (both may sit outside the ccp.game/ccp.assets roots,
                 // which is exactly why clips are inlined below instead of served by URL).
-                var defaultAudioDir = Path.Combine(AppContext.BaseDirectory, "Resources", "sub_audio");
+                // ContentLocator, not the install dir: the clips ship in mod-bambi. When neither
+                // root has them ResolveSubliminalAudioFile returns null for every phrase and the
+                // pool goes out as plain { text } entries - which is the no-audio case the page
+                // already renders.
+                var defaultAudioDir = ContentLocator.ResolveDirectory(Path.Combine("Resources", "sub_audio"));
                 string? modAudioDir = null;
                 try
                 {

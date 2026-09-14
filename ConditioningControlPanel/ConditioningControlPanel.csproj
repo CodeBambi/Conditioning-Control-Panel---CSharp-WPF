@@ -476,9 +476,13 @@
          * ALL manifests stay in-box: every *.json (bark_rules, mantras, avatar_manifest,
            vo_manifest, sfx_manifest, vn\manifest.json) and DTRH barks\manifest.js.
            A missing manifest is not a graceful degrade — it's a hang or a crash.
-         * Audio that STAYS (nothing below may match it): Resources\sounds root files,
-           bubbles\, chaos\, mindwipe\, braindrain\, companion_audio root (egg_*),
-           Resources\sub_audio\, Resources\AwarenessPresets\audio\.
+         * Audio that STAYS (nothing below may match it): the NEUTRAL Resources\sounds root
+           files (chime*, giggle1-8, faucet_*, lvup, result), bubbles\, chaos\, mindwipe\,
+           braindrain\, companion_audio root (egg_*), Resources\AwarenessPresets\audio\.
+         * Resources\sub_audio\ and the 17 named-trigger mp3s at the Resources\sounds root are
+           BambiSleep's spoken trigger words and ride in mod-bambi - see
+           $(ContentPackTriggerAudioExclude) below. That is the one strip set listed by EXACT
+           FILE NAME rather than by a glob, because its neighbours stay.
          * builtin-sissyhypno moves its portraits (*.png) too — its whole payload except the
            three .json manifests (plan §1, "mod-sissy").
          * dtrh\assets\**\*.mp3 is a deliberate catch-all: every mp3 under it moves (per-persona
@@ -536,6 +540,55 @@
       $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.m4a;
       $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.png
     </ContentPackSoundsExcludeAbs>
+    <!-- TRIGGER AUDIO. The 21 clips in Resources\sub_audio and the 17 loose copies of the same
+         named triggers sitting at the Resources\sounds ROOT are one themed voice set: they are the
+         BambiSleep trigger words, spoken. They shipped in the box from v1 because the default phrase
+         pool was Bambi's; it is neutral now (BuiltInMods.CCPDefault), so an out-of-the-box install
+         has no phrase these clips answer to and every consumer of them already degrades to
+         text-only. They ride in mod-bambi instead, at the SAME relative paths, so ContentLocator
+         finds them the moment that pack is installed.
+         The root files are listed by exact name, not by a glob: chime*, giggle*, faucet_*, lvup and
+         result live in the same folder and stay in the box. -->
+    <ContentPackTriggerAudioExclude>
+      Resources\sub_audio\**\*.mp3;
+      Resources\sounds\00 Bimbo Drone.mp3;
+      Resources\sounds\BAMBI CUM AND COLLAPSE.MP3;
+      Resources\sounds\Bambi Does As Shes Told.mp3;
+      Resources\sounds\BAMBI DOES AS SHE'S TOLD.MP3;
+      Resources\sounds\BAMBI FREEZE.mp3;
+      Resources\sounds\BAMBI RESET.mp3;
+      Resources\sounds\BAMBI SLEEP.mp3;
+      Resources\sounds\BAMBI UNIFORM LOCK.mp3;
+      Resources\sounds\BIMBO DOLL.mp3;
+      Resources\sounds\COCK ZOMBIE NOW.mp3;
+      Resources\sounds\DROP FOR COCK.mp3;
+      Resources\sounds\Giggle Time.mp3;
+      Resources\sounds\GIGGLETIME.mp3;
+      Resources\sounds\GOOD GIRL.mp3;
+      Resources\sounds\PRIMPED AND PAMPERED.MP3;
+      Resources\sounds\SNAP AND FORGET.MP3;
+      Resources\sounds\ZAP COCK DRAIN OBEY.mp3
+    </ContentPackTriggerAudioExclude>
+    <ContentPackTriggerAudioExcludeAbs>
+      $(MSBuildProjectDirectory)\Resources\sub_audio\**\*.mp3;
+      $(MSBuildProjectDirectory)\Resources\sounds\00 Bimbo Drone.mp3;
+      $(MSBuildProjectDirectory)\Resources\sounds\BAMBI CUM AND COLLAPSE.MP3;
+      $(MSBuildProjectDirectory)\Resources\sounds\Bambi Does As Shes Told.mp3;
+      $(MSBuildProjectDirectory)\Resources\sounds\BAMBI DOES AS SHE'S TOLD.MP3;
+      $(MSBuildProjectDirectory)\Resources\sounds\BAMBI FREEZE.mp3;
+      $(MSBuildProjectDirectory)\Resources\sounds\BAMBI RESET.mp3;
+      $(MSBuildProjectDirectory)\Resources\sounds\BAMBI SLEEP.mp3;
+      $(MSBuildProjectDirectory)\Resources\sounds\BAMBI UNIFORM LOCK.mp3;
+      $(MSBuildProjectDirectory)\Resources\sounds\BIMBO DOLL.mp3;
+      $(MSBuildProjectDirectory)\Resources\sounds\COCK ZOMBIE NOW.mp3;
+      $(MSBuildProjectDirectory)\Resources\sounds\DROP FOR COCK.mp3;
+      $(MSBuildProjectDirectory)\Resources\sounds\Giggle Time.mp3;
+      $(MSBuildProjectDirectory)\Resources\sounds\GIGGLETIME.mp3;
+      $(MSBuildProjectDirectory)\Resources\sounds\GOOD GIRL.mp3;
+      $(MSBuildProjectDirectory)\Resources\sounds\PRIMPED AND PAMPERED.MP3;
+      $(MSBuildProjectDirectory)\Resources\sounds\SNAP AND FORGET.MP3;
+      $(MSBuildProjectDirectory)\Resources\sounds\ZAP COCK DRAIN OBEY.mp3
+    </ContentPackTriggerAudioExcludeAbs>
     <ContentPackWebExclude>
       Resources\web\intake\assets\vo\**\*.mp3;
       Resources\web\intake\assets\sfx\**\*.mp3;
@@ -572,7 +625,8 @@
   <ItemGroup>
     <!-- Sound files - must be copied to output and publish for file system access.
          Audio listed in $(ContentPackSoundsExclude) ships as a downloadable pack instead. -->
-    <Content Include="Resources\sounds\**\*" Exclude="$(ContentPackSoundsExclude)">
+    <Content Include="Resources\sounds\**\*" Exclude="$(ContentPackSoundsExclude);
+                                                       $(ContentPackTriggerAudioExclude)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
@@ -623,8 +677,10 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
-    <!-- Subliminal audio files -->
-    <Content Include="Resources\sub_audio\**\*">
+    <!-- Subliminal audio files. The clips themselves ship in mod-bambi
+         ($(ContentPackTriggerAudioExclude)); this glob still carries anything else that lands here,
+         and the folder is a drop target for the user's own clips. -->
+    <Content Include="Resources\sub_audio\**\*" Exclude="$(ContentPackTriggerAudioExclude)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
@@ -684,12 +740,14 @@
       <!-- The excludes below MUST mirror the <Content> items above, or this target silently
            re-copies the stripped audio (and the arcademy harness pages) back into the publish
            tree. That is why both live in properties. See docs/CONTENT_PACKS_PLAN.md §6. -->
-      <SoundFiles Include="$(ProjectDir)Resources\sounds\**\*" Exclude="$(ContentPackSoundsExcludeAbs)" />
+      <SoundFiles Include="$(ProjectDir)Resources\sounds\**\*"
+                  Exclude="$(ContentPackSoundsExcludeAbs);
+                           $(ContentPackTriggerAudioExcludeAbs)" />
       <WebFiles Include="$(ProjectDir)Resources\web\**\*"
                 Exclude="$(ProjectDir)Resources\web\**\CLAUDE.md;$(ProjectDir)Resources\web\**\CAPTCHA_*.md;$(ProjectDir)Resources\web\**\BUILD_PLAN.md;
                          $(ContentPackWebExcludeAbs);
                          $(ArcademyHarnessExcludeAbs)" />
-      <SubAudioFiles Include="$(ProjectDir)Resources\sub_audio\**\*" />
+      <SubAudioFiles Include="$(ProjectDir)Resources\sub_audio\**\*" Exclude="$(ContentPackTriggerAudioExcludeAbs)" />
       <AwarenessPresetFiles Include="$(ProjectDir)Resources\AwarenessPresets\**\*" />
       <DeeperDemoFiles Include="$(ProjectDir)Resources\DeeperDemos\**\*" />
       <SpiralFiles Include="$(ProjectDir)Spirals\**\*" />
