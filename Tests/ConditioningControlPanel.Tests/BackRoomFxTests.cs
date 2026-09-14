@@ -76,18 +76,26 @@ public class BackRoomFxTests
         public void GifRain(int durationMs) => Add($"rain:{durationMs}");
         public void GlitchWash(int durationMs, double opacity) => Add($"glitch:{durationMs}");
         public void Subliminal(string text) => Add($"sub:{text}");
-        public void Spiral(int durationMs, double level, bool still) => Add($"spiral:{durationMs}:{level}:{still}");
-        public void BrainDrain(int durationMs, double level, bool melt) => Add($"drain:{durationMs}:{level}:{melt}");
+        public void BrainDrain(int durationMs, double level, bool melt) => Add(FormattableString.Invariant($"drain:{durationMs}:{level}:{melt}"));
         public void GifFull(BackRoomGif gif, int durationMs, bool still) => Add($"giffull:{gif.Key}:{durationMs}:{still}");
+        public void Wash(FxRgb color, double peak, BackRoomGif? picture) => Add(FormattableString.Invariant($"wash:{color.Hex}:{peak:0.###}:{picture?.Key}"));
+        public void GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still)
+            => Add(FormattableString.Invariant($"giffrom:{gif.Key}:{(from is { } r ? $"{r.X},{r.Y},{r.W},{r.H}" : "centre")}:{durationMs}:{scale}:{dim}:{still}"));
+        public void SpiralLoom(string gifPath, int durationMs, double alpha, bool hold, bool still)
+            => Add(FormattableString.Invariant($"spiral:{System.IO.Path.GetFileName(gifPath)}:{durationMs}:{alpha:0.###}:{hold}:{still}"));
+        public void ReleaseSpiralLoom() => Add("spiral-release");
+        public void ReleaseBrainDrain() => Add("drain-release");
+        public void Tunnel(double level, bool still) => Add(FormattableString.Invariant($"tunnel:{level:0.###}:{still}"));
+        public void CancelTunnel() => Add("tunnel-cancel");
         public void StopAll() => Stops++;
     }
 
-    private static (BackRoomFx Fx, FakeScheduler Clock, RecordingSink Sink) Make(
-        BackRoomFxIntensity intensity = BackRoomFxIntensity.Normal, MotionLevel motion = MotionLevel.Full)
+    internal static (BackRoomFx Fx, FakeScheduler Clock, RecordingSink Sink) Make(
+        BackRoomFxIntensity intensity = BackRoomFxIntensity.Normal, MotionLevel motion = MotionLevel.Full, FxGates? gates = null)
     {
         var clock = new FakeScheduler();
         var sink = new RecordingSink(clock);
-        var fx = new BackRoomFx(sink, clock, () => new FxEnvironment(motion, intensity, FxGates.AllOn, BackRoomFxPlanTests.Woven), new Random(5));
+        var fx = new BackRoomFx(sink, clock, () => new FxEnvironment(motion, intensity, gates ?? FxGates.AllOn, BackRoomFxPlanTests.Woven), new Random(5));
         return (fx, clock, sink);
     }
 
@@ -143,7 +151,7 @@ public class BackRoomFxTests
         var ack = Fire(fx, "fx.jackpot");
         Assert.Equal(new[] { "spiral-full", "flash-burst", "gif-rain", "glitch-bubbles", "sub-burst9" }, ack.Fired);
         clock.Advance(10_000);
-        Assert.Equal((0L, "spiral:2400:1:False"), sink.Calls[0]);
+        Assert.Equal((0L, "spiral:screen.gif:2400:0.85:False:False"), sink.Calls[0]);   // the screen weave, at the user's opacity
         Assert.Contains((2400L, "flash:4"), sink.Calls);
         Assert.Contains((2400L, "rain:2000"), sink.Calls);
         Assert.Equal(9, sink.Calls.Count(c => c.Call.StartsWith("sub:")));

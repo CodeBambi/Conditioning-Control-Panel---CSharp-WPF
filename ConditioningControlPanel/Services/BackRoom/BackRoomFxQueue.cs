@@ -84,6 +84,8 @@ public enum FxChannel
     Subliminal,
     Flash,
     Glitch,
+    /// <summary>Hypno v3 colour washes (10.13.B): 360 ms apart, and one inside the gap is dropped, not delayed.</summary>
+    Wash,
 }
 
 /// <summary>
@@ -102,6 +104,7 @@ public sealed class FxStrobePacer
     {
         FxChannel.Subliminal => BackRoomFxPlan.WordGapMs,
         FxChannel.Glitch => BackRoomFxPlan.GlitchWashMs,
+        FxChannel.Wash => BackRoomFxPlan.WashGapMs,
         // Measured from the previous burst's last image. FlashService clears its busy flag as soon as
         // a burst is scheduled, so bursts can overlap unless the room spaces them itself.
         _ => 1000,
@@ -118,6 +121,20 @@ public sealed class FxStrobePacer
             if (_last.TryGetValue(channel, out long prev)) at = Math.Max(at, prev + MinGapMs(channel));
             _last[channel] = at + Math.Max(0, spanMs);
             return at;
+        }
+    }
+
+    /// <summary>Claim <paramref name="atMs"/> only if it keeps the channel's gap; otherwise claim nothing and
+    /// say no (the wash rule: a wash too close to the last one is dropped as busy).</summary>
+    public bool TryReserve(FxChannel channel, long atMs)
+    {
+        lock (_lock)
+        {
+            bool known = _last.TryGetValue(channel, out long prev);
+            if (known && Math.Abs(atMs - prev) < MinGapMs(channel)) return false;
+            // A wash queued behind a hero may sit later than one fired now; the latest stays the mark.
+            _last[channel] = known ? Math.Max(prev, atMs) : atMs;
+            return true;
         }
     }
 
