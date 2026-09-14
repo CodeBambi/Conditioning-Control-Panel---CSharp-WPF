@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Prize Parlour counter - dev harness</title>
+<!-- Dev harness only: a mock ctx and mock-server.js stand in for the room, the host and the server.
+     Serve ConditioningControlPanel/Resources as the web root, then open /web/backroom/stations/counter/dev.html.
+     Query: ?sp=812&on=*|high_roller,rt_demo&nodiscord&owned=jackpot_remix,rt_demo&delivery=pending&noart&latency=120&reduced&calm&hook&closed
+     Standalone, so no ctx.hostBack: the station shows its own Back and SP chip (?hook fakes the room's Back and ctx.spReadout). -->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #160e20; font: 12px Segoe UI, Arial, sans-serif; color: #fce5f3; }
+  #room { position: fixed; inset: 0; background: #160e20 url(../../room/backroom_final.png) center / cover no-repeat; }
+  #root { position: fixed; inset: 0; }
+  #sit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 12px 22px; border-radius: 20px;
+         background: #28172fea; color: inherit; border: 1px solid #edb1d177; font: inherit; font-size: 14px; cursor: pointer; }
+  #dev { position: fixed; bottom: 8px; right: 8px; z-index: 50; display: flex; flex-direction: column; gap: 4px; opacity: .85; }
+  #dev button { font: 11px Segoe UI, Arial, sans-serif; padding: 3px 8px; }
+  #dev summary { cursor: pointer; text-align: right; }
+  .fake { position: fixed; top: 12px; z-index: 60; padding: 6px 12px; border-radius: 20px; background: #2a1838; border: 1px solid #b77da247; }
+  #fakeback { left: 12px; } #fakechip { right: 12px; }
+</style>
+</head>
+<body>
+<div id="room"></div>
+<div id="root"></div>
+<span id="fakeback" class="fake" hidden>&larr; Back</span>
+<span id="fakechip" class="fake" hidden>SP <b></b></span>
+<button id="sit" type="button">Visit the counter</button>
+<details id="dev"><summary>dev</summary>
+  <button data-do="busy">fault: busy</button>
+  <button data-do="timeout">fault: lost reply</button>
+  <button data-do="reprice">reprice bubbles_v2 to 300</button>
+  <button data-do="granted">delivery: granted</button>
+  <button data-do="door">toggle door</button>
+</details>
+<script type="module">
+import { mount } from './station.js';
+import { createMockServer } from './mock-server.js';
+
+const q = new URLSearchParams(location.search);
+const num = (k, d) => (q.has(k) ? Number(q.get(k)) : d);
+const owned = Object.fromEntries((q.get('owned') || '').split(',').filter(Boolean).map((id) => [id, { at: Date.now() - 86400000, paidSp: 0 }]));
+const server = createMockServer({ sp: num('sp', 812), on: q.get('on') || '', discordId: q.has('nodiscord') ? null : 'd_dev', owned,
+  delivery: q.get('delivery') || 'granted', open: !q.has('closed') });
+if (q.has('owned') && owned.high_roller) server.user.counter.delivery.high_roller = { status: q.get('delivery') || 'granted', tries: 1, at: Date.now() };
+if (q.has('noart')) {   // the CSS plate fallback: every art request 404s
+  const real = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+  Object.defineProperty(HTMLImageElement.prototype, 'src', { set(v) { real.set.call(this, /\/art\//.test(v) ? 'data:,' : v); }, get() { return real.get.call(this); } });
+}
+const latency = num('latency', 120), sent = [], spFns = new Set(), setFns = new Set();
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const chip = document.getElementById('fakechip'), chipLog = [];
+let shown = null;
+const paintChip = () => { chip.querySelector('b').textContent = String(shown ?? server.user.sp); };
+
+const ctx = {
+  root: document.getElementById('root'),
+  bridge: { send: (m) => sent.push(m), log: () => {} },
+  request: async (op, body, idem) => { await wait(latency); const r = await server.handle(op, body, idem); sent.push({ type: 'station-request', op, body, idem, result: r }); if (q.has('hook')) paintChip(); return r; },
+  sp: () => server.user.sp,
+  onSp: (fn) => { spFns.add(fn); return () => spFns.delete(fn); },
+  onSettings: (fn) => { setFns.add(fn); return () => setFns.delete(fn); },
+  reduced: q.has('reduced'), motion: 'full', intensity: q.has('calm') ? 'calm' : 'normal',
+  gates: { flash: true, subliminal: true, spiral: true, brainDrain: true },
+  lex: (key, fallback) => fallback,
+  standUp: () => stand(),
+  variant: null,
+  hostBack: q.has('hook') || undefined,
+  spReadout: q.has('hook') ? {
+    set(v) { chipLog.push(['set', v]); shown = v; paintChip(); }, owe() {}, thud() { chipLog.push('thud'); }, target() { return chip; },
+  } : undefined,
+};
+if (q.has('hook')) { chip.hidden = false; document.getElementById('fakeback').hidden = false; paintChip(); }
+
+let station = await mount(ctx);
+const sit = document.getElementById('sit');
+async function stand() { await station.close(); station.destroy(); station = await mount(ctx); window.dev.station = station; sit.hidden = false; sit.focus(); }
+async function open() { sit.hidden = true; await station.open(); }
+sit.onclick = open;
+
+let door = !q.has('closed');
+document.getElementById('dev').addEventListener('click', (e) => {
+  const act = e.target.dataset && e.target.dataset.do;
+  if (act === 'busy') server.fail('buy', 'busy', 1);
+  if (act === 'timeout') server.fail('buy', 'timeout', 1, { apply: true });
+  if (act === 'reprice') server.reprice('bubbles_v2', 300);
+  if (act === 'granted') server.setDelivery('granted');
+  if (act === 'door') server.setOpen(door = !door);
+});
+
+window.dev = { server, station, ctx, sent, chipLog, open, stand };
+</script>
+</body>
+</html>
