@@ -29,8 +29,16 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
         get
         {
             lock (SharedLock)
-                return _shared ??= new BackRoomFx(new BackRoomFxServices(), new DispatcherFxScheduler(), ReadEnvironment);
+                return _shared ??= new BackRoomFx(new BackRoomFxServices(), new DispatcherFxScheduler(), ReadEnvironment, xp: PayPictureXp);
         }
+    }
+
+    /// <summary>A Back Room picture pays as a flash image does in FlashService: the base times the lucky flash roll,
+    /// <c>XPSource.Flash</c>, through AddXP (idle suppression, skill multiplier, login gate). CONTRACT 10.14.</summary>
+    internal static void PayPictureXp(int baseXp)
+    {
+        int lucky = App.SkillTree?.RollLuckyFlash() ?? 1;
+        App.Progression?.AddXP(baseXp * lucky, XPSource.Flash);
     }
 
     /// <summary>How long after a fire StopAll still considers a shared one-shot channel the room's.</summary>
@@ -169,8 +177,12 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
         return null;
     }
 
-    public void Wash(FxRgb color, double peak, BackRoomGif? picture)
-        => BackRoomWashOverlay.Show(color, peak, LocalFile(picture), picture == null ? null : Target(null).ScreenPx, MotionFx.Level == MotionLevel.Off);
+    public bool Wash(FxRgb color, double peak, BackRoomGif? picture)
+    {
+        var file = LocalFile(picture);
+        BackRoomWashOverlay.Show(color, peak, file, picture == null ? null : Target(null).ScreenPx, MotionFx.Level == MotionLevel.Off);
+        return file != null;
+    }
 
     public bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still)
     {
@@ -203,9 +215,11 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
         _drainTimer = Rearm(_drainTimer, _drainUntil, StopDrain);
     }
 
-    public void GifFull(BackRoomGif gif, int durationMs, bool still)
+    public bool GifFull(BackRoomGif gif, int durationMs, bool still)
     {
-        if (LocalFile(gif) is { } path) ChaosFlashOverlay.ShowHero(path, durationMs, 0.9, still);
+        if (LocalFile(gif) is not { } path) return false;
+        ChaosFlashOverlay.ShowHero(path, durationMs, 0.9, still);
+        return true;
     }
 
     public void StopAll()

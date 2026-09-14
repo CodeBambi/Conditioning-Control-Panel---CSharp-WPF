@@ -77,8 +77,13 @@ public class BackRoomFxTests
         public void GlitchWash(int durationMs, double opacity) => Add($"glitch:{durationMs}");
         public void Subliminal(string text) => Add($"sub:{text}");
         public void BrainDrain(int durationMs, double level, bool melt) => Add(FormattableString.Invariant($"drain:{durationMs}:{level}:{melt}"));
-        public void GifFull(BackRoomGif gif, int durationMs, bool still) => Add($"giffull:{gif.Key}:{durationMs}:{still}");
-        public void Wash(FxRgb color, double peak, BackRoomGif? picture) => Add(FormattableString.Invariant($"wash:{color.Hex}:{peak:0.###}:{picture?.Key}"));
+        public bool GifFullFound = true;
+        public bool GifFull(BackRoomGif gif, int durationMs, bool still) { Add($"giffull:{gif.Key}:{durationMs}:{still}"); return GifFullFound; }
+        public bool Wash(FxRgb color, double peak, BackRoomGif? picture)
+        {
+            Add(FormattableString.Invariant($"wash:{color.Hex}:{peak:0.###}:{picture?.Key}"));
+            return picture != null;
+        }
         public bool GifFromFound = true;
         public bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still)
         {

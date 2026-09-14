@@ -1,5 +1,6 @@
 /* media.js - the sit-down deal (CONTRACT.md section 5) as the reel painter sees it.
- * gif0..gif3 = gifs[0..3], sub0..sub3 = words[0..3], kept until the player stands up. GIFs load as
+ * gif0..gif3 = gifs[i % gifs.length] (CONTRACT 10.14: a deal of fewer than 4 of the player's own GIFs cycles them;
+ * fallback art only with none), sub0..sub3 = words[0..3], kept until the player stands up. GIFs load as
  * <img> inside a hidden holder in the document so Chromium keeps them animating while the reel
  * canvas redraws them. Only ccp.assets / ccp.game (or this page's own origin, for dev.html) URLs
  * are loaded; anything else, or a load failure, falls back to the built-in art in symbols.js.
@@ -59,9 +60,9 @@ export function createMedia(holder, lex = (k, f) => f) {
       }));
       return Promise.race([Promise.all(waits), new Promise(done => setTimeout(done, LOAD_MS))]);
     },
-    /** A drawable for gif{i}, or null when missing or broken (the painter draws fallback art). */
+    /** A drawable for gif{i} (cycled over the deal), or null when missing or broken (the painter draws fallback art). */
     gif(i) {
-      const img = imgs[i];
+      const img = imgs.length ? imgs[i % imgs.length] : null;
       return img && img.complete && img.naturalWidth > 0 && readable(img) ? img : null;
     },
     word(i) {
@@ -72,7 +73,7 @@ export function createMedia(holder, lex = (k, f) => f) {
     /** Symbol id -> the dealt key (g0, s1...), or null for symbols with no media behind them. */
     keyFor(id) {
       const { kind, n } = kindOf(id);
-      const item = kind === 'gif' ? gifs[n] : kind === 'sub' ? words[n] : null;
+      const item = kind === 'gif' ? (gifs.length ? gifs[n % gifs.length] : null) : kind === 'sub' ? words[n] : null;
       return item && typeof item.key === 'string' ? item.key : null;
     },
     get animated() { return imgs.some(Boolean); },

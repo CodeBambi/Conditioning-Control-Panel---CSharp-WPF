@@ -115,6 +115,21 @@ public static class BackRoomOverlayMath
         return best;
     }
 
+    /// <summary>
+    /// One cell per monitor, in the local DIPs of a surface over the whole virtual screen (<paramref name="virtualPx"/>)
+    /// drawn at <paramref name="pxPerDip"/>: what the tunnel's vignettes and the spiral's fields are laid out in
+    /// (10.14: one field per screen, centred on that screen). Physical bounds in, so a mixed-DPI desktop maps every
+    /// monitor through the SAME window scale. No monitor reported = one cell over the whole surface.
+    /// </summary>
+    public static IReadOnlyList<PxRect> ScreenCells(IReadOnlyList<FxScreenInfo> screens, PxRect virtualPx, double pxPerDip)
+    {
+        var cells = new List<PxRect>(Math.Max(1, screens.Count));
+        foreach (var s in screens)
+            if (s.BoundsPx.W > 0 && s.BoundsPx.H > 0) cells.Add(ToLocalDip(s.BoundsPx, virtualPx, pxPerDip));
+        if (cells.Count == 0) cells.Add(ToLocalDip(virtualPx, virtualPx, pxPerDip));
+        return cells;
+    }
+
     /// <summary>Physical px -> DIPs local to a surface whose top-left is <paramref name="originPx"/>.</summary>
     public static PxRect ToLocalDip(PxRect rectPx, PxRect originPx, double pxPerDip)
     {

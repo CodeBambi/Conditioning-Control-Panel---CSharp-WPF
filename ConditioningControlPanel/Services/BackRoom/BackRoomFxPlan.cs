@@ -407,8 +407,9 @@ public static class BackRoomFxPlan
     /// <summary>
     /// Resolve symbol keys ONLY through the host's own deal. Accepts tape symbol ids (<c>gif0..gif12</c>,
     /// <c>sub0..sub3</c>) and deal keys (<c>g0..g12</c>, <c>s0</c>), one or two digits (10.13.C). Non-media symbols (<c>spiral*</c>,
-    /// <c>emi*</c>, <c>melt</c>) are ignored. Anything else, including an index past the deal, is
-    /// replaced with a random dealt item: nothing the page sends is ever used as text or a path.
+    /// <c>emi*</c>, <c>melt</c>) are ignored. A GIF index past the deal cycles (<c>gifs[i % n]</c>, 10.14: the player's
+    /// own GIFs are cycled, never padded), exactly as the pages draw it. Anything else, including a word index past the
+    /// deal, is replaced with a random dealt item: nothing the page sends is ever used as text or a path.
     /// </summary>
     public static FxMedia ResolveSymbols(IReadOnlyList<string>? keys, BackRoomMediaDeal? deal, Random rng)
     {
@@ -430,7 +431,7 @@ public static class BackRoomFxPlan
             }
             else if (TryIndex(key, "gif", out int gi) || TryIndex(key, "g", out gi))
             {
-                var g = gi < dealGifs.Count ? dealGifs[gi] : Pick(dealGifs, rng);
+                var g = dealGifs.Count > 0 ? dealGifs[gi % dealGifs.Count] : null;
                 if (g != null) gifs.Add(g);
             }
             else if (rng.Next(2) == 0 && dealWords.Count > 0)
