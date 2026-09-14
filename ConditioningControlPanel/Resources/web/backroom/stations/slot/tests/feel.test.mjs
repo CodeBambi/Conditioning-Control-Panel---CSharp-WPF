@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FEEL, tierOf, recipe, ladderSemis, winTokens, spendTokens, tickValues, glance, landPose, restPose,
          glanceHoldMs, breath, shiverPx, chaseMs, bezier, POSES, livePair, anticipation, almost, ALMOST,
-         ROLLUP_MS, rollupMs, rollupAt, rollupTicks, bankFlightMs, bankLandMs, ladderPlan, paylinePulses, paylineGlow, PAYLINE_PULSE_MIN_MS } from '../feel.js';
+         ROLLUP_MS, rollupMs, rollupAt, rollupTicks, bankFlightMs, bankLandMs, ladderPlan, paylinePulses, paylineGlow, PAYLINE_PULSE_MIN_MS,
+         ATTRACT, WIGGLE, attractOk, attractCells, emiLandings, wiggleCells } from '../feel.js';
 
 const o = (line, pay, extra = {}) => ({ line, pay, meltLeft: 0, halved: false, ...extra });
 
@@ -310,4 +311,72 @@ test('A6: a steady frame is steady, and a pulsed one breathes without going dark
   for (let ms = 0; ms <= hold; ms += 37) assert.equal(paylineGlow(ms, hold, 0), 1);
   const lit = Array.from({ length: 40 }, (_, i) => paylineGlow((i * hold) / 39, hold, 2));
   assert.ok(Math.max(...lit) > 0.98 && Math.min(...lit) >= 0.55);
+});
+
+/* ---- A4 attract mode --------------------------------------------------------------------------- */
+
+const seated = (over = {}) => ({ seated: true, phase: 'idle', busy: false, banking: false, meltLeft: 0,
+                                 calm: false, reduced: false, suspended: false, ...over });
+
+test('A4 attract: about 25 s idle, a chase every ~8 s, a wink every ~12 s, and it eases home under the move cap', () => {
+  assert.ok(ATTRACT.IDLE_MS >= 20000 && ATTRACT.IDLE_MS <= 30000, `idle ${ATTRACT.IDLE_MS}`);
+  assert.ok(ATTRACT.CHASE_MS >= 7000 && ATTRACT.CHASE_MS <= 9000);
+  assert.ok(ATTRACT.WINK_MS >= 11000 && ATTRACT.WINK_MS <= 13000);
+  assert.ok(ATTRACT.CHASE_PASS_MS < ATTRACT.CHASE_MS && ATTRACT.WINK_FIRST_MS < ATTRACT.WINK_MS);
+  assert.ok(ATTRACT.SETTLE_MS <= FEEL.MOVE_CAP_MS, 'leaving attract is utility motion, not a hero');
+});
+
+test('A4 attract: seated and idle only, and the whole of it is off while melted, on Calm and under reduced motion', () => {
+  assert.equal(attractOk(seated()), true);
+  assert.equal(attractOk(), false, 'nothing attracts before anyone sits down');
+  assert.equal(attractOk(seated({ seated: false })), false);
+  for (const phase of ['breath', 'spin', 'reveal']) assert.equal(attractOk(seated({ phase })), false, phase);
+  assert.equal(attractOk(seated({ busy: true })), false, 'a tape playing is not idle');
+  assert.equal(attractOk(seated({ banking: true })), false, 'a rollup running is not idle');
+  assert.equal(attractOk(seated({ meltLeft: 1 })), false, 'Brake 5: no ceremonies while melted');
+  assert.equal(attractOk(seated({ calm: true })), false);
+  assert.equal(attractOk(seated({ reduced: true })), false);
+  assert.equal(attractOk(seated({ suspended: true })), false);
+});
+
+test('A4 THE DRIFT is a continuous slow roll, never a landing', () => {
+  assert.equal(attractCells(0), 0);
+  assert.equal(attractCells(-500), 0);
+  const a = attractCells(1000), b = attractCells(2000);
+  assert.ok(b > a && Math.abs(b - 2 * a) < 1e-9, 'it keeps counting at one speed');
+  assert.ok(a > 0.15 && a < 1, `a cell every ${(1 / a).toFixed(1)} s reads as a drift, not a spin`);
+});
+
+/* ---- A5 the EMI land-wiggle -------------------------------------------------------------------- */
+
+const row = (symbols, line = 'none', pay = 0) => ({ symbols, line, pay, stops: [0, 0, 0], meltLeft: 0 });
+
+test('A5 emiLandings: every reel showing EMI, a losing spin included', () => {
+  assert.deepEqual(emiLandings(row(['emi', 'gif1', 'sub0'])), [0]);
+  assert.deepEqual(emiLandings(row(['gif1', 'sub0', 'emi'])), [2]);
+  assert.deepEqual(emiLandings(row(['emi', 'spiral0', 'emi'])), [0, 2]);
+  assert.deepEqual(emiLandings(row(['spiral0', 'spiral1', 'gif2'], 'spiral2', 5)), []);
+  assert.deepEqual(emiLandings(row(['emi', 'spiral0', 'spiral1'], 'spiral2', 5)), [0], 'it rides a paying spin too');
+});
+
+test('A5 emiLandings: the jackpot is already THE REVEAL, so that spin wiggles nothing (one hero per beat)', () => {
+  assert.deepEqual(emiLandings(row(['emi', 'emi', 'emi'], 'emi3', 400)), []);
+  assert.deepEqual(emiLandings(row(['emi', 'emi', 'emi'], 'emi3', 200)), [], 'halved by the melt it is still the jackpot');
+  assert.deepEqual(emiLandings(null), []);
+  assert.deepEqual(emiLandings({ line: 'none', pay: 0 }), []);
+});
+
+test('A5 the wiggle: two oscillations, about 300 ms, a fraction of a cell, ending exactly on the stop', () => {
+  assert.ok(WIGGLE.MS <= FEEL.MOVE_CAP_MS && WIGGLE.MS >= 200 && WIGGLE.MS <= 400, `${WIGGLE.MS} ms`);
+  assert.equal(WIGGLE.CYCLES, 2);
+  assert.ok(WIGGLE.CELLS > 0 && WIGGLE.CELLS < 0.5, 'a nudge, never a cell');
+  assert.equal(wiggleCells(0), 0);
+  assert.equal(wiggleCells(WIGGLE.MS), 0, 'it comes back to the stop');
+  assert.equal(wiggleCells(-1), 0);
+  assert.equal(wiggleCells(WIGGLE.MS + 200), 0, 'and stays there');
+  const peak = Math.max(...Array.from({ length: WIGGLE.MS }, (_, i) => Math.abs(wiggleCells(i))));
+  assert.ok(peak <= WIGGLE.CELLS && peak > WIGGLE.CELLS * 0.5, `peak ${peak}`);
+  const signs = Array.from({ length: WIGGLE.MS }, (_, i) => Math.sign(wiggleCells(i)));
+  const flips = signs.filter((v, i) => i > 0 && v !== 0 && signs[i - 1] !== 0 && v !== signs[i - 1]).length;
+  assert.equal(flips, 3, 'two oscillations either side of the stop');
 });
