@@ -2373,9 +2373,11 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void EndLayerDrag(FlashWindow window, System.Windows.Point px, long nowMs)
         {
-            ClearDragCallbacks();
+            // Order matters: a cancel may already have handed the hook to a DIFFERENT flash while
+            // this release was in flight, and clearing first would strip that one's callbacks.
             if (!ReferenceEquals(_dragWindow, window)) return;
             _dragWindow = null;
+            ClearDragCallbacks();
 
             var motion = window.LayerItem?.Motion;
             var drag = motion?.Drag;
