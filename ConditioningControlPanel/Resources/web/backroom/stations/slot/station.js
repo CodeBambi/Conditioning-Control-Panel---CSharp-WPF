@@ -17,6 +17,7 @@ import { createMedia, fxSymbols } from './media.js';
 import { PACE } from './pace.js';
 import { recipe, tierOf, meltedBy, ladderSemis, ladderPlan, rollupMs, winTokens, spendTokens, glance, landPose, restPose, pressPose, glanceHoldMs } from './feel.js';
 import { anticipation, almost } from './feel.js';   // the playbook's Tier A (CONTRACT 10.15)
+import { ATTRACT, attractOk, emiLandings } from './feel.js';
 import { createBank } from './bank.js';
 import { createSound } from './sound.js';
 
@@ -56,6 +57,9 @@ export async function mount(ctx) {
   // THE CHIME LADDER, how often each tier has partied (Brake 3), and EMI's current pose (THE MASCOT GLANCE).
   let sound = null, bank = null, shown = null, owing = false, streak = 0, seen = [0, 0, 0, 0, 0], jackpots = 0;
   let pose = 'idle0_0', glanceTimer = 0, gainTimer = 0, playing = null, feelLog = [], bankFrom = 0, bankTo = 0, bankHold = 1600;
+  // A4 attract: one idle timeout re-armed on input (no polling) and one self-re-arming wink, both cleared on
+  // any input, on suspend and on close, so a shut cabinet leaves nothing running.
+  let idleTimer = 0, winkTimer = 0, attracting = false;
   const $ = sel => el.querySelector(sel), wait = ms => new Promise(r => setTimeout(r, Math.max(0, ms)));
   function mark(phase) { pace = phase; marks = [...marks.slice(-79), { phase, at: Math.round(performance.now()) }]; }
   function note(what, extra = {}) { feelLog = [...feelLog.slice(-79), { what, at: Math.round(performance.now()), ...extra }]; }
@@ -100,12 +104,14 @@ export async function mount(ctx) {
       root.querySelector('.slot-back').hidden = true;
       root.querySelector('.slot-card-back').hidden = true;
     }
+    root.addEventListener('pointerdown', onPoke, true);   // A4: any pointer press ends attract (the lever included)
     root.querySelector('.slot-spin').onclick = () => press();
     root.querySelectorAll('[data-col]').forEach(b => { b.onclick = () => toggleFreeze(Number(b.dataset.col)); });
     return root;
   }
 
   function back() {
+    endAttract(true);
     // Law VIII: Back rings on the frame it is asked (standalone; in the room the room's chip answers its own press).
     if (el && !hostBack) $('.slot-back').classList.add('is-ringing');
     if (typeof ctx.standUp === 'function') ctx.standUp();
@@ -187,6 +193,43 @@ export async function mount(ctx) {
     if (rest) glanceTimer = setTimeout(() => { if (alive && pose !== rest) { setFace(rest); note('rest', { pose }); } }, holdMs);
   }
 
+  /* A4 ATTRACT (House Book deck II, playbook Tier A). After ATTRACT.IDLE_MS seated with nothing running the
+   * cabinet attracts itself: the reels drift, a chase sweeps every ~8 s, EMI winks. No SP moves and nothing is
+   * read from the tape, so it can end at any frame. Off on Calm, under reduced motion and while melted
+   * (Brake 5). Any input ends it on the frame it arrives (Law VIII) and the reels ease home (Brake 1). */
+  const attractState = () => ({
+    seated: !!el && el.dataset.phase === 'play', phase: pace, busy, banking: !!(bank && bank.busy),
+    meltLeft: tape ? tape.snapshot().melt : 0, calm: lite, reduced, suspended,
+  });
+  function armIdle() {
+    clearTimeout(idleTimer); idleTimer = 0;
+    if (!alive || suspended || lite || reduced) return;   // Calm and reduced motion never arm it at all
+    idleTimer = setTimeout(() => { idleTimer = 0; enterAttract(); }, ATTRACT.IDLE_MS);
+  }
+  function enterAttract() {
+    if (attracting || !scene || !attractOk(attractState()) || !scene.attract(true)) return;
+    attracting = true;
+    winkTimer = setTimeout(wink, ATTRACT.WINK_FIRST_MS);
+    note('attract', { on: true });
+  }
+  /** THE MASCOT GLANCE, unprompted: a short chain that returns to rest. Never the same pose twice (glance()). */
+  function wink() {
+    winkTimer = 0;
+    if (!attracting || !alive) return;
+    glanceTo('hearts', glanceHoldMs(false), restPose(0));
+    winkTimer = setTimeout(wink, ATTRACT.WINK_MS);
+  }
+  /** Ends it and drops both timers. `now` snaps the reels home instead of easing (Back, suspend: Law VI). */
+  function endAttract(now = false) {
+    clearTimeout(idleTimer); idleTimer = 0;
+    clearTimeout(winkTimer); winkTimer = 0;
+    if (!attracting) return;
+    attracting = false;
+    if (scene) scene.attract(false, now);
+    note('attract', { on: false });
+  }
+  const onPoke = () => { if (!alive) return; endAttract(); armIdle(); };
+
   /** THE THUD on the SP readout: the bank's last token (a mini-thud). Reduced motion: a lit state, no scale. */
   function thudReadout() {
     if (hostSp) { hostSp.thud(); return; }
@@ -235,6 +278,7 @@ export async function mount(ctx) {
   }
 
   function toggleFreeze(col) {
+    endAttract(); armIdle();
     if (!alive || busy || !tape || el.dataset.phase !== 'play') return;
     tape.toggleHold(col);
     sync();   // scene.setHold dips the button this frame (Law VIII)
@@ -281,6 +325,7 @@ export async function mount(ctx) {
 
   async function press() {
     if (!alive || suspended || !scene || el.dataset.phase !== 'play') return;
+    endAttract();
     sound.arm();
     // Law VI, Brake 7: one press settles a rollup that is still counting, straight to the tape's value, with
     // the mini-thud and the +N it would have ended on. The rest of the climb and the frame's pulse go quiet.
@@ -297,7 +342,7 @@ export async function mount(ctx) {
     if (r.kind !== 'play') {
       busy = false; mark('idle'); scene.letGo(); setFace(glance(pose, restPose(before.melt)));
       if (r.kind === 'refused') card(refusalText(r.reason));
-      sync();
+      sync(); armIdle();
       return;
     }
     const o = r.outcome, after = tape.snapshot();
@@ -306,7 +351,7 @@ export async function mount(ctx) {
     // The playbook's Tier A. Both read the outcome the tape already carries: A1 only delays the third
     // reel, A2 only reads the strip cell the server's own stop landed beside. No stop is ever weighted.
     const ant = anticipation(o, before.strips, { melted: before.melt > 0, held: r.held });
-    playing = { o, lastReel: [2, 1, 0].find(i => i !== r.held), ant, near: almost(o, before.strips, { held: r.held }) };
+    playing = { o, lastReel: [2, 1, 0].find(i => i !== r.held), ant, near: almost(o, before.strips, { held: r.held }), emi: emiLandings(o) };   // A5: which reels wiggle
     mark('spin'); sync();
     await scene.spin(Array.isArray(o.stops) ? o.stops : stopsFor(before.strips, o.symbols), r.held,
                      { holdMs: ant.holdMs, gold: ant.gold && !lite, dim: !lite });
@@ -319,12 +364,13 @@ export async function mount(ctx) {
     await wait(PACE.REVEAL_MS);
     if (my !== session || !alive) return;
     breathEnds = performance.now() + PACE.BREATH_MS;
-    busy = false; mark('idle'); sync();
+    busy = false; mark('idle'); sync(); armIdle();
     if (queued) press();
   }
 
   function onKey(e) {
     if (!alive) return;
+    endAttract(); armIdle();   // A4: any key ends it, then the idle timer starts over
     if (e.key === 'Escape') { e.preventDefault(); back(); return; }
     if (e.target && e.target.closest && e.target.closest('button, summary, input, select')) return;
     if (e.code === 'Space') { e.preventDefault(); press(); }
@@ -336,6 +382,7 @@ export async function mount(ctx) {
     if (alive) return;
     alive = true; busy = false; suspended = false; lastMelt = null; pace = 'idle'; queued = false; breathEnds = 0;
     shown = null; streak = 0; seen = [0, 0, 0, 0, 0]; jackpots = 0; pose = 'idle0_0'; playing = null;
+    attracting = false; clearTimeout(idleTimer); clearTimeout(winkTimer); idleTimer = winkTimer = 0;
     const my = ++session;
     el = build();
     ctx.root.append(el);
@@ -359,7 +406,11 @@ export async function mount(ctx) {
       createScene({ canvas: $('.slot-stage'), reduced, palette: variant && variant.palette, hint: $('.slot-hint'), payline: $('.slot-payline'),
                     canPull: () => (!busy || pace === 'reveal') && !suspended,
                     onLever: () => press(), onFreeze: col => toggleFreeze(col),
-                    onReelStop: i => { const p = playing; sound.thud(i, !!p && i === p.lastReel && !(p.o.pay > 0)); note('thud', { reel: i }); if (p) stopFeel(p, i); } }).catch(e => ({ error: e })),
+                    onReelStop: i => { const p = playing; sound.thud(i, !!p && i === p.lastReel && !(p.o.pay > 0));
+                      // A5: EMI landed on this reel, so the cell wiggles after this thud and she glances. The next
+                      // reel's thud is untouched (Law X); reduced motion takes the settled state, so no wiggle.
+                      if (p && p.emi.includes(i) && !reduced) { scene.wiggle(i, PACE.THUD_MS); glanceTo('hearts', glanceHoldMs(meltedBy(p.o)), null); note('emi-wiggle', { reel: i }); }
+                      note('thud', { reel: i }); if (p) stopFeel(p, i); } }).catch(e => ({ error: e })),
       tape.open(),
     ]);
     if (my !== session) { if (made && made.dispose) made.dispose(); return; }
@@ -388,6 +439,7 @@ export async function mount(ctx) {
     if (my !== session) return;
     el.dataset.phase = 'play';
     sync();
+    armIdle();
   }
 
   async function close() {
@@ -403,6 +455,7 @@ export async function mount(ctx) {
     if (typeof unSp === 'function') unSp();
     unSp = null;
     // Law VI: Back skips every ceremony to its settled state, then hands the room its chip back.
+    endAttract(true);
     clearTimeout(glanceTimer); clearTimeout(gainTimer);
     if (bank) { bank.skip(); bank.dispose(); }
     // What a reopen will show: the stored tape's unplayed pays (a freeze's own outcomes are not stored).
@@ -426,6 +479,7 @@ export async function mount(ctx) {
     close,
     suspend(on) {
       suspended = !!on;
+      if (suspended) endAttract(true); else armIdle();
       if (sound) sound.suspend(suspended);   // the climb is hushed with it: a resumed context would replay the rest
       if (suspended && bank) bank.skip();
       if (suspended && scene) { scene.cancelPull(); scene.skip(); }
@@ -440,6 +494,7 @@ export async function mount(ctx) {
                     hostBack, variant: variant && variant.id, palette: !!(scene && scene.recoloured),
                     spinning: !!(scene && scene.spinning), sceneAlive: !!scene,
                     feel: { log: feelLog, pose, streak, seen, shown, readout: String(shownSp()), hostSp: !!hostSp,
+                            attracting, idleArmed: !!idleTimer, emi: playing ? playing.emi : [],
                             cues: sound ? sound.trace.slice() : [], scene: scene && scene.debug() } }),
   };
 }

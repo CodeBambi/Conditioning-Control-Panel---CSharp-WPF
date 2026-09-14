@@ -260,3 +260,56 @@ export function almost(o, strips, { held = null } = {}) {
 
 /** A2's tell: gold in, then ONE snap back (House Book THE ALMOST, 620-1,400 ms, 120 ms snap). */
 export const ALMOST = Object.freeze({ TELL_MS: 620, SNAP_MS: 120 });
+
+/* ---- Playbook Tier A (backroom-casino-playbook.md section 2): A4 attract mode, A5 the EMI land-wiggle.
+ * Both are presentation over an outcome the tape already holds: neither reads a stop, moves SP or changes
+ * a result. Pure here so the Brake keeps its word in node:test. --------------------------------------- */
+
+/** A4 ATTRACT, House Book deck II ("an autoplay ghost after ~25 s idle"). The reels drift, a chase sweeps,
+ *  EMI winks, and nothing lands. Entering and leaving it is not a party (Brake 1). */
+export const ATTRACT = Object.freeze({
+  IDLE_MS: 25000,            // seated and untouched this long before the cabinet starts attracting
+  CHASE_MS: 8000,            // one bulb chase this often...
+  CHASE_PASS_MS: 1400,       // ...each sweep taking this long (one pulse a bulb, nowhere near the strobe floor)
+  WINK_FIRST_MS: 4000,       // the first wink, so the drift is doing the talking first
+  WINK_MS: 12000,            // and a wink this often after it
+  DRIFT_CELLS_PER_S: 0.35,   // THE DRIFT: about a cell every 3 s, a continuous roll, never a spin
+  SETTLE_MS: 420,            // leaving it: a quiet ease-out back onto the current stops (Law XI utility motion)
+});
+
+/** A5 THE EMI LAND-WIGGLE: two small oscillations that damp back to the stop, a fraction of a cell. */
+export const WIGGLE = Object.freeze({ MS: 300, CELLS: 0.17, CYCLES: 2 });
+
+/**
+ * A4: may the cabinet attract right now? Seated, idle and quiet only; never while melted (Brake 5), never
+ * on Calm, never under reduced motion (Law VI: the settled state, not a slower one), never while suspended.
+ */
+export function attractOk({ seated = false, phase = 'idle', busy = false, banking = false,
+                            meltLeft = 0, calm = false, reduced = false, suspended = false } = {}) {
+  if (!seated || calm || reduced || suspended) return false;
+  if (busy || banking || phase !== 'idle') return false;
+  return !((meltLeft || 0) > 0);
+}
+
+/** A4: the drift offset in cells at `ms` into the attract (a continuous roll, so it just keeps counting). */
+export const attractCells = ms => (ms > 0 ? (ms / 1000) * ATTRACT.DRIFT_CELLS_PER_S : 0);
+
+/**
+ * A5: the reels showing EMI on this landing, left to right. Any reel counts, a losing spin included, so the
+ * jackpot symbol stays present between jackpots. A 3-EMI line IS the REVEAL, so that spin wiggles nothing
+ * (Brake 2: one hero per beat).
+ */
+export function emiLandings(o) {
+  if (!o || o.line === 'emi3') return [];
+  const syms = Array.isArray(o.symbols) ? o.symbols : [];
+  const out = [];
+  for (let i = 0; i < Math.min(3, syms.length); i++) if (syms[i] === 'emi') out.push(i);
+  return out;
+}
+
+/** A5: the wiggle offset in cells at `ms` into it (0 outside), damping to nothing exactly on the stop. */
+export function wiggleCells(ms) {
+  if (!(ms >= 0) || ms >= WIGGLE.MS) return 0;
+  const q = ms / WIGGLE.MS;
+  return WIGGLE.CELLS * Math.sin(q * Math.PI * 2 * WIGGLE.CYCLES) * (1 - q);
+}
