@@ -32,7 +32,8 @@ const ADS = [
 ];
 
 /** CONTRACT 10.13.A + 10.14: the host's hypno toggles and the room's own tunnel and melt switches. A missing frame or
- * key reads as on (the host is the enforcer). */
+ * key reads as on (the host is the enforcer). `tunnel` is the Back Room's own tunnel vision toggle (owner, 2026-09-14):
+ * fx-tunnel reads it, not brainDrain. */
 const readGates = (g) => {
   const q = g && typeof g === 'object' ? g : {};
   return Object.freeze({ flash: q.flash !== false, subliminal: q.subliminal !== false, spiral: q.spiral !== false,

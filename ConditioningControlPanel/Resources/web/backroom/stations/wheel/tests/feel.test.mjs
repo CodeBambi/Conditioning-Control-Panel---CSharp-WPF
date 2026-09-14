@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as feel from '../feel.js';
-import { FEEL, tierOf, recipe, winTokens, tickValues, tick, glance, landPose, shiverPx, breath, POSES } from '../feel.js';
+import { FEEL, tierOf, recipe, winTokens, tickValues, tick, glance, landPose, shiverPx, breath, POSES, revealCount, bezier } from '../feel.js';
 import { readResult } from '../wheel.js';
 
 const R = (o) => readResult({ day: '2026-09-14', sliceId: 'x', sliceIndex: 1, pay: 0, snoozeCarryPaid: 0, jackpot: false, jackpotFallback: false, snoozed: false, ...o });
@@ -72,4 +72,21 @@ test('THE SHIVER and THE BREATH stay in their bounds', () => {
   assert.equal(breath(0), 0);
   assert.ok(Math.abs(breath(FEEL.BREATH_MS / 2) - 1) < 1e-9);
   assert.ok(FEEL.BREATH_MS >= 2600 && FEEL.BREATH_MS <= 4000);
+});
+
+test('THE REVEAL count-up never reads above the pay, though its ease overshoots', () => {
+  assert.ok(Math.round(550 * bezier(FEEL.REVEAL_EASE, 0.6)) > 550, 'the motion ease does overshoot (the old +551)');
+  for (const pay of [1, 12, 550, 5321, 99999]) {
+    let prev = 0;
+    for (let i = 0; i <= 200; i++) {
+      const n = revealCount(pay, i / 200);
+      assert.ok(n >= 0 && n <= pay, `pay ${pay} at q ${i / 200}: ${n}`);
+      assert.ok(n >= prev, `pay ${pay}: the count never steps back (${prev} -> ${n})`);
+      prev = n;
+    }
+    assert.equal(revealCount(pay, 1), pay, 'it ends on the pay');
+    assert.equal(revealCount(pay, 0), 0);
+  }
+  assert.equal(revealCount(550, 2), 550, 'q past the end is the pay');
+  assert.equal(revealCount(-5, 0.5), 0);
 });

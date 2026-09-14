@@ -25,8 +25,8 @@
  * ==========================================================================*/
 
 import { layoutOf, landingAngle, resultIndex, readResult, restRotation, countdown } from './wheel.js';
-import { recipe, tierOf, winTokens, glance, landPose, pressPose, bezier, FEEL } from './feel.js';
-import { dressOf, edgeAlpha, captionAlpha } from './hypno.js';
+import { recipe, tierOf, winTokens, glance, landPose, pressPose, revealCount, FEEL } from './feel.js';
+import { dressOf, edgeAlpha, captionAlpha, hubStill } from './hypno.js';
 import { createLoomKit, createDeck, createMoments, wheelSize, strengthK, wheelTurnLevel, boxAround } from '../../shared/hypno/index.js';
 import { createScene } from './scene.js';
 import { createReadout } from './readout.js';
@@ -59,6 +59,7 @@ export async function mount(ctx) {
   readMotion();
   const hostBack = ctx.hostBack === true;
   const hypnoCtx = () => ({ intensity: String(ctx.intensity || 'normal').toLowerCase(), reduced, gates: ctx.gates });
+  const hubHeld = () => hubStill({ osReduced: prefersReduced, motion: ctx.motion });   // Calm turns it at half; only OS reduced motion (or Motion Off) holds it
   loadCss();
 
   let el = null, scene = null, readout = null, bank = null, sound = null, session = 0, alive = false, suspended = false;
@@ -132,7 +133,7 @@ export async function mount(ctx) {
     scene.screen('title_screen', t('br_wheel_title', 'DAILY DAZE'));
     const now = performance.now();
     const rq = (now - revealAt) / FEEL.REVEAL_MS, counting = r && r.jackpotWon && rq >= 0 && rq < 1;   // THE REVEAL counts the pot up
-    const want = r ? [r.jackpotWon ? t('br_wheel_screen_jackpot', 'JACKPOT +{n}', { n: fmt(counting ? Math.round(r.pay * bezier(FEEL.REVEAL_EASE, rq)) : r.pay) }) : r.snoozed ? t('br_wheel_screen_snooze', 'SNOOZE +{n} TOMORROW', { n: fmt(st.snoozeCarry) }) : t('br_wheel_screen_win', '+{n} SP', { n: fmt(r.total) }),
+    const want = r ? [r.jackpotWon ? t('br_wheel_screen_jackpot', 'JACKPOT +{n}', { n: fmt(counting ? revealCount(r.pay, rq) : r.pay) }) : r.snoozed ? t('br_wheel_screen_snooze', 'SNOOZE +{n} TOMORROW', { n: fmt(st.snoozeCarry) }) : t('br_wheel_screen_win', '+{n} SP', { n: fmt(r.total) }),
                      c ? t('br_wheel_screen_next', 'NEXT {time}', { time: c.text }) : '']
       : [busy ? t('br_wheel_screen_spinning', 'ROUND IT GOES') : t('br_wheel_screen_ready', 'GIVE IT A SPIN'), t('br_wheel_screen_pot', 'JACKPOT {n}', { n: fmt(j.amount) })];
     if (want.join() !== lines.join()) { lines = want; }
@@ -172,8 +173,8 @@ export async function mount(ctx) {
   /** The kit's Loom context paints the hub; none while suspended, and a still hub is painted once. */
   function paintHub(canvas, angle, now) {
     if (!alive || suspended) return false;
-    if (dress.calm && hubPainted) return false;
-    if (!kit) { kit = createLoomKit({ still: dress.calm, log: m => note('loom', { m }) }); hubPainted = false; }
+    if (hubHeld() && hubPainted) return false;
+    if (!kit) { kit = createLoomKit({ still: hubHeld(), log: m => note('loom', { m }) }); hubPainted = false; }
     hubPainted = kit.paint(canvas, 'hub', { now, angle });
     return hubPainted;
   }
@@ -192,7 +193,7 @@ export async function mount(ctx) {
     readMotion();
     dress = dressOf(hypnoCtx());
     if (scene) { scene.setReduced(still); scene.setDress(dress); }
-    if (kit) kit.setStill(dress.calm);
+    if (kit) kit.setStill(hubHeld());
     if (deck) deck.setStill(dress.calm);
     hubPainted = false;
     if (el) el.dataset.hub = dress.hub;

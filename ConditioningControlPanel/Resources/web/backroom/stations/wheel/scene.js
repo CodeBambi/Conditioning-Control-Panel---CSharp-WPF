@@ -234,7 +234,7 @@ export async function createScene(o) {
   function paintHub(t, dtS) {
     if (!hub) return;
     const mode = dress.hub;
-    hub.rot = stepHub(hub.rot, frameSpeed, dtS, plan && plan.w ? plan.w.scale : 1);   // always clockwise (law 3)
+    hub.rot = stepHub(hub.rot, frameSpeed, dtS, plan && plan.w ? plan.w.scale : 1, dress.k);   // always clockwise (law 3), Calm at half
     // Loom: the disc holds still against the rotor, so the field's own angle is its whole turn on screen.
     hub.disc.rotation.z = mode === 'loom' ? -rotor.rotation.z : 0;
     if (mode === 'star') { if (hub.mode !== 'star') { paintStar(hub.c); hub.tex.needsUpdate = true; } hub.mode = mode; return; }
@@ -579,7 +579,8 @@ export async function createScene(o) {
                coasting: !!coast, planning: !!plan, dragging: !!drag, energy, heat, gold, party: !!party, face: emi.face, mood: emi.mode,
                pointer: pointer.rotation.z - pointerRest, shiverPx: reduced ? 0 : shiverPx(performance.now() - shiverAt),
                star: starMat ? starMat.emissiveIntensity : null, calls: renderer.info.render.calls,
-               hypno: { hub: hub ? hub.mode : 'neon', hubRadius: hub ? hub.radius : null, dim, slowing, shear, speed: frameSpeed,
+               screens: Object.fromEntries(Object.entries(screens).map(([k, v]) => [k, v.text])),
+               hypno: { hub: hub ? hub.mode : 'neon', hubRadius: hub ? hub.radius : null, hubRot: hub ? hub.rot : null, dim, slowing, shear, speed: frameSpeed,
                         timeScale: plan && plan.w ? plan.w.scale : 1, ghosts: !!(ghosts && ghosts[0].visible), moire: moire[0].visible,
                         quiet: Number.isFinite(quietAt) ? (performance.now() - quietAt) / 1000 : null,
                         outline: !!(outline && outline.visible), dress, hubScreen: hubScreen() } };

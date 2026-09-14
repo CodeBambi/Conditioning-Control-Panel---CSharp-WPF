@@ -12,11 +12,14 @@
  *   vortexOf    the chip vortex: direction and chip count
  *   resultLines the text readout for every result, as lexicon keys
  *   fanCard, lampBreath   the sit fan and the breathing lamp, as numbers
+ *   screenHoldMs how long a fired moment keeps something fullscreen, so the
+ *               next deal waits it out
  *
  * No rules and no randomness: every outcome is the server's.
  * ==========================================================================*/
 
 import { cardValue } from './hand.js';
+import { MOMENTS } from '../../shared/hypno/moments.js';
 
 export const TIMING = Object.freeze({
   firstMs: 100,        // press -> first card leaves the shoe
@@ -36,7 +39,22 @@ export const TIMING = Object.freeze({
   glowMs: 1400,
   lampPeriodMs: 10000, // six breaths a minute
   bloomMs: 4000,       // fx.gif_from on the ace: Deal waits this out
+  washMs: 900,         // the host wash (10.13.B): gone at 900 ms
+  edgesTailMs: 150,    // after the losing breath: the last fx-tunnel 0 waits out the 100 ms post gap
 });
+
+/**
+ * How long a moment the station just played keeps something fullscreen (ms), so no new decision opens under it.
+ * `fired` = host fx the moment sent (a gate off sends none), `tunnel` = the tunnel gate let the losing edges run,
+ * `still` = Calm or reduced (the host shortens a gif_from to 60%). The bloom waits out its picture, a win its wash,
+ * a loss its breath of tunnel; a push and the sit fan hold nothing fullscreen.
+ */
+export function screenHoldMs(id, { fired = 0, tunnel = false, still = false } = {}) {
+  if (id === 'cards.bloom') return fired > 0 ? Math.round(TIMING.bloomMs * (still ? 0.6 : 1)) : 0;
+  if (id === 'cards.win') return fired > 0 ? TIMING.washMs : 0;
+  if (id === 'cards.lose') return tunnel ? MOMENTS['cards.lose'].host.find((s) => s.tunnel === 'breath').ms + TIMING.edgesTailMs : 0;
+  return 0;
+}
 
 const WINS = new Set(['win', 'blackjack', 'charlie']);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));

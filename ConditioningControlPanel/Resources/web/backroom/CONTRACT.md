@@ -703,9 +703,10 @@ export function createLoomKit({ still = false, log = null } = {});
   `hub` {3, 1.5, 0.55, golden, 1, #e8c27a #ff5fa2 #9b6bff, hard}, bg #1a0f2b, glow 0.35, speed 3 (driven by angle);
   `whirl` {2, 2.5, 0.45, ribbon, 1, #5fffd0 #9b6bff, hard}, bg #1c1230, glow 0.4, wobble {amp 0.12, freq 3, cycles 1}
   (driven by angle); `wake` {4, 3, 0.5, log, 1, #5fffd0 #3a1f5c, hard}, bg #0a0614, glow 0.45, wobble {0.15, 2, 1},
-  speed 2; `screen` {6, 2.5, 0.5, log, 1, #ff5fa2 #9b6bff #5fffd0, gradient}, layer2 {enabled, 3, 1.5, 0.3, log, -1,
+  speed 2; `screen` {6, 2.5, 0.5, log, 1, #ff5fa2 #9b6bff #5fffd0, gradient}, layer2 {enabled, 3, 1.5, 0.3, log, 1,
   #e8c27a}, bg radial #14060f -> #08040e, glow 0.5, pulse {amp 0.08, cycles 1}, speed 1. `wake` and `screen` are the
-  two the host plays woven.
+  two the host plays woven. The gold layer2 of `screen` turns the SAME way as layer 1 (owner, 2026-09-14; the mockup
+  counter-turned it).
 
 ```js
 // media.js - the dealt GIFs drawn in the page (cards: 13; wheel and roulette: keys only)
@@ -740,9 +741,9 @@ export function createMoments(ctx, { station });
 ```
 
 - `play` looks the id up in `MOMENTS`, drops the host steps whose gate is off (`flash`: wash, gif_from; `spiral`:
-  loom_spiral; `brainDrain`: haze, tunnel), fires the rest through `ctx.fx` with the table's Normal `args` merged with
-  the caller's, and returns the page effect names for the station to run at `strengthK(ctx)`. An unknown id fires
-  nothing and logs.
+  loom_spiral; `brainDrain`: haze; `tunnel`: tunnel, the Back Room's own gate, amended 2026-09-14), fires the rest
+  through `ctx.fx` with the table's Normal `args` merged with the caller's, and returns the page effect names for the
+  station to run at `strengthK(ctx)`. An unknown id fires nothing and logs.
 - Tests: `shared/hypno/tests/*.test.mjs` (node) and `shared/hypno/tests/kit-check.mjs` (headless, a mock host that
   records `fx`, `fx-tunnel` and `fx-release`; `KIT_PORT` default 8896, debug +500). K1 exports that mock as
   `shared/hypno/tests/mock-host.js` `createMockHost()` for the station checks.

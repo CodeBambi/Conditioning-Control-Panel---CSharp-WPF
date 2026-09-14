@@ -51,7 +51,7 @@ await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
 // One fake host for the whole room: a mock server per station, created on its first request.
 const FAKE_HOST = `(() => {
   const listeners = [], emit = (data) => setTimeout(() => listeners.forEach((fn) => fn({ data })), 0);
-  const gates = { flash: true, subliminal: true, spiral: true, brainDrain: true };
+  const gates = { flash: true, subliminal: true, spiral: true, brainDrain: true, tunnel: true };
   const made = {};
   const mock = (id) => made[id] || (made[id] = import('/backroom/stations/' + id + '/mock-server.js').then((m) => {
     const s = id === 'cards' ? m.createMockServer({ sp: 57, floorMs: 600 }) : id === 'roulette' ? m.createMockServer({ sp: 57, floorMs: 0 }) : m.createMockServer({ sp: 57 });

@@ -103,8 +103,9 @@ const waitLanded = (ms = 16000) => until('!window.dev.station.debug().busy', ms,
 /** The hub disc measured ON SCREEN (law 3): two lossless screenshots, ring shifts around the projected hub centre.
  *  turn > 0 = the pattern moved clockwise; rim > 0 = its arms lead at the rim, so a clockwise turn reads inward. */
 async function hubHandedness(gapMs) {
+  const r0 = (await hyp()).hubRot;
   const A = await shot('png'); await sleep(gapMs); const B = await shot('png');
-  const hub = (await hyp()).hubScreen;
+  const h1 = await hyp(), hub = h1.hubScreen, rotDeg = Number.isFinite(r0) && Number.isFinite(h1.hubRot) ? ((h1.hubRot - r0) * 180) / Math.PI : null;
   return ev(`(async () => {
     const { ring, shift } = await import('/web/backroom/shared/hypno/tests/handedness.js');
     const hub = ${JSON.stringify(hub)}, S = Math.floor(hub.r * 2) - 4;
@@ -116,7 +117,7 @@ async function hubHandedness(gapMs) {
     const turn = rs.map(r => deg(shift(ring(a, S, S, r), ring(b, S, S, r), max)));
     const rim = rs.map(r => deg(shift(ring(a, S, S, r), ring(a, S, S, r + 3), max)));
     return { hubPx: Math.round(hub.r), turn, rim };
-  })()`);
+  })()`).then(m => ({ ...m, rotDeg }));
 }
 
 // 1. Full intensity, a 5 SP win (Glow): Loom hub, taffy + moire, the long last turn, the landing wash, the quiet room.
@@ -130,6 +131,9 @@ ok(((await dbg()).hypno.kit || {}).draws > 5, 'the kit paints the hub every fram
 const handRest = await hubHandedness(400);
 ok(handRest.turn.every(v => v > 0) && handRest.rim.every(v => v > 0), `hub on screen at rest: turns clockwise ${handRest.turn.map(v => v.toFixed(1))} deg, arms lead at the rim ${handRest.rim.map(v => v.toFixed(1))} deg`);
 await still('st-wheel-01-idle-loom-hub.jpg', 'Loom hub at rest, moire rim (Full)');
+const hubRate = async (ms = 1000) => { const a = (await hyp()).hubRot, t = Date.now(); await sleep(ms); return ((await hyp()).hubRot - a) / ((Date.now() - t) / 1000); };
+summary.hubRateFull = await hubRate();
+ok(summary.hubRateFull > 0.35 * 0.7 && summary.hubRateFull < 0.35 * 1.3, `hub drifts clockwise at rest at ${summary.hubRateFull.toFixed(3)} rad/s (0.35)`);
 await ev('window.dev.host.clear()');
 let t0 = Date.now();
 const ans = await pressAndMeasure();
@@ -138,9 +142,19 @@ await sleep(350);
 d = await dbg();
 ok(d.readout.server === 62 && d.readout.value === 57 && d.readout.owed === 5, 'Law I: the server says 62, the readout holds 57 until it lands');
 ok(await until('(() => { const h = window.dev.station.debug().feel.scene.hypno; return h.ghosts && h.shear > 0.5; })()', 3000), 'taffy at speed: slices sheared, smear ghosts on');
-const handSpin = await hubHandedness(60);
+// At speed two captures can straddle more than the probe's +-60 deg window (capture latency under load) or land on
+// one painted frame. The hub's own angle (hubRot, read around the pair) bounds the true turn: a pair is only read
+// when that turn is 1..55 deg; up to five pairs. A hub that ran backward would still fail every readable pair.
+const spinTries = [];
+let handSpin = null;
+for (let i = 0; i < 5 && !handSpin; i++) {
+  const m = await hubHandedness(60);
+  spinTries.push({ turn: m.turn, rotDeg: m.rotDeg && Number(m.rotDeg.toFixed(1)) });
+  if (m.rotDeg > 1 && m.rotDeg < 55 && !m.turn.every(v => v === 0)) handSpin = m;
+}
+summary.hubSpinTries = spinTries;
 await still('st-wheel-02-full-taffy-moire.jpg', 'Taffy slices with smear ghosts and the moire rim at speed');
-ok(handSpin.turn.every(v => v > 0), `hub on screen while the wheel turns clockwise: ${handSpin.turn.map(v => v.toFixed(1))} deg`);
+ok(handSpin && handSpin.turn.every(v => v > 0), `hub on screen while the wheel turns clockwise: ${handSpin ? handSpin.turn.map(v => v.toFixed(1)) : '-'} deg for ${handSpin ? handSpin.rotDeg.toFixed(1) : '-'} deg of hub angle (${spinTries.length} pair(s))`);
 ok(await until('(() => { const d = window.dev.station.debug(); return d.feel.scene.hypno.slowing && d.feel.scene.hypno.dim > 0.7; })()', 12000, 30), 'the long last turn starts under 1.6 rad/s');
 d = await dbg();
 ok(d.feel.scene.hypno.timeScale < 0.8 && d.hypno.edges > 0.3 && d.hypno.caption > 0.3 && d.hypno.turnPlayed, `slow motion x${d.feel.scene.hypno.timeScale.toFixed(2)}, stage edges ${d.hypno.edges}, "s l o w l y" ${d.hypno.caption}`);
@@ -234,6 +248,8 @@ ok(moment4.gif === fx[1].symbols[0], `the picture key is the deck's pick for the
 // 5. The jackpot: a 12-day pot (550), the fullscreen Loom spiral with the picture inside, the brass wash, THE REVEAL.
 await boot('?next=jackpot&pot=12');
 await ev('window.dev.host.clear()');
+await ev(`(() => { window.__screens = []; const s = () => { const d = window.dev.station.debug(); window.__screens.push(d.feel.scene.screens.status_screen);
+  if (window.__screens.length < 900) requestAnimationFrame(s); }; requestAnimationFrame(s); })()`);
 await ev("document.querySelector('.wheel-spin').click()");
 ok(await waitLanded(), 'jackpot lands');
 await sleep(500);
@@ -251,6 +267,10 @@ ok(d.feel.cues.some(c => c.name === 'reveal') && d.hypno.lastMoment.page.include
 await sleep(2400);
 d = await dbg();
 ok(d.readout.value === 607 && /JACKPOT! \+550 SP/.test(d.status), `57 + 550 = 607, status "${d.status}"`);
+const counted = (await ev('window.__screens')).map(t => /^JACKPOT \+([\d,]+)$/.exec(t || '')).filter(Boolean).map(m => Number(m[1].replace(/,/g, '')));
+summary.jackpotCount = { samples: counted.length, distinct: [...new Set(counted)].length, max: Math.max(...counted) };
+ok(counted.length > 10 && [...new Set(counted)].length >= 5 && Math.max(...counted) === 550 && counted.every(n => n <= 550),
+   `THE REVEAL counts up (${summary.jackpotCount.distinct} values over ${counted.length} frames) and never reads above +550 (max ${summary.jackpotCount.max})`);
 
 // 6. Reduced motion: no travel, the landing is simply there once the server answers; no tokens, no tunnel.
 await boot('?next=deep&reduced&latency=200');
@@ -260,7 +280,21 @@ ok(!r5.coasting && r5.busy && (await ev("document.querySelector('.wheel-spin').c
 await strip('strip-reduced.png', [0, 150, 400, 1200], t0);
 d = await dbg();
 ok(d.feel.scene.landed === 'deep' && !d.busy && d.readout.value === 97 && (await ev("document.querySelectorAll('.wheel-token').length")) === 0, 'reduced: settled on Deep, 97 SP, no tokens');
-ok(!(await tunnels()).some(v => v > 0) && d.hypno.kit && d.hypno.kit.still, 'reduced: no tunnel, the hub held still');
+ok(!(await tunnels()).some(v => v > 0), 'reduced: no tunnel');
+summary.hubRateReduced = await hubRate();
+ok(d.hypno.kit && !d.hypno.kit.still && summary.hubRateReduced > 0.175 * 0.7 && summary.hubRateReduced < 0.175 * 1.3,
+   `MotionLevel reduced (Calm): the hub keeps turning at half strength, ${summary.hubRateReduced.toFixed(3)} rad/s (0.175)`);
+
+// 6b. OS reduced motion (prefers-reduced-motion): the only thing that stills the hub.
+await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+await boot('?next=deep');
+await sleep(400);
+d = await dbg();
+const handOs = await hubHandedness(700);
+summary.hubOsReduced = handOs;
+ok(d.hypno.kit && d.hypno.kit.still && d.still && handOs.turn.every(v => v === 0), `OS reduced motion: the kit holds the hub still, on screen ${handOs.turn.map(v => v.toFixed(1))} deg in 700 ms`);
+await still('st-wheel-20-os-reduced-hub-still.jpg', 'OS reduced motion: the Loom hub held still');
+await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
 
 // 7. Already spun today, opened fresh: the stored landing, countdown, the button waits.
 await boot('?spun&next=twinkle');
@@ -329,7 +363,7 @@ await sleep(1200);
 d = await dbg();
 ok(d.readout.kind === 'hook' && chipMid === '57' && (await ev("document.querySelector('#fakechip b').textContent")) === '65' && (await ev("window.dev.sent.some(m => m.type === 'chip-thud')")), `spReadout hook: chip ${chipMid} while turning, 65 after the bank, chip thud`);
 
-// 12. Gated off (flash, spiral, brainDrain all off): plain dress from the first frame, no fx, no tunnel; the in-station dim stays.
+// 12. Gated off (flash, spiral, brainDrain, tunnel all off): plain dress from the first frame, no fx, no tunnel; the in-station dim stays.
 await boot('?gates=off&next=deep');
 d = await dbg();
 ok(d.feel.scene.hypno.hub === 'star' && d.hypno.dress.hub === 'star', 'spiral off: the hub is a brass star');
@@ -343,15 +377,21 @@ await still('st-wheel-14-gated-off-landed.jpg', 'Gated off: 40 SP lands with the
 d = await dbg();
 ok((await fxCalls()).length === 0 && !(await tunnels()).some(v => v > 0) && d.hypno.lastMoment.id === 'wheel.land.gif' && d.feel.scene.hypno.quiet !== null, 'gated off: wheel.land.gif fires no host fx and no tunnel, the quiet room still runs');
 ok(/Deep: \+40 SP/.test(d.status), `gated off: the result as text "${d.status}"`);
-await ev("window.dev.host.settings({ gates: { flash: true, spiral: true, brainDrain: true } })");
+await ev("window.dev.host.settings({ gates: { flash: true, spiral: true, brainDrain: true, tunnel: true } })");
 await sleep(300);
 ok((await hyp()).hub === 'loom', 'a live settings frame turns the Loom hub back on');
 await ev("window.dev.host.settings({ gates: { spiral: false } })");
 await sleep(200);
 ok((await hyp()).hub === 'star', 'and off again, live');
 
-// 13. Calm: the settled landing, Normal args sent (the host halves), the quiet room at half strength, the hub held.
+// 13. Calm: the settled landing, Normal args sent (the host halves), the quiet room at half strength, the hub turning at half.
 await boot('?calm&next=jackpot&pot=12');
+summary.hubRateCalm = await hubRate();
+ok((await dbg()).hypno.kit && !(await dbg()).hypno.kit.still && summary.hubRateCalm > 0.175 * 0.7 && summary.hubRateCalm < 0.175 * 1.3,
+   `Calm: the Loom hub keeps turning clockwise at half strength, ${summary.hubRateCalm.toFixed(3)} rad/s (0.175)`);
+const handCalm = await hubHandedness(700);
+ok(handCalm.turn.every(v => v > 0) && handCalm.rim.every(v => v > 0), `Calm hub on screen: turns clockwise ${handCalm.turn.map(v => v.toFixed(1))} deg, arms lead at the rim`);
+await still('st-wheel-19-calm-hub-turning.jpg', 'Calm: the Loom hub still turning, at half strength');
 await ev('window.dev.host.clear()');
 await ev("document.querySelector('.wheel-spin').click()");
 ok(await waitLanded(6000), 'Calm: lands once the server answers');
@@ -359,7 +399,7 @@ await sleep(300);
 await still('st-wheel-15-calm-jackpot.jpg', 'Calm: jackpot, spiral at half alpha and 60% duration on the host stand-in');
 d = await dbg();
 fx = await fxCalls();
-ok(fx.length === 3 && fx[0].args.alpha === 0.9 && fx[2].args.strength === 1 && d.hypno.dress.k === 0.5 && d.hypno.kit && d.hypno.kit.still, 'Calm: the page sends Normal args (nobody halves twice), k 0.5, the Loom held still');
+ok(fx.length === 3 && fx[0].args.alpha === 0.9 && fx[2].args.strength === 1 && d.hypno.dress.k === 0.5 && d.hypno.kit && !d.hypno.kit.still, 'Calm: the page sends Normal args (nobody halves twice), k 0.5, the Loom hub not held');
 ok(!d.feel.scene.hypno.moire && !(await tunnels()).some(v => v > 0), 'Calm: no moire, no travel so no tunnel');
 await boot('?calm&next=shimmer');
 await ev("document.querySelector('.wheel-spin').click()");
@@ -390,8 +430,8 @@ ok(d.hypno.dress.full && d.feel.scene.hypno.moire && !d.still, 'live motion: ope
 await ev("window.dev.host.settings({ reduced: true, motion: 'reduced' })");
 await sleep(250);
 d = await dbg();
-ok(d.still && !d.hypno.dress.full && d.hypno.dress.calm && d.hypno.dress.k === 0.5 && !d.feel.scene.hypno.moire && d.hypno.kit && d.hypno.kit.still,
-  'live motion: a reduced settings frame drops Full, k 0.5, no moire, the hub held still, without a reopen');
+ok(d.still && !d.hypno.dress.full && d.hypno.dress.calm && d.hypno.dress.k === 0.5 && !d.feel.scene.hypno.moire && d.hypno.kit && !d.hypno.kit.still,
+  'live motion: a reduced settings frame drops Full, k 0.5, no moire, the hub still turning at half, without a reopen');
 await ev('window.dev.host.clear()');
 await ev("document.querySelector('.wheel-spin').click()");
 await sleep(120);
@@ -407,6 +447,10 @@ await ev("window.dev.host.settings({ reduced: false, motion: 'full' })");
 await sleep(250);
 d = await dbg();
 ok(!d.still && d.hypno.dress.full && d.feel.scene.hypno.moire && d.hypno.kit && !d.hypno.kit.still, 'live motion: back to full motion, Full dress again, the hub turns');
+await ev("window.dev.host.settings({ reduced: true, motion: 'off' })");
+await sleep(250);
+d = await dbg();
+ok(d.hypno.kit && d.hypno.kit.still, 'live motion: the app Motion Off holds the hub still');
 
 await writeFile(join(OUT, 'wheel-check.json'), JSON.stringify(summary, null, 2));
 ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));

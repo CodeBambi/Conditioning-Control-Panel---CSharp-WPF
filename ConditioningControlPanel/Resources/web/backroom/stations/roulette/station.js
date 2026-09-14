@@ -44,7 +44,7 @@ export async function mount(ctx) {
   const stillNow = () => !!ctx.reduced || prefersReduced || String(ctx.intensity || '').toLowerCase() === 'calm';
   const fullNow = () => ctx.intensity === 'full' && !ctx.reduced && !prefersReduced;
   const kNow = () => (prefersReduced ? 0.5 : strengthK(ctx));
-  const gates = () => { const g = ctx.gates || {}; return { flash: g.flash !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false }; };
+  const gates = () => { const g = ctx.gates || {}; return { flash: g.flash !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false, tunnel: g.tunnel !== false }; };
   const hostBack = ctx.hostBack === true;
   const hook = ctx.spReadout && typeof ctx.spReadout.owe === 'function' ? ctx.spReadout : null;
   loadCss();
