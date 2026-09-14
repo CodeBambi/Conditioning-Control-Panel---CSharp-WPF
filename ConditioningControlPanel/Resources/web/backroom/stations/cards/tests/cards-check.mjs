@@ -8,7 +8,7 @@
  * mocks answer every call. The only process this stops is the Chrome it started, by its own handle.
  * Evidence: a screenshot of every key moment in CONTRACT 10.13.F (sit fan, Loom backs, your deck, a decision held,
  * win flash, win tunnel and chip vortex, losing edges, ace glow and blackjack bloom, ripple felt at Full, split),
- * a gated-off run, a Calm run, a resume, the room visit, and cards-check.json.
+ * a gated-off run, a Calm run, a resume, the sit latch, a settled reopen, the room visit, and cards-check.json.
  * CHROME: CHROME_PATH, else the usual Windows install.
  * ==========================================================================*/
 
@@ -339,6 +339,36 @@ await ev("window.dev.settings({ intensity: 'calm' })");
 await sleep(200);
 d = await dbg();
 ok(d.dress.still && d.kit.still, 'and a Calm frame stills the Loom');
+
+/* ---------------------------------------------------------------- 8b. the sit latch and a settled reopen */
+const slowMedia = (ms) => ev(`(() => { const m = window.dev.ctx.media; window.dev.ctx.media = (o) => new Promise((r) => setTimeout(r, ${ms})).then(() => m(o)); return true; })()`);
+await boot('?floor=600&script=Th.9d.8c.8s,Th.9d.8c.8s');
+await dealWhenReady();
+await decideNow();
+await click('.cards-move[data-move=stand]');
+await settledNow();
+await until("window.dev.station.debug().controls.deal && window.dev.station.debug().controls.sit", 8000);
+await slowMedia(700);
+const deals0 = await ev("window.dev.server.log.filter((l) => l.op === 'deal').length");
+const latch = await ev(`(() => { document.querySelector('.cards-sit').click(); const a = window.dev.station.debug();
+  document.querySelector('.cards-deal').click(); document.querySelector('.cards-sit').click(); const b = window.dev.station.debug();
+  return { phase: a.phase, seating: a.seating, deal: a.controls.deal, sit: a.controls.sit, sitting: b.sitting, moves: Object.values(b.controls.moves).some(Boolean) }; })()`);
+ok(latch.phase === 'sit' && latch.seating && !latch.deal && !latch.sit && !latch.moves && latch.sitting === 2, `Sit latches on the press, before the deck is in: Deal, the moves and a second Sit refused (${JSON.stringify(latch)})`);
+await until("window.dev.station.debug().phase === 'play'", 10000);
+await sleep(300);
+const sent0 = { deals: await ev("window.dev.server.log.filter((l) => l.op === 'deal').length"), media: await ev('window.dev.host.media.length') };
+ok(sent0.deals === deals0 && sent0.media === 2, `no deal went out during the sit, and one 13-picture request, not two (${JSON.stringify(sent0)})`);
+d = await dbg();
+await shot('resit-latched-ready.png');
+ok(d.sitting === 2 && !d.shown && !(d.state.hand && !d.state.hand.done) && !d.moments.held && /Pick a bet and deal/.test(d.status) && d.controls.deal, `after the sit: an empty table ready to deal, nothing held ("${d.status}")`);
+await ev('window.dev.stand()');
+await ev('window.dev.open()');
+await until("window.dev.station.debug().phase === 'play'", 12000);
+await ev('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))');   // afterSit queues the hand; the next frame lays it down
+d = await dbg();
+await shot('reopen-finished-hand-settled.png');
+ok(d.shown && d.shown.done && d.queue === 0 && d.table.cards.length === 4 && d.table.cards.every((c) => c.landed && c.face) && d.controls.deal,
+  `reopen with a finished last hand: it lies settled on the first frame, Deal live (${d.table.cards.length} cards)`);
 
 /* ---------------------------------------------------------------- 9. through the room */
 const PICS = ['/backroom/stations/slot/fallback/gif0.webp', '/dtrh/assets/bubbles/effects/spirals/sp6.gif', '/arcademy/art/bugle/g1.webp', '/backroom/stations/slot/fallback/gif1.webp',
