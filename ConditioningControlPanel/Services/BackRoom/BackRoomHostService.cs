@@ -35,15 +35,36 @@ internal static class BackRoomHostService
     internal static Dictionary<string, string> Lex(IEnumerable<string> keys, Func<string, string> get)
         => keys.Distinct(StringComparer.Ordinal).ToDictionary(k => k, get, StringComparer.Ordinal);
 
-    /// <summary><c>init.gates</c> / <c>settings.gates</c> (10.13.A): the four feature toggles, sent in full
-    /// every time. For dressing only; the dispatcher still enforces each toggle.</summary>
+    /// <summary><c>init.gates</c> / <c>settings.gates</c> (10.13.A, 10.14): the four feature toggles plus the room's own
+    /// <c>tunnel</c> and <c>melt</c> switches, sent in full every time. For dressing only; the dispatcher still
+    /// enforces each one.</summary>
     internal static object GatesWire(Models.AppSettings? s) => new
     {
         flash = s?.FlashEnabled ?? false,
         subliminal = s?.SubliminalEnabled ?? false,
         spiral = s?.SpiralEnabled ?? false,
         brainDrain = s?.BrainDrainEnabled ?? false,
+        tunnel = s?.BackRoomTunnel ?? false,
+        melt = s?.BackRoomMelt ?? false,
     };
+
+    /// <summary><c>intensityChoice</c> (10.14): the player's own Calm / Normal / Full, which the room's Options
+    /// shows even while <c>intensity</c> is forced to <c>calm</c> below MotionLevel Full.</summary>
+    internal static string IntensityChoiceWire(Models.AppSettings? s)
+        => (s?.BackRoomFxIntensity ?? BackRoomFxIntensity.Normal).ToString().ToLowerInvariant();
+
+    /// <summary>A <c>room-option</c> the bridge already validated, written to the settings and saved (10.14).
+    /// UI thread: the settings listeners run there.</summary>
+    internal static void ApplyRoomOption(Models.AppSettings s, BackRoomBridge.RoomOption option)
+    {
+        switch (option.Key)
+        {
+            case BackRoomBridge.OptionTunnel: s.BackRoomTunnel = option.On; break;
+            case BackRoomBridge.OptionMelt: s.BackRoomMelt = option.On; break;
+            case BackRoomBridge.OptionIntensity when option.Intensity is { } i: s.BackRoomFxIntensity = i; break;
+            default: return;
+        }
+    }
 
     /// <summary>Settings whose change pushes a full <c>settings</c> frame.</summary>
     internal static readonly HashSet<string> SettingsFrameProperties = new(StringComparer.Ordinal)
@@ -51,6 +72,7 @@ internal static class BackRoomHostService
         nameof(Models.AppSettings.MotionLevel), nameof(Models.AppSettings.BackRoomFxIntensity),
         nameof(Models.AppSettings.FlashEnabled), nameof(Models.AppSettings.SubliminalEnabled),
         nameof(Models.AppSettings.SpiralEnabled), nameof(Models.AppSettings.BrainDrainEnabled),
+        nameof(Models.AppSettings.BackRoomTunnel), nameof(Models.AppSettings.BackRoomMelt),
     };
 
     /// <summary>DEBUG only: <c>CCP_BACKROOM_CDP_PORT</c> opens a remote debugging port on the room's
@@ -111,6 +133,12 @@ internal static class BackRoomHostService
                 CloseWindow = DisposeAll,
                 Schedule = Schedule,
                 NoteEvent = key => App.FeatureDayLog?.Note(key),
+                SetOption = option => OnUi(() =>
+                {
+                    if (App.Settings?.Current is not { } s) return;
+                    ApplyRoomOption(s, option);
+                    App.Settings.Save();
+                }),
                 SetSp = sp => { if (App.Settings?.Current is { } s) s.SkillPoints = sp; },
                 OnUi = OnUi,
                 OffUi = work => System.Threading.Tasks.Task.Run(work),
@@ -247,6 +275,7 @@ internal static class BackRoomHostService
             intensity = IntensityWire(s, motion),
             lang = LocalizationManager.Instance.CurrentLanguage,
             gates = GatesWire(s),
+            intensityChoice = IntensityChoiceWire(s),
             lex = Lex(LocalizationManager.Instance.KeysWithPrefix(LexPrefix), Loc.Get),
             stations = BackRoomApi.Ops.Keys.ToArray(),
             // No door endpoint exists yet: null = unknown, and the page learns `closed` from its
@@ -262,7 +291,7 @@ internal static class BackRoomHostService
         return new
         {
             type = "settings", motion = MotionWire(motion), intensity = IntensityWire(s, motion),
-            reduced = motion != Models.MotionLevel.Full, gates = GatesWire(s),
+            reduced = motion != Models.MotionLevel.Full, gates = GatesWire(s), intensityChoice = IntensityChoiceWire(s),
         };
     }
 
@@ -348,9 +377,10 @@ internal static class BackRoomHostService
     {
         if (_bridge == null || sender is not Models.AppSettings s) return;
         if (e.PropertyName == nameof(Models.AppSettings.SkillPoints)) _bridge.OnSpChanged(s.SkillPoints, "earn");
-        // Brain Drain off under a running tunnel: the dispatcher's gate check cancels it now.
-        if (e.PropertyName == nameof(Models.AppSettings.BrainDrainEnabled) && !s.BrainDrainEnabled) Fx.Tunnel(string.Empty, 0);
-        else if (e.PropertyName != null && SettingsFrameProperties.Contains(e.PropertyName)) _bridge.PushSettings(SettingsMessage());
+        // The room's tunnel switch off under a running tunnel: the dispatcher's gate check cancels it now (10.14).
+        // The page still gets the frame, so it dresses plain from the next frame.
+        if (e.PropertyName == nameof(Models.AppSettings.BackRoomTunnel) && !s.BackRoomTunnel) Fx.Tunnel(string.Empty, 0);
+        if (e.PropertyName != null && SettingsFrameProperties.Contains(e.PropertyName)) _bridge.PushSettings(SettingsMessage());
     }
 
     private static void DisposeAll()

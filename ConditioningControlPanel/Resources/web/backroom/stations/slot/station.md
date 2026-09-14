@@ -77,5 +77,5 @@ Dev harness: serve `ConditioningControlPanel/Resources` as the web root and open
 `/web/backroom/stations/slot/dev.html` (`?sp=57&melt=0&floor=3000&latency=120&reduced&variant=violet`).
 `dev.station.debug().feel` shows the feel log, cue trace, pose and scene state.
 
-`mock-server.js` follows table v5 (CONTRACT 10.1: `emi3` pays 400, drawn at 77 per million on its own seeded
+`mock-server.js` follows table v6 (CONTRACT 10.14: `emi3` pays 400, drawn at 154 per million on its own seeded
 stream) and the 3000 ms slot and freeze floors (10.12).

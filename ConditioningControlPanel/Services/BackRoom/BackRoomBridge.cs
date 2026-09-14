@@ -57,6 +57,8 @@ public sealed class BackRoomBridge
         /// <summary>Run blocking work off the UI thread (the media deal reads file headers). Null =
         /// run inline, which is what the suite wants; the host passes <c>Task.Run</c>.</summary>
         public Action<Action>? OffUi { get; init; }
+        /// <summary>Write a validated <c>room-option</c> into the settings and save (10.14). Null = ignored.</summary>
+        public Action<RoomOption>? SetOption { get; init; }
         public Func<int>? NextSeed { get; init; }
         public Action<string>? Log { get; init; }
     }
@@ -199,6 +201,11 @@ public sealed class BackRoomBridge
             case "melt":
                 _d.Log?.Invoke("melt " + (string?)m["station"] + " left=" + (string?)m["left"]);
                 break;
+            case "room-option":
+                // 10.14: the room's Options. Anything but the three known shapes is dropped.
+                if (!IsClosing && ReadRoomOption(m) is { } option) Guard(() => _d.SetOption?.Invoke(option));
+                else _d.Log?.Invoke("room-option dropped");
+                break;
             default:
                 _d.Log?.Invoke("unhandled message '" + type + "'");
                 break;
@@ -208,6 +215,30 @@ public sealed class BackRoomBridge
     private void Guard(Action fx)
     {
         try { fx(); } catch (Exception ex) { _d.Log?.Invoke("fx threw: " + ex.Message); }
+    }
+
+    public const string OptionTunnel = "tunnel", OptionMelt = "melt", OptionIntensity = "intensity";
+
+    /// <summary>One validated <c>room-option</c>: a switch (<see cref="On"/>) or the intensity.</summary>
+    public sealed record RoomOption(string Key, bool On, BackRoomFxIntensity? Intensity);
+
+    /// <summary><c>{type:'room-option', key:'tunnel'|'melt', value: bool}</c> or <c>{key:'intensity', value:
+    /// 'calm'|'normal'|'full'}</c>. A string "true", a number or an unknown key is null.</summary>
+    internal static RoomOption? ReadRoomOption(JObject m)
+    {
+        var key = (string?)m["key"];
+        var v = m["value"];
+        if ((key == OptionTunnel || key == OptionMelt) && v is JValue { Type: JTokenType.Boolean } b)
+            return new RoomOption(key, b.Value<bool>(), null);
+        if (key == OptionIntensity && v is JValue { Type: JTokenType.String } t)
+            return (string?)t switch
+            {
+                "calm" => new RoomOption(key, false, BackRoomFxIntensity.Calm),
+                "normal" => new RoomOption(key, false, BackRoomFxIntensity.Normal),
+                "full" => new RoomOption(key, false, BackRoomFxIntensity.Full),
+                _ => null,
+            };
+        return null;
     }
 
     /// <summary><c>media-request.count</c>: an integer 1..13, anything else reads as 4 (10.13.C).</summary>

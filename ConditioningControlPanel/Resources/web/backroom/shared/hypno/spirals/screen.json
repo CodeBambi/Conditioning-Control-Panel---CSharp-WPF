@@ -20,7 +20,7 @@
     "turns": 1.5,
     "duty": 0.3,
     "style": "log",
-    "direction": -1,
+    "direction": 1,
     "colors": [
       "#e8c27a"
     ],

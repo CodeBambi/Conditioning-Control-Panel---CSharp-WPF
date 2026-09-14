@@ -4884,6 +4884,33 @@ namespace ConditioningControlPanel.Models
             }
         }
 
+        private bool _backRoomTunnel = true;
+        /// <summary>
+        /// THE BACK ROOM tunnel vision (CONTRACT 10.14): the room's own switch, shown in the room's
+        /// Options and not in Settings, because nothing else uses it. ON by default; a settings file
+        /// written before the switch existed has no key, so it reads as on until the player turns it off.
+        /// </summary>
+        [JsonProperty]
+        public bool BackRoomTunnel
+        {
+            get => _backRoomTunnel;
+            set { _backRoomTunnel = value; OnPropertyChanged(); }
+        }
+
+        private bool _backRoomMelt = true;
+        /// <summary>
+        /// THE BACK ROOM melt (CONTRACT 10.14): whether the slot's <c>fx.melt</c> plays the Brain Drain
+        /// melt. The room's own switch in the room's Options, ON by default and independent of the
+        /// app-wide Brain Drain toggles (<see cref="BrainDrainEnabled"/> and <see cref="BrainDrainMeltEnabled"/>
+        /// both default off, which kept every room melt dark). A missing key reads as on; a player's off is kept.
+        /// </summary>
+        [JsonProperty]
+        public bool BackRoomMelt
+        {
+            get => _backRoomMelt;
+            set { _backRoomMelt = value; OnPropertyChanged(); }
+        }
+
         private bool _videoForceHardwareDecoding = false;
         /// <summary>
         /// Force GPU (DXVA) hardware decoding for mandatory videos. Default OFF — mandatory videos

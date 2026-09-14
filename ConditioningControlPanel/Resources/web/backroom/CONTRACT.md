@@ -458,6 +458,7 @@ export async function mount(ctx) {
 Where these disagree with the sections above, these win.
 
 1. **Table v5:** `emi3` pays 400 at 1 in 12,987 (was 2,500 at 1 in 25,000). Paytable constant `TABLE_V5`.
+   Superseded by table v6 (10.14).
 2. **Freezes are sealed from melt:** a freeze spin and everything it expands into neither consume nor
    start melt; `melt` comes back exactly as it went in.
 3. **A re-spin keeps the hold:** a `spiral2` re-spin won on a freeze spin repeats the frozen table with the
@@ -702,9 +703,10 @@ export function createLoomKit({ still = false, log = null } = {});
   `hub` {3, 1.5, 0.55, golden, 1, #e8c27a #ff5fa2 #9b6bff, hard}, bg #1a0f2b, glow 0.35, speed 3 (driven by angle);
   `whirl` {2, 2.5, 0.45, ribbon, 1, #5fffd0 #9b6bff, hard}, bg #1c1230, glow 0.4, wobble {amp 0.12, freq 3, cycles 1}
   (driven by angle); `wake` {4, 3, 0.5, log, 1, #5fffd0 #3a1f5c, hard}, bg #0a0614, glow 0.45, wobble {0.15, 2, 1},
-  speed 2; `screen` {6, 2.5, 0.5, log, 1, #ff5fa2 #9b6bff #5fffd0, gradient}, layer2 {enabled, 3, 1.5, 0.3, log, -1,
+  speed 2; `screen` {6, 2.5, 0.5, log, 1, #ff5fa2 #9b6bff #5fffd0, gradient}, layer2 {enabled, 3, 1.5, 0.3, log, 1,
   #e8c27a}, bg radial #14060f -> #08040e, glow 0.5, pulse {amp 0.08, cycles 1}, speed 1. `wake` and `screen` are the
-  two the host plays woven.
+  two the host plays woven. The gold layer2 of `screen` turns the SAME way as layer 1 (owner, 2026-09-14; the mockup
+  counter-turned it).
 
 ```js
 // media.js - the dealt GIFs drawn in the page (cards: 13; wheel and roulette: keys only)
@@ -739,9 +741,9 @@ export function createMoments(ctx, { station });
 ```
 
 - `play` looks the id up in `MOMENTS`, drops the host steps whose gate is off (`flash`: wash, gif_from; `spiral`:
-  loom_spiral; `brainDrain`: haze, tunnel), fires the rest through `ctx.fx` with the table's Normal `args` merged with
-  the caller's, and returns the page effect names for the station to run at `strengthK(ctx)`. An unknown id fires
-  nothing and logs.
+  loom_spiral; `brainDrain`: haze; `tunnel`: tunnel, the Back Room's own gate, amended 2026-09-14), fires the rest
+  through `ctx.fx` with the table's Normal `args` merged with the caller's, and returns the page effect names for the
+  station to run at `strengthK(ctx)`. An unknown id fires nothing and logs.
 - Tests: `shared/hypno/tests/*.test.mjs` (node) and `shared/hypno/tests/kit-check.mjs` (headless, a mock host that
   records `fx`, `fx-tunnel` and `fx-release`; `KIT_PORT` default 8896, debug +500). K1 exports that mock as
   `shared/hypno/tests/mock-host.js` `createMockHost()` for the station checks.
@@ -786,7 +788,7 @@ auto-stand after 24 h.
   publicHand, autoStandAt }`. `cost` = SP this call took, `returned` = SP this call credited (0 while the hand is
   open), `sp` after both, `netSp += sp - spBefore`.
 - Refusals: `closed` (403), `bad_request`, `hand_open`, `no_hand`, `stale`, `illegal`, `insufficient`, `too_fast`,
-  `auto_stood`, `busy`. Env `CARDS_FLOOR_MS`, default 8000 (the sim's bot floor), between deals only; moves have no
+  `auto_stood`, `busy`. Env `CARDS_FLOOR_MS`, default 5000 (the sim's bot floor; 10.14), between deals only; moves have no
   floor beyond the 60/min limiter. `state.floorMs` echoes it.
 
 **Velvet Vortex (`/v2/backroom/roulette/*`, `proxy/backroom-roulette-routes.js`).** Rules = `backroom-roulette.js`
@@ -921,3 +923,134 @@ and `state.rose`, and a mat with the 37 straights, rose, plum, sip, sink and dee
 Each spin of a tape plays `roulette.run` (plus `roulette.wake` when it wakes) and ends in exactly one
 `roulette.land.*`, which releases that spin's holds first. The beam, the rim and the turret keep turning at rest; Calm
 shows them still.
+
+## 10.14 Owner decisions after the v3 build (2026-09-14)
+
+Binding: the owner's "Hypno v3 build questions" and "Path to play" surveys (`_evidence/brainstorm/DECISIONS.md`, afternoon
+of 2026-09-14). Where this section disagrees with anything above, 10.13 included, it wins. Laws 1 to 8 of 10.13 still
+hold; the only EV change is the slot table (decision 5), and it keeps 102%.
+
+**1. Tunnel vision is the Back Room's own switch (`gates.tunnel`).**
+
+- `AppSettings.BackRoomTunnel`, default `true`. It is shown only in the room's Options (decision 12), never in the main
+  Settings window, because nothing outside the Back Room uses it. A settings file written before the key existed reads
+  as on; a player's off is kept.
+- `init.gates` and every `settings.gates` carry `tunnel` (and `melt`, decision 3) beside the four toggles of 10.13.A:
+  `{ "flash", "subliminal", "spiral", "brainDrain", "tunnel", "melt" }`, sent in full every time. The host pushes a
+  full `settings` frame when either switch changes.
+- `fx-tunnel` is gated by `tunnel`, NOT by `brainDrain`: the message is dropped while it is off, and turning it off
+  under a running tunnel cancels the tunnel at once (not after the 1500 ms self-release). `FxGates.Tunnel` enforces it
+  in `BackRoomFx.Tunnel`; the page gate is for dressing only, as in 10.13.A.
+- Pages (K1 kit, `room/main.js`, `room/loader.js`): `ctx.gates.tunnel`, a missing key reads as `true`. `createMoments`
+  drops its tunnel steps (the wheel's long last turn, the roulette run, the cards' losing edges) when `tunnel` is off.
+  The 10.13.A plain-dress table becomes:
+
+| Gate off | Plain dress |
+|---|---|
+| `brainDrain` | no `fx.haze`; in-station dims (the long last turn's stage edges) stay |
+| `tunnel` | no `fx-tunnel`; in-station dims stay |
+
+**2. Fullscreen Loom spiral: one field per screen.** `spiral-loom` (and section 4's `spiral-full`, which plays through
+it) draws one field on every monitor, centred on that monitor, like the tunnel's vignettes, instead of one field over
+the virtual screen. Each field is the woven GIF at UniformToFill, CENTRED, inside a cell clipped to its monitor
+(`BackRoomLoomSpiralOverlay.BuildCell`: the Image carries no size of its own and is centred both ways, so a weave whose
+shape differs from the monitor's, a square or tall Loom weave or a 16:10, 21:9 or portrait screen, is cropped from its
+middle and the eye sits at the monitor's centre). The cells are `BackRoomOverlayMath.ScreenCells`: physical monitor
+bounds mapped through the overlay window's OWN DPI (the mixed-DPI rule of 10.13.B's overlays), laid out again on a DPI
+change. The overlay window re-reads the virtual screen whenever it wakes from its idle hide, so a monitor plugged in or
+removed gets its cell from the next spiral after a quiet spell; one plugged in under a running spiral waits for that. One decode feeds every field; the fades, the
+replace-and-release rules and the 20 s hold cap are unchanged. The 10.13.B primitive row reads: `spiral-loom` | one
+field per screen, centred on each | Off: the woven GIF's first frame.
+
+**3. Brain Drain melt is ON by default in the Back Room.**
+
+- What kept it dark: `fx.melt` (the slot's melt) needed the app-wide `AppSettings.BrainDrainEnabled` (default `false`)
+  and lost its drip without `AppSettings.BrainDrainMeltEnabled` (default `false`), so a player who never opened Brain
+  Drain never saw a Back Room melt.
+- Now `AppSettings.BackRoomMelt`, default `true`, is the ONLY gate on `fx.melt` (`FxGates.Melt`): on, the melt plays
+  (the drip included; MotionLevel Off still turns it into the still blur, reported `motion`); off, the whole melt is
+  skipped `toggle`. The app-wide Brain Drain toggles no longer gate it, and nothing about the app's own Brain Drain
+  feature or its defaults changed. A settings file without the key reads as on, so new AND existing players get it;
+  a player who turns it off in the room's Options keeps that off. `fx.haze` stays on `brainDrain`.
+- The page sees it as `gates.melt` (dressing only).
+
+**4. Screen preset: both layers turn the same way.** `LOOM_PRESETS.screen` layer2 (the thin gold layer) runs
+`direction: 1` like layer 1, so everything in the jackpot spiral reads inward; the mockup counter-turned it and is not
+copied. `shared/hypno/spirals/screen.gif` is re-woven from it with the Loom's own encoder (512 x 288, 72 frames,
+5,693,013 bytes); `wake.gif` is unchanged. `kit-check.mjs` measures layer 2 on the kit and on the woven file.
+
+**5. Slot jackpot about 1 in 6,500, table v6 at 102%.** `emi3` pays 400 at 1 in 6,494 (154 per million, was 1 in
+12,987 in table v5, section 10 item 1). Every other plain pay weight is the v5 weight scaled by about 0.9715; pays,
+melt, freeze, tape and seed rules are unchanged. Plain RTP and every held symbol class stay exactly 1.0200. Paytable
+constant `TABLE_V6`. Published plain odds: `emi3` 1 in 6,494, `gif3same` 1 in 144, `sub3` 1 in 115, `spiral3` 1 in 115,
+`gif3` 1 in 12, `sub2` 1 in 14, `spiral2` 1 in 14, `melt` 1 in 17. Held odds are unchanged except the held spiral table
+(1 in 10 / 1 in 6 / 1 in 12, weights 100000 / 173593 / 86779). At the page pace (4.02 s an outcome, 896 outcomes an
+hour) a jackpot lands about once per 7.2 hours of play. The page prints `state.table`; it keeps no copy.
+
+**6. Cards deal floor 5000 ms.** `CARDS_FLOOR_MS` defaults to 5000 (was 8000); `state.floorMs` echoes it. Rules and pays
+are unchanged. Bot estimate from the cards sim (`_evidence/hypno-followup/d-server/sims/sim-backroom-cards.log`, basic
+strategy, stake 2 SP): 720 hands an hour at the floor, expected 28.2 SP an hour (was 17.6 at 450 hands under 8000 ms);
+a human at one hand per 12 s is 11.8.
+
+**7. XP: Back Room effects pay like the app's own effects.** Through the app's award path, never a new one:
+
+| Primitive | XP | Paid by |
+|---|---|---|
+| `flash-burst` | FlashService's own: 4 per image (8 with the flash sound), x the lucky flash roll, `XPSource.Flash` | FlashService (unchanged) |
+| `sub-single`, `sub-seq`, `sub-burst9` | 10 per word, `XPSource.Subliminal` | SubliminalService.FlashSubliminalCustom (unchanged) |
+| `gif-full`, `gif-from`, `wash` WITH a picture | 4 per picture shown (FlashService's base with no sound), x `SkillTree.RollLuckyFlash`, `XPSource.Flash` | the dispatcher, once the overlay reports the picture on screen (`BackRoomFxXp`) |
+| `wash` without a picture, `spiral-full`, `spiral-loom`, `brain-drain`, `brain-drain-melt`, `haze`, `tunnel`, `gif-rain`, `glitch-bubbles` | none (they pay nothing in normal play) | none |
+
+- No double counting: a primitive that reuses a service that already pays is never paid by the dispatcher.
+- Paid only when the picture is on screen: a busy-dropped wash or gif-from, a merged duplicate, a cancelled onset, a
+  picture with no local file, one an overlay refuses while a display change settles, and one that fails to decode or
+  comes too late pay nothing. The hero (`gif-full`) pays once its window has taken the picture. Caps and gates are `ProgressionService.AddXP`'s own: login (or offline username), idle
+  suppression of `Flash` and `Subliminal`, the skill and Cycle multipliers.
+- `IBackRoomFxSink.GifFull`, `Wash` and `GifFrom` take a `shown` callback, which the overlay calls on the UI thread when
+  the picture is on; each onset pays at most once. `GifFrom` still returns false for no local file (the slot frees).
+
+**8. GIF shortfall: cycle the player's own GIFs in every game (amends section 5).** Section 5's "shortfall filled from
+built-in fallback art" is replaced, for every station and every `count`: with at least one pool GIF the host deals
+`min(count, found)` pool GIFs and never pads with fallback art (10.13.C's rule, now for the slot's 4-GIF deal too);
+with none it deals the 4 fallback loops. Pages cycle: the slot's symbol `gifN` wears `gifs[N % gifs.length]`, a card
+value `i` wears `gifs[i % gifs.length]` (10.13.C). The host's `ResolveSymbols` cycles a GIF index past the deal the same way (`gif3` on a 2-GIF
+deal is `g1`), so the fullscreen picture always matches the one on the page. Word indexes past the deal still resolve
+to a random dealt word.
+
+**9. Daily Daze hub under Calm.** The Loom hub keeps turning under Calm at half strength, as in the mockup; only the
+OS reduced-motion setting (`prefers-reduced-motion`) or the app's Motion Off holds it still. The hub angle ACCUMULATES
+(`stations/wheel/hypno.js` `stepHub`): each frame `hubRot += (abs(speed) x 0.9 + 0.35 x clamp01(scale)) x k x dtS`,
+with `speed` the rotor's rad/s (either sign), `scale` the long last turn's time scale, `k` 1 (Calm 0.5) and `dtS` the
+frame in seconds. So it always turns clockwise whichever way the wheel is flung, keeps its drift at rest and slows with
+the warped clock. This replaces 10.13.F's `angle = -rotor.rotation.z` plus 0.35 rad/s row.
+
+**10. Soft Hand.**
+
+- Suspend (panic press 1, minimise) keeps the dealt deck and the sit-down; only leaving the station (Back, `close`,
+  "Stand up, sit back down") re-deals on the next sit-down.
+- The dealer is named Emi in every line and label that names the dealer.
+- Deal cannot be pressed by any path while a fullscreen moment runs; presses are dropped, not queued. While the last
+  hand's bloom, win flash or losing edges are on screen, Deal is disabled and reads "One moment", and the Space and
+  Enter keys, repeated clicks, any room or host relay and a direct call into the deal action all do nothing (the page
+  refuses inside the deal action, not only on the button). Once the moment ends the player presses Deal again. The
+  server floor of decision 6 still applies.
+
+**11. Unchanged and confirmed.** The slot's `spiral-full` plays the Loom weave (10.13.B, kept). Roulette under
+Calm/reduced: the ball still runs at the slow-motion floor; rotor, beam and chips still. Roulette pace fits 8 s a spin.
+Wheel taffy ghosts drawn over the slices. Fullscreen spiral budget (amends 10.13.B): the Loom encoder's own output is
+accepted, long side 640 (512 when a weave runs past the worker's 6 MB soft cap), at most the Loom store's 8 MB cap,
+judged on screen; `screen.gif` is 5.69 MB at 512.
+
+**12. The room's Options.** The room HUD gets an Options pill beside Room view and Motion, opening a small card:
+Effects (Calm / Normal / Full, the existing `AppSettings.BackRoomFxIntensity`, still also in Settings), Tunnel vision
+(On/Off) and Melt (On/Off). While MotionLevel is below Full the card notes that Calm is in use. Escape or Back closes
+the card before anything else in the room. Lexicon keys `br_opt_title`, `br_opt_effects`, `br_opt_calm`,
+`br_opt_normal`, `br_opt_full`, `br_opt_calm_forced`, `br_opt_tunnel`, `br_opt_melt`, `br_opt_on`, `br_opt_off`.
+
+- Page -> host (section 2.1): `{ "type": "room-option", "key": "tunnel" | "melt", "value": true | false }` or
+  `{ "type": "room-option", "key": "intensity", "value": "calm" | "normal" | "full" }`. No reply. Any other shape (a
+  string `"false"`, a number, another key) is dropped; nothing is written once the room is closing. The host writes
+  the setting and saves.
+- Host -> page (section 2.2): `init` and `settings` gain `intensityChoice` (`calm` | `normal` | `full`, the player's
+  own choice), because `intensity` reads `calm` whenever MotionLevel is below Full. The page shows a press at once
+  and the next `settings` frame has the last word.

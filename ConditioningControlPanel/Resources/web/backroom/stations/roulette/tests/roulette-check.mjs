@@ -321,7 +321,7 @@ const FAKE_HOST = `(() => {
     postMessage(m) {
       window.__posted.push(m);
       if (m.type === 'ready') emit({ type: 'init', protocol: 1, sp: 57, reduced: false, motion: 'full', intensity: 'normal', lang: 'en', lex: {},
-        gates: { flash: true, subliminal: true, spiral: true, brainDrain: true }, stations: ['slot', 'wheel', 'roulette'], open: true });
+        gates: { flash: true, subliminal: true, spiral: true, brainDrain: true, tunnel: true }, stations: ['slot', 'wheel', 'roulette'], open: true });
       if (m.type === 'station-request') mock().then((s) => s.handle(m.op, m.body)).then((r) => emit({ type: 'station-result', reqId: m.reqId, ok: r.ok, status: r.status, reason: r.reason, body: r.body }));
       if (m.type === 'fx') emit({ type: 'fx-ack', token: m.token, fired: [m.fxId], skipped: [] });
       if (m.type === 'media-request') emit({ type: 'media', reqId: m.reqId, seed: 1, words: [],

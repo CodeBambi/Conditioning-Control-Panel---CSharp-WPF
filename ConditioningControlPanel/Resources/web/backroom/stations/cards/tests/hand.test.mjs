@@ -35,7 +35,7 @@ test('readState defaults a bare body to an empty table on stakes 1 and 2', () =>
   assert.deepEqual(s.legal, ['hit', 'stand']);
   assert.equal(s.hint, 'stand'); assert.equal(s.hand.id, 'h_1_x');
   const e = readState({});
-  assert.equal(e.hand, null); assert.deepEqual(e.rules.stakes, [1, 2]); assert.equal(e.floorMs, 8000);
+  assert.equal(e.hand, null); assert.deepEqual(e.rules.stakes, [1, 2]); assert.equal(e.floorMs, 5000);
   assert.deepEqual(legalOf('hit'), []);
 });
 
@@ -55,7 +55,13 @@ test('controls: moves from legal only while a hand is open, deal only when the t
   assert.equal(c.deal, true); assert.equal(c.sit, true); assert.equal(c.moves.hit, false);
   assert.equal(controls({ ...base, hand: null, sp: 1 }).dealWhy, 'sp');
   assert.equal(controls({ ...base, hand: null, dealReadyAt: 5000 }).dealWhy, 'floor');
+  assert.equal(controls({ ...base, hand: null, screenUntil: 1001 }).dealWhy, 'screen', 'a running fullscreen moment holds the deal');
+  assert.equal(controls({ ...base, hand: null, screenUntil: 1001, dealReadyAt: 5000, sp: 1 }).dealWhy, 'screen', 'the moment reads first');
+  assert.equal(controls({ ...base, hand: null, screenUntil: 1000 }).deal, true, 'and lets go the frame it ends');
+  assert.equal(controls({ ...base, hand: null, screenUntil: 1001 }).sit, true, 'sitting back down opens no decision');
   assert.equal(controls({ ...base, hand: null, animating: true }).dealWhy, 'busy');
+  assert.equal(controls({ ...base, hand: null, animating: true, screenUntil: 1001 }).dealWhy, 'screen', 'a bloom mid-deal reads as the moment');
+  assert.equal(controls({ ...base, hand: null, busy: true, screenUntil: 1001 }).deal, false);
   assert.equal(controls({ ...base, hand: readHand(open), busy: true }).moves.hit, false);
   assert.equal(controls({ ...base, phase: 'sit', hand: null }).deal, false);
 });

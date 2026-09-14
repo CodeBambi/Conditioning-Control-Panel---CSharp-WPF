@@ -114,10 +114,16 @@ report.handednessWebgl = hand;
 for (const [n, m] of Object.entries(hand)) {
   const want = m.delta * 180 / Math.PI;
   ok(m.turn.every((v) => v > 0), `${n}: a clockwise angle turns the field clockwise (${m.turn.map((v) => v.toFixed(1)).join(', ')} deg for +${want.toFixed(1)})`);
-  // screen's gold layer 2 counter-turns; a wobble (whirl, wake) moves with the phase too: those only need the sign
+  // screen's gold layer 2 has its own span (2/3 of layer 1's turn); a wobble (whirl, wake) moves with the phase too:
+  // those only need the sign
   const tol = n === 'screen' ? null : (n === 'whirl' || n === 'wake') ? 0.6 : 0.35;
   if (tol) ok(m.turn.every((v) => near(v, want, want * tol)), `${n}: by the angle given, within ${tol * 100}%`);
   ok(m.rim.every((v) => v > 0), `${n}: arms lead at the rim, so it reads inward (${m.rim.map((v) => v.toFixed(1)).join(', ')} deg)`);
+  if (n === 'screen') {
+    const l2 = m.layer2;
+    ok(l2 && l2.turn.every((v) => v > 0), `screen layer 2 (${l2 && l2.color} threads) turns the SAME way as layer 1, clockwise (${l2 && l2.turn.map((v) => v.toFixed(1)).join(', ')} deg)`);
+    ok(l2 && l2.rim.every((v) => v > 0), `screen layer 2 arms lead at the rim, so it reads inward too (${l2 && l2.rim.map((v) => v.toFixed(1)).join(', ')} deg)`);
+  }
 }
 await sleep(300);
 await shot('loom-handedness.png');
@@ -125,6 +131,10 @@ for (const name of ['screen', 'wake']) {
   const g = await ev(`K.measureGif(${JSON.stringify(name)})`);
   report['woven_' + name] = g;
   ok(g && g.ok, `woven spirals/${name}.gif (${g && g.size}, ${g && g.frames} frames): frame 0 -> 2 turns clockwise (${g && g.turn.map((v) => v.toFixed(1)).join(', ')} deg, ~${g && g.expectDeg.toFixed(1)} expected) and its arms lead at the rim`);
+  if (name === 'screen') {
+    const l2 = g && g.layer2;
+    ok(l2 && l2.ok, `woven spirals/screen.gif layer 2 (gold) turns clockwise with layer 1 (${l2 && l2.turn.map((v) => v.toFixed(1)).join(', ')} deg) and leads at the rim (${l2 && l2.rim.map((v) => v.toFixed(1)).join(', ')} deg)`);
+  }
 }
 
 await ev(`K.show('deck')`);
@@ -261,9 +271,14 @@ const room = await ev(`(async () => {
   m.tunnel(0.5);
   await new Promise((res) => setTimeout(res, 150));
   m.play('roulette.wake'); m.cancel();
-  window.__hostEmit({ type: 'settings', motion: 'full', intensity: 'calm', reduced: false, gates: { flash: false, subliminal: true, spiral: true, brainDrain: false } });
+  window.__hostEmit({ type: 'settings', motion: 'full', intensity: 'calm', reduced: false, gates: { flash: false, subliminal: true, spiral: true, brainDrain: true, tunnel: false } });
   await new Promise((res) => setTimeout(res, 50));
   out.settings = got; out.gatesAfter = { ...ctx.gates }; out.r = r;
+  const t0 = window.__posted.length, m2 = kit.createMoments(ctx, { station: 'slot' });
+  m2.tunnel(0.6); m2.play('cards.lose');
+  await new Promise((res) => setTimeout(res, 250));
+  out.tunnelOffPosts = window.__posted.slice(t0).filter((x) => x.type === 'fx-tunnel' && x.level > 0).length;
+  m2.dispose();
   out.posted = window.__posted.filter((x) => ['fx', 'fx-tunnel', 'fx-release', 'media-request'].includes(x.type));
   return out;
 })()`);
@@ -276,8 +291,10 @@ ok(rf.length === 3 && rf[0].fxId === 'fx.gif_from' && rf[0].args.scale === 0.46 
 ok(rf[2].token === room.token && room.ack.fired[0] === 'fx.wash', 'ctx.fx carries its token on the promise and resolves with the ack');
 ok(room.posted.some((x) => x.type === 'fx-tunnel' && x.level === 0.5) && room.posted.filter((x) => x.type === 'fx-tunnel').at(-1).level === 0, 'moments.tunnel posts fx-tunnel, cancel posts 0');
 ok(!room.posted.some((x) => x.type === 'fx' && x.fxId === 'fx.loom_spiral'), 'the wake spiral is dressed off by the spiral gate');
-ok(room.settings.length === 1 && room.settings[0].intensity === 'calm' && room.settings[0].gates.flash === false && room.gatesAfter.brainDrain === false,
-  'a settings frame reaches onSettings and ctx.gates live');
+ok(room.gates.tunnel === true, 'an init with no gates.tunnel reads the tunnel gate as on (the host is the enforcer)');
+ok(room.settings.length === 1 && room.settings[0].intensity === 'calm' && room.settings[0].gates.flash === false && room.gatesAfter.tunnel === false
+  && room.gatesAfter.brainDrain === true, 'a settings frame reaches onSettings and ctx.gates live (tunnel off, brainDrain on)');
+ok(room.tunnelOffPosts === 0, 'tunnel gate off: moments.tunnel and cards.lose post no fx-tunnel even with brainDrain on');
 await shot('room-probe-station.png');
 await ev(`document.querySelector('#br-back').click()`);
 await sleep(600);

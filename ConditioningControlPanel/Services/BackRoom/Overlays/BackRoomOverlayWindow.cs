@@ -37,7 +37,9 @@ internal static class BackRoomOverlayScreens
 /// wedge the shared render thread). A frame loop runs only while something is drawing, capped per overlay.
 /// Content is laid out in the window's OWN DIPs, which on a mixed-DPI desktop are neither the primary
 /// monitor's nor the system's: every size comes from <see cref="Local"/> after <see cref="Wake"/> (the HWND
-/// exists and is stamped by then) and is laid out again on a DPI change. The overlays stack in the
+/// exists and is stamped by then) and is laid out again on a DPI change. A window waking from its idle hide re-reads
+/// the virtual screen first and, if a monitor came or went, re-stamps itself while still hidden (never mid-run), so
+/// a hot-plugged monitor gets its cell on the next effect. The overlays stack in the
 /// mockup's order whatever order they wake in: spiral, gif-from, wash, tunnel on top.
 /// UI thread only; the static entry points marshal.
 /// </summary>
@@ -46,7 +48,7 @@ internal abstract class BackRoomOverlayWindow : Window
     protected readonly Canvas Stage = new() { IsHitTestVisible = false };
     private readonly DispatcherTimer _hideGrace;
     private readonly int _frameMs;
-    private readonly PxRect _virtualPx;
+    private PxRect _virtualPx;
     private readonly int _zRank;
     private static readonly List<BackRoomOverlayWindow> Live = new();
     private (string Key, List<BitmapSource> Frames, TimeSpan Delay)? _lastDecode;
@@ -69,8 +71,7 @@ internal abstract class BackRoomOverlayWindow : Window
         IsHitTestVisible = false;
         ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.Manual;
-        var v = System.Windows.Forms.SystemInformation.VirtualScreen;
-        _virtualPx = new PxRect(v.X, v.Y, v.Width, v.Height);
+        _virtualPx = ReadVirtualPx();
         Left = SystemParameters.VirtualScreenLeft;
         Top = SystemParameters.VirtualScreenTop;
         Width = SystemParameters.VirtualScreenWidth;
@@ -88,6 +89,12 @@ internal abstract class BackRoomOverlayWindow : Window
             OnIdleHidden();
         };
         Live.Add(this);
+    }
+
+    private static PxRect ReadVirtualPx()
+    {
+        var v = System.Windows.Forms.SystemInformation.VirtualScreen;
+        return new PxRect(v.X, v.Y, v.Width, v.Height);
     }
 
     /// <summary>The virtual screen's physical origin, which <see cref="Local"/> measures from.</summary>
@@ -129,7 +136,23 @@ internal abstract class BackRoomOverlayWindow : Window
     protected void Wake()
     {
         _hideGrace.Stop();
-        if (!IsVisible) { try { Show(); } catch (Exception ex) { Diag.Swallowed(ex, "overlay show"); } }
+        if (!IsVisible)
+        {
+            // Hidden = idle (the grace hides only a window that is not drawing): the one safe moment to follow a
+            // monitor that was plugged in or removed since this window was made.
+            try
+            {
+                var now = ReadVirtualPx();
+                if (now != _virtualPx)
+                {
+                    _virtualPx = now;
+                    _dpiRestamps = 0;
+                    PlacePhysical();
+                }
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "overlay virtual screen re-read"); }
+            try { Show(); } catch (Exception ex) { Diag.Swallowed(ex, "overlay show"); }
+        }
         ChaosWindowZ.ForceTopmost(this);
         foreach (var above in Live.Where(o => o._zRank > _zRank && o.IsVisible).OrderBy(o => o._zRank))
             ChaosWindowZ.ForceTopmost(above);

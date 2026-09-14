@@ -8,7 +8,7 @@
 <!-- Dev harness only: the kit's mock host (shared/hypno/tests/mock-host.js) and mock-server.js stand in for the room,
      the host and the server. Serve ConditioningControlPanel/Resources/web as the web root, then open
      /backroom/stations/cards/dev.html.
-     Query: ?sp=57&latency=80&floor=8000&calm&reduced&full&off=flash,spiral,brainDrain&nopics&hook
+     Query: ?sp=57&latency=80&floor=5000&calm&reduced&full&off=flash,spiral,brainDrain,tunnel&nopics&hook
             &script=As.9d.Kh.7c,Th.9d.8c.8s  (one hand per comma, cards in deal order: player, dealer up, player, hole, draws)
      #screen stands in for the host's desktop overlays (wash, gif-from, tunnel), drawn from what the mock host recorded, with
      Calm applied there as the host does. Neither it nor this page is product code. -->
@@ -41,7 +41,7 @@ const PICS = ['../slot/fallback/gif0.webp', '../../../dtrh/assets/bubbles/effect
 const off = (q.get('off') || '').split(',').filter(Boolean);
 const host = createMockHost({ deal: q.has('nopics') ? [] : PICS, intensity: q.has('calm') ? 'calm' : q.has('full') ? 'full' : 'normal', reduced: q.has('reduced'),
   gates: Object.fromEntries(off.map((g) => [g, false])) });
-const server = createMockServer({ sp: num('sp', 57), floorMs: num('floor', 8000) });
+const server = createMockServer({ sp: num('sp', 57), floorMs: num('floor', 5000) });
 for (const hand of (q.get('script') || '').split(',').filter(Boolean)) server.script(...hand.split('.'));
 const latency = num('latency', 80), sent = [];
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

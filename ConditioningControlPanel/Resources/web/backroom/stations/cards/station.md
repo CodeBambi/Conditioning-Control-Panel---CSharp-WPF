@@ -48,8 +48,19 @@ Shared code comes only through the hypno kit (`shared/hypno/index.js`): `createL
   settle frame shows it; the stake shows at once.
 - **Resume.** Opening with an open hand plays the sit fan, then deals the hand out and reopens its decisions. A finished
   last hand, a `no_hand` re-read and an auto-stood hand go down settled on one frame, with no moments.
-- **Deal floor.** Deal waits out `floorMs` locally after a deal, and a blackjack bloom (4 s) on top of that, so the
-  bloom never overlaps the next decision. The server's floor is the authority (`too_fast`).
+- **Deal floor.** Deal waits out `floorMs` locally after a deal. The server's floor is the authority (`too_fast`).
+- **Nothing fullscreen over a new decision (2026-09-14).** A moment that put something fullscreen holds the next deal
+  until it has ended (`hand.controls` reason `screen`, `feel.screenHoldMs`): the bloom's picture (4 s, 2.4 s Calm),
+  the win wash (900 ms), the losing edges (2600 ms breath plus its closing post). The bloom's 2.4 s follows the host's
+  Calm (`reduced` or `intensity: calm`) only, never the OS `prefers-reduced-motion` alone, which the host is not told.
+  Deal cannot be pressed by any path while a fullscreen moment runs; presses are dropped, not queued (owner, CONTRACT
+  10.14 item 10). The button is disabled, marked `data-held` and reads `br_cards_moment` ("One moment") from the
+  frame the moment fires, even while the hand is still being laid down; `deal()` itself refuses first (no ring, no
+  note), so Space, Enter, repeated or scripted clicks and a direct call all drop; a tunnel breath that outlives its
+  timed hold keeps the hold (`moments.breathing()`). The room relays no input into a station (no gamepad, no HUD or
+  host message presses Deal); cards-check 1b tries every path during a bloom. A gate
+  that sent nothing holds nothing; `suspend(true)` cancels the moments and the hold with them (the host's suspend
+  stops its overlays).
 
 ## Effects (10.13.F)
 
@@ -73,9 +84,9 @@ Moments, through `createMoments` only, on the frame the page shows them:
   highest card (ace highest) over the winning hands, or no picture after a bloom.
 - `moments.holdScreen(true)` whenever a reply shows `hand.done === false`, `holdScreen(false)` on the settle frame.
 - `suspend(true)` lays every queued step down quietly, cancels the moments and frees the Loom context; `close()` cancels
-  and disposes the moments, the kit and the deck. **Deviation:** `suspend(true)` keeps the deck (10.13.F says dispose it):
-  re-dealing on resume would ask the host for 13 new pictures and swap them under an open hand. Needs a contract
-  amendment or an owner nod.
+  and disposes the moments, the kit and the deck. `suspend(true)` keeps the deck (confirmed 2026-09-14, against 10.13.F's
+  dispose): re-dealing on resume would ask the host for 13 new pictures and swap them under an open hand. Leaving the
+  station (close) and sitting down again re-deals. cards-check asserts both.
 
 **Calm and reduced motion** (`reduced`, `intensity: calm`, or `prefers-reduced-motion`): every step lands at once in
 order (cards on their spots, face up), except that a blackjack keeps the bloom's 1.6 s to the reveal and 0.9 s to the
@@ -84,7 +95,7 @@ The fan fades in place for 2.4 s, the Loom and the pictures hold still, chips fa
 args stay Normal (the host halves). The OS `prefers-reduced-motion` alone halves page strength but the host is not told,
 so host washes and tunnels stay Normal there (as the wheel does). **Gates** are read live on every frame.
 
-## Lexicon (`br_cards_*`, English fallbacks in the page; the integration pass adds them to `en.json`)
+## Lexicon (`br_cards_*`, English fallbacks in the page, the same text in `en.json`; `smoke/lexicon.test.mjs` keeps them equal)
 
 | Key | English |
 |---|---|
@@ -94,7 +105,7 @@ so host washes and tunnels stay Normal there (as the wheel does). **Gates** are 
 | `br_cards_sp` / `br_cards_stake` / `br_cards_bet_line` | {n} SP |
 | `br_cards_bet` | Bet |
 | `br_cards_deal` / `br_cards_hit` / `br_cards_stand` / `br_cards_double` / `br_cards_split` | Deal / Hit / Stand / Double / Split |
-| `br_cards_wait` | {s} s |
+| `br_cards_wait` / `br_cards_moment` | {s} s / One moment |
 | `br_cards_hint_toggle` | Basic-strategy hint |
 | `br_cards_hint_is` | Hint: {move}. |
 | `br_cards_sit` | Stand up, sit back down |
@@ -135,6 +146,6 @@ node ConditioningControlPanel/Resources/web/backroom/stations/cards/tests/cards-
 ```
 
 Dev harness: serve `ConditioningControlPanel/Resources/web` as the web root and open `/backroom/stations/cards/dev.html`
-(`?sp=57&latency=80&floor=8000&calm&reduced&full&off=flash,spiral,brainDrain&nopics&hook&script=As.9d.Kh.7c,Th.9d.8c.8s`).
+(`?sp=57&latency=80&floor=5000&calm&reduced&full&off=flash,spiral,brainDrain,tunnel&nopics&hook&script=As.9d.Kh.7c,Th.9d.8c.8s`).
 `dev.station.debug()` shows the state, the felt, the kit, the deck, the moments and the feel log; `dev.host` is the
 kit's mock host (what fired), and the page's `#screen` draws what the host would.

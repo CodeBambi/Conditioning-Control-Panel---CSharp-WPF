@@ -13,11 +13,11 @@
  * field shader, the same frame table, the same quantizer and dither the Loom
  * studio saves with. Never at runtime; the host only plays the files.
  *
- * Budget: CONTRACT 10.13.B asks for at most 4 MB and a 720 long side. The
- * worker's long side is fixed at 640 (512 when a weave runs past its 6 MB soft
- * cap), so the files come out at 640 or 512. A file over 4 MB is written with a
- * warning (screen.gif, 72 frames of gradient threads, weaves to about 5.3 MB
- * at 512); over the Loom store's own 8 MB cap the run fails and writes nothing.
+ * Budget: CONTRACT 10.14 item 11 (amends 10.13.B's 4 MB / 720) accepts the
+ * Loom encoder's own output, judged on screen: long side 640, or 512 when a
+ * weave runs past the worker's 6 MB soft cap, at most the Loom store's 8 MB
+ * cap (screen.gif, 72 frames of gradient threads, weaves to about 5.7 MB at
+ * 512). Over 8 MB the run fails and writes nothing.
  * --report weaves and prints sizes only. --check-only re-weaves in memory and
  * fails when a file on disk differs in size by more than 2% or a sidecar differs.
  * Nothing leaves the machine. The only process this stops is the Chrome it
@@ -36,8 +36,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const WEB = resolve(HERE, '..', 'Resources', 'web');
 const OUT = join(WEB, 'backroom', 'shared', 'hypno', 'spirals');
 const NAMES = ['screen', 'wake'];
-const BUDGET_BYTES = 4 * 1024 * 1024;   // CONTRACT 10.13.B
-const MAX_BYTES = 8 * 1024 * 1024;      // DtrhLoomStore.MaxGifBytes: a Loom spiral the app itself would refuse
+const MAX_BYTES = 8 * 1024 * 1024;   // DtrhLoomStore.MaxGifBytes (CONTRACT 10.14 item 11): a Loom spiral the app itself would refuse
 const REPORT_ONLY = process.argv.includes('--report');   // weave and print sizes, check nothing, write nothing
 const CHECK_ONLY = process.argv.includes('--check-only');
 const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
@@ -109,7 +108,6 @@ try {
     console.log(`  wove ${name}.gif ${r.w}x${r.h}, ${r.frames} frames at ${r.delayCs} cs, ${(r.bytes / 1048576).toFixed(2)} MB in ${r.ms} ms`);
     if (REPORT_ONLY) continue;
     if (r.bytes > MAX_BYTES) throw new Error(`${name}.gif is ${r.bytes} bytes, over the Loom store's 8 MB cap`);
-    if (r.bytes > BUDGET_BYTES) console.warn(`  WARN ${name}.gif is over the contract's 4 MB budget (${r.bytes} bytes)`);
     woven.push({ name, gif: Buffer.from(r.b64, 'base64'), sidecar: JSON.stringify(r.params, tidy, 2) + '\n' });
   }
 

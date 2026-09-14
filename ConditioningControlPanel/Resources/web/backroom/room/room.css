@@ -50,6 +50,20 @@ html.br-visiting .br-room-ui { visibility: hidden; }
   background: rgba(42, 24, 56, .86); border: 1px solid rgba(185, 156, 255, .45); border-radius: 999px; padding: 9px 15px; }
 .br-pill:hover { border-color: var(--br-gold); }
 .br-pill:disabled { opacity: .6; cursor: default; }
+/* The room's Options (10.14): a small plum card hanging from the nav, right edge under the Options pill (the last pill). */
+.br-options { position: absolute; top: calc(100% + 8px); right: 0; width: 230px; padding: 12px 14px; border-radius: 12px;
+  background: rgba(30, 18, 42, .94); border: 1px solid rgba(185, 156, 255, .35); display: flex; flex-direction: column; gap: 8px; }
+.br-options[hidden], .br-opt-note[hidden] { display: none; }
+.br-opt-name { color: var(--br-ink-dim); font-size: 12px; }
+.br-opt-note { margin: -2px 0 0; color: var(--br-ink-dim); font-size: 11px; }
+.br-seg-row { display: flex; gap: 4px; }
+.br-seg, .br-switch { font: 600 12px/1 "Segoe UI", system-ui, sans-serif; color: var(--br-ink); cursor: pointer;
+  background: rgba(42, 24, 56, .9); border: 1px solid rgba(185, 156, 255, .35); border-radius: 999px; padding: 7px 10px; }
+.br-seg { flex: 1; }
+.br-seg[aria-pressed="true"], .br-switch[aria-pressed="true"] { border-color: var(--br-gold); color: var(--br-gold); }
+.br-seg:focus-visible, .br-switch:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 2px; }
+.br-opt-row { display: flex; align-items: center; justify-content: space-between; }
+.br-switch { min-width: 52px; }
 .br-map-list { position: absolute; left: 16px; right: 16px; bottom: 26px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .br-map-list[hidden] { display: none; }
 html.br-overview .br-hint { visibility: hidden; }

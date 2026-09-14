@@ -77,12 +77,27 @@ public class BackRoomFxTests
         public void GlitchWash(int durationMs, double opacity) => Add($"glitch:{durationMs}");
         public void Subliminal(string text) => Add($"sub:{text}");
         public void BrainDrain(int durationMs, double level, bool melt) => Add(FormattableString.Invariant($"drain:{durationMs}:{level}:{melt}"));
-        public void GifFull(BackRoomGif gif, int durationMs, bool still) => Add($"giffull:{gif.Key}:{durationMs}:{still}");
-        public void Wash(FxRgb color, double peak, BackRoomGif? picture) => Add(FormattableString.Invariant($"wash:{color.Hex}:{peak:0.###}:{picture?.Key}"));
+        /// <summary>False = a picture's <c>shown</c> is kept in <see cref="Pending"/> (the overlay has not put it on yet)
+        /// instead of running at once.</summary>
+        public bool ShowsAtOnce = true;
+        public readonly List<Action> Pending = new();
+        private void Shown(Action shown) { if (ShowsAtOnce) shown(); else Pending.Add(shown); }
+        public bool GifFullFound = true;
+        public void GifFull(BackRoomGif gif, int durationMs, bool still, Action shown)
+        {
+            Add($"giffull:{gif.Key}:{durationMs}:{still}");
+            if (GifFullFound) Shown(shown);
+        }
+        public void Wash(FxRgb color, double peak, BackRoomGif? picture, Action shown)
+        {
+            Add(FormattableString.Invariant($"wash:{color.Hex}:{peak:0.###}:{picture?.Key}"));
+            if (picture != null) Shown(shown);
+        }
         public bool GifFromFound = true;
-        public bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still)
+        public bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still, Action shown)
         {
             Add(FormattableString.Invariant($"giffrom:{gif.Key}:{(from is { } r ? $"{r.X},{r.Y},{r.W},{r.H}" : "centre")}:{durationMs}:{scale}:{dim}:{still}"));
+            if (GifFromFound) Shown(shown);
             return GifFromFound;
         }
         public void SpiralLoom(string gifPath, int durationMs, double alpha, bool hold, bool still)
