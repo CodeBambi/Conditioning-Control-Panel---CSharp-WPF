@@ -170,6 +170,8 @@ public sealed class BackRoomBridge
                     _d.Log?.Invoke("station close: " + shut);
                     NoteReportedCursor(m);
                     FlushCursors(shut);
+                    // 10.13.B: that station's holds and tunnel go with it.
+                    try { _d.Fx.ReleaseStation(shut); } catch (Exception ex) { _d.Log?.Invoke("fx release threw: " + ex.Message); }
                 }
                 break;
             case "station-request":
@@ -181,6 +183,15 @@ public sealed class BackRoomBridge
             case "fx":
                 OnFx(m);
                 break;
+            case "fx-tunnel":
+                // No reply (10.13.B). A NaN or a string level is dropped by the dispatcher's own checks.
+                if (!IsClosing && Station(m) is { } tunnelAt && m["level"] is JValue { Type: JTokenType.Integer or JTokenType.Float } lv)
+                    Guard(() => _d.Fx.Tunnel(tunnelAt, lv.Value<double>()));
+                break;
+            case "fx-release":
+                if ((string?)m["token"] is { Length: > 0 and <= 64 } releaseToken)
+                    Guard(() => _d.Fx.Release(releaseToken, Station(m) ?? string.Empty));
+                break;
             case "melt":
                 _d.Log?.Invoke("melt " + (string?)m["station"] + " left=" + (string?)m["left"]);
                 break;
@@ -189,6 +200,15 @@ public sealed class BackRoomBridge
                 break;
         }
     }
+
+    private void Guard(Action fx)
+    {
+        try { fx(); } catch (Exception ex) { _d.Log?.Invoke("fx threw: " + ex.Message); }
+    }
+
+    /// <summary><c>media-request.count</c>: an integer 1..13, anything else reads as 4 (10.13.C).</summary>
+    internal static int MediaCount(JToken? t)
+        => t is JValue { Type: JTokenType.Integer } v && v.Value<long>() is >= 1 and <= 13 ? (int)v.Value<long>() : 4;
 
     private static string? Station(JObject m)
     {
@@ -247,11 +267,12 @@ public sealed class BackRoomBridge
         if (string.IsNullOrEmpty(reqId) || station == null) { _d.Log?.Invoke("bad media-request dropped"); return; }
         lock (_gate) { if (!_answered.Add("media:" + reqId)) return; }
         int seed = _d.NextSeed?.Invoke() ?? Random.Shared.Next();
+        int count = MediaCount(m["count"]);
         // BackRoomMedia reads file headers: deal off the UI thread; Post marshals the reply back.
         void DealAndPost()
         {
             BackRoomMediaDeal deal;
-            try { deal = _d.Media.Deal(station, seed); }
+            try { deal = _d.Media.Deal(station, seed, count); }
             catch (Exception ex)
             {
                 _d.Log?.Invoke("media deal threw, using fallback: " + ex.Message);
@@ -284,7 +305,8 @@ public sealed class BackRoomBridge
         {
             BackRoomMediaDeal deal;
             lock (_gate) deal = _deals.TryGetValue(station, out var d) ? d : new BackRoomMediaDeal(0, Array.Empty<BackRoomGif>(), Array.Empty<BackRoomWord>());
-            try { ack = _d.Fx.Fire(fxId, station, symbols, deal); }
+            try { ack = _d.Fx.Fire(fxId, station, symbols, deal, BackRoomFxArgs.Parse(m["args"]),
+                token is { Length: <= 64 } ? token : null); }
             catch (Exception ex)
             {
                 _d.Log?.Invoke("fx threw: " + ex.Message);

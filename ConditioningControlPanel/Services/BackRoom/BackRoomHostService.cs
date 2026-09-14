@@ -27,29 +27,30 @@ internal static class BackRoomHostService
     /// WebView2 refuses to share the browser process between hosts).</summary>
     public const string BrowserArguments = "--autoplay-policy=no-user-gesture-required";
 
-    /// <summary>Room lexicon rows the page reads through <c>init.lex</c>. Stations may ask for more
-    /// with a fallback; every row here has one in en.json.</summary>
-    internal static readonly string[] LexKeys =
+    /// <summary>The room lexicon's prefix: <c>init.lex</c> carries every en.json key that starts with it
+    /// (10.13), so a station's rows reach the page the moment they are in en.json, with no list here.</summary>
+    internal const string LexPrefix = "br_";
+
+    /// <summary><c>init.lex</c>: each key once, in the current language (English where it has no row).</summary>
+    internal static Dictionary<string, string> Lex(IEnumerable<string> keys, Func<string, string> get)
+        => keys.Distinct(StringComparer.Ordinal).ToDictionary(k => k, get, StringComparer.Ordinal);
+
+    /// <summary><c>init.gates</c> / <c>settings.gates</c> (10.13.A): the four feature toggles, sent in full
+    /// every time. For dressing only; the dispatcher still enforces each toggle.</summary>
+    internal static object GatesWire(Models.AppSettings? s) => new
     {
-        "br_room_title", "br_back", "br_balance", "br_walk_hint", "br_soon_title", "br_soon_body",
-        "br_station_slot", "br_station_wheel", "br_station_scratcher", "br_station_cards", "br_station_counter",
-        "br_station_slot_rose", "br_station_slot_violet", "br_station_slot_mint", "br_station_roulette",
-        "br_visit", "br_room_view", "br_room_walk", "br_motion_on", "br_motion_still", "br_loading",
-        "br_room_label_jackpot", "br_room_label_status", "br_room_label_wheel_status", "br_ad_arcademy", "br_ad_dtrh", "br_ad_focus_gaze",
-        "br_station_failed", "br_station_closed", "br_model_missing", "br_suspended",
-        "br_preset_drop", "br_preset_relax", "br_preset_let_go", "br_preset_sink",
-        // Daily Daze station (stations/wheel): the page keeps an English fallback for each.
-        "br_wheel_title", "br_wheel_stage", "br_wheel_loading", "br_wheel_back", "br_wheel_sp", "br_wheel_spin",
-        "br_wheel_free", "br_wheel_come_back", "br_wheel_ready", "br_wheel_spinning", "br_wheel_won",
-        "br_wheel_jackpot_won", "br_wheel_snoozed", "br_wheel_fallback", "br_wheel_carry_paid", "br_wheel_capped",
-        "br_wheel_next", "br_wheel_already", "br_wheel_jackpot", "br_wheel_gain", "br_wheel_gain_snooze",
-        "br_wheel_odds", "br_wheel_odds_note", "br_wheel_odds_snooze", "br_wheel_young", "br_wheel_taken",
-        "br_wheel_carry", "br_wheel_closed", "br_wheel_offline", "br_wheel_model_missing", "br_wheel_screen_ready",
-        "br_wheel_screen_spinning", "br_wheel_screen_pot", "br_wheel_screen_win", "br_wheel_screen_jackpot",
-        "br_wheel_screen_snooze", "br_wheel_screen_next", "br_wheel_slice_jackpot", "br_wheel_slice_sip",
-        "br_wheel_slice_glow", "br_wheel_slice_sparkle", "br_wheel_slice_dreamy", "br_wheel_slice_shimmer",
-        "br_wheel_slice_snooze", "br_wheel_slice_twinkle", "br_wheel_slice_deep", "br_wheel_slice_dazzle",
-        "br_wheel_slice_dazed",
+        flash = s?.FlashEnabled ?? false,
+        subliminal = s?.SubliminalEnabled ?? false,
+        spiral = s?.SpiralEnabled ?? false,
+        brainDrain = s?.BrainDrainEnabled ?? false,
+    };
+
+    /// <summary>Settings whose change pushes a full <c>settings</c> frame.</summary>
+    internal static readonly HashSet<string> SettingsFrameProperties = new(StringComparer.Ordinal)
+    {
+        nameof(Models.AppSettings.MotionLevel), nameof(Models.AppSettings.BackRoomFxIntensity),
+        nameof(Models.AppSettings.FlashEnabled), nameof(Models.AppSettings.SubliminalEnabled),
+        nameof(Models.AppSettings.SpiralEnabled), nameof(Models.AppSettings.BrainDrainEnabled),
     };
 
     /// <summary>DEBUG only: <c>CCP_BACKROOM_CDP_PORT</c> opens a remote debugging port on the room's
@@ -147,6 +148,7 @@ internal static class BackRoomHostService
                 OnProcessFailed = kind => { App.Logger?.Warning("BackRoom: process failed ({Kind}), closing", kind); OnUi(DisposeAll); },
             });
             HookSettings(true);
+            BackRoomFxServices.Viewport = ReadViewport;
             _host.Show();
             if (_host.Window is { } w)
             {
@@ -244,7 +246,8 @@ internal static class BackRoomHostService
             motion = MotionWire(motion),
             intensity = IntensityWire(s, motion),
             lang = LocalizationManager.Instance.CurrentLanguage,
-            lex = LexKeys.ToDictionary(k => k, Loc.Get),
+            gates = GatesWire(s),
+            lex = Lex(LocalizationManager.Instance.KeysWithPrefix(LexPrefix), Loc.Get),
             stations = BackRoomApi.Ops.Keys.ToArray(),
             // No door endpoint exists yet: null = unknown, and the page learns `closed` from its
             // first station-request (CONTRACT section 3, 403 closed).
@@ -256,10 +259,27 @@ internal static class BackRoomHostService
     {
         var s = App.Settings?.Current;
         var motion = s?.MotionLevel ?? Models.MotionLevel.Full;
-        return new { type = "settings", motion = MotionWire(motion), intensity = IntensityWire(s, motion), reduced = motion != Models.MotionLevel.Full };
+        return new
+        {
+            type = "settings", motion = MotionWire(motion), intensity = IntensityWire(s, motion),
+            reduced = motion != Models.MotionLevel.Full, gates = GatesWire(s),
+        };
     }
 
     internal static string MotionWire(Models.MotionLevel m) => m.ToString().ToLowerInvariant();
+
+    /// <summary>The room's WebView2 on screen for a gif-from's rect (UI thread; the fx sink calls it there).
+    /// CSS px reach physical px through the page zoom times the monitor scale WebView2 rasterizes at.</summary>
+    private static Overlays.RoomViewport? ReadViewport()
+    {
+        if (_host?.Window is not { } w || _host.WebView is not { } web) return null;
+        if (w.WindowState == WindowState.Minimized || !web.IsVisible || web.ActualWidth < 1 || web.ActualHeight < 1)
+            return new Overlays.RoomViewport(true, default, 1, 1);
+        var tl = web.PointToScreen(new Point(0, 0));
+        var br = web.PointToScreen(new Point(web.ActualWidth, web.ActualHeight));
+        return new Overlays.RoomViewport(false, new Overlays.PxRect(tl.X, tl.Y, br.X - tl.X, br.Y - tl.Y),
+            web.ZoomFactor, System.Windows.Media.VisualTreeHelper.GetDpi(web).DpiScaleX);
+    }
 
     /// <summary>The effective intensity: <c>calm</c> whenever MotionLevel is not Full (CONTRACT
     /// section 4), otherwise <c>AppSettings.BackRoomFxIntensity</c>, which C3 adds. Read by name so
@@ -327,16 +347,8 @@ internal static class BackRoomHostService
     private static void OnSettingChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (_bridge == null || sender is not Models.AppSettings s) return;
-        switch (e.PropertyName)
-        {
-            case nameof(Models.AppSettings.SkillPoints):
-                _bridge.OnSpChanged(s.SkillPoints, "earn");
-                break;
-            case nameof(Models.AppSettings.MotionLevel):
-            case "BackRoomFxIntensity":
-                _bridge.PushSettings(SettingsMessage());
-                break;
-        }
+        if (e.PropertyName == nameof(Models.AppSettings.SkillPoints)) _bridge.OnSpChanged(s.SkillPoints, "earn");
+        else if (e.PropertyName != null && SettingsFrameProperties.Contains(e.PropertyName)) _bridge.PushSettings(SettingsMessage());
     }
 
     private static void DisposeAll()
@@ -346,6 +358,7 @@ internal static class BackRoomHostService
         try
         {
             HookSettings(false);
+            BackRoomFxServices.Viewport = null;
             var host = _host;
             _host = null;
             _bridge = null;

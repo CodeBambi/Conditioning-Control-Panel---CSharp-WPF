@@ -32,7 +32,7 @@ public sealed class NullBackRoomMedia : IBackRoomMedia
     /// <param name="lex">Lexicon lookup returning the key itself on a miss (Loc.Get's contract). Null = fallbacks.</param>
     public NullBackRoomMedia(Func<string, string>? lex) => _lex = lex;
 
-    public BackRoomMediaDeal Deal(string station, int seed)
+    public BackRoomMediaDeal Deal(string station, int seed, int count = 4)
     {
         var gifs = Enumerable.Range(0, 4)
             .Select(i => new BackRoomGif("g" + i, $"https://ccp.game/backroom/stations/slot/fallback/gif{i}.webp", 0, 0, "fallback"))

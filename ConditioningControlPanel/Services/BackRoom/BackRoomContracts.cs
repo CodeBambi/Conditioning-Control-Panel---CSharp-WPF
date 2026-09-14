@@ -14,7 +14,7 @@ namespace ConditioningControlPanel.Services.BackRoom;
 /// ever sent to the server; only keys go back to the host in <c>fx.symbols</c>.
 /// </summary>
 /// <param name="Seed">Shuffle seed echoed to the page in the <c>media</c> message.</param>
-/// <param name="Gifs">Four GIFs, shortfall filled from built-in fallback art.</param>
+/// <param name="Gifs">Up to the requested count of pool GIFs, or the four fallback loops when the pool has none.</param>
 /// <param name="Words">Up to four words, shortfall filled from the presets.</param>
 public sealed record BackRoomMediaDeal(int Seed, IReadOnlyList<BackRoomGif> Gifs, IReadOnlyList<BackRoomWord> Words);
 
@@ -80,16 +80,33 @@ public interface IBackRoomFx
     /// <see cref="BackRoomFxSkipReason.Unknown"/>.</summary>
     BackRoomFxAck Fire(string fxId, string station, IReadOnlyList<string> symbolKeys, BackRoomMediaDeal deal);
 
+    /// <summary>Hypno v3 (10.13.B): fire with the page's validated-on-arrival <paramref name="args"/>, remembering
+    /// <paramref name="token"/> so a later <c>fx-release</c> can fade what it holds. A host that predates the
+    /// amendment ignores both.</summary>
+    BackRoomFxAck Fire(string fxId, string station, IReadOnlyList<string> symbolKeys, BackRoomMediaDeal deal,
+        BackRoomFxArgs? args, string? token) => Fire(fxId, station, symbolKeys, deal);
+
+    /// <summary><c>fx-release</c>: fade out whatever that token still holds on screen.</summary>
+    void Release(string token, string station) { }
+
+    /// <summary><c>fx-tunnel</c>: the wanted tunnel vision level 0..1 (the host gates, halves under Calm, throttles).</summary>
+    void Tunnel(string station, double level) { }
+
+    /// <summary><c>station-close</c>: release every hold and the tunnel that station started.</summary>
+    void ReleaseStation(string station) { }
+
     /// <summary>Stop every running primitive the room started (on <c>suspend</c> or <c>close</c>).</summary>
     void CancelAll();
 }
 
 /// <summary>
 /// The media feed (C4, <c>BackRoomMedia.cs</c>). Deals local animated GIFs, deduped by full path,
-/// plus pool words, filling any shortfall from fallback art and presets.
+/// plus pool words. With no pool GIF at all it deals the four fallback loops; with at least one it
+/// deals only real ones (10.13.C). Words fill from the presets.
 /// </summary>
 public interface IBackRoomMedia
 {
-    /// <summary>Deal the sit-down media for <paramref name="station"/>, shuffled with <paramref name="seed"/>.</summary>
-    BackRoomMediaDeal Deal(string station, int seed);
+    /// <summary>Deal the sit-down media for <paramref name="station"/>, shuffled with <paramref name="seed"/>:
+    /// up to <paramref name="count"/> GIFs (1..13, the cards table asks for 13) and four words.</summary>
+    BackRoomMediaDeal Deal(string station, int seed, int count = 4);
 }

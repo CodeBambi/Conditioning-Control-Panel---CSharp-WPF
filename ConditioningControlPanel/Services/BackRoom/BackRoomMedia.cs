@@ -8,8 +8,8 @@ using Serilog;
 namespace ConditioningControlPanel.Services.BackRoom;
 
 /// <summary>
-/// THE MEDIA FEED (CONTRACT section 5). Deals four local animated GIFs and four words for one
-/// sit-down. Everything it deals is a key plus a url on <c>ccp.assets</c> / <c>ccp.game</c>; no
+/// THE MEDIA FEED (CONTRACT section 5, 10.13.C). Deals up to <c>count</c> local animated GIFs (4 by
+/// default, 13 for the card table) and four words for one sit-down. Everything it deals is a key plus a url on <c>ccp.assets</c> / <c>ccp.game</c>; no
 /// path ever leaves this class, and nothing in a deal is logged beyond counts (PII rule).
 ///
 /// <para>GIFs come from the DISK half of the flash pool (<see cref="FlashService.SnapshotLocalImagePaths"/>),
@@ -18,18 +18,23 @@ namespace ConditioningControlPanel.Services.BackRoom;
 /// are two GIFs), sorted so the listing order cannot move the deal, then shuffled with the seed.
 /// Only files under the assets root survive, because only those have a <c>ccp.assets</c> url.</para>
 ///
-/// <para>Does file I/O (a 30-byte header read per candidate, bounded by <see cref="ProbeBudget"/>):
+/// <para>Does file I/O (a 30-byte header read per candidate, bounded by <see cref="ProbeBudgetFor"/>):
 /// call it off the UI thread.</para>
 /// </summary>
 internal sealed class BackRoomMedia : IBackRoomMedia
 {
     internal const int Slots = 4;
+    /// <summary>The most GIFs one deal holds (the thirteen card values, 10.13.C).</summary>
+    internal const int MaxCount = 13;
     internal const string FallbackBase = "https://ccp.game/backroom/stations/slot/fallback/";
     /// <summary>Pixel size of the built-in fallback loops (square).</summary>
     internal const int FallbackSize = 180;
     /// <summary>Header reads per deal. A library of still webps must not turn one sit-down into a
     /// file open per file; past the budget the shortfall is fallback art.</summary>
     internal const int ProbeBudget = 48;
+
+    /// <summary><c>max(48, count x 4)</c>: a 13-GIF deal may read up to 52 headers.</summary>
+    internal static int ProbeBudgetFor(int count) => Math.Max(ProbeBudget, count * 4);
 
     /// <summary>Preset words in contract order, as lexicon keys with neutral fallbacks (Law VII).</summary>
     internal static readonly (string Key, string Fallback)[] PresetWords =
@@ -71,9 +76,9 @@ internal sealed class BackRoomMedia : IBackRoomMedia
         _log = log;
     }
 
-    public BackRoomMediaDeal Deal(string station, int seed)
+    public BackRoomMediaDeal Deal(string station, int seed, int count = Slots)
     {
-        var gifs = DealGifs(seed, out int candidates);
+        var gifs = DealGifs(seed, Math.Clamp(count, 1, MaxCount), out int candidates);
         var words = DealWords(seed);
 
         // Counts only. The station id comes from the page, so it is only echoed when it looks like one.
@@ -86,9 +91,10 @@ internal sealed class BackRoomMedia : IBackRoomMedia
         return new BackRoomMediaDeal(seed, gifs, words);
     }
 
-    private List<BackRoomGif> DealGifs(int seed, out int candidates)
+    private List<BackRoomGif> DealGifs(int seed, int count, out int candidates)
     {
-        var dealt = new List<BackRoomGif>(Slots);
+        var dealt = new List<BackRoomGif>(count);
+        int budget = ProbeBudgetFor(count);
         candidates = 0;
         try
         {
@@ -114,7 +120,7 @@ internal sealed class BackRoomMedia : IBackRoomMedia
 
                 var rng = new Random(seed);
                 int probes = 0;
-                for (int i = 0; i < pool.Count && dealt.Count < Slots && probes < ProbeBudget; i++)
+                for (int i = 0; i < pool.Count && dealt.Count < count && probes < budget; i++)
                 {
                     // Partial Fisher-Yates, consumed as it goes: a candidate only proves it animates
                     // once its header is read.
@@ -138,7 +144,10 @@ internal sealed class BackRoomMedia : IBackRoomMedia
             _log()?.Debug("BackRoomMedia: gif pool unavailable ({Type})", ex.GetType().Name);
         }
 
-        for (int k = dealt.Count; k < Slots; k++)
+        // 10.13.C: real pictures are never padded with fallback art (a deck cycles what it has);
+        // only a sit-down with no pool GIF at all gets the four built-in loops.
+        if (dealt.Count > 0) return dealt;
+        for (int k = 0; k < Slots; k++)
             dealt.Add(new BackRoomGif("g" + k, $"{FallbackBase}gif{k}.webp", FallbackSize, FallbackSize, "fallback"));
         return dealt;
     }

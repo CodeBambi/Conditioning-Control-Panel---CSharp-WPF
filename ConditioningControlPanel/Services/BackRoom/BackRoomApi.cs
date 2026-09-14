@@ -75,6 +75,9 @@ public sealed class BackRoomApi : IBackRoomRelay
         {
             ["slot"] = new[] { ("GET", "state"), ("POST", "tape"), ("POST", "cursor") },
             ["wheel"] = new[] { ("GET", "state"), ("POST", "spin") },
+            // 10.13.E: Soft Hand and Velvet Vortex.
+            ["cards"] = new[] { ("GET", "state"), ("POST", "deal"), ("POST", "hit"), ("POST", "stand"), ("POST", "double"), ("POST", "split") },
+            ["roulette"] = new[] { ("GET", "state"), ("POST", "spin"), ("POST", "cursor") },
         };
 
     private static readonly HttpClient SharedHttp = new() { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
