@@ -32,7 +32,10 @@ public class BackRoomFxPlanTests
 
     private static FxPlan Plan(string fx, BackRoomFxIntensity i = BackRoomFxIntensity.Normal,
         MotionLevel m = MotionLevel.Full, FxGates? g = null, params string[] symbols)
-        => BackRoomFxPlan.Resolve(fx, i, m, g ?? FxGates.AllOn, symbols, Deal, new Random(1));
+        => BackRoomFxPlan.Resolve(fx, i, m, g ?? FxGates.AllOn, symbols, Deal, new Random(1), spiralSource: Woven);
+
+    /// <summary>Every preset has a weave on this desk (a missing one is its own test).</summary>
+    internal static string? Woven(string preset) => @"C:\woven\" + preset + ".gif";
 
     private static BackRoomFxSkipReason? Why(FxPlan p, string prim)
         => p.Skipped.FirstOrDefault(s => s.Prim == prim)?.Why;

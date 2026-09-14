@@ -33,7 +33,10 @@ public interface IFxScheduler
 }
 
 /// <summary>The settings a fire reads, captured once per fire.</summary>
-public sealed record FxEnvironment(MotionLevel Motion, BackRoomFxIntensity Intensity, FxGates Gates);
+/// <param name="SpiralSource">Preset -> the Loom-woven spiral file (<see cref="BackRoomSpiralSource"/>); null = none.</param>
+/// <param name="SpiralOpacity">The user's own spiral opacity 0..1, which section 4's spiral-full scales.</param>
+public sealed record FxEnvironment(MotionLevel Motion, BackRoomFxIntensity Intensity, FxGates Gates,
+    Func<string, string?>? SpiralSource = null, double SpiralOpacity = 0.85);
 
 /// <summary>
 /// The effect dispatcher (C3). Resolves an fx id through <see cref="BackRoomFxPlan"/>, admits it
@@ -76,7 +79,8 @@ public sealed class BackRoomFx : IBackRoomFx
         try
         {
             FxPlan plan;
-            lock (_rng) plan = BackRoomFxPlan.Resolve(fxId, env.Intensity, env.Motion, env.Gates, symbolKeys, deal, _rng);
+            lock (_rng) plan = BackRoomFxPlan.Resolve(fxId, env.Intensity, env.Motion, env.Gates, symbolKeys, deal, _rng,
+                spiralSource: env.SpiralSource);
             if (plan.Steps.Count == 0) return new BackRoomFxAck(Array.Empty<string>(), plan.Skipped);
 
             var admission = _gate.Admit(fxId, plan.HeroMs);

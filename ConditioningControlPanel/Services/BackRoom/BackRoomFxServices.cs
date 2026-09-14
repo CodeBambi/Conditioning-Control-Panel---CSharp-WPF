@@ -48,10 +48,19 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
         var s = App.Settings?.Current;
         if (s == null)
             return new FxEnvironment(MotionFx.Level, BackRoomFxIntensity.Calm, new FxGates(false, false, false, false, false, false));
+        var spiralPath = s.SpiralPath;
+        string? Woven(string preset) => BackRoomSpiralSource.Resolve(preset, spiralPath,
+            Chaos.DtrhLoomStore.SpiralsFolder, WebRoot, File.Exists);
+        double opacity = s.SpiralOpacity > 0 ? Math.Clamp(s.SpiralOpacity / 100.0, 0.05, 1.0) : 0.85;
+        // A woven GIF always has a first frame, so the spiral's still exists whenever its weave does.
         return new FxEnvironment(MotionFx.Level, s.BackRoomFxIntensity,
             new FxGates(s.FlashEnabled, s.SubliminalEnabled, s.SpiralEnabled, s.BrainDrainEnabled, s.BrainDrainMeltEnabled,
-                SpiralStillPath(s) != null));
+                Woven(BackRoomSpiralSource.Screen) != null),
+            Woven, opacity);
     }
+
+    /// <summary><c>Resources\web</c>, the folder <c>ccp.game</c> maps.</summary>
+    internal static string WebRoot => Path.Combine(AppContext.BaseDirectory, "Resources", "web");
 
     /// <summary>A spiral the gif-full window can hold as a still frame: the user's own spiral file, if
     /// it is an image. A video spiral has no still here, so at Off it is skipped as motion.</summary>

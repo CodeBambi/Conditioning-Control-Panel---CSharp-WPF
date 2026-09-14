@@ -87,7 +87,7 @@ public class BackRoomFxTests
     {
         var clock = new FakeScheduler();
         var sink = new RecordingSink(clock);
-        var fx = new BackRoomFx(sink, clock, () => new FxEnvironment(motion, intensity, FxGates.AllOn), new Random(5));
+        var fx = new BackRoomFx(sink, clock, () => new FxEnvironment(motion, intensity, FxGates.AllOn, BackRoomFxPlanTests.Woven), new Random(5));
         return (fx, clock, sink);
     }
 
