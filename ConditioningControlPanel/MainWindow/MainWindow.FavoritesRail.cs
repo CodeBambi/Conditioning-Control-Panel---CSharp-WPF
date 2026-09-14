@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -181,6 +181,7 @@ namespace ConditioningControlPanel
                     Margin = new Thickness(0, 2, 3, 0),
                 });
             }
+            AddRailChipV2Pill(entry.Id, grid, locked);
 
             var chip = new Button
             {
@@ -199,6 +200,30 @@ namespace ConditioningControlPanel
             chip.Click += (_, _) => OpenDestination(entry);
             AttachPinMenu(chip, entry.Id, holdRail: false);
             return chip;
+        }
+
+        /// <summary>
+        /// The champagne v2 pill, on the chip that leads to a feature this account owns a Back
+        /// Room v2 prize for. The wall's Flashes and Bubble Pop tiles have worn it since the
+        /// prize lanes landed; the rail did not, so a user who pinned the room and never opened
+        /// the wall had nothing telling them the prize was live. The rule is
+        /// <see cref="Services.Prizes.V2Badges"/>, shared with both tiles, so the three surfaces
+        /// cannot drift.
+        ///
+        /// <para>Top right, where the pill sits on a card - EXCEPT on a locked chip, which
+        /// already pins its padlock there. Then the pill moves to the top LEFT rather than
+        /// hiding: both marks are true at once, and the chip is 69 wide, so a ~24 DIP pill and a
+        /// 10 DIP padlock clear each other with room to spare. Neither can reach the caption,
+        /// which is anchored to the foot behind its own scrim.</para>
+        /// </summary>
+        private static void AddRailChipV2Pill(string paletteId, Grid grid, bool locked)
+        {
+            if (!Services.Prizes.V2Badges.ChipWearsV2Pill(paletteId)) return;
+            var pill = Features.FeatureCard.NewV2Badge(
+                locked ? new Thickness(3, 2, 0, 0) : new Thickness(0, 2, 3, 0), compact: true);
+            pill.HorizontalAlignment = locked ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+            pill.VerticalAlignment = VerticalAlignment.Top;
+            grid.Children.Add(pill);
         }
 
         /// <summary>

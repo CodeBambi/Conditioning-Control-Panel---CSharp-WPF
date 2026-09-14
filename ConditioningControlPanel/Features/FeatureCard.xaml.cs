@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -128,14 +128,23 @@ namespace ConditioningControlPanel.Features
             return b;
         }
 
-        /// <summary>A loose copy of the card's v2 pill for other surfaces (the Flashes motion picker).</summary>
-        internal static Border NewV2Badge(Thickness margin)
+        /// <summary>
+        /// A loose copy of the card's v2 pill for other surfaces (the Flashes motion picker, and
+        /// the dashboard side rail's chips).
+        /// </summary>
+        /// <param name="compact">
+        /// The rail's size. A chip is 36 DIP tall against a card's hundred-odd, and the card's
+        /// pill pinned into a corner of one reads as a second caption rather than as a mark, so
+        /// the compact fork takes the type down two points and the padding down with it. Same
+        /// metal, same text, same corner family: one pill at two sizes, not two pills.
+        /// </param>
+        internal static Border NewV2Badge(Thickness margin, bool compact = false)
         {
             return new Border
             {
                 Margin = margin,
-                Padding = new Thickness(6, 2, 7, 3),
-                CornerRadius = new CornerRadius(7),
+                Padding = compact ? new Thickness(3, 0, 4, 1) : new Thickness(6, 2, 7, 3),
+                CornerRadius = new CornerRadius(compact ? 5 : 7),
                 Background = new System.Windows.Media.SolidColorBrush(
                     System.Windows.Media.Color.FromArgb(0xD9, 0x1A, 0x1A, 0x2E)),
                 BorderBrush = V2BadgeBrush,
@@ -146,7 +155,7 @@ namespace ConditioningControlPanel.Features
                 {
                     Text = Localization.Loc.Get("badge_v2"),
                     Foreground = V2BadgeBrush,
-                    FontSize = 9,
+                    FontSize = compact ? 7 : 9,
                     FontWeight = FontWeights.Bold,
                 },
             };
