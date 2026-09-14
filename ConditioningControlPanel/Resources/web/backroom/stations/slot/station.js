@@ -51,6 +51,9 @@ export async function mount(ctx) {
   // CONTRACT 7.1: the room's SP chip, { set(value), owe(n), thud(), target() }. Standalone keeps .slot-sp.
   const hostSp = ctx.spReadout && typeof ctx.spReadout.set === 'function' && typeof ctx.spReadout.owe === 'function' ? ctx.spReadout : null;
   const lite = String(ctx.intensity || '').toLowerCase() === 'calm';   // Brake 8: Calm bank flies 4 tokens at most
+  // Law VI: the coin shower is travel, so Calm and Motion off settle it exactly as reduced motion
+  // does. Read live, because a settings frame changes ctx.intensity and ctx.motion under a sit-down.
+  const stillFx = () => reduced || String(ctx.intensity || '').toLowerCase() === 'calm' || String(ctx.motion || '').toLowerCase() === 'off';
   loadCss();
 
   let el = null, scene = null, tape = null, media = null, session = 0, alive = false;
@@ -507,7 +510,7 @@ export async function mount(ctx) {
     const dealt = Promise.resolve().then(() => (typeof ctx.media === 'function' ? ctx.media() : null))
       .then(m => (my === session ? media.deal(m) : null)).catch(() => null);
     const [made, state] = await Promise.all([
-      createScene({ canvas: $('.slot-stage'), reduced, variant: variant && variant.id, palette: variant && variant.palette, hint: $('.slot-hint'),
+      createScene({ canvas: $('.slot-stage'), reduced, stillFx, variant: variant && variant.id, palette: variant && variant.palette, hint: $('.slot-hint'),
                     payline: $('.slot-payline'), jar: $('.slot-jar'),
                     canPull: () => (!busy || pace === 'reveal') && !suspended,
                     onLever: () => press(), onFreeze: col => toggleFreeze(col),

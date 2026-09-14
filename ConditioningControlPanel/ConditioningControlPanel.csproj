@@ -609,7 +609,7 @@
          the virtual host. Excluded, not deleted: they are how those layers get worked on. -->
     <None Remove="Resources\web\**\*" />
     <Content Include="Resources\web\**\*"
-             Exclude="Resources\web\**\CLAUDE.md;Resources\web\**\CAPTCHA_*.md;Resources\web\**\BUILD_PLAN.md;
+             Exclude="Resources\web\**\CLAUDE.md;Resources\web\**\CAPTCHA_*.md;Resources\web\**\BUILD_PLAN.md;Resources\web\**\PERFORMANCE.md;
                       $(ArcademyHarnessExclude);
                       $(RemixTestExclude);
                       $(ContentPackWebExclude)">
@@ -701,7 +701,7 @@
            tree. That is why both live in properties. See docs/CONTENT_PACKS_PLAN.md §6. -->
       <SoundFiles Include="$(ProjectDir)Resources\sounds\**\*" Exclude="$(ContentPackSoundsExcludeAbs)" />
       <WebFiles Include="$(ProjectDir)Resources\web\**\*"
-                Exclude="$(ProjectDir)Resources\web\**\CLAUDE.md;$(ProjectDir)Resources\web\**\CAPTCHA_*.md;$(ProjectDir)Resources\web\**\BUILD_PLAN.md;
+                Exclude="$(ProjectDir)Resources\web\**\CLAUDE.md;$(ProjectDir)Resources\web\**\CAPTCHA_*.md;$(ProjectDir)Resources\web\**\BUILD_PLAN.md;$(ProjectDir)Resources\web\**\PERFORMANCE.md;
                          $(ContentPackWebExcludeAbs);
                          $(RemixTestExcludeAbs);
                          $(ArcademyHarnessExcludeAbs)" />

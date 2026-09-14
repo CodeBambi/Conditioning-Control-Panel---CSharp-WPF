@@ -66,6 +66,7 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     if(category==='floor'||category==='palette'){onPreview({position:[0,4.2,5.5],look:[0,0,0]});return;}
     if(category==='handles'){
       const holder=room.holders.get(['slot:rose','slot:violet','slot:mint'][target]);
+      if(!holder)return;   // a cabinet whose glb carried no lever holder: nothing to fly the camera to
       const center=holder.getWorldPosition(new T.Vector3());
       onPreview({position:[center.x+2.4,1.55,center.z+.35],look:[center.x,1.5,center.z],width:1.8,height:1.7});return;
     }
@@ -94,7 +95,9 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
   return {row,screens:extras.screens,select,getState,restore,preview,open:()=>panel.open(),get opened(){return panel.opened;},
     dismiss(){if(!panel.opened)return false;panel.close();return true;},
     update(dt,still){spirals.update(dt,still);panel.update?.(dt,still);},
-    debug:()=>({selected:getState(),opened:panel.opened,models:9}),
+    /** The close-up: a scissored pass on the room's own renderer, so it opens no second context. */
+    draw(renderer){return panel.draw(renderer);},
+    debug:()=>({selected:getState(),opened:panel.opened,models:9,view:panel.viewDebug()}),
     dispose(){handles.dispose();extras.dispose();titleMap.dispose();panel.dispose();canvas.removeEventListener('pointerdown',onDown);canvas.removeEventListener('pointerup',onUp);root.removeFromParent();const gs=new Set(),ms=new Set();root.traverse(o=>{if(o.geometry)gs.add(o.geometry);for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m)ms.add(m);});gs.forEach(g=>g.dispose());ms.forEach(m=>m.dispose());}
   };
 }

@@ -74,12 +74,14 @@ function paintDisplay(ctx, w, h, marquee, text) {
 }
 
 /**
- * @param {{canvas:HTMLCanvasElement, reduced:boolean, hint?:HTMLElement, palette?:object,
+ * @param {{canvas:HTMLCanvasElement, reduced:boolean, stillFx?:()=>boolean, hint?:HTMLElement, palette?:object,
  *          canPull:()=>boolean, onLever:()=>void, onFreeze:(i:number)=>void, onReelStop?:(i:number)=>void}} o
  * @returns {Promise<{missing:string[], dispose:()=>void} | object>}
  */
 export async function createScene(o) {
   const { canvas, reduced } = o;
+  // Law VI: reduced motion, Calm and Motion off all settle the cosmetic travel (station.js stillFx).
+  const stillFx = typeof o.stillFx === 'function' ? o.stillFx : () => reduced;
   const budget = createRenderBudget(navigator, devicePixelRatio);
   let lastDraw = -Infinity;
   const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'default' });
@@ -371,7 +373,7 @@ export async function createScene(o) {
   }
 
   function update(t) {
-    coinShower.update((t-coinTick)/1000,reduced); coinTick=t;
+    coinShower.update((t-coinTick)/1000,stillFx()); coinTick=t;
     if (tl) {
       const dt = t - tl.start;
       if (tl.kind === 'rise') {

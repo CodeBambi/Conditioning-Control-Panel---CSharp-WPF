@@ -1,6 +1,6 @@
 import * as T from '../../vendor/three/three.module.min.js';
 
-// Review copy only. No barks imply an outcome, ownership or a purchase.
+// No barks imply an outcome, ownership or a purchase.
 export const EMI_BARKS = {
   counter: ['Just keeping the shiny things shiny.', 'I counted them. Then counted them again.', 'This shelf is my tiny kingdom.'],
   wheel: ['Round and round. Very on brand.', 'I am supervising the circle.', 'A little wave before the big wheel.'],
@@ -9,7 +9,7 @@ export const EMI_BARKS = {
 };
 
 /** Click/tap a visible NPC; dragging continues to belong to the room camera. */
-export function createEmiInteraction({ canvas, camera, scene, emis, mount, isActive = () => true, label = (key, fallback) => fallback }) {
+export function createEmiInteraction({ canvas, camera, scene, emis, mount, isActive = () => true, canGesture = () => true, label = (key, fallback) => fallback }) {
   const doc = canvas.ownerDocument, ray = new T.Raycaster(), pointer = new T.Vector2();
   const box = new T.Box3(), point = new T.Vector3(), counts = new Map();
   const entries = emis.map(emi => ({ emi, id: emi.id || emi.debug().id, root: emi.interactionRoot || emi.pivot || emi.root }));
@@ -45,7 +45,8 @@ export function createEmiInteraction({ canvas, camera, scene, emis, mount, isAct
     const index = counts.get(entry.id) || 0, lines = EMI_BARKS[entry.id] || ['Hello there.'];
     counts.set(entry.id, index + 1); selected = entry; remaining = 4.5;
     bubble.textContent = label('br_emi_' + entry.id + '_' + (index % lines.length + 1), lines[index % lines.length]);
-    entry.emi.trigger?.(entry.id === 'counter' && index % 3 === 1 ? 'dust' : 'greet');
+    // Law VI: a still room holds every NPC at rest, so the bark speaks and the gesture is skipped.
+    if (canGesture()) entry.emi.trigger?.(entry.id === 'counter' && index % 3 === 1 ? 'dust' : 'greet');
     update(0);
   }
   const onDown = event => {

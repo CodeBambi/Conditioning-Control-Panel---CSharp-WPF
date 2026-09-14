@@ -42,6 +42,18 @@ test('NPC faces are independent, blink and shared atlas remain isolated', () => 
   a.controller.update(0,true); assert.equal(a.controller.debug().blink,false);
   a.controller.dispose(); b.controller.dispose();
 });
+test('a gesture caught by Motion off is dropped, not parked to replay later', () => {
+  const f = fixture('wheel');
+  assert.ok(f.controller.trigger('wave'));
+  f.controller.update(1 / 60);
+  assert.equal(f.controller.debug().action, 'wave');
+  f.controller.update(1 / 60, true);
+  assert.equal(f.controller.debug().action, 'idle');
+  for (let i = 0; i < 60; i++) f.controller.update(1 / 60);
+  assert.equal(f.controller.debug().action, 'idle');
+  assert.ok(f.controller.trigger('wave'));   // and a fresh click still lands
+  f.controller.dispose();
+});
 test('slot cabinet face screens are not animated as NPCs', () => {
   assert.equal(createEmiIdle({model:new T.Group(),row:{id:'slot'}}),null);
 });
