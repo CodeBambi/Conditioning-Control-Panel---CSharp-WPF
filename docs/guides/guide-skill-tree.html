@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>skill_tree.dat - Conditioning Control Panel</title>
+<meta name="description" content="Spend the sparkle points you earn from leveling up on permanent upgrades - XP boosts, extra stats, streak insurance and more.">
+<link rel="icon" href="images/logo.webp">
+<link rel="stylesheet" href="assets/cookie-consent.css">
+<link rel="stylesheet" href="guide-article.css">
+</head>
+<body>
+
+<a class="skip" href="#doc">skip to document</a>
+
+<header>
+  <div class="titlebar">
+    <span class="sysname">CCP community guides</span>
+    <span class="ver">v6.7.4 OK</span>
+    <nav class="menu">
+      <a href="https://cclabs.app/">dashboard</a>
+      <a href="https://cclabs.app/explore.html">explore</a>
+      <a href="../labs/loom/">the loom</a>
+      <a href="https://cclabs.app/tools.html">tools</a>
+      <a href="https://cclabs.app/leaderboard.html">leaderboard</a>
+      <a href="https://app.cclabs.app/catalogue">catalogue</a>
+      <a href="https://app.cclabs.app/">login</a>
+      <a class="dl" href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest">download</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <section class="pagehead wrap">
+    <div class="pagehead-inner">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="https://cclabs.app/">dashboard</a>
+        <span class="sep">/</span>
+        <a href="https://cclabs.app/guide.html">field_manual</a>
+        <span class="sep">/</span>
+        <span class="here">skill_tree.dat</span>
+      </nav>
+      <div class="kicker">field_manual / progression.dir / gentle</div>
+      <h1>Skill <span class="pink">Tree</span></h1>
+      <p class="lede">Every level up hands you sparkle points. Spend them here on permanent upgrades - bigger XP, extra stats, streak insurance.</p>
+    </div>
+  </section>
+
+  <article class="doc wrap" id="doc">
+
+    <div class="window toc">
+      <div class="bar">contents.idx - on this page<span class="lights"><i></i><i></i><i></i></span></div>
+      <div class="toc-body">
+        <ul>
+          <li><a href="#overview">Overview</a></li>
+          <li><a href="#sparkle-points">Sparkle Points</a></li>
+          <li><a href="#tier-1">Tier 1 - Foundation</a></li>
+          <li><a href="#tier-2">Tier 2 - Core Branches</a></li>
+          <li><a href="#tier-3">Tier 3 - Specialization</a></li>
+          <li><a href="#tier-4">Tier 4 - Mastery</a></li>
+          <li><a href="#tier-6">PRO Analytics Branch</a></li>
+          <li><a href="#secret-skills">Secret Skills</a></li>
+          <li><a href="#pink-rush">Pink Rush</a></li>
+        </ul>
+      </div>
+    </div>
+
+            <section id="overview">
+                <h2>Overview</h2>
+
+                <p>The Skill Tree is where you spend the points you earn from playing. It lives in the <strong>Enhancements</strong> tab. Every skill you buy stays bought, and most of them make XP come in faster.</p>
+
+                <p>It is not really a tree so much as <strong>three parallel chains</strong>. All three start from one root skill, and inside each chain you have to buy the skills in order - you cannot skip ahead.</p>
+
+                <ul>
+                    <li><strong>Stats chain</strong> - unlocks numbers, records and rankings to look at</li>
+                    <li><strong>Sparkle chain</strong> - straight XP boosts, lucky rolls and Pink Rush</li>
+                    <li><strong>Streak chain</strong> - streak bonuses, streak insurance and quest rerolls</li>
+                </ul>
+
+                <div class="feature-highlight">
+                    <div class="feature-item">
+                        <span>🌳</span>
+                        <h5>27 Skills</h5>
+                        <p>4 main tiers, 3 secret, plus a PRO analytics branch</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>✨</span>
+                        <h5>1 Point / Level</h5>
+                        <p>Plus 1 more for every 100 bubbles popped</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>💎</span>
+                        <h5>2,550 Points</h5>
+                        <p>What the whole tree costs, end to end</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="sparkle-points">
+                <h2>Sparkle Points</h2>
+
+                <figure>
+                    <img loading="lazy" decoding="async" src="images/screenshots/skill-tree/tree-overview.webp" alt="Bimbo Enhancement Tree showing unlocked and locked nodes" class="guide-screenshot">
+                    <figcaption>The Bimbo Enhancement Tree on the Enhancements tab - locked nodes appear dimmed, unlocked ones glow.</figcaption>
+                </figure>
+
+                <p>Sparkle points are the currency. They are separate from XP: XP raises your level, and levels hand you sparkle points to spend here.</p>
+
+                <ul>
+                    <li><strong>1 point per level up.</strong> No exceptions, no bonus points for big levels.</li>
+                    <li><strong>1 point per 100 bubbles popped.</strong> Popping counts toward this all the time, in or out of a session.</li>
+                    <li>Your point balance <strong>never resets</strong>, and neither does anything you have spent it on.</li>
+                    <li>There is <strong>no refund and no respec.</strong> Once a skill is bought, that is that.</li>
+                </ul>
+
+                <div class="info-box">
+                    <h5>You need to be signed in to buy</h5>
+                    <p>Purchases go through the server, so you have to be logged into your CC Labs account. The server also holds the real point balance - if your local count and the server disagree, the server wins.</p>
+                </div>
+
+                <div class="info-box success">
+                    <h5>Nothing here is ever taken back</h5>
+                    <p>Older versions of this manual said that the XP-economy skills (the Sparkle chain, the Streak chain, the quest skills, Night Shift and Early Bird Bimbo) were stripped every month and had to be bought again. That treadmill is gone, so every node you buy is yours permanently, the display skills and the XP skills alike, and the only thing that turns over at the start of a month is the <a href="https://cclabs.app/guide-leaderboard.html">leaderboard</a> table. See <a href="guide-descent.html">descent.log</a> for what replaced it.</p>
+                </div>
+            </section>
+
+            <section id="tier-1">
+                <h2>Tier 1 - Foundation</h2>
+
+                <p>One skill, and everything else hangs off it. Buy this first.</p>
+
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">⏱️💕</span>
+                            <span class="node-name">Pink Hours</span>
+                            <span class="node-cost">2 pts</span>
+                        </div>
+                        <p class="node-effect">Shows your total conditioning time across all sessions</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="tier-2">
+                <h2>Tier 2 - Core Branches</h2>
+
+                <p>The three chains start here. All three need Pink Hours, and you can buy them in any order.</p>
+
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">📊💭</span>
+                            <span class="node-name">Ditzy Data</span>
+                            <span class="node-cost">5 pts</span>
+                        </div>
+                        <p class="node-effect">Head of the stats chain. Unlocks the statistics panel with your session data</p>
+                        <p class="node-prereq">Requires: Pink Hours</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">✨⚡</span>
+                            <span class="node-name">Sparkle Boost</span>
+                            <span class="node-cost">8 pts</span>
+                        </div>
+                        <p class="node-effect">Head of the sparkle chain. +10% XP from every source</p>
+                        <p class="node-prereq">Requires: Pink Hours</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">🔥💖</span>
+                            <span class="node-name">Good Girl Streak</span>
+                            <span class="node-cost">5 pts</span>
+                        </div>
+                        <p class="node-effect">Head of the streak chain. Better streak display, plus 1 streak shield a week that forgives a missed day</p>
+                        <p class="node-prereq">Requires: Pink Hours</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="tier-3">
+                <h2>Tier 3 - Specialization</h2>
+
+                <p>Each chain continues. These are strictly in order - the second skill in a chain needs the first.</p>
+
+                <h3>Stats chain</h3>
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">👯‍♀️💕</span>
+                            <span class="node-name">Hive Mind</span>
+                            <span class="node-cost">10 pts</span>
+                        </div>
+                        <p class="node-effect">Shows how many people are online right now</p>
+                        <p class="node-prereq">Requires: Ditzy Data</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">🏆✨</span>
+                            <span class="node-name">Trophy Case</span>
+                            <span class="node-cost">10 pts</span>
+                        </div>
+                        <p class="node-effect">Shows your personal best records</p>
+                        <p class="node-prereq">Requires: Hive Mind</p>
+                    </div>
+                </div>
+
+                <h3>Sparkle chain</h3>
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">💎⚡</span>
+                            <span class="node-name">Extra Sparkly</span>
+                            <span class="node-cost">15 pts</span>
+                        </div>
+                        <p class="node-effect">+15% XP, on top of Sparkle Boost. 25% total so far</p>
+                        <p class="node-prereq">Requires: Sparkle Boost</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">🍀💋</span>
+                            <span class="node-name">Lucky Bimbo</span>
+                            <span class="node-cost">15 pts</span>
+                        </div>
+                        <p class="node-effect">5% chance of 10x XP on any flash image</p>
+                        <p class="node-prereq">Requires: Extra Sparkly</p>
+                    </div>
+                </div>
+
+                <h3>Streak chain</h3>
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">🎁🎀</span>
+                            <span class="node-name">Milestone Rewards</span>
+                            <span class="node-cost">15 pts</span>
+                        </div>
+                        <p class="node-effect">A daily XP bonus that grows with your streak (50 to 300 XP, then scaled by your level)</p>
+                        <p class="node-prereq">Requires: Good Girl Streak</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">💕🩹</span>
+                            <span class="node-name">Oopsie Insurance</span>
+                            <span class="node-cost">12 pts</span>
+                        </div>
+                        <p class="node-effect">Buying it gives you a streak fix charge. If your login streak breaks, the charge spends itself and puts the streak back</p>
+                        <p class="node-prereq">Requires: Milestone Rewards</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="tier-4">
+                <h2>Tier 4 - Mastery</h2>
+
+                <p>The end of each chain, and where the big XP skills live. Still in order.</p>
+
+                <h3>Stats chain</h3>
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">👑💅</span>
+                            <span class="node-name">Popular Girl</span>
+                            <span class="node-cost">15 pts</span>
+                        </div>
+                        <p class="node-effect">Shows where you sit as a percentile on the leaderboard</p>
+                        <p class="node-prereq">Requires: Trophy Case</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">🔄💫</span>
+                            <span class="node-name">Quest Refresh</span>
+                            <span class="node-cost">15 pts</span>
+                        </div>
+                        <p class="node-effect">1 free daily quest reroll</p>
+                        <p class="node-prereq">Requires: Popular Girl</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">✨📜</span>
+                            <span class="node-name">Better Quests</span>
+                            <span class="node-cost">20 pts</span>
+                        </div>
+                        <p class="node-effect">+25% XP on rerolled quests</p>
+                        <p class="node-prereq">Requires: Quest Refresh</p>
+                    </div>
+                </div>
+
+                <h3>Sparkle chain</h3>
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">💖👸</span>
+                            <span class="node-name">Maximum Sparkle</span>
+                            <span class="node-cost">25 pts</span>
+                        </div>
+                        <p class="node-effect">+20% XP. With the two before it, that is +45% on everything</p>
+                        <p class="node-prereq">Requires: Lucky Bimbo</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">🫧🎰</span>
+                            <span class="node-name">Lucky Bubbles</span>
+                            <span class="node-cost">20 pts</span>
+                        </div>
+                        <p class="node-effect">5% chance of 20x points on a bubble pop</p>
+                        <p class="node-prereq">Requires: Maximum Sparkle</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">⚡💗</span>
+                            <span class="node-name">Pink Rush</span>
+                            <span class="node-cost">25 pts</span>
+                        </div>
+                        <p class="node-effect">Random 60-second windows where all XP is tripled</p>
+                        <p class="node-prereq">Requires: Lucky Bubbles</p>
+                    </div>
+                </div>
+
+                <h3>Streak chain</h3>
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">💪🔥</span>
+                            <span class="node-name">Streak Power</span>
+                            <span class="node-cost">20 pts</span>
+                        </div>
+                        <p class="node-effect">+0.5% XP per day of streak, capped at +15%</p>
+                        <p class="node-prereq">Requires: Oopsie Insurance</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">🎰💕</span>
+                            <span class="node-name">Reroll Addict</span>
+                            <span class="node-cost">15 pts</span>
+                        </div>
+                        <p class="node-effect">2 more daily quest rerolls</p>
+                        <p class="node-prereq">Requires: Streak Power</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">⭐👼</span>
+                            <span class="node-name">Perfect Bimbo Week</span>
+                            <span class="node-cost">20 pts</span>
+                        </div>
+                        <p class="node-effect">Big one-off payouts at quest streak milestones: 3,000 XP at 7 days, 6,000 at 14, 10,000 at 30. Each scales +2% per level</p>
+                        <p class="node-prereq">Requires: Reroll Addict</p>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <h5>Rerolls come from two different chains</h5>
+                    <p>Quest Refresh and Better Quests sit at the end of the stats chain. Reroll Addict sits at the end of the streak chain. If you want all three rerolls a day, you have to finish both.</p>
+                </div>
+            </section>
+
+            <section id="tier-6">
+                <h2>The PRO Analytics Branch</h2>
+
+                <p>Five more stat skills sit past Better Quests, at the far end of the stats chain. They are wildly expensive and they only show you information - none of them affect XP. They are also all permanent, so a season rollover never takes them away.</p>
+
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-name">Ditzy Data PRO</span>
+                            <span class="node-cost">150 pts</span>
+                        </div>
+                        <p class="node-effect">The full lifetime dashboard, with every stat the app has ever counted</p>
+                        <p class="node-prereq">Requires: Better Quests</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-name">Season Rewind</span>
+                            <span class="node-cost">250 pts</span>
+                        </div>
+                        <p class="node-effect">Compare each season against the last</p>
+                        <p class="node-prereq">Requires: Ditzy Data PRO</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-name">Bestie Records</span>
+                            <span class="node-cost">350 pts</span>
+                        </div>
+                        <p class="node-effect">A timeline of your personal bests, all-time and per season</p>
+                        <p class="node-prereq">Requires: Season Rewind</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-name">Brain Drain Report</span>
+                            <span class="node-cost">500 pts</span>
+                        </div>
+                        <p class="node-effect">A breakdown of how much you have used each feature, this season and ever</p>
+                        <p class="node-prereq">Requires: Bestie Records</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-name">Certified Data Bimbo</span>
+                            <span class="node-cost">1,000 pts</span>
+                        </div>
+                        <p class="node-effect">The capstone. Full prestige history per season, plus a certified badge</p>
+                        <p class="node-prereq">Requires: Brain Drain Report</p>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <h5>2,250 points for the set</h5>
+                    <p>This branch alone is nearly nine tenths of the cost of the whole tree. It is a long-haul goal, not something to save up for early. Buy everything that actually pays out XP first.</p>
+                </div>
+            </section>
+
+            <section id="secret-skills">
+                <h2>Secret Skills</h2>
+
+                <p>Three skills sit outside the tree, on their own row underneath it. They have no prerequisites, so you can buy them at any point - but until you meet the unlock condition, all you see is a card marked <code>???</code> with a hint.</p>
+
+                <div class="skill-node-grid">
+                    <div class="skill-node secret">
+                        <div class="node-header">
+                            <span class="node-icon">🌙😴</span>
+                            <span class="node-name">Night Shift</span>
+                            <span class="node-cost">10 pts</span>
+                        </div>
+                        <p class="node-effect">+50% XP between 11pm and 5am</p>
+                        <p class="node-prereq">Unlock: start a session 10 times in the 11pm-5am window</p>
+                    </div>
+                    <div class="skill-node secret">
+                        <div class="node-header">
+                            <span class="node-icon">🌅☀️</span>
+                            <span class="node-name">Early Bird Bimbo</span>
+                            <span class="node-cost">10 pts</span>
+                        </div>
+                        <p class="node-effect">+50% XP between 5am and 8am</p>
+                        <p class="node-prereq">Unlock: start a session 10 times in the 5am-8am window</p>
+                    </div>
+                    <div class="skill-node secret">
+                        <div class="node-header">
+                            <span class="node-icon">💎♾️</span>
+                            <span class="node-name">Eternal Doll</span>
+                            <span class="node-cost">8 pts</span>
+                        </div>
+                        <p class="node-effect">Shows your lifetime stats across every season</p>
+                        <p class="node-prereq">Unlock: reach level 50 in any season</p>
+                    </div>
+                </div>
+
+                <div class="info-box warning">
+                    <h5>The in-app hints are slightly off</h5>
+                    <p>Night Shift's hint says "after midnight" and Early Bird's says "before 7am". What the app actually counts is app launches between 11pm and 5am for Night Shift, and between 5am and 8am for Early Bird. Only the first launch of a session counts, so opening and closing the app repeatedly will not speed it up.</p>
+                </div>
+
+                <div class="info-box">
+                    <h5>Eternal Doll survives seasons, the other two do not</h5>
+                    <p>Night Shift and Early Bird Bimbo are XP skills, so they get stripped at the season rollover along with the rest. Eternal Doll is a display skill and is yours for good.</p>
+                </div>
+            </section>
+
+            <section id="pink-rush">
+                <h2>Pink Rush</h2>
+
+                <p>Pink Rush is the last skill in the sparkle chain and the biggest single multiplier in the game. It fires on its own, at random, and triples everything for a minute.</p>
+
+                <ul>
+                    <li>Costs <strong>25 points</strong>, at the very end of the sparkle chain</li>
+                    <li>Roughly a <strong>50% chance</strong> to fire every 10 minutes while the app is running</li>
+                    <li>Lasts <strong>60 seconds</strong>, then ends on its own</li>
+                    <li>Everything you earn in that window is worth <strong>3x</strong></li>
+                    <li>It can fire more than once in a long session</li>
+                </ul>
+
+                <div class="info-box success">
+                    <h5>It multiplies your other bonuses too</h5>
+                    <p>Your XP boosts add together first, then Pink Rush triples the whole total. With all three Sparkle skills, maxed Streak Power and a time-of-day secret skill running, that adds up fast. See <a href="guide-progression.html">progression.log</a> for the exact math.</p>
+                </div>
+            </section>
+
+    <nav class="guide-nav" aria-label="Document navigation">
+      <a href="guide-quests.html" class="prev">
+        <span class="nav-label">Previous</span>
+        <span class="nav-title">quests.log</span>
+      </a>
+      <a href="https://cclabs.app/guide-leaderboard.html" class="next">
+        <span class="nav-label">Next</span>
+        <span class="nav-title">leaderboard.htm</span>
+      </a>
+    </nav>
+
+  </article>
+</main>
+
+<footer>
+  <div class="wrap taskbar">
+    <a class="btn88" href="./">guide_index</a>
+    <a href="https://cclabs.app">cclabs.app</a>
+    <a href="https://cclabs.app/subscribe.html">plans</a>
+    <a href="#" id="cc-footer-link">cookie preferences</a>
+    <span class="right">local time: <span id="clock">--:--:--</span>. session: annotated.</span>
+  </div>
+  <div class="wrap legal">Community documentation for the open-source Conditioning Control Panel project. Not the CC Labs S.r.l.s. storefront. Downloads and <a href="https://cclabs.app/subscribe.html">plans</a> live at <a href="https://cclabs.app">cclabs.app</a>.</div>
+</footer>
+
+<script>
+// taskbar clock, same contract as the hub
+(function () {
+  'use strict';
+  var clock = document.getElementById('clock');
+  if (!clock) return;
+  function p(n) { return (n < 10 ? '0' : '') + n; }
+  function tick() {
+    var d = new Date();
+    clock.textContent = p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
+
+<script src="assets/cookie-consent.js" defer></script>
+</body>
+</html>

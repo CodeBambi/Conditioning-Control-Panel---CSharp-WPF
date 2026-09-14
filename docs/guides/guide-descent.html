@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>descent.log - Conditioning Control Panel</title>
+<meta name="description" content="How the Descent works in Conditioning Control Panel - the tap, the daily jar, banked days, the seven stages down the spiral, and why nothing you have earned ever gets taken back.">
+<link rel="icon" href="images/logo.webp">
+<link rel="stylesheet" href="assets/cookie-consent.css">
+<link rel="stylesheet" href="guide-article.css">
+</head>
+<body>
+
+<a class="skip" href="#doc">skip to document</a>
+
+<header>
+  <div class="titlebar">
+    <span class="sysname">CCP community guides</span>
+    <span class="ver">v6.7.4 OK</span>
+    <nav class="menu">
+      <a href="https://cclabs.app/">dashboard</a>
+      <a href="https://cclabs.app/explore.html">explore</a>
+      <a href="../labs/loom/">the loom</a>
+      <a href="https://cclabs.app/tools.html">tools</a>
+      <a href="https://cclabs.app/leaderboard.html">leaderboard</a>
+      <a href="https://app.cclabs.app/catalogue">catalogue</a>
+      <a href="https://app.cclabs.app/">login</a>
+      <a class="dl" href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest">download</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <section class="pagehead wrap">
+    <div class="pagehead-inner">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="https://cclabs.app/">dashboard</a>
+        <span class="sep">/</span>
+        <a href="https://cclabs.app/guide.html">field_manual</a>
+        <span class="sep">/</span>
+        <span class="here">descent.log</span>
+      </nav>
+      <div class="kicker">field_manual / progression.dir / gentle</div>
+      <h1>The <span class="pink">Descent</span></h1>
+      <p class="lede">Your level counts what you have earned, and the Descent counts how long you have kept coming back. It is measured in days that were good enough rather than days that were heavy, and once a day is banked it belongs to you for good.</p>
+    </div>
+  </section>
+
+  <article class="doc wrap" id="doc">
+
+    <div class="window toc">
+      <div class="bar">contents.idx - on this page<span class="lights"><i></i><i></i><i></i></span></div>
+      <div class="toc-body">
+        <ul>
+          <li><a href="#overview">Overview</a></li>
+          <li><a href="#the-jar">The Tap and the Jar</a>
+            <ul>
+              <li><a href="#filling">The Tap</a></li>
+              <li><a href="#cap">The Cap</a></li>
+              <li><a href="#banking">Banking the Day</a></li>
+              <li><a href="#overfill">Overfill</a></li>
+              <li><a href="#rollover">Midnight</a></li>
+            </ul>
+          </li>
+          <li><a href="#stages">The Seven Stages</a></li>
+          <li><a href="#time-away">Time Away</a></li>
+          <li><a href="#monthly-board">The Monthly Leaderboard</a></li>
+          <li><a href="#nothing-resets">Nothing Resets</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- OVERVIEW                                    -->
+    <!-- ═══════════════════════════════════════════ -->
+    <section id="overview">
+      <h2>Overview</h2>
+
+      <p>The Descent is the app's long arc, and it runs alongside your level rather than replacing it. Levels answer the question of how much you have done in total, which is a fine question, but it rewards the marathon sittings and quietly tells everyone else they are behind. The Descent answers a gentler one: how many days did you show up at all, and it treats a twenty-minute evening exactly the same as a lost weekend.</p>
+
+      <p>Everything runs off a single number called your <strong>banked days</strong>. Each day you do enough to fill a small daily measure, that day is banked, and your banked-day count goes up by one. Seven named stages sit along that count, and reaching one changes what the app looks like and how deep the spiral has pulled the colours.</p>
+
+      <div class="feature-highlight">
+        <div class="feature-item">
+          <span>&#128167;</span>
+          <h5>The Tap</h5>
+          <p>Where everything you earn today lands before it is poured</p>
+        </div>
+        <div class="feature-item">
+          <span>&#129380;</span>
+          <h5>The Jar</h5>
+          <p>Today's measure, scaled to your level, emptied nightly</p>
+        </div>
+        <div class="feature-item">
+          <span>&#128337;</span>
+          <h5>Banked Days</h5>
+          <p>The only number the seven stages read</p>
+        </div>
+      </div>
+
+      <div class="info-box success">
+        <h5>Nothing here can be taken back</h5>
+        <p>Banked days only ever count upward, stages you have reached stay reached, and the XP behind all of it is never spent or drained by the Descent. If you have read an older version of this manual that talked about monthly wipes, that system is gone. See <a href="#nothing-resets">Nothing Resets</a>.</p>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- TAP AND JAR                                 -->
+    <!-- ═══════════════════════════════════════════ -->
+    <section id="the-jar">
+      <h2>The Tap and the Jar</h2>
+
+      <p>There are two things to picture, and the app draws both of them for you: a glass jar with your day floating inside it, and the tap perched on its lip that fills it.</p>
+
+      <h3 id="filling">The Tap</h3>
+
+      <p>You earn XP wherever you like, and none of it is special-cased: a session, a handful of bubbles, a quest, a mantra, a run down the rabbit hole, all of it counts the same. The <a href="guide-progression.html">progression.log</a> page has every source and every multiplier on it, and the Descent does not care which of them you used. Nothing is diverted and nothing is skimmed on the way, so the XP filling the jar is the same XP raising your level, counted twice for two different purposes rather than split between them.</p>
+
+      <p>Everything you earn today lands in the tap first, and holding the tap is what pours it into today's jar. That is a press and a hold rather than a click, so you keep the button down and the tap dips under your finger, a ring closes around its head, a tone ladder climbs rung by rung with the ring, and the moment the ring completes the handle thuds, the stream lands and the readout counts up alongside the rising liquid instead of running ahead of it. The hold is deliberately short, starting around seven tenths of a second and stretching towards a second and a half when you have a lot waiting, so a trickle is a quick press and a whole evening is one you feel yourself making.</p>
+
+      <p>Letting go early costs you nothing whatsoever. The tap shivers, drips once, and keeps every point that was waiting for whenever you next come back to it, and what is waiting survives you switching tabs or closing the app entirely, because it is worked out afresh from the server's own count of your day rather than being tallied up inside the window. Your XP was recorded the moment you earned it, and the pour is how you get to watch it arrive rather than the thing that makes it count.</p>
+
+      <div class="info-box">
+        <h5>Where the tap is, and where it is not</h5>
+        <p>The jar, the cap and the banking rule are identical on every platform. The desktop app and the phone app both hand you the tap to press and hold, with the same budget and the same shiver if you release early, and the phone carries a small badge on its other screens so you can see what is piling up while you are elsewhere. The web app has no pour to perform: its faucet swings across on its own whenever you have earned enough to be worth watching, which is why the help bubble on it says in as many words that the vat is a readout and not a ledger.</p>
+      </div>
+
+      <h3 id="cap">The Cap</h3>
+
+      <p>The jar is today, and only today. Its capacity is not a flat number for everybody, because a fixed daily target would be punishing on your first evening and meaningless by level 100. The server sets the cap and it scales with your level, so the ask stays roughly proportionate to where you already are, and nobody ever reaches a point where the day fills itself by accident.</p>
+
+      <div class="info-box">
+        <h5>The cap is the server's to set</h5>
+        <p>Neither the app nor the website works the number out for itself. Both are told what today's cap is and draw the jar to match, which is how the pacing gets tuned without anyone having to update. The jar in front of you always has the current number on it, so treat that as the truth rather than any figure written down here.</p>
+      </div>
+
+      <h3 id="banking">Banking the Day</h3>
+
+      <p>You do not have to fill the jar. The day banks the moment the jar passes <strong>one fifth</strong> of its cap, so twenty percent is the whole requirement and everything above that line is momentum rather than obligation.</p>
+
+      <div class="code-block">
+        <pre>the day is banked once  jar &gt; 20% of today's cap</pre>
+      </div>
+
+      <p>A fifth of a day's measure is a short sitting of almost anything, which is the point. As the app itself puts it, banked days are the only thing that moves you down the Spiral, and a day counts once, so a quiet evening that just clears the line is worth exactly as much to your descent as a five-hour session. The heavy day still pays you in XP and levels, it simply does not buy you two rungs.</p>
+
+      <div class="info-box success">
+        <h5>This is the reassuring part</h5>
+        <p>There is no way to fall behind by having a normal week. Somebody who does the bare minimum every evening will out-descend somebody who does nothing for six days and then goes all night, and that is by design.</p>
+      </div>
+
+      <h3 id="overfill">Overfill</h3>
+
+      <p>The jar takes a little more than it holds, so a long night is not wasted the moment the level reaches the brim, and how much more depends on how far down you already are:</p>
+
+      <table class="settings-table">
+        <thead>
+          <tr>
+            <th>From</th>
+            <th>The jar holds</th>
+            <th>Which is</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>The start</td>
+            <td>120% of the cap</td>
+            <td>A fifth over</td>
+          </tr>
+          <tr>
+            <td>Deep Water</td>
+            <td>125% of the cap</td>
+            <td>A quarter over</td>
+          </tr>
+          <tr>
+            <td>Crush Depth</td>
+            <td>130% of the cap</td>
+            <td>Not quite a third over</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>The overfill is a visual reward more than a mechanical one, because the day has already banked long before you get near the brim. It is there so the jar keeps responding when you are deep in something and do not want the interface to stop acknowledging you.</p>
+
+      <h3 id="rollover">Midnight</h3>
+
+      <p>The jar empties at <strong>midnight UTC</strong>, whatever your local clock says, and it starts the next day at zero. The XP does not go anywhere when that happens, because the jar was never holding it in the first place. Think of the jar as a picture of today rather than a bank: your XP, your level, your sparkle points and your banked-day count all carry on untouched, and the only thing that resets is the drawing.</p>
+
+      <div class="info-box warning">
+        <h5>UTC, not your timezone</h5>
+        <p>If you are well west of Greenwich the jar will turn over during your evening, and if you are well east it turns over in the small hours. Worth knowing if you tend to play right up against the boundary, though since the day banks at a fifth of the cap you would have to be cutting it extremely fine for it to matter.</p>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- STAGES                                      -->
+    <!-- ═══════════════════════════════════════════ -->
+    <section id="stages">
+      <h2>The Seven Stages</h2>
+
+      <p>Stages are keyed on banked days and nothing else, so no amount of XP, no level and no purchase moves you along this ladder. Before your first banked day you are at <strong>The Edge</strong>, which is the app's way of saying you are standing at the rim and nothing has been banked yet. After that:</p>
+
+      <div class="level-timeline">
+        <div class="level-item">
+          <div class="level-badge">I</div>
+          <div class="level-content">
+            <h5>Shallows &middot; day 1</h5>
+            <p>One day is in the water. It barely covers your feet.</p>
+          </div>
+        </div>
+
+        <div class="level-item">
+          <div class="level-badge">II</div>
+          <div class="level-content">
+            <h5>Undertow &middot; day 7</h5>
+            <p>Something under the surface has started to pull.</p>
+          </div>
+        </div>
+
+        <div class="level-item">
+          <div class="level-badge">III</div>
+          <div class="level-content">
+            <h5>Downward &middot; day 21</h5>
+            <p>You stopped kicking for the top. The descent does the work now.</p>
+          </div>
+        </div>
+
+        <div class="level-item">
+          <div class="level-badge">IV</div>
+          <div class="level-content">
+            <h5>Deep Water &middot; day 50</h5>
+            <p>The surface is a rumour above you. It stopped mattering.</p>
+          </div>
+        </div>
+
+        <div class="level-item">
+          <div class="level-badge">V</div>
+          <div class="level-content">
+            <h5>Lightless &middot; day 100</h5>
+            <p>Nothing from above reaches this far. You navigate by habit.</p>
+          </div>
+        </div>
+
+        <div class="level-item">
+          <div class="level-badge">VI</div>
+          <div class="level-content">
+            <h5>Crush Depth &middot; day 180</h5>
+            <p>This is the depth that would have ended you at the start, and you like the weight.</p>
+          </div>
+        </div>
+
+        <div class="level-item">
+          <div class="level-badge">VII</div>
+          <div class="level-content">
+            <h5>Bedrock &middot; day 300</h5>
+            <p>There is nothing below you now, and the spiral keeps turning anyway.</p>
+          </div>
+        </div>
+      </div>
+
+      <p>Two of those rungs do something beyond the name: Deep Water widens the jar's <a href="#overfill">overfill</a> from 120% to 125%, and Crush Depth widens it again to 130%. The rest of what a stage changes is atmosphere, because each one pulls the palette a little further down, darkening the fog and the unlit parts of the spiral map while leaving anything you actually have to read alone. By Bedrock the app is a noticeably deeper room than the one you installed.</p>
+
+      <div class="info-box">
+        <h5>The names are the same whichever mod you run</h5>
+        <p>Bambi Sleep, Circe's Lock and Drone Mode all get the same seven titles, because they are depth imagery rather than anything belonging to one flavour. The colours underneath shift with your mod, so drone's mint stays mint and bambi's magenta stays magenta, they just sink.</p>
+      </div>
+
+      <div class="info-box warning">
+        <h5>The ladder can be tuned</h5>
+        <p>The seven thresholds above are the shipped ones, and the app draws its map from whatever table the server states so an event or an experiment can move a rung. If the numbers on your spiral map disagree with this page, your map is right and this page is describing the default.</p>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- TIME AWAY                                   -->
+    <!-- ═══════════════════════════════════════════ -->
+    <section id="time-away">
+      <h2>Time Away</h2>
+
+      <p>Life happens, and the Descent is built on the assumption that it will. Missing days costs you nothing at all, and coming back is made easier rather than harder:</p>
+
+      <ul>
+        <li><strong>Your fill rate rises while you're away.</strong> Every day you miss adds <strong>4%</strong> to the rate at which XP fills the jar, and it keeps climbing toward a ceiling of <strong>double</strong>, which it reaches once you've been away twenty-five days.</li>
+        <li><strong>You collect that raised rate over your first three days back.</strong> It's the one bonus your time away earned rather than a second one stacked on top of it, and it runs for the <strong>first three days</strong> you return before settling back to normal, so the week you come back is the easiest week you'll have.</li>
+        <li><strong>Your banked days sit where you left them.</strong> They don't decay, they don't expire, and there's no streak to break.</li>
+      </ul>
+
+      <div class="info-box success">
+        <h5>Absence is not failure</h5>
+        <p>Nothing in the app scolds you for a gap and nothing is subtracted for one. A break is just a stretch of time in which the water got a little easier to sink into, and if you were away for months you'll find the way down quicker than you left it.</p>
+      </div>
+
+      <div class="info-box">
+        <h5>What it's called on screen</h5>
+        <p>The app labels the raised fill rate a <strong>relapse bonus</strong>, which is a piece of house vocabulary for the bonus itself rather than a comment on you. If you come back to find it sitting on your jar, that's the app being pleased to see you.</p>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- THE MONTHLY LEADERBOARD                     -->
+    <!-- ═══════════════════════════════════════════ -->
+    <section id="monthly-board">
+      <h2>The Monthly Leaderboard</h2>
+
+      <p>The competitive side of the app is a <strong>monthly leaderboard</strong>, and it's the one thing in the app that still turns over on the first of the month. It ranks people on the XP they gained during that month, so the table is always a picture of the month it's named after rather than a record of who installed earliest, and rotating it is what keeps a new arrival able to place on it.</p>
+
+      <p>What changed is what the rotation costs you, which is now nothing. The board scores you, it doesn't own you, so when it rotates the old standings are archived and a fresh table opens while your level, your XP, your skill tree, your sparkle points, your streaks and your banked days all carry straight through as though nothing happened, because as far as they are concerned nothing did. The app puts it plainly when the turn comes round: the monthly leaderboard has rotated, which it does at the start of every month so everyone gets a fresh run at the rankings. The full rules for the table are in <a href="https://cclabs.app/guide-leaderboard.html">leaderboard.htm</a>.</p>
+
+      <table class="settings-table">
+        <thead>
+          <tr>
+            <th>At the turn of the month</th>
+            <th>Before the Descent</th>
+            <th>Now</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>The standings table</td>
+            <td>Archived, new one opens</td>
+            <td>Archived, new one opens</td>
+          </tr>
+          <tr>
+            <td>Ranked on</td>
+            <td>XP earned that month</td>
+            <td>XP gained during the month</td>
+          </tr>
+          <tr>
+            <td>Your level and XP</td>
+            <td>Back to level 1</td>
+            <td>Carry forward</td>
+          </tr>
+          <tr>
+            <td>Your skill tree</td>
+            <td>XP skills refunded and re-bought</td>
+            <td>Carry forward</td>
+          </tr>
+          <tr>
+            <td>Your streaks</td>
+            <td>Back to zero</td>
+            <td>Carry forward</td>
+          </tr>
+          <tr>
+            <td>Your banked days and stage</td>
+            <td>Did not exist</td>
+            <td>Carry forward</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="info-box">
+        <h5>Quests ride along with it</h5>
+        <p>The server can put a quest into the pool for a stretch of the month and take it out again, which is the only sense in which a quest is tied to the calendar now. Your quest streak and your history are not part of the rotation. See <a href="guide-quests.html">quests.log</a>.</p>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- NOTHING RESETS                              -->
+    <!-- ═══════════════════════════════════════════ -->
+    <section id="nothing-resets">
+      <h2>Nothing Resets</h2>
+
+      <p>For a long time this app ran a monthly wipe, and the manual said so in several places, but that's finished and there are no more wipes coming. The server suppresses the wipe permanently, and the promise made when the Descent shipped was the plain one: nothing was wiped, and nothing will be.</p>
+
+      <p>Your level, your XP, your streak and everything you have unlocked carry forward, and they will keep doing that from here on. Spelled out:</p>
+
+      <ul>
+        <li><strong>Your level and XP.</strong> They only go up. There is no monthly return to level 1 and there is no all-time view you have to go and find to see your real number, because the number on your profile is the real number.</li>
+        <li><strong>Your skill tree.</strong> Every node you have bought stays bought, including the whole XP economy that used to be refunded and re-purchased every month. Sparkle points are yours to spend once.</li>
+        <li><strong>Your streaks.</strong> Login streak and quest streak both survive the turn of the month.</li>
+        <li><strong>Your banked days and your stage.</strong> The Descent has no reverse gear at all.</li>
+        <li><strong>Your achievements and your account.</strong> As they always were.</li>
+      </ul>
+
+      <div class="info-box success">
+        <h5>The one thing that still turns over</h5>
+        <p>The <a href="#monthly-board">monthly leaderboard</a> table, and only the table. A fresh set of standings opens so that this month's climb is comparable with everyone else's this month, and the previous table is archived rather than deleted. Your account is not part of what turns over.</p>
+      </div>
+
+      <div class="info-box">
+        <h5>The jar is the exception that proves it</h5>
+        <p>The daily jar does empty every night, and it is the only thing in the app that does. It is a gauge showing what today has looked like so far, and emptying it is how a gauge shows you a new day. Nothing is deducted when it happens.</p>
+      </div>
+    </section>
+
+    <nav class="guide-nav" aria-label="Document navigation">
+      <a href="guide-progression.html" class="prev">
+        <span class="nav-label">Previous</span>
+        <span class="nav-title">progression.log</span>
+      </a>
+      <a href="guide-quests.html" class="next">
+        <span class="nav-label">Next</span>
+        <span class="nav-title">quests.log</span>
+      </a>
+    </nav>
+
+  </article>
+</main>
+
+<footer>
+  <div class="wrap taskbar">
+    <a class="btn88" href="./">guide_index</a>
+    <a href="https://cclabs.app">cclabs.app</a>
+    <a href="https://cclabs.app/subscribe.html">plans</a>
+    <a href="#" id="cc-footer-link">cookie preferences</a>
+    <span class="right">local time: <span id="clock">--:--:--</span>. session: annotated.</span>
+  </div>
+  <div class="wrap legal">Community documentation for the open-source Conditioning Control Panel project. Not the CC Labs S.r.l.s. storefront. Downloads and <a href="https://cclabs.app/subscribe.html">plans</a> live at <a href="https://cclabs.app">cclabs.app</a>.</div>
+</footer>
+
+<script>
+// taskbar clock, same contract as the hub
+(function () {
+  'use strict';
+  var clock = document.getElementById('clock');
+  if (!clock) return;
+  function p(n) { return (n < 10 ? '0' : '') + n; }
+  function tick() {
+    var d = new Date();
+    clock.textContent = p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
+
+<script src="assets/cookie-consent.js" defer></script>
+</body>
+</html>
