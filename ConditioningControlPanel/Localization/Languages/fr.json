@@ -5363,5 +5363,15 @@
   "br_custom_mint": "Candy Mint",
   "br_custom_spot1": "Socle 1",
   "br_custom_spot2": "Socle 2",
-  "br_custom_spot3": "Socle 3"
+  "br_custom_spot3": "Socle 3",
+  "br_custom_screens4": "4 écrans supplémentaires",
+  "br_custom_screens6": "6 écrans supplémentaires",
+  "br_custom_mega": "Écran au plafond",
+  "br_custom_all_items": "Tous les objets",
+  "br_custom_choose_item": "Choisir un objet",
+  "br_custom_on": "Activer",
+  "br_custom_off": "Désactiver",
+  "br_custom_lever": "Levier",
+  "br_custom_use": "Utiliser",
+  "br_custom_remove": "Retirer"
 }

@@ -20,7 +20,6 @@ export const WALLS = Object.freeze({ x: 6.65, z: 7.55 });
 export const BLOCKERS = Object.freeze([
   Object.freeze({ min: [6.45, 5.62], max: [7.95, 7.72] }), // customization cabinet
   Object.freeze({ min: [2.6, 6.65], max: [6.1, 7.75] }), // three sculpture spots
-  Object.freeze({ min: [1.35, 6.65], max: [2.55, 7.75] }), // planter spot
   Object.freeze({ min: [-3.24, -7.44], max: [3.24, -4.06] }),   // prize counter platform
   Object.freeze({ min: [-6.54, -3.94], max: [-4.46, -0.06] }),  // wheel plinth
 ]);

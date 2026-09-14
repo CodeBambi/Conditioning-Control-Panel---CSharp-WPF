@@ -5354,5 +5354,15 @@
   "br_custom_mint": "Candy Mint",
   "br_custom_spot1": "台座 1",
   "br_custom_spot2": "台座 2",
-  "br_custom_spot3": "台座 3"
+  "br_custom_spot3": "台座 3",
+  "br_custom_screens4": "追加画面4台",
+  "br_custom_screens6": "追加画面6台",
+  "br_custom_mega": "天井スクリーン",
+  "br_custom_all_items": "すべてのアイテム",
+  "br_custom_choose_item": "アイテムを選択",
+  "br_custom_on": "オン",
+  "br_custom_off": "オフ",
+  "br_custom_lever": "スロットレバー",
+  "br_custom_use": "使用",
+  "br_custom_remove": "取り外す"
 }

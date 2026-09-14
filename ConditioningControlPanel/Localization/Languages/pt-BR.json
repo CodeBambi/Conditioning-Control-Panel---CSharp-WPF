@@ -5362,5 +5362,15 @@
   "br_custom_mint": "Candy Mint",
   "br_custom_spot1": "Pedestal 1",
   "br_custom_spot2": "Pedestal 2",
-  "br_custom_spot3": "Pedestal 3"
+  "br_custom_spot3": "Pedestal 3",
+  "br_custom_screens4": "4 telas extras",
+  "br_custom_screens6": "6 telas extras",
+  "br_custom_mega": "Tela do teto",
+  "br_custom_all_items": "Todos os itens",
+  "br_custom_choose_item": "Escolha um item",
+  "br_custom_on": "Ativar",
+  "br_custom_off": "Desativar",
+  "br_custom_lever": "Alavanca",
+  "br_custom_use": "Usar",
+  "br_custom_remove": "Remover"
 }

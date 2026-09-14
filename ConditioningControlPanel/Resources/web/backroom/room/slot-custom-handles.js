@@ -19,25 +19,57 @@ function sculpture(model, kind) {
   return group;
 }
 
-/** Attach at the head socket, retaining quantized mesh transforms and lever pivots. */
+/** Replace the moving wand, with the sculpture base on the cabinet's real axle. */
 function socket(rig) {
-  const head = rig.getObjectByName('wand_head');
-  if (!head) throw new Error('Slot has no wand_head socket');
+  const lever = rig.getObjectByName('lever'), assembly = rig.getObjectByName('wand_assembly');
+  if (!lever || !assembly) return roomSocket(rig);
   rig.updateMatrixWorld(true);
-  const orientation = head.getWorldQuaternion(new T.Quaternion());
-  const frame = new T.Matrix4().makeRotationFromQuaternion(orientation);
-  const inverse = frame.clone().invert(), bounds = new T.Box3(), point = new T.Vector3();
-  head.geometry.computeBoundingBox();
-  const b = head.geometry.boundingBox;
-  for (const x of [b.min.x,b.max.x]) for(const y of [b.min.y,b.max.y]) for(const z of [b.min.z,b.max.z])
-    bounds.expandByPoint(point.set(x,y,z).applyMatrix4(head.matrixWorld).applyMatrix4(inverse));
-  const size = bounds.getSize(new T.Vector3());
-  const base = new T.Vector3((bounds.min.x+bounds.max.x)/2,bounds.min.y+size.y*.08,(bounds.min.z+bounds.max.z)/2).applyMatrix4(frame);
+  const orientation = assembly.getWorldQuaternion(new T.Quaternion());
+  const base = lever.getWorldPosition(new T.Vector3());
+  const frame = new T.Matrix4().compose(base,orientation,new T.Vector3(1,1,1));
+  const inverse = frame.clone().invert(), bounds = new T.Box3(), point = new T.Vector3(), originals = [];
+  assembly.traverse(node => {
+    if (!node.isMesh) return;
+    originals.push([node,node.visible]);
+    node.geometry.computeBoundingBox();
+    const b = node.geometry.boundingBox;
+    for (const x of [b.min.x,b.max.x]) for(const y of [b.min.y,b.max.y]) for(const z of [b.min.z,b.max.z])
+      bounds.expandByPoint(point.set(x,y,z).applyMatrix4(node.matrixWorld).applyMatrix4(inverse));
+  });
   const mount = new T.Group(); mount.name = 'chess_handle_socket';
-  mount.matrix.copy(head.parent.matrixWorld).invert().multiply(new T.Matrix4().compose(base,orientation,new T.Vector3(1,1,1)));
-  mount.matrix.decompose(mount.position,mount.quaternion,mount.scale); head.parent.add(mount);
-  const originals = ['wand_head','wand_switch'].map(name => rig.getObjectByName(name)).filter(Boolean).map(node=>[node,node.visible]);
-  return { mount, originals, height: size.y * 1.5 };
+  mount.matrix.copy(lever.matrixWorld).invert().multiply(frame);
+  mount.matrix.decompose(mount.position,mount.quaternion,mount.scale); lever.add(mount);
+  return { mount, originals, height: bounds.max.y };
+}
+
+// The room optimizer merged wand materials with cabinet parts. Mask only the
+// protruding wand triangles in a private geometry, leaving the axle boss intact.
+function roomSocket(rig) {
+  const head=rig.getObjectByName('wand_head');
+  if(!head) throw new Error('Slot has no wand');
+  const parent=head.parent; rig.updateMatrixWorld(true);
+  const frame=new T.Matrix4().compose(new T.Vector3(.65,.73,.12),new T.Quaternion().setFromEuler(new T.Euler(Math.PI/10,0,0)),new T.Vector3(1,1,1));
+  const inverse=frame.clone().invert(), restored=[];
+  const headBounds=new T.Box3(),headPoint=new T.Vector3(),headTransform=inverse.clone().multiply(parent.matrixWorld.clone().invert()).multiply(head.matrixWorld);
+  const headPositions=head.geometry.getAttribute('position');
+  for(let i=0;i<headPositions.count;i++)headBounds.expandByPoint(headPoint.fromBufferAttribute(headPositions,i).applyMatrix4(headTransform));
+  parent.traverse(node=>{
+    if(!node.isMesh)return;
+    const geometry=node.geometry, position=geometry.getAttribute('position'), index=geometry.index;
+    if(!position || !index)return;
+    const transform=inverse.clone().multiply(parent.matrixWorld.clone().invert()).multiply(node.matrixWorld);
+    const keep=[],point=new T.Vector3(),center=new T.Vector3(); let removed=0;
+    for(let i=0;i<index.count;i+=3){
+      center.set(0,0,0);
+      for(let j=0;j<3;j++)center.add(point.fromBufferAttribute(position,index.getX(i+j)).applyMatrix4(transform));
+      center.multiplyScalar(1/3);
+      if(Math.abs(center.x)<.068 && center.y>.078 && center.y<.57 && Math.abs(center.z)<.08){removed++;continue;}
+      keep.push(index.getX(i),index.getX(i+1),index.getX(i+2));
+    }
+    if(removed){const copy=geometry.clone();copy.setIndex(keep);node.geometry=copy;restored.push(()=>{node.geometry=geometry;copy.dispose();});}
+  });
+  const mount=new T.Group();mount.name='chess_handle_socket';frame.decompose(mount.position,mount.quaternion,mount.scale);parent.add(mount);
+  return {mount,originals:[],height:headBounds.max.y,restore(){restored.forEach(fn=>fn());}};
 }
 
 export async function attachSlotCustomHandle({rig,loader,base,style}) {
@@ -49,13 +81,9 @@ export async function attachSlotCustomHandle({rig,loader,base,style}) {
   const wrapper = new T.Group(); wrapper.scale.setScalar(factor);
   handle.position.set(-(box.min.x+box.max.x)/2,-box.min.y,-(box.min.z+box.max.z)/2);
   wrapper.add(handle); slot.mount.add(wrapper);
-  const ferrule = new T.Mesh(new T.CylinderGeometry(slot.height*.105,slot.height*.085,slot.height*.19,24),
-    new T.MeshStandardMaterial({color:0xc49354,metalness:.65,roughness:.28}));
-  ferrule.name='chess_handle_ferrule';ferrule.position.y=-slot.height*.045;slot.mount.add(ferrule);
   slot.originals.forEach(([node])=>node.visible=false);
-  return {dispose(){slot.originals.forEach(([node,visible])=>node.visible=visible);slot.mount.removeFromParent();
+  return {dispose(){slot.originals.forEach(([node,visible])=>node.visible=visible);slot.mount.removeFromParent();slot.restore?.();
     const geometries=new Set(),materials=new Set();model.traverse(n=>{if(n.geometry)geometries.add(n.geometry);[].concat(n.material||[]).forEach(m=>materials.add(m));});
-    ferrule.geometry.dispose();ferrule.material.dispose();
     geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}};
 }
 

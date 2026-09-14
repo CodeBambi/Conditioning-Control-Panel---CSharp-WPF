@@ -186,23 +186,28 @@ export async function createScene(o) {
     room.update(dt, ambient, still);
     decor.update(dt, still);
     customization.update(dt, still);
+    const fullWidth=Math.max(1,o.mount.clientWidth||window.innerWidth);
+    const height=Math.max(1,o.mount.clientHeight||window.innerHeight);
+    const previewWidth=customization.opened?Math.floor(fullWidth*2/3):fullWidth;
+    camera.aspect=previewWidth/height;camera.updateProjectionMatrix();
     if(catalogueView&&customization.opened){
       const target=new T.Vector3(...catalogueView.look);
-      camera.position.fromArray(catalogueView.position);camera.lookAt(target);
-      const phone=window.innerWidth<=650;
-      let distance=camera.position.distanceTo(target);
-      if(phone&&catalogueView.width){
-        const fit=Math.max(distance,catalogueView.width/(2*Math.tan(camera.fov*Math.PI/360)*camera.aspect)*1.18,catalogueView.height*2.2);
-        camera.position.sub(target).normalize().multiplyScalar(fit).add(target);distance=fit;
+      camera.position.fromArray(catalogueView.position);
+      if(catalogueView.width){
+        const distance=camera.position.distanceTo(target);
+        const fit=Math.max(distance,catalogueView.width/(2*Math.tan(camera.fov*Math.PI/360)*camera.aspect)*1.15,catalogueView.height*1.6);
+        camera.position.sub(target).normalize().multiplyScalar(fit).add(target);
       }
-      // Centre the item in the area left visible by the catalogue.
-      const shift=new T.Vector3(phone?0:1,phone?-1:0,0).applyQuaternion(camera.quaternion).multiplyScalar(distance*(phone?.33:.28));
-      camera.position.add(shift);camera.lookAt(target.add(shift));
+      camera.lookAt(target);
     }
     camera.updateMatrixWorld();
     interaction.update(dt, still);
     screens.update(ambient, overview ? null : camera, still);
+    renderer.setViewport(0,0,previewWidth,height);
+    renderer.setScissor(0,0,previewWidth,height);
+    renderer.setScissorTest(customization.opened);
     renderer.render(scene, camera);
+    renderer.setScissorTest(false);
   }
 
   function run() {
