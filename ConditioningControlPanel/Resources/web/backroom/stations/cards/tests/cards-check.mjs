@@ -8,7 +8,8 @@
  * mocks answer every call. The only process this stops is the Chrome it started, by its own handle.
  * Evidence: a screenshot of every key moment in CONTRACT 10.13.F (sit fan, Loom backs, your deck, a decision held,
  * win flash, win tunnel and chip vortex, losing edges, ace glow and blackjack bloom, ripple felt at Full, split),
- * a gated-off run, a Calm run, a resume, the sit latch, a settled reopen, the room visit, and cards-check.json.
+ * a gated-off run, a Calm run, an OS reduced-motion bloom hold, a resume, the sit latch, a settled reopen, the room visit,
+ * and cards-check.json.
  * CHROME: CHROME_PATH, else the usual Windows install.
  * ==========================================================================*/
 
@@ -338,6 +339,27 @@ await moment('cards.lose');
 await sleep(1200);
 await shot('calm-losing-edges.png');
 ok(Math.max(...(await levels())) > 0.6, 'Calm: the tunnel breath is posted at Normal levels');
+
+/* ---------------------------------------------------------------- 7b. OS reduced motion alone, app Motion Full */
+// The host is never told about prefers-reduced-motion, so its bloom picture runs the full 4 s: the deal hold must too.
+await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+await boot('?floor=600&script=As.9d.Kh.7c,Th.Td.7c.9s');
+d = await dbg();
+ok(d.dress.still && d.dress.k === 0.5, `OS reduced motion: the table is still at page strength ${d.dress.k}`);
+await ev('window.dev.host.clear()');
+await dealWhenReady();
+await moment('cards.bloom');
+const bloomAt = await ev("window.dev.station.debug().log.filter((x) => x.what === 'moment' && x.id === 'cards.bloom').at(-1).at");
+fx = await fxList();
+d = await dbg();
+ok(fx[0] && fx[0].fxId === 'fx.gif_from' && fx[0].args.ms === 4000 && !d.controls.deal && d.screenLeftMs > 3000,
+  `OS reduced motion: the host plays the bloom picture 4 s and Deal is held for all of it (${d.screenLeftMs} ms left)`);
+await shot('reduced-os-bloom-deal-held.png');
+await until('window.dev.station.debug().controls.deal', 8000);
+const reducedHeld = await ev(`Math.round(performance.now()) - ${bloomAt}`);
+ok(reducedHeld >= 3950, `OS reduced motion: Deal comes back only once the 4 s picture has gone (${reducedHeld} ms after the bloom)`);
+summary.reducedOsBloomHoldMs = reducedHeld;
+await cdp('Emulation.setEmulatedMedia', { features: [] });
 
 /* ---------------------------------------------------------------- 8. live settings */
 await boot('?floor=600&script=Th.9d.8c.8s');

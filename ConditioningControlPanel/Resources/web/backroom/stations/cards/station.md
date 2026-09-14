@@ -51,9 +51,11 @@ Shared code comes only through the hypno kit (`shared/hypno/index.js`): `createL
 - **Deal floor.** Deal waits out `floorMs` locally after a deal. The server's floor is the authority (`too_fast`).
 - **Nothing fullscreen over a new decision (2026-09-14).** A moment that put something fullscreen holds the next deal
   until it has ended (`hand.controls` reason `screen`, `feel.screenHoldMs`): the bloom's picture (4 s, 2.4 s Calm),
-  the win wash (900 ms), the losing edges (2600 ms breath plus its closing post). Deal is disabled and reads
-  `br_cards_moment` ("One moment"). A gate that sent nothing holds nothing; `suspend(true)` cancels the moments and
-  the hold with them.
+  the win wash (900 ms), the losing edges (2600 ms breath plus its closing post). The bloom's 2.4 s follows the host's
+  Calm (`reduced` or `intensity: calm`) only, never the OS `prefers-reduced-motion` alone, which the host is not told.
+  Deal is disabled and reads `br_cards_moment` ("One moment"); a press during the hold is dropped, not queued. A gate
+  that sent nothing holds nothing; `suspend(true)` cancels the moments and the hold with them (the host's suspend
+  stops its overlays).
 
 ## Effects (10.13.F)
 

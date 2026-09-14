@@ -184,10 +184,12 @@ export async function mount(ctx) {
       default: break;
     }
   }
-  /** A moment that put something fullscreen holds the next deal until it has ended (hand.controls 'screen'). */
+  /** A moment that put something fullscreen holds the next deal until it has ended (hand.controls 'screen'). The
+   *  bloom's picture is timed by the host, which shortens it only under its own Calm (ctx.reduced or intensity calm):
+   *  the OS prefers-reduced-motion alone never reaches the host, so it must not shorten the hold either. */
   function holdScreenFor(id, out, now) {
-    const d = dress();
-    const ms = out.held ? 0 : screenHoldMs(id, { fired: out.tokens.length, tunnel: d.gates.tunnel && typeof ctx.fxTunnel === 'function', still: d.still });
+    const d = dress(), hostCalm = !!ctx.reduced || String(ctx.intensity || 'normal').toLowerCase() === 'calm';
+    const ms = out.held ? 0 : screenHoldMs(id, { fired: out.tokens.length, tunnel: d.gates.tunnel && typeof ctx.fxTunnel === 'function', still: hostCalm });
     if (ms > 0) screenUntil = Math.max(screenUntil, now + ms);
   }
   /** Suspend: every step still owed goes down now, quietly (no moments). */
@@ -445,7 +447,7 @@ export async function mount(ctx) {
       if (suspended) {
         flush();
         moments.cancel();
-        screenUntil = 0;   // the moments are cancelled: nothing fullscreen is left running
+        screenUntil = 0;   // the moments are cancelled, and the host's own suspend stops every overlay (gif_from too)
         if (raf) cancelAnimationFrame(raf);
         raf = 0;
         kit.dispose(); kit = createLoomKit({ still: dress().still, log: say });   // the GL context goes; a new one is made on the next draw
