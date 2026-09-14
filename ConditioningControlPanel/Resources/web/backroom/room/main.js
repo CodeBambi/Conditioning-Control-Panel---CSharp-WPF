@@ -31,8 +31,15 @@ const ADS = [
   { file: 'focus-gaze', key: 'br_ad_focus_gaze', fallback: 'Focus Gaze' },
 ];
 
-const state = { sp: 0, reduced: false, motion: 'full', intensity: 'normal', lex: {}, open: null, suspended: false, userStill: false };
+/** CONTRACT 10.13.A: the host's hypno toggles. A missing frame or key reads as on (the host is the enforcer). */
+const readGates = (g) => {
+  const q = g && typeof g === 'object' ? g : {};
+  return Object.freeze({ flash: q.flash !== false, subliminal: q.subliminal !== false, spiral: q.spiral !== false, brainDrain: q.brainDrain !== false });
+};
+
+const state = { sp: 0, reduced: false, motion: 'full', intensity: 'normal', gates: readGates(null), lex: {}, open: null, suspended: false, userStill: false };
 const spListeners = new Set();
+const settingsListeners = new Set();
 let scene = null, loader = null, hud = null, leaving = false, visiting = false;
 
 const $ = (sel) => document.querySelector(sel);
@@ -216,6 +223,7 @@ async function start(init) {
     reduced: !!init.reduced,
     motion: String(init.motion || 'full'),
     intensity: String(init.intensity || 'normal'),
+    gates: readGates(init.gates),
     lex: (init.lex && typeof init.lex === 'object') ? init.lex : {},
     open: typeof init.open === 'boolean' ? init.open : null,
   });
@@ -227,8 +235,11 @@ async function start(init) {
     state.motion = String(m.motion || state.motion);
     state.intensity = String(m.intensity || state.intensity);
     state.reduced = !!m.reduced;
+    if (m.gates && typeof m.gates === 'object') state.gates = readGates(m.gates);
     paintChrome();
     paintMotion();
+    const frame = { motion: state.motion, intensity: state.intensity, reduced: state.reduced, gates: state.gates };
+    for (const fn of Array.from(settingsListeners)) { try { fn(frame); } catch (e) { bridge.log('warn', 'onSettings threw: ' + e); } }
   });
   bridge.on('suspend', (m) => {
     state.suspended = !!m.on;
@@ -254,6 +265,7 @@ async function start(init) {
     state,
     lex,
     onSp: (fn) => { spListeners.add(fn); return () => spListeners.delete(fn); },
+    onSettings: (fn) => { settingsListeners.add(fn); return () => settingsListeners.delete(fn); },
     spReadout,
     spChanged,
     chipSettle,
