@@ -28,7 +28,7 @@ test('a scripted deal opens a hand, a stand settles it against the dealer', asyn
   assert.equal(st.returned, 4); assert.equal(st.sp, 42); assert.equal(owedFor(st), 4);
   t += 1000;
   const fast = await post(m, 'deal', { stake: 1 });
-  assert.equal(classify({ ok: true, body: fast }).kind, 'wait'); assert.equal(fast.retryInMs, 7000);
+  assert.equal(classify({ ok: true, body: fast }).kind, 'wait'); assert.equal(fast.retryInMs, 4000);
 });
 
 test('blackjack on the deal settles at once and pays 2:1', async () => {

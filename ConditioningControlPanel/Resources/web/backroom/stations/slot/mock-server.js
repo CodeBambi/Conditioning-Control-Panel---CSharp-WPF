@@ -12,14 +12,14 @@ const STRIPS = [
 ];
 
 const LINES = [
-  { id: 'emi3', pays: 400, odds: '1 in 12,987', weight: 77, fx: ['fx.jackpot'] },   // table v5 (10.1), 77 per million
-  { id: 'gif3same', pays: 40, odds: '1 in 150', fx: ['fx.gif_storm'] },
-  { id: 'sub3', pays: 15, odds: '1 in 120', fx: ['fx.sub_cascade'] },
-  { id: 'spiral3', pays: 10, odds: '1 in 120', fx: ['fx.spiral_full'], free: 3 },
+  { id: 'emi3', pays: 400, odds: '1 in 6,494', weight: 154, fx: ['fx.jackpot'] },   // table v6 (10.14), 154 per million
+  { id: 'gif3same', pays: 40, odds: '1 in 144', fx: ['fx.gif_storm'] },
+  { id: 'sub3', pays: 15, odds: '1 in 115', fx: ['fx.sub_cascade'] },
+  { id: 'spiral3', pays: 10, odds: '1 in 115', fx: ['fx.spiral_full'], free: 3 },
   { id: 'gif3', pays: 3, odds: '1 in 12', fx: ['fx.gif_burst'] },
-  { id: 'sub2', pays: 2, odds: '1 in 15', fx: ['fx.sub_pair'] },
-  { id: 'spiral2', pays: 1, odds: '1 in 15', fx: ['fx.spiral_brief'], respin: 1 },
-  { id: 'melt', pays: 0, odds: '1 in 20', fx: ['fx.melt'] },
+  { id: 'sub2', pays: 2, odds: '1 in 14', fx: ['fx.sub_pair'] },
+  { id: 'spiral2', pays: 1, odds: '1 in 14', fx: ['fx.spiral_brief'], respin: 1 },
+  { id: 'melt', pays: 0, odds: '1 in 17', fx: ['fx.melt'] },
 ];
 
 const kindOf = s => (s.startsWith('gif') ? 'gif' : s.startsWith('sub') ? 'sub' : s.startsWith('spiral') ? 'spiral' : s);
@@ -57,7 +57,7 @@ export function createMockServer({ sp = 57, melt = 0, seed = 9013, floorMs = 300
   const script = [];          // forced symbol rows for the next draws, e.g. ['emi','emi','emi']
   const log = [];
 
-  const table = () => ({ v: 5, stake: 1, freezeCost: 1, jackpot: JACK.pays, rtp: 1.02, rtpFrozen: 1.02,
+  const table = () => ({ v: 6, stake: 1, freezeCost: 1, jackpot: JACK.pays, rtp: 1.02, rtpFrozen: 1.02,
                          lines: LINES.map(({ id, pays, odds }) => ({ id, pays, odds })) });
 
   function drawRow(held) {

@@ -35,7 +35,7 @@ test('readState defaults a bare body to an empty table on stakes 1 and 2', () =>
   assert.deepEqual(s.legal, ['hit', 'stand']);
   assert.equal(s.hint, 'stand'); assert.equal(s.hand.id, 'h_1_x');
   const e = readState({});
-  assert.equal(e.hand, null); assert.deepEqual(e.rules.stakes, [1, 2]); assert.equal(e.floorMs, 8000);
+  assert.equal(e.hand, null); assert.deepEqual(e.rules.stakes, [1, 2]); assert.equal(e.floorMs, 5000);
   assert.deepEqual(legalOf('hit'), []);
 });
 

@@ -84,7 +84,7 @@ export function readState(body) {
     hint: MOVES.includes(b.hint) ? b.hint : null,
     autoStandAt: typeof b.autoStandAt === 'string' ? b.autoStandAt : null,
     rules: { ...rules, stakes: stakes.length ? stakes : [1, 2] },
-    floorMs: Math.max(0, int(b.floorMs, 8000)),
+    floorMs: Math.max(0, int(b.floorMs, 5000)),
   };
 }
 
