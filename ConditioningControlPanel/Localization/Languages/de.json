@@ -4727,6 +4727,7 @@
   "ee_window_title": "Notausgang",
   "lockdown_ee_button": "NOTAUSGANG",
   "lockdown_ee_sub": "drück ihn, wenn du raus willst",
+  "lockdown_exit_hint": "zum vorzeitigen Beenden auf den Timer klicken und tippen: let me out",
   "lockdown_ee_tooltip": "Öffnet den Weg nach draußen. Hindurch musst du trotzdem selbst.",
   "lockdown_badge_label": "LOCKDOWN",
   "lockdown_badge_end": "Beenden",

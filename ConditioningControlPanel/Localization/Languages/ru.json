@@ -4725,6 +4725,7 @@
   "ee_window_title": "Аварийный выход",
   "lockdown_ee_button": "АВАРИЙНЫЙ ВЫХОД",
   "lockdown_ee_sub": "нажми, если хочешь выйти",
+  "lockdown_exit_hint": "чтобы закончить раньше, нажми на таймер и набери: let me out",
   "lockdown_ee_tooltip": "Открывает выход. Пройти через него все равно придется самой.",
   "lockdown_badge_label": "БЛОКИРОВКА",
   "lockdown_badge_end": "Завершить",

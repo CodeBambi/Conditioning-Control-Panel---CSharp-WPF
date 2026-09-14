@@ -407,6 +407,24 @@
                                                        poss:Possession.Role="Timer" poss:Possession.Name="the timer"
                                                        Margin="0,0,0,8" Cursor="Hand" MouseLeftButtonDown="TxtLockdownTimer_Click"/>
 
+                                            <!-- THE WAY OUT, SAID OUT LOUD.
+                                                 The exit gesture used to be undocumented in the UI:
+                                                 it lives in the codex, in EMI's book and in the
+                                                 support channel, none of which a person reaches
+                                                 while the room is misbehaving. A safety valve
+                                                 nobody can find is not a safety valve, so the tab
+                                                 now states it plainly for the whole lockdown.
+                                                 poss:Possession.Exclude for the same reason the
+                                                 emergency-exit button carries it: this line must
+                                                 read the same in every second of every rung. The
+                                                 mechanic itself is untouched (five clicks under a
+                                                 second apart reveal the box - see
+                                                 MainWindow.Lab.TxtLockdownTimer_Click). -->
+                                            <TextBlock Text="{loc:Str lockdown_exit_hint}"
+                                                       poss:Possession.Exclude="True"
+                                                       FontSize="11" Foreground="#8A8AA0"
+                                                       TextWrapping="Wrap" Margin="0,0,0,10"/>
+
                                             <!-- Rung readout. The digits above are never allowed to lie
                                                  (POSSESSION.md), so THIS is where "how haunted is it right
                                                  now" gets to be legible: a word plus five pips, driven from

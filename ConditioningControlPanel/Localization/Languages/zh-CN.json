@@ -5183,6 +5183,7 @@
   "ee_window_title": "紧急出口",
   "lockdown_ee_button": "紧急出口",
   "lockdown_ee_sub": "想出去就按下它",
+  "lockdown_exit_hint": "想提前结束，点击计时器并输入：let me out",
   "lockdown_ee_tooltip": "打开出口。能不能走出去还得看你自己。",
   "lockdown_badge_label": "封锁",
   "lockdown_badge_end": "结束",

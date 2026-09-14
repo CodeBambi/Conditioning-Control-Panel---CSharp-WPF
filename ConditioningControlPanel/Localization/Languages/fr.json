@@ -4727,6 +4727,7 @@
   "ee_window_title": "Sortie de secours",
   "lockdown_ee_button": "SORTIE DE SECOURS",
   "lockdown_ee_sub": "appuie si tu veux sortir",
+  "lockdown_exit_hint": "pour finir plus tôt, clique sur le chrono et tape : let me out",
   "lockdown_ee_tooltip": "Ouvre la sortie. La franchir reste ton problème.",
   "lockdown_badge_label": "CONFINEMENT",
   "lockdown_badge_end": "Terminer",
