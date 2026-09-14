@@ -48,7 +48,7 @@ export async function mount(ctx) {
   let el = null, table = null, kit = null, deck = null, moments = null, chip = null, raf = 0, session = 0, alive = false, suspended = false;
   let st = null, shownHand = null, queue = [], busy = false, decide = false, phase = 'loading', note = '', lines = [];
   let stake = 1, stakePicked = false, hint = readHintPref(storage), dealReadyAt = 0, bloomUntil = 0, sitting = 0, firstSit = true;
-  let lastStill = null, unSp = null, feelLog = [], statusText = '';
+  let lastStill = null, unSp = null, feelLog = [], statusText = '', seat = 0, seating = false;
   const $ = (sel) => el.querySelector(sel);
   const log = (what, extra = {}) => { feelLog = [...feelLog.slice(-99), { what, at: Math.round(performance.now()), ...extra }]; };
 
@@ -139,7 +139,8 @@ export async function mount(ctx) {
     const base = performance.now(), fresh = !shownHand || shownHand.id !== next.id;
     const bets = { at: 0, op: 'bets', list: next.hands.map((h) => h.bet) };
     steps.splice(fresh ? 1 : 0, 0, bets);
-    queue = queue.concat(steps.map((s) => ({ ...s, at: base + s.at, hand: next, quiet })));
+    // quiet: the hand goes down settled on this frame (no flights, no timings), the steps still in their order
+    queue = queue.concat(steps.map((s) => ({ ...s, at: quiet ? base : base + s.at, hand: next, quiet })));
     shownHand = next;
     decide = false;
     if (!next.done) moments.holdScreen(true);   // nothing fullscreen while a decision is open
@@ -150,10 +151,10 @@ export async function mount(ctx) {
     switch (s.op) {
       case 'clear': table.clear(); lines = []; break;
       case 'bets': table.setBets(s.list); break;
-      case 'card': table.addCard(s, now); break;
+      case 'card': table.addCard({ ...s, settled: s.quiet }, now); break;
       case 'split': table.split(now); break;
       case 'active': table.setActive(s.index); break;
-      case 'reveal': table.reveal(s.code, now); break;
+      case 'reveal': table.reveal(s.code, now, s.quiet); break;
       case 'ready': decide = true; table.setActive(h.active); break;
       case 'bloom': {
         if (s.quiet) break;
@@ -225,7 +226,7 @@ export async function mount(ctx) {
       adopt(c.body, { quiet: c.reason === 'auto_stood' });
     } else if (c.kind === 'refresh') await refresh(my);
     else if (c.kind === 'insufficient') { chip.setServer(c.body && c.body.sp); note = t('br_cards_insufficient', 'You need {n} SP for that bet.', { n: stake }); }
-    else if (c.kind === 'closed') card(t('br_cards_closed', 'The table is closed for a moment.'));
+    else if (c.kind === 'closed') { phase = 'closed'; el.dataset.phase = 'closed'; card(t('br_cards_closed', 'The table is closed for a moment.')); }
     else note = t('br_cards_offline', 'The house is not answering. Try again in a moment.');
     log('reply', { op, kind: c.kind, reason: c.reason || null });
   }
@@ -249,8 +250,8 @@ export async function mount(ctx) {
     const my = session;
     const r = await ask(createIntent('deal', { stake }, mintId), my);
     if (my !== session) return;
-    busy = false;
-    await reply(r, my, 'deal');
+    await reply(r, my, 'deal');   // busy until the reply is on the table (a no_hand re-read included)
+    if (my === session) busy = false;
   }
 
   async function move(m) {
@@ -261,18 +262,21 @@ export async function mount(ctx) {
     const my = session;
     const r = await ask(createIntent(m, moveBody(st.hand), mintId), my);
     if (my !== session) return;
-    busy = false;
     await reply(r, my, m);
+    if (my === session) busy = false;
   }
 
   /* ------------------------------------------------------------ sitting */
+  /** Latched on the press: phase 'sit' refuses Deal, the moves and Sit while the pictures are dealt. One deck per sit. */
   async function sitDown(my, deckP) {
-    const d = await Promise.race([deckP, wait(DECK_WAIT_MS).then(() => null)]);
-    if (my !== session) { deckP.then((x) => x && x.dispose()); return; }
-    deck = d;
-    if (!d) deckP.then((x) => { if (my === session && alive && !deck) deck = x; else if (x) x.dispose(); });
-    sitting++;
+    const mine = ++seat;
+    seating = true; sitting++;
     phase = 'sit'; el.dataset.phase = 'sit';
+    const d = await Promise.race([deckP, wait(DECK_WAIT_MS).then(() => null)]);
+    if (my !== session || mine !== seat) { deckP.then((x) => x && x.dispose()); return; }
+    if (deck && deck !== d) deck.dispose();   // the last sitting's pictures stay on its cards until this deal is in
+    deck = d; seating = false;
+    if (!d) deckP.then((x) => { if (my === session && mine === seat && alive && !deck) deck = x; else if (x) x.dispose(); });
     table.clear(); shownHand = null; lines = [];
     const out = moments.play('cards.sit');
     if (out.page.includes('sit_fan')) table.startFan(performance.now(), dress().still);
@@ -287,8 +291,6 @@ export async function mount(ctx) {
     if (!alive || suspended) return;
     ring($('.cards-sit'));
     if (!view(performance.now()).sit) return;
-    const old = deck; deck = null;
-    if (old) old.dispose();
     sitDown(session, createDeck(ctx, { count: 13, still: dress().still }).catch(() => null));
   }
 
@@ -353,7 +355,7 @@ export async function mount(ctx) {
     table.draw({ now, k: d.k, still: d.still, full: d.full, gates: d.gates, deck, decide,
       print: t('br_cards_print', 'BLACKJACK PAYS 2 TO 1 · DEALER STANDS ON ALL 17s · SIX CARDS WIN'),
       dealerName: t('br_cards_dealer', 'Emi'), youName: t('br_cards_you', 'You'), handName: (i) => t('br_cards_hand_short', 'Hand {i}', { i: i + 1 }) });
-    if (phase === 'sit' && table.fanDone(now)) afterSit();
+    if (phase === 'sit' && !seating && table.fanDone(now)) afterSit();
     sync(now);
     raf = requestAnimationFrame(frame);
   }
@@ -382,7 +384,7 @@ export async function mount(ctx) {
   async function open() {
     if (alive) return;
     alive = true; suspended = false; busy = false; decide = false; queue = []; shownHand = null; note = ''; lines = []; feelLog = [];
-    sitting = 0; firstSit = true; stakePicked = false; dealReadyAt = 0; bloomUntil = 0; phase = 'loading'; statusText = ''; lastStill = null;
+    sitting = 0; seating = false; firstSit = true; stakePicked = false; dealReadyAt = 0; bloomUntil = 0; phase = 'loading'; statusText = ''; lastStill = null;
     const my = ++session;
     el = build(); ctx.root.append(el);
     addEventListener('keydown', onKey);
@@ -444,7 +446,7 @@ export async function mount(ctx) {
     destroy() { close(); document.querySelectorAll('link[data-cards-css]').forEach((l) => l.remove()); },
     /** For dev.html and CDP checks only. */
     debug: () => ({
-      phase, alive, busy, decide, suspended, hostBack, stake, stakePicked, hint, sitting, queue: queue.length, dress: dress(),
+      phase, alive, busy, decide, suspended, hostBack, stake, stakePicked, hint, sitting, seating, queue: queue.length, dress: dress(),
       state: st && { sp: st.sp, legal: st.legal, hint: st.hint, hand: st.hand }, shown: shownHand,
       chip: chip && { kind: chip.kind, value: chip.value, server: chip.server, owed: chip.owed },
       status: statusText, controls: el ? view(performance.now()) : null, table: table && table.debug(), kit: kit && kit.debug(),
