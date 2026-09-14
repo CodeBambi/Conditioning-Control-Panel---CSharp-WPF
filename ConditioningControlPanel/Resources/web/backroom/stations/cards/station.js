@@ -18,7 +18,7 @@
 import { createLoomKit, createDeck, createMoments, strengthK, viewportRect, DECK_VALUES } from '../../shared/hypno/index.js';
 import { readState, readHand, legalOf, controls, classify, createIntent, mayRetry, moveBody, owedFor, shownSp, defaultStake,
   readHintPref, writeHintPref, isOpen, totalOf, MOVES } from './hand.js';
-import { planSteps, momentOf, aceSlot, bestCard, vortexOf, resultLines, TIMING } from './feel.js';
+import { planSteps, momentOf, aceSlot, bestCard, vortexOf, resultLines, screenHoldMs } from './feel.js';
 import { createTable } from './table.js';
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
@@ -47,7 +47,7 @@ export async function mount(ctx) {
 
   let el = null, table = null, kit = null, deck = null, moments = null, chip = null, raf = 0, session = 0, alive = false, suspended = false;
   let st = null, shownHand = null, queue = [], busy = false, decide = false, phase = 'loading', note = '', lines = [];
-  let stake = 1, stakePicked = false, hint = readHintPref(storage), dealReadyAt = 0, bloomUntil = 0, sitting = 0, firstSit = true;
+  let stake = 1, stakePicked = false, hint = readHintPref(storage), dealReadyAt = 0, screenUntil = 0, sitting = 0, firstSit = true;
   let lastStill = null, unSp = null, feelLog = [], statusText = '', seat = 0, seating = false;
   const $ = (sel) => el.querySelector(sel);
   const log = (what, extra = {}) => { feelLog = [...feelLog.slice(-99), { what, at: Math.round(performance.now()), ...extra }]; };
@@ -161,7 +161,7 @@ export async function mount(ctx) {
         const slot = aceSlot(h), r = table.cardRect(0, slot), canvas = $('.cards-stage');
         const out = moments.play('cards.bloom', { from: r ? viewportRect(canvas, r.x, r.y, r.w, r.h) : undefined, gif: deck ? deck.keyFor(h.hands[0].cards[slot]) : undefined });
         if (out.page.includes('ace_glow')) table.glowCard(0, slot, now);
-        bloomUntil = now + TIMING.bloomMs * (d.still ? 0.6 : 1);
+        holdScreenFor('cards.bloom', out, now);
         log('moment', { id: 'cards.bloom', tokens: out.tokens.length, page: out.page, held: out.held, from: r });
         break;
       }
@@ -174,6 +174,7 @@ export async function mount(ctx) {
         chip.thud();
         const id = momentOf(h), best = bestCard(h);
         const out = moments.play(id, { gif: best && deck ? deck.keyFor(best) : undefined });
+        holdScreenFor(id, out, now);
         if (out.page.includes('win_tunnel')) table.tunnel(now);
         const v = vortexOf(h);
         if (out.page.includes('chip_vortex') && v) table.vortex(v.dir, v.n, now);
@@ -182,6 +183,12 @@ export async function mount(ctx) {
       }
       default: break;
     }
+  }
+  /** A moment that put something fullscreen holds the next deal until it has ended (hand.controls 'screen'). */
+  function holdScreenFor(id, out, now) {
+    const d = dress();
+    const ms = out.held ? 0 : screenHoldMs(id, { fired: out.tokens.length, tunnel: d.gates.tunnel && typeof ctx.fxTunnel === 'function', still: d.still });
+    if (ms > 0) screenUntil = Math.max(screenUntil, now + ms);
   }
   /** Suspend: every step still owed goes down now, quietly (no moments). */
   function flush() { const now = performance.now(); const rest = queue; queue = []; for (const s of rest) apply({ ...s, quiet: true }, now); }
@@ -239,7 +246,7 @@ export async function mount(ctx) {
   }
 
   const view = (now) => controls({ phase, hand: st && st.hand, legal: st ? st.legal : [], sp: chip ? chip.server : 0, stake, busy,
-    animating: queue.length > 0, dealReadyAt: Math.max(dealReadyAt, bloomUntil), now });
+    animating: queue.length > 0, dealReadyAt, screenUntil, now });
 
   async function deal() {
     if (!alive || suspended) return;
@@ -325,8 +332,8 @@ export async function mount(ctx) {
     el.toggleAttribute('data-open', open);
     const dealBtn = $('.cards-deal');
     dealBtn.disabled = !c.deal;
-    const left = Math.max(dealReadyAt, bloomUntil) - now;
-    const small = c.dealWhy === 'floor' ? t('br_cards_wait', '{s} s', { s: Math.ceil(left / 1000) }) : t('br_cards_bet_line', '{n} SP', { n: stake });
+    const small = c.dealWhy === 'screen' ? t('br_cards_moment', 'One moment')
+      : c.dealWhy === 'floor' ? t('br_cards_wait', '{s} s', { s: Math.ceil((dealReadyAt - now) / 1000) }) : t('br_cards_bet_line', '{n} SP', { n: stake });
     if (dealBtn.querySelector('small').textContent !== small) dealBtn.querySelector('small').textContent = small;
     for (const b of el.querySelectorAll('.cards-move')) {
       const m = b.dataset.move;
@@ -384,7 +391,7 @@ export async function mount(ctx) {
   async function open() {
     if (alive) return;
     alive = true; suspended = false; busy = false; decide = false; queue = []; shownHand = null; note = ''; lines = []; feelLog = [];
-    sitting = 0; seating = false; firstSit = true; stakePicked = false; dealReadyAt = 0; bloomUntil = 0; phase = 'loading'; statusText = ''; lastStill = null;
+    sitting = 0; seating = false; firstSit = true; stakePicked = false; dealReadyAt = 0; screenUntil = 0; phase = 'loading'; statusText = ''; lastStill = null;
     const my = ++session;
     el = build(); ctx.root.append(el);
     addEventListener('keydown', onKey);
@@ -438,6 +445,7 @@ export async function mount(ctx) {
       if (suspended) {
         flush();
         moments.cancel();
+        screenUntil = 0;   // the moments are cancelled: nothing fullscreen is left running
         if (raf) cancelAnimationFrame(raf);
         raf = 0;
         kit.dispose(); kit = createLoomKit({ still: dress().still, log: say });   // the GL context goes; a new one is made on the next draw
@@ -447,6 +455,7 @@ export async function mount(ctx) {
     /** For dev.html and CDP checks only. */
     debug: () => ({
       phase, alive, busy, decide, suspended, hostBack, stake, stakePicked, hint, sitting, seating, queue: queue.length, dress: dress(),
+      screenLeftMs: Math.max(0, Math.round(screenUntil - performance.now())), dealText: el ? $('.cards-deal small').textContent : null,
       state: st && { sp: st.sp, legal: st.legal, hint: st.hint, hand: st.hand }, shown: shownHand,
       chip: chip && { kind: chip.kind, value: chip.value, server: chip.server, owed: chip.owed },
       status: statusText, controls: el ? view(performance.now()) : null, table: table && table.debug(), kit: kit && kit.debug(),

@@ -136,6 +136,9 @@ await until('window.dev.station.debug().chip.owed > 0', 2000);
 d = await dbg();
 ok(d.chip.server === 59 && d.chip.owed === 4 && d.chip.value === 55, `Law I: the server says 59, the chip holds ${d.chip.value} until the hand shows`);
 await moment('cards.win');
+d = await dbg();
+ok(!d.controls.deal && d.controls.dealWhy === 'screen' && d.dealText === 'One moment' && d.screenLeftMs > 0 && d.screenLeftMs <= 900,
+  `the win wash holds the next deal: "${d.dealText}", ${d.screenLeftMs} ms left`);
 await shot('win-flash.png');
 await sleep(700);
 await shot('win-tunnel-chip-vortex.png');
@@ -152,11 +155,18 @@ await ev('window.dev.host.clear()');
 await mark();
 await click('.cards-move[data-move=stand]');
 await moment('cards.lose');
+const loseAt = Date.now();
 await sleep(1150);
-await shot('losing-edges.png');
-await sleep(1900);
 d = await dbg();
+ok(!d.controls.deal && d.controls.dealWhy === 'screen' && d.dealText === 'One moment', `the losing edges hold the next deal mid-breath: "${d.dealText}", ${d.screenLeftMs} ms left`);
+await shot('losing-edges-deal-held.png');
+await until('window.dev.station.debug().controls.deal', 4000);
+const loseHeld = Date.now() - loseAt;
 let lv = await levels();
+ok(loseHeld >= 2300 && lv.at(-1) === 0, `Deal comes back only once the edges have closed (${loseHeld} ms after the moment, the tunnel at ${lv.at(-1)})`);
+summary.loseHoldMs = loseHeld;
+d = await dbg();
+lv = await levels();
 ok((await fxList()).length === 0 && Math.max(...lv) > 0.6 && Math.max(...lv) <= 0.75 && lv.at(-1) === 0, `cards.lose: one slow breath of tunnel, peak ${Math.max(...lv)}, back to 0, no fx`);
 ok(/19 beats 17\. Emi takes 2 SP\./.test(d.status) && d.chip.value === 57, `"${d.status.split('\n')[0]}"`);
 summary.lose = { levels: lv };
@@ -192,7 +202,10 @@ ok(fx.length === 3 && fx[0].fxId === 'fx.gif_from' && fx[0].symbols[0] === d.dec
 ok(Math.abs(fx[0].args.from.x - bloom.from.x) <= 1 && Math.abs(fx[0].args.from.w - bloom.from.w) <= 1, `the bloom grows from the ace's rect (${JSON.stringify(fx[0].args.from)})`);
 ok(bloom.at - deal.at >= 1700 && bloom.at - deal.at <= 2200, `the bloom fires as the second player card finishes turning (${bloom.at - deal.at} ms after the reply)`);
 ok(fx[2].fxId === 'fx.wash' && fx[2].args.color === '#5fffd0' && fx[2].args.strength === 0.9 && !fx[2].symbols, 'cards.win after a bloom: mint 0.9, no picture');
-ok(d.controls.dealWhy === 'floor' && /Blackjack! \+4 SP\./.test(d.status), 'Deal waits out the bloom; "Blackjack! +4 SP."');
+ok(d.controls.dealWhy === 'screen' && d.dealText === 'One moment' && /Blackjack! \+4 SP\./.test(d.status), `Deal waits out the bloom ("${d.dealText}", ${d.screenLeftMs} ms left); "Blackjack! +4 SP."`);
+await until('window.dev.station.debug().controls.deal', 5000);
+d = await dbg();
+ok(d.screenLeftMs === 0, 'and deals again once the picture has gone');
 summary.blackjack = { fx, bloomAfterReplyMs: bloom.at - deal.at };
 
 /* ---------------------------------------------------------------- 2. split and double */
@@ -369,6 +382,40 @@ d = await dbg();
 await shot('reopen-finished-hand-settled.png');
 ok(d.shown && d.shown.done && d.queue === 0 && d.table.cards.length === 4 && d.table.cards.every((c) => c.landed && c.face) && d.controls.deal,
   `reopen with a finished last hand: it lies settled on the first frame, Deal live (${d.table.cards.length} cards)`);
+
+/* ---------------------------------------------------------------- 8c. suspend keeps the deck; a suspended moment holds nothing */
+await boot('?floor=600&script=Th.9d.8c.8s,Th.9d.7c.Ts');
+await dealWhenReady();
+await decideNow();
+let sus = { media: await ev('window.dev.host.media.length'), keys: (await dbg()).deck.keys.join() };
+await ev('window.dev.station.suspend(true)');
+await sleep(300);
+await ev('window.dev.station.suspend(false)');
+await sleep(400);
+d = await dbg();
+ok((await ev('window.dev.host.media.length')) === sus.media && d.deck && d.deck.keys.join() === sus.keys && d.decide && d.moments.held,
+  `suspend keeps the deck: no new deal (${sus.media} media requests), the same 13 keys, the decision still open and held`);
+await click('.cards-move[data-move=stand]');
+await settledNow();
+await dealWhenReady();
+await decideNow();
+await ev('window.dev.host.clear()');
+await mark();
+await click('.cards-move[data-move=stand]');
+await moment('cards.lose');
+await sleep(500);
+const heldBefore = (await dbg()).screenLeftMs;
+await ev('window.dev.station.suspend(true)');
+await sleep(200);
+d = await dbg();
+ok(heldBefore > 0 && d.screenLeftMs === 0 && (await levels()).at(-1) === 0, `suspend mid-breath: the tunnel goes to 0 and the deal hold with it (${heldBefore} ms -> ${d.screenLeftMs})`);
+await ev('window.dev.station.suspend(false)');
+const mediaBeforeLeave = await ev('window.dev.host.media.length');
+await ev('window.dev.stand()');
+await ev('window.dev.open()');
+await until("window.dev.station.debug().phase === 'sit' || window.dev.station.debug().phase === 'play'", 6000);
+ok((await ev('window.dev.host.media.length')) === mediaBeforeLeave + 1 && (await ev('window.dev.host.media.at(-1).count')) === 13,
+  'leaving the station and sitting down again re-deals the 13 pictures');
 
 /* ---------------------------------------------------------------- 9. through the room */
 const PICS = ['/backroom/stations/slot/fallback/gif0.webp', '/dtrh/assets/bubbles/effects/spirals/sp6.gif', '/arcademy/art/bugle/g1.webp', '/backroom/stations/slot/fallback/gif1.webp',

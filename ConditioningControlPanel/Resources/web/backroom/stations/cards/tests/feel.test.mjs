@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readHand } from '../hand.js';
-import { TIMING, momentOf, isBloom, aceSlot, bestCard, vortexOf, resultLines, planSteps, fanCard, lampBreath } from '../feel.js';
+import { TIMING, momentOf, isBloom, aceSlot, bestCard, vortexOf, resultLines, planSteps, fanCard, lampBreath, screenHoldMs } from '../feel.js';
 import { MOMENTS } from '../../../shared/hypno/moments.js';
 
 const H = (o) => readHand({ step: 0, stake: 1, active: 0, done: false, result: null, ...o });
@@ -123,4 +123,16 @@ test('the lamp breathes six times a minute and rests while held', () => {
   assert.equal(lampBreath(0), 0.5);
   assert.ok(Math.abs(lampBreath(2500) - 1) < 1e-9); assert.ok(Math.abs(lampBreath(7500)) < 1e-9);
   assert.equal(lampBreath(2500, true), 0.5);
+});
+
+test('screenHoldMs: the bloom, the win wash and the losing edges hold the next deal; gates off hold nothing', () => {
+  assert.equal(screenHoldMs('cards.bloom', { fired: 2 }), TIMING.bloomMs);
+  assert.equal(screenHoldMs('cards.bloom', { fired: 2, still: true }), 2400, 'Calm: the host plays the picture at 60%');
+  assert.equal(screenHoldMs('cards.bloom', { fired: 0 }), 0, 'flash off: no picture, no hold');
+  assert.equal(screenHoldMs('cards.win', { fired: 1 }), 900, 'the wash is gone at 900 ms');
+  assert.equal(screenHoldMs('cards.win', { fired: 0 }), 0);
+  assert.equal(screenHoldMs('cards.lose', { tunnel: true }), MOMENTS['cards.lose'].host[0].ms + 150, 'the breath of tunnel, 2600 ms, and its closing post');
+  assert.equal(screenHoldMs('cards.lose', { tunnel: false }), 0, 'tunnel gate off: no edges, no hold');
+  assert.equal(screenHoldMs('cards.push', { fired: 0, tunnel: true }), 0);
+  assert.equal(screenHoldMs('cards.sit', { fired: 0 }), 0);
 });

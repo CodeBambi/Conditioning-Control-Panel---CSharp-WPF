@@ -100,13 +100,14 @@ export function defaultStake(sp, stakes = [1, 2]) {
 }
 
 /**
- * Which controls are live.
- * @param {{phase:string, hand:Object|null, legal:string[], sp:number, stake:number, busy:boolean, animating:boolean, dealReadyAt:number, now:number}} o
+ * Which controls are live. `screenUntil`: a fullscreen moment (bloom, win wash, losing edges) runs until then, and the
+ * next deal is held ('screen') so nothing fullscreen can overlap a new decision.
+ * @param {{phase:string, hand:Object|null, legal:string[], sp:number, stake:number, busy:boolean, animating:boolean, dealReadyAt:number, screenUntil:number, now:number}} o
  */
-export function controls({ phase, hand, legal = [], sp = 0, stake = 1, busy = false, animating = false, dealReadyAt = 0, now = 0 }) {
+export function controls({ phase, hand, legal = [], sp = 0, stake = 1, busy = false, animating = false, dealReadyAt = 0, screenUntil = 0, now = 0 }) {
   const table = phase === 'play' && !busy && !animating;
   const open = isOpen(hand);
-  const why = !table ? 'busy' : open ? 'open' : sp < stake ? 'sp' : now < dealReadyAt ? 'floor' : null;
+  const why = !table ? 'busy' : open ? 'open' : now < screenUntil ? 'screen' : sp < stake ? 'sp' : now < dealReadyAt ? 'floor' : null;
   const moves = {};
   for (const m of MOVES) moves[m] = table && open && legal.includes(m);
   return { deal: why === null, dealWhy: why, bet: table && !open, sit: table && !open, moves };
