@@ -164,6 +164,7 @@ export function createTable(canvas, { kit = null } = {}) {
       c.rot = (1 - e) * -0.9; c.lift = Math.sin(p * Math.PI);
       if (p >= 1) { c.landed = true; c.lift = 0; c.rot = 0; if (c.code) c.faceAt = now; ripples.push({ x: tx, y: ty, t0: now }); }
     } else {
+      if (!Number.isFinite(c.x)) { c.x = tx; c.y = ty; }   // put down settled: straight onto its spot
       const s = Math.min(1, dt * 0.012);
       c.x += (tx - c.x) * s; c.y += (ty - c.y) * s;
     }
@@ -178,9 +179,12 @@ export function createTable(canvas, { kit = null } = {}) {
 
   const api = {
     clear() { cards = []; hands = 1; active = -1; bets = []; betsShown = true; chips = []; tunnelAt = -1; glow = null; },
-    addCard({ owner, slot, code }, now) { cards.push({ id: ++seq, owner, slot, code: code || null, bornAt: now, faceAt: null, landed: false, x: NaN, y: NaN, rot: 0, lift: 0 }); },
+    /** `settled`: already on its spot and turned (a quiet adopt, a suspend's flush), no flight. */
+    addCard({ owner, slot, code, settled = false }, now) {
+      cards.push({ id: ++seq, owner, slot, code: code || null, bornAt: now, faceAt: settled && code ? now - TIMING.flipMs : null, landed: !!settled, x: NaN, y: NaN, rot: 0, lift: 0 });
+    },
     split() { const c = cards.find((x) => x.owner === 0 && x.slot === 1); if (c) { c.owner = 1; c.slot = 0; } hands = 2; },
-    reveal(code, now) { const c = cards.find((x) => x.owner === 'd' && x.slot === 1); if (c) { c.code = code; c.faceAt = c.landed ? now : null; } },
+    reveal(code, now, settled = false) { const c = cards.find((x) => x.owner === 'd' && x.slot === 1); if (c) { c.code = code; c.faceAt = c.landed ? (settled ? now - TIMING.flipMs : now) : null; } },
     setActive(i) { active = i; },
     setBets(list) { bets = Array.isArray(list) ? list.slice() : []; betsShown = true; },
     startFan(now, still) { fan = { t0: now, still: !!still, landed: new Set() }; },
@@ -191,10 +195,12 @@ export function createTable(canvas, { kit = null } = {}) {
     },
     tunnel(now) { tunnelAt = now; },
     glowCard(owner, slot, now) { const c = cards.find((x) => x.owner === owner && x.slot === slot); if (c) glow = { id: c.id, t0: now }; },
-    /** A card's current box in canvas CSS px (for fx.gif_from's `from`). */
+    /** A card's box on its resting spot in canvas CSS px (for fx.gif_from's `from`), known before any frame has moved it. */
     cardRect(owner, slot) {
       const c = cards.find((x) => x.owner === owner && x.slot === slot), L = tableLayout(W, H);
-      return c && Number.isFinite(c.x) ? { x: c.x - L.cw / 2, y: c.y - L.ch / 2, w: L.cw, h: L.ch } : null;
+      if (!c) return null;
+      const [x, y] = target(L, c);
+      return { x: x - L.cw / 2, y: y - L.ch / 2, w: L.cw, h: L.ch };
     },
     /** Every card has landed and turned. */
     settled(now, still) { return cards.every((c) => c.landed && (c.faceAt == null || flipOf(c, now, still) >= 1)); },
@@ -300,8 +306,8 @@ export function createTable(canvas, { kit = null } = {}) {
         const from = L.spot, to = L.dealerSpot, R0 = Math.hypot(from.x - to.x, from.y - to.y), a0 = Math.atan2(to.y - from.y, to.x - from.x);
         if (still) { const at = c.dir > 0 ? from : to; chipDisc(at.x, at.y - 10, L.spot.r, c.col, Math.sin(t * Math.PI) * k); continue; }   // settled: no travel
         const u = c.dir > 0 ? ease(t) : 1 - ease(t);
-        // turns below the spot are squashed flat so the path stays on the table
-        const pos = (uu) => { const r = R0 * (1 - uu), a = a0 + uu * TAU * 1.25, s = Math.sin(a); return [from.x + Math.cos(a) * r, from.y + s * r * (s > 0 ? 0.15 : 1)]; };
+        // turns below the spot are squashed flat so the path stays on the table (a smooth squash: no bend where it starts)
+        const pos = (uu) => { const r = R0 * (1 - uu), a = a0 + uu * TAU * 1.25, s = Math.sin(a); return [from.x + Math.cos(a) * r, from.y + s * r * (0.575 - 0.425 * Math.tanh(s * 4))]; };
         g.save(); g.strokeStyle = c.col; g.globalAlpha = 0.35 * k; g.lineWidth = 2; g.beginPath();
         for (let q = 0; q <= 12; q++) { const [px, py] = pos(clamp(u - c.dir * q * 0.02, 0, 1)); if (q === 0) g.moveTo(px, py); else g.lineTo(px, py); }
         g.stroke(); g.restore();

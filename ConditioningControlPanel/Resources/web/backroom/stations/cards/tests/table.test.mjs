@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { tableLayout, slotXY } from '../table.js';
+import { tableLayout, slotXY, createTable } from '../table.js';
 
 test('the table fits a 1280 x 720 station view: dealer above the print, player below, spot clear of the controls', () => {
   const L = tableLayout(1280, 720);
@@ -18,4 +18,13 @@ test('slots centre each row; split hands sit side by side and never overlap', ()
   const h0 = [0, 1, 2, 3, 4, 5].map((i) => slotXY(L, 0, i, 6, 2)[0]), h1 = [0, 1].map((i) => slotXY(L, 1, i, 2, 2)[0]);
   assert.ok(Math.max(...h0) + L.cw / 2 < Math.min(...h1) - L.cw / 2, 'a six-card hand 1 ends before hand 2 starts');
   assert.ok(Math.min(...h0) - L.cw / 2 > 0 && Math.max(...h1) + L.cw / 2 < 1280, 'a six-card Charlie still fits');
+});
+
+test('cardRect is the resting spot, known on the frame a card is put down (a still bloom has no drawn frame yet)', () => {
+  const t = createTable({ getContext: () => ({}), getBoundingClientRect: () => ({ width: 0, height: 0 }) });
+  t.addCard({ owner: 0, slot: 0, code: 'Kh' }, 0); t.addCard({ owner: 0, slot: 1, code: 'As', settled: true }, 0);
+  const r = t.cardRect(0, 1), L = tableLayout(0, 0), [x, y] = slotXY(L, 0, 1, 2);
+  assert.deepEqual(r, { x: x - L.cw / 2, y: y - L.ch / 2, w: L.cw, h: L.ch });
+  assert.deepEqual(t.debug().cards.map((c) => [c.landed, c.face]), [[false, false], [true, true]], 'settled: landed and face up');
+  assert.equal(t.cardRect(1, 0), null);
 });
