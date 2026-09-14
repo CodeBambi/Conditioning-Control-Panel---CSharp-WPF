@@ -96,6 +96,12 @@ param(
     # packs cover EXACTLY what the csproj strips (see KEEP IN SYNC above) before a real run.
     [switch]$ListOnly,
 
+    # Print every resolved entry path instead of the per-pack totals. Implies -ListOnly, so it
+    # still writes nothing. The self-check proves the counts agree; this proves WHICH paths, and
+    # it is the cheapest way to confirm a file that left the installer actually landed in a pack.
+    # Narrow it with -PackIds, e.g. -ListFiles -PackIds mod-bambi.
+    [switch]$ListFiles,
+
     # Regenerate ONLY installer-content-deletions.iss (the exact-name [InstallDelete] list that
     # installer.iss #includes) and exit. No zips, no manifest, no -Version needed. A normal pack
     # build regenerates it too; either way the file is COMMITTED, so run this after any change
@@ -104,6 +110,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if ($ListFiles) { $ListOnly = $true }
 Set-StrictMode -Version Latest
 
 Add-Type -AssemblyName System.IO.Compression
@@ -700,6 +707,9 @@ if ($ListOnly) {
         if ($max -gt $longest) { $longest = $max }
         $grand += $bytes; $grandCount += $files.Count
         Write-Host ("  {0,-11} {1,6} files {2,9:n1}M  longest source path {3}" -f $spec.Id, $files.Count, ($bytes / 1MB), $max)
+        if ($ListFiles -and (-not $PackIds -or $PackIds -contains $spec.Id)) {
+            foreach ($f in $files) { Write-Host ('      ' + $f.Entry) -ForegroundColor DarkGray }
+        }
     }
     Write-Host ""
     Write-Host ("  TOTAL       {0,6} files {1,9:n1}M" -f $grandCount, ($grand / 1MB)) -ForegroundColor Cyan
