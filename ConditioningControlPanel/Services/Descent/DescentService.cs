@@ -266,49 +266,17 @@ namespace ConditioningControlPanel.Services.Descent
             }
         }
 
-        // ==================== the background profile poll ====================
-
-        /// <summary>
-        /// THE UNGATED 60s POLL (feat/xp-economy). The vat's own poll is triply gated —
-        /// Trainer Card on screen, window presenting, block seen — which was right when the
-        /// response only fed a meter, but the same response now feeds the cross-device XP
-        /// adopt, and that applies to EVERY logged-in account on any tab. So this timer runs
-        /// for the life of the app; <see cref="RefreshAsync"/> itself is the logged-in &amp;&amp;
-        /// !OfflineMode gate (it bails without a request on offline mode, no unified_id, or
-        /// no auth token, so a logged-out install pays nothing but a timer tick).
-        /// </summary>
-        private DispatcherTimer? _backgroundPollTimer;
-
-        /// <summary>
-        /// The double-poll guard: when the vat's timer (or the post-sync hook) fetched within
-        /// this window, the adopt already ran on that fetch's response and this tick has
-        /// nothing to add. Slightly under the 60s cadence so the two timers cannot phase into
-        /// two fetches a minute.
-        /// </summary>
-        private static readonly TimeSpan BackgroundPollFreshEnough = TimeSpan.FromSeconds(55);
-
-        /// <summary>Start the background poll. Idempotent; call once from App startup.</summary>
-        public void StartBackgroundProfilePoll()
-        {
-            if (_backgroundPollTimer != null) return;
-
-            _backgroundPollTimer = new DispatcherTimer(DispatcherPriority.Background)
-            {
-                Interval = TimeSpan.FromSeconds(60),
-            };
-            _backgroundPollTimer.Tick += (_, _) =>
-            {
-                try
-                {
-                    DateTime lastFetchUtc;
-                    lock (_refreshGate) lastFetchUtc = _refreshGate.LastFetchUtc;
-                    if (DateTime.UtcNow - lastFetchUtc < BackgroundPollFreshEnough) return;
-                    RequestRefresh("background profile poll");
-                }
-                catch (Exception ex) { Log.Debug("[Descent] background poll tick failed: {Error}", ex.Message); }
-            };
-            _backgroundPollTimer.Start();
-        }
+        // ==================== the background profile poll (retired) ====================
+        //
+        // THE UNGATED 60s POLL (feat/xp-economy) lived here until the Redis bandwidth pass
+        // (2026-09-15). It fetched GET /v2/user/profile once a minute on EVERY logged-in
+        // install purely to feed the cross-device XP adopt, and had become ~38% of all
+        // requests the server saw, each one a full user-record read. The heartbeat already
+        // reaches the server every 120s with the same record in hand, so it now carries
+        // level/xp/current_season back in its response and ProfileSyncService hands those to
+        // the same adopt (TryAdoptFromProfilePoll). Cross-device XP shows up within about
+        // two minutes instead of one; the vat's own gated poll and the post-sync refresh
+        // are untouched.
 
         /// <summary>
         /// FORGET THE ACCOUNT. Called on logout (MainWindow.Login.cs, beside
