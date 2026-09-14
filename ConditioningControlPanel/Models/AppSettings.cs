@@ -451,11 +451,12 @@ namespace ConditioningControlPanel.Models
         /// <summary>
         /// Available skill points to spend on the enhancement tree.
         /// Earned per level-up (SkillTreeService.PointsPerLevel) and per 100 bubbles popped.
+        /// Clamped to [0, SparklePoints.Cap] so every write path shares the server's ceiling.
         /// </summary>
         public int SkillPoints
         {
             get => _skillPoints;
-            set { _skillPoints = Math.Max(0, value); OnPropertyChanged(); }
+            set { _skillPoints = SparklePoints.Clamp(value); OnPropertyChanged(); }
         }
 
         /// <summary>

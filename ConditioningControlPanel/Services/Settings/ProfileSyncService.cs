@@ -1668,7 +1668,7 @@ namespace ConditioningControlPanel.Services
                             // always correct.
                             // This also shields the balance from an older server that still zeroes
                             // skill_points at rollover.
-                            var maxPoints = Math.Max(v2Result.SkillPoints.Value, settings.SkillPoints);
+                            var maxPoints = SparklePoints.MergeMax(v2Result.SkillPoints.Value, settings.SkillPoints);
                             if (maxPoints != settings.SkillPoints)
                             {
                                 App.Logger?.Information("V2 Sync: Skill points server={Server}, local={Local} — taking max ({Max})",
@@ -2994,7 +2994,7 @@ namespace ConditioningControlPanel.Services
             // Merge skill tree data - take max of server/local (skill points only increase)
             if (cloudProfile.SkillPoints.HasValue)
             {
-                var maxPoints = Math.Max(cloudProfile.SkillPoints.Value, settings.SkillPoints);
+                var maxPoints = SparklePoints.MergeMax(cloudProfile.SkillPoints.Value, settings.SkillPoints);
                 if (maxPoints != settings.SkillPoints)
                 {
                     App.Logger?.Information("Skill tree sync: Skill points server={Server}, local={Local} — taking max ({Max})",
@@ -3673,6 +3673,25 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Adopt a successful purchase response: the server's balance replaces local (it already
+        /// has the cost taken off), skills are unioned so none are ever lost. The balance goes
+        /// through the AppSettings setter, so it shares the SparklePoints.Cap clamp.
+        /// </summary>
+        internal static void ApplyPurchaseResult(AppSettings settings, int? serverSkillPoints, List<string>? serverSkills)
+        {
+            if (serverSkillPoints.HasValue)
+                settings.SkillPoints = serverSkillPoints.Value;
+            if (serverSkills != null)
+            {
+                // Merge: take union to never lose skills
+                var merged = new HashSet<string>(settings.UnlockedSkills ?? new List<string>());
+                foreach (var skill in serverSkills)
+                    merged.Add(skill);
+                settings.UnlockedSkills = merged.ToList();
+            }
+        }
+
+        /// <summary>
         /// Purchase a skill via server-authoritative endpoint.
         /// Server validates cost, prerequisites, and deducts points.
         /// Returns (success, error) — on success, updates local SkillPoints and UnlockedSkills from server response.
@@ -3765,16 +3784,7 @@ namespace ConditioningControlPanel.Services
                 }
 
                 // Apply server's authoritative values
-                if (result.SkillPoints.HasValue)
-                    settings.SkillPoints = result.SkillPoints.Value;
-                if (result.UnlockedSkills != null)
-                {
-                    // Merge: take union to never lose skills
-                    var merged = new HashSet<string>(settings.UnlockedSkills ?? new List<string>());
-                    foreach (var skill in result.UnlockedSkills)
-                        merged.Add(skill);
-                    settings.UnlockedSkills = merged.ToList();
-                }
+                ApplyPurchaseResult(settings, result.SkillPoints, result.UnlockedSkills);
 
                 // Prestige: count the spend locally, then adopt the server total when it's
                 // ahead (it already includes this purchase, so this never double-counts —
