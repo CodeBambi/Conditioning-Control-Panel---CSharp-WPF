@@ -448,6 +448,16 @@ export async function mount(ctx) {
 - Law VIII (A4, 10.15): attract mode drifts after 25 s seated idle and any press ends it inside 100 ms. No SP moves.
 - THE MASCOT GLANCE (A5, 10.15): EMI wiggles wherever she lands, after that reel's thud, and glances.
 - Law IX (A6, 10.15): a win frames its own row and the frame pulses for the length of the rollup.
+- THE BANK and deck V (B1, 10.16): the spiral jar ticks on each spiral's own thud (Law X), and a full jar is a
+  tier 2 party plus `fx.spiral_full` before its 3 free spins play. Reduced motion takes the settled fill.
+- Brake 1 (B2, 10.16): the floor bell is one line of text at a time, rotating every 8 s, never a sound. Somebody
+  else's win is not the viewer's party.
+- Brake 1 (B3, 10.16): the welcome-back comp arrives as a glance and one chime, never a fanfare. Arriving is not
+  an earned moment.
+- THE ALMOST and Law IX (C1, 10.16): an `emi2` pair takes A1's full 1,400 ms gold hold and never halves it, gets
+  no shiver and no ALMOST tell, and the re-spin's `emi3` plays THE REVEAL as any jackpot does.
+- Law I (C2, 10.16): "MUST HIT" reads off the server's `jackpot.mustHit`, in the wheel station and on the room's
+  jackpot chip. No new fx.
 
 ## 9. Owner decisions (2026-09-13) and requests
 
@@ -1018,3 +1028,513 @@ the rollup (A3), so the two end together. No frame on a no-pay spin: that beat b
 (virtual reel mapping that parks a symbol just off the line more often than chance), losses disguised as wins
 (celebrating a pay smaller than the stake), time-on-device design (no clocks removed, no moved exits), bet nudges and
 denomination tricks, and low-balance nudges. The room mints SP and sells nothing; insufficient stays a quiet state.
+
+## 10.16 Playbook Tier B and C amendment (2026-09-14)
+
+Source: `backroom-casino-playbook.md` section 2 (Tier B: B1 the spiral jar, B2 the floor bell, B3 the
+welcome-back comp; Tier C: C1 the EMI pair free re-spin, C2 must-hit-by on the wheel) and section 3 (kept
+out), with `house-book.md` deck V "The Rake" and the Brake. Owner decisions it is built on:
+`_evidence/brainstorm/DECISIONS.md` (wheel pot 250 +25/day cap 1,000, a win about every 10 days at any
+community size, the 3-day account gate, Dazed 100 for young accounts, "do not overcomplicate this").
+Where this section disagrees with anything above, it wins. Tier A (10.15) is unchanged and rides on top.
+
+Everything here is still Law I: the server draws, the page shows. The jar, the bell, the comp, the re-spin
+and must-hit-by are all decided server side and carried in the tape or the state; no page ever weights a
+stop, mints an SP or invents an entry. The room mints SP and sells nothing (10.16.F).
+
+Numbers below are decisions. `(owner may retune)` marks the ones the owner might want to move; everything
+else is load-bearing arithmetic and moves only with a re-sim.
+
+### 10.16.A B1 the spiral jar (slot, positive persistent state)
+
+The melt is the negative carried state. The jar is its mirror: spirals the player has already seen, saved
+up, paid back as free spins. Deck V's "sunk-cost bar toward the next rank", on the cabinet.
+
+**Server state.** `user.backroom.slot.jar`, an integer `0 .. table.jar.size - 1`, next to `melt` in the slot
+ledger. `emptySlot()` seeds it at 0; `ensureSlot()` coerces it with
+`Math.min(Math.max(int(raw.jar), 0), TABLE.jar.size - 1)` so a stored value can never fire a jar on load.
+
+**What fills it.** The count of spiral symbols SHOWN on any reel, in draw order, on outcomes of kind `paid`,
+`free`, `respin`, `jar` and `emi_respin`. It does NOT count outcomes of kind `freeze`, nor any outcome a
+freeze expanded into. (The playbook lists the freeze; it is excluded here for a reason. A freeze is sealed
+from the melt (10.10.2) so that no freeze policy can beat 102%. Holding a spiral guarantees at least one
+spiral a spin, so a jar that filled on freeze spins would let a held-spiral freeze farm jar spins and lift
+`rtpFrozen` for that class from 1.0200 to about 1.14. The jar is a plain-play credit exactly as the melt is a
+plain-play debt: only plain outcomes earn it, only plain outcomes are halved by it.)
+
+**What a full jar does.** When the count reaches `table.jar.size` it drops by `table.jar.size` (the remainder
+stays: 24 + 2 spirals fires at 25 and leaves 1) and pushes `table.jar.free` outcomes of `kind: 'jar'` onto the
+same expansion queue `spiral3` uses, so `drain()` expands them inline at the point the jar filled, in draw
+order, before the next paid spin. One outcome can fire the jar at most once (three spirals is at most 3 of
+25), and the queue cap `MAX_OUTCOMES` (500) is unchanged.
+
+**What a jar spin is.** Exactly a `spiral3` free spin with a different name: drawn from the plain table,
+costing 0, halved while melted, consuming melt in draw order, able to land the `melt` malus and able to
+expand further (`spiral3` into free spins, `spiral2` into a re-spin, `emi2` into an `emi_respin`), and its own
+spirals fill the jar again. (The playbook's "never halved, no melt draw, no malus" describes the FREEZE seal,
+not today's spiral free spins, which are not sealed. "Same as spiral free spins today" is the binding half of
+that sentence: jar spins are not sealed. Owner may revisit.)
+
+**Table v7 fields** (`TABLE_V7` in `backroom-slot.js`, replacing `TABLE_V6`):
+
+```js
+jar: Object.freeze({ size: 25, free: 3 }),   // (owner may retune, see the cost table below)
+```
+
+`kind` (section 3.2) is amended to `paid | free | respin | freeze | jar | emi_respin`.
+
+**Outcome fields.** Every outcome gains `jarN`: the jar count AFTER this outcome, `0 .. jar.size - 1`,
+alongside `meltLeft` and `freeLeft`. A `freeze` outcome carries back the jar it did not change. `freeLeft`
+keeps its meaning (outcomes still queued) and now counts jar spins and the `emi_respin` too.
+
+**`state` route.** `GET /v2/backroom/slot/state` gains a top-level `"jar": 17` (the stored count) and
+`table.jar` = `{ "size": 25, "free": 3 }` in the published table. The page keeps no copy of either.
+
+**RTP.** The jar is pure added return: at table v6 dressing a plain outcome shows 0.642 spirals on average, so
+a 25-jar fills every 39.0 outcomes, and 3 free spins every 39 outcomes is +7.7% outcomes per paid spin. Left
+alone it takes the whole game from 1.0200 to 1.1178. Table v7 must land back at 1.0200 over the whole game,
+jar spins and C1 included, with the jackpot at 1 in 6,494 per plain outcome (10.14). The retune is the same
+move v6 made on v5: **only the six everyday pay weights scale by one factor** (`gif3same`, `sub3`, `spiral3`,
+`gif3`, `sub2`, `spiral2`). `melt` stays 58,900, `emi3` and `emi2` are fixed by 10.16.D, pays, `meltSpins`,
+`freeSpins`, `respins`, `stake`, `freezeCost` and the strips do not move, and `none` takes the remainder.
+All five `frozen` tables are UNCHANGED (a freeze neither fills the jar nor draws `emi2`, so every held class
+stays at exactly 1.0200 with no re-tune).
+
+The solved factor is **0.916369**, giving the v7 plain weights over `DEN` 1,000,000:
+
+| Line | v6 | v7 | Published odds (v7) |
+|---|---|---|---|
+| `emi3` (drawn direct) | 154 | **92** | 1 in 10,870 |
+| `emi2` (new, 10.16.D) | - | **8,207** | 1 in 122 |
+| `gif3same` | 6,940 | **6,360** | 1 in 157 |
+| `sub3` | 8,675 | **7,950** | 1 in 126 |
+| `spiral3` | 8,675 | **7,950** | 1 in 126 |
+| `gif3` | 85,691 | **78,525** | 1 in 13 |
+| `sub2` | 69,394 | **63,591** | 1 in 16 |
+| `spiral2` | 69,394 | **63,591** | 1 in 16 |
+| `melt` | 58,900 | **58,900** | 1 in 17 |
+| `none` | 692,177 | **704,834** | - |
+
+Plus the re-spin weight `respin.emi` = **7,555** (1 in 132) from 10.16.D. The jackpot, counting both paths,
+stays 154.00 per million plain outcomes = **1 in 6,494**. The lane re-runs the sim and polishes `gif3`
+alone to land the exact 1.0200, the way v6 polished `gif3` (10.14).
+
+**Sim requirement** (`scripts/sim-backroom-slot.mjs`, extended by the server slot lane): exact whole-game RTP
+1.0200 +- 0.0002 with the jar and the re-spin in, `exactFrozenRtp` still 1.0200 for all five held classes, the
+jackpot 1 in 6,494 per plain outcome with the re-spin's share reported, and three new reported figures:
+outcomes per paid spin, jar fires per 100 outcomes, and hit frequency. Expected: outcomes per paid spin
+1.1055 -> **1.2066**, jar fires every **39.0** outcomes (about 2.6 minutes at the 4.02 s pace), hit frequency
+24.89% -> **22.81%** (still inside the playbook's 20-40% band). A 10-spin tape becomes about 12.1 outcomes, so
+`nextBuyAt = outcomes.length * SLOT_FLOOR_MS` scales with it and nothing in 10.12 moves.
+
+What the jar size costs, for the owner (each row re-solved to 1.0200):
+
+| `jar.size` / `jar.free` | scale factor | jar fills every | hit frequency |
+|---|---|---|---|
+| **25 / 3 (decided)** | 0.916369 | 39.0 outcomes, 2.6 min | 22.81% |
+| 50 / 3 | 0.957035 | 77.8 outcomes, 5.2 min | 23.82% |
+| 100 / 3 | 0.977450 | 155.4 outcomes, 10.4 min | 24.33% |
+| 200 / 5 | 0.980807 | 310.8 outcomes, 20.8 min | 24.41% |
+
+**Client.** There is no glb node for a jar and no model request is allowed (section 9.6), so the jar is a DOM
+element, exactly the pattern `.slot-payline` uses (10.15 A6, `scene.js` `paylineRect()`):
+
+- `station.js` builds `<div class="slot-jar" aria-hidden="true" hidden><i></i><span></span></div>` next to
+  `.slot-payline`. `station.css` styles it as a narrow upright tube, `position: absolute; z-index: 2;
+  pointer-events: none`, `<i>` the fill and `<span>` the count.
+- `scene.js` gains `jarRect()` next to `paylineRect()`: the projected bounds of `payout_tray` (fallback
+  `cabinet`), taken at the cabinet's LEFT edge in screen space, one `reel_window` height tall. No new
+  material, no new geometry, nothing added to the glb. The page also prints `17 / 25` inside it, so the jar
+  survives motion level 0 (Brake 9).
+- It fills per spiral landing, on that reel's THUD (Law X, one gesture one beat): a spin showing two spirals
+  ticks the tube twice, on reel 1's thud and reel 2's, never before.
+- A full jar is a tier 2 party (`feel.js` `recipe`, `tier: 2`: two notes, jolt, chase, screen) plus
+  `fx.spiral_full` (section 4, an existing id, no new recipe), and THEN the `kind: 'jar'` outcomes play as
+  free spins do. Brake 2: if the same outcome also won a line, the two merge into the higher party and the
+  jar's own note is dropped.
+- Reduced motion: no travel, the settled fill and the settled count (Law VI). Calm: the fill only, no party;
+  `fx.spiral_full` still fires at its Calm recipe.
+- Lexicon: `br_slot_jar` ("Spiral jar"), `br_slot_jar_full` ("The jar spills: {0} free spins").
+- **Not drawn from the room.** The room would need this account's slot state, which it does not fetch, or a
+  new `ctx` channel; neither is cheap enough to be worth it. The room's `screen_status` label is unchanged
+  and the jar lives on the close-up cabinet only. (The playbook's "shows from across the room" is not built.
+  Owner may revisit.)
+
+### 10.16.B B2 the floor bell (community big-win ticker)
+
+The casino rings a bell when a machine pays big. Social proof, Brake 1: it is somebody else's party, so it is
+a line of text and never a sound.
+
+**Server storage.** One Redis list, in `backroom-routes.js` `K`:
+
+```js
+bell: 'backroom:bell',                              // LPUSH + LTRIM 0 19, newest first, no TTL
+bellRate: (uid) => `backroom_bell_rate:${uid}`,     // the read limiter
+```
+
+Capped at **20** entries by `LTRIM K.bell 0 19` in the same MULTI as the settle that wrote it (the
+`extra(tx)` hook `writeSettled` already takes), so an entry and the receipt that earned it land together or
+neither does.
+
+**Entry shape**, JSON, at most 160 bytes (the route drops `name` rather than exceed it):
+
+```json
+{ "t": 1757890123456, "station": "slot", "line": "spiral3", "pay": 10, "name": null }
+```
+
+`t` = server `Date.now()`. `station` = `slot | wheel | cards | roulette`. `line` = the id below. `pay` = the
+SP paid. `name` = the winner's display name at the time of the win, or `null`.
+
+**What rings it.** Big lines only, and **at most one entry per settle**: the route picks the single best line
+in the receipt it just wrote (up to 20 slot outcomes, up to 5 roulette spins, one hand, one wheel spin).
+Without that cap a `spiral3` at 1 in 126 would write on roughly every second tape.
+
+| Station | `line` | Fires on |
+|---|---|---|
+| `slot` | `emi3` | the jackpot |
+| `slot` | `gif3same` | 3 of the same GIF |
+| `slot` | `sub3` | 3 subliminals |
+| `slot` | `spiral3` | 3 spirals |
+| `wheel` | `jackpot` | the shared pot fell (never the Dazed fallback) |
+| `wheel` | `dazed` | the 100 slice, the biggest everyday slice |
+| `wheel` | `deep` | the 40 slice, the second biggest |
+| `cards` | `blackjack` | a hand whose `outcome === 'blackjack'`, a natural twenty-one (`backroom-cards.js`) |
+| `roulette` | `wake` | a spin with `wake === true` and `pay > 0`, the Spiral Wake double |
+
+**Opt-in.** `user.backroom.bellName`, a boolean, absent reads as false. The name shown is the account's
+`display_name` as it read at the moment of the win: trimmed, inner whitespace collapsed, **truncated to 24
+characters**, `null` if it is not a non-empty string. It is stored ON the entry and never looked up at read
+time, so a later rename does not rewrite history and reading the bell never touches another user's record. No
+user file, no uid, no PII beyond that one opted-in display name.
+
+**Routes.** Both ride the existing relay shape `{METHOD} /v2/backroom/{station}/{op}`, so the only C# that
+changes is one `Ops` row (section 3), which the integration pass adds:
+
+```csharp
+["bell"] = new[] { ("GET","state"), ("POST","opt") },
+```
+
+- `GET /v2/backroom/bell/state` -> `{ ok, open, entries: [ ...at most 20, newest first ], optIn, visit: { day, comp } }`.
+  One `LRANGE K.bell 0 19`. Auth and the door flag exactly like every backroom route (`closed` is 403 before
+  any lock; a shut door still answers `state` with `open:false` so the room can show the sign). This route is
+  also the room's visit ping (10.16.C) and is the only writer of `lastVisit`.
+- `POST /v2/backroom/bell/opt { on }` -> `{ ok, optIn }`. Writes `user.backroom.bellName = !!on` under the
+  three locks in the usual order. `bad_input` (HTTP 200) when `on` is not a boolean.
+- Limiter: the shared per-account 60/min still applies, and on top of it `rateLimitIncr(K.bellRate(uid), 60)`
+  caps `bell/state` at **12 a minute** per account. Over it the answer is HTTP 200
+  `{ ok:false, reason:'too_fast', retryInMs }` (the wheel's soft convention, not the slot's 409) and the page
+  keeps the entries it has.
+
+**Client.** `room/hud.js` is plain DOM; `room/screens.js` is a shader on wall meshes that would need a new
+texture and a new uniform per screen. The bell goes in the HUD.
+
+- `hud.js` adds `<div class="br-bell" role="status" aria-live="polite" hidden><span></span></div>` under the
+  `br-nav` pills, plus a `bell(entries)` method. `room.css` styles one line, one text colour, no background
+  flash.
+- Fetched by `room/main.js` on room open and again after each `station-close`. **Never polled while seated**,
+  and never while a station holds the screen.
+- **One line on screen at a time**, rotating through the entries every **8,000 ms**, newest first, wrapping.
+  No sound at any intensity (Brake 1). Hidden under the existing `br-visiting` class and in the room view
+  (`br-overview`), exactly as the Visit prompt is. Reduced motion and Calm: the line still rotates (it is
+  text, not motion) but it cross-fades in 0 ms instead of 200 ms.
+- Relative time comes from `entry.t` against the CLIENT clock, display only (Law I): under 60 s
+  `br_bell_ago_now`, under 60 min `br_bell_ago_min`, under 24 h `br_bell_ago_hour`, else `br_bell_ago_day`.
+- Anonymous entries read "someone hit 3 spirals 4 min ago"; an opted-in entry puts the stored name where
+  "someone" was. Lexicon keys, English fallbacks in the page (Law VII): `br_bell_someone` ("someone"),
+  `br_bell_slot_emi3`, `br_bell_slot_gif3same`, `br_bell_slot_sub3`, `br_bell_slot_spiral3`,
+  `br_bell_wheel_jackpot`, `br_bell_wheel_slice`, `br_bell_cards_blackjack`, `br_bell_roulette_wake`,
+  `br_bell_ago_now`, `br_bell_ago_min`, `br_bell_ago_hour`, `br_bell_ago_day`.
+- **Room Options.** The opt-in toggle is a row in the room's Options panel. That panel does not exist yet: the
+  room lane builds it as a third `br-pill` in `hud.js`'s `br-nav`, opening a `.br-options` panel beside the
+  `br-map-list`, with `onOptions(open)` and `options(rows)` on the HUD. Its first row is `br_bell_optin`
+  ("Show my name on the floor bell"), off by default, posting `bell/opt`. It is also where the tunnel-vision
+  toggle owed by the hypno v3 build survey (DECISIONS, build question 1) goes: whichever lane lands first
+  builds the panel, the other adds a row.
+
+### 10.16.C B3 the welcome-back comp
+
+A loyalty comp: EMI hands a returning player five spins on the house. It costs the room five spins of return
+and it gates nothing.
+
+**Server state.** `user.backroom.lastVisit`, the UTC day number (`Math.floor(now / 86400000)`, the wheel's
+`dayOf`), directly on `user.backroom` because the room owns it, not a station. Absent reads as -1.
+
+**The visit ping.** `GET /v2/backroom/bell/state` (10.16.B) is the room's `state`/init call and the only
+writer of `lastVisit`. When `today > lastVisit` it takes the three locks and, in one write:
+
+1. reads `gap = today - lastVisit`;
+2. mints a comp when ALL of: `gap >= 3`; the account is at least **3 whole days** old (the wheel's
+   `jackpotEligible` / `createdMs`, the same gate as the wheel jackpot, so young accounts get no comp); and
+   `user.backroom.slot.comp` is absent (an unspent comp is never replaced and never stacks);
+3. sets `user.backroom.lastVisit = today`.
+
+When `today === lastVisit` the route writes nothing at all, so the repeat calls after each station close are a
+plain read.
+
+The comp is stored as `user.backroom.slot.comp = { id, spins: 5, day }` with
+`id = 'c_' + day.toString(36) + '_' + (econ.hash(uid) >>> 0).toString(36)`: deterministic per account per grant
+day, so a retried ping cannot mint two. `spins` is **5** (owner may retune). Not daily: the wheel owns daily,
+and a comp is only ever a RETURN after 3 or more missed days.
+
+**`state` route.** `GET /v2/backroom/slot/state` gains `"comp": { "spins": 5, "id": "c_..." }` or `null`. The
+slot state route never mints; it reports what the ping stored.
+
+**Spending it.** `POST /v2/backroom/slot/tape` with `{ idem, comp: "<id>" }`:
+
+- `comp` matches `^c_[A-Za-z0-9_-]{4,48}$`; `parseTapeBody` answers null (-> `bad_input`) otherwise.
+- With `comp`, `freeze` must be absent and `count` must be absent or exactly `5`; anything else is `bad_input`.
+- **Cost 0 SP.** `insufficient` therefore cannot happen, which is the whole point of a comp: a player at 0 SP
+  can still play it.
+- Five spins drawn from the NORMAL plain table. **Melt applies**: comp spins are halved while melted, consume
+  melt in draw order and can land the `melt` malus. The comp is a gift, not a cleanse.
+- They fill the jar and can expand into free spins, re-spins, jar spins and an `emi_respin` exactly as paid
+  spins do.
+- `tape_unplayed` still applies (finish the tape you have). The rate floor still applies
+  (`now < slot.nextBuyAt` -> `too_fast`).
+- Refusals: `comp_none` when no comp is stored, `comp_used` when the stored comp's id does not match the one
+  sent (already spent, or from an older grant). Both HTTP 200. A retry with the SAME `idem` replays the stored
+  receipt byte for byte as always; `comp_used` is for a fresh `idem` re-using a spent id.
+- On success `settle()` clears `slot.comp`, and the receipt carries `"cost": 0` and
+  `"comp": { "id": "c_...", "spins": 5 }` beside `tape`.
+- `netSp` needs no special case: `slot.netSp += spAfter - sp` at a 0 cost already books it as a 0-cost tape,
+  so `/v2/user/sync`'s `SkillPointBackfill` never refunds or erases it. Receipts are written and trimmed
+  exactly as any other tape's.
+
+**Client.** EMI hands it over; there is no ceremony (Brake 1: arriving is not an earned moment).
+
+- On sit-down `station.js` reads `state.comp`. If it is there: the HUD status line reads `br_slot_comp` ("On
+  the house: {0} spins"), a small chip `<span class="slot-comp">` sits on the cabinet beside the SP readout
+  until the comp is spent, and EMI takes the `hearts` face for one `glanceHoldMs`.
+- The lever's FIRST press buys the comp tape (`request('tape', { comp: id })`) instead of a paid one; every
+  press after that is a normal paid tape at `defaultTapeCount(sp)`. The spin button's `<small>` reads
+  `br_slot_comp_cost` ("Free") for that one press.
+- No party: a glance and one chime (`sound.chime` at tier 1, `tokens: false`), never a fanfare, never a
+  REVEAL. The five spins themselves play exactly like paid spins and celebrate on their own merits.
+- `mock-server.js` gains the comp: a `comp` option in `createMockServer`, `comp` in the `state` body, the
+  0-cost tape branch and the `comp_none` / `comp_used` refusals, so the node tests drive it without a server.
+- Lexicon: `br_slot_comp`, `br_slot_comp_cost`, `br_slot_comp_chip` ("On the house").
+
+### 10.16.D C1 the EMI pair free re-spin (table v7)
+
+The chase moment. Two EMI on reels 1 and 2, and reel 3 comes back for a second look.
+
+**The new line.** `emi2` joins `LINES` between `emi3` and `gif3same`, and `lineOf()` checks it FIRST, before
+`melt`:
+
+```js
+if (symbols[0] === 'emi' && symbols[1] === 'emi' && symbols[2] !== 'emi') return 'emi2';
+```
+
+So `emi, emi, melt` reads `emi2` and does NOT start the melt. `emi, X, emi` and `X, emi, emi` are unchanged
+(`none` or `melt`): the re-spin is about reels 1 and 2, the same pair A1 already holds reel 3 for (10.15).
+`emi2` **pays 0**. `FX.emi2 = []`: no effect id of its own, because the re-spin IS the event. It is a
+plain-band outcome in every other way: it is halved (of 0) and consumes one melt while melted, and its spirals
+fill the jar.
+
+**The re-spin.** An `emi2` outcome appends exactly ONE outcome of `kind: 'emi_respin'` to the expansion queue,
+so `drain()` plays it immediately after. It holds reels 1 and 2 as `emi` and redraws reel 3 only, from a
+dedicated two-band re-spin weight set, not from the plain table:
+
+```js
+respin: Object.freeze({ emi: 7555 }),   // over DEN; whatever is left draws a non-EMI, non-melt reel 3
+```
+
+- `emi` -> `symbols = ['emi','emi','emi']`, `line: 'emi3'`, `pay: table.pays.emi3` (400), `fx: ['fx.jackpot']`.
+- otherwise -> reel 3 is drawn uniformly from the 11 non-EMI, non-`melt` symbols, `line: 'none'`, `pay: 0`,
+  `fx: []` (plus `fx.sub_single` when the drawn symbol is a subliminal, section 4's overlay rule).
+- **It can never land `melt`** (the symbol is not in its draw) and **is never halved** (`halved: false`): it
+  neither consumes nor starts melt, like a freeze outcome. It expands into nothing: an `emi_respin` never
+  queues a further re-spin, free spin or jar spin, and never fires a second `emi2`.
+- Its spirals DO fill the jar (it descends from a plain-band spin).
+
+**The arithmetic.** Measured over table v6's own class-first dressing (the sim, not a guess): a plain outcome
+dresses EMI onto reels 1 and 2 with reel 3 something else on 11 of the 945 `none` triples and 1 of the 394
+`melt` triples, which is **8,206.58 per million = 1 in 121.8**. `emi2`'s weight is set to that natural rate,
+**8,207**, so the pair shows exactly as often as it does today; all that changes is what happens next. The
+weight comes out of `none`, which pays 0, so lifting it costs no return.
+
+Target: the jackpot stays **1 in 6,494** (154.00 per million plain outcomes, 10.14), with about 40% of
+jackpots arriving through the re-spin.
+
+```
+ jackpot per plain outcome = P(emi3 drawn direct) + P(emi2) x P(re-spin lands emi)
+                    154e-6 = 92e-6              + 8,207e-6 x q
+                         q = 62e-6 / 8,207e-6 = 0.0075545   ->  respin.emi = 7,555 / 1,000,000  (1 in 132)
+                 delivered = 92.000 + 62.004 = 154.004 per million = 1 in 6,494
+             re-spin share = 62.004 / 154.004 = 40.3%
+```
+
+So the plain `emi3` weight drops from **154 to 92** (a direct 1 in 6,494 becomes a direct 1 in 10,870) and the
+missing 62 per million comes back through the re-spin.
+
+The re-spin's jackpot is never halved, while a direct `emi3` still is. 16.65% of plain outcomes are halved
+(the melt chain's stationary share, unchanged), so moving 62 per million of jackpot into an unhalvable band
+adds `62e-6 x 400 x 0.166497 = +0.00206` SP per outcome. That, plus the jar, is what the 0.916369 retune in
+10.16.A absorbs. The re-spin also adds `8,207e-6` outcomes per plain outcome to the tape, which is inside the
+1.2066 outcomes-per-paid-spin figure.
+
+**Published table.** `publicTable()` gains an `emi2` row
+(`{ id: 'emi2', pays: 0, odds: '1 in 122', respin: 1 }`), a `respin` block
+(`{ emi: '1 in 132', jackpotShare: 0.40 }`), the `jar` block (10.16.A), and a headline
+`jackpotOdds: '1 in 6,494'` so the page prints the TOTAL jackpot chance next to the direct-draw row.
+Published odds must always be the total: the direct row alone would understate the jackpot, and published odds
+are a playbook "already in" (10.1).
+
+**Freeze.** A freeze spin never draws `emi2` and never starts a re-spin, and neither does a `spiral2` re-spin
+that repeats a frozen table. The five `frozen` tables gain no `emi2` band and keep their v6 weights exactly, so
+every held class stays at exactly 1.0200 with no re-tune (`exactFrozenRtp`). That also settles the held-reel-3
+case the playbook asks about: a held reel 3 cannot be redrawn, so there could be no re-spin anyway; sealing the
+whole freeze from C1 gives the same answer in every column and keeps "a freeze buy is worth the same in every
+state" (`backroom-slot.js` header) literally true. (Owner may revisit: a chase moment on a 2 SP freeze would
+need all five conditional tables re-tuned.)
+
+**Sim requirement.** `sim-backroom-slot.mjs` reports, on top of 10.16.A's numbers: whole-game RTP 1.0200, the
+jackpot 1 in 6,494 per plain outcome, the re-spin's share of jackpots (expect 40.3%) and the `emi2` frequency
+(expect 1 in 122, about one chase every 8 minutes at the 4.02 s pace). A 30,000,000 paid-spin Monte Carlo
+through the real draw pinned RTP 1.02024, 1.20658 outcomes per paid spin, `emi2` 1 in 122.9, jar fires 1 in
+39.3 outcomes and a re-spin share of 40.85% (jackpot-count noise at that size is about +- 0.001 RTP).
+
+**Client.** The re-spin is a second beat, not a second spin.
+
+- `tape.js` treats `emi_respin` like `respin`: it plays on its own, with NO extra lever press, right after the
+  `emi2` outcome, and the cursor advances through both.
+- The `emi2` outcome itself plays as a no-pay landing with A1's EMI-pair anticipation already on it (10.15:
+  1,400 ms hold, bulbs gold). It gets NO shiver and NO ALMOST tell (A2 is the release when the pair misses;
+  here it has not missed yet), and `recipe()` answers `tier: 0` with `party: 'hold'`, a new quiet party that is
+  a muted thud and nothing else.
+- Then reels 1 and 2 stay exactly where they are, reel 3 spins again and takes the **full 1,400 ms gold hold**
+  (`ANTICIPATION`'s EMI row, `pace.js`), **never halved here**, not even while melted: the Brake 5 halving in
+  10.15 applies to A1's anticipation, not to this beat, because this beat IS the event. Then THE THUD. On
+  `emi3` the REVEAL plays exactly as any jackpot does (Law IX, once per sit-down).
+- `pace.js`: an `emi_respin` outcome costs `SPIN_MS` for reel 3 only, plus the 1,400 ms hold, plus `THUD_MS`,
+  `REVEAL_MS` and `BREATH_MS`: about 4,380 ms. `outcomeMs` takes a `kind` so the sim and the page agree.
+- Reduced motion and Calm keep the hold and the tone and drop the light change, exactly as A1 does (10.15).
+- Lexicon: `br_slot_line_emi2` ("2 EMI"), `br_slot_respin` ("One more look").
+- `mock-server.js` gains the `emi2` class, the `emi_respin` outcome and the v7 weights, so the node tests and
+  `dev.html` see the same shapes.
+
+### 10.16.E C2 must-hit-by on the wheel jackpot
+
+The climb becomes the event: at 1,000 it has to fall.
+
+**Wheel table v3** (`backroom-wheel.js`, `TABLE_V3` replacing `TABLE_V2`): `v: 3`, and one new jackpot field:
+
+```js
+jackpot: Object.freeze({ start: 250, perDay: 25, cap: 1000, mustHitBy: 1000, minAccountDays: 3, targetDays: 10, minSpinners: 100 }),
+```
+
+Nothing else moves: not a slice, not a weight, not a width, not `snoozeCarry`, not `virtualStake`. `mustHitBy`
+MUST equal `cap` (a test pins `TABLE_V3.jackpot.mustHitBy === TABLE_V3.jackpot.cap`) so the two numbers cannot
+drift apart: the pot is lazy (`J = min(start + perDay * (day - seedDay), cap)`) and would otherwise sit at the
+cap forever without reaching a separate must-hit line.
+
+**The rule.**
+
+```js
+/** True while today's pot sits at the must-hit line and nobody has taken it today. */
+const mustHitNow = (day, seedDay, table = TABLE_V3) =>
+  jackpotAmount(day, seedDay, table) >= table.jackpot.mustHitBy && !potWonToday(day, seedDay);
+```
+
+`spin(input)` takes a new `input.mustHit` boolean and computes
+`forced = input.mustHit === true && input.eligible !== false && !potTaken`.
+`drawSlice(rng, odds, table, eligible, forced)` **still spends the same rng call**, so a seeded re-draw stays
+aligned:
+
+```js
+const roll = Math.floor(rng() * U32);
+if (forced || roll < odds.threshold) return sliceById(table, eligible ? 'jackpot' : GATE_FALLBACK);
+```
+
+- **Eligible spinner, pot unclaimed:** forced true, they take J, and the pot re-seeds exactly as today
+  (`seedDay = day + 1`, tomorrow starts at 250 again).
+- **Young account (under `minAccountDays`):** NOT forced. Their check runs at the normal odds; a natural hit
+  still pays Dazed 100 as today and does not claim, so a young account never consumes the forced hit.
+- **Pot already taken today:** `potTaken` makes `forced` false, so the second spinner that day draws at the
+  normal odds and not a forced Dazed. This is the rule that stops must-hit-by minting Dazed 100 to every
+  spinner in the room on the forced day.
+
+**The race.** Unchanged: one atomic `SET backroom:wheel:jackpot:<day> "<uid>|<J>" NX EX 3d` claims the pot and
+exactly one caller gets OK. The loser re-runs the same seeded draw with
+`{ ...input, seedDay: day + 1, mustHit: false }`, which marks the pot taken and lands the Dazed fallback, never
+a second pot. `readRoom` already folds a foreign claim into `seedDay = max(seedDay, day + 1)`, which drops J to
+250 and makes `mustHitNow` false for everyone who reads after the claim lands, so the exposure is only
+genuinely concurrent requests.
+
+**`state`.** `GET /v2/backroom/wheel/state`'s `jackpot` object gains `mustHit`:
+
+```json
+"jackpot": { "amount": 1000, "odds": "1 in 6,644", "wonToday": false, "eligible": true, "mustHit": true }
+```
+
+`mustHit` is `mustHitNow(day, seedDay)`: a room fact, true whenever J is at the cap and nobody has taken it
+today, whatever this account's age. `eligible` already says whether THIS account can win it. `POST spin`'s
+response carries the same `jackpot` object, so the chip settles correctly after a win.
+
+**Sim requirement.** `scripts/sim-backroom-wheel.mjs` reports, per room size (20 / 100 / 700 / 3,000 / 10,000
+spinners), the mean days between wins and the distribution of the wait, with and without `mustHitBy`. Expected,
+and pinned by an exact calculation: the pot reaches the cap on day 30 after its seed day, so
+
+| | today (v2) | must-hit-by (v3) |
+|---|---|---|
+| Mean wait between wins | 10.00 days | **9.62 days** |
+| Longest possible wait | unbounded | **31 days** |
+| Cycles that end on the forced day | - | **4.24%** |
+| Mean pot paid | 465.5 SP | **465.5 SP** |
+
+Identical at every room size, because the per-spin odds already scale with yesterday's spinner count so the
+room wins about every `targetDays` days whatever its size. **Must-hit-by costs the house nothing in
+expectation** (the pot was already capped at 1,000, so the money is the same and only the wait is bounded), and
+the sim must confirm exactly that: mean pot paid unchanged to within noise, and never more than one J minted
+per UTC day at any room size.
+
+**Client.** `stations/wheel/station.js` and `room/main.js` read `jackpot.mustHit`:
+
+- The wheel station's jackpot readout (`readout.js`) prints `br_wheel_must_hit` ("MUST HIT") in place of the
+  odds line while `mustHit` is true, with the amount still shown.
+- The room's jackpot chip, the `screen_jackpot` label on the wheel fixture (`br_room_label_jackpot`), reads the
+  same key, and the room's bell line (10.16.B) carries it as a standing first entry while it is true.
+- **No new fx**, no new sound, no colour change beyond the gold the jackpot slice already has. The wheel's v3
+  hypno moments (10.13.F) are untouched.
+- Lexicon: `br_wheel_must_hit` ("MUST HIT"), `br_wheel_must_hit_room` ("The pot has to fall today").
+
+### 10.16.F Kept out (playbook section 3)
+
+Everything 10.15 kept out stays kept out, and none of B1, B2, B3, C1 or C2 reopens any of it. No near-miss stop
+weighting: the stops are still whatever the server drew, `emi2` is dressed at its natural rate and the re-spin
+draws from a published weight, so nothing is parked just off the line more often than chance. No losses
+disguised as wins: `emi2` pays 0 and gets a muted thud, not a party, and the jar's party fires on the jar
+filling (a real 3-free-spin event), never on a losing spin. No time-on-device design: the clock stays, Back
+stays live at every frame, the bell never polls while seated, attract mode still stops on any press, and the
+comp is five spins that end. No bet nudges and no denomination tricks: the stake is still 1 SP flat and the
+comp does not change it. No low-balance nudges: the comp is offered on a RETURN after three or more missed
+days, never on a low balance, and `insufficient` stays a quiet state. And the three Tier B items gate no
+content and push no purchase: the room mints SP, sells nothing, and the jar, the bell and the comp are all paid
+in SP that came from the room in the first place.
+
+### 10.16.G Lane split
+
+Four lanes, no shared file. Each can be briefed from this section alone.
+
+| Lane | Items | Files it may touch |
+|---|---|---|
+| **Server slot** (S-b1) | A + D | CCP-Server `proxy/backroom-slot.js` (table v7, `jar`, `emi2`, `emi_respin`, the `comp` seam in `parseTapeBody` / `settle`, `publicTable`), `proxy/scripts/sim-backroom-slot.mjs`, `proxy/scripts/test-backroom-slot.mjs` |
+| **Server room** (S-b2) | B + C + E | CCP-Server `proxy/backroom-routes.js` (`K.bell`, `K.bellRate`, the two `bell` routes, `lastVisit`, the comp grant, passing `comp` through the tape route, `comp` and `jar` in the slot `state` body, the bell write in each station's settle), `proxy/backroom-wheel.js` (`TABLE_V3`, `mustHitNow`, `spin`, `drawSlice`), `proxy/backroom-wheel-routes.js`, `proxy/scripts/sim-backroom-wheel.mjs`, `proxy/scripts/test-backroom-wheel.mjs`, `proxy/scripts/test-backroom-wheel-routes.mjs`, `proxy/scripts/test-backroom-routes.mjs` |
+| **Client slot** (C-b1) | A + C + D | client `Resources/web/backroom/stations/slot/` only: `station.js`, `scene.js`, `feel.js`, `pace.js`, `tape.js`, `station.css`, `mock-server.js`, `station.md`, `tests/` |
+| **Client room** (C-b2) | B + E | client `Resources/web/backroom/room/hud.js`, `room/main.js`, `room/room.css`, `stations/wheel/station.js`, `stations/wheel/readout.js`, `stations/wheel/mock-server.js`, `stations/wheel/station.md`, `smoke/room-check.mjs` |
+
+- The two server lanes share no file. `backroom-slot.js` is the slot lane's; `backroom-routes.js` is the room
+  lane's. The slot lane ships the 0-cost `comp` branch in `settle()` to 10.16.C's spec even though the grant
+  that fills `slot.comp` is the room lane's, so neither lane waits on the other.
+- The two client lanes share no file. `stations/slot/` is the slot lane's; `room/` and `stations/wheel/` are
+  the room lane's. `stations.json` is touched by neither.
+- Neither client lane touches C# and neither touches `Localization/Languages/en.json`. Each ships English
+  fallbacks in the page and lists its new `br_*` keys in its own `station.md` (the room lane lists the room's
+  in the `room/hud.js` header); the integration pass adds them to `en.json`, and the host sends every `br_*`
+  key in `init.lex` (10.13).
+- The one C# change in the whole amendment is the `Ops` row
+  `["bell"] = new[] { ("GET","state"), ("POST","opt") }` in `Services/BackRoom/BackRoomApi.cs`, which the
+  integration pass makes.
+- Order: nothing blocks. The client lanes drive their own `mock-server.js`, so they can be built and tested
+  before either server lane deploys. The server slot lane's table v7 and the server room lane's wheel v3 are
+  independent re-sims.
