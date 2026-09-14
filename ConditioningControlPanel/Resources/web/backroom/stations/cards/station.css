@@ -43,6 +43,7 @@
 .cards-deal span, .cards-deal small { display: block; }
 .cards-deal small { font-size: 10px; font-weight: 500; opacity: .85; font-variant-numeric: tabular-nums; }
 .cards-station[data-open] .cards-deal { display: none; }
+.cards-deal[data-held] { cursor: not-allowed; box-shadow: none; }   /* a fullscreen moment: One moment, presses dropped */
 .cards-station:not([data-open]) .cards-move { display: none; }
 .cards-station:not([data-phase="play"]) :is(.cards-controls, .cards-side) { visibility: hidden; }
 /* Law VIII: a press answers on its frame with a ring (a state, so reduced motion keeps it). */

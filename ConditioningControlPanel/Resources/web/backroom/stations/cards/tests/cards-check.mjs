@@ -209,6 +209,65 @@ d = await dbg();
 ok(d.screenLeftMs === 0, 'and deals again once the picture has gone');
 summary.blackjack = { fx, bloomAfterReplyMs: bloom.at - deal.at };
 
+/* ---------------------------------------------------------------- 1b. Deal cannot be pressed by any path during a fullscreen moment */
+// Owner 2026-09-14: "nip it in the bud". Every path is tried while the bloom runs; presses are dropped, never queued.
+const dealCount = () => ev("window.dev.sent.filter((m) => m.type === 'station-request' && m.op === 'deal').length");
+const trustedClick = async (sel) => {
+  const r = await ev(`(() => { const b = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; })()`);
+  await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', x: r.x, y: r.y, button: 'left', clickCount: 1 });
+  await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x: r.x, y: r.y, button: 'left', clickCount: 1 });
+  return r;
+};
+const KEYS = { Space: { key: ' ', code: 'Space', windowsVirtualKeyCode: 32, text: ' ' }, Enter: { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' } };
+const press = async (k) => { await cdp('Input.dispatchKeyEvent', { type: 'keyDown', ...KEYS[k] }); await cdp('Input.dispatchKeyEvent', { type: 'keyUp', ...KEYS[k] }); };
+await boot('?floor=600&script=As.9d.Kh.7c');
+await dealWhenReady();
+ok(await moment('cards.bloom'), 'a blackjack deal fires the bloom');
+const heldDeals0 = await dealCount();
+d = await dbg();
+const heldBtn = await ev(`(() => { const b = document.querySelector('.cards-deal'), r = b.getBoundingClientRect();
+  return { disabled: b.disabled, held: b.hasAttribute('data-held'), text: b.querySelector('small').textContent, opacity: Number(getComputedStyle(b).opacity),
+    hit: document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === b || b.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)) }; })()`);
+ok(d.controls.dealWhy === 'screen' && heldBtn.disabled && heldBtn.held && heldBtn.text === 'One moment' && heldBtn.opacity < 0.6 && d.screenLeftMs > 2000,
+  `the bloom disables Deal visibly, even while the hand is still being laid down: "${heldBtn.text}", opacity ${heldBtn.opacity}, ${d.screenLeftMs} ms left`);
+ok(heldBtn.hit, 'nothing covers the button, so the pointer presses below really reach it');
+for (let i = 0; i < 4; i++) await trustedClick('.cards-deal');
+ok((await dealCount()) === heldDeals0, 'four real mouse clicks on Deal: no deal');
+await ev("document.activeElement && document.activeElement.blur && document.activeElement.blur(); true");
+await press('Space'); await press('Enter'); await press('Space');
+ok((await dealCount()) === heldDeals0, 'Space and Enter on the table: no deal');
+await ev("document.querySelector('.cards-deal').focus(); true");
+await press('Space'); await press('Enter');
+ok((await dealCount()) === heldDeals0, 'Space and Enter with the focus on the Deal button: no deal');
+await ev("(() => { for (let i = 0; i < 6; i++) document.querySelector('.cards-deal').click(); return true; })()");
+ok((await dealCount()) === heldDeals0, 'six scripted clicks in one task: no deal');
+const heldDirect = await ev(`(async () => { const b = document.querySelector('.cards-deal'), before = window.dev.station.debug().dropped;
+  b.onclick(); b.disabled = false; b.click(); await new Promise((r) => setTimeout(r, 0)); return { dropped: window.dev.station.debug().dropped - before, ring: b.classList.contains('is-ringing') }; })()`);
+ok(heldDirect.dropped === 2 && !heldDirect.ring && (await dealCount()) === heldDeals0,
+  `a direct call into deal and a click on a re-enabled button are refused inside the deal action (${heldDirect.dropped} dropped, no ring)`);
+await until('window.dev.station.debug().controls.deal', 8000);
+const heldFor = await dbg();
+await sleep(700);
+d = await dbg();
+ok((await dealCount()) === heldDeals0 && d.busy === false && d.queue === 0 && heldFor.dropped >= 6,
+  `nothing was queued: the moment ends, no deal follows on its own (${heldFor.dropped} presses dropped, ${await dealCount()} deals)`);
+ok(!(await ev("document.querySelector('.cards-deal').hasAttribute('data-held')")) && d.dealText !== 'One moment', `Deal comes back as "${d.dealText}"`);
+await mark();
+await trustedClick('.cards-deal');
+ok(await until(`window.dev.sent.filter((m) => m.type === 'station-request' && m.op === 'deal').length === ${heldDeals0 + 1}`, 4000), 'and one real click after the moment deals once');
+{
+  // No other door: deal() is reached only from the button and the station's own Space/Enter; the room relays no input into a
+  // station (no gamepad polling, no HUD or host message that presses a station control).
+  const src = await readFile(join(HERE, '../station.js'), 'utf8');
+  const calls = src.split('\n').filter((l) => /\bdeal\(\)/.test(l) && !/function deal\(\)/.test(l)).map((l) => l.trim());
+  ok(calls.length === 2 && calls.some((l) => l.includes(".cards-deal').onclick = () => deal()")) && calls.some((l) => l.includes("e.code === 'Space' || e.key === 'Enter'")),
+    `deal() has exactly two callers, the button and Space/Enter (${calls.length})`);
+  const roomSrc = (await Promise.all(['room/main.js', 'room/loader.js', 'room/hud.js', 'bridge.js'].map((f) => readFile(join(WEB, 'backroom', f), 'utf8')))).join('\n');
+  const hostTypes = [...roomSrc.matchAll(/bridge\.on\('([\w-]+)'/g)].map((m) => m[1]);
+  ok(!/getGamepads|gamepadconnected/.test(roomSrc + src) && !/cards-deal|\.deal\b/.test(roomSrc) && hostTypes.every((x) => !/deal|key|press|input|pad/i.test(x)),
+    `no gamepad path, and no room or host message reaches Deal (host messages: ${[...new Set(hostTypes)].join(', ')})`);
+}
+
 /* ---------------------------------------------------------------- 2. split and double */
 await boot('?floor=600&sp=20&script=8h.6d.8c.Ts.3s.Td.9c.Kd');
 await dealWhenReady();

@@ -60,6 +60,8 @@ test('controls: moves from legal only while a hand is open, deal only when the t
   assert.equal(controls({ ...base, hand: null, screenUntil: 1000 }).deal, true, 'and lets go the frame it ends');
   assert.equal(controls({ ...base, hand: null, screenUntil: 1001 }).sit, true, 'sitting back down opens no decision');
   assert.equal(controls({ ...base, hand: null, animating: true }).dealWhy, 'busy');
+  assert.equal(controls({ ...base, hand: null, animating: true, screenUntil: 1001 }).dealWhy, 'screen', 'a bloom mid-deal reads as the moment');
+  assert.equal(controls({ ...base, hand: null, busy: true, screenUntil: 1001 }).deal, false);
   assert.equal(controls({ ...base, hand: readHand(open), busy: true }).moves.hit, false);
   assert.equal(controls({ ...base, phase: 'sit', hand: null }).deal, false);
 });

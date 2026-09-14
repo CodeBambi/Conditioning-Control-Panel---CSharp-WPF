@@ -107,7 +107,8 @@ export function defaultStake(sp, stakes = [1, 2]) {
 export function controls({ phase, hand, legal = [], sp = 0, stake = 1, busy = false, animating = false, dealReadyAt = 0, screenUntil = 0, now = 0 }) {
   const table = phase === 'play' && !busy && !animating;
   const open = isOpen(hand);
-  const why = !table ? 'busy' : open ? 'open' : now < screenUntil ? 'screen' : sp < stake ? 'sp' : now < dealReadyAt ? 'floor' : null;
+  // the moment reads first, even while the reply is still being laid down, so the button says why it is off
+  const why = now < screenUntil ? 'screen' : !table ? 'busy' : open ? 'open' : sp < stake ? 'sp' : now < dealReadyAt ? 'floor' : null;
   const moves = {};
   for (const m of MOVES) moves[m] = table && open && legal.includes(m);
   return { deal: why === null, dealWhy: why, bet: table && !open, sit: table && !open, moves };

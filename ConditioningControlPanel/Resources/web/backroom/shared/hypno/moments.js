@@ -243,6 +243,8 @@ export function createMoments(ctx, { station = '' } = {}) {
       else if (breathTimer) return;
       setTunnel(level);
     },
+    /** True while a timed tunnel breath (cards.lose) is still running: cards hold the next deal on it. */
+    breathing() { return !!breathTimer; },
     /** Cards: while on, play() fires no host fx and tunnel(> 0) is ignored. */
     holdScreen(on) {
       held = !!on;
@@ -272,7 +274,7 @@ export function createMoments(ctx, { station = '' } = {}) {
       if (unsub) { try { unsub(); } catch (e) { /* noop */ } }
     },
     /** Test seam. */
-    debug() { return { held, bloomed, holds: holds.size, tunnel: posted, want, disposed }; },
+    debug() { return { held, bloomed, holds: holds.size, tunnel: posted, want, disposed, breathing: !!breathTimer }; },
   };
   return api;
 }

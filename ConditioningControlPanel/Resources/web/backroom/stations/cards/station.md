@@ -53,7 +53,12 @@ Shared code comes only through the hypno kit (`shared/hypno/index.js`): `createL
   until it has ended (`hand.controls` reason `screen`, `feel.screenHoldMs`): the bloom's picture (4 s, 2.4 s Calm),
   the win wash (900 ms), the losing edges (2600 ms breath plus its closing post). The bloom's 2.4 s follows the host's
   Calm (`reduced` or `intensity: calm`) only, never the OS `prefers-reduced-motion` alone, which the host is not told.
-  Deal is disabled and reads `br_cards_moment` ("One moment"); a press during the hold is dropped, not queued. A gate
+  Deal cannot be pressed by any path while a fullscreen moment runs; presses are dropped, not queued (owner, CONTRACT
+  10.14 item 10). The button is disabled, marked `data-held` and reads `br_cards_moment` ("One moment") from the
+  frame the moment fires, even while the hand is still being laid down; `deal()` itself refuses first (no ring, no
+  note), so Space, Enter, repeated or scripted clicks and a direct call all drop; a tunnel breath that outlives its
+  timed hold keeps the hold (`moments.breathing()`). The room relays no input into a station (no gamepad, no HUD or
+  host message presses Deal); cards-check 1b tries every path during a bloom. A gate
   that sent nothing holds nothing; `suspend(true)` cancels the moments and the hold with them (the host's suspend
   stops its overlays).
 
