@@ -44,9 +44,8 @@ namespace ConditioningControlPanel.Features
         }
 
         // Jackpot Remix row: visible only while the Back Room prize is owned. Ownership comes from
-        // PrizeGrants, never from settings. The dashboard flash card's v2 pill is not added here:
-        // TODO FeatureCard.ShowV2Badge (the Flashes v2 lane adds the property and sets it from
-        // ownership in SettingsTabView.RefreshV2Badges); fold this prize into that check on merge.
+        // PrizeGrants, never from settings. The dashboard flash card's v2 pill counts this prize
+        // too; that check lives in SettingsTabView.RefreshV2Badges.
         private void RefreshJackpotRemixRow()
         {
             RowJackpotRemix.Visibility = Services.Prizes.PrizeGrants.IsGranted(Services.Prizes.PrizeGrants.JackpotRemix)
