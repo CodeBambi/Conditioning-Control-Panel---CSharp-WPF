@@ -1232,6 +1232,17 @@ namespace ConditioningControlPanel.Models
             set { _jackpotRemixEnabled = value; OnPropertyChanged(); }
         }
 
+        // Flashes v2 wave 2 (Back Room prizes fx.flash.*): rounded corners on every flash GIF.
+        // Off by default; owning a v2 style never flips it, and the renderers ignore it entirely
+        // while nothing v2 is owned (ownership is PrizeGrants' word, never this flag).
+        private bool _flashRoundedCorners = false;
+        [JsonProperty("FlashRoundedCorners")]
+        public bool FlashRoundedCorners
+        {
+            get => _flashRoundedCorners;
+            set { _flashRoundedCorners = value; OnPropertyChanged(); }
+        }
+
         private FlashMotionStyle _flashMotionStyle = FlashMotionStyle.Still;
         /// <summary>Flashes v2 motion picker. Compositor path only; resolved per spawn through FlashMotion.Resolve.</summary>
         [JsonProperty("FlashMotionStyle")]

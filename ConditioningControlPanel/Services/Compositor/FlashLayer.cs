@@ -264,8 +264,18 @@ public sealed class FlashLayer : BaseLayer
             else
             {
                 // Legacy non-glow content: black backing behind the (letterboxed) image.
+                // Wave 2: with rounded corners on, the backing rounds too and the image is clipped
+                // to the same round-rect, so no square black shoulder survives behind a corner.
                 _fillPaint.Color = new SKColor(0, 0, 0, alpha);
-                canvas.DrawRect(inner, _fillPaint);
+                if (item.CornerRadiusPx > 0)
+                {
+                    canvas.DrawRoundRect(new SKRoundRect(inner, item.CornerRadiusPx), _fillPaint);
+                    canvas.ClipRoundRect(new SKRoundRect(fit, item.CornerRadiusPx), antialias: true);
+                }
+                else
+                {
+                    canvas.DrawRect(inner, _fillPaint);
+                }
             }
 
             _imagePaint.Color = new SKColor(255, 255, 255, alpha);
