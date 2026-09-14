@@ -187,7 +187,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             var answer = await Ask(
                 Loc.Get("companion_awareness_picker_drop_guard_title"),
                 Loc.GetF("companion_awareness_picker_drop_guard", row.Label),
-                1, ("Yes", true), ("No", false));
+                1, (Loc.Get("btn_yes"), true), (Loc.Get("btn_no"), false));
 
             if (answer == true)
             {

@@ -368,6 +368,7 @@ namespace ConditioningControlPanel.Avalonia
             Task<bool?>? noCompletion = null;
             Task<bool?>? yesCompletion = null;
             Task<bool?>? noticeCompletion = null;
+            var previousLanguage = LocalizationManager.Instance.CurrentLanguage;
 
             static List<AwarenessPickRow> Rows(AwarenessAppPickerDialog dialog) =>
                 dialog.FindControl<ItemsControl>("ItemList")!.ItemsSource!
@@ -403,7 +404,9 @@ namespace ConditioningControlPanel.Avalonia
             {
                 if (OpenPrompt(dialog) is not Window prompt) return;
                 var buttons = PromptButtons(prompt);
-                if (buttons.Count != 2 || buttons[0].Caption != "Yes" || buttons[1].Caption != "No")
+                if (buttons.Count != 2
+                    || buttons[0].Caption != Loc.Get("btn_yes")
+                    || buttons[1].Caption != Loc.Get("btn_no"))
                     throw new InvalidOperationException("Unexpected guard prompt shape during cleanup");
                 ClickButton(buttons[1].Button);
             }
@@ -444,14 +447,24 @@ namespace ConditioningControlPanel.Avalonia
                     noDialog.IsVisible && noGuard.IsChecked == true && noRow.IsRecommended,
                     $"visible={noDialog.IsVisible}, checked={noGuard.IsChecked}, recommended={noRow.IsRecommended}");
 
+                // French is selected before the real guard prompt is opened so hardcoded English
+                // labels fail at the rendered TextBlock seam.
+                LocalizationManager.Instance.SetLanguage("fr");
                 noGuard.IsChecked = false;
                 Dispatcher.UIThread.RunJobs();
                 var noPrompt = OpenPrompt(noDialog);
                 var noButtons = noPrompt is null ? new List<(Button Button, string Caption)>() : PromptButtons(noPrompt);
                 check("awareness picker opens its owned Yes/No guard prompt",
-                    noPrompt is not null && noButtons.Count == 2
-                    && noButtons[0].Caption == "Yes" && noButtons[1].Caption == "No",
+                    noPrompt is not null && noButtons.Count == 2,
                     $"open={noPrompt is not null}, captions={string.Join("|", noButtons.Select(button => button.Caption))}");
+                check("awareness picker guard prompt renders French app-locale labels",
+                    noButtons.Count == 2
+                    && noButtons[0].Caption == "Oui" && noButtons[1].Caption == "Non"
+                    && noButtons[0].Caption == Loc.Get("btn_yes")
+                    && noButtons[1].Caption == Loc.Get("btn_no")
+                    && noButtons[0].Caption != "btn_yes" && noButtons[1].Caption != "btn_no",
+                    $"captions={string.Join("|", noButtons.Select(button => button.Caption))}, "
+                    + $"btn_yes={Loc.Get("btn_yes")}, btn_no={Loc.Get("btn_no")}");
                 var noButton = noButtons.Count == 2 ? noButtons[1].Button : null;
                 check("awareness picker guard prompt makes No the default",
                     noButton?.IsDefault == true,
@@ -486,9 +499,9 @@ namespace ConditioningControlPanel.Avalonia
                 Dispatcher.UIThread.RunJobs();
                 var yesPrompt = OpenPrompt(yesDialog);
                 var yesButtons = yesPrompt is null ? new List<(Button Button, string Caption)>() : PromptButtons(yesPrompt);
-                check("awareness picker exposes explicit Yes for guard removal",
+                check("awareness picker exposes explicit French Oui for guard removal",
                     yesPrompt is not null && yesButtons.Count == 2
-                    && yesButtons[0].Caption == "Yes" && yesButtons[1].Caption == "No",
+                    && yesButtons[0].Caption == "Oui" && yesButtons[1].Caption == "Non",
                     $"open={yesPrompt is not null}, captions={string.Join("|", yesButtons.Select(button => button.Caption))}");
                 if (yesButtons.Count == 2) ClickButton(yesButtons[0].Button);
                 var yesRow = Rows(yesDialog).Single(row => row.Raw == "@passwords");
@@ -546,6 +559,8 @@ namespace ConditioningControlPanel.Avalonia
                     AnswerNoticeOk(noticeDialog);
                     ClosePicker(noticeDialog, noticeCompletion);
                 }
+                LocalizationManager.Instance.SetLanguage(previousLanguage);
+                Dispatcher.UIThread.RunJobs();
                 owner?.Close();
                 Dispatcher.UIThread.RunJobs();
             }
