@@ -48,7 +48,15 @@ function allowed(url) {
   try { const u = new URL(url, location.href); return (u.protocol === 'https:' && u.host === 'ccp.assets') || u.origin === location.origin; } catch (e) { return false; }
 }
 
-function prep(t) { t.colorSpace = T.SRGBColorSpace; t.flipY = false; return t; }
+function prep(t) {
+  const image=t.image, edge=Math.max(image?.width||0,image?.height||0);
+  if(edge>512){
+    const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.width*512/edge));canvas.height=Math.max(1,Math.round(image.height*512/edge));
+    canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+    t.dispose();t=new T.CanvasTexture(canvas);
+  }
+  t.colorSpace = T.SRGBColorSpace; t.flipY = false; return t;
+}
 
 /**
  * @param {Object} o  { meshes, ads:[{url, caption}], media: () => Promise<media frame>, log }
@@ -64,10 +72,11 @@ export async function createScreens(o) {
     const c = document.createElement('canvas'); c.width = c.height = 4;
     house.push(still(prep(new T.CanvasTexture(c)))); captions.push(labelTexture(''));
   }
-  let gallery = house, custom = false, epoch = 0, decodes = 0;
+  let gallery = house, custom = false, epoch = 0, decodes = 0, disposed = false;
   for (const m of o.meshes) { m.material = material(house[0].texture, captions[0]); m.material.uniforms.screen.value=m.userData.screenAspect||SCREEN_ASPECT;m.material.uniforms.cover.value=m.userData.screenCover?1:0; }
   const frustum = new T.Frustum(), viewProj = new T.Matrix4();
   const due = new Set();
+  let nextDecode = 0, cursor = 0;
 
   /** @param t ambient seconds  @param camera the room camera  @param isStill hold first frames */
   function update(t, camera, isStill) {
@@ -87,10 +96,14 @@ export async function createScreens(o) {
       let visible=true;for(let p=mesh;p;p=p.parent)if(!p.visible)visible=false;
       if (visible && camera && (a.tick || b.tick) && frustum.intersectsObject(mesh)) { due.add(a); if (blend > 0) due.add(b); }
     });
+    const now=performance.now();
+    if(now<nextDecode)return;
     let started = 0;
-    for (const src of due) {
+    const ready=[...due];
+    for (let i=0;i<ready.length;i++) {
+      const src=ready[(cursor+i)%ready.length];
       if (started >= MAX_DECODES_PER_FRAME) break;
-      if (src.tick && src.tick(performance.now(), isStill)) { started++; decodes++; }
+      if (src.tick && src.tick(now, isStill)) { started++; decodes++; cursor=(cursor+i+1)%ready.length; nextDecode=now+1000/12; }
     }
   }
 
@@ -99,13 +112,16 @@ export async function createScreens(o) {
     let frame = null;
     try { frame = await o.media(); } catch (e) { frame = null; }
     const gifs = frame && Array.isArray(frame.gifs) ? frame.gifs : [];
-    const urls = gifs.filter((g) => g && g.src !== 'fallback' && allowed(g.url)).slice(0, MAX_PICTURES).map((g) => g.url);
-    const loaded = (await Promise.all(urls.map(async (u) => {
+    const urls = [...new Set(gifs.filter((g) => g && g.src !== 'fallback' && allowed(g.url)).slice(0, MAX_PICTURES).map((g) => g.url))];
+    const results=new Array(urls.length);let next=0;
+    await Promise.all([0,1].map(async()=>{while(next<urls.length&&!disposed){const index=next++,u=urls[index];results[index]=await (async()=>{
       const playing = await animatedSource(u);
       if (playing) return playing;
       const t = await loader.loadAsync(u).then(prep).catch(() => null);
       return t && t.image && t.image.width > 0 ? still(t) : null;
-    }))).filter(Boolean);
+    })();}}));
+    const loaded=results.filter(Boolean);
+    if (disposed) { loaded.forEach(src => src.dispose ? src.dispose() : src.texture.dispose()); return 0; }
     if (!loaded.length) { if (urls.length && o.log) o.log('wall pictures: none readable, house art stays'); return 0; }
     gallery = loaded; custom = true; epoch = now();
     return loaded.length;
@@ -113,6 +129,11 @@ export async function createScreens(o) {
 
   return {
     update, deal,
+    dispose() {
+      disposed = true;
+      for (const src of new Set([...house, ...gallery])) src.dispose ? src.dispose() : src.texture.dispose();
+      captions.forEach(t => t.dispose());
+    },
     get pictures() { return custom ? gallery.length : 0; },
     /** Test seam: how many pictures can play, frames decoded so far, decodes started. */
     get animation() { return { animated: gallery.filter((g) => g.animated).length, frames: gallery.reduce((s, g) => s + (g.frames || 0), 0), decodes }; },

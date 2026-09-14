@@ -37,7 +37,7 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     model.name='statue_spot_'+spot+'_'+PIECES[index];model.rotation.y=spot===2?Math.PI:0;
     model.position.fromArray(position);model.visible=index===spot;return model;
   }));
-  const handles=await createSlotCustomHandles({holders:room.holders,loader,base});
+  const handles=await createSlotCustomHandles({holders:room.holders,loader,base,sources:sculptures});
   const getState=()=>({screens:extras.getState(),statues:[...selected.statues],handles:handles.getState(),floor:floorEnabled?room.getFloorStyle().design:-1,palette:room.getFloorStyle().palette});
   const select=(category,index,target=0)=>{
     if(category==='screens')return extras.set(target,index);

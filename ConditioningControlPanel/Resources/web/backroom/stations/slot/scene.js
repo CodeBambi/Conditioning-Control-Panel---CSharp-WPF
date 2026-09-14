@@ -14,9 +14,11 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { createRenderBudget } from '../../room/render-budget.js';
 import { attachSlotCustomHandle, slotHandleStyle } from '../../room/slot-custom-handles.js';
 import { createCoinShower } from '../../room/coin-shower.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
 import { drawSymbol } from './symbols.js';
 import { PACE, reelStopMs, reelsMs, respinStopMs, respinMs } from './pace.js';
@@ -78,8 +80,10 @@ function paintDisplay(ctx, w, h, marquee, text) {
  */
 export async function createScene(o) {
   const { canvas, reduced } = o;
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+  const budget = createRenderBudget(navigator, devicePixelRatio);
+  let lastDraw = -Infinity;
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'default' });
+  renderer.setPixelRatio(budget.dpr(canvas.clientWidth, canvas.clientHeight));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.25;
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(LENS_DEG, 16 / 9, 0.015, 60);
@@ -125,7 +129,7 @@ export async function createScene(o) {
   const absent = OPTIONAL.filter(n => !get(n));
   if (absent.length) console.warn(`[slot] glb lacks optional nodes, degrading: ${absent.join(', ')}`);
 
-  customHandle = await attachSlotCustomHandle({rig,loader:new GLTFLoader(),base:asset('../../room/assets/'),style:slotHandleStyle(o.variant)}).catch(()=>null);
+  customHandle = await attachSlotCustomHandle({rig,loader:new GLTFLoader().setMeshoptDecoder(MeshoptDecoder),base:asset('../../room/assets/'),style:slotHandleStyle(o.variant)}).catch(()=>null);
   const cabinet = get('cabinet'), lever = get('lever'), rigRest = rig.position.clone();
   const reels = [1, 2, 3].map(i => get(`reel_${i}`)), restX = reels.map(r => r.rotation.x);
   const freezers = [1, 2, 3].map(i => get(`freeze_${i}`));
@@ -255,6 +259,7 @@ export async function createScene(o) {
   const aim = (pos, lookAt) => { camera.position.copy(pos); camera.lookAt(lookAt); };
   function resize() {
     const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
+    renderer.setPixelRatio(budget.dpr(w, h));
     renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
     poses = frame(camera.aspect);
     if (phase === 'play') aim(poses.play.pos, poses.play.look);
@@ -550,7 +555,10 @@ export async function createScene(o) {
         o.hint.style.left = `${(p.x + 1) * canvas.clientWidth / 2}px`; o.hint.style.top = `${(1 - p.y) * canvas.clientHeight / 2 - 12}px`;
       }
     }
-    renderer.render(scene, camera);
+    const gap = 1000 / (budget.mobile ? 30 : 60);
+    if (!document.hidden && t - lastDraw >= gap - 1) {
+      renderer.render(scene, camera); lastDraw = t;
+    }
   }
   // A throw in one frame must not stop the loop (a spin in flight would never land). A tainted canvas
   // (cross-origin media without CORS) stays tainted, so drop the dealt GIFs and rebuild the reel canvases.

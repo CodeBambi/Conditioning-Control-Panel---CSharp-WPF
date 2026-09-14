@@ -23,6 +23,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { createRenderBudget } from '../../room/render-budget.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { REQUIRED, OPTIONAL } from './nodes.js';
 import { TAU, sliceAt, planLanding, rotationAt } from './wheel.js';
@@ -116,8 +117,10 @@ function paintScreen(canvas, text, gold) {
 export async function createScene(o) {
   const { canvas } = o;
   let reduced = !!o.reduced;
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+  const budget = createRenderBudget(navigator, devicePixelRatio);
+  let lastDraw = -Infinity;
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'default' });
+  renderer.setPixelRatio(budget.dpr(canvas.clientWidth, canvas.clientHeight));
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping;
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(LENS_DEG, 16 / 9, 0.05, 30);
   scene.add(new THREE.HemisphereLight(0xfbd7f4, 0x36243e, 1.2));
@@ -335,6 +338,7 @@ export async function createScene(o) {
   }
   function resize() {
     const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
+    renderer.setPixelRatio(budget.dpr(w, h));
     renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
     play = frame();
     if (phase === 'play') { camera.position.copy(play.pos); camera.lookAt(play.look); }
@@ -459,7 +463,10 @@ export async function createScene(o) {
     if (play) model.position.x = modelRest.x + px * ((2 * camera.position.distanceTo(play.look) * Math.tan(THREE.MathUtils.degToRad(LENS_DEG) / 2)) / (canvas.clientHeight || 1));
     hypnoFrame(t, dtMs);
     emi.update(t);
-    renderer.render(scene, camera);
+    const gap = 1000 / (budget.mobile ? 30 : 60);
+    if (!document.hidden && t - lastDraw >= gap - 1) {
+      renderer.render(scene, camera); lastDraw = t;
+    }
   }
   let failed = false;
   const loop = t => { if (disposed) return; try { update(t); } catch (e) { if (!failed) console.error('[wheel] frame failed', e); failed = true; } raf = requestAnimationFrame(loop); };
