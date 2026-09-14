@@ -66,7 +66,7 @@ Single-zero roulette for SP (CONTRACT.md sections 2-7 and 10.13, binding spec `h
 - **Suspend** cancels the moments, pauses the station clock and disposes the Loom kit and the deck (their keys still
   pick); resuming makes a new kit and replays the running spin's holds.
 
-## Lexicon (`br_roulette_*`, English fallbacks in the page; the integration pass adds them to `en.json`)
+## Lexicon (`br_roulette_*`, English fallbacks in the page, the same text in `en.json`; `smoke/lexicon.test.mjs` keeps them equal)
 
 `br_roulette_back`, `br_roulette_stage`, `br_roulette_loading`, `br_roulette_closed`, `br_roulette_offline`,
 `br_roulette_ready`, `br_roulette_resume`, `br_roulette_watch`, `br_roulette_left`, `br_roulette_spin`,

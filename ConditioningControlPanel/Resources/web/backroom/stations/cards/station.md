@@ -90,7 +90,7 @@ The fan fades in place for 2.4 s, the Loom and the pictures hold still, chips fa
 args stay Normal (the host halves). The OS `prefers-reduced-motion` alone halves page strength but the host is not told,
 so host washes and tunnels stay Normal there (as the wheel does). **Gates** are read live on every frame.
 
-## Lexicon (`br_cards_*`, English fallbacks in the page; the integration pass adds them to `en.json`)
+## Lexicon (`br_cards_*`, English fallbacks in the page, the same text in `en.json`; `smoke/lexicon.test.mjs` keeps them equal)
 
 | Key | English |
 |---|---|
