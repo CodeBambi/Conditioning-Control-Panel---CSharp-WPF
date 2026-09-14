@@ -62,7 +62,7 @@ namespace ConditioningControlPanel
             EnsureEnhancementsFx();
 
             // Update skill points display
-            EnhancementsTab.TxtSkillPoints.Text = settings.SkillPoints.ToString();
+            EnhancementsTab.TxtSkillPoints.Text = settings.SkillPoints.ToString("N0");
 
             // Update XP multiplier display
             var multiplier = App.SkillTree?.GetTotalXpMultiplier() ?? 1.0;
@@ -275,7 +275,7 @@ namespace ConditioningControlPanel
             });
             pointsInfoStack.Children.Add(new TextBlock
             {
-                Text = settings.SkillPoints.ToString(),
+                Text = settings.SkillPoints.ToString("N0"),
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
                 FontSize = 24,
                 FontWeight = FontWeights.Bold

@@ -84,7 +84,7 @@ namespace ConditioningControlPanel
             ("BtnPlayRemoteControl", "tab.remotecontrol"), ("BtnPlayBlinkTrainer", "tab.blinktrainer"),
             ("BtnPlayGradedIntake", "tab.gradedintake"), ("BtnPlayFyp", "tab.fyp"),
             ("BtnPlayLockdown", "tab.lockdown"),
-            ("BtnPlayArcademy", "card.arcademy"),
+            ("BtnPlayArcademy", "card.arcademy"), ("BtnPlayBackRoom", "card.backroom"),
         };
 
         /// <summary>Subscribe to patron-status changes, wire the pin menus, paint once.</summary>
@@ -93,6 +93,9 @@ namespace ConditioningControlPanel
             if (!_favoritesRailSubscribed && App.Patreon != null)
             {
                 try { App.Patreon.TierChanged += (s, e) => Dispatcher.BeginInvoke(new Action(RefreshDashboardRail)); }
+                catch { }
+                // Prize grants (Back Room v2 styles) repaint the same funnel: the mosaic's v2 pills live in it.
+                try { Services.Prizes.PrizeGrants.GrantsChanged += () => Dispatcher.BeginInvoke(new Action(RefreshDashboardRail)); }
                 catch { }
                 _favoritesRailSubscribed = true;
             }

@@ -180,6 +180,27 @@
                     </ComboBox>
                 </Grid>
 
+                <!-- THE BACK ROOM effects intensity (CONTRACT section 4). Item order IS the
+                     BackRoomFxIntensity ordinal (Calm=0, Normal=1, Full=2) - never reorder. It sits
+                     under Motion because Motion caps it: anything below Full plays Calm. -->
+                <Grid MinHeight="34" Margin="0,2,0,0" ToolTip="{loc:Str tooltip_backroom_fx_intensity}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Style="{StaticResource SettingLabel}"
+                               Text="{loc:Str setting_backroom_fx_intensity}"
+                               Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                    <ComboBox Grid.Column="1" x:Name="CmbBackRoomFxIntensity" x:FieldModifier="internal"
+                              Style="{StaticResource DarkComboBoxStyle}" FontSize="11"
+                              Width="110" MinHeight="28" VerticalAlignment="Center"
+                              SelectionChanged="CmbBackRoomFxIntensity_SelectionChanged">
+                        <ComboBoxItem Content="{loc:Str label_backroom_fx_calm}"/>
+                        <ComboBoxItem Content="{loc:Str label_backroom_fx_normal}"/>
+                        <ComboBoxItem Content="{loc:Str label_backroom_fx_full}"/>
+                    </ComboBox>
+                </Grid>
+
                 <!-- ============================================================
                      DO NOT DISTURB (Wobberjockey's request). The user lists the
                      apps they watch things in; while one of those owns the

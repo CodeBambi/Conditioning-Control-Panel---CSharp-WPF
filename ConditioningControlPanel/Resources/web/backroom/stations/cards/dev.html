@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Soft Hand - dev harness</title>
+<!-- Dev harness only: the kit's mock host (shared/hypno/tests/mock-host.js) and mock-server.js stand in for the room,
+     the host and the server. Serve ConditioningControlPanel/Resources/web as the web root, then open
+     /backroom/stations/cards/dev.html.
+     Query: ?sp=57&latency=80&floor=5000&calm&reduced&full&off=flash,spiral,brainDrain,tunnel&nopics&hook
+            &script=As.9d.Kh.7c,Th.9d.8c.8s  (one hand per comma, cards in deal order: player, dealer up, player, hole, draws)
+     #screen stands in for the host's desktop overlays (wash, gif-from, tunnel), drawn from what the mock host recorded, with
+     Calm applied there as the host does. Neither it nor this page is product code. -->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #160e20; font: 12px Segoe UI, Arial, sans-serif; color: #fce5f3; }
+  #root { position: fixed; inset: 0; }
+  #screen { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 50; }
+  #sit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 12px 22px; border-radius: 20px;
+         background: #28172fea; color: inherit; border: 1px solid #edb1d177; font: inherit; font-size: 14px; cursor: pointer; }
+  #fakechip { position: fixed; top: 12px; right: 12px; z-index: 60; padding: 6px 12px; border-radius: 20px; background: #2a1838; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<canvas id="screen" aria-hidden="true"></canvas>
+<span id="fakechip" hidden>SP <b></b></span>
+<button id="sit" type="button">Sit at Soft Hand</button>
+<script type="module">
+import { mount } from './station.js';
+import { createMockServer } from './mock-server.js';
+import { createMockHost } from '../../shared/hypno/tests/mock-host.js';
+
+const q = new URLSearchParams(location.search);
+const num = (k, d) => (q.has(k) ? Number(q.get(k)) : d);
+const rel = (p) => new URL(p, location.href).href;
+const PICS = ['../slot/fallback/gif0.webp', '../../../dtrh/assets/bubbles/effects/spirals/sp6.gif', '../../../arcademy/art/bugle/g1.webp',
+  '../slot/fallback/gif1.webp', '../../room/assets/ads/dtrh.webp', '../../../arcademy/art/bugle/g2.webp', '../slot/fallback/gif2.webp',
+  '../../../dtrh/assets/bubbles/effects/spirals/sp7.gif', '../../../arcademy/art/bugle/g3.webp', '../slot/fallback/gif3.webp',
+  '../../room/assets/ads/arcademy.webp', '../../../arcademy/art/bugle/g4.webp', '../../room/assets/ads/focus-gaze.webp'].map(rel);
+const off = (q.get('off') || '').split(',').filter(Boolean);
+const host = createMockHost({ deal: q.has('nopics') ? [] : PICS, intensity: q.has('calm') ? 'calm' : q.has('full') ? 'full' : 'normal', reduced: q.has('reduced'),
+  gates: Object.fromEntries(off.map((g) => [g, false])) });
+const server = createMockServer({ sp: num('sp', 57), floorMs: num('floor', 5000) });
+for (const hand of (q.get('script') || '').split(',').filter(Boolean)) server.script(...hand.split('.'));
+const latency = num('latency', 80), sent = [];
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const chip = document.getElementById('fakechip'), chipState = { owed: 0, shown: null };
+const paintChip = () => { chip.querySelector('b').textContent = String(chipState.shown ?? Math.max(0, server.user.sp - chipState.owed)); };
+
+const ctx = host.attach({
+  root: document.getElementById('root'),
+  bridge: { send: (m) => sent.push(m), log: (level, msg) => sent.push({ type: 'log', level, msg }) },
+  request: async (op, body, idem) => { await wait(latency); const r = await server.handle(op, body, idem); sent.push({ type: 'station-request', op, body, result: r }); if (q.has('hook')) paintChip(); return r; },
+  sp: () => server.user.sp,
+  onSp: () => () => {},
+  lex: (key, fallback) => fallback,
+  standUp: () => stand(),
+  variant: null,
+  hostBack: q.has('hook') || undefined,
+  spReadout: q.has('hook') ? { set(v) { chipState.shown = v; paintChip(); }, owe(n) { chipState.owed = typeof n === 'function' ? n() : n; paintChip(); },
+    thud() { sent.push({ type: 'chip-thud' }); }, target() { return chip; } } : undefined,
+});
+if (q.has('hook')) { chip.hidden = false; paintChip(); }
+
+/* ---- the host's overlays, as the kit's contract describes them (a picture stands for what the host would draw) ---- */
+const screen = document.getElementById('screen'), sg = screen.getContext('2d');
+const imgs = PICS.map((u) => { const i = new Image(); i.src = u; return i; });
+const pic = (key) => { const m = /^g(\d+)$/.exec(key || ''); return m && !q.has('nopics') ? imgs[Number(m[1]) % imgs.length] : null; };
+const fx = { seen: new WeakSet(), washes: [], gifs: [], level: 0, want: 0, wantAt: 0, last: performance.now() };
+function drawPic(im, x, y, w, h) {
+  if (!im || !im.naturalWidth) { sg.fillStyle = '#3a1f5c'; sg.fillRect(x, y, w, h); return; }
+  const s = Math.max(w / im.naturalWidth, h / im.naturalHeight), dw = im.naturalWidth * s, dh = im.naturalHeight * s;
+  sg.save(); sg.beginPath(); sg.rect(x, y, w, h); sg.clip(); sg.drawImage(im, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh); sg.restore();
+}
+function overlay(now) {
+  const W = innerWidth, H = innerHeight, calm = host.ctx.intensity === 'calm' || host.ctx.reduced, K = calm ? 0.5 : 1, D = calm ? 0.6 : 1;
+  if (screen.width !== W || screen.height !== H) { screen.width = W; screen.height = H; }
+  for (const r of host.fx) {   // by record, not index: host.clear() empties the list and an index would skip what comes next
+    if (fx.seen.has(r)) continue; fx.seen.add(r);
+    if (!r.ack.fired.length) continue;
+    if (r.fxId === 'fx.wash') fx.washes.push({ t0: now, color: (r.args && r.args.color) || '#9b6bff', k: ((r.args && r.args.strength) || 0.7) * K, im: pic(r.symbols && r.symbols[0]) });
+    if (r.fxId === 'fx.gif_from') fx.gifs.push({ t0: now, from: r.args.from || { x: W / 2, y: H / 2, w: 8, h: 8 }, ms: (r.args.ms || 3400) * D, scale: r.args.scale || 1, im: pic(r.symbols && r.symbols[0]) });
+  }
+  const tl = host.tunnel.at(-1);
+  if (tl && tl.at !== fx.wantAt) { fx.want = tl.applied ? tl.level * K : 0; fx.wantAt = tl.at; }
+  if (Date.now() - fx.wantAt > 1500) fx.want = 0;
+  const dt = (now - fx.last) / 1000; fx.last = now;
+  fx.level += (fx.want - fx.level) * Math.min(1, dt * (fx.want > fx.level ? 1.4 : 2.2));
+  sg.clearRect(0, 0, W, H);
+  fx.gifs = fx.gifs.filter((g) => now - g.t0 < g.ms);
+  for (const g of fx.gifs) {
+    const age = (now - g.t0) / 1000, dur = g.ms / 1000, p = Math.min(1, age / 0.7), grow = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+    const fade = age > dur - 0.9 ? Math.max(0, (dur - age) / 0.9) : 1, ar = g.im && g.im.naturalWidth ? g.im.naturalWidth / g.im.naturalHeight : 4 / 3;
+    const tw = Math.max(W, H * ar) * g.scale, th = tw / ar, lerp = (a, b) => a + (b - a) * grow;
+    if (g.scale >= 1) { sg.globalAlpha = fade * (0.55 + 0.45 * grow) * (calm ? 0.8 : 1); sg.fillStyle = 'rgba(8,4,14,.55)'; sg.fillRect(0, 0, W, H); }
+    sg.globalAlpha = fade * (calm ? 0.8 : 1);
+    drawPic(g.im, lerp(g.from.x, (W - tw) / 2), lerp(g.from.y, (H - th) / 2), lerp(g.from.w, tw), lerp(g.from.h, th));
+    sg.globalAlpha = 1;
+  }
+  fx.washes = fx.washes.filter((f) => now - f.t0 < 900);
+  for (const f of fx.washes) {
+    const age = (now - f.t0) / 1000, env = age < 0.08 ? age / 0.08 : Math.exp(-(age - 0.08) * 4.5);
+    sg.globalAlpha = env * 0.42 * f.k; sg.fillStyle = f.color; sg.fillRect(0, 0, W, H);
+    if (f.im) { const h = H * 0.42, w = h * 4 / 3; sg.globalAlpha = Math.min(1, env * 1.3) * 0.85 * f.k; drawPic(f.im, (W - w) / 2, (H - h) / 2, w, h); }
+    sg.globalAlpha = 1;
+  }
+  if (fx.level > 0.01) {
+    const k = fx.level, R = Math.hypot(W, H) / 2, grad = sg.createRadialGradient(W / 2, H / 2, R * (1 - 0.72 * k), W / 2, H / 2, R * (1.12 - 0.5 * k));
+    grad.addColorStop(0, 'rgba(6,3,12,0)'); grad.addColorStop(1, `rgba(6,3,12,${0.94 * Math.min(1, 1.3 * k)})`);
+    sg.fillStyle = grad; sg.fillRect(0, 0, W, H);
+  }
+  requestAnimationFrame(overlay);
+}
+requestAnimationFrame(overlay);
+
+const station = await mount(ctx);
+const sit = document.getElementById('sit');
+async function stand() { await station.close(); sit.hidden = false; }
+async function open() { sit.hidden = true; await station.open(); }
+sit.onclick = open;
+window.dev = { server, host, station, ctx, sent, open, stand, fx, script: (...c) => server.script(...c), settings: (p) => host.settings(p) };
+</script>
+</body>
+</html>

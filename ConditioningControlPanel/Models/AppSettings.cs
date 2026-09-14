@@ -145,6 +145,20 @@ namespace ConditioningControlPanel.Models
     }
 
     /// <summary>
+    /// How the ambient dashboard bubbles travel (Back Room prize styles). FloatUp is the free
+    /// base; Rain and SpiralIn are owned styles; Mix rolls per bubble among FloatUp plus the
+    /// owned styles. Ownership is never read from here: an unowned pick behaves as FloatUp
+    /// (Services/AmbientBubbleMotion.Resolve), so a synced profile can carry any value safely.
+    /// </summary>
+    public enum BubbleMotionStyle
+    {
+        FloatUp,
+        Rain,
+        SpiralIn,
+        Mix
+    }
+
+    /// <summary>
     /// Application settings model - matches Python DEFAULT_SETTINGS
     /// </summary>
     public class AppSettings : INotifyPropertyChanged
@@ -465,11 +479,12 @@ namespace ConditioningControlPanel.Models
         /// <summary>
         /// Available skill points to spend on the enhancement tree.
         /// Earned per level-up (SkillTreeService.PointsPerLevel) and per 100 bubbles popped.
+        /// Clamped to [0, SparklePoints.Cap] so every write path shares the server's ceiling.
         /// </summary>
         public int SkillPoints
         {
             get => _skillPoints;
-            set { _skillPoints = Math.Max(0, value); OnPropertyChanged(); }
+            set { _skillPoints = SparklePoints.Clamp(value); OnPropertyChanged(); }
         }
 
         /// <summary>
@@ -3291,6 +3306,14 @@ namespace ConditioningControlPanel.Models
             get => _bubblesEnabled;
             set { _bubblesEnabled = value; OnPropertyChanged(); }
         }
+        private BubbleMotionStyle _bubbleMotionStyle = BubbleMotionStyle.FloatUp;
+        /// <summary>Ambient bubble travel style (Bubbles v2). Unowned styles degrade to FloatUp at spawn.</summary>
+        [JsonProperty("BubbleMotionStyle")]
+        public BubbleMotionStyle BubbleMotionStyle
+        {
+            get => _bubbleMotionStyle;
+            set { _bubbleMotionStyle = value; OnPropertyChanged(); }
+        }
         private int _bubblesFrequency = 5;
         public int BubblesFrequency
         {
@@ -4886,6 +4909,51 @@ namespace ConditioningControlPanel.Models
         {
             get => _motionLevel;
             set { _motionLevel = value; OnPropertyChanged(); }
+        }
+
+        private Services.BackRoom.BackRoomFxIntensity _backRoomFxIntensity = Services.BackRoom.BackRoomFxIntensity.Normal;
+        /// <summary>
+        /// THE BACK ROOM effects intensity (CONTRACT section 4): Calm, Normal or Full. Calm is also
+        /// forced whenever the effective motion level is not Full, and Full never breaks the Brake
+        /// (no strobe over 6 Hz, one hero at a time, feature toggles still win).
+        /// </summary>
+        [JsonProperty]
+        public Services.BackRoom.BackRoomFxIntensity BackRoomFxIntensity
+        {
+            get => _backRoomFxIntensity;
+            set
+            {
+                if (!Enum.IsDefined(typeof(Services.BackRoom.BackRoomFxIntensity), value)) value = Services.BackRoom.BackRoomFxIntensity.Normal;
+                _backRoomFxIntensity = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private bool _backRoomTunnel = true;
+        /// <summary>
+        /// THE BACK ROOM tunnel vision (CONTRACT 10.14): the room's own switch, shown in the room's
+        /// Options and not in Settings, because nothing else uses it. ON by default; a settings file
+        /// written before the switch existed has no key, so it reads as on until the player turns it off.
+        /// </summary>
+        [JsonProperty]
+        public bool BackRoomTunnel
+        {
+            get => _backRoomTunnel;
+            set { _backRoomTunnel = value; OnPropertyChanged(); }
+        }
+
+        private bool _backRoomMelt = true;
+        /// <summary>
+        /// THE BACK ROOM melt (CONTRACT 10.14): whether the slot's <c>fx.melt</c> plays the Brain Drain
+        /// melt. The room's own switch in the room's Options, ON by default and independent of the
+        /// app-wide Brain Drain toggles (<see cref="BrainDrainEnabled"/> and <see cref="BrainDrainMeltEnabled"/>
+        /// both default off, which kept every room melt dark). A missing key reads as on; a player's off is kept.
+        /// </summary>
+        [JsonProperty]
+        public bool BackRoomMelt
+        {
+            get => _backRoomMelt;
+            set { _backRoomMelt = value; OnPropertyChanged(); }
         }
 
         private bool _videoForceHardwareDecoding = false;

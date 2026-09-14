@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Velvet Vortex roulette - dev harness</title>
+<!-- Dev harness only: the kit's mock host (shared/hypno/tests/mock-host.js) and mock-server.js stand in for the room,
+     the host and the server. Serve ConditioningControlPanel/Resources as the web root, then open
+     /web/backroom/stations/roulette/dev.html
+     Query: ?sp=40&latency=80&floor=6000&calm&reduced&full&gates=off&hook&next=17w,0,12&tape=3
+       next   forced draws, a pocket with an optional w for a Spiral Wake ("17w,0,12")
+       tape   a tape of that many spins already bought and unwatched (a reopen)
+       hook   fakes the room's ctx.spReadout and ctx.hostBack
+     The "host preview" canvas paints what the mock host was asked to fire, roughly, so a screenshot shows the
+     moment. It is not the host: the real overlays are the app's (Services/BackRoom/Overlays). -->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0614; font: 12px Segoe UI, Arial, sans-serif; color: #efe6ff; }
+  #root { position: fixed; inset: 0; }
+  #preview { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 40; }
+  #sit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 12px 22px; border-radius: 20px; z-index: 30;
+         background: #28172fea; color: inherit; border: 1px solid #edb1d177; font: inherit; font-size: 14px; cursor: pointer; }
+  #dev { position: fixed; top: 110px; right: 8px; z-index: 50; display: flex; flex-direction: column; gap: 4px; opacity: .85; }
+  #dev button { font: 11px Segoe UI, Arial, sans-serif; padding: 3px 8px; }
+  #dev summary { cursor: pointer; text-align: right; }
+  #fakechip { position: fixed; top: 12px; right: 12px; z-index: 60; padding: 6px 12px; border-radius: 20px; background: #2a1838; }
+  #fakeback { position: fixed; top: 12px; left: 12px; z-index: 60; padding: 6px 12px; border-radius: 20px; background: #2a1838; color: inherit; border: 1px solid #ab79a766; }
+  #hostcap { position: fixed; left: 50%; bottom: 4px; transform: translateX(-50%); z-index: 60; font: 10px Consolas, monospace; color: #a898c4; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<canvas id="preview" aria-hidden="true"></canvas>
+<span id="fakechip" hidden>SP <b></b></span>
+<button id="fakeback" type="button" hidden>Back</button>
+<div id="hostcap">host preview (dev harness only)</div>
+<button id="sit" type="button">Visit the roulette</button>
+<details id="dev"><summary>dev</summary>
+  <button data-do="wake">next: 17 woken</button>
+  <button data-do="zero">next: 0</button>
+  <button data-do="busy">fault: busy x2</button>
+  <button data-do="door">toggle door</button>
+  <button data-do="gates">toggle gates</button>
+  <button data-do="calm">intensity: calm</button>
+  <button data-do="normal">intensity: normal</button>
+  <button data-do="full">intensity: full</button>
+</details>
+<script type="module">
+import { mount } from './station.js';
+import { createMockServer } from './mock-server.js';
+import { createMockHost } from '../../shared/hypno/tests/mock-host.js';
+import { createLoomKit, createDeck } from '../../shared/hypno/index.js';
+
+const q = new URLSearchParams(location.search);
+const num = (k, d) => (q.has(k) ? Number(q.get(k)) : d);
+const latency = num('latency', 80), wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const server = createMockServer({ sp: num('sp', 40), floorMs: num('floor', 6000) });
+const OFF = { flash: false, subliminal: false, spiral: false, brainDrain: false, tunnel: false };
+const host = createMockHost({ intensity: q.has('calm') ? 'calm' : q.has('full') ? 'full' : 'normal', reduced: q.has('reduced'),
+  gates: q.get('gates') === 'off' ? OFF : null });
+const parseNext = (s) => s.split(',').filter(Boolean).map((x) => ({ pocket: parseInt(x, 10), wake: /w$/.test(x) }));
+if (q.has('tape')) {
+  server.setFloor(0);
+  server.script(...parseNext(q.get('next') || '').slice(0, num('tape', 3)));
+  await server.handle('spin', { idem: 'devtapealreadybought01', count: num('tape', 3), bets: [{ spot: 'rose', amt: 1 }, { spot: 'sink', amt: 1 }] });
+  await server.handle('cursor', { tapeId: server.user.tape.id, played: 1 });
+  server.setFloor(num('floor', 6000));
+} else if (q.has('next')) server.script(...parseNext(q.get('next')));
+
+const sent = [], spFns = new Set(), chipState = { owed: 0, shown: null };
+const chip = document.getElementById('fakechip');
+const paintChip = () => { const o = typeof chipState.owed === 'function' ? chipState.owed() : chipState.owed; chip.querySelector('b').textContent = String(chipState.shown ?? Math.max(0, server.user.sp - o)); };
+const ctx = host.attach({
+  root: document.getElementById('root'),
+  bridge: { send: (m) => sent.push(m), log: (lvl, m) => sent.push({ type: 'log', lvl, m }) },
+  request: async (op, body, idem) => { await wait(latency); const r = await server.handle(op, body, idem); sent.push({ type: 'station-request', op, body, result: r }); if (q.has('hook')) requestAnimationFrame(paintChip); return r; },
+  sp: () => server.user.sp,
+  onSp: (fn) => { spFns.add(fn); return () => spFns.delete(fn); },
+  lex: (key, fallback) => fallback,
+  standUp: () => stand(),
+  variant: null,
+  hostBack: q.has('hook') || undefined,
+  spReadout: q.has('hook') ? {
+    set(v) { chipState.shown = v; paintChip(); }, owe(n) { chipState.owed = n; paintChip(); },
+    thud() { sent.push({ type: 'chip-thud' }); }, target() { return chip; },
+  } : undefined,
+});
+if (q.has('hook')) { chip.hidden = false; paintChip(); const fb = document.getElementById('fakeback'); fb.hidden = false; fb.onclick = () => stand(); }
+
+const station = await mount(ctx);
+const sit = document.getElementById('sit');
+async function stand() { await station.close(); sit.hidden = false; }
+async function open() { sit.hidden = true; await station.open(); }
+sit.onclick = open;
+
+let gatesOn = q.get('gates') !== 'off', door = true;
+document.getElementById('dev').addEventListener('click', (e) => {
+  const act = e.target.dataset && e.target.dataset.do;
+  if (act === 'wake') server.script({ pocket: 17, wake: true });
+  if (act === 'zero') server.script({ pocket: 0 });
+  if (act === 'busy') server.fail('spin', 'busy', 2);
+  if (act === 'door') server.setOpen(door = !door);
+  if (act === 'gates') { gatesOn = !gatesOn; host.settings({ gates: gatesOn ? { flash: true, subliminal: true, spiral: true, brainDrain: true, tunnel: true } : OFF }); }
+  if (['calm', 'normal', 'full'].includes(act)) host.settings({ intensity: act });
+});
+
+/* ---- host preview: what the mock host acked as fired, painted after the 10.13.B recipes, roughly ---- */
+const pv = document.getElementById('preview'), pg = pv.getContext('2d');
+let seen = 0, tunnel = 0, lastT = performance.now(), pkit = null, pdeck = null;
+const shows = [];
+createDeck(host.ctx, { count: 4 }).then((d) => { pdeck = d; });
+function frame(now) {
+  const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
+  const W = innerWidth, H = innerHeight;
+  if (pv.width !== W || pv.height !== H) { pv.width = W; pv.height = H; }
+  pg.clearRect(0, 0, W, H);
+  const calm = host.ctx.intensity === 'calm' || host.ctx.reduced, K = calm ? 0.5 : 1, D = calm ? 0.6 : 1;
+  for (; seen < host.fx.length; seen++) { const r = host.fx[seen]; if (r.ack.fired.length) shows.push({ ...r, t0: now }); }
+  if (pdeck) pdeck.tick(now);
+  const released = new Set(host.release.map((r) => r.token));
+  const want = host.tunnel.length && Date.now() - host.tunnel.at(-1).at < 1500 && host.ctx.gates.tunnel ? host.tunnel.at(-1).level * K : 0;
+  tunnel += (want - tunnel) * Math.min(1, dt * (want > tunnel ? 1.4 : 2.2));
+  let hazing = false;
+  for (let i = shows.length - 1; i >= 0; i--) {
+    const s = shows[i], age = now - s.t0, a = s.args || {};
+    if (s.fxId === 'fx.loom_spiral') {
+      const rel = released.has(s.token) ? (s.relAt ??= now) : null, hold = a.hold ? 20000 : (a.ms || 4200) * D;
+      const out = rel != null ? (now - rel) / 1200 : age > hold ? (age - hold) / 1200 : 0;
+      if (out >= 1) { shows.splice(i, 1); continue; }
+      pkit ??= createLoomKit();
+      pkit.draw(pg, a.preset === 'wake' ? 'wake' : 'screen', 0, 0, W, H, { now, alpha: Math.min(1, age / 800) * (1 - Math.max(0, out)) * (a.alpha || 0.85) * K });
+    } else if (s.fxId === 'fx.gif_from') {
+      const dur = (a.ms || 3400) * D;
+      if (age > dur) { shows.splice(i, 1); continue; }
+      const p = Math.min(1, age / 700), e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2, fade = age > dur - 900 ? (dur - age) / 900 : 1;
+      const sc = a.scale || 1, tw = Math.max(W, H * 4 / 3) * sc, th = tw * 3 / 4, f = a.from || { x: W / 2, y: H / 2, w: 8, h: 8 };
+      if (sc >= 1) { pg.globalAlpha = fade * 0.55; pg.fillStyle = '#08040e'; pg.fillRect(0, 0, W, H); }
+      pg.globalAlpha = fade;
+      if (pdeck) pdeck.draw(pg, (s.symbols || [])[0], f.x + ((W - tw) / 2 - f.x) * e, f.y + ((H - th) / 2 - f.y) * e, f.w + (tw - f.w) * e, f.h + (th - f.h) * e);
+      pg.globalAlpha = 1;
+    } else if (s.fxId === 'fx.wash') {
+      if (age > 900) { shows.splice(i, 1); continue; }
+      const env = age < 80 ? age / 80 : Math.exp(-(age - 80) / 1000 * 4.5);
+      pg.globalAlpha = env * 0.42 * (a.strength ?? 0.7) * K; pg.fillStyle = a.color || '#9b6bff'; pg.fillRect(0, 0, W, H); pg.globalAlpha = 1;
+    } else if (s.fxId === 'fx.haze') {
+      if (released.has(s.token) || age > 20000) { shows.splice(i, 1); continue; }
+      hazing = true;
+    }
+  }
+  document.getElementById('root').style.filter = hazing ? 'blur(1.5px)' : '';
+  if (tunnel > 0.01) {
+    const R = Math.hypot(W, H) / 2, gr = pg.createRadialGradient(W / 2, H / 2, R * (1 - 0.72 * tunnel), W / 2, H / 2, R * (1.12 - 0.5 * tunnel));
+    gr.addColorStop(0, 'rgba(6,3,12,0)'); gr.addColorStop(1, `rgba(6,3,12,${0.94 * Math.min(1, 1.3 * tunnel)})`);
+    pg.fillStyle = gr; pg.fillRect(0, 0, W, H);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+window.dev = { server, station, ctx, host, sent, open, stand };
+</script>
+</body>
+</html>

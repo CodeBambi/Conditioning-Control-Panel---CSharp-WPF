@@ -402,6 +402,22 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>Play → The Back Room strip. No tier gate and no boot-failed prompt: the room is
+        /// free, and a room that did not open is worth simply clicking again.</summary>
+        internal void BtnStartBackRoom_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Services.BackRoom.BackRoomHostService.Launch();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "BtnStartBackRoom_Click failed");
+                MessageBox.Show(Loc.GetF("play_backroom_open_failed_body", ex.Message),
+                    Services.BackRoom.BackRoomHostService.ProductName, MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
         /// <summary>
         /// Play → Piece by Piece strip. Opens the 3D chess board (Resources/web/piecebypiece) via
         /// <see cref="Services.PieceByPiece.PieceByPieceHostService"/>, the sibling of the DtRH,
