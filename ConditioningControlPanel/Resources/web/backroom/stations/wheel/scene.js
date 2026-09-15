@@ -178,6 +178,7 @@ export async function createScene(o) {
   if (absent.length) console.warn(`[wheel] glb lacks optional nodes, degrading: ${absent.join(', ')}`);
 
   const rotor = get('wheel_rotor'), pointer = get('pointer'), pointerRest = pointer.rotation.z, modelRest = model.position.clone();
+  if (get('room_wheel_face')) get('room_wheel_face').visible = false;
   if (get('layout_sectors')) get('layout_sectors').visible = false;
   model.traverse(n => { if (/^(peg_|glyph_)/.test(n.name)) n.visible = false; });
   for (const n of ['title_letters', 'status_letters', 'hub_spiral']) if (get(n)) get(n).visible = false;

@@ -134,6 +134,6 @@ html.br-seated .br-hint, html.br-seated .br-crosshair, html.br-seated .br-visit 
 .br-seat > * { max-width: 100%; }
 
 @media (max-width: 600px) {
-  html.br-seated .br-nav { top: 58px; left: 12px; right: 12px; justify-content: flex-end; }
-  html.br-seated .br-bell { top: 98px; right: 12px; max-width: calc(100vw - 24px); }
+  .br-nav { top: 58px; left: 12px; right: 12px; justify-content: flex-end; }
+  .br-bell { top: 98px; right: 12px; max-width: calc(100vw - 24px); }
 }

@@ -1,3 +1,4 @@
+import { setWheelFace } from './wheel-face.js';
 /* ============================================================================
  * backroom/room/main.js - boot, the Back button, visiting, and the ways out.
  *
@@ -423,6 +424,14 @@ async function start(init) {
   hud.ready();
   paintMustHit();
   refreshBell('room-open');
+  // One read on room entry paints the fixture from the same table used when seated.
+  if (stations.some(row => row.id === 'wheel' && row.state === 'live') && !seated()) {
+    const reqId = bridge.mintId();
+    bridge.request({type:'station-request',reqId,station:'wheel',op:'state',body:{}},
+      'station-result', m => m.reqId === reqId, BELL_TIMEOUT_MS).then(res => {
+        if (!leaving && !seated() && res?.ok && res.body?.ok) setWheelFace(scene?.scene, res.body.slices);
+      }).catch(() => {});
+  }
   document.documentElement.classList.add('br-ready');
   bridge.log('info', 'room up: ' + stations.length + ' fixtures, ' + stations.filter((s) => s.state === 'live').length
     + ' live, built in ' + Math.round(scene.buildMs) + ' ms');
