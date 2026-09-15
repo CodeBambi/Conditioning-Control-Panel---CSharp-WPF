@@ -24,6 +24,9 @@ import { MAX_CHIPS, MAX_SPINS, addChip, removeChip, chipsOf, chipTotal, checkLay
 import { FEEL, planRun, seedFor, landMoment, nextLaunchAt } from './feel.js';
 import { createBowl } from './bowl.js';
 import { createMat } from './mat.js';
+import { createMatStrip } from './mat-strip.js';
+
+export const roomStage = true;
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
 const wait = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
@@ -41,10 +44,14 @@ export async function mount(ctx) {
     return String(s ?? fallback).replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : `{${k}}`));
   };
   const prefersReduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const stillNow = () => !!ctx.reduced || prefersReduced || String(ctx.intensity || '').toLowerCase() === 'calm';
+  const stillNow = () => ctx.motion === 'off' || ctx.motion === 'still' || !!ctx.reduced || prefersReduced || String(ctx.intensity || '').toLowerCase() === 'calm';
   const fullNow = () => ctx.intensity === 'full' && !ctx.reduced && !prefersReduced;
   const kNow = () => (prefersReduced ? 0.5 : strengthK(ctx));
   const gates = () => { const g = ctx.gates || {}; return { flash: g.flash !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false, tunnel: g.tunnel !== false }; };
+  const stage = ctx.stage?.fixture && ctx.stage?.register ? ctx.stage : null;
+  const makeBowl3D = stage ? (await import('./bowl-3d.js')).createBowl3D : null;
+  const makeMat3D = stage ? (await import('./mat-3d.js')).createMat3D : null;
+  let unStage = null, betSelector = null;
   const hostBack = ctx.hostBack === true;
   const hook = ctx.spReadout && typeof ctx.spReadout.owe === 'function' ? ctx.spReadout : null;
   loadCss();
@@ -109,6 +116,8 @@ export async function mount(ctx) {
     $('.roul-chips-label').textContent = t('br_roulette_chips', 'Chips {n} of {max}', { n: used, max: MAX_CHIPS });
     const locked = phase !== 'bet' || resume;
     $('.roul-clear').disabled = locked || used === 0;
+    $('.roul-chips-label').disabled = !stage || locked;
+    if (betSelector && locked) betSelector.hide();
     el.querySelectorAll('.roul-spins button').forEach((b) => { b.setAttribute('aria-pressed', String(Number(b.dataset.n) === count)); b.disabled = locked; });
     const shownWhy = why || (phase === 'bet' && !resume && !c.ok && c.why !== 'empty' ? whyText(c.why, c) : '');
     $('.roul-why').textContent = shownWhy; $('.roul-why').hidden = !shownWhy;
@@ -143,10 +152,11 @@ export async function mount(ctx) {
   /* ---------------------------------------------------------------- build */
   function build() {
     const root = document.createElement('div');
-    root.className = 'roul-station'; root.dataset.phase = 'loading';
+    root.className = stage ? 'roul-station br-seat' : 'roul-station';
+    if (stage) root.dataset.seated = '';  root.dataset.phase = 'loading';
     const spinsBtns = Array.from({ length: MAX_SPINS }, (_, i) => `<button type="button" data-n="${i + 1}" aria-pressed="false">${i + 1}</button>`).join('');
     root.innerHTML = `
-      <canvas class="roul-stage"></canvas>
+      ${stage ? '<div class="roul-stage"></div>' : '<canvas class="roul-stage"></canvas>'}
       <header class="roul-top">
         <button class="roul-back" type="button">&larr; <span></span></button>
         <span class="roul-sp"></span>
@@ -154,7 +164,7 @@ export async function mount(ctx) {
         <ol class="roul-history"></ol>
       </header>
       <div class="roul-controls">
-        <div class="roul-row"><span class="roul-chips-label"></span><span class="roul-pips" aria-hidden="true"><i></i><i></i><i></i></span><button class="roul-clear" type="button"></button></div>
+        <div class="roul-row"><button type="button" class="roul-chips-label"></button><span class="roul-pips" aria-hidden="true"><i></i><i></i><i></i></span><button class="roul-clear" type="button"></button></div>
         <div class="roul-row roul-spins" role="group"><span class="roul-spins-label"></span>${spinsBtns}</div>
         <p class="roul-why" hidden></p>
         <button class="roul-spin" type="button"><span></span><small></small></button>
@@ -173,6 +183,7 @@ export async function mount(ctx) {
     root.querySelector('.roul-card-back').onclick = back;
     if (hostBack) { root.dataset.hostBack = ''; root.querySelector('.roul-back').hidden = true; root.querySelector('.roul-card-back').hidden = true; }
     if (hook) root.dataset.hostSp = '';
+    root.querySelector('.roul-chips-label').onclick = () => betSelector?.toggle();
     root.querySelector('.roul-spin').onclick = () => press();
     root.querySelector('.roul-clear').onclick = () => { if (phase === 'bet' && !resume) { chips = {}; why = null; sync(); } };
     root.querySelectorAll('.roul-spins button').forEach((b) => { b.onclick = () => setCount(Number(b.dataset.n)); });
@@ -295,6 +306,7 @@ export async function mount(ctx) {
 
   /* ---------------------------------------------------------------- frame */
   function layout() {
+    if (stage) return;
     const w = cv.clientWidth, h = cv.clientHeight, dpr = Math.min(1.5, globalThis.devicePixelRatio || 1);
     if (w === size.w && h === size.h && dpr === size.dpr) return;
     size = { w, h, dpr };
@@ -311,7 +323,7 @@ export async function mount(ctx) {
 
   function frame() {
     if (!alive) return;
-    raf = requestAnimationFrame(frame);
+    if (!stage) raf = requestAnimationFrame(frame);
     if (suspended || !bowl) return;
     const now = clock(), still = stillNow(), k = kNow();
     layout();
@@ -326,14 +338,17 @@ export async function mount(ctx) {
       if (tape && tape.played < tape.outcomes.length) launch(tape.played, now);
       else { mat.clearAnims(); endTape(); }
     }
+    if (!stage) {
     g.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
     const bgr = g.createRadialGradient(bowl.geo.cx, bowl.geo.cy, bowl.geo.R * 0.5, bowl.geo.cx, bowl.geo.cy, Math.max(size.w, size.h) * 0.8);
     bgr.addColorStop(0, '#1d1233'); bgr.addColorStop(1, '#0a0614');
     g.fillStyle = bgr; g.fillRect(0, 0, size.w, size.h);
+    }
     const gt = gates();
     bowl.draw(g, { dpr: size.dpr, now, k, full: fullNow(), spiral: gt.spiral, kit,
       still, slowText: t('br_roulette_slowly', 's l o w l y') });
     const landedShown = cur && cur.landed ? cur.read : null;
+    if (betSelector) betSelector.draw(null, { chips, hits: [], locked: phase !== 'bet' || resume });
     mat.draw(g, { now, chips, hover, hits: landedShown ? landedShown.hits : [], landed: landedShown ? landedShown.pocket : null, k, still,
       bowl: bowl.geo, locked: phase !== 'bet' || resume });
   }
@@ -350,11 +365,11 @@ export async function mount(ctx) {
   const local = (e) => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
   function onPointer(e) {
     if (!mat) return;
-    const p = local(e), spot = mat.hit(p.x, p.y);
+    const p = local(e), spot = mat.pick ? mat.pick(e) : mat.hit(p.x, p.y);
     if (e.type === 'pointermove') { hover = spot; cv.style.cursor = spot && phase === 'bet' && !resume ? 'pointer' : 'default'; return; }
     if (e.type === 'pointerdown' && spot) { e.preventDefault(); place(spot, e.button === 2 || e.shiftKey); }
   }
-  const onContext = (e) => { if (mat && mat.hit(local(e).x, local(e).y)) e.preventDefault(); };
+  const onContext = (e) => { if (mat && (mat.pick ? mat.pick(e) : mat.hit(local(e).x, local(e).y))) e.preventDefault(); };
 
   /* ------------------------------------------------------------ lifecycle */
   async function open() {
@@ -362,7 +377,7 @@ export async function mount(ctx) {
     alive = true; suspended = false; phase = 'loading'; status = ''; why = null; history = []; feelLog = []; cur = null; resume = false; pausedMs = 0;
     const my = ++session;
     el = build(); ctx.root.append(el);
-    cv = $('.roul-stage'); g = cv.getContext('2d'); size = { w: 0, h: 0, dpr: 1 };
+    cv = stage ? stage.canvas : $('.roul-stage'); g = stage ? null : cv.getContext('2d'); size = { w: 0, h: 0, dpr: 1 };
     addEventListener('keydown', onKey);
     cv.addEventListener('pointermove', onPointer); cv.addEventListener('pointerdown', onPointer); cv.addEventListener('contextmenu', onContext);
     moments = createMoments(ctx, { station: 'roulette' });
@@ -379,8 +394,12 @@ export async function mount(ctx) {
       return;
     }
     st = b; sp = Number(b.sp) || 0; tape = adoptTape(b.tape);
-    bowl = createBowl({ wheel: st.wheel, rose: st.rose });
-    mat = createMat({ spots: st.spots, rose: st.rose, label: matLabel });
+    bowl = stage ? makeBowl3D({ stage, wheel: st.wheel, rose: st.rose }) : createBowl({ wheel: st.wheel, rose: st.rose });
+    mat = stage ? makeMat3D({ stage, spots: st.spots, label: matLabel }) : createMat({ spots: st.spots, rose: st.rose, label: matLabel });
+    if (stage) {
+      betSelector = createMatStrip({ root: el, spots: st.spots, label: matLabel, place }); betSelector.hide();
+      unStage = stage.register({ update: frame, dispose() { bowl?.dispose(); mat?.dispose(); betSelector?.dispose(); betSelector = null; } });
+    }
     if (tape) {
       chips = chipsOf(tape.bets); resume = tape.played < tape.outcomes.length;
       if (tape.played > 0) { const last = readOutcome(tape.outcomes[tape.played - 1], tape.bets, { rose: st.rose, wheel: st.wheel }); bowl.seat(last.index); }
@@ -389,7 +408,7 @@ export async function mount(ctx) {
     renderOdds();
     layout();   // the mat takes clicks from the first interactive frame
     phase = 'bet'; sync();
-    raf = requestAnimationFrame(frame);
+    if (!stage) raf = requestAnimationFrame(frame);
     note('open', { resume, sp, still: stillNow(), gates: gates() });
   }
 
@@ -407,6 +426,7 @@ export async function mount(ctx) {
     if (moments) { moments.cancel(); moments.dispose(); }
     if (tape && tape.played > 0 && cursorSent !== tape.played) flushCursor();
     if (hook) { hook.owe(owedNow()); if (typeof hook.set === 'function') hook.set(null); }   // a plain number for the room
+    if (unStage) { unStage(); unStage = null; }
     if (kit) kit.dispose();
     if (deck) deck.dispose();
     if (el) el.dataset.phase = 'leaving';

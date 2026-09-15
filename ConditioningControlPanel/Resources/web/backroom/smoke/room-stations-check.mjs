@@ -163,7 +163,7 @@ const STATIONS = [
     } },
   { key: 'roulette', id: 'roulette', root: '.roul-station', ready: `!!document.querySelector('.roul-station[data-phase=bet]')`,
     async moment() {
-      const at = await ev(`(() => { const c = document.querySelector('.roul-stage'); const r = c.getBoundingClientRect(); const w = c.clientWidth, h = c.clientHeight;
+      const at = await ev(`(() => { const button=document.querySelector('.roul-mat-strip [data-spot=s36]');if(button){document.querySelector('.roul-chips-label').click();const b=button.getBoundingClientRect();return {x:b.x+b.width/2,y:b.y+b.height/2};} const c = document.querySelector('.roul-stage'); const r = c.getBoundingClientRect(); const w = c.clientWidth, h = c.clientHeight;
         const mw = w * 0.47, mh = h * 0.46, cell = Math.max(14, Math.min(mw / 13, mh / 5.4)), ox = w * 0.5 + (mw - cell * 13) / 2, oy = h * 0.16 + (mh - cell * 5.4) / 2;
         return { x: r.left + ox + 12 * cell + cell / 2, y: r.top + oy + cell / 2 }; })()`);
       await click(Math.round(at.x), Math.round(at.y));

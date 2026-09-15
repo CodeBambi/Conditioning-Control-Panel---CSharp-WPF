@@ -16,6 +16,7 @@ import { createPrizeMarquee } from './prize-marquee.js';
 import { createEmiIdle } from './emi-idle.js';
 import { createCoinShower } from './coin-shower.js';
 import { createFloorStyle } from './floor-style.js';
+import { createRouletteSurfaces } from './roulette-surfaces.js';
 
 const BULB = /^(lights_chase_\d|bulb_\d|canopy_bulb_|rim_bulb_)/;
 const CHASE = [0xff168e, 0x852bff, 0x00e6b8, 0xff9d08].map((c) => new T.Color(c));
@@ -166,7 +167,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
   const sconceMaterial = sconces.length ? sconces[0].material.clone() : null;
   for (const s of sconces) s.material = sconceMaterial;
 
-  const holders = new Map();
+  const holders = new Map(), rouletteSurfaces = [];
   const hubs = [];
   const emis = [];
   const payouts = new Map();
@@ -240,6 +241,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     const emi = createEmiIdle({ model, row, atlas });
     if (emi) emis.push(emi);
     if(row.id==='slot') payouts.set(row.key,{coins:createCoinShower(model),rest:labels.get(row.key+'/screen_status')?.text||'',showing:false});
+    if(row.id === 'roulette') rouletteSurfaces.push(createRouletteSurfaces(holder));
     holders.set(row.key, holder);
     tick();
     return holder;
@@ -332,5 +334,5 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     return true;
   }
 
-  return { shell, ceiling, floor, setFloorStyle: floorStyle.setFloorStyle, getFloorStyle: floorStyle.getFloorStyle, screens, holders, fixtures: set.length, bulbs: bulbs.length, update, auras, hubs, labels, setLabel, emis, marquee, payouts, celebrate(key,amount,tier,text){const p=payouts.get(key);if(!p)return false;if(amount<=0){p.coins.clear();return false;}return p.coins.start(amount,tier,text);} };
+  return { disposeSurfaces(){for(const surface of rouletteSurfaces)surface?.dispose();}, shell, ceiling, floor, setFloorStyle: floorStyle.setFloorStyle, getFloorStyle: floorStyle.getFloorStyle, screens, holders, fixtures: set.length, bulbs: bulbs.length, update, auras, hubs, labels, setLabel, emis, marquee, payouts, celebrate(key,amount,tier,text){const p=payouts.get(key);if(!p)return false;if(amount<=0){p.coins.clear();return false;}return p.coins.start(amount,tier,text);} };
 }

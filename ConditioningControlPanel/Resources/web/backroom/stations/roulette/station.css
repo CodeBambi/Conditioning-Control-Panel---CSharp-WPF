@@ -67,3 +67,19 @@
   .roul-odds { bottom: auto; top: 50%; }
 }
 @media (prefers-reduced-motion: reduce) { .roul-station * { transition: none !important; } }
+/* Seated play uses the room canvas; the DOM strip is a temporary mat view. */
+.roul-station[data-seated] { background: transparent; pointer-events: none; }
+.roul-station[data-seated] .roul-stage { display: none; }
+.roul-station[data-seated] :is(button, details, .roul-card, .roul-mat-strip) { pointer-events: auto; }
+.roul-mat-strip { position: absolute; left: 12px; bottom: 180px; width: min(560px, calc(100% - 24px)); display: grid;
+  grid-template-columns: repeat(12, 1fr); gap: 2px; padding: 5px; background: #160e22dd; border-radius: 10px; }
+.roul-mat-strip button { padding: 3px; min-height: 26px; font-size: 11px; border-radius: 4px; }
+.roul-mat-strip button:not([data-chips="0"]) { box-shadow: inset 0 0 0 2px #ff5fa2; }
+.roul-mat-strip button.is-hit { background: #297b65; }
+.roul-station[data-seated] .roul-odds { left: auto; right: 12px; top: 100px; bottom: auto; }
+.roul-station[data-seated] .roul-top { top: 108px; max-width: calc(100% - 104px); }
+@media (max-width: 800px), (max-aspect-ratio: 11/10) {
+  .roul-station[data-seated] .roul-controls { top: 170px; bottom: auto; }
+}
+.roul-station[data-seated] .roul-mat-strip { top: 350px; bottom: auto; }
+.roul-station:not([data-seated]) .roul-chips-label { border: 0; background: none; opacity: 1; padding: 0; min-height: 0; }

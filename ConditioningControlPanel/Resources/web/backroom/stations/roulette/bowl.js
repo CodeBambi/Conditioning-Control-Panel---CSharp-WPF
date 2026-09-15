@@ -251,7 +251,7 @@ export function createBowl({ wheel, rose }) {
       return { rot: s.rot, rotVel: s.rotVel, beamT: s.beamT, beamAngle: beamAngle(s.beamT), lit: litNumbers(W, s.rot, beamAngle(s.beamT)),
         phase: s.phase, index: s.index, pocket: s.index >= 0 ? W[s.index] : null, wake: s.wake, whirlA: s.whirlA, whirlDrawn: !!s.whirlDrawn,
         ringBuilds: s.ring ? s.ring.draws : 0, planned: s.plan ? { hits: s.plan.hits, restAt: s.plan.restAt, landAt: s.plan.landAt } : null,
-        ballAngle: s.rot + s.rel, speed: s.speed, tscale: s.tscale };
+        ballAngle: s.rot + s.rel, rel: s.rel, radius: s.r, speed: s.speed, tscale: s.tscale };
     },
   };
 }
