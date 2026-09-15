@@ -99,6 +99,12 @@ export async function mount(ctx) {
     art.append(plate, img);
     const body = h('div', 'counter-body');
     body.append(h('h3', 'counter-name', t(row.nameKey, LEX[row.nameKey] || row.id)), h('p', 'counter-blurb', t(row.blurbKey, LEX[row.blurbKey] || '')));
+    const detailKey = `br_prize_${row.id}_details`;
+    if (LEX[detailKey]) {
+      const details = h('details', 'counter-details');
+      details.append(h('summary', null, L('br_counter_details')), h('p', null, L(detailKey)));
+      body.append(details);
+    }
     if (row.noteKey) body.append(h('p', 'counter-note', t(row.noteKey, LEX[row.noteKey] || '')));
     const foot = h('div', 'counter-foot');
     const price = h('span', 'counter-price');

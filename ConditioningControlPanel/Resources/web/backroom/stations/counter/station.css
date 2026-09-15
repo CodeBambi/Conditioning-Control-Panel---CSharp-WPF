@@ -94,3 +94,14 @@
   .counter-grid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px; }
   .counter-title { font-size: 17px; }
 }
+
+.counter-details { font-size: 13px; line-height: 1.55; color: #edc7df; }
+.counter-details summary { cursor: pointer; padding: 8px 0; color: #ffe3f2; }
+.counter-details summary:focus-visible { outline: 2px solid #ff8ed2; outline-offset: 2px; }
+.counter-details p { margin: 0 0 8px; }
+@media (max-width: 480px) {
+  .counter-grid { grid-template-columns: minmax(0, 1fr); }
+  .counter-art { aspect-ratio: 16 / 7; }
+  .counter-blurb, .counter-note { font-size: 14px; line-height: 1.5; }
+  .counter-details { font-size: 14px; }
+}
