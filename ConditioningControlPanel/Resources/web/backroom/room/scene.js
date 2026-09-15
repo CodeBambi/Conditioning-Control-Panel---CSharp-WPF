@@ -279,7 +279,7 @@ export async function createScene(o) {
     if (!fixture || !seat(row)) return null;
     let closed = false;
     const owned = new Set();
-    return { renderer, scene, fixture, camera, canvas, pick: pickAt,
+    return { renderer, scene, fixture, camera, canvas, emi: room.emis.find(e => e.id === row.id), pick: pickAt,
       register(view) {
         if (closed || halted) { view.dispose?.(); return () => {}; }
         views.add(view); owned.add(view);
