@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -350,6 +351,7 @@ namespace ConditioningControlPanel.Controls
 
                 HookVisibility();
                 _wantClock = ambient;
+                _badges = null;   // re-find the card's tier signs on the next frame
 
                 if (!ambient)
                 {
@@ -507,6 +509,11 @@ namespace ConditioningControlPanel.Controls
                 double bandLength = _perimeter * BandFraction;
                 double segment = bandLength / BandSegments;
 
+                // The adorner layer paints above the whole card, so without this the band would
+                // cut straight through the tier sign pinned on the corner. Punch the sign out.
+                var occluder = BadgeOccluder(size);
+                if (occluder != null) drawingContext.PushClip(occluder);
+
                 // Dimmest segments first so the bright core paints over its own falloff.
                 for (int i = 0; i < BandSegments; i++)
                 {
@@ -519,8 +526,73 @@ namespace ConditioningControlPanel.Controls
                 }
 
                 if (_tier >= 2) DrawGlints(drawingContext, phase);
+
+                if (occluder != null) drawingContext.Pop();
             }
             catch (Exception ex) { App.Logger?.Debug("TierFxBorderAdorner.OnRender: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// The clip that keeps the band BEHIND any <see cref="TierBadge"/> on the card. An adorner
+        /// always paints over the adorned element's content, and Panel.ZIndex cannot reach across
+        /// into the adorner layer, so the band would otherwise cross the sign. The badge art is an
+        /// opaque rounded plate edge to edge (the stamp is close enough), so each visible image's
+        /// own box, carried through its live tilt and wobble, is the hole. Null when there is no
+        /// visible badge, which leaves an unbadged card drawing exactly as before.
+        /// </summary>
+        internal Geometry? BadgeOccluder(Size size)
+        {
+            _badges ??= FindBadges(AdornedElement);
+            if (_badges.Count == 0) return null;
+
+            GeometryGroup? holes = null;
+            foreach (var badge in _badges)
+            {
+                if (badge.Visibility != Visibility.Visible) continue;
+                AddHole(badge.TierImage);
+                AddHole(badge.StampImage);
+            }
+            if (holes == null) return null;
+
+            // Generous outer rect: the band's round caps and the glints can sit a few px past the
+            // element's own box.
+            var everything = new RectangleGeometry(new Rect(-16, -16, size.Width + 32, size.Height + 32));
+            var clip = new CombinedGeometry(GeometryCombineMode.Exclude, everything, holes);
+            clip.Freeze();
+            return clip;
+
+            void AddHole(Image image)
+            {
+                if (image.Visibility != Visibility.Visible || image.Source == null) return;
+                var box = image.RenderSize;
+                if (box.Width <= 0 || box.Height <= 0) return;
+                if (!image.IsDescendantOf(AdornedElement)) return;
+
+                // Includes the image's RenderTransform, so the hole follows the sway frame by frame.
+                if (image.TransformToAncestor(AdornedElement) is not Transform toCard) return;
+
+                double radius = box.Height * 0.11;
+                var hole = new RectangleGeometry(new Rect(box), radius, radius) { Transform = toCard.CloneCurrentValue() };
+                holes ??= new GeometryGroup { FillRule = FillRule.Nonzero };
+                holes.Children.Add(hole);
+            }
+        }
+
+        private List<TierBadge>? _badges;
+
+        private static List<TierBadge> FindBadges(DependencyObject root)
+        {
+            var found = new List<TierBadge>();
+            var stack = new Stack<DependencyObject>();
+            stack.Push(root);
+            while (stack.Count > 0)
+            {
+                var node = stack.Pop();
+                if (node is TierBadge badge) { found.Add(badge); continue; }
+                int n = VisualTreeHelper.GetChildrenCount(node);
+                for (int i = 0; i < n; i++) stack.Push(VisualTreeHelper.GetChild(node, i));
+            }
+            return found;
         }
 
         /// <summary>Paint order 0,10,1,9,2,8,... - the two faint tips go down first and the bright
