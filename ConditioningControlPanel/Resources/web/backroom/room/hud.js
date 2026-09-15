@@ -179,6 +179,11 @@ export function createHud(o) {
     bellOptIn(checked) { paintSwitch(bellOpt.b, checked); },
     get optionsOpen() { return !panel.hidden; },
     closeOptions() { setOptions(false); },
+    seated(on) {
+      document.documentElement.classList.toggle('br-seated', !!on);
+      viewBtn.disabled = !!on;
+      if (on) prompt.hidden = true;
+    },
     hideWhileVisiting(on) {
       if (on) setOptions(false);
       document.documentElement.classList.toggle('br-visiting', !!on);

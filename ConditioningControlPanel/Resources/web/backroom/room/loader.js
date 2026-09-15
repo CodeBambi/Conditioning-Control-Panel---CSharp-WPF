@@ -61,10 +61,11 @@ export function createLoader(room) {
     return root;
   }
 
-  function buildCtx(station, root, variant, subs) {
+  function buildCtx(station, root, variant, subs, stage) {
     const s = room.state;
     return {
       root,
+      stage,
       bridge,
       request(op, body, idem) {
         const reqId = bridge.mintId();
@@ -158,7 +159,9 @@ export function createLoader(room) {
       const mod = await import('../' + station.entry);
       if (my !== seq) return 'superseded';
       if (typeof mod.mount !== 'function') throw new Error('no mount export');
-      const handle = await mod.mount(buildCtx(station, root, extra && extra.variant, subs));
+      const stage = mod.roomStage === true ? room.stage?.(station) : null;
+      if (stage) { subs.add(() => stage.dispose()); root.classList.add('br-seat'); }
+      const handle = await mod.mount(buildCtx(station, root, extra && extra.variant, subs, stage));
       if (my !== seq) { dropSubs(subs); try { handle && handle.destroy && handle.destroy(); } catch (e) { /* noop */ } return 'superseded'; }
       current.handle = handle;
       bridge.send({ type: 'station-open', station: station.id });
@@ -186,7 +189,7 @@ export function createLoader(room) {
     current = null;
     seq++;
     if (c.handle) {
-      await withTimeout(typeof c.handle.close === 'function' ? c.handle.close() : null, budgetMs || CLOSE_BUDGET_MS);
+      await withTimeout(Promise.resolve().then(() => typeof c.handle.close === 'function' ? c.handle.close() : null), budgetMs || CLOSE_BUDGET_MS);
       try { if (typeof c.handle.destroy === 'function') c.handle.destroy(); } catch (e) { room.log('warn', 'destroy threw: ' + e); }
       bridge.send({ type: 'station-close', station: c.station.id });
     }

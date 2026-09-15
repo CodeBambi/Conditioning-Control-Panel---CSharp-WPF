@@ -75,7 +75,7 @@ export async function createScene(o) {
   const room = await buildRoom({ scene, loader, stations: o.stations, base: o.base, faces: o.faces, label: o.label, onProgress: o.onProgress });
   const decor = createCasinoDecor({ scene });
   let customization, catalogueView=null;
-  customization = await createCustomization({scene,loader,room,onPreview:view=>{catalogueView=view;},base:o.base,mount:o.mount,lex:o.lex,canvas,camera,isActive:()=>!held&&!halted&&!suspended&&!overview&&!customization?.opened});
+  customization = await createCustomization({scene,loader,room,onPreview:view=>{catalogueView=view;},base:o.base,mount:o.mount,lex:o.lex,canvas,camera,isActive:()=>!seated&&!held&&!halted&&!suspended&&!overview&&!customization?.opened});
   const screens = await createScreens({ meshes: [...room.screens,...customization.screens], ads: o.ads, media: o.media, log: say });
   // Subtle cartridge refraction otherwise renders the entire room a second time.
   scene.traverse(node => { for (const m of [].concat(node.material || [])) {
@@ -87,8 +87,10 @@ export async function createScene(o) {
   // ---- state ----
   const pos = START.slice();
   let yaw = 0, pitch = 0, sway = 0, walkPhase = 0, ambient = 0;
-  let still = !!o.still, overview = false, held = null, halted = false, suspended = false;
+  let still = !!o.still, overview = false, held = null, seated = null, halted = false, suspended = false;
   let raf = 0, last = performance.now(), lastTick = last, nearest = null, drag = null;
+  const views = new Set();
+  const ray = new T.Raycaster(), pointer = new T.Vector2();
   const saved = { pos: null, yaw: 0, pitch: 0 };
   const keys = new Set();
   const vel = new T.Vector2(), want = new T.Vector2();
@@ -97,7 +99,7 @@ export async function createScene(o) {
   const previewTarget = new T.Vector3();
 
   const interaction = createEmiInteraction({ canvas, camera, scene, emis: room.emis, mount: o.mount, label: o.lex,
-    isActive: () => !held && !halted && !suspended && !overview && !customization.opened,
+    isActive: () => !seated && !held && !halted && !suspended && !overview && !customization.opened,
     // Law VI: a still room keeps every NPC at rest, so a click gets the bark without the gesture.
     canGesture: () => !still });
 
@@ -116,7 +118,7 @@ export async function createScene(o) {
 
   function resetInput() { keys.clear(); vel.set(0, 0); drag = null; }
   window.addEventListener('keydown', (e) => {
-    if (held || halted || suspended || customization.opened || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (seated || held || halted || suspended || customization.opened || e.ctrlKey || e.altKey || e.metaKey) return;
     if (KEYS.has(e.code)) { e.preventDefault(); keys.add(e.code); }
     if (e.repeat) return;
     if (e.code === 'KeyE' && !overview && nearest) { e.preventDefault(); visit(nearest); }
@@ -125,12 +127,12 @@ export async function createScene(o) {
   window.addEventListener('keyup', (e) => keys.delete(e.code));
   window.addEventListener('blur', resetInput);
   canvas.addEventListener('pointerdown', (e) => {
-    if (held || overview || customization.opened || e.button !== 0) return;
+    if (seated || held || overview || customization.opened || e.button !== 0) return;
     drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
   });
   canvas.addEventListener('pointermove', (e) => {
-    if (!drag || drag.id !== e.pointerId || overview || held || customization.opened) return;
+    if (!drag || drag.id !== e.pointerId || overview || seated || held || customization.opened) return;
     yaw -= (e.clientX - drag.x) * 0.003;
     pitch = T.MathUtils.clamp(pitch - (e.clientY - drag.y) * 0.003, -1.12, 1.2);
     drag.x = e.clientX; drag.y = e.clientY;
@@ -144,13 +146,13 @@ export async function createScene(o) {
   }
 
   function visit(row) {
-    if (!row || held || halted) return;
+    if (!row || seated || held || halted) return;
     if(row.key==='customization'){resetInput();customization.open();return;}
     try { o.onVisit(row); } catch (e) { say('onVisit threw: ' + ((e && e.message) || e)); }
   }
 
   function setOverview(on) {
-    if (held || halted || !!on === overview) return;
+    if (seated || held || halted || !!on === overview) return;
     resetInput();
     customization.dismiss();
     overview = !!on;
@@ -163,7 +165,7 @@ export async function createScene(o) {
 
   /** Stand at a station's approach point, facing it. */
   function go(row) {
-    if (!row || held) return;
+    if (!row || held || seated) return;
     if (overview) { overview = false; decor.setOverview(false); if (room.ceiling) room.ceiling.visible = true; }
     resetInput();
     pos.splice(0, 3, ...row.approach);
@@ -175,7 +177,7 @@ export async function createScene(o) {
     if (held || halted || suspended) return;
     raf = requestAnimationFrame(frame);
     const raw = now - last;
-    const active = keys.size > 0 || drag || customization.opened;
+    const active = !!seated || keys.size > 0 || drag || customization.opened;
     const gap = 1000 / (active && !budget.mobile ? 60 : 30);
     if (raw < gap - 1) return;
     last = raw < gap ? now : now - (raw % gap);
@@ -185,7 +187,7 @@ export async function createScene(o) {
     lastTick = now;
     frames.push(raw);
     if (frames.length > 240) frames.shift();
-    if(customization.opened)resetInput();
+    if(customization.opened || seated)resetInput();
     if (!overview) {
       const x = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
       let z = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
@@ -193,14 +195,15 @@ export async function createScene(o) {
       vel.lerp(want.set(x, z).clampLength(0, 1).multiplyScalar(speed), 1 - Math.exp(-dt * 12));
       const [dx, dz] = worldDelta(yaw, vel.x * dt, vel.y * dt);
       step(pos, dx, dz, o.stations);
-      sway = T.MathUtils.damp(sway, still ? 0 : Math.min(1, vel.length() / WALK_SPEED), 10, dt);
+      sway = T.MathUtils.damp(sway, still || seated ? 0 : Math.min(1, vel.length() / WALK_SPEED), 10, dt);
       walkPhase += vel.length() * dt * 3.1;
       camera.position.set(pos[0], pos[1] + Math.sin(walkPhase * 2) * 0.004 * sway, pos[2]);
       camera.rotation.set(pitch + Math.sin(walkPhase * 2) * 0.0008 * sway, yaw, Math.sin(walkPhase) * 0.0014 * sway, 'YXZ');
-      setNearest(customization.opened?null:nearestStation(pos,stationRows));
+      setNearest(customization.opened || seated ?null:nearestStation(pos,stationRows));
     }
     if (!still) ambient += dt;
     room.update(dt, ambient, still);
+    for (const view of views) view.update?.(dt, still);
     decor.update(dt, still);
     customization.update(dt, still);
     const fullWidth=Math.max(1,o.mount.clientWidth||window.innerWidth);
@@ -228,8 +231,67 @@ export async function createScene(o) {
     renderer.setViewport(box.x,box.y,box.w,box.h);
     renderer.setScissor(box.x,box.y,box.w,box.h);
     renderer.setScissorTest(customization.opened);
+    const autoReset = renderer.info.autoReset;
+    renderer.info.autoReset = false; renderer.info.reset();
     renderer.render(scene, camera);
+    if (seated && views.size) {
+      renderer.setScissorTest(true);
+      const autoClear = renderer.autoClear;
+      renderer.autoClear = false;
+      try { for (const view of views) view.draw?.(renderer, camera); }
+      finally { renderer.autoClear = autoClear; }
+    }
+    renderer.info.autoReset = autoReset;
     renderer.setScissorTest(false);
+  }
+
+  function seat(row) {
+    if (!row || seated || held || halted) return false;
+    const previous = { pos: pos.slice(), yaw, pitch };
+    go(row);
+    seated = previous; sway = 0;
+    interaction.dismiss(); customization.dismiss(); setNearest(null);
+    camera.position.fromArray(pos); camera.rotation.set(pitch, yaw, 0, 'YXZ');
+    camera.updateMatrixWorld(); run();
+    return true;
+  }
+  function unseat() {
+    if (!seated) return;
+    for (const view of [...views]) dropView(view);
+    pos.splice(0, 3, ...seated.pos); yaw = seated.yaw; pitch = seated.pitch;
+    seated = null; resetInput(); run();
+  }
+  function dropView(view) {
+    if (!views.delete(view)) return;
+    try { view.dispose?.(); } catch (e) { say('stage dispose failed: ' + e); }
+  }
+  function pickAt(event, objects) {
+    if (halted || suspended || !Array.isArray(objects) || !objects.length) return [];
+    const box = canvas.getBoundingClientRect();
+    if (!box.width || !box.height) return [];
+    pointer.set((event.clientX - box.left) / box.width * 2 - 1, 1 - (event.clientY - box.top) / box.height * 2);
+    scene.updateMatrixWorld(true); camera.updateMatrixWorld();
+    ray.setFromCamera(pointer, camera);
+    return ray.intersectObjects(objects, true);
+  }
+  function stage(row) {
+    const fixture = room.holders.get(row.key);
+    if (!fixture || !seat(row)) return null;
+    let closed = false;
+    const owned = new Set();
+    return { renderer, scene, fixture, camera, canvas, pick: pickAt,
+      register(view) {
+        if (closed || halted) { view.dispose?.(); return () => {}; }
+        views.add(view); owned.add(view);
+        return () => { owned.delete(view); dropView(view); };
+      },
+      dispose() {
+        if (closed) return;
+        closed = true;
+        for (const view of owned) dropView(view);
+        owned.clear(); unseat();
+      },
+    };
   }
 
   function run() {
@@ -246,7 +308,7 @@ export async function createScene(o) {
   screens.deal(() => ambient).catch(() => {});
 
   return {
-    renderer, camera, scene, buildMs,
+    renderer, camera, scene, buildMs, seat, unseat, pickAt, stage,
     /** A station is taking the screen: keep the pose, stop drawing, keep the context. */
     hold() { if (held) return; held = { pos: pos.slice(), yaw, pitch }; resetInput(); interaction.dismiss(); customization.dismiss(); stop(); setNearest(null); },
     /** Back from a station: the exact spot and facing, on the next frame. */
@@ -256,7 +318,7 @@ export async function createScene(o) {
       held = null; resetInput(); run();
     },
     pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); interaction.dismiss(); customization.dismiss(); } else run(); },
-    halt() { halted = true; stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); resetInput(); interaction.dispose(); for(const e of room.emis)e.dispose(); customization.dispose(); decor.dispose(); for(const p of room.payouts.values())p.coins.dispose(); },
+    halt() { halted = true; for (const view of [...views]) dropView(view); stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); resetInput(); interaction.dispose(); for(const e of room.emis)e.dispose(); customization.dispose(); decor.dispose(); for(const p of room.payouts.values())p.coins.dispose(); },
     setStill(on) { still = !!on; },
     /** Repaint one fixture label, e.g. the wheel's screen for MUST HIT (10.16.E). */
     setLabel(rowKey, node, text) { return room.setLabel(rowKey, node, text); },
@@ -266,12 +328,13 @@ export async function createScene(o) {
     pose(p, y = 0, tilt = 0) { pos.splice(0, 3, ...p); yaw = y; pitch = tilt; },
     get nearest() { return nearest; },
     get overview() { return overview; },
+    get seated() { return !!seated; },
     get held() { return !!held; },
     /** Test seam: plain numbers only. */
     debug() {
       const sorted = frames.slice().sort((a, b) => a - b);
       return {
-        renderBudget: {...budget.debug(), dpr}, position: pos.slice(), yaw, pitch, overview, held: !!held, running: !!raf, still,
+        renderBudget: {...budget.debug(), dpr}, position: pos.slice(), yaw, pitch, overview, held: !!held, seated: !!seated, running: !!raf, still,
         nearest: nearest ? nearest.key : null, fixtures: room.fixtures, bulbs: room.bulbs, screens: room.screens.length,
         pictures: screens.pictures, animation: screens.animation, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
         decor: decor.debug(), customization: customization.debug(),
@@ -281,6 +344,7 @@ export async function createScene(o) {
         marquee: room.marquee?.userData.text,
         bulbColors: scene.children.filter((o) => o.isInstancedMesh && o.instanceColor).slice(0, 2).map((o) => Array.from(o.instanceColor.array.slice(0, 9))),
         floorAngle: room.floor ? room.floor.material.uniforms.angle.value : null, ambient, sway,
+        frameP95: sorted.length ? sorted[Math.floor(sorted.length * 0.95)] : null,
         frameMedian: sorted.length ? sorted[Math.floor(sorted.length / 2)] : null, buildMs: Math.round(buildMs),
         ceiling: room.ceiling ? room.ceiling.visible : null,
         labels: Object.fromEntries(Array.from(room.labels, ([k, v]) => [k, v.text])),

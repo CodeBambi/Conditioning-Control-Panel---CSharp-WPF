@@ -125,3 +125,15 @@ html.br-reduced .br-back, html.br-reduced .br-loading-bar i { transition: none; 
 @media (prefers-reduced-motion: reduce) {
   .br-card, .br-card-veil { animation: none; }
 }
+
+/* Seated controls share the room; the top band belongs to Back, SP, Options and bell. */
+html.br-seated .br-room-ui { visibility: visible; z-index: 25; }
+html.br-seated .br-hint, html.br-seated .br-crosshair, html.br-seated .br-visit { visibility: hidden; }
+.br-station.br-seat { background: transparent; pointer-events: none; }
+.br-seat button, .br-seat input, .br-seat select { pointer-events: auto; }
+.br-seat > * { max-width: 100%; }
+
+@media (max-width: 600px) {
+  html.br-seated .br-nav { top: 58px; left: 12px; right: 12px; justify-content: flex-end; }
+  html.br-seated .br-bell { top: 98px; right: 12px; max-width: calc(100vw - 24px); }
+}
