@@ -4,6 +4,10 @@ const KINDS = ['knight', 'queen', 'rook'];
 const VARIANTS = ['rose', 'violet', 'mint'];
 // Session preview only. No inventory or purchases are represented by this state.
 const styles = [-1, -1, -1];
+// A pull for fun (Room Service): the cabinet's handle swings on its own axle and the drums roll to a
+// dummy stop. No server call, no SP, no outcome - nothing reads where the reels land.
+const PULL_MAX = 0.5, DOWN_S = 0.16, UP_S = 0.44, STOP_AT = [0.62, 0.86, 1.12], FACES = 13, ROLL = 1.9;
+const ease = t => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
 export const slotHandleStyle = variant => styles[VARIANTS.indexOf(variant)] ?? -1;
 
 function sculpture(model, kind) {
@@ -82,13 +86,13 @@ export async function attachSlotCustomHandle({rig,loader,base,style,source=null}
   handle.position.set(-(box.min.x+box.max.x)/2,-box.min.y,-(box.min.z+box.max.z)/2);
   wrapper.add(handle); slot.mount.add(wrapper);
   slot.originals.forEach(([node])=>node.visible=false);
-  return {dispose(){slot.originals.forEach(([node,visible])=>node.visible=visible);slot.mount.removeFromParent();slot.restore?.();
+  return {node:slot.mount,dispose(){slot.originals.forEach(([node,visible])=>node.visible=visible);slot.mount.removeFromParent();slot.restore?.();
     if(source)return; // Shared sculpture resources belong to the room catalogue.
     const geometries=new Set(),materials=new Set();model.traverse(n=>{if(n.geometry)geometries.add(n.geometry);[].concat(n.material||[]).forEach(m=>materials.add(m));});
     geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}};
 }
 
-export async function createSlotCustomHandles({holders,loader,base,sources=[]}) {
+export async function createSlotCustomHandles({holders,loader,base,sources=[],onCue=()=>{}}) {
   const active = [null,null,null], revisions = [0,0,0], queues = [Promise.resolve(),Promise.resolve(),Promise.resolve()]; let disposed=false;
   function set(index,style) {
     if(disposed || !Number.isInteger(index) || index<0 || index>2 || !Number.isInteger(style) || style < -1 || style>2)return Promise.resolve(false);
@@ -106,6 +110,34 @@ export async function createSlotCustomHandles({holders,loader,base,sources=[]}) 
     });
     return queues[index];
   }
+  const pulls=[null,null,null], AXIS=new T.Vector3(1,0,0), swing=new T.Quaternion();
+  const rigOf=index=>holders.get('slot:'+VARIANTS[index]);
+  const reelsOf=rig=>[1,2,3].map(n=>rig.getObjectByName('reel_'+n)).filter(m=>m?.material?.map);
+  const face=()=>(Math.floor(Math.random()*FACES)+.5)/FACES;
+  /** Swing the handle on cabinet `index` and roll its drums. `still` (motion off) lands them at once. */
+  function pull(index,{still=false}={}){
+    if(disposed||!Number.isInteger(index)||index<0||index>2||pulls[index])return false;
+    const rig=rigOf(index);if(!rig)return false;
+    const pivot=active[index]?.node||rig.getObjectByName('lever')||null;
+    const reels=reelsOf(rig).map(mesh=>({map:mesh.material.map,to:face()}));
+    if(!pivot&&!reels.length)return false;
+    onCue('pull',index);
+    if(still){reels.forEach((r,i)=>{r.map.offset.x=r.to;onCue('stop',index,i);});return true;}
+    pulls[index]={t:0,pivot,rest:pivot?pivot.quaternion.clone():null,reels,stopped:[false,false,false]};
+    return true;}
+  function rest(p){if(p.pivot&&p.rest)p.pivot.quaternion.copy(p.rest);}
+  function update(dt=0,still=false){
+    if(disposed)return;
+    pulls.forEach((p,index)=>{
+      if(!p)return;
+      p.t+=still?9:Math.min(Math.max(dt,0),.1);
+      if(p.pivot)p.pivot.quaternion.copy(p.rest).multiply(swing.setFromAxisAngle(AXIS,
+        p.t<DOWN_S?PULL_MAX*ease(p.t/DOWN_S):p.t<DOWN_S+UP_S?PULL_MAX*(1-ease((p.t-DOWN_S)/UP_S)):0));
+      p.reels.forEach((r,i)=>{
+        if(p.t>=STOP_AT[i]){if(!p.stopped[i]){p.stopped[i]=true;r.map.offset.x=r.to;onCue('stop',index,i);}return;}
+        r.map.offset.x=(r.map.offset.x+ROLL*Math.min(Math.max(dt,0),.1))%1;});
+      if(p.t>=Math.max(DOWN_S+UP_S,STOP_AT[2])+.06){rest(p);pulls[index]=null;}});}
   await Promise.all(styles.map((style,index)=>set(index,style)));
-  return {set,getState:()=>styles.slice(),dispose(){disposed=true;active.forEach(h=>h?.dispose());}};
+  return {set,pull,update,pulling:index=>!!pulls[index],getState:()=>styles.slice(),
+    dispose(){disposed=true;pulls.forEach((p,i)=>{if(p){rest(p);pulls[i]=null;}});active.forEach(h=>h?.dispose());}};
 }

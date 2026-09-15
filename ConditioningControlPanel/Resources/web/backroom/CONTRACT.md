@@ -460,6 +460,12 @@ export async function mount(ctx) {
   no persistence and no bridge message, like every other Room Service change. The spots are the table in
   `room/assets/customization/README.md`. No station, cabinet or screen moves for them, the approved
   left-wall booth positions are untouched, and the only walk volumes added are the two floor plants.
+- **Room Service, one button (amended 2026-09-15).** Picking an item in the cabinet IS the Use: it goes on
+  the focused pedestal or cabinet there and then, and the only control under the miniature is a single
+  Remove button, shown while that piece is fitted there and gone when it is not. A right-click on an item
+  takes that piece off wherever it sits, and no browser menu opens over the stage. A tap on the lever
+  close-up pulls that cabinet for fun: the handle swings on its own axle and the drums roll to a random
+  face. No server call, no SP, no outcome, no effects, and nothing reads where they land.
 - **Budget.** At 1280x720 on the entry pose: 277 draw calls with the whole Room Service collection placed
   (264 before it; the preview draws 1,268 there, 1,312 in its own check), no shadows, no post passes,
   pixel ratio capped at 1.5.
