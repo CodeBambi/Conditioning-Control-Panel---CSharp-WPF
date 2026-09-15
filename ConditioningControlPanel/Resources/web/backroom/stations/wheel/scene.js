@@ -131,10 +131,15 @@ export async function createScene(o) {
     const l = new THREE.DirectionalLight(c, i); l.position.set(...p); scene.add(l);
   }
   const owned = [];
-  let raf = 0, disposed = false, onDown, onMove, onUp;
+  let raf = 0, disposed = false, drag = null, onDown, onMove, onUp;
+  function cancelDrag() {
+    const held=drag;drag=null;canvas.style.cursor='';
+    if(held && canvas.hasPointerCapture(held.id)) canvas.releasePointerCapture(held.id);
+  }
   function dispose() {
     if (disposed) return;
     disposed = true;
+    cancelDrag();
     cancelAnimationFrame(raf);
     rewardView?.dispose();
     if (settle) settle();
@@ -364,7 +369,7 @@ export async function createScene(o) {
   }
 
   // Motion state.
-  let phase = 'hidden', tl = null, drag = null, coast = null, plan = null, under = 0, lit = 0, crossAt = -Infinity, ladder = null;
+  let phase = 'hidden', tl = null, coast = null, plan = null, under = 0, lit = 0, crossAt = -Infinity, ladder = null;
   let landed = -1, thudAt = -Infinity, kickAt = -Infinity, kickSign = 1, kickAmp = 0, shiverAt = -Infinity;
   let party = null, heat = 0, gold = false, energy = 0, lightMotion = 0, prev = performance.now();
   let dim = 0, slowing = false, shear = 0, omega = 0, lastRot = null, quietAt = -Infinity, quietK = 1, frameSpeed = 0;
@@ -521,6 +526,7 @@ export async function createScene(o) {
   };
   onUp = e => {
     if (!drag || drag.id !== e.pointerId) return;
+    if(e.type==='pointercancel'){cancelDrag();return;}
     const d = drag; drag = null; canvas.style.cursor = '';
     if (canvas.hasPointerCapture(d.id)) canvas.releasePointerCapture(d.id);
     // Drag strength changes the picture only: the speed is clamped, the landing is the server's.
@@ -582,6 +588,7 @@ export async function createScene(o) {
     },
     /** Law VI: Back and suspend skip every ceremony to its settled state. */
     skip() {
+      cancelDrag();
       rewardView?.skip();
       if (plan) { const p = plan; plan = null; rotor.rotation.z = p.to; if (p.done) p.done(); }
       coast = null; party = null; shiverAt = thudAt = kickAt = -Infinity; energy = 0; dim = 0; shear = 0; emi.skip();
@@ -601,8 +608,8 @@ export async function createScene(o) {
       return new Promise(done => { tl = { kind: 'rise', start: performance.now(), ms: RISE_MS, done }; });
     },
     sink() {
+      cancelDrag();
       if (stage) { phase = 'hidden'; return Promise.resolve(); }
-      if (drag) { drag = null; canvas.style.cursor = ''; }
       if (reduced || phase === 'hidden') { phase = 'hidden'; return Promise.resolve(); }
       const prevTl = tl; phase = 'sink';
       return new Promise(done => { tl = { kind: 'sink', start: performance.now(), ms: SINK_MS, done: () => { done(); if (prevTl && prevTl.done) prevTl.done(); } }; });
