@@ -67,7 +67,7 @@ await cdp('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, devi
 
 await cdp('Page.navigate', {url:`http://127.0.0.1:${PORT}/web/backroom/stations/wheel/dev.html?gates=off`});
 for(let i=0;i<100&&!await ev('!!window.dev');i++)await sleep(100);
-const cases=[['room_service',{kind:'decoration',decorationId:'ivy'},0],['room_service',{kind:'decoration',fallback:true},75],['seeing_double',{kind:'double',until:Date.now()+86400000},0],['head_empty',{kind:'nothing'},0],['room_service',{kind:'decoration',fallback:true},4]];
+const cases=[['room_service',{kind:'decoration',decorationId:'ivy'},0],['room_service',{kind:'decoration',fallback:true},75],['seeing_double',{kind:'double',until:Date.now()+86400000},0],['head_empty',{kind:'nothing'},0],['room_service',{kind:'decoration',fallback:true},4],['seeing_double',{kind:'double',until:Date.now()+86400000},0]];
 for(const [index,[id,reward,pay]] of cases.entries()){
   await cdp('Emulation.setDeviceMetricsOverride',{width:index%2?400:1280,height:index%2?800:720,deviceScaleFactor:1,mobile:index%2===1});
   const setup=await ev(`(async()=>{
@@ -78,17 +78,20 @@ for(const [index,[id,reward,pay]] of cases.entries()){
     const slices=rows.map(([id,label,pay,kind,width])=>({id,label,pay,kind,width,odds:'test'}));
     const st={ok:true,sp:100,spun:false,slices,jackpot:{amount:500},nextResetAt:new Date(Date.now()+3600000).toISOString()};
     const result={day:'2026-09-15',sliceId:${JSON.stringify(id)},sliceIndex:slices.findIndex(s=>s.id===${JSON.stringify(id)}),pay:${index===4?75:pay},total:${index===4?75:pay},credited:${pay},capped:${index===4},reward:${JSON.stringify(reward)}};
+    let stateRequests=0;
+    const oldMock=(await import('./mock-server.js')).createMockServer();oldMock.script('sip_a');await oldMock.handle('spin',{idem:'overnight_test_receipt01'});const oldState=(await oldMock.handle('state',{})).body;oldState.nextResetAt=new Date(Date.now()+200).toISOString();
     window.rewardCalls=0;window.landedCalls=0;
     window.rewardStation=await mount({root:document.querySelector('#root'),motion:'off',intensity:'calm',reduced:true,gates:{spiral:false,flash:false,tunnel:false,melt:false},media:async()=>({gifs:[],words:[]}),fx:()=>Promise.resolve({}),fxTunnel:()=>{},fxRelease:()=>{},rewardLanded:()=>window.landedCalls++,
-      request:async(op)=>{if(op==='state')return{ok:true,body:st};window.rewardCalls++;await new Promise(r=>setTimeout(r,120));return{ok:true,body:{...st,sp:100+${pay},spun:true,result}};}});
+      request:async(op)=>{if(op==='state')return{ok:true,body:${index}===5&&stateRequests++===0?oldState:st};window.rewardCalls++;await new Promise(r=>setTimeout(r,120));return{ok:true,body:{...st,sp:100+${pay},spun:true,result}};}});
     await window.rewardStation.open(); return window.rewardStation.debug();
   })()`);
   ok(setup?.phase==='play',id+' opens');
+  if(index===5){ok(setup.state.slices.length===14,'starts on archived V3 layout');for(let i=0;i<120&&!await ev('window.rewardStation.debug().state.slices.length===8');i++)await sleep(50);ok(await ev('window.rewardStation.debug().state.slices.length===8'),'midnight adopts V4 state');}
   await ev("document.querySelector('.wheel-spin').click()");
   ok(await ev("document.querySelector('.daze-delivery').hidden"),id+' hidden before reply');
   for(let i=0;i<200&&!await ev('window.landedCalls===1');i++)await sleep(40);
   const r=await ev(`({calls:rewardCalls,landed:landedCalls,hidden:document.querySelector('.daze-delivery').hidden,text:document.querySelector('.daze-delivery p').textContent,scroll:document.documentElement.scrollWidth>innerWidth})`);
-  ok(r.calls===1&&r.landed===1&&!r.hidden,id+' reveals once on landing');ok(!r.scroll,id+' no horizontal scroll');if(index===4)ok(r.text.includes('+4 SP'), 'capped gift displays credited amount');
+  ok(r.calls===1&&r.landed===1&&!r.hidden,id+' reveals once on landing');ok(!r.scroll,id+' no horizontal scroll');if(index===4)ok(r.text.includes('+4 SP'), 'capped gift displays credited amount');if(index===5)ok(await ev("window.rewardStation.debug().feel.scene.landed==='seeing_double'"),'midnight rebuilds physical sectors and lands new slice');
   await writeFile(join(OUT,`reward-${index}-${id}.png`),Buffer.from((await cdp('Page.captureScreenshot',{format:'png'})).result.data,'base64'));
   await ev('window.rewardStation.close()');ok(await ev("!document.querySelector('.daze-delivery')"),id+' disposes');
 }
