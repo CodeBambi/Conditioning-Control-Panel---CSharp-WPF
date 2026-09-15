@@ -193,7 +193,8 @@ for (const st of STATIONS) {
   report.stations[st.key] = r;
   const i0 = await ev(`window.__posted.length`);
   await ev(`window.__backroom.scene.go(window.__backroom.stations.find((s) => s.key === ${JSON.stringify(st.key)}))`);
-  await sleep(300);
+  await until("!window.__backroom.scene.transitioning", 5000);
+  await sleep(100);
   r.nearest = (await ev(`window.__backroom.scene.debug().nearest`));
   ok(r.nearest === st.key, `${st.key}: standing at its approach makes it nearest`);
   await key('KeyE'); await key('KeyE', 'keyUp');
@@ -230,6 +231,7 @@ for (const st of STATIONS) {
 
 /* ---------------------------------------------------------------- 3. Escape is Back too, then the room view */
 await ev(`window.__backroom.scene.go(window.__backroom.stations.find((s) => s.key === 'roulette'))`);
+await until('!window.__backroom.scene.transitioning', 5000);
 await sleep(250);
 await key('KeyE'); await key('KeyE', 'keyUp');
 ok(await until(`!!document.querySelector('.roul-station')`, 10000), 'roulette reopens');
