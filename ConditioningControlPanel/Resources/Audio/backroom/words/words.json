@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "_comment": "Back Room subliminal word clips. Key = the NORMALISED phrase (lower case, punctuation stripped, runs of anything else collapsed to one space). Value = a plain file name in this folder, matching ^[a-z0-9][a-z0-9_.-]{0,63}$. See README.md; run `node scripts/backroom-words-manifest.mjs` for the list to generate.",
+  "words": {}
+}

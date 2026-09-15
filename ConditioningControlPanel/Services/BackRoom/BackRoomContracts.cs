@@ -107,3 +107,33 @@ public interface IBackRoomMedia
     /// up to <paramref name="count"/> GIFs (1..13, the cards table asks for 13) and four words.</summary>
     BackRoomMediaDeal Deal(string station, int seed, int count = 4);
 }
+
+/// <summary>What the host did with one <c>word.speak</c> (CONTRACT 10.21). Becomes the
+/// <c>word-ack</c> reply.</summary>
+/// <param name="Source">
+/// <c>clip</c>   the player's own audio for that phrase (a trigger's PlayAudio action, the active mod's
+///               flashes_audio, or Resources/sub_audio);
+/// <c>preset</c> a bundled Back Room word clip (Resources/Audio/backroom/words/words.json);
+/// <c>tts</c>    rendered here by Windows speech;
+/// <c>none</c>   nothing played, so the page falls back to its own speechSynthesis.
+/// </param>
+/// <param name="DurationMs">How long the audio runs, 0 when nothing played. The page holds the next
+/// word of a chain until this has elapsed (callout.js WORD_GAP_MS is the floor).</param>
+public sealed record BackRoomVoiceAck(string Source, int DurationMs);
+
+/// <summary>
+/// The spoken subliminal word (<c>BackRoomVoice.cs</c>). One voice per room; a new
+/// <see cref="Speak"/> cuts the previous line, exactly as the page's speechSynthesis did.
+/// Never throws: everything it cannot do acks <c>none</c> and the page speaks for itself.
+/// </summary>
+public interface IBackRoomVoice
+{
+    /// <summary>Say <paramref name="text"/> now, through the app's chosen audio output device.
+    /// <paramref name="reversed"/> is the easter egg: the decoded samples play backwards, which is
+    /// the real thing the page could only fake by spelling the word backwards.
+    /// <paramref name="seed"/> is the outcome's seed, so a replayed outcome picks the same clip.</summary>
+    BackRoomVoiceAck Speak(string text, bool reversed, int seed);
+
+    /// <summary>Law VI: cancel, suspend and leave drop the line at once.</summary>
+    void Stop();
+}

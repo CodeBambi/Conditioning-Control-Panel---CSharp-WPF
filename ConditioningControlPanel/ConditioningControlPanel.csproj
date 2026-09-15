@@ -640,6 +640,13 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- Back Room spoken word clips (CONTRACT 10.21): words.json plus whatever clips it names. The
+         folder ships with the manifest and the README only; a clip dropped in is picked up by name. -->
+    <Content Include="Resources\Audio\backroom\words\**\*" Exclude="Resources\Audio\**\README.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <!-- Subliminal audio files -->
     <Content Include="Resources\sub_audio\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
