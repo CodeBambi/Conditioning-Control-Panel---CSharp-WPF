@@ -184,8 +184,9 @@ export async function createScene(o) {
     if (document.hidden) return;
     if (budget.sample(now - lastTick, gap)) resize();
     const dt = Math.min(0.1, Math.max(0, (now - lastTick) / 1000));
+    const frameElapsed = now - lastTick;
     lastTick = now;
-    frames.push(raw);
+    frames.push(frameElapsed);
     if (frames.length > 240) frames.shift();
     if(customization.opened || seated)resetInput();
     if (!overview) {
@@ -318,7 +319,7 @@ export async function createScene(o) {
       held = null; resetInput(); run();
     },
     pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); interaction.dismiss(); customization.dismiss(); } else run(); },
-    halt() { halted = true; for (const view of [...views]) dropView(view); stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); resetInput(); interaction.dispose(); for(const e of room.emis)e.dispose(); customization.dispose(); decor.dispose(); for(const p of room.payouts.values())p.coins.dispose(); },
+    halt() { halted = true; for (const view of [...views]) dropView(view); stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); room.disposeSurfaces(); resetInput(); interaction.dispose(); for(const e of room.emis)e.dispose(); customization.dispose(); decor.dispose(); for(const p of room.payouts.values())p.coins.dispose(); },
     setStill(on) { still = !!on; },
     /** Repaint one fixture label, e.g. the wheel's screen for MUST HIT (10.16.E). */
     setLabel(rowKey, node, text) { return room.setLabel(rowKey, node, text); },
