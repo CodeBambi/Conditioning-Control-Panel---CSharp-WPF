@@ -48,6 +48,13 @@ jobs:
       # display server. Both exit non-zero on failure.
       - run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --smoke
 
+      # The language and notification suites stay separate: each command gets its own
+      # testhost and each assembly owns its own process-immutable profile setup.
+      - name: Test Avalonia language suite
+        run: dotnet test Tests/CCP.Avalonia.Language.Tests/CCP.Avalonia.Language.Tests.csproj -c Release
+      - name: Test Avalonia notification suite
+        run: dotnet test Tests/CCP.Avalonia.Tests/CCP.Avalonia.Tests.csproj -c Release
+
       # The VR head. Builds and self-checks on ubuntu with no OpenXR runtime and no headset -
       # StereoKit ships natives for linux-x64/arm64 and android-arm64, so the same assembly
       # targets Steam Frame (SteamOS/ARM64) and Quest standalone. Rendering needs a device;
@@ -96,6 +103,12 @@ jobs:
       # evidence (link the failing runs) rather than pre-emptively.
       - name: Test app suite
         run: dotnet test Tests/ConditioningControlPanel.Tests/ConditioningControlPanel.Tests.csproj -c Release -p:ValidateExecutableReferencesMatchSelfContained=false
+      # Keep these as separate invocations: the language and notification assemblies need
+      # independent testhost processes and isolated process-immutable profiles.
+      - name: Test Avalonia language suite
+        run: dotnet test Tests/CCP.Avalonia.Language.Tests/CCP.Avalonia.Language.Tests.csproj -c Release
+      - name: Test Avalonia notification suite
+        run: dotnet test Tests/CCP.Avalonia.Tests/CCP.Avalonia.Tests.csproj -c Release
 
   # Greps the compiler cannot do: APIs that compile fine in a net8.0 library and only fail at
   # runtime, plus the XAML clr-namespace tripwire. See the script for what and why.
