@@ -50,9 +50,9 @@ const PINS = ['@gltf-transform/core@4.5.0', '@gltf-transform/extensions@4.5.0', 
   'meshoptimizer@1.2.0', 'sharp@0.35.4'];
 
 /** Names the room reads. Leaves matching these are never joined, and their counts are checked. */
-export const PROTECT = /^(card_slot_(?:dealer|p[01])_[0-5]$|deck_shoe_mouth$|deck_shoe_base$|deck_shoe_side|bet_spot_[01]$|table_lamp$|felt_surface$|player_card_|community_card_|deck_card_|roulette_ball$|pocket_\d+$|number_\d+$|number_band_\d+$|ball_track$|center_disc$|center_disc_trim$|roulette_rotor$|betting_mat$|zero_bet$|track_diamond|shelf_(?:jackpot_remix|rt_demo|high_roller|flashes_v2|bubbles_v2|rt_bundle_[123])$|sconce_globe|media_screen_\d|spiral_inlay|ceiling$|lights_chase_\d|bulb_\d|canopy_bulb_\d|rim_bulb_\d|shoulder[LR]$|ant0$|EMI_glass|marquee$|screen_jackpot|screen_status|reel_\d|title_screen|status_screen|center_spiral|inset_spiral_|emi_topper|emi_dealer|golden_emi_attendant|alcove_return)/;
+export const PROTECT = /^(wheel_station$|wheel_rotor$|pointer$|layout_sectors$|hub_lip$|hub_spiral$|card_slot_(?:dealer|p[01])_[0-5]$|deck_shoe_mouth$|deck_shoe_base$|deck_shoe_side|bet_spot_[01]$|table_lamp$|felt_surface$|player_card_|community_card_|deck_card_|roulette_ball$|pocket_\d+$|number_\d+$|number_band_\d+$|ball_track$|center_disc$|center_disc_trim$|roulette_rotor$|betting_mat$|zero_bet$|track_diamond|shelf_(?:jackpot_remix|rt_demo|high_roller|flashes_v2|bubbles_v2|rt_bundle_[123])$|sconce_globe|media_screen_\d|spiral_inlay|ceiling$|lights_chase_\d|bulb_\d|canopy_bulb_\d|rim_bulb_\d|shoulder[LR]$|ant0$|EMI_glass|marquee$|screen_jackpot|screen_status|reel_\d|title_screen|status_screen|center_spiral|inset_spiral_|emi_topper|emi_dealer|golden_emi_attendant|alcove_return)/;
 /** Groups the room transforms or toggles as a whole: static leaves are pulled up to these, not past. */
-const KEEP_GROUP = /^(card_slot_(?:dealer|p[01])_[0-5]|deck_shoe_mouth|bet_spot_[01]|table_lamp|player_card_\d|community_card_\d|deck_card_\d|roulette_rotor|shelf_(?:jackpot_remix|rt_demo|high_roller|flashes_v2|bubbles_v2|rt_bundle_[123])|ceiling|center_spiral|emi_topper|emi_dealer|golden_emi_attendant|EMI_root|shoulder[LR]|ant0)$/;
+const KEEP_GROUP = /^(wheel_station|wheel_rotor|pointer|layout_sectors|card_slot_(?:dealer|p[01])_[0-5]|deck_shoe_mouth|bet_spot_[01]|table_lamp|player_card_\d|community_card_\d|deck_card_\d|roulette_rotor|shelf_(?:jackpot_remix|rt_demo|high_roller|flashes_v2|bubbles_v2|rt_bundle_[123])|ceiling|center_spiral|emi_topper|emi_dealer|golden_emi_attendant|EMI_root|shoulder[LR]|ant0)$/;
 /** Materials whose textures the room replaces with its own shader. */
 const RUNTIME_TEXTURED = /^(screen_picture_\d|floor_spiral)$/;
 
@@ -175,7 +175,7 @@ async function main() {
     if (!CHECK_ONLY) {
       const doc = await io.readBinary(new Uint8Array(srcBuf));
       // join and meshopt prune empty leaves internally, including explicit game anchors.
-      const anchors = doc.getRoot().listNodes().filter((n) => PROTECT.test(n.getName()) && !n.getMesh() && !n.listChildren().length)
+      const anchors = doc.getRoot().listNodes().filter((n) => PROTECT.test(n.getName()) && !n.getMesh() && (!n.listChildren().length || n.getName() === 'layout_sectors'))
         .map((n) => ({ name: n.getName(), matrix: n.getWorldMatrix(), extras: n.getExtras() }));
       for (const m of doc.getRoot().listMaterials()) {
         if (!RUNTIME_TEXTURED.test(m.getName())) continue;
@@ -185,6 +185,7 @@ async function main() {
       const retired = job.to === 'counter.glb' ? ['header_title', 'service_title']
         : job.to === 'shell.glb' ? ['house_title', 'house_sign_frame', 'house_sign_face', 'arrival_rug', 'arrival_mark'] : [];
       for (const n of doc.getRoot().listNodes()) if (retired.includes(n.getName()) || (job.to === 'shell.glb' && n.getName().startsWith('floor_brass_inlay'))) n.dispose();
+      if (job.to === 'wheel.glb') for (const n of doc.getRoot().listNodes()) if (/^(glyph_|peg_|sector_)/.test(n.getName())) n.dispose();
       // Fit the east wall display inside its bay, clear of the card niche.
       if (job.to === 'shell.glb') {
         const screen = doc.getRoot().listNodes().find((n) => n.getName() === 'screen_mount_1');
