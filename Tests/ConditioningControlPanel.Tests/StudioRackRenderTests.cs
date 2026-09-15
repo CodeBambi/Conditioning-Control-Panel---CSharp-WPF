@@ -513,6 +513,24 @@ public class StudioRackRenderTests
     }
 
     [Fact]
+    public void RightClickCanOnlySwitchTheSchedulerOff()
+    {
+        // Switching the scheduler on starts the engine and makes every later launch auto-start
+        // to the tray, so a stray right-click must never be the gesture that does it. The rack
+        // row flips it off; turning it on opens the panel and leaves the checkbox to the user.
+        var code = File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel",
+                                                 "Views", "Tabs", "StudioTabView.xaml.cs"));
+        var start = code.IndexOf("Add(\"scheduler\"", StringComparison.Ordinal);
+        var end = code.IndexOf("Add(\"ramp\"", start, StringComparison.Ordinal);
+        Assert.True(start > 0 && end > start, "the scheduler rack row moved");
+        var row = code.Substring(start, end - start);
+
+        Assert.Contains("SchedulerEnabled == true", row, StringComparison.Ordinal);
+        Assert.Contains("SelectEntry(\"scheduler\"", row, StringComparison.Ordinal);
+        Assert.DoesNotContain("toggle: () => FlipMasterCheckBox(PanelScheduler", row, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheRackGestureLineIsDockedBelowTheRackNotInsideIt()
     {
         // Auto above Auto would let a full rack push the line off the bottom of the card; star
