@@ -55,6 +55,17 @@ for (const s of stations) {
   ok(nearestStation(s.approach, stations) === s, s.key + ': standing there makes it the nearest');
 }
 ok(blocked(0, -5, stations) && blocked(-5.9, 3.1, stations) && blocked(7, 0, stations), 'the counter, a slot and the wall block');
+// The two Room Service props that stand on the floor are bodies; the other eight are on a wall, over head
+// height or already inside the cabinet blocker, and the room has to stay walkable around all of them.
+for (const [x, z, what] of [[-2.35, 7.18, 'the entrance monstera'], [-3.75, -4.9, 'the terrarium plinth']]) {
+  ok(blocked(x, z, stations), what + ' is a body you cannot walk through');
+}
+for (const [x, z, what] of [[0, 6.5, 'the doorway'], [-1.2, 7.2, 'the runner beside the monstera'],
+  [-4.6, -5.0, 'the walk down the west flank of the Prize Parlour'], [-4.4, 4.1, 'the booth row under the gallery frame'],
+  [-4.4, 5.8, 'the booth row under the portrait pair'], [0, -2.6, 'the counter approach under the billboard'],
+  [-4.9, -5.3, 'the northwest sculpture approach'], [5.5, 6.6, 'the Room Service cabinet approach']]) {
+  ok(!blocked(x, z, stations) && reachable(START, [x, 1.65, z], stations), what + ' is still walkable from the door');
+}
 {
   const f = facing([0, 1.65, 0], [0, 1.65, -1]);
   ok(Math.abs(f.yaw) < 1e-9 && Math.abs(f.pitch) < 1e-9, 'facing -z is yaw 0');
@@ -663,7 +674,9 @@ await shot('wall-picture-from-feed.png');
     return !!hit && hit.closest('.br-nav') !== null && !document.querySelector('.br-custom-panel').contains(hit); })()`),
     'and the Options pill is still the thing under its own pixels');
   const seen = [];
-  for (let i = 0; i < 9; i++) {
+  const itemCount = await ev(`document.querySelectorAll('.br-custom-items button').length`);
+  ok(itemCount === 15, `the catalogue lists fifteen items: nine bays and the six decoration props (${itemCount})`);
+  for (let i = 0; i < itemCount; i++) {
     await ev(`document.querySelectorAll('.br-custom-items button')[${i}].click()`);
     await sleep(120);
     await ev(`(document.querySelector('.br-custom-actions button') || {}).click?.()`);
@@ -671,9 +684,11 @@ await shot('wall-picture-from-feed.png');
     const d = await dbg();
     seen.push({ i, focus: d.customization.view.selected, calls: d.calls, triangles: d.triangles, chosen: JSON.stringify(d.customization.selected) });
   }
-  ok(seen.every((s) => s.focus === s.i), 'each of the nine items pulls the close-up camera onto its own bay');
+  ok(seen.every((s) => s.focus === (s.i < 9 ? s.i : -1)),
+    'each of the nine bay items pulls the close-up onto its own bay, and a decoration prop pulls it back to the whole cabinet');
   ok(seen.every((s) => s.calls > 0 && s.triangles > 0), `the room still submits work under every toggle (${seen.map((s) => s.calls).join(', ')} calls)`);
   ok(new Set(seen.map((s) => s.chosen)).size >= 4, 'and the toggles change the room state, not just the panel');
+  ok(seen.slice(9).every((s) => JSON.parse(s.chosen).props.length === 6), 'the six decoration props each report their own switch');
   ok(await canvases() === 1, 'still one canvas after the whole catalogue has been toggled');
   await shot('room-service-panel.png');
   const a0 = (await dbg()).ambient;
@@ -729,6 +744,68 @@ await shot('wall-picture-from-feed.png');
   ok(await ev(`document.querySelector('.br-custom-panel').hidden`), 'Escape closes the sheet');
   ok(await ev(`document.querySelectorAll('canvas').length`) === 1, 'and the phone room is back to its one canvas');
   await boot(1280, 720);
+}
+
+// 2k3. Room Service placement: every one of the ten props has a real spot in the room, and the room is
+// photographed from the player's own eye height at each of them, for the placement review.
+{
+  const ROOM_SERVICE = [
+    ['customization_vending', 'vending', [5.5, 1.65, 6.6], -1.635, -0.16],
+    ['statue_spot_0_knight', 'knight-pedestal', [-4.9, 1.65, -5.3], -0.477, -0.499],
+    ['statue_spot_1_queen', 'queen-pedestal', [4.1, 1.65, -5.3], 0, -0.549],
+    ['statue_spot_2_rook', 'rook-pedestal', [3.7, 1.65, 5.6], Math.PI, -0.522],
+    ['prop_monstera', 'monstera', [-2.35, 1.65, 4.8], Math.PI, -0.468],
+    ['prop_hanging_ivy', 'hanging-ivy', [-4.6, 1.65, -5.0], 0.699, 0.754],
+    ['prop_terrarium', 'terrarium', [-2.6, 1.65, -3.4], 0.653, -0.494],
+    ['prop_gallery_landscape', 'gallery-landscape', [-4.4, 1.65, 4.1], Math.PI / 2, 0.410],
+    ['prop_portrait_pair', 'portrait-pair', [-4.4, 1.65, 5.8], Math.PI / 2, 0.410],
+    ['prop_deco_billboard', 'deco-billboard', [0, 1.65, 3.5], Math.PI, 0.331],
+  ];
+  await mkdir(join(OUT, 'props'), { recursive: true });
+  const found = await ev(`${JSON.stringify(ROOM_SERVICE.map((r) => r[0]))}.filter((n) => !window.__backroom.scene.scene.getObjectByName(n))`);
+  ok(Array.isArray(found) && found.length === 0, 'all ten Room Service props are in the scene graph by name' + (found && found.length ? ': missing ' + found.join(', ') : ''));
+  const shown = await ev(`${JSON.stringify(ROOM_SERVICE.map((r) => r[0]))}.filter((n) => {
+    for (let o = window.__backroom.scene.scene.getObjectByName(n); o; o = o.parent) if (!o.visible) return true; return false; })`);
+  ok(Array.isArray(shown) && shown.length === 0, 'and every one of them is switched on when the room opens' + (shown && shown.length ? ': hidden ' + shown.join(', ') : ''));
+  // A prop's own spot is not inside a station's body: the placement never swallowed a fixture.
+  {
+    const boxes = (await dbg()).customization.props.boxes;
+    ok(boxes.length === 6, `the six decoration props report their room boxes (${boxes.length})`);
+    const clash = [];
+    for (const box of boxes) for (const s of stations) {
+      const b = s.fixture.bounds;
+      if (box.max[0] > b.min[0] && box.min[0] < b.max[0] && box.max[1] > b.min[1] && box.min[1] < b.max[1]
+        && box.max[2] > b.min[2] && box.min[2] < b.max[2]) clash.push(box.name + ' overlaps ' + s.key);
+    }
+    ok(clash.length === 0, 'no placed prop reaches into a station fixture' + (clash.length ? ': ' + clash.join(', ') : ''));
+    for (const box of boxes) console.log('  spot ' + box.name + ' ' + JSON.stringify(box.min) + ' .. ' + JSON.stringify(box.max));
+  }
+  const errsBefore = errs.length;
+  for (const [name, file, at, y, tilt] of ROOM_SERVICE) {
+    await ev(`window.__backroom.scene.pose(${JSON.stringify(at)}, ${y}, ${tilt})`);
+    await sleep(320);
+    await shot(join('props', file + '.png'));
+  }
+  await ev(`window.__backroom.scene.pose([0, 1.65, 6.5], 0, 0)`);
+  // The six decoration props switch off and back on from the panel, and the room keeps drawing through it.
+  await ev(`window.__backroom.scene.customization.open()`);
+  await sleep(300);
+  for (let i = 0; i < 6; i++) await ev(`window.__backroom.scene.customization.select('props', false, ${i})`);
+  await sleep(260);
+  const off = await dbg();
+  ok(off.customization.selected.props.every((on) => on === false) && off.customization.props.on === 0, 'every decoration prop switches off from the panel');
+  ok(off.calls > 0, `and the room still draws with all six gone (${off.calls} calls, ${off.triangles} triangles)`);
+  await shot(join('props', 'all-off.png'));
+  for (let i = 0; i < 6; i++) await ev(`window.__backroom.scene.customization.select('props', true, ${i})`);
+  await sleep(260);
+  const back = await dbg();
+  ok(back.customization.selected.props.every((on) => on === true) && back.customization.props.on === 6, 'and every one of them comes back');
+  ok(back.triangles > off.triangles, `the six props are real geometry (${back.triangles - off.triangles} more triangles drawn with them on)`);
+  ok(back.customization.props.batches <= 40, `and they cost ${back.customization.props.batches} batched draws for ${back.customization.props.triangles} authored triangles, not one per leaf`);
+  await key('Escape');
+  await sleep(300);
+  ok(errs.length === errsBefore, 'no page errors while the props are toggled' + (errs.length > errsBefore ? ': ' + errs.slice(errsBefore).join(' | ') : ''));
+  perf.props = back.customization.props;
 }
 
 // 2l. Escape in the empty room leaves

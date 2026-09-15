@@ -17,7 +17,8 @@ export function createVendingView({mount,vending,onSelect}) {
   const offset=new T.Vector3();
   const bays=Array.from({length:9},(_,i)=>model.getObjectByName('bay_'+String(i+1).padStart(2,'0')));
   const ray=new T.Raycaster(),pointer=new T.Vector2();let selected=-1,zoom=4,goalZoom=4,disposed=false;
-  function focus(index){selected=index;model.updateMatrixWorld(true);if(index<0){goal.set(0,1.18,0);}else{const bay=bays[index];if(!bay)return;bay.getWorldPosition(goal);goal.y+=.13;goal.z=.35;}}
+  /* An item with no bay of its own (the decoration props) pulls the close-up back to the whole cabinet. */
+  function focus(index){const bay=index>=0?bays[index]:null;selected=bay?index:-1;model.updateMatrixWorld(true);if(!bay){goal.set(0,1.18,0);return;}bay.getWorldPosition(goal);goal.y+=.13;goal.z=.35;}
   function pick(event){if(event.target!==mount)return;   // the stage's own buttons are not the cabinet
     const r=mount.getBoundingClientRect();if(!r.width||!r.height)return;pointer.set((event.clientX-r.left)/r.width*2-1,-(event.clientY-r.top)/r.height*2+1);ray.setFromCamera(pointer,camera);const hits=ray.intersectObjects(bays.filter(Boolean),true);if(hits.length){let n=hits[0].object;while(n&&!bays.includes(n))n=n.parent;const i=bays.indexOf(n);if(i>=0)onSelect(i);}}
   mount.addEventListener('click',pick);

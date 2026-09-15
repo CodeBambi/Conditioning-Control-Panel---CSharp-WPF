@@ -123,6 +123,14 @@ for (const id of ['slot', 'wheel', 'cards', 'roulette', 'counter']) {
   ok(rows.some((r) => r.id === id && r.state === 'live' && r.entry === `stations/${id}/station.js`), `${id} is live from stations.json with entry stations/${id}/station.js`);
 }
 ok(await ev(`window.__backroom.stations.every((s) => !!window.__backroom.scene.scene.getObjectByName('station_' + s.key))`), 'every row has its fixture set out in the scene');
+/* The ten Room Service props are set out with the fixtures, and a station's own approach point is still
+   clear of every one of them: nothing decorative sits in the way of E. */
+const PROPS = ['customization_vending', 'statue_spot_0_knight', 'statue_spot_1_queen', 'statue_spot_2_rook',
+  'prop_monstera', 'prop_hanging_ivy', 'prop_terrarium', 'prop_gallery_landscape', 'prop_portrait_pair', 'prop_deco_billboard'];
+{
+  const missing = await ev(`${JSON.stringify(PROPS)}.filter((n) => !window.__backroom.scene.scene.getObjectByName(n))`);
+  ok(Array.isArray(missing) && missing.length === 0, 'the ten Room Service props are set out too' + (missing && missing.length ? ': missing ' + missing.join(', ') : ''));
+}
 await sleep(1500);
 await shot('room-00-boot.png');
 
