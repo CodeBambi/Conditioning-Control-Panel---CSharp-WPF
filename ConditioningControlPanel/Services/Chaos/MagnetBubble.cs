@@ -39,6 +39,13 @@ public static class MagnetBubble
     public const byte GlowR = 0x6F, GlowG = 0xA8, GlowB = 0xFF;
 
     /// <summary>
+    /// The glyph worn on the body, since no sprite ships. U+2295, a circled plus: reads as an
+    /// attract point, and deliberately NOT the chaos spiral variant's U+25CE or the Brain Drain
+    /// bubble's U+25CD, which are the two nearest neighbours in the same visual family.
+    /// </summary>
+    public const string Label = "⊕";
+
+    /// <summary>
     /// The ring's pulse: opacity swings between <c>1 - RingPulseDepth</c> and 1 at
     /// <c>RingPulseRateRadPerSec</c>. Faster and shallower than the Brain Drain breathe on purpose -
     /// that one is a slow "something is about to go quiet", this one is a quick "it has noticed you".
@@ -145,10 +152,36 @@ public static class MagnetBubble
         _ => 0.0,
     };
 
-    /// <summary>Whether this frame's cursor sample may be steered at: on some monitor, and moved
-    /// inside the last <see cref="CursorStaleSeconds"/>.</summary>
+    /// <summary>Whether this frame's cursor sample is live at all: on SOME monitor, and moved
+    /// inside the last <see cref="CursorStaleSeconds"/>. Desktop-wide, so it says nothing about
+    /// whether any particular bubble can reach it - that is <see cref="CursorInBounds"/>.</summary>
     public static bool CursorUsable(bool cursorOnScreen, double secondsSinceCursorMoved) =>
         cursorOnScreen && secondsSinceCursorMoved >= 0 && secondsSinceCursorMoved <= CursorStaleSeconds;
+
+    /// <summary>
+    /// Whether the cursor is somewhere THIS bubble could actually travel to.
+    ///
+    /// <para>The multi-monitor rule, and the reason it is not optional: a bubble lives on the
+    /// screen it spawned on and is destroyed the moment it crosses that screen's bounds. With the
+    /// pointer parked on monitor 2, a magnet on monitor 1 would otherwise beeline for the shared
+    /// edge, cross it, and be quietly destroyed unpopped - every magnet on that screen, every
+    /// time. Out of bounds it simply does not steer, and floats like any other bubble.</para>
+    ///
+    /// <para>Bounds are the bubble's own screen box in DIPs. <paramref name="right"/> is expected
+    /// to already have the sprite size added back on, since the caller's <c>_screenRight</c> is
+    /// the largest legal top-left X rather than the screen's right edge.</para>
+    /// </summary>
+    public static bool CursorInBounds(double cursorX, double cursorY,
+                                      double left, double right, double top, double bottom) =>
+        cursorX >= left && cursorX <= right && cursorY >= top && cursorY <= bottom;
+
+    /// <summary>Both rules at once: a live sample, on a monitor, and inside this bubble's reach.
+    /// The one question the per-frame steering branch asks.</summary>
+    public static bool CanSteer(bool cursorOnScreen, double secondsSinceCursorMoved,
+                                double cursorX, double cursorY,
+                                double left, double right, double top, double bottom) =>
+        CursorUsable(cursorOnScreen, secondsSinceCursorMoved)
+        && CursorInBounds(cursorX, cursorY, left, right, top, bottom);
 
     /// <summary>A bubble's velocity in DIPs per frame.</summary>
     public readonly record struct Velocity(double Vx, double Vy)

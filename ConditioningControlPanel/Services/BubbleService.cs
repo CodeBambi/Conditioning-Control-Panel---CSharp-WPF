@@ -151,8 +151,14 @@ public class BubbleService : IDisposable
     // pointer has sat still: past MagnetBubble.CursorStaleSeconds the bubbles stop chasing it.
     internal static bool MagnetCursorOnScreen;
     internal static double MagnetCursorIdleSec;
+    // Attraction strength for THIS tick, resolved from MotionFx.Level once in the prologue rather
+    // than per magnet per frame (the animation loop is meant to be cheap and allocation-free).
+    internal static double MagnetStrengthNow;
     private double _magnetCursorLastX = double.NaN, _magnetCursorLastY = double.NaN;
-    private DateTime _magnetCursorMovedUtc = DateTime.UtcNow;
+    // MinValue, not UtcNow: the FIRST sample must read as stale. Seeding it to "now" meant a
+    // pointer the user had already parked before the first magnet spawned looked freshly moved,
+    // and that magnet chased a motionless cursor for two seconds before giving up.
+    private DateTime _magnetCursorMovedUtc = DateTime.MinValue;
     internal static bool WandShimmerOn;
     // The Pull / The Spanker — sampled once per anim tick (cheap shared reads in AnimateFrame).
     internal static double ChaosCursorPullNow;
@@ -522,6 +528,7 @@ public class BubbleService : IDisposable
         // Wand shimmer / VibePopping / The Pull / The Spanker: sample the cursor + boon knobs once
         // per tick (one P/Invoke); every bubble reads the shared fields instead of asking Win32 itself.
         WandShimmerOn = _chaosActive && (_chaosWandShimmer?.Invoke() ?? false);
+        MagnetStrengthNow = Chaos.MagnetBubble.StrengthFor(MotionFx.Level);
         ChaosCursorPullNow = _chaosActive ? (_chaosCursorPull?.Invoke() ?? 0) : 0;
         ChaosRabbitHomingNow = _chaosActive && (_chaosRabbitHoming?.Invoke() ?? false);
         ChaosSpankerOnNow = _chaosActive && (_chaosSpankerOn?.Invoke() ?? false);
@@ -1175,7 +1182,7 @@ public class BubbleService : IDisposable
                     SizePx = 200,
                     Tint = System.Windows.Media.Color.FromRgb(
                         MagnetBubble.TintR, MagnetBubble.TintG, MagnetBubble.TintB),
-                    Label = "◎",
+                    Label = MagnetBubble.Label,
                     IsLive = false,
                     FuseMs = 0,
                     Motion = motion ?? ChaosMotion.FloatUp,
@@ -1198,10 +1205,15 @@ public class BubbleService : IDisposable
         // Cap concurrent trigger bubbles regardless of render mode: in per-window fallback each is a
         // layered window (pileup starves desktop heap — #448/#431), and even hosted, each pop fires a
         // payload, so an uncapped field spams effects. Past the ceiling, fall back to a plain bubble.
-        // Counted by the ambient-TRIGGER flag, not by "carries a payload": the Magnet bubble has no
-        // payload and would otherwise sit outside the ceiling entirely. Identical for every other
-        // trigger id, which is a payload-carrying treat by construction.
-        if (spec != null && _bubbles.Count(b => b.IsAmbientTriggerBubble) >= MAX_TRIGGER_WINDOWS)
+        // The count is the OLD "carries a payload" predicate OR the ambient-TRIGGER flag - a strict
+        // superset, never a swap. The flag alone would have been a regression: _bubbles also holds
+        // chaos bubbles, and a chaos benign treat satisfies IsAmbientEffectBubble but is built with
+        // ambientTrigger:false, so during a chaos run the ceiling would have stopped counting the
+        // chaos field and allowed up to four EXTRA layered windows at the heaviest moment - the
+        // exact desktop-heap starvation the cap exists for (#448/#431). The flag is here only so
+        // the payload-less Magnet bubble counts too.
+        if (spec != null
+            && _bubbles.Count(b => b.IsAmbientTriggerBubble || b.IsAmbientEffectBubble) >= MAX_TRIGGER_WINDOWS)
             spec = null;
         if (spec == null)
             return new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss, OnDestroy, isClickable,
@@ -2087,14 +2099,21 @@ public class BubbleService : IDisposable
         bool onScreen = false;
         try
         {
-            onScreen = System.Windows.Forms.Screen.AllScreens
-                .Any(sc => sc.Bounds.Contains(mp.X, mp.Y));
+            // Indexed, not LINQ: this runs inside the 30fps animation loop, which allocates nothing.
+            var screens = System.Windows.Forms.Screen.AllScreens;
+            for (int i = 0; i < screens.Length; i++)
+                if (screens[i].Bounds.Contains(mp.X, mp.Y)) { onScreen = true; break; }
         }
         catch (Exception ex) { Diag.Swallowed(ex); }
         MagnetCursorOnScreen = onScreen;
 
-        if (double.IsNaN(_magnetCursorLastX)
-            || Math.Abs(mp.X - _magnetCursorLastX) > 1 || Math.Abs(mp.Y - _magnetCursorLastY) > 1)
+        if (double.IsNaN(_magnetCursorLastX))
+        {
+            // First sample of the session: remember WHERE the pointer is, but do NOT stamp it as
+            // having just moved - an already-parked pointer has not.
+            _magnetCursorLastX = mp.X; _magnetCursorLastY = mp.Y;
+        }
+        else if (Math.Abs(mp.X - _magnetCursorLastX) > 1 || Math.Abs(mp.Y - _magnetCursorLastY) > 1)
         {
             _magnetCursorLastX = mp.X; _magnetCursorLastY = mp.Y;
             _magnetCursorMovedUtc = DateTime.UtcNow;
@@ -3011,7 +3030,11 @@ internal class Bubble
                    && spec.IsHeart != true && spec.IsDroplet != true && spec.IsEscort != true
                    && spec.IsTease != true && spec.IsBrittle != true;
         if (_isTreat) _treatLifeRemainingMs = spec!.TreatLifeMs > 0 ? spec.TreatLifeMs : TREAT_LIFETIME_MS;
-        // The magnet's early window is measured against the SAME life its rot clock runs on.
+        // The magnet's early window is measured against the life its rot clock was GIVEN. The two
+        // are different clocks on purpose: _treatLifeRemainingMs burns per frame (and pauses for an
+        // avatar claim or a slow-mo field), while AgeMs is real wall-clock. The window wants the
+        // wall-clock one - "did you take it in the first two and a half seconds" is a question about
+        // the user's reaction, not about how many frames the app managed to draw.
         if (_isMagnetBubble) _magnetLifeMs = _treatLifeRemainingMs > 0 ? _treatLifeRemainingMs : TREAT_LIFETIME_MS;
         // The two giants read frantic when they breathe at full danger amplitude — calm them 60%.
         if (spec?.VariantId is "video" or "htlink") _dangerWobbleMult = 0.4;
@@ -3786,16 +3809,25 @@ internal class Bubble
             bool magnetSteering = false;
             if (_isMagnetBubble)
             {
-                double mStrength = Chaos.MagnetBubble.StrengthFor(MotionFx.Level);
+                double mStrength = BubbleService.MagnetStrengthNow;
+                double mCurX = BubbleService.CursorPxX / _dpiScale;
+                double mCurY = BubbleService.CursorPxY / _dpiScale;
+                // The cursor has to be live AND on the screen this bubble was born on. A magnet
+                // that chases a pointer sitting on another monitor just runs at the shared edge,
+                // crosses it, and is destroyed unpopped. _screenRight is the largest legal top-left
+                // X, so the sprite size goes back on to get the real right edge.
                 magnetSteering = mStrength > 0 && !_isPopping
-                    && Chaos.MagnetBubble.CursorUsable(BubbleService.MagnetCursorOnScreen,
-                                                       BubbleService.MagnetCursorIdleSec);
+                    && Chaos.MagnetBubble.CanSteer(BubbleService.MagnetCursorOnScreen,
+                                                   BubbleService.MagnetCursorIdleSec,
+                                                   mCurX, mCurY,
+                                                   _screenLeft, _screenRight + _size,
+                                                   _screenTop, _screenBottom);
                 if (magnetSteering)
                 {
                     _magnetV = Chaos.MagnetBubble.Steer(
                         _magnetV,
                         _posX + _size / 2.0, _posY + _size / 2.0,
-                        BubbleService.CursorPxX / _dpiScale, BubbleService.CursorPxY / _dpiScale,
+                        mCurX, mCurY,
                         mStrength, ts);
                     _posX += _magnetV.Vx * ts;
                     _posY += _magnetV.Vy * ts;

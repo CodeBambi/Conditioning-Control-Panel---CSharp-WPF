@@ -95,6 +95,27 @@ public class MagnetBubbleTests
         Assert.Equal(0xBF, MagnetBubble.TintB);
     }
 
+    /// <summary>
+    /// No sprite ships for it, so the body glyph is all the user has to tell it apart at a glance.
+    /// It must not be one another bubble already wears - the chaos "spiral" variant's U+25CE was
+    /// the original pick and collided exactly there.
+    /// </summary>
+    [Fact]
+    public void Its_body_glyph_is_not_already_taken()
+    {
+        Assert.False(string.IsNullOrEmpty(MagnetBubble.Label));
+        foreach (var v in ChaosBubbleVariants.All)
+            Assert.NotEqual(v.Label, MagnetBubble.Label);
+        Assert.NotEqual("◎", MagnetBubble.Label);   // the spiral variant
+        Assert.NotEqual("◍", MagnetBubble.Label);   // the Brain Drain bubble
+    }
+
+    /// <summary>The floating pop word. Its pop reaches ShowChaosEffectLabel like any other, so a
+    /// missing case would flash nothing where every neighbour flashes a token.</summary>
+    [Fact]
+    public void It_has_a_pop_word()
+        => Assert.Equal("PULL", ChaosBubbleVariants.PopWordFor(MagnetBubble.VariantId));
+
     // ---- the early-pop bargain ---------------------------------------------------------
 
     [Fact]
@@ -272,6 +293,50 @@ public class MagnetBubbleTests
     [InlineData(false, 0.5, false)]
     public void Cursor_usable(bool onScreen, double idleSec, bool expected)
         => Assert.Equal(expected, MagnetBubble.CursorUsable(onScreen, idleSec));
+
+    // ---- the multi-monitor bound -------------------------------------------------------
+    //
+    // One bubble's own screen box, in DIPs: the left monitor of a pair, 0..1920 x 0..1080.
+
+    private const double L = 0, R = 1920, T = 0, B = 1080;
+
+    [Theory]
+    [InlineData(960, 540, true)]         // middle of its own screen
+    [InlineData(0, 0, true)]             // exactly the top-left corner
+    [InlineData(1920, 1080, true)]       // exactly the bottom-right corner
+    [InlineData(1919, 1079, true)]
+    [InlineData(1921, 540, false)]       // one DIP onto the monitor to the right
+    [InlineData(3000, 540, false)]       // squarely on monitor 2
+    [InlineData(-1, 540, false)]         // a monitor to the LEFT of this one
+    [InlineData(960, -1, false)]         // a monitor stacked above
+    [InlineData(960, 1081, false)]       // a monitor stacked below
+    public void Cursor_in_bounds(double cx, double cy, bool expected)
+        => Assert.Equal(expected, MagnetBubble.CursorInBounds(cx, cy, L, R, T, B));
+
+    /// <summary>
+    /// The reason the bound exists: a perfectly live, freshly moved cursor sitting on a SECOND
+    /// monitor must not steer a bubble that lives on the first. Without it the bubble beelines for
+    /// the shared edge, crosses it, and is destroyed unpopped - every magnet, every time.
+    /// </summary>
+    [Fact]
+    public void A_live_cursor_on_another_monitor_does_not_steer_this_bubble()
+    {
+        // Desktop-wide the sample is impeccable: on a monitor, moved this instant.
+        Assert.True(MagnetBubble.CursorUsable(cursorOnScreen: true, secondsSinceCursorMoved: 0));
+        // But it is on monitor 2, so this bubble may not chase it.
+        Assert.False(MagnetBubble.CanSteer(true, 0, 3000, 540, L, R, T, B));
+        // The same cursor back on its own screen does steer it.
+        Assert.True(MagnetBubble.CanSteer(true, 0, 960, 540, L, R, T, B));
+    }
+
+    [Theory]
+    [InlineData(true, 0.0, 960.0, 540.0, true)]
+    [InlineData(true, 2.01, 960.0, 540.0, false)]    // stale, though it is in reach
+    [InlineData(false, 0.0, 960.0, 540.0, false)]    // off all monitors, though the point is in reach
+    [InlineData(true, 0.0, 3000.0, 540.0, false)]    // live, but out of this bubble's reach
+    [InlineData(true, 2.01, 3000.0, 540.0, false)]   // neither
+    public void Can_steer_is_both_rules(bool onScreen, double idleSec, double cx, double cy, bool expected)
+        => Assert.Equal(expected, MagnetBubble.CanSteer(onScreen, idleSec, cx, cy, L, R, T, B));
 
     // ---- the ring pulse ----------------------------------------------------------------
 
