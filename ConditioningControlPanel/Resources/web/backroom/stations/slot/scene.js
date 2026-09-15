@@ -256,7 +256,20 @@ export async function createScene(o) {
     const side = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), dir).normalize();
     const quarter = dir.clone().addScaledVector(side, 0.75).add(new THREE.Vector3(0, 0.45, 0)).normalize();
     rig.position.y = y; rig.updateMatrixWorld(true);
-    return { play: fit(playBox, dir, target), arrive: fit(whole, quarter), drop: (whole.max.y - whole.min.y) * 1.6 };
+    const play = fit(playBox, dir, target);
+    if (aspect < 0.8) {
+      // Portrait play centres the reels, with the marquee above and controls below.
+      const centre = new THREE.Box3();
+      (glass ? [glass] : reels).forEach(n => centre.expandByObject(n));
+      const focus = centre.getCenter(new THREE.Vector3()).sub(play.look);
+      const up = new THREE.Vector3().crossVectors(dir, play.right);
+      const shift = play.right.clone().multiplyScalar(focus.dot(play.right) * 0.2)
+        .addScaledVector(up, focus.dot(up));
+      play.look.add(shift);
+      play.dist *= 0.96;
+      play.pos.copy(play.look).addScaledVector(dir, play.dist);
+    }
+    return { play, arrive: fit(whole, quarter), drop: (whole.max.y - whole.min.y) * 1.6 };
   }
   const aim = (pos, lookAt) => { camera.position.copy(pos); camera.lookAt(lookAt); };
   function resize() {
