@@ -21,7 +21,16 @@
         NavSidebar visual tree and adds every TextBlock it finds to the global label fade, and both
         exist from this control's constructor. See MainWindow.NavRail.cs.
     -->
-    <Grid>
+    <!--
+        HEIGHT IS PINNED to the ring's 40px, and the muted pill never wraps. The shut rail is 56px
+        wide, so column 1 below is 0px wide while the rail is collapsed (which is most of the time).
+        A TextBlock with TextWrapping="Wrap" measured at width 0 breaks after EVERY character: the
+        29-character pill used to stand ~260px tall the moment EMI came out, the rail's pinned
+        bottom stack grew by that much, and the doors' ScrollViewer above it was squeezed until the
+        last medallion was cut to an arc. The row is now the same 40px whether she is out or not.
+        EmiDockRailFitTests pins both halves.
+    -->
+    <Grid Height="40">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="56"/>
             <ColumnDefinition Width="*"/>
@@ -81,7 +90,8 @@
                        Foreground="#9A8FB5"
                        FontFamily="Press Start 2P, Consolas, Global Monospace"
                        FontSize="7"
-                       TextWrapping="Wrap"
+                       TextWrapping="NoWrap"
+                       TextTrimming="CharacterEllipsis"
                        Margin="0,3,0,0"/>
         </StackPanel>
     </Grid>
