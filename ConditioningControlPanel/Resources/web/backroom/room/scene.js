@@ -19,7 +19,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { buildRoom } from './fixtures.js';
 import { createScreens } from './screens.js';
-import { createEmiInteraction } from './emi-interaction.js';
+import { createEmiInteraction, TAP_SLOP } from './emi-interaction.js';
 import { createCasinoDecor } from './casino-decor.js';
 import { cardCounts } from '../stations/cards/layout-3d.js';
 import { seatPose, easeSeat, shortAngle } from './seat-camera.js';
@@ -91,7 +91,7 @@ export async function createScene(o) {
   const pos = START.slice();
   let yaw = 0, pitch = 0, sway = 0, walkPhase = 0, ambient = 0;
   let still = !!o.still, overview = false, held = null, seated = null, halted = false, suspended = false;
-  let raf = 0, last = performance.now(), lastTick = last, nearest = null, drag = null;
+  let raf = 0, last = performance.now(), lastTick = last, nearest = null, drag = null, tap = null;
   let pendingVisit=false, transition=null, viewOffset=0, viewOffsetX=0, arrival=Promise.resolve(true), cardHands=1, counts={d:2,0:2}, composition='';
   const views = new Set();
   const ray = new T.Raycaster(), pointer = new T.Vector2();
@@ -140,7 +140,7 @@ export async function createScene(o) {
   }
   window.addEventListener('resize', resize);
 
-  function resetInput() { keys.clear(); vel.set(0, 0); drag = null; touch.reset(); touch.setEnabled(canWalk()); }
+  function resetInput() { keys.clear(); vel.set(0, 0); drag = tap = null; touch.reset(); touch.setEnabled(canWalk()); }
   window.addEventListener('keydown', (e) => {
     if (pendingVisit || transition || seated || held || halted || suspended || customization.opened || e.ctrlKey || e.altKey || e.metaKey) return;
     if (KEYS.has(e.code)) { e.preventDefault(); keys.add(e.code); }
@@ -150,31 +150,85 @@ export async function createScene(o) {
   });
   window.addEventListener('keyup', (e) => keys.delete(e.code));
   window.addEventListener('blur', resetInput);
+  // A finger rolls a little between down and up (a mouse hardly moves): under TAP_SLOP css px (emi-interaction.js) it is a tap, over it a look.
   canvas.addEventListener('pointerdown', (e) => {
-    if (!canWalk() || drag || e.button !== 0) return;
-    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, startX:e.clientX, startY:e.clientY, moved:false };
+    if (!canWalk() || e.button !== 0) return;
+    // A pointer whose up never arrived (a finger lifted over the browser chrome) must not hold the room forever.
+    if (drag && (drag.id === e.pointerId || (canvas.hasPointerCapture && !canvas.hasPointerCapture(drag.id)))) drag = null;
+    if (drag) return;
+    drag = tap = { id: e.pointerId, x: e.clientX, y: e.clientY, startX:e.clientX, startY:e.clientY, moved:false };
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
   });
   canvas.addEventListener('pointermove', (e) => {
     if (!drag || drag.id !== e.pointerId || overview || seated || held || customization.opened) return;
-    drag.moved ||= Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)>8;
+    drag.moved ||= Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)>TAP_SLOP;
     if(!drag.moved)return;
     yaw -= (e.clientX - drag.x) * 0.003;
     pitch = T.MathUtils.clamp(pitch - (e.clientY - drag.y) * 0.003, -1.12, 1.2);
     drag.x = e.clientX; drag.y = e.clientY;
   });
   canvas.addEventListener('pointerup',e=>{
-    if(!canWalk()||drag?.id!==e.pointerId||drag.moved)return;
-    const hit=pickAt(e,scene.children).find(h=>{for(let n=h.object;n;n=n.parent)if(!n.visible)return false;return true;});
-    if(!hit)return;
+    // The tap keeps its own record: Safari can drop the capture (lostpointercapture) before the up clears `drag`.
+    const start=tap;tap=null;
+    if(!canWalk()||start?.id!==e.pointerId||start.moved||Math.hypot(e.clientX-start.startX,e.clientY-start.startY)>TAP_SLOP)return;
     // A mascot stands inside its fixture, often behind its glass: a tap that reaches an NPC is the bark (emi-interaction), never a visit.
     if(interaction.npcAt(e.clientX,e.clientY))return;
-    // A bulb lives in a scene-level InstancedMesh batch (fixtures.js), so its station comes from the instance, not the parents.
-    const batched=hit.object.isInstancedMesh?o.stations.find(r=>r.key===hit.object.userData.rows?.[hit.instanceId]):null;
-    if(batched){drag=null;visit(batched);return;}
-    for(let n=hit.object;n;n=n.parent){const row=o.stations.find(r=>room.holders.get(r.key)===n);if(row){drag=null;visit(row);break;}}
+    const row=stationAt(e);
+    if(row){drag=null;visit(row);}
   });
+  canvas.addEventListener('pointercancel',e=>{if(tap?.id===e.pointerId)tap=null;});
   for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(ev, (e) => { if (drag?.id === e.pointerId) drag = null; });
+
+  /* Any tap on a fixture enters it: the exact ray first, then the fixture whose screen box (the visible meshes'
+   * world box projected, plus a finger's margin) holds the point, the nearest to the camera when boxes overlap.
+   * The vending machine is the Room Service row (customization.js). Boxes are cached: fixtures do not move. */
+  const TAP_MARGIN = 24, bounds = new Map(), corner = new T.Vector3();
+  function fixtureOf(row) { return row.key === 'customization' ? scene.getObjectByName('customization_vending') : room.holders.get(row.key); }
+  function rowOf(node) { for (let n = node; n; n = n.parent) { const row = stationRows.find(r => fixtureOf(r) === n); if (row) return row; } return null; }
+  function worldBox(node) {
+    let box = bounds.get(node);
+    if (box) return box;
+    box = new T.Box3(); node.updateWorldMatrix(true, false);
+    node.traverseVisible(m => {
+      if (!m.isMesh || m.isInstancedMesh || !m.geometry) return;
+      if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+      const b = m.geometry.boundingBox; if (!b) return;
+      for (let i = 0; i < 8; i++) box.expandByPoint(corner.set(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).applyMatrix4(m.matrixWorld));
+    });
+    bounds.set(node, box); return box;
+  }
+  function stationAt(e) {
+    const hit = pickAt(e, scene.children).find(h => { for (let n = h.object; n; n = n.parent) if (!n.visible) return false; return true; });
+    if (hit) {
+      // A bulb lives in a scene-level InstancedMesh batch (fixtures.js), so its station comes from the instance, not the parents.
+      const batched = hit.object.isInstancedMesh ? o.stations.find(r => r.key === hit.object.userData.rows?.[hit.instanceId]) : null;
+      const row = batched || rowOf(hit.object);
+      if (row) return row;
+    }
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const px = e.clientX - rect.left, py = e.clientY - rect.top;
+    camera.updateMatrixWorld();
+    let best = null, bestDistance = Infinity;
+    for (const row of stationRows) {
+      const node = fixtureOf(row);
+      if (!node || !node.visible) continue;
+      const box = worldBox(node);
+      if (box.isEmpty()) continue;
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, behind = false;
+      for (let i = 0; i < 8 && !behind; i++) {
+        corner.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).applyMatrix4(camera.matrixWorldInverse);
+        if (corner.z > -camera.near) { behind = true; break; }   // a corner behind the eye has no place on the screen: the exact ray alone serves here
+        corner.applyMatrix4(camera.projectionMatrix);
+        const sx = (corner.x + 1) * rect.width / 2, sy = (1 - corner.y) * rect.height / 2;
+        minX = Math.min(minX, sx); maxX = Math.max(maxX, sx); minY = Math.min(minY, sy); maxY = Math.max(maxY, sy);
+      }
+      if (behind || px < minX - TAP_MARGIN || px > maxX + TAP_MARGIN || py < minY - TAP_MARGIN || py > maxY + TAP_MARGIN) continue;
+      const distance = box.distanceToPoint(camera.position);
+      if (distance < bestDistance) { best = row; bestDistance = distance; }
+    }
+    return best;
+  }
 
   function setNearest(row) {
     if (row === nearest) return;
