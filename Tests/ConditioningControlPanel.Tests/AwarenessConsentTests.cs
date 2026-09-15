@@ -110,7 +110,8 @@ public class AwarenessConsentTests
         {
             "ConditioningControlPanel/Models/AppSettings.cs",
             "ConditioningControlPanel/MainWindow/MainWindow.CompanionRoom.cs",
-            "ConditioningControlPanel/MainWindow/MainWindow.Patreon.cs"
+            "ConditioningControlPanel/MainWindow/MainWindow.Patreon.cs",
+            "CCP.Avalonia/Views/Windows/MainShellWindow.CompanionRoom.cs"
         };
 
         var strays = writers.Where(f => !allowed.Contains(f)).ToList();
@@ -209,6 +210,21 @@ public class AwarenessConsentTests
         Assert.Contains("AwarenessConsentDialog.EnsureConsent", source, StringComparison.Ordinal);
         // …and a decline has to be able to stop it, which a void method could not express.
         Assert.Contains("internal bool SetAwarenessEnabled(bool enabled)", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheAvaloniaDoorChecksEntitlementAndConsentBeforeItsOnWrite()
+    {
+        var source = SourceRoots.ReadProductFile("Views", "Windows", "MainShellWindow.CompanionRoom.cs");
+        var entitlement = source.IndexOf("if (enabled && !Services.TierGate.DemandPremium", StringComparison.Ordinal);
+        var consent = source.IndexOf("if (enabled && !await AwarenessConsentDialog.EnsureConsentAsync", StringComparison.Ordinal);
+        var onWrite = source.IndexOf("s.AwarenessModeEnabled = enabled;", StringComparison.Ordinal);
+
+        Assert.True(entitlement >= 0, "Avalonia awareness ON must check entitlement");
+        Assert.True(consent > entitlement, "Avalonia awareness ON must ask consent after entitlement");
+        Assert.True(onWrite > consent, "Avalonia awareness ON must write only after consent");
+        Assert.Contains("internal async System.Threading.Tasks.Task<bool> SetAwarenessEnabled(bool enabled)",
+            source, StringComparison.Ordinal);
     }
 
     [Fact]
