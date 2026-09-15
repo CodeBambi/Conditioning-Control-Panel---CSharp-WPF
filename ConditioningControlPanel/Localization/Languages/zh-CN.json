@@ -5499,6 +5499,8 @@
   "tooltip_flash_draggable": "Press a flash and it comes with your cursor instead of popping, so you can put it where you want it. Let go with a flick and it sails off, bouncing around the desktop until it slows to a stop. A quick press still pops it, and right-click always does. Needs a Flashes v2 motion prize.",
   "setting_flash_rounded_corners": "Rounded corners",
   "tooltip_flash_rounded_corners": "Softens the corners of every flash so a GIF sits on the screen like a card instead of a pasted rectangle. Needs a Flashes v2 motion prize.",
+  "setting_flash_shatter": "Shatter",
+  "tooltip_flash_shatter": "Dismissing a flash breaks it apart instead of cutting it: the picture splits into shards that fall, tumble and fade away mid-air. Letting a flash time out on its own still fades it quietly. Reduced motion breaks it into fewer pieces over half the time, and motion off keeps the plain cut. Needs Solid mode off, and a Flashes v2 motion prize.",
   "setting_stare_to_pop": "凝视戳破",
   "tooltip_stare_to_pop": "盯着一张闪图大约一秒，它就会消失，和点击一样，九头蛇也照算。只对闪图有效。气泡在 Bubble Pop 标签页有自己的开关。",
   "setting_stare_to_keep": "凝视留存",
