@@ -434,8 +434,18 @@ export async function mount(ctx) {
   the station has adopted the same reply. Stations never look the chip up by id or observe it.
 - **HUD keys (amended 2026-09-14).** Room HUD buttons drop focus on pointerup, and while walking or with
   a station open, Space and Enter on a HUD button do nothing (the station's keys are the station's).
-- **Budget.** At 1280x720 on the entry pose: 212 draw calls (the preview draws 1,268 there, 1,312 in its
-  own check), no shadows, no post passes, pixel ratio capped at 1.5.
+- **Room Service props (amended 2026-09-15).** Every one of the ten catalogue props has a fixed spot in
+  the room, not only a bay in the cabinet: the ROOM SERVICE machine on the right wall by the entrance
+  (walk up and press E, or click it), the three chess sculptures on their pedestals, three plants (the
+  entrance monstera, the northwest hanging ivy, a terrarium on a plinth beside the Prize Parlour) and
+  three wall frames (two above the left-wall booths, the wide billboard over the door). The six
+  decoration props are on when the room opens and switch off and on again from the panel, session only:
+  no persistence and no bridge message, like every other Room Service change. The spots are the table in
+  `room/assets/customization/README.md`. No station, cabinet or screen moves for them, the approved
+  left-wall booth positions are untouched, and the only walk volumes added are the two floor plants.
+- **Budget.** At 1280x720 on the entry pose: 277 draw calls with the whole Room Service collection placed
+  (264 before it; the preview draws 1,268 there, 1,312 in its own check), no shadows, no post passes,
+  pixel ratio capped at 1.5.
 
 ## 8. Feel hooks (for F1, cited from THE HOUSE BOOK)
 

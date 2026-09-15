@@ -24,6 +24,8 @@ export const BLOCKERS = Object.freeze([
   Object.freeze({ min: [3.2, 6.7], max: [4.2, 7.75] }), // entrance sculpture
   Object.freeze({ min: [-3.24, -7.44], max: [3.24, -4.06] }),   // prize counter platform
   Object.freeze({ min: [-6.54, -3.94], max: [-4.46, -0.06] }),  // wheel plinth
+  Object.freeze({ min: [-2.93, 6.37], max: [-1.77, 7.69] }),   // Room Service monstera
+  Object.freeze({ min: [-4.27, -5.42], max: [-3.23, -4.38] }),  // Room Service terrarium plinth
 ]);
 
 const ID = /^[a-z0-9_]{1,24}$/;

@@ -4,7 +4,11 @@ import { createVendingView } from './vending-view.js';
 /** Selection previews an item; the contextual controls apply it to the room. */
 export function createCustomizationPanel({mount,vending,lex=(_,f)=>f,select,getState,restore,preview=()=>{},onClose=()=>{}}){
   const doc=mount.ownerDocument,L=(k,f)=>lex('br_custom_'+k,f)||f;
-  const items=[['screens4','4 extra screens'],['screens6','6 extra screens'],['mega','Ceiling projector'],['knight','Knight sculpture'],['queen','Queen sculpture'],['rook','Rook sculpture'],['vortex','Velvet Vortex'],['ribbon','Ribbon Galaxy'],['bloom','Prism Bloom']];
+  /* The first nine items each own a bay in the cabinet, so the close-up flies to their own bay. The six
+     decoration props have no bay: the close-up shows the whole cabinet and the room camera flies to the
+     prop's own spot instead (customization-props.js). */
+  const BAYS=9;
+  const items=[['screens4','4 extra screens'],['screens6','6 extra screens'],['mega','Ceiling projector'],['knight','Knight sculpture'],['queen','Queen sculpture'],['rook','Rook sculpture'],['vortex','Velvet Vortex'],['ribbon','Ribbon Galaxy'],['bloom','Prism Bloom'],['monstera','Monstera'],['ivy','Hanging ivy'],['terrarium','Terrarium'],['gallery','Gallery frame'],['portraits','Portrait pair'],['billboard','Wide billboard']];
   const style=doc.createElement('style');style.textContent=catalogueStyle;
   const panel=doc.createElement('section');panel.className='br-custom-panel';panel.hidden=true;panel.tabIndex=-1;panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label',L('title','Room Service'));
   const make=(tag,text,cls,parent=panel)=>{const e=doc.createElement(tag);e.textContent=text;if(cls)e.className=cls;parent.append(e);return e;};
@@ -20,8 +24,11 @@ export function createCustomizationPanel({mount,vending,lex=(_,f)=>f,select,getS
   let chosen=-1,target=0,use='handles',snapshot,previousFocus,disposed=false;
   const state=()=>getState();
   const view=createVendingView({mount:stage,vending,onSelect:choose});
-  function showPreview(){if(chosen<0)return;preview(chosen<3?'screens':chosen<6?use:'floor',chosen<3?chosen:chosen<6?chosen-3:chosen-6,chosen<3?chosen:target);}
-  function choose(i){chosen=i;target=0;use='handles';view.focus(i);paint();showPreview();}
+  function showPreview(){
+    if(chosen<0)return;
+    if(chosen>=BAYS){preview('props',chosen-BAYS,chosen-BAYS);return;}
+    preview(chosen<3?'screens':chosen<6?use:'floor',chosen<3?chosen:chosen<6?chosen-3:chosen-6,chosen<3?chosen:target);}
+  function choose(i){chosen=i;target=0;use='handles';view.focus(i<BAYS?i:-1);paint();showPreview();}
   function apply(category,value,index=0){const pending=select(category,value,index);paint();showPreview();if(pending?.then)pending.then(()=>{if(!disposed)paint();});}
   function row(parent,entries,active,fn){entries.forEach(([key,label],i)=>{const b=button(parent,L(key,label),()=>fn(i));b.setAttribute('aria-pressed',String(active===i));});}
   function paint(){
@@ -29,7 +36,8 @@ export function createCustomizationPanel({mount,vending,lex=(_,f)=>f,select,getS
     [...chooser.children].forEach((b,i)=>b.setAttribute('aria-pressed',String(chosen===i)));hud.replaceChildren();overview.hidden=chosen<0;
     if(chosen<0){make('p',L('choose_item','Choose an item'),'br-custom-prompt',hud);return;}
     const title=make('h3',L(...items[chosen]),'',hud);title.setAttribute('aria-live','polite');
-    if(chosen<3){const actions=make('div','','br-custom-actions',hud);row(actions,[['on','On'],['off','Off']],state().screens[chosen]?0:1,i=>apply('screens',i===0,chosen));}
+    if(chosen>=BAYS){const actions=make('div','','br-custom-actions',hud);row(actions,[['on','On'],['off','Off']],state().props[chosen-BAYS]?0:1,i=>apply('props',i===0,chosen-BAYS));}
+    else if(chosen<3){const actions=make('div','','br-custom-actions',hud);row(actions,[['on','On'],['off','Off']],state().screens[chosen]?0:1,i=>apply('screens',i===0,chosen));}
     else if(chosen<6){const modes=make('div','','br-custom-actions',hud);row(modes,[['statues','Statues'],['lever','Slot lever']],use==='statues'?0:1,i=>{use=i?'handles':'statues';paint();showPreview();});
       const targets=make('div','','br-custom-actions',hud);row(targets,use==='statues'?[['spot1','Pedestal 1'],['spot2','Pedestal 2'],['spot3','Pedestal 3']]:[['rose','Candy Rose'],['violet','Candy Violet'],['mint','Candy Mint']],target,i=>{target=i;paint();showPreview();});
       const actions=make('div','','br-custom-actions',hud);row(actions,[['use','Use'],[use==='statues'?'remove':'original',use==='statues'?'Remove':'Original handle']],state()[use][target]===chosen-3?0:state()[use][target]===-1?1:-1,i=>apply(use,i?-1:chosen-3,target));
