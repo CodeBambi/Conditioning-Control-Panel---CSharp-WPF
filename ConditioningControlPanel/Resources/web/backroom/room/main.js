@@ -14,6 +14,8 @@ import { setWheelFace } from './wheel-face.js';
  * Leaving:
  *   Back / Escape with a station open  -> the station closes, the room resumes
  *                                         on the exact spot and facing.
+ *   A tap on the room while seated, or a
+ *   step back (S, down, the stick)      -> the same close, through the same Back.
  *   Back / Escape in the room view     -> back to walking.
  *   Back / Escape in the room          -> `exit`, then `exit-done` once settled.
  *   host `close` (app exit, panic)     -> settle inside 300 ms, `exit-done`.
@@ -431,6 +433,8 @@ async function start(init) {
       onProgress: (f) => hud.progress(f),
       onNearest: (row) => hud.nearest(row),
       onVisit: (row) => visit(row),
+      // The room asking to stand up (a tap on the floor, a step back): the Back path, so the station settles first.
+      onLeave: () => back('room'),
       log: (msg) => bridge.log('warn', msg),
     });
   } catch (e) {

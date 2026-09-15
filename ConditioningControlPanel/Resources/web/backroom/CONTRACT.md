@@ -419,6 +419,11 @@ export async function mount(ctx) {
   within 1.65 m, M toggles the room view (ceiling off, one button per station that drops you at its
   approach). Back / Escape closes, in order: an open station or card, the room view, the room. No touch
   stick and no pointer lock (desktop WebView2 is the target).
+- **Leaving a seat.** Seated at a station, a tap that lands on the room instead of the station (the floor,
+  a wall, another fixture, empty air) and a step backwards (S, the down arrow, the touch stick pushed back)
+  both go through the same Back path as the chip: the station settles first (Law VI), then the camera walks
+  back to where you stood. A tap on the station's own meshes, its runtime dressing or its own controls never
+  leaves, and neither does a drag past the room's tap slop.
 - **Visiting.** E holds the room: pose saved, render loop stopped (no rAF), context KEPT. Measured in the
   smoke run: about 40 ms from Back to a drawing frame, against about 1.1 s to boot and decode the room
   again, so the room keeps its context. Back puts you on the exact position and facing.
