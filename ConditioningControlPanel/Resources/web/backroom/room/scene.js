@@ -21,6 +21,7 @@ import { buildRoom } from './fixtures.js';
 import { createScreens } from './screens.js';
 import { createEmiInteraction } from './emi-interaction.js';
 import { createCasinoDecor } from './casino-decor.js';
+import { createTouchControl } from './touch-control.js';
 import { createCustomization } from './customization.js';
 import { START, WALK_SPEED, RUN_SPEED, step, worldDelta, nearestStation, facing } from './walk.js';
 
@@ -94,6 +95,8 @@ export async function createScene(o) {
   const saved = { pos: null, yaw: 0, pitch: 0 };
   const keys = new Set();
   const vel = new T.Vector2(), want = new T.Vector2();
+  const canWalk = () => !seated && !held && !halted && !suspended && !overview && !customization.opened && !document.hidden;
+  const touch = createTouchControl({ mount: o.mount, onReset: () => vel.set(0, 0) });
   const frames = [];
   const stationRows = [...o.stations, customization.row];
   const previewTarget = new T.Vector3();
@@ -116,7 +119,7 @@ export async function createScene(o) {
   }
   window.addEventListener('resize', resize);
 
-  function resetInput() { keys.clear(); vel.set(0, 0); drag = null; }
+  function resetInput() { keys.clear(); vel.set(0, 0); drag = null; touch.reset(); touch.setEnabled(canWalk()); }
   window.addEventListener('keydown', (e) => {
     if (seated || held || halted || suspended || customization.opened || e.ctrlKey || e.altKey || e.metaKey) return;
     if (KEYS.has(e.code)) { e.preventDefault(); keys.add(e.code); }
@@ -127,7 +130,7 @@ export async function createScene(o) {
   window.addEventListener('keyup', (e) => keys.delete(e.code));
   window.addEventListener('blur', resetInput);
   canvas.addEventListener('pointerdown', (e) => {
-    if (seated || held || overview || customization.opened || e.button !== 0) return;
+    if (!canWalk() || drag || e.button !== 0) return;
     drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
   });
@@ -137,7 +140,7 @@ export async function createScene(o) {
     pitch = T.MathUtils.clamp(pitch - (e.clientY - drag.y) * 0.003, -1.12, 1.2);
     drag.x = e.clientX; drag.y = e.clientY;
   });
-  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(ev, () => { drag = null; });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(ev, (e) => { if (drag?.id === e.pointerId) drag = null; });
 
   function setNearest(row) {
     if (row === nearest) return;
@@ -147,7 +150,7 @@ export async function createScene(o) {
 
   function visit(row) {
     if (!row || seated || held || halted) return;
-    if(row.key==='customization'){resetInput();customization.open();return;}
+    if(row.key==='customization'){resetInput();customization.open();touch.setEnabled(false);return;}
     try { o.onVisit(row); } catch (e) { say('onVisit threw: ' + ((e && e.message) || e)); }
   }
 
@@ -155,7 +158,7 @@ export async function createScene(o) {
     if (seated || held || halted || !!on === overview) return;
     resetInput();
     customization.dismiss();
-    overview = !!on;
+    overview = !!on; touch.setEnabled(canWalk());
     decor.setOverview(overview);
     interaction.dismiss();
     if (room.ceiling) room.ceiling.visible = !overview;
@@ -177,7 +180,8 @@ export async function createScene(o) {
     if (held || halted || suspended) return;
     raf = requestAnimationFrame(frame);
     const raw = now - last;
-    const active = !!seated || keys.size > 0 || drag || customization.opened;
+    touch.setEnabled(canWalk());
+    const active = !!seated || keys.size > 0 || drag || touch.value.x || touch.value.z || customization.opened;
     const gap = 1000 / (active && !budget.mobile ? 60 : 30);
     if (raw < gap - 1) return;
     last = raw < gap ? now : now - (raw % gap);
@@ -190,8 +194,8 @@ export async function createScene(o) {
     if (frames.length > 240) frames.shift();
     if(customization.opened || seated)resetInput();
     if (!overview) {
-      const x = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
-      let z = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
+      const x = touch.value.x + (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
+      let z = touch.value.z + (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
       const speed = keys.has('ShiftLeft') || keys.has('ShiftRight') ? RUN_SPEED : WALK_SPEED;
       vel.lerp(want.set(x, z).clampLength(0, 1).multiplyScalar(speed), 1 - Math.exp(-dt * 12));
       const [dx, dz] = worldDelta(yaw, vel.x * dt, vel.y * dt);
@@ -250,7 +254,7 @@ export async function createScene(o) {
     if (!row || seated || held || halted) return false;
     const previous = { pos: pos.slice(), yaw, pitch };
     go(row);
-    seated = previous; sway = 0;
+    seated = previous; sway = 0; resetInput();
     interaction.dismiss(); customization.dismiss(); setNearest(null);
     camera.position.fromArray(pos); camera.rotation.set(pitch, yaw, 0, 'YXZ');
     camera.updateMatrixWorld(); run();
@@ -320,7 +324,7 @@ export async function createScene(o) {
       held = null; resetInput(); run();
     },
     pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); interaction.dismiss(); customization.dismiss(); } else run(); },
-    halt() { halted = true; for (const view of [...views]) dropView(view); stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); room.disposeSurfaces(); resetInput(); interaction.dispose(); for(const e of room.emis)e.dispose(); customization.dispose(); decor.dispose(); for(const p of room.payouts.values())p.coins.dispose(); },
+    halt() { halted = true; for (const view of [...views]) dropView(view); stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); room.disposeSurfaces(); resetInput(); touch.dispose(); interaction.dispose(); for(const e of room.emis)e.dispose(); customization.dispose(); decor.dispose(); for(const p of room.payouts.values())p.coins.dispose(); },
     setStill(on) { still = !!on; },
     /** Repaint one fixture label, e.g. the wheel's screen for MUST HIT (10.16.E). */
     setLabel(rowKey, node, text) { return room.setLabel(rowKey, node, text); },
@@ -339,7 +343,7 @@ export async function createScene(o) {
         renderBudget: {...budget.debug(), dpr}, position: pos.slice(), yaw, pitch, overview, held: !!held, seated: !!seated, running: !!raf, still,
         nearest: nearest ? nearest.key : null, fixtures: room.fixtures, bulbs: room.bulbs, screens: room.screens.length,
         pictures: screens.pictures, animation: screens.animation, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
-        decor: decor.debug(), customization: customization.debug(),
+        touch: touch.debug(), decor: decor.debug(), customization: customization.debug(),
         payouts: Object.fromEntries([...room.payouts].map(([key,p])=>[key,p.coins.debug()])),
         emiBubble: interaction.debug(),
         emis: room.emis.map((e) => e.debug()),
