@@ -85,6 +85,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         public MainShellWindow()
         {
             AvaloniaXamlLoader.Load(this);
+            InitializeLanguageSelector();
 
             // WPF put these on the Window element itself; Avalonia routes them as attached events.
             AddHandler(DragDrop.DropEvent, Window_Drop);
