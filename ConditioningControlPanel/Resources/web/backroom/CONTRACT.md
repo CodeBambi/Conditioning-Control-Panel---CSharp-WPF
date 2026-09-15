@@ -1910,3 +1910,17 @@ One free UTC-day spin remains. Ordinary results: Pocket Sparkles 15 SP 30%; Good
 Room Service grants a random unowned collectible decoration; a complete collection pays 75 SP. Collectibles are the six optional Room Service props: monstera, ivy, terrarium, gallery, portraits, billboard. Existing core customization remains free. Ownership is server-authoritative; no purchase or local ownership inference.
 Seeing Double lasts 24 hours from the win, refreshes without stacking, and doubles actual Back Room winnings including SP gifts and jackpots, excluding returned stakes. A blackjack push gains no bonus. Server receipts own credited amounts; prepaid tapes settle their bonus at purchase time. Head Empty pays nothing and has a short quiet reaction.
 Presentation: pink and cream enamel, brass dividers, large SP amounts with short names; Room Service cloche reveal; Seeing Double spiral-eye mark and a timed x2 charm by the balance; Head Empty bare cream wedge; Spoiled Rotten raspberry and coin shower. No auto-enable of decorations, no guest pass or bonus spins. All effects obey motion settings. Reward revelation occurs at the landed frame; server state may never reveal it early through another surface.
+
+## 10.20 The slot on a phone (2026-09-15, phone desk run)
+- **Tap target.** Any tap on a cabinet enters it. The room's glow (the bulb auras, the roulette motes) is one
+  scene-level Points cloud and is never a surface: `raycast` is a no-op on it, and a bulb batched into a scene-level
+  InstancedMesh maps back to its station by instance (`userData.rows`). No hitbox is enlarged.
+- **`export const roomBehind = true`** (amends the station module shape in section 7): a station that keeps its own
+  canvas may ask the loader to leave its root see-through (`.br-through`), so the room's pan-in is its load screen
+  and its canvas comes up over the room's held frame. No loading card. The room still holds on arrival (one drawing
+  context) and Back pans out to the exact walking pose; Motion off and reduced motion snap both ways. The slot's
+  pan-in target is its reel window and jackpot screen, fitted on height alone (seat-camera.js `travelOnly`).
+- **Sideways nudge.** In portrait on a coarse pointer the slot shows `br_slot_rotate` once a session, dismissed by a
+  tap on the pill, hidden in landscape. A phone on its side (height at most 500 px) takes a 110 px left column for
+  the pills, Freeze and Odds, Spin and the face keep the right corners, and the reel window fills the band between
+  (stations/slot/scene.js `sideband`, the seat-camera mechanism: a span per axis and a view offset).

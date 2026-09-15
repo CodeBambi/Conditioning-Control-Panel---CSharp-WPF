@@ -231,7 +231,10 @@ export async function createScene(o) {
   // Framing: from cam_seat/cam_target and live bounds, at the rest pose. The marquee is in the play box
   // and EMI's face so the cabinet's name and her glance read above the reels at every aspect (in-room tidy, lane F1).
   let poses = null;
-  function frame(aspect) {
+  /** A phone on its side (station.css, the same query and column): the pills, Freeze and Odds take a 110 px column on
+   *  the left; Spin and the face keep the right corners, so the lever may reach into the free middle of that edge. */
+  const sideband = (w, h) => (h <= 500 && w > h ? { left: 110, right: 12, top: 16, bottom: 16 } : null);
+  function frame(aspect, w = 16, h = 9) {
     const y = rig.position.y; rig.position.y = 0; rig.updateMatrixWorld(true);
     const seat = get('cam_seat').getWorldPosition(new THREE.Vector3()), target = get('cam_target').getWorldPosition(new THREE.Vector3());
     const dir = seat.sub(target); if (dir.lengthSq() < 1e-8) dir.set(0, 0, 1); dir.normalize();
@@ -240,7 +243,9 @@ export async function createScene(o) {
     playBox.expandByObject(lever);
     for (const n of [get('marquee'), glowNode, faceMesh]) if (n) playBox.expandByObject(n);
     const whole = new THREE.Box3().setFromObject(cabinet);
-    const fit = (box, d, aimAt) => {
+    // `span` is the fraction of the canvas the box may fill on each axis (1 = all of it), the way room/seat-camera.js
+    // leaves the station chrome its bands: a smaller span backs the camera off so the box fits inside what is left.
+    const fit = (box, d, aimAt, span = { x: 1, y: 1 }) => {
       const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), d).normalize(), up = new THREE.Vector3().crossVectors(d, right);
       const c = box.getCenter(new THREE.Vector3());
       if (aimAt) c.addScaledVector(up, (aimAt.clone().sub(c).dot(up)) * 0.15);   // a nod toward the authored aim height, keep the box
@@ -250,7 +255,7 @@ export async function createScene(o) {
         const p = new THREE.Vector3(x, yy, z).sub(c);
         hw = Math.max(hw, Math.abs(p.dot(right))); hh = Math.max(hh, Math.abs(p.dot(up))); depth = Math.max(depth, p.dot(d));
       }
-      const dist = Math.max(hh / tan, hw / (tan * aspect)) * FIT_MARGIN + depth;
+      const dist = Math.max(hh / (tan * span.y), hw / (tan * aspect * span.x)) * FIT_MARGIN + depth;
       return { pos: c.clone().addScaledVector(d, dist), look: c, dist, right };
     };
     const side = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), dir).normalize();
@@ -267,14 +272,28 @@ export async function createScene(o) {
       play.dist = close.dist * 1.06;
       play.pos.copy(play.look).addScaledVector(dir, play.dist);
     }
-    return { play, arrive: fit(whole, quarter), drop: (whole.max.y - whole.min.y) * 1.6 };
+    const band = sideband(w, h);
+    if (band) {
+      // The reels fill the height of the band between the side columns; the marquee reads above them or not at all.
+      // A view offset (resize) aims the band's centre, not the canvas centre, at the reels: the seat-camera mechanism.
+      const reelBox = new THREE.Box3();
+      (glass ? [glass] : reels).forEach(n => reelBox.expandByObject(n));
+      reelBox.expandByObject(lever);
+      const close = fit(reelBox, dir, null, { x: (w - band.left - band.right) / w, y: (h - band.top - band.bottom) / h });
+      play.look.copy(close.look);
+      play.dist = close.dist;
+      play.pos.copy(play.look).addScaledVector(dir, play.dist);
+    }
+    return { play, arrive: fit(whole, quarter), drop: (whole.max.y - whole.min.y) * 1.6, band };
   }
   const aim = (pos, lookAt) => { camera.position.copy(pos); camera.lookAt(lookAt); };
   function resize() {
     const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
     renderer.setPixelRatio(budget.dpr(w, h));
     renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
-    poses = frame(camera.aspect);
+    poses = frame(camera.aspect, w, h);
+    if (poses.band) camera.setViewOffset(w, h, (poses.band.right - poses.band.left) / 2, (poses.band.bottom - poses.band.top) / 2, w, h);
+    else camera.clearViewOffset();
     if (phase === 'play') aim(poses.play.pos, poses.play.look);
   }
 
@@ -366,13 +385,14 @@ export async function createScene(o) {
     const anchor = screenBox(tray) || cab, win = screenBox(glass);
     const height = Math.max(24, win ? win.height : cab.height * 0.3), width = Math.max(12, height * JAR_W);
     const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1, m = 8;
+    const edge = poses && poses.band ? poses.band.left + m : m;   // a phone on its side: right of the left column, never under Freeze
     // The play camera frames the marquee and the reels, so payout_tray's projected middle sits BELOW the
     // viewport entirely at 16:9 (measured: y 930 of 720). Brake 9 says the count has to be readable, so the
     // tray is where the tube wants to stand and the screen is where it has to: held inside the canvas and
     // never lower than the reel window's own bottom, so it reads as a jar standing beside the reels.
     const floor = win ? win.top + win.height - height : h - height - m;
     const top = Math.min(anchor.top + anchor.height / 2 - height / 2, floor, Math.max(m, h - height - m));
-    return { left: Math.min(Math.max(cab.left, m), Math.max(m, w - width - m)), top: Math.max(m, top), width, height };
+    return { left: Math.min(Math.max(cab.left, edge), Math.max(edge, w - width - m)), top: Math.max(m, top), width, height };
   }
 
   function settleSpin() {
@@ -746,6 +766,7 @@ export async function createScene(o) {
                almost: ghost ? { cell: ghost.j, reel: ghost.r, amt: Number(ghostAmt(t).toFixed(3)) } : null,
                tray: !!tray, glow: !!glowMat, emiScale: emi ? emi.scale.x / emiRest.s.x : null,
                payline: { lit: paylineGlow(t - paylineAt, paylineHold, paylinePulseN), hold: paylineHold, pulses: paylinePulseN, rect: paylineRect() },
+               window: screenBox(glass), band: poses ? poses.band : null, canvas: { w: canvas.clientWidth, h: canvas.clientHeight },
                jar: jarRect(), solo: !!(spin && spin.solo), keep: spin ? spin.keep : [],
                attract: !!attract, drifting: !!(attract || attractOut), wiggling: wiggleAt.map(a => wiggleCells(t - a) !== 0) };
     },

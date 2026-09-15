@@ -19,6 +19,10 @@ export function seatPose(row, fixture, camera, width, height, cardHands=1, count
       for(const x of [-w,w])for(const z of [-h,h])bounds.expandByPoint(n.localToWorld(new T.Vector3(x,0,z)));
     }});
   }
+  // The slot: the reel window and the jackpot screen are the pan-in target, fitted on height alone (a phone held
+  // upright would otherwise back off to fit their width); the station's own canvas frames the play once it is up.
+  const travelOnly = row.id === 'slot';
+  if (travelOnly) { include('reel_window'); include('screen_jackpot'); }
   if (bounds.isEmpty()) return null;
   const center=bounds.getCenter(new T.Vector3());
   const direction=new T.Vector3().fromArray(row.approach).sub(new T.Vector3().fromArray(row.look)); direction.y=0; direction.normalize();
@@ -27,12 +31,13 @@ export function seatPose(row, fixture, camera, width, height, cardHands=1, count
   const up=new T.Vector3().crossVectors(direction,right).normalize();
   const sideControls=row.id==='roulette'&&width>height&&height<=500;
   const rightInset=splitRoulette?0:sideControls?240:0;
-  const top=height<500?85:row.id==='roulette'?110:120, bottom=splitRoulette?height/3:sideControls?20:row.id==='roulette'?155:row.id==='cards'?170:180;
+  let top=height<500?85:row.id==='roulette'?110:120, bottom=splitRoulette?height/3:sideControls?20:row.id==='roulette'?155:row.id==='cards'?170:180;
+  if(row.id==='slot'){top=height<500?56:110;bottom=height<500?24:150;}   // no station controls share this view: the band is the chrome's only
   const available=Math.max(.3,(height-top-bottom)/height), tan=Math.tan(camera.fov*Math.PI/360);
   let distance=.4;
   for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z]){
     const p=new T.Vector3(x,y,z).sub(center), depth=p.dot(direction);
-    distance=Math.max(distance,depth+Math.abs(p.dot(right))/(tan*(width-rightInset)/height*(row.id==='wheel'?.965:.92)),depth+Math.abs(p.dot(up))/(tan*available*.9));
+    distance=Math.max(distance,travelOnly?0:depth+Math.abs(p.dot(right))/(tan*(width-rightInset)/height*(row.id==='wheel'?.965:.92)),depth+Math.abs(p.dot(up))/(tan*available*.9));
   }
   const position=center.clone().addScaledVector(direction,distance);
   const view=new T.PerspectiveCamera();view.rotation.order='YXZ';view.position.copy(position);view.lookAt(center);
