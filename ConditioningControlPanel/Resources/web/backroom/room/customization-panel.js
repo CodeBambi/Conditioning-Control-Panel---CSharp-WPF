@@ -2,7 +2,7 @@ import { catalogueStyle } from './customization-panel-style.js';
 import { createVendingView } from './vending-view.js';
 
 /** Selection previews an item; the contextual controls apply it to the room. */
-export function createCustomizationPanel({mount,vending,lex=(_,f)=>f,select,getState,restore,preview=()=>{},onClose=()=>{}}){
+export function createCustomizationPanel({mount,vending,lex=(_,f)=>f,select,getState,restore,preview=()=>{},hasOwnership=()=>false,onClose=()=>{}}){
   const doc=mount.ownerDocument,L=(k,f)=>lex('br_custom_'+k,f)||f;
   /* The first nine items each own a bay in the cabinet, so the close-up flies to their own bay. The six
      decoration props have no bay: the close-up shows the whole cabinet and the room camera flies to the
@@ -36,7 +36,8 @@ export function createCustomizationPanel({mount,vending,lex=(_,f)=>f,select,getS
     [...chooser.children].forEach((b,i)=>b.setAttribute('aria-pressed',String(chosen===i)));hud.replaceChildren();overview.hidden=chosen<0;
     if(chosen<0){make('p',L('choose_item','Choose an item'),'br-custom-prompt',hud);return;}
     const title=make('h3',L(...items[chosen]),'',hud);title.setAttribute('aria-live','polite');
-    if(chosen>=BAYS){const actions=make('div','','br-custom-actions',hud);row(actions,[['on','On'],['off','Off']],state().props[chosen-BAYS]?0:1,i=>apply('props',i===0,chosen-BAYS));}
+    if(chosen>=BAYS && !hasOwnership(items[chosen][0])){make('p',L('collect_locked','Collect this decoration from Daily Daze to use it.'),'br-custom-note',hud);}
+    else if(chosen>=BAYS){const actions=make('div','','br-custom-actions',hud);row(actions,[['on','On'],['off','Off']],state().props[chosen-BAYS]?0:1,i=>apply('props',i===0,chosen-BAYS));}
     else if(chosen<3){const actions=make('div','','br-custom-actions',hud);row(actions,[['on','On'],['off','Off']],state().screens[chosen]?0:1,i=>apply('screens',i===0,chosen));}
     else if(chosen<6){const modes=make('div','','br-custom-actions',hud);row(modes,[['statues','Statues'],['lever','Slot lever']],use==='statues'?0:1,i=>{use=i?'handles':'statues';paint();showPreview();});
       const targets=make('div','','br-custom-actions',hud);row(targets,use==='statues'?[['spot1','Pedestal 1'],['spot2','Pedestal 2'],['spot3','Pedestal 3']]:[['rose','Candy Rose'],['violet','Candy Violet'],['mint','Candy Mint']],target,i=>{target=i;paint();showPreview();});
@@ -51,7 +52,7 @@ export function createCustomizationPanel({mount,vending,lex=(_,f)=>f,select,getS
   panel.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Escape'){e.preventDefault();close();return;}if(e.key==='Tab'){const nodes=[...panel.querySelectorAll('button:not([disabled])')].filter(n=>!n.closest('[hidden]')),first=nodes[0],last=nodes.at(-1);if(e.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){e.preventDefault();last.focus();}else if(!e.shiftKey&&doc.activeElement===last){e.preventDefault();first.focus();}}});
   for(const type of ['keyup','pointerdown','pointerup','click','wheel'])panel.addEventListener(type,e=>e.stopPropagation());
   mount.append(style,panel);paint();
-  return {open(){if(disposed||!panel.hidden)return;snapshot=structuredClone(state());previousFocus=doc.activeElement;panel.hidden=false;chosen=-1;view.focus(-1);paint();preview('room',0,0);closeButton.focus({preventScroll:true});},close,get opened(){return !disposed&&!panel.hidden;},get selectedItem(){return chosen;},update(dt,still){if(!panel.hidden)view.update(dt,still);},draw(renderer){return !disposed&&!panel.hidden&&view.draw(renderer);},
+  return {refresh:paint,open(){if(disposed||!panel.hidden)return;snapshot=structuredClone(state());previousFocus=doc.activeElement;panel.hidden=false;chosen=-1;view.focus(-1);paint();preview('room',0,0);closeButton.focus({preventScroll:true});},close,get opened(){return !disposed&&!panel.hidden;},get selectedItem(){return chosen;},update(dt,still){if(!panel.hidden)view.update(dt,still);},draw(renderer){return !disposed&&!panel.hidden&&view.draw(renderer);},
     /* What the panel leaves the room, in viewport pixels (y up from the canvas bottom): the strip beside
        it while it is docked down one edge, or the band above it once it is a full-width sheet (phone). */
     previewBox(w,h){const r=panel.getBoundingClientRect();

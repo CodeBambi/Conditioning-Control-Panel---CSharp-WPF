@@ -12,6 +12,8 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
   const row={key:'customization',id:'customization',name:'Room Service',labelKey:'br_custom_title',approach:[5.5,1.65,6.6],look:[7.05,1.4,6.7]};
   const root=new T.Group();root.name='room_customization';scene.add(root);
   const selected={statues:[0,1,2]};let floorEnabled=true;
+  let owned=new Set();
+  const propIds=['monstera','ivy','terrarium','gallery','portraits','billboard'];
   const load=async file=>(await loader.loadAsync(base+'customization/'+file+'.glb')).scene;
   const vending=await load('vending');vending.name='customization_vending';
   vending.position.set(7.05,.02,6.4);vending.rotation.y=-Math.PI/2;vending.scale.setScalar(1.08);root.add(vending);
@@ -43,7 +45,7 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
   const getState=()=>({screens:extras.getState(),props:props.getState(),statues:[...selected.statues],handles:handles.getState(),floor:floorEnabled?room.getFloorStyle().design:-1,palette:room.getFloorStyle().palette});
   const select=(category,index,target=0)=>{
     if(category==='screens')return extras.set(target,index);
-    if(category==='props')return props.set(target,index);
+    if(category==='props')return (!index || owned.has(propIds[target])) && props.set(target,index);
     if(!Number.isInteger(index))return false;
     if(category==='handles')return handles.set(target,index);
     if(category==='floor'||category==='palette'){
@@ -65,6 +67,7 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     await Promise.all(state.statues.map((piece,spot)=>{select('statues',piece,spot);return select('handles',state.handles[spot],spot);}));
   };
   const preview=(category,index,target=0)=>{
+    props.endPreview();
     if(category==='room'){onPreview({position:[0,2.9,5.5],look:[0,1.7,-3]});return;}
     if(category==='screens'){onPreview(extras.preview(target));return;}
     if(category==='props'){const view=props.preview(target);if(view)onPreview(view);return;}
@@ -80,7 +83,7 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     const distance=Math.max(1.5,size.y*1.6,size.x*1.15);
     onPreview({position:[center.x,center.y+.12,center.z+Math.cos(object.rotation.y)*distance],look:center.toArray(),width:size.x,height:size.y});
   };
-  const panel=createCustomizationPanel({mount,lex,vending,select,getState,restore,preview,onClose:()=>onPreview(null)});
+  const panel=createCustomizationPanel({mount,lex,vending,select,getState,restore,preview,hasOwnership:id=>owned.has(id),onClose:()=>{props.endPreview();onPreview(null);}});
   const ray=new T.Raycaster(),pointer=new T.Vector2();let down=null;
   const onDown=e=>{if(e.button===0&&isActive())down={x:e.clientX,y:e.clientY,t:performance.now()};};
   const onUp=e=>{
@@ -97,7 +100,7 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     if(!obstructed)panel.open();
   };
   canvas.addEventListener('pointerdown',onDown);canvas.addEventListener('pointerup',onUp);
-  return {row,screens:[...extras.screens,...props.screens],select,getState,restore,preview,open:()=>panel.open(),get opened(){return panel.opened;},
+  return {setOwned(ids){owned=new Set(ids);propIds.forEach((id,index)=>{if(!owned.has(id))props.set(index,false);});panel.refresh();},row,screens:[...extras.screens,...props.screens],select,getState,restore,preview,open:()=>panel.open(),get opened(){return panel.opened;},
     dismiss(){if(!panel.opened)return false;panel.close();return true;},
     update(dt,still){spirals.update(dt,still);panel.update?.(dt,still);},
     /** The close-up: a scissored pass on the room's own renderer, so it opens no second context. */

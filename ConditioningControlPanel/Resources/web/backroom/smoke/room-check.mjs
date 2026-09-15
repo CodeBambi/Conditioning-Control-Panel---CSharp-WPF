@@ -806,6 +806,8 @@ await shot('wall-picture-from-feed.png');
 // photographed from the player's own eye height at each of them, for the placement review.
 let propProbe = null;
 {
+  await ev(`window.__backroom.scene.setRewards({owned:['monstera','ivy','terrarium','gallery','portraits','billboard']})`);
+  for(let i=0;i<6;i++) await ev(`window.__backroom.scene.customization.select('props',true,${i})`);
   const ROOM_SERVICE = [
     ['customization_vending', 'vending', [5.5, 1.65, 6.6], -1.635, -0.16],
     ['statue_spot_0_knight', 'knight-pedestal', [-4.9, 1.65, -5.3], -0.477, -0.499],

@@ -5861,5 +5861,10 @@
   "br_custom_off": "关闭",
   "br_custom_lever": "老虎机拉杆",
   "br_custom_use": "使用",
-  "br_custom_remove": "移除"
+  "br_custom_remove": "移除",
+  "br_double_remaining": "Seeing Double：剩余{minutes}分钟",
+  "br_double_tape_note": "预付转动保留购买时的倍数。",
+  "br_custom_collect_locked": "在Daily Daze中获得此装饰后即可使用。",
+  "br_bell_wheel_change": "获得了Keep the Change",
+  "br_bell_wheel_spoiled": "获得了Spoiled Rotten"
 }

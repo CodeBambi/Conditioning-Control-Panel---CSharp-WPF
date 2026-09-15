@@ -5404,5 +5404,10 @@
   "br_custom_off": "Desativar",
   "br_custom_lever": "Alavanca",
   "br_custom_use": "Usar",
-  "br_custom_remove": "Remover"
+  "br_custom_remove": "Remover",
+  "br_double_remaining": "Seeing Double: restam {minutes} min",
+  "br_double_tape_note": "Giros pré-pagos mantêm o multiplicador da compra.",
+  "br_custom_collect_locked": "Ganhe esta decoração no Daily Daze para usá-la.",
+  "br_bell_wheel_change": "ganhou Keep the Change",
+  "br_bell_wheel_spoiled": "recebeu Spoiled Rotten"
 }

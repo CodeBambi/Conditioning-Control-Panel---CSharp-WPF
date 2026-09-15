@@ -6131,5 +6131,10 @@
   "br_custom_off": "Off",
   "br_custom_lever": "Slot lever",
   "br_custom_use": "Use",
-  "br_custom_remove": "Remove"
+  "br_custom_remove": "Remove",
+  "br_double_remaining": "Seeing Double: {minutes} min left",
+  "br_double_tape_note": "Prepaid spins keep the multiplier from purchase.",
+  "br_custom_collect_locked": "Collect this decoration from Daily Daze to use it.",
+  "br_bell_wheel_change": "hit Keep the Change",
+  "br_bell_wheel_spoiled": "got Spoiled Rotten"
 }

@@ -5396,5 +5396,10 @@
   "br_custom_off": "オフ",
   "br_custom_lever": "スロットレバー",
   "br_custom_use": "使用",
-  "br_custom_remove": "取り外す"
+  "br_custom_remove": "取り外す",
+  "br_double_remaining": "Seeing Double：残り{minutes}分",
+  "br_double_tape_note": "購入済みのスピンには購入時の倍率が適用されます。",
+  "br_custom_collect_locked": "Daily Dazeでこの装飾を獲得すると使用できます。",
+  "br_bell_wheel_change": "でKeep the Changeを獲得",
+  "br_bell_wheel_spoiled": "でSpoiled Rottenを獲得"
 }
