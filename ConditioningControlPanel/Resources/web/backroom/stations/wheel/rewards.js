@@ -40,8 +40,9 @@ export function createRewardReveal(root, t) {
   return { show(result, still = false) {
     const r = rewardOf(result); box.hidden = !r || r.kind === 'sp';
     if (box.hidden) return;
+    box.querySelector('.daze-cloche').hidden = false;
     box.dataset.kind = r.kind; box.classList.toggle('is-still', still);
     box.querySelector('p').textContent = rewardText(result, t);
     box.querySelector('span').textContent = r.kind === 'double' ? '\u00d72' : r.kind === 'nothing' ? '\u00b7' : r.fallback ? `\u2726 ${result.credited ?? result.total ?? result.pay ?? 75}` : '\u2667';
-  }, setStill(value) { if (value) box.classList.add('is-still'); }, hide() { box.hidden = true; }, dispose() { box.remove(); } };
+  }, useModel(value) { box.querySelector('.daze-cloche').hidden = !!value; }, setStill(value) { if (value) box.classList.add('is-still'); }, hide() { box.hidden = true; }, dispose() { box.remove(); } };
 }
