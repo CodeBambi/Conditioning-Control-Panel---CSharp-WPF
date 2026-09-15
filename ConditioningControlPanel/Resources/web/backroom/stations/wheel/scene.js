@@ -33,8 +33,8 @@ import { warpStep, warpedRotation, stepDim, quietMix, quietDone, outlineAlpha, d
 import { createEmi } from './emi.js';
 
 const LENS_DEG = 30, FIT = 1.16, RISE_MS = 620, SINK_MS = 300, DEFAULT_OMEGA = -0.011, HUB_AT_REST_MS = 33;
-const COLORS = ['#DE87B4', '#AE89DE', '#68BFB9', '#C35F9F'], GOLD = '#F4CA68', SNOOZE = '#553967';
-const CHASE = [0xff269f, 0x7840ff, 0x00cbb8, 0xff9a20].map(c => new THREE.Color(c));
+const COLORS = ['#F7BDD2', '#FFEBDD', '#F2AFC9', '#FFE7D2'], GOLD = '#F4D896', SNOOZE = '#C48CA7';
+const CHASE = [0xf7bdd2, 0xffebdd, 0xf2afc9, 0xf4d896].map(c => new THREE.Color(c));
 const asset = p => new URL(p, import.meta.url).href;
 const clamp = x => Math.min(1, Math.max(0, x));
 const thudEase = x => bezier(FEEL.THUD_EASE, x);
@@ -115,16 +115,17 @@ function paintScreen(canvas, text, gold) {
  *          paintHub?:(canvas, angle, now)=>boolean, onFrame?:({dim, slowing, speed, turning})=>void}} o
  */
 export async function createScene(o) {
-  const { canvas } = o;
+  const { canvas, stage } = o;
+  const originals = new Map(); let model = null, unregister = null;
   let reduced = !!o.reduced;
   const budget = createRenderBudget(navigator, devicePixelRatio);
   let lastDraw = -Infinity;
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'default' });
-  renderer.setPixelRatio(budget.dpr(canvas.clientWidth, canvas.clientHeight));
-  renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(LENS_DEG, 16 / 9, 0.05, 30);
-  scene.add(new THREE.HemisphereLight(0xfbd7f4, 0x36243e, 1.2));
-  for (const [p, c, i] of [[[-3, 4, 5], 0xffd5eb, 2.1], [[3, 2, 3], 0xa5b6ff, 1.4], [[1, 4, -3], 0xff75c1, 2.2]]) {
+  const renderer = stage?.renderer || new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'default' });
+  if (!stage) renderer.setPixelRatio(budget.dpr(canvas.clientWidth, canvas.clientHeight));
+  if (!stage) { renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; }
+  const scene = stage?.scene || new THREE.Scene(), camera = stage?.camera || new THREE.PerspectiveCamera(LENS_DEG, 16 / 9, 0.05, 30);
+  if (!stage) scene.add(new THREE.HemisphereLight(0xfbd7f4, 0x36243e, 1.2));
+  if (!stage) for (const [p, c, i] of [[[-3, 4, 5], 0xffd5eb, 2.1], [[3, 2, 3], 0xa5b6ff, 1.4], [[1, 4, -3], 0xff75c1, 2.2]]) {
     const l = new THREE.DirectionalLight(c, i); l.position.set(...p); scene.add(l);
   }
   const owned = [];
@@ -135,21 +136,32 @@ export async function createScene(o) {
     cancelAnimationFrame(raf);
     if (settle) settle();
     if (onDown) { canvas.removeEventListener('pointerdown', onDown); canvas.removeEventListener('pointermove', onMove); canvas.removeEventListener('pointerup', onUp); canvas.removeEventListener('pointercancel', onUp); }
-    scene.traverse(n => {
+    const disposable = [];
+    (stage ? model : scene)?.traverse(n => { if (!stage || !originals.has(n)) disposable.push(n); });
+    disposable.forEach(n => {
       if (n.geometry) n.geometry.dispose();
       for (const m of [].concat(n.material || [])) { for (const k of Object.keys(m)) if (m[k] && m[k].isTexture) m[k].dispose(); m.dispose(); }
     });
+    if (stage) {
+      disposable.forEach(n => n.removeFromParent());
+      originals.forEach((s, n) => { n.visible = s.visible; n.material = s.material; });
+      const rotor = model?.getObjectByName('wheel_rotor'), pointer = model?.getObjectByName('pointer');
+      if (rotor) rotor.rotation.copy(originals.get(rotor).rotation);
+      if (pointer) pointer.rotation.copy(originals.get(pointer).rotation);
+      unregister?.();
+    }
     owned.forEach(x => x.dispose());
     if (emi) emi.dispose();
-    renderer.dispose(); renderer.forceContextLoss();
+    if (!stage) { renderer.dispose(); renderer.forceContextLoss(); }
   }
   let settle = null, emi = null, gltf, atlas;
   try {
-    [gltf, atlas] = await Promise.all([new GLTFLoader().loadAsync(asset('./assets/wheel.glb')),
+    [gltf, atlas] = stage ? [{ scene: stage.fixture }, null] : await Promise.all([new GLTFLoader().loadAsync(asset('./assets/wheel.glb')),
       new THREE.TextureLoader().loadAsync(asset('./assets/emi-faces-slot.png')).catch(() => null)]);
   } catch (e) { dispose(); throw e; }
-  const model = gltf.scene, get = n => model.getObjectByName(n) || null;
-  scene.add(model);
+  model = gltf.scene; const get = n => model.getObjectByName(n) || null;
+  if (!stage) scene.add(model);
+  else model.traverse(n => originals.set(n, { visible: n.visible, material: n.material, rotation: n.rotation.clone() }));
   const missing = REQUIRED.filter(n => !get(n));
   if (missing.length) return { missing, dispose };
   const absent = OPTIONAL.filter(n => !get(n));
@@ -157,12 +169,12 @@ export async function createScene(o) {
 
   const rotor = get('wheel_rotor'), pointer = get('pointer'), pointerRest = pointer.rotation.z, modelRest = model.position.clone();
   if (get('layout_sectors')) get('layout_sectors').visible = false;
-  model.traverse(n => { if (/^peg_/.test(n.name)) n.visible = false; });
+  model.traverse(n => { if (/^(peg_|glyph_)/.test(n.name)) n.visible = false; });
   for (const n of ['title_letters', 'status_letters', 'hub_spiral']) if (get(n)) get(n).visible = false;
 
   if (atlas) Object.assign(atlas, { flipY: false, colorSpace: THREE.SRGBColorSpace, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, generateMipmaps: false });
   owned.push(...(atlas ? [atlas] : []));
-  emi = createEmi({ root: model, faceMesh: get('EMI_glass'), atlas, hud: o.hud, reduced });
+  emi = stage ? { update() {}, dispose() {}, setReduced() {}, setFace() {}, setMode() {}, skip() {} } : createEmi({ root: model, faceMesh: get('EMI_glass'), atlas, hud: o.hud, reduced });
 
   const screens = {};
   for (const [name, w] of [['title_screen', 1024], ['status_screen', 1024]]) {
@@ -277,7 +289,8 @@ export async function createScene(o) {
     let prize = 0;
     const flat = [];
     for (const s of layout) {
-      const color = s.kind === 'jackpot' ? GOLD : s.kind === 'malus' ? SNOOZE : COLORS[prize++ % COLORS.length];
+      const high = Math.max(...layout.filter(x => x.kind === 'prize').map(x => x.pay));
+      const color = s.kind === 'jackpot' ? GOLD : s.kind === 'nothing' ? '#FFF0DF' : s.kind === 'malus' ? SNOOZE : s.kind === 'prize' && s.pay === high ? '#B92F62' : COLORS[prize++ % COLORS.length];
       const gap = Math.min(0.003, s.span * 0.08), n = Math.max(3, Math.ceil(s.span * 32)), shape = new THREE.Shape();
       for (let j = 0; j <= n; j++) { const a = s.start + gap + ((s.span - 2 * gap) * j) / n; j ? shape.lineTo(Math.sin(a) * 0.711, Math.cos(a) * 0.711) : shape.moveTo(Math.sin(a) * 0.711, Math.cos(a) * 0.711); }
       for (let j = n; j >= 0; j--) { const a = s.start + gap + ((s.span - 2 * gap) * j) / n; shape.lineTo(Math.sin(a) * 0.185, Math.cos(a) * 0.185); }
@@ -337,6 +350,7 @@ export async function createScene(o) {
     return { pos: new THREE.Vector3(c.x, c.y, c.z + dist), look: c };
   }
   function resize() {
+    if (stage) return;
     const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
     renderer.setPixelRatio(budget.dpr(w, h));
     renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
@@ -464,7 +478,7 @@ export async function createScene(o) {
     hypnoFrame(t, dtMs);
     emi.update(t);
     const gap = 1000 / (budget.mobile ? 30 : 60);
-    if (!document.hidden && t - lastDraw >= gap - 1) {
+    if (!stage && !document.hidden && t - lastDraw >= gap - 1) {
       renderer.render(scene, camera); lastDraw = t;
     }
   }
@@ -477,7 +491,7 @@ export async function createScene(o) {
     const r = canvas.getBoundingClientRect();
     ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, 1 - ((e.clientY - r.top) / r.height) * 2);
     ray.setFromCamera(ndc, camera);
-    return ray.intersectObject(rotor, true).length > 0;
+    return sliceGroup ? (stage ? stage.pick(e, sliceGroup.children.filter(n => n.userData.base !== undefined)) : ray.intersectObjects(sliceGroup.children.filter(n => n.userData.base !== undefined), false)).length > 0 : false;
   }
   function angleOf(e) {
     const v = rotor.getWorldPosition(new THREE.Vector3()).project(camera), r = canvas.getBoundingClientRect();
@@ -510,7 +524,8 @@ export async function createScene(o) {
   canvas.addEventListener('pointerup', onUp); canvas.addEventListener('pointercancel', onUp);
 
   resize();
-  raf = requestAnimationFrame(loop);
+  if (stage) unregister = stage.register({ update: () => update(performance.now()), dispose });
+  else raf = requestAnimationFrame(loop);
 
   return {
     missing: [], faceImage: atlas && atlas.image,
@@ -571,11 +586,13 @@ export async function createScene(o) {
       return { x: r.left + ((v.x + 1) * r.width) / 2, y: r.top + ((1 - v.y) * r.height) / 2 };
     },
     rise() {
+      if (stage) { phase = 'play'; return Promise.resolve(); }
       if (reduced) { phase = 'play'; camera.position.copy(play.pos); camera.lookAt(play.look); return Promise.resolve(); }
       phase = 'rise';
       return new Promise(done => { tl = { kind: 'rise', start: performance.now(), ms: RISE_MS, done }; });
     },
     sink() {
+      if (stage) { phase = 'hidden'; return Promise.resolve(); }
       if (drag) { drag = null; canvas.style.cursor = ''; }
       if (reduced || phase === 'hidden') { phase = 'hidden'; return Promise.resolve(); }
       const prevTl = tl; phase = 'sink';
