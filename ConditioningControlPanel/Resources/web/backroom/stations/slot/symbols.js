@@ -3,6 +3,8 @@
  * reflected by the caller. `look` carries the dealt media: look.gif(i) -> a drawable (an animated
  * <img> or null) and look.word(i) -> text or null. Missing media gets the preview's fallback art. */
 
+import { fitText } from '../../shared/text/wrap.js';
+
 const TILE = ['#ec79b3', '#8160c6', '#c698db', '#53a5b3'];
 export const WORDS = ['DROP', 'RELAX', 'LET GO', 'SINK'];
 
@@ -26,6 +28,36 @@ function fallbackTile(ctx, n, t, reduced) {
     ctx.stroke();
   }
   ctx.restore();
+}
+
+/* The subliminal / trigger phrases the player set can be long ("I CANT RESIST MY TRIGGERS"). They wrap into
+ * up to three lines at the largest font that fits the glyph box instead of being squeezed onto one line;
+ * anything past SUB_WRAP_AT characters takes at least two lines (shared/text/wrap.js). The layout is memoised
+ * per phrase, so the per-frame repaint (THE GLYPH HIT, A2's ghost) costs one measure pass per phrase. */
+const SUB_BOX = { w: 220, h: 196 };
+const SUB_WRAP_AT = 12;
+const subFont = (px) => `700 ${px}px Segoe UI, Arial, sans-serif`;
+const subFits = new Map();
+
+/** The wrapped block for one phrase in the reel cell: { size, lines }. Memoised; exported for the tests. */
+export function phraseLayout(ctx, text) {
+  const hit = subFits.get(text);
+  if (hit) return hit;
+  const measure = (str, size) => { ctx.font = subFont(size); return ctx.measureText(str).width; };
+  const fit = fitText(text, { measure, width: SUB_BOX.w, height: SUB_BOX.h, maxLines: 3,
+    minLines: text.length > SUB_WRAP_AT ? 2 : 1, min: 13, max: 42, lineHeight: 1.12 });
+  if (subFits.size > 64) subFits.clear();
+  subFits.set(text, fit);
+  return fit;
+}
+
+/** The dealt phrase, centred in the cell, wrapped and scaled to fit. Same colour as the one-line version. */
+function drawPhrase(ctx, text) {
+  const fit = phraseLayout(ctx, text);
+  ctx.fillStyle = '#ffd7eb'; ctx.font = subFont(fit.size);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const step = fit.size * 1.12, top = -(fit.lines.length - 1) * step / 2;
+  fit.lines.forEach((l, i) => ctx.fillText(l, 0, top + i * step, SUB_BOX.w));
 }
 
 function drawMedia(ctx, img) {
@@ -52,9 +84,7 @@ export function drawSymbol(ctx, id, t, look = {}) {
     ctx.stroke();
   } else if (kind === 'sub') {
     const text = (look.word && look.word(n)) || WORDS[n % 4];
-    ctx.fillStyle = '#ffd7eb'; ctx.font = '700 42px Segoe UI, Arial, sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(String(text).toUpperCase(), 0, 0, 220);
+    drawPhrase(ctx, String(text).toUpperCase());
   } else if (kind === 'emi') {
     ctx.fillStyle = '#534467'; ctx.beginPath(); ctx.roundRect(-95, -87, 190, 170, 22); ctx.fill();
     if (look.face) ctx.drawImage(look.face, 3 * 152, 0, 152, 137, -77, -68, 154, 136);

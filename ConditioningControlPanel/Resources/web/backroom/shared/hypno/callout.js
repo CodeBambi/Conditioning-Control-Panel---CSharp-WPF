@@ -45,6 +45,7 @@
  * audio, speech or the DOM is missing (node tests run on small fakes).
  * ==========================================================================*/
 import { createMoments } from './moments.js';
+import { fitText } from '../text/wrap.js';
 
 export const HIGHLIGHT_MS = 400;
 export const HIGHLIGHT_GAP_MS = 80;
@@ -64,6 +65,11 @@ export const WORD_GAP_MS = 500;                                   // onset to on
 export const WORD_TUNNEL_MS = 500;                                // the tunnel's way in, and its way out
 export const WORD_TUNNEL_LEVEL = 0.6;
 export const WORD_SIZE_VH = 12;
+export const WORD_MAX_LINES = 3;                                  // a long phrase wraps, it is never squeezed
+export const WORD_WRAP_AT = 12;                                   // past this many characters it takes 2 lines
+export const WORD_FIT_VW = 0.9;                                   // the block sits inside 90% of the viewport
+const WORD_LINE_H = 1.05;
+const GLYPH_W = 0.5;                                              // average glyph width of the display stack, in em
 export const REVERSE_ODDS = 100;                                  // 1 in 100 per word
 export const SETTLE_MS = 600;
 export const BARK_MS = 2400;
@@ -115,6 +121,27 @@ function houseColor(rng, base, drift) {
 }
 
 const reverseText = (s) => Array.from(String(s)).reverse().join('');
+
+/**
+ * The word beat's block: a long subliminal or trigger phrase wraps onto 2 or 3 lines and the tier font
+ * steps down until the widest line fits WORD_FIT_VW of the viewport AT THE ZOOM'S PEAK (the beat scales to
+ * ZOOM.to, so the block is fitted to that, not to its resting size). Short words keep WORD_SIZE_VH and one
+ * line, exactly as before. PURE apart from the viewport read (`view` overrides it) and `measure`, which the
+ * page hands in as a real canvas metric for the display font; without one an average-glyph estimate is used.
+ * @returns {{sizeVh:number, lines:string[]}}
+ */
+export function wordBlock(text, { sizeVh = WORD_SIZE_VH, maxLines = WORD_MAX_LINES, view = null, measure = null } = {}) {
+  const str = String(text == null ? '' : text);
+  const vw = Number(view && view.w) || (typeof globalThis.innerWidth === 'number' ? globalThis.innerWidth : 1280);
+  const vh = Number(view && view.h) || (typeof globalThis.innerHeight === 'number' ? globalThis.innerHeight : 720);
+  const px = (size) => size * vh / 100;
+  const metric = typeof measure === 'function' ? (t, size) => measure(String(t), px(size))
+    : (t, size) => String(t).length * px(size) * GLYPH_W;
+  const fit = fitText(str, { measure: metric, width: vw * WORD_FIT_VW / ZOOM.to, maxLines,
+    minLines: str.replace(/\s+/g, ' ').trim().length > WORD_WRAP_AT ? 2 : 1,
+    min: 4, max: sizeVh, lineHeight: WORD_LINE_H });
+  return { sizeVh: fit.size, lines: fit.lines };
+}
 
 /**
  * The plan for one word or chain: onsets, colours, the reversal draw, the tunnel breath. Pure, so a replay with
@@ -226,6 +253,7 @@ const CSS = `
   will-change:transform,opacity}
 .br-callout-text[data-tier=big]{-webkit-text-stroke:2px #e8c27a;text-shadow:0 2px 12px #0d0616,0 0 26px #e8c27a99}
 .br-callout-text[data-tier=hero]{-webkit-text-stroke:3px #e8c27a;text-shadow:0 2px 14px #0d0616,0 0 36px #e8c27acc,0 0 70px #ff5fa266}
+.br-callout-text[data-lines]{white-space:pre-line;line-height:1.05}
 .br-callout-text .br-callout-ghost{position:absolute;inset:0;opacity:0;mix-blend-mode:screen;-webkit-text-stroke:0;text-shadow:none}
 .br-callout-text .br-callout-ghost.r{color:#ff3d8f}.br-callout-text .br-callout-ghost.b{color:#5fb0ff}
 .br-callout-word{color:transparent;-webkit-background-clip:text;background-clip:text;text-shadow:none;filter:drop-shadow(0 2px 10px #0d0616)}
@@ -272,6 +300,19 @@ export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, mom
   const timers = new Set(), anims = new Set();
   let layer = null, textEl = null, wordEls = [], tunnelTimer = 0, tunnelPosted = 0, barkAt = 0, disposed = false;
 
+  /* The display font's real width, off one 2D context. The node tests have no canvas: wordBlock then falls
+   * back to its average-glyph estimate, which is what the fixtures measure against. */
+  let metricCtx;
+  function textWidth(str, px) {
+    if (metricCtx === undefined) {
+      metricCtx = null;
+      try { const c = doc && doc.createElement ? doc.createElement('canvas') : null; metricCtx = c && c.getContext ? c.getContext('2d') : null; } catch (e) { metricCtx = null; }
+    }
+    if (!metricCtx || typeof metricCtx.measureText !== 'function') return null;
+    try { metricCtx.font = `800 ${px}px ${fontStack()}`; return metricCtx.measureText(str).width; } catch (e) { return null; }
+  }
+  const wordMeasure = (str, px) => { const w = textWidth(str, px); return w === null ? String(str).length * px * 0.5 : w; };
+
   const fontStack = () => {
     if (font) return font;
     try {
@@ -298,18 +339,20 @@ export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, mom
   function track(a) { if (a) anims.add(a); return a; }
   function clearTimers() { for (const id of timers) clearTimeout(id); timers.clear(); for (const a of anims) stopAnim(a); anims.clear(); }
 
-  /** One text element, centred, with its two chromatic ghosts. */
-  function makeText(text, sizeVh, cls) {
+  /** One text element, centred, with its two chromatic ghosts. `lines` (2 or 3) makes it a wrapped block. */
+  function makeText(text, sizeVh, cls, lines = null) {
     const l = ensureLayer();
     if (!l) return null;
     const el = doc.createElement('div');
     el.className = 'br-callout-text' + (cls ? ' ' + cls : '');
     el.style.fontSize = sizeVh + 'vh';
     el.style.fontFamily = fontStack();
-    el.textContent = text;
+    const body = Array.isArray(lines) && lines.length > 1 ? lines.join('\n') : text;
+    el.textContent = body;
+    if (Array.isArray(lines) && lines.length > 1) el.setAttribute('data-lines', String(lines.length));
     for (const k of ['r', 'b']) {
       const g = doc.createElement('span');
-      g.className = 'br-callout-ghost ' + k; g.textContent = text; g.setAttribute('aria-hidden', 'true');
+      g.className = 'br-callout-ghost ' + k; g.textContent = body; g.setAttribute('aria-hidden', 'true');
       el.append(g);
     }
     l.append(el);
@@ -432,7 +475,8 @@ export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, mom
           sound.play('clicker', { index: w.index });
           speak(w.spoken, w.reversed ? SPEECH.reversedRate : SPEECH.rate, speechLog);
           sound.play('word', { index: w.index });
-          const el = makeText(w.shown, WORD_SIZE_VH, 'br-callout-word');
+          const block = wordBlock(w.shown, { measure: textWidth(' ', 10) === null ? null : wordMeasure });
+          const el = makeText(w.shown, block.sizeVh, 'br-callout-word', block.lines);
           if (!el) return;
           el.style.backgroundImage = w.stops.length > 1 ? `linear-gradient(100deg, ${w.stops[0]}, ${w.stops[1]})` : `linear-gradient(${w.stops[0]}, ${w.stops[0]})`;
           if (w.reversed) el.setAttribute('data-reversed', '');
