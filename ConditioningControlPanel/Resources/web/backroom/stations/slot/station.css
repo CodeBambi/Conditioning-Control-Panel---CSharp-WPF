@@ -112,3 +112,9 @@
 @media (prefers-reduced-motion: reduce) { .slot-station * { transition: none !important; } }
 
 @media (any-pointer: coarse) { .slot-hint { display: none; } }
+
+/* Keep the phone's room navigation clear; the cabinet already carries EMI. */
+@media (max-width: 600px) {
+  .slot-station[data-host-back] .slot-top { top: 112px; }
+  .slot-station[data-host-back] .slot-face { display: none; }
+}

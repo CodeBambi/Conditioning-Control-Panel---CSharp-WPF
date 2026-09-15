@@ -82,6 +82,7 @@ async function boot(query) {
   await until('window.dev.station.debug().phase === "bet"', 10000, 100);
 }
 async function click(x, y, button = 'left') {
+  if(button==='left'){await cdp('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});await cdp('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});return;}
   await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
   await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button, buttons: button === 'left' ? 1 : 2, clickCount: 1 });
   await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button, clickCount: 1 });
@@ -124,23 +125,25 @@ await ev(`window.__backroom.visit(window.__backroom.stations.find((s) => s.key =
 ok(await until('!!document.querySelector(".roul-station[data-phase=bet]")', 10000, 100), 'the room mounts and opens the roulette through the loader');
 const picks = await ev(`(async () => {
   const T=await import('three'),s=window.__backroom.scene,fixture=s.scene.getObjectByName('station_roulette');
+  const {createMatView}=await import('/backroom/stations/roulette/mat-view.js');
   const targets=[];fixture.traverse(o=>{if(o.isMesh&&o.userData.spot)targets.push(o);});
-  const r=s.renderer.domElement.getBoundingClientRect();s.scene.updateMatrixWorld(true);
-  return targets.map(o=>{const p=o.getWorldPosition(new T.Vector3()).project(s.camera),x=(p.x+1)*r.width/2,y=(1-p.y)*r.height/2;
-    const hit=s.pickAt({clientX:x,clientY:y},targets)[0]?.object.userData.spot;
-    return {spot:o.userData.spot,hit,x,y,visible:x>=0&&x<r.width&&y>=0&&y<r.height,uncovered:document.elementFromPoint(x,y)===s.renderer.domElement};});
+  const cells=new Map(targets.map(plane=>[plane.userData.spot,{plane,position:plane.position.clone()}]));
+  const view=createMatView({fixture,canvas:s.renderer.domElement,ready:true},cells);view.layout();s.scene.updateMatrixWorld(true);
+  return targets.map(o=>{const {x,y}=view.project(o.position),hit=view.pick({clientX:x,clientY:y},targets);
+    return {spot:o.userData.spot,hit,x,y,position:o.position.toArray(),visible:x>=0&&x<innerWidth&&y>=innerHeight*2/3&&y<innerHeight,uncovered:document.elementFromPoint(x,y)===s.renderer.domElement};});
 })()`);
-ok(picks.length===42&&picks.every(p=>p.hit===p.spot),'all 42 authored mat ray picks resolve the matching bet');
-ok(picks.length===42&&picks.every(p=>p.visible),'all 42 physical bet centers fit on phone');
+ok(picks.length===42&&picks.every(p=>p.hit===p.spot&&p.visible&&p.uncovered),'all42 actual mat centers project into the lower view and raycast correctly');
 await writeFile(join(OUT,'mat-picks.json'),JSON.stringify(picks,null,2));
-ok(await ev("document.querySelector('.roul-chips-label').getAttribute('aria-expanded')==='true'"),'phone opens its touch betting surface on arrival');
-const selector=await ev(`(() => {
- const button=document.querySelector('.roul-chips-label'),buttons=[...document.querySelectorAll('.roul-mat-strip button')];
- return buttons.length===42&&buttons.every(b=>{if(button.getAttribute('aria-expanded')!=='true')button.click();b.scrollIntoView({block:'nearest'});const r=b.getBoundingClientRect(),reachable=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===b;b.click();const good=reachable&&button.dataset.chips==='1';document.querySelector('.roul-clear').click();return good;});
-})()`);ok(selector,'touch betting surface reaches all 42 bet actions');
-ok(await ev("[...document.querySelectorAll('.roul-mat-strip button')].every(b=>{const r=b.getBoundingClientRect();return r.width>=44&&r.height>=44})"),'phone betting targets measure at least44px in both dimensions');
-await shot('phone-touch-bets.png');
-await ev("document.querySelector('.roul-chips-label').click()");
+ok(await ev("getComputedStyle(document.querySelector('.roul-mat-strip')).display==='none'"),'mobile shows no HTML betting grid');
+let pointerPass=true;
+for(const target of picks){
+  await click(target.x,target.y);await sleep(60);
+  const shown=await ev(`(async()=>{const T=await import('three'),mesh=window.__backroom.scene.scene.getObjectByName('roulette_live_chips'),matrix=new T.Matrix4();mesh.getMatrixAt(0,matrix);return{count:mesh.count,position:new T.Vector3().setFromMatrixPosition(matrix).toArray()};})()`);
+  pointerPass&&=shown?.count===1&&Math.hypot(shown.position[0]-target.position[0],shown.position[2]-target.position[2])<.001;
+  if(target.spot==='s18')await shot('phone-3d-chip.png');
+  await ev("document.querySelector('.roul-clear').click()");
+}
+ok(pointerPass,'actual pointer taps on all42 spots place a visible3D chip at that cell');
 const roomRect = await ev(`(() => { const c = document.querySelector('.roul-stage'); const r = c.getBoundingClientRect(); return { x: r.left, y: r.top }; })()`);
 ok(await ev(`!!document.querySelector('.roul-station[data-host-back][data-host-sp]') && document.querySelector('.roul-back').hidden`), 'ctx.hostBack and ctx.spReadout: the station hides its own Back and SP chip');
 await sleep(500);
@@ -149,7 +152,7 @@ await shot('18-room-roulette-open.png');
 const cellCentre = picks.find(p=>p.spot==='s18');
 await click(Math.round(roomRect.x + cellCentre.x), Math.round(roomRect.y + cellCentre.y));
 await ev(`document.querySelector('.roul-spin').click()`);
-ok(await ev("document.querySelector('.roul-mat-strip').hidden"),'Spin hides the betting sheet for an unobstructed bowl');
+ok(await ev("getComputedStyle(document.querySelector('.roul-mat-strip')).display==='none'"),'spin keeps actual3D mat and bowl visible');
 await until(`(document.querySelector('.roul-history') || {}).childElementCount >= 1`, 12000, 50);
 await sleep(400);
 const room = await ev(`({ open: window.__posted.filter((m) => m.type === 'station-open').map((m) => m.station), fx: window.__posted.filter((m) => m.type === 'fx').map((m) => ({ id: m.fxId, station: m.station, args: m.args, symbols: m.symbols })),

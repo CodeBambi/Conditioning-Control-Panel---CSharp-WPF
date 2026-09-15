@@ -258,15 +258,12 @@ export async function createScene(o) {
     rig.position.y = y; rig.updateMatrixWorld(true);
     const play = fit(playBox, dir, target);
     if (aspect < 0.8) {
-      // Portrait play centres the reels, with the marquee above and controls below.
-      const centre = new THREE.Box3();
-      (glass ? [glass] : reels).forEach(n => centre.expandByObject(n));
-      const focus = centre.getCenter(new THREE.Vector3()).sub(play.look);
-      const up = new THREE.Vector3().crossVectors(dir, play.right);
-      const shift = play.right.clone().multiplyScalar(focus.dot(play.right) * 0.2)
-        .addScaledVector(up, focus.dot(up));
-      play.look.add(shift);
-      play.dist *= 0.96;
+      // The glass is the phone's main subject. Cabinet edges may leave the frame.
+      const reelBox = new THREE.Box3();
+      (glass ? [glass] : reels).forEach(n => reelBox.expandByObject(n));
+      const close = fit(reelBox, dir);
+      play.look.copy(close.look);
+      play.dist = close.dist * 1.16;
       play.pos.copy(play.look).addScaledVector(dir, play.dist);
     }
     return { play, arrive: fit(whole, quarter), drop: (whole.max.y - whole.min.y) * 1.6 };

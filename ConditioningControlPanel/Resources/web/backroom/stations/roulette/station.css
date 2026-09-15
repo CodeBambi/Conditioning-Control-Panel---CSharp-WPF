@@ -115,3 +115,16 @@
 @media (max-height: 500px) and (min-aspect-ratio: 1/1) {
   .roul-station[data-seated] .roul-spins-label { flex-basis: 100%; }
 }
+
+/* Mobile has two real scene views. Controls occupy only the bowl side. */
+.roul-station[data-split] .roul-mat-strip { display: none !important; }
+.roul-station[data-split] .roul-controls { left: auto; right: 8px; width: 112px; top: 148px; bottom: auto; gap: 5px; }
+.roul-station[data-split] .roul-row { gap: 3px; }
+.roul-station[data-split] .roul-pips { display: none; }
+.roul-station[data-split] .roul-spins-label { flex-basis: 100%; }
+.roul-station[data-split] .roul-spins button { min-width: 33px; }
+.roul-station[data-split] .roul-spin { min-width: 0; padding: 8px 4px; }
+.roul-station[data-split] .roul-chips-label { opacity: 1; border: 0; background: none; padding: 4px 0; }
+@media (max-height: 500px) and (min-aspect-ratio: 1/1) {
+  .roul-station[data-split] .roul-controls { top: 82px; width: 210px; }
+}

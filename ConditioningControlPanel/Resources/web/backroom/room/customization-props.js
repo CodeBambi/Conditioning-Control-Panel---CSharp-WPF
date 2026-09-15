@@ -167,6 +167,7 @@ export async function createCustomizationProps({ root, loader, base }) {
 
   const bounds = new T.Box3(), center = new T.Vector3(), size = new T.Vector3();
   return {
+    models: placed.map(group => group.children[0]),
     screens,
     /** @param {number} index  @param {boolean} on */
     set(index, on) {

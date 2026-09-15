@@ -83,7 +83,7 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     const distance=Math.max(1.5,size.y*1.6,size.x*1.15);
     onPreview({position:[center.x,center.y+.12,center.z+Math.cos(object.rotation.y)*distance],look:center.toArray(),width:size.x,height:size.y});
   };
-  const panel=createCustomizationPanel({mount,lex,vending,select,getState,restore,preview,hasOwnership:id=>owned.has(id),onClose:()=>{props.endPreview();onPreview(null);}});
+  const panel=createCustomizationPanel({mount,lex,vending,decorations:props.models,select,getState,restore,preview,hasOwnership:id=>owned.has(id),onClose:()=>{props.endPreview();onPreview(null);}});
   const ray=new T.Raycaster(),pointer=new T.Vector2();let down=null;
   const onDown=e=>{if(e.button===0&&isActive())down={x:e.clientX,y:e.clientY,t:performance.now()};};
   const onUp=e=>{
