@@ -545,7 +545,7 @@ export async function createScene(o) {
     setDress(d) { dress = { ...dress, ...(d || {}) }; },
     /** Live reduced motion / Calm (a settings frame): the next gesture, landing, rise or sink takes the settled
      *  state. A landing already in flight finishes its path (no jump mid-turn); the stage dim and EMI settle now. */
-    setReduced(on) { reduced = !!on; emi.setReduced(reduced); if (reduced) dim = 0; },
+    setReduced(on) { reduced = !!on; emi.setReduced(reduced); rewardView?.setStill(reduced); if (reduced) dim = 0; },
     /** The slice's own colour, for the landing wash. */
     sliceColor(index) {
       const m = sliceGroup && sliceGroup.children.find(n => n.userData && n.userData.base !== undefined && n.userData.index === index);
