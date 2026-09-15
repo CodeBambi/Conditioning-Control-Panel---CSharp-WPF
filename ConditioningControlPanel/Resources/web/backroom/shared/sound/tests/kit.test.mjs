@@ -248,8 +248,8 @@ test('THE ROLL: the tick rate is the drum speed, and the drums sit over the bed 
   assert.ok(near(tickGap(1), 0.038), '38 ms a tick at full blur');
   assert.ok(tickGap(0) <= 0.27, 'and about a quarter second crawling into the stop');
   assert.equal(tickGap('nonsense'), tickGap(1), 'nonsense is full speed');
-  assert.ok(ROLL_TICK > BED_LEVEL * 0.7 && ROLL_TICK < 0.12, 'a tick reads over the bed without being harsh (the owner took the drums down 35% on 2026-09-15)');
-  assert.ok(ROLL_BED > BED_LEVEL * 0.7 && ROLL_BED <= ROLL_TICK, 'the purr sits around the bed, under the ticks (the owner took the drums down 35% on 2026-09-15)');
+  assert.ok(ROLL_TICK > BED_LEVEL * 0.4 && ROLL_TICK < 0.12, 'a tick reads through the bed without being harsh (the owner took the drums down 35% twice on 2026-09-15)');
+  assert.ok(ROLL_BED > BED_LEVEL * 0.4 && ROLL_BED <= ROLL_TICK, 'the purr sits under the bed and under the ticks (the owner took the drums down 35% twice on 2026-09-15)');
 });
 
 /* ------------------------------------------------------------------ the kit on a context */

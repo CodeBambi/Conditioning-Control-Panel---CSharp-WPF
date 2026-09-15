@@ -338,8 +338,8 @@ const ROLL_LAYER = Object.freeze({
 });
 /** A tick peaks here, clear of the bed at -24 dB without being harsh; the purr and the hum together sit just
  *  over it at full blur and fall away with the drum. */
-export const ROLL_TICK = 0.0585;
-export const ROLL_BED = 0.052;
+export const ROLL_TICK = 0.038;
+export const ROLL_BED = 0.034;
 const TICK_AHEAD = 0.14, TICK_MS = 45;
 const rollKey = reel => 'reel:' + clamp(Math.floor(num(reel, 0)), 0, 4);
 /** THE TICK RATE IS THE REEL SPEED: 38 ms a tick at full blur, 260 ms crawling into the stop. */
@@ -439,7 +439,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     const sh = ctx.createBufferSource(); sh.buffer = noiseBuf; sh.loop = true;
     const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 3; bp.frequency.value = 3000;
     const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.05; lg.gain.value = 1000; lfo.connect(lg); lg.connect(bp.frequency);
-    const sg = ctx.createGain(); sg.gain.value = 0.09; sh.connect(bp); bp.connect(sg); sg.connect(g); sh.start(); lfo.start(); nodes.push(sh, lfo);
+    const sg = ctx.createGain(); sg.gain.value = 0.045; sh.connect(bp); bp.connect(sg); sg.connect(g); sh.start(); lfo.start(); nodes.push(sh, lfo);
     // Two high sines breathing under a 12 s tremolo, barely there.
     const tg = ctx.createGain(); tg.gain.value = 0.05;
     const tr = ctx.createOscillator(), trg = ctx.createGain(); tr.frequency.value = 0.08; trg.gain.value = 0.04; tr.connect(trg); trg.connect(tg.gain); tr.start(); nodes.push(tr);
