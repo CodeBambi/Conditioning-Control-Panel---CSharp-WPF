@@ -1,5 +1,6 @@
 import * as T from 'three';
 import { createRouletteSurfaces, getRouletteSurfaces } from '../../room/roulette-surfaces.js';
+import { createBallPath } from './ball-path.js';
 import { createBowl } from './bowl.js';
 import { FEEL, SEG, restRel, beamAngle, beamLit, whirlAngle } from './feel.js';
 
@@ -27,6 +28,11 @@ export function createBowl3D({ stage, wheel, rose }) {
   const track = center(nodes.ball_track);
   const trackBox = new T.Box3().setFromObject(nodes.ball_track);
   const trackRadius = Math.max(trackBox.getSize(new T.Vector3()).x, trackBox.getSize(new T.Vector3()).z) / (2 * rotorScale);
+  const path=createBallPath(rotor,ball,nodes.ball_track,restRadius,lift);
+  const pocketTops=wheel.map(n=>{
+    const node=nodes['pocket_'+n],bounds=node.geometry.boundingBox||new T.Box3().setFromBufferAttribute(node.geometry.attributes.position);
+    return rotor.worldToLocal(node.localToWorld(bounds.getCenter(new T.Vector3()).setY(bounds.max.y))).y;
+  });
   const existingSurfaces=getRouletteSurfaces(root);
   const surfaces=existingSurfaces||createRouletteSurfaces(root),numberColors=surfaces.numberColors;
   const disc = nodes.center_disc, oldDisc = disc.material;
@@ -55,9 +61,9 @@ export function createBowl3D({ stage, wheel, rose }) {
       // Source order runs clockwise; the canvas plan uses increasing indices.
       const angle = angles[s.index] - (s.rel - restRel(s.index));
       const radial = Math.max(0, Math.min(1, (s.radius - FEEL.R_REST) / (FEEL.R_RIM - FEEL.R_REST)));
-      const radius = restRadius + (trackRadius - restRadius) * radial;
-      point.set(Math.cos(angle) * radius, p.y + lift + (track.y - p.y) * radial, -Math.sin(angle) * radius);
-      if (s.phase === 'rest') point.copy(p).addScaledVector(up, lift);
+      const radius = restRadius + (path.rimRadius - restRadius) * radial;
+      point.set(Math.cos(angle) * radius, path.height(radius), -Math.sin(angle) * radius);
+      if (s.phase === 'rest') point.copy(p).setY(pocketTops[s.index]+lift+path.margin);
       rotor.localToWorld(point); ball.parent.worldToLocal(point); ball.position.copy(point);
     }
     const beamA = beamAngle(s.beamT), k = lastView.k ?? 1;
@@ -117,6 +123,7 @@ export function createBowl3D({ stage, wheel, rose }) {
     draw, pocketBox, dispose,
     get geo() { return core.geo; }, get phase() { return core.phase; },
     debug() { return { ...core.debug(), view: '3d', lit: [...lit], whirlDrawn: !!lastView.whirlDrawn,
+      clearance: {rimRadius:path.rimRadius,ballRadius:lift,profileEdges:path.edges,margin:path.margin},
       ballWorld: ball.getWorldPosition(new T.Vector3()).toArray(),
       pockets: centers.map(p => rotor.localToWorld(p.clone()).toArray()), disposed }; },
   };

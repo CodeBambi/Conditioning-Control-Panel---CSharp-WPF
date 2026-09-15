@@ -67,7 +67,7 @@
   .roul-odds { bottom: auto; top: 50%; }
 }
 @media (prefers-reduced-motion: reduce) { .roul-station * { transition: none !important; } }
-/* Seated play uses the room canvas; the DOM strip is a temporary mat view. */
+/* Seated play uses the room canvas; the optional sheet offers larger bet buttons. */
 .roul-station[data-seated] { background: transparent; pointer-events: none; }
 .roul-station[data-seated] .roul-stage { display: none; }
 .roul-station[data-seated] :is(button, details, .roul-card, .roul-mat-strip) { pointer-events: auto; }
@@ -79,7 +79,39 @@
 .roul-station[data-seated] .roul-odds { left: auto; right: 12px; top: 100px; bottom: auto; }
 .roul-station[data-seated] .roul-top { top: 108px; max-width: calc(100% - 104px); }
 @media (max-width: 800px), (max-aspect-ratio: 11/10) {
-  .roul-station[data-seated] .roul-controls { top: 170px; bottom: auto; }
+  .roul-station[data-seated] .roul-controls { top: auto; bottom: 16px; }
 }
-.roul-station[data-seated] .roul-mat-strip { top: 350px; bottom: auto; }
+.roul-station[data-seated] .roul-mat-strip { top: auto; bottom: 170px; }
 .roul-station:not([data-seated]) .roul-chips-label { border: 0; background: none; opacity: 1; padding: 0; min-height: 0; }
+
+@media (max-width: 600px) {
+  .roul-station[data-seated] .roul-mat-strip { grid-template-columns: repeat(6, 1fr); max-height: calc(100dvh - 330px); overflow-y: auto; }
+  .roul-station[data-seated] .roul-mat-strip button { min-height: 44px; }
+}
+
+@media (min-width: 370px) and (max-width: 600px) {
+  .roul-station[data-seated] .roul-mat-strip { grid-template-columns: repeat(7, 1fr); }
+}
+.roul-mat-strip button { position: relative; }
+.roul-mat-strip button:not([data-chips="0"])::after { content: attr(data-chips); position: absolute; right: 2px; top: 1px; font-size: 10px; color: #ff9dca; }
+
+@media (max-width: 600px) {
+  .roul-station[data-seated] .roul-mat-strip button { font-size: 12px; }
+  .roul-station[data-seated] .roul-mat-strip button.is-number { font-size: 16px; }
+  .roul-station[data-seated] .roul-pips { display: none; }
+}
+
+@media (max-height: 500px) and (min-aspect-ratio: 1/1) {
+  .roul-station[data-seated] .roul-controls { left: auto; right: 12px; width: 210px; top: 120px; bottom: auto; gap: 6px; }
+  .roul-station[data-seated] .roul-pips { display: none; }
+  .roul-station[data-seated] .roul-row { gap: 4px; }
+  .roul-station[data-seated] .roul-top { top: 84px; max-width: calc(100% - 250px); }
+  .roul-station[data-seated] .roul-odds { top: 84px; }
+  .roul-station[data-seated] .roul-mat-strip { left: 12px; right: 246px; top: 145px; bottom: 16px; width: auto; max-height: none; overflow-y: auto; grid-template-columns: repeat(auto-fit, minmax(44px, 1fr)); align-content: start; }
+  .roul-station[data-seated] .roul-mat-strip button { min-height: 44px; font-size: 12px; }
+  .roul-station[data-seated] .roul-mat-strip button.is-number { font-size: 16px; }
+}
+
+@media (max-height: 500px) and (min-aspect-ratio: 1/1) {
+  .roul-station[data-seated] .roul-spins-label { flex-basis: 100%; }
+}

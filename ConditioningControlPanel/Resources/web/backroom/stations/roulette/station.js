@@ -51,7 +51,7 @@ export async function mount(ctx) {
   const stage = ctx.stage?.fixture && ctx.stage?.register ? ctx.stage : null;
   const makeBowl3D = stage ? (await import('./bowl-3d.js')).createBowl3D : null;
   const makeMat3D = stage ? (await import('./mat-3d.js')).createMat3D : null;
-  let unStage = null, betSelector = null;
+  let unStage = null, betSelector = null, stageReady = stage?.ready !== false;
   const hostBack = ctx.hostBack === true;
   const hook = ctx.spReadout && typeof ctx.spReadout.owe === 'function' ? ctx.spReadout : null;
   loadCss();
@@ -113,8 +113,9 @@ export async function mount(ctx) {
     if (!hook) $('.roul-sp').textContent = t('br_roulette_sp', '{n} SP', { n: fmt(shownSp(sp, tape)) });
     const pips = el.querySelectorAll('.roul-pips i'), used = chipTotal(chips);
     pips.forEach((p, i) => p.classList.toggle('is-used', i < used));
-    $('.roul-chips-label').textContent = t('br_roulette_chips', 'Chips {n} of {max}', { n: used, max: MAX_CHIPS });
-    const locked = phase !== 'bet' || resume;
+    $('.roul-chips-label').textContent = stage ? t('br_roulette_place_bets', 'Place bets · {n}/{max}', { n: used, max: MAX_CHIPS }) : t('br_roulette_chips', 'Chips {n} of {max}', { n: used, max: MAX_CHIPS });
+    $('.roul-chips-label').dataset.chips = String(used);
+    const locked = phase !== 'bet' || resume || stage?.ready === false;
     $('.roul-clear').disabled = locked || used === 0;
     $('.roul-chips-label').disabled = !stage || locked;
     if (betSelector && locked) betSelector.hide();
@@ -196,7 +197,7 @@ export async function mount(ctx) {
   }
   function setCount(n) { if (phase !== 'bet' || resume) return; count = Math.max(1, Math.min(MAX_SPINS, Math.trunc(n) || 1)); why = null; sync(); }
   function place(spot, remove = false) {
-    if (phase !== 'bet' || resume || !st) return false;
+    if (phase !== 'bet' || resume || !st || stage?.ready === false) return false;
     if (remove) { chips = removeChip(chips, spot); why = null; sync(); return true; }
     const r = addChip(chips, spot, { spots: st.spots });
     chips = r.chips; why = r.ok ? null : whyText(r.why);
@@ -207,7 +208,7 @@ export async function mount(ctx) {
 
   /* ----------------------------------------------------------------- spin */
   async function press() {
-    if (!alive || suspended || !st || phase !== 'bet') return;
+    if (!alive || suspended || !st || phase !== 'bet' || stage?.ready === false) return;
     const pressedAt = performance.now();
     if (resume) { resume = false; ring('.roul-spin'); note('answer', { ms: Math.round(performance.now() - pressedAt), resume: true }); playTape(); return; }
     const c = check();
@@ -325,6 +326,7 @@ export async function mount(ctx) {
     if (!alive) return;
     if (!stage) raf = requestAnimationFrame(frame);
     if (suspended || !bowl) return;
+    if (stage && stageReady !== (stage.ready !== false)) { stageReady = stage.ready !== false; sync(); }
     const now = clock(), still = stillNow(), k = kNow();
     layout();
     if (kit) kit.setStill(still);
@@ -348,7 +350,7 @@ export async function mount(ctx) {
     bowl.draw(g, { dpr: size.dpr, now, k, full: fullNow(), spiral: gt.spiral, kit,
       still, slowText: t('br_roulette_slowly', 's l o w l y') });
     const landedShown = cur && cur.landed ? cur.read : null;
-    if (betSelector) betSelector.draw(null, { chips, hits: [], locked: phase !== 'bet' || resume });
+    if (betSelector) betSelector.draw(null, { chips, hits: [], locked: phase !== 'bet' || resume || !stageReady });
     mat.draw(g, { now, chips, hover, hits: landedShown ? landedShown.hits : [], landed: landedShown ? landedShown.pocket : null, k, still,
       bowl: bowl.geo, locked: phase !== 'bet' || resume });
   }
@@ -397,7 +399,7 @@ export async function mount(ctx) {
     bowl = stage ? makeBowl3D({ stage, wheel: st.wheel, rose: st.rose }) : createBowl({ wheel: st.wheel, rose: st.rose });
     mat = stage ? makeMat3D({ stage, spots: st.spots, label: matLabel }) : createMat({ spots: st.spots, rose: st.rose, label: matLabel });
     if (stage) {
-      betSelector = createMatStrip({ root: el, spots: st.spots, label: matLabel, place }); betSelector.hide();
+      betSelector = createMatStrip({ root: el, spots: st.spots, label: matLabel, place, onToggle: open => $('.roul-chips-label').setAttribute('aria-expanded',String(open)) }); betSelector.hide();
       unStage = stage.register({ update: frame, dispose() { bowl?.dispose(); mat?.dispose(); betSelector?.dispose(); betSelector = null; } });
     }
     if (tape) {
