@@ -142,7 +142,12 @@ export function recordsFx(now) {
       kind: 'seam', view: 'wide', when: 'ajar',
       rect: RECTS.door, edge: FX_SEAM_EDGE, pool: FX_SEAM_POOL,
     },
-    { kind: 'tilt', view: 'wide', amp: 2 },
+    /* NO TILT (owner ruling 2026-09-15). The mouse parallax was authored as
+     * "two pixels nobody can see", but it rides INSIDE the 1376x768 stage and
+     * therefore the fit scale: on a 1440p window that is ~4px each way and on
+     * 4K more, which reads as the room sliding under the cursor rather than as
+     * depth. Pulled from the office and the booth together - the effect is not
+     * worth a second, differently-wrong amplitude per monitor. */
   ];
 }
 

@@ -569,6 +569,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     } catch (e) { return false; }
   };
 
+  /* THE PA IS EXEMPT FROM THE DEVICE HALF, and it is the one twin that has to
+   * be. `shellLite` is a GPU dial: every other thing it gates (rooms breath,
+   * alley bloom, counter lamps, scene dust, particles) is something the phone
+   * pays for in frames. A spoken line costs no frames - for pa.js "lite" is not
+   * a diet, it is a MUTE (its law 3, and `arm()` returns before the timer is
+   * even set). So when the device half started firing on phones the announcer
+   * went silent on every phone in the school, which is not what that wave was
+   * buying. `performanceMode` stays honoured: a player who explicitly asked for
+   * the stripped-down school still gets a quiet one. */
+  const paLite = () => !!src.performanceMode;
+
   /* ---------------------- look & lexicon -------------------------------- */
   setLexicon(src.lexicon);
   applyPalette(src.palette, say);
@@ -1941,7 +1952,21 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // overlay that outlived its screen would be a second, invisible Esc rung).
     dismissEndCard();
     dismissPunchStage();
-    dismissAnnexStage();
+    /* A SILENT REPAINT IS NOT A SCREEN CHANGE, AND IT MUST NOT TOUCH THE ANNEX.
+     * This line used to be unconditional, and it is why the Records Annex never
+     * opened for a save that sealed the school before the reveal wave shipped:
+     *   - the catch-up probe below arms for 5600ms on arrival at the campus;
+     *   - the host echoes a `meta` frame after EVERY page write and pushes a
+     *     whole-blob snapshot on the launch mirror pull (ArcademyHostService
+     *     OnMirrorCardsChanged), each of which lands here as showBoard({silent});
+     *   - the old call cleared `annexProbe` on the way past and then the fast
+     *     repaint RETURNED below, before the re-arm could run.
+     * One network round trip inside 5.6s of the board painting was enough to
+     * make the reveal unreachable for the rest of the session - and, since the
+     * flag stamps at mount, unreachable forever. The stage itself is an overlay
+     * on `document.body`: a board being patched underneath it is no reason to
+     * tear a cinematic down either. Every non-silent path still dismisses. */
+    if (!silent) dismissAnnexStage();
 
     // FAST REPAINT: a live campus is patched, never rebuilt - tearing the stage
     // down on every meta echo would restart every ambient animation mid-frame.
@@ -3299,7 +3324,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       owned: () => ownsSku('pa_pack'),
       t,
       log: say,
-      lite: () => shellLite(),
+      lite: paLite,
       reduced: () => reducedMotion,
       inClass: () => !!active,
       /* THE DUCK CAP. pa.js scales LINE_DUCK by this exactly the way
@@ -3323,6 +3348,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     paCaption = installPaCaption({
       t,
       log: say,
+      /* NOT `paLite`: for the caption, lite is a genuine diet and not a mute -
+       * it only adds `is-still` (pacaption.js liteNow), so the words still
+       * appear, they just do not animate. That is exactly what the perf wave
+       * wanted on a phone, and the line is legible either way. Only pa.js
+       * needed the exemption, because there lite stops the cue at the source. */
       lite: () => shellLite(),
       reduced: () => reducedMotion,
       /* SHE STEPS ASIDE WHILE THE SCHOOL TALKS. campusDoorRects() already hands
