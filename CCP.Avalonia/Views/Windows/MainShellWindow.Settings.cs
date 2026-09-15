@@ -21,7 +21,7 @@
 // Still blocked, each naming its symbol rather than a vague service:
 //   - StartTutorial(TutorialType) and every tour behind it: ConditioningControlPanel/Services/
 //     TutorialService.cs (App.Tutorial), which drives TutorialOverlay step by step.
-//   - OpenBugReportWindow: ConditioningControlPanel/Windows/BugReportWindow.xaml, not ported.
+//   - OpenBugReportWindow: opens the shared BugReportService-backed BugReportWindow below.
 //   - BtnTutorialModding_Click's second half: Windows/ModCreatorWindow.xaml, not ported.
 //   - BtnSave_Click: SaveSettings() re-derives AppSettings from AppSettingsTab's controls, but on
 //     this head every one of those controls is already a live editor that writes Current and
@@ -45,6 +45,7 @@ using System.Threading.Tasks;
 using Avalonia.Platform.Storage;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
+using ConditioningControlPanel.Services;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -254,14 +255,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// startWithTutorial:true. That window is not ported.</summary>
         private void BtnTutorialModding_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
 
-        /// <summary>ponytail: closes the panel, then WPF opens Windows/BugReportWindow.xaml.
-        /// Not ported.</summary>
-        private void BtnTutorialReportBug_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
+        /// <summary>Close the help panel first, then open the owned report dialog, matching WPF.</summary>
+        private void BtnTutorialReportBug_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            CloseTutorialOverlay();
+            OpenBugReportWindow();
+        }
 
-        /// <summary>ponytail: needs Windows/BugReportWindow.xaml. Deliberately NOT approximated
-        /// with a message box - a bug report that goes nowhere is worse than a button that admits
-        /// it does nothing.</summary>
-        private void BtnReportBug_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
+        /// <summary>Open the real owned bug-report modal from the title bar.</summary>
+        private void BtnReportBug_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+            => OpenBugReportWindow();
+
+        private async void OpenBugReportWindow()
+        {
+            try
+            {
+                if (!IsVisible) return;
+                await new BugReportWindow(ReportKind.Bug).ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to open BugReportWindow");
+                if (IsVisible)
+                {
+                    await MessageDialog.ShowAsync(this, Loc.Get("bug_report_title"),
+                        Loc.Get("bug_report_error_toast") + "\n\n" + ex.Message);
+                }
+            }
+        }
 
         /// <summary>ponytail: see the "Still blocked" note at the top of this file - restoring
         /// SaveSettings() here would make the shell a second writer of settings each Settings

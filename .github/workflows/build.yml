@@ -53,6 +53,8 @@ jobs:
         run: dotnet test Tests/CCP.Avalonia.Language.Tests/CCP.Avalonia.Language.Tests.csproj -c Release
       - name: Test Avalonia notification suite
         run: dotnet test Tests/CCP.Avalonia.Tests/CCP.Avalonia.Tests.csproj -c Release
+      - name: Test Avalonia report workflow
+        run: dotnet test Tests/CCP.Avalonia.Report.Tests/CCP.Avalonia.Report.Tests.csproj -c Release
 
       # The VR head. Builds and self-checks on ubuntu with no OpenXR runtime and no headset -
       # StereoKit ships natives for linux-x64/arm64 and android-arm64, so the same assembly
@@ -110,6 +112,8 @@ jobs:
         run: dotnet test Tests/CCP.Avalonia.Language.Tests/CCP.Avalonia.Language.Tests.csproj -c Release
       - name: Test Avalonia notification suite
         run: dotnet test Tests/CCP.Avalonia.Tests/CCP.Avalonia.Tests.csproj -c Release
+      - name: Test Avalonia report workflow
+        run: dotnet test Tests/CCP.Avalonia.Report.Tests/CCP.Avalonia.Report.Tests.csproj -c Release
       - name: Test Avalonia consent flow
         run: dotnet test Tests/CCP.Avalonia.Consent.Tests/CCP.Avalonia.Consent.Tests.csproj -c Release
 

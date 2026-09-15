@@ -4,3 +4,4 @@ using System.Runtime.CompilerServices;
 // platform; keep the production surface internal while granting that dedicated process its test
 // access.
 [assembly: InternalsVisibleTo("CCP.Avalonia.Consent.Tests")]
+[assembly: InternalsVisibleTo("CCP.Avalonia.Report.Tests")]

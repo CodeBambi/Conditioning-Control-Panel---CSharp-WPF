@@ -3011,7 +3011,7 @@
                         </Border>
 
                         <!-- Tutorial Content -->
-                        <ScrollViewer Grid.Row="1" ScrollViewer.VerticalScrollBarVisibility="Auto" Padding="20,15">
+                        <ScrollViewer x:Name="MainTutorialScroll" Grid.Row="1" ScrollViewer.VerticalScrollBarVisibility="Auto" Padding="20,15">
                             <StackPanel>
                                 <!-- Quick Tip -->
                                 <Border Background="#3A2542" CornerRadius="8" Padding="12" Margin="0,0,0,15" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
@@ -3238,7 +3238,7 @@
                                             <TextBlock Text="{loc:Str btn_report_bug}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="{loc:Str bug_report_privacy_notice}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
                                         </StackPanel>
-                                        <Button Grid.Column="2" Content="{loc:Str btn_report_bug}" Click="BtnTutorialReportBug_Click"
+                                        <Button x:Name="BtnTutorialReportBug" Grid.Column="2" Content="{loc:Str btn_report_bug}" Click="BtnTutorialReportBug_Click"
                                                 Theme="{StaticResource SmallPinkButton}" VerticalAlignment="Center"/>
                                     </Grid>
                                 </Border>
