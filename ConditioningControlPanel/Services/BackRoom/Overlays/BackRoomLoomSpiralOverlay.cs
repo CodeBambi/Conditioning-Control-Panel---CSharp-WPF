@@ -14,16 +14,16 @@ namespace ConditioningControlPanel.Services.BackRoom.Overlays;
 /// Hypno v3 <c>spiral-loom</c> (CONTRACT 10.13.B, owner law: every Back Room spiral is Loom-woven): one
 /// woven spiral GIF as one field PER SCREEN (10.14, like the tunnel: UniformToFill, centred, inside a clipped cell the
 /// size of that monitor, so every screen has its own eye at its own centre; cells come from physical bounds
-/// through this window's own DPI, so a mixed-DPI desktop stays aligned), in over 800 ms, out over 1200 ms when its
-/// time or the 20 s hold cap runs out or it is released. A new spiral replaces the running one, which
-/// fades out on its own layer while the new one fades in; a third layer keeps a quick third spiral from
-/// cutting a fade short. Section 4's spiral-full plays here too.
+/// through this window's own DPI, so a mixed-DPI desktop stays aligned), in over 250 ms, out over 500 ms when its
+/// time or the 20 s hold cap runs out or it is released (the authored envelope: a spiral never pops). A new
+/// spiral replaces the running one, which fades out on its own layer while the new one fades in; a third
+/// layer keeps a quick third spiral from cutting a fade short. Section 4's spiral-full plays here too.
 ///
 /// <para>Frames decode off the UI thread with every frame of the loop kept (a woven loop is at most 72
 /// frames): 640 px on the long side, less for a squarer weave so all 72 fit the budget. One decode is
 /// kept while the window is up (a second Start on the same path waits for the running decode) and
-/// dropped when it hides after a quiet spell. Still (MotionLevel Off) decodes and shows the first frame
-/// only.</para>
+/// dropped when it hides after a quiet spell. Reduced motion (safety line a) plays the slower variant:
+/// the same weave at half speed, never a still.</para>
 /// </summary>
 internal sealed class BackRoomLoomSpiralOverlay : BackRoomOverlayWindow
 {
@@ -43,7 +43,8 @@ internal sealed class BackRoomLoomSpiralOverlay : BackRoomOverlayWindow
         public TimeSpan Delay;
         public object? Token;
         public string? Path;
-        public bool Still;
+        /// <summary>The reduced-motion variant: the loop at half speed.</summary>
+        public bool Slow;
         public long StartedAt;        // 0 until the picture is on
         public int HoldMs;
         public double Alpha;
@@ -62,10 +63,10 @@ internal sealed class BackRoomLoomSpiralOverlay : BackRoomOverlayWindow
         foreach (var l in _layers) Stage.Children.Add(l.Root);
     }
 
-    public static void Show(string gifPath, int durationMs, double alpha, bool still) => OnUi(() =>
+    public static void Show(string gifPath, int durationMs, double alpha, bool slow) => OnUi(() =>
     {
         if (!MayCreate(_instance)) return;
-        (_instance ??= new BackRoomLoomSpiralOverlay()).Start(gifPath, durationMs, alpha, still);
+        (_instance ??= new BackRoomLoomSpiralOverlay()).Start(gifPath, durationMs, alpha, slow);
     });
 
     /// <summary>Fade the running spiral out now.</summary>
@@ -79,7 +80,7 @@ internal sealed class BackRoomLoomSpiralOverlay : BackRoomOverlayWindow
         w.Sleep();
     });
 
-    private void Start(string path, int durationMs, double alpha, bool still)
+    private void Start(string path, int durationMs, double alpha, bool slow)
     {
         ReleaseCurrent();
         // An idle layer if there is one, else the faintest fading one (never a cut on a bright layer).
@@ -90,28 +91,13 @@ internal sealed class BackRoomLoomSpiralOverlay : BackRoomOverlayWindow
         var token = layer.Token = new object();
         layer.Active = true;
         layer.Path = path;
-        layer.Still = still;
+        layer.Slow = slow;
         layer.HoldMs = Math.Clamp(durationMs, 0, BackRoomFxPlan.HoldCapMs);
         layer.Alpha = Math.Clamp(alpha, 0, 1);
         Wake();   // first, so the layers are sized in this window's own DPI
         OnRescaled();
 
         if (_decoded is { } hit && string.Equals(hit.Path, path, StringComparison.OrdinalIgnoreCase)) { Attach(layer, hit.Frames, hit.Delay); return; }
-        if (still)
-        {
-            Task.Run(() =>
-            {
-                BitmapSource? first = null;
-                try { first = DecodeStill(path, DecodeLongSide); }
-                catch (Exception ex) { App.Logger?.Debug("[BackRoom] spiral still decode: {E}", ex.Message); }
-                OnUi(() =>
-                {
-                    if (!ReferenceEquals(layer.Token, token)) return;
-                    if (first != null) Attach(layer, new List<BitmapSource> { first }, TimeSpan.Zero); else End(layer);
-                });
-            });
-            return;
-        }
         if (!_decoding.Add(path)) return;   // the running decode attaches this layer too
         Task.Run(() =>
         {
@@ -162,7 +148,7 @@ internal sealed class BackRoomLoomSpiralOverlay : BackRoomOverlayWindow
     {
         layer.Frames = frames;
         layer.Delay = delay;
-        foreach (var img in layer.Images) PlayFrames(img, frames, delay, layer.Still);
+        foreach (var img in layer.Images) PlayFrames(img, frames, Pace(layer, delay));
         // The fades count from the first frame on screen, so a slow decode never eats the fade in.
         layer.StartedAt = Environment.TickCount64;
     }
@@ -185,7 +171,7 @@ internal sealed class BackRoomLoomSpiralOverlay : BackRoomOverlayWindow
                 var (cell, img) = BuildCell(c);
                 l.Root.Children.Add(cell);
                 l.Images.Add(img);
-                if (l.Active && l.Frames is { } f) PlayFrames(img, f, l.Delay, l.Still);
+                if (l.Active && l.Frames is { } f) PlayFrames(img, f, Pace(l, l.Delay));
             }
         }
     }
@@ -207,6 +193,9 @@ internal sealed class BackRoomLoomSpiralOverlay : BackRoomOverlayWindow
         Canvas.SetTop(cell, c.Y);
         return (cell, img);
     }
+
+    /// <summary>The frame delay a layer plays at: the weave's own, or twice it for the slow variant.</summary>
+    private static TimeSpan Pace(Layer l, TimeSpan delay) => l.Slow ? TimeSpan.FromMilliseconds(delay.TotalMilliseconds * 2) : delay;
 
     private void ReleaseCurrent()
     {

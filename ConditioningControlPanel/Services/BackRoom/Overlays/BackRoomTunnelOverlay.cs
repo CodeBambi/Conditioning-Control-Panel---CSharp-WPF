@@ -9,7 +9,7 @@ namespace ConditioningControlPanel.Services.BackRoom.Overlays;
 /// <summary>
 /// Hypno v3 <c>tunnel</c> (CONTRACT 10.13.B): tunnel vision, one radial vignette per screen, centred on that
 /// screen. The edges darken toward <c>rgba(6,3,12)</c> while the centre always stays clear. The wanted level
-/// comes from <c>fx-tunnel</c> (already gated, halved under Calm and throttled by the dispatcher);
+/// comes from <c>fx-tunnel</c> (always honoured, halved under Calm and throttled by the dispatcher);
 /// <see cref="TunnelModel"/> eases toward it and lets go by itself 1500 ms after the last update.
 /// </summary>
 internal sealed class BackRoomTunnelOverlay : BackRoomOverlayWindow
@@ -36,16 +36,15 @@ internal sealed class BackRoomTunnelOverlay : BackRoomOverlayWindow
 
     private readonly TunnelModel _model = new();
     private readonly List<Vignette> _screens = new();
-    private bool _still;
 
     private BackRoomTunnelOverlay() : base(frameMs: 33, zRank: 3) { }
 
-    public static void Set(double level, bool still) => OnUi(() =>
+    public static void Set(double level) => OnUi(() =>
     {
         // Opening a surface just to draw nothing is not worth a layered window.
         if (level <= 0 && (_instance == null || _instance._model.Idle)) return;
         if (!MayCreate(_instance)) return;
-        (_instance ??= new BackRoomTunnelOverlay()).Want(level, still);
+        (_instance ??= new BackRoomTunnelOverlay()).Want(level);
     });
 
     /// <summary>Gone at once (suspend, close, exit, that station's station-close).</summary>
@@ -57,9 +56,8 @@ internal sealed class BackRoomTunnelOverlay : BackRoomOverlayWindow
         w.Sleep();
     });
 
-    private void Want(double level, bool still)
+    private void Want(double level)
     {
-        _still = still;
         _model.Set(level, Environment.TickCount64);
         Wake();   // first, so the vignettes are laid out in this window's own DPI
         if (_screens.Count == 0) Layout();
@@ -93,7 +91,7 @@ internal sealed class BackRoomTunnelOverlay : BackRoomOverlayWindow
 
     protected override bool Frame(long nowMs, long dtMs)
     {
-        double level = _model.Step(nowMs, dtMs, _still);
+        double level = _model.Step(nowMs, dtMs);
         Paint(level);
         return !_model.Idle;
     }

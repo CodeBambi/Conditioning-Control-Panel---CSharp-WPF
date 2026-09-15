@@ -102,8 +102,10 @@ public sealed class FxStrobePacer
 
     public static int MinGapMs(FxChannel c) => c switch
     {
-        FxChannel.Subliminal => BackRoomFxPlan.WordGapMs,
-        FxChannel.Glitch => BackRoomFxPlan.GlitchWashMs,
+        // The floor is the fastest authored word rate (the nine-word burst, under 3 Hz); a single's
+        // own 500 ms gap is above it, so a stacked run never goes faster than a burst.
+        FxChannel.Subliminal => BackRoomFxPlan.BurstGapMs,
+        FxChannel.Glitch => BackRoomFxPlan.GlitchPulseMs,
         FxChannel.Wash => BackRoomFxPlan.WashGapMs,
         // Measured from the previous burst's last image. FlashService clears its busy flag as soon as
         // a burst is scheduled, so bursts can overlap unless the room spaces them itself.

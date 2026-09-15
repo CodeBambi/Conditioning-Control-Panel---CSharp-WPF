@@ -6,9 +6,17 @@ using ConditioningControlPanel.Models;
 namespace ConditioningControlPanel.Services.BackRoom;
 
 // THE BACK ROOM, effects half one: the pure recipe table (CONTRACT section 4). Nothing in this file
-// touches a service, a window or a clock, so every rule the host enforces on an fx id - intensity,
-// motion, toggles, symbol resolution - is decided here and pinned by BackRoomFxPlanTests. The
+// touches a service, a window or a clock, so every rule the host applies to an fx id - intensity,
+// reduced motion, symbol resolution - is decided here and pinned by BackRoomFxPlanTests. The
 // executor (BackRoomFx) only walks the plan this produces.
+//
+// The Back Room is an AUTHORED show (owner direction, 2026-09-15): every fx id always plays its full
+// recipe. The app's Flash / Subliminal / Spiral / Brain Drain toggles and the room's own switches no
+// longer gate anything here. Exactly two safety lines remain, and neither one ever skips a step:
+//   (a) reduced motion (MotionLevel below Full, which is also where the OS animation flag lands) caps
+//       flash onsets at 3 Hz and plays the slower spiral variant;
+//   (b) Calm intensity is "gentle": every opacity and strength is halved, every duration is kept.
+// Full keeps the counts and stretches the durations by 1.3.
 
 /// <summary>The primitives an fx id resolves into (CONTRACT section 4, primitive table).</summary>
 public enum FxPrim
@@ -21,9 +29,6 @@ public enum FxPrim
     SubBurst9,
     SpiralFull,
     BrainDrainMelt,
-    /// <summary>Brain drain without the drip: what <see cref="BrainDrainMelt"/> becomes at MotionLevel
-    /// Off or with the melt toggle off. Never authored in a recipe.</summary>
-    BrainDrain,
     GifFull,
     /// <summary>Hypno v3 (10.13.B): a soft colour wash over the virtual screen, optionally with a picture.</summary>
     Wash,
@@ -31,20 +36,20 @@ public enum FxPrim
     GifFrom,
     /// <summary>Hypno v3: a Loom-woven spiral GIF over the virtual screen. <see cref="SpiralFull"/> plays through it too.</summary>
     SpiralLoom,
-    /// <summary>Hypno v3: the app's BrainDrain blur without the drip, Full only.</summary>
+    /// <summary>Hypno v3: the app's BrainDrain blur without the drip.</summary>
     Haze,
 }
 
 /// <summary>
 /// One authored step. <paramref name="AtMs"/> is the offset from the fx start. <paramref name="Count"/>
-/// is the flash amount, the wash count or the word count. <paramref name="Level"/> is the fraction of
-/// the user's own opacity or strength (1 = as set, 0.5 = the Calm "half"). <paramref name="Still"/>
-/// is set by the motion rules, never authored. For the Hypno v3 primitives <paramref name="Level"/> is the
-/// resolved amount: the wash peak alpha, the gif-from dim factor, the spiral-loom alpha, the haze fraction;
-/// <paramref name="Look"/> carries the rest of the validated <c>args</c>.
+/// is the flash amount, the rain's GIF count, the glitch pulse count or the word count.
+/// <paramref name="Level"/> is the authored opacity (flash image, rain GIF, glitch pulse, word card,
+/// spiral alpha, gif-full, the melt's peak alpha, the wash peak), already halved under Calm. Two
+/// exceptions keep their older meaning: for <see cref="FxPrim.GifFrom"/> it is the backdrop dim factor
+/// and for <see cref="FxPrim.Haze"/> the fraction of the user's own BrainDrain intensity.
+/// <paramref name="Look"/> carries the rest of a Hypno v3 step's validated <c>args</c>.
 /// </summary>
-public sealed record FxStep(FxPrim Prim, int AtMs, int Count = 1, int DurationMs = 0, double Level = 1.0, bool Still = false,
-    FxLook? Look = null);
+public sealed record FxStep(FxPrim Prim, int AtMs, int Count = 1, int DurationMs = 0, double Level = 1.0, FxLook? Look = null);
 
 /// <summary>The validated <c>args</c> of one Hypno v3 step (CONTRACT 10.13.B, host validation column).</summary>
 /// <param name="From">Null = grow from the centre (a missing or bad rect).</param>
@@ -57,22 +62,14 @@ public sealed record FxRecipe(int HeroMs, IReadOnlyList<FxStep> Steps)
     public bool IsHero => HeroMs > 0;
 }
 
-/// <summary>The feature toggles a plan is gated by, read once per fire. <paramref name="Melt"/> is the room's own melt
-/// switch (<c>AppSettings.BackRoomMelt</c>) and <paramref name="Tunnel"/> its own tunnel vision switch
-/// (<c>AppSettings.BackRoomTunnel</c>), both on by default (CONTRACT 10.14).</summary>
-public sealed record FxGates(bool Flash, bool Subliminal, bool Spiral, bool BrainDrain, bool Melt, bool SpiralStill = true, bool Tunnel = true)
-{
-    public static readonly FxGates AllOn = new(true, true, true, true, true);
-    /// <summary>Every gate shut, the tunnel included (its record default is on): what a fire reads with no settings.</summary>
-    public static readonly FxGates AllOff = new(false, false, false, false, false, SpiralStill: false, Tunnel: false);
-}
-
 /// <summary>A resolved step with the media it will use (words for sub primitives, one GIF for gif-full and
 /// gif-from, an optional picture for a wash, the woven file for spiral-full and spiral-loom).</summary>
 public sealed record FxPlannedStep(FxStep Step, IReadOnlyList<string> Words, BackRoomGif? Gif, string? SpiralPath = null);
 
-/// <summary>What one fx id will do under the current settings, plus every skip for the ack.</summary>
-public sealed record FxPlan(string FxId, BackRoomFxIntensity Intensity, int HeroMs,
+/// <summary>What one fx id will do, plus every skip for the ack (only <c>unknown</c> comes out of the resolver:
+/// an id the host does not know, or media it does not have).</summary>
+/// <param name="Reduced">Motion below Full: flash onsets are capped at 3 Hz and spirals play their slower variant.</param>
+public sealed record FxPlan(string FxId, BackRoomFxIntensity Intensity, bool Reduced, int HeroMs,
     IReadOnlyList<FxPlannedStep> Steps, IReadOnlyList<BackRoomFxSkip> Skipped)
 {
     public bool IsHero => HeroMs > 0;
@@ -81,20 +78,57 @@ public sealed record FxPlan(string FxId, BackRoomFxIntensity Intensity, int Hero
 
 public static class BackRoomFxPlan
 {
-    /// <summary>Brake: no strobe over 6 Hz. Repeated words sit at least this far apart, which is
-    /// ~4.5 Hz, comfortably under the ceiling.</summary>
-    public const int WordGapMs = 220;
+    // ---- the word envelope: a word is VISIBLE, then FADES (never a blink) ----
+    /// <summary>A word card fades in over this.</summary>
+    public const int WordFadeInMs = 80;
+    /// <summary>...holds this long at its opacity...</summary>
+    public const int WordHoldMs = 400;
+    /// <summary>...and fades out over this.</summary>
+    public const int WordFadeOutMs = 350;
+    /// <summary>One word's whole envelope on screen.</summary>
+    public const int WordMs = WordFadeInMs + WordHoldMs + WordFadeOutMs;
+    /// <summary>Word onsets in a single and a pair (2 Hz).</summary>
+    public const int WordGapMs = 500;
+    /// <summary>Word onsets in a nine-word burst (under 3 Hz).</summary>
+    public const int BurstGapMs = 350;
 
-    /// <summary>One glitch wash: the overlay fades in over 500 ms, so a wash shorter than this never
-    /// reads as its own beat.</summary>
-    public const int GlitchWashMs = 800;
+    /// <summary>One fullscreen glitch pulse: this long on the overlay, at <see cref="GlitchOpacity"/>. Pulses in a
+    /// step come this far apart.</summary>
+    public const int GlitchPulseMs = 600;
+    public const double GlitchOpacity = 0.35;
 
-    /// <summary>The glitch wash opacity the contract names (<c>ChaosFlashOverlay.Show(ms, 0.3)</c>).</summary>
-    public const double GlitchOpacity = 0.3;
-
-    /// <summary>FlashService staggers a one-shot's images this far apart (FlashService, <c>i * 300</c>),
-    /// so a flash-burst of n images is n onsets spread over <c>(n - 1) * FlashImageGapMs</c>.</summary>
+    /// <summary>A flash-burst's images come this far apart (the burst passes the gap to FlashService), so a burst of
+    /// n images is n onsets spread over <c>(n - 1) * FlashImageGapMs</c>.</summary>
     public const int FlashImageGapMs = 300;
+    /// <summary><c>fx.gif_burst</c> and <c>fx.gif_storm</c>: this many flashes; a burst's <c>args.count</c> may ask for 1..<see cref="MaxBurstFlashes"/>.</summary>
+    public const int BurstFlashes = 5, MaxBurstFlashes = 8;
+    /// <summary>Safety line (a): under reduced motion flash onsets are capped at 3 Hz.</summary>
+    public const int ReducedFlashGapMs = 334;
+    /// <summary>The flash image size the room asks for: FlashService's ImageScale percent at which an image is
+    /// 40% of the monitor (medium, whatever the user's own slider says).</summary>
+    public const int FlashSize = 100;
+    /// <summary>Flash images play at full opacity, whatever the user's own slider says.</summary>
+    public const double FlashOpacity = 1.0;
+
+    /// <summary>The rain's per-GIF opacity.</summary>
+    public const double RainOpacity = 0.9;
+    /// <summary>Rain density: 14 GIFs over 3 s (<c>fx.gif_storm</c>); the jackpot's 4 s rain keeps the density.</summary>
+    public const int StormRainGifs = 14, StormRainMs = 3000, JackpotRainGifs = 19, JackpotRainMs = 4000;
+
+    /// <summary>Spiral alphas: the brief one (and the pair's tail) and the full one.</summary>
+    public const double SpiralBriefAlpha = 0.55, SpiralFullAlpha = 0.7;
+    public const int SpiralBriefMs = 1500, SpiralFullMs = 4000;
+
+    /// <summary>gif-full: the cascade's tail and the jackpot's picture.</summary>
+    public const double GifFullOpacity = 0.8;
+
+    /// <summary>The melt: its alpha ramps from 0 to this over the step, then lets go.</summary>
+    public const double MeltAlpha = 0.8;
+    public const int MeltMs = 6000;
+
+    /// <summary>The jackpot hero: the spiral alone for this long, then everything else at once.</summary>
+    public const int JackpotHeroMs = 4000;
+    public const int JackpotFlashes = 8, JackpotGlitches = 3;
 
     /// <summary>At most one symbol key per dealt item (4 words + 4 GIFs). A page sending hundreds of
     /// keys must not schedule hundreds of subliminals.</summary>
@@ -115,13 +149,30 @@ public static class BackRoomFxPlan
     public const double DefaultSpiralAlpha = 0.85;
     /// <summary>The haze is the user's BrainDrain blur at this fraction.</summary>
     public const double HazeLevel = 0.5;
-    /// <summary>Calm (the mockup's reduced motion): strengths x0.5, fullscreen durations x0.6, gif-from dim x0.8.</summary>
-    public const double CalmStrength = 0.5, CalmDuration = 0.6, CalmDim = 0.8;
+    /// <summary>Safety line (b), Calm is gentle: every opacity and strength x0.5, every duration kept.</summary>
+    public const double CalmStrength = 0.5;
+    /// <summary>Full: the same counts, every authored duration x1.3.</summary>
+    public const double FullDuration = 1.3;
     /// <summary>A page rect narrower or shorter than this reads as no rect.</summary>
     public const double MinFromPx = 8;
 
-    /// <summary>Length of a word run, used for the "then" in a recipe.</summary>
-    public static int WordsMs(int words) => Math.Max(0, words) * WordGapMs;
+    /// <summary>The onset gap of a word primitive.</summary>
+    public static int WordGap(FxPrim p) => p == FxPrim.SubBurst9 ? BurstGapMs : WordGapMs;
+
+    /// <summary>Length of a word run, used for the "then" in a recipe: the last onset plus the envelope.</summary>
+    public static int RunMs(int words, int gapMs) => words <= 0 ? 0 : (words - 1) * gapMs + WordMs;
+
+    /// <summary>How long one step keeps the screen busy from its onset (the dev rig's grab schedule).</summary>
+    public static int StepMs(FxStep s) => s.Prim switch
+    {
+        FxPrim.SubSingle or FxPrim.SubSeq or FxPrim.SubBurst9 => RunMs(Math.Max(1, s.Count), WordGap(s.Prim)),
+        FxPrim.GlitchBubbles => Math.Max(1, s.Count) * GlitchPulseMs,
+        FxPrim.FlashBurst => (Math.Max(1, s.Count) - 1) * FlashImageGapMs,
+        _ => s.DurationMs,
+    };
+
+    /// <summary>The whole recipe's length from its start.</summary>
+    public static int LengthMs(FxRecipe r) => r.Steps.Count == 0 ? 0 : r.Steps.Max(s => s.AtMs + StepMs(s));
 
     public static readonly IReadOnlyList<string> KnownIds = new[]
     {
@@ -140,7 +191,6 @@ public static class BackRoomFxPlan
         FxPrim.SubBurst9 => "sub-burst9",
         FxPrim.SpiralFull => "spiral-full",
         FxPrim.BrainDrainMelt => "brain-drain-melt",
-        FxPrim.BrainDrain => "brain-drain",
         FxPrim.GifFull => "gif-full",
         FxPrim.Wash => "wash",
         FxPrim.GifFrom => "gif-from",
@@ -149,188 +199,134 @@ public static class BackRoomFxPlan
         _ => "unknown",
     };
 
-    private static FxStep S(FxPrim p, int at, int count = 1, int ms = 0, double level = 1.0) => new(p, at, count, ms, level);
     private static FxRecipe R(params FxStep[] steps) => new(0, steps);
-    private static FxRecipe Hero(int heroMs, params FxStep[] steps) => new(heroMs, steps);
 
     /// <summary>
-    /// The table, verbatim from CONTRACT section 4. "+" in the contract is the same start, "then" is
-    /// after the previous piece. <paramref name="wordCount"/> only feeds <c>fx.sub_single</c> (one
-    /// word per subliminal showing). <paramref name="args"/> only feeds the Hypno v3 ids (10.13.B), which
-    /// the page always sends at Normal values: Calm is applied here, once.
+    /// The table (CONTRACT section 4, authored 2026-09-15). "+" is the same start, "then" is after the
+    /// previous piece. <paramref name="wordCount"/> only feeds <c>fx.sub_single</c> (one word per subliminal
+    /// showing). <paramref name="args"/>: <c>count</c> for <c>fx.gif_burst</c>, <c>wordsShown</c> for the three
+    /// word ids (the page drew the words itself: the word steps are left out, the rest keeps its authored
+    /// offset), and the Hypno v3 fields (10.13.B), which the page always sends at Normal values. One authored
+    /// row per id: Calm halves every <c>Level</c>, Full stretches every duration (word onsets, flash gaps and
+    /// glitch pulses are pacing, not durations, and never stretch; the Hypno v3 durations are the page's own
+    /// and are kept as sent).
     /// </summary>
     public static FxRecipe? Recipe(string fxId, BackRoomFxIntensity intensity, int wordCount = 1, BackRoomFxArgs? args = null)
     {
-        int b9 = WordsMs(9);
         var a = args ?? BackRoomFxArgs.None;
-        bool calm = intensity == BackRoomFxIntensity.Calm;
+        bool calm = intensity == BackRoomFxIntensity.Calm, full = intensity == BackRoomFxIntensity.Full;
+        int D(int ms) => full ? (int)Math.Round(ms * FullDuration) : ms;
+        double L(double level) => calm ? level * CalmStrength : level;
+        FxStep S(FxPrim p, int at, int count = 1, int ms = 0, double level = 1.0) => new(p, at, count, ms, L(level));
+
         switch (fxId)
         {
             case "fx.jackpot":
-                return intensity switch
+            {
+                int t = D(JackpotHeroMs);
+                return new FxRecipe(t, new[]
                 {
-                    BackRoomFxIntensity.Calm => Hero(2000,
-                        S(FxPrim.SpiralFull, 0, ms: 2000), S(FxPrim.GifFull, 0, ms: 1500), S(FxPrim.SubSingle, 0)),
-                    BackRoomFxIntensity.Full => Hero(4000,
-                        S(FxPrim.SpiralFull, 0, ms: 4000),
-                        S(FxPrim.FlashBurst, 4000, 8), S(FxPrim.GifRain, 4000, ms: 4000),
-                        S(FxPrim.GlitchBubbles, 4000, 3), S(FxPrim.SubBurst9, 4000, 9), S(FxPrim.SubBurst9, 4000 + b9, 9),
-                        S(FxPrim.GifFull, 4000, ms: 2000)),
-                    _ => Hero(2400,
-                        S(FxPrim.SpiralFull, 0, ms: 2400),
-                        S(FxPrim.FlashBurst, 2400, 4), S(FxPrim.GifRain, 2400, ms: 2000),
-                        S(FxPrim.GlitchBubbles, 2400, 1), S(FxPrim.SubBurst9, 2400, 9)),
-                };
+                    S(FxPrim.SpiralFull, 0, ms: t, level: SpiralFullAlpha),
+                    S(FxPrim.FlashBurst, t, JackpotFlashes, level: FlashOpacity),
+                    S(FxPrim.GifRain, t, JackpotRainGifs, D(JackpotRainMs), RainOpacity),
+                    S(FxPrim.GlitchBubbles, t, JackpotGlitches, level: GlitchOpacity),
+                    S(FxPrim.SubBurst9, t, 9),
+                    S(FxPrim.SubBurst9, t + 9 * BurstGapMs, 9),
+                    S(FxPrim.GifFull, t, ms: D(2000), level: GifFullOpacity),
+                });
+            }
             case "fx.gif_storm":
-                return intensity switch
-                {
-                    BackRoomFxIntensity.Calm => R(S(FxPrim.FlashBurst, 0, 1)),
-                    BackRoomFxIntensity.Full => R(S(FxPrim.FlashBurst, 0, 6), S(FxPrim.GifRain, 0, ms: 3500), S(FxPrim.GlitchBubbles, 0, 2)),
-                    _ => R(S(FxPrim.FlashBurst, 0, 4), S(FxPrim.GifRain, 0, ms: 2000), S(FxPrim.GlitchBubbles, 0, 1)),
-                };
+                return R(S(FxPrim.FlashBurst, 0, BurstFlashes, level: FlashOpacity),
+                    S(FxPrim.GifRain, 0, StormRainGifs, D(StormRainMs), RainOpacity),
+                    S(FxPrim.GlitchBubbles, 0, 1, level: GlitchOpacity));
             case "fx.sub_cascade":
-                return intensity switch
-                {
-                    BackRoomFxIntensity.Calm => R(S(FxPrim.SubSeq, 0, 2), S(FxPrim.GifFull, 0, ms: 1500)),
-                    BackRoomFxIntensity.Full => R(S(FxPrim.SubBurst9, 0, 9), S(FxPrim.GifFull, b9, ms: 2500)),
-                    _ => R(S(FxPrim.SubBurst9, 0, 9), S(FxPrim.GifFull, b9, ms: 1500)),
-                };
+            {
+                var tail = S(FxPrim.GifFull, RunMs(9, BurstGapMs), ms: D(1500), level: GifFullOpacity);
+                return a.WordsShown ? R(tail) : R(S(FxPrim.SubBurst9, 0, 9), tail);
+            }
             case "fx.spiral_full":
-                return intensity switch
-                {
-                    BackRoomFxIntensity.Calm => R(S(FxPrim.SpiralFull, 0, ms: 2500, level: 0.5)),
-                    BackRoomFxIntensity.Full => R(S(FxPrim.SpiralFull, 0, ms: 4000)),
-                    _ => R(S(FxPrim.SpiralFull, 0, ms: 2500)),
-                };
+                return R(S(FxPrim.SpiralFull, 0, ms: D(SpiralFullMs), level: SpiralFullAlpha));
             case "fx.spiral_brief":
-                return intensity switch
-                {
-                    BackRoomFxIntensity.Calm => R(S(FxPrim.SpiralFull, 0, ms: 1200, level: 0.5)),
-                    BackRoomFxIntensity.Full => R(S(FxPrim.SpiralFull, 0, ms: 2000)),
-                    _ => R(S(FxPrim.SpiralFull, 0, ms: 1200)),
-                };
+                return R(S(FxPrim.SpiralFull, 0, ms: D(SpiralBriefMs), level: SpiralBriefAlpha));
             case "fx.gif_burst":
-                return R(S(FxPrim.FlashBurst, 0, intensity switch
-                {
-                    BackRoomFxIntensity.Calm => 1,
-                    BackRoomFxIntensity.Full => 3,
-                    _ => 2,
-                }));
+                return R(S(FxPrim.FlashBurst, 0, Math.Clamp(a.Count ?? BurstFlashes, 1, MaxBurstFlashes), level: FlashOpacity));
             case "fx.sub_pair":
-                return intensity switch
-                {
-                    BackRoomFxIntensity.Calm => R(S(FxPrim.SubSeq, 0, 2)),
-                    BackRoomFxIntensity.Full => R(S(FxPrim.SubSeq, 0, 3), S(FxPrim.SpiralFull, WordsMs(3), ms: 2000)),
-                    _ => R(S(FxPrim.SubSeq, 0, 2), S(FxPrim.SpiralFull, WordsMs(2), ms: 1200)),
-                };
+            {
+                var tail = S(FxPrim.SpiralFull, RunMs(2, WordGapMs), ms: D(SpiralBriefMs), level: SpiralBriefAlpha);
+                return a.WordsShown ? R(tail) : R(S(FxPrim.SubSeq, 0, 2), tail);
+            }
             case "fx.sub_single":
                 // "sub-single per word", the same at every intensity. Each word is its own step so
-                // the word gap is visible in the plan (and in the 6 Hz test).
+                // the word gap is visible in the plan (and in the 6 Hz test). Nothing at all when the
+                // page drew the words itself.
+                if (a.WordsShown) return R();
                 return R(Enumerable.Range(0, Math.Max(1, wordCount))
                     .Select(i => S(FxPrim.SubSingle, i * WordGapMs)).ToArray());
             case "fx.melt":
-                return intensity switch
-                {
-                    BackRoomFxIntensity.Calm => R(S(FxPrim.BrainDrainMelt, 0, ms: 4000, level: 0.5)),
-                    BackRoomFxIntensity.Full => R(S(FxPrim.BrainDrainMelt, 0, ms: 9000)),
-                    _ => R(S(FxPrim.BrainDrainMelt, 0, ms: 6000)),
-                };
+                return R(S(FxPrim.BrainDrainMelt, 0, ms: D(MeltMs), level: MeltAlpha));
             case "fx.wash":
             {
                 double strength = Math.Clamp(a.Strength ?? DefaultWashStrength, 0.1, 1.0);
-                return R(new FxStep(FxPrim.Wash, 0, DurationMs: WashMs, Level: WashPeak * strength * (calm ? CalmStrength : 1),
+                return R(new FxStep(FxPrim.Wash, 0, DurationMs: WashMs, Level: L(WashPeak * strength),
                     Look: new FxLook(FxColor.Safe(a.Color))));
             }
             case "fx.gif_from":
             {
                 int ms = Math.Clamp(a.Ms ?? DefaultGifFromMs, MinGifFromMs, MaxGifFromMs);
-                return R(new FxStep(FxPrim.GifFrom, 0, DurationMs: calm ? Calm(ms) : ms, Level: calm ? CalmDim : 1,
+                return R(new FxStep(FxPrim.GifFrom, 0, DurationMs: ms, Level: L(1.0),
                     Look: new FxLook(FxColor.Safe(null), a.From, Math.Clamp(a.Scale ?? 1.0, 0.3, 1.0))));
             }
             case "fx.loom_spiral":
             {
                 int ms = a.Hold ? HoldCapMs : Math.Clamp(a.Ms ?? DefaultSpiralLoomMs, MinHoldableMs, HoldCapMs);
-                if (calm && !a.Hold) ms = Calm(ms);
-                double alpha = Math.Clamp(a.Alpha ?? DefaultSpiralAlpha, 0.3, 0.9) * (calm ? CalmStrength : 1);
+                double alpha = L(Math.Clamp(a.Alpha ?? DefaultSpiralAlpha, 0.3, 0.9));
                 return R(new FxStep(FxPrim.SpiralLoom, 0, DurationMs: ms, Level: alpha,
                     Look: new FxLook(FxColor.Safe(null), Preset: BackRoomSpiralSource.Preset(a.Preset), Hold: a.Hold)));
             }
             case "fx.haze":
-                // Full only: the page-wide blur is the costliest thing in the mockup (10.13 law 7).
-                if (intensity != BackRoomFxIntensity.Full) return R();
                 return R(new FxStep(FxPrim.Haze, 0,
                     DurationMs: a.Hold ? HoldCapMs : Math.Clamp(a.Ms ?? DefaultSpiralLoomMs, MinHoldableMs, HoldCapMs),
-                    Level: HazeLevel, Look: new FxLook(FxColor.Safe(null), Hold: a.Hold)));
+                    Level: L(HazeLevel), Look: new FxLook(FxColor.Safe(null), Hold: a.Hold)));
             default:
                 return null;
         }
     }
 
-    private static int Calm(int ms) => (int)Math.Round(ms * CalmDuration);
-
-    /// <summary>Calm also applies whenever MotionLevel is not Full, whatever the setting.</summary>
-    public static BackRoomFxIntensity EffectiveIntensity(BackRoomFxIntensity setting, MotionLevel motion)
-        => motion == MotionLevel.Full ? setting : BackRoomFxIntensity.Calm;
-
     /// <summary>
-    /// Resolve <paramref name="fxId"/> into a plan. Order of the rules: intensity (Calm forced below
-    /// Full motion), then the motion rules per primitive, then the feature toggles. Every primitive
-    /// that does not play is reported once, with the first rule that removed it.
+    /// Resolve <paramref name="fxId"/> into a plan. Nothing is ever skipped for a setting: the only skips are
+    /// <c>unknown</c> (an id this host does not know, a word primitive with no dealt words, a picture with no
+    /// dealt GIF, a spiral with no weave). Motion below Full only marks the plan <see cref="FxPlan.Reduced"/>.
     /// </summary>
     /// <param name="spiralSource">Preset -> the woven spiral file (<see cref="BackRoomSpiralSource"/>), null
     /// when none exists. Null resolver = no weave anywhere, so spiral-full and spiral-loom skip <c>unknown</c>.</param>
-    public static FxPlan Resolve(string fxId, BackRoomFxIntensity setting, MotionLevel motion, FxGates gates,
+    public static FxPlan Resolve(string fxId, BackRoomFxIntensity intensity, MotionLevel motion,
         IReadOnlyList<string>? symbolKeys, BackRoomMediaDeal? deal, Random rng,
         BackRoomFxArgs? args = null, Func<string, string?>? spiralSource = null)
     {
-        var intensity = EffectiveIntensity(setting, motion);
+        bool reduced = motion != MotionLevel.Full;
         var media = ResolveSymbols(symbolKeys, deal, rng);
         var recipe = Recipe(fxId, intensity, media.Words.Count, args);
         if (recipe == null)
-            return new FxPlan(fxId, intensity, 0, Array.Empty<FxPlannedStep>(),
+            return new FxPlan(fxId, intensity, reduced, 0, Array.Empty<FxPlannedStep>(),
                 new[] { new BackRoomFxSkip(fxId, BackRoomFxSkipReason.Unknown) });
 
         var skipped = new List<BackRoomFxSkip>();
-        if (fxId == "fx.haze" && recipe.Steps.Count == 0)
-            skipped.Add(new BackRoomFxSkip(WireName(FxPrim.Haze), BackRoomFxSkipReason.Calm));
-        else if (intensity == BackRoomFxIntensity.Calm)
-        {
-            // Report what Calm left out, measured against the design-doc (Normal) recipe.
-            var calmPrims = recipe.Steps.Select(s => s.Prim).ToHashSet();
-            foreach (var p in Recipe(fxId, BackRoomFxIntensity.Normal, media.Words.Count)!.Steps
-                         .Select(s => s.Prim).Distinct().Where(p => !calmPrims.Contains(p)))
-                skipped.Add(new BackRoomFxSkip(WireName(p), BackRoomFxSkipReason.Calm));
-        }
-
         var steps = new List<FxPlannedStep>();
         int wordCursor = 0;
-        foreach (var authored in recipe.Steps)
+        foreach (var step in recipe.Steps)
         {
-            var step = ApplyMotion(authored, motion, gates, out var motionSkip);
-            if (step == null) { AddOnce(skipped, authored.Prim, motionSkip); continue; }
-
-            // 10.14: a melt is the room's melt switch alone, the still blur it becomes at Off included.
-            if (authored.Prim == FxPrim.BrainDrainMelt ? !gates.Melt : !ToggleAllows(step.Prim, gates))
-            {
-                AddOnce(skipped, authored.Prim, BackRoomFxSkipReason.Toggle);
-                continue;
-            }
-            // The drip went, the blur stays (MotionLevel Off): report the melt itself, with the rule that took it.
-            if (authored.Prim == FxPrim.BrainDrainMelt && step.Prim == FxPrim.BrainDrain)
-                AddOnce(skipped, FxPrim.BrainDrainMelt, BackRoomFxSkipReason.Motion);
-
             IReadOnlyList<string> words = Array.Empty<string>();
             BackRoomGif? gif = null;
             string? spiral = null;
             if (IsWordPrim(step.Prim))
             {
-                if (media.AllWords.Count == 0) { AddOnce(skipped, step.Prim, BackRoomFxSkipReason.Unknown); continue; }
+                if (media.AllWords.Count == 0) { AddOnce(skipped, step.Prim); continue; }
                 words = TakeWords(media, step.Prim == FxPrim.SubSingle ? 1 : step.Count, ref wordCursor);
             }
             else if (step.Prim is FxPrim.GifFull or FxPrim.GifFrom)
             {
                 gif = media.Gifs.Count > 0 ? media.Gifs[0] : Pick(deal?.Gifs, rng);
-                if (gif == null) { AddOnce(skipped, step.Prim, BackRoomFxSkipReason.Unknown); continue; }
+                if (gif == null) { AddOnce(skipped, step.Prim); continue; }
             }
             else if (step.Prim == FxPrim.Wash)
             {
@@ -340,62 +336,20 @@ public static class BackRoomFxPlan
             else if (step.Prim is FxPrim.SpiralFull or FxPrim.SpiralLoom)
             {
                 spiral = spiralSource?.Invoke(step.Look?.Preset ?? BackRoomSpiralSource.Screen);
-                if (spiral == null) { AddOnce(skipped, step.Prim, BackRoomFxSkipReason.Unknown); continue; }
+                if (spiral == null) { AddOnce(skipped, step.Prim); continue; }
             }
             steps.Add(new FxPlannedStep(step, words, gif, spiral));
         }
 
-        return new FxPlan(fxId, intensity, recipe.HeroMs, steps, skipped);
+        return new FxPlan(fxId, intensity, reduced, recipe.HeroMs, steps, skipped);
     }
-
-    /// <summary>The per-primitive motion rules. Null means the primitive is dropped at this level.</summary>
-    internal static FxStep? ApplyMotion(FxStep s, MotionLevel motion, FxGates gates, out BackRoomFxSkipReason why)
-    {
-        why = BackRoomFxSkipReason.Motion;
-        bool off = motion == MotionLevel.Off;
-        switch (s.Prim)
-        {
-            case FxPrim.FlashBurst:
-                return off ? s with { Count = 1 } : s;
-            case FxPrim.GifRain:
-                return motion == MotionLevel.Full ? s : null;
-            case FxPrim.GlitchBubbles:
-                return off ? null : s;
-            case FxPrim.SubSeq:
-            case FxPrim.SubBurst9:
-                // Reduced -> sub-seq 2. Off is at least as strict as Reduced.
-                return motion == MotionLevel.Full ? s : s with { Prim = FxPrim.SubSeq, Count = Math.Min(2, s.Count) };
-            case FxPrim.SpiralFull:
-                if (!off) return s;
-                return gates.SpiralStill ? s with { Still = true } : null;
-            case FxPrim.BrainDrainMelt:
-                return off ? s with { Prim = FxPrim.BrainDrain } : s;
-            case FxPrim.GifFull:
-            case FxPrim.GifFrom:     // Off: no growth, full size with a 300 ms fade, still frame
-            case FxPrim.SpiralLoom:  // Off: the woven GIF's first frame
-                return off ? s with { Still = true } : s;
-            default:
-                // Wash (not motion) and Haze (already the no-drip blur) play at every level.
-                return s;
-        }
-    }
-
-    internal static bool ToggleAllows(FxPrim p, FxGates g) => p switch
-    {
-        FxPrim.FlashBurst or FxPrim.GifRain or FxPrim.GlitchBubbles or FxPrim.GifFull or FxPrim.Wash or FxPrim.GifFrom => g.Flash,
-        FxPrim.SubSingle or FxPrim.SubSeq or FxPrim.SubBurst9 => g.Subliminal,
-        FxPrim.SpiralFull or FxPrim.SpiralLoom => g.Spiral,
-        FxPrim.BrainDrainMelt => g.Melt,
-        FxPrim.BrainDrain or FxPrim.Haze => g.BrainDrain,
-        _ => false,
-    };
 
     private static bool IsWordPrim(FxPrim p) => p is FxPrim.SubSingle or FxPrim.SubSeq or FxPrim.SubBurst9;
 
-    private static void AddOnce(List<BackRoomFxSkip> list, FxPrim p, BackRoomFxSkipReason why)
+    private static void AddOnce(List<BackRoomFxSkip> list, FxPrim p)
     {
         var name = WireName(p);
-        if (!list.Any(x => x.Prim == name)) list.Add(new BackRoomFxSkip(name, why));
+        if (!list.Any(x => x.Prim == name)) list.Add(new BackRoomFxSkip(name, BackRoomFxSkipReason.Unknown));
     }
 
     // ---- symbols -------------------------------------------------------------------------------

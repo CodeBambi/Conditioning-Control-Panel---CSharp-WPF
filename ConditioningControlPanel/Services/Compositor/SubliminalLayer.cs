@@ -18,7 +18,8 @@ namespace ConditioningControlPanel.Services.Compositor;
 /// </summary>
 public sealed class SubliminalLayer : BaseLayer
 {
-    /// <summary>WPF AnimateSubliminal fade-in/out duration (50ms each side of the hold).</summary>
+    /// <summary>WPF AnimateSubliminal fade-in/out duration (50ms each side of the hold), the default a Flash
+    /// with no fades of its own gets.</summary>
     private const double FadeMs = 50;
     /// <summary>Arial Bold 120 DIP (CreateTextBlock parity); multiplied by per-screen scale.</summary>
     private const float FontDip = 120f;
@@ -78,13 +79,16 @@ public sealed class SubliminalLayer : BaseLayer
         /// derived from the metrics of every face in the line, not just the first.</summary>
         public float[] BaselineOffsetPx = Array.Empty<float>();
 
-        /// <summary>0..1 fade envelope: 50ms ramp up, hold, 50ms ramp down (WPF storyboard parity).</summary>
+        /// <summary>The card's own fades (WPF storyboard parity: 50 ms each side unless the Flash named its own).</summary>
+        public double FadeInMs = FadeMs, FadeOutMs = FadeMs;
+
+        /// <summary>0..1 fade envelope: ramp up over <see cref="FadeInMs"/>, hold, ramp down over <see cref="FadeOutMs"/>.</summary>
         public double Envelope()
         {
             var elapsedMs = (Total - Remaining).TotalMilliseconds;
             var remainingMs = Remaining.TotalMilliseconds;
-            if (elapsedMs < FadeMs) return Math.Clamp(elapsedMs / FadeMs, 0.0, 1.0);
-            if (remainingMs < FadeMs) return Math.Clamp(remainingMs / FadeMs, 0.0, 1.0);
+            if (elapsedMs < FadeInMs) return Math.Clamp(elapsedMs / FadeInMs, 0.0, 1.0);
+            if (remainingMs < FadeOutMs) return Math.Clamp(remainingMs / FadeOutMs, 0.0, 1.0);
             return 1.0;
         }
     }
@@ -120,11 +124,14 @@ public sealed class SubliminalLayer : BaseLayer
     /// <paramref name="targetOpacity"/> scales the whole card (background AND text), 0..1 -
     /// exactly like the legacy whole-window Opacity animation. Safe from any thread.
     /// </summary>
+    /// <param name="fadeInMs">The card's own fades; the WPF default is 50 ms each side of the hold.</param>
     public void Flash(IReadOnlyList<Placement> placements, string text,
         SKColor bg, SKColor textColor, SKColor border,
-        bool bgTransparent, double targetOpacity, int holdMs)
+        bool bgTransparent, double targetOpacity, int holdMs, double fadeInMs = FadeMs, double fadeOutMs = FadeMs)
     {
         if (string.IsNullOrWhiteSpace(text) || placements.Count == 0) return;
+        fadeInMs = Math.Max(1, fadeInMs);
+        fadeOutMs = Math.Max(1, fadeOutMs);
 
         var runs = GlyphFallback.Split(text, BoldArial, SKFontStyle.Bold);
         if (runs.Length == 0) return;
@@ -139,7 +146,9 @@ public sealed class SubliminalLayer : BaseLayer
             Border = border,
             BgTransparent = bgTransparent,
             TargetOpacity = Math.Clamp(targetOpacity, 0.0, 1.0),
-            Total = TimeSpan.FromMilliseconds(holdMs + 2 * FadeMs),
+            FadeInMs = fadeInMs,
+            FadeOutMs = fadeOutMs,
+            Total = TimeSpan.FromMilliseconds(holdMs + fadeInMs + fadeOutMs),
             Placements = new Placement[placements.Count],
             TextWidthPx = new float[placements.Count],
             TextHeightPx = new float[placements.Count],

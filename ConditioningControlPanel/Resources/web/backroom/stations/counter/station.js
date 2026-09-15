@@ -10,7 +10,7 @@
 
 import { createCounter, LEX } from './cards.js';
 import { demoKind, demoFrame } from './demo.js';
-import { audioUrl, altAudioUrl } from '../../../dtrh/shared/audioSrc.js';
+import { kit } from '../../shared/sound/kit.js';
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
 let cssLink = null;
@@ -33,27 +33,15 @@ function h(tag, cls, text) {
   return e;
 }
 
-/** One chime (Brake 1), the race's own clip. The context is made inside the Confirm press. */
-function createChime() {
-  let ac = null, buf = null, off = false;
-  const grab = (url) => fetch(url).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.arrayBuffer(); })
-    .then((raw) => new Promise((res, rej) => ac.decodeAudioData(raw, res, rej)));
+/** THE BUY's chime (Brake 1: one small earned moment), on the room's kit: three chips into the tray and the small
+ *  win's two notes, synthesised, no clip. The kit is armed inside the Confirm press. */
+function createChime(k = kit) {
+  let off = false;
   return {
-    arm() {
-      if (ac || off) return;
-      const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
-      if (!AC || typeof fetch !== 'function') return;
-      try { ac = new AC(); } catch (e) { return; }
-      const first = audioUrl(new URL('../../../dtrh/assets/bubbles/sfx/chime1.mp3', import.meta.url).href);
-      grab(first).catch(() => { const alt = altAudioUrl(first); if (!alt) throw new Error('no alt'); return grab(alt); })
-        .then((b) => { buf = b; }).catch(() => { /* a quiet counter is still a counter */ });
-    },
-    play() {
-      if (!ac || !buf || off || ac.state === 'closed') return;
-      try { const s = ac.createBufferSource(), g = ac.createGain(); s.buffer = buf; g.gain.value = 0.34; s.connect(g); g.connect(ac.destination); s.start(); } catch (e) { /* noop */ }
-    },
-    suspend(on) { off = !!on; if (ac && ac.state !== 'closed') (on ? ac.suspend() : ac.resume()).catch(() => {}); },
-    dispose() { if (ac) ac.close().catch(() => {}); ac = null; buf = null; },
+    arm() { if (!off) k.arm(); },
+    play() { if (off) return; k.play('chips', { n: 3, gap: 0.05 }); k.play('win', { tier: 'small', at: 0.12 }); },
+    suspend(on) { off = !!on; },
+    dispose() { off = true; },
   };
 }
 
