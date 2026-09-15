@@ -86,18 +86,42 @@ function paintStar(c) {
   g.closePath(); g.fill();
 }
 
-/** One slice's printed face: the pay as a number (Brake 9), the label under it; radial text on a narrow slice. */
+/** Enamel prize badges: large values, stacked names, radial values on slim wedges. */
 function sliceLabel(s, w, h, text) {
-  const c = document.createElement('canvas'); c.height = 512; c.width = Math.max(48, Math.round((512 * w) / h));
-  const g = c.getContext('2d'), narrow = c.width < 150;
-  g.fillStyle = '#fff3e8'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round'; g.strokeStyle = '#3a1d45';
-  const both = (txt, x, y, max) => { g.lineWidth = Math.max(4, parseInt(g.font.split(' ')[1], 10) * 0.09); g.strokeText(txt, x, y, max); g.fillText(txt, x, y, max); };
+  const c = document.createElement('canvas'); c.height = 768; c.width = Math.max(64, Math.round((768 * w) / h));
+  const g = c.getContext('2d'), narrow = w < 0.19;
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+  const ink = '#482039', cream = '#fff3df';
+  const print = (value, x, y, size, max) => {
+    g.font = `900 ${size}px Georgia, serif`; g.strokeStyle = cream; g.lineWidth = size * .09;
+    g.strokeText(value, x, y, max); g.fillStyle = ink; g.fillText(value, x, y, max);
+  };
   if (narrow) {
-    g.translate(c.width / 2, 256); g.rotate(-Math.PI / 2);
-    g.font = `700 ${Math.round(c.width * 0.62)}px Segoe UI, Arial, sans-serif`; both(`${text.big} ${text.small}`, 0, 0, 480);
+    g.translate(c.width / 2, c.height / 2); g.rotate(-Math.PI / 2);
+    print(text.big, 0, 0, Math.round(c.width * .88), 690);
   } else {
-    g.font = `800 ${Math.min(150, Math.round(c.width * 0.48))}px Segoe UI, Arial, sans-serif`; both(text.big, c.width / 2, 150, c.width * 0.92);
-    g.font = `600 ${Math.min(70, Math.round(c.width * 0.2))}px Segoe UI, Arial, sans-serif`; both(text.small, c.width / 2, 300, c.width * 0.95);
+    // A foil medallion with four tiny rays gives the number its own silhouette.
+    const cx = c.width / 2, cy = 218, radius = Math.min(c.width * .45, 260);
+    g.fillStyle = cream; g.strokeStyle = '#c4934e'; g.lineWidth = 9;
+    g.beginPath(); g.ellipse(cx, cy, radius, 220, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+    if (s.kind === 'decoration') {
+      const unit = radius / 100;
+      g.save(); g.translate(cx, cy); g.scale(unit, unit);
+      g.fillStyle = '#b63670'; g.fillRect(-58, -29, 116, 84);
+      g.fillStyle = '#e0b35d'; g.fillRect(-10, -35, 20, 94); g.fillRect(-64, -39, 128, 20);
+      g.strokeStyle = ink; g.lineWidth = 6; g.strokeRect(-58, -19, 116, 74);
+      g.beginPath(); g.ellipse(-23, -54, 26, 14, .4, 0, Math.PI * 2); g.ellipse(23, -54, 26, 14, -.4, 0, Math.PI * 2); g.stroke();
+      g.restore();
+    } else print(text.big, cx, cy, Math.min(300, c.width * .76), radius * 1.75);
+    const words = text.small.split(/\s+/), lines = [];
+    for (const word of words) {
+      const last = lines.length - 1;
+      if (last >= 0 && (lines[last] + ' ' + word).length <= 13) lines[last] += ' ' + word;
+      else lines.push(word);
+    }
+    const size = Math.min(134, c.width * .3);
+    g.font = `800 ${size}px Segoe UI, Arial, sans-serif`; g.fillStyle = ink;
+    lines.slice(0, 3).forEach((line, i) => g.fillText(line, cx, 510 + i * 122, c.width * .94));
   }
   return canvasTexture(c);
 }
@@ -311,10 +335,10 @@ export async function createScene(o) {
         bevelSize: Math.min(0.002, (0.185 * (s.span - 2 * gap)) / 4), bevelThickness: 0.002 }), mat);
       mesh.position.z = 0.076; mesh.userData = { index: s.index, h: 0, base: color, mid: s.mid };
       flat.push({ pts: sectorPoints(s.start + gap, s.end - gap, 0.185, 0.711), color });
-      const w = Math.min(0.17, s.span * 0.5 * 0.82), h = 0.3;
+      const w = Math.min(0.40, s.span * 0.43 * 0.86), h = 0.37;
       const label = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: sliceLabel(s, w, h, o.labels(s)), transparent: true, depthWrite: false }));
-      label.position.set(Math.sin(s.mid) * 0.5, Math.cos(s.mid) * 0.5, 0.1); label.rotation.z = -s.mid;
-      label.userData = { a: s.mid, r: 0.5, spin: -s.mid, index: s.index };
+      label.position.set(Math.sin(s.mid) * 0.48, Math.cos(s.mid) * 0.48, 0.1); label.rotation.z = -s.mid;
+      label.userData = { a: s.mid, r: 0.48, spin: -s.mid, index: s.index };
       const prev = layout[(s.index + layout.length - 1) % layout.length], pr = Math.min(0.01, 0.738 * Math.min(s.span, prev.span) * 0.3);
       const peg = new THREE.Mesh(new THREE.CylinderGeometry(pr, pr, 0.038, 12), new THREE.MeshStandardMaterial({ color: 0xd7af6e, metalness: 0.65, roughness: 0.3 }));
       peg.rotation.x = Math.PI / 2; peg.position.set(Math.sin(s.start) * 0.738, Math.cos(s.start) * 0.738, 0.094);
