@@ -150,7 +150,13 @@ the station's DOM keeps only the controls, the room camera seats the player over
   (`roulette_mat_prints`, one draw call) prints bold outlined digits and the outside labels onto the cells at their
   own proportions; leaving restores the glyphs. The wheel's own glyphs are batched by `room/roulette-surfaces.js`,
   grown 1.9x inside their bands with a faint emissive, on every view of the room.
-- **Camera.** `room/seat-camera.js` fits the whole table on a desktop and never moves it. A phone (width <= 800 or
+- **Camera.** `room/seat-camera.js` seats a mouse viewport (width > 800 and height > 500) at the table and never
+  moves it: THE PC SEAT leans in (`PC_TILT` 1.35, about 53 degrees, from the old top-down 3) and solves the distance
+  from two edges instead of fitting the table's box - the mat's near edge sits on the floor of the controls' band and
+  the wheel's far rim just under its ceiling, so the board reads across the bottom of the screen and the wheel, the
+  flick hint and the room fill the rest. On 1920x1080 that is 2.22 away at [3.27, 2.77, 3.11] (was 2.83 at
+  [3.70, 3.67, 3.11]) and the board covers 47% of the width, up from 29%; every bet cell roughly doubles in area, so
+  nothing gets harder to hit. A phone (width <= 800 or
   height <= 500) frames the mat while bets are open (`mat.setFrame('mat')`, the wheel above it, its offset side
   cropped) and eases out to the whole table for 700 ms on Spin (`'table'`, every pocket in view), back to the mat
   once bets reopen; `room/scene.js` reads `userData.frame` on `roulette_runtime_mat` and moves only when the pose
