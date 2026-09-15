@@ -539,9 +539,19 @@ namespace ConditioningControlPanel.Views.Tabs
             // Neither is a wall tile either, and neither drives a service directly (the 30s
             // SchedulerTimer_Tick and the session ramp read the flags), so the honest quick-toggle
             // is the panel's own enable box - it writes the flag and Saves in one place.
+            // Scheduler is OFF-ONLY on right-click: switching it on starts the engine within 30s
+            // (the default window is 00:00-22:00, every day) and every later launch auto-starts
+            // and hides to the tray. A stray right-click beside Haptics did exactly that to the
+            // owner (Sep 15 2026), so turning it ON opens the panel and leaves the box to the user.
             Add("scheduler", "📅", null, "Scheduler", "section_scheduler", HostScheduler, PanelScheduler, "SchedulerRamp",
                 () => App.Settings?.Current?.SchedulerEnabled,
-                toggle: () => FlipMasterCheckBox(PanelScheduler?.Inner.ChkEnabled));
+                toggle: () =>
+                {
+                    if (App.Settings?.Current?.SchedulerEnabled == true)
+                        FlipMasterCheckBox(PanelScheduler?.Inner.ChkEnabled);
+                    else
+                        SelectEntry("scheduler", announce: true, animate: true);
+                });
             Add("ramp", "📈", null, "Intensity Ramp", "section_intensity_ramp", HostRamp, PanelRamp, "SchedulerRamp",
                 () => App.Settings?.Current?.IntensityRampEnabled,
                 toggle: () => FlipMasterCheckBox(PanelRamp?.Inner.ChkEnabled));
@@ -1159,7 +1169,12 @@ namespace ConditioningControlPanel.Views.Tabs
                 try
                 {
                     RefreshDots();
-                    if (SafeDotState(entry) != before) PingDot(entry.DotShape);
+                    var after = SafeDotState(entry);
+                    if (after != before)
+                    {
+                        PingDot(entry.DotShape);
+                        App.Logger?.Information("[Studio] rack right-click toggled {Key}: {Before} -> {After}", key, before, after);
+                    }
                 }
                 catch (Exception ex) { App.Logger?.Debug("StudioTabView rack toggle repaint: {E}", ex.Message); }
             }));
