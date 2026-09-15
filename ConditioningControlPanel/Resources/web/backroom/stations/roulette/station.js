@@ -20,8 +20,13 @@
  *             stripped for Calm in feel.js (pure); gates no longer drop a step
  *             (owner 2026-09-15)
  *
- * A spin: chips on the mat (1 to 3 SP), 1 to 5 spins, Spin. The bowl answers on
- * the press (Law VIII), the server settles every spin at once, and the page
+ * A spin: chips on the mat (1 to 3 SP), 1 to 5 spins, then THE THROW - a flick
+ * across the wheel itself (flick.js). While the throw is armed a curved arrow
+ * breathes around the rim; the Spin button stays as the keyboard's fallback.
+ * The flick's direction and strength set the rotor's starting speed and nothing
+ * else (Law I): the pocket is the server's, planRun turns the whole ball path
+ * onto it, and the same request the button sent goes out on the lift. The bowl
+ * answers on the throw (Law VIII), the server settles every spin at once, and the page
  * plays them one at a time, about 8 s each. Each spin plays roulette.run (plus
  * roulette.wake on a Spiral Wake) at its launch, and exactly one
  * roulette.land.* on the frame the ball drops into the pocket. The SP chip owes
@@ -42,6 +47,7 @@ import { createCallout, FX_DELAY_MS } from '../../shared/hypno/callout.js';
 import { kit as sound } from '../../shared/sound/kit.js';
 import { MAX_CHIPS, MAX_SPINS, addChip, removeChip, chipsOf, chipTotal, checkLayout, adoptTape, owed, shownSp, cursorOf, readOutcome, classify, spinBody, mintId, ROWS } from './tape.js';
 import { FEEL, planRun, seedFor, landMoment, nextLaunchAt, landBeat, nearMisses, fxPlan, fxSymbols, createFxCooldowns, calloutFor } from './feel.js';
+import { flickStart, flickMove, flickRelease } from './flick.js';
 import { createBowl } from './bowl.js';
 import { createMat } from './mat.js';
 
@@ -81,6 +87,7 @@ export async function mount(ctx) {
   let status = '', history = [], feelLog = [], cursorSent = null, pausedAt = 0, pausedMs = 0, size = { w: 0, h: 0, dpr: 1 };
   let cool = createFxCooldowns(), streak = 0;   // the host recipe's cooldowns and the paying spins in a row
   let callout = null, landTimer = 0, lastCallout = null;   // the landing flow: the callout and the delayed fx frame of a paying spin
+  let grab = null, thrown = null, lastThrow = null;   // THE THROW: the live flick, the speed it left for the next launch, the last one's log
   const $ = (sel) => el.querySelector(sel);
   const clock = () => (suspended ? pausedAt : performance.now()) - pausedMs;
   const note = (what, extra = {}) => { feelLog = [...feelLog.slice(-99), { what, at: Math.round(performance.now()), ...extra }]; };
@@ -120,6 +127,8 @@ export async function mount(ctx) {
     }
   }
   const check = () => checkLayout(chips, { rose: st && st.rose, count, sp: shownSp(sp, tape) });
+  /** THE THROW is armed exactly when the Spin button is live: bets down (or a tape to watch) and nothing in flight. */
+  const armed = () => !!(alive && !suspended && st && phase === 'bet' && stage?.ready !== false && (resume || check().ok));
 
   function sync() {
     if (!el) return;
@@ -145,6 +154,7 @@ export async function mount(ctx) {
     $('.roul-why').textContent = shownWhy; $('.roul-why').hidden = !shownWhy;
     const spin = $('.roul-spin');
     spin.disabled = phase !== 'bet' || (!resume && !c.ok);
+    if (bowl) bowl.setHint(armed() && !grab);   // the arrow only while the wheel is waiting for a hand
     spin.querySelector('span').textContent = phase === 'playing' || phase === 'asking' ? t('br_roulette_spinning', 'No more bets')
       : resume ? t('br_roulette_watch', 'Watch the rest') : t('br_roulette_spin', 'Spin');
     spin.querySelector('small').textContent = resume ? t('br_roulette_left', '{n} left', { n: left })
@@ -258,14 +268,16 @@ export async function mount(ctx) {
   }
 
   /* ----------------------------------------------------------------- spin */
-  async function press() {
+  /** `rotVel` is THE THROW's signed rotor speed (flick.js); the button and the keyboard send none and take the kick. */
+  async function press(rotVel = null) {
     if (!alive || suspended || !st || phase !== 'bet' || stage?.ready === false) return;
     const pressedAt = performance.now();
-    if (resume) { resume = false; ring('.roul-spin'); note('answer', { ms: Math.round(performance.now() - pressedAt), resume: true }); playTape(); return; }
+    if (resume) { resume = false; thrown = rotVel; ring('.roul-spin'); note('answer', { ms: Math.round(performance.now() - pressedAt), resume: true }); playTape(); return; }
     const c = check();
     if (!c.ok) { ring('.roul-spin'); why = whyText(c.why, c); sync(); return; }
     // Law VIII: the rotor picks up and the button rings on this frame, before any reply.
-    phase = 'asking'; why = null; status = t('br_roulette_no_more', 'No more bets...'); bowl.kick(); ring('.roul-spin'); sync();
+    thrown = Number.isFinite(rotVel) ? rotVel : null;
+    phase = 'asking'; why = null; status = t('br_roulette_no_more', 'No more bets...'); bowl.kick(thrown ?? FEEL.ROTOR_KICK); ring('.roul-spin'); sync();
     beat('nomore');   // the same for every press: nothing here knows the pocket (Law I)
     note('answer', { ms: Math.round(performance.now() - pressedAt) });
     const my = session, idem = mintId(), body = spinBody({ idem, count, chips, spots: st.spots, tape });
@@ -309,8 +321,10 @@ export async function mount(ctx) {
     const o = tape.outcomes[i], read = readOutcome(o, tape.bets, { rose: st.rose, wheel: st.wheel });
     if (read.index < 0) { note('skip', { pocket: read.pocket }); tape.played = i + 1; playTape(); return; }
     mat.clearAnims();
-    bowl.kick();
-    const plan = planRun({ index: read.index, seed: seedFor(tape.id, i), calm: stillNow(), rotVel0: FEEL.ROTOR_KICK });
+    // THE THROW's speed is spent on the launch it bought; the spins after it leave on the house's own kick.
+    const rotVel0 = Number.isFinite(thrown) ? thrown : FEEL.ROTOR_KICK; thrown = null;
+    bowl.kick(rotVel0);
+    const plan = planRun({ index: read.index, seed: seedFor(tape.id, i), calm: stillNow(), rotVel0 });
     bowl.launch(plan, now, { wake: read.wake });
     const run = moments.play('roulette.run');
     const wake = read.wake ? moments.play('roulette.wake', { wake: true }) : null;
@@ -319,7 +333,7 @@ export async function mount(ctx) {
     if (read.wake) beat('wake', { i });    // the wake is on screen as text from this frame
     status = (read.wake ? t('br_roulette_waking', 'No more bets... the bowl is waking.') : t('br_roulette_no_more', 'No more bets...'))
       + '\n' + t('br_roulette_progress', 'Spin {i} of {n}', { i: i + 1, n: tape.outcomes.length });
-    note('launch', { i, pocket: read.pocket, wake: read.wake, hits: plan.hits, restAt: Math.round(plan.restAt * 1000), page: cur.page });
+    note('launch', { i, pocket: read.pocket, wake: read.wake, hits: plan.hits, restAt: Math.round(plan.restAt * 1000), page: cur.page, rotVel0: Math.round(rotVel0 * 100) / 100 });
     sync();
   }
 
@@ -454,10 +468,46 @@ export async function mount(ctx) {
   }
   const local = (e) => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
   function onPointer(e) {
-    if (!mat) return;
+    if (!mat || !bowl) return;
     const p = local(e), spot = mat.pick ? mat.pick(e) : mat.hit(p.x, p.y);
-    if (e.type === 'pointermove') { hover = spot; cv.style.cursor = spot && phase === 'bet' && !resume ? 'pointer' : 'default'; return; }
-    if (e.type === 'pointerdown' && spot) { e.preventDefault(); place(spot, e.button === 2 || e.shiftKey); }
+    if (e.type === 'pointermove') {
+      if (grab && grab.id === e.pointerId) { dragTo(e, p); return; }
+      hover = spot;
+      cv.style.cursor = spot && phase === 'bet' && !resume ? 'pointer' : (!spot && armed() && bowl.wheelHit(p.x, p.y) ? 'grab' : 'default');
+      return;
+    }
+    if (e.type !== 'pointerdown') return;
+    if (spot) { e.preventDefault(); place(spot, e.button === 2 || e.shiftKey); return; }
+    // THE THROW: the mat has first claim on a press; what is left over, on the wheel, is a hand on the rotor.
+    if (e.button !== 0 || !e.isPrimary || grab || !bowl.wheelHit(p.x, p.y)) return;
+    e.preventDefault();   // never a page scroll, never the room's own look-around
+    // Bets still to come: the hand may push the wheel round for the feel of it, but nothing is ever sent (Law I).
+    const locked = !armed();
+    if (locked && (phase !== 'bet' || resume)) { note('flick', { ok: false, why: 'shut' }); return; }
+    try { cv.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
+    grab = { id: e.pointerId, locked, ...flickStart(bowl.angleAt(p.x, p.y), performance.now()) };
+    cv.style.cursor = 'grabbing'; sound.arm();
+    sync();   // the arrow steps aside while the hand is on the wheel
+  }
+  /** One sample of a live grab: the wheel follows the finger, the speed is remembered, nothing is sent. */
+  function dragTo(e, p) {
+    e.preventDefault();
+    const next = flickMove(grab, bowl.angleAt(p.x, p.y), performance.now());
+    grab = { ...next, id: grab.id, locked: grab.locked };
+    bowl.turn(next.d);
+  }
+  /** The lift. A real throw sends the SAME request the Spin button sends; anything less leaves the wheel turning. */
+  function onRelease(e) {
+    if (!grab || grab.id !== e.pointerId) return;
+    const held = grab; grab = null;
+    cv.style.cursor = 'default';
+    try { if (cv.hasPointerCapture(e.pointerId)) cv.releasePointerCapture(e.pointerId); } catch (err) { /* noop */ }
+    const r = e.type === 'pointerup' && !held.locked ? flickRelease(held, performance.now())
+      : { ok: false, why: held.locked ? 'locked' : 'cancel', rotVel: null, sign: held.sign, travel: held.travel, omega: 0 };
+    lastThrow = { ok: r.ok, why: r.why || null, sign: r.sign, travel: Math.round(held.travel * 1000) / 1000, rotVel: r.rotVel == null ? null : Math.round(r.rotVel * 100) / 100 };
+    note('flick', lastThrow);
+    if (!r.ok) { sync(); return; }
+    press(r.rotVel);
   }
   const onContext = (e) => { if (mat && (mat.pick ? mat.pick(e) : mat.hit(local(e).x, local(e).y))) e.preventDefault(); };
 
@@ -465,11 +515,13 @@ export async function mount(ctx) {
   async function open() {
     if (alive) return;
     alive = true; suspended = false; phase = 'loading'; status = ''; why = null; history = []; feelLog = []; cur = null; resume = false; pausedMs = 0;
+    grab = null; thrown = null; lastThrow = null;
     const my = ++session;
     el = build(); ctx.root.append(el);
     cv = stage ? stage.canvas : $('.roul-stage'); g = stage ? null : cv.getContext('2d'); size = { w: 0, h: 0, dpr: 1 };
     addEventListener('keydown', onKey);
     cv.addEventListener('pointermove', onPointer); cv.addEventListener('pointerdown', onPointer); cv.addEventListener('contextmenu', onContext);
+    for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) cv.addEventListener(ev, onRelease);
     moments = createMoments(ctx, { station: 'roulette' });
     callout = createCallout({ mount: el, lex: typeof ctx.lex === 'function' ? ctx.lex : undefined }); lastCallout = null;
     kit = createLoomKit({ still: stillNow(), log: (m) => note('loom', { m }) });
@@ -506,7 +558,11 @@ export async function mount(ctx) {
     const my = ++session;
     cancelAnimationFrame(raf); raf = 0;
     removeEventListener('keydown', onKey);
-    if (cv) { cv.removeEventListener('pointermove', onPointer); cv.removeEventListener('pointerdown', onPointer); cv.removeEventListener('contextmenu', onContext); }
+    if (cv) {
+      cv.removeEventListener('pointermove', onPointer); cv.removeEventListener('pointerdown', onPointer); cv.removeEventListener('contextmenu', onContext);
+      for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) cv.removeEventListener(ev, onRelease);
+    }
+    grab = null; thrown = null;
     if (typeof unSp === 'function') unSp();
     if (typeof unSettings === 'function') unSettings();
     unSp = null; unSettings = null;
@@ -555,6 +611,7 @@ export async function mount(ctx) {
       sp, shown: shownSp(sp, tape), owed: owedNow(), chips: { ...chips }, count, resume,
       check: st ? check() : null, why: el ? $('.roul-why').textContent : null, status: el ? $('.roul-status').textContent : null,
       history: history.slice(), spin: el ? $('.roul-spin').textContent : null, spinDisabled: el ? $('.roul-spin').disabled : null,
+      flick: { armed: armed(), grabbed: !!grab, last: lastThrow, pending: thrown },
       tape: tape && { id: tape.id, played: tape.played, n: tape.outcomes.length, bets: tape.bets, outcomes: tape.outcomes },
       cur: cur && { i: cur.i, landed: cur.landed, pocket: cur.read.pocket, wake: cur.read.wake, page: cur.page, win: !!cur.win, landAt: cur.landAt ?? null },
       callout: { last: lastCallout, pending: !!landTimer, ...(callout ? callout.debug() : { shown: [] }) },
@@ -563,6 +620,6 @@ export async function mount(ctx) {
       fx: { ...cool.debug(), streak },
     }),
     /** Test seams for the checks: the same paths the mat and buttons take. */
-    dev: { place, setCount, press, clock, clearChips: () => { if (phase === 'bet' && !resume) { chips = {}; sync(); } } },
+    dev: { place, setCount, press, clock, armed, clearChips: () => { if (phase === 'bet' && !resume) { chips = {}; sync(); } } },
   };
 }

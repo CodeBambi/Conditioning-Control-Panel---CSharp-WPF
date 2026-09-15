@@ -419,6 +419,11 @@ export async function mount(ctx) {
   within 1.65 m, M toggles the room view (ceiling off, one button per station that drops you at its
   approach). Back / Escape closes, in order: an open station or card, the room view, the room. No touch
   stick and no pointer lock (desktop WebView2 is the target).
+- **Leaving a seat.** Seated at a station, a tap that lands on the room instead of the station (the floor,
+  a wall, another fixture, empty air) and a step backwards (S, the down arrow, the touch stick pushed back)
+  both go through the same Back path as the chip: the station settles first (Law VI), then the camera walks
+  back to where you stood. A tap on the station's own meshes, its runtime dressing or its own controls never
+  leaves, and neither does a drag past the room's tap slop.
 - **Visiting.** E holds the room: pose saved, render loop stopped (no rAF), context KEPT. Measured in the
   smoke run: about 40 ms from Back to a drawing frame, against about 1.1 s to boot and decode the room
   again, so the room keeps its context. Back puts you on the exact position and facing.
@@ -460,6 +465,12 @@ export async function mount(ctx) {
   no persistence and no bridge message, like every other Room Service change. The spots are the table in
   `room/assets/customization/README.md`. No station, cabinet or screen moves for them, the approved
   left-wall booth positions are untouched, and the only walk volumes added are the two floor plants.
+- **Room Service, one button (amended 2026-09-15).** Picking an item in the cabinet IS the Use: it goes on
+  the focused pedestal or cabinet there and then, and the only control under the miniature is a single
+  Remove button, shown while that piece is fitted there and gone when it is not. A right-click on an item
+  takes that piece off wherever it sits, and no browser menu opens over the stage. A tap on the lever
+  close-up pulls that cabinet for fun: the handle swings on its own axle and the drums roll to a random
+  face. No server call, no SP, no outcome, no effects, and nothing reads where they land.
 - **Budget.** At 1280x720 on the entry pose: 277 draw calls with the whole Room Service collection placed
   (264 before it; the preview draws 1,268 there, 1,312 in its own check), no shadows, no post passes,
   pixel ratio capped at 1.5.
@@ -1940,3 +1951,62 @@ Presentation: pink and cream enamel, brass dividers, large SP amounts with short
   tap on the pill, hidden in landscape. A phone on its side (height at most 500 px) takes a 110 px left column for
   the pills, Freeze and Odds, Spin and the face keep the right corners, and the reel window fills the band between
   (stations/slot/scene.js `sideband`, the seat-camera mechanism: a span per axis and a view offset).
+
+## 10.21 The spoken subliminal word (2026-09-15)
+
+**Rule.** The slot's word beat used to be spoken by the browser's own `speechSynthesis`, which is a placeholder voice
+on whatever the WebView happened to have. The words themselves were the player's subliminal pool. Both halves now come
+from the app.
+
+**The words.** `BackRoomMedia` deals the sit-down's four words out of everything CCP counts as selected AND active
+right now, in this order:
+
+| Source | Which rows | Setting |
+|---|---|---|
+| Subliminal pool | keys whose value is `true` | `Settings.SubliminalPool` (the app writes the per-mode / per-mod variant into it, and a running session prescribes its own) |
+| Awareness keyword triggers | every trigger with `Enabled` | `Settings.KeywordTriggers` - the player's own plus the ones an installed preset (`KeywordTriggerPreset.MasterEnabled`) cloned in |
+
+Deduped case-insensitively, shuffled with the deal's own seed. The four preset words (`br_word_drop`, `_relax`,
+`_let_go`, `_sink`) only fill a SHORTFALL, so a player with nothing active still gets a full deal and a player with an
+active list never hears the presets. A dealt word may be a whole trigger phrase: the page wraps it, it is never
+truncated.
+
+**The voice.** Each word is spoken by the HOST, which owns a real chain and the app's chosen audio output device:
+
+| `source` | What plays |
+|---|---|
+| `clip` | the player's OWN audio for that phrase: an enabled keyword trigger's PlayAudio action (or its legacy `AudioFilePath`), else `KeywordTriggerService.FindLinkedAudio` - the active mod's `resources/sounds/flashes_audio`, then `Resources/sub_audio`. The same precedence the subliminal whisper already uses. |
+| `preset` | a bundled Back Room clip: `Resources/Audio/backroom/words/words.json` maps a NORMALISED phrase to a plain file name in that folder. Ships with an empty map; the owner generates the clips. |
+| `tts` | Windows speech (`Windows.Media.SpeechSynthesis`, no package - the project already targets `net8.0-windows10.0.19041.0`), a female voice in the machine's language where there is one, rate 0.75, pitch 0.9, rendered to a cached wav. |
+| `none` | nothing played. ONLY then does the page speak the word itself with `speechSynthesis` (rate 0.85 / 0.7 reversed, pitch 0.8) - which is also what happens with no host at all, the Vercel phone playtest. |
+
+**Normalised phrase.** Lower case, every run of non-letter / non-digit collapsed to one space, trimmed. `"Let Go!"`,
+`"let  go"` and `"LET GO"` are one word. The preset clip's file stem is that with spaces as hyphens: `let-go.mp3`.
+`scripts/backroom-words-manifest.mjs` prints the slugs the owner has to generate.
+
+**Wire.**
+
+```json
+{ "type": "word.speak", "token": "32-hex", "text": "Let Go", "reversed": false, "seed": 2913771 }
+{ "type": "word-ack", "token": "32-hex", "source": "clip", "durationMs": 640 }
+{ "type": "word.stop" }
+```
+
+| Field | Host validation |
+|---|---|
+| `text` | 1..200 characters, else acked `none`. Never used as a path: a preset clip is found by looking the NORMALISED phrase up in the manifest, whose values must match `^[a-z0-9][a-z0-9_.-]{0,63}$` and resolve inside the words folder. |
+| `reversed` | boolean only. `true` = the easter egg: the host decodes the clip and plays its sample FRAMES back to front, which is true backwards audio. The page still mirrors and reverses the SPELLING; it must not also speak the reversed spelling when the host answered anything but `none`. |
+| `seed` | the outcome's seed (uint32), so a replayed outcome picks the same thing. |
+| `token` | page-minted, correlates the ack. Exactly one `word-ack` per `word.speak`, `none` included, so the page never waits on a missing reply (its own cap is 1200 ms). |
+| `durationMs` | how long the host's audio runs, 0 when silent (a deliberate mute reports its `source` with duration 0, so the page stays quiet instead of shouting the browser voice over it). |
+
+**Timing.** The word beat asks on the frame the word's zoom-in starts (`WORD_IN_MS` 80 ms), so the audio and the
+zoom open together. A chain of 2-3 words is `WORD_GAP_MS` (500 ms) onset to onset as before, but a `durationMs`
+longer than `WORD_MS` (980 ms) holds the next onset until the clip is done, capped at `MAX_WORD_HOLD_MS` (3000 ms)
+so a bad duration can never stall the beat. `callout.cancel()`, `cancelWords()`, `suspend` and `close` all send
+`word.stop` and the host cuts the line (Law VI); a new `word.speak` also cuts the one before it, exactly as
+`speechSynthesis.cancel()` did.
+
+**Files.** Page: `shared/hypno/voice.js` (the adapter), `shared/hypno/callout.js` (`voice` option, the chain hold).
+Host: `Services/BackRoom/BackRoomVoice.cs`, `IBackRoomVoice` / `BackRoomVoiceAck` in `BackRoomContracts.cs`,
+`NullBackRoomVoice` in `BackRoomStubs.cs` (what the dev rig and the suite run on).

@@ -32,6 +32,9 @@ kit.dispose();                          // the room settles: the context closes,
 | `ambience` | bed: a low warm hum (55 Hz pair under a 220 Hz lowpass) and a very slow shimmer, -24 dB under master, loops | until stop | |
 | `spiral` | bed: two slow-beating pairs (110/114, 220/224.5 Hz), in 250 ms, out 500 ms | until stop, or `ms` | `ms` |
 | `tick` / `ticks` | a reel's filtered click, rising ladder per reel; `ticks` is the whole decelerating train | 22 ms / travel | `reel` 0..4, `step`, `ms` |
+| `lever` | THE LEVER PULL, one whole gesture: the stroke, the stop at the bottom, the spring back. Four voices (below) | 0.51-0.70 s | `variant` A-D, `level` |
+| `reel` | THE REEL ROLL: a loop per reel that follows the drum. Not scored: `play('reel', {reel, variant, speed})`, `setRollSpeed(reel, speed)` each frame, `stop('reel', {reel})` on the stop frame | until stop | `reel` 0..4, `variant` A-D, `speed` 0..1, `level` |
+| `reelStop` | the gesture that lands one drum, per reel voice; it carries the thud, so a stop is still one beat | 0.26-0.34 s | `variant` A-D, `reel` 0..4, `level` |
 | `riser` | the anticipation: a triangle sweep 180 -> 520 Hz under an opening lowpass, resolving on a quiet top note | `ms` + 0.35 s | `ms` 1500-2500, `level` |
 | `almost` | the near miss resolving: the riser's top note, soft and flat | 0.4 s | `level` |
 | `settle` | a dead spin, a lost hand, a missed pocket: a felt-wrapped C4 touched once and a breath in the ambience that opens | 0.65 s | `level` |
@@ -54,6 +57,54 @@ kit.dispose();                          // the room settles: the context closes,
 | `tap` | a button, a lever, "no more bets" | 30 ms | |
 | `launch` | the ball's rising whoosh | 0.3 s | |
 
+## The lever and the drum
+
+The two loudest gestures in the room come in four voices each, so they can be picked by ear. `LEVER_VARIANTS`
+and `REEL_VARIANTS` are A-D; `DEFAULT_SFX` is the owner's pair, **lever B over reel C**.
+
+| lever | what it sounds like |
+|---|---|
+| A **Iron** | 3-4 ratchet ticks rising up the stroke, a heavy metallic clank at the bottom (filtered noise over a low body resonance), a soft spring click coming back |
+| B **Candy** | a velvety band-passed whoosh down the stroke, a satisfying muted pop at the bottom, a two-note chime tail on the release. The pink cabinet's own voice |
+| C **Toy** | light plastic click-clack, a little knock, a bouncy cartoon spring boing on the way back. The shortest of the four |
+| D **Vintage** | one long creaking ratchet over the whole stroke, a deep wooden thunk, then a short "krrr" as the reels are released, handing the beat straight to the roll |
+
+| reel | the roll | the stop |
+|---|---|---|
+| A **Ticker** | per-symbol ticks, classic mechanical: the tick rate IS the reel speed, each reel a few semitones higher than the one left of it | a thud and a short damped bell |
+| B **Purr** | a low band-passed noise loop whose band and level open with the speed, a whir rather than a click | a soft thump |
+| C **Rattle and bell** | ticks over a resonant hum; as a drum slows the ticks slow AND climb in pitch, so A1's stretched third reel tells on itself | a ding that climbs reel to reel: first low, second mid, third high |
+| D **Hybrid casino** | ticks and purr layered, a busy floor | the thud and a digital chime, a rung higher each reel |
+
+The roll is not scored like the one-shots: it is a live loop per reel, one gain and (per voice) a purr, a hum and
+a tick train scheduled a beat ahead on a timer. `tickGap(speed)` is the whole trick: 38 ms a tick at full blur,
+260 ms crawling into the stop. `setRollSpeed` is untraced on purpose, because the reels call it every frame.
+
+Levels: a tick peaks at `ROLL_TICK` 0.09 and the purr and hum together at `ROLL_BED` 0.08, both over the
+ambient bed's 0.063 (-24 dB), both on the same master and trim chain as everything else, and both held by
+`kit.suspend` and `kit.mute` like every other voice.
+
+### Picking a pair
+
+`stations/slot/sound.js` resolves the pair once when the station opens, in this order: `DEFAULT_SFX`, then
+`localStorage.br.sfx.variant` (`{"lever":"A","reel":"D"}`, or the compact `"A/D"`), then the URL query
+`?lever=A&reel=D`, which wins so a dev page can try a pair without changing what is saved. `pickVariant` is
+pure and node-tested (`stations/slot/tests/sound.test.mjs`); nonsense anywhere falls back to the default pair.
+
+### The audition page
+
+`shared/sound/audition.html` plays the eight voices on their own: a button per lever, a button per drum (a whole
+3-reel spin with the third reel stretched for the anticipation), a full pull, and the ambient bed to level them
+against. `serve.mjs` is the tiny static server the dev pages want, the same shape the smoke checks use:
+
+```
+node ConditioningControlPanel/Resources/web/backroom/shared/sound/serve.mjs
+```
+
+then open <http://127.0.0.1:8940/backroom/shared/sound/audition.html> (`SOUND_PORT` moves it). "Use this pair in
+the game" writes `br.sfx.variant` for that origin; the slot's own harness takes the query instead:
+<http://127.0.0.1:8940/backroom/stations/slot/dev.html?lever=A&reel=D>.
+
 `settle` and `clicker` are deduped (`DEDUPE_MS`): two lanes saying `settle` on the same frame make one settle. The
 spoken word itself is another lane's speechSynthesis call; the kit never synthesises speech.
 
@@ -68,7 +119,9 @@ every cue: sound is where the beat lives when the travel is gone.
 | room | suspend / resume | `kit.suspend(on)`: everything holds, the ambience returns |
 | room | settle (halt) | `kit.dispose()` |
 | room | settings, intensity calm | `setTrim(0.6)` |
-| slot | reel thud (reel 0..2) | `thud` semis -2, 0, +2 |
+| slot | the lever pull (Law VIII, the frame it leans) | `lever` in the picked voice |
+| slot | each reel's travel | `reel` started on its first frame, `setRollSpeed` off the same decel curve |
+| slot | reel thud (reel 0..2) | `stop('reel', {reel})` and `reelStop` on the same frame (`thud` semis -2, 0, +2 inside it) |
 | slot | last reel of a no-pay spin | `settle` |
 | slot | reel 2 thud with a hold (A1) | `riser` over the hold, Calm at half level |
 | slot | last reel near miss (A2) | `almost` |
@@ -105,8 +158,9 @@ station.js and the checks are unchanged; their `trace` still lists the cues with
 ## Tests
 
 `shared/sound/tests/kit.test.mjs` (node --test, a mocked AudioContext): tier -> tail and voices, the rising
-invariants, loss silence, the riser's shape, the three named cues, ambience and spiral beds, suspend/resume, stop by
-name, no node leaks over 200 plays, dedupe, dispose and re-arm, trim. From `Resources/web/backroom`:
+invariants, loss silence, the riser's shape, the three named cues, the four levers and the four reel stops, the tick rate,
+the drums on a context, ambience and spiral beds, suspend/resume, stop by name, no node leaks over 200 plays,
+dedupe, dispose and re-arm, trim. From `Resources/web/backroom`:
 
 ```
 node --test $(find . -name '*.test.mjs')

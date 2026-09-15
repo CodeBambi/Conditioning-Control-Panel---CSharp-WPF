@@ -8,7 +8,13 @@
  *                            still sent the fx with args { wordsShown: true } (it skips its own words and
  *                            plays the pair's spiral / the cascade's fullscreen GIF)
  *   line none, no fx at all  callout.settle(): the sweep, the settle cue, EMI's bark
- * Words come from the deal (media.word(n)), else the symbol's fallback label (symbols.js WORDS). The
+ * Words come from the deal (media.word(n)), else the symbol's fallback label (symbols.js WORDS).
+ * The deal is the PLAYER'S own vocabulary: the host builds it from Settings.SubliminalPool's enabled
+ * keys plus every enabled Awareness keyword trigger, and only falls back to the four preset words when
+ * the player has none active (BackRoomMedia.ActiveWords). Each word is then SPOKEN BY THE HOST
+ * (callout.js -> shared/hypno/voice.js -> word.speak, CONTRACT 10.21): the player's own clip for that
+ * phrase, a bundled Back Room clip, or Windows speech, on the app's chosen audio device. The browser's
+ * speechSynthesis is only the last fallback, for the phone playtest where there is no host. The
  * subliminal gate off (ctx.gates.subliminal === false) leaves every fx to the host as before, so the host's
  * own toggle stays the only judge. The reversal easter egg is seeded from the outcome (index + stops), so a
  * replayed outcome shows the same thing; it never touches the payout.

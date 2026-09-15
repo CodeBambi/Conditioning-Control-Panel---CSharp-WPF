@@ -48,6 +48,16 @@ export function createBowl3D({ stage, wheel, rose }) {
   const sparks=new T.LineSegments(sparkGeometry,new T.LineBasicMaterial({color:0x5fffd0,transparent:true,depthWrite:false}));rotor.add(sparks);
   const trailGeometry=new T.BufferGeometry();trailGeometry.setAttribute('position',new T.Float32BufferAttribute(new Float32Array(72),3));
   const trail=new T.Line(trailGeometry,new T.LineBasicMaterial({color:0x5fffd0,transparent:true,opacity:.2,depthWrite:false}));root.add(trail);
+  // THE THROW's hint (flick.js): a curved, half-lit arrow around the rim, on the rotor but counter-turned so it
+  // stands still in the room while the wheel moves under it. It breathes on a 1.2 s cycle; still, it just sits there.
+  const HINT_MS=1200,HINT_A0=-Math.PI*.45,HINT_ARC=Math.PI*1.15;
+  const hintR=restRadius*1.45,hintTube=restRadius*.05;
+  const hintMaterial=new T.MeshBasicMaterial({color:0x5fffd0,transparent:true,opacity:0,depthWrite:false,side:T.DoubleSide});
+  const hintArc=new T.Mesh(new T.TorusGeometry(hintR,hintTube,6,44,HINT_ARC),hintMaterial);
+  const hintHead=new T.Mesh(new T.CircleGeometry(hintTube*3.6,3),hintMaterial);
+  hintHead.position.set(Math.cos(HINT_ARC)*hintR,Math.sin(HINT_ARC)*hintR,0);hintHead.rotation.z=HINT_ARC+Math.PI/2;
+  const hint=new T.Group();hint.name='roulette_flick_hint';hint.add(hintArc,hintHead);
+  hint.rotation.x=-Math.PI/2;hint.position.y=track.y+lift*3;hint.renderOrder=4;hint.visible=false;rotor.add(hint);
   let disposed = false, lastView = {}, activePlan=null, launchAt=0, currentNow=0;
   const trailPoints=[];
   const lit = new Set();
@@ -83,6 +93,12 @@ export function createBowl3D({ stage, wheel, rose }) {
       trailPoints.forEach((p,i)=>trailGeometry.attributes.position.setXYZ(i,p.x,p.y,p.z));trailGeometry.setDrawRange(0,trailPoints.length);trailGeometry.attributes.position.needsUpdate=true;
     }else trailPoints.length=0;
     trail.visible=trailPoints.length>1;trail.material.opacity=.2*k;
+    if (hint.visible) {
+      const pulse = lastView.still ? .5 : (1 - Math.cos((currentNow % HINT_MS) / HINT_MS * Math.PI * 2)) / 2;
+      hint.rotation.z = HINT_A0 - s.rot;   // the room's angle, not the rotor's
+      hint.scale.setScalar(1 + (lastView.still ? 0 : .035 * pulse));
+      hintMaterial.opacity = (.3 + .28 * pulse) * k;
+    }
     // THE GLYPH HIT: the landed pocket's number lights on its own over HIGHLIGHT_MS from the winning frame (callout.js)
     const hq = (currentNow - s.hitAt) / HIGHLIGHT_MS, hitPulse = hq >= 0 && hq < 1 ? Math.sin(hq * Math.PI) : 0, hitN = s.index >= 0 ? wheel[s.index] : null;
     for (const n of numberColors) {
@@ -108,9 +124,35 @@ export function createBowl3D({ stage, wheel, rose }) {
     if (disposed) return; disposed = true;
     rotor.quaternion.copy(saved.rotor); ball.position.copy(saved.ball); ball.visible = saved.visible;
     surfaces.reset(); if(!existingSurfaces)surfaces.dispose();
-    for(const object of [beam,sparks,trail]){object.removeFromParent();object.geometry.dispose();object.material.dispose();}
+    for(const object of [beam,sparks,trail,hintArc,hintHead]){object.removeFromParent();object.geometry.dispose();}
+    for(const object of [beam,sparks,trail]) object.material.dispose();
+    hint.removeFromParent(); hintMaterial.dispose();
     disc.material = oldDisc; material.dispose(); texture.dispose();
     ink.width = ink.height = 1;
+  }
+  /** The rotor's centre and its rim, in canvas-local CSS px. */
+  function screenWheel() {
+    const rect = stage.canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    root.updateWorldMatrix(true, true); stage.camera.updateMatrixWorld();
+    const px = (v) => { const p = v.clone().project(stage.camera); return { x: (p.x + 1) * rect.width / 2, y: (1 - p.y) * rect.height / 2 }; };
+    const c = px(rotor.getWorldPosition(new T.Vector3()));
+    const edge = px(rotor.localToWorld(new T.Vector3(trackRadius, centers[0].y, 0)));
+    return { rect, c, r: Math.max(24, Math.hypot(edge.x - c.x, edge.y - c.y)) };
+  }
+  /** THE THROW: canvas-local CSS px, the ray first and the wheel's projected disc as the fallback a finger needs. */
+  function wheelHit(x, y) {
+    if (disposed || stage.ready === false) return false;
+    const w = screenWheel();
+    if (!w) return false;
+    const event = { clientX: w.rect.left + x, clientY: w.rect.top + y };
+    if (stage.pick(event, [rotor, nodes.ball_track]).length) return true;
+    return Math.hypot(x - w.c.x, y - w.c.y) <= w.r * 1.06;
+  }
+  /** The pointer's angle around the wheel, in the convention `rot` grows in (seen from the seat: y up). */
+  function angleAt(x, y) {
+    const w = screenWheel();
+    return w ? Math.atan2(-(y - w.c.y), x - w.c.x) : 0;
   }
   function pocketBox(index) {
     root.updateWorldMatrix(true, true);
@@ -123,10 +165,12 @@ export function createBowl3D({ stage, wheel, rose }) {
     launch(plan, now, opts) { activePlan=plan;launchAt=now;trailPoints.length=0;core.launch(plan, now, opts); apply(); },
     seat(index, opts) { core.seat(index, opts); apply(); },
     update(now, opts) { currentNow=now;const result = core.update(now, opts); apply(); return result; },
-    draw, pocketBox, dispose,
+    draw, pocketBox, dispose, wheelHit, angleAt,
+    turn(d) { core.turn(d); apply(); },
+    setHint(on) { hint.visible = !!on; if (!hint.visible) hintMaterial.opacity = 0; },
     glow(index, now) { core.glow(index, now); },
     get geo() { return core.geo; }, get phase() { return core.phase; },
-    debug() { return { ...core.debug(), view: '3d', lit: [...lit], whirlDrawn: !!lastView.whirlDrawn,
+    debug() { return { ...core.debug(), view: '3d', lit: [...lit], whirlDrawn: !!lastView.whirlDrawn, hint: hint.visible,
       clearance: {rimRadius:path.rimRadius,ballRadius:lift,profileEdges:path.edges,margin:path.margin},
       ballWorld: ball.getWorldPosition(new T.Vector3()).toArray(),
       pockets: centers.map(p => rotor.localToWorld(p.clone()).toArray()), disposed }; },

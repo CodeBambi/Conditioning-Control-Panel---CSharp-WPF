@@ -1,7 +1,8 @@
 /* kit.test.mjs - the schedules the kit scores and the way it treats a context. node --test, no audio. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { score, createKit, pentatonic, TIERS, TIER_ORDER, CUES, BEDS, DEFAULT_MASTER, BED_LEVEL, DEDUPE_MS } from '../kit.js';
+import { score, createKit, pentatonic, TIERS, TIER_ORDER, CUES, BEDS, ROLLS, DEFAULT_MASTER, BED_LEVEL, DEDUPE_MS,
+  LEVER_VARIANTS, REEL_VARIANTS, DEFAULT_SFX, ROLL_TICK, ROLL_BED, tickGap } from '../kit.js';
 
 /* ------------------------------------------------------------------ a mocked AudioContext */
 function makeParam(v = 0) {
@@ -51,9 +52,9 @@ const risesInTime = (s, part) => {
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) < eps;
 
 /* ------------------------------------------------------------------ the scores */
-test('every cue scores or is a bed, and an unknown name is null', () => {
+test('every cue scores or is a bed or a roll, and an unknown name is null', () => {
   for (const name of CUES) {
-    if (BEDS.includes(name)) { assert.equal(score(name), null); continue; }
+    if (BEDS.includes(name) || ROLLS.includes(name)) { assert.equal(score(name), null); continue; }
     const s = score(name, {}, seq(0.5));
     assert.ok(s && s.notes.length > 0, name + ' has notes');
     assert.ok(s.tail > 0 && Number.isFinite(s.tail), name + ' has a tail');
@@ -197,6 +198,60 @@ test('the rest of the palette: breath 6 s, chips randomised, card kinds, rattle 
   assert.ok(score('thud', { muted: true }).notes[0].level < score('thud').notes[0].level, 'a muted thud is quieter');
 });
 
+test('THE LEVER: four voices, each a whole gesture in 500-700 ms', () => {
+  const seen = new Map();
+  for (const v of LEVER_VARIANTS) {
+    const x = score('lever', { variant: v });
+    assert.ok(x.tail >= 0.5 - 1e-9 && x.tail <= 0.7 + 1e-9, v + ' is a 500-700 ms gesture: ' + x.tail);
+    const bottom = x.notes.reduce((m, n) => (n.level > m.level ? n : m), x.notes[0]);
+    assert.ok(bottom.at >= 0.2 && bottom.at <= 0.4, v + ' stops hardest at the bottom of the stroke: ' + bottom.at);
+    assert.ok(x.notes.some(n => n.at < bottom.at), v + ' has a stroke before it');
+    assert.ok(x.notes.some(n => n.at > bottom.at), v + ' springs back after it');
+    seen.set(v, x.notes.map(n => Math.round(n.hz) + '@' + n.at).join(','));
+  }
+  assert.equal(new Set(seen.values()).size, LEVER_VARIANTS.length, 'four levers, four different sounds');
+  assert.equal(seen.get(DEFAULT_SFX.lever), score('lever', { variant: 'nope' }).notes.map(n => Math.round(n.hz) + '@' + n.at).join(','), 'an unknown variant is the default');
+  assert.ok(Math.max(...score('lever', { level: 0.5 }).notes.map(n => n.level)) < Math.max(...score('lever').notes.map(n => n.level)), 'level scales it');
+  const iron = parts(score('lever', { variant: 'A' }), 'ratchet');
+  assert.ok(iron.length >= 3 && iron.every((n, i) => i === 0 || (n.hz > iron[i - 1].hz && n.at > iron[i - 1].at)), 'A ratchets up the stroke');
+  assert.equal(parts(score('lever', { variant: 'A' }), 'clank').length, 1, 'A lands on one metallic clank');
+  const chime = parts(score('lever', { variant: 'B' }), 'chime').sort((a, b) => a.at - b.at);
+  assert.ok(chime.length >= 2 && chime[chime.length - 1].at > chime[0].at, 'B ends on a two-note chime');
+  assert.ok(parts(score('lever', { variant: 'B' }), 'whoosh')[0].hzTo > parts(score('lever', { variant: 'B' }), 'whoosh')[0].hz, 'B strokes on an opening whoosh');
+  assert.ok(parts(score('lever', { variant: 'C' }), 'boing').length >= 2, 'C springs back on a boing');
+  assert.ok(score('lever', { variant: 'C' }).tail < score('lever', { variant: 'D' }).tail, 'the toy lever is shorter than the vintage one');
+  assert.equal(parts(score('lever', { variant: 'D' }), 'krrr').length, 1, 'D hands the beat over to the reels');
+});
+
+test('THE REEL STOP: a landing per voice, and the ding climbs reel to reel', () => {
+  for (const v of REEL_VARIANTS) {
+    for (const r of [0, 1, 2]) {
+      const x = score('reelStop', { variant: v, reel: r });
+      assert.ok(x.notes.length > 0, v + r + ' has notes');
+      assert.ok(x.tail > 0.1 && x.tail < 0.5, v + r + ' is a short landing: ' + x.tail);
+    }
+  }
+  const ding = r => parts(score('reelStop', { variant: 'C', reel: r }), 'ding')[0];
+  assert.ok(ding(0).hz < ding(1).hz && ding(1).hz < ding(2).hz, 'C: first reel low, second mid, third high');
+  const chime = r => parts(score('reelStop', { variant: 'D', reel: r }), 'chime')[0];
+  assert.ok(chime(0).hz < chime(1).hz && chime(1).hz < chime(2).hz, 'D: the digital chime climbs too');
+  const ticker = score('reelStop', { variant: 'A' });
+  assert.ok(parts(ticker, 'thud').length > 0 && parts(ticker, 'ding').length > 0, 'A: a thud and a damped bell');
+  const purr = score('reelStop', { variant: 'B' });
+  assert.ok(purr.notes.every(n => n.part === 'thump'), 'B: a soft thump, nothing else');
+  assert.ok(Math.max(...purr.notes.map(n => n.level)) <= Math.max(...ticker.notes.map(n => n.level)), 'and it is the gentlest landing');
+  assert.equal(score('reelStop', { variant: 'zz' }).notes.length, score('reelStop', { variant: DEFAULT_SFX.reel }).notes.length, 'an unknown variant is the default');
+});
+
+test('THE ROLL: the tick rate is the drum speed, and the drums sit over the bed without shouting', () => {
+  assert.ok(tickGap(1) < tickGap(0.5) && tickGap(0.5) < tickGap(0), 'the ticks spread out as the drum slows');
+  assert.ok(near(tickGap(1), 0.038), '38 ms a tick at full blur');
+  assert.ok(tickGap(0) <= 0.27, 'and about a quarter second crawling into the stop');
+  assert.equal(tickGap('nonsense'), tickGap(1), 'nonsense is full speed');
+  assert.ok(ROLL_TICK > BED_LEVEL && ROLL_TICK < 0.12, 'a tick reads clearly over the bed without being harsh');
+  assert.ok(ROLL_BED > BED_LEVEL && ROLL_BED <= ROLL_TICK, 'the purr sits just over the bed, under the ticks');
+});
+
 /* ------------------------------------------------------------------ the kit on a context */
 test('no AudioContext: every call is a no-op that still traces', () => {
   const k = createKit({ AudioContext: null });
@@ -317,12 +372,44 @@ test('stop(name) takes back only that cue, scheduled-ahead notes included', () =
   k.stop('nothing-here');
 });
 
+test('THE ROLL on a context: one drum per reel, following its speed, down on its own stop frame', () => {
+  const { AC } = makeMock();
+  const k = createKit({ AudioContext: AC });
+  k.arm();
+  for (const v of REEL_VARIANTS) {
+    assert.equal(k.play('reel', { reel: 0, variant: v, speed: 1 }), 1, v + ' starts a drum');
+    assert.deepEqual(k.debug().rolls, ['reel:0'], v + ' is turning');
+    assert.equal(k.play('reel', { reel: 0, variant: v, speed: 0.3 }), 1, 'a second play follows it, it does not stack');
+    assert.deepEqual(k.debug().rolls, ['reel:0']);
+    k.setRollSpeed(0, 0.2);
+    k.stop('reel', { reel: 0 });
+    assert.deepEqual(k.debug().rolls, [], v + ' comes down on its stop frame');
+  }
+  k.setRollSpeed(0, 0.5);   // no drum there: a no-op, never a throw
+  for (const i of [0, 1, 2]) k.play('reel', { reel: i, variant: 'C', speed: 1 });
+  assert.deepEqual(k.debug().rolls, ['reel:0', 'reel:1', 'reel:2'], 'three drums, one per reel');
+  assert.ok(k.debug().live > 0, 'the tick train is scheduled a beat ahead');
+  k.stop('reel', { reel: 1 });
+  assert.deepEqual(k.debug().rolls, ['reel:0', 'reel:2'], 'one drum stops without touching the others');
+  k.stop('reel');
+  assert.deepEqual(k.debug().rolls, [], 'and stop with no reel takes them all');
+  for (const i of [0, 1, 2]) k.play('reel', { reel: i, variant: 'D', speed: 1 });
+  k.play('ambience');
+  k.suspend(true);
+  assert.deepEqual(k.debug().rolls, [], 'Law VI: a suspend takes every drum down');
+  assert.equal(k.play('reel', { reel: 0 }), 0, 'and nothing turns while suspended');
+  k.suspend(false);
+  assert.equal(k.play('reel', { reel: 0, variant: 'B', speed: 1 }), 1, 'a resumed room can turn again');
+  k.dispose();
+  assert.deepEqual(k.debug().rolls, [], 'dispose takes the drums with the context');
+});
+
 test('no node leaks over 200 plays: every voice ends, every node disconnects', () => {
   const { AC, log } = makeMock();
   const k = createKit({ AudioContext: AC });
   k.arm();
   const graphNodes = log.nodes.length;   // the master, dry, send, delay, feedback, lowpass, destination
-  const names = ['win', 'ladder', 'settle', 'clicker', 'word', 'chips', 'card', 'rattle', 'drop', 'clack', 'thud', 'token', 'riser', 'almost', 'tap', 'launch'];
+  const names = ['win', 'ladder', 'settle', 'clicker', 'word', 'chips', 'card', 'rattle', 'drop', 'clack', 'thud', 'token', 'riser', 'almost', 'tap', 'launch', 'lever', 'reelStop'];
   for (let i = 0; i < 200; i++) k.play(names[i % names.length], { tier: TIER_ORDER[i % 4], index: i % 3, n: 3 });
   assert.ok(k.debug().live > 0);
   for (const src of log.sources) { if (src.onended) src.onended(); }

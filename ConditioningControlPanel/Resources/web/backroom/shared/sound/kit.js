@@ -51,9 +51,17 @@ export const DEFAULT_MASTER = 0.8;
 /** A cue on this list plays once per window even when two lanes call it on the same frame (the slot's muted
  *  last thud and its dead-spin lane both say `settle`). Milliseconds. */
 export const DEDUPE_MS = Object.freeze({ settle: 120, clicker: 25 });
+/** THE LEVER and THE REEL ROLL come in four voices each, so the cabinet can be auditioned and picked
+ *  (shared/sound/audition.html; the slot picks in stations/slot/sound.js). A: Iron, B: Candy, C: Toy,
+ *  D: Vintage on the lever; A: Ticker, B: Purr, C: Rattle and bell, D: Hybrid casino on the reels. */
+export const LEVER_VARIANTS = Object.freeze(['A', 'B', 'C', 'D']);
+export const REEL_VARIANTS = Object.freeze(['A', 'B', 'C', 'D']);
+/** The owner's pair: a candy lever over a rattle-and-bell drum. */
+export const DEFAULT_SFX = Object.freeze({ lever: 'B', reel: 'C' });
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+const pick = (v, list, d) => { const k = String(v == null ? '' : v).trim().toUpperCase(); return list.includes(k) ? k : d; };
 
 /* ----------------------------------------------------------------------------
  * SCORES. A note is one of:
@@ -231,6 +239,70 @@ const SCORES = {
     if (last) return SCORES.thud({ semis: 5, level: 0.6 });
     return bell(ROOT_HZ * 2 * SEMI(pentatonic(clamp(Math.floor(num(i, 0)), 0, 14))), 0, 0.18, 0.1, 'arp');
   },
+  /**
+   * THE LEVER PULL, the whole gesture in one cue: the stroke down, the stop at the bottom, the spring back.
+   * 500-700 ms, and the four voices are four cabinets:
+   *   A Iron     ratchet ticks up the stroke, a heavy metallic clank at the bottom, a spring click coming back
+   *   B Candy    a velvety whoosh, a muted pop, two little chimes on the release (the pink cabinet's own)
+   *   C Toy      plastic click-clack, a knock, a cartoon spring boing: the shortest and the bounciest
+   *   D Vintage  one long creaking ratchet, a deep wooden thunk, a "krrr" that hands the beat to the reels
+   */
+  lever({ variant = DEFAULT_SFX.lever, level = 1 } = {}) {
+    const v = pick(variant, LEVER_VARIANTS, DEFAULT_SFX.lever), lv = clamp(num(level, 1), 0, 1), out = [];
+    if (v === 'A') {
+      for (let i = 0; i < 4; i++) out.push(noise(1700 * SEMI(i * 1.5), i * 0.072, 0.02, 0.085 * lv, { q: 7, part: 'ratchet', dry: true }));
+      out.push(noise(1500, 0.3, 0.16, 0.12 * lv, { hzTo: 430, q: 1.2, part: 'clank', dry: true }),
+        tone(150, 0.3, 0.26, 0.24 * lv, { hzTo: 62, wave: 'triangle', lp: 1400, part: 'body' }),
+        tone(300, 0.3, 0.1, 0.05 * lv, { wave: 'triangle', part: 'body' }),
+        noise(2300, 0.52, 0.03, 0.055 * lv, { q: 5, part: 'spring', dry: true }),
+        tone(700, 0.52, 0.04, 0.035 * lv, { part: 'spring', dry: true }));
+    } else if (v === 'B') {
+      out.push(noise(320, 0, 0.3, 0.07 * lv, { hzTo: 1500, q: 0.9, attack: 0.45, part: 'whoosh', dry: true }),
+        tone(250, 0.29, 0.14, 0.2 * lv, { hzTo: 96, wave: 'triangle', lp: 900, part: 'pop' }),
+        noise(700, 0.29, 0.05, 0.045 * lv, { type: 'lowpass', part: 'pop', dry: true }),
+        ...bell(ROOT_HZ, 0.44, 0.2, 0.07 * lv, 'chime'), ...bell(ROOT_HZ * SEMI(7), 0.53, 0.17, 0.065 * lv, 'chime'));
+    } else if (v === 'C') {
+      out.push(noise(2600, 0, 0.016, 0.095 * lv, { q: 4, part: 'clack', dry: true }),
+        noise(2200, 0.07, 0.016, 0.085 * lv, { q: 4, part: 'clack', dry: true }),
+        noise(1900, 0.15, 0.02, 0.095 * lv, { q: 3, part: 'clack', dry: true }),
+        tone(210, 0.22, 0.09, 0.15 * lv, { hzTo: 120, wave: 'square', lp: 1200, part: 'knock' }),
+        tone(300, 0.3, 0.07, 0.09 * lv, { hzTo: 720, wave: 'triangle', part: 'boing' }),
+        tone(720, 0.37, 0.08, 0.075 * lv, { hzTo: 330, wave: 'triangle', part: 'boing' }),
+        tone(330, 0.45, 0.06, 0.055 * lv, { hzTo: 560, wave: 'triangle', part: 'boing' }));
+    } else {
+      out.push(noise(850, 0, 0.34, 0.055 * lv, { hzTo: 1600, q: 8, attack: 0.3, part: 'creak', dry: true }));
+      for (let i = 0; i < 6; i++) out.push(noise(1200 * SEMI(i), 0.03 + i * 0.055, 0.014, 0.05 * lv, { q: 9, part: 'ratchet', dry: true }));
+      out.push(tone(170, 0.36, 0.24, 0.22 * lv, { hzTo: 58, wave: 'triangle', lp: 700, part: 'thunk' }),
+        noise(520, 0.36, 0.07, 0.065 * lv, { type: 'lowpass', part: 'thunk', dry: true }),
+        noise(1700, 0.52, 0.13, 0.05 * lv, { hzTo: 2300, q: 2.5, attack: 0.15, part: 'krrr', dry: true }));
+    }
+    return out;
+  },
+  /**
+   * THE REEL STOP: the gesture that lands drum REEL (0..2), one per reel voice. It carries the thud the floor
+   * already knew, so a stop is still one beat (Law X).
+   *   A Ticker           the thud and a short damped bell
+   *   B Purr             a soft thump, nothing else
+   *   C Rattle and bell  a ding that climbs reel to reel: first low, second mid, third high
+   *   D Hybrid casino    the thud and a digital chime, a rung higher each reel
+   */
+  reelStop({ variant = DEFAULT_SFX.reel, reel = 0, level = 1 } = {}) {
+    const v = pick(variant, REEL_VARIANTS, DEFAULT_SFX.reel);
+    const r = clamp(Math.floor(num(reel, 0)), 0, 4), lv = clamp(num(level, 1), 0, 1), semis = (r - 1) * 2;
+    if (v === 'A') return [...SCORES.thud({ semis, level: lv }), ...bell(ROOT_HZ * SEMI(pentatonic(r)), 0.01, 0.16, 0.05 * lv, 'ding')];
+    if (v === 'B') {
+      return [tone(110 * SEMI(semis), 0, 0.26, 0.28 * lv, { hzTo: 44, lp: 600, part: 'thump' }),
+        noise(600, 0, 0.05, 0.035 * lv, { type: 'lowpass', part: 'thump', dry: true })];
+    }
+    if (v === 'C') {
+      return [...bell(ROOT_HZ * SEMI(pentatonic(r * 2)), 0, 0.34, 0.095 * lv, 'ding'),
+        noise(1800, 0, 0.018, 0.055 * lv, { q: 5, part: 'click', dry: true }),
+        tone(120 * SEMI(semis), 0, 0.14, 0.13 * lv, { hzTo: 52, lp: 700, part: 'thud' })];
+    }
+    return [...SCORES.thud({ semis, level: lv * 0.9 }),
+      tone(ROOT_HZ * SEMI(pentatonic(r + 2)), 0.02, 0.2, 0.075 * lv, { wave: 'square', lp: 2600, part: 'chime' }),
+      tone(ROOT_HZ * 2 * SEMI(pentatonic(r + 2)), 0.02, 0.12, 0.028 * lv, { part: 'chime' })];
+  },
   /** A button, a lever, "no more bets": one soft tap. */
   tap() { return [tone(220, 0, 0.03, 0.06, { part: 'tap', dry: true }), noise(1500, 0, 0.012, 0.03, { part: 'tap', dry: true })]; },
   /** The ball's launch: a short rising whoosh. */
@@ -239,7 +311,10 @@ const SCORES = {
 
 /* The beds are not scored: they loop until stopped. */
 export const BEDS = Object.freeze(['ambience', 'spiral']);
-export const CUES = Object.freeze([...Object.keys(SCORES), ...BEDS]);
+/** THE ROLLS loop like a bed but one per reel, and they follow the drum: play('reel', { reel, variant, speed }),
+ *  setRollSpeed(reel, speed) every frame, stop('reel', { reel }) on the stop frame. */
+export const ROLLS = Object.freeze(['reel']);
+export const CUES = Object.freeze([...Object.keys(SCORES), ...BEDS, ...ROLLS]);
 
 /**
  * Pure: the schedule for cue `name`: { name, notes, tail } (tail = seconds to the last note's end), or null for a
@@ -253,6 +328,23 @@ export function score(name, opts = {}, rand = Math.random) {
   return { name, notes, tail };
 }
 
+/** Which layers a reel voice turns on. A ticks alone, B purrs alone, C ticks over a resonant hum, D layers
+ *  the purr under the ticks. */
+const ROLL_LAYER = Object.freeze({
+  A: Object.freeze({ ticks: 1, purr: 0, hum: 0 }),
+  B: Object.freeze({ ticks: 0, purr: 1, hum: 0 }),
+  C: Object.freeze({ ticks: 1, purr: 0.3, hum: 1 }),
+  D: Object.freeze({ ticks: 1, purr: 0.6, hum: 0 }),
+});
+/** A tick peaks here, clear of the bed at -24 dB without being harsh; the purr and the hum together sit just
+ *  over it at full blur and fall away with the drum. */
+export const ROLL_TICK = 0.09;
+export const ROLL_BED = 0.08;
+const TICK_AHEAD = 0.14, TICK_MS = 45;
+const rollKey = reel => 'reel:' + clamp(Math.floor(num(reel, 0)), 0, 4);
+/** THE TICK RATE IS THE REEL SPEED: 38 ms a tick at full blur, 260 ms crawling into the stop. */
+export const tickGap = speed => 0.038 + 0.222 * (1 - clamp(num(speed, 1), 0, 1)) ** 1.7;
+
 /* ----------------------------------------------------------------------------
  * THE KIT. createKit({ AudioContext?, master?, random?, now? }) for a test; the
  * module singleton `kit` below for the room and the stations.
@@ -264,6 +356,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
   const live = new Set();       // every voice not yet ended (the leak check)
   const voices = new Map();     // name -> Set of voices
   const beds = new Map();       // name -> { nodes, gain, stop(fade) }
+  const rolls = new Map();      // 'reel:i' -> the drum turning on reel i
   const wanted = new Set();     // beds to bring back after a suspend
   const lastAt = new Map();     // name -> page time of the last play, for DEDUPE_MS
   const trace = [];
@@ -391,6 +484,89 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     beds.delete(name);
     try { bed.stop(fade); } catch (e) { /* closed */ }
   }
+  /* ---- THE REEL ROLL. One loop per reel, following the drum: ticks whose rate IS the reel's speed, a purr
+   * whose band opens with it, or both. A roll is not a bed: it belongs to one reel, it never comes back on a
+   * resume, and it dies on the stop frame under the stop gesture (Law X). ---- */
+  function shapeRoll(roll) {
+    if (!ctx || !roll.gain) return;
+    const t = ctx.currentTime, sp = clamp(roll.speed, 0, 1);
+    const lvl = Math.max(0.0001, ROLL_BED * roll.level * (0.22 + 0.78 * sp)), g = roll.gain.gain;
+    try { g.cancelScheduledValues(t); g.setValueAtTime(Math.max(0.0001, g.value), t); g.linearRampToValueAtTime(lvl, t + 0.06); } catch (e) { g.value = lvl; }
+    if (!roll.band) return;
+    const hz = 150 + 520 * sp + roll.reel * 30, f = roll.band.frequency;
+    try { f.cancelScheduledValues(t); f.setValueAtTime(Math.max(20, f.value), t); f.linearRampToValueAtTime(hz, t + 0.06); } catch (e) { f.value = hz; }
+  }
+  /** One tick of the train. The pitch climbs as the drum slows: on C that rise IS A1's anticipation tell. */
+  function tickNote(roll) {
+    const sp = clamp(roll.speed, 0, 1), up = (roll.variant === 'C' ? 7 : 2) * (1 - sp);
+    return noise(roll.base * SEMI(up), 0, 0.02, ROLL_TICK * roll.level * (0.72 + 0.28 * sp), { q: 6, part: 'tick', dry: true });
+  }
+  /** Ticks are scheduled a beat ahead and topped up on a timer, so the rate follows the drum without a frame
+   *  of its own. The timer is unref'd where the runtime has it: a bare node test never waits on a drum. */
+  function pump(roll) {
+    if (!ctx || rolls.get(roll.key) !== roll) return;
+    const until = ctx.currentTime + TICK_AHEAD;
+    if (roll.next < ctx.currentTime) roll.next = ctx.currentTime;
+    for (let i = 0; i < 24 && roll.next < until; i++) {
+      try { render(tickNote(roll), roll.next, roll.set); } catch (e) { /* a tick never breaks a beat */ }
+      roll.next += tickGap(roll.speed);
+    }
+    roll.timer = setTimeout(() => pump(roll), TICK_MS);
+    if (roll.timer && typeof roll.timer.unref === 'function') roll.timer.unref();
+  }
+  function freeRoll(roll) { for (const n of roll.nodes) { try { n.disconnect(); } catch (e) { /* gone */ } } }
+  /** Start the drum on `reel`, or follow it if it is already turning. */
+  function startRoll(reel, opts = {}) {
+    const key = rollKey(reel), speed = clamp(num(opts.speed, 1), 0, 1), have = rolls.get(key);
+    if (have) { have.speed = speed; shapeRoll(have); return 1; }
+    const r = clamp(Math.floor(num(reel, 0)), 0, 4);
+    const variant = pick(opts.variant, REEL_VARIANTS, DEFAULT_SFX.reel), layer = ROLL_LAYER[variant];
+    let set = voices.get(key);
+    if (!set) { set = new Set(); voices.set(key, set); }
+    const roll = { key, reel: r, variant, layer, speed, level: clamp(num(opts.level, 1), 0, 1),
+                   base: 1250 * SEMI(r * 3), nodes: [], gain: null, band: null, next: 0, timer: 0, set };
+    try {
+      if (layer.purr || layer.hum) {
+        const g = ctx.createGain(); g.gain.value = 0.0001; g.connect(dry); roll.gain = g; roll.nodes.push(g);
+        if (layer.purr) {
+          const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+          const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.4; bp.frequency.value = 240;
+          const pg = ctx.createGain(); pg.gain.value = layer.purr;
+          src.connect(bp); bp.connect(pg); pg.connect(g); src.start(); src.onended = () => freeRoll(roll);
+          roll.band = bp; roll.nodes.push(src, bp, pg);
+        }
+        if (layer.hum) {
+          const hg = ctx.createGain(); hg.gain.value = 0.34 * layer.hum;
+          const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+          lp.connect(hg); hg.connect(g);
+          for (const hz of [96 * SEMI(r * 2), 144 * SEMI(r * 2)]) {
+            const o = ctx.createOscillator(), og = ctx.createGain();
+            o.type = 'triangle'; o.frequency.value = hz; og.gain.value = 0.5;
+            o.connect(og); og.connect(lp); o.start(); o.onended = () => freeRoll(roll);
+            roll.nodes.push(o, og);
+          }
+          roll.nodes.push(lp, hg);
+        }
+      }
+    } catch (e) { /* a drum that cannot purr still ticks */ }
+    rolls.set(key, roll);
+    roll.next = ctx.currentTime;
+    shapeRoll(roll);
+    if (layer.ticks) pump(roll);
+    return 1;
+  }
+  function stopRoll(reel) {
+    const key = rollKey(reel), roll = rolls.get(key);
+    if (!roll) return;
+    rolls.delete(key);
+    if (roll.timer) clearTimeout(roll.timer);
+    killVoices(key);                       // every tick scheduled ahead goes with it (Law VI)
+    if (!ctx) return;
+    const at = ctx.currentTime;
+    if (roll.gain) { const g = roll.gain.gain; try { g.cancelScheduledValues(at); g.setValueAtTime(Math.max(0.0001, g.value), at); g.exponentialRampToValueAtTime(0.0001, at + 0.05); } catch (e) { /* closed */ } }
+    for (const n of roll.nodes) { try { if (typeof n.stop === 'function') n.stop(at + 0.07); } catch (e) { /* already */ } }
+  }
+  function stopRolls() { for (const key of Array.from(rolls.keys())) stopRoll(key.slice(5)); }
   function killVoices(name) {
     const set = voices.get(name);
     if (!set) return;
@@ -411,6 +587,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
       const window = DEDUPE_MS[name];
       if (window) { const t = clock(), was = lastAt.get(name); if (was != null && t - was < window) return 0; lastAt.set(name, t); }
       if (BEDS.includes(name)) { wanted.add(name); if (!ready()) return 0; return startBed(name, opts) ? 1 : 0; }
+      if (ROLLS.includes(name)) { if (!ready()) return 0; return startRoll(opts && opts.reel, opts || {}); }
       const s = score(name, opts, rand);
       if (!s) return 0;
       if (!ready()) return 0;
@@ -422,13 +599,15 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
       return n;
     },
     /** Take a cue back: a bed fades (500 ms), a one-shot and everything it scheduled ahead stops now. */
-    stop(name) {
+    stop(name, opts = {}) {
       if (BEDS.includes(name)) { wanted.delete(name); if (ctx) stopBed(name, 0.5); return; }
+      if (ROLLS.includes(name)) { if (opts && opts.reel != null) stopRoll(opts.reel); else stopRolls(); return; }
       if (ctx) killVoices(name);
     },
     /** Every one-shot stops; the beds fade. Law VI's skip and the suspend both come here. */
     stopAll({ beds: bedsToo = true } = {}) {
       if (!ctx) return;
+      stopRolls();
       killAll();
       if (bedsToo) for (const name of Array.from(beds.keys())) stopBed(name, 0.15);
     },
@@ -440,6 +619,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
       suspended = want;
       if (!ctx || ctx.state === 'closed') return;
       if (suspended) {
+        stopRolls();
         killAll();
         for (const name of Array.from(beds.keys())) stopBed(name, 0.05);
         ctx.suspend().catch(() => {});
@@ -452,6 +632,8 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     /** A quieter room under Calm (the slot and the wheel already play their cues softer there). */
     setTrim(v) { trimLevel = clamp(num(v, 1), 0, 1); applyLevel(); },
     mute(on) { muted = !!on; applyLevel(); },
+    /** Follow a drum. Untraced on purpose: the reels call this every frame while they travel. */
+    setRollSpeed(reel, speed) { const roll = rolls.get(rollKey(reel)); if (!roll) return; roll.speed = clamp(num(speed, roll.speed), 0, 1); shapeRoll(roll); },
     get master() { return masterLevel; },
     get muted() { return muted; },
     get suspended() { return suspended; },
@@ -460,14 +642,14 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     dispose() {
       wanted.clear();
       if (ctx) {
-        try { killAll(); for (const name of Array.from(beds.keys())) stopBed(name, 0.02); } catch (e) { /* closing */ }
+        try { stopRolls(); killAll(); for (const name of Array.from(beds.keys())) stopBed(name, 0.02); } catch (e) { /* closing */ }
         try { ctx.close().catch(() => {}); } catch (e) { /* already */ }
       }
-      ctx = null; out = null; dry = null; send = null; noiseBuf = null; live.clear(); voices.clear(); beds.clear(); lastAt.clear(); suspended = false;
+      ctx = null; out = null; dry = null; send = null; noiseBuf = null; live.clear(); voices.clear(); beds.clear(); rolls.clear(); lastAt.clear(); suspended = false;
     },
     trace,
     /** Test seam. */
-    debug() { return { live: live.size, voices: Array.from(voices.keys()), beds: Array.from(beds.keys()), wanted: Array.from(wanted), master: masterLevel, trim: trimLevel, muted, suspended, has: !!ctx, state: ctx ? ctx.state : 'none' }; },
+    debug() { return { live: live.size, voices: Array.from(voices.keys()), beds: Array.from(beds.keys()), rolls: Array.from(rolls.keys()), wanted: Array.from(wanted), master: masterLevel, trim: trimLevel, muted, suspended, has: !!ctx, state: ctx ? ctx.state : 'none' }; },
   };
   function applyLevel() {
     if (!out) return;

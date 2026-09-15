@@ -8,29 +8,95 @@
  * two -> mid, thud -> big, reveal -> hero), THE CHIME LADDER rolls with THE BANK's count-up, a no-pay spin's last
  * stop is THE SETTLE (soft, felt, never a fail), A1's tease is the riser and A2's almost resolves quietly. */
 
-import { kit } from '../../shared/sound/kit.js';
+import { kit, DEFAULT_SFX, LEVER_VARIANTS, REEL_VARIANTS } from '../../shared/sound/kit.js';
 
 const WIN_TIER = { chime: 'small', two: 'mid', thud: 'big', reveal: 'hero' };
-const LEVEL = { thud: 0.5, settle: 0.05, chime: 0.34, token: 0.12, rise: 0.2 };
+const LEVEL = { thud: 0.5, settle: 0.05, chime: 0.34, token: 0.12, rise: 0.2, lever: 0.24, roll: 0.09 };
 
-export function createSound(k = kit) {
+/** The owner's pick, kept where he can change it while playing (shared/sound/audition.html writes it). */
+export const VARIANT_KEY = 'br.sfx.variant';
+const up = v => String(v == null ? '' : v).trim().toUpperCase();
+const asLever = v => (LEVER_VARIANTS.includes(up(v)) ? up(v) : null);
+const asReel = v => (REEL_VARIANTS.includes(up(v)) ? up(v) : null);
+
+/**
+ * Pure: which lever and which drum to play. The kit's defaults (lever B, reel C) first, then the saved pair
+ * (`store`, the localStorage value: {"lever":"A","reel":"D"} or the compact "A/D"), then the URL query
+ * (?lever=A&reel=D), which wins so a dev page can try a pair without touching what is saved.
+ */
+export function pickVariant({ search = '', store = null } = {}) {
+  const out = { ...DEFAULT_SFX };
+  let saved = store && typeof store === 'object' ? store : null;
+  if (typeof store === 'string' && store.trim()) {
+    try { const j = JSON.parse(store); if (j && typeof j === 'object') saved = j; } catch (e) { /* not json, try the compact pair */ }
+    if (!saved) { const m = up(store).match(/^([A-D])[\s/,-]*([A-D])$/); if (m) saved = { lever: m[1], reel: m[2] }; }
+  }
+  if (saved) { const l = asLever(saved.lever); if (l) out.lever = l; const r = asReel(saved.reel); if (r) out.reel = r; }
+  let q = null;
+  try { q = new URLSearchParams(String(search || '')); } catch (e) { q = null; }
+  if (q) { const l = asLever(q.get('lever')); if (l) out.lever = l; const r = asReel(q.get('reel')); if (r) out.reel = r; }
+  return out;
+}
+
+/** The page's own pair: the query and the saved key, read once when the station opens. */
+function readVariant() {
+  let search = '', store = null;
+  try { search = typeof location !== 'undefined' ? location.search : ''; } catch (e) { /* not a page */ }
+  try { store = typeof localStorage !== 'undefined' ? localStorage.getItem(VARIANT_KEY) : null; } catch (e) { /* blocked */ }
+  return pickVariant({ search, store });
+}
+
+export function createSound(k = kit, over = null) {
   let suspended = false, disposed = false, tokens = 0;
+  const variant = { ...readVariant(), ...(over && typeof over === 'object' ? pickVariant({ store: over }) : null) };
+  const rolling = new Set();                  // reels already turning, so only the first frame traces
+  const sent = new Map();                     // reel -> [speed, page time] of the last update sent to the kit
   const trace = [];   // the last cues with their page time, for dev.html and CDP checks
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   function note(name, semis, level, inMs = 0) { trace.push({ name, semis, level, at: Math.round(now()), in: Math.round(inMs) }); if (trace.length > 60) trace.shift(); }
   const live = () => !disposed && !suspended;
-  /** Every voice this station may have scheduled ahead. */
-  const quiet = () => { k.stop('riser'); k.stop('ladder'); k.stop('breath'); };
+  /** Every voice this station may have scheduled ahead, the drums included. */
+  const quiet = () => { k.stop('riser'); k.stop('ladder'); k.stop('breath'); k.stop('reel'); rolling.clear(); sent.clear(); };
 
   const api = {
     /** Wake the kit inside a gesture (a press or a pull). */
     arm() { if (live()) k.arm(); },
-    /** THE THUD for reel `i` (0..2), rising left to right; the last stop of a no-pay spin is THE SETTLE. */
+    /**
+     * THE LEVER PULL, the whole gesture, on the frame the lever starts to move (Law VIII: it leans before the
+     * tape or the server answers, and it sounds on that same frame).
+     */
+    lever() {
+      note('lever-' + variant.lever, 0, LEVEL.lever);
+      if (live()) k.play('lever', { variant: variant.lever });
+    },
+    /**
+     * THE REEL ROLL for reel `i`: the drum starts turning on its first frame and follows its own decel from
+     * there (`speed` 1 at full blur, 0 into the stop), so A1's stretched third reel crawls in sound too. The
+     * roll ends on the stop frame, in thud() below. Updates are throttled: one per 60 ms or per 2% of speed.
+     */
+    roll(i, speed = 1) {
+      const sp = Math.max(0, Math.min(1, Number(speed) || 0));
+      if (!live()) return;
+      if (!rolling.has(i)) {
+        rolling.add(i); sent.set(i, [sp, now()]);
+        note('roll-' + variant.reel, i, LEVEL.roll);
+        k.play('reel', { reel: i, variant: variant.reel, speed: sp });
+        return;
+      }
+      const t = now(), was = sent.get(i) || [0, 0];
+      if (Math.abs(sp - was[0]) < 0.02 && t - was[1] < 60) return;
+      sent.set(i, [sp, t]);
+      k.setRollSpeed(i, sp);
+    },
+    /** THE THUD for reel `i` (0..2), rising left to right; the last stop of a no-pay spin is THE SETTLE.
+     *  The drum stops on this same frame and the reel voice's own stop gesture carries the thud (Law X). */
     thud(i, muted = false) {
       const semis = muted ? -5 : (i - 1) * 2;
       note(muted ? 'thud-muted' : 'thud', semis, muted ? LEVEL.settle : LEVEL.thud);
+      rolling.delete(i); sent.delete(i);
+      k.stop('reel', { reel: i });
       if (!live()) return;
-      if (muted) k.play('settle'); else k.play('thud', { semis });
+      if (muted) k.play('settle'); else k.play('reelStop', { reel: i, variant: variant.reel });
     },
     /** THE WIN by tier, `sound` from feel.recipe, `semis` from feel.ladderSemis (the streak's root). */
     win(sound, semis) {
@@ -80,6 +146,8 @@ export function createSound(k = kit) {
       if (suspended) quiet();   // the room suspends the kit itself; this only takes the slot's own voices back
     },
     dispose() { disposed = true; quiet(); },
+    /** Which pair is playing, for dev.html and the CDP checks. */
+    get variant() { return { ...variant }; },
     trace,
   };
   return api;
