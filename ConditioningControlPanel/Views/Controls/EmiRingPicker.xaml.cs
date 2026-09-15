@@ -125,40 +125,12 @@ namespace ConditioningControlPanel.Views.Controls
             }
         }
 
-        /// <summary>The card art with its name on a strip, or the target's flat hue when it has no art.</summary>
+        /// <summary>The card art (or medallion plate) with its name on a strip; the flat hue only when the art fails to load.</summary>
         private static UIElement BuildTileFace(EmiTarget t, bool locked)
         {
             var grid = new Grid();
 
-            ImageSource? art = null;
-            try
-            {
-                if (!string.IsNullOrWhiteSpace(t.ThumbPath))
-                    art = Services.ModResourceResolver.ResolveImageDecoded(t.ThumbPath!, 192);
-            }
-            catch (Exception ex)
-            {
-                Log.Debug(ex, "[EmiDesk] picker art missing for {Target}", t.Id);
-            }
-
-            if (art != null)
-            {
-                grid.Children.Add(new Image
-                {
-                    Source = art,
-                    Stretch = Stretch.UniformToFill,
-                    IsHitTestVisible = false,
-                    Opacity = locked ? 0.42 : 0.92,
-                });
-            }
-            else
-            {
-                grid.Children.Add(new System.Windows.Shapes.Rectangle
-                {
-                    Fill = new SolidColorBrush(t.Hue) { Opacity = locked ? 0.28 : 0.62 },
-                    IsHitTestVisible = false,
-                });
-            }
+            EmiCardFace.AddArt(grid, t, locked, iconSize: 34, stripReserve: 14);
 
             var strip = new Border
             {

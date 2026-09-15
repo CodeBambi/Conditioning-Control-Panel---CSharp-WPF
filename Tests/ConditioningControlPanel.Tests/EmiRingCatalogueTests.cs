@@ -74,19 +74,68 @@ public class EmiRingCatalogueTests
     }
 
     [Fact]
-    public void Every_card_that_declares_art_has_a_file_to_show()
+    public void Every_pinnable_target_has_art_that_ships()
     {
-        // A ThumbPath is resolved at runtime by ModResourceResolver, which answers a miss with a
-        // logged null and a flat hue tile - the same silent failure this file exists to catch. The
-        // arcademy card shipped as that tile for a whole build before anyone noticed (QA
-        // 2026-08-29), so the paths are checked against the tree instead of against a play-test.
+        // Every catalogue entry is pinnable from her options wall, and any of them can land on the
+        // ring. A ThumbPath is resolved at runtime by ModResourceResolver, which answers a miss with
+        // a logged null and a flat hue tile - the same silent failure this file exists to catch. The
+        // arcademy card shipped as that tile for a whole build (QA 2026-08-29), and Profile, Settings
+        // and Companion shipped with no art at all (owner report 2026-09-15), so every target must
+        // name a file that exists AND that the csproj actually packages: a PNG on disk that is not a
+        // Resource (or web Content) is a pack URI to nothing.
         var res = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources");
+        var packaged = PackagedGlobs();
         foreach (var t in EmiTargets.All)
         {
-            if (string.IsNullOrWhiteSpace(t.ThumbPath)) continue;
+            Assert.False(string.IsNullOrWhiteSpace(t.ThumbPath), $"\"{t.Id}\" has no art and would paint a flat tile");
             var file = Path.Combine(res, t.ThumbPath!.Replace('/', Path.DirectorySeparatorChar));
             Assert.True(File.Exists(file), $"\"{t.Id}\" points at missing art: {t.ThumbPath}");
+            Assert.True(new FileInfo(file).Length > 64, $"\"{t.Id}\" art is an LFS pointer or empty: {t.ThumbPath}");
+
+            var rel = "Resources\\" + t.ThumbPath!.Replace('/', '\\');
+            Assert.True(packaged.Any(g => g.IsMatch(rel)), $"\"{t.Id}\" art is not packaged by the csproj: {t.ThumbPath}");
+
+            if (t.ThumbIsIcon)
+            {
+                // A plate draws its icon at a fixed square size; scene art there would be squashed.
+                var (w, h) = PngSize(file);
+                Assert.True(w == h, $"\"{t.Id}\" is drawn as an icon plate but its art is {w}x{h}");
+            }
         }
+    }
+
+    /// <summary>Resource and Content Include globs from the app csproj, as regexes over project-relative paths.</summary>
+    private static List<System.Text.RegularExpressions.Regex> PackagedGlobs()
+    {
+        var proj = Path.Combine(RepoRoot(), "ConditioningControlPanel", "ConditioningControlPanel.csproj");
+        var doc = System.Xml.Linq.XDocument.Load(proj);
+        var globs = new List<System.Text.RegularExpressions.Regex>();
+        foreach (var el in doc.Descendants().Where(e => e.Name.LocalName is "Resource" or "Content"))
+        {
+            var inc = (string?)el.Attribute("Include");
+            if (string.IsNullOrWhiteSpace(inc)) continue;
+            foreach (var raw in inc.Split(';'))
+            {
+                var g = raw.Trim();
+                if (g.Length == 0 || g.Contains("$(")) continue;
+                var rx = System.Text.RegularExpressions.Regex.Escape(g)
+                    .Replace(@"\*\*\\", @"(.*\\)?")
+                    .Replace(@"\*", @"[^\\]*");
+                globs.Add(new System.Text.RegularExpressions.Regex("^" + rx + "$",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase));
+            }
+        }
+        Assert.NotEmpty(globs);
+        return globs;
+    }
+
+    private static (int W, int H) PngSize(string file)
+    {
+        var b = new byte[24];
+        using (var fs = File.OpenRead(file)) Assert.Equal(24, fs.Read(b, 0, 24));
+        int W = (b[16] << 24) | (b[17] << 16) | (b[18] << 8) | b[19];
+        int H = (b[20] << 24) | (b[21] << 16) | (b[22] << 8) | b[23];
+        return (W, H);
     }
 
     [Fact]

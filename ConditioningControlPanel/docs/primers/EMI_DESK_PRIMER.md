@@ -248,8 +248,11 @@ sibling. Speaking `gradedintake` out loud is the failure this prevents.
 Six cards, ever. No scroll, no second page.
 
 - **Catalogue** — `EmiTargets.All`, 27 entries, each `EmiTarget(Id, LabelKey, ThumbPath, Hue,
-  IsAvailable, IsLocked, Open, Gate)`. The ring never learns what a feature *is*; it asks three
+  IsAvailable, IsLocked, Open, Gate, ThumbIsIcon)`. The ring never learns what a feature *is*; it asks three
   lambdas. Adding a door is one `T(...)` line plus a loc key `emi_desk_target_<id>`.
+  **Every door needs art** (`EmiRingCatalogueTests` fails a null or unpackaged `ThumbPath`): scene art
+  cover-fills the card, and a room with no illustration passes its square nav medallion with
+  `icon: true`, which `EmiCardFace` draws centred on a plate. The flat `Hue` tile is only a runtime-miss fallback.
   **`Id` is the usage key, the pin key and the `ringPick` payload — renaming a shipped id silently
   resets that feature's score.**
 - **`IsAvailable` vs `IsLocked`** are not the same. Unavailable **hides the card** (a dark door, a
