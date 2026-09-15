@@ -561,6 +561,7 @@
       Resources\web\arcademy\shell\recordsroom.demo.html;
       Resources\web\arcademy\games\**\smoke\**\*;
       Resources\web\backroom\smoke\**\*;
+      Resources\web\backroom\**\tests\**\*;
       Resources\web\backroom\shared\hypno\tests\**\*
     </ArcademyHarnessExclude>
     <!-- Remix engine (Resources\web\remix, vendored from cclabs-site/remix for the Jackpot Remix
@@ -579,6 +580,7 @@
       $(MSBuildProjectDirectory)\Resources\web\arcademy\shell\recordsroom.demo.html;
       $(MSBuildProjectDirectory)\Resources\web\arcademy\games\**\smoke\**\*;
       $(MSBuildProjectDirectory)\Resources\web\backroom\smoke\**\*;
+      $(MSBuildProjectDirectory)\Resources\web\backroom\**\tests\**\*;
       $(MSBuildProjectDirectory)\Resources\web\backroom\shared\hypno\tests\**\*
     </ArcademyHarnessExcludeAbs>
   </PropertyGroup>

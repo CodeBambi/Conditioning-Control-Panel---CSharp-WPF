@@ -1,7 +1,7 @@
 // Soft Hand's room view. The station owns all cards, steps, locks, moments and SP.
 // Geometry follows authored anchors; this view never opens a renderer or moves the camera.
 import * as T from 'three';
-import { cardsNodes, slotName } from '../../room/nodes-cards.js';
+import { cardsNodes, slotName, validCardSlot } from '../../room/nodes-cards.js';
 import { TIMING, fanCard, lampBreath } from './feel.js';
 import { DECK_VALUES } from '../../shared/hypno/media.js';
 import { createCardFace } from './card-face.js';
@@ -66,7 +66,8 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
   }
   const api = {
     clear() { cards.splice(0).forEach(drop); hands = 1; active = -1; },
-    addCard(c, time) { cards.push(makeCard({ ...c, code: c.code || null, bornAt: time })); },
+    // Ignore malformed cards without inventing a placement or stopping the station.
+    addCard(c, time) { if (!validCardSlot(c.owner, c.slot)) return false; cards.push(makeCard({ ...c, code: c.code || null, bornAt: time })); return true; },
     split() { const c = cards.find((x) => x.owner === 0 && x.slot === 1); if (c) { c.owner = 1; c.slot = 0; } hands = 2; },
     reveal(code, time, settled = false) { const c = cards.find((x) => x.owner === 'd' && x.slot === 1); if (c) { c.code = code; c.faceAt = settled ? time - TIMING.flipMs : time; } },
     setActive(i) { active = i; },
