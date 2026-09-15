@@ -6,8 +6,8 @@
     Adding -windows / win-x64 / UseWPF here would make it unrunnable on Linux and quietly
     delete that signal. Package versions match Tests/ConditioningControlPanel.Tests.
 
-    It currently contains no tests, so CI builds it rather than running `dotnet test` - every
-    runner treats "zero tests ran" as a failure (exit 1). See .github/workflows/build.yml.
+    Core persistence/lifecycle tests run here on Linux; keep this project headless and runnable
+    without a Windows runtime. See .github/workflows/build.yml.
   -->
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
