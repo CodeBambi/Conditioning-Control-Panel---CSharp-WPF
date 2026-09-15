@@ -1,5 +1,5 @@
 import * as T from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { createRouletteSurfaces, getRouletteSurfaces } from '../../room/roulette-surfaces.js';
 import { createBowl } from './bowl.js';
 import { FEEL, SEG, restRel, beamAngle, beamLit, whirlAngle } from './feel.js';
 
@@ -27,34 +27,8 @@ export function createBowl3D({ stage, wheel, rose }) {
   const track = center(nodes.ball_track);
   const trackBox = new T.Box3().setFromObject(nodes.ball_track);
   const trackRadius = Math.max(trackBox.getSize(new T.Vector3()).x, trackBox.getSize(new T.Vector3()).z) / (2 * rotorScale);
-  // Retain authored pick/landing nodes, but batch their visuals by material.
-  const batches = [], hidden = [], groups = new Map(), numberColors = [];
-  rotor.updateWorldMatrix(true, true);
-  const inverse = rotor.matrixWorld.clone().invert();
-  for (const n of wheel) for (const prefix of ['pocket_', 'number_band_', 'number_']) {
-    const node = root.getObjectByName(prefix + n);
-    if (!node?.isMesh || Array.isArray(node.material)) continue;
-    const key = node.material.uuid + (prefix === 'number_' ? ':number' : ':surface');
-    if (!groups.has(key)) groups.set(key, { material:node.material, geometries:[], colors:[] });
-    const group = groups.get(key), geometry = node.geometry.clone();
-    geometry.applyMatrix4(inverse.clone().multiply(node.matrixWorld));
-    // Optimized GLBs use quantized attributes. Float colors are runtime-owned.
-    if (prefix === 'number_') {
-      const color = new Float32Array(geometry.attributes.position.count * 3); color.fill(1);
-      geometry.setAttribute('color', new T.BufferAttribute(color, 3));
-      group.colors.push({ n, count:geometry.attributes.position.count, angle:angles[wheel.indexOf(n)] });
-    }
-    group.geometries.push(geometry); hidden.push({node, visible:node.visible}); node.visible=false;
-  }
-  for (const group of groups.values()) {
-    const geometry=mergeGeometries(group.geometries, false);
-    if (!geometry) throw new Error('Roulette named surfaces could not be batched');
-    for (const g of group.geometries) g.dispose();
-    const material=group.material.clone(); material.vertexColors=group.colors.length>0;
-    const mesh=new T.Mesh(geometry, material); mesh.name='roulette_runtime_surfaces'; rotor.add(mesh);
-    batches.push(mesh);
-    let offset=0;for(const item of group.colors){numberColors.push({...item,offset,attribute:geometry.attributes.color});offset+=item.count;}
-  }
+  const existingSurfaces=getRouletteSurfaces(root);
+  const surfaces=existingSurfaces||createRouletteSurfaces(root),numberColors=surfaces.numberColors;
   const disc = nodes.center_disc, oldDisc = disc.material;
   const ink = document.createElement('canvas'); ink.width = ink.height = 256;
   const inkCtx = ink.getContext('2d'), texture = new T.CanvasTexture(ink);
@@ -124,8 +98,7 @@ export function createBowl3D({ stage, wheel, rose }) {
   function dispose() {
     if (disposed) return; disposed = true;
     rotor.quaternion.copy(saved.rotor); ball.position.copy(saved.ball); ball.visible = saved.visible;
-    for (const entry of hidden) entry.node.visible=entry.visible;
-    for (const mesh of batches) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose(); }
+    surfaces.reset(); if(!existingSurfaces)surfaces.dispose();
     for(const object of [beam,sparks,trail]){object.removeFromParent();object.geometry.dispose();object.material.dispose();}
     disc.material = oldDisc; material.dispose(); texture.dispose();
     ink.width = ink.height = 1;
