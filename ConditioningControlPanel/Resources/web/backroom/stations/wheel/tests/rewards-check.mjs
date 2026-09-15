@@ -95,6 +95,8 @@ for(const [index,[id,reward,pay]] of cases.entries()){
   await writeFile(join(OUT,`reward-${index}-${id}.png`),Buffer.from((await cdp('Page.captureScreenshot',{format:'png'})).result.data,'base64'));
   await ev('window.rewardStation.close()');ok(await ev("!document.querySelector('.daze-delivery')"),id+' disposes');
 }
+const motion = await ev(`(async()=>{const {createRewardReveal}=await import('./rewards.js');const root=document.querySelector('#root');const reveal=createRewardReveal(root,(_,s)=>s);reveal.show({reward:{kind:'decoration',decorationId:'ivy'}},false);await new Promise(r=>requestAnimationFrame(r));reveal.setStill(true);reveal.setStill(false);const still=root.querySelector('.daze-delivery').classList.contains('is-still'),running=root.querySelector('.daze-cloche i').getAnimations().some(a=>a.playState==='running');reveal.dispose();return{still,running};})()`);
+ok(motion.still&&!motion.running,'live Motion Off drops cloche animation without replay');
 ok(errs.length===0,'no browser errors');
 await writeFile(join(OUT,'rewards-check.json'),JSON.stringify({fails,errs,cases:cases.length},null,2));
 await done(fails?1:0);
