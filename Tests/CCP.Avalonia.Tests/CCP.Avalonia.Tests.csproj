@@ -18,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Shared\AvaloniaTestDispatcher.cs" Link="AvaloniaTestDispatcher.cs" />
     <ProjectReference Include="..\..\CCP.Avalonia\CCP.Avalonia.csproj" />
   </ItemGroup>
 </Project>

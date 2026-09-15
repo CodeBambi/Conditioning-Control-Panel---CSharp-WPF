@@ -7,6 +7,7 @@ using Avalonia.Headless;
 using Avalonia.Skia;
 using Avalonia.Threading;
 using ConditioningControlPanel;
+using CCP.Avalonia.Testing;
 using ConditioningControlPanel.Avalonia.Views.Controls.AppSettings;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -19,7 +20,9 @@ public sealed class NotificationsSettingsSectionTests
     [Fact]
     public void BothNotificationPreferencesRoundTripWithoutLoadOrRebindWrites()
     {
-        var profile = Path.Combine(Path.GetTempPath(), "ccp-notifications-" + Guid.NewGuid().ToString("N"));
+        AvaloniaTestDispatcher.Run(() =>
+        {
+            var profile = Path.Combine(Path.GetTempPath(), "ccp-notifications-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(profile);
         var previousProfile = Environment.GetEnvironmentVariable("CCP_USERDATA_DIR");
         Environment.SetEnvironmentVariable("CCP_USERDATA_DIR", profile);
@@ -117,11 +120,13 @@ public sealed class NotificationsSettingsSectionTests
             CoreSettings.ServiceProvider = null;
             Environment.SetEnvironmentVariable("CCP_USERDATA_DIR", previousProfile);
             try { Directory.Delete(profile, recursive: true); } catch { }
-        }
+            }
+        });
     }
 
     private static void EnsureAvalonia()
     {
+        Assert.True(AvaloniaTestDispatcher.IsDispatcherThread, "Avalonia setup did not stay on the test dispatcher");
         if (Application.Current is not null) return;
         AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
             .UseSkia()

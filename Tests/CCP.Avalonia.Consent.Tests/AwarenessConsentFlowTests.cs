@@ -11,6 +11,7 @@ using Avalonia.Skia;
 using Avalonia.Threading;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia;
+using CCP.Avalonia.Testing;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
@@ -47,7 +48,9 @@ public sealed class AwarenessConsentFlowTests
     [Fact]
     public async Task EnablingWithoutEntitlementDoesNotOpenOrWrite()
     {
-        var settings = Prepare();
+        await AvaloniaTestDispatcher.RunAsync(async () =>
+        {
+            var settings = Prepare();
         var previousProvider = CoreEntitlement.HasPremiumProvider;
         try
         {
@@ -67,13 +70,16 @@ public sealed class AwarenessConsentFlowTests
                 finally { CloseShell(shell); }
             });
         }
-        finally { Restore(previousProvider); }
+            finally { Restore(previousProvider); }
+        });
     }
 
     [Fact]
     public async Task DecliningTheRealDialogLeavesAwarenessOff()
     {
-        var settings = Prepare();
+        await AvaloniaTestDispatcher.RunAsync(async () =>
+        {
+            var settings = Prepare();
         var previousProvider = CoreEntitlement.HasPremiumProvider;
         try
         {
@@ -97,13 +103,16 @@ public sealed class AwarenessConsentFlowTests
                 finally { CloseShell(shell); }
             });
         }
-        finally { Restore(previousProvider); }
+            finally { Restore(previousProvider); }
+        });
     }
 
     [Fact]
     public async Task DismissingTheRealDialogIsADecline()
     {
-        var settings = Prepare();
+        await AvaloniaTestDispatcher.RunAsync(async () =>
+        {
+            var settings = Prepare();
         var previousProvider = CoreEntitlement.HasPremiumProvider;
         try
         {
@@ -130,13 +139,16 @@ public sealed class AwarenessConsentFlowTests
                 finally { CloseShell(shell); }
             });
         }
-        finally { Restore(previousProvider); }
+            finally { Restore(previousProvider); }
+        });
     }
 
     [Fact]
     public async Task AcceptingTheRealDialogSeedsPrivacyAndMigratesBeforeEnabling()
     {
-        var settings = Prepare(s => s.AwarenessReactionCooldownSeconds = 15);
+        await AvaloniaTestDispatcher.RunAsync(async () =>
+        {
+            var settings = Prepare(s => s.AwarenessReactionCooldownSeconds = 15);
         var previousProvider = CoreEntitlement.HasPremiumProvider;
         try
         {
@@ -165,13 +177,16 @@ public sealed class AwarenessConsentFlowTests
                 finally { CloseShell(shell); }
             });
         }
-        finally { Restore(previousProvider); }
+            finally { Restore(previousProvider); }
+        });
     }
 
     [Fact]
     public async Task AlreadyAcceptedConsentOpensTheDoorWithoutASecondDialog()
     {
-        var settings = Prepare(s => s.AwarenessConsentShownV2 = true);
+        await AvaloniaTestDispatcher.RunAsync(async () =>
+        {
+            var settings = Prepare(s => s.AwarenessConsentShownV2 = true);
         var previousProvider = CoreEntitlement.HasPremiumProvider;
         try
         {
@@ -191,18 +206,21 @@ public sealed class AwarenessConsentFlowTests
                 finally { CloseShell(shell); }
             });
         }
-        finally { Restore(previousProvider); }
+            finally { Restore(previousProvider); }
+        });
     }
 
     [Fact]
     public async Task DisablingRemainsUngatedWhenEntitlementIsDenied()
     {
-        var settings = Prepare(s =>
+        await AvaloniaTestDispatcher.RunAsync(async () =>
         {
-            s.AwarenessModeEnabled = true;
-            s.AwarenessConsentGiven = true;
-            s.AwarenessConsentShownV2 = true;
-        });
+            var settings = Prepare(s =>
+            {
+                s.AwarenessModeEnabled = true;
+                s.AwarenessConsentGiven = true;
+                s.AwarenessConsentShownV2 = true;
+            });
         var previousProvider = CoreEntitlement.HasPremiumProvider;
         try
         {
@@ -222,11 +240,13 @@ public sealed class AwarenessConsentFlowTests
                 finally { CloseShell(shell); }
             });
         }
-        finally { Restore(previousProvider); }
+            finally { Restore(previousProvider); }
+        });
     }
 
     private static AppSettings Prepare(Action<AppSettings>? configure = null)
     {
+        Assert.True(AvaloniaTestDispatcher.IsDispatcherThread, "consent setup did not stay on the test dispatcher");
         EnsureAvalonia();
         _settings ??= new SettingsService();
         CoreSettings.ServiceProvider = () => _settings;
