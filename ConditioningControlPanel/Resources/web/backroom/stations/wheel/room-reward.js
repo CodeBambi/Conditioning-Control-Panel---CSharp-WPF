@@ -12,7 +12,7 @@ export function createRoomReward(stage, loom) {
     if(kind==='nothing'){if(!still)stage.emi?.trigger('look');return true;}
     if(kind==='decoration'&&!reward.fallback){
       const source=stage.scene.getObjectByName(MODELS[reward.decorationId]);if(!source)return false;
-      const gift=source.clone(true);gift.position.set(0,0,0);gift.rotation.set(0,0,0);gift.scale.setScalar(1);gift.visible=true;
+      const gift=source.clone(true);gift.matrixAutoUpdate=true;gift.position.set(0,0,0);gift.rotation.set(0,0,0);gift.scale.setScalar(1);gift.visible=true;
       const box=new T.Box3().setFromObject(gift),size=box.getSize(new T.Vector3()),center=box.getCenter(new T.Vector3());
       const scale=.20/Math.max(size.x,size.y,size.z);gift.scale.setScalar(scale);gift.position.copy(center).multiplyScalar(-scale);gift.position.y+=.018;
       gift.traverse(n=>{n.renderOrder=1001;if(n.material){n.material=Array.isArray(n.material)?n.material.map(copy):copy(n.material);}});
@@ -33,5 +33,5 @@ export function createRoomReward(stage, loom) {
     eyes.forEach((eye,i)=>{eye.position.x=(i?1:-1)*(.065+(still?0:.035*Math.max(0,1-age/.62)));});
     if(age>4)group.visible=false;
   }
-  return {reveal,update,skip(){group.visible=false;},dispose(){clear();group.removeFromParent();}};
+  return {reveal,update,setStill(on){if(on){still=true;update(performance.now());}},skip(){group.visible=false;},dispose(){clear();group.removeFromParent();}};
 }
