@@ -30,6 +30,7 @@ import { readState, readHand, legalOf, controls, classify, createIntent, mayRetr
   readHintPref, writeHintPref, isOpen, totalOf, MOVES } from './hand.js';
 import { planSteps, settleMoment, streakAfter, mayFire, wordKeys, aceSlot, bestCard, vortexOf, resultLines, screenHoldMs, TIMING,
   calloutFor, winningCards, isBloom, WIN_HOLD_MS } from './feel.js';
+import { kit as sound } from '../../shared/sound/kit.js';
 import { MOMENTS } from '../../shared/hypno/moments.js';
 import { createTable } from './table.js';
 
@@ -39,6 +40,10 @@ const fmt = (n) => Number(n || 0).toLocaleString('en-US');
 const wait = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
 const mintId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
 const MOVE_LABEL = { hit: 'Hit', stand: 'Stand', double: 'Double', split: 'Split' };
+/** The kit's cue on a settle, by its moment: a pay is a win by tier that only rises, a loss is THE SETTLE (soft,
+ *  never a fail), a push is a sigh. A bust (cards.bust) is a beat with nothing in it, so no cue either. */
+const SETTLE_CUE = { 'cards.win': ['win', { tier: 'mid' }], 'cards.dealer_bust': ['win', { tier: 'mid' }], 'cards.streak': ['win', { tier: 'big' }],
+  'cards.sweep': ['win', { tier: 'hero' }], 'cards.lose': ['settle'], 'cards.push': ['sigh', { level: 0.6 }] };
 const DECK_WAIT_MS = 2500;
 
 function loadCss() {
@@ -179,19 +184,20 @@ export async function mount(ctx) {
     const d = dress(), h = s.hand;
     switch (s.op) {
       case 'clear': table.clear(); lines = []; break;
-      case 'bets': table.setBets(s.list); break;
-      case 'card': table.addCard({ ...s, settled: s.quiet }, now); break;
+      case 'bets': table.setBets(s.list); if (!s.quiet) sound.play('chips', { n: Math.min(6, 1 + (Array.isArray(s.list) ? s.list.length : 0)) }); break;
+      case 'card': table.addCard({ ...s, settled: s.quiet }, now); if (!s.quiet) sound.play('card'); break;
       case 'split': table.split(now); break;
       case 'active': table.setActive(s.index); break;
-      case 'reveal': table.reveal(s.code, now, s.quiet); break;
+      case 'reveal': table.reveal(s.code, now, s.quiet); if (!s.quiet) sound.play('card', { kind: 'flip' }); break;
       case 'ready': decide = true; table.setActive(h.active); break;
       case 'bloom': {
         if (s.quiet) break;
-        // The blackjack's frame: both cards glow now; the bloom, its picture and "Blackjack" follow at FX_DELAY_MS.
+        // The blackjack's frame: both cards glow now; the bloom, its picture, its swell and "Blackjack" follow at FX_DELAY_MS.
         const slot = aceSlot(h), r = table.cardRect(0, slot), canvas = $('.cards-stage');
         table.hitCards(h.hands[0].cards.map((_, j) => ({ owner: 0, slot: j })), now);
         screenUntil = Math.max(screenUntil, now + WIN_HOLD_MS);
         later(FX_DELAY_MS, (at) => {
+          sound.play('win', { tier: 'big' });
           const out = moments.play('cards.bloom', { from: r ? viewportRect(canvas, r.x, r.y, r.w, r.h) : undefined, gif: deck ? deck.keyFor(h.hands[0].cards[slot]) : undefined });
           if (out.page.includes('ace_glow')) table.glowCard(0, slot, at);
           holdScreenFor('cards.bloom', out, at);
@@ -222,6 +228,7 @@ export async function mount(ctx) {
         if (s.quiet) { log('settled-quiet', { hand: h.id }); break; }
         chip.thud();
         const id = settleMoment(h, streak), best = bestCard(h);
+        if (SETTLE_CUE[id]) sound.play(SETTLE_CUE[id][0], SETTLE_CUE[id][1]);
         const n = (MOMENTS[id] ? MOMENTS[id].host : []).reduce((m, st) => Math.max(m, st.words | 0), 0);
         const words = n > 0 ? wordKeys(n, wordCursor) : undefined;
         if (n > 0) wordCursor += n;
@@ -320,7 +327,7 @@ export async function mount(ctx) {
   async function deal() {
     if (!alive || suspended || (ctx.stage && !ctx.stage.ready)) return;
     if (screenBusy(performance.now())) { dropped++; log('deal-dropped', { why: 'screen' }); return; }
-    ring($('.cards-deal'));
+    ring($('.cards-deal')); sound.arm();
     const c = view(performance.now());
     if (!c.deal) { if (c.dealWhy === 'sp') note = t('br_cards_insufficient', 'You need {n} SP for that bet.', { n: stake }); return; }
     busy = true; lines = []; note = ''; card(null);

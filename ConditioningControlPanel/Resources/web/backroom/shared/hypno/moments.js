@@ -36,6 +36,8 @@ const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 const KEY_RE = /^g\d{1,2}$/;
 
 /** Pocket colours (10.13.F): 0 mint, rose rose, plum plum. */
+import { kit as sound } from '../sound/kit.js';
+
 export const POCKET_COLORS = Object.freeze({ zero: '#5fffd0', rose: '#ff5fa2', plum: '#9b6bff' });
 
 function deepFreeze(o) {
@@ -203,6 +205,13 @@ export function createMoments(ctx, { station = '' } = {}) {
     }
   }) : null;
   const holding = (fxId) => { for (const v of holds.values()) { if (v === fxId) return true; } return false; };
+  /** The kit under a host step it has just fired: the spiral's hum for as long as the spiral (a hold runs until its
+   *  release), a 6 s breath under the haze, the whisper bed under each subliminal word (a chain climbs a tone a word). */
+  function cueFor(step, args, symbols) {
+    if (step.fx === 'fx.loom_spiral') sound.play('spiral', { ms: args.hold ? 0 : args.ms });
+    else if (step.fx === 'fx.haze') sound.play('breath');
+    else if (step.words > 0) { const n = Math.min(3, Array.isArray(symbols) ? symbols.length : 1); for (let i = 0; i < n; i++) sound.play('word', { index: i, at: i * 0.9 }); }
+  }
 
   const api = {
     /**
@@ -226,7 +235,7 @@ export function createMoments(ctx, { station = '' } = {}) {
       const wordKeys = Array.isArray(words) ? words.filter((w) => typeof w === 'string' && WORD_RE.test(w)) : [];
       for (const step of m.host) {
         if (held && !step.light) continue;
-        if (step.tunnel === 'breath') { breath(step.peak, step.ms); continue; }
+        if (step.tunnel === 'breath') { breath(step.peak, step.ms); sound.play('breath', { ms: step.ms }); continue; }
         if (step.tunnel) continue;
         if (step.full && !full) continue;
         if (typeof c.fx !== 'function') continue;
@@ -244,6 +253,7 @@ export function createMoments(ctx, { station = '' } = {}) {
         try { p = c.fx(step.fx, symbols, args); } catch (e) { p = null; }
         if (p && typeof p.catch === 'function') p.catch(() => {});
         const token = p && typeof p.token === 'string' ? p.token : null;
+        cueFor(step, args, symbols);
         if (!token) continue;
         out.tokens.push(token);
         if (args.hold) holds.set(token, step.fx);
@@ -269,13 +279,14 @@ export function createMoments(ctx, { station = '' } = {}) {
       const list = Array.isArray(tokens) ? tokens : [tokens];
       for (const t of list) {
         if (typeof t !== 'string' || !t) continue;
+        if (holds.get(t) === 'fx.loom_spiral') sound.stop('spiral');
         holds.delete(t);
         if (typeof c.fxRelease === 'function') { try { c.fxRelease(t); } catch (e) { /* noop */ } }
       }
     },
     /** Suspend or close: tunnel 0 now, every hold released, every timer stopped. */
     cancel() {
-      stopBreath();
+      stopBreath(); sound.stop('spiral'); sound.stop('breath'); sound.stop('word');
       tunnelNow0();
       if (keepTimer) { clearInterval(keepTimer); keepTimer = 0; }
       releaseAll();

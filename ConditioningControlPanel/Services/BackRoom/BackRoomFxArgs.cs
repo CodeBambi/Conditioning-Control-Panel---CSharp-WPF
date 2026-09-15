@@ -23,8 +23,12 @@ public readonly record struct FxRgb(byte R, byte G, byte B)
 /// defaults are applied per fx id by <see cref="BackRoomFxPlan"/>, so a field used by one id is never
 /// silently reinterpreted by another. Nothing here is ever used as a path or as text on screen.
 /// </summary>
+/// <param name="Count">The flash count of <c>fx.gif_burst</c> (an integer; the plan clamps it 1..8). The slot's
+/// "GIF tease" sends 1.</param>
+/// <param name="WordsShown">The page rendered the words of <c>fx.sub_single</c> / <c>fx.sub_pair</c> /
+/// <c>fx.sub_cascade</c> itself, so the host skips the word steps and plays only the rest.</param>
 public sealed record BackRoomFxArgs(string? Color = null, double? Strength = null, FxCssRect? From = null, int? Ms = null,
-    double? Scale = null, string? Preset = null, bool Hold = false, double? Alpha = null)
+    double? Scale = null, string? Preset = null, bool Hold = false, double? Alpha = null, int? Count = null, bool WordsShown = false)
 {
     public static readonly BackRoomFxArgs None = new();
 
@@ -42,7 +46,9 @@ public sealed record BackRoomFxArgs(string? Color = null, double? Strength = nul
                 Scale: Number(o["scale"]),
                 Preset: o["preset"] is JValue { Type: JTokenType.String } p ? (string?)p : null,
                 Hold: o["hold"] is JValue { Type: JTokenType.Boolean } h && (bool)h,
-                Alpha: Number(o["alpha"]));
+                Alpha: Number(o["alpha"]),
+                Count: o["count"] is JValue { Type: JTokenType.Integer } n && Math.Abs(n.Value<long>()) < int.MaxValue ? (int)n.Value<long>() : null,
+                WordsShown: o["wordsShown"] is JValue { Type: JTokenType.Boolean } ws && (bool)ws);
         }
         catch { return None; }
     }

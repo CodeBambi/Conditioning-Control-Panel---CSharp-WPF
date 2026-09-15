@@ -18,10 +18,10 @@ namespace ConditioningControlPanel.Services.Dev;
 /// writes every ack to <c>acks.jsonl</c> and grabs the screen a few times per effect.
 ///
 /// <para>Options: <c>--fx fx.jackpot,fx.melt</c> (default every contract id), <c>--intensity
-/// Calm,Normal</c> (default all three), <c>--motion Full|Reduced|Off</c> (default Full, so Normal and
-/// Full can be seen whatever the desk's own Motion setting is), <c>--all-toggles</c> (ignore the
-/// feature toggles for this run only; the room itself never can), <c>--exit</c> (shut down when done).
-/// Settings are never written. Dead code in every normal launch.</para>
+/// Calm,Normal</c> (default all three), <c>--motion Full|Reduced|Off</c> (default Full, so the 3 Hz flash
+/// cap and the slow spiral can be seen whatever the desk's own Motion setting is), <c>--exit</c> (shut
+/// down when done). No feature toggle gates anything (the authored show). Settings are never written.
+/// Dead code in every normal launch.</para>
 ///
 /// <para>Screen grabs need a composited, unlocked desktop (see DoorShooter for why), and the brain
 /// drain surface is excluded from capture unless AllowOverlayCapture is on, so a melt grab can come
@@ -41,15 +41,14 @@ internal static class BackRoomFxRig
                 .Select(x => Enum.TryParse<BackRoomFxIntensity>(x, true, out var v) ? v : (BackRoomFxIntensity?)null)
                 .Where(v => v.HasValue).Select(v => v!.Value).ToArray();
             var motion = Enum.TryParse<MotionLevel>(ArgList(args, "--motion")?.FirstOrDefault(), true, out var m) ? m : MotionLevel.Full;
-            bool allToggles = args.Contains("--all-toggles");
             bool exit = args.Contains("--exit");
-            _ = RunAsync(outDir, ids, intensities, motion, allToggles, exit);
+            _ = RunAsync(outDir, ids, intensities, motion, exit);
         }
         catch (Exception ex) { App.Logger?.Error(ex, "[BackRoomFxRig] failed to start"); }
     }
 
     private static async Task RunAsync(string outDir, string[] ids, BackRoomFxIntensity[] intensities,
-        MotionLevel motion, bool allToggles, bool exit)
+        MotionLevel motion, bool exit)
     {
         try
         {
@@ -69,8 +68,7 @@ internal static class BackRoomFxRig
                     await Task.Delay(1500);
 
                     var real = BackRoomFxServices.ReadEnvironment();
-                    var gates = allToggles ? FxGates.AllOn with { SpiralStill = real.Gates.SpiralStill } : real.Gates;
-                    var ack = fx.Fire(id, SymbolsFor(id), deal, real with { Motion = motion, Intensity = intensity, Gates = gates });
+                    var ack = fx.Fire(id, SymbolsFor(id), deal, real with { Motion = motion, Intensity = intensity });
                     File.AppendAllText(log, JsonConvert.SerializeObject(new
                     {
                         fxId = id, intensity = intensity.ToString(), motion = motion.ToString(),
@@ -78,7 +76,7 @@ internal static class BackRoomFxRig
                     }) + Environment.NewLine);
 
                     var recipe = BackRoomFxPlan.Recipe(id, intensity);
-                    int lengthMs = recipe == null ? 0 : recipe.Steps.Max(s => s.AtMs + Math.Max(s.DurationMs, s.Count * BackRoomFxPlan.WordGapMs));
+                    int lengthMs = recipe == null ? 0 : BackRoomFxPlan.LengthMs(recipe);
                     var shots = new List<int> { 800, 1800 };
                     if (recipe?.IsHero == true) shots.Add(recipe.HeroMs + 1500);
                     else if (lengthMs > 2600) shots.Add(Math.Min(lengthMs - 400, 4000));

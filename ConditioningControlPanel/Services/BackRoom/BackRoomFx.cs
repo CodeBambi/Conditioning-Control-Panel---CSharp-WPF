@@ -12,27 +12,34 @@ namespace ConditioningControlPanel.Services.BackRoom;
 /// </summary>
 public interface IBackRoomFxSink
 {
-    void FlashBurst(int amount);
-    void GifRain(int durationMs);
+    /// <summary><paramref name="amount"/> medium images at <paramref name="opacity"/>, their onsets <paramref name="gapMs"/> apart
+    /// (300 ms, or 334 ms under reduced motion: the 3 Hz cap).</summary>
+    void FlashBurst(int amount, double opacity, int gapMs);
+    /// <summary><paramref name="count"/> GIFs falling over <paramref name="durationMs"/>, each at <paramref name="opacity"/>.</summary>
+    void GifRain(int count, int durationMs, double opacity);
     void GlitchWash(int durationMs, double opacity);
-    void Subliminal(string text);
-    /// <summary><paramref name="level"/> is a fraction of the user's own brain drain intensity.</summary>
+    /// <summary>One word card at <paramref name="opacity"/> with the authored envelope (in 80 ms, hold 400 ms, out 350 ms).</summary>
+    void Subliminal(string text, double opacity);
+    /// <summary>A melt (<paramref name="melt"/>) ramps its alpha from 0 to <paramref name="level"/> over
+    /// <paramref name="durationMs"/> and then lets go; a haze holds at <paramref name="level"/> x the user's own brain
+    /// drain intensity for <paramref name="durationMs"/> or until released.</summary>
     void BrainDrain(int durationMs, double level, bool melt);
     // The picture primitives take `shown`: call it (on the UI thread) when the picture is actually on screen, never for
     // a picture that is refused (no local file, a display change settling), fails to decode or is stopped first.
     // The XP award keys off it (10.14).
-    void GifFull(BackRoomGif gif, int durationMs, bool still, Action shown);
+    void GifFull(BackRoomGif gif, int durationMs, double opacity, Action shown);
     // Hypno v3 (10.13.B). GifFrom's rect is page CSS px, mapped at play time (null = the centre).
     /// <summary><paramref name="shown"/> runs only for a wash WITH a picture, once that picture is on.</summary>
     void Wash(FxRgb color, double peak, BackRoomGif? picture, Action shown);
     /// <returns>False when nothing will show (no local file), so the one-at-a-time slot frees at once.</returns>
-    bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still, Action shown);
-    /// <summary>Replaces a running one; a hold's <paramref name="durationMs"/> is the 20 s cap.</summary>
-    void SpiralLoom(string gifPath, int durationMs, double alpha, bool hold, bool still);
+    bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, Action shown);
+    /// <summary>Replaces a running one; a hold's <paramref name="durationMs"/> is the 20 s cap. <paramref name="slow"/> is the
+    /// reduced-motion variant (the weave at half speed), never a still.</summary>
+    void SpiralLoom(string gifPath, int durationMs, double alpha, bool hold, bool slow);
     void ReleaseSpiralLoom();
     void ReleaseBrainDrain();
     /// <summary>The wanted level; the overlay eases toward it and lets go 1500 ms after the last call.</summary>
-    void Tunnel(double level, bool still);
+    void Tunnel(double level);
     void CancelTunnel();
     /// <summary>Stop everything this sink started.</summary>
     void StopAll();
@@ -45,11 +52,10 @@ public interface IFxScheduler
     IDisposable After(int delayMs, Action action);
 }
 
-/// <summary>The settings a fire reads, captured once per fire.</summary>
+/// <summary>The settings a fire reads, captured once per fire: the effective motion level (the two safety lines) and the
+/// room's intensity. No feature toggle: the Back Room is an authored show.</summary>
 /// <param name="SpiralSource">Preset -> the Loom-woven spiral file (<see cref="BackRoomSpiralSource"/>); null = none.</param>
-/// <param name="SpiralOpacity">The user's own spiral opacity 0..1, which section 4's spiral-full scales.</param>
-public sealed record FxEnvironment(MotionLevel Motion, BackRoomFxIntensity Intensity, FxGates Gates,
-    Func<string, string?>? SpiralSource = null, double SpiralOpacity = 0.85);
+public sealed record FxEnvironment(MotionLevel Motion, BackRoomFxIntensity Intensity, Func<string, string?>? SpiralSource = null);
 
 /// <summary>
 /// XP for what the Back Room shows (CONTRACT 10.14: Back Room effects award XP like normal app effects), on the app's
@@ -72,8 +78,9 @@ public static class BackRoomFxXp
 
 /// <summary>
 /// The effect dispatcher (C3, H1). Resolves an fx id through <see cref="BackRoomFxPlan"/>, admits it
-/// through the hero gate, paces every repeated onset under the 6 Hz ceiling, and schedules the
-/// primitives on the sink. The ack goes back synchronously: what will play, and every skip.
+/// through the hero gate, paces every repeated onset under the 6 Hz ceiling (3 Hz for flashes under
+/// reduced motion), and schedules the primitives on the sink. The ack goes back synchronously: what
+/// will play, and every skip (only <c>busy</c> and <c>unknown</c> exist: nothing is gated by a setting).
 /// Hypno v3 (10.13.B) adds the two Brake gaps that DROP instead of delaying (a wash inside 360 ms, a
 /// second gif-from while one shows), holds released by token or by station, and the tunnel feed.
 /// </summary>
@@ -98,7 +105,7 @@ public sealed class BackRoomFx : IBackRoomFx
     private string? _spiralToken, _hazeToken, _tunnelStation;
     private long _gifFromUntil = long.MinValue;
     private long _tunnelAppliedAt = long.MinValue / 2;
-    private (double Level, bool Still)? _tunnelNext;
+    private double? _tunnelNext;
     private IDisposable? _tunnelTimer;
 
     /// <param name="xp">Pays a primitive's base XP (<see cref="BackRoomFxXp"/>) once it has shown. Null = no XP (tests, rig).</param>
@@ -136,7 +143,7 @@ public sealed class BackRoomFx : IBackRoomFx
         try
         {
             FxPlan plan;
-            lock (_rng) plan = BackRoomFxPlan.Resolve(fxId, env.Intensity, env.Motion, env.Gates, symbolKeys, deal, _rng,
+            lock (_rng) plan = BackRoomFxPlan.Resolve(fxId, env.Intensity, env.Motion, symbolKeys, deal, _rng,
                 args, env.SpiralSource);
             if (plan.Steps.Count == 0) return new BackRoomFxAck(Array.Empty<string>(), plan.Skipped);
 
@@ -194,7 +201,7 @@ public sealed class BackRoomFx : IBackRoomFx
                 }
             }
 
-            foreach (var planned in kept) Schedule(planned, baseAt, env, hold);
+            foreach (var planned in kept) Schedule(planned, baseAt, plan.Reduced, hold);
             return new BackRoomFxAck(kept.Select(s => BackRoomFxPlan.WireName(s.Step.Prim)).ToList(), skipped);
         }
         catch (Exception ex)
@@ -204,7 +211,7 @@ public sealed class BackRoomFx : IBackRoomFx
         }
     }
 
-    private void Schedule(FxPlannedStep planned, long baseAt, FxEnvironment env, Hold? hold)
+    private void Schedule(FxPlannedStep planned, long baseAt, bool reduced, Hold? hold)
     {
         var s = planned.Step;
         long at = baseAt + s.AtMs;
@@ -213,43 +220,44 @@ public sealed class BackRoomFx : IBackRoomFx
             case FxPrim.SubSingle:
             case FxPrim.SubSeq:
             case FxPrim.SubBurst9:
+                int gap = BackRoomFxPlan.WordGap(s.Prim);
                 for (int i = 0; i < planned.Words.Count; i++)
                 {
                     var word = planned.Words[i];
-                    At(_pacer.Reserve(FxChannel.Subliminal, at + i * BackRoomFxPlan.WordGapMs), () => _sink.Subliminal(word), hold);
+                    At(_pacer.Reserve(FxChannel.Subliminal, at + i * gap), () => _sink.Subliminal(word, s.Level), hold);
                 }
                 break;
             case FxPrim.GlitchBubbles:
                 for (int i = 0; i < Math.Max(1, s.Count); i++)
-                    At(_pacer.Reserve(FxChannel.Glitch, at + i * BackRoomFxPlan.GlitchWashMs),
-                        () => _sink.GlitchWash(BackRoomFxPlan.GlitchWashMs, BackRoomFxPlan.GlitchOpacity), hold);
+                    At(_pacer.Reserve(FxChannel.Glitch, at + i * BackRoomFxPlan.GlitchPulseMs),
+                        () => _sink.GlitchWash(BackRoomFxPlan.GlitchPulseMs, s.Level), hold);
                 break;
             case FxPrim.FlashBurst:
+                // Safety line (a): under reduced motion the burst's images come no faster than 3 Hz.
                 int images = Math.Max(1, s.Count);
-                At(_pacer.Reserve(FxChannel.Flash, at, (images - 1) * BackRoomFxPlan.FlashImageGapMs), () => _sink.FlashBurst(images), hold);
+                int flashGap = reduced ? BackRoomFxPlan.ReducedFlashGapMs : BackRoomFxPlan.FlashImageGapMs;
+                At(_pacer.Reserve(FxChannel.Flash, at, (images - 1) * flashGap), () => _sink.FlashBurst(images, s.Level, flashGap), hold);
                 break;
             case FxPrim.GifRain:
-                At(at, () => _sink.GifRain(s.DurationMs), hold);
+                At(at, () => _sink.GifRain(Math.Max(1, s.Count), s.DurationMs, s.Level), hold);
                 break;
             case FxPrim.SpiralFull:
-                // Section 4's spiral now plays the screen weave (10.13.B), at the user's opacity x the recipe level.
-                double opacity = Math.Clamp(env.SpiralOpacity * s.Level, 0.02, 1.0);
-                At(at, () => { Own(ref _spiralToken, hold); _sink.SpiralLoom(planned.SpiralPath!, s.DurationMs, opacity, false, s.Still); }, hold);
+                // Section 4's spiral plays the screen weave (10.13.B) at the authored alpha; the overlay fades it in and out.
+                At(at, () => { Own(ref _spiralToken, hold); _sink.SpiralLoom(planned.SpiralPath!, s.DurationMs, s.Level, false, reduced); }, hold);
                 break;
             case FxPrim.SpiralLoom:
-                At(at, () => { Own(ref _spiralToken, hold); _sink.SpiralLoom(planned.SpiralPath!, s.DurationMs, s.Level, s.Look?.Hold == true, s.Still); }, hold);
+                At(at, () => { Own(ref _spiralToken, hold); _sink.SpiralLoom(planned.SpiralPath!, s.DurationMs, s.Level, s.Look?.Hold == true, reduced); }, hold);
                 break;
             case FxPrim.BrainDrainMelt:
-            case FxPrim.BrainDrain:
                 // A melt takes the drain surface over, so a later haze release must not end it.
-                At(at, () => { Own(ref _hazeToken, null); _sink.BrainDrain(s.DurationMs, s.Level, s.Prim == FxPrim.BrainDrainMelt); }, hold);
+                At(at, () => { Own(ref _hazeToken, null); _sink.BrainDrain(s.DurationMs, s.Level, true); }, hold);
                 break;
             case FxPrim.Haze:
                 At(at, () => { Own(ref _hazeToken, hold); _sink.BrainDrain(s.DurationMs, s.Level, false); }, hold);
                 break;
             case FxPrim.GifFull:
                 var gif = planned.Gif!;
-                At(at, () => _sink.GifFull(gif, s.DurationMs, s.Still, PayOnce(s.Prim)), hold);
+                At(at, () => _sink.GifFull(gif, s.DurationMs, s.Level, PayOnce(s.Prim)), hold);
                 break;
             case FxPrim.Wash:
                 At(at, () => _sink.Wash(s.Look!.Color, s.Level, planned.Gif, PayOnce(s.Prim)), hold);
@@ -257,7 +265,7 @@ public sealed class BackRoomFx : IBackRoomFx
             case FxPrim.GifFrom:
                 var grown = planned.Gif!;
                 long until = at + s.DurationMs;
-                At(at, () => { if (!_sink.GifFrom(grown, s.Look!.From, s.DurationMs, s.Look.Scale, s.Level, s.Still, PayOnce(s.Prim))) FreeGifFrom(until); }, hold, until);
+                At(at, () => { if (!_sink.GifFrom(grown, s.Look!.From, s.DurationMs, s.Look.Scale, s.Level, PayOnce(s.Prim))) FreeGifFrom(until); }, hold, until);
                 break;
         }
     }
@@ -379,24 +387,16 @@ public sealed class BackRoomFx : IBackRoomFx
 
     // ============================ tunnel (10.13.B) ============================
 
-    /// <summary><c>fx-tunnel</c>: gated by the room's tunnel switch (10.14, not Brain Drain), halved under Calm, at most 10 a second.</summary>
+    /// <summary><c>fx-tunnel</c>: always honoured (no switch gates it), halved under Calm, at most 10 a second.</summary>
     public void Tunnel(string station, double level)
     {
         if (!double.IsFinite(level)) return;
         FxEnvironment env;
         try { env = _env(); }
         catch (Exception ex) { App.Logger?.Warning(ex, "[BackRoom] fx environment failed"); return; }
-        if (!env.Gates.Tunnel)
-        {
-            // The switch went off under a running tunnel: gone now, not after the 1500 ms self-release.
-            bool live;
-            lock (_lock) live = _tunnelStation != null;
-            if (live) CancelTunnel();
-            return;
-        }
 
-        bool calm = BackRoomFxPlan.EffectiveIntensity(env.Intensity, env.Motion) == BackRoomFxIntensity.Calm;
-        var next = (Math.Clamp(level, 0, 1) * (calm ? BackRoomFxPlan.CalmStrength : 1), env.Motion == MotionLevel.Off);
+        bool calm = env.Intensity == BackRoomFxIntensity.Calm;
+        double next = Math.Clamp(level, 0, 1) * (calm ? BackRoomFxPlan.CalmStrength : 1);
         bool now = false;
         lock (_lock)
         {
@@ -413,12 +413,12 @@ public sealed class BackRoomFx : IBackRoomFx
                 _tunnelTimer ??= _scheduler.After((int)Math.Max(0, _tunnelAppliedAt + TunnelGapMs - t), FlushTunnel);
             }
         }
-        if (now) SinkTunnel(next.Item1, next.Item2);
+        if (now) SinkTunnel(next);
     }
 
     private void FlushTunnel()
     {
-        (double Level, bool Still)? next;
+        double? next;
         lock (_lock)
         {
             if (_tunnelTimer == null) return;   // cancelled
@@ -427,12 +427,12 @@ public sealed class BackRoomFx : IBackRoomFx
             _tunnelNext = null;
             _tunnelAppliedAt = _scheduler.NowMs;
         }
-        if (next is { } n) SinkTunnel(n.Level, n.Still);
+        if (next is { } n) SinkTunnel(n);
     }
 
-    private void SinkTunnel(double level, bool still)
+    private void SinkTunnel(double level)
     {
-        try { _sink.Tunnel(level, still); }
+        try { _sink.Tunnel(level); }
         catch (Exception ex) { App.Logger?.Warning(ex, "[BackRoom] fx tunnel failed"); }
     }
 

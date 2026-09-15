@@ -9,8 +9,7 @@ namespace ConditioningControlPanel.Services.BackRoom.Overlays;
 /// Hypno v3 <c>gif-from</c> (CONTRACT 10.13.B, the only new picture overlay): a dealt picture grows out of
 /// a game object's rect to cover the screen holding the room window over 700 ms, holds, and fades over the
 /// last 900 ms while that screen dims to 45% behind it (no dim below full scale, where it sits inside a
-/// running spiral). Still (MotionLevel Off): no growth, full size, 300 ms fades, first frame. One at a time;
-/// the dispatcher acks a second one busy. The clock starts when the picture's first frame is on, so the
+/// running spiral). One at a time; the dispatcher acks a second one busy. The clock starts when the picture's first frame is on, so the
 /// growth always carries the picture; one that is not decoded within a second never shows. The caller's
 /// <c>shown</c> runs when the growth starts on its first frame, never for a refused, failed or late picture.
 /// </summary>
@@ -31,7 +30,7 @@ internal sealed class BackRoomGifFromOverlay : BackRoomOverlayWindow
     private FxFromTarget _target;
     private PxRect _screen, _from;
     private double _aspect, _scale, _dimLevel;
-    private bool _still, _active;
+    private bool _active;
 
     private BackRoomGifFromOverlay() : base(frameMs: 16, zRank: 1)
     {
@@ -41,21 +40,20 @@ internal sealed class BackRoomGifFromOverlay : BackRoomOverlayWindow
         Clear();
     }
 
-    public static void Show(string path, double aspect, FxFromTarget target, int durationMs, double scale, double dim, bool still, Action? shown = null) => OnUi(() =>
+    public static void Show(string path, double aspect, FxFromTarget target, int durationMs, double scale, double dim, Action? shown = null) => OnUi(() =>
     {
         if (target.ScreenIndex < 0 || !MayCreate(_instance)) return;
-        (_instance ??= new BackRoomGifFromOverlay()).Start(path, aspect, target, durationMs, scale, dim, still, shown);
+        (_instance ??= new BackRoomGifFromOverlay()).Start(path, aspect, target, durationMs, scale, dim, shown);
     });
 
     public static void Stop() => OnUi(() => { if (_instance is { _active: true } w) { w.Clear(); w.Sleep(); } });
 
-    private void Start(string path, double aspect, FxFromTarget target, int durationMs, double scale, double dim, bool still, Action? shown)
+    private void Start(string path, double aspect, FxFromTarget target, int durationMs, double scale, double dim, Action? shown)
     {
         _target = target;
         _aspect = aspect;
         _scale = scale;
         _dimLevel = dim;
-        _still = still;
         _durationMs = Math.Max(1, durationMs);
         _box.Opacity = _dim.Opacity = 0;
         _active = true;
@@ -65,7 +63,7 @@ internal sealed class BackRoomGifFromOverlay : BackRoomOverlayWindow
         OnRescaled();
         // The growth is at most the screen's own long edge, so decode no larger than that.
         int maxDim = (int)Math.Clamp(Math.Max(target.ScreenPx.W, target.ScreenPx.H), 320, DecodeLongSideMax);
-        SetPicture(_image, path, still, maxDim, DecodeFrames, DecodeBudgetMb, ok =>
+        SetPicture(_image, path, maxDim, DecodeFrames, DecodeBudgetMb, ok =>
         {
             if (!_active || _startedAt != 0) return;
             if (!ok) { Clear(); return; }
@@ -99,7 +97,7 @@ internal sealed class BackRoomGifFromOverlay : BackRoomOverlayWindow
         }
         double age = nowMs - _startedAt;
         if (age >= _durationMs) { Clear(); return false; }
-        var f = BackRoomOverlayMath.GifFrom(age, _durationMs, _from, _screen.W, _screen.H, _aspect, _scale, _dimLevel, _still);
+        var f = BackRoomOverlayMath.GifFrom(age, _durationMs, _from, _screen.W, _screen.H, _aspect, _scale, _dimLevel);
         Canvas.SetLeft(_box, _screen.X + f.Image.X);
         Canvas.SetTop(_box, _screen.Y + f.Image.Y);
         _box.Width = Math.Max(1, f.Image.W);

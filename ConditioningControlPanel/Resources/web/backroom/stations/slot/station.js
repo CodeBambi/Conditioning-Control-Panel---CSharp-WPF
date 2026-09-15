@@ -6,20 +6,39 @@
  *   tape.js   what plays next, and the readouts (server-settled outcomes)
  *   scene.js  the cabinet, one WebGL context per open(), freed in close()
  *   media.js  the dealt GIFs and words painted on the reel cells
+ *   word.js   the lone word and the dead-spin settle on the page (shared/hypno/callout.js): fx.sub_single is
+ *             shown here and not sent; fx.sub_pair / fx.sub_cascade go to the host with args { wordsShown: true }
+ *             (the host skips its own words and plays the pair's spiral / the cascade's fullscreen GIF)
  *   pace.js   THE PACE: about 4 s an outcome
  *   feel.js   THE HOUSE BOOK: which move plays, how big, and the Brake (lane F1)
  *   bank.js / sound.js  THE BANK's tokens and the cues
+ *
+ * THE FLOW on the frame the result SHOWS (shared/hypno/callout.js, Law I: after the server reply, the tape holds
+ * outcomes ahead): the landing thud at 0 ms; the winning glyphs glow 0..400 ms in reel order 80 ms apart
+ * (scene.highlight: rim pulse + 6% cell pop; the root carries class br-glyph-hit for that window); at 400 ms the
+ * callout (.show) and the row's host fx fire TOGETHER (feel.flowPlan decides, flow() below schedules); the next
+ * press unlocks no earlier than landing + 2000 ms on a paid line (the jackpot holds 3400 ms, losses stay as quick
+ * as today). The tunnel level and the jar/free-spin sequencing keep their own timing.
+ * THE GIF TEASE (owner: a couple of points on the GIF visuals, the economy untouched): a row reading `none` that
+ * shows exactly two GIF symbols fires ONE host GIF flash, fx.gif_burst with args { count: 1 }, at 400 ms. No
+ * callout, no SP, the payout untouched (mock-server.js says the same).
+ * A1's hold (reels 1+2 a live pair, reel 3 still travelling) pulls ctx.fxTunnel to 0.4 with the riser and releases
+ * on the landing: page dressing of a known tape row, no host fx. Eight seconds idle breathes the spiral haze behind
+ * the cabinet (scene.haze) until the next press; off while a result plays, off on suspend.
  * ==========================================================================*/
 
 import { createTape, stopsFor } from './tape.js';
 import { createScene, FACES } from './scene.js';
-import { createMedia, fxSymbols } from './media.js';
+import { createMedia } from './media.js';
+import { createSlotWords, subWords } from './word.js';   // the lone word, the sub pair / trio, the dead-spin settle (callout.js)
 import { PACE } from './pace.js';
 import { recipe, tierOf, meltedBy, ladderSemis, ladderPlan, rollupMs, winTokens, spendTokens, glance, landPose, restPose, pressPose, glanceHoldMs } from './feel.js';
 import { anticipation, almost } from './feel.js';   // the playbook's Tier A (CONTRACT 10.15)
 import { ATTRACT, attractOk, emiLandings } from './feel.js';
 // The playbook's Tier B and C (CONTRACT 10.16): B1 the spiral jar, B3 the comp, C1 the EMI pair re-spin.
 import { jarPlan, jarParty, JAR_TIER, playsWithoutPress, respinKeep, respinHold } from './feel.js';
+import { flowPlan, FLOW, CALLOUTS } from './feel.js';                     // THE FLOW on the landing frame
+import { createCallout, GLYPH_HIT, WORD_MS, WORD_GAP_MS } from '../../shared/hypno/callout.js';
 import { createBank } from './bank.js';
 import { createSound } from './sound.js';
 
@@ -65,7 +84,7 @@ export async function mount(ctx) {
   let pace = 'idle', queued = false, breathEnds = 0, marks = [];   // pace phase: idle | breath | spin | reveal
   // Feel state for one sit-down (lane F1): the readout override while THE BANK flies, the win streak for
   // THE CHIME LADDER, how often each tier has partied (Brake 3), and EMI's current pose (THE MASCOT GLANCE).
-  let sound = null, bank = null, shown = null, owing = false, streak = 0, seen = [0, 0, 0, 0, 0], jackpots = 0;
+  let sound = null, bank = null, shown = null, owing = false, streak = 0, seen = [0, 0, 0, 0, 0], jackpots = 0, words = null;
   let pose = 'idle0_0', glanceTimer = 0, gainTimer = 0, playing = null, feelLog = [], bankFrom = 0, bankTo = 0, bankHold = 1600;
   // A4 attract: one idle timeout re-armed on input (no polling) and one self-re-arming wink, both cleared on
   // any input, on suspend and on close, so a shut cabinet leaves nothing running.
@@ -73,6 +92,9 @@ export async function mount(ctx) {
   // B1: the jar count the tube is currently showing, while the ticks run ahead of the tape's own count
   // (the same override `shown` is for the SP readout). null follows the tape (Law I).
   let jarShown = null;
+  // THE FLOW: the callout (one per open), the timers it and the fx ride on (cleared on suspend and close, Law VI),
+  // when the next press may start after a landing, the host tunnel level A1 pulls, and the haze's idle timer.
+  let callout = null, flowTimers = new Set(), flowLast = null, unlockAt = 0, tunnelLevel = 0, hazeTimer = 0;
   const $ = sel => el.querySelector(sel), wait = ms => new Promise(r => setTimeout(r, Math.max(0, ms)));
   function mark(phase) { pace = phase; marks = [...marks.slice(-79), { phase, at: Math.round(performance.now()) }]; }
   function note(what, extra = {}) { feelLog = [...feelLog.slice(-79), { what, at: Math.round(performance.now()), ...extra }]; }
@@ -104,6 +126,7 @@ export async function mount(ctx) {
       <div class="slot-payline" aria-hidden="true" hidden></div>
       <div class="slot-jar" aria-hidden="true" hidden><i></i><span></span></div>
       <div class="slot-tokens" aria-hidden="true"></div>
+      <div class="slot-callout" aria-live="polite"></div>
       <div class="slot-controls">
         <div class="slot-freeze">${[0, 1, 2].map(i => `<button type="button" data-col="${i}" aria-pressed="false"></button>`).join('')}</div>
       </div>
@@ -254,8 +277,11 @@ export async function mount(ctx) {
   });
   function armIdle() {
     clearTimeout(idleTimer); idleTimer = 0;
+    clearTimeout(hazeTimer); hazeTimer = 0;
     if (!alive || suspended || lite || reduced) return;   // Calm and reduced motion never arm it at all
     idleTimer = setTimeout(() => { idleTimer = 0; enterAttract(); }, ATTRACT.IDLE_MS);
+    // THE ATTRACT HAZE: 8 s idle, the same gate as the drift (seated, quiet, not melted), off on the next press.
+    hazeTimer = setTimeout(() => { hazeTimer = 0; if (scene && attractOk(attractState()) && scene.haze(true)) note('haze', { on: true }); }, FLOW.HAZE_IDLE_MS);
   }
   function enterAttract() {
     if (attracting || !scene || !attractOk(attractState()) || !scene.attract(true)) return;
@@ -274,6 +300,8 @@ export async function mount(ctx) {
   function endAttract(now = false) {
     clearTimeout(idleTimer); idleTimer = 0;
     clearTimeout(winkTimer); winkTimer = 0;
+    clearTimeout(hazeTimer); hazeTimer = 0;
+    if (scene && scene.hazing) { scene.haze(false); note('haze', { on: false }); }
     if (!attracting) return;
     attracting = false;
     if (scene) scene.attract(false, now);
@@ -342,15 +370,68 @@ export async function mount(ctx) {
     sync();   // scene.setHold dips the button this frame (Law VIII)
   }
 
-  function fireFx(fxId, keys) {
-    if (suspended || typeof ctx.fx !== 'function') return;
+  function fireFx(fxId, keys, args) {
+    if (suspended || !alive || typeof ctx.fx !== 'function') return;
     try {
-      const p = ctx.fx(fxId, keys && keys.length ? keys : undefined);   // never awaited: fx-ack is advisory
+      const p = ctx.fx(fxId, keys && keys.length ? keys : undefined, args);   // never awaited: fx-ack is advisory
       if (p && typeof p.catch === 'function') p.catch(() => {});
     } catch (e) { console.warn('[slot] fx failed', e); }
   }
-  function fire(o) {
-    for (const fxId of Array.isArray(o.fx) ? o.fx : []) fireFx(fxId, fxSymbols(fxId, o, media));
+  /** The outcome's fx, on the frame the result shows (Law I). word.js shows the dealt subliminal word(s) on the page
+   *  itself (fx.sub_single stays here; sub_pair / sub_cascade go to the host with { wordsShown: true }) and settles
+   *  a dead spin (line none, no fx) with EMI's bark; every other fx id goes to the host as before. */
+  function fire(o, tease) {
+    // EMI's wink lands a tick after land()'s own glance on this frame, so the settle's face is hers and not the rest's.
+    if (!words) words = createSlotWords({ ctx, mount: el, media, lex: ctx.lex,
+      emi: { react: () => setTimeout(() => { if (alive) glanceTo('hearts', glanceHoldMs(false), restPose(tape ? tape.snapshot().melt : 0)); }, 0) } });
+    return words.outcome(o, fireFx, { tease: !!tease });
+  }
+  /** The host tunnel (CONTRACT 10.13.B): A1's hold pulls it to FLOW.TEASE_TUNNEL, the landing releases it. Sent
+   *  on change only; the room's `tunnel` gate (a missing key reads true) drops it to 0. */
+  function tunnel(level) {
+    const want = ctx.gates && ctx.gates.tunnel === false ? 0 : Math.max(0, Math.min(1, Number(level) || 0));
+    if (want === tunnelLevel) return;
+    tunnelLevel = want;
+    if (typeof ctx.fxTunnel === 'function') { try { ctx.fxTunnel(want); } catch (e) { console.warn('[slot] tunnel failed', e); } }
+    note('tunnel', { level: want });
+  }
+  /** One flow timer: this open's, this session's; suspend and close clear them all (Law VI). */
+  function later(ms, fn) {
+    const my = session;
+    const id = setTimeout(() => { flowTimers.delete(id); if (alive && !suspended && my === session) fn(); }, Math.max(0, ms));
+    flowTimers.add(id);
+  }
+  function clearFlow() {
+    for (const id of flowTimers) clearTimeout(id);
+    flowTimers.clear();
+    if (callout) callout.cancel();
+  }
+  /** THE FLOW from the landing frame (feel.flowPlan): the glyph hit now, then at each `at` the callout(s) and the
+   *  row's own host fx together (the GIF tease's flash rides the same frame). `respinRow`: the row the spiral2
+   *  respin granted takes its "Respin" word first; `jarWord`: the jar's Overflow already holds the frame, so a
+   *  small word yields to it. Law I: everything here reads the row the tape landed. */
+  function flow(o, { respinRow = false, jarWord = false } = {}) {
+    const plan = flowPlan(o, { respinRow, jarWord }), at = performance.now();
+    unlockAt = at + plan.unlockMs;
+    flowLast = { line: o.line, kind: o.kind, landedAt: Math.round(at), hits: plan.hits, callouts: plan.callouts.map(c => c.key),
+                 fx: plan.fx.map(f => f.id), unlockMs: plan.unlockMs, calloutAt: null, fxAt: null };
+    scene.highlight(plan.hits);
+    if (el && plan.hits.length) { el.classList.add(GLYPH_HIT); later(FLOW.HIGHLIGHT_MS, () => { if (el) el.classList.remove(GLYPH_HIT); }); }
+    const chain = plan.fx.some(f => /^fx.sub_/.test(f.id)) ? subWords(o, media).length : 0;   // a sub chain owns the centre first
+    const wordsMs = chain ? WORD_MS + WORD_GAP_MS * (chain - 1) : 0;
+    for (const c of plan.callouts) later(c.at + wordsMs, () => {
+      if (callout) callout.show(c.key, c.fallback, { tier: c.tier });
+      if (flowLast) flowLast.calloutAt = Math.round(performance.now());
+      note('callout', { key: c.key, tier: c.tier, at: c.at });
+    });
+    const tease = plan.fx.find(f => f.args && f.args.count === 1) || null;   // the GIF tease rides its own entry
+    later(FLOW.FX_DELAY_MS, () => {
+      const shown = fire(o, tease);   // word.js: the words on the page, the rest to the host, a dead spin settles
+      if (tease) fireFx(tease.id, fxSymbols(tease.id, o, media), tease.args);
+      if (flowLast) { flowLast.fxAt = Math.round(performance.now()); flowLast.words = shown ? shown.words : []; }
+      note('fx', { ids: plan.fx.map(f => f.id), at: FLOW.FX_DELAY_MS, words: shown ? shown.words.length : 0, settled: !!(shown && shown.settled) });
+    });
+    return plan;
   }
 
   /** The landing beat (Law X): the party the Brake allows, the ladder, the tokens and EMI, all on one frame.
@@ -361,7 +442,7 @@ export async function mount(ctx) {
     const semis = ladderSemis(streak, melted), roll = rollupMs(tier);   // playbook A3: the count-up scales to the win
     if (tier > 0) { seen[tier]++; if (tier === 4) jackpots++; }
     if (tier > 0) { sound.win(r.sound, semis); streak++; } else streak = 0;   // the no-pay cue was the last reel's muted thud
-    scene.setMelted(melted);
+    scene.setMelted(melted); if (melted) sound.melt();
     scene.celebrate(r, o.pay, t('br_slot_screen_win', 'WIN +{n}', { n: fmt(o.pay) }));
     ctx.revealedWin?.(o.pay,tier,t('br_slot_screen_win','WIN +{n}',{n:fmt(o.pay)}));
     if (r.tokens) {
@@ -391,6 +472,10 @@ export async function mount(ctx) {
       if (r.sound) sound.win(r.sound, ladderSemis(streak, r.melted));
       scene.celebrate(r, 0, t('br_slot_jar_full', 'The jar spills: {n} free spins', { n: s.jarFree }));
       glanceTo('spirals', glanceHoldMs(r.melted), restPose(s.melt));
+      // THE FLOW: the jar's own word, on the tick that fills it (a big callout; a small landing word yields to it).
+      if (callout) callout.show(CALLOUTS.jar.key, CALLOUTS.jar.fallback, { tier: CALLOUTS.jar.tier });
+      p.jarWord = true;
+      note('callout', { key: CALLOUTS.jar.key, tier: CALLOUTS.jar.tier, at: 'jar' });
       // The tube's own flash rides the same frame (Law X). Reduced motion takes the settled fill and no flash.
       const box = el && $('.slot-jar');
       if (box && !reduced && typeof box.animate === 'function') {
@@ -404,7 +489,8 @@ export async function mount(ctx) {
    *  the last reel's thud carries A2's ghost under the same muted thud, and every spiral ticks the jar on the
    *  thud of the reel it landed on, never before (10.16.A). */
   function stopFeel(p, i) {
-    if (i === 1 && !p.respin && p.ant && p.ant.holdMs > 0) { sound.rise(PACE.STAGGER_MS + p.ant.holdMs, lite); note('tease', { kind: p.ant.kind, holdMs: p.ant.holdMs }); }
+    if (i === 1 && !p.respin && p.ant && p.ant.holdMs > 0) { sound.rise(PACE.STAGGER_MS + p.ant.holdMs, lite); tunnel(FLOW.TEASE_TUNNEL); note('tease', { kind: p.ant.kind, holdMs: p.ant.holdMs }); }
+    if (i === p.lastReel) tunnel(0);   // A1's pull releases on the landing frame, whatever held it
     if (i === p.lastReel && p.near) { scene.almost(p.near); sound.almost(lite); note('almost', p.near); }
     const k = p.jar ? p.jar.reels.indexOf(i) : -1;
     if (k >= 0) {
@@ -437,13 +523,14 @@ export async function mount(ctx) {
     mark('spin'); sync();
     // Reel 3 is alone here, so the rising tone runs from the start of its travel: there is no reel 2 thud to
     // open it (A1's own tone still opens on that thud for every other spin, in stopFeel).
-    if (respin) { sound.rise(PACE.SPIN_MS + ant.holdMs, lite); note('tease', { kind: ant.kind, holdMs: ant.holdMs, respin: true }); }
+    if (respin) { sound.rise(PACE.SPIN_MS + ant.holdMs, lite); tunnel(FLOW.TEASE_TUNNEL); note('tease', { kind: ant.kind, holdMs: ant.holdMs, respin: true }); }
     await scene.spin(Array.isArray(o.stops) ? o.stops : stopsFor(before.strips, o.symbols), r.held,
                      { holdMs: ant.holdMs, gold: ant.gold && !lite, dim: !lite, keep });
     if (my !== session || !alive) return false;
-    playing = null;
     const shownBefore = shownSp();
-    tape.land(o); fire(o);
+    const p = playing; playing = null;
+    tape.land(o);
+    flow(o, { respinRow: o.kind === 'respin', jarWord: !!(p && p.jarWord) });   // THE FLOW: hit now, word + fx at 400 ms
     land(o, shownBefore);
     jarShown = null; paintJar();          // Law I: whatever the ticks showed, the tube settles on the tape's count
     scene.reveal(o.pay > 0); mark('reveal'); sync();
@@ -476,7 +563,8 @@ export async function mount(ctx) {
     let step = r, from = before;
     for (;;) {
       if (!(await beat(step, from, my))) return;
-      breathEnds = performance.now() + PACE.BREATH_MS;
+      // THE FLOW: a paid line holds the next spin to landing + UNLOCK_MS (the jackpot longer); a loss keeps the pace.
+      breathEnds = Math.max(performance.now() + PACE.BREATH_MS, unlockAt);
       // C1 (10.16.D): the re-spin is the SECOND BEAT of this same press. The lever is never asked twice and
       // nothing is bought: the outcome is already on the tape, queued by the emi2 that just landed.
       if (!playsWithoutPress(tape.snapshot().nextKind)) break;
@@ -506,6 +594,7 @@ export async function mount(ctx) {
     if (alive) return;
     alive = true; busy = false; suspended = false; lastMelt = null; pace = 'idle'; queued = false; breathEnds = 0;
     shown = null; streak = 0; seen = [0, 0, 0, 0, 0]; jackpots = 0; pose = 'idle0_0'; playing = null; jarShown = null;
+    flowLast = null; unlockAt = 0; tunnelLevel = 0; clearTimeout(hazeTimer); hazeTimer = 0;
     attracting = false; clearTimeout(idleTimer); clearTimeout(winkTimer); idleTimer = winkTimer = 0;
     const my = ++session;
     el = build();
@@ -514,6 +603,7 @@ export async function mount(ctx) {
     tape = createTape({ request: (op, body, idem) => ctx.request(op, body, idem), onMelt: sendMelt });
     media = createMedia($('.slot-media'), ctx.lex);
     sound = createSound();
+    callout = createCallout({ mount: $('.slot-callout'), lex: t });   // one per open; the layer sits above the reels
     bank = createBank({
       layer: $('.slot-tokens'), reduced,
       onTick: (value, kind, quiet) => { shown = value; paintSp(); if (!quiet) sound.token(false); note('tick', { kind, value }); },
@@ -589,6 +679,8 @@ export async function mount(ctx) {
     unSp = null;
     // Law VI: Back skips every ceremony to its settled state, then hands the room its chip back.
     endAttract(true);
+    clearFlow(); tunnel(0);
+    if (callout) callout.dispose();
     clearTimeout(glanceTimer); clearTimeout(gainTimer);
     if (bank) { bank.skip(); bank.dispose(); }
     // What a reopen will show: the stored tape's unplayed pays (a freeze's own outcomes are not stored).
@@ -597,6 +689,7 @@ export async function mount(ctx) {
     if (hostSp) hostSp.set(null);
     owing = false;
     if (sound) sound.dispose();
+    if (words) { words.dispose(); words = null; }   // Law VI: the word, the tunnel and the speech go with the cabinet
     const s = scene, root = el, m = media;
     if (s) s.skip();
     if (root) root.dataset.phase = 'leaving';
@@ -604,7 +697,7 @@ export async function mount(ctx) {
     if (s) s.dispose();
     if (m) m.dispose();
     if (root) root.remove();
-    if (my === session) { scene = null; el = null; tape = null; media = null; busy = false; bank = null; sound = null; shown = null; }
+    if (my === session) { scene = null; el = null; tape = null; media = null; busy = false; bank = null; sound = null; shown = null; callout = null; }
   }
 
   return {
@@ -612,9 +705,10 @@ export async function mount(ctx) {
     close,
     suspend(on) {
       suspended = !!on;
-      if (suspended) endAttract(true); else armIdle();
+      if (suspended) { endAttract(true); clearFlow(); tunnel(0); } else armIdle();   // Law VI: the word and the timers drop at once
       if (sound) sound.suspend(suspended);   // the climb is hushed with it: a resumed context would replay the rest
       if (suspended && bank) bank.skip();
+      if (suspended && words) words.cancel();   // Law VI: the word, the tunnel and the speech drop at once
       if (suspended && scene) { scene.cancelPull(); scene.skip(); }
       if (el) sync();
     },
@@ -634,6 +728,7 @@ export async function mount(ctx) {
                           label: el && $('.slot-spin small') ? $('.slot-spin small').textContent : null },
                     hostBack, variant: variant && variant.id, palette: !!(scene && scene.recoloured),
                     spinning: !!(scene && scene.spinning), sceneAlive: !!scene,
+                    callout: callout ? callout.debug() : null, flow: flowLast, tunnel: tunnelLevel, haze: !!(scene && scene.hazing),
                     feel: { log: feelLog, pose, streak, seen, shown, readout: String(shownSp()), hostSp: !!hostSp,
                             attracting, idleArmed: !!idleTimer, emi: playing ? playing.emi : [],
                             cues: sound ? sound.trace.slice() : [], scene: scene && scene.debug() } }),
