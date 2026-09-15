@@ -401,7 +401,7 @@ export async function mount(ctx) {
     mat = stage ? makeMat3D({ stage, spots: st.spots, label: matLabel }) : createMat({ spots: st.spots, rose: st.rose, label: matLabel });
     if (stage) {
       betSelector = createMatStrip({ root: el, spots: st.spots, label: matLabel, place, onToggle: open => $('.roul-chips-label').setAttribute('aria-expanded',String(open)) }); betSelector.hide();
-      unStage = stage.register({ update: frame, draw: renderer => mat?.drawSplit(renderer), dispose() { bowl?.dispose(); mat?.dispose(); betSelector?.dispose(); betSelector = null; } });
+      unStage = stage.register({ get coversRoom(){return mat?.split===true;}, update: frame, draw: renderer => mat?.drawSplit(renderer), dispose() { bowl?.dispose(); mat?.dispose(); betSelector?.dispose(); betSelector = null; } });
     }
     if (tape) {
       chips = chipsOf(tape.bets); resume = tape.played < tape.outcomes.length;
