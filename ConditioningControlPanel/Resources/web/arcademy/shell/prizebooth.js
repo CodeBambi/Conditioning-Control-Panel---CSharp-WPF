@@ -170,7 +170,8 @@ export function boothFx() {
   return [
     { kind: 'neon', view: 'wide', rect: FX_SIGN, seed: 0x71CE75, when: '!closed' },
     { kind: 'lamp', view: 'wide', rect: FX_LAMP, when: '!closed' },
-    { kind: 'tilt', view: 'wide', amp: 2 },
+    /* NO TILT (owner ruling 2026-09-15) - see recordsroom.js roomFx() for why.
+     * The booth carried the identical row and went with it. */
   ];
 }
 
