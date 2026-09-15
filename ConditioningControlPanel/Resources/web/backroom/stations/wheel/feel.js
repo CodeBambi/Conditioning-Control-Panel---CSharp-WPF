@@ -132,8 +132,9 @@ export function bezier([a, b, c, d], x) {
  *
  *   Law I:  grab and coast are the same for every press (a word, a plum wash); nothing before the
  *           server answers reads as an outcome. The landing rows fire on the frame the pointer settles.
- *   Gates:  a row's id fires only while at least one of its gates is on (the host skips the rest per
- *           primitive and never forces a toggle). A host that sends no gate reads as on.
+ *   Gates:  NONE (owner direction 2026-09-15): every gate reads as on, whatever the host reports. FX_GATE
+ *           stays as the record of which app toggle stood behind an id; the host enforces its own toggles
+ *           per primitive and never has a step withheld by the page.
  *   Calm:   reduced motion, Calm or Motion off strips the travel (the coast wash, the near-miss spiral,
  *           the storm's rain, the melt's drip); cues that are not motion (a word, a burst, a wash) stay.
  *           The page sends Normal args; the host halves (law 6, nobody halves twice).
@@ -216,12 +217,30 @@ export function pickKeys(keys, n, seed) {
   return Array.from({ length: Math.min(n | 0, list.length) }, (_, i) => list[(start + i) % list.length]);
 }
 
-/** May `id` fire under these gates? A host that reports no gates, or no such gate, reads as on. */
-export function fxAllowed(id, gates) {
-  const need = FX_GATE[id];
-  if (!need) return false;
-  const g = gates && typeof gates === 'object' ? gates : {};
-  return need.some(k => g[k] !== false);
+/** May `id` fire? Every known host id, always: gates no longer drop a step (`gates` is read for nothing). */
+export function fxAllowed(id, gates) {   // eslint-disable-line no-unused-vars
+  return Array.isArray(FX_GATE[id]);
+}
+
+/* ---------------------------------------------------------------------------------------------
+ * THE CALLOUT (shared/hypno/callout.js, owner direction 2026-09-15): the diegetic name of a landing,
+ * shown at FX_DELAY_MS with the host fx, after the landed slice glowed. One per landing, by row; a
+ * Snooze and a wound-down wheel get none. `tier` picks the callout's size.
+ * ------------------------------------------------------------------------------------------ */
+export const CALLOUTS = Object.freeze({
+  small:   { key: 'br_callout_small_win', fallback: 'Small Win', tier: 'small' },
+  mid:     { key: 'br_callout_nice_spin', fallback: 'Nice Spin', tier: 'small' },
+  big:     { key: 'br_callout_big_spin', fallback: 'Big Spin', tier: 'big' },
+  jackpot: { key: 'br_callout_emi_jackpot', fallback: 'Emi Jackpot', tier: 'hero' },
+  double:  { key: 'br_callout_double_up', fallback: 'Double Up', tier: 'small' },
+  gift:    { key: 'br_callout_gift_drop', fallback: 'Gift Drop', tier: 'small' },
+  empty:   { key: 'br_callout_head_empty', fallback: 'Head Empty', tier: 'big' },
+});
+
+/** The callout for a landed result, or null (Snooze, no result). */
+export function calloutFor(r) {
+  const row = landMoment(r);
+  return Object.prototype.hasOwnProperty.call(CALLOUTS, row) ? CALLOUTS[row] : null;
 }
 
 /** A fresh cooldown ledger for one sit-down. */

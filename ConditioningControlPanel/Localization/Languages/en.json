@@ -6181,5 +6181,22 @@
   "br_double_tape_note": "Prepaid spins keep the multiplier from purchase.",
   "br_custom_collect_locked": "Collect this decoration from Daily Daze to use it.",
   "br_bell_wheel_change": "hit Keep the Change",
-  "br_bell_wheel_spoiled": "got Spoiled Rotten"
+  "br_bell_wheel_spoiled": "got Spoiled Rotten",
+  "br_callout_small_win": "Small Win",
+  "br_callout_nice_spin": "Nice Spin",
+  "br_callout_big_spin": "Big Spin",
+  "br_callout_emi_jackpot": "Emi Jackpot",
+  "br_callout_double_up": "Double Up",
+  "br_callout_gift_drop": "Gift Drop",
+  "br_callout_head_empty": "Head Empty",
+  "br_callout_chips_in": "Chips In",
+  "br_callout_straight_up": "Straight Up",
+  "br_callout_spiral_wake": "Spiral Wake",
+  "br_callout_full_wake": "Full Wake",
+  "br_callout_on_a_roll": "On A Roll",
+  "br_callout_winner": "Winner",
+  "br_callout_blackjack": "Blackjack",
+  "br_callout_dealer_bust": "Dealer Bust",
+  "br_callout_hot_hand": "Hot Hand",
+  "br_callout_sweep": "Sweep"
 }

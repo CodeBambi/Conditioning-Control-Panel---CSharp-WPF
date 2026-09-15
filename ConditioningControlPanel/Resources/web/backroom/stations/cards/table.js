@@ -20,6 +20,7 @@
 import { TIMING, fanCard, lampBreath } from './feel.js';
 import { rankLabel, suitOf, totalOf } from './hand.js';
 import { DECK_VALUES } from '../../shared/hypno/media.js';
+import { HIGHLIGHT_MS, HIGHLIGHT_GAP_MS } from '../../shared/hypno/callout.js';
 
 const TAU = Math.PI * 2;
 const COL = { rose: '#ff5fa2', mint: '#5fffd0', brass: '#e8c27a', ink: '#1a0f2b', text: '#efe6ff', paper: '#f7f0fb' };
@@ -53,6 +54,8 @@ export function createTable(canvas, { kit = null } = {}) {
   const loom = () => (typeof kit === 'function' ? kit() : kit);
   let cards = [], seq = 0, hands = 1, active = -1, bets = [], betsShown = true;
   let fan = null, ripples = [], chips = [], tunnelAt = -1, glow = null, lastNow = 0;
+  let hits = [];   // THE GLYPH HIT (callout.js): { id, t0 } per winning card, a mint rim and a 1.06 pop over HIGHLIGHT_MS
+  const hitPulse = (c, now) => { const h = hits.find((x) => x.id === c.id); if (!h) return 0; const q = (now - h.t0) / HIGHLIGHT_MS; return q >= 0 && q < 1 ? Math.sin(q * Math.PI) : 0; };
   let W = 0, H = 0, D = 1, cache = { key: '', weave: null, print: null };
   const stats = { backs: 0, pictures: 0, fan: 0, frame: 0 };
 
@@ -178,7 +181,7 @@ export function createTable(canvas, { kit = null } = {}) {
   }
 
   const api = {
-    clear() { cards = []; hands = 1; active = -1; bets = []; betsShown = true; chips = []; tunnelAt = -1; glow = null; },
+    clear() { cards = []; hands = 1; active = -1; bets = []; betsShown = true; chips = []; tunnelAt = -1; glow = null; hits = []; },
     /** `settled`: already on its spot and turned (a quiet adopt, a suspend's flush), no flight. */
     addCard({ owner, slot, code, settled = false }, now) {
       cards.push({ id: ++seq, owner, slot, code: code || null, bornAt: now, faceAt: settled && code ? now - TIMING.flipMs : null, landed: !!settled, x: NaN, y: NaN, rot: 0, lift: 0 });
@@ -195,6 +198,10 @@ export function createTable(canvas, { kit = null } = {}) {
     },
     tunnel(now) { tunnelAt = now; },
     glowCard(owner, slot, now) { const c = cards.find((x) => x.owner === owner && x.slot === slot); if (c) glow = { id: c.id, t0: now }; },
+    /** THE GLYPH HIT: the cards in `list` ([{ owner, slot }]) glow in turn from `now`, HIGHLIGHT_GAP_MS apart. */
+    hitCards(list, now) {
+      hits = (Array.isArray(list) ? list : []).map((h, i) => { const c = cards.find((x) => x.owner === h.owner && x.slot === h.slot); return c ? { id: c.id, t0: now + i * HIGHLIGHT_GAP_MS } : null; }).filter(Boolean);
+    },
     /** A card's box on its resting spot in canvas CSS px (for fx.gif_from's `from`), known before any frame has moved it. */
     cardRect(owner, slot) {
       const c = cards.find((x) => x.owner === owner && x.slot === slot), L = tableLayout(W, H);
@@ -261,7 +268,14 @@ export function createTable(canvas, { kit = null } = {}) {
           g.save(); g.globalAlpha = (still ? 0.6 : Math.sin(gp * Math.PI) * 0.9) * k; g.shadowColor = COL.rose; g.shadowBlur = 30; g.fillStyle = COL.rose;
           rrect(g, c.x - L.cw / 2 - 4, c.y - L.ch / 2 - 4, L.cw + 8, L.ch + 8, L.cw * 0.12); g.fill(); g.restore();
         }
-        g.save(); g.translate(c.x, c.y - c.lift * 6); g.rotate(c.rot); drawCard(c.code, L.cw, L.ch, flipOf(c, now, still), { ...o, now }); g.restore();
+        const pulse = hitPulse(c, now);
+        if (pulse > 0) {   // the winning frame's rim: mint, out and back over 400 ms, the card popping 1.06 with it
+          g.save(); g.globalAlpha = 0.85 * pulse * k; g.shadowColor = COL.mint; g.shadowBlur = 26; g.strokeStyle = COL.mint; g.lineWidth = 3;
+          g.translate(c.x, c.y - c.lift * 6); g.rotate(c.rot); g.scale(1 + 0.06 * pulse, 1 + 0.06 * pulse);
+          rrect(g, -L.cw / 2 - 2, -L.ch / 2 - 2, L.cw + 4, L.ch + 4, L.cw * 0.12); g.stroke(); g.restore();
+        }
+        g.save(); g.translate(c.x, c.y - c.lift * 6); g.rotate(c.rot); if (pulse > 0) g.scale(1 + 0.06 * pulse, 1 + 0.06 * pulse);
+        drawCard(c.code, L.cw, L.ch, flipOf(c, now, still), { ...o, now }); g.restore();
       }
       // totals as the felt shows them (face-up cards only)
       g.font = `600 ${Math.max(12, W * 0.013)}px "Segoe UI", system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -320,9 +334,10 @@ export function createTable(canvas, { kit = null } = {}) {
     debug() {
       return { cards: cards.map((c) => ({ owner: c.owner, slot: c.slot, code: c.code, landed: c.landed, face: c.faceAt != null })), hands, active,
         fan: !!fan, fanCards: stats.fan, backs: stats.backs, pictures: stats.pictures, chips: chips.length, ripples: ripples.length,
-        tunnel: tunnelAt >= 0 && lastNow - tunnelAt < TIMING.tunnelMs, glow: !!(glow && lastNow - glow.t0 < TIMING.glowMs), frames: stats.frame };
+        tunnel: tunnelAt >= 0 && lastNow - tunnelAt < TIMING.tunnelMs, glow: !!(glow && lastNow - glow.t0 < TIMING.glowMs), frames: stats.frame,
+        hits: hits.map((h) => { const c = cards.find((x) => x.id === h.id); return { owner: c ? c.owner : null, slot: c ? c.slot : null, t0: Math.round(h.t0) }; }) };
     },
-    dispose() { cards = []; chips = []; ripples = []; fan = null; cache = { key: '', weave: null, print: null }; },
+    dispose() { cards = []; chips = []; ripples = []; fan = null; hits = []; cache = { key: '', weave: null, print: null }; },
   };
   return api;
 }

@@ -93,7 +93,7 @@ test('THE REVEAL count-up never reads above the pay, though its ease overshoots'
 
 /* ---- THE DESKTOP RECIPE (feel.js FX_MOMENTS): every moment to its host ids, the gates, Calm, the cooldowns. ---- */
 
-const { FX_MOMENTS, FX_GATE, FX_REPEAT_CAP, landMoment, nearMiss, fxPlan, fxAllowed, pickKeys, hash32, freshCool } = feel;
+const { FX_MOMENTS, FX_GATE, FX_REPEAT_CAP, landMoment, nearMiss, fxPlan, fxAllowed, pickKeys, hash32, freshCool, CALLOUTS, calloutFor } = feel;
 const HOST_IDS = ['fx.gif_burst', 'fx.gif_from', 'fx.gif_storm', 'fx.haze', 'fx.jackpot', 'fx.loom_spiral', 'fx.melt', 'fx.spiral_brief',
   'fx.spiral_full', 'fx.sub_cascade', 'fx.sub_pair', 'fx.sub_single', 'fx.wash'];
 const GIFS = ['g0', 'g1', 'g2', 'g3'], WORDS = ['s0', 's1', 's2', 's3'];
@@ -146,22 +146,31 @@ test('Law I: grab and coast are the same whatever the result, and fire no landin
   for (const f of [...g.fx, ...c.fx]) assert.ok(!['fx.jackpot', 'fx.gif_storm', 'fx.gif_from', 'fx.loom_spiral', 'fx.melt'].includes(f.id));
 });
 
-test('gated variants drop: each toggle strips its ids, a two-gate id needs only one of them, everything off is silent', () => {
-  assert.deepEqual(ids(play('mid', { gates: { flash: false } })), ['fx.sub_single']);
-  assert.deepEqual(ids(play('mid', { gates: { subliminal: false } })), ['fx.gif_burst']);
-  assert.deepEqual(ids(play('big', { gates: { subliminal: false } })), ['fx.gif_storm', 'fx.sub_pair'], 'sub_pair still carries its spiral');
-  assert.deepEqual(ids(play('big', { gates: { subliminal: false, spiral: false } })), ['fx.gif_storm']);
-  assert.deepEqual(ids(play('empty', { gates: { brainDrain: false } })), []);
-  assert.deepEqual(ids(play('nearMiss', { gates: { spiral: false } })), []);
-  assert.deepEqual(ids(play('jackpot', { gates: { spiral: false, flash: false } })), ['fx.jackpot'], 'the pot still has its words');
+test('gates never drop a step (2026-09-15): every toggle off plans the same rows as every toggle on', () => {
   const off = { flash: false, subliminal: false, spiral: false, brainDrain: false, tunnel: false };
   for (const moment of Object.keys(FX_MOMENTS)) {
-    const p = play(moment, { gates: off });
-    assert.deepEqual(p.fx, [], `${moment} off`);
-    assert.equal(p.why, FX_MOMENTS[moment].fx.length ? 'gated' : null);
+    assert.deepEqual(ids(play(moment, { gates: off })), ids(play(moment)), `${moment}: gates off changes nothing`);
+    assert.equal(play(moment, { gates: off }).why, null, `${moment}: never 'gated'`);
   }
-  assert.deepEqual(ids(play('big', { gates: null })), ['fx.gif_storm', 'fx.sub_pair'], 'no gates reported reads as all on');
-  assert.deepEqual(ids(play('big', { gates: { melt: false } })), ['fx.gif_storm', 'fx.sub_pair'], 'a gate we do not read changes nothing');
+  assert.deepEqual(ids(play('mid', { gates: { flash: false } })), ['fx.gif_burst', 'fx.sub_single']);
+  assert.deepEqual(ids(play('empty', { gates: { brainDrain: false } })), ['fx.melt']);
+  assert.deepEqual(ids(play('nearMiss', { gates: { spiral: false } })), ['fx.spiral_brief']);
+  assert.deepEqual(ids(play('big', { gates: null })), ['fx.gif_storm', 'fx.sub_pair'], 'no gates reported reads the same');
+  for (const id of Object.keys(FX_GATE)) assert.equal(fxAllowed(id, off), true, id + ' fires with every gate off');
+});
+
+test('the callout for a landing: one name a row, none for a Snooze (callout.js)', () => {
+  assert.deepEqual(Object.keys(CALLOUTS).sort(), ['big', 'double', 'empty', 'gift', 'jackpot', 'mid', 'small']);
+  for (const c of Object.values(CALLOUTS)) assert.ok(/^br_callout_[a-z_]+$/.test(c.key) && c.fallback && ['small', 'big', 'hero'].includes(c.tier));
+  assert.equal(calloutFor(R({ pay: 1 })).key, 'br_callout_small_win');
+  assert.equal(calloutFor(R({ pay: 15 })).key, 'br_callout_nice_spin');
+  assert.equal(calloutFor(R({ pay: 60 })).key, 'br_callout_big_spin');
+  assert.deepEqual(calloutFor(R({ pay: 550, jackpot: true })), { key: 'br_callout_emi_jackpot', fallback: 'Emi Jackpot', tier: 'hero' });
+  assert.equal(calloutFor(R({ pay: 0, reward: { kind: 'double' } })).key, 'br_callout_double_up');
+  assert.equal(calloutFor(R({ pay: 0, reward: { kind: 'decoration', id: 'x' } })).key, 'br_callout_gift_drop');
+  assert.deepEqual(calloutFor(R({ pay: 0, reward: { kind: 'nothing' } })), { key: 'br_callout_head_empty', fallback: 'Head Empty', tier: 'big' });
+  assert.equal(calloutFor(R({ pay: 0, snoozed: true })), null, 'a Snooze names nothing');
+  assert.equal(calloutFor(null), null);
 });
 
 test('Calm strips motion: no coast wash, no near-miss spiral, no melt, the storm becomes a burst; the cues stay', () => {

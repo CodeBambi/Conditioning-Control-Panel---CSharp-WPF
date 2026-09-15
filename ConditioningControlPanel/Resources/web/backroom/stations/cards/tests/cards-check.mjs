@@ -138,8 +138,18 @@ d = await dbg();
 ok(d.chip.server === 59 && d.chip.owed === 4 && d.chip.value === 55, `Law I: the server says 59, the chip holds ${d.chip.value} until the hand shows`);
 await moment('cards.win');
 d = await dbg();
-ok(!d.controls.deal && d.controls.dealWhy === 'screen' && d.dealText === 'One moment' && d.screenLeftMs > 0 && d.screenLeftMs <= 900,
-  `the win wash holds the next deal: "${d.dealText}", ${d.screenLeftMs} ms left`);
+ok(!d.controls.deal && d.controls.dealWhy === 'screen' && d.dealText === 'One moment' && d.screenLeftMs > 0 && d.screenLeftMs <= 2000,
+  `the win holds the next deal WIN_HOLD_MS from the settle frame: "${d.dealText}", ${d.screenLeftMs} ms left`);
+// THE WINNING FLOW (callout.js): the winning cards glowed 80 ms apart from the settle frame; the moment and the callout came FX_DELAY_MS later.
+{
+  const markAt = await ev('window.__mark');
+  const win = d.log.find((x) => x.what === 'moment' && x.id === 'cards.win' && x.at > markAt);
+  ok(d.callout.shown.length === 1 && d.callout.shown[0].key === 'br_callout_winner' && d.callout.shown[0].tier === 'small' && win && win.delayed === 400,
+    `the callout "Winner" (small) recorded with the delayed moment: ${JSON.stringify(d.callout.shown)}`);
+  const hits = d.table.hits || [];
+  ok(hits.length === 2 && hits.every((h) => h.owner === 0) && hits[1].t0 - hits[0].t0 === 80 && win.at - hits[0].t0 >= 380 && win.at - hits[0].t0 <= 700,
+    `both winning cards glowed 80 ms apart, the fx ${win ? win.at - hits[0].t0 : '?'} ms after the first (FX_DELAY_MS 400)`);
+}
 await shot('win-flash.png');
 await sleep(700);
 await shot('win-tunnel-chip-vortex.png');
@@ -201,7 +211,8 @@ const deal = d.log.filter((x) => x.what === 'reply' && x.op === 'deal').at(-1);
 ok(fx.length === 3 && fx[0].fxId === 'fx.gif_from' && fx[0].symbols[0] === d.deck.map[0] && fx[0].args.ms === 4000 && fx[1].fxId === 'fx.wash' && fx[1].args.color === '#ff5fa2' && fx[1].args.strength === 0.8,
   'cards.bloom: fx.gif_from out of the ace with the ace\'s picture, then a rose wash 0.8');
 ok(Math.abs(fx[0].args.from.x - bloom.from.x) <= 1 && Math.abs(fx[0].args.from.w - bloom.from.w) <= 1, `the bloom grows from the ace's rect (${JSON.stringify(fx[0].args.from)})`);
-ok(bloom.at - deal.at >= 1700 && bloom.at - deal.at <= 2200, `the bloom fires as the second player card finishes turning (${bloom.at - deal.at} ms after the reply)`);
+ok(bloom.at - deal.at >= 2100 && bloom.at - deal.at <= 2600, `the bloom fires FX_DELAY_MS after the second player card finishes turning (${bloom.at - deal.at} ms after the reply)`);
+ok(d.callout.shown.some((c) => c.key === 'br_callout_blackjack' && c.tier === 'big') && !d.callout.shown.some((c) => c.key === 'br_callout_winner'), 'the bloom named "Blackjack" (big); the plain settle after it named nothing more');
 ok(fx[2].fxId === 'fx.wash' && fx[2].args.color === '#5fffd0' && fx[2].args.strength === 0.9 && !fx[2].symbols, 'cards.win after a bloom: mint 0.9, no picture');
 ok(d.controls.dealWhy === 'screen' && d.dealText === 'One moment' && /Blackjack! \+4 SP\./.test(d.status), `Deal waits out the bloom ("${d.dealText}", ${d.screenLeftMs} ms left); "Blackjack! +4 SP."`);
 await until('window.dev.station.debug().controls.deal', 5000);
@@ -367,14 +378,14 @@ await sleep(300);
 d = await dbg();
 await shot('gated-off-blackjack.png');
 await moment('cards.win');
-ok((await ev('window.dev.host.fx.length')) === 0 && d.table.glow, 'gated off: a blackjack fires no host fx; the ace glow (page) stays');
+ok((await ev('window.dev.host.fx.length > 0 && window.dev.host.fx.every((r) => r.ack.fired.length === 0)')) && d.table.glow, 'gated off: the blackjack still posts its fx (the host fires none); the ace glow (page) stays');
 await dealWhenReady();
 await decideNow();
 await shot('gated-off-decision.png');
 await click('.cards-move[data-move=stand]');
 await moment('cards.lose');
 await sleep(1500);
-ok((await ev('window.dev.host.tunnel.length')) === 0 && (await ev('window.dev.host.fx.length')) === 0, 'tunnel gate off: losing edges send no tunnel');
+ok((await ev('window.dev.host.tunnel.length > 0 && window.dev.host.tunnel.every((t) => !t.applied)')), 'tunnel gate off: the losing edges still post their tunnel; the host applies none');
 
 /* ---------------------------------------------------------------- 7. Calm */
 await boot('?calm&floor=600&script=As.9d.Kh.7c,Th.Td.7c.9s', { play: false });

@@ -28,15 +28,24 @@
  * moment: a word on a rim grab, a plum wash as the coast starts (the same for
  * every press, Law I), and on the landing frame the row for the result (small,
  * mid, big, the pot, Seeing Double, the gift, Head Empty) plus THE ALMOST when
- * the pointer rests one slice off the pot. feel.fxPlan applies the gates, Calm,
- * the cooldowns and the per-sit-down cap; this file only posts what it returns.
- * Back and suspend fire nothing more (the host's station-close settles the desk).
+ * the pointer rests one slice off the pot. feel.fxPlan applies Calm, the
+ * cooldowns and the per-sit-down cap (gates no longer drop a step, owner
+ * 2026-09-15); this file only posts what it returns. Back and suspend fire
+ * nothing more (the host's station-close settles the desk).
+ *
+ * THE LANDING FLOW (shared/hypno/callout.js, owner 2026-09-15). On the frame the
+ * pointer settles (Law I): the thud and the party at 0, the landed slice's rim
+ * pulses to HIGHLIGHT_MS, and at FX_DELAY_MS the kit's moment, the desktop row
+ * and the callout (feel.calloutFor) fire together. The tunnel level of the last
+ * turn is not delayed. A Snooze gets no callout; the spin button is already
+ * waiting for tomorrow, so nothing unlocks early.
  * ==========================================================================*/
 
 import { layoutOf, landingAngle, resultIndex, readResult, restRotation, countdown } from './wheel.js';
-import { recipe, tierOf, winTokens, glance, landPose, pressPose, revealCount, FEEL, landMoment, nearMiss, fxPlan, freshCool } from './feel.js';
+import { recipe, tierOf, winTokens, glance, landPose, pressPose, revealCount, FEEL, landMoment, nearMiss, fxPlan, freshCool, calloutFor } from './feel.js';
 import { dressOf, edgeAlpha, captionAlpha, hubStill } from './hypno.js';
 import { createLoomKit, createDeck, createMoments, wheelSize, strengthK, wheelTurnLevel, boxAround } from '../../shared/hypno/index.js';
+import { createCallout, FX_DELAY_MS } from '../../shared/hypno/callout.js';
 import { createScene } from './scene.js';
 import { createRoomScene } from './room-scene.js';
 export const roomStage = true;
@@ -80,6 +89,7 @@ export async function mount(ctx) {
   let gainTimer = 0, glanceTimer = 0, feelLog = [], revealAt = -Infinity;
   let moments = null, kit = null, deck = null, unSettings = null, dress = dressOf(), hubPainted = false, turnPlayed = false, lastMoment = null, dealSeq = 0;
   let fxCool = freshCool(), wordKeys = [], lastFx = null;
+  let callout = null, landTimer = 0, lastCallout = null;   // the landing flow: the callout and the delayed fx frame
   const $ = sel => el.querySelector(sel);
   const note = (what, extra = {}) => { feelLog = [...feelLog.slice(-79), { what, at: Math.round(performance.now()), ...extra }]; };
 
@@ -258,7 +268,13 @@ export async function mount(ctx) {
     note('fx', lastFx);
     return ids;
   }
+  /** Law VI: whatever the landing still owed the desk (the delayed fx frame, the callout) is dropped now. */
+  function dropLanding() {
+    clearTimeout(landTimer); landTimer = 0;
+    if (callout) callout.cancel();
+  }
   function freeHypno() {
+    dropLanding();
     if (moments) moments.cancel();
     if (kit) { kit.dispose(); kit = null; }
     if (deck) { deck.dispose(); deck = null; }
@@ -282,11 +298,21 @@ export async function mount(ctx) {
     lineAt = performance.now();   // the result line shows first
     if (fresh && rec.reveal) { revealAt = lineAt; const step = () => { if (!alive || performance.now() - revealAt > FEEL.REVEAL_MS + 40) return; sync(); requestAnimationFrame(step); }; requestAnimationFrame(step); }
     if (r.reward?.kind !== 'nothing') sound.thud(tier === 0);
-    if (fresh && r.reward?.kind !== 'nothing') { scene.celebrate(rec); sound.win(rec.sound); fire(raw, r, idx); }
-    if (fresh) {   // the desktop row for the result, on the same frame as the pointer's thud (Law X), after the kit's moment
-      const seed = `${r.day}|${r.sliceId}|${idx}`;
-      playFx(landMoment(r), seed);
-      if (nearMiss(layout, idx, r)) playFx('nearMiss', seed);
+    if (fresh && r.reward?.kind !== 'nothing') { scene.celebrate(rec); sound.win(rec.sound); }
+    if (fresh) {
+      // THE LANDING FLOW (callout.js): the slice glows from this frame; at FX_DELAY_MS the kit's moment, the desktop
+      // row (THE ALMOST with it) and the callout fire together. A Snooze glows nothing and names nothing.
+      const seed = `${r.day}|${r.sliceId}|${idx}`, co = calloutFor(r), my = session;
+      if (co && idx >= 0) scene.hit(idx);
+      clearTimeout(landTimer);
+      landTimer = setTimeout(() => {
+        landTimer = 0;
+        if (my !== session || !alive || suspended) return;
+        if (r.reward?.kind !== 'nothing') fire(raw, r, idx);
+        playFx(landMoment(r), seed);
+        if (nearMiss(layout, idx, r)) playFx('nearMiss', seed);
+        if (co && callout) { callout.show(co.key, co.fallback, { tier: co.tier }); lastCallout = { key: co.key, tier: co.tier, at: Math.round(performance.now()) }; note('callout', lastCallout); }
+      }, FX_DELAY_MS);
     }
     glanceTo(landPose(r));
     $('.wheel-zzz').hidden = !r.snoozed;
@@ -386,11 +412,12 @@ export async function mount(ctx) {
   async function open() {
     if (alive) return;
     alive = true; busy = false; suspended = false; pose = 'idle0_0'; feelLog = []; lines = []; lineAt = performance.now(); lastMoment = null;
-    fxCool = freshCool(); wordKeys = []; lastFx = null;   // a sit-down starts with every cooldown and cap fresh
+    fxCool = freshCool(); wordKeys = []; lastFx = null; lastCallout = null;   // a sit-down starts with every cooldown and cap fresh
     const my = ++session;
     readMotion(); dress = dressOf(hypnoCtx());
     el = build(); ctx.root.append(el); rewardReveal = createRewardReveal(el, t); el.dataset.hub = dress.hub;
     moments = createMoments(ctx, { station: 'wheel' });
+    callout = createCallout({ mount: el, lex: typeof ctx.lex === 'function' ? ctx.lex : undefined });
     if (typeof ctx.onSettings === 'function') unSettings = ctx.onSettings(() => { if (alive) applyDress(); });
     addEventListener('keydown', onKey); addEventListener('resize', onResize);
     readout = createReadout({ ctx, own: $('.wheel-sp'), format: n => t('br_wheel_sp', '{n} SP', { n: fmt(n) }) });
@@ -446,6 +473,7 @@ export async function mount(ctx) {
     freeHypno();
     rewardReveal?.dispose(); rewardReveal = null;
     if (moments) { moments.dispose(); moments = null; }
+    if (callout) { callout.dispose(); callout = null; }
     // Law VI: Back skips every ceremony to its settled state and hands the readout the plain server number.
     if (bank) { bank.skip(); bank.dispose(); }
     if (readout) readout.dispose();
@@ -477,7 +505,8 @@ export async function mount(ctx) {
                     readout: readout && { kind: readout.kind, value: readout.value, server: readout.server, owed: readout.owed },
                     status: el && $('.wheel-status').textContent, spin: el && $('.wheel-spin').textContent,
                     feel: { log: feelLog, cues: sound ? sound.trace.slice() : [], scene: scene && scene.debug() },
-                    fx: { last: lastFx, cool: fxCool, words: wordKeys.slice() },
+                    fx: { last: lastFx, cool: fxCool, words: wordKeys.slice(), pending: !!landTimer },
+                    callout: { last: lastCallout, ...(callout ? callout.debug() : { shown: [] }) },
                     hypno: { dress, lastMoment, turnPlayed, moments: moments && moments.debug(), kit: kit && kit.debug(), deck: deck && deck.debug(),
                              edges: el && Number($('.wheel-edges').style.opacity || 0), caption: el && Number($('.wheel-slowly').style.opacity || 0) } }),
   };

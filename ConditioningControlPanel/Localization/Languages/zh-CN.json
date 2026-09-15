@@ -5911,5 +5911,22 @@
   "br_custom_collect_locked": "在Daily Daze中获得此装饰后即可使用。",
   "br_bell_wheel_change": "获得了Keep the Change",
   "br_bell_wheel_spoiled": "获得了Spoiled Rotten",
-  "br_slot_rotate": "把手机横过来，画面更大"
+  "br_slot_rotate": "把手机横过来，画面更大",
+  "br_callout_small_win": "小奖",
+  "br_callout_nice_spin": "漂亮一转",
+  "br_callout_big_spin": "大奖一转",
+  "br_callout_emi_jackpot": "艾米头奖",
+  "br_callout_double_up": "翻倍",
+  "br_callout_gift_drop": "礼物掉落",
+  "br_callout_head_empty": "头脑放空",
+  "br_callout_chips_in": "筹码入账",
+  "br_callout_straight_up": "直押命中",
+  "br_callout_spiral_wake": "螺旋苏醒",
+  "br_callout_full_wake": "完全苏醒",
+  "br_callout_on_a_roll": "连连得手",
+  "br_callout_winner": "赢家",
+  "br_callout_blackjack": "黑杰克",
+  "br_callout_dealer_bust": "庄家爆牌",
+  "br_callout_hot_hand": "手气火热",
+  "br_callout_sweep": "全胜"
 }

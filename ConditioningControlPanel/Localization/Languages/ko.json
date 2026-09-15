@@ -5453,5 +5453,22 @@
   "br_custom_collect_locked": "Daily Daze에서 이 장식을 획득하면 사용할 수 있습니다.",
   "br_bell_wheel_change": "Keep the Change 획득",
   "br_bell_wheel_spoiled": "Spoiled Rotten 획득",
-  "br_slot_rotate": "휴대폰을 옆으로 돌리면 더 크게 볼 수 있어요"
+  "br_slot_rotate": "휴대폰을 옆으로 돌리면 더 크게 볼 수 있어요",
+  "br_callout_small_win": "작은 승리",
+  "br_callout_nice_spin": "멋진 스핀",
+  "br_callout_big_spin": "큰 스핀",
+  "br_callout_emi_jackpot": "에미 잭팟",
+  "br_callout_double_up": "더블 업",
+  "br_callout_gift_drop": "선물 드롭",
+  "br_callout_head_empty": "머리 텅 빔",
+  "br_callout_chips_in": "칩 인",
+  "br_callout_straight_up": "스트레이트 업",
+  "br_callout_spiral_wake": "스파이럴 웨이크",
+  "br_callout_full_wake": "풀 웨이크",
+  "br_callout_on_a_roll": "연승 중",
+  "br_callout_winner": "위너",
+  "br_callout_blackjack": "블랙잭",
+  "br_callout_dealer_bust": "딜러 버스트",
+  "br_callout_hot_hand": "핫 핸드",
+  "br_callout_sweep": "스윕"
 }

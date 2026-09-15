@@ -5,14 +5,13 @@
  * A station never names a fullscreen fx id itself. It plays a moment on the
  * frame it SHOWS the result (Law I) and runs the page effect names it gets back
  * at strengthK(ctx). This module fires the host steps through ctx.fx with the
- * table's Normal args, after dropping every step whose gate is off:
- *   flash      -> fx.wash, fx.gif_from
- *   spiral     -> fx.loom_spiral
- *   brainDrain -> fx.haze
- *   tunnel     -> fx-tunnel (the Back Room's own tunnel vision toggle, owner
- *                 2026-09-14; a host that sends no `tunnel` reads as on)
- * A page always sends Normal values; the host applies Calm (law 6: nobody
- * halves twice). The host still enforces every toggle; gates only dress.
+ * table's Normal args. GATES NO LONGER DROP A STEP (owner direction 2026-09-15:
+ * the host stopped gating the Back Room's effects on the app toggles): every
+ * step of a moment is posted and fx-tunnel always posts its level; the host
+ * alone decides what it draws. ctx.gates still dresses the page (a brass star,
+ * plain card faces) and never empties a moment. A page always sends Normal
+ * values; the host applies Calm (law 6: nobody halves twice). A settings frame
+ * below Full still releases a running haze hold.
  *
  * Tunnel vision is a level, not an fx: tunnel(level) posts fx-tunnel on a
  * change at most every 100 ms and re-posts every 1000 ms while it is above 0,
@@ -98,9 +97,10 @@ export const MOMENTS = deepFreeze({
     page: ['chips_in', { name: 'pulled_pair', when: 'wake' }] },
 });
 
-const GATE_OF = { 'fx.wash': 'flash', 'fx.gif_from': 'flash', 'fx.loom_spiral': 'spiral', 'fx.haze': 'brainDrain',
-  // Section 4 ids the cards table borrows: dressed plain by their first gate; the host enforces every toggle in the recipe.
-  'fx.gif_burst': 'flash', 'fx.gif_storm': 'flash', 'fx.sub_single': 'subliminal', 'fx.sub_pair': 'subliminal' };
+/** Which app toggle each id used to stand behind (CONTRACT 10.13.A). Kept for the record: nothing here reads it to
+ *  drop a step any more; the host enforces its own toggles per primitive. */
+export const GATE_OF = Object.freeze({ 'fx.wash': 'flash', 'fx.gif_from': 'flash', 'fx.loom_spiral': 'spiral', 'fx.haze': 'brainDrain',
+  'fx.gif_burst': 'flash', 'fx.gif_storm': 'flash', 'fx.sub_single': 'subliminal', 'fx.sub_pair': 'subliminal' });
 const WORD_RE = /^s\d$/;
 
 /** Which landing a Daily Daze result gets. */
@@ -148,12 +148,6 @@ const nowMs = () => Date.now();
 export function createMoments(ctx, { station = '' } = {}) {
   const c = ctx || {};
   const say = (m) => { try { if (c.bridge && typeof c.bridge.log === 'function') c.bridge.log('warn', m); else if (typeof c.log === 'function') c.log(m); } catch (e) { /* noop */ } };
-  const gates = () => {
-    const g = c.gates;
-    return g && typeof g === 'object' ? { flash: g.flash !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false, tunnel: g.tunnel !== false,
-      subliminal: g.subliminal !== false }
-      : { flash: true, spiral: true, brainDrain: true, tunnel: true, subliminal: true };
-  };
   const holds = new Map();   // token -> fxId
   let held = false, bloomed = false, disposed = false;
   let want = 0, posted = 0, lastPostAt = -Infinity, gapTimer = 0, keepTimer = 0, breathTimer = 0;
@@ -182,7 +176,7 @@ export function createMoments(ctx, { station = '' } = {}) {
   function stopBreath() { if (breathTimer) { clearInterval(breathTimer); breathTimer = 0; } }
   function setTunnel(level) {
     let v = Math.round(clamp01(Number(level)) * 100) / 100;
-    if (!gates().tunnel || typeof c.fxTunnel !== 'function') v = 0;
+    if (typeof c.fxTunnel !== 'function') v = 0;
     if (held && v > 0) return;
     want = v;
     flushTunnel();
@@ -202,13 +196,12 @@ export function createMoments(ctx, { station = '' } = {}) {
     for (const token of Array.from(holds.keys())) api.release(token);
   }
 
+  // A settings frame: a gate going off changes nothing here (the host enforces); haze is Full only.
   const unsub = typeof c.onSettings === 'function' ? c.onSettings((f) => {
     if (!f) return;
-    const g = f.gates || {};
     const belowFull = ('intensity' in f && f.intensity !== 'full') || f.reduced === true;
-    if (g.tunnel === false) { stopBreath(); tunnelNow0(); }
     for (const [token, fxId] of Array.from(holds)) {
-      if (g[GATE_OF[fxId]] === false || (fxId === 'fx.haze' && belowFull)) api.release(token);
+      if (fxId === 'fx.haze' && belowFull) api.release(token);
     }
   }) : null;
   const holding = (fxId) => { for (const v of holds.values()) { if (v === fxId) return true; } return false; };
@@ -239,15 +232,12 @@ export function createMoments(ctx, { station = '' } = {}) {
       if (m.bloom) bloomed = true;
       if (m.settles) bloomed = false;
       if (held && m.host.some((s) => !s.light)) out.held = true;
-      const g = gates();
       const wordKeys = Array.isArray(words) ? words.filter((w) => typeof w === 'string' && WORD_RE.test(w)) : [];
       for (const step of m.host) {
         if (held && !step.light) continue;
-        if (step.tunnel === 'breath') { if (g.tunnel) { breath(step.peak, step.ms); sound.play('breath', { ms: step.ms }); } continue; }
+        if (step.tunnel === 'breath') { breath(step.peak, step.ms); sound.play('breath', { ms: step.ms }); continue; }
         if (step.tunnel) continue;
         if (step.full && !full) continue;
-        const gate = GATE_OF[step.fx];
-        if (gate && !g[gate]) continue;
         if (typeof c.fx !== 'function') continue;
         const bloomStep = afterBloom && step.bloomArgs;
         const args = { ...(bloomStep ? step.bloomArgs : step.args) };
@@ -270,7 +260,7 @@ export function createMoments(ctx, { station = '' } = {}) {
       }
       return out;
     },
-    /** Tunnel vision 0..1 (Normal values). Throttled; ignored while the screen is held; 0 when the tunnel gate is off. */
+    /** Tunnel vision 0..1 (Normal values). Throttled; ignored while the screen is held. */
     tunnel(level) {
       if (disposed) return;
       if (Number(level) > 0) stopBreath();   // a live level takes over from a running breath; 0 leaves it be

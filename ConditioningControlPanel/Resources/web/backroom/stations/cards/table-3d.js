@@ -6,6 +6,7 @@ import { TIMING, fanCard, lampBreath } from './feel.js';
 import { DECK_VALUES } from '../../shared/hypno/media.js';
 import { cardLayout, cardCounts } from './layout-3d.js';
 import { createCardFace } from './card-face.js';
+import { HIGHLIGHT_MS, HIGHLIGHT_GAP_MS } from '../../shared/hypno/callout.js';
 
 const clamp = (v) => Math.max(0, Math.min(1, v));
 const ease = (p) => 1 - (1 - p) ** 3;
@@ -22,6 +23,8 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
   const size = nodes.card_slot_p0_0.getWorldScale(new T.Vector3());
   let layout=cardLayout(stage.fixture);
   const geometry = new T.PlaneGeometry(layout.width, layout.height);
+  // THE GLYPH HIT (callout.js): a mint rim just under a winning card, additive, pulsing with a 1.06 pop over HIGHLIGHT_MS.
+  const rimGeometry = new T.PlaneGeometry(layout.width * 1.12, layout.height * 1.1);
   const normal = new T.Vector3(0, 1, 0);
   const basis = nodes.card_slot_p0_0.getWorldQuaternion(new T.Quaternion());
   normal.applyQuaternion(basis);
@@ -35,7 +38,13 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
     const mesh = new T.Mesh(geometry, material); mesh.quaternion.copy(base); mesh.renderOrder = 2; group.add(mesh);
     return { ...c, mesh, material, face, landed: !!c.settled, faceAt: c.settled && c.code ? c.bornAt - TIMING.flipMs : null };
   }
-  function drop(c) { c.mesh.removeFromParent(); c.material.dispose(); c.face.dispose(); }
+  function drop(c) { c.mesh.removeFromParent(); c.material.dispose(); c.face.dispose(); if (c.rim) { c.rim.removeFromParent(); c.rim.material.dispose(); c.rim = null; } }
+  function rimFor(c) {
+    if (c.rim) return c.rim;
+    const m = new T.Mesh(rimGeometry, new T.MeshBasicMaterial({ color: '#5fffd0', transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide }));
+    m.quaternion.copy(base); m.renderOrder = 1; m.visible = false; group.add(m); c.rim = m; return m;
+  }
+  const hitPulse = (c, time) => { if (c.hit == null) return 0; const q = (time - c.hit) / HIGHLIGHT_MS; return q >= 0 && q < 1 ? Math.sin(q * Math.PI) : 0; };
   function target(c) { return layout.point(c.owner,c.slot); }
   function setPose(c, at, flip = 1, alpha = 1) {
     c.mesh.position.copy(at); c.mesh.quaternion.copy(base); c.mesh.scale.set(Math.max(.02, Math.abs(Math.cos(Math.PI * flip))), 1, 1);
@@ -49,7 +58,7 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
     for (const c of [...cards, ...fans]) drop(c);
     betChips.forEach((m) => { m.geometry.dispose(); m.material.dispose(); });
     for (const s of sparks) { s.mesh.geometry.dispose(); s.mesh.material.dispose(); }
-    geometry.dispose(); group.removeFromParent();
+    geometry.dispose(); rimGeometry.dispose(); group.removeFromParent();
     authored.forEach(([n, visible]) => { n.visible = visible; });
   }
   function pickShoe(e) {
@@ -88,6 +97,11 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
     vortex(dir, count, time) { if (dir < 0) betChips.forEach((m) => { m.visible = false; }); effect('chip', time, count, dir); },
     tunnel(time) { effect('tunnel', time, 7); },
     glowCard(owner, slot, time) { const c = cards.find((c) => c.owner === owner && c.slot === slot); if (c) c.glow = time; },
+    /** THE GLYPH HIT: the cards in `list` ([{ owner, slot }]) glow in turn from `time`, HIGHLIGHT_GAP_MS apart. */
+    hitCards(list, time) {
+      for (const c of cards) c.hit = null;
+      (Array.isArray(list) ? list : []).forEach((h, i) => { const c = cards.find((x) => x.owner === h.owner && x.slot === h.slot); if (c) c.hit = time + i * HIGHLIGHT_GAP_MS; });
+    },
     cardRect(owner, slot) {
       const c = cards.find((c) => c.owner === owner && c.slot === slot); if (!c) return null;
       const p = target(c), rect = stage.canvas.getBoundingClientRect(), corners = [];
@@ -113,6 +127,11 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
         if (!o.still) pos.addScaledVector(normal, Math.sin(p * Math.PI) * height * o.k);
         if (p === 1 && !c.landed) { c.landed = true; if (c.code) c.faceAt = now; if (o.full) effect('ripple', now); }
         const flip = flipAt(c, now, o.still); setPose(c, pos, flip);
+        const pulse = hitPulse(c, now);
+        if (pulse > 0 || c.rim) {
+          const rim = rimFor(c); rim.visible = pulse > 0;
+          if (pulse > 0) { c.mesh.scale.multiplyScalar(1 + 0.06 * pulse); rim.position.copy(pos).addScaledVector(normal, -0.002); rim.scale.setScalar(1 + 0.06 * pulse); rim.material.opacity = 0.6 * pulse * o.k; }
+        }
         c.material.color.set(c.glow && now - c.glow < TIMING.glowMs ? '#ffb2d0' : '#ffffff');
         if (repaint) c.face.paint(c.code, flip >= .5, o, typeof kit === 'function' ? kit() : kit);
       }
@@ -136,7 +155,8 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
         s.mesh.material.opacity = Math.sin(p * Math.PI) * .4 * o.k;
       }
     },
-    debug() { return { kind: 'room3d', cards: cards.map((c) => ({ owner: c.owner, slot: c.slot, code: c.code, landed: c.landed, face: c.faceAt != null })), hands, active, fan: !!fan, fanCards: fans.length, chips: sparks.filter((s) => s.kind === 'chip').length, frames: now, disposed }; },
+    debug() { return { kind: 'room3d', cards: cards.map((c) => ({ owner: c.owner, slot: c.slot, code: c.code, landed: c.landed, face: c.faceAt != null })), hands, active, fan: !!fan, fanCards: fans.length, chips: sparks.filter((s) => s.kind === 'chip').length, frames: now, disposed,
+      hits: cards.filter((c) => c.hit != null).map((c) => ({ owner: c.owner, slot: c.slot, t0: Math.round(c.hit) })) }; },
     dispose() { off(); release(); },
   };
   group.userData.debug = api.debug;

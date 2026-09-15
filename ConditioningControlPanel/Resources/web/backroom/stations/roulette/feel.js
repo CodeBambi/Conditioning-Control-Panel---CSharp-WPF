@@ -20,6 +20,8 @@
  * ball runs against it, and the turret arms bend back against the rotor.
  * ==========================================================================*/
 
+import { FX_DELAY_MS, CALLOUT_MS } from '../../shared/hypno/callout.js';
+
 const TAU = Math.PI * 2;
 export const POCKETS = 37;
 export const SEG = TAU / POCKETS;
@@ -28,6 +30,7 @@ export const FEEL = Object.freeze({
   DT: 1 / 120,                // planner step, real seconds
   SPIN_MS: 8000,              // one spin of a tape, launch to the next launch (the sim's page pace)
   MIN_HOLD_MS: 1500,          // the landing stays on screen at least this long before the next spin
+  WIN_HOLD_MS: FX_DELAY_MS + CALLOUT_MS,   // a paying landing: the next spin waits out the highlight, the callout and the fx (2000)
   RUN_BUDGET_S: 6.4,          // launch -> ball at rest, so a spin fits SPIN_MS
   SLOW: 0.42, SLOW_CALM: 0.7, // the rattle's slow motion (law 6 raises the floor)
   SLOW_EASE: 8,
@@ -70,8 +73,9 @@ export function litNumbers(wheel, rot, beamA) {
 }
 /** The whirlpool's Loom angle: the rotor's clockwise angle x 2.2. */
 export const whirlAngle = (rot) => rot * FEEL.WHIRL_MUL;
-/** When the next spin of a tape may launch. */
-export const nextLaunchAt = (launchMs, restMs) => Math.max(launchMs + FEEL.SPIN_MS, restMs + FEEL.MIN_HOLD_MS);
+/** When the next spin of a tape may launch. A paying landing (`landMs`, `win`) holds WIN_HOLD_MS from the landing frame. */
+export const nextLaunchAt = (launchMs, restMs, { landMs = null, win = false } = {}) => Math.max(launchMs + FEEL.SPIN_MS, restMs + FEEL.MIN_HOLD_MS,
+  win && Number.isFinite(landMs) ? landMs + FEEL.WIN_HOLD_MS : -Infinity);
 
 function mulberry32(a) {
   return () => {
@@ -207,8 +211,12 @@ export const restRel = (index) => (index + 0.5) * SEG;
  * and the host lets a one-shot settle (suspend and close cancel every primitive the room started).
  * Law 6 (Calm): motion steps drop (a flash burst, a GIF storm, the jackpot hero); words and spirals
  * stay and the host halves them. Nothing is halved here (Normal values only).
- * Gates: the page reads the host's five (flash, subliminal, spiral, brainDrain, tunnel) and drops
- * a step whose gate is off; the host still enforces every toggle per primitive.
+ * Gates: NONE (owner direction 2026-09-15): every gate reads as on whatever the host reports; the
+ * host enforces its own toggles per primitive. FX_GATE stays as the record of which toggle stood
+ * behind an id.
+ * The flow on the landing frame (shared/hypno/callout.js): the thud at 0, the pocket and the paying
+ * chips glow to HIGHLIGHT_MS, then at FX_DELAY_MS the callout (calloutFor) and the landing's host
+ * beat fire together; the next launch waits WIN_HOLD_MS (nextLaunchAt). A miss stays quick.
  * ------------------------------------------------------------------------------------------ */
 
 export const FX = Object.freeze({
@@ -220,7 +228,7 @@ export const FX = Object.freeze({
   }),
 });
 
-/** A section 4 id -> the page gate that drops it ('any' = fires while any of flash, spiral, subliminal is on). */
+/** A section 4 id -> the app toggle that used to stand behind it (the record only; nothing drops a step now). */
 export const FX_GATE = Object.freeze({
   'fx.gif_burst': 'flash', 'fx.gif_storm': 'flash',
   'fx.sub_single': 'subliminal', 'fx.sub_pair': 'subliminal', 'fx.sub_cascade': 'subliminal',
@@ -276,16 +284,12 @@ export function landBeat(read, near = []) {
   return read.wake ? 'land.wake' : 'land.win';
 }
 
-const gateOn = (gates, fx) => {
-  const g = gates || {};
-  const on = (k) => g[k] !== false;
-  const gate = FX_GATE[fx];
-  return gate === 'any' ? on('flash') || on('spiral') || on('subliminal') : on(gate);
-};
+/** Every known id fires: gates no longer drop a step. */
+const gateOn = (_gates, fx) => !!FX_GATE[fx];
 
 /**
- * What a beat fires, after the gates, Calm and the intensity. `streak` = paying spins in a row, this one
- * included: the storm rides a paying landing at STREAK_FROM and above.
+ * What a beat fires, after Calm and the intensity (`gates` is read for nothing). `streak` = paying spins in a
+ * row, this one included: the storm rides a paying landing at STREAK_FROM and above.
  * -> [{ fx, gif, words, once }] in firing order (the beat's own steps first, then the streak's)
  */
 export function fxPlan(beat, { gates = null, calm = false, full = false, streak = 0 } = {}) {
@@ -301,6 +305,25 @@ export function fxPlan(beat, { gates = null, calm = false, full = false, streak 
     if (calm && MOTION.includes(s.fx)) return false;
     return gateOn(gates, s.fx);
   }).map((s) => ({ fx: s.fx, gif: !!s.gif, words: s.words || 0, once: s.once || null }));
+}
+
+/**
+ * THE CALLOUT (shared/hypno/callout.js): the diegetic name of a landing, one a spin at most, shown at FX_DELAY_MS
+ * with the host beat. By the landing beat: an outside win, a straight-up hit, a woken win, a straight-up on a wake.
+ * "On A Roll" is the streak's own name and shows only when the spin's beat named nothing (never on a miss or a
+ * near miss; with every paying beat named above it is the fallback, not a second callout: Brake 2).
+ */
+export const CALLOUTS = Object.freeze({
+  'land.win': { key: 'br_callout_chips_in', fallback: 'Chips In', tier: 'small' },
+  'land.straight': { key: 'br_callout_straight_up', fallback: 'Straight Up', tier: 'big' },
+  'land.wake': { key: 'br_callout_spiral_wake', fallback: 'Spiral Wake', tier: 'big' },
+  'land.full': { key: 'br_callout_full_wake', fallback: 'Full Wake', tier: 'hero' },
+  streak: { key: 'br_callout_on_a_roll', fallback: 'On A Roll', tier: 'small' },
+});
+export function calloutFor(beat, { streak = 0 } = {}) {
+  if (Object.prototype.hasOwnProperty.call(CALLOUTS, beat) && beat !== 'streak') return CALLOUTS[beat];
+  if (typeof beat === 'string' && beat.startsWith('land.') && beat !== 'land.miss' && streak >= FX.STREAK_FROM) return CALLOUTS.streak;
+  return null;
 }
 
 /** The dealt keys a step carries: the spin's picture (deck.pickKey) and `words` word keys turned by the spin index. */

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   FEEL, SEG, POCKETS, landMoment, beamAngle, beamLit, litNumbers, pocketAngle, whirlAngle, planRun, sampleRun, seedFor, nextLaunchAt, wrapAngle, angDist, restRel,
-  FX, FX_GATE, FX_RECIPE, FX_BEATS, fxPlan, fxSymbols, landBeat, nearMisses, createFxCooldowns,
+  FX, FX_GATE, FX_RECIPE, FX_BEATS, fxPlan, fxSymbols, landBeat, nearMisses, createFxCooldowns, CALLOUTS, calloutFor,
 } from '../feel.js';
 import { createMockServer } from '../mock-server.js';
 
@@ -74,6 +74,11 @@ test('the same spin plans the same run (a reopen replays the choreography)', () 
 test('pace, the whirl angle and the rotor handedness', () => {
   assert.equal(nextLaunchAt(1000, 6000), 9000);
   assert.equal(nextLaunchAt(1000, 8500), 10000);
+  assert.equal(FEEL.WIN_HOLD_MS, 2000, 'a paying landing: FX_DELAY_MS + CALLOUT_MS (callout.js)');
+  assert.equal(nextLaunchAt(1000, 8500, { landMs: 8000, win: false }), 10000, 'a miss stays quick');
+  assert.equal(nextLaunchAt(1000, 8500, { landMs: 8000, win: true }), 10000, 'a win: 8000 + 2000 is inside the pace already');
+  assert.equal(nextLaunchAt(1000, 8800, { landMs: 8700, win: true }), 10700, 'a win landing late holds WIN_HOLD_MS from the landing frame');
+  assert.equal(nextLaunchAt(1000, 8800, { landMs: null, win: true }), 10300, 'no landing time: the old pace');
   assert.equal(whirlAngle(1), FEEL.WHIRL_MUL);
   const p = planRun({ index: 0, seed: 5 });
   assert.ok(p.rot[p.rot.length - 1] > p.rot[0], 'the rotor turns clockwise on screen (its angle grows)');
@@ -111,22 +116,31 @@ test('Law I: the beats before the landing are the same for every spin', () => {
   assert.deepEqual(ids('launch', { streak: 3 }), ['fx.gif_burst'], 'the streak rides a landing only');
 });
 
-test('gated variants drop the right steps; the jackpot needs any of flash, spiral, subliminal', () => {
+test('gates never drop a step (2026-09-15): every toggle off plans the same beats as every toggle on', () => {
   const off = (k) => ({ ...ALL_ON, [k]: false });
-  assert.deepEqual(ids('launch', { gates: off('flash') }), []);
-  assert.deepEqual(ids('nomore', { gates: off('subliminal') }), []);
-  assert.deepEqual(ids('land.win', { gates: off('subliminal') }), []);
-  assert.deepEqual(ids('land.straight', { gates: off('subliminal') }), []);
-  assert.deepEqual(ids('near', { gates: off('spiral') }), []);
-  assert.deepEqual(ids('land.wake', { gates: off('spiral') }), []);
-  assert.deepEqual(ids('land.win', { gates: off('spiral'), streak: 2 }), ['fx.sub_pair', 'fx.gif_storm'], 'a spiral gate leaves the words and the storm');
-  assert.deepEqual(ids('land.win', { gates: off('flash'), streak: 2 }), ['fx.sub_pair'], 'the flash gate drops the storm');
-  assert.deepEqual(ids('land.full', { gates: off('flash'), full: true }), ['fx.jackpot'], 'per-primitive: the host skips what it must');
-  assert.deepEqual(ids('land.full', { gates: { flash: false, spiral: false, subliminal: false }, full: true }), [], 'all three off: no jackpot');
+  assert.deepEqual(ids('launch', { gates: off('flash') }), ['fx.gif_burst']);
+  assert.deepEqual(ids('nomore', { gates: off('subliminal') }), ['fx.sub_single']);
+  assert.deepEqual(ids('near', { gates: off('spiral') }), ['fx.spiral_brief']);
+  assert.deepEqual(ids('land.win', { gates: off('flash'), streak: 2 }), ['fx.sub_pair', 'fx.gif_storm'], 'the flash gate no longer drops the storm');
+  assert.deepEqual(ids('land.full', { gates: { flash: false, spiral: false, subliminal: false }, full: true }), ['fx.jackpot'], 'all three off: the hero still posts');
   const none = { flash: false, subliminal: false, spiral: false, brainDrain: false, tunnel: false };
-  for (const beat of FX_BEATS) assert.deepEqual(fxPlan(beat, { gates: none, full: true, streak: 3 }), [], beat + ': gates off, nothing fires');
-  assert.deepEqual(ids('launch', { gates: null }), ['fx.gif_burst'], 'a host that sends no gates reads as on');
-  assert.deepEqual(ids('nomore', { gates: {} }), ['fx.sub_single'], 'a missing subliminal gate reads as on');
+  for (const beat of FX_BEATS) assert.deepEqual(fxPlan(beat, { gates: none, full: true, streak: 3 }), fxPlan(beat, { gates: ALL_ON, full: true, streak: 3 }), beat + ': gates off changes nothing');
+  assert.deepEqual(ids('launch', { gates: null }), ['fx.gif_burst'], 'a host that sends no gates reads the same');
+  assert.deepEqual(ids('nomore', { gates: {} }), ['fx.sub_single']);
+});
+
+test('the callout for a landing beat: one name a spin, the streak only as the fallback, none on a miss (callout.js)', () => {
+  assert.deepEqual(Object.keys(CALLOUTS).sort(), ['land.full', 'land.straight', 'land.wake', 'land.win', 'streak']);
+  for (const c of Object.values(CALLOUTS)) assert.ok(/^br_callout_[a-z_]+$/.test(c.key) && c.fallback && ['small', 'big', 'hero'].includes(c.tier));
+  assert.deepEqual(calloutFor('land.win'), { key: 'br_callout_chips_in', fallback: 'Chips In', tier: 'small' });
+  assert.equal(calloutFor('land.straight').tier, 'big');
+  assert.equal(calloutFor('land.wake').key, 'br_callout_spiral_wake');
+  assert.deepEqual(calloutFor('land.full', { streak: 5 }), { key: 'br_callout_full_wake', fallback: 'Full Wake', tier: 'hero' }, 'the streak never replaces the beat name');
+  assert.equal(calloutFor('land.win', { streak: 5 }).key, 'br_callout_chips_in', 'Brake 2: one callout a spin');
+  assert.equal(calloutFor('land.miss', { streak: 5 }), null, 'a miss names nothing, streak or not');
+  assert.equal(calloutFor('near', { streak: 5 }), null, 'a near miss gets its spiral and no name');
+  assert.equal(calloutFor('streak'), null, 'the streak key is never a beat of its own');
+  for (const beat of ['nomore', 'launch', 'wake', 'rattle', 'run', 'skip']) assert.equal(calloutFor(beat, { streak: 9 }), null, beat);
 });
 
 test('Calm strips motion (the burst, the storm, the hero) and keeps the words and spirals for the host to halve', () => {

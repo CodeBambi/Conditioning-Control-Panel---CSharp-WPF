@@ -21,6 +21,7 @@
  * ==========================================================================*/
 
 import { FEEL, SEG, beamAngle, beamLit, pocketAngle, whirlAngle, sampleRun, restRel, litNumbers } from './feel.js';
+import { HIGHLIGHT_MS } from '../../shared/hypno/callout.js';
 
 const TAU = Math.PI * 2;
 const COL = { brass: '#e8c27a', mint: '#5fffd0', rose: '#ff5fa2', plum: '#3a1f5c', text: '#efe6ff', zero: '#1f8f74', roseFelt: '#c8286e' };
@@ -42,7 +43,12 @@ export function createBowl({ wheel, rose }) {
     plan: null, launchAt: 0, rot0: 0, planEndRot: 0, index: -1, seated: false,
     phase: 'idle', speed: 0, rel: 0, r: FEEL.R_REST, tscale: 1,
     wake: false, whirlA: 0, trail: [], ring: null, landedEdge: false, landedShown: false,
+    hitAt: -Infinity,   // THE GLYPH HIT: the landed pocket's rim glow over HIGHLIGHT_MS from the winning frame (callout.js)
   };
+  /** The glow's 0..1 at station time `now` (0 outside the window). */
+  const hitPulse = (now) => { const q = (now - s.hitAt) / HIGHLIGHT_MS; return q >= 0 && q < 1 ? Math.sin(q * Math.PI) : 0; };
+  /** A paying landing: the pocket lights from `now`. */
+  function glow(_index, now) { s.hitAt = now; }
 
   /** Where everything sits. cx, cy, R in CSS px of the canvas. */
   function layout(cx, cy, R) { geo.cx = cx; geo.cy = cy; geo.R = Math.max(40, R); }
@@ -161,8 +167,12 @@ export function createBowl({ wheel, rose }) {
       g.beginPath(); g.arc(0, 0, rNumO, a0, a1); g.arc(0, 0, rNumI, a1, a0, true); g.closePath();
       g.fillStyle = colorOf(v); g.fill();
       g.beginPath(); g.arc(0, 0, rNumI, a0, a1); g.arc(0, 0, rPocI, a1, a0, true); g.closePath();
-      const won = showLanded && i === s.index;
-      g.fillStyle = won ? COL.mint : '#140c1f'; g.globalAlpha = won ? 0.55 : 1; g.fill(); g.globalAlpha = 1;
+      const won = showLanded && i === s.index, pulse = won ? hitPulse(now) : 0;
+      g.fillStyle = won ? COL.mint : '#140c1f'; g.globalAlpha = won ? 0.55 + 0.4 * pulse : 1; g.fill(); g.globalAlpha = 1;
+      if (pulse > 0) {   // the rim glow of the winning frame: a mint stroke around the pocket, out and back over 400 ms
+        g.save(); g.strokeStyle = COL.mint; g.lineWidth = 2 + 2 * pulse; g.shadowColor = COL.mint; g.shadowBlur = 22 * pulse * k; g.globalAlpha = 0.5 + 0.5 * pulse;
+        g.beginPath(); g.arc(0, 0, rNumO * (1 + 0.06 * pulse), a0, a1); g.arc(0, 0, rPocI, a1, a0, true); g.closePath(); g.stroke(); g.restore();
+      }
       g.strokeStyle = 'rgba(232,194,122,.6)'; g.lineWidth = 1;
       g.beginPath(); g.moveTo(Math.cos(a0) * rPocI, Math.sin(a0) * rPocI); g.lineTo(Math.cos(a0) * rNumO, Math.sin(a0) * rNumO); g.stroke();
       const am = pocketAngle(i, s.rot), rr = (rNumO + rNumI) / 2, lit = beamLit(am, beamA) * (k < 1 ? 0.75 : 1);
@@ -243,7 +253,7 @@ export function createBowl({ wheel, rose }) {
   }
 
   return {
-    layout, kick, launch, seat, clear, update, draw, pocketBox,
+    layout, kick, launch, seat, clear, update, draw, pocketBox, glow,
     get geo() { return { ...geo }; },
     get phase() { return s.phase; },
     /** Test seam: what the beam lights now, the rotor, the ball, the caches. */
@@ -251,7 +261,7 @@ export function createBowl({ wheel, rose }) {
       return { rot: s.rot, rotVel: s.rotVel, beamT: s.beamT, beamAngle: beamAngle(s.beamT), lit: litNumbers(W, s.rot, beamAngle(s.beamT)),
         phase: s.phase, index: s.index, pocket: s.index >= 0 ? W[s.index] : null, wake: s.wake, whirlA: s.whirlA, whirlDrawn: !!s.whirlDrawn,
         ringBuilds: s.ring ? s.ring.draws : 0, planned: s.plan ? { hits: s.plan.hits, restAt: s.plan.restAt, landAt: s.plan.landAt } : null,
-        ballAngle: s.rot + s.rel, rel: s.rel, radius: s.r, speed: s.speed, tscale: s.tscale };
+        ballAngle: s.rot + s.rel, rel: s.rel, radius: s.r, speed: s.speed, tscale: s.tscale, hitAt: s.hitAt, hitOn: hitPulse(s.lastNow ?? 0) > 0 };
     },
   };
 }

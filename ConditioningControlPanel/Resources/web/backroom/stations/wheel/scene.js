@@ -34,6 +34,7 @@ import { createEmi } from './emi.js';
 import { createRoomEmi } from './room-emi.js';
 import { createRoomReward } from './room-reward.js';
 import { createPrizeSector } from './prize-art.js';
+import { HIGHLIGHT_MS } from '../../shared/hypno/callout.js';
 
 const LENS_DEG = 30, FIT = 1.16, RISE_MS = 620, SINK_MS = 300, DEFAULT_OMEGA = -0.011, HUB_AT_REST_MS = 33;
 const COLORS = ['#F7BDD2', '#FFEBDD', '#F2AFC9', '#FFE7D2'], GOLD = '#F4D896', SNOOZE = '#C48CA7';
@@ -340,6 +341,7 @@ export async function createScene(o) {
   // Motion state.
   let phase = 'hidden', tl = null, coast = null, plan = null, under = 0, lit = 0, crossAt = -Infinity, ladder = null;
   let landed = -1, thudAt = -Infinity, kickAt = -Infinity, kickSign = 1, kickAmp = 0, shiverAt = -Infinity;
+  let hitAt = -Infinity, hitIndex = -1;   // THE GLYPH HIT: the landed slice's emissive pulse over HIGHLIGHT_MS (callout.js)
   let party = null, heat = 0, gold = false, energy = 0, lightMotion = 0, prev = performance.now();
   let dim = 0, slowing = false, shear = 0, omega = 0, lastRot = null, quietAt = -Infinity, quietK = 1, frameSpeed = 0;
   settle = () => { const a = tl, b = plan; tl = null; plan = null; if (a && a.done) a.done(); if (b && b.done) b.done(); };
@@ -424,7 +426,8 @@ export async function createScene(o) {
         const i = m.userData.index, isLanded = i === landed && !rotating(), goal = isLanded ? 1 : i === lit && rotating() ? 0.68 : 0;
         m.userData.h = reduced ? goal : THREE.MathUtils.lerp(m.userData.h, goal, 1 - Math.exp(-dt * (goal > m.userData.h ? 45 : 10)));
         const tq = (t - thudAt) / FEEL.THUD_MS, flash = isLanded && tq >= 0 && tq < 1 ? (reduced ? 1.3 : 1 + 1.2 * (1 - thudEase(tq))) : 1;
-        m.material.emissiveIntensity = m.userData.h * flash;
+        const hq = (t - hitAt) / HIGHLIGHT_MS, hit = i === hitIndex && hq >= 0 && hq < 1 ? 1 + 1.6 * Math.sin(hq * Math.PI) : 1;   // the rim glow, 0..400 ms
+        m.material.emissiveIntensity = m.userData.h * flash * hit;
       }
     }
     // Pointer: a damped kick per played tick, a knock on the landing (THE THUD). Reduced: at rest.
@@ -547,6 +550,8 @@ export async function createScene(o) {
       const omega = coast.omega, from = rotor.rotation.z; coast = null;
       return new Promise(done => { plan = { from, to: from + (omega * 700) / 4, ms: 700, sign: Math.sign(omega), start: performance.now(), done }; });
     },
+    /** THE GLYPH HIT (callout.js): the landed slice's emissive pulses over HIGHLIGHT_MS from this frame. */
+    hit(index) { hitIndex = index; hitAt = performance.now(); },
     /** One celebration per landing (feel.recipe). */
     celebrate(r) {
       const t = performance.now();
@@ -560,7 +565,7 @@ export async function createScene(o) {
       cancelDrag();
       rewardView?.skip();
       if (plan) { const p = plan; plan = null; rotor.rotation.z = p.to; if (p.done) p.done(); }
-      coast = null; party = null; shiverAt = thudAt = kickAt = -Infinity; energy = 0; dim = 0; shear = 0; emi.skip();
+      coast = null; party = null; shiverAt = thudAt = kickAt = hitAt = -Infinity; energy = 0; dim = 0; shear = 0; emi.skip();
     },
     /** A point in client px: 'landed' is the landed slice's printed face, else a node's centre. */
     project(name) {
@@ -587,6 +592,7 @@ export async function createScene(o) {
       return { rotation: rotor.rotation.z, under: layout ? layout[under].id : null, lit: layout ? layout[lit].id : null, landed: landed >= 0 && layout ? layout[landed].id : null,
                coasting: !!coast, planning: !!plan, dragging: !!drag, energy, heat, gold, party: !!party, face: emi.face, mood: emi.mode,
                pointer: pointer.rotation.z - pointerRest, shiverPx: reduced ? 0 : shiverPx(performance.now() - shiverAt),
+               hit: hitIndex >= 0 && layout ? { slice: layout[hitIndex].id, on: performance.now() - hitAt < HIGHLIGHT_MS } : null,
                star: starMat ? starMat.emissiveIntensity : null, calls: renderer.info.render.calls,
                screens: Object.fromEntries(Object.entries(screens).map(([k, v]) => [k, v.text])),
                hypno: { hub: hub ? hub.mode : 'neon', hubRadius: hub ? hub.radius : null, hubRot: hub ? hub.rot : null, dim, slowing, shear, speed: frameSpeed,
