@@ -825,7 +825,7 @@ let propProbe = null;
   ok(Array.isArray(found) && found.length === 0, 'all ten Room Service props are in the scene graph by name' + (found && found.length ? ': missing ' + found.join(', ') : ''));
   const shown = await ev(`${JSON.stringify(ROOM_SERVICE.map((r) => r[0]))}.filter((n) => {
     for (let o = window.__backroom.scene.scene.getObjectByName(n); o; o = o.parent) if (!o.visible) return true; return false; })`);
-  ok(Array.isArray(shown) && shown.length === 0, 'and every one of them is switched on when the room opens' + (shown && shown.length ? ': hidden ' + shown.join(', ') : ''));
+  ok(Array.isArray(shown) && shown.length === 0, 'and owned props are enabled for the placement check' + (shown && shown.length ? ': hidden ' + shown.join(', ') : ''));
   // A prop's own spot is not inside a station's body: the placement never swallowed a fixture.
   {
     const boxes = (await dbg()).customization.props.boxes;
