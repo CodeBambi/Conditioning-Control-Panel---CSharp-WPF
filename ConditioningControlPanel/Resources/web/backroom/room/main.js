@@ -345,7 +345,7 @@ async function start(init) {
     state.intensityChoice = readChoice(m.intensityChoice, state.intensityChoice);
     paintChrome();
     paintMotion();
-    const frame = { motion: state.motion, intensity: state.intensity, reduced: state.reduced, gates: state.gates };
+    const frame = { motion: state.userStill ? 'off' : state.motion, intensity: state.intensity, reduced: state.reduced, gates: state.gates };
     for (const fn of Array.from(settingsListeners)) { try { fn(frame); } catch (e) { bridge.log('warn', 'onSettings threw: ' + e); } }
   });
   bridge.on('suspend', (m) => {
@@ -360,7 +360,10 @@ async function start(init) {
     onVisit: (row) => visit(row),
     onGo: (row) => { if (scene) { scene.go(row); hud.overview(false); } },
     onOverview: (on) => { if (scene) { scene.setOverview(on); hud.overview(scene.overview); } },
-    onMotion: () => { if (forcedStill()) return; state.userStill = !state.userStill; paintMotion(); },
+    onMotion: () => { if (forcedStill()) return; state.userStill = !state.userStill; paintMotion();
+      const frame={motion:state.userStill?'off':state.motion,intensity:state.intensity,reduced:state.reduced,gates:state.gates};
+      for(const fn of Array.from(settingsListeners)){try{fn(frame);}catch(e){bridge.log('warn','onSettings threw: '+e);}}
+    },
     onOption: setOption,
     onBellOpt: (on) => { setBellOptIn(on); },
   });

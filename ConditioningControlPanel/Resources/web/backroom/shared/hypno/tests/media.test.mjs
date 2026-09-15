@@ -91,6 +91,8 @@ test('drawableUrl: ccp.assets and ccp.game only (no page origin in node)', () =>
 
 test('no decoder: the still comes from a CORS <img>, so a texture upload of image() is not tainted', async () => {
   const imgs = [];
+  const fetchBefore = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: false });
   const canvas = () => ({ width: 0, height: 0, getContext: () => ({ drawImage() {} }) });
   globalThis.document = { createElement: canvas };
   globalThis.Image = class { constructor() { imgs.push(this); this.naturalWidth = 400; this.naturalHeight = 200; this.order = []; }
@@ -104,5 +106,5 @@ test('no decoder: the still comes from a CORS <img>, so a texture upload of imag
     assert.deepEqual(imgs[0].order, ['crossOrigin', 'src'], 'crossOrigin is set before src');
     assert.deepEqual([deck.image('g0').width, deck.image('g0').height], [192, 96]);
     deck.dispose();
-  } finally { delete globalThis.document; delete globalThis.Image; }
+  } finally { delete globalThis.document; delete globalThis.Image; globalThis.fetch = fetchBefore; }
 });

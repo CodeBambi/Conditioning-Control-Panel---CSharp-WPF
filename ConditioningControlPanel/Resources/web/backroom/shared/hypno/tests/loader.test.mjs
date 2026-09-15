@@ -39,6 +39,8 @@ test('a live station gets the hypno ctx members', async () => {
   for (const k of ['fx', 'fxRelease', 'fxTunnel', 'media', 'gates', 'onSettings']) assert.ok(keys.includes(k), k);
   assert.deepEqual({ ...ctx.gates }, { flash: true, subliminal: true, spiral: false, brainDrain: true });
   assert.ok(Object.isFrozen(ctx.gates));
+  state.userStill=true;assert.equal(ctx.motion,'off','room motion toggle reaches a seated station');
+  state.userStill=false;assert.equal(ctx.motion,'full','restores host motion choice');
   state.gates = Object.freeze({ flash: false, subliminal: true, spiral: true, brainDrain: true });
   assert.equal(ctx.gates.flash, false, 'gates is a live getter');
 });

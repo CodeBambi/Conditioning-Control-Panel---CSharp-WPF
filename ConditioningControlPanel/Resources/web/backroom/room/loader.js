@@ -118,7 +118,7 @@ export function createLoader(room) {
       rewardLanded: body => { if(!subs.closed && current?.subs === subs && station.id === 'wheel') room.rewardLanded?.(body); },
       revealedWin: (amount,tier,text) => { if(!subs.closed) room.revealedWin?.(station.key,amount,tier,text); },
       get reduced() { return s.reduced; },
-      get motion() { return s.motion; },
+      get motion() { return s.userStill ? 'off' : s.motion; },
       get intensity() { return s.intensity; },
       /** The host's hypno toggles, frozen { flash, subliminal, spiral, brainDrain, tunnel }, live on every read (10.13.A). */
       get gates() { return s.gates; },

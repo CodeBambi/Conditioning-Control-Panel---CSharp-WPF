@@ -5,16 +5,17 @@
  * wrap it in a CanvasTexture (room/gif.js), the hypno kit draws it straight
  * onto a 2D canvas (shared/hypno/media.js).
  *
- * Why ImageDecoder and no vendored decoder: WebView2 is Chromium, which has
+ * Prefer ImageDecoder: WebView2 is Chromium, which has
  * shipped ImageDecoder since 94 in secure contexts (https://ccp.game is one),
- * it returns fully composited frames (GIF disposal handled), and it decodes off
- * the main thread. Where it is missing or refuses the file, the caller falls
- * back to a still first frame through an <img>.
+ * it returns composited frames off the main thread. HTTP previews and browsers
+ * without WebCodecs use image-frames.js; unsupported files keep a still frame.
  *
  * Costs are capped by the caller's clock, not here: a source advances only when
  * `tick()` is called, at most once per its frame delay and never faster than
  * `maxFps`, one decode in flight, into a canvas no larger than `maxEdge` px.
  * ==========================================================================*/
+
+import { compatibilityDecoder } from './image-frames.js';
 
 export const MAX_FPS = 12;
 export const MAX_EDGE = 384;
@@ -28,15 +29,17 @@ export const canAnimate = () => typeof ImageDecoder === 'function';
  * @returns {Promise<{canvas, animated, frames, index, tick(now, still), dispose()} | null>}
  */
 export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS, onFrame = null } = {}) {
-  if (!canAnimate()) return null;
   let decoder = null;
   try {
     const res = await fetch(url, { mode: 'cors', credentials: 'omit' });
     if (!res.ok) return null;
     const ext = (new URL(url, location.href).pathname.split('.').pop() || '').toLowerCase();
     const type = (res.headers.get('content-type') || '').split(';')[0].trim() || EXT[ext] || '';
-    if (!type.startsWith('image/') || !(await ImageDecoder.isTypeSupported(type))) return null;
-    decoder = new ImageDecoder({ data: await res.arrayBuffer(), type });
+    if (!type.startsWith('image/')) return null;
+    const data = await res.arrayBuffer();
+    decoder = canAnimate() && await ImageDecoder.isTypeSupported(type)
+      ? new ImageDecoder({ data, type }) : await compatibilityDecoder(data, type);
+    if (!decoder) return null;
     await decoder.tracks.ready;
     await decoder.completed;
     const track = decoder.tracks.selectedTrack;
@@ -57,6 +60,7 @@ export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS,
       busy = true;
       return decoder.decode({ frameIndex: i }).then((r) => {
         if (closed) { r.image.close(); return; }
+        g.clearRect(0, 0, canvas.width, canvas.height);
         g.drawImage(r.image, 0, 0, canvas.width, canvas.height);
         const delay = r.image.duration ? r.image.duration / 1000 : 100;   // microseconds to ms
         r.image.close();
