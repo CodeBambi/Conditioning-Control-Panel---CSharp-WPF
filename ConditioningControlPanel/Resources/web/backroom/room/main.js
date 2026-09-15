@@ -29,6 +29,10 @@ import { normaliseStations } from './walk.js';
 import { createScene } from './scene.js';
 import { createLoader } from './loader.js';
 import { createHud } from './hud.js';
+import { createRoomRewards, createDoubleCharm } from './rewards.js';
+const rewards = createRoomRewards();
+let doubleCharm = null;
+function applyRewards(body) { if (leaving) return; if (rewards.apply(body)) { scene?.setRewards(rewards.snapshot()); doubleCharm?.paint(); } }
 
 const PAGE_SETTLE_MS = 300;
 const BELL_TIMEOUT_MS = 6000;
@@ -181,6 +185,7 @@ async function back(reason) {
 
 async function settle() {
   if (hud) hud.stop();
+  doubleCharm?.dispose(); doubleCharm = null;
   if (scene) scene.halt();
   if (loader) await loader.close(PAGE_SETTLE_MS - 60);
   bridge.send({ type: 'exit-done' });
@@ -276,9 +281,11 @@ async function refreshBell(why) {
   bell.fetching = true;
   bell.fetches++;
   try {
+    const rewardRevision = rewards.revision;
     const res = await bellRequest('state', {});
     const b = res && res.ok && res.body && typeof res.body === 'object' ? res.body : null;
     if (!b || b.ok === false) return;   // closed, too_fast, offline: keep the lines we have
+    if (rewards.revision === rewardRevision) applyRewards(b);
     if (Array.isArray(b.entries)) bell.entries = b.entries;
     bell.optIn = b.optIn === true;
     bell.mustHit = !!(b.jackpot && b.jackpot.mustHit === true);
@@ -314,6 +321,7 @@ function media() {
 }
 
 async function start(init) {
+  rewards.reset();
   Object.assign(state, {
     sp: Number.isFinite(init.sp) ? init.sp : 0,
     reduced: !!init.reduced,
@@ -357,6 +365,7 @@ async function start(init) {
   });
   paintMotion();
   hud.bellOptIn(bell.optIn);
+  doubleCharm = createDoubleCharm({mount:$('.br-sp'),lex,read:now=>rewards.snapshot(now)});
 
   const stations = await readStations();
   if (leaving) return;
@@ -378,12 +387,13 @@ async function start(init) {
     spReadout,
     spChanged,
     chipSettle,
+    rewardLanded: body => applyRewards(body),
     revealedWin: (key,amount,tier,text)=>scene?.celebrate(key,amount,tier,text),
     standUp: () => back('back'),
     log: (level, msg) => bridge.log(level, msg),
   });
   // Test seam for the smoke checks (never read by the room itself).
-  window.__backroom = { state, stations, loader, back, lex, visit, bell, refreshBell, get hud() { return hud; }, get scene() { return scene; } };
+  window.__backroom = { state, stations, loader, back, lex, visit, bell, refreshBell, rewards, get hud() { return hud; }, get scene() { return scene; } };
 
   try {
     scene = await createScene({

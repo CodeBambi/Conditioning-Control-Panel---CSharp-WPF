@@ -31,6 +31,8 @@ test('every station and line the bell rings for has a phrase, and nothing else d
     ['slot', 'gif3same', 'someone hit three of a kind just now'],
     ['slot', 'sub3', 'someone hit 3 subliminals just now'],
     ['slot', 'spiral3', 'someone hit 3 spirals just now'],
+    ['wheel', 'keep_the_change', 'someone hit Keep the Change just now'],
+    ['wheel', 'spoiled_rotten', 'someone got Spoiled Rotten just now'],
     ['wheel', 'jackpot', 'someone took the pot just now'],
     ['wheel', 'dazed', 'someone hit a big slice just now'],
     ['wheel', 'deep', 'someone hit a big slice just now'],
@@ -38,7 +40,7 @@ test('every station and line the bell rings for has a phrase, and nothing else d
     ['roulette', 'wake', 'someone doubled on a Spiral Wake just now'],
   ];
   for (const [station, line, want] of rows) assert.equal(bellLine(entry({ station, line }), NOW, en), want, station + '/' + line);
-  // The 10.16.B table is exactly these nine rows, and the wheel's two big slices share one phrase.
+  // The 10.16.B table is exactly these rows, and the wheel's two big slices share one phrase.
   assert.equal(rows.length, Object.values(PHRASES).reduce((n, m) => n + Object.keys(m).length, 0));
   assert.equal(PHRASES.wheel.dazed[0], PHRASES.wheel.deep[0]);
   const bad = [null, undefined, {}, { station: 'slot' }, { station: 'slot', line: 'gif3' }, { station: 'lobby', line: 'spiral3' },

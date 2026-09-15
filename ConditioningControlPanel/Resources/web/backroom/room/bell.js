@@ -38,6 +38,8 @@ export const PHRASES = Object.freeze({
     spiral3: Object.freeze(['br_bell_slot_spiral3', 'hit 3 spirals']),
   }),
   wheel: Object.freeze({
+    keep_the_change: Object.freeze(['br_bell_wheel_change', 'hit Keep the Change']),
+    spoiled_rotten: Object.freeze(['br_bell_wheel_spoiled', 'got Spoiled Rotten']),
     jackpot: Object.freeze(['br_bell_wheel_jackpot', 'took the pot']),
     dazed: Object.freeze(['br_bell_wheel_slice', 'hit a big slice']),
     deep: Object.freeze(['br_bell_wheel_slice', 'hit a big slice']),
