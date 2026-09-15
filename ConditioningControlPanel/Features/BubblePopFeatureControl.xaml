@@ -227,6 +227,19 @@
                                                   Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
                                                   Checked="ChkBrainDrainBubble_Changed" Unchecked="ChkBrainDrainBubble_Changed"/>
                                     </Grid>
+
+                                    <Grid x:Name="MagnetBubbleRow" Height="34" Background="Transparent"
+                                          ToolTip="{loc:Str tooltip_bubble_magnet}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_bubble_magnet}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkMagnetBubble"
+                                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                  Checked="ChkMagnetBubble_Changed" Unchecked="ChkMagnetBubble_Changed"/>
+                                    </Grid>
                                 </StackPanel>
                             </Border>
                         </StackPanel>

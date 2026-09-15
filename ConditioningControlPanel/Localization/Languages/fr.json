@@ -5226,6 +5226,8 @@
   "label_bubbles_v2_box": "Bubbles v2",
   "setting_bubble_braindrain": "Brain Drain bubble",
   "tooltip_bubble_braindrain": "Adds a violet bubble to the pool. Pop it and the screen drains for ten seconds - the melting blur, then it lifts on its own. It waits its turn: if a drain is already running, the pop just pays its points.",
+  "setting_bubble_magnet": "Magnet bubble",
+  "tooltip_bubble_magnet": "Adds a steel-blue bubble to the pool. It steers toward your mouse as it rises, so it comes to you - and pops for DOUBLE points if you catch it in the first third of its life. Under Reduced motion it pulls half as hard; with motion off it just floats and pays the normal amount.",
   "play_backroom_title": "The Back Room",
   "play_backroom_blurb": "Spend your Sparkle Points in a little neon room: walk up to a station and play. Free for everyone.",
   "play_backroom_cta": "Enter",
