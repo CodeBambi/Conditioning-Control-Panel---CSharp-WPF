@@ -203,7 +203,7 @@ export async function mount(ctx) {
     if (edges.style.opacity !== ea) edges.style.opacity = ea;
     if (cap.style.opacity !== ca) cap.style.opacity = ca;
     if (!moments || suspended) return;
-    if (slowing && !turnPlayed) { turnPlayed = true; const out = moments.play('wheel.turn'); note('moment', { id: 'wheel.turn', tokens: out.tokens.length, page: out.page }); }
+    if (slowing && !turnPlayed) { turnPlayed = true; if (sound) sound.slowing(); const out = moments.play('wheel.turn'); note('moment', { id: 'wheel.turn', tokens: out.tokens.length, page: out.page }); }
     if (!slowing && dim < 0.01) turnPlayed = false;
     moments.tunnel(wheelTurnLevel(dim));
   }

@@ -361,7 +361,7 @@ export async function mount(ctx) {
     const semis = ladderSemis(streak, melted), roll = rollupMs(tier);   // playbook A3: the count-up scales to the win
     if (tier > 0) { seen[tier]++; if (tier === 4) jackpots++; }
     if (tier > 0) { sound.win(r.sound, semis); streak++; } else streak = 0;   // the no-pay cue was the last reel's muted thud
-    scene.setMelted(melted);
+    scene.setMelted(melted); if (melted) sound.melt();
     scene.celebrate(r, o.pay, t('br_slot_screen_win', 'WIN +{n}', { n: fmt(o.pay) }));
     ctx.revealedWin?.(o.pay,tier,t('br_slot_screen_win','WIN +{n}',{n:fmt(o.pay)}));
     if (r.tokens) {

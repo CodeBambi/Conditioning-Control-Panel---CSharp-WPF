@@ -28,6 +28,7 @@
  * ==========================================================================*/
 
 import { createLoomKit, createDeck, createMoments, strengthK, rouletteRunLevel, pocketColor, viewportRect } from '../../shared/hypno/index.js';
+import { kit as sound } from '../../shared/sound/kit.js';
 import { MAX_CHIPS, MAX_SPINS, addChip, removeChip, chipsOf, chipTotal, checkLayout, adoptTape, owed, shownSp, cursorOf, readOutcome, classify, spinBody, mintId, ROWS } from './tape.js';
 import { FEEL, planRun, seedFor, landMoment, nextLaunchAt, landBeat, nearMisses, fxPlan, fxSymbols, createFxCooldowns } from './feel.js';
 import { createBowl } from './bowl.js';
@@ -208,14 +209,29 @@ export async function mount(ctx) {
     if (remove) { chips = removeChip(chips, spot); why = null; sync(); return true; }
     const r = addChip(chips, spot, { spots: st.spots });
     chips = r.chips; why = r.ok ? null : whyText(r.why);
+    if (r.ok) { sound.arm(); sound.play('chips'); }
     sync();
     return r.ok;
   }
   function ring(sel) { const b = el && $(sel); if (!b) return; b.classList.add('is-ringing'); setTimeout(() => b.classList.remove('is-ringing'), 400); }
 
+  /** The kit's cue for a beat, on the same frame as the host recipe (Law X). The landing drops the ball first; a
+   *  miss is THE SETTLE (soft, never a fail), a near miss resolves quietly, a pay is a win by tier that only rises. */
+  function cue(name) {
+    if (!alive || suspended) return;
+    if (name === 'nomore') { sound.arm(); sound.play('tap'); }
+    else if (name === 'launch') sound.play('launch');
+    else if (name === 'rattle') { sound.play('rattle'); if (cur && cur.plan) sound.play('riser', { ms: Math.min(2500, Math.max(800, cur.plan.restAt * 1000 - (clock() - cur.launchAt))) }); }
+    else if (name === 'near') { sound.play('drop'); sound.play('almost'); }
+    else if (name === 'land.miss') { sound.play('drop'); sound.play('settle'); }
+    else if (name === 'land.win') { sound.play('drop'); sound.play('win', { tier: 'mid' }); sound.play('chips', { n: 4, at: 0.2 }); }
+    else if (name === 'land.wake' || name === 'land.straight') { sound.play('drop'); sound.play('win', { tier: 'big' }); sound.play('chips', { n: 6, at: 0.3 }); }
+    else if (name === 'land.full') { sound.play('drop'); sound.play('win', { tier: 'hero' }); sound.play('chips', { n: 8, at: 0.4 }); }
+  }
   /** The host recipe (feel.FX_RECIPE): a beat fires its section 4 ids through ctx.fx, gated, cooled, never awaited (fx-ack is advisory). */
   function beat(name, { i = null, streak: run = 0 } = {}) {
     const fired = [];
+    cue(name);
     if (!alive || suspended || typeof ctx.fx !== 'function') return fired;
     const plan = fxPlan(name, { gates: gates(), calm: stillNow(), full: fullNow(), streak: run });
     const now = performance.now();
@@ -452,6 +468,7 @@ export async function mount(ctx) {
     unSp = null; unSettings = null;
     // Law VI: Back drops every ceremony. What has landed is flushed; a spin still running stays unplayed.
     if (moments) { moments.cancel(); moments.dispose(); }
+    sound.stop('riser');
     cool.reset(); streak = 0; note('fx', { beat: 'skip', fired: [], planned: [] });   // one-shots settle on the host; nothing new fires
     if (tape && tape.played > 0 && cursorSent !== tape.played) flushCursor();
     if (hook) { hook.owe(owedNow()); if (typeof hook.set === 'function') hook.set(null); }   // a plain number for the room
