@@ -50,12 +50,15 @@ export function createBowl3D({ stage, wheel, rose }) {
   const trail=new T.Line(trailGeometry,new T.LineBasicMaterial({color:0x5fffd0,transparent:true,opacity:.2,depthWrite:false}));root.add(trail);
   // THE THROW's hint (flick.js): a curved, half-lit arrow around the rim, on the rotor but counter-turned so it
   // stands still in the room while the wheel moves under it. It breathes on a 1.2 s cycle; still, it just sits there.
+  // The seat reads angles y UP (angleAt) where the canvas bowl reads them y down, so the arrow is MIRRORED here:
+  // it sweeps BACK from its tail to the head, which is the way the rotor's angle SHRINKS, and that reads
+  // CLOCKWISE from the chair. A finger that follows it drags the rotor clockwise too, so arrow and wheel agree.
   const HINT_MS=1200,HINT_A0=-Math.PI*.45,HINT_ARC=Math.PI*1.15;
   const hintR=restRadius*1.45,hintTube=restRadius*.05;
   const hintMaterial=new T.MeshBasicMaterial({color:0x5fffd0,transparent:true,opacity:0,depthWrite:false,side:T.DoubleSide});
-  const hintArc=new T.Mesh(new T.TorusGeometry(hintR,hintTube,6,44,HINT_ARC),hintMaterial);
+  const hintArc=new T.Mesh(new T.TorusGeometry(hintR,hintTube,6,44,HINT_ARC),hintMaterial);hintArc.rotation.z=-HINT_ARC;
   const hintHead=new T.Mesh(new T.CircleGeometry(hintTube*3.6,3),hintMaterial);
-  hintHead.position.set(Math.cos(HINT_ARC)*hintR,Math.sin(HINT_ARC)*hintR,0);hintHead.rotation.z=HINT_ARC+Math.PI/2;
+  hintHead.position.set(Math.cos(HINT_ARC)*hintR,-Math.sin(HINT_ARC)*hintR,0);hintHead.rotation.z=-HINT_ARC-Math.PI/2;
   const hint=new T.Group();hint.name='roulette_flick_hint';hint.add(hintArc,hintHead);
   hint.rotation.x=-Math.PI/2;hint.position.y=track.y+lift*3;hint.renderOrder=4;hint.visible=false;rotor.add(hint);
   let disposed = false, lastView = {}, activePlan=null, launchAt=0, currentNow=0;
@@ -95,7 +98,7 @@ export function createBowl3D({ stage, wheel, rose }) {
     trail.visible=trailPoints.length>1;trail.material.opacity=.2*k;
     if (hint.visible) {
       const pulse = lastView.still ? .5 : (1 - Math.cos((currentNow % HINT_MS) / HINT_MS * Math.PI * 2)) / 2;
-      hint.rotation.z = HINT_A0 - s.rot;   // the room's angle, not the rotor's
+      hint.rotation.z = -HINT_A0 - s.rot;   // the room's angle, not the rotor's (mirrored: the seat reads y up)
       hint.scale.setScalar(1 + (lastView.still ? 0 : .035 * pulse));
       hintMaterial.opacity = (.3 + .28 * pulse) * k;
     }
