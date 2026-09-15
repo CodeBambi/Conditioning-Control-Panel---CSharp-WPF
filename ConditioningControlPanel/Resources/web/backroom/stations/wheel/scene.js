@@ -31,6 +31,8 @@ import { FEEL, tick, breath, shiverPx, bezier } from './feel.js';
 import { warpStep, warpedRotation, stepDim, quietMix, quietDone, outlineAlpha, distance01, mixRgb, QUIET, taffyShear, stepShear,
          trailOffset, sliceU, ghostRotations, TAFFY, stepHub, moireRotations, moireSegments, MOIRE, dressOf } from './hypno.js';
 import { createEmi } from './emi.js';
+import { createRoomEmi } from './room-emi.js';
+import { createRoomReward } from './room-reward.js';
 
 const LENS_DEG = 30, FIT = 1.16, RISE_MS = 620, SINK_MS = 300, DEFAULT_OMEGA = -0.011, HUB_AT_REST_MS = 33;
 const COLORS = ['#F7BDD2', '#FFEBDD', '#F2AFC9', '#FFE7D2'], GOLD = '#F4D896', SNOOZE = '#C48CA7';
@@ -116,7 +118,7 @@ function paintScreen(canvas, text, gold) {
  */
 export async function createScene(o) {
   const { canvas, stage } = o;
-  const originals = new Map(); let model = null, unregister = null;
+  const originals = new Map(); let model = null, unregister = null, rewardView = null;
   let reduced = !!o.reduced;
   const budget = createRenderBudget(navigator, devicePixelRatio);
   let lastDraw = -Infinity;
@@ -134,13 +136,15 @@ export async function createScene(o) {
     if (disposed) return;
     disposed = true;
     cancelAnimationFrame(raf);
+    rewardView?.dispose();
     if (settle) settle();
     if (onDown) { canvas.removeEventListener('pointerdown', onDown); canvas.removeEventListener('pointermove', onMove); canvas.removeEventListener('pointerup', onUp); canvas.removeEventListener('pointercancel', onUp); }
-    const disposable = [];
+    const disposable = [], resources = new Set(), borrowed = new Set();
+    originals.forEach((s,n) => { if(n.geometry) borrowed.add(n.geometry); for(const m of [].concat(s.material||[])) { borrowed.add(m); for(const v of Object.values(m)) if(v?.isTexture) borrowed.add(v); } });
     (stage ? model : scene)?.traverse(n => { if (!stage || !originals.has(n)) disposable.push(n); });
     disposable.forEach(n => {
-      if (n.geometry) n.geometry.dispose();
-      for (const m of [].concat(n.material || [])) { for (const k of Object.keys(m)) if (m[k] && m[k].isTexture) m[k].dispose(); m.dispose(); }
+      if (n.geometry) resources.add(n.geometry);
+      for (const m of [].concat(n.material || [])) { for (const v of Object.values(m)) if (v?.isTexture) resources.add(v); resources.add(m); }
     });
     if (stage) {
       disposable.forEach(n => n.removeFromParent());
@@ -150,7 +154,8 @@ export async function createScene(o) {
       if (pointer) pointer.rotation.copy(originals.get(pointer).rotation);
       unregister?.();
     }
-    owned.forEach(x => x.dispose());
+    owned.forEach(x => resources.add(x));
+    resources.forEach(x => { if(!borrowed.has(x)) x.dispose(); });
     if (emi) emi.dispose();
     if (!stage) { renderer.dispose(); renderer.forceContextLoss(); }
   }
@@ -174,7 +179,7 @@ export async function createScene(o) {
 
   if (atlas) Object.assign(atlas, { flipY: false, colorSpace: THREE.SRGBColorSpace, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, generateMipmaps: false });
   owned.push(...(atlas ? [atlas] : []));
-  emi = stage ? { update() {}, dispose() {}, setReduced() {}, setFace() {}, setMode() {}, skip() {} } : createEmi({ root: model, faceMesh: get('EMI_glass'), atlas, hud: o.hud, reduced });
+  emi = stage ? createRoomEmi(stage.emi, o.hud) : createEmi({ root: model, faceMesh: get('EMI_glass'), atlas, hud: o.hud, reduced });
 
   const screens = {};
   for (const [name, w] of [['title_screen', 1024], ['status_screen', 1024]]) {
@@ -409,6 +414,7 @@ export async function createScene(o) {
   }
 
   function update(t) {
+    rewardView?.update(t);
     const dt = Math.min(0.05, Math.max(0, (t - prev) / 1000)); prev = t;
     const dtMs = dt * 1000;
     if (tl) {
@@ -523,6 +529,7 @@ export async function createScene(o) {
   canvas.addEventListener('pointerdown', onDown); canvas.addEventListener('pointermove', onMove);
   canvas.addEventListener('pointerup', onUp); canvas.addEventListener('pointercancel', onUp);
 
+  if(stage) rewardView=createRoomReward(stage,()=>hub?.mode==='loom'?hub.c:null);
   resize();
   if (stage) unregister = stage.register({ update: () => update(performance.now()), dispose });
   else raf = requestAnimationFrame(loop);
@@ -533,6 +540,7 @@ export async function createScene(o) {
     get rotation() { return rotor.rotation.z; },
     get spinning() { return rotating(); },
     resize, screen, setLayout, dispose,
+    revealReward(result, still = reduced) { return rewardView?.reveal(result, still) || false; },
     /** Live dress (hypno.dressOf): the hub mode, Full-only moire and taffy, k. */
     setDress(d) { dress = { ...dress, ...(d || {}) }; },
     /** Live reduced motion / Calm (a settings frame): the next gesture, landing, rise or sink takes the settled
@@ -574,6 +582,7 @@ export async function createScene(o) {
     },
     /** Law VI: Back and suspend skip every ceremony to its settled state. */
     skip() {
+      rewardView?.skip();
       if (plan) { const p = plan; plan = null; rotor.rotation.z = p.to; if (p.done) p.done(); }
       coast = null; party = null; shiverAt = thudAt = kickAt = -Infinity; energy = 0; dim = 0; shear = 0; emi.skip();
     },
