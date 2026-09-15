@@ -5946,6 +5946,7 @@
   "br_slot_on_tape": "{n} left on tape",
   "br_slot_tape_cost": "{n} SP for {n} spins",
   "br_slot_marquee": "CANDY",
+  "br_slot_marquee_spin": "Spinning",
   "br_slot_screen_jackpot": "JACKPOT {n}",
   "br_slot_screen_melt": "MELT · {n} SPINS AT HALF",
   "br_slot_screen_status": "WIN {n} · FREE {m}",
