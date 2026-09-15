@@ -7,6 +7,7 @@
 
 import { CFX, bankCount } from '../../../arcademy/shell/counterfx.js';
 import { ANTICIPATION } from './pace.js';
+import { HIGHLIGHT_MS, HIGHLIGHT_GAP_MS, FX_DELAY_MS, CALLOUT_MS } from '../../shared/hypno/callout.js';
 
 export const FEEL = Object.freeze({
   ANSWER_MS: 100,                 // Law VIII: every input answers inside this, before any network reply
@@ -406,3 +407,110 @@ export function compOffer(comp) {
  * a press that buys nothing cannot buy a comp, and a refused buy must not eat it either).
  */
 export const compAvailable = (comp, spent = false) => !spent && !!compOffer(comp);
+
+/* ---------------------------------------------------------------------------------------------
+ * THE FLOW on the frame the result SHOWS (shared/hypno/callout.js, owner direction 2026-09-15). The
+ * timings are the shared contract's, never this file's: the thud at 0, the winning glyphs 0..HIGHLIGHT_MS
+ * in reel order HIGHLIGHT_GAP_MS apart, the callout and the host fx TOGETHER at FX_DELAY_MS, the next
+ * press no earlier than UNLOCK_MS on a paid line. Law I: every rule below reads a row the tape already
+ * holds; nothing here decides, weights or re-draws an outcome.
+ * ------------------------------------------------------------------------------------------ */
+
+export const FLOW = Object.freeze({
+  HIGHLIGHT_MS, HIGHLIGHT_GAP_MS, FX_DELAY_MS, CALLOUT_MS,
+  UNLOCK_MS: 2000,                                    // a paid line: the next press unlocks no earlier than this
+  UNLOCK_JACKPOT_MS: FX_DELAY_MS + CALLOUT_MS + 1400,  // the jackpot keeps its longer hold (the hero, then PARTY_MS[4])
+  TEASE_TUNNEL: 0.4,                                  // A1's hold pulls the host tunnel to this, released on landing
+  HAZE_IDLE_MS: 8000,                                 // the attract haze breathes after this much idle...
+  HAZE_BREATH_MS: 6000,                               // ...one breath this long...
+  HAZE_OPACITY: 0.12,                                 // ...never brighter than this
+});
+
+/** The callout names, keyed as the lexicon carries them (br_callout_*). One sub is NOT a callout: the other
+ *  lane's word is that beat. emi2 is the chase (reels 1+2 lock on EMI), shown before reel 3's re-spin. */
+export const CALLOUTS = Object.freeze({
+  sub2:     { key: 'br_callout_echo',         fallback: 'Echo',         tier: 'small' },
+  sub3:     { key: 'br_callout_chorus',       fallback: 'Chorus',       tier: 'big' },
+  gif3:     { key: 'br_callout_picture_show', fallback: 'Picture Show', tier: 'small' },
+  gif3same: { key: 'br_callout_storm',        fallback: 'Storm',        tier: 'big' },
+  spiral2:  { key: 'br_callout_double_spin',  fallback: 'Double Spin',  tier: 'small' },
+  spiral3:  { key: 'br_callout_sinking_down', fallback: 'Sinking Down', tier: 'big' },
+  melt:     { key: 'br_callout_brain_melt',   fallback: 'Brain Melt',   tier: 'big' },
+  emi3:     { key: 'br_callout_emi_jackpot',  fallback: 'Emi Jackpot',  tier: 'hero' },
+  emi2:     { key: 'br_callout_emi_chase',    fallback: 'Emi Chase',    tier: 'big' },
+  jar:      { key: 'br_callout_overflow',     fallback: 'Overflow',     tier: 'big' },
+  respin:   { key: 'br_callout_respin',       fallback: 'Respin',       tier: 'small' },
+});
+
+/** The callout a landed row earns by its LINE, or null (`none`, a single sub, a sealed row). */
+export const calloutFor = o => (o && CALLOUTS[o.line]) || null;
+
+/** The reels whose glyph glows on this landing, left to right: every reel on a three-line, the two matching
+ *  reels on a pair, reels 1+2 on the chase, the melt cell on a melt. A `none` row lights nothing. */
+export function hitReels(o) {
+  if (!o) return [];
+  const syms = Array.isArray(o.symbols) ? o.symbols.slice(0, 3) : [];
+  const idx = pred => syms.map((s, i) => (pred(s) ? i : -1)).filter(i => i >= 0);
+  switch (o.line) {
+    case 'emi3': case 'gif3same': case 'gif3': case 'sub3': case 'spiral3': return [0, 1, 2];
+    case 'emi2': return [0, 1];
+    case 'sub2': return idx(s => symKind(s) === 'sub');
+    case 'spiral2': return idx(s => symKind(s) === 'spiral');
+    case 'melt': return idx(s => s === 'melt');
+    default: return [];
+  }
+}
+
+/** The highlight plan: `[{ reel, at }]`, reel order, HIGHLIGHT_GAP_MS apart, all inside HIGHLIGHT_MS. */
+export const highlightPlan = o => hitReels(o).map((reel, i) => ({ reel, at: i * HIGHLIGHT_GAP_MS }));
+
+/** One glyph's glow 0..1 at `ms` after the landing, for a hit that starts at `at`: in fast, then out so every
+ *  glyph is dark again by HIGHLIGHT_MS (the callout's frame). Reduced motion takes the lit state, flat. */
+export function glyphGlow(ms, at = 0, reduced = false) {
+  const t = Number(ms) || 0, a = Math.max(0, Number(at) || 0);
+  if (t < a || t >= HIGHLIGHT_MS) return 0;
+  if (reduced) return 1;
+  const span = Math.max(1, HIGHLIGHT_MS - a), q = (t - a) / span, rise = Math.min(0.3, 80 / span);
+  return q < rise ? q / rise : 1 - (q - rise) / (1 - rise);
+}
+
+/** The GIF tease (owner: a couple of points on the GIF visuals, the economy untouched): a row reading `none`
+ *  that shows EXACTLY two GIF symbols fires one host GIF flash (`fx.gif_burst`, args.count 1) at FX_DELAY_MS.
+ *  No callout, no SP, no pay: the tape's row is what it was. */
+export function teaseGif(o) {
+  if (!o || o.line !== 'none') return false;
+  const syms = Array.isArray(o.symbols) ? o.symbols.slice(0, 3) : [];
+  return syms.filter(s => symKind(s) === 'gif').length === 2;
+}
+export const GIF_TEASE_FX = 'fx.gif_burst';
+
+/** When the next press unlocks, in ms from the landing: the jackpot's longer hold, UNLOCK_MS on a paid line
+ *  and on any row with a callout (the melt's word needs its frame), 0 on a loss (as quick as today). The
+ *  chase (emi2) keeps its own sequencing: the re-spin follows on the pace's beat. */
+export function unlockMs(o) {
+  if (!o) return 0;
+  if (o.line === 'emi3') return FLOW.UNLOCK_JACKPOT_MS;
+  if (o.line === 'emi2') return 0;
+  return o.pay > 0 || calloutFor(o) ? FLOW.UNLOCK_MS : 0;
+}
+
+/**
+ * The whole flow for one landed row -> { hits, callouts: [{ at, ...callout }], fx: [{ at, id, args? }],
+ * unlockMs }. `respinRow` is a row the spiral2 respin granted (tape kind `respin`): its "Respin" word shows
+ * on the landing frame and its own result callout, if any, replaces it at FX_DELAY_MS (the shared contract:
+ * a show while one is up replaces it). `jarWord`: the jar's Overflow (big) already holds the frame, so a small
+ * word yields to it (Brake 2, one beat) and a big one still takes over. The host fx ids are the row's own, moved
+ * to FX_DELAY_MS so they fire with the callout; the tunnel and the jar keep their own timing (station.js).
+ */
+export function flowPlan(o, { respinRow = false, jarWord = false } = {}) {
+  if (!o) return { hits: [], callouts: [], fx: [], unlockMs: 0 };
+  const own = calloutFor(o), callouts = [], keep = c => !!c && !(jarWord && c.tier === 'small');
+  if (respinRow && keep(CALLOUTS.respin)) callouts.push({ at: own ? 0 : FX_DELAY_MS, ...CALLOUTS.respin });
+  if (keep(own)) callouts.push({ at: FX_DELAY_MS, ...own });
+  const fx = (Array.isArray(o.fx) ? o.fx : []).map(id => ({ at: FX_DELAY_MS, id }));
+  if (teaseGif(o)) fx.push({ at: FX_DELAY_MS, id: GIF_TEASE_FX, args: { count: 1 } });
+  return { hits: highlightPlan(o), callouts, fx, unlockMs: unlockMs(o) };
+}
+
+/** The attract haze 0..1 at `ms` into it: one slow breath (HAZE_BREATH_MS), never above HAZE_OPACITY. */
+export const hazeAt = ms => (ms > 0 ? FLOW.HAZE_OPACITY * (1 - Math.cos((2 * Math.PI * ms) / FLOW.HAZE_BREATH_MS)) / 2 : 0);

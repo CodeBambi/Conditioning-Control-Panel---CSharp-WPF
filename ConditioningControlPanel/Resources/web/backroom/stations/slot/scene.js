@@ -23,7 +23,7 @@ import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
 import { drawSymbol } from './symbols.js';
 import { PACE, reelStopMs, reelsMs, respinStopMs, respinMs } from './pace.js';
 import { applyPalette } from './palette.js';
-import { FEEL, ALMOST as FEEL_ALMOST, ATTRACT, bezier, breath, shiverPx, chaseMs, paylineGlow, paylinePulses, wiggleCells } from './feel.js';
+import { FEEL, ALMOST as FEEL_ALMOST, ATTRACT, FLOW, bezier, breath, shiverPx, chaseMs, paylineGlow, paylinePulses, wiggleCells, glyphGlow, hazeAt } from './feel.js';
 
 export const FACES = { idle0_0: 3, hearts: 7, spirals: 8, melt: 9, jackpot: 10 };
 const RISE_MS = 620, CAMERA_MS = 620, SINK_MS = 340, PAINT_MS = 100, { THUD_MS } = FEEL;
@@ -177,6 +177,12 @@ export async function createScene(o) {
   let strips = [[], [], []], look = { reduced }, lastPaint = -Infinity;
   // A2 THE ALMOST: the off-by-one cell on reel 3 going gold, {r, j, at}. Set by almost(), cleared when it ends.
   let ghost = null;
+  // THE GLYPH HIT: when each reel's landed cell started glowing (the landing frame) and its offset in the plan.
+  const hitAt = [-Infinity, -Infinity, -Infinity], hitStart = [0, 0, 0];
+  let hitDirty = false;
+  const hitGlow = (r, t) => glyphGlow(t - hitAt[r], hitStart[r], reduced);
+  const hitting = t => hitAt.some(a => t - a >= 0 && t - a < FLOW.HIGHLIGHT_MS);
+  const stopsNow = [0, 0, 0];
   /** The gold on that cell: in over the tell, then ONE snap back. Reduced motion takes a single tint (Law VI). */
   function ghostAmt(t) {
     if (!ghost) return 0;
@@ -193,6 +199,10 @@ export async function createScene(o) {
       ctx.clearRect(0, 0, c.width, c.height);
       for (let j = 0; j < strips[r].length; j++) {
         ctx.save(); ctx.translate((j + 0.5) * 256, 128); ctx.rotate(-Math.PI / 2); ctx.scale(1, -1);
+        // THE GLYPH HIT (shared/hypno/callout.js timings): the landed cell pops 6% inside its own cell and takes a
+        // rim, reel order, HIGHLIGHT_GAP_MS apart. Reduced motion takes the lit rim and no pop (Law VI).
+        const hit = j === stopsNow[r] ? hitGlow(r, t) : 0;
+        if (hit > 0 && !reduced) { ctx.beginPath(); ctx.rect(-128, -128, 256, 256); ctx.clip(); ctx.scale(1 + 0.06 * hit, 1 + 0.06 * hit); }
         // One bad drawable (a broken or tainted GIF) paints the fallback tile, never the whole reel.
         try { ctx.save(); drawSymbol(ctx, strips[r][j], t, look); } catch { ctx.restore(); ctx.save(); drawSymbol(ctx, strips[r][j], t, { reduced: look.reduced, face: look.face }); }
         ctx.restore();
@@ -201,6 +211,7 @@ export async function createScene(o) {
         glaze.addColorStop(0.88, '#ffffff08'); glaze.addColorStop(1, '#07040f99');
         ctx.fillStyle = glaze; ctx.fillRect(-128, -128, 256, 256);
         ctx.strokeStyle = '#e8bbd526'; ctx.lineWidth = 1; ctx.strokeRect(-116, -116, 232, 232);
+        if (hit > 0) { ctx.strokeStyle = `rgba(255,214,120,${(0.9 * hit).toFixed(3)})`; ctx.lineWidth = 12; ctx.strokeRect(-116, -116, 232, 232); }
         // A2: the cell one step off the payline ghosts gold. The reel window shows about half of each
         // neighbour (drum r 0.43, 13 cells, window 0.39 tall), so the tell reads without moving a stop.
         const gh = ghost && ghost.r === r && ghost.j === j ? ghostAmt(t) : 0;
@@ -223,7 +234,6 @@ export async function createScene(o) {
     paint(performance.now());
   }
   setStrips([]);
-  const stopsNow = [0, 0, 0];
   function setStops(stops) {
     stops.forEach((k, r) => { stopsNow[r] = k; reels[r].rotation.x = restX[r] + angle(k, strips[r].length || 13); });
   }
@@ -305,6 +315,23 @@ export async function createScene(o) {
   // A4 attract and A5 the EMI land-wiggle: both live on the loop, so neither holds a timer of its own.
   let attract = null, attractOut = null;
   const wiggleAt = [-Infinity, -Infinity, -Infinity];
+  // THE ATTRACT HAZE (feel.FLOW): one spiral plane behind the cabinet, breathing at 12% after 8 s idle.
+  let hazeMesh = null, hazeOn = null, hazeOut = null, hazeTick = 0;
+  function makeHaze() {
+    const c = makeCanvas(512, 512), g = c.getContext('2d');
+    g.strokeStyle = '#f49aca'; g.lineWidth = 16; g.lineCap = 'round'; g.beginPath();
+    for (let k = 0; k < 400; k++) { const a = k * 0.115, rr = k * 0.62; if (k) g.lineTo(256 + Math.cos(a) * rr, 256 + Math.sin(a) * rr); else g.moveTo(256, 256); }
+    g.stroke();
+    const box = new THREE.Box3().setFromObject(rig), size = box.getSize(new THREE.Vector3()), centre = box.getCenter(new THREE.Vector3());
+    const d = Math.max(size.x, size.y) * 2.4;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(d, d), new THREE.MeshBasicMaterial({ map: canvasTexture(c), transparent: true, opacity: 0, depthWrite: false }));
+    const dir = poses ? poses.play.look.clone().sub(poses.play.pos).normalize() : new THREE.Vector3(0, 0, -1);
+    m.position.copy(centre).addScaledVector(dir, size.z * 0.5 + 0.25);
+    m.lookAt(m.position.clone().sub(dir));
+    m.renderOrder = -1; m.visible = false;
+    scene.add(m);
+    return m;
+  }
   const cellRad = i => TAU / (strips[i].length || 13);
   const restAngle = i => restX[i] + angle(stopsNow[i], strips[i].length || 13);
   const attractRad = (i, age) => (age / 1000) * ATTRACT.DRIFT_CELLS_PER_S * ATTRACT_SPEED[i] * cellRad(i);
@@ -439,7 +466,10 @@ export async function createScene(o) {
         const dur = s.solo ? respinStopMs(PACE, s.teaseMs) : reelStopMs(i, PACE, s.teaseMs);
         const target = home + Math.PI * 2 * (6 + 2 * i);
         // Law VI: reduced motion takes the STATE. The reel rests, then is simply on its stop at its thud frame.
-        let x = reduced ? s.from[i] : THREE.MathUtils.lerp(s.from[i], target, reelTravel(dt, dur));
+        // A1's hold stretches reel 3's slow-down across the whole hold, so it crawls into its stop instead of
+        // blurring longer and stopping as sharply as ever (the stop itself is the tape's; only the curve moves).
+        const down = i === 2 && s.teaseMs > 0 ? Math.min(PACE.DECEL_MS + s.teaseMs, dur * 0.5) : undefined;
+        let x = reduced ? s.from[i] : THREE.MathUtils.lerp(s.from[i], target, reelTravel(dt, dur, 180, down));
         if (dt >= dur) {
           if (!s.stopped[i]) { s.stopped[i] = true; stopAt[i] = t; if (o.onReelStop) o.onReelStop(i); }   // THE THUD: cue on this frame
           const k = clamp((dt - dur) / THUD_MS);
@@ -472,7 +502,8 @@ export async function createScene(o) {
     const rq = (t - revealAt) / PACE.REVEAL_MS, glow = rq < 0 || rq > 1 ? 1 : 1 + revealGain * (reduced ? 0.6 : Math.sin(Math.PI * rq));
     reels.forEach((r, i) => {
       const k = (t - stopAt[i]) / THUD_MS, flash = k < 0 || k >= 1 ? 1 : reduced ? 1.3 : 1 + 1.2 * (1 - ease(k));
-      if (r.material && r.material.color) r.material.color.setScalar(glow * flash);
+      // THE GLYPH HIT's rim pulse rides the reel's own brightness: the drum lifts with the cell it landed.
+      if (r.material && r.material.color) r.material.color.setScalar(glow * flash + 0.7 * hitGlow(i, t));
       // A2 under reduced motion: no travel and no repaint, the reel takes one gold tint and settles (Law VI).
       if (reduced && ghost && ghost.r === i && r.material && r.material.color) r.material.color.lerp(GOLD, 0.6 * ghostAmt(t));
     });
@@ -579,7 +610,16 @@ export async function createScene(o) {
         s.opacity = lit.toFixed(3);
       }
     }
-    if (!stillFx() && (ghost || t - lastPaint > PAINT_MS)) paint(t);   // A2's ghost repaints every frame while it runs
+    if (!stillFx() && (ghost || hitting(t) || t - lastPaint > PAINT_MS)) paint(t);   // A2's ghost and the glyph hit repaint every frame
+    else if (stillFx() && hitting(t) && t - lastPaint > PAINT_MS) paint(t);          // still reels take the lit rim, a few paints
+    if (hitDirty && !hitting(t)) { hitDirty = false; paint(t); }                   // ...and one paint to put it out
+    if (hazeMesh) {
+      const a = hazeOn ? hazeAt(t - hazeOn.start) : hazeOut ? hazeOut.from * (1 - ease((t - hazeOut.start) / 300)) : 0;
+      if (hazeOut && t - hazeOut.start >= 300) hazeOut = null;
+      hazeMesh.visible = a > 0.001; hazeMesh.material.opacity = a;
+      if (hazeMesh.visible && !reduced) hazeMesh.rotateZ(-TAU * (Math.min(50, t - hazeTick) / 14000));
+      hazeTick = t;
+    }
     if (ghost && t - ghost.at >= FEEL_ALMOST.TELL_MS) ghost = null;
     if (o.hint) {
       o.hint.hidden = phase !== 'play' || !!spin;
@@ -687,7 +727,28 @@ export async function createScene(o) {
     /** Law VI: a press or a new spin takes the frame straight to its settled end, never a faster pulse. */
     paylineOut() { if (paylineAt > -Infinity) paylineHold = Math.max(0, Math.min(paylineHold, performance.now() - paylineAt)); },
     /** Law VI: Back and suspend skip every ceremony to its settled state. */
-    skip() { party = null; shiverAt = trayAt = -Infinity; stopAt.fill(-Infinity); revealAt = -Infinity; lean = null; ghost = null; teasing = false; heat = { ...heat, from: heat.to, at: -Infinity }; paylineAt = -Infinity; if (o.payline) o.payline.hidden = true; },
+    skip() { party = null; shiverAt = trayAt = -Infinity; stopAt.fill(-Infinity); revealAt = -Infinity; lean = null; ghost = null; teasing = false; heat = { ...heat, from: heat.to, at: -Infinity }; paylineAt = -Infinity; if (o.payline) o.payline.hidden = true; hitAt.fill(-Infinity); hitDirty = true; hazeOn = null; hazeOut = null; },
+    /** THE GLYPH HIT (feel.highlightPlan): the landed cells on `plan` ([{ reel, at }]) glow from this frame, reel
+     *  order, each `at` ms in, all out by HIGHLIGHT_MS. Nothing moves a stop; it lights what the tape landed. */
+    highlight(plan) {
+      const now = performance.now();
+      for (const h of Array.isArray(plan) ? plan : []) if (h && h.reel >= 0 && h.reel < 3) { hitAt[h.reel] = now; hitStart[h.reel] = Math.max(0, Number(h.at) || 0); }
+      hitDirty = true;
+    },
+    /** THE ATTRACT HAZE on or off (the station owns the idle timer). Off eases out over 300 ms; reduced motion
+     *  and a cabinet not yet in play take nothing (Law VI). */
+    haze(on) {
+      if (on) {
+        if (phase !== 'play' || reduced) return false;
+        hazeMesh = hazeMesh || makeHaze();
+        if (!hazeOn) { hazeOn = { start: performance.now() }; hazeOut = null; }
+        return true;
+      }
+      if (hazeOn) hazeOut = { start: performance.now(), from: hazeAt(performance.now() - hazeOn.start) };
+      hazeOn = null;
+      return true;
+    },
+    get hazing() { return !!hazeOn; },
     /** A node's centre in client px (tokens fly from and to these), null when the glb lacks it. */
     project(name) {
       const n = get(name);
@@ -768,7 +829,8 @@ export async function createScene(o) {
                payline: { lit: paylineGlow(t - paylineAt, paylineHold, paylinePulseN), hold: paylineHold, pulses: paylinePulseN, rect: paylineRect() },
                window: screenBox(glass), band: poses ? poses.band : null, canvas: { w: canvas.clientWidth, h: canvas.clientHeight },
                jar: jarRect(), solo: !!(spin && spin.solo), keep: spin ? spin.keep : [],
-               attract: !!attract, drifting: !!(attract || attractOut), wiggling: wiggleAt.map(a => wiggleCells(t - a) !== 0) };
+               attract: !!attract, drifting: !!(attract || attractOut), wiggling: wiggleAt.map(a => wiggleCells(t - a) !== 0),
+               hits: [0, 1, 2].map(i => Number(hitGlow(i, t).toFixed(3))), haze: { on: !!hazeOn, opacity: hazeMesh ? Number(hazeMesh.material.opacity.toFixed(3)) : 0 } };
     },
   };
 }

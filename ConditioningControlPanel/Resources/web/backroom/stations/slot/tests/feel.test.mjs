@@ -5,7 +5,9 @@ import { FEEL, tierOf, recipe, ladderSemis, winTokens, spendTokens, tickValues, 
          ROLLUP_MS, rollupMs, rollupAt, rollupTicks, bankFlightMs, bankLandMs, ladderPlan, paylinePulses, paylineGlow, PAYLINE_PULSE_MIN_MS,
          ATTRACT, WIGGLE, attractOk, attractCells, emiLandings, wiggleCells,
          RESPIN_KIND, isHold, playsWithoutPress, respinKeep, respinHold, spiralReels, jarPlan, jarParty, JAR_TIER,
-         COMP_ID, compOffer, compAvailable } from '../feel.js';
+         COMP_ID, compOffer, compAvailable,
+         FLOW, CALLOUTS, calloutFor, hitReels, highlightPlan, glyphGlow, teaseGif, GIF_TEASE_FX, unlockMs, flowPlan, hazeAt } from '../feel.js';
+import { HIGHLIGHT_MS, HIGHLIGHT_GAP_MS, FX_DELAY_MS, CALLOUT_MS } from '../../../shared/hypno/callout.js';
 import { ANTICIPATION, PACE, respinStopMs, respinMs, outcomeMs, reelsMs } from '../pace.js';
 
 const o = (line, pay, extra = {}) => ({ line, pay, meltLeft: 0, halved: false, ...extra });
@@ -538,4 +540,130 @@ test('B3 compAvailable: spendable once, and a spent one never comes back', () =>
   assert.equal(compAvailable(c, true), false, 'already spent this sit-down');
   assert.equal(compAvailable(null), false);
   assert.equal(compAvailable({ id: 'x', spins: 5 }), false);
+});
+
+/* ---- THE FLOW on the landing frame (shared/hypno/callout.js): pure rules over a row the tape already holds ---- */
+
+const landed = (line, pay, symbols, fx = []) => ({ line, pay, symbols, fx, kind: 'paid', meltLeft: 0, halved: false });
+
+test('FLOW mirrors the shared callout contract and the unlock rule', () => {
+  assert.equal(FLOW.HIGHLIGHT_MS, HIGHLIGHT_MS);
+  assert.equal(FLOW.HIGHLIGHT_GAP_MS, HIGHLIGHT_GAP_MS);
+  assert.equal(FLOW.FX_DELAY_MS, FX_DELAY_MS);
+  assert.equal(FLOW.CALLOUT_MS, CALLOUT_MS);
+  assert.equal(FLOW.UNLOCK_MS, 2000);
+  assert.ok(FLOW.UNLOCK_MS >= FX_DELAY_MS + CALLOUT_MS, 'the word has dissolved before the next press');
+  assert.ok(FLOW.UNLOCK_JACKPOT_MS > FLOW.UNLOCK_MS, 'the jackpot keeps its longer hold');
+  assert.equal(FLOW.TEASE_TUNNEL, 0.4);
+  assert.deepEqual([FLOW.HAZE_IDLE_MS, FLOW.HAZE_BREATH_MS, FLOW.HAZE_OPACITY], [8000, 6000, 0.12]);
+  assert.ok(Object.isFrozen(FLOW) && Object.isFrozen(CALLOUTS));
+});
+
+test('callout names: every key is br_callout_*, the tiers are the owner table, one sub and none are no callout', () => {
+  const want = { sub2: ['br_callout_echo', 'small'], sub3: ['br_callout_chorus', 'big'], gif3: ['br_callout_picture_show', 'small'],
+                 gif3same: ['br_callout_storm', 'big'], spiral2: ['br_callout_double_spin', 'small'], spiral3: ['br_callout_sinking_down', 'big'],
+                 melt: ['br_callout_brain_melt', 'big'], emi3: ['br_callout_emi_jackpot', 'hero'], emi2: ['br_callout_emi_chase', 'big'],
+                 jar: ['br_callout_overflow', 'big'], respin: ['br_callout_respin', 'small'] };
+  for (const [line, [key, tier]] of Object.entries(want)) {
+    assert.equal(CALLOUTS[line].key, key, line); assert.equal(CALLOUTS[line].tier, tier, line);
+    assert.ok(/^br_callout_[a-z_]+$/.test(CALLOUTS[line].key) && CALLOUTS[line].fallback.length > 0);
+  }
+  assert.equal(calloutFor(landed('none', 0, ['sub0', 'gif1', 'spiral2'])), null, 'a single sub is the other lane\'s word');
+  assert.equal(calloutFor(landed('none', 0, ['gif0', 'gif1', 'sub0'])), null);
+  assert.equal(calloutFor(null), null);
+  assert.equal(calloutFor(landed('sub2', 2, ['sub0', 'gif1', 'sub2'])).key, 'br_callout_echo');
+});
+
+test('hitReels: the glyphs that glow, in reel order', () => {
+  assert.deepEqual(hitReels(landed('sub2', 2, ['sub0', 'gif1', 'sub2'])), [0, 2]);
+  assert.deepEqual(hitReels(landed('spiral2', 1, ['gif0', 'spiral1', 'spiral2'])), [1, 2]);
+  assert.deepEqual(hitReels(landed('gif3', 3, ['gif0', 'gif1', 'gif2'])), [0, 1, 2]);
+  assert.deepEqual(hitReels(landed('gif3same', 40, ['gif1', 'gif1', 'gif1'])), [0, 1, 2]);
+  assert.deepEqual(hitReels(landed('sub3', 15, ['sub0', 'sub1', 'sub2'])), [0, 1, 2]);
+  assert.deepEqual(hitReels(landed('spiral3', 10, ['spiral0', 'spiral1', 'spiral2'])), [0, 1, 2]);
+  assert.deepEqual(hitReels(landed('emi3', 400, ['emi', 'emi', 'emi'])), [0, 1, 2]);
+  assert.deepEqual(hitReels(landed('emi2', 0, ['emi', 'emi', 'sub0'])), [0, 1], 'the chase lights the locked pair');
+  assert.deepEqual(hitReels(landed('melt', 0, ['gif1', 'melt', 'spiral2'])), [1]);
+  assert.deepEqual(hitReels(landed('none', 0, ['gif0', 'gif1', 'sub0'])), []);
+  assert.deepEqual(hitReels(null), []);
+});
+
+test('highlightPlan: reel order, HIGHLIGHT_GAP_MS apart, every hit inside HIGHLIGHT_MS', () => {
+  const plan = highlightPlan(landed('sub3', 15, ['sub0', 'sub1', 'sub2']));
+  assert.deepEqual(plan, [{ reel: 0, at: 0 }, { reel: 1, at: 80 }, { reel: 2, at: 160 }]);
+  for (const h of plan) assert.ok(h.at + 1 <= HIGHLIGHT_MS);
+  assert.deepEqual(highlightPlan(landed('sub2', 2, ['sub0', 'gif1', 'sub2'])), [{ reel: 0, at: 0 }, { reel: 2, at: 80 }]);
+});
+
+test('glyphGlow: dark before its start, in fast, out by HIGHLIGHT_MS; reduced motion takes the lit state flat', () => {
+  assert.equal(glyphGlow(-1, 0), 0);
+  assert.equal(glyphGlow(50, 80), 0, 'reel 2 waits its 80 ms');
+  assert.ok(glyphGlow(80, 0) > 0.9, 'in fast');
+  assert.ok(glyphGlow(160, 80) > 0.9);
+  assert.ok(glyphGlow(300, 0) > 0 && glyphGlow(300, 0) < glyphGlow(120, 0), 'out slow');
+  assert.equal(glyphGlow(HIGHLIGHT_MS, 0), 0);
+  assert.equal(glyphGlow(HIGHLIGHT_MS, 160), 0, 'every glyph is dark on the callout frame');
+  assert.equal(glyphGlow(200, 80, true), 1);
+  assert.equal(glyphGlow(HIGHLIGHT_MS, 80, true), 0);
+  for (let ms = 0; ms <= HIGHLIGHT_MS; ms += 10) for (const at of [0, 80, 160]) { const g = glyphGlow(ms, at); assert.ok(g >= 0 && g <= 1); }
+});
+
+test('teaseGif: a none row showing exactly two GIFs, nothing else', () => {
+  assert.equal(teaseGif(landed('none', 0, ['gif0', 'gif1', 'sub0'])), true);
+  assert.equal(teaseGif(landed('none', 0, ['gif2', 'spiral0', 'gif2'])), true, 'the same gif twice still reads none and still teases');
+  assert.equal(teaseGif(landed('none', 0, ['gif0', 'sub1', 'spiral0'])), false, 'one gif');
+  assert.equal(teaseGif(landed('gif3', 3, ['gif0', 'gif1', 'gif2'])), false, 'three gifs is a pay, not a tease');
+  assert.equal(teaseGif(landed('melt', 0, ['gif0', 'melt', 'gif1'])), false, 'a melt row is the melt');
+  assert.equal(teaseGif(landed('sub2', 2, ['sub0', 'gif1', 'gif2'])), false, 'a paid pair is its own line');
+  assert.equal(teaseGif(landed('emi2', 0, ['emi', 'emi', 'gif0'])), false);
+  assert.equal(teaseGif(null), false);
+  assert.equal(GIF_TEASE_FX, 'fx.gif_burst');
+});
+
+test('unlockMs: a paid line 2000, a loss 0, the melt word 2000, the chase 0, the jackpot longer', () => {
+  assert.equal(unlockMs(landed('none', 0, ['gif0', 'gif1', 'sub0'])), 0, 'a tease row is still a loss: as quick as today');
+  assert.equal(unlockMs(landed('sub2', 2, ['sub0', 'gif1', 'sub2'])), 2000);
+  assert.equal(unlockMs(landed('spiral2', 0, ['spiral0', 'gif1', 'spiral2'], [])), 2000, 'a halved-to-zero pair still has its word');
+  assert.equal(unlockMs(landed('melt', 0, ['gif1', 'melt', 'spiral2'])), 2000);
+  assert.equal(unlockMs(landed('emi2', 0, ['emi', 'emi', 'sub0'])), 0);
+  assert.equal(unlockMs(landed('emi3', 400, ['emi', 'emi', 'emi'])), FLOW.UNLOCK_JACKPOT_MS);
+  assert.equal(unlockMs(null), 0);
+});
+
+test('flowPlan: the word and the host fx fire together at FX_DELAY_MS, the tease adds one flash with count 1', () => {
+  const p = flowPlan(landed('sub2', 2, ['sub0', 'gif1', 'sub2'], ['fx.sub_pair']));
+  assert.deepEqual(p.hits, [{ reel: 0, at: 0 }, { reel: 2, at: 80 }]);
+  assert.deepEqual(p.callouts, [{ at: FX_DELAY_MS, key: 'br_callout_echo', fallback: 'Echo', tier: 'small' }]);
+  assert.deepEqual(p.fx, [{ at: FX_DELAY_MS, id: 'fx.sub_pair' }]);
+  assert.equal(p.unlockMs, 2000);
+  const tease = flowPlan(landed('none', 0, ['gif0', 'gif1', 'sub0'], ['fx.sub_single']));
+  assert.deepEqual(tease.callouts, []);
+  assert.deepEqual(tease.hits, []);
+  assert.deepEqual(tease.fx, [{ at: FX_DELAY_MS, id: 'fx.sub_single' }, { at: FX_DELAY_MS, id: 'fx.gif_burst', args: { count: 1 } }]);
+  assert.equal(tease.unlockMs, 0);
+  const loss = flowPlan(landed('none', 0, ['gif0', 'spiral1', 'sub0'], ['fx.sub_single']));
+  assert.deepEqual(loss.fx, [{ at: FX_DELAY_MS, id: 'fx.sub_single' }], 'one gif is no tease');
+  assert.deepEqual(flowPlan(null), { hits: [], callouts: [], fx: [], unlockMs: 0 });
+});
+
+test('flowPlan: a respin row says Respin first and its own word replaces it; the jar\'s Overflow outranks a small word', () => {
+  const quiet = flowPlan(landed('none', 0, ['gif0', 'spiral1', 'sub0']), { respinRow: true });
+  assert.deepEqual(quiet.callouts, [{ at: FX_DELAY_MS, key: 'br_callout_respin', fallback: 'Respin', tier: 'small' }], 'no word of its own: Respin on the fx frame');
+  const won = flowPlan(landed('sub3', 15, ['sub0', 'sub1', 'sub2'], ['fx.sub_cascade']), { respinRow: true });
+  assert.deepEqual(won.callouts.map(c => [c.at, c.key]), [[0, 'br_callout_respin'], [FX_DELAY_MS, 'br_callout_chorus']]);
+  const jarSmall = flowPlan(landed('spiral2', 1, ['spiral0', 'gif1', 'spiral2'], ['fx.spiral_brief']), { jarWord: true });
+  assert.deepEqual(jarSmall.callouts, [], 'Double Spin yields to Overflow');
+  assert.deepEqual(jarSmall.fx, [{ at: FX_DELAY_MS, id: 'fx.spiral_brief' }], 'the fx still fire');
+  const jarBig = flowPlan(landed('spiral3', 10, ['spiral0', 'spiral1', 'spiral2'], ['fx.spiral_full']), { jarWord: true });
+  assert.equal(jarBig.callouts[0].key, 'br_callout_sinking_down', 'a big word still takes the frame');
+  const jarRespin = flowPlan(landed('none', 0, ['spiral0', 'gif1', 'sub0']), { respinRow: true, jarWord: true });
+  assert.deepEqual(jarRespin.callouts, [], 'Respin (small) yields too');
+});
+
+test('hazeAt: one 6 s breath, never above 12%, dark at rest', () => {
+  assert.equal(hazeAt(0), 0);
+  assert.equal(hazeAt(-5), 0);
+  assert.ok(Math.abs(hazeAt(3000) - FLOW.HAZE_OPACITY) < 1e-9, 'the peak of the breath');
+  assert.ok(hazeAt(6000) < 1e-9, 'back to dark at the end of a breath');
+  for (let ms = 0; ms <= 12000; ms += 100) assert.ok(hazeAt(ms) >= 0 && hazeAt(ms) <= FLOW.HAZE_OPACITY + 1e-9);
 });

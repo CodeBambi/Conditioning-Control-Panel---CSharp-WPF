@@ -65,6 +65,9 @@
 .slot-comp { background: #241634e8; border: 1px solid #ffcf6b5c; color: #ffcf6b; padding: 5px 11px; border-radius: 30px;
   font-size: 11px; letter-spacing: .4px; }
 .slot-tokens { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
+/* THE FLOW's callout root (shared/hypno/callout.js mounts here): above the tokens, the card and, on a phone turned
+   sideways, the landscape reel view (the stage canvas has no z-index of its own), so the word is never behind a reel. */
+.slot-callout { position: absolute; inset: 0; z-index: 7; pointer-events: none; }
 .slot-token { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; will-change: transform;
   background: radial-gradient(circle at 35% 30%, #fff6d8, #ffcf6b 45%, #d9689f 100%); box-shadow: 0 0 10px #ffcf6b99; }
 .slot-token-spend { background: radial-gradient(circle at 35% 30%, #ffe9f6, #e59cca 50%, #7a3f86 100%); box-shadow: 0 0 8px #e59cca88; }
