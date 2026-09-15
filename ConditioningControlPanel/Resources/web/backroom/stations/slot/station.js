@@ -382,8 +382,11 @@ export async function mount(ctx) {
    *  a dead spin (line none, no fx) with EMI's bark; every other fx id goes to the host as before. */
   function fire(o, tease) {
     // EMI's wink lands a tick after land()'s own glance on this frame, so the settle's face is hers and not the rest's.
+    // The bark stands over wherever she is: her shelf beside the reels while seated, her topper before that
+    // (scene.js). Without the node the callout keeps its own centred place.
     if (!words) words = createSlotWords({ ctx, mount: el, media, lex: ctx.lex,
-      emi: { react: () => setTimeout(() => { if (alive) glanceTo('hearts', glanceHoldMs(false), restPose(tape ? tape.snapshot().melt : 0)); }, 0) } });
+      emi: { react: () => setTimeout(() => { if (alive) glanceTo('hearts', glanceHoldMs(false), restPose(tape ? tape.snapshot().melt : 0)); }, 0),
+             anchor: () => (scene ? scene.project('emi_topper', true) : null) } });
     return words.outcome(o, fireFx, { tease: !!tease });
   }
   /** The host tunnel (CONTRACT 10.13.B): A1's hold pulls it to FLOW.TEASE_TUNNEL, the landing releases it. Sent

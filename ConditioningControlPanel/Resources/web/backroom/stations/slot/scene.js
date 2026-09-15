@@ -29,6 +29,14 @@ export const FACES = { idle0_0: 3, hearts: 7, spirals: 8, melt: 9, jackpot: 10 }
 const RISE_MS = 620, CAMERA_MS = 620, SINK_MS = 340, PAINT_MS = 100, { THUD_MS } = FEEL;
 const LENS_DEG = 20;           // vertical field; a narrow screen backs the camera off to keep the width
 const FIT_MARGIN = 1.04;        // breathing room around the marquee, reels and lever box
+// THE CLOSE SEAT (owner, 2026-09-15: "bring the pov closer"). fit() measures the box on its nearest face, and the
+// lever and EMI's shelf stand well in front of the reel glass, so a straight fit leaves a band of empty room down
+// each side. A desk seat takes this much of that distance off: the reels, and the art on them, read big.
+const PLAY_CLOSE = 0.93;
+// EMI'S SHELF: her perch beside the reel window while the player is seated, answering the lever on the right.
+// Cabinet space, the glb's own units: outboard of the side panel, the top surface level with the reels.
+const SHELF = { x: -0.66, top: 0.99, z: 0.36, w: 0.17, d: 0.16, lip: 0.03 };
+const PERCH_SCALE = 0.85, PERCH_HOP = 0.11;   // a smaller EMI on a small shelf, and the arc of her jump across
 const PULL_MAX = 0.5, PULL_COMMIT = 0.55;
 const LEAN = 0.22, BREATH_RAD = 0.03;   // Law VIII lean into a press; THE BREATH's reach at rest
 const PALETTES = {
@@ -245,13 +253,19 @@ export async function createScene(o) {
    *  the left; Spin and the face keep the right corners, so the lever may reach into the free middle of that edge. */
   const sideband = (w, h) => (h <= 500 && w > h ? { left: 110, right: 12, top: 16, bottom: 16 } : null);
   function frame(aspect, w = 16, h = 9) {
+    let closeSeat = false;   // the desk pose: the one EMI takes her shelf for (a phone keeps her on her topper)
     const y = rig.position.y; rig.position.y = 0; rig.updateMatrixWorld(true);
     const seat = get('cam_seat').getWorldPosition(new THREE.Vector3()), target = get('cam_target').getWorldPosition(new THREE.Vector3());
     const dir = seat.sub(target); if (dir.lengthSq() < 1e-8) dir.set(0, 0, 1); dir.normalize();
     const playBox = new THREE.Box3();
     (glass ? [glass] : reels).forEach(n => playBox.expandByObject(n));
     playBox.expandByObject(lever);
-    for (const n of [get('marquee'), glowNode, faceMesh]) if (n) playBox.expandByObject(n);
+    for (const n of [get('marquee'), glowNode]) if (n) playBox.expandByObject(n);
+    // EMI's shelf, and EMI standing on it, are the left of the seated frame the way the lever is the right. The
+    // perch is used, never wherever she happens to be standing this frame, so the framing never rides her hop.
+    // Without a shelf (a glb short of emi_stage) she keeps her topper, and the frame keeps reaching up for it.
+    if (shelf && perch) { playBox.expandByObject(shelf); playBox.union(new THREE.Box3().setFromCenterAndSize(emiHost.localToWorld(perch.clone().setY(perch.y + emiSpan.y / 2)), emiSpan)); }
+    else if (faceMesh) playBox.expandByObject(faceMesh);
     const whole = new THREE.Box3().setFromObject(cabinet);
     // `span` is the fraction of the canvas the box may fill on each axis (1 = all of it), the way room/seat-camera.js
     // leaves the station chrome its bands: a smaller span backs the camera off so the box fits inside what is left.
@@ -293,8 +307,14 @@ export async function createScene(o) {
       play.look.copy(close.look);
       play.dist = close.dist;
       play.pos.copy(play.look).addScaledVector(dir, play.dist);
+    } else if (aspect >= 0.8) {
+      // A desk seat: closer than the box fit, so the cabinet fills the frame (PLAY_CLOSE). A phone keeps its own
+      // fit above, where the whole width has to be bought back anyway.
+      play.dist *= PLAY_CLOSE;
+      play.pos.copy(play.look).addScaledVector(dir, play.dist);
+      closeSeat = true;
     }
-    return { play, arrive: fit(whole, quarter), drop: (whole.max.y - whole.min.y) * 1.6, band };
+    return { play, arrive: fit(whole, quarter), drop: (whole.max.y - whole.min.y) * 1.6, band, closeSeat };
   }
   const aim = (pos, lookAt) => { camera.position.copy(pos); camera.lookAt(lookAt); };
   function resize() {
@@ -345,6 +365,43 @@ export async function createScene(o) {
   }
   const emi = get('emi_topper'), emiRest = emi && { p: emi.position.clone(), s: emi.scale.clone(), r: emi.rotation.clone() };
   const tmp = new THREE.Vector3(), nextColor = new THREE.Color(), GOLD = new THREE.Color(0xffc23a);
+
+  /* EMI'S SHELF (owner, 2026-09-15). The close seat cuts her topper off the top of the frame, so while the player
+   * is seated she hops down onto a plank on the cabinet's left, level with the reels, and the frame reads even:
+   * EMI on the left, the lever on the right. The plank is a clone of her own stage (its geometry, its palette-
+   * recoloured material, so a room variant paints it too) with a small lip, parented where she is parented so the
+   * perch is simply a position in her own space. Nothing is asked of the glb (section 9.6). */
+  const stage = get('emi_stage'), emiHost = emi && (emi.parent || rig);
+  let shelf = null, perch = null, emiSpan = null;
+  if (emi && stage && emiHost) {
+    const span = new THREE.Box3().setFromObject(stage).getSize(new THREE.Vector3());
+    emiSpan = new THREE.Box3().setFromObject(emi).getSize(new THREE.Vector3()).multiplyScalar(PERCH_SCALE);
+    perch = new THREE.Vector3(SHELF.x, SHELF.top, SHELF.z);
+    shelf = new THREE.Group();
+    shelf.name = 'emi_shelf';
+    shelf.position.copy(perch);
+    const plank = stage.clone(true);
+    plank.position.set(0, -span.y / 2, 0);         // the group's origin is the top surface: where her feet land
+    plank.rotation.set(0, 0, 0);
+    plank.scale.set(SHELF.w / Math.max(span.x, 1e-3), 1, SHELF.d / Math.max(span.z, 1e-3));
+    shelf.add(plank);
+    if (plank.isMesh && plank.material) {
+      const lip = new THREE.Mesh(new THREE.BoxGeometry(SHELF.w, SHELF.lip, SHELF.lip), plank.material);
+      lip.position.set(0, SHELF.lip / 2 - span.y / 2, (SHELF.d - SHELF.lip) / 2);
+      shelf.add(lip);
+    }
+    emiHost.add(shelf);
+  }
+  /** THE HOP: 0 on her topper, 1 on the shelf. She crosses while the camera settles into the seat and climbs back
+   *  as the cabinet sinks. Law VI: reduced motion settles the travel (rise() goes straight to `play`), so k is 0
+   *  or 1 there and the arc never runs. */
+  function perchAt(t) {
+    if (!perch || !poses || !poses.closeSeat) return 0;   // a phone frames the whole cabinet: she keeps her topper
+    if (phase === 'play') return 1;
+    if (tl && tl.kind === 'rise') return ease(clamp((t - tl.start - RISE_MS) / CAMERA_MS));
+    if (tl && tl.kind === 'sink') return 1 - ease(clamp((t - tl.start) / SINK_MS));
+    return 0;
+  }
 
   function screen(name, text) {
     const s = screens[name];
@@ -541,7 +598,13 @@ export async function createScene(o) {
     }
 
     if (emi) {
+      const k = perchAt(t);
       emi.position.copy(emiRest.p); emi.scale.copy(emiRest.s); emi.rotation.copy(emiRest.r);
+      if (k > 0) {
+        emi.position.lerp(perch, k);
+        if (k < 1 && !reduced) emi.position.y += PERCH_HOP * Math.sin(Math.PI * k);   // the little jump across
+        emi.scale.multiplyScalar(1 - (1 - PERCH_SCALE) * k);
+      }
       const age = t - moodAt, pa = partying ? t - party.start : Infinity;
       if (!reduced && phase === 'play') {
         let lean2 = 0, hop = 0, squash = 1, pop = 1, turn = 0;
@@ -749,11 +812,14 @@ export async function createScene(o) {
       return true;
     },
     get hazing() { return !!hazeOn; },
-    /** A node's centre in client px (tokens fly from and to these), null when the glb lacks it. */
-    project(name) {
+    /** A node's centre in client px (tokens fly from and to these), null when the glb lacks it. `top` takes the
+     *  middle of its top edge instead: where a speech bubble wants to stand, EMI's shelf or her topper. */
+    project(name, top = false) {
       const n = get(name);
       if (!n) return null;
-      const box = new THREE.Box3().setFromObject(n), p = (box.isEmpty() ? n.getWorldPosition(new THREE.Vector3()) : box.getCenter(new THREE.Vector3())).project(camera);
+      const box = new THREE.Box3().setFromObject(n), at = box.isEmpty() ? n.getWorldPosition(new THREE.Vector3()) : box.getCenter(new THREE.Vector3());
+      if (top && !box.isEmpty()) at.y = box.max.y;
+      const p = at.project(camera);
       const r = canvas.getBoundingClientRect();
       return { x: r.left + (p.x + 1) * r.width / 2, y: r.top + (1 - p.y) * r.height / 2 };
     },
@@ -830,7 +896,10 @@ export async function createScene(o) {
                window: screenBox(glass), band: poses ? poses.band : null, canvas: { w: canvas.clientWidth, h: canvas.clientHeight },
                jar: jarRect(), solo: !!(spin && spin.solo), keep: spin ? spin.keep : [],
                attract: !!attract, drifting: !!(attract || attractOut), wiggling: wiggleAt.map(a => wiggleCells(t - a) !== 0),
-               hits: [0, 1, 2].map(i => Number(hitGlow(i, t).toFixed(3))), haze: { on: !!hazeOn, opacity: hazeMesh ? Number(hazeMesh.material.opacity.toFixed(3)) : 0 } };
+               hits: [0, 1, 2].map(i => Number(hitGlow(i, t).toFixed(3))), haze: { on: !!hazeOn, opacity: hazeMesh ? Number(hazeMesh.material.opacity.toFixed(3)) : 0 },
+               // THE CLOSE SEAT: what the seated frame actually holds, so a re-check can measure it without eyes.
+               seat: { dist: poses ? Number(poses.play.dist.toFixed(3)) : null, perch: Number(perchAt(t).toFixed(3)),
+                       marquee: screenBox(glowNode), lever: screenBox(lever), emi: screenBox(emi), shelf: screenBox(shelf), freeze: screenBox(freezers[0]) } };
     },
   };
 }
