@@ -29,7 +29,7 @@
 
 import { createTape, stopsFor } from './tape.js';
 import { createScene, FACES } from './scene.js';
-import { createMedia } from './media.js';
+import { createMedia, fxSymbols } from './media.js';
 import { createSlotWords, subWords } from './word.js';   // the lone word, the sub pair / trio, the dead-spin settle (callout.js)
 import { PACE } from './pace.js';
 import { recipe, tierOf, meltedBy, ladderSemis, ladderPlan, rollupMs, winTokens, spendTokens, glance, landPose, restPose, pressPose, glanceHoldMs } from './feel.js';
