@@ -258,16 +258,36 @@ const keysOf = (chart) => {
 };
 
 // ---- track charts (CHART.md host protocol). The run owns the clock; this only relays. ----
+// A desktop host charts the audio itself and ships no transcript pass, so a chart that lands
+// wordless is laid again with the shipped transcript (race/hostWords.js) and swapped in the way
+// the host's own words pass would be. `wordsGen` drops an answer that a newer chart outran.
+let wordsGen = 0;
+const worded = new Map();   // hash|cloudId -> the worded chart, so the partial and final frames share one pass
 bridge.on('track-chart', (m) => {
   if (!race || !m || !m.chart) return;
+  const gen = ++wordsGen;
+  if (!applyTrackChart(m) || m.authored) return;
+  const k = keysOf(m.chart), key = k.hash + '|' + k.cloudId;
+  let work = worded.get(key);
+  if (!work) {
+    work = import('./race/hostWords.js').then((mod) => mod.wordHostChart(m.chart, { log: host.log }));
+    worded.set(key, work);
+  }
+  work.then((chart) => {
+    if (!chart) { worded.delete(key); return; }
+    if (gen === wordsGen && race) applyTrackChart({ ...m, chart });
+  }, (e) => { worded.delete(key); host.log('host words: ' + e); });
+});
+function applyTrackChart(m) {
   try { (race.track && started) ? race.replaceTrack(m.chart) : race.setTrack(m.chart); }
-  catch (err) { host.log('track-chart: ' + ((err && err.message) || err)); trackError(String((err && err.message) || err)); return; }
+  catch (err) { host.log('track-chart: ' + ((err && err.message) || err)); trackError(String((err && err.message) || err)); return false; }
   const t = race.track, st = race.trackStats ? race.trackStats() : null;
   // `authored` is the host saying a person wrote this chart: the plate marks it, and nothing
   // fuller is coming behind it (an authored chart is never partial and never replaced).
   trackReady = t ? { stage: 'ready', name: t.name, durationSec: t.durationSec, countable: st ? st.countable : 0, partial: !!m.partial, authored: !!m.authored, ...keysOf(t.chart) } : null;
   plate(trackReady);
-});
+  return true;
+}
 bridge.on('track-clock', (m) => { if (race && m) race.trackClock(Number(m.t) || 0, m.playing !== false); });
 bridge.on('track-ended', () => { if (race) race.trackEnded(); });
 bridge.on('track-error', (m) => trackError((m && m.message) || 'the track would not load'));

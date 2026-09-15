@@ -740,7 +740,12 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     if (webMedia) { if (pile.images || pile.videos) parts.push(`your files (${counts(pile.images, pile.videos)})`); }
     else if (media && typeof media.stats === 'function') {
       let c = null; try { c = media.stats(); } catch (e) { c = null; }
-      if (c) { known = true; if (c.images || c.videos) parts.push(`your library (${counts(c.images | 0, c.videos | 0)})`); }
+      if (c) {
+        known = true;
+        if (c.images || c.videos) parts.push(`your library (${counts(c.images | 0, c.videos | 0)})`);
+        // the host's online pool rides the overlay, not the walls, but it is still on screen
+        if (!feed && (c.remoteImages || c.remoteVideos)) parts.push(`online feed (${counts(c.remoteImages | 0, c.remoteVideos | 0)})`);
+      }
     }
     // the best on this track rides the track line when the plate is not up to carry it (paintStatus)
     const best = name ? bestLine(trackBestRec) : '';

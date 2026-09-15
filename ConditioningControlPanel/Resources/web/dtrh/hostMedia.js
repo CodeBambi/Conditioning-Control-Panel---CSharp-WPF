@@ -80,9 +80,10 @@ export function createHostMediaSource() {
   let favorites = []; // host-ranked asset names (dtrh_asset_stats.json, most-engaged first)
 
   const counts = () => {
-    let images = 0, videos = 0;
+    let images = 0, videos = 0, remoteImages = 0, remoteVideos = 0;
     for (const e of entries) (e.kind === 'image' ? images++ : videos++);
-    return { images, videos, skipped };
+    for (const e of remote) (e.kind === 'image' ? remoteImages++ : remoteVideos++);
+    return { images, videos, skipped, remoteImages, remoteVideos };
   };
 
   function reshuffle() {
