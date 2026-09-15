@@ -83,6 +83,34 @@ Moments, through `createMoments` only, on the frame the page shows them:
 - `cards.win` / `cards.lose` / `cards.push` on the settle frame by `result.net`; the win wash carries the key of the
   highest card (ace highest) over the winning hands, or no picture after a bloom.
 - `moments.holdScreen(true)` whenever a reply shows `hand.done === false`, `holdScreen(false)` on the settle frame.
+
+The table beats (2026-09-15). `planSteps(..., { beats: true })` adds `beat` steps for a reply to the player's own press
+(Deal, a move); a hand put back on the felt (resume, refresh, `illegal`, `hand_open`, `auto_stood`) has none, and a
+quiet flush (suspend, Back) plays none (Law VI). Each fires on the frame its card SHOWS, never on the reply (Law I). Host
+args are Normal (the host applies Calm); `light` steps are the app's small overlays and may play while a decision is
+open, everything fullscreen still waits for the settle. Gates dress plain: `subliminal` off drops the whispers, `flash`
+off the bursts and washes, `spiral` off the streak's spiral (host side), `tunnel` off the losing edges.
+
+| Moment | Fires on | Host, same frame, in order | Page |
+|---|---|---|---|
+| `cards.deal` | the first card of a fresh deal shows | `fx.sub_single` (one dealt word, light) | none |
+| `cards.hit` | each hit card shows, at most one per 1.2 s (`COOLDOWN_MS`) | `fx.sub_single` (one word, light) | none |
+| `cards.double` | the doubled card shows | `fx.gif_burst` (light) | none |
+| `cards.split` | the pair slides apart (the two cards that follow are silent) | `fx.sub_single` (two words, light) | none |
+| `cards.bust` | the card that busts a hand shows | none: the whisper is withheld, the loss lands at the settle | none |
+| stand | the press | none: the reveal that follows is the beat | none |
+| `cards.reveal` | the hole card turns | `fx.gif_burst` (light) | none |
+| `cards.bloom` | a paid blackjack (as before) | `fx.gif_from` from the ace, `fx.wash` rose | `ace_glow` |
+| `cards.win` | settle, `net > 0`, the dealer stood | `fx.wash` mint 0.7 with the best card (0.9, no picture after a bloom) | `win_tunnel`, `chip_vortex` |
+| `cards.dealer_bust` | settle, `net > 0`, `dealerTotal > 21` | `fx.gif_burst`, `fx.wash` mint 0.8 with the best card | `win_tunnel`, `chip_vortex` |
+| `cards.streak` | settle, the third win in a row and on (`streakAfter`, a push keeps it) | `fx.sub_pair` (two words), `fx.wash` mint 0.9 | `win_tunnel`, `chip_vortex` |
+| `cards.sweep` | settle, a split with every hand won | `fx.gif_storm`, `fx.wash` gold 1 | `win_tunnel`, `chip_vortex` |
+| `cards.lose` | settle, `net < 0` (as before) | the tunnel breath 0.75 over 2.6 s | `chip_vortex` |
+| `cards.push` | settle, `net === 0` | none | none |
+
+One settle beat per hand (Brake 2): sweep > streak > dealer_bust > win (`settleMoment`). `screenHoldMs` holds the next
+deal for the wash (win, dealer_bust), the streak's words and spiral (1.7 s) and the storm's rain (2 s). The whispers
+rotate through the four dealt words (`wordKeys`). The streak counter resets on `open()`.
 - `suspend(true)` lays every queued step down quietly, cancels the moments and frees the Loom context; `close()` cancels
   and disposes the moments, the kit and the deck. `suspend(true)` keeps the deck (confirmed 2026-09-14, against 10.13.F's
   dispose): re-dealing on resume would ask the host for 13 new pictures and swap them under an open hand. Leaving the

@@ -142,6 +142,66 @@ test('Back during an in-flight buy closes at once; the late reply touches nothin
   assert.equal(r.server.user.sp, 80, 'the buy settled on the server');
 });
 
+test('Try it: the three effect prizes get a preview inside the card, drawn by the page, nothing posted to the host', async () => {
+  const r = room({ sp: 30, on: 'jackpot_remix,flashes_v2', owned: { jackpot_remix: { at: 1, paidSp: 15 } } });
+  const fx = [], medias = [];
+  r.ctx.fx = (...a) => { fx.push(a); return Promise.resolve({}); };
+  r.ctx.media = (o) => { medias.push(o); return Promise.resolve({ gifs: [{ key: 'g0', url: 'https://ccp.assets/a/one.gif' }, { key: 'g1', url: 'https://evil.example/x.gif' }], words: [] }); };
+  const st = await mount(r.ctx);
+  await st.open();
+  assert.deepEqual(r.root.all('counter-card').map((c) => [c.dataset.id, !!c.one('counter-try'), c.one('counter-try') ? c.one('counter-try').hidden : null]),
+    [['jackpot_remix', true, false], ['rt_demo', false, null], ['high_roller', false, null], ['flashes_v2', true, false], ['bubbles_v2', true, true],
+      ['rt_bundle_1', false, null], ['rt_bundle_2', false, null], ['rt_bundle_3', false, null]], 'owned, short and buy cards try; soon hides it; no button elsewhere');
+  const c = card(r.root, 'flashes_v2');
+  c.one('counter-try').click();
+  assert.equal(c.one('counter-art').dataset.demo, 'flashes');
+  assert.ok(c.one('counter-demo'), 'the stage is in the art box');
+  await wait(40);
+  assert.equal(medias.length, 1, 'one deal asked for the visit'); assert.equal(medias[0].count, 4);
+  assert.equal(st.debug().demo.kind, 'flashes');
+  const pics = c.all('counter-demo-pic').filter((p) => !p.hidden);
+  assert.equal(pics.length, 1, 'one flash card');
+  assert.equal(pics[0].dataset.url, 'https://ccp.assets/a/one.gif', 'the dealt picture, from a mapped origin only');
+  assert.ok(pics[0].style.left && pics[0].style.transform.includes('rotate('));
+  card(r.root, 'jackpot_remix').one('counter-try').click();
+  assert.equal(c.one('counter-demo'), null, 'one preview at a time');
+  assert.equal(card(r.root, 'jackpot_remix').one('counter-art').dataset.demo, 'remix');
+  await wait(40);
+  assert.deepEqual(medias.length, 1);
+  assert.equal(card(r.root, 'jackpot_remix').all('counter-demo-pic').filter((p) => !p.hidden).length, 4);
+  assert.equal(card(r.root, 'jackpot_remix').all('counter-demo-pic').filter((p) => p.dataset.url === 'https://evil.example/x.gif').length, 0, 'an unmapped url never loads');
+  st.suspend(true);
+  assert.equal(st.debug().demo, null, 'suspend stops it');
+  card(r.root, 'jackpot_remix').one('counter-try').click();
+  assert.equal(st.debug().demo, null, 'and nothing starts while suspended');
+  st.suspend(false);
+  card(r.root, 'jackpot_remix').one('counter-try').click();
+  assert.equal(st.debug().demos, 3);
+  await st.close();
+  assert.equal(st.debug().demo, null, 'close stops it');
+  assert.deepEqual(fx, [], 'never an fx over the bridge');
+  assert.equal(r.server.user.sp, 30, 'nothing charged');
+  st.destroy();
+});
+
+test('Try it under reduced motion: the settled frame, no pictures when the flash gate is off', async () => {
+  const r = room({ sp: 300, on: '*' }, { reduced: true });
+  r.ctx.gates = { flash: false, subliminal: true, spiral: true, brainDrain: true };
+  r.ctx.media = () => Promise.resolve({ gifs: [{ key: 'g0', url: 'https://ccp.assets/a/one.gif' }], words: [] });
+  const st = await mount(r.ctx);
+  await st.open();
+  const c = card(r.root, 'bubbles_v2');
+  c.one('counter-try').click();
+  await wait(40);
+  const a = c.all('counter-demo-pic').filter((p) => !p.hidden).map((p) => [p.style.left, p.style.top, p.dataset.kind]);
+  await wait(40);
+  const b = c.all('counter-demo-pic').filter((p) => !p.hidden).map((p) => [p.style.left, p.style.top, p.dataset.kind]);
+  assert.equal(a.length, 4); assert.deepEqual(a, b, 'held still');
+  assert.ok(a.every(([, , k]) => k === 'bubble'));
+  assert.ok(c.all('counter-demo-pic').every((p) => !p.dataset.url), 'flash off: plates, no pictures');
+  st.destroy();
+});
+
 test('destroy frees the page: root, keydown, onSp, onSettings and the stylesheet', async () => {
   const r = room({ on: '*' });
   const st = await mount(r.ctx);

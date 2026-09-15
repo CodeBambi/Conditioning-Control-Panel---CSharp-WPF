@@ -11,7 +11,8 @@ namespace ConditioningControlPanel.Tests;
 /// <summary>
 /// THE BACK ROOM's own Options (CONTRACT 10.14): the tunnel vision and melt switches default ON for new and
 /// existing settings files and keep a player's off, <c>room-option</c> accepts only its three shapes, and a
-/// valid one lands in the settings.
+/// valid one lands in the settings. Since the authored show (2026-09-15) the switches dress the room only;
+/// the host gates nothing on them (BackRoomFxPlanTests pins that).
 /// </summary>
 public class BackRoomRoomOptionsTests
 {
@@ -21,14 +22,6 @@ public class BackRoomRoomOptionsTests
         var s = new AppSettings();
         Assert.True(s.BackRoomTunnel);
         Assert.True(s.BackRoomMelt);
-    }
-
-    [Fact]
-    public void NoSettings_ShutsEveryGate_TheTunnelToo()
-    {
-        // FxGates.Tunnel defaults to true, so the no-settings fallback must name it.
-        foreach (var p in typeof(FxGates).GetProperties().Where(p => p.PropertyType == typeof(bool)))
-            Assert.False((bool)p.GetValue(FxGates.AllOff)!, p.Name);
     }
 
     [Fact]

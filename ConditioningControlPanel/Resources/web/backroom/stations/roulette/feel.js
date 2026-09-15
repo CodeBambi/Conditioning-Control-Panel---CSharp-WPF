@@ -193,3 +193,144 @@ export function sampleRun(plan, sec) {
 
 /** Where the ball rests in pocket `index`, relative to the rotor. */
 export const restRel = (index) => (index + 0.5) * SEG;
+
+/* ---------------------------------------------------------------------------------------------
+ * THE HOST RECIPE (the slot's pattern, section 4 ids). Every beat of a spin maps to the host's
+ * fullscreen effects, on top of the moments (shared/hypno/moments.js keeps the tunnel run, the
+ * haze, the wake spiral hold, the wash and the pocket GIF). PURE: what fires and when, gated and
+ * cooled here so node:test holds it to its word; station.js only plays what this table says.
+ *
+ * Law I: a beat before the landing frame (nomore, launch, wake, rattle) is the same for every
+ * spin whatever the tape holds, so nothing on the screen tells the pocket before the ball does.
+ * The wake is shown as text at its launch already, so its beat is allowed to know it woke.
+ * Law VI: `skip` fires nothing; the station drops its cooldowns, the moments release their holds
+ * and the host lets a one-shot settle (suspend and close cancel every primitive the room started).
+ * Law 6 (Calm): motion steps drop (a flash burst, a GIF storm, the jackpot hero); words and spirals
+ * stay and the host halves them. Nothing is halved here (Normal values only).
+ * Gates: the page reads the host's five (flash, subliminal, spiral, brainDrain, tunnel) and drops
+ * a step whose gate is off; the host still enforces every toggle per primitive.
+ * ------------------------------------------------------------------------------------------ */
+
+export const FX = Object.freeze({
+  STREAK_FROM: 2,             // the second paying spin in a row brings the storm
+  COOLDOWN_MS: Object.freeze({
+    'fx.sub_single': 4000, 'fx.sub_pair': 8000, 'fx.sub_cascade': 12000,
+    'fx.spiral_brief': 6000, 'fx.spiral_full': 12000,
+    'fx.gif_burst': 6000, 'fx.gif_storm': 20000, 'fx.jackpot': 60000, 'fx.melt': 30000,
+  }),
+});
+
+/** A section 4 id -> the page gate that drops it ('any' = fires while any of flash, spiral, subliminal is on). */
+export const FX_GATE = Object.freeze({
+  'fx.gif_burst': 'flash', 'fx.gif_storm': 'flash',
+  'fx.sub_single': 'subliminal', 'fx.sub_pair': 'subliminal', 'fx.sub_cascade': 'subliminal',
+  'fx.spiral_brief': 'spiral', 'fx.spiral_full': 'spiral',
+  'fx.jackpot': 'any', 'fx.melt': 'brainDrain',
+});
+
+/** Steps Calm strips (the mockup's reduced motion): a flash burst, a GIF rain, the jackpot hero. */
+const MOTION = Object.freeze(['fx.gif_burst', 'fx.gif_storm', 'fx.jackpot']);
+
+const deepFreeze = (o) => { if (o && typeof o === 'object' && !Object.isFrozen(o)) { Object.freeze(o); for (const v of Object.values(o)) deepFreeze(v); } return o; };
+
+/**
+ * The table. A step: { fx, gif?: the spin's picture key rides in symbols, words?: n word keys ride in symbols,
+ * when?: 'full' | 'below_full' (the intensity it needs), once?: 'spin' (at most once a spin) }.
+ */
+export const FX_RECIPE = deepFreeze({
+  'nomore': [{ fx: 'fx.sub_single', words: 1 }],                                       // the press frame (Law VIII), before any reply
+  'launch': [{ fx: 'fx.gif_burst', gif: true }],                                        // every spin's launch, wake or not
+  'wake': [{ fx: 'fx.sub_single', words: 1 }],                                          // a Spiral Wake's launch (the spiral hold is the moments')
+  'rattle': [{ fx: 'fx.sub_single', words: 1, once: 'spin' }],                          // the first fret clip
+  'run': [],                                                                             // the tunnel run is moments.tunnel(rouletteRunLevel)
+  'near': [{ fx: 'fx.spiral_brief' }],                                                  // a miss one pocket off a covered number
+  'land.miss': [],                                                                       // the page's chip vortex, nothing fullscreen
+  'land.win': [{ fx: 'fx.sub_pair', words: 2 }],                                        // an outside bet pays
+  'land.straight': [{ fx: 'fx.sub_cascade', gif: true }],                               // a straight-up hit (the wash and the pocket GIF are the moments')
+  'land.wake': [{ fx: 'fx.spiral_full' }],                                              // a woken win: the turret's spiral goes full
+  'land.full': [{ fx: 'fx.jackpot', gif: true, when: 'full' }, { fx: 'fx.sub_cascade', gif: true, when: 'below_full' }],   // a straight-up hit on a wake
+  'streak': [{ fx: 'fx.gif_storm', gif: true }],                                        // STREAK_FROM paying spins in a row
+  'skip': [],                                                                            // Back or suspend (Law VI)
+});
+
+export const FX_BEATS = Object.freeze(Object.keys(FX_RECIPE));
+
+/**
+ * The straight chips one pocket off the landing on the WHEEL (not the mat). Reads the tape's bets and
+ * state.wheel, never a page copy of the order. -> the covered neighbour numbers (empty when none).
+ */
+export function nearMisses(read, bets, wheel) {
+  const w = Array.isArray(wheel) ? wheel : [];
+  const i = read ? Number(read.index) : -1;
+  if (!(i >= 0 && i < w.length) || !Array.isArray(bets)) return [];
+  const n = w.length, left = w[(i - 1 + n) % n], right = w[(i + 1) % n];
+  const straights = new Set(bets.map((b) => (b && /^s\d+$/.test(String(b.spot)) ? Number(String(b.spot).slice(1)) : NaN)));
+  return [left, right].filter((x) => Number.isFinite(x) && straights.has(x));
+}
+
+/** The landing beat for a read outcome (tape.readOutcome). `near` = the covered neighbours (nearMisses) on a miss. */
+export function landBeat(read, near = []) {
+  if (!read || !(read.pay > 0)) return Array.isArray(near) && near.length ? 'near' : 'land.miss';
+  if (read.straight && read.wake) return 'land.full';
+  if (read.straight) return 'land.straight';
+  return read.wake ? 'land.wake' : 'land.win';
+}
+
+const gateOn = (gates, fx) => {
+  const g = gates || {};
+  const on = (k) => g[k] !== false;
+  const gate = FX_GATE[fx];
+  return gate === 'any' ? on('flash') || on('spiral') || on('subliminal') : on(gate);
+};
+
+/**
+ * What a beat fires, after the gates, Calm and the intensity. `streak` = paying spins in a row, this one
+ * included: the storm rides a paying landing at STREAK_FROM and above.
+ * -> [{ fx, gif, words, once }] in firing order (the beat's own steps first, then the streak's)
+ */
+export function fxPlan(beat, { gates = null, calm = false, full = false, streak = 0 } = {}) {
+  const rows = FX_RECIPE[beat];
+  if (!rows) return [];
+  const list = rows.slice();
+  // Brake 2, one hero per beat: the storm rides a paying landing, never the jackpot hero's own frame.
+  if (beat.startsWith('land.') && beat !== 'land.miss' && streak >= FX.STREAK_FROM && !(full && !calm && list.some((s) => s.fx === 'fx.jackpot'))) list.push(...FX_RECIPE.streak);
+  const isFull = !!full && !calm;
+  return list.filter((s) => {
+    if (s.when === 'full' && !isFull) return false;
+    if (s.when === 'below_full' && isFull) return false;
+    if (calm && MOTION.includes(s.fx)) return false;
+    return gateOn(gates, s.fx);
+  }).map((s) => ({ fx: s.fx, gif: !!s.gif, words: s.words || 0, once: s.once || null }));
+}
+
+/** The dealt keys a step carries: the spin's picture (deck.pickKey) and `words` word keys turned by the spin index. */
+export function fxSymbols(step, { gif = null, spin = 0, wordCount = 4 } = {}) {
+  const out = [];
+  if (step.gif && typeof gif === 'string' && /^g\d{1,2}$/.test(gif)) out.push(gif);
+  const n = Math.max(1, Math.trunc(Number(wordCount)) || 4), i = Math.max(0, Math.trunc(Number(spin)) || 0);
+  for (let k = 0; k < (step.words || 0); k++) out.push('s' + ((i + k) % n));
+  return out;
+}
+
+/** The cooldown ledger: one clock per fx id (FX.COOLDOWN_MS) and the once-a-spin steps. Back and suspend reset it. */
+export function createFxCooldowns() {
+  let last = new Map(), spinKey = null, spent = new Set();
+  return {
+    /** May `step` fire at `nowMs` for spin `spin`? Taking it starts its cooldown. */
+    take(step, nowMs, spin = null) {
+      const fx = typeof step === 'string' ? step : step.fx, once = typeof step === 'string' ? null : step.once;
+      const key = fx + '@' + once;
+      if (once === 'spin') {
+        if (spin !== spinKey) { spinKey = spin; spent = new Set(); }
+        if (spent.has(key)) return false;
+      }
+      const gap = FX.COOLDOWN_MS[fx] || 0, prev = last.get(fx);
+      if (prev != null && nowMs - prev < gap) return false;   // cooled: the once-a-spin step stays unspent for a later clip
+      last.set(fx, nowMs);
+      if (once === 'spin') spent.add(key);
+      return true;
+    },
+    reset() { last = new Map(); spinKey = null; spent = new Set(); },
+    debug() { return { last: Object.fromEntries(last), spin: spinKey, spent: [...spent] }; },
+  };
+}

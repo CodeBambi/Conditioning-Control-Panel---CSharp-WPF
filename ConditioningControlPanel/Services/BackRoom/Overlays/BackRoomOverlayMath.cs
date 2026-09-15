@@ -54,13 +54,14 @@ public static class BackRoomOverlayMath
     /// <summary>The start box when the page gave no usable rect (the mockup's slice box).</summary>
     public const double CentreBoxW = 60, CentreBoxH = 44;
 
-    public const int GrowMs = 700, GifFadeMs = 900, StillFadeMs = 300;
+    public const int GrowMs = 700, GifFadeMs = 900;
     /// <summary>The page behind a full-size gif-from dims under <c>rgba(8,4,14, 0.55)</c>, so it reads at 45%.</summary>
     public const double DimAlpha = 0.55;
     public const int WashRiseMs = 80;
     public const double WashDecayPerSec = 4.5;
     public const double WashPictureHeight = 0.42;
-    public const int SpiralFadeInMs = 800, SpiralFadeOutMs = 1200;
+    /// <summary>The authored spiral envelope (2026-09-15): in over 250 ms, out over 500 ms. A spiral never pops.</summary>
+    public const int SpiralFadeInMs = 250, SpiralFadeOutMs = 500;
 
     // ---- coordinates -----------------------------------------------------------------------------
 
@@ -171,28 +172,18 @@ public static class BackRoomOverlayMath
     /// The mockup's fullscreen GIF: the image lerps from <paramref name="from"/> to a centred box that
     /// covers the screen (<c>max(W, H x aspect) x scale</c> wide) over 700 ms, ease in-out, and fades over
     /// the last 900 ms. Behind it the screen dims under 0.55 black, rising with the growth, unless
-    /// <paramref name="scale"/> is below 1 (it then sits inside a running spiral). <paramref name="still"/>
-    /// (MotionLevel Off) has no growth: full size, 300 ms fades.
+    /// <paramref name="scale"/> is below 1 (it then sits inside a running spiral).
     /// </summary>
     public static GifFromFrame GifFrom(double ageMs, int durationMs, PxRect from, double w, double h, double aspect,
-        double scale, double dimLevel, bool still)
+        double scale, double dimLevel)
     {
         if (ageMs < 0 || ageMs >= durationMs) return new GifFromFrame(from, 0, 0);
         double ar = aspect > 0.05 && double.IsFinite(aspect) ? aspect : 4.0 / 3;
         double tw = Math.Max(w, h * ar) * scale, th = tw / ar;
         var cover = new PxRect((w - tw) / 2, (h - th) / 2, tw, th);
 
-        double grow, fade;
-        if (still)
-        {
-            grow = 1;
-            fade = Math.Min(1, Math.Min(ageMs / StillFadeMs, (durationMs - ageMs) / StillFadeMs));
-        }
-        else
-        {
-            grow = EaseInOut(ageMs / GrowMs);
-            fade = ageMs > durationMs - GifFadeMs ? Math.Max(0, (durationMs - ageMs) / GifFadeMs) : 1;
-        }
+        double grow = EaseInOut(ageMs / GrowMs);
+        double fade = ageMs > durationMs - GifFadeMs ? Math.Max(0, (durationMs - ageMs) / GifFadeMs) : 1;
         var image = new PxRect(Lerp(from.X, cover.X, grow), Lerp(from.Y, cover.Y, grow), Lerp(from.W, cover.W, grow), Lerp(from.H, cover.H, grow));
         double dim = scale >= 1 ? DimAlpha * fade * (0.55 + 0.45 * grow) * dimLevel : 0;
         return new GifFromFrame(image, fade, dim);
@@ -200,7 +191,7 @@ public static class BackRoomOverlayMath
 
     // ---- spiral-loom -----------------------------------------------------------------------------
 
-    /// <summary>0..1 before the step's alpha: in over 800 ms, out over 1200 ms from the hold's end or
+    /// <summary>0..1 before the step's alpha: in over 250 ms, out over 500 ms from the hold's end or
     /// from a release, whichever comes first.</summary>
     public static double SpiralEnvelope(double ageMs, int holdMs, double? releasedAtAgeMs)
     {
@@ -230,8 +221,8 @@ public static class BackRoomOverlayMath
 
 /// <summary>
 /// The tunnel's level over time (one per room, drawn on every screen). It eases toward the wanted level
-/// at 1.4/s closing and 2.2/s opening (the mockup's exponential approach), steps without easing when
-/// still, and lets go by itself when nobody refreshed the want for 1500 ms.
+/// at 1.4/s closing and 2.2/s opening (the mockup's exponential approach) and lets go by itself when
+/// nobody refreshed the want for 1500 ms.
 /// </summary>
 public sealed class TunnelModel
 {
@@ -255,15 +246,11 @@ public sealed class TunnelModel
     /// <summary>Gone at once (suspend, close, exit, station-close).</summary>
     public void Cancel() { Want = 0; Level = 0; }
 
-    public double Step(long nowMs, double dtMs, bool still)
+    public double Step(long nowMs, double dtMs)
     {
         if (Want > 0 && nowMs - _refreshedAt > StaleMs) Want = 0;
-        if (still) Level = Want;
-        else
-        {
-            double rate = Want > Level ? CloseRate : OpenRate;
-            Level += (Want - Level) * Math.Min(1, Math.Max(0, dtMs) / 1000 * rate);
-        }
+        double rate = Want > Level ? CloseRate : OpenRate;
+        Level += (Want - Level) * Math.Min(1, Math.Max(0, dtMs) / 1000 * rate);
         if (Want <= 0 && Level < Epsilon) Level = 0;
         return Level;
     }

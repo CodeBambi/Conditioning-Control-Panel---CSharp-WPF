@@ -95,9 +95,13 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
   };
   const panel=createCustomizationPanel({mount,lex,vending,decorations:props.models,select,getState,restore,preview,slotOrder,hasOwnership:id=>owned.has(id),onClose:()=>{props.endPreview();travel=null;shown=null;onPreview(null);}});
   const ray=new T.Raycaster(),pointer=new T.Vector2();let down=null;
-  const onDown=e=>{if(e.button===0&&isActive())down={x:e.clientX,y:e.clientY,t:performance.now()};};
+  // A finger on the room pane while the lever close-up is up: a horizontal swipe pans to the next cabinet
+  // (swipe left, the way a carousel reads) or the previous one; the sheet keeps its own pointer events.
+  const SWIPE=40;
+  const onDown=e=>{if(e.button===0&&(isActive()||panel.slotArrows))down={x:e.clientX,y:e.clientY,t:performance.now()};};
   const onUp=e=>{
     if(!down)return;const start=down;down=null;
+    if(panel.opened){const dx=e.clientX-start.x,dy=e.clientY-start.y;if(panel.slotArrows&&Math.abs(dx)>=SWIPE&&Math.abs(dx)>Math.abs(dy)*1.5&&performance.now()-start.t<900)panel.stepSlot(dx<0?1:-1);return;}
     if(!isActive()||Math.hypot(e.clientX-start.x,e.clientY-start.y)>7||performance.now()-start.t>650)return;
     const rect=canvas.getBoundingClientRect();pointer.set((e.clientX-rect.left)/rect.width*2-1,1-(e.clientY-rect.top)/rect.height*2);
     ray.setFromCamera(pointer,camera);

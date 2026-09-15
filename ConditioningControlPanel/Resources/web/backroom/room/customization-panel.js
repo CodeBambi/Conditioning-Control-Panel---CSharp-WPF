@@ -37,7 +37,8 @@ export function createCustomizationPanel({mount,vending,decorations=[],lex=(_,f)
     if(chosen<0)return;
     if(chosen>=BAYS){preview('props',chosen-BAYS,chosen-BAYS);return;}
     preview(chosen<3?'screens':chosen<6?use:'floor',chosen<3?chosen:chosen<6?chosen-3:chosen-6,chosen<3?chosen:target);}
-  function choose(i){chosen=i;target=0;use='handles';view.focus(i);paint();showPreview();}
+  // Switching between lever items keeps the cabinet in view: the target is the user's, not the item's.
+  function choose(i){const keep=chosen>=3&&chosen<6&&i>=3&&i<6;chosen=i;if(!keep){target=0;use='handles';}view.focus(i);paint();showPreview();}
   function apply(category,value,index=0){const pending=select(category,value,index);paint();showPreview();if(pending?.then)pending.then(()=>{if(!disposed)paint();});}
   function row(parent,entries,active,fn){entries.forEach(([key,label],i)=>{const b=button(parent,L(key,label),()=>fn(i));b.setAttribute('aria-pressed',String(active===i));});}
   function paint(){
@@ -65,7 +66,7 @@ export function createCustomizationPanel({mount,vending,decorations=[],lex=(_,f)
   panel.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Escape'){e.preventDefault();close();return;}trap(e);});
   for(const type of ['keyup','pointerdown','pointerup','click','wheel']){panel.addEventListener(type,e=>e.stopPropagation());arrows.addEventListener(type,e=>e.stopPropagation());}
   mount.append(style,arrows,panel);paint();
-  return {refresh:paint,open(){if(disposed||!panel.hidden)return;snapshot=structuredClone(state());previousFocus=doc.activeElement;panel.hidden=false;chosen=-1;page=0;view.setPage(0);view.focus(-1);paint();preview('room',0,0);closeButton.focus({preventScroll:true});},close,get opened(){return !disposed&&!panel.hidden;},get selectedItem(){return chosen;},update(dt,still){if(!panel.hidden)view.update(dt,still);},draw(renderer){return !disposed&&!panel.hidden&&view.draw(renderer);},
+  return {refresh:paint,stepSlot:step,get slotArrows(){return !arrows.hidden;},open(){if(disposed||!panel.hidden)return;snapshot=structuredClone(state());previousFocus=doc.activeElement;panel.hidden=false;chosen=-1;page=0;view.setPage(0);view.focus(-1);paint();preview('room',0,0);closeButton.focus({preventScroll:true});},close,get opened(){return !disposed&&!panel.hidden;},get selectedItem(){return chosen;},update(dt,still){if(!panel.hidden)view.update(dt,still);},draw(renderer){return !disposed&&!panel.hidden&&view.draw(renderer);},
     /* What the panel leaves the room, in viewport pixels (y up from the canvas bottom): the strip beside
        it while it is docked down one edge, or the band above it once it is a full-width sheet (phone). */
     previewBox(w,h){const r=panel.getBoundingClientRect();

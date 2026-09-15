@@ -37,6 +37,8 @@ const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 const KEY_RE = /^g\d{1,2}$/;
 
 /** Pocket colours (10.13.F): 0 mint, rose rose, plum plum. */
+import { kit as sound } from '../sound/kit.js';
+
 export const POCKET_COLORS = Object.freeze({ zero: '#5fffd0', rose: '#ff5fa2', plum: '#9b6bff' });
 
 function deepFreeze(o) {
@@ -47,7 +49,8 @@ function deepFreeze(o) {
 /*
  * The table. host steps, in order:
  *   { fx, args, gif?: the caller's picture key rides in symbols, from?: the caller's rect goes in args.from,
- *     full?: only at Full intensity, bloomArgs?: args instead when this hand already bloomed }
+ *     full?: only at Full intensity, bloomArgs?: args instead when this hand already bloomed,
+ *     light?: a small overlay (a word, the flash windows) that may play while holdScreen is on, words?: n dealt word keys }
  *   { tunnel: 'wheel' | 'ball' }       continuous: played once, then the station calls tunnel(level) each frame (wheelTurnLevel, rouletteRunLevel)
  *   { tunnel: 'breath', peak, ms }     timed: this module runs peak x sin(PI x p) over ms, then 0
  * release: the moment first releases every hold this station still has (a roulette landing).
@@ -65,9 +68,24 @@ export const MOMENTS = deepFreeze({
     { fx: 'fx.wash', args: { color: '#e8c27a', strength: 1 } },
   ], page: ['quiet_room', 'reveal'] },
   'cards.sit': { host: [], page: ['sit_fan'] },
+  // The table beats (2026-09-15). `light` steps are the app's small overlays (a subliminal word, the flash
+  // windows), never fullscreen, so they may play while a decision is open (holdScreen). `words: n` sends
+  // n of the caller's dealt word keys (s0..s3), so a whisper is one word and a split is two.
+  'cards.deal': { host: [{ fx: 'fx.sub_single', args: {}, words: 1, light: true }], page: [] },
+  'cards.hit': { host: [{ fx: 'fx.sub_single', args: {}, words: 1, light: true }], page: [] },
+  'cards.double': { host: [{ fx: 'fx.gif_burst', args: {}, light: true }], page: [] },
+  'cards.split': { host: [{ fx: 'fx.sub_single', args: {}, words: 2, light: true }], page: [] },
+  'cards.reveal': { host: [{ fx: 'fx.gif_burst', args: {}, light: true }], page: [] },
+  'cards.bust': { host: [], page: [] },   // the whisper is withheld: the silence is the beat; the settle's cards.lose carries the loss
   'cards.bloom': { host: [{ fx: 'fx.gif_from', args: { ms: 4000 }, gif: true, from: true }, { fx: 'fx.wash', args: { color: '#ff5fa2', strength: 0.8 } }],
     page: ['ace_glow'], bloom: true },
   'cards.win': { host: [{ fx: 'fx.wash', args: { color: '#5fffd0', strength: 0.7 }, gif: true, bloomArgs: { color: '#5fffd0', strength: 0.9 } }],
+    page: ['win_tunnel', 'chip_vortex'], settles: true },
+  'cards.dealer_bust': { host: [{ fx: 'fx.gif_burst', args: {} }, { fx: 'fx.wash', args: { color: '#5fffd0', strength: 0.8 }, gif: true, bloomArgs: { color: '#5fffd0', strength: 0.9 } }],
+    page: ['win_tunnel', 'chip_vortex'], settles: true },
+  'cards.streak': { host: [{ fx: 'fx.sub_pair', args: {}, words: 2 }, { fx: 'fx.wash', args: { color: '#5fffd0', strength: 0.9 }, gif: true, bloomArgs: { color: '#5fffd0', strength: 0.9 } }],
+    page: ['win_tunnel', 'chip_vortex'], settles: true },
+  'cards.sweep': { host: [{ fx: 'fx.gif_storm', args: {} }, { fx: 'fx.wash', args: { color: '#e8c27a', strength: 1 }, gif: true, bloomArgs: { color: '#e8c27a', strength: 1 } }],
     page: ['win_tunnel', 'chip_vortex'], settles: true },
   'cards.lose': { host: [{ tunnel: 'breath', peak: 0.75, ms: 2600 }], page: ['chip_vortex'], settles: true },
   'cards.push': { host: [], page: [], settles: true },
@@ -80,7 +98,10 @@ export const MOMENTS = deepFreeze({
     page: ['chips_in', { name: 'pulled_pair', when: 'wake' }] },
 });
 
-const GATE_OF = { 'fx.wash': 'flash', 'fx.gif_from': 'flash', 'fx.loom_spiral': 'spiral', 'fx.haze': 'brainDrain' };
+const GATE_OF = { 'fx.wash': 'flash', 'fx.gif_from': 'flash', 'fx.loom_spiral': 'spiral', 'fx.haze': 'brainDrain',
+  // Section 4 ids the cards table borrows: dressed plain by their first gate; the host enforces every toggle in the recipe.
+  'fx.gif_burst': 'flash', 'fx.gif_storm': 'flash', 'fx.sub_single': 'subliminal', 'fx.sub_pair': 'subliminal' };
+const WORD_RE = /^s\d$/;
 
 /** Which landing a Daily Daze result gets. */
 export function wheelSize(result) {
@@ -129,8 +150,9 @@ export function createMoments(ctx, { station = '' } = {}) {
   const say = (m) => { try { if (c.bridge && typeof c.bridge.log === 'function') c.bridge.log('warn', m); else if (typeof c.log === 'function') c.log(m); } catch (e) { /* noop */ } };
   const gates = () => {
     const g = c.gates;
-    return g && typeof g === 'object' ? { flash: g.flash !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false, tunnel: g.tunnel !== false }
-      : { flash: true, spiral: true, brainDrain: true, tunnel: true };
+    return g && typeof g === 'object' ? { flash: g.flash !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false, tunnel: g.tunnel !== false,
+      subliminal: g.subliminal !== false }
+      : { flash: true, spiral: true, brainDrain: true, tunnel: true, subliminal: true };
   };
   const holds = new Map();   // token -> fxId
   let held = false, bloomed = false, disposed = false;
@@ -190,13 +212,21 @@ export function createMoments(ctx, { station = '' } = {}) {
     }
   }) : null;
   const holding = (fxId) => { for (const v of holds.values()) { if (v === fxId) return true; } return false; };
+  /** The kit under a host step it has just fired: the spiral's hum for as long as the spiral (a hold runs until its
+   *  release), a 6 s breath under the haze, the whisper bed under each subliminal word (a chain climbs a tone a word). */
+  function cueFor(step, args, symbols) {
+    if (step.fx === 'fx.loom_spiral') sound.play('spiral', { ms: args.hold ? 0 : args.ms });
+    else if (step.fx === 'fx.haze') sound.play('breath');
+    else if (step.words > 0) { const n = Math.min(3, Array.isArray(symbols) ? symbols.length : 1); for (let i = 0; i < n; i++) sound.play('word', { index: i, at: i * 0.9 }); }
+  }
 
   const api = {
     /**
      * Fire moment `id`. Returns the tokens fired, the page effects to run, and whether holdScreen stopped the host steps.
-     * `color` and `strength` fill in a wash only where the table sets none; `from` and `gif` ride on the steps that take them.
+     * `color` and `strength` fill in a wash only where the table sets none; `from` and `gif` ride on the steps that take them;
+     * `words` (dealt word keys s0..s3) feed the steps that take `words: n`. While the screen is held only `light` steps play.
      */
-    play(id, { color, strength, from, gif, wake = false } = {}) {
+    play(id, { color, strength, from, gif, words, wake = false } = {}) {
       const m = Object.prototype.hasOwnProperty.call(MOMENTS, id) ? MOMENTS[id] : null;
       const out = { tokens: [], page: [], held: false };
       if (!m) { say('moments: unknown moment ' + id + (station ? ' (' + station + ')' : '')); return out; }
@@ -208,10 +238,12 @@ export function createMoments(ctx, { station = '' } = {}) {
       const afterBloom = bloomed;
       if (m.bloom) bloomed = true;
       if (m.settles) bloomed = false;
-      if (held) { out.held = true; return out; }
+      if (held && m.host.some((s) => !s.light)) out.held = true;
       const g = gates();
+      const wordKeys = Array.isArray(words) ? words.filter((w) => typeof w === 'string' && WORD_RE.test(w)) : [];
       for (const step of m.host) {
-        if (step.tunnel === 'breath') { if (g.tunnel) breath(step.peak, step.ms); continue; }
+        if (held && !step.light) continue;
+        if (step.tunnel === 'breath') { if (g.tunnel) { breath(step.peak, step.ms); sound.play('breath', { ms: step.ms }); } continue; }
         if (step.tunnel) continue;
         if (step.full && !full) continue;
         const gate = GATE_OF[step.fx];
@@ -225,11 +257,13 @@ export function createMoments(ctx, { station = '' } = {}) {
           if (!Number.isFinite(args.strength) && Number.isFinite(strength)) args.strength = Math.min(1, Math.max(0.1, strength));
         }
         if (step.from) { const r = cleanRect(from); if (r) args.from = r; }
-        const symbols = step.gif && !bloomStep && typeof gif === 'string' && KEY_RE.test(gif) ? [gif] : undefined;
+        let symbols = step.gif && !bloomStep && typeof gif === 'string' && KEY_RE.test(gif) ? [gif] : undefined;
+        if (step.words > 0 && wordKeys.length) symbols = wordKeys.slice(0, step.words);
         let p = null;
         try { p = c.fx(step.fx, symbols, args); } catch (e) { p = null; }
         if (p && typeof p.catch === 'function') p.catch(() => {});
         const token = p && typeof p.token === 'string' ? p.token : null;
+        cueFor(step, args, symbols);
         if (!token) continue;
         out.tokens.push(token);
         if (args.hold) holds.set(token, step.fx);
@@ -255,13 +289,14 @@ export function createMoments(ctx, { station = '' } = {}) {
       const list = Array.isArray(tokens) ? tokens : [tokens];
       for (const t of list) {
         if (typeof t !== 'string' || !t) continue;
+        if (holds.get(t) === 'fx.loom_spiral') sound.stop('spiral');
         holds.delete(t);
         if (typeof c.fxRelease === 'function') { try { c.fxRelease(t); } catch (e) { /* noop */ } }
       }
     },
     /** Suspend or close: tunnel 0 now, every hold released, every timer stopped. */
     cancel() {
-      stopBreath();
+      stopBreath(); sound.stop('spiral'); sound.stop('breath'); sound.stop('word');
       tunnelNow0();
       if (keepTimer) { clearInterval(keepTimer); keepTimer = 0; }
       releaseAll();

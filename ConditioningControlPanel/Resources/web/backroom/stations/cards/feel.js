@@ -7,6 +7,8 @@
  *               split, the hole card turning, the dealer's draws, the bloom
  *               frame, the settle frame)
  *   momentOf    a settled hand -> cards.win | cards.lose | cards.push
+ *   settleMoment the settle beat with its size: sweep, streak, dealer_bust, win, lose, push
+ *   streakAfter, mayFire, wordKeys   the win streak, the beat cooldowns, which dealt words a whisper takes
  *   isBloom     a paid player blackjack (the bloom moment)
  *   bestCard    the highest-value card (ace highest) in the player's winning hands
  *   vortexOf    the chip vortex: direction and chip count
@@ -18,7 +20,7 @@
  * No rules and no randomness: every outcome is the server's.
  * ==========================================================================*/
 
-import { cardValue } from './hand.js';
+import { cardValue, totalOf } from './hand.js';
 import { MOMENTS } from '../../shared/hypno/moments.js';
 
 export const TIMING = Object.freeze({
@@ -41,7 +43,21 @@ export const TIMING = Object.freeze({
   bloomMs: 4000,       // fx.gif_from on the ace: Deal waits this out
   washMs: 900,         // the host wash (10.13.B): gone at 900 ms
   edgesTailMs: 150,    // after the losing breath: the last fx-tunnel 0 waits out the 100 ms post gap
+  streakMs: 1700,      // fx.sub_pair at Normal: two words at 220 ms, then the 1.2 s spiral
+  sweepMs: 2000,       // fx.gif_storm at Normal: the 2 s gif rain
 });
+
+/** The beats between the deal and the settle, and how often each may fire (ms): a whisper per hit at most every 1.2 s. */
+export const COOLDOWN_MS = Object.freeze({ 'cards.hit': 1200 });
+export const mayFire = (id, lastAt, now) => !(Number.isFinite(lastAt)) || now - lastAt >= (COOLDOWN_MS[id] || 0);
+/** `n` dealt word keys from a running cursor over the four words (s0..s3), so the whispers rotate. */
+export const wordKeys = (n, cursor = 0) => Array.from({ length: Math.max(0, Math.min(4, n | 0)) }, (_, i) => 's' + ((((cursor | 0) + i) % 4) + 4) % 4);
+/** Wins in a row after this settled hand: a win adds one, a loss ends it, a push keeps it. */
+export function streakAfter(streak, hand) {
+  const s = Math.max(0, streak | 0), net = hand && hand.result ? hand.result.net : 0;
+  return net > 0 ? s + 1 : net < 0 ? 0 : s;
+}
+export const STREAK_FROM = 3;
 
 /**
  * How long a moment the station just played keeps something fullscreen (ms), so no new decision opens under it.
@@ -51,7 +67,9 @@ export const TIMING = Object.freeze({
  */
 export function screenHoldMs(id, { fired = 0, tunnel = false, still = false } = {}) {
   if (id === 'cards.bloom') return fired > 0 ? Math.round(TIMING.bloomMs * (still ? 0.6 : 1)) : 0;
-  if (id === 'cards.win') return fired > 0 ? TIMING.washMs : 0;
+  if (id === 'cards.win' || id === 'cards.dealer_bust') return fired > 0 ? TIMING.washMs : 0;
+  if (id === 'cards.streak') return fired > 0 ? TIMING.streakMs : 0;
+  if (id === 'cards.sweep') return fired > 0 ? TIMING.sweepMs : 0;
   if (id === 'cards.lose') return tunnel ? MOMENTS['cards.lose'].host.find((s) => s.tunnel === 'breath').ms + TIMING.edgesTailMs : 0;
   return 0;
 }
@@ -63,6 +81,26 @@ export function momentOf(hand) {
   if (!hand || !hand.done || !hand.result) return null;
   const net = hand.result.net;
   return net > 0 ? 'cards.win' : net < 0 ? 'cards.lose' : 'cards.push';
+}
+
+/** Every hand of a split won (two or more hands, none lost or pushed). */
+export const isSweep = (hand) => !!(hand && hand.done && hand.result && hand.hands.length >= 2
+  && hand.result.hands.length === hand.hands.length && hand.result.hands.every((r) => r && WINS.has(r.outcome)));
+/** A win the dealer handed over by busting. */
+export const isDealerBust = (hand) => !!(hand && hand.done && hand.result && hand.result.net > 0 && hand.result.dealerTotal > 21);
+
+/**
+ * The settle beat, one per hand (Brake 2): the biggest that fits. `streak` counts this hand (streakAfter).
+ * sweep (a split, every hand won) > streak (the third win in a row and on) > dealer_bust > win; then lose, push.
+ * Everything here reads the server's settled result: nothing is guessed before the reply (Law I).
+ */
+export function settleMoment(hand, streak = 0) {
+  const base = momentOf(hand);
+  if (base !== 'cards.win') return base;
+  if (isSweep(hand)) return 'cards.sweep';
+  if ((streak | 0) >= STREAK_FROM) return 'cards.streak';
+  if (isDealerBust(hand)) return 'cards.dealer_bust';
+  return 'cards.win';
 }
 
 export const isBloom = (hand) => !!(hand && hand.done && hand.result && hand.hands.length === 1
@@ -129,23 +167,28 @@ export function resultLines(hand) {
  *   { at, op: 'reveal', code }                            the hole card turns
  *   { at, op: 'active', index }                           the hand the player is on
  *   { at, op: 'ready' }                                   decisions are live
+ *   { at, op: 'beat', id, owner?, slot? }                 a table beat on the frame its card shows: cards.deal, cards.hit,
+ *                                                         cards.double, cards.split, cards.bust, cards.reveal (`beats` only)
  *   { at, op: 'settle' }                                  the result shows (moments fire here)
  * `still` (Calm, reduced) puts every step at 0: the settled state, in order. A bloom keeps its gaps to the reveal and
- * the settle, so the settle's wash is never inside the host's 360 ms wash gap after the bloom's.
+ * the settle, so the settle's wash is never inside the host's 360 ms wash gap after the bloom's. `beats` is on for a
+ * reply to the player's own press (Deal, a move): a hand put back on the felt (resume, refresh) has no beats.
  */
-export function planSteps(shown, next, { still = false } = {}) {
+export function planSteps(shown, next, { still = false, beats = false } = {}) {
   const T = TIMING, g = still ? 0 : 1, steps = [];
   if (!next) return steps;
   let t = 0, lastCardAt = -1, bloomAt = -1;
   const push = (op, extra = {}) => steps.push({ at: Math.round(t), op, ...extra });
   const card = (owner, slot, code) => { push('card', { owner, slot, code }); lastCardAt = t; };
+  const beat = (at, id, extra = {}) => { if (beats && id) { const keep = t; t = at; push('beat', { id, ...extra }); t = keep; } };
+  const shownMs = (T.flyMs + T.flipMs) * g;
   const fresh = !shown || shown.id !== next.id;
 
   if (fresh) {
     push('clear');
     t += T.firstMs * g;
     const h = next.hands, two = h.length === 2;
-    card(0, 0, h[0].cards[0]); t += T.dealGapMs * g;
+    card(0, 0, h[0].cards[0]); beat(t + shownMs, 'cards.deal', { owner: 0, slot: 0 }); t += T.dealGapMs * g;
     card('d', 0, next.dealer[0]); t += T.dealGapMs * g;
     if (two) card(1, 0, h[1].cards[0]); else { card(0, 1, h[0].cards[1]); if (isBloom(next)) bloomAt = t + (T.flyMs + T.flipMs) * g; }
     t += T.dealGapMs * g;
@@ -154,10 +197,16 @@ export function planSteps(shown, next, { still = false } = {}) {
       for (let j = two ? 1 : i === 0 ? 2 : 1; j < x.cards.length; j++) { t += T.hitGapMs * g; card(i, j, x.cards[j]); }
     });
   } else {
-    let from = shown.hands.map((x) => x.cards.length);
-    if (shown.hands.length === 1 && next.hands.length === 2) { push('split'); t += T.splitMs * g; from = [1, 1]; }
+    let from = shown.hands.map((x) => x.cards.length), split = false;
+    if (shown.hands.length === 1 && next.hands.length === 2) { push('split'); beat(t + T.splitMs * g, 'cards.split'); t += T.splitMs * g; from = [1, 1]; split = true; }
     next.hands.forEach((x, i) => {
-      for (let j = from[i] || 0; j < x.cards.length; j++) { card(i, j, x.cards[j]); t += T.hitGapMs * g; }
+      const doubled = !!x.doubled && !(shown.hands[i] && shown.hands[i].doubled);
+      for (let j = from[i] || 0; j < x.cards.length; j++) {
+        card(i, j, x.cards[j]);
+        const bust = totalOf(x.cards.slice(0, j + 1)).total > 21;
+        beat(t + shownMs, bust ? 'cards.bust' : split ? null : doubled ? 'cards.double' : 'cards.hit', { owner: i, slot: j });
+        t += T.hitGapMs * g;
+      }
     });
     if (lastCardAt >= 0) t = lastCardAt;
   }
@@ -167,11 +216,12 @@ export function planSteps(shown, next, { still = false } = {}) {
     if (fresh) push('active', { index: next.active });
     if (lastCardAt >= 0) t = lastCardAt + (T.flyMs + T.flipMs) * g;
     push('ready');
-    return steps;
+    return steps.sort((a, b) => a.at - b.at);
   }
   if (bloomAt >= 0) { const keep = t; t = bloomAt; push('bloom'); t = keep; }
   t = bloomAt >= 0 ? bloomAt + T.bjRevealMs : lastCardAt >= 0 ? lastCardAt + T.revealMs * g : t + T.firstMs * g;
   push('reveal', { code: next.dealer[1] });
+  beat(t + T.flipMs * g, 'cards.reveal', { owner: 'd', slot: 1 });
   for (let j = 2; j < next.dealer.length; j++) { t += T.hitGapMs * g; push('card', { owner: 'd', slot: j, code: next.dealer[j] }); }
   t += T.settleMs * (bloomAt >= 0 ? 1 : g);
   push('settle');

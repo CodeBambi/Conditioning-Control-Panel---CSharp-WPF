@@ -8,7 +8,7 @@ Single-zero roulette for SP (CONTRACT.md sections 2-7 and 10.13, binding spec `h
 |---|---|
 | `station.js` | `mount(ctx)` -> `{open, close, suspend, destroy}`. DOM, the chip count, the spins picker (1-5), Spin, tape playback (about 8 s a spin), the cursor, the moments. |
 | `tape.js` | Pure: chips to bets, the client cover-all check (only disables Spin, with the server's word `covers_all`), Law I `shownSp`, reading an outcome for the text, `classify` (retry with the same idem, adopt `tape_unplayed`, refusals). |
-| `feel.js` | Pure: outcome -> moment id, the Lighthouse clock (law 4), the ball's run planned backwards from `outcome.pocket`, timings. |
+| `feel.js` | Pure: outcome -> moment id, the Lighthouse clock (law 4), the ball's run planned backwards from `outcome.pocket`, timings, the host recipe (`FX_RECIPE`: beat -> section 4 ids, gates, Calm, the streak, cooldowns). |
 | `bowl.js` | The canvas bowl: drifting rim cache, rotor, pockets, lighthouse, the run, fret rattle and sparks, turret whirl (Loom), velvet wake. |
 | `mat.js` | The canvas mat (37 straights, sip, sink, deep, rose, plum) and the chips: chip vortex, chips in, the pulled pair. |
 | `bowl-3d.js`, `mat-3d.js` | The seated view on the room's fixture (below): the authored bowl driven by the same core, the authored mat with printed cells, pick planes and live chips. |
@@ -57,15 +57,39 @@ Single-zero roulette for SP (CONTRACT.md sections 2-7 and 10.13, binding spec `h
 | Velvet wake | Full only (the `velvet_wake` page effect), 1.3 s settle |
 | Turret whirl | a wake spin: `kit.draw('whirl')` clipped to the dish at 0.85 x fade x k, `angle = rotor x 2.2`; the arms trail the rotor (`a = base - 1.1 u`); `spiral` gate off: velvet dish and a gold rim glow |
 | Chips | a lost chip spirals into the bowl; a win slides two chips in per winning spot; a `pulled_pair` (wake win) pulls two more out of the whirlpool |
-| Host | only through `createMoments`: `fx-tunnel`, `fx.haze {hold}` at Full, `fx.loom_spiral {wake, hold, 0.65}`, `fx.wash` in the pocket colour (0.6 or 1), `fx.gif_from {from pocket, ms 3600}` |
+| Host (moments) | through `createMoments`: `fx-tunnel`, `fx.haze {hold}` at Full, `fx.loom_spiral {wake, hold, 0.65}`, `fx.wash` in the pocket colour (0.6 or 1), `fx.gif_from {from pocket, ms 3600}` |
+| Host (recipe) | `feel.FX_RECIPE`, fired through `ctx.fx` the way the slot fires section 4 ids (`beat()` in `station.js`), never awaited; on a landing the recipe fires first so the moment's wash and pocket GIF close the frame |
+
+**The host recipe** (`feel.fxPlan(beat, {gates, calm, full, streak})`, `tests/feel.test.mjs`):
+
+| Beat | When | Host ids (Normal) | Notes |
+|---|---|---|---|
+| `nomore` | the press frame, before any reply | `fx.sub_single` (one word key) | Law I: the same for every press |
+| `launch` | each spin's launch | `fx.gif_burst` (the spin's picture key) | wake or not, the same (Law I); Calm strips it |
+| `wake` | a Spiral Wake's launch | `fx.sub_single` | the spiral hold itself is `roulette.wake` (moments); the wake is on screen as text from this frame |
+| `rattle` | the ball's first fret clip (phase `rattle`), once a spin | `fx.sub_single` | |
+| `run` | the ball run | none here | `moments.tunnel(rouletteRunLevel)` each frame |
+| `near` | a miss with a straight chip on a WHEEL neighbour of the pocket (`nearMisses`, from `state.wheel`) | `fx.spiral_brief` | the only fullscreen step a miss gets |
+| `land.miss` | `pay === 0`, no near miss | none | the page's chip vortex |
+| `land.win` | an outside bet pays, no wake, no straight | `fx.sub_pair` (two word keys) | plus the moment's wash 0.6 |
+| `land.straight` | a straight-up hit | `fx.sub_cascade` | plus the moment's wash 1 and pocket GIF |
+| `land.wake` | a woken win, no straight | `fx.spiral_full` | the turret's spiral goes full |
+| `land.full` | a straight-up hit on a wake | Full: `fx.jackpot` (the hero); below Full or Calm: `fx.sub_cascade` | Brake 2: the streak storm stays off the hero's frame |
+| `streak` | rides any paying landing at 2+ paying spins in a row (a miss resets) | `fx.gif_storm` | Calm strips it |
+| `skip` | Back, suspend | none | Law VI: cooldowns reset, `moments.cancel()` releases the holds and the tunnel, the host lets one-shots settle |
+
+- **Gates** (page side, the host still enforces per primitive): `flash` -> `gif_burst`, `gif_storm`; `subliminal` -> `sub_*`; `spiral` -> `spiral_brief`, `spiral_full`; `fx.jackpot` fires while any of the three is on. A gate the host does not send reads as on.
+- **Calm / reduced** strips the motion steps (`gif_burst`, `gif_storm`, `jackpot`) and keeps the words and spirals at Normal values (the host halves, law 6).
+- **Cooldowns** (`FX.COOLDOWN_MS`, one clock per id): `sub_single` 4 s, `sub_pair` 8 s, `spiral_brief` 6 s, `gif_burst` 6 s, `sub_cascade` 12 s, `spiral_full` 12 s, `gif_storm` 20 s, `jackpot` 60 s. The rattle word is once a spin.
+- **Symbols**: gif steps carry `deck.pickKey(tapeId + ':' + i)` (the same 4-GIF deal as `fx.gif_from`); word steps carry `s<n>` keys turned by the spin index (the host resolves them against its own dealt words, a missing one is a random dealt word). Nothing else ever goes back.
 
 - **Calm / reduced** (`ctx.intensity === 'calm'`, `ctx.reduced`, or `prefers-reduced-motion`): page strengths x0.5,
   the rotor eases to a stop and the beam holds at rest, the rattle floor is 0.7, chips appear or fade where they end
   (no travel). The ball still runs its plan (the mockup's reduced motion). Host args stay Normal (the host halves).
 - **Gates** are read live every frame: `flash`, `brainDrain` (haze) and `tunnel` (the run's fx-tunnel) off simply drop host steps (moments); `spiral` off keeps
   the dish velvet. A Spiral Wake always shows as text.
-- **Suspend** cancels the moments, pauses the station clock and disposes the Loom kit and the deck (their keys still
-  pick); resuming makes a new kit and replays the running spin's holds.
+- **Suspend** cancels the moments, resets the recipe's cooldowns, pauses the station clock and disposes the Loom kit and the deck (their keys still
+  pick); resuming makes a new kit and replays the running spin's holds (the recipe fires nothing on a resume: its one-shots settled).
 
 ## Lexicon (`br_roulette_*`, English fallbacks in the page, the same text in `en.json`; `smoke/lexicon.test.mjs` keeps them equal)
 

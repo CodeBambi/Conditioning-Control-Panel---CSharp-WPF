@@ -22,10 +22,19 @@
  * painted by the kit's one shared context; the deck deals 4 and only lends a key.
  * Gates dress the page (spiral off: a brass star) from the first frame and live;
  * suspend and close cancel the moments and free the kit and the deck.
+ *
+ * THE DESKTOP RECIPE (feel.js FX_MOMENTS, owner ask 2026-09-15). On top of the
+ * kit's moment the station fires the section 4 ids the host renders, one row a
+ * moment: a word on a rim grab, a plum wash as the coast starts (the same for
+ * every press, Law I), and on the landing frame the row for the result (small,
+ * mid, big, the pot, Seeing Double, the gift, Head Empty) plus THE ALMOST when
+ * the pointer rests one slice off the pot. feel.fxPlan applies the gates, Calm,
+ * the cooldowns and the per-sit-down cap; this file only posts what it returns.
+ * Back and suspend fire nothing more (the host's station-close settles the desk).
  * ==========================================================================*/
 
 import { layoutOf, landingAngle, resultIndex, readResult, restRotation, countdown } from './wheel.js';
-import { recipe, tierOf, winTokens, glance, landPose, pressPose, revealCount, FEEL } from './feel.js';
+import { recipe, tierOf, winTokens, glance, landPose, pressPose, revealCount, FEEL, landMoment, nearMiss, fxPlan, freshCool } from './feel.js';
 import { dressOf, edgeAlpha, captionAlpha, hubStill } from './hypno.js';
 import { createLoomKit, createDeck, createMoments, wheelSize, strengthK, wheelTurnLevel, boxAround } from '../../shared/hypno/index.js';
 import { createScene } from './scene.js';
@@ -70,6 +79,7 @@ export async function mount(ctx) {
   let rewardReveal = null;
   let gainTimer = 0, glanceTimer = 0, feelLog = [], revealAt = -Infinity;
   let moments = null, kit = null, deck = null, unSettings = null, dress = dressOf(), hubPainted = false, turnPlayed = false, lastMoment = null, dealSeq = 0;
+  let fxCool = freshCool(), wordKeys = [], lastFx = null;
   const $ = sel => el.querySelector(sel);
   const note = (what, extra = {}) => { feelLog = [...feelLog.slice(-79), { what, at: Math.round(performance.now()), ...extra }]; };
 
@@ -193,7 +203,7 @@ export async function mount(ctx) {
     if (edges.style.opacity !== ea) edges.style.opacity = ea;
     if (cap.style.opacity !== ca) cap.style.opacity = ca;
     if (!moments || suspended) return;
-    if (slowing && !turnPlayed) { turnPlayed = true; const out = moments.play('wheel.turn'); note('moment', { id: 'wheel.turn', tokens: out.tokens.length, page: out.page }); }
+    if (slowing && !turnPlayed) { turnPlayed = true; if (sound) sound.slowing(); const out = moments.play('wheel.turn'); note('moment', { id: 'wheel.turn', tokens: out.tokens.length, page: out.page }); }
     if (!slowing && dim < 0.01) turnPlayed = false;
     moments.tunnel(wheelTurnLevel(dim));
   }
@@ -209,7 +219,13 @@ export async function mount(ctx) {
   }
   function dealDeck(my) {
     const mine = ++dealSeq;
-    createDeck(ctx, { count: 4, still: dress.calm }).then(d => {
+    // The deck keeps the picture keys; the word keys of the same deal (s0..s3) are kept here for the fx.sub_* rows.
+    const media = typeof ctx.media === 'function' ? {
+      media: o => Promise.resolve(ctx.media(o)).then(rep => {
+        if (mine === dealSeq) wordKeys = Array.isArray(rep && rep.words) ? rep.words.map(w => w && w.key).filter(k => typeof k === 'string' && /^s\d{1,2}$/.test(k)) : [];
+        return rep;
+      }) } : {};
+    createDeck(media, { count: 4, still: dress.calm }).then(d => {
       if (mine !== dealSeq || my !== session || suspended || !alive) { d.dispose(); return null; }
       if (deck) deck.dispose();
       deck = d; return d;
@@ -220,6 +236,27 @@ export async function mount(ctx) {
     const p = scene && el && scene.project('wheel_rotor'), r = el && el.getBoundingClientRect();
     if (!p || !r) return;
     el.style.setProperty('--wheel-x', `${Math.round(p.x - r.left)}px`); el.style.setProperty('--wheel-y', `${Math.round(p.y - r.top)}px`);
+  }
+  /** THE DESKTOP RECIPE: one section 4 id to the host, never awaited (fx-ack is advisory), nothing while suspended. */
+  function fireFx(fxId, symbols, args) {
+    if (suspended || !alive || typeof ctx.fx !== 'function') return false;
+    try {
+      const p = ctx.fx(fxId, symbols, args);
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch (e) { console.warn('[wheel] fx failed', e); return false; }
+    return true;
+  }
+  /** Fire feel.js's row for `moment` (gates, Calm, cooldown and the cap applied there), `seed` picking the keys. */
+  function playFx(moment, seed = '') {
+    if (suspended || !alive) return [];
+    readMotion();
+    const plan = fxPlan(moment, { still, gates: ctx.gates, cool: fxCool, now: performance.now(), gifs: deck ? deck.keys : [], words: wordKeys, seed });
+    fxCool = plan.cool;
+    const ids = [];
+    for (const f of plan.fx) if (fireFx(f.id, f.symbols, f.args)) ids.push(f.id);
+    lastFx = { moment, ids, why: plan.why, still };
+    note('fx', lastFx);
+    return ids;
   }
   function freeHypno() {
     if (moments) moments.cancel();
@@ -246,6 +283,11 @@ export async function mount(ctx) {
     if (fresh && rec.reveal) { revealAt = lineAt; const step = () => { if (!alive || performance.now() - revealAt > FEEL.REVEAL_MS + 40) return; sync(); requestAnimationFrame(step); }; requestAnimationFrame(step); }
     if (r.reward?.kind !== 'nothing') sound.thud(tier === 0);
     if (fresh && r.reward?.kind !== 'nothing') { scene.celebrate(rec); sound.win(rec.sound); fire(raw, r, idx); }
+    if (fresh) {   // the desktop row for the result, on the same frame as the pointer's thud (Law X), after the kit's moment
+      const seed = `${r.day}|${r.sliceId}|${idx}`;
+      playFx(landMoment(r), seed);
+      if (nearMiss(layout, idx, r)) playFx('nearMiss', seed);
+    }
     glanceTo(landPose(r));
     $('.wheel-zzz').hidden = !r.snoozed;
     if (gained > 0 && fresh) {
@@ -286,6 +328,7 @@ export async function mount(ctx) {
     // Law VIII: the wheel turns (or, still, the button rings) and EMI glances on this frame.
     rewardReveal.hide();
     busy = true; scene.coast(omega); scene.setMood('spin'); glanceTo(pressPose());
+    playFx('coast');   // the same plum wash for every press: it says nothing about where the wheel stops (Law I)
     $('.wheel-spin').classList.add('is-ringing'); card(null); lineAt = performance.now(); sync();
     note('answer', { ms: Math.round(performance.now() - pressedAt), omega: omega || null });
     const before = readout.server;
@@ -343,6 +386,7 @@ export async function mount(ctx) {
   async function open() {
     if (alive) return;
     alive = true; busy = false; suspended = false; pose = 'idle0_0'; feelLog = []; lines = []; lineAt = performance.now(); lastMoment = null;
+    fxCool = freshCool(); wordKeys = []; lastFx = null;   // a sit-down starts with every cooldown and cap fresh
     const my = ++session;
     readMotion(); dress = dressOf(hypnoCtx());
     el = build(); ctx.root.append(el); rewardReveal = createRewardReveal(el, t); el.dataset.hub = dress.hub;
@@ -362,7 +406,7 @@ export async function mount(ctx) {
       (ctx.stage ? createRoomScene : createScene)({ stage: ctx.stage, canvas: $('.wheel-stage'), hud: $('.wheel-face'), reduced: still, dress, paintHub, onFrame,
         labels: s => sliceText(s, t, fmt),
         canSpin: () => !busy && !suspended && !!st && !st.spun,
-        onGrab: ok => { sound.arm(); if (!ok) press(); else glanceTo(pressPose()); },
+        onGrab: ok => { sound.arm(); if (!ok) press(); else { glanceTo(pressPose()); playFx('grab'); } },
         onRelease: omega => press(omega),
         onTick: semis => sound.tick(semis) }).catch(e => ({ error: e })),
       Promise.resolve(ctx.request('state', {})).catch(() => null),
@@ -433,6 +477,7 @@ export async function mount(ctx) {
                     readout: readout && { kind: readout.kind, value: readout.value, server: readout.server, owed: readout.owed },
                     status: el && $('.wheel-status').textContent, spin: el && $('.wheel-spin').textContent,
                     feel: { log: feelLog, cues: sound ? sound.trace.slice() : [], scene: scene && scene.debug() },
+                    fx: { last: lastFx, cool: fxCool, words: wordKeys.slice() },
                     hypno: { dress, lastMoment, turnPlayed, moments: moments && moments.debug(), kit: kit && kit.debug(), deck: deck && deck.debug(),
                              edges: el && Number($('.wheel-edges').style.opacity || 0), caption: el && Number($('.wheel-slowly').style.opacity || 0) } }),
   };

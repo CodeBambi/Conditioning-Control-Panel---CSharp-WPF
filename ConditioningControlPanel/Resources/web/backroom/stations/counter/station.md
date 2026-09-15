@@ -56,6 +56,16 @@ no fx ids, no hypno kit, so it adds no context and no gate changes its dress.
   the server and the next `open()` shows it owned.
 - **Reduced / Calm** (`ctx.reduced`, `intensity: calm`, or `prefers-reduced-motion`): `data-still` on the root, no
   hover tilt, no flip, no pending stripe; the state swap is instant. `onSettings` repaints live.
+- **Try it** (2026-09-15, `demo.js`, `br_counter_try`). The three effect prizes (`jackpot_remix`, `flashes_v2`,
+  `bubbles_v2`) carry a "Try it" button on every face but `soon`. It plays a 5.2 s preview INSIDE the card's art box,
+  drawn by the page: a 2 x 2 mosaic of the dealt pictures swapping places (Jackpot Remix), one picture drifting and
+  bouncing off the walls then swinging from the top (Flashes v2: Drift & Bounce, Pendulum), four bubbles raining then
+  winding in to the centre (Bubbles v2: Rain, Spiral In). Pictures come from one `ctx.media({ count: 4 })` per visit,
+  mapped origins only; `flash` gate off, or no deal, shows plain plates. Calm and reduced motion show the settled frame
+  for 1.8 s. One preview at a time; `suspend(true)`, Back and `close()` stop it (Law VI). It never posts an fx and never
+  pays SP: the real effects are the app's overlays and the host plays them only for an account that owns the grant
+  (`FlashMotion`, `AmbientBubbleMotion` and the remix director ask `PrizeGrants`, never a page), so a host-rendered
+  demo would be the prize for free. No sound (Brake 1: nothing is earned).
 - **suspend(on)** suspends the chime's AudioContext. **close()** removes the DOM, the keydown listener, `onSp` and
   `onSettings` subscriptions and closes the AudioContext; **destroy()** also removes the stylesheet link.
 

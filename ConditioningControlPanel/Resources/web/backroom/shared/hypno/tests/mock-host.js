@@ -15,8 +15,14 @@
  * ==========================================================================*/
 
 const FALLBACK = ['gif0', 'gif1', 'gif2', 'gif3'].map((f) => new URL('../../../stations/slot/fallback/' + f + '.webp', import.meta.url).href);
-const PRIM = { 'fx.wash': 'wash', 'fx.gif_from': 'gif-from', 'fx.loom_spiral': 'spiral-loom', 'fx.haze': 'haze' };
-const GATE = { 'fx.wash': 'flash', 'fx.gif_from': 'flash', 'fx.loom_spiral': 'spiral', 'fx.haze': 'brainDrain' };
+// 10.13.B ids by their primitive, then the section 4 ids the wheel's desktop recipe fires (stations/wheel/feel.js
+// FX_MOMENTS), each named by its first primitive and gated by its first toggle (the real host skips per primitive).
+const PRIM = { 'fx.wash': 'wash', 'fx.gif_from': 'gif-from', 'fx.loom_spiral': 'spiral-loom', 'fx.haze': 'haze',
+  'fx.jackpot': 'spiral-full', 'fx.gif_storm': 'flash-burst', 'fx.sub_cascade': 'sub-burst9', 'fx.spiral_full': 'spiral-full',
+  'fx.spiral_brief': 'spiral-full', 'fx.gif_burst': 'flash-burst', 'fx.sub_pair': 'sub-seq', 'fx.sub_single': 'sub-single', 'fx.melt': 'brain-drain-melt' };
+const GATE = { 'fx.wash': 'flash', 'fx.gif_from': 'flash', 'fx.loom_spiral': 'spiral', 'fx.haze': 'brainDrain',
+  'fx.jackpot': 'spiral', 'fx.gif_storm': 'flash', 'fx.sub_cascade': 'subliminal', 'fx.spiral_full': 'spiral',
+  'fx.spiral_brief': 'spiral', 'fx.gif_burst': 'flash', 'fx.sub_pair': 'subliminal', 'fx.sub_single': 'subliminal', 'fx.melt': 'brainDrain' };
 const WASH_GAP_MS = 360;
 
 let seq = 0;
@@ -90,7 +96,8 @@ export function createMockHost({ gates = null, intensity = 'normal', reduced = f
         : FALLBACK.map((url, i) => ({ key: 'g' + i, url, w: 180, h: 180, src: 'fallback' }));
       const rec = { type: 'media-request', at: now(), count: c, dealt: gifs.length };
       host.calls.push(rec); host.media.push(rec);
-      return later({ reqId: mint(), seed, gifs, words: [] });
+      // Words as CONTRACT 5 deals them with an empty pool: the four presets, keyed s0..s3 (the wheel's fx.sub_* rows read the keys).
+      return later({ reqId: mint(), seed, gifs, words: ['Drop', 'Relax', 'Let Go', 'Sink'].map((text, i) => ({ key: 's' + i, text, src: 'preset' })) });
     },
     onSettings(fn) {
       if (typeof fn !== 'function') return () => {};

@@ -49,6 +49,7 @@ await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
 const FAKE_HOST = `(() => {
   const listeners = [], emit = (data) => setTimeout(() => listeners.forEach((fn) => fn({ data })), 0);
   const made = {};
+  window.__mocks = made;   // the flow check below scripts a row on the slot's own mock (a promise per station id)
   const mock = (id) => made[id] || (made[id] = import(id === 'bell' ? '/backroom/smoke/mock-bell.js' : '/backroom/stations/' + id + '/mock-server.js')
     .then((m) => (id === 'bell' ? m.createBellMock({}) : m.createMockServer({ sp: 57 }))));
   window.__posted = [];
@@ -254,6 +255,29 @@ for (const sel of ['.slot-spin', '.slot-controls .slot-freeze', '.slot-odds', '.
 }
 ok(!overlap(await boxOf('.slot-controls .slot-freeze'), await boxOf('.slot-spin')) && !overlap(await boxOf('.slot-controls .slot-freeze'), await boxOf('.slot-face')), 'landscape: Freeze, Spin and the face keep their own places');
 await shot('landscape-01-playing.png');
+// THE FLOW (shared/hypno/callout.js): a paid landing lights its glyphs, then the word and the host fx fire TOGETHER at
+// 400 ms; the next row is a two-GIF `none`, the GIF tease: one fx.gif_burst { count: 1 }, no word, no SP.
+ok(await ev(`(async () => { const s = await window.__mocks.slot; s.script(['sub0', 'gif1', 'sub2'], ['gif0', 'gif1', 'sub0']); return true; })()`), 'flow: an Echo row and a two-GIF tease row scripted on the mock');
+const fxBefore = await ev(`window.__posted.filter((m) => m.type === 'fx').length`);
+ok(await ev(`(() => { const b = document.querySelector('.slot-spin'); if (!b || b.disabled) return false; b.click(); return true; })()`), 'flow: Spin pressed');
+ok(await until(`(() => { const d = window.__backroom.loader.current && window.__backroom.loader.current.debug(); return !!(d && d.flow && d.flow.line === 'sub2' && d.flow.fxAt !== null && d.callout && d.callout.shown.length); })()`, 15000, 50), 'flow: the Echo row lands, its word shows and its fx fires');
+const flow = await ev(`(() => { const d = window.__backroom.loader.current.debug(); return { flow: d.flow, shown: d.callout.shown, fx: window.__posted.filter((m) => m.type === 'fx').slice(${fxBefore}) }; })()`);
+report.flow = flow;
+ok(flow && flow.shown.at(-1).key === 'br_callout_echo' && flow.shown.at(-1).tier === 'small', 'flow: debug().callout.shown ends on br_callout_echo (small)');
+ok(flow && flow.flow.fxAt - flow.flow.landedAt >= 400 && flow.flow.fxAt - flow.flow.landedAt < 800, `flow: the fx fired ${flow && flow.flow.fxAt - flow.flow.landedAt} ms after the landing (>= 400)`);
+ok(flow && Math.abs(flow.flow.calloutAt - flow.flow.fxAt) <= 50, `flow: the word and the fx share the frame (${flow && flow.flow.calloutAt - flow.flow.fxAt} ms apart)`);
+ok(flow && flow.fx.some((m) => m.fxId === 'fx.sub_pair'), 'flow: the row\'s own fx.sub_pair went to the host');
+ok(flow && flow.flow.hits.length === 2 && flow.flow.hits[0].reel === 0 && flow.flow.hits[1].reel === 2 && flow.flow.hits[1].at === 80, 'flow: the two sub glyphs are the hit, 80 ms apart');
+ok(flow && flow.flow.unlockMs === 2000, 'flow: a paid line unlocks at landing + 2000 ms');
+await shot('flow-01-echo.png');
+const shownBefore = flow ? flow.shown.length : 0;
+ok(await until(`(() => { const b = document.querySelector('.slot-spin'); if (!b || b.disabled) return false; b.click(); return true; })()`, 8000, 100), 'tease: Spin pressed again');
+ok(await until(`(() => { const d = window.__backroom.loader.current && window.__backroom.loader.current.debug(); return !!(d && d.flow && d.flow.line === 'none' && d.flow.fxAt !== null); })()`, 15000, 50), 'tease: the two-GIF none row lands and its flash fires');
+const tease = await ev(`(() => { const d = window.__backroom.loader.current.debug(); return { flow: d.flow, shown: d.callout.shown.length, fx: window.__posted.filter((m) => m.type === 'fx' && m.fxId === 'fx.gif_burst').at(-1) || null }; })()`);
+report.tease = tease;
+ok(tease && tease.fx && tease.fx.args && tease.fx.args.count === 1 && (tease.fx.symbols || []).length === 2, 'tease: one fx.gif_burst { count: 1 } with the two GIF keys ' + JSON.stringify(tease && tease.fx && { args: tease.fx.args, symbols: tease.fx.symbols }));
+ok(tease && tease.shown === shownBefore, 'tease: no callout for a tease');
+ok(tease && tease.flow.unlockMs === 0 && tease.flow.hits.length === 0, 'tease: a loss keeps the pace and lights no glyph');
 // Spin still works sideways, and the reels stay put while the tape plays.
 ok(await ev(`(() => { const b = document.querySelector('.slot-spin'); if (!b || b.disabled) return false; b.click(); return true; })()`), 'landscape: Spin pressed');
 ok(await until(`window.__posted.some((m) => m.type === 'station-request' && m.station === 'slot' && m.op === 'tape')`, 8000), 'landscape: the press buys a tape');

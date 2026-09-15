@@ -67,15 +67,15 @@ public class BackRoomFxTests
         public int Stops;
         public RecordingSink(FakeScheduler clock) => _clock = clock;
         private void Add(string c) => Calls.Add((_clock.NowMs, c));
-        // FlashService staggers the burst's images 300 ms apart; each image is its own onset.
-        public void FlashBurst(int amount)
+        // FlashService staggers the burst's images gapMs apart; each image is its own onset.
+        public void FlashBurst(int amount, double opacity, int gapMs)
         {
-            Add($"flash:{amount}");
-            for (int i = 0; i < amount; i++) Calls.Add((_clock.NowMs + i * BackRoomFxPlan.FlashImageGapMs, "flashimg:"));
+            Add(FormattableString.Invariant($"flash:{amount}:{opacity:0.###}:{gapMs}"));
+            for (int i = 0; i < amount; i++) Calls.Add((_clock.NowMs + i * gapMs, "flashimg:"));
         }
-        public void GifRain(int durationMs) => Add($"rain:{durationMs}");
-        public void GlitchWash(int durationMs, double opacity) => Add($"glitch:{durationMs}");
-        public void Subliminal(string text) => Add($"sub:{text}");
+        public void GifRain(int count, int durationMs, double opacity) => Add(FormattableString.Invariant($"rain:{count}:{durationMs}:{opacity:0.###}"));
+        public void GlitchWash(int durationMs, double opacity) => Add(FormattableString.Invariant($"glitch:{durationMs}:{opacity:0.###}"));
+        public void Subliminal(string text, double opacity) => Add(FormattableString.Invariant($"sub:{text}:{opacity:0.###}"));
         public void BrainDrain(int durationMs, double level, bool melt) => Add(FormattableString.Invariant($"drain:{durationMs}:{level}:{melt}"));
         /// <summary>False = a picture's <c>shown</c> is kept in <see cref="Pending"/> (the overlay has not put it on yet)
         /// instead of running at once.</summary>
@@ -83,9 +83,9 @@ public class BackRoomFxTests
         public readonly List<Action> Pending = new();
         private void Shown(Action shown) { if (ShowsAtOnce) shown(); else Pending.Add(shown); }
         public bool GifFullFound = true;
-        public void GifFull(BackRoomGif gif, int durationMs, bool still, Action shown)
+        public void GifFull(BackRoomGif gif, int durationMs, double opacity, Action shown)
         {
-            Add($"giffull:{gif.Key}:{durationMs}:{still}");
+            Add(FormattableString.Invariant($"giffull:{gif.Key}:{durationMs}:{opacity:0.###}"));
             if (GifFullFound) Shown(shown);
         }
         public void Wash(FxRgb color, double peak, BackRoomGif? picture, Action shown)
@@ -94,27 +94,27 @@ public class BackRoomFxTests
             if (picture != null) Shown(shown);
         }
         public bool GifFromFound = true;
-        public bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still, Action shown)
+        public bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, Action shown)
         {
-            Add(FormattableString.Invariant($"giffrom:{gif.Key}:{(from is { } r ? $"{r.X},{r.Y},{r.W},{r.H}" : "centre")}:{durationMs}:{scale}:{dim}:{still}"));
+            Add(FormattableString.Invariant($"giffrom:{gif.Key}:{(from is { } r ? $"{r.X},{r.Y},{r.W},{r.H}" : "centre")}:{durationMs}:{scale}:{dim}"));
             if (GifFromFound) Shown(shown);
             return GifFromFound;
         }
-        public void SpiralLoom(string gifPath, int durationMs, double alpha, bool hold, bool still)
-            => Add(FormattableString.Invariant($"spiral:{System.IO.Path.GetFileName(gifPath)}:{durationMs}:{alpha:0.###}:{hold}:{still}"));
+        public void SpiralLoom(string gifPath, int durationMs, double alpha, bool hold, bool slow)
+            => Add(FormattableString.Invariant($"spiral:{System.IO.Path.GetFileName(gifPath)}:{durationMs}:{alpha:0.###}:{hold}:{slow}"));
         public void ReleaseSpiralLoom() => Add("spiral-release");
         public void ReleaseBrainDrain() => Add("drain-release");
-        public void Tunnel(double level, bool still) => Add(FormattableString.Invariant($"tunnel:{level:0.###}:{still}"));
+        public void Tunnel(double level) => Add(FormattableString.Invariant($"tunnel:{level:0.###}"));
         public void CancelTunnel() => Add("tunnel-cancel");
         public void StopAll() => Stops++;
     }
 
     internal static (BackRoomFx Fx, FakeScheduler Clock, RecordingSink Sink) Make(
-        BackRoomFxIntensity intensity = BackRoomFxIntensity.Normal, MotionLevel motion = MotionLevel.Full, FxGates? gates = null)
+        BackRoomFxIntensity intensity = BackRoomFxIntensity.Normal, MotionLevel motion = MotionLevel.Full)
     {
         var clock = new FakeScheduler();
         var sink = new RecordingSink(clock);
-        var fx = new BackRoomFx(sink, clock, () => new FxEnvironment(motion, intensity, gates ?? FxGates.AllOn, BackRoomFxPlanTests.Woven), new Random(5));
+        var fx = new BackRoomFx(sink, clock, () => new FxEnvironment(motion, intensity, BackRoomFxPlanTests.Woven), new Random(5));
         return (fx, clock, sink);
     }
 
@@ -168,12 +168,50 @@ public class BackRoomFxTests
     {
         var (fx, clock, sink) = Make();
         var ack = Fire(fx, "fx.jackpot");
-        Assert.Equal(new[] { "spiral-full", "flash-burst", "gif-rain", "glitch-bubbles", "sub-burst9" }, ack.Fired);
-        clock.Advance(10_000);
-        Assert.Equal((0L, "spiral:screen.gif:2400:0.85:False:False"), sink.Calls[0]);   // the screen weave, at the user's opacity
-        Assert.Contains((2400L, "flash:4"), sink.Calls);
-        Assert.Contains((2400L, "rain:2000"), sink.Calls);
-        Assert.Equal(9, sink.Calls.Count(c => c.Call.StartsWith("sub:")));
+        Assert.Equal(new[] { "spiral-full", "flash-burst", "gif-rain", "glitch-bubbles", "sub-burst9", "sub-burst9", "gif-full" }, ack.Fired);
+        clock.Advance(20_000);
+        Assert.Equal((0L, "spiral:screen.gif:4000:0.7:False:False"), sink.Calls[0]);   // the screen weave at the authored alpha
+        Assert.Contains((4000L, "flash:8:1:300"), sink.Calls);                              // medium, full opacity, 300 ms apart
+        Assert.Contains((4000L, "rain:19:4000:0.9"), sink.Calls);
+        Assert.Contains((4000L, "glitch:600:0.35"), sink.Calls);
+        Assert.Contains((5200L, "glitch:600:0.35"), sink.Calls);
+        Assert.Contains(sink.Calls, c => c.At == 4000 && c.Call.StartsWith("giffull:") && c.Call.EndsWith(":2000:0.8"));
+        var words = sink.Calls.Where(c => c.Call.StartsWith("sub:")).ToList();
+        Assert.Equal(18, words.Count);
+        Assert.All(words, w => Assert.EndsWith(":1", w.Call));                              // full opacity
+        Assert.Equal(4000L, words[0].At);
+        Assert.Equal(4000L + 8 * 350, words[8].At);                                          // the first burst, 350 apart
+        Assert.Equal(4000L + 9 * 350, words[9].At);                                          // the second continues the beat
+    }
+
+    [Fact]
+    public void JackpotCalm_IsTheSameShow_AtHalfOpacity()
+    {
+        var (fx, clock, sink) = Make(BackRoomFxIntensity.Calm);
+        Assert.Equal(7, Fire(fx, "fx.jackpot").Fired.Count);
+        clock.Advance(20_000);
+        Assert.Equal((0L, "spiral:screen.gif:4000:0.35:False:False"), sink.Calls[0]);
+        Assert.Contains((4000L, "flash:8:0.5:300"), sink.Calls);
+        Assert.Contains((4000L, "rain:19:4000:0.45"), sink.Calls);
+        Assert.Contains((4000L, "glitch:600:0.175"), sink.Calls);
+        Assert.Equal(18, sink.Calls.Count(c => c.Call.StartsWith("sub:") && c.Call.EndsWith(":0.5")));
+    }
+
+    [Theory]
+    [InlineData(MotionLevel.Reduced)]
+    [InlineData(MotionLevel.Off)]
+    public void ReducedMotion_CapsFlashOnsetsAtThreeHz_AndSlowsTheSpiral_SkipsNothing(MotionLevel m)
+    {
+        var (fx, clock, sink) = Make(motion: m);
+        Assert.Equal(7, Fire(fx, "fx.jackpot").Fired.Count);
+        clock.Advance(20_000);
+        Assert.Equal((0L, "spiral:screen.gif:4000:0.7:False:True"), sink.Calls[0]);   // the slow variant, never a still
+        Assert.Contains((4000L, "flash:8:1:334"), sink.Calls);
+        var images = sink.Calls.Where(c => c.Call == "flashimg:").Select(c => c.At).OrderBy(t => t).ToList();
+        Assert.Equal(8, images.Count);
+        for (int i = 1; i < images.Count; i++) Assert.True(images[i] - images[i - 1] >= 1000 / 3, "flash onsets over 3 Hz under reduced motion");
+        Assert.Contains((4000L, "rain:19:4000:0.9"), sink.Calls);   // everything else plays as authored
+        Assert.Equal(18, sink.Calls.Count(c => c.Call.StartsWith("sub:")));
     }
 
     [Fact]
@@ -185,18 +223,18 @@ public class BackRoomFxTests
         var ack = Fire(fx, "fx.melt");
         Assert.Equal(new[] { "brain-drain-melt" }, ack.Fired);
         clock.Advance(10_000);
-        Assert.Contains((2400L, "drain:6000:1:True"), sink.Calls);
+        Assert.Contains((4000L, "drain:6000:0.8:True"), sink.Calls);
     }
 
     [Fact]
     public void BusyFx_AcksEveryPrimitiveAsBusy_AndSchedulesNothing()
     {
         var (fx, clock, sink) = Make();
-        Fire(fx, "fx.jackpot");                       // hero 0..2400
-        fx.Gate.Admit("fx.future_hero", 3000);        // a later station's hero chains to 2400..5400
+        Fire(fx, "fx.jackpot");                       // hero 0..4000
+        fx.Gate.Admit("fx.future_hero", 3000);        // a later station's hero chains to 4000..7000
         clock.Advance(100);
         int pending = fx.PendingCount;
-        var ack = Fire(fx, "fx.gif_storm");           // would wait 5300 ms
+        var ack = Fire(fx, "fx.gif_storm");           // would wait 6900 ms
         Assert.Empty(ack.Fired);
         Assert.Equal(new[] { "flash-burst", "gif-rain", "glitch-bubbles" }, ack.Skipped.Select(s => s.Prim));
         Assert.All(ack.Skipped, s => Assert.Equal(BackRoomFxSkipReason.Busy, s.Why));
@@ -219,7 +257,7 @@ public class BackRoomFxTests
         // and the stage is free again
         Assert.NotEmpty(Fire(fx, "fx.gif_burst").Fired);
         clock.Advance(10);
-        Assert.Contains(sink.Calls, c => c.Call == "flash:3");
+        Assert.Contains(sink.Calls, c => c.Call == "flash:5:1:300");
     }
 
     // ---- 6 Hz -------------------------------------------------------------------------------------
@@ -268,13 +306,13 @@ public class BackRoomFxTests
     [Fact]
     public void OverlappingFlashBursts_PaceFromTheLastImage()
     {
-        // gif_storm Full is a 6-image burst (0..1500 ms); a gif_burst 500 ms later must not interleave.
+        // gif_storm is a 5-image burst (0..1200 ms); a gif_burst 500 ms later must not interleave.
         var (fx, clock, sink) = Make(BackRoomFxIntensity.Full);
         Fire(fx, "fx.gif_storm");
         clock.Advance(500);
         Fire(fx, "fx.gif_burst");
         clock.Advance(30_000);
-        Assert.True(sink.Calls.Count(c => c.Call == "flashimg:") > 6);
+        Assert.True(sink.Calls.Count(c => c.Call == "flashimg:") > 5);
         AssertUnderSixHz(sink, "storm then burst");
     }
 
@@ -335,17 +373,37 @@ public class BackRoomFxTests
         var (fx, clock, sink) = Make();
         Fire(fx, "fx.sub_cascade", "gif2");
         clock.Advance(5000);
-        Assert.Contains(sink.Calls, c => c.Call == "giffull:g2:1500:False");
+        Assert.Contains(sink.Calls, c => c.Call == "giffull:g2:1500:0.8");
     }
 
     [Fact]
     public void EmptyDeal_SkipsMediaPrimitives_AsUnknown_WithoutThrowing()
     {
-        var p = BackRoomFxPlan.Resolve("fx.sub_cascade", BackRoomFxIntensity.Normal, MotionLevel.Full, FxGates.AllOn,
+        var p = BackRoomFxPlan.Resolve("fx.sub_cascade", BackRoomFxIntensity.Normal, MotionLevel.Full,
             new[] { "sub0" }, new BackRoomMediaDeal(0, Array.Empty<BackRoomGif>(), Array.Empty<BackRoomWord>()), new Random(0));
         Assert.Empty(p.Fired);
         Assert.Contains(new BackRoomFxSkip("sub-burst9", BackRoomFxSkipReason.Unknown), p.Skipped);
         Assert.Contains(new BackRoomFxSkip("gif-full", BackRoomFxSkipReason.Unknown), p.Skipped);
+    }
+
+    [Fact]
+    public void GifBurst_ArgsCount_ReachesTheSink_AndWordsShown_LeavesTheWordsOut()
+    {
+        var (fx, clock, sink) = Make();
+        Assert.Equal(new[] { "flash-burst" }, fx.Fire("fx.gif_burst", "slot", Array.Empty<string>(), Deal, new BackRoomFxArgs(Count: 1), "tease").Fired);
+        clock.Advance(10);
+        Assert.Contains(sink.Calls, c => c.Call == "flash:1:1:300");
+
+        clock.Advance(5000);
+        var pair = fx.Fire("fx.sub_pair", "slot", new[] { "sub0", "sub1" }, Deal, new BackRoomFxArgs(WordsShown: true), "p");
+        Assert.Equal(new[] { "spiral-full" }, pair.Fired);
+        Assert.Empty(pair.Skipped);
+        var single = fx.Fire("fx.sub_single", "slot", new[] { "sub2" }, Deal, new BackRoomFxArgs(WordsShown: true), "s");
+        Assert.Empty(single.Fired);
+        Assert.Empty(single.Skipped);
+        clock.Advance(10_000);
+        Assert.DoesNotContain(sink.Calls, c => c.Call.StartsWith("sub:"));
+        Assert.Contains(sink.Calls, c => c.Call.StartsWith("spiral:screen.gif:1500:0.55:"));
     }
 
     [Fact]

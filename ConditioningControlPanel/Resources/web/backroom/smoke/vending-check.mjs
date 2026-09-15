@@ -155,6 +155,13 @@ for(const [width,height] of [[400,730],[730,400]]){
  ok(await until('!window.__backroom.scene.customization.debug().arrows.travel',3000)&&(await arrowsDbg()).target!==before&&await centredOn(),'ArrowRight on the focused pane pans to the next cabinet');
  await cdp('Input.dispatchKeyEvent',{type:'keyDown',code:'ArrowLeft',key:'ArrowLeft',windowsVirtualKeyCode:37});await cdp('Input.dispatchKeyEvent',{type:'keyUp',code:'ArrowLeft',key:'ArrowLeft',windowsVirtualKeyCode:37});await sleep(40);
  ok(await until('!window.__backroom.scene.customization.debug().arrows.travel',3000)&&(await arrowsDbg()).target===before&&await centredOn(),'ArrowLeft pans back');
+ // A finger swipe on the room pane steps cabinets too: left for the next, right for the previous.
+ const swipe=async dx=>{await ev(`(()=>{const c=document.querySelector('canvas');const at=(t,x)=>c.dispatchEvent(new PointerEvent(t,{bubbles:true,button:0,pointerId:7,pointerType:'touch',clientX:x,clientY:120}));at('pointerdown',200);at('pointerup',200+(${dx}));})()`);return until('!window.__backroom.scene.customization.debug().arrows.travel',3000);};
+ ok(await swipe(-90)&&(await arrowsDbg()).target!==before&&await centredOn(),'swipe left on the pane pans to the next cabinet');
+ ok(await swipe(90)&&(await arrowsDbg()).target===before&&await centredOn(),'swipe right pans back');
+ ok(await swipe(-20)&&(await arrowsDbg()).target===before,'a short drag is not a swipe');
+ await ev(`document.querySelectorAll('.br-vending-pick')[3].click()`);await sleep(40);ok(await until('!window.__backroom.scene.customization.debug().arrows.travel',3000)&&(await arrowsDbg()).target===before&&await centredOn(),'picking another lever item keeps the cabinet in view');
+ await ev(`document.querySelectorAll('.br-vending-pick')[4].click()`);await sleep(40);
  ok(await ev('window.__backroom.scene.customization.opened'),'arrow keys leave the sheet open');
  await ev(`document.querySelector('.br-custom-more').open=true;document.querySelectorAll('.br-custom-more .br-custom-actions')[1].querySelectorAll('button')[0].click()`);ok(await until('!window.__backroom.scene.customization.debug().arrows.travel',3000)&&(await arrowsDbg()).target===0&&await centredOn(),'choosing a Placement target pans the pane to it');
  await ev(`document.querySelectorAll('.br-nav .br-pill')[1].click()`);ok(await ev(`document.querySelectorAll('.br-nav .br-pill')[1].getAttribute('aria-pressed')==='true'`),'Motion Off from the room pill');await sleep(60);

@@ -9,9 +9,9 @@ using Xunit;
 namespace ConditioningControlPanel.Tests;
 
 /// <summary>
-/// THE BACK ROOM Hypno v3 recipes (CONTRACT 10.13.B): the five new primitives' Calm / Normal / Full
-/// rows, the host validation of <c>args</c>, the never-white colour rule, two-digit symbol keys and the
-/// Loom-woven spiral source. All pure.
+/// THE BACK ROOM Hypno v3 recipes (CONTRACT 10.13.B) under the authored show: the four Hypno ids at Calm
+/// (half strength, same durations) / Normal / Full, the host validation of <c>args</c>, the never-white
+/// colour rule, two-digit symbol keys and the Loom-woven spiral source. All pure.
 /// </summary>
 public class BackRoomHypnoPlanTests
 {
@@ -21,8 +21,8 @@ public class BackRoomHypnoPlanTests
         new[] { new BackRoomWord("s0", "Drop", "preset") });
 
     private static FxPlan Plan(string fx, object? args = null, BackRoomFxIntensity i = BackRoomFxIntensity.Normal,
-        MotionLevel m = MotionLevel.Full, FxGates? g = null, Func<string, string?>? source = null, params string[] symbols)
-        => BackRoomFxPlan.Resolve(fx, i, m, g ?? FxGates.AllOn, symbols, Deck, new Random(1),
+        MotionLevel m = MotionLevel.Full, Func<string, string?>? source = null, params string[] symbols)
+        => BackRoomFxPlan.Resolve(fx, i, m, symbols, Deck, new Random(1),
             BackRoomFxArgs.Parse(args == null ? null : JObject.FromObject(args)), source ?? BackRoomFxPlanTests.Woven);
 
     private static FxStep Step(FxPlan p) => Assert.Single(p.Steps).Step;
@@ -41,12 +41,15 @@ public class BackRoomHypnoPlanTests
     }
 
     [Fact]
-    public void Wash_Calm_HalvesThePeak_AndOffStillWashes()
+    public void Wash_Calm_HalvesThePeak_KeepsTheLength_AndReducedMotionChangesNothing()
     {
-        Assert.Equal(0.42 * 0.5, Step(Plan("fx.wash", new { strength = 1 }, BackRoomFxIntensity.Calm)).Level, 6);
+        var calm = Step(Plan("fx.wash", new { strength = 1 }, BackRoomFxIntensity.Calm));
+        Assert.Equal(0.42 * 0.5, calm.Level, 6);
+        Assert.Equal(900, calm.DurationMs);
         var off = Plan("fx.wash", new { strength = 1 }, m: MotionLevel.Off);
         Assert.Equal(new[] { "wash" }, off.Fired);
-        Assert.Equal(0.21, Step(off).Level, 6);   // Off forces Calm
+        Assert.Equal(0.42, Step(off).Level, 6);   // nothing forces Calm any more
+        Assert.True(off.Reduced);
         Assert.Empty(off.Skipped);
     }
 
@@ -56,14 +59,6 @@ public class BackRoomHypnoPlanTests
         Assert.Null(Assert.Single(Plan("fx.wash").Steps).Gif);
         Assert.Equal("g11", Assert.Single(Plan("fx.wash", symbols: "g11").Steps).Gif!.Key);
         Assert.Equal("g12", Assert.Single(Plan("fx.gif_from", symbols: "gif12").Steps).Gif!.Key);
-    }
-
-    [Fact]
-    public void FlashOff_SkipsWashAndGifFrom_AsToggle()
-    {
-        var g = FxGates.AllOn with { Flash = false };
-        Assert.Equal(BackRoomFxSkipReason.Toggle, Assert.Single(Plan("fx.wash", g: g).Skipped).Why);
-        Assert.Equal(new BackRoomFxSkip("gif-from", BackRoomFxSkipReason.Toggle), Assert.Single(Plan("fx.gif_from", g: g).Skipped));
     }
 
     // ---- gif-from --------------------------------------------------------------------------------
@@ -84,18 +79,19 @@ public class BackRoomHypnoPlanTests
     }
 
     [Fact]
-    public void GifFrom_Calm_IsShorterAndDimsLess_OffIsStill()
+    public void GifFrom_Calm_KeepsTheLength_DimsHalf_MotionNeverStillsIt()
     {
         var calm = Step(Plan("fx.gif_from", new { ms = 4000 }, BackRoomFxIntensity.Calm));
-        Assert.Equal((2400, 0.8, false), (calm.DurationMs, calm.Level, calm.Still));
-        Assert.True(Step(Plan("fx.gif_from", m: MotionLevel.Off)).Still);
-        Assert.False(Step(Plan("fx.gif_from", m: MotionLevel.Reduced)).Still);
+        Assert.Equal((4000, 0.5), (calm.DurationMs, calm.Level));
+        Assert.Equal(4000, Step(Plan("fx.gif_from", new { ms = 4000 }, BackRoomFxIntensity.Full)).DurationMs);   // the page's own ms, kept
+        Assert.Equal(new[] { "gif-from" }, Plan("fx.gif_from", m: MotionLevel.Off).Fired);
+        Assert.Equal(new[] { "gif-from" }, Plan("fx.gif_from", m: MotionLevel.Reduced).Fired);
     }
 
     [Fact]
     public void GifFrom_WithNoDealtGif_IsUnknown()
     {
-        var p = BackRoomFxPlan.Resolve("fx.gif_from", BackRoomFxIntensity.Normal, MotionLevel.Full, FxGates.AllOn,
+        var p = BackRoomFxPlan.Resolve("fx.gif_from", BackRoomFxIntensity.Normal, MotionLevel.Full,
             new[] { "g0" }, new BackRoomMediaDeal(0, Array.Empty<BackRoomGif>(), Array.Empty<BackRoomWord>()), new Random(0));
         Assert.Equal(new BackRoomFxSkip("gif-from", BackRoomFxSkipReason.Unknown), Assert.Single(p.Skipped));
     }
@@ -116,23 +112,23 @@ public class BackRoomHypnoPlanTests
     }
 
     [Fact]
-    public void LoomSpiral_Calm_HalvesAlpha_ShortensTimedButNotTheHoldCap()
+    public void LoomSpiral_Calm_HalvesAlpha_KeepsTheTime_AndTheHoldCap()
     {
         var calm = Step(Plan("fx.loom_spiral", new { ms = 4200, alpha = 0.9 }, BackRoomFxIntensity.Calm));
-        Assert.Equal((2520, 0.45), (calm.DurationMs, calm.Level));
+        Assert.Equal((4200, 0.45), (calm.DurationMs, calm.Level));
         Assert.Equal(20000, Step(Plan("fx.loom_spiral", new { hold = true }, BackRoomFxIntensity.Calm)).DurationMs);
-        Assert.True(Step(Plan("fx.loom_spiral", m: MotionLevel.Off)).Still);
+        // Reduced motion plays the slow variant (the plan's flag), never a still.
+        Assert.True(Plan("fx.loom_spiral", m: MotionLevel.Off).Reduced);
+        Assert.Equal(new[] { "spiral-loom" }, Plan("fx.loom_spiral", m: MotionLevel.Off).Fired);
     }
 
     [Fact]
-    public void Spirals_WithNoWeave_AreUnknown_AndTheToggleStillWins()
+    public void Spirals_WithNoWeave_AreUnknown()
     {
         Assert.Equal(new BackRoomFxSkip("spiral-loom", BackRoomFxSkipReason.Unknown),
             Assert.Single(Plan("fx.loom_spiral", source: _ => null).Skipped));
         Assert.Equal(new BackRoomFxSkip("spiral-full", BackRoomFxSkipReason.Unknown),
             Assert.Single(Plan("fx.spiral_full", source: _ => null).Skipped));
-        Assert.Equal(BackRoomFxSkipReason.Toggle,
-            Assert.Single(Plan("fx.loom_spiral", g: FxGates.AllOn with { Spiral = false }).Skipped).Why);
     }
 
     [Fact]
@@ -142,22 +138,18 @@ public class BackRoomHypnoPlanTests
     // ---- haze ------------------------------------------------------------------------------------
 
     [Theory]
-    [InlineData(BackRoomFxIntensity.Calm)]
-    [InlineData(BackRoomFxIntensity.Normal)]
-    public void Haze_BelowFull_IsSkippedCalm(BackRoomFxIntensity i)
+    [InlineData(BackRoomFxIntensity.Calm, 0.25)]
+    [InlineData(BackRoomFxIntensity.Normal, 0.5)]
+    [InlineData(BackRoomFxIntensity.Full, 0.5)]
+    public void Haze_PlaysAtEveryIntensity_HalfTheBlur_QuarterUnderCalm_HeldToTheCap(BackRoomFxIntensity i, double level)
     {
         var p = Plan("fx.haze", new { hold = true }, i);
-        Assert.Empty(p.Fired);
-        Assert.Equal(new BackRoomFxSkip("haze", BackRoomFxSkipReason.Calm), Assert.Single(p.Skipped));
-    }
-
-    [Fact]
-    public void Haze_Full_IsHalfTheBlur_HeldToTheCap_GatedByBrainDrain()
-    {
-        var s = Step(Plan("fx.haze", new { hold = true }, BackRoomFxIntensity.Full));
-        Assert.Equal((FxPrim.Haze, 20000, 0.5, true), (s.Prim, s.DurationMs, s.Level, s.Look!.Hold));
-        Assert.Equal(BackRoomFxSkipReason.Toggle, Assert.Single(
-            Plan("fx.haze", new { hold = true }, BackRoomFxIntensity.Full, g: FxGates.AllOn with { BrainDrain = false }).Skipped).Why);
+        Assert.Equal(new[] { "haze" }, p.Fired);
+        Assert.Empty(p.Skipped);
+        var s = Step(p);
+        Assert.Equal((FxPrim.Haze, 20000, true), (s.Prim, s.DurationMs, s.Look!.Hold));
+        Assert.Equal(level, s.Level, 9);
+        Assert.Equal(3000, Step(Plan("fx.haze", new { ms = 3000 }, i)).DurationMs);   // the page's ms, kept at every intensity
     }
 
     [Fact]
@@ -176,6 +168,11 @@ public class BackRoomHypnoPlanTests
         var a = BackRoomFxArgs.Parse(JObject.Parse(
             """{"color":7,"strength":"1","from":{"x":1,"y":2,"w":"60","h":44},"ms":3.6,"scale":null,"preset":["wake"],"hold":"true","alpha":0.5}"""));
         Assert.Equal(new BackRoomFxArgs(Ms: 4, Alpha: 0.5), a);
+        // count: an integer only; wordsShown: a boolean only.
+        Assert.Equal(new BackRoomFxArgs(Count: 3, WordsShown: true), BackRoomFxArgs.Parse(JObject.Parse("{\"count\":3,\"wordsShown\":true}")));
+        Assert.Equal(BackRoomFxArgs.None, BackRoomFxArgs.Parse(JObject.Parse("{\"count\":\"3\",\"wordsShown\":\"true\"}")));
+        Assert.Equal(BackRoomFxArgs.None, BackRoomFxArgs.Parse(JObject.Parse("{\"count\":2.5,\"wordsShown\":1}")));
+        Assert.Equal(new BackRoomFxArgs(Count: -7), BackRoomFxArgs.Parse(JObject.Parse("{\"count\":-7,\"wordsShown\":false}")));   // the plan clamps
         Assert.Same(BackRoomFxArgs.None, BackRoomFxArgs.Parse(new JArray()));
         Assert.Same(BackRoomFxArgs.None, BackRoomFxArgs.Parse(null));
         Assert.Equal(new FxCssRect(-5, 0, 8, 8), BackRoomFxArgs.Parse(JObject.Parse("""{"from":{"x":-5,"y":0,"w":8,"h":8}}""")).From);

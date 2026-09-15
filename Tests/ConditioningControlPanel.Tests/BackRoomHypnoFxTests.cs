@@ -10,7 +10,7 @@ namespace ConditioningControlPanel.Tests;
 /// <summary>
 /// THE BACK ROOM dispatcher, Hypno v3 half (CONTRACT 10.13.B): the gaps that drop instead of delaying,
 /// the one-hero queue for the new non-heroes, holds released by token or by station-close, the tunnel
-/// feed (gate, Calm, 10 a second) and cancel on suspend/close. Fake clock, recording sink.
+/// feed (always honoured, Calm, 10 a second) and cancel on suspend/close. Fake clock, recording sink.
 /// </summary>
 public class BackRoomHypnoFxTests
 {
@@ -44,7 +44,7 @@ public class BackRoomHypnoFxTests
         clock.Advance(400);
         Assert.Single(Fire(fx, "fx.gif_from", "wheel", "c", new BackRoomFxArgs(Scale: 0.46), "g0").Fired);
         clock.Advance(10_000);
-        Assert.Equal(new[] { (0L, "giffrom:g1:612,188,60,44:3400:1:1:False"), (3400L, "giffrom:g0:centre:3400:0.46:1:False") },
+        Assert.Equal(new[] { (0L, "giffrom:g1:612,188,60,44:3400:1:1"), (3400L, "giffrom:g0:centre:3400:0.46:1") },
             sink.Calls.Where(c => c.Call.StartsWith("giffrom")).ToArray());
     }
 
@@ -58,9 +58,9 @@ public class BackRoomHypnoFxTests
         Fire(fx, "fx.gif_from", "wheel", "g", new BackRoomFxArgs(Ms: 4600, Scale: 0.46));
         Fire(fx, "fx.wash", "wheel", "w", new BackRoomFxArgs(Color: "#e8c27a", Strength: 1));
         clock.Advance(10_000);
-        Assert.Contains((2400L, "spiral:screen.gif:4200:0.9:False:False"), sink.Calls);
-        Assert.Contains(sink.Calls, c => c.At == 2400 && c.Call.StartsWith("giffrom:") && c.Call.Contains(":4600:0.46:"));
-        Assert.Contains(sink.Calls, c => c.At == 2400 && c.Call.StartsWith("wash:#"));
+        Assert.Contains((4000L, "spiral:screen.gif:4200:0.9:False:False"), sink.Calls);
+        Assert.Contains(sink.Calls, c => c.At == 4000 && c.Call.StartsWith("giffrom:") && c.Call.Contains(":4600:0.46:"));
+        Assert.Contains(sink.Calls, c => c.At == 4000 && c.Call.StartsWith("wash:#"));
     }
 
     [Fact]
@@ -133,30 +133,26 @@ public class BackRoomHypnoFxTests
         clock.Advance(200);
         fx.Tunnel("wheel", 0.7);
         clock.Advance(1);
-        Assert.Equal(new[] { (0L, "tunnel:0.2:False"), (100L, "tunnel:0.62:False"), (260L, "tunnel:0.7:False") },
+        Assert.Equal(new[] { (0L, "tunnel:0.2"), (100L, "tunnel:0.62"), (260L, "tunnel:0.7") },
             sink.Calls.Where(c => c.Call.StartsWith("tunnel")).ToArray());
     }
 
     [Fact]
-    public void Tunnel_GatedByTheRoomsTunnelSwitch_HalvedUnderCalm_StillAtOff()
+    public void Tunnel_AlwaysHonoured_HalvedUnderCalm_ClampedAndEasedAtOff()
     {
-        var (off, _, offSink) = Make(gates: FxGates.AllOn with { Tunnel = false });
-        off.Tunnel("wheel", 0.9);
-        Assert.Empty(offSink.Calls);
-
-        // 10.14: not Brain Drain any more.
-        var (drainOff, _, drainOffSink) = Make(gates: FxGates.AllOn with { BrainDrain = false });
-        drainOff.Tunnel("wheel", 0.9);
-        Assert.Equal("tunnel:0.9:False", Assert.Single(drainOffSink.Calls).Call);
+        var (normal, _, normalSink) = Make();
+        normal.Tunnel("wheel", 0.9);
+        Assert.Equal("tunnel:0.9", Assert.Single(normalSink.Calls).Call);
 
         var (calm, _, calmSink) = Make(BackRoomFxIntensity.Calm);
         calm.Tunnel("cards", 0.75);
-        Assert.Equal("tunnel:0.375:False", Assert.Single(calmSink.Calls).Call);
+        Assert.Equal("tunnel:0.375", Assert.Single(calmSink.Calls).Call);
 
-        var (still, _, stillSink) = Make(motion: MotionLevel.Off);
-        still.Tunnel("cards", 2);
-        still.Tunnel("cards", double.NaN);
-        Assert.Equal("tunnel:0.5:True", Assert.Single(stillSink.Calls).Call);   // clamped to 1, Calm forced, no easing
+        // Reduced motion is not a gate: the tunnel still plays (and still eases; there is no still variant).
+        var (off, _, offSink) = Make(motion: MotionLevel.Off);
+        off.Tunnel("cards", 2);
+        off.Tunnel("cards", double.NaN);
+        Assert.Equal("tunnel:1", Assert.Single(offSink.Calls).Call);   // clamped to 1, nothing forces Calm
     }
 
     [Fact]
@@ -170,7 +166,7 @@ public class BackRoomHypnoFxTests
         fx.CancelAll();
         Assert.Equal(0, fx.HoldCount);
         clock.Advance(1000);
-        Assert.DoesNotContain(sink.Calls, c => c.Call == "tunnel:0.5:False");
+        Assert.DoesNotContain(sink.Calls, c => c.Call == "tunnel:0.5");
         fx.Release("s", "roulette");
         Assert.DoesNotContain(sink.Calls, c => c.Call == "spiral-release");   // StopAll already took it
         Assert.Single(Fire(fx, "fx.gif_from", "wheel", "g2").Fired);
@@ -203,26 +199,12 @@ public class BackRoomHypnoFxTests
         clock.Advance(500);
         Fire(fx, "fx.loom_spiral", "roulette", "s1", new BackRoomFxArgs(Hold: true));
         Fire(fx, "fx.loom_spiral", "roulette", "s2", new BackRoomFxArgs(Hold: true));   // merged into s1's copy
-        clock.Advance(3000);
+        clock.Advance(5000);   // past the 4 s hero
         Assert.Single(sink.Calls, c => c.Call.StartsWith("spiral:") && c.Call.Contains(":True:"));   // the held one plays once
         fx.Release("s1", "roulette");
         Assert.DoesNotContain(sink.Calls, c => c.Call == "spiral-release");   // s2 still holds it
         fx.Release("s2", "roulette");
         Assert.Contains(sink.Calls, c => c.Call == "spiral-release");
-    }
-
-    [Fact]
-    public void Tunnel_SwitchTurnedOffMidTunnel_CancelsAtOnce()
-    {
-        var gates = FxGates.AllOn;
-        var clock = new FakeScheduler();
-        var sink = new RecordingSink(clock);
-        var fx = new BackRoomFx(sink, clock, () => new FxEnvironment(MotionLevel.Full, BackRoomFxIntensity.Normal, gates, BackRoomFxPlanTests.Woven));
-        fx.Tunnel("wheel", 0.6);
-        gates = gates with { Tunnel = false };
-        fx.Tunnel(string.Empty, 0);
-        fx.Tunnel("wheel", 0.6);
-        Assert.Equal(new[] { "tunnel:0.6:False", "tunnel-cancel" }, sink.Calls.Select(c => c.Call));
     }
 
     [Fact]
