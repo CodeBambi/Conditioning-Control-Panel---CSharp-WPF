@@ -4,7 +4,7 @@
  * <img> or null) and look.word(i) -> text or null. Missing media gets the preview's fallback art. */
 
 const TILE = ['#ec79b3', '#8160c6', '#c698db', '#53a5b3'];
-const WORDS = ['DROP', 'RELAX', 'LET GO', 'SINK'];
+export const WORDS = ['DROP', 'RELAX', 'LET GO', 'SINK'];
 
 export function kindOf(id) {
   const m = /^(gif|sub|spiral)(\d)$/.exec(id || '');

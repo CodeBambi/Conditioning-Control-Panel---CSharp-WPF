@@ -6,6 +6,9 @@
  *   tape.js   what plays next, and the readouts (server-settled outcomes)
  *   scene.js  the cabinet, one WebGL context per open(), freed in close()
  *   media.js  the dealt GIFs and words painted on the reel cells
+ *   word.js   the lone word and the dead-spin settle on the page (shared/hypno/callout.js): fx.sub_single is
+ *             shown here and not sent; fx.sub_pair / fx.sub_cascade go to the host with args { wordsShown: true }
+ *             (the host skips its own words and plays the pair's spiral / the cascade's fullscreen GIF)
  *   pace.js   THE PACE: about 4 s an outcome
  *   feel.js   THE HOUSE BOOK: which move plays, how big, and the Brake (lane F1)
  *   bank.js / sound.js  THE BANK's tokens and the cues
@@ -26,7 +29,8 @@
 
 import { createTape, stopsFor } from './tape.js';
 import { createScene, FACES } from './scene.js';
-import { createMedia, fxSymbols } from './media.js';
+import { createMedia } from './media.js';
+import { createSlotWords, subWords } from './word.js';   // the lone word, the sub pair / trio, the dead-spin settle (callout.js)
 import { PACE } from './pace.js';
 import { recipe, tierOf, meltedBy, ladderSemis, ladderPlan, rollupMs, winTokens, spendTokens, glance, landPose, restPose, pressPose, glanceHoldMs } from './feel.js';
 import { anticipation, almost } from './feel.js';   // the playbook's Tier A (CONTRACT 10.15)
@@ -34,7 +38,7 @@ import { ATTRACT, attractOk, emiLandings } from './feel.js';
 // The playbook's Tier B and C (CONTRACT 10.16): B1 the spiral jar, B3 the comp, C1 the EMI pair re-spin.
 import { jarPlan, jarParty, JAR_TIER, playsWithoutPress, respinKeep, respinHold } from './feel.js';
 import { flowPlan, FLOW, CALLOUTS } from './feel.js';                     // THE FLOW on the landing frame
-import { createCallout, GLYPH_HIT } from '../../shared/hypno/callout.js';
+import { createCallout, GLYPH_HIT, WORD_MS, WORD_GAP_MS } from '../../shared/hypno/callout.js';
 import { createBank } from './bank.js';
 import { createSound } from './sound.js';
 
@@ -80,7 +84,7 @@ export async function mount(ctx) {
   let pace = 'idle', queued = false, breathEnds = 0, marks = [];   // pace phase: idle | breath | spin | reveal
   // Feel state for one sit-down (lane F1): the readout override while THE BANK flies, the win streak for
   // THE CHIME LADDER, how often each tier has partied (Brake 3), and EMI's current pose (THE MASCOT GLANCE).
-  let sound = null, bank = null, shown = null, owing = false, streak = 0, seen = [0, 0, 0, 0, 0], jackpots = 0;
+  let sound = null, bank = null, shown = null, owing = false, streak = 0, seen = [0, 0, 0, 0, 0], jackpots = 0, words = null;
   let pose = 'idle0_0', glanceTimer = 0, gainTimer = 0, playing = null, feelLog = [], bankFrom = 0, bankTo = 0, bankHold = 1600;
   // A4 attract: one idle timeout re-armed on input (no polling) and one self-re-arming wink, both cleared on
   // any input, on suspend and on close, so a shut cabinet leaves nothing running.
@@ -373,6 +377,15 @@ export async function mount(ctx) {
       if (p && typeof p.catch === 'function') p.catch(() => {});
     } catch (e) { console.warn('[slot] fx failed', e); }
   }
+  /** The outcome's fx, on the frame the result shows (Law I). word.js shows the dealt subliminal word(s) on the page
+   *  itself (fx.sub_single stays here; sub_pair / sub_cascade go to the host with { wordsShown: true }) and settles
+   *  a dead spin (line none, no fx) with EMI's bark; every other fx id goes to the host as before. */
+  function fire(o, tease) {
+    // EMI's wink lands a tick after land()'s own glance on this frame, so the settle's face is hers and not the rest's.
+    if (!words) words = createSlotWords({ ctx, mount: el, media, lex: ctx.lex,
+      emi: { react: () => setTimeout(() => { if (alive) glanceTo('hearts', glanceHoldMs(false), restPose(tape ? tape.snapshot().melt : 0)); }, 0) } });
+    return words.outcome(o, fireFx, { tease: !!tease });
+  }
   /** The host tunnel (CONTRACT 10.13.B): A1's hold pulls it to FLOW.TEASE_TUNNEL, the landing releases it. Sent
    *  on change only; the room's `tunnel` gate (a missing key reads true) drops it to 0. */
   function tunnel(level) {
@@ -404,15 +417,19 @@ export async function mount(ctx) {
                  fx: plan.fx.map(f => f.id), unlockMs: plan.unlockMs, calloutAt: null, fxAt: null };
     scene.highlight(plan.hits);
     if (el && plan.hits.length) { el.classList.add(GLYPH_HIT); later(FLOW.HIGHLIGHT_MS, () => { if (el) el.classList.remove(GLYPH_HIT); }); }
-    for (const c of plan.callouts) later(c.at, () => {
+    const chain = plan.fx.some(f => /^fx.sub_/.test(f.id)) ? subWords(o, media).length : 0;   // a sub chain owns the centre first
+    const wordsMs = chain ? WORD_MS + WORD_GAP_MS * (chain - 1) : 0;
+    for (const c of plan.callouts) later(c.at + wordsMs, () => {
       if (callout) callout.show(c.key, c.fallback, { tier: c.tier });
       if (flowLast) flowLast.calloutAt = Math.round(performance.now());
       note('callout', { key: c.key, tier: c.tier, at: c.at });
     });
-    for (const f of plan.fx) later(f.at, () => {
-      fireFx(f.id, fxSymbols(f.id, o, media), f.args);
-      if (flowLast && flowLast.fxAt === null) flowLast.fxAt = Math.round(performance.now());
-      note('fx', { id: f.id, args: f.args || null, at: f.at });
+    const tease = plan.fx.find(f => f.args && f.args.count === 1) || null;   // the GIF tease rides its own entry
+    later(FLOW.FX_DELAY_MS, () => {
+      const shown = fire(o, tease);   // word.js: the words on the page, the rest to the host, a dead spin settles
+      if (tease) fireFx(tease.id, fxSymbols(tease.id, o, media), tease.args);
+      if (flowLast) { flowLast.fxAt = Math.round(performance.now()); flowLast.words = shown ? shown.words : []; }
+      note('fx', { ids: plan.fx.map(f => f.id), at: FLOW.FX_DELAY_MS, words: shown ? shown.words.length : 0, settled: !!(shown && shown.settled) });
     });
     return plan;
   }
@@ -672,6 +689,7 @@ export async function mount(ctx) {
     if (hostSp) hostSp.set(null);
     owing = false;
     if (sound) sound.dispose();
+    if (words) { words.dispose(); words = null; }   // Law VI: the word, the tunnel and the speech go with the cabinet
     const s = scene, root = el, m = media;
     if (s) s.skip();
     if (root) root.dataset.phase = 'leaving';
@@ -690,6 +708,7 @@ export async function mount(ctx) {
       if (suspended) { endAttract(true); clearFlow(); tunnel(0); } else armIdle();   // Law VI: the word and the timers drop at once
       if (sound) sound.suspend(suspended);   // the climb is hushed with it: a resumed context would replay the rest
       if (suspended && bank) bank.skip();
+      if (suspended && words) words.cancel();   // Law VI: the word, the tunnel and the speech drop at once
       if (suspended && scene) { scene.cancelPull(); scene.skip(); }
       if (el) sync();
     },
