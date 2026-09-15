@@ -43,5 +43,5 @@ export function createRewardReveal(root, t) {
     box.dataset.kind = r.kind; box.classList.toggle('is-still', still);
     box.querySelector('p').textContent = rewardText(result, t);
     box.querySelector('span').textContent = r.kind === 'double' ? '\u00d72' : r.kind === 'nothing' ? '\u00b7' : r.fallback ? `\u2726 ${result.credited ?? result.total ?? result.pay ?? 75}` : '\u2667';
-  }, hide() { box.hidden = true; }, dispose() { box.remove(); } };
+  }, setStill(value) { if (value) box.classList.add('is-still'); }, hide() { box.hidden = true; }, dispose() { box.remove(); } };
 }
