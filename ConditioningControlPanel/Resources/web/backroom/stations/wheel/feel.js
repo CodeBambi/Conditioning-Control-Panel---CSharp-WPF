@@ -34,6 +34,7 @@ export const FEEL = Object.freeze({
 export function tierOf(r) {
   if (!r) return 0;
   if (r.jackpotWon) return 4;
+  if (r.reward?.kind === 'double' || (r.reward?.kind === 'decoration' && !r.reward.fallback)) return 2;
   if (r.snoozed || !(r.pay > 0)) return 0;
   return r.pay >= 40 ? 3 : r.pay >= 5 ? 2 : 1;
 }
@@ -90,6 +91,8 @@ export const pressPose = () => 'spirals';
 export function landPose(r) {
   if (!r) return 'idle0_0';
   if (r.jackpotWon) return 'jackpot';
+  if (r.reward?.kind === 'double') return 'spirals';
+  if (r.reward?.kind === 'decoration') return 'hearts';
   if (r.snoozed) return 'melt';
   return r.pay > 0 ? 'hearts' : 'idle0_0';
 }

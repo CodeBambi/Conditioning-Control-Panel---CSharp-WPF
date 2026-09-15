@@ -5861,5 +5861,20 @@
   "br_custom_off": "关闭",
   "br_custom_lever": "老虎机拉杆",
   "br_custom_use": "使用",
-  "br_custom_remove": "移除"
+  "br_custom_remove": "移除",
+  "br_wheel_slice_pocket_sparkles": "口袋闪光",
+  "br_wheel_slice_good_behaviour": "乖巧奖励",
+  "br_wheel_slice_keep_the_change": "零钱归你",
+  "br_wheel_slice_spoiled_rotten": "宠到没边",
+  "br_wheel_slice_room_service": "客房服务",
+  "br_wheel_slice_seeing_double": "双重视界",
+  "br_wheel_slice_head_empty": "脑袋空空",
+  "br_daze_empty": "没有念头。没有闪光。",
+  "br_daze_double_won": "双重视界。24小时内奖金翻倍。",
+  "br_daze_complete": "收藏已集齐。+{n} SP。",
+  "br_daze_delivered": "{name}已送达。前往客房服务摆放。",
+  "br_daze_gift": "一件装饰",
+  "br_daze_gift_odds": "未拥有的装饰，集齐后改得75 SP",
+  "br_daze_double_odds": "24小时内奖金翻倍",
+  "br_daze_nothing": "什么也没有"
 }
