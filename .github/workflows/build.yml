@@ -43,12 +43,40 @@ jobs:
       # Suppressing the validation on the command line rather than editing either .csproj keeps
       # what ships byte-for-byte unchanged. Drop the flag if the solution ever builds clean
       # without it.
-      - name: Build solution
-        run: dotnet build ConditioningControlPanel.sln -c Release -p:ValidateExecutableReferencesMatchSelfContained=false
+      - name: Build solution and initialize evidence
+        id: build
+        shell: pwsh
+        run: |
+          $out = (New-Item -ItemType Directory (Join-Path $env:RUNNER_TEMP ('ccp-ci-' + [guid]::NewGuid().ToString('N')))).FullName
+          "receipts=$out" >> $env:GITHUB_OUTPUT
+          $PSNativeCommandUseErrorActionPreference = $false
+          $command = 'dotnet build ConditioningControlPanel.sln -c Release -p:ValidateExecutableReferencesMatchSelfContained=false'
+          $command | Set-Content "$out/green-build-command.log"
+          & dotnet build ConditioningControlPanel.sln -c Release -p:ValidateExecutableReferencesMatchSelfContained=false *> "$out/green-build.log"
+          $code = $LASTEXITCODE
+          try { @{ exitCode = $code; command = $command; testsStarted = $false } | ConvertTo-Json | Set-Content "$out/green-build-outcome.json" }
+          finally { if ($code) { exit $code } }
 
       # The suite includes WpfRenderHarness.cs and PlayDoorRenderTests.cs, which do real WPF
       # rendering. Those pass headless on windows-latest - measured, 4924 passed / 0 failed in
       # about 45 seconds - so this is a hard gate rather than advisory. An advisory job that is
       # always green trains everyone to ignore it.
-      - name: Test
-        run: dotnet test Tests/ConditioningControlPanel.Tests/ConditioningControlPanel.Tests.csproj -c Release -p:ValidateExecutableReferencesMatchSelfContained=false
+      # The lower support-only layer reports nativeVerified=false. Once the fixture is composed,
+      # RED/GREEN are mandatory in owned jobs; compatibility excludes only that one native Fact.
+      - name: Test in owned Windows boundaries
+        id: tests
+        shell: pwsh
+        env:
+          TEST_RECEIPTS: ${{ steps.build.outputs.receipts }}
+        run: ./.github/ci/Test-Windows.ps1 -Mode SupportOnly -Receipts $env:TEST_RECEIPTS
+
+      - name: Preserve test evidence (including blocked runs)
+        if: always() && steps.build.outputs.receipts != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-test-evidence
+          path: |
+            ${{ steps.build.outputs.receipts }}/*.json
+            ${{ steps.build.outputs.receipts }}/*.log
+            ${{ steps.build.outputs.receipts }}/*/tests.trx
+          if-no-files-found: error

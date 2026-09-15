@@ -1,0 +1,11 @@
+--- a/ConditioningControlPanel/Resources/web/dtrh/raceBoot.js
++++ b/ConditioningControlPanel/Resources/web/dtrh/raceBoot.js
+@@ -165,7 +165,7 @@
+   try { menu.settingEcho(m); } catch (e) { host.log('setting: ' + e); }
+ });
+ bridge.on('ping', (m) => host.send({ type: 'pong', t: m && m.t }));
+-bridge.on('fullscreen', () => { /* Acknowledgement only; no fullscreen UI to update. Never echo a command. */ });
++bridge.on('fullscreen', (m) => host.send({ type: 'fullscreen-set', on: !!(m && m.on) }));
+ bridge.on('exit-request', surface);
+ // ---- track charts (CHART.md host protocol). The run owns the clock; this only relays. ----
+ bridge.on('track-chart', (m) => {
