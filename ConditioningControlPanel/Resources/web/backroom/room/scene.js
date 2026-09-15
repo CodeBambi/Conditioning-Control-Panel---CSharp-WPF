@@ -230,6 +230,14 @@ export async function createScene(o) {
       const hands=view?.hands||1, next=cardCounts(view?.cards), key=JSON.stringify([hands,next]);
       if(key!==composition){composition=key;cardHands=hands;counts=next;if(view)moveCamera(gamePose(seated.row),700);}
     }
+    if(seated?.row.id==='roulette'){
+      // The mat asks for its frame ('mat' while bets are open, 'table' once the ball runs); only a pose that differs moves.
+      const want=scene.getObjectByName('roulette_runtime_mat')?.userData.frame;
+      if(want&&want!==seated.frame){
+        seated.frame=want;const target=gamePose(seated.row);
+        if(target.pos.some((v,i)=>Math.abs(v-pos[i])>1e-4)||Math.abs(target.yaw-yaw)>1e-4||Math.abs(target.pitch-pitch)>1e-4||Math.abs(target.offset-viewOffset)>1e-4)moveCamera(target,700);
+      }
+    }
     if(customization.opened || seated || transition)resetInput();
     if(transition){
       const tr=transition; tr.elapsed+=dt*1000;

@@ -11,6 +11,7 @@ Single-zero roulette for SP (CONTRACT.md sections 2-7 and 10.13, binding spec `h
 | `feel.js` | Pure: outcome -> moment id, the Lighthouse clock (law 4), the ball's run planned backwards from `outcome.pocket`, timings. |
 | `bowl.js` | The canvas bowl: drifting rim cache, rotor, pockets, lighthouse, the run, fret rattle and sparks, turret whirl (Loom), velvet wake. |
 | `mat.js` | The canvas mat (37 straights, sip, sink, deep, rose, plum) and the chips: chip vortex, chips in, the pulled pair. |
+| `bowl-3d.js`, `mat-3d.js` | The seated view on the room's fixture (below): the authored bowl driven by the same core, the authored mat with printed cells, pick planes and live chips. |
 | `mock-server.js`, `dev.html` | Standalone harness on the 10.13.E shapes with seeded fixture outcomes (not the table) and the kit's mock host. Not shipped behaviour. |
 | `tests/*.test.mjs`, `tests/roulette-check.mjs` | Node tests; the headless check (`ROULETTE_PORT` default 8899, debug +500). |
 
@@ -92,16 +93,31 @@ Dev harness: serve `ConditioningControlPanel/Resources/web` as the web root and 
 `dev.station.debug()` shows the phase, Law I, the tape, the bowl (lit numbers, plan), the mat and the feel log.
 
 
-## Seated 3D view (draft amendment)
+## Seated 3D view (CONTRACT 10.18)
 
-When ctx.stage is present, the room renderer owns the bowl and authored mat.
-`bet_hit_<spot>` anchors provide spot id, hit_width, hit_depth and chip_radius.
-All 42 hit targets route into the existing place/remove action. Chip-count opens
-an optional bet picker for cells outside a narrow viewport; its chips still land
-on the physical mat. The camera pose never changes. Without a stage the canvas
-view remains available. No new lexicon keys or server operations.
+When ctx.stage is present, the room renderer owns the bowl and the authored mat (`bowl-3d.js`, `mat-3d.js`):
+the station's DOM keeps only the controls, the room camera seats the player over the fixture and the same
+`place` / `remove` action takes every tap on the mat.
+
+- **Targets.** `bet_hit_<spot>` anchors provide spot id, hit_width, hit_depth and chip_radius; all 42 become hidden
+  pick planes. A ray hit wins; a miss still picks the nearest cell whose 40 px pad (round cells narrower than a
+  fingertip) holds the pointer, so a tap just off a narrow cell lands where it looks. There is no DOM betting grid.
+- **Prints.** While seated the authored cream glyph mesh (`bet_number_assembly`) is hidden and one 1024 px atlas
+  (`roulette_mat_prints`, one draw call) prints bold outlined digits and the outside labels onto the cells at their
+  own proportions; leaving restores the glyphs. The wheel's own glyphs are batched by `room/roulette-surfaces.js`,
+  grown 1.9x inside their bands with a faint emissive, on every view of the room.
+- **Camera.** `room/seat-camera.js` fits the whole table on a desktop and never moves it. A phone (width <= 800 or
+  height <= 500) frames the mat while bets are open (`mat.setFrame('mat')`, the wheel above it, its offset side
+  cropped) and eases out to the whole table for 700 ms on Spin (`'table'`, every pocket in view), back to the mat
+  once bets reopen; `room/scene.js` reads `userData.frame` on `roulette_runtime_mat` and moves only when the pose
+  differs. Portrait keeps 150 px clear above and 108 px below for the control bar; landscape keeps 200 px at the
+  right for the status and controls column and lets the wheel's far side leave the top.
+- Without a stage the canvas view (`bowl.js`, `mat.js`) remains. No new lexicon keys or server operations.
 
 Rebuild the model variant from the separate Blender workspace's
 `roulette/add_play_anchors.py`, then use the room asset pipeline with
 `--only roulette.glb --asset-source <roulette/play-out/roulette.glb>`.
 Runtime resources are disposed by the stage subscription.
+
+Checks: `tests/room-3d-check.mjs` (both phone orientations through the real room: 42 taps, the pick pad, the
+camera frames, a landing), `tests/bowl-3d-check.mjs`, and `smoke/seat-camera-check.mjs` for the seated fit.

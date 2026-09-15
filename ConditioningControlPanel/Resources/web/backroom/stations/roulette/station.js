@@ -8,6 +8,9 @@
  *             the server's pocket (pure)
  *   bowl.js   the canvas bowl and its page effects
  *   mat.js    the canvas mat and the chips
+ *   bowl-3d.js, mat-3d.js  the same bowl and mat on the room's own fixture when the
+ *             room seats the player (ctx.stage, CONTRACT 10.18); a phone frames the
+ *             mat while bets are open and the whole table once the ball runs
  *   shared/hypno  the Loom kit (turret whirl), the deal (a picture key for
  *             fx.gif_from) and the moments (every host fx goes through them)
  *
@@ -24,7 +27,6 @@ import { MAX_CHIPS, MAX_SPINS, addChip, removeChip, chipsOf, chipTotal, checkLay
 import { FEEL, planRun, seedFor, landMoment, nextLaunchAt } from './feel.js';
 import { createBowl } from './bowl.js';
 import { createMat } from './mat.js';
-import { createMatStrip } from './mat-strip.js';
 
 export const roomStage = true;
 
@@ -51,7 +53,7 @@ export async function mount(ctx) {
   const stage = ctx.stage?.fixture && ctx.stage?.register ? ctx.stage : null;
   const makeBowl3D = stage ? (await import('./bowl-3d.js')).createBowl3D : null;
   const makeMat3D = stage ? (await import('./mat-3d.js')).createMat3D : null;
-  let unStage = null, betSelector = null, stageReady = stage?.ready !== false;
+  let unStage = null, stageReady = stage?.ready !== false;
   const hostBack = ctx.hostBack === true;
   const hook = ctx.spReadout && typeof ctx.spReadout.owe === 'function' ? ctx.spReadout : null;
   loadCss();
@@ -113,12 +115,12 @@ export async function mount(ctx) {
     if (!hook) $('.roul-sp').textContent = t('br_roulette_sp', '{n} SP', { n: fmt(shownSp(sp, tape)) });
     const pips = el.querySelectorAll('.roul-pips i'), used = chipTotal(chips);
     pips.forEach((p, i) => p.classList.toggle('is-used', i < used));
-    $('.roul-chips-label').textContent = stage && !mat?.split ? t('br_roulette_place_bets', 'Place bets · {n}/{max}', { n: used, max: MAX_CHIPS }) : t('br_roulette_chips', 'Chips {n} of {max}', { n: used, max: MAX_CHIPS });
+    $('.roul-chips-label').textContent = stage ? t('br_roulette_place_bets', 'Place bets · {n}/{max}', { n: used, max: MAX_CHIPS }) : t('br_roulette_chips', 'Chips {n} of {max}', { n: used, max: MAX_CHIPS });
     $('.roul-chips-label').dataset.chips = String(used);
     const locked = phase !== 'bet' || resume || stage?.ready === false;
     $('.roul-clear').disabled = locked || used === 0;
-    $('.roul-chips-label').disabled = !stage || mat?.split || locked;
-    if (betSelector && (locked || mat?.split)) betSelector.hide();
+    // A phone's camera frames the mat while bets are open and the whole table for the run (seat-camera.js).
+    if (mat && mat.setFrame) mat.setFrame(phase === 'bet' && !resume ? 'mat' : 'table');
     el.querySelectorAll('.roul-spins button').forEach((b) => { b.setAttribute('aria-pressed', String(Number(b.dataset.n) === count)); b.disabled = locked; });
     const shownWhy = why || (phase === 'bet' && !resume && !c.ok && c.why !== 'empty' ? whyText(c.why, c) : '');
     $('.roul-why').textContent = shownWhy; $('.roul-why').hidden = !shownWhy;
@@ -165,7 +167,7 @@ export async function mount(ctx) {
         <ol class="roul-history"></ol>
       </header>
       <div class="roul-controls">
-        <div class="roul-row"><button type="button" class="roul-chips-label"></button><span class="roul-pips" aria-hidden="true"><i></i><i></i><i></i></span><button class="roul-clear" type="button"></button></div>
+        <div class="roul-row"><span class="roul-chips-label"></span><span class="roul-pips" aria-hidden="true"><i></i><i></i><i></i></span><button class="roul-clear" type="button"></button></div>
         <div class="roul-row roul-spins" role="group"><span class="roul-spins-label"></span>${spinsBtns}</div>
         <p class="roul-why" hidden></p>
         <button class="roul-spin" type="button"><span></span><small></small></button>
@@ -184,7 +186,6 @@ export async function mount(ctx) {
     root.querySelector('.roul-card-back').onclick = back;
     if (hostBack) { root.dataset.hostBack = ''; root.querySelector('.roul-back').hidden = true; root.querySelector('.roul-card-back').hidden = true; }
     if (hook) root.dataset.hostSp = '';
-    root.querySelector('.roul-chips-label').onclick = () => betSelector?.toggle();
     root.querySelector('.roul-spin').onclick = () => press();
     root.querySelector('.roul-clear').onclick = () => { if (phase === 'bet' && !resume) { chips = {}; why = null; sync(); } };
     root.querySelectorAll('.roul-spins button').forEach((b) => { b.onclick = () => setCount(Number(b.dataset.n)); });
@@ -328,7 +329,6 @@ export async function mount(ctx) {
     if (suspended || !bowl) return;
     if (stage && stageReady !== (stage.ready !== false)) { stageReady = stage.ready !== false; sync(); }
     const now = clock(), still = stillNow(), k = kNow();
-    if(stage){mat.layout();const split=mat.split;if(el.hasAttribute('data-split')!==split){el.toggleAttribute('data-split',split);sync();}}
     layout();
     if (kit) kit.setStill(still);
     const u = bowl.update(now, { still });
@@ -351,7 +351,6 @@ export async function mount(ctx) {
     bowl.draw(g, { dpr: size.dpr, now, k, full: fullNow(), spiral: gt.spiral, kit,
       still, slowText: t('br_roulette_slowly', 's l o w l y') });
     const landedShown = cur && cur.landed ? cur.read : null;
-    if (betSelector) betSelector.draw(null, { chips, hits: [], locked: phase !== 'bet' || resume || !stageReady || mat?.split });
     mat.draw(g, { now, chips, hover, hits: landedShown ? landedShown.hits : [], landed: landedShown ? landedShown.pocket : null, k, still,
       bowl: bowl.geo, locked: phase !== 'bet' || resume });
   }
@@ -399,10 +398,7 @@ export async function mount(ctx) {
     st = b; sp = Number(b.sp) || 0; tape = adoptTape(b.tape);
     bowl = stage ? makeBowl3D({ stage, wheel: st.wheel, rose: st.rose }) : createBowl({ wheel: st.wheel, rose: st.rose });
     mat = stage ? makeMat3D({ stage, spots: st.spots, label: matLabel }) : createMat({ spots: st.spots, rose: st.rose, label: matLabel });
-    if (stage) {
-      betSelector = createMatStrip({ root: el, spots: st.spots, label: matLabel, place, onToggle: open => $('.roul-chips-label').setAttribute('aria-expanded',String(open)) }); betSelector.hide();
-      unStage = stage.register({ get coversRoom(){return mat?.split===true;}, update: frame, draw: renderer => mat?.drawSplit(renderer), dispose() { bowl?.dispose(); mat?.dispose(); betSelector?.dispose(); betSelector = null; } });
-    }
+    if (stage) unStage = stage.register({ update: frame, dispose() { bowl?.dispose(); mat?.dispose(); } });
     if (tape) {
       chips = chipsOf(tape.bets); resume = tape.played < tape.outcomes.length;
       if (tape.played > 0) { const last = readOutcome(tape.outcomes[tape.played - 1], tape.bets, { rose: st.rose, wheel: st.wheel }); bowl.seat(last.index); }
@@ -410,7 +406,6 @@ export async function mount(ctx) {
     if (hook) hook.owe(reader);   // registered once the tape state is back (CONTRACT 7.1)
     renderOdds();
     layout();   // the mat takes clicks from the first interactive frame
-    if(stage)el.toggleAttribute('data-split',mat.split);
     phase = 'bet'; sync();
     if (!stage) raf = requestAnimationFrame(frame);
     note('open', { resume, sp, still: stillNow(), gates: gates() });

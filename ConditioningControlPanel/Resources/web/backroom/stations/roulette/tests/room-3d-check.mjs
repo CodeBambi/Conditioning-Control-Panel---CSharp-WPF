@@ -1,15 +1,16 @@
 /* ============================================================================
- * roulette-check.mjs - the Velvet Vortex station in headless Chrome, driven over CDP, on dev.html (the kit's mock
- * host and mock-server.js) and inside the real room page.
+ * room-3d-check.mjs - the Velvet Vortex seated on the room's own fixture, on a phone, driven over CDP.
  *
- *   node backroom/stations/roulette/tests/roulette-check.mjs [evidenceDir]    (exit 0 = pass)
+ *   node backroom/stations/roulette/tests/room-3d-check.mjs [evidenceDir]    (exit 0 = pass)
  *
- * Nothing leaves the machine: Resources/web is served on 127.0.0.1 (ROULETTE_PORT, default 8899, debug +500) and the
- * mocks answer every call. The only process this stops is the Chrome it started, by its own handle.
- * Evidence: a screenshot of every key moment in CONTRACT 10.13.F (idle table, lighthouse sweep, the mat, a
- * refused cover-all, the tunnel run, the fret rattle, the Spiral Wake turret, big / win / miss landings, Full,
- * a gated-off run, a Calm run, the room) and roulette-check.json. The dev page's "host preview" layer paints
- * what the mock host acked, so the fullscreen moments show in the shots; the real overlays are the app's.
+ * Both phone orientations (ROULETTE_WIDTH x ROULETTE_HEIGHT to run one): the room seats the player on the
+ * same top-down camera a desktop gets, framed on the mat while bets are open; every one of the 42 authored
+ * bet targets projects inside the viewport, under no control, and a real touch on each lands a chip on that
+ * cell. Spin eases the camera out to the whole table (all 37 pockets in view), the landing fires through the
+ * real bridge, and the camera returns to the mat once bets reopen. No DOM betting grid exists any more.
+ *
+ * Nothing leaves the machine: Resources/web is served on 127.0.0.1 (ROULETTE_ROOM_PORT, default 8919, debug
+ * +500). The only process it stops is the Chrome it started, by its own handle.
  * CHROME: CHROME_PATH, else the usual Windows install.
  * ==========================================================================*/
 
@@ -67,37 +68,21 @@ const ev = async (x) => {
   return r.result?.result?.value;
 };
 await cdp('Runtime.enable'); await cdp('Page.enable');
-await cdp('Emulation.setDeviceMetricsOverride', { width: Number(process.env.ROULETTE_WIDTH || 400), height: Number(process.env.ROULETTE_HEIGHT || 800), deviceScaleFactor: 1, mobile: true });
 async function shot(name) {
   const r = await cdp('Page.captureScreenshot', { format: 'png' });
   await writeFile(join(OUT, name), Buffer.from(r.result.data, 'base64'));
   console.log('  shot ' + name);
 }
-const dbg = () => ev('window.dev.station.debug()');
 async function until(expr, ms = 15000, step = 50) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await ev(expr)) return true; await sleep(step); } return false; }
-async function boot(query) {
-  await cdp('Page.navigate', { url: `http://127.0.0.1:${PORT}/backroom/stations/roulette/dev.html${query}` });
-  await until('!!(window.dev && window.dev.station)', 10000, 100);
-  await ev('window.dev.open()');
-  await until('window.dev.station.debug().phase === "bet"', 10000, 100);
+async function tap(x, y) {
+  await cdp('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  await cdp('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
 }
-async function click(x, y, button = 'left') {
-  if(button==='left'){await cdp('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});await cdp('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});return;}
-  await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
-  await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button, buttons: button === 'left' ? 1 : 2, clickCount: 1 });
-  await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button, clickCount: 1 });
-}
-async function clickSpot(spot) {
-  const r = (await dbg()).mat.rects[spot];
-  await click(Math.round(r.x + r.w / 2), Math.round(r.y + r.h / 2));
-}
-const clickSel = (sel) => ev(`(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b || b.disabled) return false; b.click(); return true; })()`);
-const host = (expr) => ev(`(() => { const h = window.dev.host; return ${expr}; })()`);
-const logOf = (what) => ev(`window.dev.station.debug().log.filter((x) => x.what === ${JSON.stringify(what)})`);
 const report = {};
 
-await cdp('Emulation.setUserAgentOverride',{userAgent:'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36'});
-await cdp('Page.addScriptToEvaluateOnNewDocument',{source: "Object.defineProperty(navigator,'deviceMemory',{get:()=>4});Object.defineProperty(navigator,'hardwareConcurrency',{get:()=>4});"});
+await cdp('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 2 });
+await cdp('Emulation.setUserAgentOverride', { userAgent: 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36' });
+await cdp('Page.addScriptToEvaluateOnNewDocument', { source: "Object.defineProperty(navigator,'deviceMemory',{get:()=>4});Object.defineProperty(navigator,'hardwareConcurrency',{get:()=>4});" });
 const FAKE_HOST = `(() => {
   const listeners = [];
   const emit = (data) => setTimeout(() => listeners.forEach((fn) => fn({ data })), 0);
@@ -119,62 +104,95 @@ const FAKE_HOST = `(() => {
   };
 })();`;
 await cdp('Page.addScriptToEvaluateOnNewDocument', { source: FAKE_HOST });
-await cdp('Page.navigate', { url: `http://127.0.0.1:${PORT}/backroom/index.html` });
-await until(`document.documentElement.classList.contains('br-ready')`, 40000, 100);
-await ev(`window.__backroom.visit(window.__backroom.stations.find((s) => s.key === 'roulette'))`);
-ok(await until('!!document.querySelector(".roul-station[data-phase=bet]")', 10000, 100), 'the room mounts and opens the roulette through the loader');
-const picks = await ev(`(async () => {
-  const T=await import('three'),s=window.__backroom.scene,fixture=s.scene.getObjectByName('station_roulette');
-  const {createMatView}=await import('/backroom/stations/roulette/mat-view.js');
-  const targets=[];fixture.traverse(o=>{if(o.isMesh&&o.userData.spot)targets.push(o);});
-  const cells=new Map(targets.map(plane=>[plane.userData.spot,{plane,position:plane.position.clone()}]));
-  const view=createMatView({fixture,canvas:s.renderer.domElement,ready:true},cells);view.layout();s.scene.updateMatrixWorld(true);
-  return targets.map(o=>{const {x,y}=view.project(o.position),hit=view.pick({clientX:x,clientY:y},targets);
-    return {spot:o.userData.spot,hit,x,y,position:o.position.toArray(),visible:x>=0&&x<innerWidth&&y>=innerHeight*2/3&&y<innerHeight,uncovered:document.elementFromPoint(x,y)===s.renderer.domElement};});
-})()`);
-ok(picks.length===42&&picks.every(p=>p.hit===p.spot&&p.visible&&p.uncovered),'all42 actual mat centers project into the lower view and raycast correctly');
-await writeFile(join(OUT,'mat-picks.json'),JSON.stringify(picks,null,2));
-ok(await ev("getComputedStyle(document.querySelector('.roul-mat-strip')).display==='none'"),'mobile shows no HTML betting grid');
-ok(await ev("document.querySelector('.roul-controls').getBoundingClientRect().top>=innerHeight*2/3"),'bet controls stay in the lower comic panel');
-ok(await ev("(()=>{const s=getComputedStyle(document.querySelector('.roul-station'),'::after');return s.backgroundColor==='rgb(0, 0, 0)'&&s.transform!=='none';})()"),'panels have a solid black tilted divider');
-let pointerPass=true;
-for(const target of picks){
-  await click(target.x,target.y);await sleep(60);
-  const shown=await ev(`(async()=>{const T=await import('three'),mesh=window.__backroom.scene.scene.getObjectByName('roulette_live_chips'),matrix=new T.Matrix4();mesh.getMatrixAt(0,matrix);return{count:mesh.count,position:new T.Vector3().setFromMatrixPosition(matrix).toArray()};})()`);
-  pointerPass&&=shown?.count===1&&Math.hypot(shown.position[0]-target.position[0],shown.position[2]-target.position[2])<.001;
-  if(target.spot==='s18')await shot('phone-3d-chip.png');
-  await ev("document.querySelector('.roul-clear').click()");
+
+/** Every bet target's cell through the room camera, as viewport rects, with what the DOM shows at its centre. */
+const RECTS = `(async () => { const T = await import('three'); const s = window.__backroom.scene, mat = s.scene.getObjectByName('roulette_runtime_mat'); if (!mat) return null;
+  const r = s.renderer.domElement.getBoundingClientRect(), out = {}, v = new T.Vector3();
+  mat.traverse((o) => { if (!o.userData.spot) return; const g = o.geometry.parameters; let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const x of [-g.width / 2, g.width / 2]) for (const y of [-g.height / 2, g.height / 2]) { o.localToWorld(v.set(x, y, 0)).project(s.camera); const px = r.left + (v.x + 1) * r.width / 2, py = r.top + (1 - v.y) * r.height / 2; x0 = Math.min(x0, px); y0 = Math.min(y0, py); x1 = Math.max(x1, px); y1 = Math.max(y1, py); }
+    out[o.userData.spot] = { x: x0, y: y0, w: x1 - x0, h: y1 - y0, cover: document.elementFromPoint((x0 + x1) / 2, (y0 + y1) / 2)?.tagName || null, position: o.position.toArray() }; });
+  return out; })()`;
+/** The 37 pocket centres through the room camera. */
+const POCKETS = `(async () => { const T = await import('three'); const s = window.__backroom.scene, f = s.scene.getObjectByName('station_roulette'), r = s.renderer.domElement.getBoundingClientRect(), out = [];
+  for (let n = 0; n < 37; n++) { const v = new T.Box3().setFromObject(f.getObjectByName('pocket_' + n)).getCenter(new T.Vector3()).project(s.camera); out.push({ n, x: r.left + (v.x + 1) * r.width / 2, y: r.top + (1 - v.y) * r.height / 2 }); }
+  return out; })()`;
+const CHIP = `(async () => { const T = await import('three'), mesh = window.__backroom.scene.scene.getObjectByName('roulette_live_chips'), matrix = new T.Matrix4(); mesh.getMatrixAt(0, matrix); return { count: mesh.count, position: new T.Vector3().setFromMatrixPosition(matrix).toArray() }; })()`;
+const pose = () => ev('(() => { const d = window.__backroom.scene.debug(); return { position: d.position, yaw: d.yaw, pitch: d.pitch, offset: d.viewOffset }; })()');
+const samePose = (a, b) => a.position.every((v, i) => Math.abs(v - b.position[i]) < .01) && Math.abs(a.yaw - b.yaw) < .001 && Math.abs(a.pitch - b.pitch) < .001 && Math.abs(a.offset - b.offset) < .001;
+
+const SIZES = process.env.ROULETTE_WIDTH ? [[Number(process.env.ROULETTE_WIDTH), Number(process.env.ROULETTE_HEIGHT || 800)]] : [[400, 800], [800, 400]];
+for (const [width, height] of SIZES) {
+  const name = width + 'x' + height, portrait = height > width, floor = portrait ? 20 : 26;   // css px, the narrowest number cell
+  await cdp('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: true });
+  await cdp('Page.navigate', { url: `http://127.0.0.1:${PORT}/backroom/index.html` });
+  await until(`document.documentElement.classList.contains('br-ready')`, 40000, 100);
+  await ev(`window.__posted.length = 0; window.__backroom.visit(window.__backroom.stations.find((s) => s.key === 'roulette'))`);
+  ok(await until('!!document.querySelector(".roul-station[data-phase=bet]")', 12000, 100), `${name}: the room mounts and opens the roulette through the loader`);
+  ok(await until('!window.__backroom.scene.transitioning', 5000), `${name}: the seat camera has arrived`);
+  await sleep(300);
+  ok(await ev("document.querySelectorAll('canvas').length === 1 && !document.querySelector('.roul-mat-strip') && getComputedStyle(document.querySelector('.roul-stage')).display === 'none'"), `${name}: one room canvas, no DOM betting grid: the 3D mat takes the bets`);
+  ok(await ev("(() => { const f = window.__backroom.scene.scene.getObjectByName('station_roulette'); return f.getObjectByName('bet_number_assembly').visible === false && !!f.getObjectByName('roulette_mat_prints'); })()"), `${name}: the authored cream glyphs give way to the printed atlas`);
+  const rects = await ev(RECTS), list = Object.entries(rects || {});
+  const inside = list.filter(([, r]) => r.x >= 0 && r.y >= 0 && r.x + r.w <= width && r.y + r.h <= height), clear = list.filter(([, r]) => r.cover === 'CANVAS');
+  ok(list.length === 42 && inside.length === 42 && clear.length === 42, `${name}: all 42 targets project inside the viewport under no control (${inside.length} inside, ${clear.length} clear)`);
+  const numbers = list.filter(([k]) => /^s[1-9]/.test(k)), minW = Math.min(...numbers.map(([, r]) => r.w)), minH = Math.min(...numbers.map(([, r]) => r.h));
+  ok(minW >= floor && minH >= floor * .85, `${name}: number cells at least ${floor} px wide while bets are open (min ${minW.toFixed(1)} x ${minH.toFixed(1)})`);
+  const controls = await ev("(() => { const b = document.querySelector('.roul-controls').getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height }; })()");
+  const covered = list.filter(([, r]) => r.x < controls.x + controls.w && r.x + r.w > controls.x && r.y < controls.y + controls.h && r.y + r.h > controls.y).map(([k]) => k);
+  ok(covered.length === 0, `${name}: the control bar covers no target` + (covered.length ? ': ' + covered.join(', ') : ''));
+  report[name] = { cells: { minW, minH }, controls, rects };
+  await shot(`phone-3d-${name}-idle.png`);
+  let placed = 0;
+  for (const [spot, r] of list) {
+    await tap(Math.round(r.x + r.w / 2), Math.round(r.y + r.h / 2)); await sleep(40);
+    const shown = await ev(CHIP);
+    if (shown?.count === 1 && Math.hypot(shown.position[0] - r.position[0], shown.position[2] - r.position[2]) < .001) placed++;
+    else console.log('  miss ' + spot + ' ' + JSON.stringify(shown));
+    if (spot === 's18') await shot(`phone-3d-${name}-chip.png`);
+    await ev("document.querySelector('.roul-clear').click()");
+  }
+  ok(placed === 42, `${name}: a touch on each of the 42 cells lands a chip on that cell (${placed}/42)`);
+  // A fingertip beside a narrow cell still picks it: a touch just off the mat's right edge, inside the 40 px pad, reads as 36.
+  const s36 = rects.s36, pad = Math.max(0, (40 - s36.w) / 2);
+  if (pad >= 2) {
+    await tap(Math.round(s36.x + s36.w + Math.max(1, Math.floor(pad) - 1)), Math.round(s36.y + s36.h / 2)); await sleep(60);
+    const padded = await ev(CHIP);
+    ok(padded?.count === 1 && Math.hypot(padded.position[0] - s36.position[0], padded.position[2] - s36.position[2]) < .001, `${name}: a touch ${Math.floor(pad) - 1} px off the mat's edge still picks 36 (the 40 px pick pad round a ${s36.w.toFixed(0)} px cell)`);
+    await ev("document.querySelector('.roul-clear').click()");
+  } else console.log(`  skip ${name}: cells already ${s36.w.toFixed(0)} px wide, no pick pad needed`);
+  // The spin: the chip on 18, the camera eases out to the whole table, the landing comes through the real bridge.
+  const betPose = await pose();
+  const s18 = rects.s18;
+  await tap(Math.round(s18.x + s18.w / 2), Math.round(s18.y + s18.h / 2)); await sleep(60);
+  await ev("document.querySelector('.roul-spin').click()");
+  ok(await until('window.__backroom.scene.transitioning', 1500), `${name}: Spin eases the camera out to the whole table`);
+  ok(await until('!window.__backroom.scene.transitioning', 3000), `${name}: the table frame arrives`);
+  const pockets = await ev(POCKETS), run = Object.values(await ev(RECTS) || {});
+  ok(pockets.length === 37 && pockets.every((p) => p.x >= 0 && p.x <= width && p.y >= 0 && p.y <= height), `${name}: all 37 pockets are in view for the run`);
+  ok(run.length === 42 && run.every((r) => r.x >= 0 && r.y >= 0 && r.x + r.w <= width && r.y + r.h <= height), `${name}: the mat and its chip stay in view while the ball runs`);
+  await sleep(500); await shot(`phone-3d-${name}-run.png`);
+  ok(await until(`(document.querySelector('.roul-history') || {}).childElementCount >= 1`, 14000), `${name}: the ball lands`);
+  await sleep(400); await shot(`phone-3d-${name}-landing.png`);
+  const room = await ev(`({ open: window.__posted.filter((m) => m.type === 'station-open').map((m) => m.station), fx: window.__posted.filter((m) => m.type === 'fx').map((m) => ({ id: m.fxId, station: m.station, args: m.args, symbols: m.symbols })),
+    tunnel: window.__posted.filter((m) => m.type === 'fx-tunnel').length, media: window.__posted.filter((m) => m.type === 'media-request').map((m) => ({ station: m.station, count: m.count })),
+    chip: document.querySelector('#br-sp-value').textContent, sp: window.__srv.user.sp, status: document.querySelector('.roul-status').textContent })`);
+  report[name].room = room;
+  ok(room.open.includes('roulette') && room.media.some((m) => m.station === 'roulette' && m.count === 4), `${name}: station-open posted; a 4-GIF deal asked for the roulette`);
+  ok(room.fx.some((f) => f.id === 'fx.gif_from' && f.station === 'roulette' && f.args.from && /^g\d$/.test(f.symbols[0])) && room.tunnel > 3, `${name}: the straight on 18 fired its landing through the real bridge (${room.fx.map((f) => f.id).join(', ')})`);
+  ok(room.chip === String(room.sp) && /18 Rose, Sink row/.test(room.status), `${name}: the room chip lands at ${room.chip} with the text "${room.status.split('\n')[0]}"`);
+  ok(await until('window.__backroom.scene.transitioning', 9000), `${name}: the camera returns to the mat once bets reopen`);
+  await until('!window.__backroom.scene.transitioning', 3000); await sleep(100);
+  ok(samePose(await pose(), betPose), `${name}: the bet frame is the pose it left`);
+  await shot(`phone-3d-${name}-after.png`);
+  const perf = await ev('window.__backroom.scene.debug()');
+  await writeFile(join(OUT, `phone-perf-${name}.json`), JSON.stringify({ viewport: [width, height], ...perf }, null, 2));
+  await ev(`document.querySelector('#br-back').click()`);
+  await sleep(700);
+  ok(await ev(`window.__posted.some((m) => m.type === 'station-close' && m.station === 'roulette') && !document.querySelector('.roul-station')`), `${name}: Back closes the roulette and posts station-close`);
+  ok(await ev("window.__backroom.scene.scene.getObjectByName('station_roulette').getObjectByName('bet_number_assembly').visible === true && !window.__backroom.scene.scene.getObjectByName('roulette_runtime_mat')"), `${name}: leaving restores the authored glyphs and drops the runtime mat`);
 }
-ok(pointerPass,'actual pointer taps on all42 spots place a visible3D chip at that cell');
-const roomRect = await ev(`(() => { const c = document.querySelector('.roul-stage'); const r = c.getBoundingClientRect(); return { x: r.left, y: r.top }; })()`);
-ok(await ev(`!!document.querySelector('.roul-station[data-host-back][data-host-sp]') && document.querySelector('.roul-back').hidden`), 'ctx.hostBack and ctx.spReadout: the station hides its own Back and SP chip');
-await sleep(500);
-await shot('18-room-roulette-open.png');
-// place 36 through the canvas in the room page (the room page has no window.dev; find the cell by the mat layout)
-const cellCentre = picks.find(p=>p.spot==='s18');
-await click(Math.round(roomRect.x + cellCentre.x), Math.round(roomRect.y + cellCentre.y));
-await ev(`document.querySelector('.roul-spin').click()`);
-ok(await ev("getComputedStyle(document.querySelector('.roul-mat-strip')).display==='none'"),'spin keeps actual3D mat and bowl visible');
-await until(`(document.querySelector('.roul-history') || {}).childElementCount >= 1`, 12000, 50);
-await sleep(400);
-const room = await ev(`({ open: window.__posted.filter((m) => m.type === 'station-open').map((m) => m.station), fx: window.__posted.filter((m) => m.type === 'fx').map((m) => ({ id: m.fxId, station: m.station, args: m.args, symbols: m.symbols })),
-  tunnel: window.__posted.filter((m) => m.type === 'fx-tunnel').length, media: window.__posted.filter((m) => m.type === 'media-request').map((m) => ({ station: m.station, count: m.count })),
-  chip: document.querySelector('#br-sp-value').textContent, sp: window.__srv.user.sp, status: document.querySelector('.roul-status').textContent })`);
-report.room = room;
-ok(room.open.includes('roulette') && room.media.some((m) => m.station === 'roulette' && m.count === 4), 'station-open posted; a 4-GIF deal asked for the roulette');
-ok(room.fx.some((f) => f.id === 'fx.gif_from' && f.station === 'roulette' && f.args.from && /^g\d$/.test(f.symbols[0])) && room.tunnel > 3, `the straight on 18 fired its landing through the real bridge (${room.fx.map((f) => f.id).join(', ')})`);
-ok(room.chip === String(room.sp) && room.sp === 57 - 1 + 36 && /18 Rose, Sink row/.test(room.status), `the room chip lands at ${room.chip} with the text "${room.status.split('\n')[0]}"`);
-await shot('19-room-roulette-landing.png');
-const perf = await ev('window.__backroom.scene.debug()');
-await writeFile(join(OUT,'phone-perf.json'),JSON.stringify({viewport:[400,800],...perf},null,2));
-ok(await ev('document.querySelectorAll("canvas").length===1'),'one room canvas while seated');
 
-await ev(`document.querySelector('#br-back').click()`);
-await sleep(700);
-ok(await ev(`window.__posted.some((m) => m.type === 'station-close' && m.station === 'roulette') && !document.querySelector('.roul-station')`), 'Back closes the roulette and posts station-close');
-
-await writeFile(join(OUT, 'roulette-check.json'), JSON.stringify(report, null, 2));
+await writeFile(join(OUT, 'room-3d-check.json'), JSON.stringify(report, null, 2));
 ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
-console.log(fails ? `\n${fails} FAILED` : '\nall roulette checks passed');
-
-await done(fails?1:0);
+console.log(fails ? `\n${fails} FAILED` : '\nall room 3D roulette checks passed');
+await done(fails ? 1 : 0);
