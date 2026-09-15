@@ -2,6 +2,7 @@ import * as T from 'three';
 import { createCustomizationPanel } from './customization-panel.js';
 import { createSlotCustomHandles } from './slot-custom-handles.js';
 import { createCustomizationScreens } from './customization-screens.js';
+import { createCustomizationProps } from './customization-props.js';
 import { createSpiralSamples } from './vending-spirals.js';
 
 const PIECES=['knight','queen','rook'];
@@ -20,6 +21,7 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
   const titleMap=new T.CanvasTexture(titleCanvas);titleMap.colorSpace=T.SRGBColorSpace;
   const title=new T.Mesh(new T.PlaneGeometry(1.16,.145),new T.MeshBasicMaterial({map:titleMap,toneMapped:false}));title.position.set(0,2.065,.438);vending.add(title);
   const extras=await createCustomizationScreens({scene,root,loader,base,room});
+  const props=await createCustomizationProps({root,loader,base});
   const sculptures=await Promise.all(PIECES.map(load));
   const spirals=createSpiralSamples();
   const samples=[...extras.models,...sculptures,...spirals.models];
@@ -38,9 +40,10 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     model.position.fromArray(position);model.visible=index===spot;return model;
   }));
   const handles=await createSlotCustomHandles({holders:room.holders,loader,base,sources:sculptures});
-  const getState=()=>({screens:extras.getState(),statues:[...selected.statues],handles:handles.getState(),floor:floorEnabled?room.getFloorStyle().design:-1,palette:room.getFloorStyle().palette});
+  const getState=()=>({screens:extras.getState(),props:props.getState(),statues:[...selected.statues],handles:handles.getState(),floor:floorEnabled?room.getFloorStyle().design:-1,palette:room.getFloorStyle().palette});
   const select=(category,index,target=0)=>{
     if(category==='screens')return extras.set(target,index);
+    if(category==='props')return props.set(target,index);
     if(!Number.isInteger(index))return false;
     if(category==='handles')return handles.set(target,index);
     if(category==='floor'||category==='palette'){
@@ -57,12 +60,14 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
   };
   const restore=async state=>{
     state.screens.forEach((on,index)=>select('screens',on,index));
+    state.props.forEach((on,index)=>select('props',on,index));
     select('floor',state.floor);select('palette',state.palette);
     await Promise.all(state.statues.map((piece,spot)=>{select('statues',piece,spot);return select('handles',state.handles[spot],spot);}));
   };
   const preview=(category,index,target=0)=>{
     if(category==='room'){onPreview({position:[0,2.9,5.5],look:[0,1.7,-3]});return;}
     if(category==='screens'){onPreview(extras.preview(target));return;}
+    if(category==='props'){const view=props.preview(target);if(view)onPreview(view);return;}
     if(category==='floor'||category==='palette'){onPreview({position:[0,4.2,5.5],look:[0,0,0]});return;}
     if(category==='handles'){
       const holder=room.holders.get(['slot:rose','slot:violet','slot:mint'][target]);
@@ -92,14 +97,14 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     if(!obstructed)panel.open();
   };
   canvas.addEventListener('pointerdown',onDown);canvas.addEventListener('pointerup',onUp);
-  return {row,screens:extras.screens,select,getState,restore,preview,open:()=>panel.open(),get opened(){return panel.opened;},
+  return {row,screens:[...extras.screens,...props.screens],select,getState,restore,preview,open:()=>panel.open(),get opened(){return panel.opened;},
     dismiss(){if(!panel.opened)return false;panel.close();return true;},
     update(dt,still){spirals.update(dt,still);panel.update?.(dt,still);},
     /** The close-up: a scissored pass on the room's own renderer, so it opens no second context. */
     draw(renderer){return panel.draw(renderer);},
     /** What the open panel leaves the room to draw into (viewport pixels, y up from the bottom). */
     previewBox(w,h){return panel.previewBox(w,h);},
-    debug:()=>({selected:getState(),opened:panel.opened,models:9,view:panel.viewDebug()}),
-    dispose(){handles.dispose();extras.dispose();titleMap.dispose();panel.dispose();canvas.removeEventListener('pointerdown',onDown);canvas.removeEventListener('pointerup',onUp);root.removeFromParent();const gs=new Set(),ms=new Set();root.traverse(o=>{if(o.geometry)gs.add(o.geometry);for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m)ms.add(m);});gs.forEach(g=>g.dispose());ms.forEach(m=>m.dispose());}
+    debug:()=>({selected:getState(),opened:panel.opened,models:9,props:props.debug(),view:panel.viewDebug()}),
+    dispose(){handles.dispose();props.dispose();extras.dispose();titleMap.dispose();panel.dispose();canvas.removeEventListener('pointerdown',onDown);canvas.removeEventListener('pointerup',onUp);root.removeFromParent();const gs=new Set(),ms=new Set();root.traverse(o=>{if(o.geometry)gs.add(o.geometry);for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m)ms.add(m);});gs.forEach(g=>g.dispose());ms.forEach(m=>m.dispose());}
   };
 }

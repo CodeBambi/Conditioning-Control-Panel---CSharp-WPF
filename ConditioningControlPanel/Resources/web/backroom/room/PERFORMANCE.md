@@ -8,6 +8,7 @@ Measured locally at 1440 x 900, same entrance pose, September 2026. This is a br
 | Submitted triangles | 1,132,268 | 566,728 |
 | Cold startup response bodies | 12.10 MB | 9.94 MB |
 | Vending and three sculpture GLBs | 3.12 MB | 0.96 MB |
+| Six decoration prop GLBs (placed 2026-09-15) | 1.60 MB authored | 0.56 MB |
 
 The cold total includes JS and art from the local no-cache test server, before HTTP compression. It excludes player media and game assets fetched on entry to a game. About 2.16 MB is saved per cold room load, roughly 216 GB per 100,000 cold loads. This is bandwidth, not a currency estimate.
 
@@ -19,6 +20,7 @@ The cold total includes JS and art from the local no-cache test server, before H
 - Two minor cartridge transmission materials use their opaque reflective finish, avoiding a second whole-room refraction pass.
 - All wall and ceiling screens share media sources. GIFs are at most 384 px and there is one global budget of 12 new frame decodes per second, shared fairly among visible sources. Still images are capped at 512 px. At most two media files initialize concurrently. Exiting closes decoders.
 - Sculpture lever previews share the already loaded catalogue geometry/materials. Swapping all three requires zero further asset requests.
+- The six decoration props (three plants, three wall frames) are baked to one mesh per material when they are placed, so the ivy's 85 authored mesh nodes cost six draw calls, not eighty-five. All six together: 30 draw calls and 60,428 triangles. The entry pose at 1280 x 720 measures 277 draw calls with every prop on. Their two media frames feed from the same wall-picture sources and the same global 12-decode budget as the room's own screens; nothing new is fetched for them. Switching them off from the panel removes their draws. There is no new resolution scaler: the room's own frame-time sampler (render-budget.js) is what drops resolution on a slow device.
 
 ## Website hosting boundary
 
@@ -27,12 +29,12 @@ No website configuration or deployment is included. The room is currently a loca
 1. Serve room JS, GLBs, textures and media directly as static CDN files. Do not route asset downloads through an authenticated server function. Keep authoritative SP/game endpoints separate.
 2. For the current stable asset filenames, emit ETag and `Cache-Control: public, max-age=0, must-revalidate`. A repeat visit can reuse unchanged browser bytes following a 304. Do not use year-long immutable caching on these mutable filenames.
 3. When the web build adopts content-hashed filenames, use `Cache-Control: public, max-age=31536000, immutable` for those files. Keep HTML and the asset manifest revalidated. Enable Brotli/gzip for JS/CSS/JSON and verify real response headers and a warm reload in the deployed browser.
-4. Package only referenced assets. The retired ivy, terrarium and other old catalogue GLBs are gone from the collection. Player GIF sizes and traffic volume are separate inputs to a hosting estimate.
+4. Package only referenced assets. Every GLB in room/assets/customization is referenced and placed; see that folder's README for the spot each one occupies. Player GIF sizes and traffic volume are separate inputs to a hosting estimate.
 
 Animations make no server calls. Room media is dealt once; the floor bell reads on entry and station return, never by polling. Existing slot tapes batch game requests. Real hosting cost still needs traffic, CDN pricing, player-media volume and game endpoint measurements; a local GPU test cannot establish it.
 
 ## Rebuild and validation
 
-Build-only compression tool: `../smoke/asset-build/compress-customization.mjs`. Install its pinned dependencies in that folder and pass separate original/output directories. Do not simplify the shipped outputs again. It preserves named interaction/lever nodes; the runtime uses the existing Meshopt decoder.
+Build-only compression tool: `../smoke/asset-build/compress-customization.mjs`. Install its pinned dependencies in that folder and pass separate original/output directories; every .glb in the original directory is rebuilt. Do not simplify the shipped outputs again. It preserves named interaction/lever nodes; the runtime uses the existing Meshopt decoder. Pass `--no-simplify` for a model whose flat media planes have to keep their exact UVs: the three gallery frames were packed that way, the three plants with the standard decimating pipeline. The flag applies to the whole run, so the frames and the plants have to be rebuilt from separate input directories.
 
 Regression checks: room/slot Node suites plus `smoke/room-check.mjs`. Validate all three compressed sculptures on both room and active-slot pivots after rebuilding. A 390 x 844 browser check passes, but physical low-end Android/iPhone thermal, memory and touch-navigation testing remains necessary before claiming phone support.
