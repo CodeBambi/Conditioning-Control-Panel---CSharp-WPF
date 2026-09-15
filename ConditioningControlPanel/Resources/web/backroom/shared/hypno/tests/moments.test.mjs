@@ -7,11 +7,44 @@ import { createMockHost } from './mock-host.js';
 
 const IDS = ['wheel.turn', 'wheel.land.quiet', 'wheel.land.flash', 'wheel.land.gif', 'wheel.land.jackpot',
   'cards.sit', 'cards.bloom', 'cards.win', 'cards.lose', 'cards.push',
+  'cards.deal', 'cards.hit', 'cards.double', 'cards.split', 'cards.reveal', 'cards.bust', 'cards.dealer_bust', 'cards.streak', 'cards.sweep',
   'roulette.run', 'roulette.wake', 'roulette.land.miss', 'roulette.land.win', 'roulette.land.big'];
 const RECT = { x: 612.4, y: 188, w: 60, h: 44 };
 const calls = (host) => host.fx.map((r) => [r.fxId, r.symbols || null, r.args]);
 
-test('MOMENTS has exactly the fifteen ids of 10.13.F, frozen', () => {
+test('cards table beats: light steps play under holdScreen, fullscreen ones wait; words ride as dealt keys; gates dress', () => {
+  const host = createMockHost();
+  const m = createMoments(host.ctx, { station: 'cards' });
+  m.holdScreen(true);
+  let r = m.play('cards.deal', { words: ['s2'] });
+  assert.equal(r.held, false, 'a light-only moment is not held');
+  r = m.play('cards.split', { words: ['s3', 's0', 'bad', 'g1'] });
+  r = m.play('cards.double');
+  r = m.play('cards.reveal');
+  assert.deepEqual(calls(host), [['fx.sub_single', ['s2'], {}], ['fx.sub_single', ['s3', 's0'], {}], ['fx.gif_burst', null, {}], ['fx.gif_burst', null, {}]]);
+  assert.deepEqual(m.play('cards.bust').page, []);
+  host.clear();
+  r = m.play('cards.streak', { gif: 'g4', words: ['s0', 's1'] });
+  assert.equal(r.held, true, 'the streak is fullscreen: held while a decision is open');
+  assert.equal(host.fx.length, 0);
+  m.holdScreen(false);
+  m.play('cards.streak', { gif: 'g4', words: ['s0', 's1'] });
+  m.play('cards.dealer_bust', { gif: 'g7' });
+  m.play('cards.sweep', { gif: 'g1' });
+  assert.deepEqual(calls(host), [
+    ['fx.sub_pair', ['s0', 's1'], {}], ['fx.wash', ['g4'], { color: '#5fffd0', strength: 0.9 }],
+    ['fx.gif_burst', null, {}], ['fx.wash', ['g7'], { color: '#5fffd0', strength: 0.8 }],
+    ['fx.gif_storm', null, {}], ['fx.wash', ['g1'], { color: '#e8c27a', strength: 1 }],
+  ]);
+  for (const id of ['cards.dealer_bust', 'cards.streak', 'cards.sweep']) assert.deepEqual(MOMENTS[id].page, ['win_tunnel', 'chip_vortex']);
+  host.clear();
+  host.settings({ gates: { flash: false, subliminal: false, spiral: true, brainDrain: true } });
+  m.play('cards.hit', { words: ['s1'] }); m.play('cards.reveal'); m.play('cards.sweep', { gif: 'g1' });
+  assert.equal(host.fx.length, 0, 'subliminal off drops the whispers and the pair, flash off the bursts, the storm and the washes');
+  m.dispose();
+});
+
+test('MOMENTS has exactly the ids of 10.13.F plus the cards table beats, frozen', () => {
   assert.deepEqual(Object.keys(MOMENTS).sort(), [...IDS].sort());
   assert.ok(Object.isFrozen(MOMENTS) && Object.isFrozen(MOMENTS['wheel.land.jackpot'].host[0].args));
 });

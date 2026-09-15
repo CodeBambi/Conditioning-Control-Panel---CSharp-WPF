@@ -9,10 +9,22 @@
  * ==========================================================================*/
 
 import { createCounter, LEX } from './cards.js';
+import { demoKind, demoFrame } from './demo.js';
 import { audioUrl, altAudioUrl } from '../../../dtrh/shared/audioSrc.js';
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
 let cssLink = null;
+const nowMs = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
+const raf = (fn) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(fn) : setTimeout(() => fn(nowMs()), 16));
+const unraf = (id) => (typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame(id) : clearTimeout(id));
+
+/** Only the two origins the room maps (and this page's own, for dev.html) may put a picture in a preview. */
+function allowedUrl(url) {
+  try {
+    const u = new URL(url, typeof location !== 'undefined' ? location.href : 'https://ccp.game/');
+    return u.origin === 'https://ccp.assets' || u.origin === 'https://ccp.game' || (typeof location !== 'undefined' && u.origin === location.origin);
+  } catch (e) { return false; }
+}
 
 function h(tag, cls, text) {
   const e = document.createElement(tag);
@@ -59,6 +71,7 @@ export async function mount(ctx) {
   }
 
   let el = null, grid = null, chipEl = null, closedEl = null, cards = new Map(), alive = false, suspended = false, unSp = null, unSet = null;
+  let demo = null, media = null, dealt = null, demos = 0;   // the running "Try it" preview, the deal asked for it (once per visit)
   const flipped = new Set();
   let chime = createChime();
   const counter = createCounter({ request: (op, body, idem) => ctx.request(op, body, idem), sp: () => (typeof ctx.sp === 'function' ? ctx.sp() : NaN),
@@ -109,11 +122,78 @@ export async function mount(ctx) {
     const foot = h('div', 'counter-foot');
     const price = h('span', 'counter-price');
     const act = h('div', 'counter-act');
-    foot.append(price, act);
+    let tryBtn = null;
+    if (demoKind(row.id)) {
+      tryBtn = h('button', 'counter-try', L('br_counter_try'));
+      tryBtn.type = 'button';
+      tryBtn.onclick = () => startDemo(row.id);
+    }
+    foot.append(price, ...(tryBtn ? [tryBtn] : []), act);
     const confirm = h('div', 'counter-confirm');
     body.append(foot, confirm);
     card.append(art, h('div', 'counter-sheet'), body);
-    return { card, price, act, confirm, sig: '' };
+    return { card, art, price, act, confirm, tryBtn, sig: '' };
+  }
+
+  /* ------------------------------------------------------------ "Try it" (demo.js)
+   * A preview of an effect prize, drawn by the page inside the card's art box with the pictures the host dealt
+   * this visit. It never posts an fx: the real effects are the app's overlays and the host plays them only for
+   * an account that owns the grant, so a demo the host rendered would be the prize for free. Nothing pays SP.
+   * Calm and reduced motion show the settled frame and hold it; suspend, Back and close stop it (Law VI). */
+  function askMedia() {
+    if (media) return;
+    media = Promise.resolve().then(() => (typeof ctx.media === 'function' ? ctx.media({ count: 4 }) : null))
+      .then((m) => { if (alive) dealt = m && Array.isArray(m.gifs) ? m.gifs.slice(0, 4) : []; })
+      .catch(() => { dealt = []; });
+  }
+  function stopDemo() {
+    if (!demo) return;
+    unraf(demo.raf);
+    demo.stage.remove();
+    delete demo.art.dataset.demo;
+    demo = null;
+  }
+  function startDemo(id) {
+    if (!alive || suspended) return;
+    const c = cards.get(id), kind = demoKind(id);
+    if (!c || !kind) return;
+    stopDemo();
+    askMedia();
+    const stage = h('div', 'counter-demo');
+    const pics = [];
+    for (let i = 0; i < 4; i++) {
+      const p = h('img', 'counter-demo-pic'); p.alt = ''; p.decoding = 'async'; p.dataset.pic = String(i); p.hidden = true;
+      pics.push(p); stage.append(p);
+    }
+    c.art.append(stage);
+    c.art.dataset.demo = kind;
+    demos++;
+    demo = { id, kind, art: c.art, stage, pics, t0: nowMs(), raf: 0 };
+    const tick = () => {
+      if (!demo) return;
+      const gates = ctx.gates || {}, pictures = gates.flash !== false;
+      const frame = demoFrame(demo.kind, nowMs() - demo.t0, { still: still() });
+      if (!frame.length) { stopDemo(); return; }
+      demo.pics.forEach((p, i) => {
+        const s = frame[i];
+        p.hidden = !s;
+        if (!s) return;
+        const g = pictures && dealt ? dealt[s.pic % Math.max(1, dealt.length)] : null;
+        const url = g && typeof g.url === 'string' && allowedUrl(g.url) ? g.url : '';
+        if (url && p.dataset.url !== url) { p.dataset.url = url; p.src = url; }
+        if (!url && p.dataset.url) { delete p.dataset.url; p.removeAttribute && p.removeAttribute('src'); }
+        p.dataset.kind = s.kind;
+        if (s.pivot) p.dataset.pivot = s.pivot; else delete p.dataset.pivot;
+        const st = p.style;
+        st.left = (s.x * 100).toFixed(2) + '%';
+        st.top = (s.y * 100).toFixed(2) + '%';
+        st.width = (s.scale * 100).toFixed(2) + '%';
+        st.opacity = String(Math.max(0, Math.min(1, s.alpha)));
+        st.transform = (s.pivot === 'top' ? 'translate(-50%, 0)' : 'translate(-50%, -50%)') + ' rotate(' + s.rot.toFixed(2) + 'deg)';
+      });
+      demo.raf = raf(tick);
+    };
+    tick();
   }
 
   function actFor(v, c) {
@@ -170,6 +250,7 @@ export async function mount(ctx) {
       if (!c) { c = makeCard(v); cards.set(v.id, c); grid.append(c.card); }
       c.card.dataset.face = v.face;
       c.price.textContent = L('br_counter_price', fmt(v.priceSp));
+      if (c.tryBtn) c.tryBtn.hidden = v.face === 'soon';   // under the dust sheet nothing is tried
       if (v.flip && !flipped.has(v.id)) { flipped.add(v.id); if (!still()) c.card.classList.add('is-flip'); }
       const sig = JSON.stringify([v.face, v.short, v.deliveryKey, v.confirm, v.priceSp]);
       if (sig !== c.sig) { c.sig = sig; actFor(v, c); }
@@ -200,6 +281,8 @@ export async function mount(ctx) {
   function close() {
     if (!alive) return Promise.resolve();
     alive = false;
+    stopDemo();
+    media = null; dealt = null;
     counter.close();
     globalThis.removeEventListener('keydown', onKey);
     if (typeof unSp === 'function') unSp();
@@ -213,10 +296,11 @@ export async function mount(ctx) {
 
   return {
     open, close,
-    suspend(on) { suspended = !!on; chime.suspend(suspended); },
+    suspend(on) { suspended = !!on; chime.suspend(suspended); if (suspended) stopDemo(); },
     destroy() { close(); if (cssLink) { cssLink.remove(); cssLink = null; } },
     /** For dev.html and the checks only. */
     debug: () => ({ alive, suspended, hostBack, still: still(), phase: counter.phase, sp: counter.sp(), confirm: counter.confirm,
+      demo: demo ? { id: demo.id, kind: demo.kind, pics: demo.pics.filter((p) => !p.hidden).length } : null, demos, dealt: dealt ? dealt.length : null,
       cards: counter.view().map((v) => ({ id: v.id, face: v.face, short: v.short || 0, deliveryKey: v.deliveryKey })), log: counter.log }),
   };
 }

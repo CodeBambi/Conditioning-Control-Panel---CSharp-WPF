@@ -43,6 +43,18 @@
   box-shadow: inset 0 0 12px #e8c27a33; }
 .counter-art:not([data-plate]) .counter-plate { visibility: hidden; }
 
+/* "Try it": a preview of an effect prize, drawn inside the art box by the page (demo.js), never by the host. */
+.counter-try { padding: 5px 12px; min-height: 30px; font-size: 12px; color: #cdb8ff; border-color: #cdb8ff55; }
+.counter-demo { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, #1b0f24, #0d0713 75%); }
+.counter-art[data-demo] > img, .counter-art[data-demo] > .counter-plate { visibility: hidden; }
+.counter-demo-pic { position: absolute; left: 0; top: 0; width: 30%; transform: translate(-50%, -50%); object-fit: cover; padding: 0;
+  inset: auto; height: auto; filter: none; background: linear-gradient(135deg, #e59cca, #a562b4); }
+.counter-demo-pic[data-kind="tile"] { aspect-ratio: 4 / 3; border-radius: 4px; }
+.counter-demo-pic[data-kind="flash"] { aspect-ratio: 4 / 3; border-radius: 8px; box-shadow: 0 0 0 2px #ffffff22, 0 6px 16px #0a0412aa; }
+.counter-demo-pic[data-kind="flash"][data-pivot="top"] { transform-origin: 50% 0; }
+.counter-demo-pic[data-kind="bubble"] { aspect-ratio: 1; border-radius: 50%; box-shadow: inset 0 0 0 2px #ffffff33, 0 0 12px #ff8ed255; }
+
 /* Soon: a dust sheet over the whole card, the price and name still readable. */
 .counter-sheet { display: none; position: absolute; inset: 0; z-index: 2; pointer-events: none; border-radius: inherit;
   background: repeating-linear-gradient(100deg, #d8c8d80d 0 14px, #00000012 14px 30px),

@@ -5802,6 +5802,7 @@
   "br_counter_delivery_not_in_guild": "加入 Discord 服务器，身份组随后就到。",
   "br_counter_delivery_failed": "身份组还没发放成功。它会自己再试。",
   "br_prize_rt_note": "基于原始文件做的第一个试玩版。更多主题和模组会按需推出。",
+  "br_counter_try": "è¯ä¸è¯",
   "br_counter_details": "包含的功能",
   "br_prize_jackpot_remix_details": "在 Flashes 中开启 Jackpot Remix。每次定时闪图有百分之一的概率使用混剪。混剪准备好后才会播放；制作会等待画面空闲且可用内存充足时进行。需要 GIF 并开启动态效果。计为一次闪图，不发放 SP。",
   "br_prize_flashes_v2_details": "Drift & Bounce 让闪图在屏幕上移动弹跳，Pendulum 让它从上方摆动。你可以拖动、抛掷 GIF，或将边角变圆。Shatter 会把关闭的闪图变成掉落的碎片。在 Flashes 中开启这些选项。移动、拖动和 Shatter 需要关闭 Solid 模式，同时遵循动态效果设置。",
