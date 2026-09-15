@@ -9,6 +9,7 @@ Single-zero roulette for SP (CONTRACT.md sections 2-7 and 10.13, binding spec `h
 | `station.js` | `mount(ctx)` -> `{open, close, suspend, destroy}`. DOM, the chip count, the spins picker (1-5), Spin, tape playback (about 8 s a spin), the cursor, the moments. |
 | `tape.js` | Pure: chips to bets, the client cover-all check (only disables Spin, with the server's word `covers_all`), Law I `shownSp`, reading an outcome for the text, `classify` (retry with the same idem, adopt `tape_unplayed`, refusals). |
 | `flick.js` | Pure: THE THROW. An angular drag on the wheel -> one signed rotor speed for `planRun`'s `rotVel0`, or nothing. Minimum travel, minimum release speed, a stale grab, the direction, the clamped band. |
+| `glyphs.js` | Pure (GLYPHS.md): THE POCKET GLYPHS, four faded marks on the wheel keyed by the pocket number (`glyphFor`, `glyphFx`), one section 4 id each; `paintGlyph` draws one on a canvas. |
 | `feel.js` | Pure: outcome -> moment id, the Lighthouse clock (law 4), the ball's run planned backwards from `outcome.pocket`, timings, the host recipe (`FX_RECIPE`: beat -> section 4 ids, gates, Calm, the streak, cooldowns). |
 | `bowl.js` | The canvas bowl: drifting rim cache, rotor, pockets, lighthouse, the run, fret rattle and sparks, turret whirl (Loom), velvet wake. |
 | `mat.js` | The canvas mat (37 straights, sip, sink, deep, rose, plum) and the chips: chip vortex, chips in, the pulled pair. |
@@ -86,10 +87,11 @@ Single-zero roulette for SP (CONTRACT.md sections 2-7 and 10.13, binding spec `h
 | `wake` | a Spiral Wake's launch | `fx.sub_single` | the spiral hold itself is `roulette.wake` (moments); the wake is on screen as text from this frame |
 | `rattle` | the ball's first fret clip (phase `rattle`), once a spin | `fx.sub_single` | |
 | `run` | the ball run | none here | `moments.tunnel(rouletteRunLevel)` each frame |
-| `near` | a miss with a straight chip on a WHEEL neighbour of the pocket (`nearMisses`, from `state.wheel`) | `fx.spiral_brief` | the only fullscreen step a miss gets |
+| `near` | a miss with a straight chip on a WHEEL neighbour of the pocket (`nearMisses`, from `state.wheel`) | `fx.spiral_brief` | on top of the glyph |
+| `glyph` | every landing, on the thud frame (Law X), win or lose | the landed pocket's glyph (`glyphs.js`): spiral `fx.spiral_brief`, eye `fx.gif_burst`, bubble `fx.sub_pair`, drop `fx.melt`, 0 nothing | the mark on the wheel goes hot on the same frame; the callout still names the pay |
 | `land.miss` | `pay === 0`, no near miss | none | the page's chip vortex |
-| `land.win` | an outside bet pays, no wake, no straight | `fx.sub_pair` (two word keys) | plus the moment's wash 0.6 |
-| `land.straight` | a straight-up hit | `fx.sub_cascade` | plus the moment's wash 1 and pocket GIF |
+| `land.win` | an outside bet pays, no wake, no straight | none of its own (the glyph is its effect) | plus the moment's wash 0.6 |
+| `land.straight` | a straight-up hit | none of its own (the glyph again) | plus the moment's wash 1 and pocket GIF |
 | `land.wake` | a woken win, no straight | `fx.spiral_full` | the turret's spiral goes full |
 | `land.full` | a straight-up hit on a wake | Full: `fx.jackpot` (the hero); below Full or Calm: `fx.sub_cascade` | Brake 2: the streak storm stays off the hero's frame |
 | `streak` | rides any paying landing at 2+ paying spins in a row (a miss resets) | `fx.gif_storm` | Calm strips it |
@@ -120,7 +122,8 @@ Single-zero roulette for SP (CONTRACT.md sections 2-7 and 10.13, binding spec `h
 `br_roulette_mat_deep`, `br_roulette_wake`, `br_roulette_won`, `br_roulette_lost`, `br_roulette_why_empty`,
 `br_roulette_why_covers_all`, `br_roulette_why_stake_cap`, `br_roulette_why_insufficient`, `br_roulette_why_too_fast`,
 `br_roulette_why_bad_layout`, `br_roulette_why_bad_request`, `br_roulette_odds`, `br_roulette_odds_straight`,
-`br_roulette_odds_row`, `br_roulette_odds_color`, `br_roulette_odds_pays`, `br_roulette_odds_woken`, `br_roulette_odds_note`.
+`br_roulette_odds_row`, `br_roulette_odds_color`, `br_roulette_odds_pays`, `br_roulette_odds_woken`, `br_roulette_odds_note`,
+`br_roulette_glyphs_note` (the four marks, under the Odds panel; the one roulette row carried in all nine locales).
 
 ## Checks
 

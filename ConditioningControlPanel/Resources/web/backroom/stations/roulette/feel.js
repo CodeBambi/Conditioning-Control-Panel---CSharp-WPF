@@ -21,6 +21,7 @@
  * ==========================================================================*/
 
 import { FX_DELAY_MS, CALLOUT_MS } from '../../shared/hypno/callout.js';
+import { glyphFx } from './glyphs.js';
 
 const TAU = Math.PI * 2;
 export const POCKETS = 37;
@@ -214,6 +215,10 @@ export const restRel = (index) => (index + 0.5) * SEG;
  * Gates: NONE (owner direction 2026-09-15): every gate reads as on whatever the host reports; the
  * host enforces its own toggles per primitive. FX_GATE stays as the record of which toggle stood
  * behind an id.
+ * THE POCKET GLYPHS (glyphs.js, GLYPHS.md): every landing fires the landed pocket's own id on the thud
+ * frame (Law X), win or lose, keyed by the pocket NUMBER page-side. The glyph IS the landing's fullscreen
+ * step now: land.win and land.straight fire nothing of their own, the callout names the pay, the Wake
+ * tiers keep their signature on top and the streak keeps its storm.
  * The flow on the landing frame (shared/hypno/callout.js): the thud at 0, the pocket and the paying
  * chips glow to HIGHLIGHT_MS, then at FX_DELAY_MS the callout (calloutFor) and the landing's host
  * beat fire together; the next launch waits WIN_HOLD_MS (nextLaunchAt). A miss stays quick.
@@ -252,9 +257,10 @@ export const FX_RECIPE = deepFreeze({
   'rattle': [{ fx: 'fx.sub_single', words: 1, once: 'spin' }],                          // the first fret clip
   'run': [],                                                                             // the tunnel run is moments.tunnel(rouletteRunLevel)
   'near': [{ fx: 'fx.spiral_brief' }],                                                  // a miss one pocket off a covered number
+  'glyph': [],                                                                           // the landed pocket's glyph (glyphFx), filled per pocket by fxPlan
   'land.miss': [],                                                                       // the page's chip vortex, nothing fullscreen
-  'land.win': [{ fx: 'fx.sub_pair', words: 2 }],                                        // an outside bet pays
-  'land.straight': [{ fx: 'fx.sub_cascade', gif: true }],                               // a straight-up hit (the wash and the pocket GIF are the moments')
+  'land.win': [],                                                                        // an outside bet pays: the glyph is its effect, the callout its name
+  'land.straight': [],                                                                   // a straight-up hit: the glyph again (the wash and the pocket GIF are the moments')
   'land.wake': [{ fx: 'fx.spiral_full' }],                                              // a woken win: the turret's spiral goes full
   'land.full': [{ fx: 'fx.jackpot', gif: true, when: 'full' }, { fx: 'fx.sub_cascade', gif: true, when: 'below_full' }],   // a straight-up hit on a wake
   'streak': [{ fx: 'fx.gif_storm', gif: true }],                                        // STREAK_FROM paying spins in a row
@@ -287,13 +293,17 @@ export function landBeat(read, near = []) {
 /** Every known id fires: gates no longer drop a step. */
 const gateOn = (_gates, fx) => !!FX_GATE[fx];
 
+/** The glyph beat's row for a landed pocket: its one id (glyphs.js), or nothing on the house pocket. */
+const glyphRows = (pocket) => { const fx = glyphFx(pocket); return fx ? [{ fx }] : []; };
+
 /**
  * What a beat fires, after Calm and the intensity (`gates` is read for nothing). `streak` = paying spins in a
- * row, this one included: the storm rides a paying landing at STREAK_FROM and above.
+ * row, this one included: the storm rides a paying landing at STREAK_FROM and above. `pocket` = the landed
+ * pocket number, read by the glyph beat alone.
  * -> [{ fx, gif, words, once }] in firing order (the beat's own steps first, then the streak's)
  */
-export function fxPlan(beat, { gates = null, calm = false, full = false, streak = 0 } = {}) {
-  const rows = FX_RECIPE[beat];
+export function fxPlan(beat, { gates = null, calm = false, full = false, streak = 0, pocket = null } = {}) {
+  const rows = beat === 'glyph' ? glyphRows(pocket) : FX_RECIPE[beat];
   if (!rows) return [];
   const list = rows.slice();
   // Brake 2, one hero per beat: the storm rides a paying landing, never the jackpot hero's own frame.
