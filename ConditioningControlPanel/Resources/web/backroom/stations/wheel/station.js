@@ -200,6 +200,7 @@ export async function mount(ctx) {
   function applyDress() {
     readMotion();
     dress = dressOf(hypnoCtx());
+    rewardReveal?.setStill(still);
     if (scene) { scene.setReduced(still); scene.setDress(dress); }
     if (kit) kit.setStill(hubHeld());
     if (deck) deck.setStill(dress.calm);
