@@ -243,3 +243,43 @@ Dev harness: serve `ConditioningControlPanel/Resources` as the web root and open
 
 `mock-server.js` follows table v6 (CONTRACT 10.14: `emi3` pays 400, drawn at 154 per million on its own seeded
 stream) and the 3000 ms slot and freeze floors (10.12).
+
+## The flow on the landing frame (shared/hypno/callout.js, 2026-09-15)
+
+Law I: the tape holds the outcome before a reel moves, so everything below is dressing on a known row. `feel.flowPlan`
+decides (pure, node-tested), `station.js flow()` schedules, `scene.highlight` lights. The timings are the shared
+module's constants (`HIGHLIGHT_MS` 400, `HIGHLIGHT_GAP_MS` 80, `FX_DELAY_MS` 400, `CALLOUT_MS` 1600), never the slot's.
+
+| ms from the landing | What |
+|---|---|
+| 0 | THE THUD (unchanged); the winning glyphs start glowing in reel order, 80 ms apart (rim pulse + 6% cell pop on the drum canvas; the root carries `br-glyph-hit` for the window) |
+| 400 | the callout `.show()` and the row's own host fx fire TOGETHER (`fx.*` ids moved here from the landing frame); the GIF tease's flash rides the same frame |
+| 2000 | the next spin may start on a paid line or a row with a word (a loss keeps today's 1120 ms); the jackpot holds 3400 ms |
+
+| Line | Glyphs lit | Callout (key, tier) | Unlock |
+|---|---|---|---|
+| `none` | none | none (a single sub is the other lane's word) | 0 (quick) |
+| `sub2` | the two subs | `br_callout_echo` Echo, small | 2000 |
+| `sub3` | all three | `br_callout_chorus` Chorus, big | 2000 |
+| `gif3` | all three | `br_callout_picture_show` Picture Show, small | 2000 |
+| `gif3same` | all three | `br_callout_storm` Storm, big | 2000 |
+| `spiral2` | the two spirals | `br_callout_double_spin` Double Spin, small | 2000 |
+| `spiral3` | all three | `br_callout_sinking_down` Sinking Down, big | 2000 |
+| `melt` | the melt cell | `br_callout_brain_melt` Brain Melt, big | 2000 |
+| `emi2` (the chase) | reels 1+2 | `br_callout_emi_chase` Emi Chase, big, before reel 3's re-spin | 0 (the re-spin follows on the pace's beat) |
+| `emi3` | all three | `br_callout_emi_jackpot` Emi Jackpot, hero | 3400 |
+| the jar fills | (the jar's own tick) | `br_callout_overflow` Overflow, big, on the tick that fills it; a small landing word yields to it | as the row |
+| a `respin` row (spiral2's grant) | as its line | `br_callout_respin` Respin, small, on the landing frame; its own word replaces it at 400 ms | as its line |
+
+- **THE GIF TEASE** (owner: a couple of points on the GIF visuals, the economy untouched): a row reading `none` that
+  shows exactly two GIF symbols fires ONE host GIF flash, `fx.gif_burst` with `args { count: 1 }` and the two GIF
+  keys, at 400 ms. No callout, no SP, no pay. Rate on the mock strips: about 1 row in 6 (see the PR).
+- **A1's hold** (reels 1 and 2 a live pair, reel 3 still travelling, CONTRACT 10.15's 900-1,400 ms) now also pulls
+  `ctx.fxTunnel` to 0.4 with the riser and stretches reel 3's slow-down across the hold (it crawls into its stop);
+  the landing frame releases the tunnel. Page dressing of a known row, no host fx.
+- **THE ATTRACT HAZE**: 8 s idle (the drift's own gate: seated, quiet, not melted, not Calm, not reduced motion)
+  breathes a spiral plane behind the cabinet at 12% over 6 s (`scene.haze`) until the next press; off while a
+  result plays, off on suspend and Back.
+- The callout is created once per open (`createCallout({ mount: .slot-callout, lex: t })`), the layer sits at
+  z-index 7 so a phone in landscape never puts a reel over the word, it is cancelled on suspend and close (Law VI),
+  disposed with the station, and `debug().callout` / `debug().flow` carry what showed and when.

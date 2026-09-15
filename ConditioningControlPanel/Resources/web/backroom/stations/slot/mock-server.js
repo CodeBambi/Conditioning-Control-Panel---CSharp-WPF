@@ -67,6 +67,10 @@ const LINES = [
   { id: 'melt', pays: 0, odds: '1 in 17', fx: ['fx.melt'] },
 ];
 
+/* THE GIF TEASE (page-only, feel.teaseGif, 2026-09-15): a row that reads `none` and SHOWS exactly two GIF symbols
+ * gets one host GIF flash (fx.gif_burst, args { count: 1 }) on the landing frame + 400 ms. It is dressing on a row
+ * this table already drew: the row's line stays `none`, its pay stays 0, its `fx` list here stays empty, no SP
+ * moves and no weight above changes. The server lane mirrors nothing for it. */
 const kindOf = s => (s.startsWith('gif') ? 'gif' : s.startsWith('sub') ? 'sub' : s.startsWith('spiral') ? 'spiral' : s);
 
 /** The single best line for three payline symbols (section 4). */
