@@ -250,7 +250,6 @@ export async function mount(ctx) {
                    from: () => scene && scene.project('landed'), to: () => readout.target() });
     } else readout.settle();
     if (fresh && rewardText(r, t)) rewardReveal.show(r, still);
-    if (fresh) ctx.rewardLanded?.(raw);
     if (fresh && !rewardText(r, t)) gain(r.snoozed ? t('br_wheel_gain_snooze', '+{n} tomorrow', { n: fmt(st.snoozeCarry) }) : t('br_wheel_gain', '+{n} SP', { n: fmt(gained) }));
     note('land', { slice: r.sliceId, pay: r.pay, total: r.total, gained, tier, party: rec.sound, fresh, still });
   }
@@ -307,6 +306,7 @@ export async function mount(ctx) {
     if (my !== session || !alive) return;
     busy = false; st = next;
     land(r, gained, a.kind === 'result', b.result, idx);
+    if (a.kind === 'result') ctx.rewardLanded?.(b);
     if (a.kind === 'already') card(t('br_wheel_already', 'Already spun today. Here is where it landed.'));
     renderOdds(); sync();
   }
