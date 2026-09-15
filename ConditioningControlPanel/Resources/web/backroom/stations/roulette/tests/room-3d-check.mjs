@@ -135,6 +135,8 @@ const picks = await ev(`(async () => {
 ok(picks.length===42&&picks.every(p=>p.hit===p.spot&&p.visible&&p.uncovered),'all42 actual mat centers project into the lower view and raycast correctly');
 await writeFile(join(OUT,'mat-picks.json'),JSON.stringify(picks,null,2));
 ok(await ev("getComputedStyle(document.querySelector('.roul-mat-strip')).display==='none'"),'mobile shows no HTML betting grid');
+ok(await ev("document.querySelector('.roul-controls').getBoundingClientRect().top>=innerHeight*2/3"),'bet controls stay in the lower comic panel');
+ok(await ev("(()=>{const s=getComputedStyle(document.querySelector('.roul-station'),'::after');return s.backgroundColor==='rgb(0, 0, 0)'&&s.transform!=='none';})()"),'panels have a solid black tilted divider');
 let pointerPass=true;
 for(const target of picks){
   await click(target.x,target.y);await sleep(60);

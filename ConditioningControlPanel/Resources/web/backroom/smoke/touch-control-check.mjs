@@ -131,8 +131,21 @@ for(const [name,enter,leave] of [
  ['paused','pause(true)','pause(false)']]) {
  await send('touchStart',[stick(1)]);await ev('window.__backroom.scene.'+enter);await sleep(80);
  const s=await state();ok(!s.touch.visible&&!s.touch.active&&s.touch.z===0,name+' hides and resets thumbstick');
- await send('touchEnd',[]);await ev('window.__backroom.scene.'+leave);await sleep(80);
+ await send('touchEnd',[]);await ev('window.__backroom.scene.'+leave);await until('!window.__backroom.scene.transitioning');await sleep(80);
  ok((await state()).touch.visible,name+' exit restores walking control');
+}
+ok(await ev("!document.querySelector('.br-visit') && getComputedStyle(document.querySelector('.br-hint')).display==='none'"),'phone has no Visit button or keyboard instructions');
+await ev("window.__backroom.scene.go(window.__backroom.stations.find(r=>r.id==='cards'))");await until('!window.__backroom.scene.transitioning');
+const targetPoint=await ev(`(()=>{const s=window.__backroom.scene;for(let y=170;y<650;y+=25)for(let x=30;x<380;x+=25){if(document.elementFromPoint(x,y)?.tagName!=='CANVAS')continue;const h=s.pickAt({clientX:x,clientY:y},s.scene.children).find(h=>{for(let n=h.object;n;n=n.parent)if(!n.visible)return false;return true;});for(let n=h?.object;n;n=n.parent)if(n.name==='station_cards')return {x,y};}return null;})()`);
+ok(!!targetPoint,'find exposed card fixture for physical touch');
+if(targetPoint){
+ await send('touchStart',[pt(5,targetPoint.x,targetPoint.y)]);await send('touchMove',[pt(5,targetPoint.x+25,targetPoint.y+5)]);await send('touchEnd',[]);await sleep(100);
+ ok(!await ev('window.__backroom.scene.seated'),'drag over a game does not enter');
+ await ev("window.__backroom.scene.go(window.__backroom.stations.find(r=>r.id==='cards'))");await until('!window.__backroom.scene.transitioning');
+ await send('touchStart',[pt(6,targetPoint.x,targetPoint.y)]);await send('touchEnd',[]);
+ ok(await until('window.__backroom.scene.seated'),'physical game tap starts entry');
+ await until('!window.__backroom.scene.transitioning');await shot('phone-direct-cards.png');
+ await ev('window.__backroom.back()');await until('!window.__backroom.scene.transitioning && !window.__backroom.scene.seated');
 }
 await ev('window.__backroom.scene.pose([0,1.65,6.5],0,0)');await sleep(150);await shot('phone-thumbstick.png');
 await cdp('Emulation.setTouchEmulationEnabled',{enabled:false});await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:720,deviceScaleFactor:1,mobile:false});await sleep(100);

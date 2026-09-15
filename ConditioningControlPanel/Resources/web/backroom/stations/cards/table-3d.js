@@ -1,9 +1,10 @@
 // Soft Hand's room view. The station owns all cards, steps, locks, moments and SP.
-// Geometry follows authored anchors; this view never opens a renderer or moves the camera.
+// Large cards use authored origin/dimensions and the same hand layout as the seating camera.
 import * as T from 'three';
-import { cardsNodes, slotName, validCardSlot } from '../../room/nodes-cards.js';
+import { cardsNodes, validCardSlot } from '../../room/nodes-cards.js';
 import { TIMING, fanCard, lampBreath } from './feel.js';
 import { DECK_VALUES } from '../../shared/hypno/media.js';
+import { cardLayout, cardCounts } from './layout-3d.js';
 import { createCardFace } from './card-face.js';
 
 const clamp = (v) => Math.max(0, Math.min(1, v));
@@ -13,13 +14,14 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
   const nodes = cardsNodes(stage.fixture), group = new T.Group();
   group.name = 'cards_runtime'; stage.scene.add(group);
   const authored = [], cards = [], fans = [], sparks = [], betChips = [];
-  let active = -1, hands = 1, fan = null, disposed = false, now = 0, lastPaint = -Infinity;
+  let active = -1, hands = 1, fan = null, disposed = false, now = 0, lastPaint = -Infinity, frameStep=1;
   const point = (name) => nodes[name].getWorldPosition(new T.Vector3());
   const shoe = point('deck_shoe_mouth');
   const width = Number(nodes.card_slot_p0_0.userData.card_width), height = Number(nodes.card_slot_p0_0.userData.card_height);
   if (!(width > 0 && height > 0)) { group.removeFromParent(); throw new Error('Card anchors require card_width/card_height'); }
   const size = nodes.card_slot_p0_0.getWorldScale(new T.Vector3());
-  const geometry = new T.PlaneGeometry(width * size.x, height * size.z);
+  let layout=cardLayout(stage.fixture);
+  const geometry = new T.PlaneGeometry(layout.width, layout.height);
   const normal = new T.Vector3(0, 1, 0);
   const basis = nodes.card_slot_p0_0.getWorldQuaternion(new T.Quaternion());
   normal.applyQuaternion(basis);
@@ -34,7 +36,7 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
     return { ...c, mesh, material, face, landed: !!c.settled, faceAt: c.settled && c.code ? c.bornAt - TIMING.flipMs : null };
   }
   function drop(c) { c.mesh.removeFromParent(); c.material.dispose(); c.face.dispose(); }
-  function target(c) { return point(slotName(c.owner, c.slot)); }
+  function target(c) { return layout.point(c.owner,c.slot); }
   function setPose(c, at, flip = 1, alpha = 1) {
     c.mesh.position.copy(at); c.mesh.quaternion.copy(base); c.mesh.scale.set(Math.max(.02, Math.abs(Math.cos(Math.PI * flip))), 1, 1);
     c.material.opacity = alpha;
@@ -90,7 +92,7 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
       const c = cards.find((c) => c.owner === owner && c.slot === slot); if (!c) return null;
       const p = target(c), rect = stage.canvas.getBoundingClientRect(), corners = [];
       for (const x of [-.5, .5]) for (const y of [-.5, .5]) {
-        const v = new T.Vector3(x * width * size.x, y * height * size.z, 0).applyQuaternion(base).add(p).project(stage.camera);
+        const v = new T.Vector3(x * layout.width, y * layout.height, 0).applyQuaternion(base).add(p).project(stage.camera);
         corners.push([(v.x + 1) * rect.width / 2, (1 - v.y) * rect.height / 2]);
       }
       const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]);
@@ -98,7 +100,8 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
     },
     settled(time, still) { return cards.every((c) => c.landed && flipAt(c, time, still) >= (c.code ? 1 : 0)); },
     draw(o) {
-      if (disposed) return; now = o.now;
+      if (disposed) return; frameStep=1-Math.exp(-Math.max(0,o.now-now)/90);now = o.now;
+      layout=cardLayout(stage.fixture,hands,cardCounts(cards));
       // Freeze any in-flight gesture on a settings transition; never replay it later.
       if (o.still) { for (const c of cards) { c.landed = true; if (c.code) c.faceAt = now - TIMING.flipMs; } if (fan) fan.still = true; }
       const repaint = now - lastPaint >= 1000 / 15;
@@ -106,6 +109,7 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
       lamp.intensity = (o.still ? .35 : lampBreath(now, false)) * o.k * .7;
       for (const c of cards) {
         const end = target(c), p = c.landed ? 1 : clamp((now - c.bornAt) / TIMING.flyMs), pos = shoe.clone().lerp(end, ease(p));
+        if(c.landed){c.rest ||=end.clone();c.rest.lerp(end,o.still?1:frameStep);pos.copy(c.rest);}
         if (!o.still) pos.addScaledVector(normal, Math.sin(p * Math.PI) * height * o.k);
         if (p === 1 && !c.landed) { c.landed = true; if (c.code) c.faceAt = now; if (o.full) effect('ripple', now); }
         const flip = flipAt(c, now, o.still); setPose(c, pos, flip);

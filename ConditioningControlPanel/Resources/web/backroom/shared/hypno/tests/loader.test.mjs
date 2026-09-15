@@ -10,7 +10,13 @@ globalThis.window = { chrome: { webview: {
   addEventListener(type, fn) { if (type === 'message') listeners.push(fn); },
   postMessage(m) { posted.push(m); },
 } } };
-globalThis.document = { createElement: () => ({ className: '', dataset: {}, remove() {} }) };
+globalThis.document = { createElement: () => {
+  const node={className:'',dataset:{},remove(){}};
+  node.classList={add(...names){node.className=[...new Set([...node.className.split(/\s+/).filter(Boolean),...names])].join(' ');},
+    remove(...names){node.className=node.className.split(/\s+/).filter(n=>n&&!names.includes(n)).join(' ');},
+    contains(name){return node.className.split(/\s+/).includes(name);}};
+  return node;
+} };
 const emit = (data) => listeners.forEach((fn) => fn({ data }));
 
 const bridge = await import('../../../bridge.js');

@@ -1,3 +1,4 @@
+import { sliceText } from '../stations/wheel/rewards.js';
 import { setWheelFace } from './wheel-face.js';
 /* ============================================================================
  * backroom/room/main.js - boot, the Back button, visiting, and the ways out.
@@ -160,8 +161,7 @@ async function visit(row) {
   if (leaving || visiting || !scene || !loader || scene.overview || scene.transitioning || scene.seated) return;
   if(row?.key==='customization'){scene.customization.open();return;}
   visiting = true;
-  scene.hold();
-  hud.hideWhileVisiting(true);
+  scene.prepareVisit();
   await loader.open(row, { variant: row.variant ? { id: row.variant, name: label(row), palette: row.fixture.palette } : null });
 }
 
@@ -436,7 +436,7 @@ async function start(init) {
     const reqId = bridge.mintId();
     bridge.request({type:'station-request',reqId,station:'wheel',op:'state',body:{}},
       'station-result', m => m.reqId === reqId, BELL_TIMEOUT_MS).then(res => {
-        if (!leaving && !seated() && res?.ok && res.body?.ok) setWheelFace(scene?.scene, res.body.slices);
+        if (!leaving && !seated() && res?.ok && res.body?.ok) setWheelFace(scene?.scene, res.body.slices, s=>sliceText(s,lex,n=>Number(n||0).toLocaleString()));
       }).catch(() => {});
   }
   document.documentElement.classList.add('br-ready');
