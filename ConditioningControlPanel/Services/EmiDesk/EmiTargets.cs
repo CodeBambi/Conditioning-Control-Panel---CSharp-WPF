@@ -21,8 +21,10 @@ namespace ConditioningControlPanel.Services.EmiDesk;
 /// <param name="LabelKey">Localization key, always <c>emi_desk_target_&lt;id&gt;</c>.</param>
 /// <param name="ThumbPath">Resource-relative art path (<c>features/loom.png</c>), resolved through
 /// <c>ModResourceResolver</c> so a .ccpmod can reskin the card. Null means "no art exists, paint the
-/// hue tile instead".</param>
-/// <param name="Hue">The flat tile colour behind the label when there is no art.</param>
+/// hue tile instead", and no shipped target may use it: <c>EmiRingCatalogueTests</c> demands art on
+/// every card, because a flat block beside five illustrated ones reads as a broken card.</param>
+/// <param name="Hue">The flat tile colour a card falls back to when its art fails to load at runtime,
+/// and the tint through a medallion plate.</param>
 /// <param name="IsAvailable">False HIDES the card completely (a dark door, a withheld shop). Not the
 /// same as locked: unavailable means the feature is not part of this build or this account at all,
 /// locked means it exists and the tier gate says no.</param>
@@ -31,6 +33,9 @@ namespace ConditioningControlPanel.Services.EmiDesk;
 /// counter and the moments.</param>
 /// <param name="Gate">The <see cref="PremiumFeature"/> value where one exists, for callers that want
 /// to cross-reference the gated feature. Null for free doors and for Lab doors (the enum has no Lab members).</param>
+/// <param name="ThumbIsIcon">True when <paramref name="ThumbPath"/> is a square icon (a nav door
+/// medallion) rather than scene art: the card draws it centred on a plate instead of cover-cropping
+/// it. See <c>EmiCardFace</c>.</param>
 public sealed record EmiTarget(
     string Id,
     string LabelKey,
@@ -39,7 +44,8 @@ public sealed record EmiTarget(
     Func<bool> IsAvailable,
     Func<bool> IsLocked,
     Action Open,
-    PremiumFeature? Gate)
+    PremiumFeature? Gate,
+    bool ThumbIsIcon = false)
 {
     /// <summary>The card's visible name.</summary>
     public string Label
@@ -262,11 +268,11 @@ public static class EmiTargets
         var list = new List<EmiTarget>();
 
         void T(string id, string? thumb, Color hue, Func<bool> available, Func<bool> locked,
-               Action open, PremiumFeature? gate = null)
+               Action open, PremiumFeature? gate = null, bool icon = false)
         {
             string key = "emi_desk_target_" + id;
             list.Add(new EmiTarget(id, key, thumb, hue, available, locked,
-                () => Pick(id, locked, open), gate));
+                () => Pick(id, locked, open), gate, icon));
         }
 
         // ---- the six she shows a brand new user, in this order ------------------
@@ -308,8 +314,10 @@ public static class EmiTargets
         // also the one door that opens with NOTHING on disk - EmiCodex fails soft to a native
         // reader, so a build with no bundle still puts something readable on screen.
         //
-        // No art on purpose: no PNG ships in this wave, and the hue tile is the book's own colour.
-        T("codex", null, Tile(0xE6, 0xD3, 0xA8), Always, Never, () => EmiBook.Open());
+        // No book PNG was ever drawn, so the manual wears the "New Features" plate: four features
+        // on one sheet, which is what the book is. A flat hue tile beside five illustrated cards
+        // read as a card that failed to load.
+        T("codex", "features/4new.png", Tile(0xE6, 0xD3, 0xA8), Always, Never, () => EmiBook.Open());
 
         // Seventh since 2026-08-30: stepped out of the default ring to make room for the book.
         // Still one open away from the ring for anybody who actually runs videos.
@@ -366,12 +374,18 @@ public static class EmiTargets
         T("justdrop", "features/justdrop.png", Tile(0xFF, 0xB3, 0x6B),
             () => JustDrop.JustDropService.DoorAvailable, Never, () => Nav("justdrop"));
 
-        // ---- rooms with no card art: hue tiles ----------------------------------
+        // ---- rooms with no card art: their nav rail medallion on a plate ---------
+        //
+        // These shipped as flat hue tiles (owner report 2026-09-15: Profile, Settings and
+        // Companion pinned beside Flashes, Takeover and Vault read as broken cards). Each room
+        // already has a face - its door medallion in the nav rail - and the favourites rail
+        // (FavoritesRailArt) wears the same one for the same tab, so the ring agrees with it.
+        // "progression" is a permanent alias that lands on Home, hence the home door.
 
-        T("companion", null, Tile(0xB9, 0x80, 0xFF), Always, Never, () => Nav("companion"));
-        T("progression", null, Tile(0x8C, 0xF5, 0xC8), Always, Never, () => Nav("progression"));
-        T("profile", null, Tile(0x7F, 0xE3, 0xFF), Always, Never, () => Nav("discord"));
-        T("settings", null, Tile(0x9A, 0x9A, 0xB8), Always, Never, () => Nav("appsettings"));
+        T("companion", "nav/door_companion.png", Tile(0xB9, 0x80, 0xFF), Always, Never, () => Nav("companion"), icon: true);
+        T("progression", "nav/door_home.png", Tile(0x8C, 0xF5, 0xC8), Always, Never, () => Nav("progression"), icon: true);
+        T("profile", "nav/door_you.png", Tile(0x7F, 0xE3, 0xFF), Always, Never, () => Nav("discord"), icon: true);
+        T("settings", "nav/door_settings.png", Tile(0x9A, 0x9A, 0xB8), Always, Never, () => Nav("appsettings"), icon: true);
 
         return list;
     }
