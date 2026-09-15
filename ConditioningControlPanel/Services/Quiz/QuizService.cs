@@ -761,6 +761,7 @@ Do NOT include any other text before or after the question format. Just the ques
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorText = await response.Content.ReadAsStringAsync();
+                    if (await MergedAccountRecovery.TryHandleAsync(response, errorText)) return null;   // contract D
                     App.Logger?.Warning("QuizService: API returned {Status}: {Error}", response.StatusCode, errorText);
                     return null;
                 }

@@ -262,6 +262,7 @@ internal static class ArcademyWalletSyncService
 
             using var response = await Http.SendAsync(request).ConfigureAwait(false);
             var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            MergedAccountRecovery.TryHandle((int)response.StatusCode, body);   // contract D
             if (!response.IsSuccessStatusCode)
             {
                 App.Logger?.Information("[ArcademyWallet] pull failed: {Status} {Body}",
@@ -347,6 +348,7 @@ internal static class ArcademyWalletSyncService
 
             using var response = await Http.SendAsync(request).ConfigureAwait(false);
             var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            MergedAccountRecovery.TryHandle((int)response.StatusCode, text);   // contract D
             if (!response.IsSuccessStatusCode)
             {
                 App.Logger?.Information("[ArcademyWallet] import refused: {Status} {Body} - trying again next launch",
@@ -406,6 +408,7 @@ internal static class ArcademyWalletSyncService
 
             using var response = await Http.SendAsync(request, cts.Token).ConfigureAwait(false);
             var text = await response.Content.ReadAsStringAsync(cts.Token).ConfigureAwait(false);
+            MergedAccountRecovery.TryHandle((int)response.StatusCode, text);   // contract D
 
             if (!response.IsSuccessStatusCode)
             {
@@ -647,6 +650,7 @@ internal static class ArcademyWalletSyncService
 
             using var response = await Http.SendAsync(request, cts.Token).ConfigureAwait(false);
             var text = await response.Content.ReadAsStringAsync(cts.Token).ConfigureAwait(false);
+            MergedAccountRecovery.TryHandle((int)response.StatusCode, text);   // contract D
             var reply = Parse(text);
 
             if (!response.IsSuccessStatusCode)

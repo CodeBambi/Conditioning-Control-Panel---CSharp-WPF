@@ -562,6 +562,10 @@ namespace ConditioningControlPanel.Services
 
                 var response = await _httpClient.SendAsync(validateRequest);
 
+                // Contract D: the account this token belongs to is a merge tombstone. The swap
+                // re-signs in on the canonical (detached); keep the cached tier meanwhile.
+                if (await MergedAccountRecovery.TryHandleAsync(response)) return CurrentTier;
+
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
                 {
                     // Token may be invalid, try refresh

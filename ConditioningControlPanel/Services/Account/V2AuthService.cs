@@ -84,6 +84,21 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("auth_token")]
             public string? AuthToken { get; set; }
+
+            // The same-email hint the server attaches to a needs_registration answer when an
+            // existing account already carries this provider's verified email (server.js, the
+            // autoLinkHint block of /v2/auth/discord and /v2/auth/patreon). It was on the wire
+            // all along and never deserialised, which is why the desktop minted a twin instead
+            // of telling the user their account already exists. Hint only: the client never
+            // links on it (that needs the TARGET account's token), it ASKS.
+            [JsonProperty("can_auto_link")]
+            public bool CanAutoLink { get; set; }
+
+            [JsonProperty("auto_link_unified_id")]
+            public string? AutoLinkUnifiedId { get; set; }
+
+            [JsonProperty("auto_link_display_name")]
+            public string? AutoLinkDisplayName { get; set; }
         }
 
         public class LegacyData
@@ -458,6 +473,8 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response, json))
+                        return new LinkResponse { Success = false, Error = "account_merged" };
                     return new LinkResponse
                     {
                         Success = false,
@@ -505,6 +522,9 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    // Contract D: profile fetch on a merge tombstone.
+                    if (await MergedAccountRecovery.TryHandleAsync(response, json)) return null;
+
                     // TRUNCATED, and it matters more here than at the other call
                     // sites: the vat put this request on a 60s cadence, so a server
                     // erroring out with a fat body would write that whole body into
@@ -560,6 +580,7 @@ namespace ConditioningControlPanel.Services
                 request.Content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
                 var response = await _http.SendAsync(request);
 
+                if (await MergedAccountRecovery.TryHandleAsync(response)) return false;
                 return response.IsSuccessStatusCode;
             }
             catch (Exception ex)
@@ -586,6 +607,7 @@ namespace ConditioningControlPanel.Services
                 request.Content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
                 var response = await _http.SendAsync(request);
 
+                if (await MergedAccountRecovery.TryHandleAsync(response)) return false;
                 return response.IsSuccessStatusCode;
             }
             catch
@@ -612,6 +634,7 @@ namespace ConditioningControlPanel.Services
                 request.Content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
                 var response = await _http.SendAsync(request);
 
+                if (await MergedAccountRecovery.TryHandleAsync(response)) return false;
                 return response.IsSuccessStatusCode;
             }
             catch (Exception ex)
@@ -680,6 +703,8 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response, json))
+                        return new MobileLinkResponse { Success = false, Error = "account_merged" };
                     var error = ParseErrorMessage(json, response.StatusCode);
                     Log.Warning("[V2Auth] Mobile link authorize failed: {Status} {Error}", (int)response.StatusCode, error);
                     return new MobileLinkResponse { Success = false, Error = error };

@@ -368,6 +368,7 @@ internal static class ArcademyPresenceService
 
             using var response = await Http.SendAsync(request).ConfigureAwait(false);
             var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            MergedAccountRecovery.TryHandle((int)response.StatusCode, text);   // contract D
             if (!response.IsSuccessStatusCode)
             {
                 // No retry ladder, and deliberately not even the one gentle re-arm the card mirror

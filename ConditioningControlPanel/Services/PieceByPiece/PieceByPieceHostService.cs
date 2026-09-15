@@ -520,6 +520,7 @@ internal static class PieceByPieceHostService
                 using var response = await Http.SendAsync(request, CancellationToken.None).ConfigureAwait(false);
                 status = (int)response.StatusCode;
                 responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                MergedAccountRecovery.TryHandle(status, responseBody);   // contract D
             }
             catch (Exception ex)
             {

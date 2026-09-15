@@ -218,6 +218,9 @@ namespace ConditioningControlPanel.Services
 
                 if ((int)response.StatusCode == 409)
                 {
+                    // Contract D first: a merged-account 409 is about the caller, not the claim.
+                    if (await MergedAccountRecovery.TryHandleAsync(response).ConfigureAwait(false)) return null;
+
                     // Someone won the race. Re-fetch silently — the new
                     // TAKEN state is the answer the user gets.
                     _ = RefreshAsync();

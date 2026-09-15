@@ -3450,9 +3450,42 @@ namespace ConditioningControlPanel
             {
                 _authUpgradeGate.Release();
             }
+        }
 
-            static bool NeedsAuthTokenUpgrade() =>
-                string.IsNullOrEmpty(UnifiedUserId) || string.IsNullOrEmpty(Settings?.Current?.AuthToken);
+        private static bool NeedsAuthTokenUpgrade() =>
+            string.IsNullOrEmpty(UnifiedUserId) || string.IsNullOrEmpty(Settings?.Current?.AuthToken);
+
+        /// <summary>
+        /// Split-accounts contract D: after <see cref="Services.MergedAccountRecovery"/> has swapped
+        /// the stored unified id to the canonical and dropped the tombstone's token, this re-runs
+        /// the ordinary provider sign-in (the same <see cref="EnsureAuthTokenAsync"/> path startup
+        /// uses when a provider is signed in but no usable unified session exists). The OAuth doors
+        /// answer with the canonical account and mint its token. Returns true when a token was
+        /// minted; false when no provider credential is available (device-code or email sessions,
+        /// or a lapsed provider token), in which case the caller offers the sign-in prompt.
+        /// </summary>
+        internal static async Task<bool> ReauthenticateAfterMergedSwapAsync()
+        {
+            if (Current is not App app) return false;
+            if (!NeedsAuthTokenUpgrade()) return true;
+
+            if (Patreon?.IsAuthenticated == true)
+            {
+                await app.EnsureAuthTokenAsync("Patreon", () => Patreon.GetAccessToken(),
+                    (v2Auth, accessToken) => v2Auth.AuthenticateWithPatreonAsync(accessToken));
+            }
+            if (NeedsAuthTokenUpgrade() && Discord?.IsAuthenticated == true)
+            {
+                await app.EnsureAuthTokenAsync("Discord", () => Discord.GetAccessToken(),
+                    (v2Auth, accessToken) => v2Auth.AuthenticateWithDiscordAsync(accessToken));
+            }
+            if (NeedsAuthTokenUpgrade() && SubscribeStar?.IsAuthenticated == true)
+            {
+                await app.EnsureAuthTokenAsync("SubscribeStar", () => SubscribeStar.GetAccessToken(),
+                    (v2Auth, accessToken) => v2Auth.AuthenticateWithSubstarAsync(accessToken));
+            }
+
+            return !NeedsAuthTokenUpgrade();
         }
 
         /// <summary>
@@ -3593,6 +3626,11 @@ namespace ConditioningControlPanel
                 };
                 var content = new StringContent(body.ToString(), Encoding.UTF8, "application/json");
                 var response = await http.PostAsync("https://codebambi-proxy.vercel.app/v2/auth/restore-session", content);
+
+                // Split-accounts contract D: the restored id is a merge tombstone. The handler
+                // swaps to the canonical and re-runs the provider sign-in (or offers the prompt);
+                // nothing below applies to the old id any more.
+                if (await Services.MergedAccountRecovery.TryHandleAsync(response)) return;
 
                 if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 {

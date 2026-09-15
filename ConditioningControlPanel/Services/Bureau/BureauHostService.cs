@@ -518,6 +518,7 @@ namespace ConditioningControlPanel.Services.Bureau
 
             using var resp = await Http.SendAsync(req).ConfigureAwait(false);
             var text = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+            MergedAccountRecovery.TryHandle((int)resp.StatusCode, text);   // contract D
             JObject? parsed = null;
             try { if (!string.IsNullOrWhiteSpace(text)) parsed = JObject.Parse(text); } catch { }
             return ((int)resp.StatusCode, parsed);

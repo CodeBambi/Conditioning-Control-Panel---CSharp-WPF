@@ -3667,6 +3667,13 @@
   "account_link_failed_email_hint": "Failed to link accounts.\n\nMake sure you're using the same email on both platforms.",
   "account_name_taken": "This name is already taken. Please choose another.",
   "account_name_unavailable_title": "Name Unavailable",
+  "account_existing_email_title": "Existing Account Found",
+  "account_existing_email_prompt": "An account with the same email already exists (\"{1}\"). It uses a different sign-in method than {0}.\n\nTo keep that account's progress, choose No and sign in with the method you used before (Patreon, Discord, or the website).\n\nCreate a new, separate {0} account anyway?",
+  "account_existing_email_prompt_unnamed": "An account with the same email already exists. It uses a different sign-in method than {0}.\n\nTo keep that account's progress, choose No and sign in with the method you used before (Patreon, Discord, or the website).\n\nCreate a new, separate {0} account anyway?",
+  "account_merged_signin_title": "Your accounts were merged",
+  "account_merged_signin_summary": "Sign in again to pick up where you left off.",
+  "account_merged_signin_body": "Your two accounts were merged into one. Sign in again to pick up where you left off.\n\nYour local progress is kept.",
+  "account_merged_retry_hint": "Your accounts were merged into one. Sign in again, then try that once more.",
 
   "ai_login_required_hint": "Log in with Discord or Patreon to chat with me~ *giggles*",
 

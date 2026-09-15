@@ -390,6 +390,9 @@ namespace ConditioningControlPanel.Services
 
                 var response = await _httpClient.SendAsync(validateRequest);
 
+                // Contract D: merge tombstone; the swap re-signs in on the canonical (detached).
+                if (await MergedAccountRecovery.TryHandleAsync(response)) return CurrentTier;
+
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
                 {
                     var refreshed = await RefreshTokensAsync(tokens.RefreshToken);

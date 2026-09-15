@@ -113,7 +113,12 @@ namespace ConditioningControlPanel.Services
             var token = App.Settings?.Current?.AuthToken;
             if (!string.IsNullOrEmpty(token))
                 request.Headers.Add("X-Auth-Token", token);
-            return await _httpClient.SendAsync(request);
+            var response = await _httpClient.SendAsync(request);
+            // Contract D: every remote-control door is keyed on the account; a merge tombstone
+            // answers 409 merged and the handler swaps to the canonical. Callers still see the
+            // 409 and fail this one call the way they already do.
+            await MergedAccountRecovery.TryHandleAsync(response);
+            return response;
         }
 
         // Server returns { "error": "...", "cap": "user"|"ip", "count": N } on rate limit.

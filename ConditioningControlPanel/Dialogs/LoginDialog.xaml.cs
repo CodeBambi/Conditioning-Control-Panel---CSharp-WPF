@@ -228,6 +228,17 @@ namespace ConditioningControlPanel
                     return;
                 }
 
+                // The server found an existing account carrying this provider's email. The desktop
+                // cannot link to it (that needs the other account's token), so instead of quietly
+                // minting a twin it asks; No sends the user back to pick the method they used before.
+                if (authResponse.CanAutoLink &&
+                    !AccountService.ConfirmCreateNewDespiteExistingAccount(this, provider, authResponse.AutoLinkDisplayName))
+                {
+                    AccountService.LogoutProvider(provider);
+                    ShowProviderSelection();
+                    return;
+                }
+
                 // User needs registration - go straight to username picker
                 _firstProvider = provider;
                 _firstProviderToken = accessToken;

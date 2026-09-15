@@ -552,6 +552,28 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Contract D: quiesce every timer that could write under the OLD unified id while
+        /// <see cref="MergedAccountRecovery"/> swaps to the canonical. The heartbeat is restarted
+        /// by the post-swap sign-in; the sync nudge re-arms itself on the next
+        /// <see cref="NudgeSyncSoon"/>. Safe from any thread (DispatcherTimer.Stop is marshalled).
+        /// </summary>
+        public void StopTimersForAccountSwap()
+        {
+            StopHeartbeat();
+            try
+            {
+                var nudge = _nudgeTimer;
+                if (nudge == null) return;
+                if (nudge.Dispatcher.CheckAccess()) nudge.Stop();
+                else nudge.Dispatcher.BeginInvoke(new Action(() => nudge.Stop()), DispatcherPriority.Normal);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Sync nudge stop failed during account swap: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
         /// Forget that this session already completed a profile round-trip. Call on logout.
         /// Logout zeroes local progression (ClearProgressionData), so without this the
         /// defaults-push guard in SyncProfileAsync stays disarmed for the rest of the app
@@ -726,6 +748,11 @@ namespace ConditioningControlPanel.Services
                         Encoding.UTF8, "application/json");
 
                     var v2Response = await _httpClient.SendAsync(v2Request);
+
+                    // Contract D: this id is a merge tombstone. The handler stops this timer,
+                    // swaps to the canonical and re-signs in; nothing else here applies.
+                    if (await MergedAccountRecovery.TryHandleAsync(v2Response)) return;
+
                     if (v2Response.IsSuccessStatusCode)
                     {
                         // THE HEARTBEAT'S SECOND READING (Redis bandwidth pass, 2026-09-15).
@@ -1760,6 +1787,13 @@ namespace ConditioningControlPanel.Services
 
                     if (!v2Response.IsSuccessStatusCode)
                     {
+                        // Contract D: merged tombstone. Not a rejection of the DATA, so the
+                        // deferred streak break stays deferred; the swap's own reload re-syncs.
+                        if (await MergedAccountRecovery.TryHandleAsync(v2Response))
+                        {
+                            LastSyncError = "Sync deferred: account merged, re-signing in";
+                            return false;
+                        }
                         // On 429 (cooldown), set LastSyncTime to prevent immediate retry
                         if (v2Response.StatusCode == (System.Net.HttpStatusCode)429)
                         {
@@ -3842,6 +3876,8 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response, json))
+                        return (false, Localization.Loc.Get("account_merged_retry_hint"), null, null);
                     await HandleUnauthorizedAsync(response);
                     var errorResult = JsonConvert.DeserializeObject<OopsieErrorResponse>(json);
                     var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
@@ -3912,6 +3948,9 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response, json))
+                        return (false, Localization.Loc.Get("account_merged_retry_hint"));
+
                     // On 401, attempt auth recovery and retry once — but ONLY if the session was
                     // genuinely recovered. HandleUnauthorizedAsync used to answer true for a failed
                     // recovery too, so this retried the identical POST with the identical dead
@@ -4028,6 +4067,8 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response, json))
+                        return (false, Localization.Loc.Get("account_merged_retry_hint"), null);
                     await HandleUnauthorizedAsync(response);
                     var errorResult = JsonConvert.DeserializeObject<ChangeDisplayNameErrorResponse>(json);
                     var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
@@ -4070,6 +4111,9 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response, json))
+                        return (false, Localization.Loc.Get("account_merged_retry_hint"));
+
                     // On 401, attempt auth recovery and retry once — only when the session was
                     // genuinely recovered (#879 discipline; see ExportDataAsync for why the
                     // recovery alone isn't enough without the retry).
@@ -4127,6 +4171,9 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response, json))
+                        return (false, Localization.Loc.Get("account_merged_retry_hint"), null);
+
                     // On 401, attempt auth recovery and retry once — but ONLY if the session was
                     // genuinely recovered (same discipline as the skill purchase, #879). Without
                     // the retry, a SUCCESSFUL recovery still surfaced "Invalid or missing auth
@@ -4301,6 +4348,11 @@ namespace ConditioningControlPanel.Services
                 request.Content = new StringContent(body, Encoding.UTF8, "application/json");
 
                 var response = await _httpClient.SendAsync(request);
+
+                // Contract D: the id we are trying to restore is a merge tombstone. The swap runs
+                // detached (this method executes under _authRecoveryGate), and there is no token
+                // to recover for a tombstone.
+                if (await MergedAccountRecovery.TryHandleAsync(response)) return false;
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -4572,6 +4624,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response)) return false;
                     await HandleUnauthorizedAsync(response);
                     var error = await response.Content.ReadAsStringAsync();
                     App.Logger?.Warning("Settings backup failed: {Status} - {Error}", response.StatusCode, error);
@@ -4616,6 +4669,7 @@ namespace ConditioningControlPanel.Services
                 var response = await _httpClient.SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response)) return null;
                     await HandleUnauthorizedAsync(response);
                     return null;
                 }
@@ -4662,6 +4716,7 @@ namespace ConditioningControlPanel.Services
                 var response = await _httpClient.SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response)) return null;
                     await HandleUnauthorizedAsync(response);
                     return null;
                 }
@@ -4731,6 +4786,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response)) return -1;
                     App.Logger?.Warning("Easter egg endpoint returned {Status}", response.StatusCode);
                     return -1;
                 }
@@ -4785,6 +4841,7 @@ namespace ConditioningControlPanel.Services
                 var response = await _httpClient.SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response)) return;
                     App.Logger?.Debug("Announcement dismissal not recorded server-side: {Status} (id={Id})",
                         response.StatusCode, announcementId);
                     return;

@@ -155,6 +155,7 @@ public sealed class BackRoomApi : IBackRoomRelay
                 using var req = BuildRequest(method, path, id.Value, idem, body);
                 using var res = await _http.SendAsync(req, budget.Token).ConfigureAwait(false);
                 var text = await res.Content.ReadAsStringAsync(budget.Token).ConfigureAwait(false);
+                MergedAccountRecovery.TryHandle((int)res.StatusCode, text);   // contract D
                 return Read(station, id.Value.UnifiedId, (int)res.StatusCode, res.IsSuccessStatusCode, text);
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
