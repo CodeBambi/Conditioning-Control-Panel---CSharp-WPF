@@ -50,7 +50,7 @@ import { createCallout, FX_DELAY_MS } from '../../shared/hypno/callout.js';
 import { kit as sound } from '../../shared/sound/kit.js';
 import { MAX_CHIPS, MAX_SPINS, addChip, removeChip, chipsOf, chipTotal, checkLayout, adoptTape, owed, shownSp, cursorOf, readOutcome, classify, spinBody, mintId, ROWS } from './tape.js';
 import { FEEL, planRun, seedFor, landMoment, nextLaunchAt, landBeat, nearMisses, fxPlan, fxSymbols, createFxCooldowns, calloutFor } from './feel.js';
-import { flickStart, flickMove, flickRelease } from './flick.js';
+import { FLICK, flickStart, flickMove, flickRelease } from './flick.js';
 import { createBowl } from './bowl.js';
 import { createMat } from './mat.js';
 
@@ -245,8 +245,12 @@ export async function mount(ctx) {
    *  miss is THE SETTLE (soft, never a fail), a near miss resolves quietly, a pay is a win by tier that only rises. */
   function cue(name) {
     if (!alive || suspended) return;
-    if (name === 'nomore') { sound.arm(); sound.play('tap'); }
-    else if (name === 'launch') sound.play('launch');
+    // THE THROW's voice: the wheel has no lever, the throw IS the lever. The press frame gets the spin-up
+    // (Law VIII, before any reply) and the rotor's loop; every launch after it picks the loop back up; a
+    // landing hands the frame straight over to the drop and the settle (Law X).
+    if (name === 'near' || name.startsWith('land.')) sound.stop('wheel');
+    if (name === 'nomore') { sound.arm(); sound.play('tap'); sound.play('whir'); sound.play('wheel', { speed: 1 }); }
+    else if (name === 'launch') { sound.play('launch'); sound.play('wheel', { speed: 1 }); }
     else if (name === 'rattle') { sound.play('rattle'); if (cur && cur.plan) sound.play('riser', { ms: Math.min(2500, Math.max(800, cur.plan.restAt * 1000 - (clock() - cur.launchAt))) }); }
     else if (name === 'near') { sound.play('drop'); sound.play('almost'); }
     else if (name === 'land.miss') { sound.play('drop'); sound.play('settle'); }
@@ -429,6 +433,19 @@ export async function mount(ctx) {
     }
   }
 
+  /** THE THROW's loop follows the rotor: 1 at the hardest throw, 0 once the wheel is back to its idle drift.
+   *  Throttled like the slot's drums, one update per 60 ms or per 2% of speed. */
+  let wheelSent = [-1, 0];
+  function followThrow(rotVel) {
+    if (!alive || suspended) return;
+    const span = Math.max(0.01, FLICK.VEL_MAX - FEEL.ROTOR_IDLE);
+    const sp = Math.max(0, Math.min(1, (Math.abs(Number(rotVel) || 0) - FEEL.ROTOR_IDLE) / span));
+    const t = clock();
+    if (Math.abs(sp - wheelSent[0]) < 0.02 && t - wheelSent[1] < 60) return;
+    wheelSent = [sp, t];
+    sound.setWheelSpeed(sp);
+  }
+
   function frame() {
     if (!alive) return;
     if (!stage) raf = requestAnimationFrame(frame);
@@ -438,6 +455,7 @@ export async function mount(ctx) {
     layout();
     if (kit) kit.setStill(still);
     const u = bowl.update(now, { still });
+    followThrow(u.rotVel);
     if (cur && !cur.landed) {
       if (u.speed > 0) moments.tunnel(rouletteRunLevel(u.speed));
       if (!cur.rattled && u.phase === 'rattle') { cur.rattled = true; beat('rattle', { i: cur.i }); }   // the first fret clip, once a spin
@@ -575,7 +593,7 @@ export async function mount(ctx) {
     dropLanding();
     if (callout) { callout.dispose(); callout = null; }
     if (moments) { moments.cancel(); moments.dispose(); }
-    sound.stop('riser');
+    sound.stop('riser'); sound.stop('wheel');
     cool.reset(); streak = 0; note('fx', { beat: 'skip', fired: [], planned: [] });   // one-shots settle on the host; nothing new fires
     if (tape && tape.played > 0 && cursorSent !== tape.played) flushCursor();
     if (hook) { hook.owe(owedNow()); if (typeof hook.set === 'function') hook.set(null); }   // a plain number for the room
@@ -597,6 +615,7 @@ export async function mount(ctx) {
         dropLanding();
         if (moments) moments.cancel();
         cool.reset(); note('fx', { beat: 'skip', fired: [], planned: [] });   // Law VI: the recipe stops with the moments
+        sound.stop('wheel');   // THE THROW's loop never rides a suspend
         if (kit) { kit.dispose(); kit = null; }
         if (deck) deck.dispose();   // its keys still pick (pickKey needs no pictures)
       } else {
