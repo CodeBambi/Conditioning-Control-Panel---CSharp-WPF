@@ -145,15 +145,22 @@ public sealed class FlashLayer : BaseLayer
     /// </summary>
     public void BeginShatter(FlashItem item, FlashShatterState shatter)
     {
-        if (item.Frames == null || shatter.Done || shatter.Shards.Length == 0)
+        if (item.Frames is not { Length: > 0 } || shatter.Done || shatter.Shards.Length == 0)
         {
             Remove(item);
             return;
         }
         item.Shatter = shatter;
-        // The shards fall from where the picture actually is, not from where it spawned.
-        shatter.RectX = item.X; shatter.RectY = item.Y;
-        shatter.RectW = item.W; shatter.RectH = item.H;
+        // The shards fall from where the picture is actually DRAWN, not from where it spawned and
+        // not from the axis-aligned box the click reads. A pendulum's box is the bounds of the
+        // ROTATED media, some 15-18% larger than the picture and never tilted, so cutting from it
+        // would make the flash jump bigger and snap level the instant it broke; the pivot-space
+        // rect plus the frozen angle is the same geometry the pendulum draw itself uses.
+        if (item.Motion is { Style: FlashMotionStyle.Pendulum } pend)
+            FlashShatter.TakeOverHangingRect(shatter, pend.PivotX, pend.PivotY, pend.Rope,
+                pend.AngleRad, pend.MediaW, pend.MediaH);
+        else
+            FlashShatter.TakeOverDrawnRect(shatter, item.X, item.Y, item.W, item.H);
         _dirty = true;
         SetActive(true);
     }
@@ -345,19 +352,48 @@ public sealed class FlashLayer : BaseLayer
     /// <summary>
     /// Flashes v2 wave 2: draw one broken flash. Every shard is a sub-rect of the same frame the
     /// flash was showing, blitted at the shard's offset, turned about its own centre and faded
-    /// with the rest of them. The pieces line up with the picture the viewer was looking at, so
-    /// the cut is taken over the LETTERBOXED image box (glow padding removed), not the
-    /// bookkeeping rect. Rounded corners are deliberately not carried onto the pieces: a break
-    /// exposes hard edges, and rounding every shard would read as a bag of lozenges.
+    /// with the rest of them.
+    ///
+    /// The geometry mirrors the classic draw above it so nothing jumps at the break: a pendulum
+    /// rotates the canvas about its pivot by the angle FROZEN at the dismiss and cuts from the
+    /// media rect in pivot space, a gaze-dwell pop keeps the inflate it was wearing, and the cut
+    /// is taken over the LETTERBOXED image box (glow padding removed). A non-glow flash keeps its
+    /// black backing, now per shard, so a GIF with transparency in it does not turn to ghosts
+    /// halfway down the screen.
+    ///
+    /// What it deliberately does NOT carry over: the glow halo (a shattered flash is no longer a
+    /// card, so there is no card to light) and the corner radius (a break exposes hard edges, and
+    /// rounding every shard would read as a bag of lozenges).
     /// </summary>
     private void DrawShards(SKCanvas canvas, FlashItem item, FlashShatterState shatter, SKImage image,
         SKRectI boundsPx)
     {
-        var rect = new SKRect(item.X, item.Y, item.X + item.W, item.Y + item.H);
+        var rect = new SKRect((float)shatter.RectX, (float)shatter.RectY,
+            (float)(shatter.RectX + shatter.RectW), (float)(shatter.RectY + shatter.RectH));
+
+        int saves = canvas.Save();
+        // Pendulum: the same rotate-about-the-pivot the classic path does, at the frozen angle.
+        // The pieces then fall down the picture's own axis rather than the screen's, which is
+        // what a thing coming apart mid-swing does.
+        var tilted = shatter.FrozenAngleRad != 0;
+        if (tilted)
+            canvas.RotateDegrees((float)(shatter.FrozenAngleRad * 180.0 / Math.PI),
+                (float)shatter.PivotX, (float)shatter.PivotY);
+
+        // Gaze-dwell inflate about the rect center, as the classic path has it: a stare-to-pop
+        // must not start the break by shrinking the picture 10%.
+        if (item.DwellScale > 1.001)
+        {
+            var ds = (float)item.DwellScale;
+            canvas.Translate(rect.MidX, rect.MidY);
+            canvas.Scale(ds, ds);
+            canvas.Translate(-rect.MidX, -rect.MidY);
+        }
+
         var inner = new SKRect(rect.Left + item.PaddingPx, rect.Top + item.PaddingPx,
             rect.Right - item.PaddingPx, rect.Bottom - item.PaddingPx);
         var fit = UniformFit(image.Width, image.Height, inner);
-        if (fit.Width <= 0 || fit.Height <= 0) return;
+        if (fit.Width <= 0 || fit.Height <= 0) { canvas.RestoreToCount(saves); return; }
 
         foreach (var shard in shatter.Shards)
         {
@@ -374,21 +410,35 @@ public sealed class FlashLayer : BaseLayer
             if (dest.Width <= 0 || dest.Height <= 0) continue;
 
             // Cull generously: the tumble can push a shard's corners a little past its own box.
-            var slack = Math.Max(dest.Width, dest.Height);
-            if (!SKRect.Create(dest.Left - slack, dest.Top - slack,
-                    dest.Width + 2 * slack, dest.Height + 2 * slack).IntersectsWith(boundsPx))
-                continue;
+            // A tilted rig is not culled at all - these rects are in pivot space, so testing them
+            // against a screen rect would throw away pieces that are plainly on the monitor, and
+            // a pendulum break is a handful of shards for 0.7 s.
+            if (!tilted)
+            {
+                var slack = Math.Max(dest.Width, dest.Height);
+                if (!SKRect.Create(dest.Left - slack, dest.Top - slack,
+                        dest.Width + 2 * slack, dest.Height + 2 * slack).IntersectsWith(boundsPx))
+                    continue;
+            }
 
             var src = new SKRect(
                 (float)(shard.U0 * image.Width), (float)(shard.V0 * image.Height),
                 (float)(shard.U1 * image.Width), (float)(shard.V1 * image.Height));
 
-            _imagePaint.Color = new SKColor(255, 255, 255, (byte)Math.Clamp(a * 255, 0, 255));
-            int saves = canvas.Save();
+            var shardAlpha = (byte)Math.Clamp(a * 255, 0, 255);
+            int shardSaves = canvas.Save();
             canvas.RotateDegrees((float)(shard.AngleRad * 180.0 / Math.PI), dest.MidX, dest.MidY);
+            if (!item.HasGlow)
+            {
+                // The legacy black backing, cut up and falling with the picture it was behind.
+                _fillPaint.Color = new SKColor(0, 0, 0, shardAlpha);
+                canvas.DrawRect(dest, _fillPaint);
+            }
+            _imagePaint.Color = new SKColor(255, 255, 255, shardAlpha);
             canvas.DrawImage(image, src, dest, _imagePaint);
-            canvas.RestoreToCount(saves);
+            canvas.RestoreToCount(shardSaves);
         }
+        canvas.RestoreToCount(saves);
     }
 
     /// <summary>Copy the motion's current axis-aligned bounds onto the item's bookkeeping rect.</summary>

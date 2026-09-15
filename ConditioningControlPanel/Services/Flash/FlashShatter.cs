@@ -36,8 +36,21 @@ public sealed class FlashShatterState
     /// <summary>The pieces, in reading order across the grid. Empty at MotionLevel.Off.</summary>
     public FlashShard[] Shards = Array.Empty<FlashShard>();
 
-    /// <summary>Where the picture was when it broke (world px). The shards fall from here.</summary>
+    /// <summary>
+    /// Where the DRAWN picture was when it broke (world px). The shards fall from here. For a
+    /// pendulum this is the media rect in pivot space, not the axis-aligned box the click and the
+    /// gaze read, because the pieces have to line up with the picture the viewer was looking at.
+    /// </summary>
     public double RectX, RectY, RectW, RectH;
+
+    /// <summary>
+    /// The tilt the picture was wearing at the break, radians, about <see cref="PivotX"/> /
+    /// <see cref="PivotY"/> (world px). Zero for every style but the pendulum. It is FROZEN: the
+    /// swing stops dead at the dismiss and the pieces fall away along the axis the picture had,
+    /// so nothing snaps level under the cursor.
+    /// </summary>
+    public double FrozenAngleRad;
+    public double PivotX, PivotY;
 
     /// <summary>The monitor the break happened on (world px): a shard past these edges is gone.</summary>
     public double BoundsX, BoundsY, BoundsW, BoundsH;
@@ -177,6 +190,37 @@ public static class FlashShatter
         }
         s.Shards = shards;
         return s;
+    }
+
+    /// <summary>
+    /// Take the break over the picture as it is actually DRAWN. Everything but a pendulum draws
+    /// square in its own rect, so the plain overload is the whole story there; a pendulum hangs
+    /// its media below a pivot and the whole rig is tilted, so the shards have to be cut from
+    /// that rect at that angle or the picture jumps bigger and snaps level the moment it breaks.
+    /// The angle is copied here and never stepped again: the swing is over.
+    /// </summary>
+    public static void TakeOverDrawnRect(FlashShatterState s, double x, double y, double w, double h)
+    {
+        s.RectX = x; s.RectY = y; s.RectW = w; s.RectH = h;
+        s.FrozenAngleRad = 0;
+        s.PivotX = 0; s.PivotY = 0;
+    }
+
+    /// <summary>
+    /// The pendulum shape of <see cref="TakeOverDrawnRect"/>: the media hangs <paramref name="rope"/>
+    /// below the pivot and the rig is tilted by <paramref name="angleRad"/> about it, exactly as
+    /// FlashMotion.HangingBounds and the compositor's pendulum draw have it.
+    /// </summary>
+    public static void TakeOverHangingRect(FlashShatterState s, double pivotX, double pivotY,
+        double rope, double angleRad, double mediaW, double mediaH)
+    {
+        s.RectX = pivotX - mediaW / 2.0;
+        s.RectY = pivotY + rope - mediaH / 2.0;
+        s.RectW = mediaW;
+        s.RectH = mediaH;
+        s.FrozenAngleRad = angleRad;
+        s.PivotX = pivotX;
+        s.PivotY = pivotY;
     }
 
     /// <summary>

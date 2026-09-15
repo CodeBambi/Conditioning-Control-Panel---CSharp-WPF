@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -2109,16 +2109,36 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private FlashShatterState? BuildShatter(FlashWindow window, Compositor.FlashLayer.FlashItem item)
         {
-            if (!window.ShatterOnDismiss) return null;
             if (App.Settings?.Current?.FlashShatterEnabled != true) return null;
             if (!OwnsFlashV2()) return null;
 
-            var d = window.Monitor.DpiScale > 0 ? window.Monitor.DpiScale : 1.0;
-            var state = FlashShatter.Create(item.X, item.Y, item.W, item.H,
-                window.Monitor.X * d, window.Monitor.Y * d,
-                window.Monitor.Width * d, window.Monitor.Height * d,
+            var (bx, by, bw, bh) = ShatterBounds(window, item);
+            var state = FlashShatter.Create(item.X, item.Y, item.W, item.H, bx, by, bw, bh,
                 MotionFx.Level, _random);
             return state.Shards.Length > 0 ? state : null;
+        }
+
+        /// <summary>
+        /// The screen a break falls off, world px. It comes from the monitor the picture is
+        /// ACTUALLY on rather than the one it spawned on: a drift can carry a flash across a
+        /// seam and a drag can put it anywhere, and reading the spawn monitor would leave the
+        /// shards "off screen" from their first tick, ending the break before it was seen.
+        /// Falls back to the spawn monitor when there is no screen under the picture.
+        /// </summary>
+        private static (double X, double Y, double W, double H) ShatterBounds(
+            FlashWindow window, Compositor.FlashLayer.FlashItem item)
+        {
+            try
+            {
+                var mid = new System.Drawing.Point((int)(item.X + item.W / 2), (int)(item.Y + item.H / 2));
+                var b = Screen.FromPoint(mid).Bounds;
+                if (b.Width > 0 && b.Height > 0) return (b.X, b.Y, b.Width, b.Height);
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "no screen under the broken flash"); }
+
+            var d = window.Monitor.DpiScale > 0 ? window.Monitor.DpiScale : 1.0;
+            return (window.Monitor.X * d, window.Monitor.Y * d,
+                    window.Monitor.Width * d, window.Monitor.Height * d);
         }
 
         /// <summary>
@@ -4609,6 +4629,12 @@ namespace ConditioningControlPanel.Services
                     window.GlowEffect = null;
                 }
 
+                // Wave 2: consumed here and nowhere else, so clear it before any path returns -
+                // a classic window goes back into _windowPool and must not carry a dismiss from
+                // its previous life into the next spawn's teardown.
+                var shatterThis = window.ShatterOnDismiss;
+                window.ShatterOnDismiss = false;
+
                 // Compositor: detach the layer item — this disposes its SKImage frames
                 // deterministically. No hwnd, nothing to pool.
                 if (window.UsesLayer)
@@ -4617,11 +4643,10 @@ namespace ConditioningControlPanel.Services
                     {
                         var item = window.LayerItem;
                         window.LayerItem = null;
-                        var shatter = BuildShatter(window, item);
+                        var shatter = shatterThis ? BuildShatter(window, item) : null;
                         if (shatter != null) _flashLayer?.BeginShatter(item, shatter);
                         else _flashLayer?.Remove(item);
                     }
-                    window.ShatterOnDismiss = false;
                     window.IsFadingOut = false;
                     // The state bag is still a real Window: constructing it registered it in
                     // Application.Windows, and only Close() removes it — returning without a

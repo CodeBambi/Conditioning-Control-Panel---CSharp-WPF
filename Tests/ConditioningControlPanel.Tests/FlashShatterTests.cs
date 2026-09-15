@@ -291,6 +291,71 @@ public class FlashShatterTests
         Assert.True(s.Done);
     }
 
+    // ---------------------------------------------------------------- the drawn rect
+
+    [Fact]
+    public void APlainFlashBreaksOverItsOwnRectWithNoTilt()
+    {
+        var s = Break();
+        FlashShatter.TakeOverDrawnRect(s, 100, 200, 300, 400);
+        Assert.Equal(100, s.RectX, 9);
+        Assert.Equal(200, s.RectY, 9);
+        Assert.Equal(300, s.RectW, 9);
+        Assert.Equal(400, s.RectH, 9);
+        Assert.Equal(0.0, s.FrozenAngleRad, 9);
+    }
+
+    [Fact]
+    public void APendulumBreaksOverTheMediaItDrawsNotTheBoxItOccupies()
+    {
+        // The box a swinging 400x300 picture occupies is the bounds of the ROTATED media, which
+        // is wider and taller than the picture itself. Cutting from that would make the flash
+        // jump bigger the instant it broke, so the break takes the pivot-space media rect.
+        const double pivotX = 960, pivotY = 0, rope = 500, angle = 0.28;
+        var aabb = FlashMotion.HangingBounds(pivotX, pivotY, rope, angle, RW, RH);
+        Assert.True(aabb.W > RW && aabb.H > RH, "the swinging box really is bigger than the picture");
+
+        var s = Break();
+        FlashShatter.TakeOverHangingRect(s, pivotX, pivotY, rope, angle, RW, RH);
+        Assert.Equal(RW, s.RectW, 9);
+        Assert.Equal(RH, s.RectH, 9);
+        Assert.Equal(pivotX - RW / 2, s.RectX, 9);
+        Assert.Equal(pivotY + rope - RH / 2, s.RectY, 9);
+    }
+
+    [Fact]
+    public void ThePendulumTiltIsFrozenAtTheBreakAndTheSwingIsOver()
+    {
+        var motion = FlashMotion.Create(FlashMotionStyle.Pendulum, RX, RY, RW, RH,
+            0, 0, BW, BH, MotionLevel.Full, new Random(4));
+        FlashMotion.Step(motion, 0.4);           // let it swing somewhere off straight down
+        var angleAtTheBreak = motion.AngleRad;
+        Assert.NotEqual(0.0, angleAtTheBreak, 3);
+
+        var s = Break();
+        FlashShatter.TakeOverHangingRect(s, motion.PivotX, motion.PivotY, motion.Rope,
+            motion.AngleRad, motion.MediaW, motion.MediaH);
+        Assert.Equal(angleAtTheBreak, s.FrozenAngleRad, 9);
+        Assert.Equal(motion.PivotX, s.PivotX, 9);
+        Assert.Equal(motion.PivotY, s.PivotY, 9);
+
+        // The break runs its whole course and the tilt never moves: the shards fall away along
+        // the axis the picture had, and nothing snaps level under the cursor.
+        RunToDone(s);
+        Assert.Equal(angleAtTheBreak, s.FrozenAngleRad, 9);
+    }
+
+    [Fact]
+    public void TakingOverADrawnRectClearsAPreviousTilt()
+    {
+        var s = Break();
+        FlashShatter.TakeOverHangingRect(s, 960, 0, 500, 0.3, RW, RH);
+        FlashShatter.TakeOverDrawnRect(s, RX, RY, RW, RH);
+        Assert.Equal(0.0, s.FrozenAngleRad, 9);
+        Assert.Equal(0.0, s.PivotX, 9);
+        Assert.Equal(0.0, s.PivotY, 9);
+    }
+
     // ---------------------------------------------------------------- the setting
 
     [Fact]

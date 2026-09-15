@@ -5042,7 +5042,7 @@
   "setting_flash_rounded_corners": "Rounded corners",
   "tooltip_flash_rounded_corners": "Softens the corners of every flash so a GIF sits on the screen like a card instead of a pasted rectangle. Needs a Flashes v2 motion prize.",
   "setting_flash_shatter": "Shatter",
-  "tooltip_flash_shatter": "Dismissing a flash breaks it apart instead of cutting it: the picture splits into shards that drop off the bottom of the screen and fade as they go. Letting a flash time out on its own still fades it quietly. Reduced motion breaks it into fewer pieces over half the time, and motion off keeps the plain cut. Needs a Flashes v2 motion prize.",
+  "tooltip_flash_shatter": "Dismissing a flash breaks it apart instead of cutting it: the picture splits into shards that fall, tumble and fade away mid-air. Letting a flash time out on its own still fades it quietly. Reduced motion breaks it into fewer pieces over half the time, and motion off keeps the plain cut. Needs Solid mode off, and a Flashes v2 motion prize.",
   "setting_stare_to_pop": "응시해서 터뜨리기",
   "tooltip_stare_to_pop": "플래시를 1초쯤 보고 있으면 사라집니다. 클릭한 것과 같고, 하이드라도 마찬가지입니다. 플래시에만 해당합니다. 버블은 버블 팝 탭에 자체 스위치가 있습니다.",
   "setting_stare_to_keep": "응시해서 유지",
