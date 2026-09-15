@@ -105,11 +105,24 @@ const mounted=await ev(`(async()=>{
  const openedAt=performance.now(),stage=room.stage(row),{createRoomScene}=await import('/backroom/stations/wheel/room-scene.js');
  const {layoutOf,landingAngle}=await import('/backroom/stations/wheel/wheel.js');
  const {createLoomKit}=await import('/backroom/shared/hypno/index.js'),kit=createLoomKit({still:true});
- const view=await createRoomScene({stage,canvas:stage.canvas,reduced:true,labels:s=>({big:String(s.pay),small:s.label}),dress:{hub:'loom'},paintHub:(c)=>kit.paint(c,'hub',{now:performance.now(),angle:0})});
+ const view=await createRoomScene({stage,canvas:stage.canvas,reduced:true,canSpin:()=>true,onRelease:()=>window.__releases=(window.__releases||0)+1,labels:s=>({big:String(s.pay),small:s.label}),dress:{hub:'loom'},paintHub:(c)=>kit.paint(c,'hub',{now:performance.now(),angle:0})});
  window.__test={stage,view,layoutOf,landingAngle,kit,layout:null,openMs:performance.now()-openedAt};await view.rise();return view.missing;
 })()`);ok(mounted?.length===0,'real fixture mounts with required anchors');
 const tables=await ev(`(()=>{const {view,layoutOf,landingAngle,stage}=window.__test;return [Array(7).fill(1),[7.2,105.84,88.2,52.92,17.64,35.28,42.336,10.584]].map(widths=>{const layout=layoutOf(widths.map((width,i)=>({id:'test'+i,width,pay:i*15,kind:i===0?'jackpot':'prize',label:'Test '+i})));view.setLayout(layout);window.__test.layout=layout;return layout.map(s=>{view.setRotation(landingAngle(layout,s.index,'test'),s.index);const debug=view.debug();let sectors=0;stage.fixture.traverse(n=>{if(n.userData.base!==undefined)sectors++;});return {id:s.id,under:debug.under,landed:debug.landed,sectors};});});})()`);
 ok(tables?.every(rows=>rows.every(s=>s.id===s.under&&s.id===s.landed&&s.sectors===rows.length)),'synthetic seven and unequal eight render exactly the table and land every index');
+for(const method of ['skip','sink']) {
+ let grabbed=false;
+ for(const [x,y] of [[100,200],[300,200],[100,550],[300,550]]){
+  await cdp('Input.dispatchMouseEvent',{type:'mousePressed',x,y,button:'left',clickCount:1});
+  grabbed=await ev(`window.__test.view.debug().dragging`);if(grabbed)break;
+  await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',x,y,button:'left',clickCount:1});
+ }
+ ok(grabbed,'real rim pointer captured for '+method);
+ await ev(`window.__test.view.${method}()`);
+ ok(await ev(`!window.__test.view.debug().dragging && window.__test.stage.canvas.style.cursor==='' && !window.__test.stage.canvas.hasPointerCapture(1) && !window.__releases`),method+' releases capture and cursor without spinning');
+ await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',x:100,y:200,button:'left',clickCount:1});await ev(`window.__test.view.rise()`);
+}
+if(process.env.QUICK){await ev(`window.__test.view.dispose();window.__test.stage.dispose();window.__test.kit.dispose()`);ok(errs.length===0,'no browser errors '+errs.join(' | '));await done(fails?1:0);}
 await sleep(4000);await shot('phone-default-camera.jpg');
 const crop=await ev(`(async()=>{const T=await import('three'),{stage}=window.__test;const cam=stage.camera;cam.updateMatrixWorld();const inv=cam.matrixWorldInverse;const node=stage.fixture.getObjectByName('wheel_rotor'),box=new T.Box3().setFromObject(node);let need=0;const pixels=[];for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z]){const p=new T.Vector3(x,y,z),v=p.clone().applyMatrix4(inv);need=Math.max(need,Math.abs(v.x)/(-v.z)/cam.aspect,Math.abs(v.y)/(-v.z));const q=p.project(cam);pixels.push([(q.x+1)*200,(1-q.y)*400]);}return {fov:cam.fov,minimumRotorFov:Math.atan(need)*360/Math.PI,pixels,performance:window.__backroom.scene.debug()};})()`);
 await ev(`window.__test.stage.camera.fov=${crop.minimumRotorFov+4};window.__test.stage.camera.updateProjectionMatrix()`);await sleep(400);await shot('proposed-fit-camera.jpg');
