@@ -225,7 +225,7 @@ public static partial class BuiltInPrograms
 
                 // Five days in this program name a specific lock card in their copy, and a named
                 // sentence has to be *pinned*, not merely present in the pool - a template pool with
-                // three entries makes "Complete 3 lock cards - GOOD BOYS DON'T DECIDE." a one-in-27
+                // three entries makes "Complete 3 lock cards - GOOD PETS DON'T DECIDE." a one-in-27
                 // promise. So those five days override the pool down to the sentence they name. This
                 // is exactly what ProgramDay.Overrides is for: sparse per-day escalation the
                 // intensity curve cannot express.
@@ -472,7 +472,7 @@ public static partial class BuiltInPrograms
                 Intensity = 0.26,
                 Overrides = new Dictionary<string, object>
                 {
-                    ["LockCardPhrases"] = new List<string> { "GOOD BOYS DON'T DECIDE." }
+                    ["LockCardPhrases"] = new List<string> { "GOOD PETS DON'T DECIDE." }
                 },
                 Tasks = new List<ProgramTask>
                 {
@@ -481,7 +481,7 @@ public static partial class BuiltInPrograms
                         Id = "d9_dont_decide",
                         OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
-                        Description = "Complete 3 lock cards - GOOD BOYS DON'T DECIDE.",
+                        Description = "Complete 3 lock cards - GOOD PETS DON'T DECIDE.",
                         Verifier = QuestCategory.LockCard,
                         TargetValue = 3
                     }
@@ -1238,7 +1238,7 @@ public static partial class BuiltInPrograms
     /// </summary>
     private static List<string> OfferSubliminals() => new()
     {
-        "GOOD BOY",
+        "GOOD PET",
         "OBEY HER",
         "SHE HOLDS THE KEY",
         "MINE",
@@ -1250,7 +1250,7 @@ public static partial class BuiltInPrograms
 
     private static List<string> AcheSubliminals() => new()
     {
-        "GOOD BOY",
+        "GOOD PET",
         "OBEY HER",
         "SHE HOLDS THE KEY",
         "MINE",
@@ -1266,7 +1266,7 @@ public static partial class BuiltInPrograms
 
     private static List<string> HabitSubliminals() => new()
     {
-        "GOOD BOY",
+        "GOOD PET",
         "OBEY HER",
         "SHE HOLDS THE KEY",
         "MINE",
@@ -1285,7 +1285,7 @@ public static partial class BuiltInPrograms
 
     private static List<string> VerdictSubliminals() => new()
     {
-        "GOOD BOY",
+        "GOOD PET",
         "OBEY HER",
         "MINE",
         "SINK DEEPER",
@@ -1326,14 +1326,14 @@ public static partial class BuiltInPrograms
     {
         "CIRCE HOLDS MY KEY.",
         "I AM KEPT, AND I AM GRATEFUL.",
-        "GOOD BOYS DON'T DECIDE."
+        "GOOD PETS DON'T DECIDE."
     };
 
     private static List<string> HabitLockSentences() => new()
     {
         "CIRCE HOLDS MY KEY.",
         "I AM KEPT, AND I AM GRATEFUL.",
-        "GOOD BOYS DON'T DECIDE.",
+        "GOOD PETS DON'T DECIDE.",
         "EMPTY, OBEDIENT, LOCKED.",
         "MINE IS NOT A LIFE OF CHOICES."
     };
@@ -1342,7 +1342,7 @@ public static partial class BuiltInPrograms
     {
         "CIRCE HOLDS MY KEY.",
         "I AM KEPT, AND I AM GRATEFUL.",
-        "GOOD BOYS DON'T DECIDE.",
+        "GOOD PETS DON'T DECIDE.",
         "EMPTY, OBEDIENT, LOCKED.",
         "MINE IS NOT A LIFE OF CHOICES.",
         "I DON'T NEED CONTROL. SHE HAS IT.",
@@ -1357,7 +1357,7 @@ public static partial class BuiltInPrograms
     private static List<string> AcheBouncingText() => new()
     {
         "MINE",
-        "GOOD BOY",
+        "GOOD PET",
         "KEPT",
         "OBEY HER",
         "HER KEY",
@@ -1367,7 +1367,7 @@ public static partial class BuiltInPrograms
     private static List<string> HabitBouncingText() => new()
     {
         "MINE",
-        "GOOD BOY",
+        "GOOD PET",
         "KEPT",
         "OBEY HER",
         "HER KEY",
@@ -1380,7 +1380,7 @@ public static partial class BuiltInPrograms
     private static List<string> VerdictBouncingText() => new()
     {
         "MINE",
-        "GOOD BOY",
+        "GOOD PET",
         "KEPT",
         "OBEY HER",
         "HER KEY",

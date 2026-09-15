@@ -2324,6 +2324,17 @@ namespace ConditioningControlPanel.Models
             set { _marqueeNeutralDefaultMigrated = value; OnPropertyChanged(); }
         }
 
+        private bool _circeNeutralTextMigrated;
+        /// <summary>One-shot guard for Services.Migrations.CirceNeutralMigration, which rewrites the
+        /// old Circe's Lock defaults saved in pools, phrase toggles and a pasted custom prompt. Latched
+        /// on the first load of a build that has it, so text typed back in later is kept.</summary>
+        [JsonProperty]
+        public bool CirceNeutralTextMigrated
+        {
+            get => _circeNeutralTextMigrated;
+            set { _circeNeutralTextMigrated = value; OnPropertyChanged(); }
+        }
+
         /// <summary>
         /// Move users with NO themed mod off the old gendered default banner text. Keyed on an exact
         /// match of <see cref="LegacyGenderedMarqueeMessage"/>, so anyone who customised their banner

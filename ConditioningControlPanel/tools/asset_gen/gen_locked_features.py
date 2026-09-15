@@ -99,7 +99,7 @@ ASSETS = [
      "spiral, an eye, a mandala and a zig-zag in a grid on the screen. No text."),
     ("subliminal.png", (512, 512), SQ, "RGB",
      "She stands beside a big glowing neon sign that stacks commands; the sign's in-art text "
-     "reads \"OBEY\" / \"MINE\" / \"GOOD BOY\" on three stacked neon lines."),
+     "reads \"OBEY\" / \"MINE\" / \"GOOD PET\" on three stacked neon lines."),
     ("audio_whispers.png", (512, 512), SQ, "RGB",
      "She wears glossy headphones with one gloved finger to her lips whispering; magenta "
      "sound-waves and a few music notes curl around her. Short neon text reads \"LISTEN\"."),
@@ -111,10 +111,10 @@ ASSETS = [
      "bright neon play-button triangle glowing on it. Short neon text reads \"WATCH\"."),
     ("bouncing_text.png", (1024, 1024), SQ, "RGB",
      "Several glowing magenta neon command words bounce and float around her like drifting "
-     "on-screen captions — \"OBEY\", \"SINK\", \"GOOD BOY\" — short, bold and legible."),
+     "on-screen captions — \"OBEY\", \"SINK\", \"GOOD PET\" — short, bold and legible."),
     ("Phrase_Lock.png", (1024, 1024), SQ, "RGB",
      "She holds up a single glowing magenta affirmation lock-card with a neon PADLOCK and a "
-     "short phrase on it; the card's in-art text reads \"GOOD BOY\"."),
+     "short phrase on it; the card's in-art text reads \"GOOD PET\"."),
     ("spiral_overlay.png", (1024, 1024), SQ, "RGB",
      "A huge glowing magenta hypnotic SPIRAL fills the scene as an overlay, her waist-up "
      "figure set against / drawn into it, pulling the eye to the centre. No text."),

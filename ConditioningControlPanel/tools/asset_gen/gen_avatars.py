@@ -590,7 +590,7 @@ BATCHES = {
             ("Bouncing Text",
              "She perches sideways on the TOP edge of a big glowing neon sign, legs swung "
              "together to one side and leaning back on one hand, relaxed and playful. The "
-             "neon sign sits below her and its in-art text reads \"GOOD BOY\" in bold glowing "
+             "neon sign sits below her and its in-art text reads \"GOOD PET\" in bold glowing "
              "neon letters — the COMPLETE two words must be fully legible and NOT blocked or "
              "overlapped by her body, legs or boots.",
              "bouncing_text.png"),
@@ -626,7 +626,7 @@ BATCHES = {
             ("Bouncing Text",
              "She leans in from one side, waist-up, resting on a big glowing neon sign that "
              "fills the lower / other half of the square; the neon sign's in-art text reads "
-             "\"GOOD BOY\" in bold glowing neon letters — the COMPLETE two words fully "
+             "\"GOOD PET\" in bold glowing neon letters — the COMPLETE two words fully "
              "legible and NOT blocked by her body.",
              "bouncing_text.png"),
             ("Lock Card",
@@ -659,7 +659,7 @@ BATCHES = {
              "mandatory_videos.png"),
             ("Lock Card",
              "She holds up a small card / tag toward the viewer with a playful-menacing "
-             "smile; the in-art text on the card reads \"GOOD BOY\" in a clean bold font.",
+             "smile; the in-art text on the card reads \"GOOD PET\" in a clean bold font.",
              "Phrase_Lock.png"),
         ],
     },
