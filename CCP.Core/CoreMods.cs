@@ -9,17 +9,16 @@ namespace ConditioningControlPanel
     /// than through <c>App.Mods</c>, which lives on a <c>System.Windows.Application</c> subclass
     /// and therefore cannot exist in Core.
     ///
-    /// Deliberately three delegates and no interface. The only Core consumer today is
-    /// <see cref="Localization.VocabTokens"/>, and an interface with one implementation is a
-    /// speculative abstraction - the WPF head, a future Avalonia head and a VR head all seed
-    /// this the same way. Promote it to an interface when a second consumer needs something
-    /// these three cannot express, not before.
+    /// Deliberately small delegates and no interface. The WPF head, a future Avalonia head and a VR
+    /// head all seed these the same way, while an interface with one implementation is speculative.
+    /// Add a focused provider when a consumer needs data these callbacks cannot express, not a generic
+    /// mod service abstraction.
     ///
-    /// <para><b>Why the active mod is <see cref="object"/>.</b> VocabTokens uses the manifest
-    /// purely as a cache-invalidation token - it does <c>ReferenceEquals</c> against the previous
-    /// value and never reads a property. Typing it as <c>object?</c> keeps <c>ModManifest</c>
-    /// (which is blocked on head-side types) out of Core entirely. If a Core consumer ever needs
-    /// real manifest data, that is the moment to move the model, not now.</para>
+    /// <para><b>Why the cache token is <see cref="object"/>.</b> VocabTokens uses the manifest purely
+    /// as a cache-invalidation token - it does <c>ReferenceEquals</c> against the previous value and
+    /// never reads a property. The active-package provider is separate because the package model is
+    /// already in Core and a reporting consumer needs its built-in/custom bit without enumerating
+    /// installed mods.</para>
     ///
     /// <para>Unseeded is a supported state, not a bug: localization initialises before the mod
     /// system, so the earliest reads legitimately happen with no provider attached. Every
@@ -86,6 +85,10 @@ namespace ConditioningControlPanel
         // built-in CCP default manifest, which is in Core - or, where a WPF call site carried its
         // own null-App.Mods fallback, that fallback. See GetDefaultSubliminalPool.
 
+        /// <summary>The complete active package for consumers that need its built-in/custom
+        /// classification. Unseeded means no mod layer, not the installed-mod list's vanilla
+        /// fallback.</summary>
+        public static volatile Func<ModPackage?>? ActiveModPackageProvider;
         public static volatile Func<string?>? ActiveModIdProvider;
         public static volatile Func<IReadOnlyDictionary<string, ModPackage>?>? InstalledModsProvider;
         public static volatile Func<string?>? AccentColorHexProvider;
@@ -102,6 +105,11 @@ namespace ConditioningControlPanel
             {
                 [BuiltInMods.CCPDefaultId] = new ModPackage(BuiltInMods.CCPDefault, null, isBuiltIn: true),
             });
+
+        public static ModPackage? ActiveModPackage
+        {
+            get { try { return ActiveModPackageProvider?.Invoke(); } catch { return null; } }
+        }
 
         public static string ActiveModId
         {

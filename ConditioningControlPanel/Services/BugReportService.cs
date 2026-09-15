@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using ConditioningControlPanel.Localization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
@@ -59,6 +60,12 @@ namespace ConditioningControlPanel.Services
         // thread-pool thread, and the "My Reports" UI can read the list concurrently.
         private static readonly object RecentReportsLock = new();
 
+        /// <summary>
+        /// Head-supplied tail of the dedicated diagnostic trace. The writer itself stays in the
+        /// WPF head; an unseeded service simply has no extra trace to attach.
+        /// </summary>
+        public static volatile Func<int, string>? DiagnosticTailProvider;
+
         private readonly HttpClient _httpClient;
 
         public BugReportService()
@@ -67,8 +74,8 @@ namespace ConditioningControlPanel.Services
             {
                 Timeout = TimeSpan.FromSeconds(30),
             };
-            _httpClient.DefaultRequestHeaders.Add("X-Client-Version", UpdateService.AppVersion);
-            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
+            _httpClient.DefaultRequestHeaders.Add("X-Client-Version", CoreReleaseContent.AppVersion);
+            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{CoreReleaseContent.AppVersion}");
         }
 
         /// <summary>
@@ -120,10 +127,10 @@ namespace ConditioningControlPanel.Services
         {
             var metadata = new BugMetadata
             {
-                AppVersion = UpdateService.AppVersion ?? "unknown",
+                AppVersion = CoreReleaseContent.AppVersion,
                 Os = SafeToString(() => Environment.OSVersion.ToString()),
                 Dotnet = SafeToString(() => Environment.Version.ToString()),
-                Language = App.Settings?.Current?.Language ?? "en",
+                Language = ResolveLanguage(),
                 ActiveModId = ResolveActiveModId(),
             };
 
@@ -153,7 +160,7 @@ namespace ConditioningControlPanel.Services
                 // trace lives in its own small flush-on-write file that a relaunch cannot scroll,
                 // so append its tail here. Same field (no server schema change), clearly delimited,
                 // and it goes through the same scrubber as everything else.
-                var diagRaw = VideoDiag.Tail(MaxVideoDiagLines);
+                var diagRaw = TryReadDiagnosticTail(MaxVideoDiagLines);
                 var combined = string.IsNullOrWhiteSpace(diagRaw)
                     ? appLogRaw
                     : appLogRaw + Environment.NewLine + Environment.NewLine +
@@ -232,7 +239,7 @@ namespace ConditioningControlPanel.Services
                 if ((int)res.StatusCode == 202)
                 {
                     var token202 = TryExtractToken(responseText);
-                    App.Logger?.Information("[BugReport] Saved pending (bot unreachable): {Token}",
+                    Log.Information("[BugReport] Saved pending (bot unreachable): {Token}",
                         string.IsNullOrEmpty(token202) ? "(no token)" : token202);
                     RememberReportToken(token202, draft.Kind);
                     return new SubmitResult
@@ -245,7 +252,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!res.IsSuccessStatusCode)
                 {
-                    App.Logger?.Warning("[BugReport] Upload failed: {Status} {Body}", res.StatusCode, responseText);
+                    Log.Warning("[BugReport] Upload failed: {Status} {Body}", res.StatusCode, responseText);
                     return new SubmitResult
                     {
                         Outcome = SubmitOutcome.ValidationFailed,
@@ -263,7 +270,7 @@ namespace ConditioningControlPanel.Services
                     };
                 }
 
-                App.Logger?.Information("[BugReport] Submitted successfully: {Token}", token);
+                Log.Information("[BugReport] Submitted successfully: {Token}", token);
                 RememberReportToken(token, draft.Kind);
                 return new SubmitResult
                 {
@@ -273,7 +280,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (TaskCanceledException ex)
             {
-                App.Logger?.Warning(ex, "[BugReport] Upload timed out");
+                Log.Warning(ex, "[BugReport] Upload timed out");
                 return new SubmitResult
                 {
                     Outcome = SubmitOutcome.NetworkError,
@@ -282,7 +289,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (HttpRequestException ex)
             {
-                App.Logger?.Warning(ex, "[BugReport] Network error");
+                Log.Warning(ex, "[BugReport] Network error");
                 return new SubmitResult
                 {
                     Outcome = SubmitOutcome.NetworkError,
@@ -291,7 +298,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "[BugReport] Unexpected error");
+                Log.Error(ex, "[BugReport] Unexpected error");
                 return new SubmitResult
                 {
                     Outcome = SubmitOutcome.ValidationFailed,
@@ -342,8 +349,12 @@ namespace ConditioningControlPanel.Services
             if (string.IsNullOrWhiteSpace(token)) return;
             try
             {
-                var settings = App.Settings?.Current;
-                if (settings == null) return;
+                // Match the old App.Settings?.Current guard: CoreSettings has a safe fallback for
+                // reads, but report numbers must not be written into that in-memory fallback when
+                // no head settings service has been seeded.
+                var service = CoreSettings.Service;
+                if (service == null) return;
+                var settings = service.Current;
 
                 lock (RecentReportsLock)
                 {
@@ -356,11 +367,11 @@ namespace ConditioningControlPanel.Services
                     AppendRecentReport(updated, token, DateTime.UtcNow, kind);
                     settings.RecentBugReports = updated;
                 }
-                App.Settings?.Save();
+                CoreSettings.Save();
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning("[BugReport] could not persist report number: {Msg}", ex.Message);
+                Log.Warning("[BugReport] could not persist report number: {Msg}", ex.Message);
             }
         }
 
@@ -418,11 +429,27 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        private static string ResolveLanguage()
+        {
+            try { return CoreSettings.Current.Language ?? "en"; }
+            catch { return "en"; }
+        }
+
+        private static string TryReadDiagnosticTail(int maxLines)
+        {
+            try { return DiagnosticTailProvider?.Invoke(maxLines) ?? string.Empty; }
+            catch (Exception ex)
+            {
+                Log.Debug("[BugReport] diagnostic trace read failed: {Msg}", ex.Message);
+                return string.Empty;
+            }
+        }
+
         private static string ResolveActiveModId()
         {
             try
             {
-                var mod = App.Mods?.ActiveMod;
+                var mod = CoreMods.ActiveModPackage;
                 if (mod == null) return "unknown";
                 // If the mod is not a built-in (i.e. locally authored / unpublished),
                 // report a generic "custom-mod" label instead of the real ID. This
@@ -462,7 +489,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("[BugReport] crash log read failed: {Msg}", ex.Message);
+                Log.Debug("[BugReport] crash log read failed: {Msg}", ex.Message);
                 return string.Empty;
             }
         }
@@ -500,7 +527,7 @@ namespace ConditioningControlPanel.Services
             }
 
             if (dropped > 0)
-                App.Logger?.Debug("[BugReport] filtered {Count} benign exit-cleanup crash entries", dropped);
+                Log.Debug("[BugReport] filtered {Count} benign exit-cleanup crash entries", dropped);
             return kept.ToString();
         }
 
@@ -520,7 +547,7 @@ namespace ConditioningControlPanel.Services
             var entries = log.Split(new[] { marker }, StringSplitOptions.None);
             if (entries.Length <= 1) return log; // no delimited entries — leave as-is
 
-            var versionTag = "App Version: " + UpdateService.AppVersion;
+            var versionTag = "App Version: " + CoreReleaseContent.AppVersion;
             var kept = new System.Text.StringBuilder(entries[0]);
             int dropped = 0;
             for (int i = 1; i < entries.Length; i++)
@@ -532,7 +559,7 @@ namespace ConditioningControlPanel.Services
             }
 
             if (dropped > 0)
-                App.Logger?.Debug("[BugReport] dropped {Count} crash entries from other app versions", dropped);
+                Log.Debug("[BugReport] dropped {Count} crash entries from other app versions", dropped);
             return kept.ToString();
         }
 
@@ -554,7 +581,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("[BugReport] sampled diagnostics read failed: {Msg}", ex.Message);
+                Log.Debug("[BugReport] sampled diagnostics read failed: {Msg}", ex.Message);
                 return string.Empty;
             }
         }
@@ -636,7 +663,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("[BugReport] app log read failed: {Msg}", ex.Message);
+                Log.Debug("[BugReport] app log read failed: {Msg}", ex.Message);
                 return string.Empty;
             }
         }

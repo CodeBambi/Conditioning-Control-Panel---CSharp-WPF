@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
+using System.Reflection;
+using ConditioningControlPanel;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using Xunit;
 
@@ -14,6 +18,7 @@ namespace ConditioningControlPanel.Tests;
 /// the marker lines (DiagMarkers), retains the MaxDiagMatches most-recent in order, and caps the
 /// joined section at MaxDiagSectionChars. These tests pin that contract headlessly.
 /// </summary>
+[Collection(BugReportPortabilityCollection.Name)]
 public class BugReportDiagnosticsTests
 {
     private static string[] MarkerLine(string marker, int n) =>
@@ -299,4 +304,139 @@ public class BugReportDiagnosticsTests
         Assert.Equal(filled, BugReportService.TidyEmptyTokenPlaceholder(filled));
         Assert.Equal(string.Empty, BugReportService.TidyEmptyTokenPlaceholder(null));
     }
+
+    [Fact]
+    public void VersionSeam_ControlsHeadersDraftAndCurrentCrashFiltering()
+    {
+        var oldVersion = CoreReleaseContent.AppVersionProvider;
+        try
+        {
+            CoreReleaseContent.AppVersionProvider = () => "9.8.7";
+            var service = new BugReportService();
+            var client = (HttpClient)typeof(BugReportService)
+                .GetField("_httpClient", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(service)!;
+
+            Assert.Equal("9.8.7", client.DefaultRequestHeaders.GetValues("X-Client-Version").Single());
+            Assert.Equal("ConditioningControlPanel/9.8.7", client.DefaultRequestHeaders.UserAgent.ToString());
+            Assert.Equal("9.8.7", service.CreateDraft("", "", includeAppLog: false).Metadata.AppVersion);
+
+            var filter = typeof(BugReportService).GetMethod(
+                "FilterToCurrentVersion", BindingFlags.Static | BindingFlags.NonPublic)!;
+            var log = "prefix\n" +
+                "CRASH REPORT - old\nApp Version: 9.8.6\n" +
+                "CRASH REPORT - current\nApp Version: 9.8.7\n";
+            var filtered = (string)filter.Invoke(null, new object[] { log })!;
+            Assert.DoesNotContain("CRASH REPORT - old", filtered);
+            Assert.Contains("CRASH REPORT - current", filtered);
+        }
+        finally
+        {
+            CoreReleaseContent.AppVersionProvider = oldVersion;
+        }
+    }
+
+    [Fact]
+    public void Draft_UnseededUsesSafeCoreDefaults_AndDoesNotReadDiagnosticsWithoutOptIn()
+    {
+        var oldVersion = CoreReleaseContent.AppVersionProvider;
+        var oldSettings = CoreSettings.ServiceProvider;
+        var oldPackage = CoreMods.ActiveModPackageProvider;
+        var oldTail = BugReportService.DiagnosticTailProvider;
+        try
+        {
+            CoreReleaseContent.AppVersionProvider = null;
+            CoreSettings.ServiceProvider = null;
+            CoreMods.ActiveModPackageProvider = null;
+            BugReportService.DiagnosticTailProvider = _ => throw new InvalidOperationException("opt-in callback must not run");
+
+            var draft = new BugReportService().CreateDraft("description", "steps", includeAppLog: false);
+
+            Assert.Equal("0.0.0", draft.Metadata.AppVersion);
+            Assert.Equal("en", draft.Metadata.Language);
+            Assert.Equal("unknown", draft.Metadata.ActiveModId);
+            Assert.False(draft.IncludeAppLog);
+            Assert.Empty(draft.ScrubbedAppLog);
+        }
+        finally
+        {
+            CoreReleaseContent.AppVersionProvider = oldVersion;
+            CoreSettings.ServiceProvider = oldSettings;
+            CoreMods.ActiveModPackageProvider = oldPackage;
+            BugReportService.DiagnosticTailProvider = oldTail;
+        }
+    }
+
+    [Fact]
+    public void Draft_UsesActivePackagePrivacyClassifier_NotInstalledList()
+    {
+        var oldPackage = CoreMods.ActiveModPackageProvider;
+        var oldInstalled = CoreMods.InstalledModsProvider;
+        try
+        {
+            // Deliberately make the installed-list answer disagree: the service must inspect the
+            // active package's built-in bit, not infer identity from enumeration.
+            CoreMods.InstalledModsProvider = () => new Dictionary<string, ModPackage>();
+            CoreMods.ActiveModPackageProvider = () => new ModPackage(
+                new ModManifest { Id = "locally-authored" }, null, isBuiltIn: false);
+
+            var custom = new BugReportService().CreateDraft("", "", includeAppLog: false);
+            Assert.Equal("custom-mod", custom.Metadata.ActiveModId);
+
+            CoreMods.ActiveModPackageProvider = () => new ModPackage(
+                new ModManifest { Id = "built-in-id" }, null, isBuiltIn: true);
+            var builtIn = new BugReportService().CreateDraft("", "", includeAppLog: false);
+            Assert.Equal("built-in-id", builtIn.Metadata.ActiveModId);
+
+            CoreMods.ActiveModPackageProvider = null;
+            var unknown = new BugReportService().CreateDraft("", "", includeAppLog: false);
+            Assert.Equal("unknown", unknown.Metadata.ActiveModId);
+        }
+        finally
+        {
+            CoreMods.ActiveModPackageProvider = oldPackage;
+            CoreMods.InstalledModsProvider = oldInstalled;
+        }
+    }
+
+    [Fact]
+    public void Draft_OnlyReadsDiagnosticTailWhenBugLogOptInIsEnabled()
+    {
+        var oldTail = BugReportService.DiagnosticTailProvider;
+        try
+        {
+            int calls = 0;
+            BugReportService.DiagnosticTailProvider = maxLines =>
+            {
+                calls++;
+                Assert.Equal(200, maxLines);
+                return "portability-tail";
+            };
+            var service = new BugReportService();
+
+            var omitted = service.CreateDraft("", "", includeAppLog: false);
+            Assert.Equal(0, calls);
+            Assert.Empty(omitted.ScrubbedAppLog);
+
+            var included = service.CreateDraft("", "", includeAppLog: true);
+            Assert.Equal(1, calls);
+            Assert.True(included.IncludeAppLog);
+            Assert.Contains("portability-tail", included.ScrubbedAppLog);
+
+            var suggestion = service.CreateDraft("", "", includeAppLog: true, ReportKind.Suggestion);
+            Assert.Equal(1, calls);
+            Assert.False(suggestion.IncludeAppLog);
+            Assert.Empty(suggestion.ScrubbedAppLog);
+        }
+        finally
+        {
+            BugReportService.DiagnosticTailProvider = oldTail;
+        }
+    }
+}
+
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class BugReportPortabilityCollection
+{
+    public const string Name = "BugReportPortability";
 }

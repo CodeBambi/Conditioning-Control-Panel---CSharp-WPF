@@ -271,6 +271,7 @@ namespace ConditioningControlPanel
             };
 
             CoreMods.ActiveModTokenProvider = () => Mods?.ActiveMod?.Manifest;
+            CoreMods.ActiveModPackageProvider = () => Mods?.ActiveMod;
             CoreMods.PetNameOverrideProvider = () => Mods?.GetPetNameOverride();
             CoreMods.CollectiveOverrideProvider = () => Mods?.GetCollectiveOverride();
             CoreMods.ModeDisplayNameProvider = () => Mods?.GetModeDisplayName();
@@ -332,6 +333,9 @@ namespace ConditioningControlPanel
             // stamps) that need a version string or the installed build's notes and nothing else.
             CoreReleaseContent.AppVersionProvider = () => Services.UpdateService.AppVersion;
             CoreReleaseContent.PatchNotesProvider = () => Services.UpdateService.CurrentPatchNotes;
+            // BugReportService stays head-side in this layer, but its report assembly is portable.
+            // The diagnostic writer/heartbeat remains WPF; only its bounded tail crosses the seam.
+            BugReportService.DiagnosticTailProvider = VideoDiag.Tail;
             // Audio and AI availability, for the views that only need to play a sound or duck,
             // and for the engine code that shapes content by whether an AI provider is usable.
             CoreAudio.PlayOneShotProvider = (path, volume, tag, onStarted, onFinished) => Audio?.PlayOneShot(path, volume, tag, onStarted, onFinished);
