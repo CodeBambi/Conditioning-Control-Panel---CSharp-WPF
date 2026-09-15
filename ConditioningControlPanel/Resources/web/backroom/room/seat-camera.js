@@ -26,8 +26,8 @@ export function seatPose(row, fixture, camera, width, height, cardHands=1, count
   const right=new T.Vector3().crossVectors(new T.Vector3(0,1,0),direction).normalize();
   const up=new T.Vector3().crossVectors(direction,right).normalize();
   const sideControls=row.id==='roulette'&&width>height&&height<=500;
-  const rightInset=splitRoulette?(width>height?234:128):sideControls?240:0;
-  const top=height<500?85:row.id==='roulette'?150:120, bottom=splitRoulette?height/3:sideControls?20:row.id==='roulette'?155:row.id==='cards'?170:180;
+  const rightInset=splitRoulette?0:sideControls?240:0;
+  const top=height<500?85:row.id==='roulette'?110:120, bottom=splitRoulette?height/3:sideControls?20:row.id==='roulette'?155:row.id==='cards'?170:180;
   const available=Math.max(.3,(height-top-bottom)/height), tan=Math.tan(camera.fov*Math.PI/360);
   let distance=.4;
   for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z]){

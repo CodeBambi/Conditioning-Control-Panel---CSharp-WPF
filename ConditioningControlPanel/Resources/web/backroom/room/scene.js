@@ -152,14 +152,22 @@ export async function createScene(o) {
   window.addEventListener('blur', resetInput);
   canvas.addEventListener('pointerdown', (e) => {
     if (!canWalk() || drag || e.button !== 0) return;
-    drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, startX:e.clientX, startY:e.clientY, moved:false };
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
   });
   canvas.addEventListener('pointermove', (e) => {
     if (!drag || drag.id !== e.pointerId || overview || seated || held || customization.opened) return;
+    drag.moved ||= Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)>8;
+    if(!drag.moved)return;
     yaw -= (e.clientX - drag.x) * 0.003;
     pitch = T.MathUtils.clamp(pitch - (e.clientY - drag.y) * 0.003, -1.12, 1.2);
     drag.x = e.clientX; drag.y = e.clientY;
+  });
+  canvas.addEventListener('pointerup',e=>{
+    if(!canWalk()||drag?.id!==e.pointerId||drag.moved)return;
+    const hit=pickAt(e,scene.children).find(h=>{for(let n=h.object;n;n=n.parent)if(!n.visible)return false;return true;});
+    if(!hit)return;
+    for(let n=hit.object;n;n=n.parent){const row=o.stations.find(r=>room.holders.get(r.key)===n);if(row){drag=null;visit(row);break;}}
   });
   for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(ev, (e) => { if (drag?.id === e.pointerId) drag = null; });
 
@@ -272,7 +280,7 @@ export async function createScene(o) {
     renderer.setScissorTest(customization.opened);
     const autoReset = renderer.info.autoReset;
     renderer.info.autoReset = false; renderer.info.reset();
-    renderer.render(scene, camera);
+    if(![...views].some(view=>view.coversRoom))renderer.render(scene, camera);
     if (seated && views.size) {
       renderer.setScissorTest(true);
       const autoClear = renderer.autoClear;

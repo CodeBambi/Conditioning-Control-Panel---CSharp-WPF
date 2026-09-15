@@ -1,6 +1,6 @@
 /* ============================================================================
  * backroom/room/hud.js - the room's own chrome over the 3D view: the loading
- * veil, the walk hint, the Visit prompt, the Room view button and list, the
+ * veil, the walk hint, the Room view button and list, the
  * Motion button and the room's Options (CONTRACT 10.14: effects intensity, tunnel
  * vision, melt). Back and the SP chip stay in index.html (Law VI: they exist
  * before any of this loads).
@@ -9,7 +9,7 @@
  * rotating through the entries every 8,000 ms, newest first, wrapping. No sound
  * at any intensity (Brake 1: it is somebody else's party). Hidden while a
  * station holds the screen (`br-visiting`) and in the room view (`br-overview`),
- * exactly as the Visit prompt is. Reduced motion and Calm keep the rotation (it
+ * Reduced motion and Calm keep the rotation (it
  * is text, not motion) and cross-fade in 0 ms instead of 200 ms. Its opt-in is
  * one more switch row inside the 10.14 Options panel, after Melt: it is the
  * user's own setting, so that press goes to `onBellOpt`, never to the host as
@@ -52,7 +52,7 @@ export function createHud(o) {
 
   const hint = el('div', 'br-hint', L('br_walk_hint', 'W/S or up/down to walk, A/D or left/right to move sideways, drag to look, E to visit'));
   const cross = el('div', 'br-crosshair'); cross.setAttribute('aria-hidden', 'true');
-  const prompt = el('button', 'br-visit'); prompt.type = 'button'; prompt.hidden = true;
+
   const nav = el('nav', 'br-nav');
   const viewBtn = el('button', 'br-pill'); viewBtn.type = 'button';
   const motionBtn = el('button', 'br-pill'); motionBtn.type = 'button';
@@ -96,7 +96,7 @@ export function createHud(o) {
   paintSwitch(bellOpt.b, false);
   panel.append(el('span', 'br-opt-name', L('br_opt_effects', 'Effects')), segRow, forcedNote, tunnel.row, melt.row, bellOpt.row);
   nav.append(panel);   // anchored under the Options pill, whatever the nav's own offset
-  o.root.append(veil, hint, cross, prompt, nav, bell, list);
+  o.root.append(veil, hint, cross, nav, bell, list);
   function setOptions(open) { panel.hidden = !open; optBtn.setAttribute('aria-expanded', String(!!open)); }
   optBtn.addEventListener('click', () => setOptions(panel.hidden));
   // A press anywhere outside the card (and outside its pill, which toggles it) closes it.
@@ -104,8 +104,7 @@ export function createHud(o) {
     if (!panel.hidden && !panel.contains(e.target) && !optBtn.contains(e.target)) setOptions(false);
   }, true);
 
-  let nearest = null, overview = false;
-  prompt.addEventListener('click', () => { if (nearest) o.onVisit(nearest); });
+  let overview = false;
   viewBtn.addEventListener('click', () => o.onOverview(!overview));
   motionBtn.addEventListener('click', () => o.onMotion());
   // Focus: main.js drops it from every HUD button on pointerup and eats Space/Enter on them while walking.
@@ -157,11 +156,9 @@ export function createHud(o) {
       }
     },
     nearest(row) {
-      nearest = row;
-      prompt.hidden = !row || overview;
-      if (row) prompt.textContent = L('br_visit', 'Visit {0}').replace('{0}', o.label(row)) + '  (E)';
+      hint.title = row ? L('br_visit', 'Visit {0}').replace('{0}', o.label(row)) : '';
     },
-    overview(on) { overview = !!on; if (overview) prompt.hidden = true; paintView(); },
+    overview(on) { overview = !!on; paintView(); },
     motion(still, forced) {
       motionBtn.textContent = still ? L('br_motion_still', 'Motion still') : L('br_motion_on', 'Motion on');
       motionBtn.setAttribute('aria-pressed', String(still));
@@ -182,12 +179,10 @@ export function createHud(o) {
     seated(on) {
       document.documentElement.classList.toggle('br-seated', !!on);
       viewBtn.disabled = !!on;
-      if (on) prompt.hidden = true;
     },
     hideWhileVisiting(on) {
       if (on) setOptions(false);
       document.documentElement.classList.toggle('br-visiting', !!on);
-      if (on) prompt.hidden = true; else prompt.hidden = !nearest || overview;
     },
     /* ------------------------------------------------------- the floor bell */
     /** The entries off `GET bell/state`, newest first. Starts the 8,000 ms rotation. */
