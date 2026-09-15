@@ -411,8 +411,8 @@ export async function mount(ctx) {
 - **Wall screens.** One `media-request` with `station: "room"` at boot. `gifs` that are not
   `src: "fallback"`, point at `ccp.assets` or the page's own origin, and load CORS-clean go on the room's
   own four wall screens (`media_screen_0..3`) and on whatever Room Service has switched on, which is two
-  further packs of wall screens, four and six, and the ceiling projection; one turn every 18 s on all of
-  them. Otherwise the house art (`room/assets/ads/*.webp`) with lexicon captions. The preview's local
+  further packs of wall screens, four and six, and the ceiling projection; one turn every 18 s on the wall
+  screens, 4.5 s on the ceiling projection. Otherwise the house art (`room/assets/ads/*.webp`) with lexicon captions. The preview's local
   file picker is not carried over.
 - **Playing GIFs (amended 2026-09-13).** Dealt GIFs play, decoded in the page with WebCodecs
   `ImageDecoder` (Chromium 94+, no vendored decoder; a page without it shows the first frame). Caps: a
