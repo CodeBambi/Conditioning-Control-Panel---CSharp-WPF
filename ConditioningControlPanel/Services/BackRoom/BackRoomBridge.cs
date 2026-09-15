@@ -41,6 +41,9 @@ public sealed class BackRoomBridge
         public required IBackRoomRelay Relay { get; init; }
         public IBackRoomFx Fx { get; init; } = new NullBackRoomFx();
         public IBackRoomMedia Media { get; init; } = new NullBackRoomMedia(null);
+        /// <summary>The spoken subliminal word (10.21). The default speaks nothing and says so, which
+        /// leaves the page's own speechSynthesis in charge exactly as before.</summary>
+        public IBackRoomVoice Voice { get; init; } = NullBackRoomVoice.Instance;
         /// <summary>The whole <c>init</c> message (the host's settings projection).</summary>
         public required Func<object> BuildInit { get; init; }
         /// <summary>Tear the window down. Called at most once.</summary>
@@ -188,6 +191,13 @@ public sealed class BackRoomBridge
                 break;
             case "fx":
                 OnFx(m);
+                break;
+            case "word.speak":
+                OnWordSpeak(m);
+                break;
+            case "word.stop":
+                // No reply (10.21): Law VI on the page's side, the same call cancel() and suspend make.
+                StopVoice();
                 break;
             case "fx-tunnel":
                 // No reply (10.13.B). A NaN or a string level is dropped by the dispatcher's own checks.
@@ -356,6 +366,34 @@ public sealed class BackRoomBridge
         });
     }
 
+    /// <summary>The longest phrase the host will speak. A dealt word can be a whole trigger phrase;
+    /// anything past this is not a word, so it is acked <c>none</c> and the page says it itself.</summary>
+    public const int MaxWordLength = 200;
+
+    /// <summary>10.21 <c>word.speak</c>: the host says the subliminal word, and the ack tells the page
+    /// whether it still has to. Runs off the UI thread - it opens clips and may synthesise speech - and
+    /// answers exactly once, <c>none</c> included, so the page never waits on a missing reply.</summary>
+    private void OnWordSpeak(JObject m)
+    {
+        var token = (string?)m["token"];
+        var text = (string?)m["text"];
+        bool reversed = m["reversed"] is JValue { Type: JTokenType.Boolean } r && r.Value<bool>();
+        int seed = m["seed"] is JValue { Type: JTokenType.Integer } sv ? unchecked((int)sv.Value<long>()) : 0;
+
+        void Silent() => _d.Post(new { type = "word-ack", token, source = "none", durationMs = 0 });
+        if (Quiet || string.IsNullOrWhiteSpace(text) || text!.Length > MaxWordLength) { Silent(); return; }
+
+        void SpeakAndPost()
+        {
+            BackRoomVoiceAck ack;
+            try { ack = _d.Voice.Speak(text!, reversed, seed); }
+            catch (Exception ex) { _d.Log?.Invoke("voice threw: " + ex.Message); ack = new BackRoomVoiceAck("none", 0); }
+            lock (_gate) { if (_closed) return; }
+            _d.Post(new { type = "word-ack", token, source = ack.Source, durationMs = ack.DurationMs });
+        }
+        if (_d.OffUi != null) _d.OffUi(SpeakAndPost); else SpeakAndPost();
+    }
+
     // ============================ cursor + teardown ============================
 
     private void NoteCursor(string station, string op, JObject? body)
@@ -428,6 +466,12 @@ public sealed class BackRoomBridge
 
     private void CancelFx()
     {
+        StopVoice();
         try { _d.Fx.CancelAll(); } catch (Exception ex) { _d.Log?.Invoke("fx cancel threw: " + ex.Message); }
+    }
+
+    private void StopVoice()
+    {
+        try { _d.Voice.Stop(); } catch (Exception ex) { _d.Log?.Invoke("voice stop threw: " + ex.Message); }
     }
 }

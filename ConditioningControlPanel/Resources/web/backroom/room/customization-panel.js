@@ -1,7 +1,7 @@
 import { catalogueStyle } from './customization-panel-style.js';
 import { createVendingView } from './vending-view.js';
 
-/** Selection previews an item; the contextual controls apply it to the room. */
+/** Picking an item fits it to the room at once; the one button under the miniature takes it off again. */
 export function createCustomizationPanel({mount,vending,decorations=[],lex=(_,f)=>f,select,getState,restore,preview=()=>{},slotOrder=[0,1,2],hasOwnership=()=>false,onClose=()=>{}}){
   const doc=mount.ownerDocument,L=(k,f)=>lex('br_custom_'+k,f)||f;
   // Two cabinet displays: nine room upgrades, then six collectible decorations.
@@ -32,13 +32,37 @@ export function createCustomizationPanel({mount,vending,decorations=[],lex=(_,f)
   function paintArrows(){const on=!panel.hidden&&chosen>=3&&chosen<6&&use==='handles';arrows.hidden=!on;if(on)centred.textContent=L(...SLOT_LABELS[target]);}
   arrows.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();step(e.key==='ArrowLeft'?-1:1);}else if(e.key==='Escape'){e.preventDefault();close();}else trap(e);});
   const state=()=>getState();
-  const view=createVendingView({mount:stage,vending,decorations,labels:items.map(([key,label])=>L(key,label)),onSelect:choose});
+  const view=createVendingView({mount:stage,vending,decorations,labels:items.map(([key,label])=>L(key,label)),onSelect:choose,onDismount:dismount});
   function showPreview(){
     if(chosen<0)return;
     if(chosen>=BAYS){preview('props',chosen-BAYS,chosen-BAYS);return;}
     preview(chosen<3?'screens':chosen<6?use:'floor',chosen<3?chosen:chosen<6?chosen-3:chosen-6,chosen<3?chosen:target);}
   // Switching between lever items keeps the cabinet in view: the target is the user's, not the item's.
-  function choose(i){const keep=chosen>=3&&chosen<6&&i>=3&&i<6;chosen=i;if(!keep){target=0;use='handles';}view.focus(i);paint();showPreview();}
+  // A pick IS the Use: the item goes on the focused cabinet or pedestal there and then, no second press.
+  function choose(i){const keep=chosen>=3&&chosen<6&&i>=3&&i<6;chosen=i;if(!keep){target=0;use='handles';}view.focus(i);paint();showPreview();equip();}
+  /** The chosen item as the room takes it: what to set, where, and whether it is already fitted there. */
+  function fitting(){
+    if(chosen<0)return null;
+    if(chosen<3)return {category:'screens',on:true,off:false,index:chosen,fitted:!!state().screens[chosen]};
+    if(chosen<6)return {category:use,on:chosen-3,off:-1,index:target,fitted:state()[use][target]===chosen-3};
+    if(chosen<BAYS)return {category:'floor',on:chosen-6,off:-1,index:0,fitted:state().floor===chosen-6};
+    return {category:'props',on:true,off:false,index:chosen-BAYS,fitted:!!state().props[chosen-BAYS]};}
+  const isLocked=()=>chosen>=BAYS&&!hasOwnership(items[chosen][0]);
+  function equip(){const f=fitting();if(f&&!isLocked()&&!f.fitted)apply(f.category,f.on,f.index);}
+  function unequip(){const f=fitting();if(f)apply(f.category,f.off,f.index);}
+  /** A right-click on an item: that piece comes off wherever it sits, whatever is selected. */
+  function dismount(i){
+    if(!Number.isInteger(i)||i<0||i>=items.length)return false;
+    const s=state(),pending=[];
+    if(i<3){if(s.screens[i])pending.push(select('screens',false,i));}
+    else if(i<6){const piece=i-3;
+      s.statues.forEach((on,spot)=>{if(on===piece)pending.push(select('statues',-1,spot));});
+      s.handles.forEach((on,cabinet)=>{if(on===piece)pending.push(select('handles',-1,cabinet));});}
+    else if(i<BAYS){if(s.floor===i-6)pending.push(select('floor',-1));}
+    else if(s.props[i-BAYS])pending.push(select('props',false,i-BAYS));
+    paint();if(chosen>=0)showPreview();
+    if(pending.length)Promise.all(pending).then(()=>{if(!disposed)paint();});
+    return !!pending.length;}
   function apply(category,value,index=0){const pending=select(category,value,index);paint();showPreview();if(pending?.then)pending.then(()=>{if(!disposed)paint();});}
   function row(parent,entries,active,fn){entries.forEach(([key,label],i)=>{const b=button(parent,L(key,label),()=>fn(i));b.setAttribute('aria-pressed',String(active===i));});}
   function paint(){
@@ -48,15 +72,13 @@ export function createCustomizationPanel({mount,vending,decorations=[],lex=(_,f)
     [...chooser.children].forEach((b,i)=>b.setAttribute('aria-pressed',String(page===i)));hud.replaceChildren();overview.hidden=chosen<0;paintArrows();
     if(chosen<0){make('p',L('choose_item','Choose an item'),'br-custom-prompt',hud);return;}
     const title=make('h3',L(...items[chosen]),'',hud);title.setAttribute('aria-live','polite');
-    if(chosen>=BAYS && !hasOwnership(items[chosen][0])){make('p',L('collect_locked','Collect this decoration from Daily Daze to use it.'),'br-custom-note',hud);}
-    else if(chosen>=BAYS){const actions=make('div','','br-custom-actions',hud);row(actions,[['on','On'],['off','Off']],state().props[chosen-BAYS]?0:1,i=>apply('props',i===0,chosen-BAYS));}
-    else if(chosen<3){const actions=make('div','','br-custom-actions',hud);row(actions,[['on','On'],['off','Off']],state().screens[chosen]?0:1,i=>apply('screens',i===0,chosen));}
-    else if(chosen<6){const placement=more(L('placement','Placement'));const modes=make('div','','br-custom-actions',placement);row(modes,[['statues','Statues'],['lever','Slot lever']],use==='statues'?0:1,i=>{use=i?'handles':'statues';paint();showPreview();});
-      const targets=make('div','','br-custom-actions',placement);row(targets,use==='statues'?[['spot1','Pedestal 1'],['spot2','Pedestal 2'],['spot3','Pedestal 3']]:[['rose','Candy Rose'],['violet','Candy Violet'],['mint','Candy Mint']],target,i=>{target=i;paint();showPreview();});
-      const actions=make('div','','br-custom-actions',hud);row(actions,[['use','Use'],[use==='statues'?'remove':'original',use==='statues'?'Remove':'Original handle']],state()[use][target]===chosen-3?0:state()[use][target]===-1?1:-1,i=>apply(use,i?-1:chosen-3,target));
-    }else{const actions=make('div','','br-custom-actions',hud);row(actions,[['on','On'],['off','Off']],state().floor===chosen-6?0:state().floor===-1?1:-1,i=>apply('floor',i?-1:chosen-6));
-      const palette=make('div','','br-custom-actions br-custom-palettes',more(L('palette','Colours')));row(palette,[['jewel','Jewel'],['lagoon','Lagoon'],['sunset','Sunset']],state().palette,i=>apply('palette',i));
-    }
+    const locked=isLocked();
+    if(locked)make('p',L('collect_locked','Collect this decoration from Daily Daze to use it.'),'br-custom-note',hud);
+    if(chosen>=3&&chosen<6){const placement=more(L('placement','Placement'));const modes=make('div','','br-custom-actions',placement);row(modes,[['statues','Statues'],['lever','Slot lever']],use==='statues'?0:1,i=>{use=i?'handles':'statues';paint();showPreview();});
+      const targets=make('div','','br-custom-actions',placement);row(targets,use==='statues'?[['spot1','Pedestal 1'],['spot2','Pedestal 2'],['spot3','Pedestal 3']]:[['rose','Candy Rose'],['violet','Candy Violet'],['mint','Candy Mint']],target,i=>{target=i;paint();showPreview();});}
+    else if(chosen>=6&&chosen<BAYS){const palette=make('div','','br-custom-actions br-custom-palettes',more(L('palette','Colours')));row(palette,[['jewel','Jewel'],['lagoon','Lagoon'],['sunset','Sunset']],state().palette,i=>apply('palette',i));}
+    // The one button under the miniature, where the eye already is: the item itself is the Use.
+    if(!locked&&fitting()?.fitted)button(hud,L('remove','Remove'),unequip).className='br-custom-remove';
     if(focused>=0)hud.querySelectorAll('button')[focused]?.focus({preventScroll:true});
   }
   [['upgrades','Room upgrades'],['decorations','Decorations']].forEach(([key,label],i)=>button(chooser,L(key,label),()=>{page=i;chosen=-1;view.setPage(i);paint();preview('room',0,0);}));
@@ -66,7 +88,7 @@ export function createCustomizationPanel({mount,vending,decorations=[],lex=(_,f)
   panel.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Escape'){e.preventDefault();close();return;}trap(e);});
   for(const type of ['keyup','pointerdown','pointerup','click','wheel']){panel.addEventListener(type,e=>e.stopPropagation());arrows.addEventListener(type,e=>e.stopPropagation());}
   mount.append(style,arrows,panel);paint();
-  return {refresh:paint,stepSlot:step,get slotArrows(){return !arrows.hidden;},open(){if(disposed||!panel.hidden)return;snapshot=structuredClone(state());previousFocus=doc.activeElement;panel.hidden=false;chosen=-1;page=0;view.setPage(0);view.focus(-1);paint();preview('room',0,0);closeButton.focus({preventScroll:true});},close,get opened(){return !disposed&&!panel.hidden;},get selectedItem(){return chosen;},update(dt,still){if(!panel.hidden)view.update(dt,still);},draw(renderer){return !disposed&&!panel.hidden&&view.draw(renderer);},
+  return {refresh:paint,stepSlot:step,dismount,get slotArrows(){return !arrows.hidden;},get slotTarget(){return target;},open(){if(disposed||!panel.hidden)return;snapshot=structuredClone(state());previousFocus=doc.activeElement;panel.hidden=false;chosen=-1;page=0;view.setPage(0);view.focus(-1);paint();preview('room',0,0);closeButton.focus({preventScroll:true});},close,get opened(){return !disposed&&!panel.hidden;},get selectedItem(){return chosen;},update(dt,still){if(!panel.hidden)view.update(dt,still);},draw(renderer){return !disposed&&!panel.hidden&&view.draw(renderer);},
     /* What the panel leaves the room, in viewport pixels (y up from the canvas bottom): the strip beside
        it while it is docked down one edge, or the band above it once it is a full-width sheet (phone). */
     previewBox(w,h){const r=panel.getBoundingClientRect();

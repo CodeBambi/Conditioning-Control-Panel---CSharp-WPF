@@ -25,6 +25,7 @@ import { cardCounts } from '../stations/cards/layout-3d.js';
 import { seatPose, easeSeat, shortAngle } from './seat-camera.js';
 import { createTouchControl } from './touch-control.js';
 import { createCustomization } from './customization.js';
+import { isBackKey, isBackwardMove, isStationHit } from './leave-intent.js';
 import { START, WALK_SPEED, RUN_SPEED, step, worldDelta, nearestStation, facing } from './walk.js';
 
 const KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
@@ -91,7 +92,7 @@ export async function createScene(o) {
   const pos = START.slice();
   let yaw = 0, pitch = 0, sway = 0, walkPhase = 0, ambient = 0;
   let still = !!o.still, overview = false, held = null, seated = null, halted = false, suspended = false;
-  let raf = 0, last = performance.now(), lastTick = last, nearest = null, drag = null, tap = null;
+  let raf = 0, last = performance.now(), lastTick = last, nearest = null, drag = null, tap = null, standTap = null, leaveAsked = false;
   let pendingVisit=false, transition=null, viewOffset=0, viewOffsetX=0, arrival=Promise.resolve(true), cardHands=1, counts={d:2,0:2}, composition='';
   const views = new Set();
   const ray = new T.Raycaster(), pointer = new T.Vector2();
@@ -99,6 +100,10 @@ export async function createScene(o) {
   const keys = new Set();
   const vel = new T.Vector2(), want = new T.Vector2();
   const canWalk = () => !pendingVisit && !transition && !seated && !held && !halted && !suspended && !overview && !customization.opened && !document.hidden;
+  /* LEAVING BY HAND (leave-intent.js). Seated at a station, a tap that lands on the room instead of the
+   * station and a step backwards both stand you up the way the Back chip does: o.onLeave runs the room's
+   * own Back path, so the station settles first and the camera walks back to where you stood (Law VI). */
+  const canLeave = () => !!seated && !held && !halted && !suspended && !transition && !pendingVisit && !overview && !leaveAsked && !customization.opened;
   const touch = createTouchControl({ mount: o.mount, onReset: () => vel.set(0, 0) });
   const frames = [];
   const stationRows = [...o.stations, customization.row];
@@ -140,16 +145,25 @@ export async function createScene(o) {
   }
   window.addEventListener('resize', resize);
 
-  function resetInput() { keys.clear(); vel.set(0, 0); drag = tap = null; touch.reset(); touch.setEnabled(canWalk()); }
+  /** `keepStick`: a seat keeps the touch stick alive and centred by the player's own finger, so a push back still reads. */
+  function resetInput(keepStick) { keys.clear(); vel.set(0, 0); drag = tap = null; if (!keepStick) { standTap = null; touch.reset(); } touch.setEnabled(canWalk() || canLeave()); }
+  function leaveSeat() {
+    if (!canLeave()) return;
+    leaveAsked = true; resetInput();
+    try { if (o.onLeave) o.onLeave(seated.row); else unseat(); } catch (e) { say('onLeave threw: ' + ((e && e.message) || e)); }
+  }
   window.addEventListener('keydown', (e) => {
-    if (pendingVisit || transition || seated || held || halted || suspended || customization.opened || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    // A seat has no walk: S or the down arrow there is a step back out of the station, never a step in the room.
+    if (isBackKey(e.code) && !e.repeat && canLeave()) { e.preventDefault(); leaveSeat(); return; }
+    if (pendingVisit || transition || seated || held || halted || suspended || customization.opened) return;
     if (KEYS.has(e.code)) { e.preventDefault(); keys.add(e.code); }
     if (e.repeat) return;
     if (e.code === 'KeyE' && !overview && nearest) { e.preventDefault(); visit(nearest); }
     if (e.code === 'KeyM') { e.preventDefault(); setOverview(!overview); }
   });
   window.addEventListener('keyup', (e) => keys.delete(e.code));
-  window.addEventListener('blur', resetInput);
+  window.addEventListener('blur', () => resetInput());   // an Event is not a keepStick
   // A finger rolls a little between down and up (a mouse hardly moves): under TAP_SLOP css px (emi-interaction.js) it is a tap, over it a look.
   canvas.addEventListener('pointerdown', (e) => {
     if (!canWalk() || e.button !== 0) return;
@@ -177,6 +191,21 @@ export async function createScene(o) {
     if(row){drag=null;visit(row);}
   });
   canvas.addEventListener('pointercancel',e=>{if(tap?.id===e.pointerId)tap=null;});
+  /* THE WAY OUT BY TAP. Seated, the station's own DOM keeps its buttons (room.css: the seat sheet is
+   * pointer-events: none but its controls are not), so anything that reaches the canvas is either the
+   * station's own meshes - ignored here, the station handles them - or the room, and the room stands you up. */
+  canvas.addEventListener('pointerdown', (e) => { if (e.button === 0 && canLeave()) standTap = { id: e.pointerId, x: e.clientX, y: e.clientY }; });
+  canvas.addEventListener('pointerup', (e) => {
+    const start = standTap; standTap = null;
+    if (!start || start.id !== e.pointerId || !canLeave()) return;
+    // The same slop as every other tap in the room: a drag on the wheel rim or across the mat is not a click.
+    if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > TAP_SLOP) return;
+    if ([...views].some((view) => view.coversRoom)) return;   // no room on screen to be tapped
+    const hit = pickAt(e, scene.children).find(h => { for (let n = h.object; n; n = n.parent) if (!n.visible) return false; return true; });
+    if (hit && isStationHit(hit.object, room.holders.get(seated.row.key))) return;
+    leaveSeat();
+  });
+  for (const ev of ['pointercancel', 'lostpointercapture']) canvas.addEventListener(ev, (e) => { if (standTap?.id === e.pointerId) standTap = null; });
   for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(ev, (e) => { if (drag?.id === e.pointerId) drag = null; });
 
   /* Any tap on a fixture enters it: the exact ray first, then the fixture whose screen box (the visible meshes'
@@ -267,7 +296,7 @@ export async function createScene(o) {
     if (held || halted || suspended) return;
     raf = requestAnimationFrame(frame);
     const raw = now - last;
-    touch.setEnabled(canWalk());
+    touch.setEnabled(canWalk() || canLeave());
     const active = !!transition || !!seated || keys.size > 0 || drag || touch.value.x || touch.value.z || customization.opened;
     const gap = 1000 / (active && !budget.mobile ? 60 : 30);
     if (raw < gap - 1) return;
@@ -292,7 +321,9 @@ export async function createScene(o) {
         if(target.pos.some((v,i)=>Math.abs(v-pos[i])>1e-4)||Math.abs(target.yaw-yaw)>1e-4||Math.abs(target.pitch-pitch)>1e-4||Math.abs(target.offset-viewOffset)>1e-4)moveCamera(target,700);
       }
     }
-    if(customization.opened || seated || transition)resetInput();
+    // A seat keeps the stick: pushed back it stands you up, the same as S (leave-intent.js).
+    if (seated && isBackwardMove(touch.value) && canLeave()) leaveSeat();
+    if(customization.opened || seated || transition)resetInput(!!seated && canLeave());
     if(transition){
       const tr=transition; tr.elapsed+=dt*1000;
       const t=o.cameraMotion?.().off?1:Math.min(1,tr.elapsed/tr.duration), k=easeSeat(t);
@@ -374,7 +405,7 @@ export async function createScene(o) {
   }
   function seat(row) {
     if (!row || seated || held || halted || transition) return false;
-    pendingVisit=false;seated={pos:pos.slice(),yaw,pitch,row}; sway=0;cardHands=1;counts={d:2,0:2};composition='';
+    pendingVisit=false;leaveAsked=false;seated={pos:pos.slice(),yaw,pitch,row}; sway=0;cardHands=1;counts={d:2,0:2};composition='';
     if(overview){overview=false;decor.setOverview(false);}
     if(room.ceiling)room.ceiling.visible=true;
     interaction.dismiss();customization.dismiss();setNearest(null);resetInput();
@@ -464,7 +495,7 @@ export async function createScene(o) {
     debug() {
       const sorted = frames.slice().sort((a, b) => a - b);
       return {
-        renderBudget: {...budget.debug(), dpr}, position: pos.slice(), yaw, pitch, transitioning:!!transition, viewOffset, viewOffsetX, overview, held: !!held, seated: !!seated, running: !!raf, still,
+        renderBudget: {...budget.debug(), dpr}, position: pos.slice(), yaw, pitch, transitioning:!!transition, viewOffset, viewOffsetX, overview, held: !!held, seated: !!seated, leaveAsked, running: !!raf, still,
         nearest: nearest ? nearest.key : null, fixtures: room.fixtures, bulbs: room.bulbs, screens: room.screens.length,
         pictures: screens.pictures, animation: screens.animation, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
         touch: touch.debug(), decor: decor.debug(), customization: customization.debug(),

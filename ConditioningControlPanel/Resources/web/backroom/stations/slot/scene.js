@@ -21,6 +21,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
 import { drawSymbol } from './symbols.js';
+import { fitText } from '../../shared/text/wrap.js';
 import { PACE, reelStopMs, reelsMs, respinStopMs, respinMs } from './pace.js';
 import { applyPalette } from './palette.js';
 import { FEEL, ALMOST as FEEL_ALMOST, ATTRACT, FLOW, bezier, breath, shiverPx, chaseMs, paylineGlow, paylinePulses, wiggleCells, glyphGlow, hazeAt } from './feel.js';
@@ -68,6 +69,15 @@ function canvasTexture(c) {
   return t;
 }
 
+/* THE MARQUEE BOARD: the inset panel is the cabinet's message board. It carries the cabinet name at rest and
+ * the play's own status and result lines while a spin runs (station.js drives it through api.marquee). A line
+ * too long for the panel wraps onto 2 or 3 lines at the largest font that still fits (shared/text/wrap.js),
+ * never a squeezed single line. MARQUEE_HOLD_MS after the last message the name comes back on its own restrike. */
+export const MARQUEE_HOLD_MS = 4000;
+const MARQUEE_FLICKER_MS = 260;   // the neon restrike on a change: a brief emissive stutter, then the rest level
+const MARQUEE_LIT = 0.45;
+const displayFont = (px) => `600 ${px}px Segoe UI, Arial, sans-serif`;
+
 function paintDisplay(ctx, w, h, marquee, text) {
   const g = ctx.createLinearGradient(0, 0, w, h);
   g.addColorStop(0, '#180d27'); g.addColorStop(0.5, '#432040'); g.addColorStop(1, '#180d27');
@@ -75,9 +85,14 @@ function paintDisplay(ctx, w, h, marquee, text) {
   ctx.lineWidth = 1.5; ctx.strokeStyle = '#bf85ac'; ctx.strokeRect(9, 9, w - 18, h - 18);
   ctx.strokeStyle = '#744366'; ctx.strokeRect(15, 15, w - 30, h - 30);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = `600 ${marquee ? 57 : 44}px Segoe UI, Arial, sans-serif`;
+  const lh = 1.06, measure = (str, size) => { ctx.font = displayFont(size); return ctx.measureText(str).width; };
+  const fit = fitText(text, { measure, width: w * 0.82, height: h * (marquee ? 0.78 : 0.74),
+    maxLines: marquee ? 3 : 2, min: marquee ? 17 : 15, max: marquee ? 57 : 44, lineHeight: lh });
+  ctx.font = displayFont(fit.size);
   ctx.shadowColor = '#ff75c8'; ctx.shadowBlur = marquee ? 12 : 4; ctx.fillStyle = '#ffe3f2';
-  ctx.fillText(text, w / 2, h / 2, w * 0.8); ctx.shadowBlur = 0;
+  const step = fit.size * lh, top = h / 2 - (fit.lines.length - 1) * step / 2;
+  for (let i = 0; i < fit.lines.length; i++) ctx.fillText(fit.lines[i], w / 2, top + i * step, w * 0.84);
+  ctx.shadowBlur = 0;
 }
 
 /**
@@ -180,6 +195,9 @@ export async function createScene(o) {
     owned.push(t);
     screens[name] = { c, t, mesh, text: null };
   }
+
+  // THE MARQUEE BOARD: the live message (null = the cabinet name) and the frame it was posted on.
+  let marqueeMsg = null, marqueeAt = -Infinity;
 
   // Reels: one canvas per drum, N cells along U, painted in strip order.
   let strips = [[], [], []], look = { reduced }, lastPaint = -Infinity;
@@ -578,6 +596,16 @@ export async function createScene(o) {
       sj.mesh.material.emissiveIntensity = lit;
       screen('screen_jackpot', text);
     }
+    // THE MARQUEE BOARD: the live line while it holds, then the cabinet name, with a short neon restrike
+    // on every change. Reduced motion takes the steady level and no stutter (Law VI).
+    const sm = screens.marquee;
+    if (sm) {
+      if (marqueeMsg && t - marqueeAt >= MARQUEE_HOLD_MS) { marqueeMsg = null; marqueeAt = t; }
+      screen('marquee', marqueeMsg || sm.base || '');
+      const age = t - marqueeAt, q = age / MARQUEE_FLICKER_MS;
+      const flick = reduced || !(q >= 0) || q >= 1 ? 0 : (1 - q) * (q < 0.22 ? 1 : Math.sin(q * 31) > 0 ? 0.85 : 0.2);
+      sm.mesh.material.emissiveIntensity = MARQUEE_LIT * (1 + 1.6 * flick);
+    }
     const payout=coinShower.debug();
     screen('screen_status',payout.active?'✦ '+payout.label+' ✦':screens.screen_status?.base||'');
     if(screens.screen_status) {const m=screens.screen_status.mesh.material;
@@ -704,7 +732,16 @@ export async function createScene(o) {
     get phase() { return phase; },
     get spinning() { return !!spin; },
     resize, setStrips, setStops, setFace, dispose, cancelPull,
-    screen(name, text) { if (screens[name]) screens[name].base = text; screen(name, text); },
+    screen(name, text) { if (screens[name]) screens[name].base = text; if (!(name === 'marquee' && marqueeMsg)) screen(name, text); },
+    /** THE MARQUEE BOARD: post a line to the marquee for MARQUEE_HOLD_MS (null or '' returns the cabinet name
+     *  now). The centred callout zoom and the word beat are untouched: the board mirrors them, it never
+     *  replaces them. Long lines wrap onto up to three lines inside the panel. */
+    marquee(text) {
+      const line = text == null ? '' : String(text).trim();
+      marqueeMsg = line || null;
+      marqueeAt = performance.now();
+    },
+    get marqueeLine() { return marqueeMsg; },
     setLook(next) { look = { ...next, reduced, face: atlas && atlas.image }; paint(performance.now()); },
     /** A freeze lit or cleared: the button dips either way (Law VIII). */
     setHold(col) { if (col !== hold) { const c = col !== null ? col : hold; if (c !== null) pulse[c] = performance.now(); } hold = col; },
@@ -738,7 +775,7 @@ export async function createScene(o) {
     /** Law VI: a press or a new spin takes the frame straight to its settled end, never a faster pulse. */
     paylineOut() { if (paylineAt > -Infinity) paylineHold = Math.max(0, Math.min(paylineHold, performance.now() - paylineAt)); },
     /** Law VI: Back and suspend skip every ceremony to its settled state. */
-    skip() { party = null; shiverAt = trayAt = -Infinity; stopAt.fill(-Infinity); revealAt = -Infinity; lean = null; ghost = null; teasing = false; heat = { ...heat, from: heat.to, at: -Infinity }; paylineAt = -Infinity; if (o.payline) o.payline.hidden = true; hitAt.fill(-Infinity); hitDirty = true; hazeOn = null; hazeOut = null; },
+    skip() { marqueeMsg = null; party = null; shiverAt = trayAt = -Infinity; stopAt.fill(-Infinity); revealAt = -Infinity; lean = null; ghost = null; teasing = false; heat = { ...heat, from: heat.to, at: -Infinity }; paylineAt = -Infinity; if (o.payline) o.payline.hidden = true; hitAt.fill(-Infinity); hitDirty = true; hazeOn = null; hazeOut = null; },
     /** THE GLYPH HIT (feel.highlightPlan): the landed cells on `plan` ([{ reel, at }]) glow from this frame, reel
      *  order, each `at` ms in, all out by HIGHLIGHT_MS. Nothing moves a stop; it lights what the tape landed. */
     highlight(plan) {

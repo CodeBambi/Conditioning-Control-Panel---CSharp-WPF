@@ -98,6 +98,10 @@ export async function mount(ctx) {
   const $ = sel => el.querySelector(sel), wait = ms => new Promise(r => setTimeout(r, Math.max(0, ms)));
   function mark(phase) { pace = phase; marks = [...marks.slice(-79), { phase, at: Math.round(performance.now()) }]; }
   function note(what, extra = {}) { feelLog = [...feelLog.slice(-79), { what, at: Math.round(performance.now()), ...extra }]; }
+  /** THE MARQUEE BOARD (scene.marquee): the line the cabinet's own sign shows while a spin plays. The board
+   *  MIRRORS what the centre already says, it never replaces it: the announcer zoom and the word beat are
+   *  untouched. null lets the cabinet name come back now; otherwise it holds for scene's MARQUEE_HOLD_MS. */
+  function board(text) { if (scene) scene.marquee(text == null ? null : String(text).toUpperCase()); }
 
   function sendMelt(left) {
     if (left === lastMelt) return;
@@ -421,6 +425,7 @@ export async function mount(ctx) {
     const wordsMs = chain ? WORD_MS + WORD_GAP_MS * (chain - 1) : 0;
     for (const c of plan.callouts) later(c.at + wordsMs, () => {
       if (callout) callout.show(c.key, c.fallback, { tier: c.tier });
+      board(t(c.key, c.fallback));   // THE MARQUEE BOARD mirrors the announcer
       if (flowLast) flowLast.calloutAt = Math.round(performance.now());
       note('callout', { key: c.key, tier: c.tier, at: c.at });
     });
@@ -453,6 +458,13 @@ export async function mount(ctx) {
       scene.payline(roll, r);                                // A6: the winning row frames for the same window
     }
     glanceTo(landPose(o), glanceHoldMs(melted), restPose(o.meltLeft));
+    // THE MARQUEE BOARD: the same result the pills carried. A win first, then the free spins it granted, then
+    // the melt it left, else Ready. The announcer's own name lands on the sign FX_DELAY_MS later (flow()).
+    const after = tape.snapshot();
+    board(o.pay > 0 ? t('br_slot_screen_win', 'WIN +{n}', { n: fmt(o.pay) })
+      : after.free > 0 ? t('br_slot_free_left', 'Free spins {n}', { n: after.free })
+      : after.melt ? t('br_slot_screen_melt', 'MELT · {n} SPINS AT HALF', { n: after.melt })
+      : t('br_slot_ready', 'Ready'));
     note('land', { line: o.line, pay: o.pay, tier, party: r.party, sound: r.sound, melted, streak, roll });
   }
 
@@ -474,6 +486,7 @@ export async function mount(ctx) {
       glanceTo('spirals', glanceHoldMs(r.melted), restPose(s.melt));
       // THE FLOW: the jar's own word, on the tick that fills it (a big callout; a small landing word yields to it).
       if (callout) callout.show(CALLOUTS.jar.key, CALLOUTS.jar.fallback, { tier: CALLOUTS.jar.tier });
+      board(t(CALLOUTS.jar.key, CALLOUTS.jar.fallback));
       p.jarWord = true;
       note('callout', { key: CALLOUTS.jar.key, tier: CALLOUTS.jar.tier, at: 'jar' });
       // The tube's own flash rides the same frame (Law X). Reduced motion takes the settled fill and no flash.
@@ -551,12 +564,14 @@ export async function mount(ctx) {
     scene.answer(); sound.lever(); clearTimeout(glanceTimer); setFace(glance(pose, pressPose()));
     note('answer', { pose });
     busy = true; queued = false; card(null); mark('breath'); sync();
+    board(t('br_slot_marquee_spin', 'Spinning'));   // THE MARQUEE BOARD: the pull is on the sign before the tape answers
     // THE BREATH (PACE): the next spin starts no sooner than BREATH_MS after the last reveal; the buy runs meanwhile.
     const [r] = await Promise.all([tape.press(), wait(breathEnds - performance.now())]);
     if (my !== session || !alive) return;
     if (r.kind !== 'play') {
       busy = false; mark('idle'); scene.letGo(); setFace(glance(pose, restPose(before.melt)));
       if (r.kind === 'refused') card(refusalText(r.reason));
+      board(null);
       sync(); armIdle();
       return;
     }
