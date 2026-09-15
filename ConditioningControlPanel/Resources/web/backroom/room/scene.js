@@ -184,8 +184,9 @@ export async function createScene(o) {
     if (document.hidden) return;
     if (budget.sample(now - lastTick, gap)) resize();
     const dt = Math.min(0.1, Math.max(0, (now - lastTick) / 1000));
+    const frameElapsed = now - lastTick;
     lastTick = now;
-    frames.push(raw);
+    frames.push(frameElapsed);
     if (frames.length > 240) frames.shift();
     if(customization.opened || seated)resetInput();
     if (!overview) {

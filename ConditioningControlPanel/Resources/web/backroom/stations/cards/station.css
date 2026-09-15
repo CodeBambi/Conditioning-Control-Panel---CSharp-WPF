@@ -64,3 +64,16 @@
   .cards-move { min-width: 64px; }
 }
 @media (prefers-reduced-motion: reduce) { .cards-station * { transition: none !important; } }
+
+/* Seated game chrome leaves the shared room and its live HUD exposed. */
+.cards-station.cards-in-room { background: transparent; pointer-events: none; }
+.cards-in-room :is(button,input,label,.cards-card) { pointer-events: auto; }
+.cards-in-room .cards-stage { pointer-events: none; }
+.cards-in-room .cards-top { top: 90px; }
+@media (max-width: 600px) {
+  .cards-in-room .cards-side { bottom: 122px; left: 10px; }
+  .cards-in-room .cards-controls { bottom: 12px; left: 10px; right: 10px; max-width: none; }
+  .cards-in-room .cards-move { min-width: 70px; padding: 8px; }
+}
+.cards-station.cards-in-room .cards-top { top: 105px; max-width: calc(100vw - 24px); }
+.cards-in-room .cards-side { background: #201229e8; border-radius: 12px; padding: 10px; }

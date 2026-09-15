@@ -204,9 +204,10 @@ for (const st of STATIONS) {
   ok(p.some((m) => m.type === 'station-open' && m.station === st.id), `${st.key}: station-open ${st.id} posted`);
   ok(p.some((m) => m.type === 'station-request' && m.station === st.id && m.op === 'state'), `${st.key}: GET state relayed as ${st.id}`);
   const cur = await ev(`window.__backroom.loader.current`);
-  const dbg = await ev(`(() => { const d = window.__backroom.scene.debug(); return { held: d.held, running: d.running }; })()`);
+  const dbg = await ev(`(() => { const d = window.__backroom.scene.debug(); return { held: d.held, running: d.running, seated: d.seated }; })()`);
   ok(cur && cur.id === st.id && cur.kind === 'live', `${st.key}: the loader holds ${st.id} as live`);
-  ok(dbg.held && !dbg.running, `${st.key}: the room loop is held while it is open`);
+  const staged = await ev(`import('/backroom/' + window.__backroom.stations.find(s => s.key === ${JSON.stringify(st.key)}).entry).then(m => m.roomStage === true)`);
+  ok(staged ? dbg.seated && dbg.running && !dbg.held : dbg.held && !dbg.running, `${st.key}: the room loop follows its declared view mode`);
   ok(await ev(`!!document.querySelector(${JSON.stringify(st.root)} + '[data-host-back]') || !!document.querySelector('.br-station [data-host-back]')`), `${st.key}: the room owns Back (ctx.hostBack)`);
   await sleep(400);
   await shot(`${st.id}-01-open.png`);
