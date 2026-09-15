@@ -52,6 +52,14 @@ public sealed class FlashLayer : BaseLayer
         /// <summary>Flashes v2 motion, null or Still for a classic held flash. Stepped by Update.</summary>
         public FlashMotionState? Motion;
 
+        /// <summary>
+        /// Flashes v2 wave 2: non-null once a hand has dismissed this flash and it is breaking
+        /// apart. FlashService is already finished with the item by then (the window is out of the
+        /// active list, XP and hydra have run), so the layer owns the rest of its life: Update
+        /// steps the shards and drops the item the moment they are done.
+        /// </summary>
+        public FlashShatterState? Shatter;
+
         // Glow (lucky / sparkle-boost tiers). Sigma is the WPF DropShadow blur radius / 3
         // (same conversion as the brain-drain layer). LuckyPulse replicates the 400ms
         // auto-reverse radius x1.6 / opacity 0.7->1.0 forever-animation.
@@ -129,6 +137,27 @@ public sealed class FlashLayer : BaseLayer
         return item;
     }
 
+    /// <summary>
+    /// Flashes v2 wave 2: hand an item over to the shatter instead of removing it. The layer keeps
+    /// the frames alive for the length of the break and disposes them when the last shard is gone,
+    /// so FlashService can tear its window down at the dismiss exactly as it always did. A state
+    /// with no shards (MotionLevel.Off) removes the item on the spot: that is the plain cut.
+    /// </summary>
+    public void BeginShatter(FlashItem item, FlashShatterState shatter)
+    {
+        if (item.Frames == null || shatter.Done || shatter.Shards.Length == 0)
+        {
+            Remove(item);
+            return;
+        }
+        item.Shatter = shatter;
+        // The shards fall from where the picture actually is, not from where it spawned.
+        shatter.RectX = item.X; shatter.RectY = item.Y;
+        shatter.RectW = item.W; shatter.RectH = item.H;
+        _dirty = true;
+        SetActive(true);
+    }
+
     /// <summary>Remove an item and dispose its frames. Idempotent.</summary>
     public void Remove(FlashItem item)
     {
@@ -157,10 +186,28 @@ public sealed class FlashLayer : BaseLayer
 
     public override void Update(TimeSpan delta)
     {
-        for (int i = 0; i < _items.Count; i++)
+        // Backwards: a finished shatter drops its item right here, on the existing flash tick, so
+        // the break needs no timer of its own.
+        for (int i = _items.Count - 1; i >= 0; i--)
         {
             var item = _items[i];
             item.ElapsedSec += delta.TotalSeconds;
+
+            if (item.Shatter is { } shatter)
+            {
+                if (FlashShatter.Step(shatter, delta.TotalSeconds)) _dirty = true;
+                if (shatter.Done)
+                {
+                    item.Shatter = null;
+                    item.ReleaseFrames();
+                    _items.RemoveAt(i);
+                    _dirty = true;
+                    if (_items.Count == 0) SetActive(false);
+                }
+                // A breaking flash answers to the shards and to nothing else: no drift, no fade
+                // ramp, no GIF advance (its FlashWindow is already gone and writes nothing).
+                continue;
+            }
 
             // Flashes v2: step the motion here (the one place with delta time). Step answers
             // false for a Still item and for a zero delta, so a held flash stays clean.
@@ -196,6 +243,17 @@ public sealed class FlashLayer : BaseLayer
             if (frames == null || frames.Length == 0 || item.Opacity <= 0) continue;
 
             var rect = new SKRect(item.X, item.Y, item.X + item.W, item.Y + item.H);
+
+            // Flashes v2 wave 2: a dismissed flash draws as falling pieces of its LAST frame and
+            // nothing else - no glow card, no dwell inflate, no pendulum rotation. The shards
+            // leave the item's own rect, so this runs before the AABB cull and culls per shard.
+            if (item.Shatter is { } shatter)
+            {
+                DrawShards(canvas, item, shatter, frames[Math.Clamp(item.FrameIndex, 0, frames.Length - 1)],
+                    boundsPx);
+                continue;
+            }
+
             if (!rect.IntersectsWith(boundsPx)) continue;   // cull to this monitor (the AABB)
 
             var alpha = (byte)Math.Clamp(item.Opacity * 255, 0, 255);
@@ -280,6 +338,55 @@ public sealed class FlashLayer : BaseLayer
 
             _imagePaint.Color = new SKColor(255, 255, 255, alpha);
             canvas.DrawImage(image, fit, _imagePaint);
+            canvas.RestoreToCount(saves);
+        }
+    }
+
+    /// <summary>
+    /// Flashes v2 wave 2: draw one broken flash. Every shard is a sub-rect of the same frame the
+    /// flash was showing, blitted at the shard's offset, turned about its own centre and faded
+    /// with the rest of them. The pieces line up with the picture the viewer was looking at, so
+    /// the cut is taken over the LETTERBOXED image box (glow padding removed), not the
+    /// bookkeeping rect. Rounded corners are deliberately not carried onto the pieces: a break
+    /// exposes hard edges, and rounding every shard would read as a bag of lozenges.
+    /// </summary>
+    private void DrawShards(SKCanvas canvas, FlashItem item, FlashShatterState shatter, SKImage image,
+        SKRectI boundsPx)
+    {
+        var rect = new SKRect(item.X, item.Y, item.X + item.W, item.Y + item.H);
+        var inner = new SKRect(rect.Left + item.PaddingPx, rect.Top + item.PaddingPx,
+            rect.Right - item.PaddingPx, rect.Bottom - item.PaddingPx);
+        var fit = UniformFit(image.Width, image.Height, inner);
+        if (fit.Width <= 0 || fit.Height <= 0) return;
+
+        foreach (var shard in shatter.Shards)
+        {
+            var a = shard.Alpha * item.Opacity;
+            if (a <= 0) continue;
+
+            var dx = (float)shard.Dx;
+            var dy = (float)shard.Dy;
+            var dest = new SKRect(
+                fit.Left + (float)(shard.U0 * fit.Width) + dx,
+                fit.Top + (float)(shard.V0 * fit.Height) + dy,
+                fit.Left + (float)(shard.U1 * fit.Width) + dx,
+                fit.Top + (float)(shard.V1 * fit.Height) + dy);
+            if (dest.Width <= 0 || dest.Height <= 0) continue;
+
+            // Cull generously: the tumble can push a shard's corners a little past its own box.
+            var slack = Math.Max(dest.Width, dest.Height);
+            if (!SKRect.Create(dest.Left - slack, dest.Top - slack,
+                    dest.Width + 2 * slack, dest.Height + 2 * slack).IntersectsWith(boundsPx))
+                continue;
+
+            var src = new SKRect(
+                (float)(shard.U0 * image.Width), (float)(shard.V0 * image.Height),
+                (float)(shard.U1 * image.Width), (float)(shard.V1 * image.Height));
+
+            _imagePaint.Color = new SKColor(255, 255, 255, (byte)Math.Clamp(a * 255, 0, 255));
+            int saves = canvas.Save();
+            canvas.RotateDegrees((float)(shard.AngleRad * 180.0 / Math.PI), dest.MidX, dest.MidY);
+            canvas.DrawImage(image, src, dest, _imagePaint);
             canvas.RestoreToCount(saves);
         }
     }

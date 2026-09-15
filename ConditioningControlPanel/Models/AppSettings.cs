@@ -1254,6 +1254,18 @@ namespace ConditioningControlPanel.Models
             set { _flashRoundedCorners = value; OnPropertyChanged(); }
         }
 
+        // Flashes v2 wave 2: dismissing a flash breaks it into falling shards instead of cutting
+        // it. ON by default - unlike the two dials above it changes nothing until the account owns
+        // a v2 motion grant AND a hand actually dismisses a flash, so there is nothing to opt into.
+        // Compositor path only; a classic layered flash still cuts.
+        private bool _flashShatterEnabled = true;
+        [JsonProperty("FlashShatterEnabled")]
+        public bool FlashShatterEnabled
+        {
+            get => _flashShatterEnabled;
+            set { _flashShatterEnabled = value; OnPropertyChanged(); }
+        }
+
         private FlashMotionStyle _flashMotionStyle = FlashMotionStyle.Still;
         /// <summary>Flashes v2 motion picker. Compositor path only; resolved per spawn through FlashMotion.Resolve.</summary>
         [JsonProperty("FlashMotionStyle")]

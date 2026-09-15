@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -2100,6 +2100,28 @@ namespace ConditioningControlPanel.Services
                || PrizeGrants.IsGranted(PrizeGrants.FlashPendulum);
 
         /// <summary>
+        /// Flashes v2 wave 2: the state for a dismissed compositor flash breaking into shards, or
+        /// null to keep the plain cut. Null covers every reason not to break: this teardown was
+        /// not a dismiss (a timer expiry, a retired one-shot, the run stopping), the switch is off,
+        /// the account owns no v2 motion grant, or MotionLevel.Off - at which FlashShatter itself
+        /// returns a done, shardless state, and this hands back the same null either way.
+        /// UI thread (every SafeCloseFlashWindow caller is), so _random needs no guard.
+        /// </summary>
+        private FlashShatterState? BuildShatter(FlashWindow window, Compositor.FlashLayer.FlashItem item)
+        {
+            if (!window.ShatterOnDismiss) return null;
+            if (App.Settings?.Current?.FlashShatterEnabled != true) return null;
+            if (!OwnsFlashV2()) return null;
+
+            var d = window.Monitor.DpiScale > 0 ? window.Monitor.DpiScale : 1.0;
+            var state = FlashShatter.Create(item.X, item.Y, item.W, item.H,
+                window.Monitor.X * d, window.Monitor.Y * d,
+                window.Monitor.Width * d, window.Monitor.Height * d,
+                MotionFx.Level, _random);
+            return state.Shards.Length > 0 ? state : null;
+        }
+
+        /// <summary>
         /// Round the corners of a WPF flash picture. A Border's CornerRadius rounds its own chrome
         /// and never its child, so the image itself needs the geometry; a zero radius clears any
         /// clip a pooled/recycled Image control is still carrying.
@@ -2495,6 +2517,11 @@ namespace ConditioningControlPanel.Services
                 _activeWindows.Remove(window);
             }
 
+            // Wave 2: a hand (or a gaze dwell, which is the same "stare to pop = click" dismiss)
+            // took this flash off the screen, so the compositor may break it instead of cutting
+            // it. Purely how the picture leaves - the XP below, the hydra roll and the active list
+            // all run exactly as they did, and a timer expiry never reaches here.
+            window.ShatterOnDismiss = true;
             SafeCloseFlashWindow(window);
             FlashClicked?.Invoke(this, EventArgs.Empty);
             _ = App.Haptics?.FlashClickVibeAsync();
@@ -4590,8 +4617,11 @@ namespace ConditioningControlPanel.Services
                     {
                         var item = window.LayerItem;
                         window.LayerItem = null;
-                        _flashLayer?.Remove(item);
+                        var shatter = BuildShatter(window, item);
+                        if (shatter != null) _flashLayer?.BeginShatter(item, shatter);
+                        else _flashLayer?.Remove(item);
                     }
+                    window.ShatterOnDismiss = false;
                     window.IsFadingOut = false;
                     // The state bag is still a real Window: constructing it registered it in
                     // Application.Windows, and only Close() removes it — returning without a
@@ -4850,6 +4880,15 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>Flashes v2: the motion kind this flash resolved to; hydra children inherit it.</summary>
         public FlashMotionStyle MotionStyle { get; set; }
+
+        /// <summary>
+        /// Flashes v2 wave 2, compositor only: true when THIS teardown is a hand dismissing the
+        /// flash rather than its timer running out, a one-shot being retired or the run stopping.
+        /// Set by OnFlashClicked immediately before the close and read once, in
+        /// SafeCloseFlashWindow, which is the only place that decides between the shatter and the
+        /// plain cut. Presentation only - XP, hydra and the active list are untouched by it.
+        /// </summary>
+        public bool ShatterOnDismiss { get; set; }
 
         /// <summary>
         /// The fade alpha the heartbeat animates: window Opacity in per-window mode, the hosted

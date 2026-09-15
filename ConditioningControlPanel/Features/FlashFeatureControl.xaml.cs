@@ -58,6 +58,8 @@ namespace ConditioningControlPanel.Features
             // the way it moves, so both ride those grants rather than Jackpot Remix.
             RowRoundedCorners.Visibility = motion ? Visibility.Visible : Visibility.Collapsed;
             RowDraggable.Visibility = motion ? Visibility.Visible : Visibility.Collapsed;
+            // Shatter dresses the way that same picture leaves, so it rides those grants too.
+            RowShatter.Visibility = motion ? Visibility.Visible : Visibility.Collapsed;
             BoxFlashV2.Visibility = (remix || motion) ? Visibility.Visible : Visibility.Collapsed;
         }
 
@@ -89,6 +91,17 @@ namespace ConditioningControlPanel.Features
             var s = App.Settings?.Current;
             if (s == null) return;
             s.FlashDraggable = ChkFlashDraggable.IsChecked ?? false;
+            App.Settings?.Save();
+        }
+
+        // Shatter: read at the dismiss, so the switch takes effect on flashes already on screen.
+        // No service bounce.
+        private void ChkFlashShatter_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.FlashShatterEnabled = ChkFlashShatter.IsChecked ?? false;
             App.Settings?.Save();
         }
 
@@ -139,6 +152,7 @@ namespace ConditioningControlPanel.Features
                 ChkJackpotRemix.IsChecked = s.JackpotRemixEnabled;
                 ChkFlashRoundedCorners.IsChecked = s.FlashRoundedCorners;
                 ChkFlashDraggable.IsChecked = s.FlashDraggable;
+                ChkFlashShatter.IsChecked = s.FlashShatterEnabled;
             }
             finally { _isLoading = false; }
         }
@@ -158,6 +172,7 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.FlashMotionStyle) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashRoundedCorners) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashDraggable) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashShatterEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazePopEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerExtensionMs) ||
