@@ -252,7 +252,7 @@ export async function mount(ctx) {
       bank.start({ n: winTokens(tier, calm), fromValue: readout.server - gained, toValue: readout.server,
                    from: () => scene && scene.project('landed'), to: () => readout.target() });
     } else readout.settle();
-    if (fresh && rewardText(r, t)) rewardReveal.show(r, still);
+    if (fresh && rewardText(r, t)) { rewardReveal.show(r, still); rewardReveal.useModel(scene.revealReward?.(r, still)); }
     if (fresh && !rewardText(r, t)) gain(r.snoozed ? t('br_wheel_gain_snooze', '+{n} tomorrow', { n: fmt(st.snoozeCarry) }) : t('br_wheel_gain', '+{n} SP', { n: fmt(gained) }));
     note('land', { slice: r.sliceId, pay: r.pay, total: r.total, gained, tier, party: rec.sound, fresh, still });
   }
