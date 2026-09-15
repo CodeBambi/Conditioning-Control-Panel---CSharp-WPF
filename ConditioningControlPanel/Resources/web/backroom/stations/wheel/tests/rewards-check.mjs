@@ -67,7 +67,7 @@ await cdp('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, devi
 
 await cdp('Page.navigate', {url:`http://127.0.0.1:${PORT}/web/backroom/stations/wheel/dev.html?gates=off`});
 for(let i=0;i<100&&!await ev('!!window.dev');i++)await sleep(100);
-const cases=[['room_service',{kind:'decoration',decorationId:'ivy'},0],['room_service',{kind:'decoration',fallback:true},75],['seeing_double',{kind:'double',until:Date.now()+86400000},0],['head_empty',{kind:'nothing'},0]];
+const cases=[['room_service',{kind:'decoration',decorationId:'ivy'},0],['room_service',{kind:'decoration',fallback:true},75],['seeing_double',{kind:'double',until:Date.now()+86400000},0],['head_empty',{kind:'nothing'},0],['room_service',{kind:'decoration',fallback:true},4]];
 for(const [index,[id,reward,pay]] of cases.entries()){
   await cdp('Emulation.setDeviceMetricsOverride',{width:index%2?400:1280,height:index%2?800:720,deviceScaleFactor:1,mobile:index%2===1});
   const setup=await ev(`(async()=>{
@@ -77,7 +77,7 @@ for(const [index,[id,reward,pay]] of cases.entries()){
     const rows=[['jackpot','JACKPOT',500,'jackpot',7.2],['pocket_sparkles','Pocket Sparkles',15,'prize',105.84],['good_behaviour','Good Behaviour',30,'prize',88.2],['keep_the_change','Keep the Change',60,'prize',52.92],['spoiled_rotten','Spoiled Rotten',150,'prize',17.64],['room_service','Room Service',0,'decoration',35.28],['seeing_double','Seeing Double',0,'double',42.336],['head_empty','Head Empty',0,'nothing',10.584]];
     const slices=rows.map(([id,label,pay,kind,width])=>({id,label,pay,kind,width,odds:'test'}));
     const st={ok:true,sp:100,spun:false,slices,jackpot:{amount:500},nextResetAt:new Date(Date.now()+3600000).toISOString()};
-    const result={day:'2026-09-15',sliceId:${JSON.stringify(id)},sliceIndex:slices.findIndex(s=>s.id===${JSON.stringify(id)}),pay:${pay},total:${pay},reward:${JSON.stringify(reward)}};
+    const result={day:'2026-09-15',sliceId:${JSON.stringify(id)},sliceIndex:slices.findIndex(s=>s.id===${JSON.stringify(id)}),pay:${index===4?75:pay},total:${index===4?75:pay},credited:${pay},capped:${index===4},reward:${JSON.stringify(reward)}};
     window.rewardCalls=0;window.landedCalls=0;
     window.rewardStation=await mount({root:document.querySelector('#root'),motion:'off',intensity:'calm',reduced:true,gates:{spiral:false,flash:false,tunnel:false,melt:false},media:async()=>({gifs:[],words:[]}),fx:()=>Promise.resolve({}),fxTunnel:()=>{},fxRelease:()=>{},rewardLanded:()=>window.landedCalls++,
       request:async(op)=>{if(op==='state')return{ok:true,body:st};window.rewardCalls++;await new Promise(r=>setTimeout(r,120));return{ok:true,body:{...st,sp:100+${pay},spun:true,result}};}});
@@ -88,7 +88,7 @@ for(const [index,[id,reward,pay]] of cases.entries()){
   ok(await ev("document.querySelector('.daze-delivery').hidden"),id+' hidden before reply');
   for(let i=0;i<200&&!await ev('window.landedCalls===1');i++)await sleep(40);
   const r=await ev(`({calls:rewardCalls,landed:landedCalls,hidden:document.querySelector('.daze-delivery').hidden,text:document.querySelector('.daze-delivery p').textContent,scroll:document.documentElement.scrollWidth>innerWidth})`);
-  ok(r.calls===1&&r.landed===1&&!r.hidden,id+' reveals once on landing');ok(!r.scroll,id+' no horizontal scroll');
+  ok(r.calls===1&&r.landed===1&&!r.hidden,id+' reveals once on landing');ok(!r.scroll,id+' no horizontal scroll');if(index===4)ok(r.text.includes('+4 SP'), 'capped gift displays credited amount');
   await writeFile(join(OUT,`reward-${index}-${id}.png`),Buffer.from((await cdp('Page.captureScreenshot',{format:'png'})).result.data,'base64'));
   await ev('window.rewardStation.close()');ok(await ev("!document.querySelector('.daze-delivery')"),id+' disposes');
 }

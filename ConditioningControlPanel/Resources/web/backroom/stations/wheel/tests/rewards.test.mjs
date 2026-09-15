@@ -28,3 +28,9 @@ test('noncash sectors remain data-driven and land inside every arc', () => {
   for (const row of layout) {assert.equal(row.kind,kinds[row.index]);assert.equal(sliceAt(layout,landingAngle(layout,row.index,'day')).id,row.id);}
   assert.equal(rewardOdds(layout[1],t,String),'Unowned decoration, or 75 SP if complete');
 });
+
+test('collection at the balance cap displays persisted credited amount', () => {
+  const r=readResult({pay:75,total:75,credited:4,capped:true,reward:{kind:'decoration',fallback:true}});
+  assert.equal(rewardText(r,t),'Collection complete. +4 SP.');
+  assert.equal(rewardText(readResult({...r,credited:0}),t),'Collection complete. +0 SP.');
+});
