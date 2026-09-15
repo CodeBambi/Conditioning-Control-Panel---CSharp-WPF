@@ -23,13 +23,9 @@ jobs:
             8.0.x
             10.0.x
       - run: dotnet build CCP.Core/CCP.Core.csproj -c Release
-      # NOT `dotnet test`: CCP.Core.Tests is deliberately empty, and `dotnet test` on a project
-      # with zero tests exits 1, not 0 - verified with both the VSTest adapter and the Microsoft
-      # Testing Platform runner ("No test is available in ..." / "Failed! ... Total: 0"). Adding
-      # one test makes the same command exit 0. Building still proves the net8.0 test toolchain
-      # and the ProjectReference to Core resolve on Linux. Change `build` to `test` the moment
-      # the first test lands.
-      - run: dotnet build Tests/CCP.Core.Tests/CCP.Core.Tests.csproj -c Release
+      # Core.Tests is the Linux-only behavior gate for the engine. Keep it separate from the
+      # smoke runner so persistence/lifecycle regressions report as ordinary test failures.
+      - run: dotnet test Tests/CCP.Core.Tests/CCP.Core.Tests.csproj -c Release
 
       # Compiling for net8.0 proves the type system is satisfied. It does not prove the engine
       # BEHAVES off Windows. This step actually executes Core on Linux and asserts on the answers.
@@ -106,6 +102,8 @@ jobs:
       # evidence (link the failing runs) rather than pre-emptively.
       - name: Test app suite
         run: dotnet test Tests/ConditioningControlPanel.Tests/ConditioningControlPanel.Tests.csproj -c Release -p:ValidateExecutableReferencesMatchSelfContained=false
+      - name: Test Core suite
+        run: dotnet test Tests/CCP.Core.Tests/CCP.Core.Tests.csproj -c Release
       # Keep these as separate invocations: the language and notification assemblies need
       # independent testhost processes and isolated process-immutable profiles.
       - name: Test Avalonia language suite

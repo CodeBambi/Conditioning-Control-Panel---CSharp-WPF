@@ -69,7 +69,6 @@ public class RoadmapService : IDisposable
             if (_isDirty)
             {
                 Save();
-                _isDirty = false;
             }
         }), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
 
@@ -109,6 +108,7 @@ public class RoadmapService : IDisposable
 
             var json = JsonSerializer.Serialize(Progress, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_progressPath, json);
+            _isDirty = false;
         }
         catch (Exception ex)
         {
