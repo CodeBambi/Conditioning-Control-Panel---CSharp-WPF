@@ -294,7 +294,9 @@ ok(Math.abs((await dbg()).yaw) > 0.2, 'a drag turns the view');
 
 // A visible mascot reacts to a real click, without opening a game or spending SP.
 ok((await dbg()).emis.every(e => e.articulated), 'all four mascots retain their shoulder joints');
-await ev(`window.__backroom.scene.go(${row('counter')})`);
+// go() travels the camera (2.1 s at full motion); every pose check below reads the arrived pose.
+const goTo = async (r) => { await ev(`window.__backroom.scene.go(${r})`); for (let i = 0; i < 80 && await ev('window.__backroom.scene.debug().transitioning'); i++) await sleep(100); };
+await goTo(row('counter'));
 await sleep(300);
 const emiPoint = await ev(`import('/vendor/three/three.module.min.js').then(T => { const s=window.__backroom.scene;
   const face=s.scene.getObjectByName('emi_idle_counter').getObjectByName('EMI_glass');
@@ -311,7 +313,7 @@ ok(!(await dbg()).emiBubble.id && (await posted('exit')).length === 0 && (await 
 // The three settled poses keep the room renderer alive and input locked.
 for (const id of ['cards', 'roulette', 'wheel']) {
   const prior = await dbg();
-  await ev(`window.__backroom.scene.go(${row(id)})`);
+  await goTo(row(id));
   const expected = await dbg();
   await ev(`window.__backroom.scene.pose(${JSON.stringify(prior.position)}, ${prior.yaw}, ${prior.pitch});
     window.__backroom.scene.seat(${row(id)}); window.__backroom.hud.seated(true)`);
@@ -351,7 +353,7 @@ await ev(`window.__mockStation = null`);
 
 // 2c. every approach: stand there, shot, push forward into the fixture, never clip
 for (const s of stations) {
-  await ev(`window.__backroom.scene.go(${row(s.key)})`);
+  await goTo(row(s.key));
   await sleep(250);
   await shot(`approach-${s.key.replace(':', '-')}.png`);
   await hold('KeyW', 1500);
@@ -361,12 +363,12 @@ for (const s of stations) {
 }
 
 // 2d. E at the violet slot opens the one slot station with the violet variant; Back restores the pose
-await ev(`window.__backroom.scene.go(${row('slot:violet')})`);
+await goTo(row('slot:violet'));
 await ev(`window.__backroom.scene.pose(${row('slot:violet')}.approach, 1.4, -0.1)`);
 await sleep(200);
 const before = await dbg();
 ok(before.nearest === 'slot:violet', 'standing by the violet slot makes it nearest');
-ok(await ev(`!document.querySelector('.br-visit').hidden && /Visit/.test(document.querySelector('.br-visit').textContent)`), 'the Visit prompt shows');
+ok(await ev(`/Visit/.test(document.querySelector('.br-hint').title)`), 'the walk hint names the visit');
 await key('KeyE'); await key('KeyE', 'keyUp');
 for (let i = 0; i < 40 && !(await ev(`!!(window.__mockStation && window.__mockStation.seen.state)`)); i++) await sleep(100);
 ok((await posted('station-open')).some((m) => m.station === 'slot'), 'E posts station-open slot');
@@ -387,7 +389,7 @@ ok(d.position.every((v, i) => Math.abs(v - before.position[i]) < 1e-9) && d.yaw 
 ok(tBack >= 0 && tBack < 1000, `resume took ${Math.round(tBack)} ms (rebuild would be ${perf.buildMs} ms)`);
 ok((await posted('exit')).length === 0, 'the room itself stays open');
 await ev(`window.__mockStation = null`);
-await ev(`window.__backroom.scene.go(${row('slot:rose')})`);
+await goTo(row('slot:rose'));
 await sleep(150);
 await key('KeyE'); await key('KeyE', 'keyUp');
 for (let i = 0; i < 40 && !(await ev(`!!(window.__mockStation && window.__mockStation.seen.opened)`)); i++) await sleep(100);
@@ -406,7 +408,7 @@ await sleep(300);
   };
   const openSlot = async () => {
     await ev(`window.__mockStation = null`);
-    await ev(`window.__backroom.scene.go(${row('slot:violet')})`);
+    await goTo(row('slot:violet'));
     await sleep(150);
     await key('KeyE'); await key('KeyE', 'keyUp');
     for (let i = 0; i < 40 && !(await ev(`!!(window.__mockStation && window.__mockStation.seen.opened)`)); i++) await sleep(100);
@@ -450,7 +452,7 @@ await sleep(300);
   const frame = () => ev(`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))`);
   const openViolet = async () => {
     await ev(`window.__mockStation = null`);
-    await ev(`window.__backroom.scene.go(${row('slot:violet')})`);
+    await goTo(row('slot:violet'));
     await sleep(150);
     await key('KeyE'); await key('KeyE', 'keyUp');
     for (let i = 0; i < 40 && !(await ev(`!!(window.__mockStation && window.__mockStation.seen.state)`)); i++) await sleep(100);
@@ -483,7 +485,7 @@ await sleep(300);
 }
 
 // 2e. a soon station: the dust-sheet card, no code (every row is live now, so a soon copy of the counter row)
-await ev(`window.__backroom.scene.go(${row('counter')})`);
+await goTo(row('counter'));
 await sleep(150);
 await ev(`void window.__backroom.visit({ ...${row('counter')}, state: 'soon', entry: null })`);
 for (let i = 0; i < 20 && !(await ev(`!!document.querySelector('.br-card-veil.is-soon')`)); i++) await sleep(100);
@@ -545,7 +547,7 @@ ok(!(await dbg()).overview, 'M again walks');
 }
 
 // 2g. host close with a station open: exit-done inside the 300 ms budget
-await ev(`window.__backroom.scene.go(${row('slot:mint')})`);
+await goTo(row('slot:mint'));
 await sleep(150);
 await key('KeyE'); await key('KeyE', 'keyUp');
 for (let i = 0; i < 40 && !(await ev(`!!(window.__mockStation && window.__mockStation.seen.opened)`)); i++) await sleep(100);
@@ -628,7 +630,7 @@ await shot('wall-picture-from-feed.png');
   ok(await reads() === 1, 'the rotation never asks the server for anything');
 
   // never while seated, and a refresh after each station close
-  await ev(`window.__backroom.scene.go(${row('slot:violet')})`);
+  await goTo(row('slot:violet'));
   await sleep(150);
   await key('KeyE'); await key('KeyE', 'keyUp');
   for (let i = 0; i < 40 && !(await ev(`!!window.__backroom.loader.current`)); i++) await sleep(100);

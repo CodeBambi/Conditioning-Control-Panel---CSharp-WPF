@@ -167,6 +167,8 @@ export async function createScene(o) {
     if(!canWalk()||drag?.id!==e.pointerId||drag.moved)return;
     const hit=pickAt(e,scene.children).find(h=>{for(let n=h.object;n;n=n.parent)if(!n.visible)return false;return true;});
     if(!hit)return;
+    // A mascot stands inside its fixture, often behind its glass: a tap that reaches an NPC is the bark (emi-interaction), never a visit.
+    if(interaction.npcAt(e.clientX,e.clientY))return;
     for(let n=hit.object;n;n=n.parent){const row=o.stations.find(r=>room.holders.get(r.key)===n);if(row){drag=null;visit(row);break;}}
   });
   for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(ev, (e) => { if (drag?.id === e.pointerId) drag = null; });
@@ -198,7 +200,7 @@ export async function createScene(o) {
   /** Stand at a station's approach point, facing it. */
   function go(row) {
     if (!row || held || seated || pendingVisit) return;
-    if (overview) { overview=false;decor.setOverview(false); }
+    if (overview) { overview=false;decor.setOverview(false); if (room.ceiling) room.ceiling.visible = roofAlpha > .001; }
     resetInput();setNearest(null);
     moveCamera({pos:row.approach.slice(),...facing(row.approach,row.look),offset:0,offsetX:0});
   }
