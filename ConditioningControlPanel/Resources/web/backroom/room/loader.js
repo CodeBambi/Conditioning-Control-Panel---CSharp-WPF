@@ -171,6 +171,9 @@ export function createLoader(room) {
         if(trip){subs.add(()=>trip.dispose());const arrived=await trip.arrived;if(my!==seq||arrived===false){dropSubs(subs);return 'superseded';}}
       }
       if(!stage)root.classList.remove('br-seat');
+      // `export const roomBehind = true` (the slot): the root stays see-through, so the pan-in is the load screen
+      // and the station's own canvas comes up over the room's held frame, with no ground colour and no card between.
+      if(!stage&&mod.roomBehind===true)root.classList.add('br-through');
       const handle = await mod.mount(buildCtx(station, root, extra && extra.variant, subs, stage));
       if (my !== seq) { dropSubs(subs); try { handle && handle.destroy && handle.destroy(); } catch (e) { /* noop */ } return 'superseded'; }
       current.handle = handle;
@@ -213,5 +216,6 @@ export function createLoader(room) {
     try { if (h && typeof h.suspend === 'function') h.suspend(!!on); } catch (e) { room.log('warn', 'suspend threw: ' + e); }
   }
 
-  return { open, close, suspend, get current() { return current ? { id: current.station.id, kind: current.kind } : null; } };
+  /** `current.debug()` is a test seam (smoke/): the station's own debug(), never read by the room. */
+  return { open, close, suspend, get current() { return current ? { id: current.station.id, kind: current.kind, debug: () => current?.handle?.debug?.() } : null; } };
 }

@@ -169,6 +169,9 @@ export async function createScene(o) {
     if(!hit)return;
     // A mascot stands inside its fixture, often behind its glass: a tap that reaches an NPC is the bark (emi-interaction), never a visit.
     if(interaction.npcAt(e.clientX,e.clientY))return;
+    // A bulb lives in a scene-level InstancedMesh batch (fixtures.js), so its station comes from the instance, not the parents.
+    const batched=hit.object.isInstancedMesh?o.stations.find(r=>r.key===hit.object.userData.rows?.[hit.instanceId]):null;
+    if(batched){drag=null;visit(batched);return;}
     for(let n=hit.object;n;n=n.parent){const row=o.stations.find(r=>room.holders.get(r.key)===n);if(row){drag=null;visit(row);break;}}
   });
   for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(ev, (e) => { if (drag?.id === e.pointerId) drag = null; });

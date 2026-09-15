@@ -51,6 +51,10 @@ function createAuras(count) {
   const points = new T.Points(g, m);
   points.frustumCulled = false;
   points.renderOrder = 2;
+  // Glow is not a surface. A Points raycast answers within Raycaster.params.Points.threshold (1 m) of
+  // every aura, and this cloud is a scene child, so a tap anywhere near a cabinet's bulbs used to land
+  // here, in front of the cabinet and on no station (the phone desk run: only the base of a slot entered).
+  points.raycast = () => {};
   let n = 0;
   return {
     points,
@@ -100,6 +104,7 @@ vec4 mv=modelViewMatrix*vec4(p,1.);gl_Position=projectionMatrix*mv;gl_PointSize=
     fragmentShader: 'varying vec3 vColor;void main(){float r=length(gl_PointCoord-.5)*2.;if(r>1.)discard;gl_FragColor=vec4(vColor,exp(-r*r*15.)+exp(-r*r*3.)*.24);}',
   }));
   motes.frustumCulled = false;
+  motes.raycast = () => {};   // the same: a mote field is glow, the medallion under it is the surface
   spiral.add(motes);
   let phase = 0;
   return { update(dt, still) { if (!still) phase += dt * 0.35; uniforms.uTime.value = phase; }, setDpr(d) { motes.material.uniforms.uDpr.value = d; } };
@@ -285,6 +290,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     });
     im.instanceMatrix.needsUpdate = true;
     im.computeBoundingSphere();
+    im.userData.rows = list.map((b) => b.row.key);   // a bulb left its fixture for this batch: scene.js maps a tap on instance i back to its station
     scene.add(im);
     instanced.push(im);
   }

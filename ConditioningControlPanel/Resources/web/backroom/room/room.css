@@ -22,7 +22,9 @@ html.br-overview .br-canvas { cursor: default; }
 /* The room's own chrome sits between the view and the station layer. */
 .br-room-ui { position: fixed; inset: 0; z-index: 10; pointer-events: none; }
 .br-room-ui > * { pointer-events: auto; }
-html.br-visiting .br-room-ui { visibility: hidden; }
+/* A station that holds the screen (the slot, the counter) hides the walking chrome even after a seated pan-in
+ * (`br-seated` stays on until its trip is disposed, so this has to outrank the seated rule below). */
+html.br-visiting .br-room-ui, html.br-visiting.br-seated .br-room-ui { visibility: hidden; }
 
 .br-loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 10px; background: radial-gradient(ellipse, #422445, #160d1e); }
@@ -103,6 +105,8 @@ html.br-leaving .br-sp { opacity: .5; }
 .br-layer { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
 .br-layer > * { pointer-events: auto; }
 .br-station { position: absolute; inset: 0; background: var(--br-ground); }
+/* A station that draws over the room's held frame (loader.js roomBehind): no ground colour under its load. */
+.br-station.br-through { background: transparent; }
 
 .br-card-veil { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(12, 8, 20, .55);
   animation: br-fade 220ms ease-out; }

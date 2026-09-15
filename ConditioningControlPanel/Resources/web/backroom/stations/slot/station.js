@@ -24,6 +24,10 @@ import { createBank } from './bank.js';
 import { createSound } from './sound.js';
 
 const STATION = 'slot';
+/** CONTRACT 7 (room/loader.js): the root stays see-through, so the room's pan-in is the load screen and the cabinet
+ *  rises over the room's held frame. There is no loading card: Back is live the whole way (Law VI). */
+export const roomBehind = true;
+const ROTATE_SEEN = 'br_slot_rotate_seen';   // the sideways nudge, dismissed once a session
 const LINE_LABELS = {
   emi3: '3 EMI', emi2: '2 EMI', gif3same: '3 of the same GIF', sub3: '3 subliminals', spiral3: '3 spirals',
   gif3: '3 GIFs', sub2: '2 subliminals', spiral2: '2 spirals', melt: 'Melt',
@@ -106,7 +110,8 @@ export async function mount(ctx) {
       <button class="slot-spin" type="button"><span></span><small></small></button>
       <details class="slot-odds"><summary>${t('br_slot_odds', 'Odds')}</summary><table></table><p></p></details>
       <div class="slot-card" role="status" hidden><p></p><button class="slot-card-back" type="button">${t('br_slot_back', 'Back')}</button></div>
-      <div class="slot-loading">${t('br_slot_loading', 'Preparing the cabinet')}</div>`;
+      <button class="slot-rotate" type="button" hidden><i aria-hidden="true">&#x21bb;</i>${t('br_slot_rotate', 'Turn your phone sideways for a bigger view')}</button>`;
+    root.querySelector('.slot-rotate').onclick = () => { rotateSeen = true; try { sessionStorage.setItem(ROTATE_SEEN, '1'); } catch (e) { /* private mode */ } paintRotate(); };
     root.querySelector('.slot-back').onclick = back;
     root.querySelector('.slot-card-back').onclick = back;
     if (hostSp) root.dataset.hostSp = '';
@@ -119,6 +124,18 @@ export async function mount(ctx) {
     root.querySelector('.slot-spin').onclick = () => press();
     root.querySelectorAll('[data-col]').forEach(b => { b.onclick = () => toggleFreeze(Number(b.dataset.col)); });
     return root;
+  }
+
+  /* THE SIDEWAYS NUDGE (phone desk run): in portrait the reels are small, so a phone (a coarse pointer) at the cabinet
+   * gets one dismissable hint to turn sideways. Remembered for the session once dismissed; it hides itself in landscape
+   * and shows again in portrait until then. A desk (fine pointer, no touch) never sees it. */
+  let rotateSeen = false;
+  try { rotateSeen = sessionStorage.getItem(ROTATE_SEEN) === '1'; } catch (e) { /* private mode */ }
+  const coarse = () => (typeof matchMedia === 'function' && matchMedia('(any-pointer: coarse)').matches) || (navigator.maxTouchPoints || 0) > 0;
+  function paintRotate() {
+    const n = el && $('.slot-rotate');
+    if (!n) return;
+    n.hidden = rotateSeen || !coarse() || !(innerHeight > innerWidth) || el.dataset.phase !== 'play';
   }
 
   function back() {
@@ -483,7 +500,7 @@ export async function mount(ctx) {
     if (e.code === 'Space') { e.preventDefault(); press(); }
     if (['1', '2', '3'].includes(e.key) && tape && tape.snapshot().canFreeze) toggleFreeze(Number(e.key) - 1);
   }
-  const onResize = () => scene && scene.resize();
+  const onResize = () => { if (scene) scene.resize(); paintRotate(); };
 
   async function open() {
     if (alive) return;
@@ -522,7 +539,6 @@ export async function mount(ctx) {
       tape.open(),
     ]);
     if (my !== session) { if (made && made.dispose) made.dispose(); return; }
-    $('.slot-loading').hidden = true;
     if (made.error) { console.error('[slot] cabinet failed to load', made.error); el.dataset.phase = 'closed'; card(refusalText('closed')); return; }
     if (made.missing.length) {
       made.dispose();
@@ -546,7 +562,7 @@ export async function mount(ctx) {
     await scene.rise();
     if (my !== session) return;
     el.dataset.phase = 'play';
-    sync();
+    sync(); paintRotate();
     // 10.16.C: EMI hands the comp over. No party, no REVEAL: a glance and one chime (Brake 1, arriving is not
     // an earned moment). The five spins themselves celebrate on their own merits.
     const offered = tape.snapshot().comp;

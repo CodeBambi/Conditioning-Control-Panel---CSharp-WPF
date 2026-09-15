@@ -25,6 +25,10 @@ export function seatPose(row, fixture, camera, width, height, cardHands=1, count
     const track=fixture.getObjectByName('ball_track');
     if(track){box.setFromObject(track);if(matFrame){for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z])wide.push(new T.Vector3(x,y,z));}else bounds.union(box);}
   }
+  // The slot: the reel window and the jackpot screen are the pan-in target, fitted on height alone (a phone held
+  // upright would otherwise back off to fit their width); the station's own canvas frames the play once it is up.
+  const travelOnly = row.id === 'slot';
+  if (travelOnly) { include('reel_window'); include('screen_jackpot'); }
   if (bounds.isEmpty()) return null;
   const matCenter=bounds.getCenter(new T.Vector3()), matBounds=bounds.clone();
   const direction=new T.Vector3().fromArray(row.approach).sub(new T.Vector3().fromArray(row.look)); direction.y=0; direction.normalize();
@@ -37,12 +41,13 @@ export function seatPose(row, fixture, camera, width, height, cardHands=1, count
   const up=new T.Vector3().crossVectors(direction,right).normalize();
   if(matFrame)center.addScaledVector(right,matCenter.clone().sub(center).dot(right));   // the mat sits centred, the wheel above it
   const rightInset=landscape?200:0;
-  const top=phone?(landscape?50:150):height<500?85:row.id==='roulette'?110:120, bottom=phone?(landscape?12:108):row.id==='roulette'?155:row.id==='cards'?170:180;
+  let top=phone?(landscape?50:150):height<500?85:row.id==='roulette'?110:120, bottom=phone?(landscape?12:108):row.id==='roulette'?155:row.id==='cards'?170:180;
+  if(row.id==='slot'){top=height<500?56:110;bottom=height<500?24:150;}   // no station controls share this view: the band is the chrome's only
   const available=Math.max(.3,(height-top-bottom)/height), tan=Math.tan(camera.fov*Math.PI/360);
   const fitX=tan*(width-rightInset)/height*(row.id==='wheel'?.965:phone?.985:.92), fitY=tan*available*(phone?.96:.9);
   let distance=.4;
   const corners=b=>{const list=[];for(const x of [b.min.x,b.max.x])for(const y of [b.min.y,b.max.y])for(const z of [b.min.z,b.max.z])list.push(new T.Vector3(x,y,z).sub(center));return list;};
-  for(const p of corners(bounds)){const depth=p.dot(direction);distance=Math.max(distance,depth+Math.abs(p.dot(up))/fitY);if(!matFrame)distance=Math.max(distance,depth+Math.abs(p.dot(right))/fitX);}
+  for(const p of corners(bounds)){const depth=p.dot(direction);distance=Math.max(distance,depth+Math.abs(p.dot(up))/fitY);if(!matFrame)distance=Math.max(distance,travelOnly?0:depth+Math.abs(p.dot(right))/fitX);}
   if(matFrame)for(const p of corners(matBounds)){const depth=p.dot(direction);distance=Math.max(distance,depth+Math.abs(p.dot(right))/fitX);}
   const position=center.clone().addScaledVector(direction,distance);
   const view=new T.PerspectiveCamera();view.rotation.order='YXZ';view.position.copy(position);view.lookAt(center);
