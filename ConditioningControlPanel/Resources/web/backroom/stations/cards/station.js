@@ -259,7 +259,7 @@ export async function mount(ctx) {
   /** Every Deal path (the button, Space and Enter, a direct call) lands here. During a fullscreen moment the press is
    *  dropped before anything else: no ring, no note, nothing kept for later (owner 2026-09-14, CONTRACT 10.14 item 10). */
   async function deal() {
-    if (!alive || suspended) return;
+    if (!alive || suspended || (ctx.stage && !ctx.stage.ready)) return;
     if (screenBusy(performance.now())) { dropped++; log('deal-dropped', { why: 'screen' }); return; }
     ring($('.cards-deal'));
     const c = view(performance.now());
@@ -273,7 +273,7 @@ export async function mount(ctx) {
   }
 
   async function move(m) {
-    if (!alive || suspended) return;
+    if (!alive || suspended || (ctx.stage && !ctx.stage.ready)) return;
     ring(el && $(`.cards-move[data-move="${m}"]`));
     if (!view(performance.now()).moves[m]) return;
     busy = true; decide = false; note = '';
@@ -341,15 +341,16 @@ export async function mount(ctx) {
     const c = view(now);
     const open = isOpen(st && st.hand);
     el.toggleAttribute('data-open', open);
+    const cameraReady = !ctx.stage || ctx.stage.ready;
     const dealBtn = $('.cards-deal');
-    dealBtn.disabled = !c.deal;
+    dealBtn.disabled = !c.deal || !cameraReady;
     dealBtn.toggleAttribute('data-held', c.dealWhy === 'screen');
     const small = c.dealWhy === 'screen' ? t('br_cards_moment', 'One moment')
       : c.dealWhy === 'floor' ? t('br_cards_wait', '{s} s', { s: Math.ceil((dealReadyAt - now) / 1000) }) : t('br_cards_bet_line', '{n} SP', { n: stake });
     if (dealBtn.querySelector('small').textContent !== small) dealBtn.querySelector('small').textContent = small;
     for (const b of el.querySelectorAll('.cards-move')) {
       const m = b.dataset.move;
-      b.disabled = !c.moves[m];
+      b.disabled = !c.moves[m] || !cameraReady;
       b.classList.toggle('is-hint', !!(hint && decide && st && st.hint === m && c.moves[m]));
     }
     for (const b of el.querySelectorAll('.cards-bet button')) { b.disabled = !c.bet; b.setAttribute('aria-pressed', String(Number(b.dataset.stake) === stake)); }

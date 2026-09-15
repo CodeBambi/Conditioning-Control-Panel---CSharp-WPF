@@ -67,7 +67,7 @@ const ev = async (x) => {
   return r.result?.result?.value;
 };
 await cdp('Runtime.enable'); await cdp('Page.enable');
-await cdp('Emulation.setDeviceMetricsOverride', { width: 400, height: 800, deviceScaleFactor: 1, mobile: true });
+await cdp('Emulation.setDeviceMetricsOverride', { width: Number(process.env.ROULETTE_WIDTH || 400), height: Number(process.env.ROULETTE_HEIGHT || 800), deviceScaleFactor: 1, mobile: true });
 async function shot(name) {
   const r = await cdp('Page.captureScreenshot', { format: 'png' });
   await writeFile(join(OUT, name), Buffer.from(r.result.data, 'base64'));
@@ -128,14 +128,19 @@ const picks = await ev(`(async () => {
   const r=s.renderer.domElement.getBoundingClientRect();s.scene.updateMatrixWorld(true);
   return targets.map(o=>{const p=o.getWorldPosition(new T.Vector3()).project(s.camera),x=(p.x+1)*r.width/2,y=(1-p.y)*r.height/2;
     const hit=s.pickAt({clientX:x,clientY:y},targets)[0]?.object.userData.spot;
-    return {spot:o.userData.spot,hit,x,y,visible:x>=0&&x<r.width&&y>=0&&y<r.height};});
+    return {spot:o.userData.spot,hit,x,y,visible:x>=0&&x<r.width&&y>=0&&y<r.height,uncovered:document.elementFromPoint(x,y)===s.renderer.domElement};});
 })()`);
 ok(picks.length===42&&picks.every(p=>p.hit===p.spot),'all 42 authored mat ray picks resolve the matching bet');
+ok(picks.length===42&&picks.every(p=>p.visible),'all 42 physical bet centers fit on phone');
 await writeFile(join(OUT,'mat-picks.json'),JSON.stringify(picks,null,2));
+ok(await ev("document.querySelector('.roul-chips-label').getAttribute('aria-expanded')==='true'"),'phone opens its touch betting surface on arrival');
 const selector=await ev(`(() => {
  const button=document.querySelector('.roul-chips-label'),buttons=[...document.querySelectorAll('.roul-mat-strip button')];
- return buttons.length===42&&buttons.every(b=>{button.click();b.click();const good=button.textContent.includes('1 of 3');document.querySelector('.roul-clear').click();return good;});
-})()`);ok(selector,'optional narrow-screen selector reaches all 42 bet actions');
+ return buttons.length===42&&buttons.every(b=>{if(button.getAttribute('aria-expanded')!=='true')button.click();b.scrollIntoView({block:'nearest'});const r=b.getBoundingClientRect(),reachable=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===b;b.click();const good=reachable&&button.dataset.chips==='1';document.querySelector('.roul-clear').click();return good;});
+})()`);ok(selector,'touch betting surface reaches all 42 bet actions');
+ok(await ev("[...document.querySelectorAll('.roul-mat-strip button')].every(b=>{const r=b.getBoundingClientRect();return r.width>=44&&r.height>=44})"),'phone betting targets measure at least44px in both dimensions');
+await shot('phone-touch-bets.png');
+await ev("document.querySelector('.roul-chips-label').click()");
 const roomRect = await ev(`(() => { const c = document.querySelector('.roul-stage'); const r = c.getBoundingClientRect(); return { x: r.left, y: r.top }; })()`);
 ok(await ev(`!!document.querySelector('.roul-station[data-host-back][data-host-sp]') && document.querySelector('.roul-back').hidden`), 'ctx.hostBack and ctx.spReadout: the station hides its own Back and SP chip');
 await sleep(500);
@@ -144,6 +149,7 @@ await shot('18-room-roulette-open.png');
 const cellCentre = picks.find(p=>p.spot==='s18');
 await click(Math.round(roomRect.x + cellCentre.x), Math.round(roomRect.y + cellCentre.y));
 await ev(`document.querySelector('.roul-spin').click()`);
+ok(await ev("document.querySelector('.roul-mat-strip').hidden"),'Spin hides the betting sheet for an unobstructed bowl');
 await until(`(document.querySelector('.roul-history') || {}).childElementCount >= 1`, 12000, 50);
 await sleep(400);
 const room = await ev(`({ open: window.__posted.filter((m) => m.type === 'station-open').map((m) => m.station), fx: window.__posted.filter((m) => m.type === 'fx').map((m) => ({ id: m.fxId, station: m.station, args: m.args, symbols: m.symbols })),

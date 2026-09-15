@@ -93,7 +93,17 @@ const report = await ev(`(async () => {
   const renderer=new T.WebGLRenderer({canvas,preserveDrawingBuffer:true});renderer.setSize(400,800);
   const stage={fixture,camera,canvas};
   const ball=fixture.getObjectByName('roulette_ball'),before=ball.position.clone();
-  const view=createBowl3D({stage,wheel,rose:[]}); const landings=[];
+  const view=createBowl3D({stage,wheel,rose:[]}); const landings=[],clearances=[];
+  const solids=[];fixture.getObjectByName('roulette_rotor').traverse(n=>{if(n.isMesh)solids.push(n)});solids.push(fixture.getObjectByName('ball_track'));
+  const ray=new T.Raycaster(),down=new T.Vector3(0,-1,0),v=new T.Vector3(),radius=new T.Box3().setFromObject(ball).getSize(new T.Vector3()).y/2;
+  function clearance(){
+    fixture.updateMatrixWorld(true);const c=ball.getWorldPosition(new T.Vector3());let min=Infinity;
+    for(let ring=0;ring<3;ring++)for(let a=0;a<8;a++){
+      const offset=radius*ring*.45,angle=a*Math.PI/4;v.set(c.x+Math.cos(angle)*offset,c.y+1,c.z+Math.sin(angle)*offset);ray.set(v,down);
+      const hit=ray.intersectObjects(solids,false)[0];if(hit)min=Math.min(min,c.y-Math.sqrt(radius*radius-offset*offset)-hit.point.y);
+    }
+    return min;
+  }
   for(let i=0;i<20;i++) {
     const index=(i*13)%37,plan=planRun({index,seed:100+i}); view.launch(plan,0);
     for(let now=0;now<(plan.duration+.1)*1000;now+=16) view.update(now,{});
@@ -104,13 +114,14 @@ const report = await ev(`(async () => {
   const lit=view.debug().lit.length;
   const plan=planRun({index:17,seed:42}),images={};view.launch(plan,0,{wake:true});
   for(const [name,t] of [['launch',.1],['drop',2],['rattle',plan.landAt-.2],['settle',plan.restAt+.1]]){
-    view.update(t*1000,{});renderer.render(scene,camera);images[name]=canvas.toDataURL('image/png').split(',')[1];
+    view.update(t*1000,{});clearances.push({name,gap:clearance(),path:view.debug().clearance});renderer.render(scene,camera);images[name]=canvas.toDataURL('image/png').split(',')[1];
   }
   const calls=renderer.info.render.calls;view.dispose();view.dispose();renderer.dispose();renderer.forceContextLoss();
-  return {landings,lit,images,calls,restored:ball.position.distanceTo(before)<1e-9};
+  return {landings,clearances,lit,images,calls,restored:ball.position.distanceTo(before)<1e-9};
 })()`);
 ok(!!report,'3D adapter loads against the rebuilt asset');
 if(report){ok(report.landings.every(x=>x.horizontalError<1e-5&&x.phase==='rest'),'20 seeded outcomes rest at the authored pocket center');ok(report.lit>=30,`Lighthouse visits ${report.lit} numbers`);ok(report.restored,'dispose restores authored ball transform');}
+if(report)ok(report.clearances.every(x=>x.gap>=-1e-4),'ball clears authored surfaces through launch, drop, rattle and rest: '+JSON.stringify(report.clearances));
 if(report?.images){for(const [name,data] of Object.entries(report.images))await writeFile(join(OUT,'3d-'+name+'.png'),Buffer.from(data,'base64'));delete report.images;}
 await writeFile(join(OUT,'bowl-3d-check.json'),JSON.stringify({report,errors:errs},null,2));
 ok(errs.length===0,`no browser errors: ${errs.join('; ')}`);

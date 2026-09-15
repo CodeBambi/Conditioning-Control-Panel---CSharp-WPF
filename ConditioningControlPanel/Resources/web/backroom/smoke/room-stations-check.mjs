@@ -214,7 +214,7 @@ for (const st of STATIONS) {
   await st.moment();
   await ev(`document.querySelector('#br-back').click()`);
   ok(await until(`!document.querySelector(${JSON.stringify(st.root)}) && !window.__backroom.loader.current`, 3000), `${st.key}: Back unmounts the station`);
-  ok(await until(`(() => { const d = window.__backroom.scene.debug(); return d.running && !d.held; })()`, 2000), `${st.key}: the room loop runs again`);
+  ok(await until(`(() => { const d = window.__backroom.scene.debug(); return d.running && !d.held && !d.transitioning; })()`, 7000), `${st.key}: the room loop runs again`);
   p = await since();
   ok(p.some((m) => m.type === 'station-close' && m.station === st.id), `${st.key}: station-close ${st.id} posted`);
   ok(!p.some((m) => m.type === 'exit'), `${st.key}: the room itself stays open`);

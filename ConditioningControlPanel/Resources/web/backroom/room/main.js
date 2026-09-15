@@ -157,8 +157,8 @@ function setSp(sp) {
 }
 
 async function visit(row) {
-  if(row?.key==='customization'){scene?.customization.open();return;}
-  if (leaving || visiting || !scene || !loader || scene.overview) return;
+  if (leaving || visiting || !scene || !loader || scene.overview || scene.transitioning || scene.seated) return;
+  if(row?.key==='customization'){scene.customization.open();return;}
   visiting = true;
   scene.hold();
   hud.hideWhileVisiting(true);
@@ -380,7 +380,13 @@ async function start(init) {
       if (!stage) { scene.hold(); return null; }
       hud.hideWhileVisiting(false);
       hud.seated(true);
-      return { ...stage, dispose() { stage.dispose(); hud.seated(false); } };
+      return { ...stage, get ready(){return stage.ready;}, dispose() { stage.dispose(); hud.seated(false); } };
+    },
+    approach:row=>{
+      scene.release();const trip=scene.stage(row);if(!trip){scene.hold();return null;}
+      hud.hideWhileVisiting(false);hud.seated(true);
+      return {arrived:trip.arrived.then(ok=>{if(ok){scene.hold();hud.hideWhileVisiting(true);}return ok;}),
+        dispose(){scene.release();trip.dispose();hud.seated(false);}};
     },
     lex,
     onSp: (fn) => { spListeners.add(fn); return () => spListeners.delete(fn); },
@@ -406,6 +412,7 @@ async function start(init) {
       label: (row, key) => (key === '@name' ? label(row) : lex(key, LABEL_FALLBACK[key])),
       media, lex,
       still: still(),
+      cameraMotion:()=>({off:state.userStill||state.motion==='off'||state.motion==='still',reduced:state.reduced||state.motion==='reduced'||state.intensity==='calm'}),
       onProgress: (f) => hud.progress(f),
       onNearest: (row) => hud.nearest(row),
       onVisit: (row) => visit(row),

@@ -161,7 +161,15 @@ export function createLoader(room) {
       if (my !== seq) return 'superseded';
       if (typeof mod.mount !== 'function') throw new Error('no mount export');
       const stage = mod.roomStage === true ? room.stage?.(station) : null;
-      if (stage) { subs.add(() => stage.dispose()); root.classList.add('br-seat'); }
+      if (stage) {
+        subs.add(() => stage.dispose()); root.classList.add('br-seat');
+        const arrived=await stage.arrived;
+        if(my!==seq||arrived===false){dropSubs(subs);return 'superseded';}
+      }
+      if (!stage && room.approach) {
+        const trip=room.approach(station);
+        if(trip){subs.add(()=>trip.dispose());const arrived=await trip.arrived;if(my!==seq||arrived===false){dropSubs(subs);return 'superseded';}}
+      }
       const handle = await mod.mount(buildCtx(station, root, extra && extra.variant, subs, stage));
       if (my !== seq) { dropSubs(subs); try { handle && handle.destroy && handle.destroy(); } catch (e) { /* noop */ } return 'superseded'; }
       current.handle = handle;
