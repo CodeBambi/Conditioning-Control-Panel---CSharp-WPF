@@ -8,6 +8,9 @@ export const EMI_BARKS = {
   roulette: ['Keeping an eye on the little ball.', 'The velvet gets the full treatment.', 'Yes, I practise that bow.'],
 };
 
+/** A finger rolls a little between down and up: the same slop as the room's own tap (scene.js TAP_SLOP), or a tap on a mascot is neither bark nor visit. */
+export const TAP_SLOP = 14;
+
 /** Click/tap a visible NPC; dragging continues to belong to the room camera. */
 export function createEmiInteraction({ canvas, camera, scene, emis, mount, isActive = () => true, canGesture = () => true, label = (key, fallback) => fallback }) {
   const doc = canvas.ownerDocument, ray = new T.Raycaster(), pointer = new T.Vector2();
@@ -53,10 +56,10 @@ export function createEmiInteraction({ canvas, camera, scene, emis, mount, isAct
     if (event.button !== 0 || !event.isPrimary || (!enabled || !isActive())) return;
     down = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false, time: performance.now() };
   };
-  const onMove = event => { if (down?.id === event.pointerId && Math.hypot(event.clientX - down.x, event.clientY - down.y) > 7) down.moved = true; };
+  const onMove = event => { if (down?.id === event.pointerId && Math.hypot(event.clientX - down.x, event.clientY - down.y) > TAP_SLOP) down.moved = true; };
   const onUp = event => {
     const start = down; down = null;
-    if (!start || start.id !== event.pointerId || start.moved || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 7 || (!enabled || !isActive()) || performance.now() - start.time > 650) return;
+    if (!start || start.id !== event.pointerId || start.moved || Math.hypot(event.clientX - start.x, event.clientY - start.y) > TAP_SLOP || (!enabled || !isActive()) || performance.now() - start.time > 650) return;
     const entry = hitAt(event.clientX, event.clientY);
     if (entry) show(entry); else dismiss();
   };
