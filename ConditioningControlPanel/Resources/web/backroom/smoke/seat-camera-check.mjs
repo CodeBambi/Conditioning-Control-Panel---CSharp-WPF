@@ -98,6 +98,55 @@ async function click(x, y) {
 const clickSel = (sel) => ev(`(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b || b.disabled) return false; b.click(); return true; })()`);
 const report = { stations: {}, registry: LIVE.map((s) => s.id + (s.variant ? ':' + s.variant : '')) };
 
+/** Every roulette bet target through the room camera, as viewport rects, with what the DOM shows at its centre. */
+const RECTS = `(async () => { const T = await import('three'); const s = window.__backroom.scene, mat = s.scene.getObjectByName('roulette_runtime_mat'); if (!mat) return null;
+  const r = s.renderer.domElement.getBoundingClientRect(), out = {}, v = new T.Vector3();
+  mat.traverse((o) => { if (!o.userData.spot) return; const g = o.geometry.parameters; let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const x of [-g.width / 2, g.width / 2]) for (const y of [-g.height / 2, g.height / 2]) { o.localToWorld(v.set(x, y, 0)).project(s.camera); const px = r.left + (v.x + 1) * r.width / 2, py = r.top + (1 - v.y) * r.height / 2; x0 = Math.min(x0, px); y0 = Math.min(y0, py); x1 = Math.max(x1, px); y1 = Math.max(y1, py); }
+    out[o.userData.spot] = { x: x0, y: y0, w: x1 - x0, h: y1 - y0, cover: document.elementFromPoint((x0 + x1) / 2, (y0 + y1) / 2)?.tagName || null }; });
+  return out; })()`;
+const POCKETS = `(async () => { const T = await import('three'); const s = window.__backroom.scene, f = s.scene.getObjectByName('station_roulette'), r = s.renderer.domElement.getBoundingClientRect(), out = [];
+  for (let n = 0; n < 37; n++) { const v = new T.Box3().setFromObject(f.getObjectByName('pocket_' + n)).getCenter(new T.Vector3()).project(s.camera); out.push({ n, x: r.left + (v.x + 1) * r.width / 2, y: r.top + (1 - v.y) * r.height / 2 }); }
+  return out; })()`;
+/* The seated roulette: a phone frames the mat while bets are open (every target in view, none under the control bar,
+ * number cells wide enough for a fingertip), Spin eases out to the whole table and the landing brings the mat frame back.
+ * A desktop keeps its single whole-table pose through the spin. */
+async function rouletteSeat(width,height){
+ const phone=width<=800||height<=500, name='roulette '+width+'x'+height, floor=phone?(width>height?26:20):17;
+ ok(await until('!!document.querySelector(".roul-station[data-phase=bet]")',8000),name+': bets open on the room fixture');
+ const rects=await ev(RECTS), list=Object.entries(rects||{});
+ ok(list.length===42&&!await ev("!!document.querySelector('.roul-mat-strip')"),name+': 42 targets on the 3D mat and no DOM betting grid');
+ const inside=list.filter(([,r])=>r.x>=0&&r.y>=0&&r.x+r.w<=width&&r.y+r.h<=height).length, clear=list.filter(([,r])=>r.cover==='CANVAS').length;
+ ok(inside===42&&clear===42,name+': every target inside the viewport and under no control ('+inside+' inside, '+clear+' clear)');
+ const controls=await ev("(()=>{const b=document.querySelector('.roul-controls').getBoundingClientRect();return {x:b.x,y:b.y,w:b.width,h:b.height};})()");
+ const covered=list.filter(([,r])=>r.x<controls.x+controls.w&&r.x+r.w>controls.x&&r.y<controls.y+controls.h&&r.y+r.h>controls.y).map(([k])=>k);
+ ok(covered.length===0,name+': the control bar covers no target'+(covered.length?': '+covered.join(', '):''));
+ const numbers=list.filter(([k])=>/^s[1-9]/.test(k)), minW=Math.min(...numbers.map(([,r])=>r.w)), minH=Math.min(...numbers.map(([,r])=>r.h));
+ ok(minW>=floor&&minH>=floor*.85,name+': number cells at least '+floor+' px wide (min '+minW.toFixed(1)+' x '+minH.toFixed(1)+')');
+ report.stations[width+'-roulette-cells']={minW,minH,controls};
+ const s36=rects.s36; await click(Math.round(s36.x+s36.w/2),Math.round(s36.y+s36.h/2)); await sleep(150);
+ ok(await ev("window.__backroom.scene.scene.getObjectByName('roulette_live_chips')?.count===1"),name+': a tap on 36 lands a chip on the 3D mat');
+ await shot(width+'-roulette-bet.png');
+ const before=await ev('window.__backroom.scene.debug().position');
+ await clickSel('.roul-spin');
+ if(phone){
+  ok(await until('window.__backroom.scene.transitioning',1500),name+': Spin eases the camera out to the whole table');
+  ok(await until('!window.__backroom.scene.transitioning',3000),name+': the table frame arrives');
+  const pockets=await ev(POCKETS), run=Object.values(await ev(RECTS)||{});
+  ok(pockets.length===37&&pockets.every(p=>p.x>=0&&p.x<=width&&p.y>=0&&p.y<=height),name+': all 37 pockets in view for the landing');
+  ok(run.length===42&&run.every(r=>r.x>=0&&r.y>=0&&r.x+r.w<=width&&r.y+r.h<=height),name+': the mat stays in view while the ball runs');
+  await sleep(500); await shot(width+'-roulette-run.png');
+ } else { await sleep(400); ok(!await ev('window.__backroom.scene.transitioning'),name+': a desktop keeps its pose through the spin'); }
+ ok(await until("(document.querySelector('.roul-history')||{}).childElementCount>=1",14000),name+': the ball lands');
+ await sleep(400); await shot(width+'-roulette-landing.png');
+ if(phone){
+  ok(await until('window.__backroom.scene.transitioning',9000),name+': the camera returns to the mat once bets reopen');
+  await until('!window.__backroom.scene.transitioning',3000); await sleep(100);
+  const after=await ev('window.__backroom.scene.debug().position');
+  ok(after.every((v,i)=>Math.abs(v-before[i])<.01),name+': the bet frame is the pose it left');
+ } else ok(await until('!!document.querySelector(".roul-station[data-phase=bet]")',9000),name+': bets reopen without a camera move');
+}
+
 
 // An intentionally slow import must leave the last walking frame visible, never a blank layer.
 await cdp('Emulation.setDeviceMetricsOverride',{width:400,height:730,deviceScaleFactor:1,mobile:true});
@@ -128,6 +177,7 @@ for(const [width,height] of (process.argv.includes('--phone')?[[400,730]]:proces
   if(id==='cards'){await clickSel('.cards-deal');await sleep(3800);}
   await shot(width+'-'+id+'-seated.png');
   report.stations[width+'-'+id]=await ev('window.__backroom.scene.debug()');
+  if(id==='roulette')await rouletteSeat(width,height);
   await ev('window.__backroom.back();true');
   ok(await until('window.__backroom.scene.transitioning',1500),'return pan begins '+id);
   ok(await until('!window.__backroom.scene.transitioning',6000),'return pan finishes '+id);
