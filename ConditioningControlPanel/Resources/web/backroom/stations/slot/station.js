@@ -545,10 +545,10 @@ export async function mount(ctx) {
     // Law VI, Brake 7: one press settles a rollup that is still counting, straight to the tape's value, with
     // the mini-thud and the +N it would have ended on. The rest of the climb and the frame's pulse go quiet.
     if (bank && bank.kind === 'pay') { bank.skip({ land: true }); sound.hush(); scene.paylineOut(); note('skip', { rollup: true }); }
-    if (busy) { if (pace === 'reveal') { queued = true; scene.answer(); note('answer', { queued: true }); } return; }
+    if (busy) { if (pace === 'reveal') { queued = true; scene.answer(); sound.lever(); note('answer', { queued: true }); } return; }
     const my = session, before = tape.snapshot();
     // Law VIII: the lever leans and EMI glances on this frame, before the tape or the server answers.
-    scene.answer(); clearTimeout(glanceTimer); setFace(glance(pose, pressPose()));
+    scene.answer(); sound.lever(); clearTimeout(glanceTimer); setFace(glance(pose, pressPose()));
     note('answer', { pose });
     busy = true; queued = false; card(null); mark('breath'); sync();
     // THE BREATH (PACE): the next spin starts no sooner than BREATH_MS after the last reveal; the buy runs meanwhile.
@@ -621,6 +621,7 @@ export async function mount(ctx) {
                     payline: $('.slot-payline'), jar: $('.slot-jar'),
                     canPull: () => (!busy || pace === 'reveal') && !suspended,
                     onLever: () => press(), onFreeze: col => toggleFreeze(col),
+                    onReelSpeed: (i, speed) => sound.roll(i, speed),
                     onReelStop: i => { const p = playing; sound.thud(i, !!p && i === p.lastReel && !(p.o.pay > 0));
                       // A5: EMI landed on this reel, so the cell wiggles after this thud and she glances. The next
                       // reel's thud is untouched (Law X); reduced motion takes the settled state, so no wiggle.

@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Back Room sound - lever and reel audition</title>
+<!-- Dev page only, never shipped behaviour and never localised. It plays the kit's cues on their own so the
+     lever and the drum can be picked by ear:
+       node ConditioningControlPanel/Resources/web/backroom/shared/sound/serve.mjs
+     then open http://127.0.0.1:8940/backroom/shared/sound/audition.html
+     "Use this pair in the game" writes localStorage br.sfx.variant, which stations/slot/sound.js reads (same
+     origin only); dev.html also takes ?lever=A&reel=D. -->
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 22px 20px 40px; background: #160e20; color: #fce5f3;
+         font: 13px/1.5 Segoe UI, Arial, sans-serif; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  h2 { font-size: 13px; margin: 22px 0 8px; color: #edb1d1; text-transform: uppercase; letter-spacing: .08em; }
+  p { margin: 0 0 10px; color: #d7bcd0; max-width: 62ch; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+  button { font: inherit; color: #fce5f3; background: #2a1733; border: 1px solid #77436a; border-radius: 9px;
+           padding: 8px 12px; cursor: pointer; text-align: left; min-width: 168px; }
+  button:hover { background: #3a2045; border-color: #edb1d1; }
+  button:active { transform: translateY(1px); }
+  button.on { border-color: #ff83c9; box-shadow: 0 0 0 1px #ff83c9 inset; }
+  button b { display: block; font-size: 13px; }
+  button small { color: #c79ec0; }
+  .wide { min-width: 0; }
+  label { display: inline-flex; align-items: center; gap: 6px; color: #d7bcd0; }
+  input[type=range] { width: 150px; accent-color: #ff83c9; }
+  pre { margin: 10px 0 0; padding: 8px 10px; background: #1d1228; border: 1px solid #3b2647; border-radius: 8px;
+        color: #c79ec0; overflow-x: auto; }
+</style>
+</head>
+<body>
+<h1>Back Room sound: the lever and the drum</h1>
+<p>Everything here is the room's own kit, synthesised, no samples. Turn the ambient bed on first: the ticks are
+levelled to sit clearly above it (bed -24 dB, a tick peaks at 0.09) without getting harsh.</p>
+
+<div class="row">
+  <button id="bed" class="wide" type="button">ambient bed: off</button>
+  <button id="hush" class="wide" type="button">stop everything</button>
+  <label>master <input id="master" type="range" min="0" max="1" step="0.05" value="0.8"></label>
+  <label>Calm trim <input id="trim" type="range" min="0.2" max="1" step="0.05" value="1"></label>
+</div>
+
+<h2>The lever pull (about 500-700 ms, one whole gesture)</h2>
+<div class="row" id="levers"></div>
+
+<h2>The reel roll (a 3-reel spin, the third stretched for the anticipation)</h2>
+<div class="row" id="reels"></div>
+
+<h2>The whole thing</h2>
+<p>The pair below is what the full pull plays, and what the cabinet plays once it is saved.</p>
+<div class="row">
+  <button id="pull" type="button"><b>Full pull</b><small>lever, three drums, the settle</small></button>
+  <button id="pullTease" type="button"><b>Full pull, anticipation</b><small>the third drum holds 1,400 ms</small></button>
+  <button id="save" type="button"><b>Use this pair in the game</b><small>writes br.sfx.variant</small></button>
+</div>
+<pre id="out">pick a lever and a drum</pre>
+
+<script type="module">
+import { kit, LEVER_VARIANTS, REEL_VARIANTS, DEFAULT_SFX } from './kit.js';
+import { PACE, ANTICIPATION, reelStopMs } from '../../stations/slot/pace.js';
+
+const LEVERS = {
+  A: ['Iron', 'ratchet ticks, a heavy clank, a spring click'],
+  B: ['Candy', 'a velvet whoosh, a muted pop, two little chimes'],
+  C: ['Toy', 'plastic click-clack and a cartoon boing'],
+  D: ['Vintage', 'a long creak, a wooden thunk, a krrr into the reels'],
+};
+const REELS = {
+  A: ['Ticker', 'per-symbol ticks, a thud and a damped bell'],
+  B: ['Purr', 'a band-passed whir, a soft thump'],
+  C: ['Rattle and bell', 'ticks over a hum, a ding climbing per reel'],
+  D: ['Hybrid casino', 'ticks and purr, a digital chime per reel'],
+};
+const pick = { ...DEFAULT_SFX };
+const $ = id => document.getElementById(id);
+const say = t => { $('out').textContent = t; };
+
+/* The same curve as stations/slot/scene.js (reelTravel / reelSpeed), copied for this dev page: 1 at full blur,
+ * 0 into the stop. The stretched third reel gets a longer slow-down, so its ticks stretch with it. */
+const clamp = (v, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v));
+function reelTravel(dt, dur, up, down) {
+  const v = 1 / (dur - up / 2 - (2 * down) / 3);
+  if (dt <= up) return v * dt * dt / (2 * up);
+  return dt <= dur - down ? v * (dt - up / 2) : v * (dur - down - up / 2) + (v * down / 3) * (1 - (1 - clamp((dt - dur + down) / down)) ** 3);
+}
+function reelSpeed(dt, dur, up, down) {
+  const step = 16, cruise = step / (dur - up / 2 - (2 * down) / 3);
+  if (!(cruise > 0)) return 0;
+  return clamp((reelTravel(Math.min(dt + step, dur), dur, up, down) - reelTravel(Math.max(0, Math.min(dt, dur)), dur, up, down)) / cruise);
+}
+
+function paint() {
+  for (const b of document.querySelectorAll('[data-lever]')) b.classList.toggle('on', b.dataset.lever === pick.lever);
+  for (const b of document.querySelectorAll('[data-reel]')) b.classList.toggle('on', b.dataset.reel === pick.reel);
+}
+function button(kind, key, [name, blurb]) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.dataset[kind] = key;
+  b.innerHTML = '<b>' + key + ' ' + name + '</b><small>' + blurb + '</small>';
+  return b;
+}
+
+/** A whole spin on one drum voice: three reels, staggered, the third stretched when `hold` is set. */
+function spin(variant, hold = 0, done = null) {
+  kit.arm();
+  const start = performance.now();
+  const durs = [0, 1, 2].map(i => reelStopMs(i, PACE, hold));
+  const downs = durs.map((dur, i) => (i === 2 && hold ? Math.min(PACE.DECEL_MS + hold, dur * 0.5) : Math.min(PACE.DECEL_MS, dur * 0.5)));
+  const stopped = [false, false, false];
+  for (let i = 0; i < 3; i++) kit.play('reel', { reel: i, variant, speed: 0 });
+  requestAnimationFrame(function frame(t) {
+    const dt = t - start;
+    for (let i = 0; i < 3; i++) {
+      if (stopped[i]) continue;
+      if (dt >= durs[i]) { stopped[i] = true; kit.stop('reel', { reel: i }); kit.play('reelStop', { reel: i, variant }); continue; }
+      kit.setRollSpeed(i, reelSpeed(dt, durs[i], 180, downs[i]));
+    }
+    if (stopped.every(Boolean)) { if (done) setTimeout(done, PACE.THUD_MS); return; }
+    requestAnimationFrame(frame);
+  });
+}
+
+for (const key of LEVER_VARIANTS) {
+  const b = button('lever', key, LEVERS[key]);
+  b.addEventListener('click', () => { pick.lever = key; paint(); kit.arm(); kit.play('lever', { variant: key }); say('lever ' + key + ': ' + LEVERS[key][0]); });
+  $('levers').append(b);
+}
+for (const key of REEL_VARIANTS) {
+  const b = button('reel', key, REELS[key]);
+  b.addEventListener('click', () => { pick.reel = key; paint(); say('reel ' + key + ': ' + REELS[key][0] + ', three drums turning'); spin(key, 0); });
+  $('reels').append(b);
+}
+
+function fullPull(hold) {
+  kit.arm();
+  kit.play('lever', { variant: pick.lever });
+  say('lever ' + pick.lever + ' + reel ' + pick.reel + (hold ? ', with the anticipation hold' : ''));
+  // The drums pick up as the lever bottoms out, the way the cabinet does.
+  setTimeout(() => spin(pick.reel, hold, () => kit.play('settle')), 300);
+}
+$('pull').addEventListener('click', () => fullPull(0));
+$('pullTease').addEventListener('click', () => fullPull(ANTICIPATION.emi));
+$('save').addEventListener('click', () => {
+  try { localStorage.setItem('br.sfx.variant', JSON.stringify(pick)); say('saved br.sfx.variant = ' + JSON.stringify(pick) + ' (this origin only; dev.html also takes ?lever=' + pick.lever + '&reel=' + pick.reel + ')'); }
+  catch (e) { say('could not save: ' + e.message); }
+});
+let bedOn = false;
+$('bed').addEventListener('click', () => {
+  kit.arm();
+  bedOn = !bedOn;
+  if (bedOn) kit.play('ambience'); else kit.stop('ambience');
+  $('bed').textContent = 'ambient bed: ' + (bedOn ? 'on' : 'off');
+  $('bed').classList.toggle('on', bedOn);
+});
+$('hush').addEventListener('click', () => { kit.stopAll(); bedOn = false; $('bed').textContent = 'ambient bed: off'; $('bed').classList.remove('on'); say('quiet'); });
+$('master').addEventListener('input', e => { kit.arm(); kit.setMaster(Number(e.target.value)); });
+$('trim').addEventListener('input', e => { kit.arm(); kit.setTrim(Number(e.target.value)); });
+paint();
+window.kit = kit;   // console: kit.debug(), kit.play('lever', { variant: 'D' })
+</script>
+</body>
+</html>

@@ -50,6 +50,13 @@ function reelTravel(dt, dur, up = 180, down = Math.min(PACE.DECEL_MS, dur * 0.5)
   if (dt <= up) return v * dt * dt / (2 * up);
   return dt <= dur - down ? v * (dt - up / 2) : v * (dur - down - up / 2) + (v * down / 3) * (1 - (1 - clamp((dt - dur + down) / down)) ** 3);
 }
+/** The drum's speed at `dt`: the travel curve's own slope over its cruise slope, 1 at full blur and 0
+ *  stopped. A1's stretched third reel comes out of this on its own, because the stretch is in the curve. */
+function reelSpeed(dt, dur, up = 180, down = Math.min(PACE.DECEL_MS, dur * 0.5)) {
+  const step = 16, cruise = step / (dur - up / 2 - (2 * down) / 3);
+  if (!(cruise > 0)) return 0;
+  return clamp((reelTravel(Math.min(dt + step, dur), dur, up, down) - reelTravel(Math.max(0, Math.min(dt, dur)), dur, up, down)) / cruise);
+}
 const reveal = x => bezier(FEEL.REVEAL_EASE, x), thud = x => bezier(FEEL.THUD_EASE, x);
 const asset = p => new URL(p, import.meta.url).href;
 
@@ -75,7 +82,8 @@ function paintDisplay(ctx, w, h, marquee, text) {
 
 /**
  * @param {{canvas:HTMLCanvasElement, reduced:boolean, stillFx?:()=>boolean, hint?:HTMLElement, palette?:object,
- *          canPull:()=>boolean, onLever:()=>void, onFreeze:(i:number)=>void, onReelStop?:(i:number)=>void}} o
+ *          canPull:()=>boolean, onLever:()=>void, onFreeze:(i:number)=>void, onReelStop?:(i:number)=>void,
+ *          onReelSpeed?:(i:number, speed:number)=>void}} o
  * @returns {Promise<{missing:string[], dispose:()=>void} | object>}
  */
 export async function createScene(o) {
@@ -468,8 +476,11 @@ export async function createScene(o) {
         // Law VI: reduced motion takes the STATE. The reel rests, then is simply on its stop at its thud frame.
         // A1's hold stretches reel 3's slow-down across the whole hold, so it crawls into its stop instead of
         // blurring longer and stopping as sharply as ever (the stop itself is the tape's; only the curve moves).
-        const down = i === 2 && s.teaseMs > 0 ? Math.min(PACE.DECEL_MS + s.teaseMs, dur * 0.5) : undefined;
+        const down = i === 2 && s.teaseMs > 0 ? Math.min(PACE.DECEL_MS + s.teaseMs, dur * 0.5) : Math.min(PACE.DECEL_MS, dur * 0.5);
         let x = reduced ? s.from[i] : THREE.MathUtils.lerp(s.from[i], target, reelTravel(dt, dur, 180, down));
+        // THE ROLL follows the drum off the curve itself, so reduced motion keeps it: sound is where the beat
+        // lives when the travel is gone (Law VI), and it is the same slope whether the drum is drawn or not.
+        if (o.onReelSpeed && dt < dur) o.onReelSpeed(i, reelSpeed(dt, dur, 180, down));
         if (dt >= dur) {
           if (!s.stopped[i]) { s.stopped[i] = true; stopAt[i] = t; if (o.onReelStop) o.onReelStop(i); }   // THE THUD: cue on this frame
           const k = clamp((dt - dur) / THUD_MS);
