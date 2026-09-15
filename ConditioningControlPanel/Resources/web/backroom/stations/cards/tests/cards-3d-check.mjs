@@ -99,7 +99,9 @@ ok(await until("document.querySelector('.cards-station')?.dataset.phase==='play'
 ok((await ev('document.querySelectorAll("canvas").length')) === 1, 'only room canvas attached');
 ok((await ev('window.__backroom.scene.debug().pitch')) === pose.pitch, 'sit fan preserves seated pitch');
 const rows = [];
-for (let run = 0; run < 3; run++) {
+for (let run = 0; run < 5; run++) {
+  if (run === 3) await ev("window.__server.script('Tc','Ac','9d','Ad','Ah','As','Ac','Ad','Ah')");
+  if (run === 4) await ev("window.__server.script('Tc','Ac','9d','Ad','Ah','As','Ac','Ad','6c','Ah','As','Ac','Ad','Ah')");
   if (run === 1) await ev("window.__server.script('5s','9d','6h','7c','3d','2s')");
   if (run === 2) await ev("window.__server.script('8s','9d','8h','7c','3s','2c','Th','2d')");
   ok(await until("!document.querySelector('.cards-deal').disabled"), 'deal unlocks');
@@ -134,6 +136,7 @@ for (let run = 0; run < 3; run++) {
     })()`);
     ok(locked.hits>0 && locked.before===locked.after, 'raycast shoe press during fullscreen moment sends no Deal');
   }
+  if (run >= 3) ok(await until("window.__backroom.scene.scene.getObjectByName('cards_runtime').userData.debug().cards.filter(c=>c.owner==='d').length===" + (run === 3 ? 7 : 12), 15000), 'long dealer hand uses every authored slot');
   await sleep(3000); rows.push(await ev('window.__backroom.scene.debug()'));
   const exact = await ev(`(async()=>{
     const h=(await window.__server.handle('state',{})).body.hand;
@@ -166,6 +169,19 @@ ok(await until("!document.querySelector('.cards-station')", 1000), 'Back closes 
 const closeMs = performance.now() - closeAt;
 ok((await ev("window.__backroom.scene.scene.getObjectByName('cards_runtime')===undefined")), 'runtime mesh disposed on close');
 ok((await ev('document.querySelectorAll("canvas").length')) === 1, 'close leaves one room canvas');
+const malformed = await ev(`(async()=>{
+  const T=await import('three'), {createTable3D}=await import('/backroom/stations/cards/table-3d.js');
+  const {REQUIRED}=await import('/backroom/room/nodes-cards.js');
+  const fixture=new T.Group(), scene=new T.Scene();
+  for(const name of REQUIRED){const n=new T.Object3D();n.name=name;n.userData={card_width:.135,card_height:.194};fixture.add(n);}
+  const table=createTable3D({fixture,scene,canvas:document.createElement('canvas'),pick:()=>[],register:v=>()=>v.dispose()});
+  const before=scene.getObjectByName('cards_runtime').children.length;
+  const rejected=table.addCard({owner:'d',slot:12,code:'Ac'},0)===false;
+  table.draw({now:1000,still:true,k:0});
+  const clean=table.debug().cards.length===0&&scene.getObjectByName('cards_runtime').children.length===before;
+  table.dispose();return rejected&&clean&&scene.children.length===0;
+})()`);
+ok(malformed,'out-of-range dealer card allocates nothing and frame/disposal remain live');
 ok(!errs.length, 'no page exceptions: ' + errs.join('\n'));
 await writeFile(join(OUT, phone ? 'phone-perf.json' : 'desktop-perf.json'), JSON.stringify({ device: phone ? '400x800 headless Android emulation, not physical phone' : '1280x720 headless', openMs, closeMs, runs: rows, errors: errs, fails }, null, 2));
 await done(fails ? 1 : 0);
