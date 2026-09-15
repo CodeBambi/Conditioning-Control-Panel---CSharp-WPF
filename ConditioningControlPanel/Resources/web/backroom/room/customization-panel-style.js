@@ -1,19 +1,35 @@
 export const catalogueStyle=`
-body:has(.br-custom-panel:not([hidden])) :is(.br-hint,.br-crosshair,.br-sp){visibility:hidden}
-/* The nav pills and the floor bell are NOT hidden with the rest of the walking chrome: the Options
-   pill has to stay reachable and the bell's aria-live has to keep announcing. The panel only pushes
-   them left of its own edge. */
-body:has(.br-custom-panel:not([hidden])) :is(.br-nav,.br-bell){right:calc(33.333333vw + 14px)}
-body:has(.br-custom-panel:not([hidden])) .br-bell{max-width:min(380px,calc(66.666667vw - 44px))}
-/* No background of its own: the stage is a hole through the panel, and the room renderer draws the
-   vending close-up straight into it (vending-view.js). Every other strip paints its own ground. */
-.br-custom-panel{position:fixed;right:0;top:0;bottom:0;width:33.333333vw;z-index:30;display:flex;flex-direction:column;box-sizing:border-box;background:transparent;color:#f7e5ef;border-left:1px solid #b58a63;font:13px/1.35 system-ui,sans-serif;pointer-events:auto}
-.br-custom-panel[hidden],.br-custom-panel [hidden]{display:none!important}.br-custom-panel button{font:inherit;color:inherit;background:#30203c;border:1px solid #75536d;border-radius:8px;padding:8px;cursor:pointer}.br-custom-panel button:hover{background:#523257}.br-custom-panel button:focus-visible{outline:2px solid #78f4dc;outline-offset:2px}.br-custom-panel button[aria-pressed=true]{background:#713a60;border-color:#edc077;color:#fff0cf}
-.br-custom-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px;background:#24122f}.br-custom-header h2{font:24px Georgia,serif;color:#f3d5a0;margin:0}.br-custom-stage{position:relative;flex:1;min-height:120px;overflow:hidden;touch-action:none}.br-custom-overview{position:absolute;left:10px;top:10px;z-index:1;background:#21142ed9!important}.br-custom-items{display:grid;grid-template-columns:repeat(5,1fr);gap:3px;padding:7px;background:#100b20}.br-custom-items button{padding:7px 0;font-size:11px}.br-custom-hud{padding:10px 12px;background:linear-gradient(#291735,#160d24);max-height:40vh;overflow:auto}.br-custom-hud h3{font:21px Georgia,serif;color:#f2d19c;margin:0 0 10px}.br-custom-actions{display:flex;gap:5px;margin-top:7px}.br-custom-actions button{flex:1;min-width:0;font-size:12px}.br-custom-footer{padding:9px 12px;background:#100b20;border-top:1px solid #80604755;display:flex;align-items:center;justify-content:space-between;gap:8px}.br-custom-footer button{font-size:11px;background:transparent}.br-custom-note{font-size:10px;color:#baa9c4}.br-custom-prompt{margin:0;color:#d8c3e1}.br-custom-palettes button:nth-child(1){border-bottom:3px solid #ef26aa}.br-custom-palettes button:nth-child(2){border-bottom:3px solid #13bea5}.br-custom-palettes button:nth-child(3){border-bottom:3px solid #f47939}
-/* PHONE (the room is played at about 400 px wide through cclabs-web too). A third of the width is
-   unusable there, so under the panel's own 700 px breakpoint it becomes a full-width sheet on the
-   bottom of the screen instead of a column down the right. The nav pills and the bell go back to
-   their walking places at the top: there is no panel edge to sit left of any more, and the stage
-   still reports its own rect, so the vending close-up follows the new shape by itself. */
-@media(max-width:700px){body:has(.br-custom-panel:not([hidden])) :is(.br-nav,.br-bell){right:12px}body:has(.br-custom-panel:not([hidden])) .br-bell{max-width:calc(100vw - 24px)}.br-custom-panel{left:0;width:auto;top:auto;height:76vh;border-left:0;border-top:1px solid #b58a63}.br-custom-hud{max-height:30vh}.br-custom-header{padding:8px 5px;flex-wrap:wrap}.br-custom-header h2{font-size:16px}.br-custom-header button{font-size:10px;padding:5px}.br-custom-items{grid-template-columns:repeat(5,1fr);padding:4px}.br-custom-items button{padding:4px 0}.br-custom-hud{padding:7px 5px}.br-custom-hud h3{font-size:15px}.br-custom-actions{flex-wrap:wrap;gap:3px}.br-custom-actions button{font-size:10px;padding:6px 3px;flex-basis:35%}.br-custom-footer{padding:6px 4px;flex-direction:column}.br-custom-overview{left:4px;top:4px;font-size:10px!important;padding:5px!important}.br-custom-note{font-size:9px;text-align:center}}
+body:has(.br-custom-panel:not([hidden])) :is(.br-hint,.br-crosshair,.br-sp,.br-bell){visibility:hidden}
+body:has(.br-custom-panel:not([hidden])) .br-nav{right:calc(50vw + 12px)}
+.br-custom-panel{position:fixed;right:0;top:0;bottom:0;width:50vw;z-index:30;display:flex;flex-direction:column;box-sizing:border-box;color:#f7e5ef;font:13px/1.35 system-ui,sans-serif;pointer-events:auto}
+.br-custom-panel:before{content:"";position:absolute;left:-5px;top:0;bottom:0;width:7px;z-index:5;background:#f3d5a0;border:2px solid #160b21;transform:rotate(1deg);pointer-events:none}
+.br-custom-panel[hidden],.br-custom-panel [hidden]{display:none!important}
+.br-custom-panel button,.br-custom-panel summary{font:inherit;color:inherit;cursor:pointer}
+.br-custom-panel button{background:#30203c;border:1px solid #75536d;border-radius:8px;padding:8px}
+.br-custom-panel button:hover{background:#523257}.br-custom-panel :is(button,summary):focus-visible{outline:2px solid #78f4dc;outline-offset:2px}
+.br-custom-panel button[aria-pressed=true]{background:#713a60;border-color:#edc077;color:#fff0cf}
+.br-custom-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;background:#24122f}
+.br-custom-header h2{font:22px Georgia,serif;color:#f3d5a0;margin:0}
+.br-custom-stage{position:relative;flex:1;min-height:100px;overflow:hidden;touch-action:none}
+.br-custom-overview{position:absolute;right:8px;top:8px;z-index:3;background:#21142ed9!important;font-size:11px!important}
+.br-custom-items{order:0;display:flex;gap:5px;padding:5px 12px;background:#160d24}.br-custom-items button{flex:1;padding:6px}
+.br-custom-stage{order:1}.br-custom-hud{order:2;padding:8px 12px;background:linear-gradient(#291735,#160d24);position:relative}
+.br-custom-hud h3{font:19px Georgia,serif;color:#f2d19c;margin:0 0 5px}
+.br-custom-actions{display:flex;gap:5px;margin-top:6px}.br-custom-actions button{flex:1;min-width:0;font-size:12px}
+.br-custom-more{font-size:12px}.br-custom-more summary{padding:5px 0;color:#d6c0df}
+.br-custom-more[open]{position:absolute;bottom:100%;left:10px;right:10px;z-index:6;padding:10px;background:#24122ff5;border:1px solid #bd936c;border-radius:12px;box-shadow:0 -8px 25px #0008}
+.br-custom-footer{order:3;padding:4px 12px;background:#160d24;text-align:right}.br-custom-footer button{padding:3px;border:0;background:transparent;font-size:11px;color:#b8a4bf}
+.br-custom-note{font-size:12px;color:#e1c8dc;margin:4px 0}.br-custom-prompt{margin:0;color:#d8c3e1}
+.br-custom-palettes button:nth-child(1){border-bottom:3px solid #ef26aa}.br-custom-palettes button:nth-child(2){border-bottom:3px solid #13bea5}.br-custom-palettes button:nth-child(3){border-bottom:3px solid #f47939}
+.br-custom-panel .br-vending-pick{position:absolute;z-index:2;padding:0;border:2px solid transparent;background:transparent;border-radius:6px}
+.br-custom-panel .br-vending-pick:hover{background:transparent;border-color:transparent}
+.br-custom-panel .br-vending-pick[aria-pressed=true]{background:#78f4dc12;border-color:#78f4dc;box-shadow:0 0 9px #78f4dc88}
+@media(max-width:700px) and (orientation:portrait){
+ body:has(.br-custom-panel:not([hidden])) .br-nav{right:12px}
+ .br-custom-panel{left:0;width:auto;top:auto;height:56vh}
+ .br-custom-panel:before{left:-2%;right:-2%;top:-5px;bottom:auto;width:auto;height:7px;transform:rotate(-1.5deg)}
+ .br-custom-header{padding:7px 12px}.br-custom-header h2{font-size:18px}.br-custom-header button{padding:5px 9px}
+ .br-custom-hud{padding:6px 12px}.br-custom-hud h3{font-size:17px}
+}
+@media(max-height:500px){.br-custom-header{padding:4px 8px}.br-custom-header h2{font-size:17px}.br-custom-header button{padding:4px 8px}.br-custom-items{padding:3px 8px}.br-custom-items button{padding:4px}.br-custom-hud{padding:5px 8px}.br-custom-hud h3{font-size:16px}.br-custom-actions{margin-top:4px}.br-custom-actions button{padding:5px}.br-custom-footer{padding:2px 8px}}
 `;

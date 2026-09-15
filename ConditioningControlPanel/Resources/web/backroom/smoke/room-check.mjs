@@ -719,26 +719,29 @@ await shot('wall-picture-from-feed.png');
   await sleep(400);
   ok(await ev(`!document.querySelector('.br-custom-panel').hidden`), 'Room Service opens its panel');
   ok(await canvases() === 1, 'and adds no canvas of its own: the close-up draws on the room renderer');
-  // The Options pill and the floor bell are shifted out from under the panel, never hidden by it.
+  // Navigation stays reachable; the ticker stays quiet during customization.
   ok(await ev(`getComputedStyle(document.querySelector('.br-nav')).visibility === 'visible'
-    && getComputedStyle(document.querySelector('.br-bell')).visibility === 'visible'`), 'the nav pills and the bell stay visible');
+    && getComputedStyle(document.querySelector('.br-bell')).visibility === 'hidden'`), 'navigation stays visible and the ticker is hidden');
   ok(await ev(`(() => { const p = document.querySelector('.br-nav .br-pill:nth-child(3)').getBoundingClientRect();
     const hit = document.elementFromPoint(p.left + p.width / 2, p.top + p.height / 2);
     return !!hit && hit.closest('.br-nav') !== null && !document.querySelector('.br-custom-panel').contains(hit); })()`),
     'and the Options pill is still the thing under its own pixels');
   const seen = [];
-  const itemCount = await ev(`document.querySelectorAll('.br-custom-items button').length`);
-  ok(itemCount === 15, `the catalogue lists fifteen items: nine bays and the six decoration props (${itemCount})`);
+  const itemCount = 15;
+  ok(await ev(`document.querySelectorAll('.br-custom-items button').length===2`), 'two cabinet displays replace numbered buttons');
   for (let i = 0; i < itemCount; i++) {
-    await ev(`document.querySelectorAll('.br-custom-items button')[${i}].click()`);
+    if(i===0||i===9)await ev(`document.querySelectorAll('.br-custom-items button')[${i===0?0:1}].click()`);
+    await sleep(200);
+    const pick=await ev(`window.__backroom.scene.customization.debug().view.picks[${i%9}]`);
+    for(const type of ['mousePressed','mouseReleased'])await cdp('Input.dispatchMouseEvent',{type,x:pick.x,y:pick.y,button:'left',clickCount:1});
     await sleep(120);
-    await ev(`(document.querySelector('.br-custom-actions button') || {}).click?.()`);
+    await ev(`(document.querySelector('.br-custom-hud > .br-custom-actions button') || {}).click?.()`);
     await sleep(220);
     const d = await dbg();
     seen.push({ i, focus: d.customization.view.selected, calls: d.calls, triangles: d.triangles, chosen: JSON.stringify(d.customization.selected) });
   }
-  ok(seen.every((s) => s.focus === (s.i < 9 ? s.i : -1)),
-    'each of the nine bay items pulls the close-up onto its own bay, and a decoration prop pulls it back to the whole cabinet');
+  ok(seen.every((s) => s.focus === s.i),
+    'every actual cabinet item selects its own preview');
   ok(seen.every((s) => s.calls > 0 && s.triangles > 0), `the room still submits work under every toggle (${seen.map((s) => s.calls).join(', ')} calls)`);
   ok(new Set(seen.map((s) => s.chosen)).size >= 4, 'and the toggles change the room state, not just the panel');
   ok(seen.slice(9).every((s) => JSON.parse(s.chosen).props.length === 6), 'the six decoration props each report their own switch');
@@ -770,7 +773,7 @@ await shot('wall-picture-from-feed.png');
   ok(box.left >= 0 && box.right <= 400.5 && box.width > 320,
     `the panel is a full-width sheet, not a third of one (${Math.round(box.width)} px of 400)`);
   ok(box.top > 66, `and it starts below the nav pills and the bell (panel top ${Math.round(box.top)} px)`);
-  ok(await ev(`!document.querySelector('.br-bell').hidden`), 'the floor bell still shows its line');
+  ok(await ev(`getComputedStyle(document.querySelector('.br-bell')).visibility==='hidden'`), 'the ticker stays hidden in customization');
   const chrome = await ev(`(() => { const r = (s) => { const b = document.querySelector(s).getBoundingClientRect();
     return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, width: b.width }; };
     return { 'the Options pill row': r('.br-nav'), 'the floor bell': r('.br-bell') }; })()`);
@@ -788,7 +791,8 @@ await shot('wall-picture-from-feed.png');
   const grid = await ev(`(() => { const g = document.querySelector('.br-custom-items');
     return { scroll: g.scrollHeight, client: g.clientHeight, buttons: g.children.length }; })()`);
   ok(grid.scroll <= grid.client, `all ${grid.buttons} item buttons fit the sheet's grid without scrolling it (${grid.scroll} of ${grid.client} px)`);
-  await ev(`document.querySelectorAll('.br-custom-items button')[4].click()`);
+  const pick=await ev(`window.__backroom.scene.customization.debug().view.picks[4]`);
+  for(const type of ['mousePressed','mouseReleased'])await cdp('Input.dispatchMouseEvent',{type,x:pick.x,y:pick.y,button:'left',clickCount:1});
   await sleep(320);
   const phone = await dbg();
   ok(phone.customization.view.selected === 4 && phone.calls > 0,
