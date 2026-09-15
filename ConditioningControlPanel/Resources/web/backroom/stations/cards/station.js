@@ -18,7 +18,8 @@
 import { createLoomKit, createDeck, createMoments, strengthK, viewportRect, DECK_VALUES } from '../../shared/hypno/index.js';
 import { readState, readHand, legalOf, controls, classify, createIntent, mayRetry, moveBody, owedFor, shownSp, defaultStake,
   readHintPref, writeHintPref, isOpen, totalOf, MOVES } from './hand.js';
-import { planSteps, momentOf, aceSlot, bestCard, vortexOf, resultLines, screenHoldMs, TIMING } from './feel.js';
+import { planSteps, settleMoment, streakAfter, mayFire, wordKeys, aceSlot, bestCard, vortexOf, resultLines, screenHoldMs, TIMING } from './feel.js';
+import { MOMENTS } from '../../shared/hypno/moments.js';
 import { createTable } from './table.js';
 
 export const roomStage = true;
@@ -52,6 +53,7 @@ export async function mount(ctx) {
   let st = null, shownHand = null, queue = [], busy = false, decide = false, phase = 'loading', note = '', lines = [];
   let stake = 1, stakePicked = false, hint = readHintPref(storage), dealReadyAt = 0, screenUntil = 0, sitting = 0, firstSit = true;
   let lastStill = null, unSp = null, feelLog = [], statusText = '', seat = 0, seating = false, dropped = 0;
+  let streak = 0, beatAt = {}, wordCursor = 0;   // the table beats: wins in a row, each beat's last frame (cooldowns), the whisper rotation
   const $ = (sel) => el.querySelector(sel);
   const log = (what, extra = {}) => { feelLog = [...feelLog.slice(-99), { what, at: Math.round(performance.now()), ...extra }]; };
 
@@ -137,8 +139,8 @@ export async function mount(ctx) {
   }
 
   /* ------------------------------------------------------------ the felt */
-  function enqueue(next, { quiet = false } = {}) {
-    const steps = planSteps(shownHand, next, { still: dress().still });
+  function enqueue(next, { quiet = false, beats = false } = {}) {
+    const steps = planSteps(shownHand, next, { still: dress().still, beats: beats && !quiet });
     const base = performance.now(), fresh = !shownHand || shownHand.id !== next.id;
     const bets = { at: 0, op: 'bets', list: next.hands.map((h) => h.bet) };
     steps.splice(fresh ? 1 : 0, 0, bets);
@@ -168,20 +170,37 @@ export async function mount(ctx) {
         log('moment', { id: 'cards.bloom', tokens: out.tokens.length, page: out.page, held: out.held, from: r });
         break;
       }
+      case 'beat': {
+        // A table beat, on the frame its card shows (Law I: the card is the server's). Never quiet (a flush, a resume),
+        // never inside its cooldown; a bust is a beat with nothing in it (the whisper withheld). Light host steps only
+        // while a decision is open: moments.js keeps everything fullscreen out (holdScreen).
+        if (s.quiet || !mayFire(s.id, beatAt[s.id], now)) { log('beat-skipped', { id: s.id, why: s.quiet ? 'quiet' : 'cooldown' }); break; }
+        beatAt[s.id] = now;
+        const n = (MOMENTS[s.id] ? MOMENTS[s.id].host : []).reduce((m, st) => Math.max(m, st.words | 0), 0);
+        const words = n > 0 ? wordKeys(n, wordCursor) : undefined;
+        if (n > 0) wordCursor += n;
+        const out = moments.play(s.id, { words });
+        log('moment', { id: s.id, tokens: out.tokens.length, page: out.page, held: out.held, owner: s.owner, slot: s.slot, words });
+        break;
+      }
       case 'settle': {
         moments.holdScreen(false);
         decide = false;
         chip.owe(0);
         lines = resultLines(h);
+        streak = streakAfter(streak, h);
         if (s.quiet) { log('settled-quiet', { hand: h.id }); break; }
         chip.thud();
-        const id = momentOf(h), best = bestCard(h);
-        const out = moments.play(id, { gif: best && deck ? deck.keyFor(best) : undefined });
+        const id = settleMoment(h, streak), best = bestCard(h);
+        const n = (MOMENTS[id] ? MOMENTS[id].host : []).reduce((m, st) => Math.max(m, st.words | 0), 0);
+        const words = n > 0 ? wordKeys(n, wordCursor) : undefined;
+        if (n > 0) wordCursor += n;
+        const out = moments.play(id, { gif: best && deck ? deck.keyFor(best) : undefined, words });
         holdScreenFor(id, out, now);
         if (out.page.includes('win_tunnel')) table.tunnel(now);
         const v = vortexOf(h);
         if (out.page.includes('chip_vortex') && v) table.vortex(v.dir, v.n, now);
-        log('moment', { id, tokens: out.tokens.length, page: out.page, held: out.held, net: h.result.net, best });
+        log('moment', { id, tokens: out.tokens.length, page: out.page, held: out.held, net: h.result.net, best, streak });
         break;
       }
       default: break;
@@ -215,13 +234,14 @@ export async function mount(ctx) {
     }
   }
 
-  /** A reply's hand goes on the felt. `quiet`: no moments (a hand stood for the player while away). */
-  function adopt(body, { quiet = false } = {}) {
+  /** A reply's hand goes on the felt. `quiet`: no moments (a hand stood for the player while away). `beats`: the
+   *  reply answers the player's own press, so the table beats play; a hand put back (illegal, hand_open) has none. */
+  function adopt(body, { quiet = false, beats = false } = {}) {
     if (Number.isFinite(Number(body.sp))) chip.setServer(body.sp);
     const next = readHand(body.hand);
     st = { ...st, sp: chip.server, hand: next, legal: legalOf(body.legal), hint: MOVES.includes(body.hint) ? body.hint : null };
     chip.owe(body.ok ? owedFor(body) : 0);   // Law I: a settled return lands on its settle frame
-    if (next) enqueue(next, { quiet }); else { table.clear(); shownHand = null; }
+    if (next) enqueue(next, { quiet, beats }); else { table.clear(); shownHand = null; }
   }
 
   async function reply(c, my, op) {
@@ -230,7 +250,7 @@ export async function mount(ctx) {
     if (c.kind === 'ok') {
       if (op === 'deal') dealReadyAt = performance.now() + st.floorMs;
       if (c.body.autoStood) note = t('br_cards_auto_stood', 'Your last hand was stood for you after a day away.');
-      adopt(c.body);
+      adopt(c.body, { beats: !!op && !c.body.autoStood });
     } else if (c.kind === 'adopt') {
       if (c.reason === 'auto_stood') note = t('br_cards_auto_stood', 'Your last hand was stood for you after a day away.');
       if (c.reason === 'illegal') note = t('br_cards_illegal', 'That move is not open on this hand.');
@@ -406,6 +426,7 @@ export async function mount(ctx) {
     if (alive) return;
     alive = true; suspended = false; busy = false; decide = false; queue = []; shownHand = null; note = ''; lines = []; feelLog = [];
     sitting = 0; seating = false; firstSit = true; stakePicked = false; dealReadyAt = 0; screenUntil = 0; dropped = 0; phase = 'loading'; statusText = ''; lastStill = null;
+    streak = 0; beatAt = {}; wordCursor = 0;
     const my = ++session;
     el = build(); ctx.root.append(el);
     addEventListener('keydown', onKey);
@@ -468,7 +489,7 @@ export async function mount(ctx) {
     destroy() { close(); document.querySelectorAll('link[data-cards-css]').forEach((l) => l.remove()); },
     /** For dev.html and CDP checks only. */
     debug: () => ({
-      phase, alive, busy, decide, suspended, hostBack, stake, stakePicked, hint, sitting, seating, queue: queue.length, dress: dress(), dropped,
+      phase, alive, busy, decide, suspended, hostBack, stake, stakePicked, hint, sitting, seating, queue: queue.length, dress: dress(), dropped, streak,
       screenLeftMs: Math.max(0, Math.round(screenUntil - performance.now())), dealText: el ? $('.cards-deal small').textContent : null,
       state: st && { sp: st.sp, legal: st.legal, hint: st.hint, hand: st.hand }, shown: shownHand,
       chip: chip && { kind: chip.kind, value: chip.value, server: chip.server, owed: chip.owed },

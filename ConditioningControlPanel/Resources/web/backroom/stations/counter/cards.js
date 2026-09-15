@@ -26,6 +26,7 @@ export const LEX = {
   br_counter_short: 'Short by {0}',
   br_counter_link_discord: 'Link Discord first',
   br_counter_price: '{0} SP',
+  br_counter_try: 'Try it',
   br_counter_delivery_pending: 'The role is on its way to Discord.',
   br_counter_delivery_granted: 'The role is on your Discord account.',
   br_counter_delivery_not_in_guild: 'Join the Discord server and the role follows.',

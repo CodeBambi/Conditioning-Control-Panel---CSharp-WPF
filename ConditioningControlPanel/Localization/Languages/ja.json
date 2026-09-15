@@ -5337,6 +5337,7 @@
   "br_counter_delivery_not_in_guild": "Discordサーバーに参加すると、ロールも付いてきます。",
   "br_counter_delivery_failed": "ロールはまだ付与されていません。自動で再試行します。",
   "br_prize_rt_note": "オリジナルのファイルで作った最初のデモ。テーマやModはリクエストに応じて増えていきます。",
+  "br_counter_try": "è©¦ãã¦ã¿ã",
   "br_counter_details": "含まれる機能",
   "br_prize_jackpot_remix_details": "FlashesでJackpot Remixを有効にすると、定期フラッシュごとに100分の1の確率でリミックスが選ばれます。準備ができた時点で再生され、生成は画面が落ち着いていてメモリに余裕があるときに行われます。GIFとモーションの有効化が必要です。1回のフラッシュとして数えられ、SPの払い出しはありません。",
   "br_prize_flashes_v2_details": "Drift & Bounceは画面内を移動し、Pendulumは上から振り子のように揺れます。GIFをドラッグして投げたり、角を丸くしたりできます。Shatterは閉じたフラッシュを落下する破片に変えます。Flashesで各機能を有効にしてください。移動、ドラッグ、ShatterにはSolidモードの無効化が必要で、モーション設定も反映されます。",

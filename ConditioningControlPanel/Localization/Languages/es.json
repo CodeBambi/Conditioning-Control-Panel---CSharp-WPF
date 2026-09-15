@@ -5337,6 +5337,7 @@
   "br_counter_delivery_not_in_guild": "Únete al servidor de Discord y el rol llegará después.",
   "br_counter_delivery_failed": "El rol aún no se ha asignado. Lo vuelve a intentar solo.",
   "br_prize_rt_note": "Una primera demo hecha con los archivos originales. Llegarán más temas y mods, a petición.",
+  "br_counter_try": "Probar",
   "br_counter_details": "Qué incluye",
   "br_prize_jackpot_remix_details": "Activa Jackpot Remix en Flashes. Cada flash programado tiene una probabilidad de 1 entre 100 de usar una mezcla. Se muestra cuando está lista; la preparación espera un momento tranquilo y suficiente memoria libre. Requiere GIF y movimiento activado. Cuenta como un flash y no otorga SP.",
   "br_prize_flashes_v2_details": "Drift & Bounce mueve los flashes por la pantalla; Pendulum los balancea desde arriba. Arrastra un GIF, lánzalo o redondea sus esquinas. Shatter rompe un flash descartado en fragmentos que caen. Activa estas opciones en Flashes. El movimiento, el arrastre y Shatter requieren desactivar el modo Solid; se respetan los ajustes de movimiento.",

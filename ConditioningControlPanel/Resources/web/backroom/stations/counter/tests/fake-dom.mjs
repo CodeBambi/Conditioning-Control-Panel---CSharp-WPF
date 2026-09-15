@@ -3,7 +3,7 @@
 
 class El {
   constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.parent = null; this.dataset = {}; this.attrs = {};
-    this.className = ''; this.hidden = false; this.disabled = false; this._text = ''; }
+    this.className = ''; this.hidden = false; this.disabled = false; this._text = ''; this.style = {}; }
   get classList() {
     const set = () => new Set(this.className.split(/\s+/).filter(Boolean)), put = (s) => { this.className = [...s].join(' '); };
     return { add: (c) => { const s = set(); s.add(c); put(s); }, remove: (c) => { const s = set(); s.delete(c); put(s); },
