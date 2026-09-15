@@ -12,6 +12,7 @@ using Avalonia.Headless;
 using Avalonia.Threading;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia;
+using CCP.Avalonia.Testing;
 using ConditioningControlPanel.Avalonia.Views.Controls.AppSettings;
 using ConditioningControlPanel.Avalonia.Views.Tabs;
 using ConditioningControlPanel.Avalonia.Views.Windows;
@@ -45,9 +46,11 @@ public sealed class LanguageSelectorTests
         var settingsPath = Path.Combine(TestProfile.DirectoryPath, "settings.json");
         var settingsBeforeStartup = SeedProfile(settingsPath);
         var settingsWriteBeforeStartup = File.GetLastWriteTimeUtc(settingsPath);
-        var (shell, lifetime) = StartApp();
+        AvaloniaTestDispatcher.Run(() =>
+        {
+            var (shell, lifetime) = StartApp();
 
-        try
+            try
         {
             Assert.Equal("ja", LocalizationManager.Instance.CurrentLanguage);
             Assert.Equal("ja", SelectedCode(Pill(shell)));
@@ -204,8 +207,9 @@ public sealed class LanguageSelectorTests
             try { Dispatcher.UIThread.RunJobs(); } catch { }
             CoreSettings.ServiceProvider = null;
             CoreDispatch.PostProvider = null;
-            CoreDispatch.InvokeProvider = null;
-        }
+                CoreDispatch.InvokeProvider = null;
+            }
+        });
     }
 
     private static ComboBox Pill(MainShellWindow shell) =>
@@ -256,7 +260,9 @@ public sealed class LanguageSelectorTests
         Assert.True(app.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime,
             $"lifetime={app.ApplicationLifetime?.GetType().FullName}");
         Assert.NotNull(App.Settings);
-        Assert.True(Dispatcher.UIThread.CheckAccess(), "Avalonia setup did not stay on the test thread");
+        Assert.True(AvaloniaTestDispatcher.IsDispatcherThread, "Avalonia setup did not stay on the test dispatcher");
+        if (OperatingSystem.IsWindows())
+            Assert.Equal(ApartmentState.STA, Thread.CurrentThread.GetApartmentState());
 
         var shell = Assert.IsType<MainShellWindow>(lifetime.MainWindow);
         shell.Show();
