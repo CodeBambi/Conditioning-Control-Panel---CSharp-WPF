@@ -44,12 +44,11 @@ export function createSlotWords({ ctx, mount, media, emi, lex }) {
   return {
     callout,
     /** Fires the outcome's fx through fireFx(fxId, keys, args), showing the words here first. */
-    outcome(o, fireFx) {
+    outcome(o, fireFx, { tease = false } = {}) {
       const fx = Array.isArray(o.fx) ? o.fx : [];
-      const dead = fx.length === 0 && (o.line === 'none' || !o.line) && !(o.pay > 0);
+      const dead = !tease && fx.length === 0 && (o.line === 'none' || !o.line) && !(o.pay > 0);   // a teased row flashes, it is not dead
       if (dead) { callout.settle(); return { words: [], settled: true }; }
-      const gateOn = !(ctx && ctx.gates && ctx.gates.subliminal === false);
-      const texts = gateOn && fx.some(f => SUB_FX.has(f)) ? subWords(o, media) : [];
+      const texts = fx.some(f => SUB_FX.has(f)) ? subWords(o, media) : [];
       if (texts.length) callout.word(texts[0], { chain: texts.slice(1), seed: outcomeSeed(o) });
       for (const f of fx) {
         if (f === 'fx.sub_single' && texts.length) continue;
