@@ -24,9 +24,12 @@ namespace ConditioningControlPanel.Avalonia
             // view rendered for CI would show raw keys while the running app showed real strings.
             // Initialize() runs on both paths.
             //
-            // "en" is hardcoded for now: honouring the user's choice reads AppSettings, which is
-            // still in the WPF head. That lands when AppSettings moves.
-            LocalizationManager.Instance.SetLanguage("en");
+            // The real profile is intentionally not opened here: headless rendering reaches
+            // Initialize() without a desktop lifetime. The desktop path restores the saved
+            // language after SettingsService is available, immediately before constructing the
+            // shell below.
+            if (!CoreSettings.HasProvider)
+                LocalizationManager.Instance.SetLanguage("en");
         }
 
         public override void OnFrameworkInitializationCompleted()
@@ -46,6 +49,7 @@ namespace ConditioningControlPanel.Avalonia
                 // out one default instance, which is what the renders bind against.
                 Settings = new SettingsService();
                 CoreSettings.ServiceProvider = () => Settings;
+                LocalizationManager.Instance.SetLanguage(Settings.Current.Language);
 
                 // The lock-card surface seam. The schedule and the no-repeat phrase rotation are in
                 // Core now (LockCardScheduler); this is the half that draws, and on this head that

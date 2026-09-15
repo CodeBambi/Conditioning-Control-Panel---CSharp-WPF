@@ -1,6 +1,9 @@
 using System;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Interactivity;
+using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
 using Serilog;
 
@@ -46,6 +49,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             OnSectionShown();   // seed from settings; every handler above compares before writing
         }
 
+        /// <summary>The General language surface, owned by the shell's shared language path.</summary>
+        internal ComboBox LanguageSelector => CmbLanguageSetting;
+
         /// <summary>Re-reads the OS startup registration and the startup-video filename.</summary>
         public void OnSectionShown()
         {
@@ -80,13 +86,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         {
             if (CmbLanguageSetting.SelectedItem is not ComboBoxItem selected) return;
             var code = string.IsNullOrWhiteSpace(selected.Tag as string) ? "en" : (string)selected.Tag!;
+
+            // The shell owns the shared writer and re-selects the chrome pill. Keep the direct
+            // path for a standalone/headless section, where no shell exists to receive the event.
+            var shell = TopLevel.GetTopLevel(this) as MainShellWindow
+                ?? (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)
+                    ?.MainWindow as MainShellWindow;
+            if (shell is not null)
+            {
+                shell.ApplyLanguageSelection(code);
+                return;
+            }
+
             var s = CoreSettings.Current;
-            if (s.Language == code) return;   // the seed's echo, or the pill re-selecting us
+            if (s.Language == code) return;
             s.Language = code;
             LocalizationManager.Instance.SetLanguage(code);
             CoreSettings.Save();
-            // ponytail: WPF also re-selects the chrome pill and shows the "restart to apply" banner
-            // through MainWindow; those live in the shell.
         }
 
         private void ChkWinStart_Click(object? sender, RoutedEventArgs e)
