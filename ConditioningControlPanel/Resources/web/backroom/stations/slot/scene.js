@@ -258,12 +258,13 @@ export async function createScene(o) {
     rig.position.y = y; rig.updateMatrixWorld(true);
     const play = fit(playBox, dir, target);
     if (aspect < 0.8) {
-      // The glass is the phone's main subject. Cabinet edges may leave the frame.
+      // Keep the reels prominent, with the whole working lever inside the phone frame.
       const reelBox = new THREE.Box3();
       (glass ? [glass] : reels).forEach(n => reelBox.expandByObject(n));
+      reelBox.expandByObject(lever);
       const close = fit(reelBox, dir);
       play.look.copy(close.look);
-      play.dist = close.dist * 1.16;
+      play.dist = close.dist * 1.06;
       play.pos.copy(play.look).addScaledVector(dir, play.dist);
     }
     return { play, arrive: fit(whole, quarter), drop: (whole.max.y - whole.min.y) * 1.6 };
@@ -558,7 +559,7 @@ export async function createScene(o) {
         s.opacity = lit.toFixed(3);
       }
     }
-    if (!reduced && (ghost || t - lastPaint > PAINT_MS)) paint(t);   // A2's ghost repaints every frame while it runs
+    if (!stillFx() && (ghost || t - lastPaint > PAINT_MS)) paint(t);   // A2's ghost repaints every frame while it runs
     if (ghost && t - ghost.at >= FEEL_ALMOST.TELL_MS) ghost = null;
     if (o.hint) {
       o.hint.hidden = phase !== 'play' || !!spin;

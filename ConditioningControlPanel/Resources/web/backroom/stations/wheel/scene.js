@@ -33,6 +33,7 @@ import { warpStep, warpedRotation, stepDim, quietMix, quietDone, outlineAlpha, d
 import { createEmi } from './emi.js';
 import { createRoomEmi } from './room-emi.js';
 import { createRoomReward } from './room-reward.js';
+import { createPrizeSector } from './prize-art.js';
 
 const LENS_DEG = 30, FIT = 1.16, RISE_MS = 620, SINK_MS = 300, DEFAULT_OMEGA = -0.011, HUB_AT_REST_MS = 33;
 const COLORS = ['#F7BDD2', '#FFEBDD', '#F2AFC9', '#FFE7D2'], GOLD = '#F4D896', SNOOZE = '#C48CA7';
@@ -86,45 +87,6 @@ function paintStar(c) {
   g.closePath(); g.fill();
 }
 
-/** Enamel prize badges: large values, stacked names, radial values on slim wedges. */
-function sliceLabel(s, w, h, text) {
-  const c = document.createElement('canvas'); c.height = 768; c.width = Math.max(64, Math.round((768 * w) / h));
-  const g = c.getContext('2d'), narrow = w < 0.19;
-  g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
-  const ink = '#482039', cream = '#fff3df';
-  const print = (value, x, y, size, max) => {
-    g.font = `900 ${size}px Georgia, serif`; g.strokeStyle = cream; g.lineWidth = size * .09;
-    g.strokeText(value, x, y, max); g.fillStyle = ink; g.fillText(value, x, y, max);
-  };
-  if (narrow) {
-    g.translate(c.width / 2, c.height / 2); g.rotate(-Math.PI / 2);
-    print(text.big, 0, 0, Math.round(c.width * .88), 690);
-  } else {
-    // A foil medallion with four tiny rays gives the number its own silhouette.
-    const cx = c.width / 2, cy = 218, radius = Math.min(c.width * .45, 260);
-    g.fillStyle = cream; g.strokeStyle = '#c4934e'; g.lineWidth = 9;
-    g.beginPath(); g.ellipse(cx, cy, radius, 220, 0, 0, Math.PI * 2); g.fill(); g.stroke();
-    if (s.kind === 'decoration') {
-      const unit = radius / 100;
-      g.save(); g.translate(cx, cy); g.scale(unit, unit);
-      g.fillStyle = '#b63670'; g.fillRect(-58, -29, 116, 84);
-      g.fillStyle = '#e0b35d'; g.fillRect(-10, -35, 20, 94); g.fillRect(-64, -39, 128, 20);
-      g.strokeStyle = ink; g.lineWidth = 6; g.strokeRect(-58, -19, 116, 74);
-      g.beginPath(); g.ellipse(-23, -54, 26, 14, .4, 0, Math.PI * 2); g.ellipse(23, -54, 26, 14, -.4, 0, Math.PI * 2); g.stroke();
-      g.restore();
-    } else print(text.big, cx, cy, Math.min(300, c.width * .76), radius * 1.75);
-    const words = text.small.split(/\s+/), lines = [];
-    for (const word of words) {
-      const last = lines.length - 1;
-      if (last >= 0 && (lines[last] + ' ' + word).length <= 13) lines[last] += ' ' + word;
-      else lines.push(word);
-    }
-    const size = Math.min(134, c.width * .3);
-    g.font = `800 ${size}px Segoe UI, Arial, sans-serif`; g.fillStyle = ink;
-    lines.slice(0, 3).forEach((line, i) => g.fillText(line, cx, 510 + i * 122, c.width * .94));
-  }
-  return canvasTexture(c);
-}
 function paintScreen(canvas, text, gold) {
   const g = canvas.getContext('2d'), { width: w, height: h } = canvas;
   const grad = g.createLinearGradient(0, 0, w, h);
@@ -321,29 +283,11 @@ export async function createScene(o) {
     if (ghosts) { ghosts.forEach(g => { rotor.parent.remove(g); g.material.dispose(); }); ghosts[0].geometry.dispose(); ghosts = null; }
     outline = null;
     layout = next; sliceGroup = new THREE.Group(); sliceGroup.name = 'runtime_sectors';
-    let prize = 0;
     const flat = [];
     for (const s of layout) {
-      const high = Math.max(...layout.filter(x => x.kind === 'prize').map(x => x.pay));
-      const color = s.kind === 'jackpot' ? GOLD : s.kind === 'nothing' ? '#FFF0DF' : s.kind === 'malus' ? SNOOZE : s.kind === 'prize' && s.pay === high ? '#B92F62' : COLORS[prize++ % COLORS.length];
-      const gap = Math.min(0.003, s.span * 0.08), n = Math.max(3, Math.ceil(s.span * 32)), shape = new THREE.Shape();
-      for (let j = 0; j <= n; j++) { const a = s.start + gap + ((s.span - 2 * gap) * j) / n; j ? shape.lineTo(Math.sin(a) * 0.711, Math.cos(a) * 0.711) : shape.moveTo(Math.sin(a) * 0.711, Math.cos(a) * 0.711); }
-      for (let j = n; j >= 0; j--) { const a = s.start + gap + ((s.span - 2 * gap) * j) / n; shape.lineTo(Math.sin(a) * 0.185, Math.cos(a) * 0.185); }
-      const mat = twist(new THREE.MeshPhysicalMaterial({ color, roughness: 0.3, metalness: 0.04, clearcoat: 0.6 }), shearU);
-      mat.emissive.set(color).lerp(new THREE.Color(0xffdca8), 0.35); mat.emissiveIntensity = 0;
-      const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.018, bevelEnabled: true, bevelSegments: 2, steps: 1,
-        bevelSize: Math.min(0.002, (0.185 * (s.span - 2 * gap)) / 4), bevelThickness: 0.002 }), mat);
-      mesh.position.z = 0.076; mesh.userData = { index: s.index, h: 0, base: color, mid: s.mid };
-      flat.push({ pts: sectorPoints(s.start + gap, s.end - gap, 0.185, 0.711), color });
-      const w = Math.min(0.40, s.span * 0.43 * 0.86), h = 0.37;
-      const label = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: sliceLabel(s, w, h, o.labels(s)), transparent: true, depthWrite: false }));
-      label.position.set(Math.sin(s.mid) * 0.48, Math.cos(s.mid) * 0.48, 0.1); label.rotation.z = -s.mid;
-      label.userData = { a: s.mid, r: 0.48, spin: -s.mid, index: s.index };
-      const prev = layout[(s.index + layout.length - 1) % layout.length], pr = Math.min(0.01, 0.738 * Math.min(s.span, prev.span) * 0.3);
-      const peg = new THREE.Mesh(new THREE.CylinderGeometry(pr, pr, 0.038, 12), new THREE.MeshStandardMaterial({ color: 0xd7af6e, metalness: 0.65, roughness: 0.3 }));
-      peg.rotation.x = Math.PI / 2; peg.position.set(Math.sin(s.start) * 0.738, Math.cos(s.start) * 0.738, 0.094);
-      peg.userData = { a: s.start, r: 0.738 };
-      sliceGroup.add(mesh, label, peg);
+      const { mesh, label, peg, border, pts, color } = createPrizeSector(s, o.labels(s), m => twist(m, shearU));
+      flat.push({ pts, color });
+      sliceGroup.add(mesh, label, peg, border);
     }
     rotor.add(sliceGroup);
     under = sliceAt(layout, rotor.rotation.z).index; lit = under;
