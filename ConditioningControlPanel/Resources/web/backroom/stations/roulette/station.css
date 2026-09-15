@@ -36,8 +36,11 @@
 .roul-spins button[aria-pressed="true"] { background: #e8c27a; color: #1a0f2b; border-color: #e8c27a; }
 .roul-why { margin: 0; max-width: 100%; padding: 6px 10px; border-radius: 10px; background: #3a1330e8; border: 1px solid #ff5fa266;
   color: #ffd2e6; font-size: 12px; text-align: right; }
-.roul-spin { min-width: 180px; font-weight: 700; color: #1a0f2b !important; background: linear-gradient(135deg, #f1d49a, #c99a4c) !important;
-  border-color: #f5e2b8 !important; box-shadow: inset 0 1px 0 #fff5, 0 5px 24px #08040b99; }
+/* THE THROW (flick.js) is the way to spin: a flick across the wheel, with the arrow around the rim as its hint.
+   The button stays for the keyboard and for anyone who cannot swing a pointer, so it reads as the second way in. */
+.roul-spin { min-width: 120px; font-weight: 600; font-size: 12px; padding: 6px 12px; color: #f4e6c9 !important;
+  background: #2a1a33cc !important; border-color: #e8c27a66 !important; box-shadow: none; opacity: .82; }
+.roul-spin:hover:not(:disabled), .roul-spin:focus-visible { opacity: 1; border-color: #f1d49a !important; }
 .roul-spin span, .roul-spin small { display: block; }
 .roul-spin small { font-size: 10px; font-weight: 500; opacity: .85; font-variant-numeric: tabular-nums; }
 /* Law VIII: a press answers on its frame with a ring (a state, so reduced motion keeps it). */

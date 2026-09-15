@@ -8,6 +8,7 @@ Single-zero roulette for SP (CONTRACT.md sections 2-7 and 10.13, binding spec `h
 |---|---|
 | `station.js` | `mount(ctx)` -> `{open, close, suspend, destroy}`. DOM, the chip count, the spins picker (1-5), Spin, tape playback (about 8 s a spin), the cursor, the moments. |
 | `tape.js` | Pure: chips to bets, the client cover-all check (only disables Spin, with the server's word `covers_all`), Law I `shownSp`, reading an outcome for the text, `classify` (retry with the same idem, adopt `tape_unplayed`, refusals). |
+| `flick.js` | Pure: THE THROW. An angular drag on the wheel -> one signed rotor speed for `planRun`'s `rotVel0`, or nothing. Minimum travel, minimum release speed, a stale grab, the direction, the clamped band. |
 | `feel.js` | Pure: outcome -> moment id, the Lighthouse clock (law 4), the ball's run planned backwards from `outcome.pocket`, timings, the host recipe (`FX_RECIPE`: beat -> section 4 ids, gates, Calm, the streak, cooldowns). |
 | `bowl.js` | The canvas bowl: drifting rim cache, rotor, pockets, lighthouse, the run, fret rattle and sparks, turret whirl (Loom), velvet wake. |
 | `mat.js` | The canvas mat (37 straights, sip, sink, deep, rose, plum) and the chips: chip vortex, chips in, the pulled pair. |
@@ -33,7 +34,23 @@ Single-zero roulette for SP (CONTRACT.md sections 2-7 and 10.13, binding spec `h
 - **Bets.** Click a spot to add 1 SP (right click or Shift takes one off), 3 SP a spin in all, 1 to 5 spins (buttons or
   keys 1-5), Clear (or Backspace). The Spin button stays off with a reason for an empty layout, a cover-all layout
   (rose + plum, sip + sink + deep) and a cost above the shown balance; the server decides everything else.
-- **Law VIII.** Spin, Space or Enter: the rotor picks up and the button rings on the press frame.
+- **THE THROW.** The wheel is spun by hand: press on it, swing, let go (`flick.js`). The mat has first claim on a
+  press, so a chip is still a chip; what is left over, on the wheel, is a hand on the rotor, and the wheel follows the
+  finger. On the lift, a swing past `MIN_TRAVEL` that is still moving past `MIN_OMEGA` sends the SAME request the
+  Spin button sends; a shorter, slower or stale one just leaves the wheel turning. Before the bets are down the hand
+  may still push the wheel round, and nothing is sent. Pointer events, so a finger throws it too; the press is
+  `preventDefault`ed and both canvases are `touch-action: none`, so no scroll and no look-around.
+- **The strength.** The flick's direction and speed become `rotVel0` for the FIRST launch of the tape it bought,
+  clamped into `FLICK.VEL_MIN..VEL_MAX` (either sign; the house's own kick, 1.5, sits inside it). Law I: `planRun`
+  simulates forward from it and then turns the whole ball path onto the server's pocket, so a hard throw and a soft
+  one land in the same place and take the same time. The spins after it leave on the house kick.
+- **The hint.** While the throw is armed (exactly when the Spin button is live) a curved, semi-transparent arrow sits
+  around the rim the way the rotor turns, breathing on a 1.2 s cycle: a `TorusGeometry` arc and a flat head on the
+  rotor, counter-turned so it stands still in the room (`bowl-3d.js`), and the same arrow stroked on the canvas
+  (`bowl.js`). It is gone while the wheel spins, while a hand is on it, and before the bets are down. Still (Calm,
+  reduced motion): the arrow holds, no breath.
+- **Law VIII.** The throw, Spin, Space or Enter: the rotor picks up and the button rings on the press frame. The Spin
+  button is the keyboard's and the screen reader's way in and reads as the second one; the throw is the first.
 - **Law I.** The receipt's `sp` is adopted at once; the SP chip (`ctx.spReadout.owe(reader)`) owes every unplayed pay,
   so the stake leaves on the reply and each spin's pay lands on the frame the ball drops into its pocket.
 - **Playback.** Each spin: `roulette.run` (and `roulette.wake` on a Spiral Wake) at launch; `moments.tunnel(rouletteRunLevel(ball speed))`

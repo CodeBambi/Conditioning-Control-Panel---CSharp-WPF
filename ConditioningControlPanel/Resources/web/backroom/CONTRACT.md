@@ -419,6 +419,11 @@ export async function mount(ctx) {
   within 1.65 m, M toggles the room view (ceiling off, one button per station that drops you at its
   approach). Back / Escape closes, in order: an open station or card, the room view, the room. No touch
   stick and no pointer lock (desktop WebView2 is the target).
+- **Leaving a seat.** Seated at a station, a tap that lands on the room instead of the station (the floor,
+  a wall, another fixture, empty air) and a step backwards (S, the down arrow, the touch stick pushed back)
+  both go through the same Back path as the chip: the station settles first (Law VI), then the camera walks
+  back to where you stood. A tap on the station's own meshes, its runtime dressing or its own controls never
+  leaves, and neither does a drag past the room's tap slop.
 - **Visiting.** E holds the room: pose saved, render loop stopped (no rAF), context KEPT. Measured in the
   smoke run: about 40 ms from Back to a drawing frame, against about 1.1 s to boot and decode the room
   again, so the room keeps its context. Back puts you on the exact position and facing.
@@ -460,6 +465,12 @@ export async function mount(ctx) {
   no persistence and no bridge message, like every other Room Service change. The spots are the table in
   `room/assets/customization/README.md`. No station, cabinet or screen moves for them, the approved
   left-wall booth positions are untouched, and the only walk volumes added are the two floor plants.
+- **Room Service, one button (amended 2026-09-15).** Picking an item in the cabinet IS the Use: it goes on
+  the focused pedestal or cabinet there and then, and the only control under the miniature is a single
+  Remove button, shown while that piece is fitted there and gone when it is not. A right-click on an item
+  takes that piece off wherever it sits, and no browser menu opens over the stage. A tap on the lever
+  close-up pulls that cabinet for fun: the handle swings on its own axle and the drums roll to a random
+  face. No server call, no SP, no outcome, no effects, and nothing reads where they land.
 - **Budget.** At 1280x720 on the entry pose: 277 draw calls with the whole Room Service collection placed
   (264 before it; the preview draws 1,268 there, 1,312 in its own check), no shadows, no post passes,
   pixel ratio capped at 1.5.

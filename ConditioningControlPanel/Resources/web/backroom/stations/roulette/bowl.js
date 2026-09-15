@@ -27,6 +27,7 @@ const TAU = Math.PI * 2;
 const COL = { brass: '#e8c27a', mint: '#5fffd0', rose: '#ff5fa2', plum: '#3a1f5c', text: '#efe6ff', zero: '#1f8f74', roseFelt: '#c8286e' };
 const DRIFT = ['#0b0714', '#3a1f5c', '#d8cbe9', '#cfae6e'];
 const FONT = 'Segoe UI, Figtree, Arial, sans-serif';
+const HINT_MS = 1200, HINT_A0 = -Math.PI * 0.95, HINT_ARC = Math.PI * 1.15;   // THE THROW's arrow: cycle, start, sweep
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 const mixHex = (a, b, t) => { const A = hex(a), B = hex(b); return `rgb(${(A[0] + (B[0] - A[0]) * t) | 0},${(A[1] + (B[1] - A[1]) * t) | 0},${(A[2] + (B[2] - A[2]) * t) | 0})`; };
@@ -43,6 +44,7 @@ export function createBowl({ wheel, rose }) {
     plan: null, launchAt: 0, rot0: 0, planEndRot: 0, index: -1, seated: false,
     phase: 'idle', speed: 0, rel: 0, r: FEEL.R_REST, tscale: 1,
     wake: false, whirlA: 0, trail: [], ring: null, landedEdge: false, landedShown: false,
+    hint: false,   // THE THROW (flick.js): the curved arrow around the rim while the wheel may be flicked
     hitAt: -Infinity,   // THE GLYPH HIT: the landed pocket's rim glow over HIGHLIGHT_MS from the winning frame (callout.js)
   };
   /** The glow's 0..1 at station time `now` (0 outside the window). */
@@ -53,8 +55,19 @@ export function createBowl({ wheel, rose }) {
   /** Where everything sits. cx, cy, R in CSS px of the canvas. */
   function layout(cx, cy, R) { geo.cx = cx; geo.cy = cy; geo.R = Math.max(40, R); }
 
-  /** Law VIII: the press answers on its frame; the rotor picks up before the server has replied. */
-  function kick() { s.rotVel = Math.max(s.rotVel, FEEL.ROTOR_KICK); }
+  /** Law VIII: the press answers on its frame; the rotor picks up before the server has replied. A throw
+   *  (flick.js) hands its own signed speed in, so the wheel leaves the finger the way it was swung. */
+  function kick(vel = FEEL.ROTOR_KICK) {
+    const v = Number.isFinite(Number(vel)) ? Number(vel) : FEEL.ROTOR_KICK;
+    s.rotVel = v < 0 ? Math.min(s.rotVel, v) : Math.max(s.rotVel, v);
+  }
+  /** THE THROW: the finger drags the rotor round by `d` radians. A planned run owns the rotor, so it refuses then. */
+  function turn(d) { if (!s.plan && Number.isFinite(Number(d))) s.rot += Number(d); }
+  /** The arrow hint on or off (station.js arms it on the Spin button's own conditions). */
+  function setHint(on) { s.hint = !!on; }
+  /** Canvas-local CSS px. `angleAt` returns the pointer's angle in the convention `rot` grows in (here: y down). */
+  function wheelHit(x, y) { return Math.hypot(x - geo.cx, y - geo.cy) <= geo.R * 1.06; }
+  function angleAt(x, y) { return Math.atan2(y - geo.cy, x - geo.cx); }
 
   /** Start a planned spin at station time `now` (ms). */
   function launch(plan, now, { wake = false } = {}) {
@@ -240,6 +253,19 @@ export function createBowl({ wheel, rose }) {
       g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.arc(bx + 2, by + 3, br, 0, TAU); g.fill();
       g.save(); g.fillStyle = '#fff8ff'; g.shadowColor = COL.mint; g.shadowBlur = 12; g.beginPath(); g.arc(bx, by, br, 0, TAU); g.fill(); g.restore();
     }
+    // THE THROW's hint: a curved, half-lit arrow around the rim, breathing on a 1.2 s cycle (still: no breath).
+    if (s.hint) {
+      const pulse = view.still ? 0.5 : (1 - Math.cos((now % HINT_MS) / HINT_MS * TAU)) / 2;
+      const hr = R * (0.935 + 0.012 * pulse), a1 = HINT_A0 + HINT_ARC, alpha = (0.32 + 0.34 * pulse) * k;
+      g.save(); g.translate(cx, cy); g.globalCompositeOperation = 'lighter';
+      g.strokeStyle = `rgba(95,255,208,${alpha})`; g.lineWidth = Math.max(3, R * 0.045); g.lineCap = 'round';
+      g.beginPath(); g.arc(0, 0, hr, HINT_A0, a1); g.stroke();
+      const hx = Math.cos(a1) * hr, hy = Math.sin(a1) * hr, hs = Math.max(7, R * 0.12);
+      g.translate(hx, hy); g.rotate(a1 + Math.PI / 2);   // the head points along the rim, the way the rotor turns
+      g.fillStyle = `rgba(95,255,208,${alpha + 0.12})`;
+      g.beginPath(); g.moveTo(hs * 0.62, 0); g.lineTo(-hs * 0.36, hs * 0.46); g.lineTo(-hs * 0.36, -hs * 0.46); g.closePath(); g.fill();
+      g.restore();
+    }
     if (s.phase === 'rattle' && s.tscale < 0.9 && view.slowText) {
       g.fillStyle = `rgba(232,194,122,${0.7 * (1 - s.tscale)})`; g.font = `500 12px Consolas, "DM Mono", monospace`; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
       g.fillText(view.slowText, cx, cy - R * 1.28);
@@ -253,7 +279,7 @@ export function createBowl({ wheel, rose }) {
   }
 
   return {
-    layout, kick, launch, seat, clear, update, draw, pocketBox, glow,
+    layout, kick, launch, seat, clear, update, draw, pocketBox, glow, turn, setHint, wheelHit, angleAt,
     get geo() { return { ...geo }; },
     get phase() { return s.phase; },
     /** Test seam: what the beam lights now, the rotor, the ball, the caches. */
@@ -261,6 +287,7 @@ export function createBowl({ wheel, rose }) {
       return { rot: s.rot, rotVel: s.rotVel, beamT: s.beamT, beamAngle: beamAngle(s.beamT), lit: litNumbers(W, s.rot, beamAngle(s.beamT)),
         phase: s.phase, index: s.index, pocket: s.index >= 0 ? W[s.index] : null, wake: s.wake, whirlA: s.whirlA, whirlDrawn: !!s.whirlDrawn,
         ringBuilds: s.ring ? s.ring.draws : 0, planned: s.plan ? { hits: s.plan.hits, restAt: s.plan.restAt, landAt: s.plan.landAt } : null,
+        hint: s.hint, geo: { ...geo },
         ballAngle: s.rot + s.rel, rel: s.rel, radius: s.r, speed: s.speed, tscale: s.tscale, hitAt: s.hitAt, hitOn: hitPulse(s.lastNow ?? 0) > 0 };
     },
   };
