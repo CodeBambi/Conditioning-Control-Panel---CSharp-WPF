@@ -46,10 +46,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// RoadmapDiaryDialog) are constructed without a shell in --render-view. Built on first
         /// read on the UI thread, so no lock.</para>
         ///
-        /// <para>Nothing disposes it on this head: the shell owns no Closed hook this layer may
-        /// edit. The service saves immediately on photo submission and on a note edit, so the only
-        /// thing a missed Dispose can lose is a StartStep timestamp within 30 s of exit.</para>
+        /// <para>The desktop application calls <see cref="DisposeRoadmapIfCreated"/> on actual
+        /// application exit. That method checks the backing field rather than this property, so a
+        /// profile that never opened the roadmap does not create a service just to dispose it.</para>
         /// </summary>
         internal static RoadmapService Roadmap => _roadmap ??= new RoadmapService();
+
+        internal static void DisposeRoadmapIfCreated() => _roadmap?.Dispose();
     }
 }

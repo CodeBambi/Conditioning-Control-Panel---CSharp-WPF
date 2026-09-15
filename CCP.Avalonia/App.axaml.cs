@@ -1,6 +1,8 @@
+using System.Threading;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
 
@@ -10,6 +12,9 @@ namespace ConditioningControlPanel.Avalonia
     {
         /// <summary>The settings service, or null on the headless render path.</summary>
         public static SettingsService? Settings { get; private set; }
+
+        private AvaloniaCoreDispatch? _desktopDispatch;
+        private int _exitHandled;
 
         public override void Initialize()
         {
@@ -41,6 +46,12 @@ namespace ConditioningControlPanel.Avalonia
             // still hosts single views inside it - neither depends on it being the startup window.
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
+                // Core timers and background engine callbacks must return to this dispatcher,
+                // while Core's unseeded providers remain the contract for renders and tests.
+                _desktopDispatch = new AvaloniaCoreDispatch(Dispatcher.UIThread);
+                _desktopDispatch.Attach();
+                desktop.Exit += OnDesktopExit;
+
                 // Real settings on this head: SettingsService now lives in Core and reads and
                 // writes settings.json under CorePaths.UserData (~/.local/share on Linux), with
                 // the same migrations, backups and recovery the Windows app has. Seeded here and
@@ -138,6 +149,23 @@ namespace ConditioningControlPanel.Avalonia
                 desktop.MainWindow = new Views.Windows.MainShellWindow();
             }
             base.OnFrameworkInitializationCompleted();
+        }
+
+        private void OnDesktopExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
+        {
+            if (Interlocked.Exchange(ref _exitHandled, 1) != 0) return;
+
+            // Flush while the dispatcher is still usable. In particular, a serialize retry from a
+            // background save must not see the shutdown-safe drop provider below.
+            try { Settings?.SaveImmediate(); }
+            catch { /* SettingsService logs save failures; exit must continue */ }
+
+            // Roadmap is lazy: do not construct it merely to dispose it on a profile that never
+            // opened the quest page.
+            try { Views.Windows.MainShellWindow.DisposeRoadmapIfCreated(); }
+            catch { /* one service cannot prevent the head from exiting */ }
+
+            _desktopDispatch?.Stop();
         }
     }
 }
