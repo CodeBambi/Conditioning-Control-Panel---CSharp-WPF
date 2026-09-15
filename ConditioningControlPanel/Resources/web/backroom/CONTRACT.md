@@ -1872,3 +1872,25 @@ limiter, locks and the receipt helpers.
 | **Integration** | merge of C-counter + H-own | `Services/BackRoom/BackRoomApi.cs` (Ops row, apply block), `stations.json` counter row, `Localization/Languages/en.json` counter rows, room smoke |
 
 No two lanes share a file. Every PR under 600 changed lines, draft only.
+
+
+### 10.18 Seated game stage (draft 2026-09-15)
+
+This amendment permits cards and roulette to replace their canvas view with fixture-backed 3D,
+while retaining the audited station state machine and standalone canvas fallback. Wheel migration
+waits for its slice decision. No rules, probabilities, stakes, pays or outcome timing change.
+A station opts in with `export const roomStage = true`; absent that flag its existing path remains.
+The loader provides optional `ctx.stage` before mount and disposes it on failure, close or timeout.
+The room seats with the existing `go(row)` pose, keeps rendering, drops walking and look input,
+and restores the exact prior pose on exit. Back, SP, Options and the bell remain accessible.
+
+Stage exposes `renderer`, `scene`, `camera`, `canvas`, `fixture`, `pick(event, objects)` and
+`register(view)`. Picking returns intersections against only the supplied objects. A view may
+attach runtime meshes to its fixture and register `update(dt, still)`, optional
+`draw(renderer, camera)` and `dispose()`. Updates precede room drawing; optional overlay draws
+share its renderer, camera and full-canvas scissor without clearing the room. The returned
+unregister function disposes once; closing or halting also removes registrations. Views must
+restore changed fixture state and release their own textures, geometry and listeners in dispose.
+No view creates a WebGL context. Texture canvases are permitted; context checks distinguish them
+from WebGL canvases and do not create a context while counting. `.br-seat` holds controls below
+the persistent room chrome, passes empty-space input through, and fits 400 px without overflow.

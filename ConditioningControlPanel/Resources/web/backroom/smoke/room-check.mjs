@@ -102,6 +102,10 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/jav
 const server = createServer(async (req, res) => {
   const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   if (path.indexOf('..') >= 0) { res.writeHead(400); return res.end(); }
+  if (path === '/backroom/smoke/seated-station.js') {
+    res.writeHead(200, { 'content-type': 'text/javascript' });
+    return res.end((await readFile(join(HERE, 'mock-station.js'), 'utf8')) + '\nexport const roomStage = true;');
+  }
   const file = path === '/backroom/stations/slot/station.js' ? join(HERE, 'mock-station.js') : join(WEB, path);
   try {
     const body = await readFile(file);
@@ -193,7 +197,15 @@ ws.onmessage = (e) => {
 const cdp = (method, params) => new Promise((res) => { const i = ++msgId; waits.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
 const ev = async (x) => (await cdp('Runtime.evaluate', { expression: x, returnByValue: true, awaitPromise: true })).result?.result?.value;
 await cdp('Runtime.enable'); await cdp('Page.enable'); await cdp('Network.enable');
-await cdp('Page.addScriptToEvaluateOnNewDocument', { source: FAKE_HOST });
+await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
+  window.__glContexts = new Set();
+  const get = HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext = function(type, ...args) {
+    const ctx = get.call(this, type, ...args);
+    if (ctx && /^(webgl2?|experimental-webgl)$/.test(type)) window.__glContexts.add(ctx);
+    return ctx;
+  };
+` + FAKE_HOST });
 
 async function shot(name) {
   const r = await cdp('Page.captureScreenshot', { format: 'png' });
@@ -284,6 +296,47 @@ ok((await dbg()).emiBubble.id === 'counter' && (await dbg()).emis.find(e=>e.id==
 await shot('emi-click-wave.png');
 await key('Escape'); await key('Escape', 'keyUp');
 ok(!(await dbg()).emiBubble.id && (await posted('exit')).length === 0 && (await posted('station-open')).length === opensBeforeEmi, 'Escape dismisses the bark without exiting or opening a station');
+
+// The three settled poses keep the room renderer alive and input locked.
+for (const id of ['cards', 'roulette', 'wheel']) {
+  const prior = await dbg();
+  await ev(`window.__backroom.scene.go(${row(id)})`);
+  const expected = await dbg();
+  await ev(`window.__backroom.scene.pose(${JSON.stringify(prior.position)}, ${prior.yaw}, ${prior.pitch});
+    window.__backroom.scene.seat(${row(id)}); window.__backroom.hud.seated(true)`);
+  await hold('KeyW', 100);
+  await key('KeyM'); await key('KeyM', 'keyUp');
+  const seated = await dbg();
+  ok(seated.seated && seated.running && !seated.held, id + ': seat keeps drawing');
+  ok(JSON.stringify(seated.position) === JSON.stringify(expected.position)
+    && Math.abs(seated.yaw - expected.yaw) < 1e-4 && Math.abs(seated.pitch - expected.pitch) < 1e-4,
+    id + ': existing go pose is exact and walking/map input is locked');
+  ok(await ev(`[...window.__glContexts].filter(gl => !gl.isContextLost()).length === 1`), id + ': one live WebGL context');
+  ok(await ev(`['#br-back', '.br-nav .br-pill:nth-child(3)'].every(sel => {
+    const node = document.querySelector(sel), r = node.getBoundingClientRect();
+    return node.contains(document.elementFromPoint(r.x+r.width/2, r.y+r.height/2));
+  }) && getComputedStyle(document.querySelector('.br-bell')).visibility === 'visible'`), id + ': Back, Options and bell stay visible');
+  await shot('seat-' + id + '.png');
+  await ev(`window.__backroom.scene.unseat(); window.__backroom.hud.seated(false)`);
+  const after = await dbg();
+  ok(JSON.stringify(after.position) === JSON.stringify(prior.position) && after.yaw === prior.yaw && after.pitch === prior.pitch,
+    id + ': unseat restores the prior pose');
+}
+
+// Exercise loader opt-in and cleanup, including a shared renderer update registration.
+await ev(`window.__backroom.visit({...${row('cards')}, id:'slot', entry:'smoke/seated-station.js'})`);
+ok((await dbg()).seated && (await dbg()).running, 'loader opt-in seats before station mount');
+await ev(`window.__stageUpdates=0; window.__stageDisposals=0;
+  const original=window.__backroom.scene.stage;
+  window.__backroom.scene.stage = function(row) { const stage=original(row);
+    stage.register({update(){window.__stageUpdates++},dispose(){window.__stageDisposals++}}); return stage; };`);
+await ev(`window.__backroom.back('test')`);
+await ev(`window.__backroom.visit({...${row('cards')}, id:'slot', entry:'smoke/seated-station.js'})`);
+await sleep(120);
+ok(await ev(`window.__stageUpdates > 0`), 'registered view advances on the shared room loop');
+await ev(`window.__backroom.back('test')`);
+ok(await ev(`window.__stageDisposals === 1 && !window.__backroom.scene.seated`), 'loader close disposes the view once and unseats');
+await ev(`window.__mockStation = null`);
 
 // 2c. every approach: stand there, shot, push forward into the fixture, never clip
 for (const s of stations) {
@@ -647,7 +700,7 @@ await shot('wall-picture-from-feed.png');
 // 2k. Room Service: the catalogue panel opens no second WebGL context, every item toggles, and the
 // room keeps drawing behind it (CONTRACT 7 and 10.13.7: the close-up is a scissored pass, not a context).
 {
-  const canvases = () => ev(`document.querySelectorAll('canvas').length`);
+  const canvases = () => ev(`[...window.__glContexts].filter(gl => !gl.isContextLost()).length`);
   const errsBefore = errs.length;
   const before = await canvases();
   ok(before === 1, `the walking room owns one canvas (${before})`);
@@ -713,7 +766,7 @@ await shot('wall-picture-from-feed.png');
     const hit = document.elementFromPoint(p.left + p.width / 2, p.top + p.height / 2);
     return !!hit && hit.closest('.br-nav') !== null && !document.querySelector('.br-custom-panel').contains(hit); })()`),
     'and the Options pill is still the thing under its own pixels');
-  ok(await ev(`document.querySelectorAll('canvas').length`) === 1, 'still one canvas: the close-up is the same scissored pass');
+  ok(await ev(`[...window.__glContexts].filter(gl => !gl.isContextLost()).length`) === 1, 'still one canvas: the close-up is the same scissored pass');
   const stage = await ev(`(() => { const r = document.querySelector('.br-custom-stage').getBoundingClientRect();
     return { w: r.width, h: r.height }; })()`);
   ok(stage.w > 320 && stage.h > 80, `the stage keeps a rectangle worth drawing into (${Math.round(stage.w)} x ${Math.round(stage.h)})`);
@@ -727,7 +780,7 @@ await shot('wall-picture-from-feed.png');
   await key('Escape');
   await sleep(320);
   ok(await ev(`document.querySelector('.br-custom-panel').hidden`), 'Escape closes the sheet');
-  ok(await ev(`document.querySelectorAll('canvas').length`) === 1, 'and the phone room is back to its one canvas');
+  ok(await ev(`[...window.__glContexts].filter(gl => !gl.isContextLost()).length`) === 1, 'and the phone room is back to its one canvas');
   await boot(1280, 720);
 }
 

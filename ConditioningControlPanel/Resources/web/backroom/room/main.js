@@ -364,6 +364,14 @@ async function start(init) {
   loader = createLoader({
     layer: $('#br-layer'),
     state,
+    stage: (row) => {
+      scene.release();
+      const stage = scene.stage(row);
+      if (!stage) { scene.hold(); return null; }
+      hud.hideWhileVisiting(false);
+      hud.seated(true);
+      return { ...stage, dispose() { stage.dispose(); hud.seated(false); } };
+    },
     lex,
     onSp: (fn) => { spListeners.add(fn); return () => spListeners.delete(fn); },
     onSettings: (fn) => { settingsListeners.add(fn); return () => settingsListeners.delete(fn); },
