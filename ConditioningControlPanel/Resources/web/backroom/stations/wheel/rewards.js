@@ -10,7 +10,7 @@ export function rewardText(result, t) {
   if (!r || r.kind === 'sp') return null;
   if (r.kind === 'nothing') return t('br_daze_empty', 'Not a thought. Not a sparkle.');
   if (r.kind === 'double') return t('br_daze_double_won', 'Seeing Double. Winnings doubled for 24 hours.');
-  if (r.fallback) return t('br_daze_complete', 'Collection complete. +{n} SP.', { n: result.total ?? result.pay ?? 75 });
+  if (r.fallback) return t('br_daze_complete', 'Collection complete. +{n} SP.', { n: result.credited ?? result.total ?? result.pay ?? 75 });
   const names = { monstera: ['br_custom_monstera', 'Monstera'], ivy: ['br_custom_ivy', 'Hanging ivy'],
     terrarium: ['br_custom_terrarium', 'Terrarium'], gallery: ['br_custom_gallery', 'Gallery frame'],
     portraits: ['br_custom_portraits', 'Portrait pair'], billboard: ['br_custom_billboard', 'Wide billboard'] };
@@ -42,6 +42,6 @@ export function createRewardReveal(root, t) {
     if (box.hidden) return;
     box.dataset.kind = r.kind; box.classList.toggle('is-still', still);
     box.querySelector('p').textContent = rewardText(result, t);
-    box.querySelector('span').textContent = r.kind === 'double' ? '\u00d72' : r.kind === 'nothing' ? '\u00b7' : r.fallback ? `\u2726 ${result.total ?? result.pay ?? 75}` : '\u2667';
+    box.querySelector('span').textContent = r.kind === 'double' ? '\u00d72' : r.kind === 'nothing' ? '\u00b7' : r.fallback ? `\u2726 ${result.credited ?? result.total ?? result.pay ?? 75}` : '\u2667';
   }, hide() { box.hidden = true; }, dispose() { box.remove(); } };
 }

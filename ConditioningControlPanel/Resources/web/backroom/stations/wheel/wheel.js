@@ -72,7 +72,7 @@ export function readResult(r) {
   const n = v => (Number.isFinite(Number(v)) ? Math.max(0, Math.trunc(Number(v))) : 0);
   const pay = n(r.pay), carry = n(r.snoozeCarryPaid);
   return { day: String(r.day ?? ''), sliceId: r.sliceId == null ? null : String(r.sliceId), sliceIndex: r.sliceIndex,
-           pay, carryPaid: carry, total: r.total == null ? pay + carry : n(r.total), jackpotWon: r.jackpot === true,
+           pay, ...(r.credited == null ? {} : { credited: n(r.credited) }), carryPaid: carry, total: r.total == null ? pay + carry : n(r.total), jackpotWon: r.jackpot === true,
            ...(r.reward ? {reward: r.reward} : {}), fallback: r.jackpotFallback === true, snoozed: r.snoozed === true, capped: r.capped === true };
 }
 

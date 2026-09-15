@@ -110,7 +110,7 @@ export async function mount(ctx) {
   function resultLine(r, carry) {
     if (!r) return '';
     const special = rewardText(r, t);
-    if (special) return special;
+    if (special) return special + (r.capped ? ' ' + t('br_wheel_capped', 'Your SP is at the cap.') : '');
     const row = layout && layout[resultIndex(layout, { sliceId: r.sliceId, sliceIndex: r.sliceIndex })];
     const name = row ? t(`br_wheel_slice_${row.id.replace(/_[a-z]$/, '')}`, row.label) : '';
     let s = r.jackpotWon ? t('br_wheel_jackpot_won', 'JACKPOT! +{n} SP.', { n: fmt(r.pay) })
@@ -322,7 +322,10 @@ export async function mount(ctx) {
   async function refresh(my) {
     const res = await Promise.resolve(ctx.request('state', {})).catch(() => null);
     if (my !== session || !res || !res.ok || !res.body || !res.body.ok || busy) return;
-    st = res.body; readout.setServer(st.sp);
+    const nextLayout = layoutOf(res.body.slices);
+    if (!nextLayout) { card(closedText()); return; }
+    st = res.body; layout = nextLayout; scene.setLayout(layout); readout.setServer(st.sp);
+    if (st.spun && st.result) scene.setRotation(restRotation(layout, st.result, readResult(st.result).day) ?? 0, resultIndex(layout, st.result));
     if (!st.spun) { scene.setRotation(scene.rotation % (Math.PI * 2)); scene.setMood('idle'); setFace('idle0_0'); $('.wheel-zzz').hidden = true; }
     renderOdds(); sync();
   }
