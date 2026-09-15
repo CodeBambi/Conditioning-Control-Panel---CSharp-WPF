@@ -43,6 +43,8 @@ const SOURCE = resolve(arg('--source', 'C:/Projects/blender-scripting'));
 const TOOLS = resolve(arg('--tools', join(process.env.LOCALAPPDATA || join(HERE, '..', '..', '.tools'), 'ccp-tools', 'gltf-transform-4.5.0')));
 const CHECK_ONLY = process.argv.includes('--check-only');
 const ONLY = arg('--only', null);
+const ASSET_SOURCE = arg('--asset-source', null);
+if (ASSET_SOURCE && !ONLY) throw new Error('--asset-source requires --only');
 
 const PINS = ['@gltf-transform/core@4.5.0', '@gltf-transform/extensions@4.5.0', '@gltf-transform/functions@4.5.0',
   'meshoptimizer@1.2.0', 'sharp@0.35.4'];
@@ -165,13 +167,16 @@ async function main() {
   let failed = 0;
 
   for (const job of JOBS.filter((job) => !ONLY || job.to === ONLY)) {
-    const src = join(SOURCE, job.from);
+    const src = ASSET_SOURCE ? resolve(ASSET_SOURCE) : join(SOURCE, job.from);
     const dst = inClient(join(OUT, job.to));
     const srcBuf = readFileSync(src);
     const before = stats(await io.readBinary(new Uint8Array(srcBuf)));
 
     if (!CHECK_ONLY) {
       const doc = await io.readBinary(new Uint8Array(srcBuf));
+      // join and meshopt prune empty leaves internally, including explicit game anchors.
+      const anchors = doc.getRoot().listNodes().filter((n) => PROTECT.test(n.getName()) && !n.getMesh() && !n.listChildren().length)
+        .map((n) => ({ name: n.getName(), matrix: n.getWorldMatrix(), extras: n.getExtras() }));
       for (const m of doc.getRoot().listMaterials()) {
         if (!RUNTIME_TEXTURED.test(m.getName())) continue;
         m.setBaseColorTexture(null); m.setEmissiveTexture(null);
@@ -192,10 +197,12 @@ async function main() {
       liftStatics(doc);
       await doc.transform(
         t.fn.join({ keepNamed: false, filter: (n) => !PROTECT.test(n.getName()) }),
-        t.fn.prune({ keepLeaves: false, keepAttributes: true }),   // the room paints its own maps onto untextured meshes
+        t.fn.prune({ keepLeaves: job.to === 'card-table.glb', keepAttributes: true }),   // the room paints its own maps onto untextured meshes
         t.fn.textureCompress({ encoder: t.sharp, targetFormat: 'webp', resize: [1024, 1024], quality: 88 }),
         t.fn.meshopt({ encoder: t.mo.MeshoptEncoder, level: 'medium' }),
       );
+      for (const a of anchors) if (!doc.getRoot().listNodes().some((n) => n.getName() === a.name))
+        doc.getRoot().listScenes()[0].addChild(doc.createNode(a.name).setMatrix(a.matrix).setExtras(a.extras));
       writeFileSync(dst, await io.writeBinary(doc));
     }
 
