@@ -688,6 +688,49 @@ await shot('wall-picture-from-feed.png');
   ok(after.running && after.calls > 0 && !after.customization.opened, 'and the room is walking again, drawing the full width');
 }
 
+// 2k2. Room Service on a phone. The room is played at about 400 px wide through cclabs-web, where a
+// third of the width is unusable, so under 700 px the panel is a full-width sheet on the bottom of the
+// screen and the walking chrome keeps its own band at the top. The close-up is still the one pass.
+{
+  await boot(400, 800);
+  const errsBefore = errs.length;
+  await ev(`window.__backroom.scene.customization.open()`);
+  await sleep(500);
+  ok(await ev(`!document.querySelector('.br-custom-panel').hidden`), 'Room Service opens on a 400x800 viewport');
+  const box = await ev(`(() => { const r = document.querySelector('.br-custom-panel').getBoundingClientRect();
+    return { left: r.left, right: r.right, width: r.width, top: r.top }; })()`);
+  ok(box.left >= 0 && box.right <= 400.5 && box.width > 320,
+    `the panel is a full-width sheet, not a third of one (${Math.round(box.width)} px of 400)`);
+  ok(box.top > 66, `and it starts below the nav pills and the bell (panel top ${Math.round(box.top)} px)`);
+  ok(await ev(`!document.querySelector('.br-bell').hidden`), 'the floor bell still shows its line');
+  const chrome = await ev(`(() => { const r = (s) => { const b = document.querySelector(s).getBoundingClientRect();
+    return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, width: b.width }; };
+    return { 'the Options pill row': r('.br-nav'), 'the floor bell': r('.br-bell') }; })()`);
+  for (const [what, r] of Object.entries(chrome)) {
+    ok(r.width > 0 && r.left >= 0 && r.right <= 400.5 && r.top >= 0 && r.bottom <= 800.5, `${what} is wholly on screen`);
+  }
+  ok(await ev(`(() => { const p = document.querySelector('.br-nav .br-pill:nth-child(3)').getBoundingClientRect();
+    const hit = document.elementFromPoint(p.left + p.width / 2, p.top + p.height / 2);
+    return !!hit && hit.closest('.br-nav') !== null && !document.querySelector('.br-custom-panel').contains(hit); })()`),
+    'and the Options pill is still the thing under its own pixels');
+  ok(await ev(`document.querySelectorAll('canvas').length`) === 1, 'still one canvas: the close-up is the same scissored pass');
+  const stage = await ev(`(() => { const r = document.querySelector('.br-custom-stage').getBoundingClientRect();
+    return { w: r.width, h: r.height }; })()`);
+  ok(stage.w > 320 && stage.h > 80, `the stage keeps a rectangle worth drawing into (${Math.round(stage.w)} x ${Math.round(stage.h)})`);
+  await ev(`document.querySelectorAll('.br-custom-items button')[4].click()`);
+  await sleep(320);
+  const phone = await dbg();
+  ok(phone.customization.view.selected === 4 && phone.calls > 0,
+    'the close-up follows the reshaped stage and the room keeps drawing behind it');
+  await shot('room-service-panel-400x800.png');
+  ok(errs.length === errsBefore, 'no page errors on the phone layout' + (errs.length > errsBefore ? ': ' + errs.slice(errsBefore).join(' | ') : ''));
+  await key('Escape');
+  await sleep(320);
+  ok(await ev(`document.querySelector('.br-custom-panel').hidden`), 'Escape closes the sheet');
+  ok(await ev(`document.querySelectorAll('canvas').length`) === 1, 'and the phone room is back to its one canvas');
+  await boot(1280, 720);
+}
+
 // 2l. Escape in the empty room leaves
 await key('Escape');
 await sleep(200);

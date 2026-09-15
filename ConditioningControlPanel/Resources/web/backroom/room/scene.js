@@ -205,8 +205,10 @@ export async function createScene(o) {
     customization.update(dt, still);
     const fullWidth=Math.max(1,o.mount.clientWidth||window.innerWidth);
     const height=Math.max(1,o.mount.clientHeight||window.innerHeight);
-    const previewWidth=customization.opened?Math.floor(fullWidth*2/3):fullWidth;
-    if(camera.aspect!==previewWidth/height){camera.aspect=previewWidth/height;camera.updateProjectionMatrix();}
+    // The room keeps whatever the panel does not cover: the strip beside it, or the band above it once
+    // the panel is a full-width sheet (the phone layout, customization-panel-style.js).
+    const box=customization.opened?customization.previewBox(fullWidth,height):{x:0,y:0,w:fullWidth,h:height};
+    if(camera.aspect!==box.w/box.h){camera.aspect=box.w/box.h;camera.updateProjectionMatrix();}
     if(catalogueView&&customization.opened){
       const target=previewTarget.fromArray(catalogueView.look);
       camera.position.fromArray(catalogueView.position);
@@ -223,8 +225,8 @@ export async function createScene(o) {
     // The catalogue close-up shares this context (CONTRACT 7): its own scissored pass, drawn first so
     // renderer.info still reports the room's own frame.
     customization.draw(renderer);
-    renderer.setViewport(0,0,previewWidth,height);
-    renderer.setScissor(0,0,previewWidth,height);
+    renderer.setViewport(box.x,box.y,box.w,box.h);
+    renderer.setScissor(box.x,box.y,box.w,box.h);
     renderer.setScissorTest(customization.opened);
     renderer.render(scene, camera);
     renderer.setScissorTest(false);

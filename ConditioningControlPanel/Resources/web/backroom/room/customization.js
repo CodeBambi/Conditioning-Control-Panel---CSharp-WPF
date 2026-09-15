@@ -97,6 +97,8 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     update(dt,still){spirals.update(dt,still);panel.update?.(dt,still);},
     /** The close-up: a scissored pass on the room's own renderer, so it opens no second context. */
     draw(renderer){return panel.draw(renderer);},
+    /** What the open panel leaves the room to draw into (viewport pixels, y up from the bottom). */
+    previewBox(w,h){return panel.previewBox(w,h);},
     debug:()=>({selected:getState(),opened:panel.opened,models:9,view:panel.viewDebug()}),
     dispose(){handles.dispose();extras.dispose();titleMap.dispose();panel.dispose();canvas.removeEventListener('pointerdown',onDown);canvas.removeEventListener('pointerup',onUp);root.removeFromParent();const gs=new Set(),ms=new Set();root.traverse(o=>{if(o.geometry)gs.add(o.geometry);for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m)ms.add(m);});gs.forEach(g=>g.dispose());ms.forEach(m=>m.dispose());}
   };

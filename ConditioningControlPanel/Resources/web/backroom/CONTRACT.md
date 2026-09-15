@@ -409,9 +409,11 @@ export async function mount(ctx) {
   off whenever `reduced` is true or `intensity` is `calm` (the Motion button is locked then), or when the
   player picks Motion still. A `settings` frame applies live.
 - **Wall screens.** One `media-request` with `station: "room"` at boot. `gifs` that are not
-  `src: "fallback"`, point at `ccp.assets` or the page's own origin, and load CORS-clean go on the four
-  screens (one turn every 18 s); otherwise the house art (`room/assets/ads/*.webp`) with lexicon
-  captions. The preview's local file picker is not carried over.
+  `src: "fallback"`, point at `ccp.assets` or the page's own origin, and load CORS-clean go on the room's
+  own four wall screens (`media_screen_0..3`) and on whatever Room Service has switched on, which is two
+  further packs of wall screens, four and six, and the ceiling projection; one turn every 18 s on all of
+  them. Otherwise the house art (`room/assets/ads/*.webp`) with lexicon captions. The preview's local
+  file picker is not carried over.
 - **Playing GIFs (amended 2026-09-13).** Dealt GIFs play, decoded in the page with WebCodecs
   `ImageDecoder` (Chromium 94+, no vendored decoder; a page without it shows the first frame). Caps: a
   picture advances only while a screen showing it is inside the camera frustum (not in the room view,
@@ -1285,10 +1287,12 @@ element, exactly the pattern `.slot-payline` uses (10.15 A6, `scene.js` `payline
 - Reduced motion: no travel, the settled fill and the settled count (Law VI). Calm: the fill only, no party;
   `fx.spiral_full` still fires at its Calm recipe.
 - Lexicon: `br_slot_jar` ("Spiral jar"), `br_slot_jar_full` ("The jar spills: {0} free spins").
-- **Not drawn from the room.** The room would need this account's slot state, which it does not fetch, or a
-  new `ctx` channel; neither is cheap enough to be worth it. The room's `screen_status` label is unchanged
-  and the jar lives on the close-up cabinet only. (The playbook's "shows from across the room" is not built.
-  Owner may revisit.)
+- **Not drawn from the room.** The room would need this account's slot state, which it does not fetch. There
+  is a `ctx` channel now, `ctx.revealedWin(amount, tier, text)` (`room/loader.js` -> `scene.celebrate`),
+  which a station posts once a paid result has been revealed and the room spends on that fixture's coin
+  shower; it carries the pay, its tier and the win text, never the jar's fill. So the room's `screen_status`
+  label is unchanged and the jar still lives on the close-up cabinet only. (The playbook's "shows from
+  across the room" is not built. Owner may revisit.)
 
 ### 10.16.B B2 the floor bell (community big-win ticker)
 
