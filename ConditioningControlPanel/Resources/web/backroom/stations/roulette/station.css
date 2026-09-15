@@ -78,3 +78,8 @@
 .roul-mat-strip button.is-hit { background: #297b65; }
 .roul-station[data-seated] .roul-odds { left: auto; right: 12px; top: 100px; bottom: auto; }
 .roul-station[data-seated] .roul-top { top: 108px; max-width: calc(100% - 104px); }
+@media (max-width: 800px), (max-aspect-ratio: 11/10) {
+  .roul-station[data-seated] .roul-controls { top: 170px; bottom: auto; }
+}
+.roul-station[data-seated] .roul-mat-strip { top: 350px; bottom: auto; }
+.roul-station:not([data-seated]) .roul-chips-label { border: 0; background: none; opacity: 1; padding: 0; min-height: 0; }

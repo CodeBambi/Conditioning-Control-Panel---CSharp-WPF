@@ -50,7 +50,8 @@ export async function mount(ctx) {
   const gates = () => { const g = ctx.gates || {}; return { flash: g.flash !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false, tunnel: g.tunnel !== false }; };
   const stage = ctx.stage?.fixture && ctx.stage?.register ? ctx.stage : null;
   const makeBowl3D = stage ? (await import('./bowl-3d.js')).createBowl3D : null;
-  let unStage = null;
+  const makeMat3D = stage ? (await import('./mat-3d.js')).createMat3D : null;
+  let unStage = null, betSelector = null;
   const hostBack = ctx.hostBack === true;
   const hook = ctx.spReadout && typeof ctx.spReadout.owe === 'function' ? ctx.spReadout : null;
   loadCss();
@@ -115,6 +116,8 @@ export async function mount(ctx) {
     $('.roul-chips-label').textContent = t('br_roulette_chips', 'Chips {n} of {max}', { n: used, max: MAX_CHIPS });
     const locked = phase !== 'bet' || resume;
     $('.roul-clear').disabled = locked || used === 0;
+    $('.roul-chips-label').disabled = !stage || locked;
+    if (betSelector && locked) betSelector.hide();
     el.querySelectorAll('.roul-spins button').forEach((b) => { b.setAttribute('aria-pressed', String(Number(b.dataset.n) === count)); b.disabled = locked; });
     const shownWhy = why || (phase === 'bet' && !resume && !c.ok && c.why !== 'empty' ? whyText(c.why, c) : '');
     $('.roul-why').textContent = shownWhy; $('.roul-why').hidden = !shownWhy;
@@ -161,7 +164,7 @@ export async function mount(ctx) {
         <ol class="roul-history"></ol>
       </header>
       <div class="roul-controls">
-        <div class="roul-row"><span class="roul-chips-label"></span><span class="roul-pips" aria-hidden="true"><i></i><i></i><i></i></span><button class="roul-clear" type="button"></button></div>
+        <div class="roul-row"><button type="button" class="roul-chips-label"></button><span class="roul-pips" aria-hidden="true"><i></i><i></i><i></i></span><button class="roul-clear" type="button"></button></div>
         <div class="roul-row roul-spins" role="group"><span class="roul-spins-label"></span>${spinsBtns}</div>
         <p class="roul-why" hidden></p>
         <button class="roul-spin" type="button"><span></span><small></small></button>
@@ -180,6 +183,7 @@ export async function mount(ctx) {
     root.querySelector('.roul-card-back').onclick = back;
     if (hostBack) { root.dataset.hostBack = ''; root.querySelector('.roul-back').hidden = true; root.querySelector('.roul-card-back').hidden = true; }
     if (hook) root.dataset.hostSp = '';
+    root.querySelector('.roul-chips-label').onclick = () => betSelector?.toggle();
     root.querySelector('.roul-spin').onclick = () => press();
     root.querySelector('.roul-clear').onclick = () => { if (phase === 'bet' && !resume) { chips = {}; why = null; sync(); } };
     root.querySelectorAll('.roul-spins button').forEach((b) => { b.onclick = () => setCount(Number(b.dataset.n)); });
@@ -344,6 +348,7 @@ export async function mount(ctx) {
     bowl.draw(g, { dpr: size.dpr, now, k, full: fullNow(), spiral: gt.spiral, kit,
       still, slowText: t('br_roulette_slowly', 's l o w l y') });
     const landedShown = cur && cur.landed ? cur.read : null;
+    if (betSelector) betSelector.draw(null, { chips, hits: [], locked: phase !== 'bet' || resume });
     mat.draw(g, { now, chips, hover, hits: landedShown ? landedShown.hits : [], landed: landedShown ? landedShown.pocket : null, k, still,
       bowl: bowl.geo, locked: phase !== 'bet' || resume });
   }
@@ -360,11 +365,11 @@ export async function mount(ctx) {
   const local = (e) => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
   function onPointer(e) {
     if (!mat) return;
-    const p = local(e), spot = mat.hit(p.x, p.y);
+    const p = local(e), spot = mat.pick ? mat.pick(e) : mat.hit(p.x, p.y);
     if (e.type === 'pointermove') { hover = spot; cv.style.cursor = spot && phase === 'bet' && !resume ? 'pointer' : 'default'; return; }
     if (e.type === 'pointerdown' && spot) { e.preventDefault(); place(spot, e.button === 2 || e.shiftKey); }
   }
-  const onContext = (e) => { if (mat && mat.hit(local(e).x, local(e).y)) e.preventDefault(); };
+  const onContext = (e) => { if (mat && (mat.pick ? mat.pick(e) : mat.hit(local(e).x, local(e).y))) e.preventDefault(); };
 
   /* ------------------------------------------------------------ lifecycle */
   async function open() {
@@ -390,8 +395,11 @@ export async function mount(ctx) {
     }
     st = b; sp = Number(b.sp) || 0; tape = adoptTape(b.tape);
     bowl = stage ? makeBowl3D({ stage, wheel: st.wheel, rose: st.rose }) : createBowl({ wheel: st.wheel, rose: st.rose });
-    mat = stage ? createMatStrip({ root: el, spots: st.spots, label: matLabel, place }) : createMat({ spots: st.spots, rose: st.rose, label: matLabel });
-    if (stage) unStage = stage.register({ update: frame, dispose() { bowl?.dispose(); mat?.dispose(); } });
+    mat = stage ? makeMat3D({ stage, spots: st.spots, label: matLabel }) : createMat({ spots: st.spots, rose: st.rose, label: matLabel });
+    if (stage) {
+      betSelector = createMatStrip({ root: el, spots: st.spots, label: matLabel, place }); betSelector.hide();
+      unStage = stage.register({ update: frame, dispose() { bowl?.dispose(); mat?.dispose(); betSelector?.dispose(); betSelector = null; } });
+    }
     if (tape) {
       chips = chipsOf(tape.bets); resume = tape.played < tape.outcomes.length;
       if (tape.played > 0) { const last = readOutcome(tape.outcomes[tape.played - 1], tape.bets, { rose: st.rose, wheel: st.wheel }); bowl.seat(last.index); }
