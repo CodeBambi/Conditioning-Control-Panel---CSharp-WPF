@@ -149,3 +149,11 @@ Dev harness: serve `ConditioningControlPanel/Resources/web` as the web root and 
 (`?sp=57&latency=80&floor=5000&calm&reduced&full&off=flash,spiral,brainDrain,tunnel&nopics&hook&script=As.9d.Kh.7c,Th.9d.8c.8s`).
 `dev.station.debug()` shows the state, the felt, the kit, the deck, the moments and the feel log; `dev.host` is the
 kit's mock host (what fired), and the page's `#screen` draws what the host would.
+
+## Draft seated 3D view
+
+When the room provides `ctx.stage`, cards render on the existing room renderer and seated camera. Standalone mounts keep the canvas view. The state machine, server calls, card order, moments and Deal guard are shared. The shoe raycast calls the same guarded Deal action as the button and keyboard.
+
+`room/nodes-cards.js` requires eighteen `card_slot_{dealer,p0,p1}_{0..5}` anchors plus `deck_shoe_mouth`, `deck_shoe_base`, `bet_spot_0/1`, `table_lamp` and `felt_surface`. Slots carry `card_width` and `card_height` extras in model metres. Missing anchors fail visibly instead of guessing placement. The runtime owns card quads/textures, chip meshes and the breathing light; it restores hidden decorative cards and disposes those resources on close.
+
+No new lexicon keys. Existing card status and controls remain the accessible text view. Verification: `node tests/cards-3d-check.mjs <evidence-directory> [--phone]` exercises the real room at 1280x720 or 400x800, with a local mock host. Phone results are headless emulation, not device measurements.
