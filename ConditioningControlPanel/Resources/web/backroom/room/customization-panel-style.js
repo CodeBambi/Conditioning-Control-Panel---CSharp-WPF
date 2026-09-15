@@ -21,12 +21,21 @@ body:has(.br-custom-panel:not([hidden])) .br-nav{right:calc(50vw + 12px)}
 .br-custom-footer{order:3;padding:4px 12px;background:#160d24;text-align:right}.br-custom-footer button{padding:3px;border:0;background:transparent;font-size:11px;color:#b8a4bf}
 .br-custom-note{font-size:12px;color:#e1c8dc;margin:4px 0}.br-custom-prompt{margin:0;color:#d8c3e1}
 .br-custom-palettes button:nth-child(1){border-bottom:3px solid #ef26aa}.br-custom-palettes button:nth-child(2){border-bottom:3px solid #13bea5}.br-custom-palettes button:nth-child(3){border-bottom:3px solid #f47939}
+/* The lever arrows sit on the room pane, the part of the screen the sheet leaves free. */
+.br-custom-arrows{position:fixed;left:0;top:0;right:50vw;bottom:0;z-index:29;pointer-events:none;font:13px/1.35 system-ui,sans-serif;color:#f7e5ef}
+.br-custom-arrows[hidden]{display:none!important}
+.br-custom-arrows:focus-visible{outline:2px solid #78f4dc;outline-offset:-4px}
+.br-custom-arrow{position:absolute;top:50%;transform:translateY(-50%);width:48px;height:48px;pointer-events:auto;cursor:pointer;border-radius:50%;border:2px solid #edc077;background:#21142ed9;color:#f3d5a0;font:28px/1 Georgia,serif;padding:0 0 4px;box-shadow:0 2px 12px #0009;touch-action:manipulation}
+.br-custom-arrow:hover{background:#523257}.br-custom-arrow:active{background:#713a60}.br-custom-arrow:focus-visible{outline:2px solid #78f4dc;outline-offset:2px}
+.br-custom-arrow.is-prev{left:10px}.br-custom-arrow.is-next{right:10px}
+.br-custom-centred{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);padding:4px 12px;border-radius:999px;background:#21142ed9;border:1px solid #75536d;color:#f2d19c;font:13px Georgia,serif;white-space:nowrap}
 .br-custom-panel .br-vending-pick{position:absolute;z-index:2;padding:0;border:2px solid transparent;background:transparent;border-radius:6px}
 .br-custom-panel .br-vending-pick:hover{background:transparent;border-color:transparent}
 .br-custom-panel .br-vending-pick[aria-pressed=true]{background:#78f4dc12;border-color:#78f4dc;box-shadow:0 0 9px #78f4dc88}
 @media(max-width:700px) and (orientation:portrait){
  body:has(.br-custom-panel:not([hidden])) .br-nav{right:12px}
  .br-custom-panel{left:0;width:auto;top:auto;height:56vh}
+ .br-custom-arrows{right:0;bottom:56vh}
  .br-custom-panel:before{left:-2%;right:-2%;top:-5px;bottom:auto;width:auto;height:7px;transform:rotate(-1.5deg)}
  .br-custom-header{padding:7px 12px}.br-custom-header h2{font-size:18px}.br-custom-header button{padding:5px 9px}
  .br-custom-hud{padding:6px 12px}.br-custom-hud h3{font-size:17px}

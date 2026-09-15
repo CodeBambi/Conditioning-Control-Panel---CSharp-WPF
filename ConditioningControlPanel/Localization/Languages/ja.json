@@ -5367,6 +5367,8 @@
   "br_custom_upgrades": "部屋のアップグレード",
   "br_custom_decorations": "装飾",
   "br_custom_placement": "配置",
+  "br_custom_prev_slot": "前のスロット",
+  "br_custom_next_slot": "次のスロット",
   "br_custom_palette": "色",
   "br_custom_title": "ルームサービス",
   "br_custom_close": "閉じる",

@@ -5367,6 +5367,8 @@
   "br_custom_upgrades": "Mejoras de la sala",
   "br_custom_decorations": "Decoraciones",
   "br_custom_placement": "Colocación",
+  "br_custom_prev_slot": "Tragaperras anterior",
+  "br_custom_next_slot": "Tragaperras siguiente",
   "br_custom_palette": "Colores",
   "br_custom_title": "Servicio de habitación",
   "br_custom_close": "Cerrar",

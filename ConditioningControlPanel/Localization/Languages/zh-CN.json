@@ -5832,6 +5832,8 @@
   "br_custom_upgrades": "房间升级",
   "br_custom_decorations": "装饰",
   "br_custom_placement": "摆放位置",
+  "br_custom_prev_slot": "上一台老虎机",
+  "br_custom_next_slot": "下一台老虎机",
   "br_custom_palette": "颜色",
   "br_custom_title": "客房服务",
   "br_custom_close": "关闭",
