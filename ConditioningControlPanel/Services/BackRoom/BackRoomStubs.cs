@@ -51,3 +51,12 @@ public sealed class NullBackRoomMedia : IBackRoomMedia
         catch { return fallback; }
     }
 }
+
+/// <summary>Speaks nothing and says so, which sends the page back to its own speechSynthesis.
+/// What the dev rig and the tests run on.</summary>
+public sealed class NullBackRoomVoice : IBackRoomVoice
+{
+    public static readonly NullBackRoomVoice Instance = new();
+    public BackRoomVoiceAck Speak(string text, bool reversed, int seed) => new("none", 0);
+    public void Stop() { }
+}

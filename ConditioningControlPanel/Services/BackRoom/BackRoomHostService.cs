@@ -103,6 +103,9 @@ internal static class BackRoomHostService
     internal static IBackRoomFx Fx { get; set; } = BackRoomFxServices.Shared;
     internal static IBackRoomMedia Media { get; set; } = new BackRoomMedia(LexOrFallback);
 
+    /// <summary>The spoken subliminal word (10.21). Tests swap it for the null object.</summary>
+    internal static IBackRoomVoice Voice { get; set; } = new BackRoomVoice();
+
     /// <summary>Loc.Get returns the key itself on a miss; the feed wants the fallback then.</summary>
     private static string LexOrFallback(string key, string fallback)
     {
@@ -129,6 +132,7 @@ internal static class BackRoomHostService
                 Relay = api,
                 Fx = Fx,
                 Media = Media,
+                Voice = Voice,
                 BuildInit = BuildInit,
                 CloseWindow = DisposeAll,
                 Schedule = Schedule,

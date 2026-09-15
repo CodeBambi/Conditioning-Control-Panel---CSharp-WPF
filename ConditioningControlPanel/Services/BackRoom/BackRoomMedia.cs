@@ -58,7 +58,7 @@ internal sealed class BackRoomMedia : IBackRoomMedia
     public BackRoomMedia(Func<string, string, string>? lex = null)
         : this(
             () => (IReadOnlyList<string>?)App.Flash?.SnapshotLocalImagePaths() ?? Array.Empty<string>(),
-            ActivePoolWords,
+            ActiveWords,
             () => App.EffectiveAssetsPath,
             lex,
             () => App.Logger)
@@ -189,13 +189,37 @@ internal sealed class BackRoomMedia : IBackRoomMedia
         return dealt;
     }
 
-    /// <summary>The live subliminal vocabulary: <c>SubliminalPool</c> is where the app writes the
-    /// per-mode / per-mod variant, so its ENABLED keys are exactly what subliminals flash now.</summary>
-    private static IReadOnlyList<string> ActivePoolWords()
+    /// <summary>
+    /// THE PLAYER'S OWN WORDS. Everything CCP counts as selected AND active right now, in one list:
+    /// <list type="bullet">
+    /// <item><c>Settings.SubliminalPool</c>: the live subliminal vocabulary (the app writes the per-mode /
+    /// per-mod variant into it, and a running session prescribes its own), so its ENABLED keys are exactly
+    /// what the subliminal flashes say now;</item>
+    /// <item><c>Settings.KeywordTriggers</c> where <c>Enabled</c>: every Awareness keyword the player left
+    /// switched on, their own and the ones an installed preset (<c>KeywordTriggerPreset.MasterEnabled</c>)
+    /// cloned in. These are the phrases that already have clips in the app, which is what lets
+    /// <see cref="BackRoomVoice"/> say them in the player's own audio.</item>
+    /// </list>
+    /// Empty means the player has nothing active, and only then does the deal fall back to the four
+    /// preset words (Law VII).
+    /// </summary>
+    internal static IReadOnlyList<string> ActiveWords()
     {
-        var pool = App.Settings?.Current?.SubliminalPool;
-        if (pool == null) return Array.Empty<string>();
-        return pool.Where(kv => kv.Value).Select(kv => kv.Key).ToList();
+        var words = new List<string>();
+        var settings = App.Settings?.Current;
+        if (settings == null) return words;
+
+        var pool = settings.SubliminalPool;
+        if (pool != null)
+            foreach (var kv in pool)
+                if (kv.Value && !string.IsNullOrWhiteSpace(kv.Key)) words.Add(kv.Key);
+
+        var triggers = settings.KeywordTriggers;
+        if (triggers != null)
+            foreach (var t in triggers)
+                if (t is { Enabled: true } && !string.IsNullOrWhiteSpace(t.Keyword)) words.Add(t.Keyword);
+
+        return words;
     }
 
     private static bool IsLoopExtension(string path)

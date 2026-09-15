@@ -20,10 +20,14 @@
  *                                      the subliminal word BIG at centre (~12vh), same zoom, house colours
  *                                      (pink to purple, sometimes a two-stop gradient, seeded when `seed` is given).
  *                                      In 80 ms, hold 500 ms, out 400 ms. `chain` (1..2 more words) plays back to
- *                                      back, WORD_GAP_MS between onsets, colours drifting along the chain. A creeping
+ *                                      back, WORD_GAP_MS between onsets, colours drifting along the chain (a host clip
+ *                                      longer than WORD_MS holds the next onset back, up to MAX_WORD_HOLD_MS). A creeping
  *                                      tunnel (moments.tunnel -> fx-tunnel) breathes once for the chain: in 500 ms
- *                                      to 0.6, held to the last onset, out 500 ms. Each word: 'clicker' cue, spoken
- *                                      through speechSynthesis (rate 0.85, pitch 0.8), the 'word' cue under it.
+ *                                      to 0.6, held to the last onset, out 500 ms. Each word: 'clicker' cue, SPOKEN BY
+ *                                      THE HOST (voice.js -> word.speak: the player's own clip for that phrase, a
+ *                                      bundled one, or Windows speech, on the app's audio device). Only an ack of
+ *                                      'none' - or no host at all, the phone playtest - falls back to speechSynthesis
+ *                                      (rate 0.85, pitch 0.8). The 'word' cue under it.
  *                                      1 in 100 per word (the page's own seeded rng, never the payout): the word is
  *                                      reversed, mirrored and spoken as its reversed spelling at rate 0.7.
  *                                      Returns { done: Promise } resolving after the last word fades.
@@ -31,7 +35,7 @@
  *                                      and EMI shrugs / winks with one of eight rotating barks (br_emi_dead_1..8).
  *   .cancel()                          Law VI: suspend or leave drops text, words, tunnel and speech at once
  *   .dispose()
- *   .debug()                           { shown, words, tunnel, cues, barks, speech } for the tests and the smokes
+ *   .debug()                           { shown, words, tunnel, cues, barks, speech, voice } for the tests and the smokes
  *
  * The flow every game follows on the frame the result SHOWS (Law I):
  *   0 ms                 the landing thud
@@ -45,6 +49,7 @@
  * audio, speech or the DOM is missing (node tests run on small fakes).
  * ==========================================================================*/
 import { createMoments } from './moments.js';
+import { createVoice } from './voice.js';
 
 export const HIGHLIGHT_MS = 400;
 export const HIGHLIGHT_GAP_MS = 80;
@@ -65,6 +70,7 @@ export const WORD_TUNNEL_MS = 500;                                // the tunnel'
 export const WORD_TUNNEL_LEVEL = 0.6;
 export const WORD_SIZE_VH = 12;
 export const REVERSE_ODDS = 100;                                  // 1 in 100 per word
+export const MAX_WORD_HOLD_MS = 3000;                             // the longest a host clip may hold the next word back
 export const SETTLE_MS = 600;
 export const BARK_MS = 2400;
 export const TIER_VH = Object.freeze({ small: 7, big: 10, hero: 14 });
@@ -122,7 +128,8 @@ const reverseText = (s) => Array.from(String(s)).reverse().join('');
  */
 export function wordPlan(text, { chain = [], reversed = false, seed } = {}) {
   const words = [String(text)].concat(Array.isArray(chain) ? chain.slice(0, 2).map(String) : []).filter((w) => w.length > 0);
-  const rng = seededRng(seed === undefined || seed === null ? Math.floor(Math.random() * 4294967296) : seed);
+  const resolvedSeed = (seed === undefined || seed === null ? Math.floor(Math.random() * 4294967296) : Number(seed)) >>> 0;
+  const rng = seededRng(resolvedSeed);
   const base = 272 + rng() * 60;                                  // purple .. pink
   const step = (rng() < 0.5 ? -1 : 1) * (12 + rng() * 16);        // the drift along the chain
   const items = words.map((w, i) => {
@@ -134,6 +141,7 @@ export function wordPlan(text, { chain = [], reversed = false, seed } = {}) {
   const lastOnset = (items.length - 1) * WORD_GAP_MS;
   return {
     words: items,
+    seed: resolvedSeed,
     totalMs: lastOnset + WORD_MS,
     tunnel: { inMs: WORD_TUNNEL_MS, holdUntilMs: lastOnset, outMs: WORD_TUNNEL_MS, level: WORD_TUNNEL_LEVEL, endMs: Math.max(WORD_TUNNEL_MS, lastOnset) + WORD_TUNNEL_MS },
   };
@@ -261,9 +269,10 @@ function stopAnim(a) { if (a) { try { a.cancel(); } catch (e) { /* noop */ } } }
  * @param {string} [o.font]        the cabinet's display font stack; else a bold condensed system stack
  * @param {number} [o.seed]        default seed for .word() when a call gives none
  * @param {Object} [o.cues]        { play(cue, opts) } to use instead of the kit adapter (tests)
+ * @param {Object|null} [o.voice]  the host voice (voice.js). Omitted = the real one; null forces speechSynthesis (tests)
  */
-export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, moments = null, emi = null, font = '', seed, cues = null } = {}) {
-  const shown = [], words = [], tunnelLog = [], cueLog = [], barks = [], speechLog = [];
+export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, moments = null, emi = null, font = '', seed, cues = null, voice } = {}) {
+  const shown = [], words = [], tunnelLog = [], cueLog = [], barks = [], speechLog = [], voiceLog = [];
   const doc = mount && mount.ownerDocument ? mount.ownerDocument : (typeof document !== 'undefined' ? document : null);
   const reduced = () => !!(ctx && ctx.reduced) || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
   const own = !moments && ctx && typeof ctx.fxTunnel === 'function' ? createMoments(ctx, { station: 'callout' }) : null;
@@ -271,6 +280,10 @@ export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, mom
   const sound = cues && typeof cues.play === 'function' ? { play(c, o) { cueLog.push({ cue: c, ...o, at: nowMs() }); cues.play(c, o); } } : createCues(cueLog);
   const timers = new Set(), anims = new Set();
   let layer = null, textEl = null, wordEls = [], tunnelTimer = 0, tunnelPosted = 0, barkAt = 0, disposed = false;
+  // The host voice when there is a host; null (or an explicit null) leaves every word on speechSynthesis.
+  const speaker = voice === undefined ? createVoice() : voice;
+  const hosted = !!(speaker && speaker.available === true && typeof speaker.speak === 'function');
+  let chainHoldUntil = 0;   // a host clip longer than WORD_MS pushes the next onset out to here
 
   const fontStack = () => {
     if (font) return font;
@@ -408,6 +421,37 @@ export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, mom
     return false;
   }
 
+  /** Law VI everywhere: the host line stops with the page one. */
+  function hushAll() {
+    hush();
+    if (hosted && typeof speaker.stop === 'function') { try { speaker.stop(); } catch (e) { /* noop */ } }
+  }
+  /**
+   * Say one word. Hosted, the app owns the line (its own clip, a bundled one, or Windows speech) and the
+   * page stays quiet unless the ack comes back 'none'; unhosted, speechSynthesis speaks on this very frame
+   * exactly as it always did. An ack whose durationMs runs past WORD_MS holds the next word of the chain.
+   */
+  function speakWord(w, planSeed) {
+    const rate = w.reversed ? SPEECH.reversedRate : SPEECH.rate;
+    if (!hosted) { speak(w.spoken, rate, speechLog); return; }
+    const at = nowMs();
+    const entry = { text: w.text, reversed: w.reversed, index: w.index, at, source: null, durationMs: 0 };
+    voiceLog.push(entry);
+    let asked;
+    try { asked = speaker.speak({ text: w.text, reversed: w.reversed, seed: planSeed }); }
+    catch (e) { entry.source = 'none'; speak(w.spoken, rate, speechLog); return; }
+    Promise.resolve(asked).then((ack) => {
+      if (disposed) return;
+      const source = ack && typeof ack.source === 'string' ? ack.source : 'none';
+      const ms = ack && Number.isFinite(ack.durationMs) ? Math.max(0, ack.durationMs) : 0;
+      entry.source = source; entry.durationMs = ms;
+      // Only silence sends the word back to the browser voice. 'clip', 'preset' and 'tts' all mean the
+      // host is already saying it, reversed audio included, so speaking here would double it up.
+      if (source === 'none') { speak(w.spoken, rate, speechLog); return; }
+      if (ms > WORD_MS) chainHoldUntil = Math.max(chainHoldUntil, at + Math.min(ms, MAX_WORD_HOLD_MS));
+    }).catch(() => { if (!disposed) { entry.source = 'none'; speak(w.spoken, rate, speechLog); } });
+  }
+
   const api = {
     show(key, fallback = '', { tier = 'small' } = {}) {
       if (disposed) return { done: Promise.resolve() };
@@ -427,10 +471,13 @@ export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, mom
       api.cancelWords();
       words.push({ text: String(text), chain: plan.words.slice(1).map((w) => w.text), at: nowMs(), plan });
       const still = reduced();
+      const startedAt = nowMs();
+      let lastEndAt = startedAt + plan.totalMs;
       for (const w of plan.words) {
         const play = () => {
+          lastEndAt = Math.max(lastEndAt, nowMs() + WORD_MS);
           sound.play('clicker', { index: w.index });
-          speak(w.spoken, w.reversed ? SPEECH.reversedRate : SPEECH.rate, speechLog);
+          speakWord(w, plan.seed);
           sound.play('word', { index: w.index });
           const el = makeText(w.shown, WORD_SIZE_VH, 'br-callout-word');
           if (!el) return;
@@ -440,10 +487,18 @@ export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, mom
           zoomIn(el, { from: ZOOM.from, to: ZOOM.to, zoomMs: w.inMs, holdMs: w.holdMs, outMs: w.outMs }, w.reversed && !still ? ' scaleX(-1)' : '');
           after(WORD_MS, () => { wordEls = wordEls.filter((x) => x !== el); try { el.remove(); } catch (e) { /* noop */ } });
         };
-        if (w.onsetMs === 0) play(); else after(w.onsetMs, play);   // Law I: the first word is on this frame
+        // The chain waits on the host: a clip that runs past WORD_MS pushes the next onset out, capped at
+        // MAX_WORD_HOLD_MS so a bad duration can never stall the beat.
+        const gated = () => {
+          const wait = chainHoldUntil - nowMs();
+          if (wait > 0) { after(Math.min(wait, MAX_WORD_HOLD_MS), gated); return; }
+          play();
+        };
+        if (w.onsetMs === 0) play(); else after(w.onsetMs, gated);   // Law I: the first word is on this frame
       }
       breathe(plan);
-      return { done: new Promise((r) => after(plan.totalMs, r)), plan };
+      const settle = (r) => () => { const wait = lastEndAt - nowMs(); if (wait > 0) { after(wait, settle(r)); return; } r(); };
+      return { done: new Promise((r) => after(plan.totalMs, settle(r))), plan };
     },
     /** A dead spin: the sweep, the settle cue, EMI's small reaction and one rotating bark. */
     settle() {
@@ -465,14 +520,16 @@ export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, mom
     cancelWords() {
       dropWords();
       if (tunnelTimer) stopTunnel();
-      hush();
+      chainHoldUntil = 0;
+      hushAll();
     },
     cancel() {
       clearTimers();
       dropText();
       dropWords();
       stopTunnel();
-      hush();
+      chainHoldUntil = 0;
+      hushAll();
       if (layer && typeof layer.querySelectorAll === 'function') {
         for (const n of Array.from(layer.querySelectorAll('.br-callout-sweep,.br-callout-bark'))) { try { n.remove(); } catch (e) { /* noop */ } }
       }
@@ -486,7 +543,7 @@ export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, mom
       if (layer) { try { layer.remove(); } catch (e) { /* noop */ } layer = null; }
     },
     debug() {
-      return { shown: shown.slice(), words: words.slice(), tunnel: tunnelLog.slice(), cues: cueLog.slice(), barks: barks.slice(), speech: speechLog.slice(),
+      return { shown: shown.slice(), words: words.slice(), tunnel: tunnelLog.slice(), cues: cueLog.slice(), barks: barks.slice(), speech: speechLog.slice(), voice: voiceLog.slice(), hosted,
         mount: !!mount, live: { text: !!textEl, words: wordEls.length, tunnel: tunnelPosted, timers: timers.size } };
     },
   };
