@@ -134,11 +134,27 @@ for(const [width,height] of [[400,730],[730,400]]){
   }
  }
  ok(await ev('window.__backroom.scene.customization.getState().props.every(x=>!x)'),'preview never grants or equips locked decorations');
- await ev(`window.__backroom.scene.customization.setOwned(['monstera']);document.querySelector('.br-vending-pick').click();document.querySelector('.br-custom-actions button').click()`);
- ok(await ev('window.__backroom.scene.customization.getState().props[0]'),'owned decoration Use applies');
- await ev(`document.querySelectorAll('.br-custom-items button')[0].click();document.querySelectorAll('.br-vending-pick')[4].click();document.querySelector('.br-custom-more').open=true;document.querySelectorAll('.br-custom-more .br-custom-actions')[1].querySelectorAll('button')[1].click();document.querySelector('.br-custom-hud > .br-custom-actions button').click()`);
+ // A pick IS the equip, and the one button under the miniature is the only way back off.
+ await ev(`window.__backroom.scene.customization.setOwned(['monstera']);document.querySelector('.br-vending-pick').click()`);
+ ok(await until('window.__backroom.scene.customization.getState().props[0]'),'one click equips an owned decoration');
+ ok(await ev(`document.querySelectorAll('.br-custom-hud > button').length===1 && !!document.querySelector('.br-custom-remove') && !document.querySelector('.br-custom-hud > .br-custom-actions')`),'exactly one button under the miniature, and it is Remove');
+ await ev(`document.querySelector('.br-custom-remove').click()`);
+ ok(await until('!window.__backroom.scene.customization.getState().props[0]'),'Remove takes the decoration off');
+ ok(await ev(`!document.querySelector('.br-custom-remove')`),'nothing equipped, no button at all');
+ // Right-click an item: the piece comes off wherever it sits, and the browser menu never opens.
+ const menu=(i)=>ev(`(()=>{const e=new MouseEvent('contextmenu',{bubbles:true,cancelable:true,button:2});document.querySelectorAll('.br-vending-pick')[${i}].dispatchEvent(e);return e.defaultPrevented;})()`);
+ await ev(`document.querySelector('.br-vending-pick').click()`);ok(await until('window.__backroom.scene.customization.getState().props[0]'),'the pick puts it back');
+ ok(await menu(0),'right-click is taken from the browser');
+ ok(await until('!window.__backroom.scene.customization.getState().props[0]'),'right-click dismounts the decoration');
+ await ev(`document.querySelectorAll('.br-custom-items button')[0].click();document.querySelectorAll('.br-vending-pick')[4].click()`);
+ ok(await until('window.__backroom.scene.customization.getState().handles[0]===1'),'a lever pick fits the queen to the centred cabinet');
+ await ev(`document.querySelector('.br-custom-more').open=true;document.querySelectorAll('.br-custom-more .br-custom-actions')[1].querySelectorAll('button')[1].click()`);await sleep(60);
+ await ev(`document.querySelectorAll('.br-vending-pick')[4].click()`);
  ok(await until('window.__backroom.scene.customization.getState().handles[1]===1'),'placement uses selected queen on Candy Violet');await shot(width+'-placement.png');
- await ev(`document.querySelectorAll('.br-custom-hud > .br-custom-actions button')[1].click()`);ok(await until('window.__backroom.scene.customization.getState().handles[1]===-1'),'Original restores the chosen handle');
+ await ev(`document.querySelector('.br-custom-remove').click()`);ok(await until('window.__backroom.scene.customization.getState().handles[1]===-1'),'Remove restores the original handle');
+ ok(await until('window.__backroom.scene.customization.getState().handles[0]===1'),'and leaves the other cabinet wearing it');
+ await menu(4);
+ ok(await until('window.__backroom.scene.customization.getState().handles.every(h=>h!==1)'),'right-click dismounts the handle from every cabinet');
  // Lever arrows: the pane pans to the cabinet being modified, and the centred cabinet IS the Placement target.
  const arrowsDbg=()=>ev('window.__backroom.scene.customization.debug().arrows');
  const centredOn=async()=>{const a=await arrowsDbg();const goal=a.slots[a.target];return !a.travel&&!!a.view&&goal&&a.view.look.every((v,i)=>Math.abs(v-goal.look[i])<1e-6)&&a.centred===['Candy Rose','Candy Violet','Candy Mint'][a.target]&&(await ev(`[...document.querySelectorAll('.br-custom-more .br-custom-actions')[1].querySelectorAll('button')].map(b=>b.getAttribute('aria-pressed'))`)).indexOf('true')===a.target;};
@@ -160,6 +176,16 @@ for(const [width,height] of [[400,730],[730,400]]){
  ok(await swipe(-90)&&(await arrowsDbg()).target!==before&&await centredOn(),'swipe left on the pane pans to the next cabinet');
  ok(await swipe(90)&&(await arrowsDbg()).target===before&&await centredOn(),'swipe right pans back');
  ok(await swipe(-20)&&(await arrowsDbg()).target===before,'a short drag is not a swipe');
+ // A tap on the close-up pulls that cabinet for fun: the handle swings and the drums roll, and nothing is spent.
+ const pullDbg=()=>ev('window.__backroom.scene.customization.debug().pulls');
+ const requests=()=>ev(`window.__posted.filter(m=>m.type==='station-request'||m.type==='reward-claim').length`);
+ const spent=await requests(),pullsBefore=(await pullDbg()).count;
+ await ev(`(()=>{const c=document.querySelector('canvas');const at=(t,x)=>c.dispatchEvent(new PointerEvent(t,{bubbles:true,button:0,pointerId:8,pointerType:'touch',clientX:x,clientY:120}));at('pointerdown',200);at('pointerup',202);})()`);
+ const afterPull=await pullDbg();
+ ok(afterPull.count===pullsBefore+1&&afterPull.active[afterPull.target],'a tap on the close-up pulls the centred cabinet');
+ ok(await until('!window.__backroom.scene.customization.debug().pulls.active.some(Boolean)',5000),'the pull settles on its own');
+ ok(await requests()===spent,'the pull spends nothing: no station request, no claim');
+ ok((await arrowsDbg()).target===before,'a pull is not a swipe');
  await ev(`document.querySelectorAll('.br-vending-pick')[3].click()`);await sleep(40);ok(await until('!window.__backroom.scene.customization.debug().arrows.travel',3000)&&(await arrowsDbg()).target===before&&await centredOn(),'picking another lever item keeps the cabinet in view');
  await ev(`document.querySelectorAll('.br-vending-pick')[4].click()`);await sleep(40);
  ok(await ev('window.__backroom.scene.customization.opened'),'arrow keys leave the sheet open');

@@ -4,6 +4,7 @@ import { createSlotCustomHandles } from './slot-custom-handles.js';
 import { createCustomizationScreens } from './customization-screens.js';
 import { createCustomizationProps } from './customization-props.js';
 import { createSpiralSamples } from './vending-spirals.js';
+import { kit } from '../shared/sound/kit.js';
 
 const PIECES=['knight','queen','rook'];
 
@@ -19,7 +20,7 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
   vending.position.set(7.05,.02,6.4);vending.rotation.y=-Math.PI/2;vending.scale.setScalar(1.08);root.add(vending);
   for(const name of ['header_title','header_subtitle','delivery_label']){const n=vending.getObjectByName(name);if(n)n.visible=false;}
   const titleCanvas=document.createElement('canvas');titleCanvas.width=1024;titleCanvas.height=128;
-  const tx=titleCanvas.getContext('2d');tx.fillStyle='#180c25';tx.fillRect(0,0,1024,128);tx.fillStyle='#f4d29c';tx.font='600 82px Georgia';tx.textAlign='center';tx.textBaseline='middle';tx.fillText(lex('br_custom_title','Room Service'),512,64,970);
+  const tx=titleCanvas.getContext('2d');tx.fillStyle='#180c25';tx.fillRect(0,0,1024,128);tx.fillStyle='#f4d29c';tx.font='600 82px "Segoe UI",system-ui,sans-serif';tx.textAlign='center';tx.textBaseline='middle';tx.fillText(lex('br_custom_title','Room Service'),512,64,970);
   const titleMap=new T.CanvasTexture(titleCanvas);titleMap.colorSpace=T.SRGBColorSpace;
   const title=new T.Mesh(new T.PlaneGeometry(1.16,.145),new T.MeshBasicMaterial({map:titleMap,toneMapped:false}));title.position.set(0,2.065,.438);vending.add(title);
   const extras=await createCustomizationScreens({scene,root,loader,base,room});
@@ -41,7 +42,13 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     model.name='statue_spot_'+spot+'_'+PIECES[index];model.rotation.y=spot===2?Math.PI:0;
     model.position.fromArray(position);model.visible=index===spot;return model;
   }));
-  const handles=await createSlotCustomHandles({holders:room.holders,loader,base,sources:sculptures});
+  // The pull-for-fun cues, on the room's one kit: the lever's tap, the drums' roll, a thud per stop.
+  let pulled=0;
+  const cue=(name,index,reel=0)=>{
+    if(name==='pull')pulled++;
+    try{if(!kit.arm())return;if(name==='pull'){kit.play('tap');kit.play('ticks',{reel:0,ms:1100});}else kit.play('thud',{semis:(reel-1)*2});}catch{/* a cue never breaks a pull */}
+  };
+  const handles=await createSlotCustomHandles({holders:room.holders,loader,base,sources:sculptures,onCue:cue});
   const getState=()=>({screens:extras.getState(),props:props.getState(),statues:[...selected.statues],handles:handles.getState(),floor:floorEnabled?room.getFloorStyle().design:-1,palette:room.getFloorStyle().palette});
   const select=(category,index,target=0)=>{
     if(category==='screens')return extras.set(target,index);
@@ -101,7 +108,12 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
   const onDown=e=>{if(e.button===0&&(isActive()||panel.slotArrows))down={x:e.clientX,y:e.clientY,t:performance.now()};};
   const onUp=e=>{
     if(!down)return;const start=down;down=null;
-    if(panel.opened){const dx=e.clientX-start.x,dy=e.clientY-start.y;if(panel.slotArrows&&Math.abs(dx)>=SWIPE&&Math.abs(dx)>Math.abs(dy)*1.5&&performance.now()-start.t<900)panel.stepSlot(dx<0?1:-1);return;}
+    if(panel.opened){const dx=e.clientX-start.x,dy=e.clientY-start.y,ms=performance.now()-start.t;
+      if(!panel.slotArrows)return;
+      if(Math.abs(dx)>=SWIPE&&Math.abs(dx)>Math.abs(dy)*1.5&&ms<900){panel.stepSlot(dx<0?1:-1);return;}
+      // A tap on the close-up pulls that cabinet for fun: the handle swings, the drums roll, nothing is spent.
+      if(Math.hypot(dx,dy)<=7&&ms<650)handles.pull(panel.slotTarget,{still:snaps()});
+      return;}
     if(!isActive()||Math.hypot(e.clientX-start.x,e.clientY-start.y)>7||performance.now()-start.t>650)return;
     const rect=canvas.getBoundingClientRect();pointer.set((e.clientX-rect.left)/rect.width*2-1,1-(e.clientY-rect.top)/rect.height*2);
     ray.setFromCamera(pointer,camera);
@@ -116,14 +128,14 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
   canvas.addEventListener('pointerdown',onDown);canvas.addEventListener('pointerup',onUp);
   return {setOwned(ids){owned=new Set(ids);propIds.forEach((id,index)=>{if(!owned.has(id))props.set(index,false);});panel.refresh();},row,screens:[...extras.screens,...props.screens],select,getState,restore,preview,open:()=>panel.open(),get opened(){return panel.opened;},
     dismiss(){if(!panel.opened)return false;panel.close();return true;},
-    update(dt,still){spirals.update(dt,still);panel.update?.(dt,still);quiet=!!still;
+    update(dt,still){spirals.update(dt,still);panel.update?.(dt,still);handles.update(dt,still);quiet=!!still;
       if(travel){travel.elapsed+=dt;const t=still?1:Math.min(1,travel.elapsed/travel.duration),k=1-Math.pow(1-t,3);
         shown={...travel.to,position:mix(travel.from.position,travel.to.position,k),look:mix(travel.from.look,travel.to.look,k)};onPreview(shown);if(t>=1)travel=null;}},
     /** The close-up: a scissored pass on the room's own renderer, so it opens no second context. */
     draw(renderer){return panel.draw(renderer);},
     /** What the open panel leaves the room to draw into (viewport pixels, y up from the bottom). */
     previewBox(w,h){return panel.previewBox(w,h);},
-    debug:()=>({selected:getState(),opened:panel.opened,models:9,props:props.debug(),view:panel.viewDebug(),arrows:{...panel.arrowsDebug(),order:slotOrder.slice(),travel:!!travel,view:shown,slots:[0,1,2].map(slotView)}}),
+    debug:()=>({selected:getState(),opened:panel.opened,models:9,props:props.debug(),view:panel.viewDebug(),pulls:{count:pulled,target:panel.slotTarget,active:[0,1,2].map(i=>handles.pulling(i))},arrows:{...panel.arrowsDebug(),order:slotOrder.slice(),travel:!!travel,view:shown,slots:[0,1,2].map(slotView)}}),
     dispose(){handles.dispose();props.dispose();extras.dispose();titleMap.dispose();panel.dispose();canvas.removeEventListener('pointerdown',onDown);canvas.removeEventListener('pointerup',onUp);root.removeFromParent();const gs=new Set(),ms=new Set();root.traverse(o=>{if(o.geometry)gs.add(o.geometry);for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m)ms.add(m);});gs.forEach(g=>g.dispose());ms.forEach(m=>m.dispose());}
   };
 }

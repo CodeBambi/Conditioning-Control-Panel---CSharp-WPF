@@ -7,7 +7,7 @@ import * as T from 'three';
  * thirds. The budget stays where the contract put it: the room, the open station and the hypno
  * kit's Loom, at most three contexts alive and two drawing.
  */
-export function createVendingView({mount,vending,decorations=[],labels=[],onSelect}) {
+export function createVendingView({mount,vending,decorations=[],labels=[],onSelect,onDismount=()=>{}}) {
   const scene=new T.Scene();scene.background=new T.Color(0x100b20);
   const model=vending.clone(true);model.matrixAutoUpdate=true;model.position.set(0,0,0);model.rotation.set(0,0,0);model.scale.setScalar(1);scene.add(model);
   scene.add(new T.HemisphereLight(0xe8d8ff,0x332044,2.6));
@@ -24,7 +24,7 @@ export function createVendingView({mount,vending,decorations=[],labels=[],onSele
     const box=new T.Box3().setFromObject(mini),size=box.getSize(new T.Vector3()),scale=Math.min(.27/size.x,.27/size.y,.20/Math.max(.01,size.z));
     mini.scale.setScalar(scale);mini.position.set(-(box.min.x+size.x/2)*scale,-box.min.y*scale,-(box.min.z+size.z/2)*scale);mini.visible=false;bays[i]?.add(mini);return mini;
   });
-  const buttons=bays.map((bay,i)=>{const b=mount.ownerDocument.createElement('button');b.className='br-vending-pick';b.type='button';b.onclick=()=>onSelect(page*9+i);mount.append(b);own.push(b);return b;});
+  const buttons=bays.map((bay,i)=>{const b=mount.ownerDocument.createElement('button');b.className='br-vending-pick';b.type='button';b.onclick=()=>onSelect(page*9+i);b.oncontextmenu=e=>{e.preventDefault();onDismount(page*9+i);};mount.append(b);own.push(b);return b;});
   function setPage(next){page=next;selected=-1;outline.visible=false;
     bays.forEach((bay,i)=>{const original=bay?.getObjectByName('vending_item_'+i);if(original)original.visible=page===0;if(propMinis[i])propMinis[i].visible=page===1;buttons[i].hidden=page===1&&i>=propMinis.length;buttons[i].setAttribute('aria-label',labels[page*9+i]||'');buttons[i].setAttribute('aria-pressed','false');});
   }
@@ -34,9 +34,12 @@ export function createVendingView({mount,vending,decorations=[],labels=[],onSele
   setPage(0);
   // Selection stays on the cabinet; the room pane carries the item preview.
   function focus(index){selected=index;outline.visible=index>=0;buttons.forEach((b,i)=>b.setAttribute('aria-pressed',String(page*9+i===index)));}
-  function pick(event){if(event.target!==mount)return;   // the stage's own buttons are not the cabinet
-    const r=mount.getBoundingClientRect();if(!r.width||!r.height)return;pointer.set((event.clientX-r.left)/r.width*2-1,-(event.clientY-r.top)/r.height*2+1);ray.setFromCamera(pointer,camera);const hits=ray.intersectObjects(bays.filter(Boolean),true);if(hits.length){let n=hits[0].object;while(n&&!bays.includes(n))n=n.parent;const i=bays.indexOf(n);if(i>=0&&(page===0||i<propMinis.length))onSelect(page*9+i);}}
-  mount.addEventListener('click',pick);
+  function bayAt(event){if(event.target!==mount)return -1;   // the stage's own buttons are not the cabinet
+    const r=mount.getBoundingClientRect();if(!r.width||!r.height)return -1;pointer.set((event.clientX-r.left)/r.width*2-1,-(event.clientY-r.top)/r.height*2+1);ray.setFromCamera(pointer,camera);const hits=ray.intersectObjects(bays.filter(Boolean),true);if(!hits.length)return -1;let n=hits[0].object;while(n&&!bays.includes(n))n=n.parent;const i=bays.indexOf(n);return i>=0&&(page===0||i<propMinis.length)?page*9+i:-1;}
+  function pick(event){const i=bayAt(event);if(i>=0)onSelect(i);}
+  /** Right-click on the cabinet: the piece in that bay comes off the room. No browser menu over the stage. */
+  function menu(event){event.preventDefault();const i=bayAt(event);if(i>=0)onDismount(i);}
+  mount.addEventListener('click',pick);mount.addEventListener('contextmenu',menu);
   /** The stage rectangle in the room canvas's own CSS pixels, y measured up from its bottom edge. */
   function rect(canvas){
     const c=canvas.getBoundingClientRect(),r=mount.getBoundingClientRect();
@@ -65,5 +68,5 @@ export function createVendingView({mount,vending,decorations=[],labels=[],onSele
       return true;
     },
     debug:()=>({selected,page,visibleItems:[...bays.map((b,i)=>b?.getObjectByName('vending_item_'+i)),...propMinis].filter(n=>n?.visible).map(n=>n.name),zoom:Math.round(zoom*1000)/1000,picks:buttons.filter(b=>!b.hidden).map((b)=>{const r=b.getBoundingClientRect();return {label:b.getAttribute('aria-label'),x:r.x+r.width/2,y:r.y+r.height/2,w:r.width,h:r.height};})}),
-    dispose(){disposed=true;mount.removeEventListener('click',pick);own.forEach(b=>b.remove());propMinis.forEach(m=>m.removeFromParent());outline.geometry.dispose();outline.material.dispose();}};
+    dispose(){disposed=true;mount.removeEventListener('click',pick);mount.removeEventListener('contextmenu',menu);own.forEach(b=>b.remove());propMinis.forEach(m=>m.removeFromParent());outline.geometry.dispose();outline.material.dispose();}};
 }
