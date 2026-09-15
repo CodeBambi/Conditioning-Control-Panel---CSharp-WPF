@@ -66,24 +66,34 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     select('floor',state.floor);select('palette',state.palette);
     await Promise.all(state.statues.map((piece,spot)=>{select('statues',piece,spot);return select('handles',state.handles[spot],spot);}));
   };
+  // The lever close-up: one cabinet at a time, the camera at +x looking down -x, so screen-right is -z.
+  const SLOTS=['slot:rose','slot:violet','slot:mint'];
+  const slotView=target=>{const holder=room.holders.get(SLOTS[target]);if(!holder)return null;   // a cabinet whose glb carried no lever holder: nothing to fly the camera to
+    const center=holder.getWorldPosition(new T.Vector3());return {position:[center.x+2.4,1.55,center.z+.35],look:[center.x,1.5,center.z],width:1.8,height:1.7};};
+  const slotZ=i=>room.holders.get(SLOTS[i]).getWorldPosition(new T.Vector3()).z;
+  const slotOrder=[0,1,2].filter(i=>room.holders.get(SLOTS[i])).sort((a,b)=>slotZ(b)-slotZ(a));
+  // The pan between cabinets: a short eased travel, driven from update(); a snap when motion is off or reduced.
+  let travel=null,shown=null,quiet=false;
+  const mix=(a,b,k)=>a.map((v,i)=>v+(b[i]-v)*k);
+  const snaps=()=>quiet||matchMedia('(prefers-reduced-motion: reduce)').matches;
   const preview=(category,index,target=0)=>{
     props.endPreview();
+    if(category!=='handles'){travel=null;shown=null;}
     if(category==='room'){onPreview({position:[0,2.9,5.5],look:[0,1.7,-3]});return;}
     if(category==='screens'){onPreview(extras.preview(target));return;}
     if(category==='props'){const view=props.preview(target);if(view)onPreview(view);return;}
     if(category==='floor'||category==='palette'){onPreview({position:[0,4.2,5.5],look:[0,0,0]});return;}
     if(category==='handles'){
-      const holder=room.holders.get(['slot:rose','slot:violet','slot:mint'][target]);
-      if(!holder)return;   // a cabinet whose glb carried no lever holder: nothing to fly the camera to
-      const center=holder.getWorldPosition(new T.Vector3());
-      onPreview({position:[center.x+2.4,1.55,center.z+.35],look:[center.x,1.5,center.z],width:1.8,height:1.7});return;
+      const goal=slotView(target);if(!goal)return;
+      if(shown&&!snaps()){travel={from:shown,to:goal,elapsed:0,duration:.45};return;}
+      travel=null;shown=goal;onPreview(goal);return;
     }
     const object=statueSpots[target]?.[Math.max(0,index)];if(!object)return;
     const bounds=new T.Box3().setFromObject(object),center=bounds.getCenter(new T.Vector3()),size=bounds.getSize(new T.Vector3());
     const distance=Math.max(1.5,size.y*1.6,size.x*1.15);
     onPreview({position:[center.x,center.y+.12,center.z+Math.cos(object.rotation.y)*distance],look:center.toArray(),width:size.x,height:size.y});
   };
-  const panel=createCustomizationPanel({mount,lex,vending,decorations:props.models,select,getState,restore,preview,hasOwnership:id=>owned.has(id),onClose:()=>{props.endPreview();onPreview(null);}});
+  const panel=createCustomizationPanel({mount,lex,vending,decorations:props.models,select,getState,restore,preview,slotOrder,hasOwnership:id=>owned.has(id),onClose:()=>{props.endPreview();travel=null;shown=null;onPreview(null);}});
   const ray=new T.Raycaster(),pointer=new T.Vector2();let down=null;
   const onDown=e=>{if(e.button===0&&isActive())down={x:e.clientX,y:e.clientY,t:performance.now()};};
   const onUp=e=>{
@@ -102,12 +112,14 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
   canvas.addEventListener('pointerdown',onDown);canvas.addEventListener('pointerup',onUp);
   return {setOwned(ids){owned=new Set(ids);propIds.forEach((id,index)=>{if(!owned.has(id))props.set(index,false);});panel.refresh();},row,screens:[...extras.screens,...props.screens],select,getState,restore,preview,open:()=>panel.open(),get opened(){return panel.opened;},
     dismiss(){if(!panel.opened)return false;panel.close();return true;},
-    update(dt,still){spirals.update(dt,still);panel.update?.(dt,still);},
+    update(dt,still){spirals.update(dt,still);panel.update?.(dt,still);quiet=!!still;
+      if(travel){travel.elapsed+=dt;const t=still?1:Math.min(1,travel.elapsed/travel.duration),k=1-Math.pow(1-t,3);
+        shown={...travel.to,position:mix(travel.from.position,travel.to.position,k),look:mix(travel.from.look,travel.to.look,k)};onPreview(shown);if(t>=1)travel=null;}},
     /** The close-up: a scissored pass on the room's own renderer, so it opens no second context. */
     draw(renderer){return panel.draw(renderer);},
     /** What the open panel leaves the room to draw into (viewport pixels, y up from the bottom). */
     previewBox(w,h){return panel.previewBox(w,h);},
-    debug:()=>({selected:getState(),opened:panel.opened,models:9,props:props.debug(),view:panel.viewDebug()}),
+    debug:()=>({selected:getState(),opened:panel.opened,models:9,props:props.debug(),view:panel.viewDebug(),arrows:{...panel.arrowsDebug(),order:slotOrder.slice(),travel:!!travel,view:shown,slots:[0,1,2].map(slotView)}}),
     dispose(){handles.dispose();props.dispose();extras.dispose();titleMap.dispose();panel.dispose();canvas.removeEventListener('pointerdown',onDown);canvas.removeEventListener('pointerup',onUp);root.removeFromParent();const gs=new Set(),ms=new Set();root.traverse(o=>{if(o.geometry)gs.add(o.geometry);for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m)ms.add(m);});gs.forEach(g=>g.dispose());ms.forEach(m=>m.dispose());}
   };
 }

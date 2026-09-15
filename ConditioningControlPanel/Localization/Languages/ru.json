@@ -5374,6 +5374,8 @@
   "br_custom_upgrades": "Улучшения комнаты",
   "br_custom_decorations": "Украшения",
   "br_custom_placement": "Размещение",
+  "br_custom_prev_slot": "Предыдущий автомат",
+  "br_custom_next_slot": "Следующий автомат",
   "br_custom_palette": "Цвета",
   "br_custom_title": "Обслуживание номера",
   "br_custom_close": "Закрыть",

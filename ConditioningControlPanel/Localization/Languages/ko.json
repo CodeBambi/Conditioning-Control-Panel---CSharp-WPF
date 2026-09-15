@@ -5374,6 +5374,8 @@
   "br_custom_upgrades": "방 업그레이드",
   "br_custom_decorations": "장식",
   "br_custom_placement": "배치",
+  "br_custom_prev_slot": "이전 슬롯",
+  "br_custom_next_slot": "다음 슬롯",
   "br_custom_palette": "색상",
   "br_custom_title": "룸서비스",
   "br_custom_close": "닫기",

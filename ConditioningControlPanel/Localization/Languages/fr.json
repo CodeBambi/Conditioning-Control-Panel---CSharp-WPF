@@ -5376,6 +5376,8 @@
   "br_custom_upgrades": "Améliorations",
   "br_custom_decorations": "Décorations",
   "br_custom_placement": "Emplacement",
+  "br_custom_prev_slot": "Machine précédente",
+  "br_custom_next_slot": "Machine suivante",
   "br_custom_palette": "Couleurs",
   "br_custom_title": "Service en chambre",
   "br_custom_close": "Fermer",

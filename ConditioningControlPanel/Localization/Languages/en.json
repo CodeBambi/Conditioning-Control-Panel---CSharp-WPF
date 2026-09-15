@@ -6103,6 +6103,8 @@
   "br_custom_upgrades": "Room upgrades",
   "br_custom_decorations": "Decorations",
   "br_custom_placement": "Placement",
+  "br_custom_prev_slot": "Previous slot",
+  "br_custom_next_slot": "Next slot",
   "br_custom_palette": "Colours",
   "br_custom_title": "Room Service",
   "br_custom_close": "Close",

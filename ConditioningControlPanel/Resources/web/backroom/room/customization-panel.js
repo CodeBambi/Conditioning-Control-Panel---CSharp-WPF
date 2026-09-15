@@ -2,7 +2,7 @@ import { catalogueStyle } from './customization-panel-style.js';
 import { createVendingView } from './vending-view.js';
 
 /** Selection previews an item; the contextual controls apply it to the room. */
-export function createCustomizationPanel({mount,vending,decorations=[],lex=(_,f)=>f,select,getState,restore,preview=()=>{},hasOwnership=()=>false,onClose=()=>{}}){
+export function createCustomizationPanel({mount,vending,decorations=[],lex=(_,f)=>f,select,getState,restore,preview=()=>{},slotOrder=[0,1,2],hasOwnership=()=>false,onClose=()=>{}}){
   const doc=mount.ownerDocument,L=(k,f)=>lex('br_custom_'+k,f)||f;
   // Two cabinet displays: nine room upgrades, then six collectible decorations.
   const BAYS=9;
@@ -20,6 +20,17 @@ export function createCustomizationPanel({mount,vending,decorations=[],lex=(_,f)
   const footer=make('footer','','br-custom-footer');button(footer,L('restore','Restore preview'),async()=>{await restore?.(structuredClone(snapshot));paint();if(chosen>=0)showPreview();});
 
   let chosen=-1,page=0,target=0,use='handles',snapshot,previousFocus,disposed=false;
+  // Lever arrows, overlaid on the room pane (outside the sheet): they pan the close-up to the previous or
+  // next cabinet, and the centred cabinet IS the Placement target, so the two never disagree.
+  const SLOT_LABELS=[['rose','Candy Rose'],['violet','Candy Violet'],['mint','Candy Mint']];
+  const arrows=doc.createElement('div');arrows.className='br-custom-arrows';arrows.hidden=true;arrows.tabIndex=0;arrows.setAttribute('role','group');arrows.setAttribute('aria-label',L('placement','Placement'));
+  const arrow=(cls,glyph,label,dir)=>{const b=doc.createElement('button');b.type='button';b.className='br-custom-arrow '+cls;b.textContent=glyph;b.setAttribute('aria-label',label);b.title=label;b.onclick=()=>step(dir);arrows.append(b);return b;};
+  arrow('is-prev','\u2039',L('prev_slot','Previous slot'),-1);
+  const centred=make('output','','br-custom-centred',arrows);centred.setAttribute('aria-live','polite');
+  arrow('is-next','\u203a',L('next_slot','Next slot'),1);
+  function step(dir){if(arrows.hidden||!slotOrder.length)return;const i=Math.max(0,slotOrder.indexOf(target));target=slotOrder[(i+dir+slotOrder.length)%slotOrder.length];paint();showPreview();}
+  function paintArrows(){const on=!panel.hidden&&chosen>=3&&chosen<6&&use==='handles';arrows.hidden=!on;if(on)centred.textContent=L(...SLOT_LABELS[target]);}
+  arrows.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();step(e.key==='ArrowLeft'?-1:1);}else if(e.key==='Escape'){e.preventDefault();close();}else trap(e);});
   const state=()=>getState();
   const view=createVendingView({mount:stage,vending,decorations,labels:items.map(([key,label])=>L(key,label)),onSelect:choose});
   function showPreview(){
@@ -33,7 +44,7 @@ export function createCustomizationPanel({mount,vending,decorations=[],lex=(_,f)
     const expanded=!!hud.querySelector('details[open]');
     const more=label=>{const d=make('details','','br-custom-more',hud);d.open=expanded;make('summary',label,'',d);return d;};
     const focused=hud.contains(doc.activeElement)?[...hud.querySelectorAll('button')].indexOf(doc.activeElement):-1;
-    [...chooser.children].forEach((b,i)=>b.setAttribute('aria-pressed',String(page===i)));hud.replaceChildren();overview.hidden=chosen<0;
+    [...chooser.children].forEach((b,i)=>b.setAttribute('aria-pressed',String(page===i)));hud.replaceChildren();overview.hidden=chosen<0;paintArrows();
     if(chosen<0){make('p',L('choose_item','Choose an item'),'br-custom-prompt',hud);return;}
     const title=make('h3',L(...items[chosen]),'',hud);title.setAttribute('aria-live','polite');
     if(chosen>=BAYS && !hasOwnership(items[chosen][0])){make('p',L('collect_locked','Collect this decoration from Daily Daze to use it.'),'br-custom-note',hud);}
@@ -48,15 +59,18 @@ export function createCustomizationPanel({mount,vending,decorations=[],lex=(_,f)
     if(focused>=0)hud.querySelectorAll('button')[focused]?.focus({preventScroll:true});
   }
   [['upgrades','Room upgrades'],['decorations','Decorations']].forEach(([key,label],i)=>button(chooser,L(key,label),()=>{page=i;chosen=-1;view.setPage(i);paint();preview('room',0,0);}));
-  function close(){if(panel.hidden)return;panel.hidden=true;onClose();previousFocus?.isConnected&&previousFocus.focus({preventScroll:true});previousFocus=null;}
-  panel.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Escape'){e.preventDefault();close();return;}if(e.key==='Tab'){const nodes=[...panel.querySelectorAll('button:not([disabled]),summary')].filter(n=>!n.closest('[hidden]')&&(!n.closest('details')||n.tagName==='SUMMARY'||n.closest('details').open)),first=nodes[0],last=nodes.at(-1);if(e.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){e.preventDefault();last.focus();}else if(!e.shiftKey&&doc.activeElement===last){e.preventDefault();first.focus();}}});
-  for(const type of ['keyup','pointerdown','pointerup','click','wheel'])panel.addEventListener(type,e=>e.stopPropagation());
-  mount.append(style,panel);paint();
+  function close(){if(panel.hidden)return;panel.hidden=true;arrows.hidden=true;onClose();previousFocus?.isConnected&&previousFocus.focus({preventScroll:true});previousFocus=null;}
+  // One Tab ring for the sheet and the pane arrows, so a keyboard reaches the arrows from the dialog.
+  function trap(e){if(e.key!=='Tab')return;const nodes=[...panel.querySelectorAll('button:not([disabled]),summary')].filter(n=>!n.closest('[hidden]')&&(!n.closest('details')||n.tagName==='SUMMARY'||n.closest('details').open)).concat(arrows.hidden?[]:[...arrows.querySelectorAll('button')]),first=nodes[0],last=nodes.at(-1);if(e.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){e.preventDefault();last.focus();}else if(!e.shiftKey&&doc.activeElement===last){e.preventDefault();first.focus();}}
+  panel.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Escape'){e.preventDefault();close();return;}trap(e);});
+  for(const type of ['keyup','pointerdown','pointerup','click','wheel']){panel.addEventListener(type,e=>e.stopPropagation());arrows.addEventListener(type,e=>e.stopPropagation());}
+  mount.append(style,arrows,panel);paint();
   return {refresh:paint,open(){if(disposed||!panel.hidden)return;snapshot=structuredClone(state());previousFocus=doc.activeElement;panel.hidden=false;chosen=-1;page=0;view.setPage(0);view.focus(-1);paint();preview('room',0,0);closeButton.focus({preventScroll:true});},close,get opened(){return !disposed&&!panel.hidden;},get selectedItem(){return chosen;},update(dt,still){if(!panel.hidden)view.update(dt,still);},draw(renderer){return !disposed&&!panel.hidden&&view.draw(renderer);},
     /* What the panel leaves the room, in viewport pixels (y up from the canvas bottom): the strip beside
        it while it is docked down one edge, or the band above it once it is a full-width sheet (phone). */
     previewBox(w,h){const r=panel.getBoundingClientRect();
       if(r.left>4)return{x:0,y:0,w:Math.max(1,Math.floor(r.left)),h};
       const band=Math.max(1,Math.floor(r.top));return{x:0,y:h-band,w,h:band};},
-    viewDebug(){return view.debug();},dispose(){if(disposed)return;close();disposed=true;view.dispose();panel.remove();style.remove();}};
+    viewDebug(){return view.debug();},arrowsDebug(){return {visible:!arrows.hidden,target,centred:centred.textContent,buttons:[...arrows.querySelectorAll('button')].map(b=>{const r=b.getBoundingClientRect();return {label:b.getAttribute('aria-label'),x:r.x,y:r.y,w:r.width,h:r.height};})};},
+    dispose(){if(disposed)return;close();disposed=true;view.dispose();arrows.remove();panel.remove();style.remove();}};
 }

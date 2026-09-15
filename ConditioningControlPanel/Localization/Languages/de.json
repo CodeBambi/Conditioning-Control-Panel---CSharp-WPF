@@ -5376,6 +5376,8 @@
   "br_custom_upgrades": "Raum-Upgrades",
   "br_custom_decorations": "Dekorationen",
   "br_custom_placement": "Platzierung",
+  "br_custom_prev_slot": "Vorheriger Automat",
+  "br_custom_next_slot": "Nächster Automat",
   "br_custom_palette": "Farben",
   "br_custom_title": "Zimmerservice",
   "br_custom_close": "Schließen",
