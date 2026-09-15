@@ -20945,8 +20945,8 @@
     },
     {
       "id": "q_crc_h3_betaplace",
-      "text": "Where does a beta belong in the room?",
-      "v3": "[slyly] [darkly amused] [knowing] Where does a beta belong in the room?",
+      "text": "Where does a needy little thing belong in the room?",
+      "v3": "[slyly] [darkly amused] [knowing] Where does a needy little thing belong in the room?",
       "settings": {
         "stability": 0.32,
         "similarity_boost": 0.9,
@@ -21209,8 +21209,8 @@
     },
     {
       "id": "q_crc_h3_yn_betaadmit",
-      "text": "You are more useful as a beta than you ever were as anything else.",
-      "v3": "[soft chuckle] [slyly] [darkly amused] [knowing] [falling intonation] You are more useful as a beta than you ever were as anything else.",
+      "text": "You are more useful as her pet than you ever were as anything else.",
+      "v3": "[soft chuckle] [slyly] [darkly amused] [knowing] [falling intonation] You are more useful as her pet than you ever were as anything else.",
       "settings": {
         "stability": 0.32,
         "similarity_boost": 0.9,
@@ -21449,8 +21449,8 @@
     },
     {
       "id": "q_crc_h3_ci_betacomfort",
-      "text": "How comfortable is the word beta when it is applied to you?",
-      "v3": "[soft chuckle] [slyly] [darkly amused] [knowing] How comfortable is the word beta when it is applied to you?",
+      "text": "How comfortable is the word pathetic when it is applied to you?",
+      "v3": "[soft chuckle] [slyly] [darkly amused] [knowing] How comfortable is the word pathetic when it is applied to you?",
       "settings": {
         "stability": 0.32,
         "similarity_boost": 0.9,
@@ -21521,8 +21521,8 @@
     },
     {
       "id": "q_crc_h3_mantra_beta",
-      "text": "Say what you are: 'I am a beta, and beta is the correct rank.'",
-      "v3": "[slyly] [darkly amused] [knowing] Say what you are: 'I am a beta, and beta is the correct rank.'",
+      "text": "Say what you are: 'I am a pet, and pet is the correct rank.'",
+      "v3": "[slyly] [darkly amused] [knowing] Say what you are: 'I am a pet, and pet is the correct rank.'",
       "settings": {
         "stability": 0.32,
         "similarity_boost": 0.9,
@@ -23777,8 +23777,8 @@
     },
     {
       "id": "sure_circe_16",
-      "text": "That is beneath you, beta.",
-      "v3": "[cold, dismissive] That is beneath you, beta.",
+      "text": "That is beneath you, needy thing.",
+      "v3": "[cold, dismissive] That is beneath you, needy thing.",
       "settings": {
         "stability": 0.42,
         "similarity_boost": 0.9,

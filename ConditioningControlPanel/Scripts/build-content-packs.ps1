@@ -365,6 +365,44 @@ $CsprojStripPatterns = @(
     'Resources\web\dtrh\assets\**\*.mp3'
 )
 
+# ---------------------------------------------------------------------------------------------
+# Deliberate packed-AND-in-box allowlist (TEMPORARY: Circe neutral hotfix overlay)
+# ---------------------------------------------------------------------------------------------
+# The csproj property $(CirceNeutralInBoxOverride) re-adds a handful of stripped files to the
+# build as <Content>, so they ship in the installer AS WELL AS in their pack. That is the one
+# "ships twice" case that is wanted: the re-rendered gender-neutral Circe audio has to reach users
+# who already hold the old mod-locked / audio-web packs, which never refresh on their own, and the
+# in-box copy winning over the pack is exactly the point.
+#
+# Read straight from the csproj, NOT mirrored: it is an exact file list, so a second copy here
+# would only be one more thing to drift. The strip globs above still match these files (the
+# re-include is a separate item), so the drift check itself is unchanged; this set is validated
+# on its own terms instead - every entry must exist, be stripped and be packed, or it is not an
+# overlay but a mislabelled ordinary file.
+#
+# Remove together with the csproj block once the rebuilt packs are published and have had a
+# release cycle (see the comment above $(CirceNeutralInBoxOverride) in the csproj).
+$InBoxOverrideProperty = 'CirceNeutralInBoxOverride'
+
+# Full path -> $true (lower-cased keys, like Get-StrippedFileSet) for every entry of the property.
+# An absent property is an empty set: once the overlay is removed, this is a no-op.
+function Get-InBoxOverrideSet {
+    $set = @{}
+    $csprojPath = Join-Path $ProjectDir 'ConditioningControlPanel.csproj'
+    [xml]$doc = Get-Content -LiteralPath $csprojPath -Raw
+    foreach ($node in @($doc.SelectNodes("//*[local-name()='$InBoxOverrideProperty']"))) {
+        foreach ($raw in ($node.InnerText -split ';')) {
+            $rel = $raw.Trim()
+            if (-not $rel) { continue }
+            if ($rel -match '[*?$@%]') {
+                throw "`$($InBoxOverrideProperty) entry '$rel' is not a plain file path. The allowlist is exact names only."
+            }
+            $set[(Join-Path $ProjectDir $rel).ToLowerInvariant()] = $true
+        }
+    }
+    return $set
+}
+
 # Expands $CsprojStripPatterns against the SOURCE TREE. Returns a hashtable of full path -> $true
 # (lower-cased keys; NTFS is case-insensitive and MSBuild globs are too).
 function Get-StrippedFileSet {
@@ -435,6 +473,26 @@ function Assert-NoStripPackDrift($Resolved) {
     }
 
     Write-Host ("  strip/pack self-check OK ({0} files stripped by the csproj, all packed exactly once)" -f $stripped.Count) -ForegroundColor DarkGray
+
+    # The deliberate in-box overlay (see Get-InBoxOverrideSet). Each entry must be real pack
+    # payload that the build strips and then re-adds; anything else is a typo or a stale entry.
+    $overlay = Get-InBoxOverrideSet
+    if ($overlay.Count) {
+        $bad = @()
+        foreach ($p in @($overlay.Keys | Sort-Object)) {
+            if (-not (Test-Path -LiteralPath (Get-LongPath $p))) { $bad += "    missing on disk: $p"; continue }
+            if (-not $stripped.ContainsKey($p)) { $bad += "    not stripped by the csproj: $p" }
+            if (-not $packed.ContainsKey($p))   { $bad += "    not in any pack: $p" }
+        }
+        if ($bad.Count) {
+            throw ("`$($InBoxOverrideProperty) in the csproj has {0} problem(s) - every entry must be packed AND stripped payload:`n{1}`n" -f $bad.Count, ($bad -join "`n")) +
+                  "  Fix the entry, or drop it: an in-box file that is not also pack payload does not belong in the overlay."
+        }
+        $byPack = @{}
+        foreach ($p in $overlay.Keys) { $byPack[$packed[$p]] = 1 + [int]$byPack[$packed[$p]] }
+        $summary = (@($byPack.Keys | Sort-Object) | ForEach-Object { "$_ $($byPack[$_])" }) -join ', '
+        Write-Host ("  in-box overlay OK ({0} files deliberately packed AND in-box via `$({1}): {2}; temporary)" -f $overlay.Count, $InBoxOverrideProperty, $summary) -ForegroundColor DarkGray
+    }
 }
 
 # ---------------------------------------------------------------------------------------------

@@ -71,7 +71,7 @@ STYLE = (
 POSE_DELTAS = {
     2: ("APPROVING",
         "POSE 2, APPROVING — a warm, satisfied, genuinely pleased smile, pleased-but-superior, "
-        "as if praising the viewer with a soft \"good boy\". Relaxed approving posture, maybe a "
+        "as if praising the viewer with a soft \"good pet\". Relaxed approving posture, maybe a "
         "gloved hand raised in a light approving gesture or resting at her chest. Warm and "
         "rewarding while still dominant."),
     3: ("COMMANDING",

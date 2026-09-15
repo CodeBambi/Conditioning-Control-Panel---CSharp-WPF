@@ -2234,6 +2234,13 @@ namespace ConditioningControlPanel.Services
                         _log?.Warning("Resource mod {BuiltInId} has no resources/ tree at {Path}", builtInId, extractDir);
                         return false;
                     }
+                    // TEMPORARY Circe neutral hotfix overlay: every path that hands a ready tree to the
+                    // registry (fresh sync extract, background extract, stale tree kept while a pack
+                    // re-extracts, tree adopted with no archive at all) lands here, BEFORE adoption
+                    // drops the resolver caches and raises ModChanged, so nothing has listed
+                    // flashes_audio from the unpatched tree yet. Cheap when already patched.
+                    if (string.Equals(builtInId, BuiltInMods.LockedId, StringComparison.OrdinalIgnoreCase))
+                        Migrations.CirceNeutralPackPatch.Apply(extractDir, Migrations.CirceNeutralPackPatch.DefaultOverridesRoot);
                     // Keep the in-code manifest authoritative; only adopt the assets.
                     AdoptBuiltInPackage(builtInId, new ModPackage(codeManifest, extractDir, isBuiltIn: true));
                     System.Threading.Interlocked.Increment(ref _builtInsRegistered);

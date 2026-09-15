@@ -181,7 +181,7 @@ ASSETS = [
     ("docile_cow.png", (1871, 1851), CREST, "RGBA",
      "Central motif: a collar with a hanging chain", "LVL 75 / KEPT PET"),
     ("Dumb_Bimbo.png", (1024, 1024), CREST, "RGB",
-     "Central motif: a drained, emptied hypnotic spiral", "LVL 20 / EMPTY BETA"),
+     "Central motif: a drained, emptied hypnotic spiral", "LVL 20 / EMPTY THING"),
     ("lv_10.png", (1024, 1024), CREST, "RGB",
      "Central motif: a closed padlock", "LVL 10 / KEPT"),
     ("lv_50.png", (1024, 1024), CREST, "RGB",
