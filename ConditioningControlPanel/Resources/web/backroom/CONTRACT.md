@@ -444,7 +444,7 @@ export async function mount(ctx) {
   `room/assets/customization/README.md`. No station, cabinet or screen moves for them, the approved
   left-wall booth positions are untouched, and the only walk volumes added are the two floor plants.
 - **Budget.** At 1280x720 on the entry pose: 277 draw calls with the whole Room Service collection placed
-  (212 before it; the preview draws 1,268 there, 1,312 in its own check), no shadows, no post passes,
+  (264 before it; the preview draws 1,268 there, 1,312 in its own check), no shadows, no post passes,
   pixel ratio capped at 1.5.
 
 ## 8. Feel hooks (for F1, cited from THE HOUSE BOOK)

@@ -732,6 +732,9 @@ await shot('wall-picture-from-feed.png');
   const stage = await ev(`(() => { const r = document.querySelector('.br-custom-stage').getBoundingClientRect();
     return { w: r.width, h: r.height }; })()`);
   ok(stage.w > 320 && stage.h > 80, `the stage keeps a rectangle worth drawing into (${Math.round(stage.w)} x ${Math.round(stage.h)})`);
+  const grid = await ev(`(() => { const g = document.querySelector('.br-custom-items');
+    return { scroll: g.scrollHeight, client: g.clientHeight, buttons: g.children.length }; })()`);
+  ok(grid.scroll <= grid.client, `all ${grid.buttons} item buttons fit the sheet's grid without scrolling it (${grid.scroll} of ${grid.client} px)`);
   await ev(`document.querySelectorAll('.br-custom-items button')[4].click()`);
   await sleep(320);
   const phone = await dbg();
@@ -748,6 +751,7 @@ await shot('wall-picture-from-feed.png');
 
 // 2k3. Room Service placement: every one of the ten props has a real spot in the room, and the room is
 // photographed from the player's own eye height at each of them, for the placement review.
+let propProbe = null;
 {
   const ROOM_SERVICE = [
     ['customization_vending', 'vending', [5.5, 1.65, 6.6], -1.635, -0.16],
@@ -806,12 +810,35 @@ await shot('wall-picture-from-feed.png');
   await sleep(300);
   ok(errs.length === errsBefore, 'no page errors while the props are toggled' + (errs.length > errsBefore ? ': ' + errs.slice(errsBefore).join(' | ') : ''));
   perf.props = back.customization.props;
+  /* Arm the disposal probe here and read it after the room leaves (2l): the batch geometries and the
+     GLB materials exist nowhere but customization-props.js, so if its own dispose() misses them
+     nothing else can free them. Every prop resource has to fire its 'dispose'. */
+  propProbe = await ev(`(() => {
+    window.__propProbe = { g: 0, m: 0 };
+    const gs = new Set(), ms = new Set();
+    for (const name of ${JSON.stringify(ROOM_SERVICE.map((r) => r[0]).filter((n) => n.startsWith('prop_')))}) {
+      window.__backroom.scene.scene.getObjectByName(name).traverse((o) => {
+        if (o.geometry) gs.add(o.geometry);
+        for (const m of (Array.isArray(o.material) ? o.material : [o.material])) if (m) ms.add(m);
+      });
+    }
+    gs.forEach((g) => g.addEventListener('dispose', () => { window.__propProbe.g++; }));
+    ms.forEach((m) => m.addEventListener('dispose', () => { window.__propProbe.m++; }));
+    return { geometries: gs.size, materials: ms.size };
+  })()`);
 }
 
 // 2l. Escape in the empty room leaves
 await key('Escape');
 await sleep(200);
 ok((await posted('exit')).some((m) => m.reason === 'key') && (await posted('exit-done')).length === 1, 'Escape in the room posts exit (key) and exit-done');
+{
+  const freed = await ev('window.__propProbe');
+  ok(propProbe && propProbe.geometries > 25 && propProbe.materials > 25,
+    `the six props held ${propProbe?.geometries} geometries and ${propProbe?.materials} materials`);
+  ok(freed && freed.g === propProbe.geometries && freed.m === propProbe.materials,
+    `leaving the room freed every one of them (${freed?.g}/${propProbe?.geometries} geometries, ${freed?.m}/${propProbe?.materials} materials)`);
+}
 
 perf.gpu = await ev(`(() => { const gl = document.createElement('canvas').getContext('webgl2'); const x = gl && gl.getExtension('WEBGL_debug_renderer_info'); return x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : 'unknown'; })()`);
 await writeFile(join(OUT, 'room-perf.json'), JSON.stringify(perf, null, 2));

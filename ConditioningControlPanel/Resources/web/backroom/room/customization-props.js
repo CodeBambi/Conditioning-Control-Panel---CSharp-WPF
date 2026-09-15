@@ -95,7 +95,19 @@ function bakeStatic(model) {
     model.add(mesh); meshes.push(mesh);
     triangles += index.length / 3;
   }
-  return { meshes, triangles };
+  // A planter carries one authored empty per leaf. With their meshes batched away those empties are
+  // pure recursion for updateMatrixWorld, so drop the ones that ended up holding nothing.
+  let pruned = 0;
+  for (let again = true; again;) {
+    again = false;
+    const dead = [];
+    model.traverse((node) => {
+      if (node === model || node.isMesh || node.children.length || !node.parent) return;
+      dead.push(node);
+    });
+    for (const node of dead) { node.removeFromParent(); pruned++; again = true; }
+  }
+  return { meshes, triangles, pruned };
 }
 
 /**
@@ -104,8 +116,8 @@ function bakeStatic(model) {
  */
 export async function createCustomizationProps({ root, loader, base }) {
   const brass = new T.MeshStandardMaterial({ color: 0xba8654, metalness: 0.72, roughness: 0.32 });
-  const geometries = new Set(), screens = [], placed = [], enabled = PROPS.map(() => true);
-  let triangles = 0, batches = 0;
+  const geometries = new Set(), orphaned = new Set(), screens = [], placed = [], enabled = PROPS.map(() => true);
+  let triangles = 0, batches = 0, pruned = 0;
 
   const models = await Promise.all(PROPS.map((row) => loader.loadAsync(base + 'customization/' + row.file + '.glb')));
   PROPS.forEach((row, i) => {
@@ -113,7 +125,7 @@ export async function createCustomizationProps({ root, loader, base }) {
     group.name = row.node;
     const model = models[i].scene;
     const baked = bakeStatic(model);
-    triangles += baked.triangles; batches += baked.meshes.length;
+    triangles += baked.triangles; batches += baked.meshes.length; pruned += baked.pruned;
     group.add(model);
 
     if (row.plinth) {
@@ -138,6 +150,9 @@ export async function createCustomizationProps({ root, loader, base }) {
       const surface = model.getObjectByName(name);
       if (!surface || !surface.isMesh) continue;
       surface.userData.screenAspect = aspect;
+      // screens.js replaces the authored placeholder with its own shader material and owns that one
+      // from then on, so keep the placeholder to free and leave the replacement alone.
+      for (const m of (Array.isArray(surface.material) ? surface.material : [surface.material])) if (m) orphaned.add(m);
       screens.push(surface);
     }
 
@@ -175,16 +190,28 @@ export async function createCustomizationProps({ root, loader, base }) {
     },
     /** Test seam (scene.js debug): plain numbers, so the smoke can check the spots against the fixtures. */
     debug: () => ({
-      props: placed.length, batches, triangles: Math.round(triangles), on: enabled.filter(Boolean).length,
+      props: placed.length, batches, pruned, triangles: Math.round(triangles), on: enabled.filter(Boolean).length,
       boxes: placed.map((group) => {
         bounds.setFromObject(group);
         return { name: group.name, min: bounds.min.toArray().map(round), max: bounds.max.toArray().map(round) };
       }),
     }),
+    /* Collect BEFORE detaching: the room's own sweep in customization.js traverses the catalogue root,
+       and a group already removed from it is invisible to that sweep. The baked batch geometries and
+       the GLB materials only exist here, so they are only freed here. */
     dispose() {
-      for (const group of placed) group.removeFromParent();
+      const fed = new Set(screens);
+      const materials = new Set([brass, ...orphaned]);
+      for (const group of placed) {
+        group.traverse((node) => {
+          if (node.geometry) geometries.add(node.geometry);
+          if (fed.has(node)) return;   // its material belongs to the room's screen feed, not here
+          for (const m of (Array.isArray(node.material) ? node.material : [node.material])) if (m) materials.add(m);
+        });
+        group.removeFromParent();
+      }
       geometries.forEach((g) => g.dispose());
-      brass.dispose();
+      materials.forEach((m) => m.dispose());
     },
   };
 }

@@ -39,4 +39,4 @@ Notes on the spots:
 - The gallery frame and the portrait pair feed from the room's own media feed, like the room's four wall pictures and the extra screen packs.
 - Two small pieces of geometry are built in code rather than authored: the brass rod the ivy hangs from and the brass plinth the terrarium stands on.
 
-Each prop is baked to one mesh per material when it is placed, so the ivy's 85 authored mesh nodes cost six draw calls instead of eighty-five. The six decoration props together are 30 draw calls and 60,428 triangles. Because the batches are baked, the authored foliage_sway pivots are not animated: these are dressing, not performers.
+Each prop is baked to one mesh per material when it is placed, so the ivy's 85 authored mesh nodes cost six draw calls instead of eighty-five. The six decoration props together are 30 draw calls and 60,428 triangles. The authored nodes the bake empties are pruned from the graph with it (32 of them across the six), so nothing dead is walked every frame. Because the batches are baked, the authored foliage_sway pivots are not animated: these are dressing, not performers.
