@@ -9,7 +9,8 @@
  * Static calls are read from the page sources: t('br_x', 'English') and
  * { key: 'br_x', fallback: 'English' }. Keys a page builds at runtime
  * ('br_cards_' + move, a ternary key) are listed below from the pages' own
- * fallback tables.
+ * fallback tables. The last test runs the scan the other way: an en.json row
+ * nobody asks for is dead weight in all nine locales.
  * ==========================================================================*/
 
 import { test } from 'node:test';
@@ -22,14 +23,25 @@ const BACKROOM = resolve(fileURLToPath(import.meta.url), '../..');
 const EN = resolve(BACKROOM, '../../../Localization/Languages/en.json');
 const en = JSON.parse(readFileSync(EN, 'utf8'));
 
-const pages = [];
+const pages = [], data = [];
 (function walk(dir) {
   for (const n of readdirSync(dir)) {
     const p = join(dir, n);
     if (statSync(p).isDirectory()) { if (!['tests', 'smoke', 'node_modules'].includes(n)) walk(p); }
     else if (/\.(js|html)$/.test(n) && !/^(mock-server\.js|dev\.html)$/.test(n)) pages.push(p);
+    else if (/\.json$/.test(n)) data.push(p);   // stations.json names its rows' labelKey outright
   }
 })(BACKROOM);
+
+/* The host's own side of the lexicon: BackRoomHostService sends every br_ row in init.lex, and
+ * BackRoomMedia / BackRoomStubs name a few rows (the preset words) that no page ever spells out. */
+const host = [];
+(function walk(dir) {
+  for (const n of readdirSync(dir)) {
+    const p = join(dir, n);
+    if (statSync(p).isDirectory()) walk(p); else if (/\.cs$/.test(n)) host.push(p);
+  }
+})(resolve(BACKROOM, '../../../Services/BackRoom'));
 
 const LIT = String.raw`'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"|` + '`' + String.raw`((?:[^` + '`' + String.raw`\\]|\\.)*)` + '`';
 const CALL = new RegExp(String.raw`['"` + '`' + String.raw`](br_(?:slot|cards|roulette|wheel)_[A-Za-z0-9_]+)['"` + '`' + String.raw`]\s*,\s*(?:` + LIT + ')', 'g');
@@ -86,4 +98,41 @@ test('the rows carry no em dash and sit in the br_ block after the wheel', () =>
   assert.ok(at('br_wheel_slice_dazed') < at('br_wheel_slowly') && at('br_wheel_slowly') < at('br_slot_stage')
     && at('br_slot_stage') < at('br_cards_stage') && at('br_cards_stage') < at('br_roulette_back') && at('br_roulette_back') < at('br_ad_arcademy'),
   'wheel, slot, cards, roulette, then the room ads');
+});
+
+/* ------------------------------------------------------------------- the reverse
+ * A row nobody asks for is dead weight in all nine locales: six deleted customization GLBs left
+ * their br_custom_ rows behind (#1250). Every br_ row has to be named outright by a page, by
+ * stations.json or by the C# host, or built by one of the families below. Each family says where
+ * its suffixes come from, so a suffix whose table row or asset is gone has nowhere to hide. */
+const read = (rel) => readFileSync(join(BACKROOM, rel), 'utf8');
+const stationIds = () => new Set(JSON.parse(read('stations.json')).map((r) => r.id));
+
+const FAMILIES = [
+  // room/customization-panel.js: 'br_custom_' + a key from the panel's own item and control tables.
+  { prefix: 'br_custom_', suffixes: () => {
+    const src = read('room/customization-panel.js'), out = new Set();
+    for (const m of src.matchAll(/\bL\(\s*'([a-z0-9_]+)'/g)) out.add(m[1]);
+    for (const m of src.matchAll(/\['([a-z0-9_]+)'\s*,\s*'/g)) out.add(m[1]);
+    for (const m of src.matchAll(/\?\s*'([a-z0-9_]+)'\s*:\s*'([a-z0-9_]+)'/g)) { out.add(m[1]); out.add(m[2]); }
+    return out;
+  } },
+  // room/emi-interaction.js: 'br_emi_' + the EMI's station id + '_' + the line number, three each.
+  { prefix: 'br_emi_', suffixes: () => new Set([...stationIds()].flatMap((id) => [1, 2, 3].map((n) => id + '_' + n))) },
+  // stations/wheel/station.js: 'br_wheel_slice_' + the dealt slice id without its _a / _b half.
+  { prefix: 'br_wheel_slice_', suffixes: () => new Set([...read('stations/wheel/mock-server.js')
+    .matchAll(/\['([a-z0-9_]+)',\s*'/g)].map((m) => m[1].replace(/_[a-z]$/, ''))) },
+  // room/walk.js: 'br_station_' + the row id, for a row that carries no labelKey of its own.
+  { prefix: 'br_station_', suffixes: stationIds },
+];
+
+test('every br_* row in en.json is asked for by somebody', () => {
+  const named = new Set(Object.keys(RUNTIME));
+  for (const f of [...pages, ...data, ...host]) {
+    for (const m of readFileSync(f, 'utf8').matchAll(/br_[a-z0-9_]+/g)) named.add(m[0]);
+  }
+  const families = FAMILIES.map((f) => ({ prefix: f.prefix, set: f.suffixes() }));
+  const dead = Object.keys(en).filter((k) => k.startsWith('br_') && !named.has(k)
+    && !families.some((f) => k.startsWith(f.prefix) && f.set.has(k.slice(f.prefix.length))));
+  assert.deepEqual(dead, [], 'br_ rows nothing asks for: delete them from all nine locales');
 });

@@ -43,5 +43,11 @@ export function createCustomizationPanel({mount,vending,lex=(_,f)=>f,select,getS
   panel.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Escape'){e.preventDefault();close();return;}if(e.key==='Tab'){const nodes=[...panel.querySelectorAll('button:not([disabled])')].filter(n=>!n.closest('[hidden]')),first=nodes[0],last=nodes.at(-1);if(e.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){e.preventDefault();last.focus();}else if(!e.shiftKey&&doc.activeElement===last){e.preventDefault();first.focus();}}});
   for(const type of ['keyup','pointerdown','pointerup','click','wheel'])panel.addEventListener(type,e=>e.stopPropagation());
   mount.append(style,panel);paint();
-  return {open(){if(disposed||!panel.hidden)return;snapshot=structuredClone(state());previousFocus=doc.activeElement;panel.hidden=false;chosen=-1;view.focus(-1);paint();preview('room',0,0);closeButton.focus({preventScroll:true});},close,get opened(){return !disposed&&!panel.hidden;},get selectedItem(){return chosen;},update(dt,still){if(!panel.hidden)view.update(dt,still);},draw(renderer){return !disposed&&!panel.hidden&&view.draw(renderer);},viewDebug(){return view.debug();},dispose(){if(disposed)return;close();disposed=true;view.dispose();panel.remove();style.remove();}};
+  return {open(){if(disposed||!panel.hidden)return;snapshot=structuredClone(state());previousFocus=doc.activeElement;panel.hidden=false;chosen=-1;view.focus(-1);paint();preview('room',0,0);closeButton.focus({preventScroll:true});},close,get opened(){return !disposed&&!panel.hidden;},get selectedItem(){return chosen;},update(dt,still){if(!panel.hidden)view.update(dt,still);},draw(renderer){return !disposed&&!panel.hidden&&view.draw(renderer);},
+    /* What the panel leaves the room, in viewport pixels (y up from the canvas bottom): the strip beside
+       it while it is docked down one edge, or the band above it once it is a full-width sheet (phone). */
+    previewBox(w,h){const r=panel.getBoundingClientRect();
+      if(r.left>4)return{x:0,y:0,w:Math.max(1,Math.floor(r.left)),h};
+      const band=Math.max(1,Math.floor(r.top));return{x:0,y:h-band,w,h:band};},
+    viewDebug(){return view.debug();},dispose(){if(disposed)return;close();disposed=true;view.dispose();panel.remove();style.remove();}};
 }

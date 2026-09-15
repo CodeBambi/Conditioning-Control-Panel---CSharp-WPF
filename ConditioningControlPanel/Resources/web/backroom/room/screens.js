@@ -1,5 +1,7 @@
 /* ============================================================================
- * backroom/room/screens.js - the four wall screens.
+ * backroom/room/screens.js - the room's four wall screens, plus whatever Room
+ * Service has switched on (two more packs of wall screens, four and six, and
+ * the ceiling projection); scene.js hands them all in as one mesh list.
  *
  * Pictures come from the media feed (CONTRACT 5): the room asks once for a deal
  * under the station id `room` and puts the player's own GIFs on the walls,
