@@ -5418,5 +5418,10 @@
   "br_daze_gift": "장식품",
   "br_daze_gift_odds": "미보유 장식품, 모두 보유했다면 75 SP",
   "br_daze_double_odds": "24시간 동안 당첨금 두 배",
-  "br_daze_nothing": "꽝"
+  "br_daze_nothing": "꽝",
+  "br_double_remaining": "Seeing Double: {minutes}분 남음",
+  "br_double_tape_note": "선결제한 스핀은 구매 시점의 배율을 유지합니다.",
+  "br_custom_collect_locked": "Daily Daze에서 이 장식을 획득하면 사용할 수 있습니다.",
+  "br_bell_wheel_change": "Keep the Change 획득",
+  "br_bell_wheel_spoiled": "Spoiled Rotten 획득"
 }

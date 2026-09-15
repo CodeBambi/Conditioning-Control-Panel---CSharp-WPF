@@ -5420,5 +5420,10 @@
   "br_daze_gift": "Une décoration",
   "br_daze_gift_odds": "Décoration manquante, ou 75 SP si la collection est complète",
   "br_daze_double_odds": "Gains doublés pendant 24 heures",
-  "br_daze_nothing": "Rien"
+  "br_daze_nothing": "Rien",
+  "br_double_remaining": "Seeing Double : encore {minutes} min",
+  "br_double_tape_note": "Les tours prépayés gardent le multiplicateur du moment de l’achat.",
+  "br_custom_collect_locked": "Obtenez cette décoration dans Daily Daze pour l’utiliser.",
+  "br_bell_wheel_change": "a obtenu Keep the Change",
+  "br_bell_wheel_spoiled": "a reçu Spoiled Rotten"
 }

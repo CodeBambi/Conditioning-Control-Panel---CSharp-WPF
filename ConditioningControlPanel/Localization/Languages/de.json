@@ -5420,5 +5420,10 @@
   "br_daze_gift": "Eine Dekoration",
   "br_daze_gift_odds": "Fehlende Dekoration oder 75 SP bei voller Sammlung",
   "br_daze_double_odds": "Doppelte Gewinne für 24 Stunden",
-  "br_daze_nothing": "Nichts"
+  "br_daze_nothing": "Nichts",
+  "br_double_remaining": "Seeing Double: noch {minutes} Min.",
+  "br_double_tape_note": "Vorausbezahlte Drehungen behalten den Multiplikator vom Kauf.",
+  "br_custom_collect_locked": "Sammle diese Dekoration bei Daily Daze, um sie zu verwenden.",
+  "br_bell_wheel_change": "traf Keep the Change",
+  "br_bell_wheel_spoiled": "bekam Spoiled Rotten"
 }

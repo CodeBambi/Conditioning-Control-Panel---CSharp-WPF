@@ -806,6 +806,8 @@ await shot('wall-picture-from-feed.png');
 // photographed from the player's own eye height at each of them, for the placement review.
 let propProbe = null;
 {
+  await ev(`window.__backroom.scene.setRewards({owned:['monstera','ivy','terrarium','gallery','portraits','billboard']})`);
+  for(let i=0;i<6;i++) await ev(`window.__backroom.scene.customization.select('props',true,${i})`);
   const ROOM_SERVICE = [
     ['customization_vending', 'vending', [5.5, 1.65, 6.6], -1.635, -0.16],
     ['statue_spot_0_knight', 'knight-pedestal', [-4.9, 1.65, -5.3], -0.477, -0.499],
@@ -823,7 +825,7 @@ let propProbe = null;
   ok(Array.isArray(found) && found.length === 0, 'all ten Room Service props are in the scene graph by name' + (found && found.length ? ': missing ' + found.join(', ') : ''));
   const shown = await ev(`${JSON.stringify(ROOM_SERVICE.map((r) => r[0]))}.filter((n) => {
     for (let o = window.__backroom.scene.scene.getObjectByName(n); o; o = o.parent) if (!o.visible) return true; return false; })`);
-  ok(Array.isArray(shown) && shown.length === 0, 'and every one of them is switched on when the room opens' + (shown && shown.length ? ': hidden ' + shown.join(', ') : ''));
+  ok(Array.isArray(shown) && shown.length === 0, 'and owned props are enabled for the placement check' + (shown && shown.length ? ': hidden ' + shown.join(', ') : ''));
   // A prop's own spot is not inside a station's body: the placement never swallowed a fixture.
   {
     const boxes = (await dbg()).customization.props.boxes;

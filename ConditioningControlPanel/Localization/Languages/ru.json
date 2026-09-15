@@ -5418,5 +5418,10 @@
   "br_daze_gift": "Украшение",
   "br_daze_gift_odds": "Новое украшение или 75 SP, если коллекция собрана",
   "br_daze_double_odds": "Двойные выигрыши на 24 часа",
-  "br_daze_nothing": "Ничего"
+  "br_daze_nothing": "Ничего",
+  "br_double_remaining": "Seeing Double: осталось {minutes} мин",
+  "br_double_tape_note": "Предоплаченные вращения сохраняют множитель на момент покупки.",
+  "br_custom_collect_locked": "Получите это украшение в Daily Daze, чтобы использовать его.",
+  "br_bell_wheel_change": "выиграл Keep the Change",
+  "br_bell_wheel_spoiled": "получил Spoiled Rotten"
 }

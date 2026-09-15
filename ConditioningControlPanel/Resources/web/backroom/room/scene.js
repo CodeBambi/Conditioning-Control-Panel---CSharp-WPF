@@ -309,6 +309,7 @@ export async function createScene(o) {
   screens.deal(() => ambient).catch(() => {});
 
   return {
+    setRewards: snapshot => customization.setOwned(snapshot.owned),
     renderer, camera, scene, buildMs, seat, unseat, pickAt, stage,
     /** A station is taking the screen: keep the pose, stop drawing, keep the context. */
     hold() { if (held) return; held = { pos: pos.slice(), yaw, pitch }; resetInput(); interaction.dismiss(); customization.dismiss(); stop(); setNearest(null); },
