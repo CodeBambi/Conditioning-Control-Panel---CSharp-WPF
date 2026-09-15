@@ -6083,6 +6083,7 @@
   "br_roulette_odds_pays": "pays {n}",
   "br_roulette_odds_woken": "woken {n}",
   "br_roulette_odds_note": "Pays are the SP a chip returns, the chip included. Spiral Wake {wake}: every winning chip pays double. 1 to {max} SP a spin, up to {spins} spins. A layout covering all of 1-36 is refused.",
+  "br_roulette_glyphs_note": "The faded marks on the wheel are the spell of each pocket, win or lose. Spiral: a spiral. Eye: a flash of pictures. Bubble: words. Drop: a melt. The mark lights when the ball settles there.",
   "br_counter_title": "The Prize Parlour",
   "br_counter_closed": "The counter is closed for a moment.",
   "br_counter_retry": "The house did not answer. Confirm again to retry.",

@@ -307,13 +307,28 @@ const SCORES = {
   tap() { return [tone(220, 0, 0.03, 0.06, { part: 'tap', dry: true }), noise(1500, 0, 0.012, 0.03, { part: 'tap', dry: true })]; },
   /** The ball's launch: a short rising whoosh. */
   launch() { return [noise(400, 0, 0.3, 0.06, { hzTo: 1600, q: 0.8, attack: 0.3, part: 'rise' })]; },
+  /**
+   * THE THROW's spin-up (the roulette). The wheel has no lever, so the throw IS the lever and this is its
+   * whole gesture in one cue, about 0.45 s and about the pull's own level: the bearing taking the hand (one
+   * dry catch), a whir opening upward as the rotor picks up, and a low body under it. The loop that follows
+   * the rotor from here is the 'wheel' roll below; the landing is still the thud's own frame (Law X).
+   */
+  whir({ level = 1 } = {}) {
+    const lv = clamp(num(level, 1), 0, 1);
+    return [
+      noise(1900, 0, 0.018, 0.06 * lv, { q: 6, part: 'catch', dry: true }),
+      noise(240, 0.01, 0.44, 0.085 * lv, { hzTo: 1150, q: 1.1, attack: 0.38, part: 'whir', dry: true }),
+      tone(116, 0, 0.38, 0.19 * lv, { hzTo: 232, wave: 'triangle', lp: 820, part: 'bearing' }),
+      tone(232, 0.02, 0.2, 0.05 * lv, { hzTo: 348, wave: 'triangle', part: 'bearing' }),
+    ];
+  },
 };
 
 /* The beds are not scored: they loop until stopped. */
 export const BEDS = Object.freeze(['ambience', 'spiral']);
 /** THE ROLLS loop like a bed but one per reel, and they follow the drum: play('reel', { reel, variant, speed }),
  *  setRollSpeed(reel, speed) every frame, stop('reel', { reel }) on the stop frame. */
-export const ROLLS = Object.freeze(['reel']);
+export const ROLLS = Object.freeze(['reel', 'wheel']);
 export const CUES = Object.freeze([...Object.keys(SCORES), ...BEDS, ...ROLLS]);
 
 /**
@@ -344,6 +359,14 @@ const TICK_AHEAD = 0.14, TICK_MS = 45;
 const rollKey = reel => 'reel:' + clamp(Math.floor(num(reel, 0)), 0, 4);
 /** THE TICK RATE IS THE REEL SPEED: 38 ms a tick at full blur, 260 ms crawling into the stop. */
 export const tickGap = speed => 0.038 + 0.222 * (1 - clamp(num(speed, 1), 0, 1)) ** 1.7;
+
+/** THE WHEEL ROLL: the roulette rotor turning after a throw. One loop for the room, not one per reel, and it
+ *  sits UNDER the slot's drums on purpose - it runs for seconds at a time behind the ball's own voices. */
+export const WHEEL_ROLL = 'wheel';
+export const WHEEL_TICK = 0.034;
+export const WHEEL_BED = 0.03;
+/** THE RATCHET RATE IS THE ROTOR SPEED: 54 ms a click on a hard throw, 340 ms as the wheel gives up. */
+export const wheelGap = speed => 0.054 + 0.286 * (1 - clamp(num(speed, 1), 0, 1)) ** 1.6;
 
 /* ----------------------------------------------------------------------------
  * THE KIT. createKit({ AudioContext?, master?, random?, now? }) for a test; the
@@ -567,6 +590,68 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     for (const n of roll.nodes) { try { if (typeof n.stop === 'function') n.stop(at + 0.07); } catch (e) { /* already */ } }
   }
   function stopRolls() { for (const key of Array.from(rolls.keys())) stopRoll(key.slice(5)); }
+  /* ---- THE WHEEL ROLL. The roulette's rotor has no lever, so the throw is the lever: the gesture plays the
+   * 'whir' one-shot and starts this loop, one for the room. A bearing bed whose band opens with the rotor and
+   * a ratchet click whose rate IS the rotor's speed, both dying away as the wheel gives up. The station stops
+   * it on the landing frame, so the drop and the settle keep that frame to themselves (Law X). ---- */
+  let wheelRoll = null;
+  function freeWheel(w) { for (const n of w.nodes) { try { n.disconnect(); } catch (e) { /* gone */ } } }
+  function shapeWheel(w) {
+    if (!ctx || !w || !w.gain) return;
+    const t = ctx.currentTime, sp = clamp(w.speed, 0, 1);
+    const lvl = Math.max(0.0001, WHEEL_BED * w.level * (0.12 + 0.88 * sp)), g = w.gain.gain;
+    try { g.cancelScheduledValues(t); g.setValueAtTime(Math.max(0.0001, g.value), t); g.linearRampToValueAtTime(lvl, t + 0.08); } catch (e) { g.value = lvl; }
+    if (!w.band) return;
+    const hz = 120 + 330 * sp, f = w.band.frequency;
+    try { f.cancelScheduledValues(t); f.setValueAtTime(Math.max(20, f.value), t); f.linearRampToValueAtTime(hz, t + 0.08); } catch (e) { f.value = hz; }
+  }
+  /** One ratchet click. It goes up a little as the rotor slows: the bearing tightening, the wheel's own tell. */
+  function wheelTick(w) {
+    const sp = clamp(w.speed, 0, 1);
+    return noise(880 * SEMI(5 * (1 - sp)), 0, 0.016, WHEEL_TICK * w.level * (0.3 + 0.7 * sp), { q: 8, part: 'ratchet', dry: true });
+  }
+  function pumpWheel(w) {
+    if (!ctx || wheelRoll !== w) return;
+    const until = ctx.currentTime + TICK_AHEAD;
+    if (w.next < ctx.currentTime) w.next = ctx.currentTime;
+    for (let i = 0; i < 24 && w.next < until; i++) {
+      try { render(wheelTick(w), w.next, w.set); } catch (e) { /* a click never breaks a beat */ }
+      w.next += wheelGap(w.speed);
+    }
+    w.timer = setTimeout(() => pumpWheel(w), TICK_MS);
+    if (w.timer && typeof w.timer.unref === 'function') w.timer.unref();
+  }
+  /** Start the rotor's loop, or follow it if it is already turning. */
+  function startWheel(opts = {}) {
+    const speed = clamp(num(opts.speed, 1), 0, 1);
+    if (wheelRoll) { wheelRoll.speed = speed; shapeWheel(wheelRoll); return 1; }
+    let set = voices.get(WHEEL_ROLL);
+    if (!set) { set = new Set(); voices.set(WHEEL_ROLL, set); }
+    const w = { speed, level: clamp(num(opts.level, 1), 0, 1), nodes: [], gain: null, band: null, next: 0, timer: 0, set };
+    try {
+      const g = ctx.createGain(); g.gain.value = 0.0001; g.connect(dry); w.gain = g; w.nodes.push(g);
+      const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2.2; bp.frequency.value = 140;
+      src.connect(bp); bp.connect(g); src.start(); src.onended = () => freeWheel(w);
+      w.band = bp; w.nodes.push(src, bp);
+    } catch (e) { /* a rotor that cannot hum still ratchets */ }
+    wheelRoll = w;
+    w.next = ctx.currentTime;
+    shapeWheel(w);
+    pumpWheel(w);
+    return 1;
+  }
+  function stopWheel() {
+    const w = wheelRoll;
+    if (!w) return;
+    wheelRoll = null;
+    if (w.timer) clearTimeout(w.timer);
+    killVoices(WHEEL_ROLL);                // every click scheduled ahead goes with it (Law VI)
+    if (!ctx) return;
+    const at = ctx.currentTime;
+    if (w.gain) { const g = w.gain.gain; try { g.cancelScheduledValues(at); g.setValueAtTime(Math.max(0.0001, g.value), at); g.exponentialRampToValueAtTime(0.0001, at + 0.12); } catch (e) { /* closed */ } }
+    for (const n of w.nodes) { try { if (typeof n.stop === 'function') n.stop(at + 0.15); } catch (e) { /* already */ } }
+  }
   function killVoices(name) {
     const set = voices.get(name);
     if (!set) return;
@@ -587,6 +672,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
       const window = DEDUPE_MS[name];
       if (window) { const t = clock(), was = lastAt.get(name); if (was != null && t - was < window) return 0; lastAt.set(name, t); }
       if (BEDS.includes(name)) { wanted.add(name); if (!ready()) return 0; return startBed(name, opts) ? 1 : 0; }
+      if (name === WHEEL_ROLL) { if (!ready()) return 0; return startWheel(opts || {}); }
       if (ROLLS.includes(name)) { if (!ready()) return 0; return startRoll(opts && opts.reel, opts || {}); }
       const s = score(name, opts, rand);
       if (!s) return 0;
@@ -601,6 +687,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     /** Take a cue back: a bed fades (500 ms), a one-shot and everything it scheduled ahead stops now. */
     stop(name, opts = {}) {
       if (BEDS.includes(name)) { wanted.delete(name); if (ctx) stopBed(name, 0.5); return; }
+      if (name === WHEEL_ROLL) { stopWheel(); return; }
       if (ROLLS.includes(name)) { if (opts && opts.reel != null) stopRoll(opts.reel); else stopRolls(); return; }
       if (ctx) killVoices(name);
     },
@@ -608,6 +695,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     stopAll({ beds: bedsToo = true } = {}) {
       if (!ctx) return;
       stopRolls();
+      stopWheel();
       killAll();
       if (bedsToo) for (const name of Array.from(beds.keys())) stopBed(name, 0.15);
     },
@@ -620,6 +708,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
       if (!ctx || ctx.state === 'closed') return;
       if (suspended) {
         stopRolls();
+        stopWheel();
         killAll();
         for (const name of Array.from(beds.keys())) stopBed(name, 0.05);
         ctx.suspend().catch(() => {});
@@ -634,6 +723,8 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     mute(on) { muted = !!on; applyLevel(); },
     /** Follow a drum. Untraced on purpose: the reels call this every frame while they travel. */
     setRollSpeed(reel, speed) { const roll = rolls.get(rollKey(reel)); if (!roll) return; roll.speed = clamp(num(speed, roll.speed), 0, 1); shapeRoll(roll); },
+    /** Follow the rotor. Untraced on purpose: the wheel calls this every frame while it turns. */
+    setWheelSpeed(speed) { if (!wheelRoll) return; wheelRoll.speed = clamp(num(speed, wheelRoll.speed), 0, 1); shapeWheel(wheelRoll); },
     get master() { return masterLevel; },
     get muted() { return muted; },
     get suspended() { return suspended; },
@@ -642,14 +733,14 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     dispose() {
       wanted.clear();
       if (ctx) {
-        try { stopRolls(); killAll(); for (const name of Array.from(beds.keys())) stopBed(name, 0.02); } catch (e) { /* closing */ }
+        try { stopRolls(); stopWheel(); killAll(); for (const name of Array.from(beds.keys())) stopBed(name, 0.02); } catch (e) { /* closing */ }
         try { ctx.close().catch(() => {}); } catch (e) { /* already */ }
       }
-      ctx = null; out = null; dry = null; send = null; noiseBuf = null; live.clear(); voices.clear(); beds.clear(); rolls.clear(); lastAt.clear(); suspended = false;
+      ctx = null; out = null; dry = null; send = null; noiseBuf = null; live.clear(); voices.clear(); beds.clear(); rolls.clear(); wheelRoll = null; lastAt.clear(); suspended = false;
     },
     trace,
     /** Test seam. */
-    debug() { return { live: live.size, voices: Array.from(voices.keys()), beds: Array.from(beds.keys()), rolls: Array.from(rolls.keys()), wanted: Array.from(wanted), master: masterLevel, trim: trimLevel, muted, suspended, has: !!ctx, state: ctx ? ctx.state : 'none' }; },
+    debug() { return { live: live.size, voices: Array.from(voices.keys()), beds: Array.from(beds.keys()), rolls: Array.from(rolls.keys()), wheel: !!wheelRoll, wanted: Array.from(wanted), master: masterLevel, trim: trimLevel, muted, suspended, has: !!ctx, state: ctx ? ctx.state : 'none' }; },
   };
   function applyLevel() {
     if (!out) return;

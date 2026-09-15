@@ -93,17 +93,17 @@ const ids = (beat, o) => fxPlan(beat, { gates: ALL_ON, ...o }).map((s) => s.fx);
 const HOST_IDS = ['fx.gif_burst', 'fx.gif_from', 'fx.gif_storm', 'fx.haze', 'fx.jackpot', 'fx.loom_spiral', 'fx.melt', 'fx.spiral_brief', 'fx.spiral_full', 'fx.sub_cascade', 'fx.sub_pair', 'fx.sub_single', 'fx.wash'];
 
 test('the recipe table: every beat of a spin maps to host ids the bridge handles, frozen', () => {
-  assert.deepEqual(FX_BEATS, ['nomore', 'launch', 'wake', 'rattle', 'run', 'near', 'land.miss', 'land.win', 'land.straight', 'land.wake', 'land.full', 'streak', 'skip']);
+  assert.deepEqual(FX_BEATS, ['nomore', 'launch', 'wake', 'rattle', 'run', 'near', 'glyph', 'land.miss', 'land.win', 'land.straight', 'land.wake', 'land.full', 'streak', 'skip']);
   assert.ok(Object.isFrozen(FX_RECIPE) && Object.isFrozen(FX_RECIPE['land.full'][0]) && Object.isFrozen(FX.COOLDOWN_MS));
   for (const beat of FX_BEATS) for (const s of FX_RECIPE[beat]) assert.ok(HOST_IDS.includes(s.fx) && FX_GATE[s.fx], `${beat}: ${s.fx} is a host id with a gate`);
   const table = {
     nomore: ['fx.sub_single'], launch: ['fx.gif_burst'], wake: ['fx.sub_single'], rattle: ['fx.sub_single'],
-    run: [], near: ['fx.spiral_brief'], 'land.miss': [], 'land.win': ['fx.sub_pair'], 'land.straight': ['fx.sub_cascade'],
+    run: [], near: ['fx.spiral_brief'], glyph: [], 'land.miss': [], 'land.win': [], 'land.straight': [],
     'land.wake': ['fx.spiral_full'], 'land.full': ['fx.sub_cascade'], streak: ['fx.gif_storm'], skip: [],
   };
   for (const [beat, want] of Object.entries(table)) assert.deepEqual(ids(beat), want, beat + ' at Normal');
   assert.deepEqual(ids('land.full', { full: true }), ['fx.jackpot'], 'Full: the straight-up hit on a wake is the jackpot hero');
-  assert.deepEqual(ids('land.straight', { full: true }), ['fx.sub_cascade'], 'Full changes only land.full');
+  assert.deepEqual(ids('land.straight', { full: true }), [], 'Full changes only land.full');
   assert.deepEqual(fxPlan('not.a.beat'), [], 'an unknown beat fires nothing');
   assert.deepEqual(fxPlan('skip', { gates: ALL_ON, full: true, streak: 9 }), [], 'Law VI: Back and suspend fire nothing');
 });
@@ -121,7 +121,7 @@ test('gates never drop a step (2026-09-15): every toggle off plans the same beat
   assert.deepEqual(ids('launch', { gates: off('flash') }), ['fx.gif_burst']);
   assert.deepEqual(ids('nomore', { gates: off('subliminal') }), ['fx.sub_single']);
   assert.deepEqual(ids('near', { gates: off('spiral') }), ['fx.spiral_brief']);
-  assert.deepEqual(ids('land.win', { gates: off('flash'), streak: 2 }), ['fx.sub_pair', 'fx.gif_storm'], 'the flash gate no longer drops the storm');
+  assert.deepEqual(ids('land.win', { gates: off('flash'), streak: 2 }), ['fx.gif_storm'], 'the flash gate no longer drops the storm');
   assert.deepEqual(ids('land.full', { gates: { flash: false, spiral: false, subliminal: false }, full: true }), ['fx.jackpot'], 'all three off: the hero still posts');
   const none = { flash: false, subliminal: false, spiral: false, brainDrain: false, tunnel: false };
   for (const beat of FX_BEATS) assert.deepEqual(fxPlan(beat, { gates: none, full: true, streak: 3 }), fxPlan(beat, { gates: ALL_ON, full: true, streak: 3 }), beat + ': gates off changes nothing');
@@ -145,7 +145,7 @@ test('the callout for a landing beat: one name a spin, the streak only as the fa
 
 test('Calm strips motion (the burst, the storm, the hero) and keeps the words and spirals for the host to halve', () => {
   assert.deepEqual(ids('launch', { calm: true }), []);
-  assert.deepEqual(ids('land.win', { calm: true, streak: 4 }), ['fx.sub_pair']);
+  assert.deepEqual(ids('land.win', { calm: true, streak: 4 }), [], 'the glyph carries the effect of a win; Calm strips the storm');
   assert.deepEqual(ids('land.full', { calm: true, full: true }), ['fx.sub_cascade'], 'Calm beats Full: no hero, the cascade instead');
   assert.deepEqual(ids('near', { calm: true }), ['fx.spiral_brief']);
   assert.deepEqual(ids('land.wake', { calm: true }), ['fx.spiral_full']);
@@ -154,9 +154,9 @@ test('Calm strips motion (the burst, the storm, the hero) and keeps the words an
 
 test('the streak: STREAK_FROM paying spins in a row bring the storm, a miss resets it, the hero keeps its frame', () => {
   assert.equal(FX.STREAK_FROM, 2);
-  assert.deepEqual(ids('land.win', { streak: 1 }), ['fx.sub_pair']);
-  assert.deepEqual(ids('land.win', { streak: 2 }), ['fx.sub_pair', 'fx.gif_storm']);
-  assert.deepEqual(ids('land.straight', { streak: 3 }), ['fx.sub_cascade', 'fx.gif_storm']);
+  assert.deepEqual(ids('land.win', { streak: 1 }), [], 'the glyph beat carries the effect (glyphs.js)');
+  assert.deepEqual(ids('land.win', { streak: 2 }), ['fx.gif_storm']);
+  assert.deepEqual(ids('land.straight', { streak: 3 }), ['fx.gif_storm']);
   assert.deepEqual(ids('land.miss', { streak: 5 }), [], 'a miss never storms');
   assert.deepEqual(ids('near', { streak: 5 }), ['fx.spiral_brief']);
   assert.deepEqual(ids('land.full', { full: true, streak: 2 }), ['fx.jackpot'], 'Brake 2: one hero per beat');

@@ -14,6 +14,9 @@
  *   shared/hypno  the Loom kit (turret whirl), the deal (a picture key for
  *             fx.gif_from) and the moments (the tunnel run, the haze, the wake
  *             spiral, the wash and the pocket GIF)
+ *   glyphs.js the pocket glyphs (GLYPHS.md): four faded marks on the wheel's inner
+ *             slope keyed by the pocket number, one section 4 id each; every
+ *             landing fires the landed pocket's id on the thud frame (Law X)
  *   feel.FX_RECIPE  the host recipe on top: every beat of a spin (no more bets,
  *             the launch, the wake, the fret rattle, a near miss, the landing by
  *             outcome, a streak) fires section 4 ids through ctx.fx, cooled and
@@ -47,7 +50,7 @@ import { createCallout, FX_DELAY_MS } from '../../shared/hypno/callout.js';
 import { kit as sound } from '../../shared/sound/kit.js';
 import { MAX_CHIPS, MAX_SPINS, addChip, removeChip, chipsOf, chipTotal, checkLayout, adoptTape, owed, shownSp, cursorOf, readOutcome, classify, spinBody, mintId, ROWS } from './tape.js';
 import { FEEL, planRun, seedFor, landMoment, nextLaunchAt, landBeat, nearMisses, fxPlan, fxSymbols, createFxCooldowns, calloutFor } from './feel.js';
-import { flickStart, flickMove, flickRelease } from './flick.js';
+import { FLICK, flickStart, flickMove, flickRelease } from './flick.js';
 import { createBowl } from './bowl.js';
 import { createMat } from './mat.js';
 
@@ -179,6 +182,7 @@ export async function mount(ctx) {
     $('.roul-odds table').replaceChildren(...rows);
     $('.roul-odds p').textContent = t('br_roulette_odds_note', 'Pays are the SP a chip returns, the chip included. Spiral Wake {wake}: every winning chip pays double. 1 to {max} SP a spin, up to {spins} spins. A layout covering all of 1-36 is refused.',
       { wake: String((st.table && st.table.wake) || ''), max: MAX_CHIPS, spins: MAX_SPINS });
+    $('.roul-glyphs').textContent = t('br_roulette_glyphs_note', 'The faded marks on the wheel are the spell of each pocket, win or lose. Spiral: a spiral. Eye: a flash of pictures. Bubble: words. Drop: a melt. The mark lights when the ball settles there.');
   }
 
   /* ---------------------------------------------------------------- build */
@@ -201,7 +205,7 @@ export async function mount(ctx) {
         <p class="roul-why" hidden></p>
         <button class="roul-spin" type="button"><span></span><small></small></button>
       </div>
-      <details class="roul-odds"><summary></summary><table></table><p></p></details>
+      <details class="roul-odds"><summary></summary><table></table><p></p><p class="roul-glyphs"></p></details>
       <div class="roul-card" role="status" hidden><p></p><button class="roul-card-back" type="button"></button></div>
       <div class="roul-loading"></div>`;
     const set = (sel, text) => { root.querySelector(sel).textContent = text; };
@@ -241,8 +245,12 @@ export async function mount(ctx) {
    *  miss is THE SETTLE (soft, never a fail), a near miss resolves quietly, a pay is a win by tier that only rises. */
   function cue(name) {
     if (!alive || suspended) return;
-    if (name === 'nomore') { sound.arm(); sound.play('tap'); }
-    else if (name === 'launch') sound.play('launch');
+    // THE THROW's voice: the wheel has no lever, the throw IS the lever. The press frame gets the spin-up
+    // (Law VIII, before any reply) and the rotor's loop; every launch after it picks the loop back up; a
+    // landing hands the frame straight over to the drop and the settle (Law X).
+    if (name === 'near' || name.startsWith('land.')) sound.stop('wheel');
+    if (name === 'nomore') { sound.arm(); sound.play('tap'); sound.play('whir'); sound.play('wheel', { speed: 1 }); }
+    else if (name === 'launch') { sound.play('launch'); sound.play('wheel', { speed: 1 }); }
     else if (name === 'rattle') { sound.play('rattle'); if (cur && cur.plan) sound.play('riser', { ms: Math.min(2500, Math.max(800, cur.plan.restAt * 1000 - (clock() - cur.launchAt))) }); }
     else if (name === 'near') { sound.play('drop'); sound.play('almost'); }
     else if (name === 'land.miss') { sound.play('drop'); sound.play('settle'); }
@@ -251,11 +259,11 @@ export async function mount(ctx) {
     else if (name === 'land.full') { sound.play('drop'); sound.play('win', { tier: 'hero' }); sound.play('chips', { n: 8, at: 0.4 }); }
   }
   /** The host recipe (feel.FX_RECIPE): a beat fires its section 4 ids through ctx.fx, gated, cooled, never awaited (fx-ack is advisory). */
-  function beat(name, { i = null, streak: run = 0 } = {}) {
+  function beat(name, { i = null, streak: run = 0, pocket = null } = {}) {
     const fired = [];
     cue(name);
     if (!alive || suspended || typeof ctx.fx !== 'function') return fired;
-    const plan = fxPlan(name, { gates: gates(), calm: stillNow(), full: fullNow(), streak: run });
+    const plan = fxPlan(name, { gates: gates(), calm: stillNow(), full: fullNow(), streak: run, pocket });
     const now = performance.now();
     for (const step of plan) {
       if (!cool.take(step, now, i)) continue;
@@ -364,6 +372,7 @@ export async function mount(ctx) {
     const r = cur.read;
     cur.landed = true; cur.landAt = now; cur.win = r.pay > 0;
     moments.tunnel(0);
+    const glyphFx = beat('glyph', { i: r.i, pocket: r.pocket });   // THE POCKET GLYPH: the mark lights and its effect fires on the thud frame (Law X), win or lose
     const id = landMoment(r);
     streak = r.pay > 0 ? streak + 1 : 0;
     const near = nearMisses(r, tape.bets, st.wheel), hostBeat = landBeat(r, near);
@@ -379,12 +388,12 @@ export async function mount(ctx) {
         if (my !== session || !alive || suspended || !cur || cur.i !== i) return;
         landFx(r, id, hostBeat, near, co);
       }, FX_DELAY_MS);
-      note('landed', { i: r.i, pocket: r.pocket, pay: r.pay, beat: hostBeat, callout: co ? co.key : null });
+      note('landed', { i: r.i, pocket: r.pocket, pay: r.pay, beat: hostBeat, callout: co ? co.key : null, glyph: glyphFx });
     } else {
       const box = bowl.pocketBox(r.index);
       const hostFx = beat(hostBeat, { i: r.i, streak });   // a near miss's spiral, or nothing
       const m = moments.play(id, { color: pocketColor(r.pocket, st.rose), from: viewportRect(cv, box.x, box.y, box.w, box.h), wake: r.wake });   // releases the run's holds
-      note('land', { i: r.i, pocket: r.pocket, pay: r.pay, wake: r.wake, straight: r.straight, moment: id, page: m.page, fx: m.tokens.length, beat: hostBeat, near, streak, hostFx, callout: null, delayed: false });
+      note('land', { i: r.i, pocket: r.pocket, pay: r.pay, wake: r.wake, straight: r.straight, moment: id, page: m.page, fx: m.tokens.length, beat: hostBeat, near, streak, hostFx, glyph: glyphFx, callout: null, delayed: false });
     }
     tape.played = r.i + 1;
     if (hook) { hook.owe(reader); if (r.pay > 0 && typeof hook.thud === 'function') hook.thud(); }
@@ -424,6 +433,19 @@ export async function mount(ctx) {
     }
   }
 
+  /** THE THROW's loop follows the rotor: 1 at the hardest throw, 0 once the wheel is back to its idle drift.
+   *  Throttled like the slot's drums, one update per 60 ms or per 2% of speed. */
+  let wheelSent = [-1, 0];
+  function followThrow(rotVel) {
+    if (!alive || suspended) return;
+    const span = Math.max(0.01, FLICK.VEL_MAX - FEEL.ROTOR_IDLE);
+    const sp = Math.max(0, Math.min(1, (Math.abs(Number(rotVel) || 0) - FEEL.ROTOR_IDLE) / span));
+    const t = clock();
+    if (Math.abs(sp - wheelSent[0]) < 0.02 && t - wheelSent[1] < 60) return;
+    wheelSent = [sp, t];
+    sound.setWheelSpeed(sp);
+  }
+
   function frame() {
     if (!alive) return;
     if (!stage) raf = requestAnimationFrame(frame);
@@ -433,6 +455,7 @@ export async function mount(ctx) {
     layout();
     if (kit) kit.setStill(still);
     const u = bowl.update(now, { still });
+    followThrow(u.rotVel);
     if (cur && !cur.landed) {
       if (u.speed > 0) moments.tunnel(rouletteRunLevel(u.speed));
       if (!cur.rattled && u.phase === 'rattle') { cur.rattled = true; beat('rattle', { i: cur.i }); }   // the first fret clip, once a spin
@@ -570,7 +593,7 @@ export async function mount(ctx) {
     dropLanding();
     if (callout) { callout.dispose(); callout = null; }
     if (moments) { moments.cancel(); moments.dispose(); }
-    sound.stop('riser');
+    sound.stop('riser'); sound.stop('wheel');
     cool.reset(); streak = 0; note('fx', { beat: 'skip', fired: [], planned: [] });   // one-shots settle on the host; nothing new fires
     if (tape && tape.played > 0 && cursorSent !== tape.played) flushCursor();
     if (hook) { hook.owe(owedNow()); if (typeof hook.set === 'function') hook.set(null); }   // a plain number for the room
@@ -592,6 +615,7 @@ export async function mount(ctx) {
         dropLanding();
         if (moments) moments.cancel();
         cool.reset(); note('fx', { beat: 'skip', fired: [], planned: [] });   // Law VI: the recipe stops with the moments
+        sound.stop('wheel');   // THE THROW's loop never rides a suspend
         if (kit) { kit.dispose(); kit = null; }
         if (deck) deck.dispose();   // its keys still pick (pickKey needs no pictures)
       } else {
