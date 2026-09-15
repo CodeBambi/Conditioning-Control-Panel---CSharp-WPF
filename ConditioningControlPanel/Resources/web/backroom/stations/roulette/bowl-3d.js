@@ -3,6 +3,7 @@ import { createRouletteSurfaces, getRouletteSurfaces } from '../../room/roulette
 import { createBallPath } from './ball-path.js';
 import { createBowl } from './bowl.js';
 import { FEEL, SEG, restRel, beamAngle, beamLit, whirlAngle } from './feel.js';
+import { HIGHLIGHT_MS } from '../../shared/hypno/callout.js';
 
 // The authored pocket centers define this coordinate system. No model dimensions
 // or pocket order are duplicated here; the server order indexes named pockets.
@@ -82,8 +83,10 @@ export function createBowl3D({ stage, wheel, rose }) {
       trailPoints.forEach((p,i)=>trailGeometry.attributes.position.setXYZ(i,p.x,p.y,p.z));trailGeometry.setDrawRange(0,trailPoints.length);trailGeometry.attributes.position.needsUpdate=true;
     }else trailPoints.length=0;
     trail.visible=trailPoints.length>1;trail.material.opacity=.2*k;
+    // THE GLYPH HIT: the landed pocket's number lights on its own over HIGHLIGHT_MS from the winning frame (callout.js)
+    const hq = (currentNow - s.hitAt) / HIGHLIGHT_MS, hitPulse = hq >= 0 && hq < 1 ? Math.sin(hq * Math.PI) : 0, hitN = s.index >= 0 ? wheel[s.index] : null;
     for (const n of numberColors) {
-      const strength = beamLit(n.angle + s.rot, beamA) * k;
+      const strength = Math.max(beamLit(n.angle + s.rot, beamA) * k, n.n === hitN ? hitPulse : 0);
       if (strength > 0.1) lit.add(n.n);
       for(let i=n.offset;i<n.offset+n.count;i++) n.attribute.setXYZ(i,1,1-strength*.15,1-strength*.45);
       n.attribute.needsUpdate=true;
@@ -121,6 +124,7 @@ export function createBowl3D({ stage, wheel, rose }) {
     seat(index, opts) { core.seat(index, opts); apply(); },
     update(now, opts) { currentNow=now;const result = core.update(now, opts); apply(); return result; },
     draw, pocketBox, dispose,
+    glow(index, now) { core.glow(index, now); },
     get geo() { return core.geo; }, get phase() { return core.phase; },
     debug() { return { ...core.debug(), view: '3d', lit: [...lit], whirlDrawn: !!lastView.whirlDrawn,
       clearance: {rimRadius:path.rimRadius,ballRadius:lift,profileEdges:path.edges,margin:path.margin},

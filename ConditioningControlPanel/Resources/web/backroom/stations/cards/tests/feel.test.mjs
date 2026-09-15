@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readHand } from '../hand.js';
 import { TIMING, momentOf, isBloom, aceSlot, bestCard, vortexOf, resultLines, planSteps, fanCard, lampBreath, screenHoldMs,
-  settleMoment, streakAfter, isSweep, isDealerBust, mayFire, wordKeys, COOLDOWN_MS, STREAK_FROM } from '../feel.js';
+  settleMoment, streakAfter, isSweep, isDealerBust, mayFire, wordKeys, COOLDOWN_MS, STREAK_FROM, CALLOUTS, calloutFor, winningCards, WIN_HOLD_MS } from '../feel.js';
 import { MOMENTS } from '../../../shared/hypno/moments.js';
 
 const H = (o) => readHand({ step: 0, stake: 1, active: 0, done: false, result: null, ...o });
@@ -126,14 +126,14 @@ test('the lamp breathes six times a minute and rests while held', () => {
   assert.equal(lampBreath(2500, true), 0.5);
 });
 
-test('screenHoldMs: the bloom, the win wash and the losing edges hold the next deal; gates off hold nothing', () => {
+test('screenHoldMs: the bloom, the win wash and the losing edges hold the next deal; a host with no hook holds nothing', () => {
   assert.equal(screenHoldMs('cards.bloom', { fired: 2 }), TIMING.bloomMs);
   assert.equal(screenHoldMs('cards.bloom', { fired: 2, still: true }), 2400, 'Calm: the host plays the picture at 60%');
-  assert.equal(screenHoldMs('cards.bloom', { fired: 0 }), 0, 'flash off: no picture, no hold');
+  assert.equal(screenHoldMs('cards.bloom', { fired: 0 }), 0, 'no fx hook: no picture, no hold');
   assert.equal(screenHoldMs('cards.win', { fired: 1 }), 900, 'the wash is gone at 900 ms');
   assert.equal(screenHoldMs('cards.win', { fired: 0 }), 0);
   assert.equal(screenHoldMs('cards.lose', { tunnel: true }), MOMENTS['cards.lose'].host[0].ms + 150, 'the breath of tunnel, 2600 ms, and its closing post');
-  assert.equal(screenHoldMs('cards.lose', { tunnel: false }), 0, 'tunnel gate off: no edges, no hold');
+  assert.equal(screenHoldMs('cards.lose', { tunnel: false }), 0, 'no tunnel hook: no edges, no hold');
   assert.equal(screenHoldMs('cards.push', { fired: 0, tunnel: true }), 0);
   assert.equal(screenHoldMs('cards.sit', { fired: 0 }), 0);
   assert.equal(screenHoldMs('cards.dealer_bust', { fired: 2 }), TIMING.washMs);
@@ -145,6 +145,33 @@ test('screenHoldMs: the bloom, the win wash and the losing edges hold the next d
 /* ---- the table beats (2026-09-15) ---- */
 
 const ops = (s) => s.map((x) => (x.op === 'beat' ? 'beat:' + x.id : x.op));
+
+test('the callout for a settled hand and the winning cards in dealt order (callout.js)', () => {
+  assert.equal(WIN_HOLD_MS, 2000, 'Deal waits FX_DELAY_MS + CALLOUT_MS from the settle frame at least');
+  assert.deepEqual(Object.keys(CALLOUTS).sort(), ['cards.bloom', 'cards.dealer_bust', 'cards.streak', 'cards.sweep', 'cards.win']);
+  for (const c of Object.values(CALLOUTS)) assert.ok(/^br_callout_[a-z_]+$/.test(c.key) && c.fallback && ['small', 'big', 'hero'].includes(c.tier));
+  assert.deepEqual(calloutFor('cards.win'), { key: 'br_callout_winner', fallback: 'Winner', tier: 'small' });
+  assert.equal(calloutFor('cards.win', { bloomed: true }), null, 'a blackjack said its name at the bloom; its plain settle says nothing');
+  assert.equal(calloutFor('cards.bloom').key, 'br_callout_blackjack');
+  assert.equal(calloutFor('cards.dealer_bust').tier, 'small');
+  assert.equal(calloutFor('cards.streak').key, 'br_callout_hot_hand');
+  assert.deepEqual(calloutFor('cards.sweep', { bloomed: true }), { key: 'br_callout_sweep', fallback: 'Sweep', tier: 'hero' }, 'a sweep is bigger than the bloom and still shows');
+  for (const id of ['cards.lose', 'cards.push', 'cards.deal', 'cards.hit', 'cards.sit', 'nope']) assert.equal(calloutFor(id), null, id);
+
+  assert.deepEqual(winningCards(bj), [{ owner: 0, slot: 0 }, { owner: 0, slot: 1 }], 'a one-hand win: its cards in slot order');
+  assert.deepEqual(winningCards(lose), [], 'a loss lights nothing');
+  assert.deepEqual(winningCards(push), [], 'a push lights nothing');
+  assert.deepEqual(winningCards(H({ id: 'h_open', dealer: ['9d'], hands: [hand(['Th', '4c'], { done: false })] })), [], 'an open hand has no winner yet');
+  const split = H({ id: 'h_s', dealer: ['6d', 'Ts', '8c'], done: true,
+    hands: [hand(['8h', '3s', '9d'], { split: true }), hand(['8c', 'Td'], { split: true })],
+    result: R([{ outcome: 'win', bet: 1, paid: 2, total: 20 }, { outcome: 'lose', bet: 1, paid: 0, total: 18 }], { dealerTotal: 24 }) });
+  assert.deepEqual(winningCards(split), [{ owner: 0, slot: 0 }, { owner: 0, slot: 1 }, { owner: 0, slot: 2 }], 'a split: only the hand that won, in dealt order');
+  const sweep = H({ id: 'h_w', dealer: ['6d', 'Ts', '8c'], done: true,
+    hands: [hand(['8h', '3s'], { split: true }), hand(['8c', 'Td', '2s'], { split: true })],
+    result: R([{ outcome: 'win', bet: 1, paid: 2, total: 11 }, { outcome: 'win', bet: 1, paid: 2, total: 20 }], { dealerTotal: 24 }) });
+  assert.deepEqual(winningCards(sweep), [{ owner: 0, slot: 0 }, { owner: 1, slot: 0 }, { owner: 0, slot: 1 }, { owner: 1, slot: 1 }, { owner: 1, slot: 2 }],
+    'a sweep: the two first cards as dealt, then each hand\'s draws');
+});
 
 test('beats: a fresh deal whispers on the first card shown; none without `beats`, none for a resumed hand', () => {
   const next = H({ id: 'h1', dealer: ['9d'], hands: [hand(['Th', '4c'], { done: false })] });

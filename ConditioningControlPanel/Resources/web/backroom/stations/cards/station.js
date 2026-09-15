@@ -13,12 +13,23 @@
  * server deals and decides every card; the page animates what the reply says
  * and fires moments on the frame the result SHOWS. While a decision is open the
  * screen is held (moments.holdScreen): nothing fullscreen covers the table.
+ *
+ * THE WINNING FLOW (shared/hypno/callout.js, owner 2026-09-15). On the settle
+ * frame of a win (Law I): the chip thud, the text and the deal hold at 0, the
+ * winning cards glow in dealt order to HIGHLIGHT_MS, and at FX_DELAY_MS the
+ * settle moment, its page effects and the callout (feel.calloutFor) fire
+ * together; Deal stays held WIN_HOLD_MS at least. A blackjack does the same at
+ * its bloom (both cards glow, then the bloom and "Blackjack"). A loss keeps its
+ * breath of tunnel on the settle frame; a push shows nothing. Gates no longer
+ * drop a step (moments.js); ctx.gates only dresses the table.
  * ==========================================================================*/
 
 import { createLoomKit, createDeck, createMoments, strengthK, viewportRect, DECK_VALUES } from '../../shared/hypno/index.js';
+import { createCallout, FX_DELAY_MS } from '../../shared/hypno/callout.js';
 import { readState, readHand, legalOf, controls, classify, createIntent, mayRetry, moveBody, owedFor, shownSp, defaultStake,
   readHintPref, writeHintPref, isOpen, totalOf, MOVES } from './hand.js';
-import { planSteps, settleMoment, streakAfter, mayFire, wordKeys, aceSlot, bestCard, vortexOf, resultLines, screenHoldMs, TIMING } from './feel.js';
+import { planSteps, settleMoment, streakAfter, mayFire, wordKeys, aceSlot, bestCard, vortexOf, resultLines, screenHoldMs, TIMING,
+  calloutFor, winningCards, isBloom, WIN_HOLD_MS } from './feel.js';
 import { MOMENTS } from '../../shared/hypno/moments.js';
 import { createTable } from './table.js';
 
@@ -54,8 +65,21 @@ export async function mount(ctx) {
   let stake = 1, stakePicked = false, hint = readHintPref(storage), dealReadyAt = 0, screenUntil = 0, sitting = 0, firstSit = true;
   let lastStill = null, unSp = null, feelLog = [], statusText = '', seat = 0, seating = false, dropped = 0;
   let streak = 0, beatAt = {}, wordCursor = 0;   // the table beats: wins in a row, each beat's last frame (cooldowns), the whisper rotation
+  let callout = null, lastCallout = null, fxTimers = new Set();   // the winning flow: the callout and the delayed fx frames
   const $ = (sel) => el.querySelector(sel);
   const log = (what, extra = {}) => { feelLog = [...feelLog.slice(-99), { what, at: Math.round(performance.now()), ...extra }]; };
+  /** `fn(now)` after `ms`, unless the visit ended or paused first (Law VI: suspend and Back fire nothing more). */
+  function later(ms, fn) {
+    const my = session, id = setTimeout(() => { fxTimers.delete(id); if (my !== session || !alive || suspended) return; fn(performance.now()); }, ms);
+    fxTimers.add(id);
+  }
+  function dropTimers() { for (const id of fxTimers) clearTimeout(id); fxTimers.clear(); if (callout) callout.cancel(); }
+  function showCallout(co) {
+    if (!co || !callout) return;
+    callout.show(co.key, co.fallback, { tier: co.tier });
+    lastCallout = { key: co.key, tier: co.tier, at: Math.round(performance.now()) };
+    log('callout', lastCallout);
+  }
 
   /** Calm, reduced motion and the gates, read live every frame (the loader's ctx getters follow settings frames). */
   function dress() {
@@ -163,11 +187,17 @@ export async function mount(ctx) {
       case 'ready': decide = true; table.setActive(h.active); break;
       case 'bloom': {
         if (s.quiet) break;
+        // The blackjack's frame: both cards glow now; the bloom, its picture and "Blackjack" follow at FX_DELAY_MS.
         const slot = aceSlot(h), r = table.cardRect(0, slot), canvas = $('.cards-stage');
-        const out = moments.play('cards.bloom', { from: r ? viewportRect(canvas, r.x, r.y, r.w, r.h) : undefined, gif: deck ? deck.keyFor(h.hands[0].cards[slot]) : undefined });
-        if (out.page.includes('ace_glow')) table.glowCard(0, slot, now);
-        holdScreenFor('cards.bloom', out, now);
-        log('moment', { id: 'cards.bloom', tokens: out.tokens.length, page: out.page, held: out.held, from: r });
+        table.hitCards(h.hands[0].cards.map((_, j) => ({ owner: 0, slot: j })), now);
+        screenUntil = Math.max(screenUntil, now + WIN_HOLD_MS);
+        later(FX_DELAY_MS, (at) => {
+          const out = moments.play('cards.bloom', { from: r ? viewportRect(canvas, r.x, r.y, r.w, r.h) : undefined, gif: deck ? deck.keyFor(h.hands[0].cards[slot]) : undefined });
+          if (out.page.includes('ace_glow')) table.glowCard(0, slot, at);
+          holdScreenFor('cards.bloom', out, at);
+          showCallout(calloutFor('cards.bloom'));
+          log('moment', { id: 'cards.bloom', tokens: out.tokens.length, page: out.page, held: out.held, from: r, delayed: FX_DELAY_MS });
+        });
         break;
       }
       case 'beat': {
@@ -195,12 +225,21 @@ export async function mount(ctx) {
         const n = (MOMENTS[id] ? MOMENTS[id].host : []).reduce((m, st) => Math.max(m, st.words | 0), 0);
         const words = n > 0 ? wordKeys(n, wordCursor) : undefined;
         if (n > 0) wordCursor += n;
-        const out = moments.play(id, { gif: best && deck ? deck.keyFor(best) : undefined, words });
-        holdScreenFor(id, out, now);
-        if (out.page.includes('win_tunnel')) table.tunnel(now);
         const v = vortexOf(h);
-        if (out.page.includes('chip_vortex') && v) table.vortex(v.dir, v.n, now);
-        log('moment', { id, tokens: out.tokens.length, page: out.page, held: out.held, net: h.result.net, best, streak });
+        const play = (at, delayed) => {
+          const out = moments.play(id, { gif: best && deck ? deck.keyFor(best) : undefined, words });
+          holdScreenFor(id, out, at);
+          if (out.page.includes('win_tunnel')) table.tunnel(at);
+          if (out.page.includes('chip_vortex') && v) table.vortex(v.dir, v.n, at);
+          log('moment', { id, tokens: out.tokens.length, page: out.page, held: out.held, net: h.result.net, best, streak, delayed });
+        };
+        if (h.result.net > 0) {
+          // THE WINNING FLOW: the winning cards glow from this frame; the moment and the callout follow at FX_DELAY_MS.
+          table.hitCards(winningCards(h), now);
+          screenUntil = Math.max(screenUntil, now + WIN_HOLD_MS);
+          const co = calloutFor(id, { bloomed: isBloom(h) });
+          later(FX_DELAY_MS, (at) => { play(at, FX_DELAY_MS); showCallout(co); });
+        } else play(now, 0);   // a loss keeps its breath of tunnel on this frame; a push shows nothing
         break;
       }
       default: break;
@@ -210,8 +249,8 @@ export async function mount(ctx) {
    *  bloom's picture is timed by the host, which shortens it only under its own Calm (ctx.reduced or intensity calm):
    *  the OS prefers-reduced-motion alone never reaches the host, so it must not shorten the hold either. */
   function holdScreenFor(id, out, now) {
-    const d = dress(), hostCalm = !!ctx.reduced || String(ctx.intensity || 'normal').toLowerCase() === 'calm';
-    const ms = out.held ? 0 : screenHoldMs(id, { fired: out.tokens.length, tunnel: d.gates.tunnel && typeof ctx.fxTunnel === 'function', still: hostCalm });
+    const hostCalm = !!ctx.reduced || String(ctx.intensity || 'normal').toLowerCase() === 'calm';
+    const ms = out.held ? 0 : screenHoldMs(id, { fired: out.tokens.length, tunnel: typeof ctx.fxTunnel === 'function', still: hostCalm });
     if (ms > 0) screenUntil = Math.max(screenUntil, now + ms);
   }
   /** Suspend: every step still owed goes down now, quietly (no moments). */
@@ -426,12 +465,13 @@ export async function mount(ctx) {
     if (alive) return;
     alive = true; suspended = false; busy = false; decide = false; queue = []; shownHand = null; note = ''; lines = []; feelLog = [];
     sitting = 0; seating = false; firstSit = true; stakePicked = false; dealReadyAt = 0; screenUntil = 0; dropped = 0; phase = 'loading'; statusText = ''; lastStill = null;
-    streak = 0; beatAt = {}; wordCursor = 0;
+    streak = 0; beatAt = {}; wordCursor = 0; lastCallout = null;
     const my = ++session;
     el = build(); ctx.root.append(el);
     addEventListener('keydown', onKey);
     chip = createChip();
     moments = createMoments(ctx, { station: 'cards' });
+    callout = createCallout({ mount: el, lex: typeof ctx.lex === 'function' ? ctx.lex : undefined });
     kit = createLoomKit({ still: dress().still, log: say });
     table = ctx.stage ? createTable3D(ctx.stage, { kit: () => kit, onDeal: deal }) : createTable($('.cards-stage'), { kit: () => kit });
     if (typeof ctx.onSp === 'function') unSp = ctx.onSp((v) => { if (chip) chip.setServer(v); });
@@ -462,6 +502,8 @@ export async function mount(ctx) {
     if (typeof unSp === 'function') unSp();
     unSp = null;
     // Law VI: every ceremony skips; the chip gets the plain server number; the kit, the deck and every hold go.
+    dropTimers();
+    if (callout) { callout.dispose(); callout = null; }
     if (moments) { moments.cancel(); moments.dispose(); }
     if (kit) kit.dispose();
     if (deck) deck.dispose();
@@ -478,6 +520,7 @@ export async function mount(ctx) {
       if (!alive || suspended === !!on) return;
       suspended = !!on;
       if (suspended) {
+        dropTimers();
         flush();
         moments.cancel();
         screenUntil = 0;   // the moments are cancelled, and the host's own suspend stops every overlay (gif_from too)
@@ -495,6 +538,7 @@ export async function mount(ctx) {
       chip: chip && { kind: chip.kind, value: chip.value, server: chip.server, owed: chip.owed },
       status: statusText, controls: el ? view(performance.now()) : null, table: table && table.debug(), kit: kit && kit.debug(),
       deck: deck && { ...deck.debug(), keys: deck.keys, map: DECK_VALUES.map((v) => deck.keyFor(v)) }, moments: moments && moments.debug(), log: feelLog,
+      callout: { last: lastCallout, pending: fxTimers.size, ...(callout ? callout.debug() : { shown: [] }) },
     }),
   };
 }

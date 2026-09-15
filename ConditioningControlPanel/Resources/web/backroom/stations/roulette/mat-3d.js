@@ -1,5 +1,6 @@
 import * as T from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { HIGHLIGHT_MS } from '../../shared/hypno/callout.js';
 
 // All positions, dimensions and chip sizes are authored extras on bet_hit_<spot>. While seated the
 // authored cream glyphs (bet_number_assembly) give way to one printed atlas: bold outlined digits and
@@ -58,6 +59,12 @@ export function createMat3D({ stage, spots, label }) {
   const chipsMesh=new T.InstancedMesh(chipGeometry,[chipMaterial,chipTop,chipMaterial],12);chipsMesh.name='roulette_live_chips';chipsMesh.count=0;chipsMesh.frustumCulled=false;group.add(chipsMesh);
   const dummy=new T.Object3D(),end=root.worldToLocal(root.getObjectByName('roulette_rotor').getWorldPosition(new T.Vector3())),corner=new T.Vector3();
   let disposed=false,anims=[],lastChips={};
+  // THE GLYPH HIT (callout.js): the paying chips pop 1.06 and a mint halo pulses under each stack over HIGHLIGHT_MS.
+  let glowSpots=new Set(),glowAt=-Infinity;
+  const haloGeometry=new T.RingGeometry(radius*1.1,radius*1.7,32),haloMaterial=new T.MeshBasicMaterial({color:0x5fffd0,transparent:true,opacity:0,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide});
+  resources.push(haloGeometry,haloMaterial);
+  const halos=[];
+  const haloPulse=(spot,now)=>{if(!glowSpots.has(spot))return 0;const q=(now-glowAt)/HIGHLIGHT_MS;return q>=0&&q<1?Math.sin(q*Math.PI):0;};
   /** The cell's four corners through the room camera, as a viewport rect. */
   function rectOf(spot){
     const c=cells.get(spot);if(!c)return null;
@@ -84,12 +91,18 @@ export function createMat3D({ stage, spots, label }) {
   function draw(_,view){
     if(disposed)return;lastChips=view.chips;
     if(view.still)anims=[];
-    let count=0;
-    function put(position){if(count>=12)return;dummy.position.copy(position);dummy.updateMatrix();chipsMesh.setMatrixAt(count++,dummy.matrix);}
+    let count=0,haloCount=0;
+    function put(position,pop=1){if(count>=12)return;dummy.position.copy(position);dummy.scale.setScalar(pop);dummy.updateMatrix();chipsMesh.setMatrixAt(count++,dummy.matrix);}
     for(const [spot,amount] of Object.entries(view.chips)){
       const cell=cells.get(spot);if(!cell)continue;
-      for(let i=0;i<amount;i++)put(cell.position.clone().add(new T.Vector3(0,radius*(.15+i*.32),0)));
+      const pulse=haloPulse(spot,view.now),pop=1+.06*pulse;
+      if(pulse>0&&amount>0){
+        const halo=halos[haloCount]||(halos[haloCount]=(()=>{const m=new T.Mesh(haloGeometry,haloMaterial.clone());m.rotation.x=-Math.PI/2;m.renderOrder=3;group.add(m);resources.push(m.material);return m;})());
+        halo.visible=true;halo.position.copy(cell.position).setY(cell.position.y+.002);halo.material.opacity=.6*pulse*view.k;halo.scale.setScalar(pop);haloCount++;
+      }
+      for(let i=0;i<amount;i++)put(cell.position.clone().add(new T.Vector3(0,radius*(.15+i*.32)*pop,0)),pop);
     }
+    for(let i=haloCount;i<halos.length;i++)halos[i].visible=false;
     anims=anims.filter(a=>view.now-a.at<1100);
     for(const a of anims){
       const start=cells.get(a.spot)?.position;if(!start)continue;
@@ -102,9 +115,11 @@ export function createMat3D({ stage, spots, label }) {
     chipsMesh.count=count;chipsMesh.instanceMatrix.needsUpdate=true;
   }
   function dispose(){if(disposed)return;disposed=true;group.removeFromParent();for(const resource of resources)resource.dispose();canvas.width=canvas.height=1;if(glyphs)glyphs.visible=glyphsVisible;anims=[];}
-  return {layout(){},hit(){return null;},pick,rectOf,draw,dispose,animate(list,now){anims=list.map(a=>({...a,at:now}));},clearAnims(){anims=[];},
+  return {layout(){},hit(){return null;},pick,rectOf,draw,dispose,animate(list,now){anims=anims.concat(list.map(a=>({...a,at:now})));},clearAnims(){anims=[];},
+    /** A paying landing: the chips on `spots` glow from station time `now`. */
+    glow(spots,now){glowSpots=new Set(Array.isArray(spots)?spots:[]);glowAt=now;},
     /** 'mat' while bets are open, 'table' once the ball runs: seat-camera.js frames a phone from it. */
     setFrame(frame){group.userData.frame=frame==='table'?'table':'mat';},
     get frame(){return group.userData.frame;},
-    debug(){return {view:'3d',frame:group.userData.frame,atlas:slots.map(s=>({spot:s.spot,x:s.x,y:s.y,w:s.w,h:s.h})),glyphsHidden:!!glyphs&&!glyphs.visible,rects:Object.fromEntries([...cells.keys()].map(k=>[k,rectOf(k)])),cells:cells.size,chips:{...lastChips},anims:anims.map(a=>a.kind+':'+a.spot),disposed};}};
+    debug(){return {view:'3d',frame:group.userData.frame,atlas:slots.map(s=>({spot:s.spot,x:s.x,y:s.y,w:s.w,h:s.h})),glyphsHidden:!!glyphs&&!glyphs.visible,rects:Object.fromEntries([...cells.keys()].map(k=>[k,rectOf(k)])),cells:cells.size,chips:{...lastChips},anims:anims.map(a=>a.kind+':'+a.spot),glow:{spots:[...glowSpots],at:glowAt},disposed};}};
 }

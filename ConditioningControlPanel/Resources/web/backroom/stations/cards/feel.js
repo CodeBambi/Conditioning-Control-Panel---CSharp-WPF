@@ -22,6 +22,7 @@
 
 import { cardValue, totalOf } from './hand.js';
 import { MOMENTS } from '../../shared/hypno/moments.js';
+import { FX_DELAY_MS, CALLOUT_MS } from '../../shared/hypno/callout.js';
 
 export const TIMING = Object.freeze({
   firstMs: 100,        // press -> first card leaves the shoe
@@ -59,11 +60,42 @@ export function streakAfter(streak, hand) {
 }
 export const STREAK_FROM = 3;
 
+/* ---------------------------------------------------------------------------------------------
+ * THE CALLOUT (shared/hypno/callout.js, owner 2026-09-15). A settled win names itself at FX_DELAY_MS with
+ * its host fx, after the winning cards glowed (winningCards, HIGHLIGHT_GAP_MS apart in dealt order); a
+ * blackjack names itself at its bloom, so its plain settle (cards.win) says nothing more. A push and a
+ * loss get no callout. The next deal waits WIN_HOLD_MS from the frame the result showed.
+ * ------------------------------------------------------------------------------------------ */
+export const WIN_HOLD_MS = FX_DELAY_MS + CALLOUT_MS;
+export const CALLOUTS = Object.freeze({
+  'cards.win': { key: 'br_callout_winner', fallback: 'Winner', tier: 'small' },
+  'cards.bloom': { key: 'br_callout_blackjack', fallback: 'Blackjack', tier: 'big' },
+  'cards.dealer_bust': { key: 'br_callout_dealer_bust', fallback: 'Dealer Bust', tier: 'small' },
+  'cards.streak': { key: 'br_callout_hot_hand', fallback: 'Hot Hand', tier: 'big' },
+  'cards.sweep': { key: 'br_callout_sweep', fallback: 'Sweep', tier: 'hero' },
+});
+/** The callout for a moment id, or null. `bloomed`: this hand already said Blackjack, so a plain win says nothing. */
+export function calloutFor(id, { bloomed = false } = {}) {
+  if (id === 'cards.win' && bloomed) return null;
+  return Object.prototype.hasOwnProperty.call(CALLOUTS, id) ? CALLOUTS[id] : null;
+}
+/** The cards of every hand the player won, in dealt order ([{ owner, slot }]); empty unless the hand settled. */
+export function winningCards(hand) {
+  if (!hand || !hand.done || !hand.result) return [];
+  const won = hand.hands.map((_, i) => { const r = hand.result.hands[i]; return !!(r && WINS.has(r.outcome)); });
+  const out = [], two = hand.hands.length === 2;
+  const push = (i, j) => { if (won[i] && hand.hands[i].cards[j] !== undefined) out.push({ owner: i, slot: j }); };
+  if (two) { push(0, 0); push(1, 0); hand.hands.forEach((h, i) => { for (let j = 1; j < h.cards.length; j++) push(i, j); }); }
+  else if (hand.hands[0]) for (let j = 0; j < hand.hands[0].cards.length; j++) push(0, j);
+  return out;
+}
+
 /**
  * How long a moment the station just played keeps something fullscreen (ms), so no new decision opens under it.
- * `fired` = host fx the moment sent (a gate off sends none), `tunnel` = the tunnel gate let the losing edges run,
- * `still` = Calm or reduced (the host shortens a gif_from to 60%). The bloom waits out its picture, a win its wash,
- * a loss its breath of tunnel; a push and the sit fan hold nothing fullscreen.
+ * `fired` = host fx the moment sent (a host with no fx hook sends none), `tunnel` = the host has a tunnel hook for
+ * the losing edges, `still` = Calm or reduced (the host shortens a gif_from to 60%). The bloom waits out its picture,
+ * a win its wash, a loss its breath of tunnel; a push and the sit fan hold nothing fullscreen. The station adds
+ * WIN_HOLD_MS from the settle frame on top for a win.
  */
 export function screenHoldMs(id, { fired = 0, tunnel = false, still = false } = {}) {
   if (id === 'cards.bloom') return fired > 0 ? Math.round(TIMING.bloomMs * (still ? 0.6 : 1)) : 0;

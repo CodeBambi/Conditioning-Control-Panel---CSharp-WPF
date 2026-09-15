@@ -102,3 +102,14 @@
 .wheel-station[data-seated] .wheel-top{top:112px;max-width:min(320px,70vw)}
 .wheel-station[data-seated] .wheel-odds[open]{max-width:calc(100vw - 24px);max-height:55vh}
 .wheel-station[data-seated] .wheel-odds td{white-space:normal}
+
+/* THE GLYPH HIT (shared/hypno/callout.js): a winning element on the DOM glows and pops 1.06 over HIGHLIGHT_MS (400 ms).
+   The same rule in every game's station.css; the canvas and three.js views draw the same pulse themselves. */
+.br-glyph-hit { animation: br-glyph-hit 400ms cubic-bezier(.2, 1.5, .4, 1) both; }
+@keyframes br-glyph-hit {
+  0% { box-shadow: 0 0 0 0 #5fffd000; transform: scale(1); }
+  50% { box-shadow: 0 0 18px 4px #5fffd0cc; transform: scale(1.06); }
+  100% { box-shadow: 0 0 0 0 #5fffd000; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) { .br-glyph-hit { animation-name: br-glyph-hit-still; } }
+@keyframes br-glyph-hit-still { 0%, 100% { box-shadow: 0 0 0 0 #5fffd000; } 50% { box-shadow: 0 0 18px 4px #5fffd0cc; } }

@@ -185,6 +185,11 @@ ok(d.hypno.lastMoment && d.hypno.lastMoment.id === 'wheel.land.flash', 'moment w
 ok(fx.map(f => f.fxId).join() === 'fx.wash,fx.gif_burst,fx.sub_single' && fx[1].symbols.length === 2 && fx[1].symbols.every(k => /^g[0-3]$/.test(k))
    && fx[2].symbols.length === 1 && /^s[0-3]$/.test(fx[2].symbols[0]) && fx[1].fired && fx[2].fired, `mid row after the kit's moment: a burst of two dealt pictures and one dealt word: ${JSON.stringify(fx.slice(1))}`);
 ok(d.fx.last && d.fx.last.moment === 'mid' && d.fx.last.ids.join() === 'fx.gif_burst,fx.sub_single' && d.fx.cool.seen.mid === 1, `the feel log: ${JSON.stringify(d.fx.last)}`);
+// THE LANDING FLOW (callout.js): the slice glowed from the landing frame; at FX_DELAY_MS the callout named the win with the fx.
+const co = d.callout.shown.at(-1), landAt = d.feel.log.find(x => x.what === 'land'), fxAt = d.feel.log.find(x => x.what === 'fx' && x.moment === 'mid');
+ok(co && co.key === 'br_callout_nice_spin' && co.tier === 'small' && d.callout.shown.length === 1 && d.callout.last.key === co.key, `the callout "Nice Spin" (small) recorded once: ${JSON.stringify(co)}`);
+ok(d.feel.scene.hit && d.feel.scene.hit.slice === 'glow' && landAt && fxAt && fxAt.at - landAt.at >= 380 && fxAt.at - landAt.at <= 700 && d.callout.last.at - landAt.at >= 380,
+   `the landed slice glowed on the landing frame; the row and the callout followed ${fxAt && landAt ? fxAt.at - landAt.at : '?'} ms later (FX_DELAY_MS 400)`);
 await sleep(2200);
 const tl2 = await tunnels();
 ok(tl2.at(-1) === 0, `tunnel back to 0 after the landing (${tl2.length} posts)`);
@@ -266,6 +271,8 @@ await sleep(400);
 ok(landFx(await fxCalls()).length === 0, 'near miss: nothing but the coast wash while the wheel turns (the answer is in, the pointer is not)');
 ok(await waitLanded(), 'sip lands');
 await sleep(120);
+ok(landFx(await fxCalls()).length === 0 && (await dbg()).fx.pending, 'the landing frame itself fires nothing to the desk yet: the slice glows, the row waits FX_DELAY_MS');
+await sleep(400);
 fx = landFx(await fxCalls());
 d = await dbg();
 ok(d.feel.scene.landed === 'sip_a' && fx.map(f => f.fxId).join() === 'fx.sub_single,fx.spiral_brief' && /^s[0-3]$/.test(fx[0].symbols[0]) && !fx[1].symbols && fx[1].fired,
@@ -410,8 +417,11 @@ await waitLanded();
 await sleep(700);
 await still('st-wheel-14-gated-off-landed.jpg', 'Gated off: 40 SP lands with the quiet room and text only');
 d = await dbg();
-ok((await fxCalls()).length === 0 && !(await tunnels()).some(v => v > 0) && d.hypno.lastMoment.id === 'wheel.land.gif' && d.feel.scene.hypno.quiet !== null, 'gated off: wheel.land.gif fires no host fx and no tunnel, the quiet room still runs');
-ok(d.fx.last && d.fx.last.moment === 'big' && d.fx.last.ids.length === 0 && d.fx.last.why === 'gated', `gated off: the big row is planned and dropped whole (${JSON.stringify(d.fx.last)})`);
+// Gates no longer drop a step (2026-09-15): the page posts the moment, the row and the tunnel; the host (here the mock) skips per toggle.
+fx = await fxCalls();
+ok(fx.length >= 3 && fx.every(f => !f.fired) && (await tunnels()).some(v => v > 0) && d.hypno.lastMoment.id === 'wheel.land.gif' && d.feel.scene.hypno.quiet !== null,
+   `gated off: wheel.land.gif and the tunnel are still posted (${fx.length} fx, none fired by the host), the quiet room still runs`);
+ok(d.fx.last && d.fx.last.moment === 'big' && d.fx.last.ids.join() === 'fx.gif_storm,fx.sub_pair' && d.fx.last.why === null, `gated off: the big row is posted whole (${JSON.stringify(d.fx.last)})`);
 ok(/Deep: \+40 SP/.test(d.status), `gated off: the result as text "${d.status}"`);
 await ev("window.dev.host.settings({ gates: { flash: true, spiral: true, brainDrain: true, tunnel: true } })");
 await sleep(300);
@@ -476,7 +486,7 @@ await sleep(120);
 d = await dbg();
 ok(!d.feel.scene.coasting, 'live motion: the next press does not travel (the scene took the flag)');
 await waitLanded(6000);
-await sleep(300);
+await sleep(700);   // the quiet room comes with the moment at FX_DELAY_MS
 d = await dbg();
 ok(d.feel.scene.landed === 'glow' && !d.feel.scene.hypno.ghosts && d.feel.scene.hypno.shear === 0 && !(await tunnels()).some(v => v > 0) && d.feel.scene.hypno.quiet !== null,
   'live motion: settled on Glow, no taffy, no tunnel, the quiet room at k 0.5');

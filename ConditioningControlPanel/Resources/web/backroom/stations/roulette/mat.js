@@ -14,6 +14,7 @@
  * ==========================================================================*/
 
 import { FEEL } from './feel.js';
+import { HIGHLIGHT_MS } from '../../shared/hypno/callout.js';
 
 const TAU = Math.PI * 2;
 const COL = { brass: '#e8c27a', mint: '#5fffd0', rose: '#ff5fa2', text: '#efe6ff', muted: '#a898c4', zero: '#1f8f74', roseFelt: '#c8286e', plum: '#3a1f5c', felt: '#1b1230' };
@@ -30,7 +31,11 @@ export function createMat({ spots, rose, label }) {
   const has = (id) => !Array.isArray(spots) || spots.includes(id);
   let cells = [];   // { spot, x, y, w, h, fill }
   let anims = [];   // { kind: 'in' | 'lose' | 'pull', spot, t0, i }
+  let hits = { spots: new Set(), at: -Infinity };   // THE GLYPH HIT: the paying chips' rim glow over HIGHLIGHT_MS (callout.js)
   const box = { x: 0, y: 0, w: 0, h: 0, cell: 0 };
+  /** A paying landing: the chips on `spots` glow and pop from station time `now`. */
+  function glow(spots, now) { hits = { spots: new Set(Array.isArray(spots) ? spots : []), at: now }; }
+  const hitPulse = (spot, now) => { if (!hits.spots.has(spot)) return 0; const q = (now - hits.at) / HIGHLIGHT_MS; return q >= 0 && q < 1 ? Math.sin(q * Math.PI) : 0; };
 
   /** Lay the mat into x, y, w, h (CSS px); it keeps its proportions and centres itself. */
   function layout(x, y, w, h) {
@@ -86,7 +91,7 @@ export function createMat({ spots, rose, label }) {
    */
   function draw(g, view) {
     const { now, k } = view, cell = box.cell, chipR = Math.max(6, cell * 0.28);
-    const hits = new Set(view.hits || []);
+    const hitsNow = new Set(view.hits || []);
     g.save();
     g.fillStyle = 'rgba(12,7,22,.72)'; g.strokeStyle = 'rgba(232,194,122,.35)'; g.lineWidth = 1;
     g.beginPath(); g.roundRect(box.x - cell * 0.3, box.y - cell * 0.3, box.w + cell * 0.6, box.h + cell * 0.6, cell * 0.3); g.fill(); g.stroke();
@@ -96,9 +101,11 @@ export function createMat({ spots, rose, label }) {
       if (hover) { g.fillStyle = 'rgba(255,243,214,.14)'; g.fillRect(c.x + 1, c.y + 1, c.w - 2, c.h - 2); }
       g.strokeStyle = 'rgba(232,194,122,.55)'; g.lineWidth = 1; g.strokeRect(c.x + 0.5, c.y + 0.5, c.w - 1, c.h - 1);
       const landedHere = view.landed != null && c.spot === 's' + view.landed;
-      if (hits.has(c.spot) || landedHere) {
-        g.save(); g.strokeStyle = COL.mint; g.lineWidth = 2.5; g.shadowColor = COL.mint; g.shadowBlur = 12 * k;
-        g.strokeRect(c.x + 2, c.y + 2, c.w - 4, c.h - 4); g.restore();
+      const pulse = hitPulse(c.spot, now);
+      if (hitsNow.has(c.spot) || landedHere || pulse > 0) {
+        g.save(); g.strokeStyle = COL.mint; g.lineWidth = 2.5 + 1.5 * pulse; g.shadowColor = COL.mint; g.shadowBlur = (12 + 16 * pulse) * k;
+        const grow = c.w * 0.03 * pulse;   // the 1.06 pop of the winning frame
+        g.strokeRect(c.x + 2 - grow, c.y + 2 - grow, c.w - 4 + grow * 2, c.h - 4 + grow * 2); g.restore();
       }
       const straight = /^s\d+$/.test(c.spot);
       g.fillStyle = COL.text; g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -110,8 +117,9 @@ export function createMat({ spots, rose, label }) {
     const flying = new Set(anims.filter((a) => a.kind === 'lose').map((a) => a.spot));
     for (const [spot, amt] of Object.entries(view.chips || {})) {
       if (!(amt > 0) || flying.has(spot)) continue;
-      const p = stackAt(spot);
-      for (let n = 0; n < amt; n++) chip(g, p.x, p.y - n * 3, chipR, COL.rose, 1);
+      const p = stackAt(spot), pulse = hitPulse(spot, now), r = chipR * (1 + 0.06 * pulse);
+      if (pulse > 0) { g.save(); g.globalAlpha = 0.7 * pulse * k; g.fillStyle = COL.mint; g.shadowColor = COL.mint; g.shadowBlur = 20; g.beginPath(); g.arc(p.x, p.y, r * 1.35, 0, TAU); g.fill(); g.restore(); }
+      for (let n = 0; n < amt; n++) chip(g, p.x, p.y - n * 3, r, COL.rose, 1);
       if (amt > 1) { g.fillStyle = COL.text; g.font = `700 ${Math.max(9, chipR)}px ${FONT}`; g.fillText(String(amt), p.x, p.y - (amt - 1) * 3); }
     }
 
@@ -144,10 +152,10 @@ export function createMat({ spots, rose, label }) {
   }
 
   return {
-    layout, hit, draw, animate, clearAnims, stackAt,
+    layout, hit, glow, draw, animate, clearAnims, stackAt,
     get box() { return { ...box }; },
     /** A spot's cell rect (CSS px), or null. */
     rectOf(spot) { const c = cellOf(spot); return c ? { x: c.x, y: c.y, w: c.w, h: c.h } : null; },
-    debug() { return { cells: cells.length, anims: anims.map((a) => a.kind + ':' + a.spot), cell: box.cell }; },
+    debug() { return { cells: cells.length, anims: anims.map((a) => a.kind + ':' + a.spot), cell: box.cell, glow: { spots: [...hits.spots], at: hits.at } }; },
   };
 }

@@ -1,4 +1,4 @@
-/* shared/hypno/moments.js against the mock host: the MOMENTS table, gates, holdScreen, holds, the tunnel throttle. */
+/* shared/hypno/moments.js against the mock host: the MOMENTS table, gates (never dropping a step, 2026-09-15), holdScreen, holds, the tunnel throttle. */
 
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
@@ -40,7 +40,8 @@ test('cards table beats: light steps play under holdScreen, fullscreen ones wait
   host.clear();
   host.settings({ gates: { flash: false, subliminal: false, spiral: true, brainDrain: true } });
   m.play('cards.hit', { words: ['s1'] }); m.play('cards.reveal'); m.play('cards.sweep', { gif: 'g1' });
-  assert.equal(host.fx.length, 0, 'subliminal off drops the whispers and the pair, flash off the bursts, the storm and the washes');
+  assert.equal(host.fx.length, 4, 'gates off drop nothing on the page: the whisper, the burst, the storm and the wash are all posted');
+  assert.ok(host.fx.every((r) => r.ack.fired.length === 0 && r.ack.skipped[0].why === 'toggle'), 'and the host is the one that skips them, per toggle');
   m.dispose();
 });
 
@@ -99,34 +100,38 @@ test('the wheel landings fire the table, Normal args, the caller colour, rect an
   assert.equal(host.fx.length, 2, 'an unknown id fires nothing');
 });
 
-test('gates drop their steps; a moment with nothing left fires nothing', () => {
-  const host = createMockHost({ gates: { flash: false, spiral: false, brainDrain: false, tunnel: false } });
+test('gates never drop a step (2026-09-15): every step is posted with every gate off; the host skips per toggle', () => {
+  const host = createMockHost({ gates: { flash: false, spiral: false, brainDrain: false, tunnel: false, subliminal: false } });
   const m = createMoments(host.ctx, { station: 'wheel' });
   const r = m.play('wheel.land.jackpot', { from: RECT, gif: 'g0' });
-  assert.deepEqual(r, { tokens: [], page: ['quiet_room', 'reveal'], held: false });
+  assert.equal(r.tokens.length, 3, 'the spiral, the picture and the wash are all posted');
+  assert.deepEqual(r.page, ['quiet_room', 'reveal']);
   m.play('roulette.wake'); m.play('roulette.land.big', { color: '#ff5fa2', from: RECT, gif: 'g1' });
-  assert.equal(host.fx.length, 0);
+  assert.deepEqual(host.fx.map((x) => x.fxId), ['fx.loom_spiral', 'fx.gif_from', 'fx.wash', 'fx.loom_spiral', 'fx.wash', 'fx.gif_from']);
+  assert.ok(host.fx.every((x) => x.ack.fired.length === 0), 'the mock host, like the real one, fires none of them');
   m.tunnel(0.8);
-  assert.equal(host.tunnel.length, 0, 'tunnel off: no fx-tunnel');
+  assert.deepEqual(host.tunnel.map((x) => x.level), [0.8], 'tunnel off: the level still posts (the host decides)');
   host.settings({ gates: { flash: true } });
   m.play('wheel.land.jackpot', { from: RECT, gif: 'g0' });
-  assert.deepEqual(host.fx.map((x) => x.fxId), ['fx.gif_from', 'fx.wash'], 'flash back on, spiral still off');
+  assert.equal(host.fx.length, 9, 'a settings frame changes nothing on the page');
+  m.dispose();
 });
 
-test('fx-tunnel reads the tunnel gate, not brainDrain; haze stays on brainDrain', async () => {
+test('fx-tunnel and the haze post whatever the brainDrain and tunnel gates say; a settings frame with tunnel off changes nothing', async () => {
   const drainOff = createMockHost({ intensity: 'full', gates: { brainDrain: false } });
   const a = createMoments(drainOff.ctx, { station: 'roulette' });
   a.play('roulette.run'); a.tunnel(0.6);
-  assert.deepEqual(drainOff.fx.map((x) => x.fxId), [], 'brainDrain off: no haze');
-  assert.deepEqual(drainOff.tunnel.map((x) => x.level), [0.6], 'brainDrain off, tunnel on: the run still posts its tunnel');
+  assert.deepEqual(drainOff.fx.map((x) => x.fxId), ['fx.haze'], 'brainDrain off: the haze is still posted (the host skips it)');
+  assert.equal(drainOff.fx[0].ack.fired.length, 0);
+  assert.deepEqual(drainOff.tunnel.map((x) => x.level), [0.6], 'the run posts its tunnel');
   a.dispose();
 
   const tunnelOff = createMockHost({ intensity: 'full', gates: { tunnel: false } });
   const b = createMoments(tunnelOff.ctx, { station: 'roulette' });
   b.play('roulette.run'); b.tunnel(0.6); b.play('cards.lose');
   await new Promise((r) => setTimeout(r, 120));
-  assert.deepEqual(tunnelOff.fx.map((x) => x.fxId), ['fx.haze'], 'tunnel off, brainDrain on: the haze still holds');
-  assert.equal(tunnelOff.tunnel.length, 0, 'tunnel off: no fx-tunnel from a level or the losing breath');
+  assert.deepEqual(tunnelOff.fx.map((x) => x.fxId), ['fx.haze'], 'the haze holds');
+  assert.ok(tunnelOff.tunnel.length > 0 && tunnelOff.tunnel.every((x) => x.applied === false), 'tunnel off: the level and the losing breath still post; the host applies none');
   b.dispose();
 
   const live = createMockHost();
@@ -136,10 +141,10 @@ test('fx-tunnel reads the tunnel gate, not brainDrain; haze stays on brainDrain'
   assert.ok(live.tunnel.some((x) => x.level > 0), 'the losing edges breathe');
   live.settings({ gates: { tunnel: false } });
   const n = live.tunnel.length;
-  assert.equal(live.tunnel.at(-1).level, 0, 'a settings frame with tunnel off closes it at once');
   await new Promise((r) => setTimeout(r, 160));
-  assert.equal(live.tunnel.length, n, 'and the breath stops');
+  assert.ok(live.tunnel.length > n && c.breathing(), 'a settings frame with tunnel off does not stop the breath');
   c.dispose();
+  assert.equal(live.tunnel.at(-1).level, 0, 'dispose closes it');
 });
 
 test('cards: holdScreen stops host fx and the tunnel; bloom then win drops the picture and raises the wash', () => {
@@ -233,14 +238,14 @@ test('roulette: run holds haze at Full only, a wake holds the spiral, every land
   assert.deepEqual(n.play('roulette.land.big', { gif: 'g1' }).page, ['chips_in'], 'no pulled pair without a wake');
 });
 
-test('a gate going off releases what it holds; dispose unsubscribes', () => {
+test('a gate going off releases nothing it holds; dispose releases everything and unsubscribes', () => {
   const host = createMockHost({ intensity: 'full' });
   const m = createMoments(host.ctx, { station: 'roulette' });
   m.play('roulette.run'); m.play('roulette.wake');
   host.settings({ gates: { spiral: false } });
-  assert.deepEqual(host.release.map((r) => host.fx.find((f) => f.token === r.token).fxId), ['fx.loom_spiral']);
+  assert.equal(host.release.length, 0, 'spiral off: the wake spiral keeps its hold (the host is the enforcer)');
   m.dispose();
-  assert.equal(host.release.length, 2, 'dispose releases the haze too');
+  assert.deepEqual(host.release.map((r) => host.fx.find((f) => f.token === r.token).fxId).sort(), ['fx.haze', 'fx.loom_spiral'], 'dispose releases both');
   host.settings({ gates: { brainDrain: false } });
   assert.equal(host.release.length, 2);
   assert.deepEqual(m.play('roulette.wake'), { tokens: [], page: [], held: false });

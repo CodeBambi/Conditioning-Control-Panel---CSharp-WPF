@@ -5436,5 +5436,22 @@
   "br_custom_collect_locked": "Sammle diese Dekoration bei Daily Daze, um sie zu verwenden.",
   "br_bell_wheel_change": "traf Keep the Change",
   "br_bell_wheel_spoiled": "bekam Spoiled Rotten",
-  "br_slot_rotate": "Dreh dein Handy quer für eine größere Ansicht"
+  "br_slot_rotate": "Dreh dein Handy quer für eine größere Ansicht",
+  "br_callout_small_win": "Kleiner Gewinn",
+  "br_callout_nice_spin": "Schöner Dreh",
+  "br_callout_big_spin": "Großer Dreh",
+  "br_callout_emi_jackpot": "Emi-Jackpot",
+  "br_callout_double_up": "Verdoppelt",
+  "br_callout_gift_drop": "Geschenk",
+  "br_callout_head_empty": "Kopf leer",
+  "br_callout_chips_in": "Chips rein",
+  "br_callout_straight_up": "Volltreffer",
+  "br_callout_spiral_wake": "Spiralerwachen",
+  "br_callout_full_wake": "Volles Erwachen",
+  "br_callout_on_a_roll": "Auf Zack",
+  "br_callout_winner": "Gewinner",
+  "br_callout_blackjack": "Blackjack",
+  "br_callout_dealer_bust": "Dealer überkauft",
+  "br_callout_hot_hand": "Glückssträhne",
+  "br_callout_sweep": "Abgeräumt"
 }

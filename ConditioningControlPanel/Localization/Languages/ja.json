@@ -5427,5 +5427,22 @@
   "br_custom_collect_locked": "Daily Dazeでこの装飾を獲得すると使用できます。",
   "br_bell_wheel_change": "でKeep the Changeを獲得",
   "br_bell_wheel_spoiled": "でSpoiled Rottenを獲得",
-  "br_slot_rotate": "横向きにすると大きく表示されます"
+  "br_slot_rotate": "横向きにすると大きく表示されます",
+  "br_callout_small_win": "スモールウィン",
+  "br_callout_nice_spin": "ナイススピン",
+  "br_callout_big_spin": "ビッグスピン",
+  "br_callout_emi_jackpot": "エミ・ジャックポット",
+  "br_callout_double_up": "ダブルアップ",
+  "br_callout_gift_drop": "ギフトドロップ",
+  "br_callout_head_empty": "ヘッドエンプティ",
+  "br_callout_chips_in": "チップイン",
+  "br_callout_straight_up": "ストレートアップ",
+  "br_callout_spiral_wake": "スパイラルウェイク",
+  "br_callout_full_wake": "フルウェイク",
+  "br_callout_on_a_roll": "絶好調",
+  "br_callout_winner": "ウィナー",
+  "br_callout_blackjack": "ブラックジャック",
+  "br_callout_dealer_bust": "ディーラーバスト",
+  "br_callout_hot_hand": "ホットハンド",
+  "br_callout_sweep": "スイープ"
 }

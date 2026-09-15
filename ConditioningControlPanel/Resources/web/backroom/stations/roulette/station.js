@@ -16,8 +16,9 @@
  *             spiral, the wash and the pocket GIF)
  *   feel.FX_RECIPE  the host recipe on top: every beat of a spin (no more bets,
  *             the launch, the wake, the fret rattle, a near miss, the landing by
- *             outcome, a streak) fires section 4 ids through ctx.fx, gated,
- *             cooled and stripped for Calm in feel.js (pure)
+ *             outcome, a streak) fires section 4 ids through ctx.fx, cooled and
+ *             stripped for Calm in feel.js (pure); gates no longer drop a step
+ *             (owner 2026-09-15)
  *
  * A spin: chips on the mat (1 to 3 SP), 1 to 5 spins, Spin. The bowl answers on
  * the press (Law VIII), the server settles every spin at once, and the page
@@ -25,11 +26,21 @@
  * roulette.wake on a Spiral Wake) at its launch, and exactly one
  * roulette.land.* on the frame the ball drops into the pocket. The SP chip owes
  * the tape's unplayed pays until each lands (Law I).
+ *
+ * THE LANDING FLOW (shared/hypno/callout.js, owner 2026-09-15). On the frame
+ * the ball drops (Law I): tunnel 0, the text and the chip thud at 0; on a
+ * paying spin the pocket and the paying chips glow to HIGHLIGHT_MS, and at
+ * FX_DELAY_MS the landing moment, the host beat, the chips_in flight and the
+ * callout (feel.calloutFor) fire together; the next launch waits WIN_HOLD_MS
+ * (feel.nextLaunchAt). A miss stays quick: its moment (the run's holds
+ * released), the chip vortex and a near miss's spiral all on the landing frame,
+ * no callout.
  * ==========================================================================*/
 
 import { createLoomKit, createDeck, createMoments, strengthK, rouletteRunLevel, pocketColor, viewportRect } from '../../shared/hypno/index.js';
+import { createCallout, FX_DELAY_MS } from '../../shared/hypno/callout.js';
 import { MAX_CHIPS, MAX_SPINS, addChip, removeChip, chipsOf, chipTotal, checkLayout, adoptTape, owed, shownSp, cursorOf, readOutcome, classify, spinBody, mintId, ROWS } from './tape.js';
-import { FEEL, planRun, seedFor, landMoment, nextLaunchAt, landBeat, nearMisses, fxPlan, fxSymbols, createFxCooldowns } from './feel.js';
+import { FEEL, planRun, seedFor, landMoment, nextLaunchAt, landBeat, nearMisses, fxPlan, fxSymbols, createFxCooldowns, calloutFor } from './feel.js';
 import { createBowl } from './bowl.js';
 import { createMat } from './mat.js';
 
@@ -68,6 +79,7 @@ export async function mount(ctx) {
   let st = null, sp = 0, tape = null, chips = {}, count = 1, why = null, hover = null, cur = null, resume = false;
   let status = '', history = [], feelLog = [], cursorSent = null, pausedAt = 0, pausedMs = 0, size = { w: 0, h: 0, dpr: 1 };
   let cool = createFxCooldowns(), streak = 0;   // the host recipe's cooldowns and the paying spins in a row
+  let callout = null, landTimer = 0, lastCallout = null;   // the landing flow: the callout and the delayed fx frame of a paying spin
   const $ = (sel) => el.querySelector(sel);
   const clock = () => (suspended ? pausedAt : performance.now()) - pausedMs;
   const note = (what, extra = {}) => { feelLog = [...feelLog.slice(-99), { what, at: Math.round(performance.now()), ...extra }]; };
@@ -295,29 +307,60 @@ export async function mount(ctx) {
     sync();
   }
 
-  /** The landing frame: tunnel off, one roulette.land.*, the chips, the text, and Law I lets this spin's pay land. */
-  function land(now) {
-    const r = cur.read;
-    cur.landed = true;
-    moments.tunnel(0);
-    const id = landMoment(r), box = bowl.pocketBox(r.index);
-    streak = r.pay > 0 ? streak + 1 : 0;
-    const near = nearMisses(r, tape.bets, st.wheel), hostBeat = landBeat(r, near);
+  /** Law VI: whatever a landing still owed the desk (the delayed fx frame, the callout) is dropped now. */
+  function dropLanding() {
+    clearTimeout(landTimer); landTimer = 0;
+    if (callout) callout.cancel();
+  }
+  /** The moment, the host beat, the paying chips' flight and the callout of a paying spin: one frame, FX_DELAY_MS after the landing. */
+  function landFx(r, id, hostBeat, near, co) {
+    const box = bowl.pocketBox(r.index), now = clock();
     const hostFx = beat(hostBeat, { i: r.i, streak });   // the recipe first; the moment's wash and pocket GIF close the frame
     const m = moments.play(id, { color: pocketColor(r.pocket, st.rose), from: viewportRect(cv, box.x, box.y, box.w, box.h),
       gif: deck ? deck.pickKey(tape.id + ':' + r.i) : undefined, wake: r.wake });
-    const list = tape.bets.filter((b) => !r.hits.includes(b.spot)).map((b) => ({ kind: 'lose', spot: b.spot }));
+    const list = [];
     for (const spot of r.hits) {
       if (m.page.includes('chips_in')) list.push({ kind: 'in', spot }, { kind: 'in', spot });
       if (m.page.includes('pulled_pair')) list.push({ kind: 'pull', spot }, { kind: 'pull', spot });
     }
-    mat.animate(list, now);
+    if (list.length) mat.animate(list, now);
+    if (co && callout) { callout.show(co.key, co.fallback, { tier: co.tier }); lastCallout = { key: co.key, tier: co.tier, i: r.i, at: Math.round(performance.now()) }; note('callout', lastCallout); }
+    note('land', { i: r.i, pocket: r.pocket, pay: r.pay, wake: r.wake, straight: r.straight, moment: id, page: m.page, fx: m.tokens.length, beat: hostBeat, near, streak, hostFx,
+      callout: co ? co.key : null, delayed: true });
+  }
+  /** The landing frame: tunnel off, the chips, the text, and Law I lets this spin's pay land. A paying spin glows first
+   *  and fires its moment, beat and callout at FX_DELAY_MS (landFx); a miss plays its moment and vortex here. */
+  function land(now) {
+    const r = cur.read;
+    cur.landed = true; cur.landAt = now; cur.win = r.pay > 0;
+    moments.tunnel(0);
+    const id = landMoment(r);
+    streak = r.pay > 0 ? streak + 1 : 0;
+    const near = nearMisses(r, tape.bets, st.wheel), hostBeat = landBeat(r, near);
+    const co = r.pay > 0 ? calloutFor(hostBeat, { streak }) : null;
+    const lose = tape.bets.filter((b) => !r.hits.includes(b.spot)).map((b) => ({ kind: 'lose', spot: b.spot }));
+    mat.animate(lose, now);
+    if (r.pay > 0) {
+      bowl.glow(r.index, now); mat.glow(r.hits, now);   // THE GLYPH HIT: the pocket and the paying chips, 0..HIGHLIGHT_MS
+      const my = session, i = r.i;
+      clearTimeout(landTimer);
+      landTimer = setTimeout(() => {
+        landTimer = 0;
+        if (my !== session || !alive || suspended || !cur || cur.i !== i) return;
+        landFx(r, id, hostBeat, near, co);
+      }, FX_DELAY_MS);
+      note('landed', { i: r.i, pocket: r.pocket, pay: r.pay, beat: hostBeat, callout: co ? co.key : null });
+    } else {
+      const box = bowl.pocketBox(r.index);
+      const hostFx = beat(hostBeat, { i: r.i, streak });   // a near miss's spiral, or nothing
+      const m = moments.play(id, { color: pocketColor(r.pocket, st.rose), from: viewportRect(cv, box.x, box.y, box.w, box.h), wake: r.wake });   // releases the run's holds
+      note('land', { i: r.i, pocket: r.pocket, pay: r.pay, wake: r.wake, straight: r.straight, moment: id, page: m.page, fx: m.tokens.length, beat: hostBeat, near, streak, hostFx, callout: null, delayed: false });
+    }
     tape.played = r.i + 1;
     if (hook) { hook.owe(reader); if (r.pay > 0 && typeof hook.thud === 'function') hook.thud(); }
     const line = resultLine(r);
     history = [...history.slice(-4), `${r.pocket} ${r.pocket === 0 ? '' : spotName(r.color) + ' '}${r.pay > 0 ? '+' + fmt(r.pay) : '+0'}${r.wake ? ' ~' : ''}`.replace(/\s+/g, ' ')];
     status = line + '\n' + t('br_roulette_progress', 'Spin {i} of {n}', { i: r.i + 1, n: tape.outcomes.length });
-    note('land', { i: r.i, pocket: r.pocket, pay: r.pay, wake: r.wake, straight: r.straight, moment: id, page: m.page, fx: m.tokens.length, beat: hostBeat, near, streak, hostFx, text: line });
     sync();
   }
 
@@ -366,7 +409,7 @@ export async function mount(ctx) {
       if (u.landed) land(now);
     }
     if (cur && cur.landed && cur.restAt == null && u.phase === 'rest') cur.restAt = now;
-    if (cur && cur.restAt != null && now >= nextLaunchAt(cur.launchAt, cur.restAt)) {
+    if (cur && cur.restAt != null && now >= nextLaunchAt(cur.launchAt, cur.restAt, { landMs: cur.landAt, win: cur.win })) {
       if (tape && tape.played < tape.outcomes.length) launch(tape.played, now);
       else { mat.clearAnims(); endTape(); }
     }
@@ -412,6 +455,7 @@ export async function mount(ctx) {
     addEventListener('keydown', onKey);
     cv.addEventListener('pointermove', onPointer); cv.addEventListener('pointerdown', onPointer); cv.addEventListener('contextmenu', onContext);
     moments = createMoments(ctx, { station: 'roulette' });
+    callout = createCallout({ mount: el, lex: typeof ctx.lex === 'function' ? ctx.lex : undefined }); lastCallout = null;
     kit = createLoomKit({ still: stillNow(), log: (m) => note('loom', { m }) });
     createDeck(ctx, { count: 4 }).then((d) => { if (my === session && alive) deck = d; else d.dispose(); }).catch(() => {});
     if (typeof ctx.onSp === 'function') unSp = ctx.onSp((v) => { if (Number.isFinite(Number(v)) && phase !== 'asking') { sp = Number(v); if (el) sync(); } });
@@ -451,6 +495,8 @@ export async function mount(ctx) {
     if (typeof unSettings === 'function') unSettings();
     unSp = null; unSettings = null;
     // Law VI: Back drops every ceremony. What has landed is flushed; a spin still running stays unplayed.
+    dropLanding();
+    if (callout) { callout.dispose(); callout = null; }
     if (moments) { moments.cancel(); moments.dispose(); }
     cool.reset(); streak = 0; note('fx', { beat: 'skip', fired: [], planned: [] });   // one-shots settle on the host; nothing new fires
     if (tape && tape.played > 0 && cursorSent !== tape.played) flushCursor();
@@ -470,6 +516,7 @@ export async function mount(ctx) {
       if (!!on === suspended) return;
       if (on) {
         suspended = true; pausedAt = performance.now();
+        dropLanding();
         if (moments) moments.cancel();
         cool.reset(); note('fx', { beat: 'skip', fired: [], planned: [] });   // Law VI: the recipe stops with the moments
         if (kit) { kit.dispose(); kit = null; }
@@ -492,7 +539,8 @@ export async function mount(ctx) {
       check: st ? check() : null, why: el ? $('.roul-why').textContent : null, status: el ? $('.roul-status').textContent : null,
       history: history.slice(), spin: el ? $('.roul-spin').textContent : null, spinDisabled: el ? $('.roul-spin').disabled : null,
       tape: tape && { id: tape.id, played: tape.played, n: tape.outcomes.length, bets: tape.bets, outcomes: tape.outcomes },
-      cur: cur && { i: cur.i, landed: cur.landed, pocket: cur.read.pocket, wake: cur.read.wake, page: cur.page },
+      cur: cur && { i: cur.i, landed: cur.landed, pocket: cur.read.pocket, wake: cur.read.wake, page: cur.page, win: !!cur.win, landAt: cur.landAt ?? null },
+      callout: { last: lastCallout, pending: !!landTimer, ...(callout ? callout.debug() : { shown: [] }) },
       bowl: bowl && bowl.debug(), mat: mat && { ...mat.debug(), rects: Object.fromEntries((st ? st.spots : []).map((s) => [s, mat.rectOf(s)])) },
       kit: kit && kit.debug(), moments: moments && moments.debug(), deck: deck && { keys: deck.keys }, log: feelLog.slice(), rows: ROWS,
       fx: { ...cool.debug(), streak },

@@ -5427,5 +5427,22 @@
   "br_custom_collect_locked": "Consigue esta decoración en Daily Daze para usarla.",
   "br_bell_wheel_change": "consiguió Keep the Change",
   "br_bell_wheel_spoiled": "recibió Spoiled Rotten",
-  "br_slot_rotate": "Gira el teléfono de lado para ver más grande"
+  "br_slot_rotate": "Gira el teléfono de lado para ver más grande",
+  "br_callout_small_win": "Premio pequeño",
+  "br_callout_nice_spin": "Buen giro",
+  "br_callout_big_spin": "Gran giro",
+  "br_callout_emi_jackpot": "Bote de Emi",
+  "br_callout_double_up": "Doble",
+  "br_callout_gift_drop": "Regalo",
+  "br_callout_head_empty": "Cabeza vacía",
+  "br_callout_chips_in": "Fichas dentro",
+  "br_callout_straight_up": "Pleno",
+  "br_callout_spiral_wake": "Despertar espiral",
+  "br_callout_full_wake": "Despertar total",
+  "br_callout_on_a_roll": "En racha",
+  "br_callout_winner": "Ganas",
+  "br_callout_blackjack": "Blackjack",
+  "br_callout_dealer_bust": "La banca se pasa",
+  "br_callout_hot_hand": "Mano caliente",
+  "br_callout_sweep": "Barrida"
 }

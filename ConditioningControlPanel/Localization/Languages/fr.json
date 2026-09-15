@@ -5436,5 +5436,22 @@
   "br_custom_collect_locked": "Obtenez cette décoration dans Daily Daze pour l’utiliser.",
   "br_bell_wheel_change": "a obtenu Keep the Change",
   "br_bell_wheel_spoiled": "a reçu Spoiled Rotten",
-  "br_slot_rotate": "Tourne ton téléphone sur le côté pour une vue plus grande"
+  "br_slot_rotate": "Tourne ton téléphone sur le côté pour une vue plus grande",
+  "br_callout_small_win": "Petit gain",
+  "br_callout_nice_spin": "Beau tour",
+  "br_callout_big_spin": "Grand tour",
+  "br_callout_emi_jackpot": "Jackpot Emi",
+  "br_callout_double_up": "Doublé",
+  "br_callout_gift_drop": "Cadeau",
+  "br_callout_head_empty": "Tête vide",
+  "br_callout_chips_in": "Jetons rentrés",
+  "br_callout_straight_up": "Plein",
+  "br_callout_spiral_wake": "Réveil spiral",
+  "br_callout_full_wake": "Réveil total",
+  "br_callout_on_a_roll": "En veine",
+  "br_callout_winner": "Gagnant",
+  "br_callout_blackjack": "Blackjack",
+  "br_callout_dealer_bust": "Croupier sauté",
+  "br_callout_hot_hand": "Main chaude",
+  "br_callout_sweep": "Rafle"
 }

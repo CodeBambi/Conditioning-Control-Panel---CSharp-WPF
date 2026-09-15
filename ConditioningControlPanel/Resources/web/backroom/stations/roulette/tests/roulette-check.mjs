@@ -170,7 +170,13 @@ d = await dbg();
 ok(d.bowl.tscale < 0.6 && d.bowl.planned.hits >= 1, `fret rattle in slow motion (time scale ${d.bowl.tscale.toFixed(2)}, ${d.bowl.planned.hits} clips planned)`);
 await shot('07-fret-rattle-slowly.png');
 await until('window.dev.station.debug().cur && window.dev.station.debug().cur.landed', 8000, 16);
+const landed1 = (await logOf('landed'))[0], glowAt = await ev('({ bowl: window.dev.station.debug().bowl.hitAt, mat: window.dev.station.debug().mat.glow })');
+ok(landed1 && landed1.pocket === 17 && landed1.callout === 'br_callout_full_wake' && (await host('h.fx.filter((f) => f.fxId === "fx.wash").length')) === 0,
+   'THE LANDING FLOW: the landing frame names the win to come and fires no landing fx yet');
+ok(glowAt.bowl > 0 && glowAt.mat.spots.includes('s17') && glowAt.mat.at === glowAt.bowl, `the pocket and the paying chip glow from the landing frame (${JSON.stringify(glowAt.mat.spots)})`);
+await until('window.dev.station.debug().log.filter((x) => x.what === "land").length === 1', 3000, 16);
 const land1 = (await logOf('land'))[0];
+ok(land1 && land1.delayed === true && land1.at - landed1.at >= 380 && land1.at - landed1.at <= 700, `the moment, the beat and the callout fire ${land1 ? land1.at - landed1.at : '?'} ms after the landing (FX_DELAY_MS 400)`);
 await sleep(250);
 await shot('08-land-big-wake-gif.png');
 d = await dbg();
@@ -184,6 +190,7 @@ ok(big[1].id === 'fx.gif_from' && big[1].args.ms === 3600 && big[1].args.from.w 
   `the double win GIF grows out of the pocket ${JSON.stringify(big[1].args.from)} with ${big[1].symbols[0]}`);
 ok(/17 Plum, Sink row/.test(d.status) && /Spiral Wake/.test(d.status) && /won 78 SP/.test(d.status) && /Spin 1 of 3/.test(d.status), `result as text: "${d.status}"`);
 ok(d.history.at(-1) === '17 Plum +78 ~' && d.owed === d.tape.outcomes.slice(1).reduce((s, o) => s + o.pay, 0), `history "${d.history.at(-1)}", Law I owes only the rest`);
+ok(d.callout.shown.length === 1 && d.callout.shown[0].key === 'br_callout_full_wake' && d.callout.shown[0].tier === 'hero', `the callout "Full Wake" (hero) recorded with the fx: ${JSON.stringify(d.callout.shown)}`);
 const tun = await host('h.tunnel.map((t) => ({ at: t.at, level: t.level }))');
 const gaps = tun.slice(1).map((t, i) => t.at - tun[i].at);
 report.tunnel = { posts: tun.length, max: Math.max(...tun.map((t) => t.level)), minGapMs: Math.min(...gaps) };
@@ -200,12 +207,14 @@ const land2 = (await logOf('land'))[1];
 fx = await host('h.fx.map((f) => ({ id: f.fxId, args: f.args }))');
 ok(land2.pocket === 5 && land2.moment === 'roulette.land.win' && fx.at(-1).id === 'fx.wash' && fx.at(-1).args.strength === 0.6 && fx.at(-1).args.color === '#ff5fa2',
   `5 rose on the rose chip: roulette.land.win, a rose wash at 0.6`);
+ok((await dbg()).callout.shown.at(-1).key === 'br_callout_chips_in' && (await dbg()).callout.shown.length === 2, 'an outside win: the callout "Chips In" (small)');
 await until('window.dev.station.debug().log.filter((x) => x.what === "land").length === 3', 12000, 16);
 const fxBefore3 = await host('h.fx.length');
 await sleep(900);
 await shot('11-land-miss-vortex.png');
 const land3 = (await logOf('land'))[2];
 ok(land3.pocket === 0 && land3.moment === 'roulette.land.miss' && land3.page.includes('chip_vortex') && (await host('h.fx.length')) === fxBefore3, '0: roulette.land.miss, the chips spiral into the bowl, no host fx');
+ok(land3.delayed === false && land3.callout === null && (await dbg()).callout.shown.length === 2, 'a miss stays quick: its moment on the landing frame, no callout');
 const launches = await logOf('launch');
 const pace = launches.slice(1).map((l, i) => l.at - launches[i].at);
 report.pace = pace;
@@ -248,6 +257,7 @@ const haze = fx.find((f) => f.id === 'fx.haze');
 ok(haze && haze.args.hold === true && haze.fired && d.cur.page.includes('velvet_wake'), 'Full: fx.haze {hold} fired and the velvet wake runs');
 await shot('12-full-velvet-wake-haze.png');
 await until('window.dev.station.debug().cur && window.dev.station.debug().cur.landed', 9000, 16);
+await until('window.dev.station.debug().log.some((x) => x.what === "land")', 3000, 16);   // a paying landing fires at FX_DELAY_MS
 ok((await host('h.release.map((r) => r.token)')).includes(haze.token), 'the landing releases the haze');
 await sleep(300);
 await shot('12b-full-land-win.png');
@@ -264,8 +274,9 @@ await shot('13-gated-off-wake-run.png');
 await until('window.dev.station.debug().cur && window.dev.station.debug().cur.landed', 9000, 16);
 await sleep(300);
 d = await dbg();
-const gatedCalls = await host('({ fx: h.fx.length, tunnel: h.tunnel.length })');
-ok(gatedCalls.fx === 0 && gatedCalls.tunnel === 0, `gates off: no host fx, no tunnel (${JSON.stringify(gatedCalls)})`);
+// Gates no longer drop a step (2026-09-15): the page posts everything; the host (here the mock) skips per toggle.
+const gatedCalls = await host('({ fx: h.fx.length, fired: h.fx.filter((f) => f.ack.fired.length).length, tunnel: h.tunnel.length, applied: h.tunnel.filter((t) => t.applied).length })');
+ok(gatedCalls.fx > 0 && gatedCalls.fired === 0 && gatedCalls.tunnel > 0 && gatedCalls.applied === 0, `gates off: the fx and the tunnel are still posted, the host fires none (${JSON.stringify(gatedCalls)})`);
 ok(/Spiral Wake/.test(d.status) && /won 72 SP/.test(d.status), `a Spiral Wake still shows as text: "${d.status}"`);
 await shot('14-gated-off-landing.png');
 
@@ -284,7 +295,7 @@ d = await dbg();
 ok(d.bowl.tscale > 0.62, `Calm rattle floor raised to 0.7 (time scale ${d.bowl.tscale.toFixed(2)})`);
 await shot('16-calm-rattle.png');
 await until('window.dev.station.debug().cur && window.dev.station.debug().cur.landed', 9000, 16);
-await sleep(300);
+await sleep(700);   // the wash comes at FX_DELAY_MS
 fx = await host('h.fx.map((f) => ({ id: f.fxId, args: f.args }))');
 ok(fx.find((f) => f.id === 'fx.loom_spiral').args.alpha === 0.65 && fx.find((f) => f.id === 'fx.wash').args.strength === 1, 'Calm: the page still sends Normal args (the host halves)');
 await shot('17-calm-landing.png');
@@ -348,7 +359,7 @@ const cellCentre = await ev(`(async () => {
 await click(Math.round(roomRect.x + cellCentre.x), Math.round(roomRect.y + cellCentre.y));
 await ev(`document.querySelector('.roul-spin').click()`);
 await until(`(document.querySelector('.roul-history') || {}).childElementCount >= 1`, 12000, 50);
-await sleep(400);
+await sleep(1000);   // the landing's fx follow the glow at FX_DELAY_MS
 const room = await ev(`({ open: window.__posted.filter((m) => m.type === 'station-open').map((m) => m.station), fx: window.__posted.filter((m) => m.type === 'fx').map((m) => ({ id: m.fxId, station: m.station, args: m.args, symbols: m.symbols })),
   tunnel: window.__posted.filter((m) => m.type === 'fx-tunnel').length, media: window.__posted.filter((m) => m.type === 'media-request').map((m) => ({ station: m.station, count: m.count })),
   chip: document.querySelector('#br-sp-value').textContent, sp: window.__srv.user.sp, status: document.querySelector('.roul-status').textContent })`);

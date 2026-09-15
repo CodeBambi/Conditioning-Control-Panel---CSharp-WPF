@@ -5434,5 +5434,22 @@
   "br_custom_collect_locked": "Получите это украшение в Daily Daze, чтобы использовать его.",
   "br_bell_wheel_change": "выиграл Keep the Change",
   "br_bell_wheel_spoiled": "получил Spoiled Rotten",
-  "br_slot_rotate": "Поверни телефон боком, чтобы видеть крупнее"
+  "br_slot_rotate": "Поверни телефон боком, чтобы видеть крупнее",
+  "br_callout_small_win": "Малый выигрыш",
+  "br_callout_nice_spin": "Славный оборот",
+  "br_callout_big_spin": "Большой оборот",
+  "br_callout_emi_jackpot": "Джекпот Эми",
+  "br_callout_double_up": "Удвоение",
+  "br_callout_gift_drop": "Подарок",
+  "br_callout_head_empty": "Пустая голова",
+  "br_callout_chips_in": "Фишки в игре",
+  "br_callout_straight_up": "На число",
+  "br_callout_spiral_wake": "Спиральное пробуждение",
+  "br_callout_full_wake": "Полное пробуждение",
+  "br_callout_on_a_roll": "На волне",
+  "br_callout_winner": "Победа",
+  "br_callout_blackjack": "Блэкджек",
+  "br_callout_dealer_bust": "Перебор у дилера",
+  "br_callout_hot_hand": "Горячая рука",
+  "br_callout_sweep": "Чистая победа"
 }
