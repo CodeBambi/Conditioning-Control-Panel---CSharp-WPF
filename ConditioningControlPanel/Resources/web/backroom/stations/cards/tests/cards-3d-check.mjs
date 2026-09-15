@@ -135,6 +135,15 @@ for (let run = 0; run < 3; run++) {
     ok(locked.hits>0 && locked.before===locked.after, 'raycast shoe press during fullscreen moment sends no Deal');
   }
   await sleep(3000); rows.push(await ev('window.__backroom.scene.debug()'));
+  const exact = await ev(`(async()=>{
+    const h=(await window.__server.handle('state',{})).body.hand;
+    const shown=window.__backroom.scene.scene.getObjectByName('cards_runtime').userData.debug().cards;
+    const expected=h.hands.flatMap((x,owner)=>x.cards.map((code,slot)=>({owner,slot,code})));
+    h.dealer.forEach((code,slot)=>expected.push({owner:'d',slot,code}));
+    const keys=(xs)=>xs.map(c=>[c.owner,c.slot,c.code].join(':')).sort().join('|');
+    return keys(expected)===keys(shown);
+  })()`);
+  ok(exact, 'every public reply card occupies its exact slot with no extra cards');
   await shot('settle-' + run + '.png');
 }
 // A losing hand and a blackjack bloom retain the same host moments in the 3D view.
