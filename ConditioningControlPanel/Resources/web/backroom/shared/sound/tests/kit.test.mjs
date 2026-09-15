@@ -2,7 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { score, createKit, pentatonic, TIERS, TIER_ORDER, CUES, BEDS, ROLLS, DEFAULT_MASTER, BED_LEVEL, DEDUPE_MS,
-  LEVER_VARIANTS, REEL_VARIANTS, DEFAULT_SFX, ROLL_TICK, ROLL_BED, tickGap } from '../kit.js';
+  LEVER_VARIANTS, REEL_VARIANTS, DEFAULT_SFX, ROLL_TICK, ROLL_BED, tickGap,
+  WHEEL_ROLL, WHEEL_TICK, WHEEL_BED, wheelGap } from '../kit.js';
 
 /* ------------------------------------------------------------------ a mocked AudioContext */
 function makeParam(v = 0) {
@@ -250,6 +251,54 @@ test('THE ROLL: the tick rate is the drum speed, and the drums sit over the bed 
   assert.equal(tickGap('nonsense'), tickGap(1), 'nonsense is full speed');
   assert.ok(ROLL_TICK > BED_LEVEL * 0.7 && ROLL_TICK < 0.12, 'a tick reads over the bed without being harsh (the owner took the drums down 35% on 2026-09-15)');
   assert.ok(ROLL_BED > BED_LEVEL * 0.7 && ROLL_BED <= ROLL_TICK, 'the purr sits around the bed, under the ticks (the owner took the drums down 35% on 2026-09-15)');
+});
+
+test('THE THROW: the wheel has no lever, so the spin-up and the rotor loop are its gesture', () => {
+  const s = score('whir');
+  assert.ok(s && s.notes.length >= 3, 'the whir is scored, not a bed');
+  assert.ok(s.tail > 0.2 && s.tail <= 0.8, 'a spin-up, not a run: ' + s.tail + ' s');
+  assert.ok(parts(s, 'catch').length > 0 && parts(s, 'whir').length > 0 && parts(s, 'bearing').length > 0,
+    'the catch, the whir and the bearing under it');
+  assert.ok(neverFalls(s), 'the throw only opens upward, the way the rotor picks up');
+  const peak = Math.max(...s.notes.map(n => n.level));
+  assert.ok(peak > 0.08 && peak <= 0.26, 'about the slot lever level (0.24), never over it: ' + peak);
+  assert.ok(score('whir', { level: 0.5 }).notes.every((n, i) => near(n.level, s.notes[i].level / 2)), 'level scales every voice');
+  assert.ok(score('whir', { level: 0 }).notes.every(n => n.level === 0), 'level 0 is silent');
+  assert.equal(WHEEL_ROLL, 'wheel');
+  assert.ok(ROLLS.includes(WHEEL_ROLL) && CUES.includes(WHEEL_ROLL), 'the rotor is a roll, and it is a cue');
+  assert.equal(score(WHEEL_ROLL), null, 'a roll is not scored');
+  assert.ok(WHEEL_TICK > 0 && WHEEL_TICK < ROLL_TICK, 'the ratchet sits under the drums ticks: ' + WHEEL_TICK);
+  assert.ok(WHEEL_BED > 0 && WHEEL_BED < ROLL_BED && WHEEL_BED <= WHEEL_TICK, 'the bearing bed sits under both: ' + WHEEL_BED);
+  assert.ok(wheelGap(1) < wheelGap(0.5) && wheelGap(0.5) < wheelGap(0), 'the ratchet rate IS the rotor speed');
+  assert.ok(wheelGap(1) > tickGap(1), 'and it never clatters faster than a drum');
+  assert.equal(wheelGap('nonsense'), wheelGap(1), 'nonsense is full speed');
+});
+
+test('THE THROW on a context: one rotor loop for the room, following its speed, down on the landing frame', () => {
+  const { AC } = makeMock();
+  const k = createKit({ AudioContext: AC });
+  k.arm();
+  assert.equal(k.debug().wheel, false, 'the wheel is still until it is thrown');
+  assert.equal(k.play('wheel', { speed: 1 }), 1, 'the throw starts the loop');
+  assert.equal(k.debug().wheel, true);
+  assert.ok(k.debug().live > 0, 'the ratchet is scheduled a beat ahead');
+  assert.equal(k.play('wheel', { speed: 0.4 }), 1, 'a second throw follows it, it does not stack');
+  assert.deepEqual(k.debug().rolls, [], 'and it never shows up as a drum');
+  k.setWheelSpeed(0.1);
+  k.stop('wheel');
+  assert.equal(k.debug().wheel, false, 'the landing frame takes it down');
+  k.setWheelSpeed(0.5);   // nothing turning: a no-op, never a throw
+  k.play('wheel', { speed: 1 });
+  k.suspend(true);
+  assert.equal(k.debug().wheel, false, 'Law VI: a suspend takes the rotor down');
+  assert.equal(k.play('wheel'), 0, 'and nothing turns while suspended');
+  k.suspend(false);
+  assert.equal(k.play('wheel', { speed: 1 }), 1, 'a resumed room can be thrown again');
+  k.stopAll();
+  assert.equal(k.debug().wheel, false, 'stopAll takes it too');
+  k.play('wheel', { speed: 1 });
+  k.dispose();
+  assert.equal(k.debug().wheel, false, 'dispose takes the rotor with the context');
 });
 
 /* ------------------------------------------------------------------ the kit on a context */
