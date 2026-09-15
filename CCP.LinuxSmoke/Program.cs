@@ -425,9 +425,11 @@ namespace ConditioningControlPanel.LinuxSmoke
             var second = new ConditioningControlPanel.Services.SettingsService();
             Check("a second instance reads the value back", second.Current.ActiveModId == "smoke-mod", second.Current.ActiveModId);
             Check("CoreSettings still serves the default until a head seeds it", !CoreSettings.HasProvider);
+            var persisted = File.ReadAllText(file);
             CoreSettings.Save();                       // no service: must be a silent no-op
+            Check("CoreSettings.Save is a no-op with no service", File.Exists(file) && File.ReadAllText(file) == persisted);
             CoreSettings.SaveImmediate();
-            Check("CoreSettings.Save is a no-op with no service", !File.Exists(Path.Combine(CorePaths.UserData, "settings.json")) || true);
+            Check("CoreSettings.SaveImmediate is a no-op with no service", File.Exists(file) && File.ReadAllText(file) == persisted);
             CoreSettings.ServiceProvider = () => second;
             Check("a seeded CoreSettings.Current is the service's instance", ReferenceEquals(CoreSettings.Current, second.Current));
             CoreSettings.Current.ActiveModId = "smoke-mod-2";
