@@ -1,8 +1,9 @@
-// node --test backroom/stations/roulette/tests/ : the Lighthouse clock, the planned run, the landing moments
+// node --test backroom/stations/roulette/tests/ : the Lighthouse clock, the planned run, the landing moments, the host recipe
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   FEEL, SEG, POCKETS, landMoment, beamAngle, beamLit, litNumbers, pocketAngle, whirlAngle, planRun, sampleRun, seedFor, nextLaunchAt, wrapAngle, angDist, restRel,
+  FX, FX_GATE, FX_RECIPE, FX_BEATS, fxPlan, fxSymbols, landBeat, nearMisses, createFxCooldowns,
 } from '../feel.js';
 import { createMockServer } from '../mock-server.js';
 
@@ -78,4 +79,118 @@ test('pace, the whirl angle and the rotor handedness', () => {
   assert.ok(p.rot[p.rot.length - 1] > p.rot[0], 'the rotor turns clockwise on screen (its angle grows)');
   assert.ok(sampleRun(p, 1).rel < sampleRun(p, 0.5).rel, 'the ball runs against it');
   assert.ok(Math.abs(pocketAngle(0, 0) - SEG / 2) < 1e-12);
+});
+
+/* ---- the host recipe (feel.FX_RECIPE): every beat, its ids, the gates, Calm, the streak, the cooldowns ---- */
+
+const ALL_ON = { flash: true, subliminal: true, spiral: true, brainDrain: true, tunnel: true };
+const ids = (beat, o) => fxPlan(beat, { gates: ALL_ON, ...o }).map((s) => s.fx);
+const HOST_IDS = ['fx.gif_burst', 'fx.gif_from', 'fx.gif_storm', 'fx.haze', 'fx.jackpot', 'fx.loom_spiral', 'fx.melt', 'fx.spiral_brief', 'fx.spiral_full', 'fx.sub_cascade', 'fx.sub_pair', 'fx.sub_single', 'fx.wash'];
+
+test('the recipe table: every beat of a spin maps to host ids the bridge handles, frozen', () => {
+  assert.deepEqual(FX_BEATS, ['nomore', 'launch', 'wake', 'rattle', 'run', 'near', 'land.miss', 'land.win', 'land.straight', 'land.wake', 'land.full', 'streak', 'skip']);
+  assert.ok(Object.isFrozen(FX_RECIPE) && Object.isFrozen(FX_RECIPE['land.full'][0]) && Object.isFrozen(FX.COOLDOWN_MS));
+  for (const beat of FX_BEATS) for (const s of FX_RECIPE[beat]) assert.ok(HOST_IDS.includes(s.fx) && FX_GATE[s.fx], `${beat}: ${s.fx} is a host id with a gate`);
+  const table = {
+    nomore: ['fx.sub_single'], launch: ['fx.gif_burst'], wake: ['fx.sub_single'], rattle: ['fx.sub_single'],
+    run: [], near: ['fx.spiral_brief'], 'land.miss': [], 'land.win': ['fx.sub_pair'], 'land.straight': ['fx.sub_cascade'],
+    'land.wake': ['fx.spiral_full'], 'land.full': ['fx.sub_cascade'], streak: ['fx.gif_storm'], skip: [],
+  };
+  for (const [beat, want] of Object.entries(table)) assert.deepEqual(ids(beat), want, beat + ' at Normal');
+  assert.deepEqual(ids('land.full', { full: true }), ['fx.jackpot'], 'Full: the straight-up hit on a wake is the jackpot hero');
+  assert.deepEqual(ids('land.straight', { full: true }), ['fx.sub_cascade'], 'Full changes only land.full');
+  assert.deepEqual(fxPlan('not.a.beat'), [], 'an unknown beat fires nothing');
+  assert.deepEqual(fxPlan('skip', { gates: ALL_ON, full: true, streak: 9 }), [], 'Law VI: Back and suspend fire nothing');
+});
+
+test('Law I: the beats before the landing are the same for every spin', () => {
+  for (const beat of ['nomore', 'launch', 'rattle']) {
+    const a = JSON.stringify(fxPlan(beat, { gates: ALL_ON, streak: 0 })), b = JSON.stringify(fxPlan(beat, { gates: ALL_ON, streak: 5 }));
+    assert.equal(a, b, beat + ' does not read the outcome');
+  }
+  assert.deepEqual(ids('launch', { streak: 3 }), ['fx.gif_burst'], 'the streak rides a landing only');
+});
+
+test('gated variants drop the right steps; the jackpot needs any of flash, spiral, subliminal', () => {
+  const off = (k) => ({ ...ALL_ON, [k]: false });
+  assert.deepEqual(ids('launch', { gates: off('flash') }), []);
+  assert.deepEqual(ids('nomore', { gates: off('subliminal') }), []);
+  assert.deepEqual(ids('land.win', { gates: off('subliminal') }), []);
+  assert.deepEqual(ids('land.straight', { gates: off('subliminal') }), []);
+  assert.deepEqual(ids('near', { gates: off('spiral') }), []);
+  assert.deepEqual(ids('land.wake', { gates: off('spiral') }), []);
+  assert.deepEqual(ids('land.win', { gates: off('spiral'), streak: 2 }), ['fx.sub_pair', 'fx.gif_storm'], 'a spiral gate leaves the words and the storm');
+  assert.deepEqual(ids('land.win', { gates: off('flash'), streak: 2 }), ['fx.sub_pair'], 'the flash gate drops the storm');
+  assert.deepEqual(ids('land.full', { gates: off('flash'), full: true }), ['fx.jackpot'], 'per-primitive: the host skips what it must');
+  assert.deepEqual(ids('land.full', { gates: { flash: false, spiral: false, subliminal: false }, full: true }), [], 'all three off: no jackpot');
+  const none = { flash: false, subliminal: false, spiral: false, brainDrain: false, tunnel: false };
+  for (const beat of FX_BEATS) assert.deepEqual(fxPlan(beat, { gates: none, full: true, streak: 3 }), [], beat + ': gates off, nothing fires');
+  assert.deepEqual(ids('launch', { gates: null }), ['fx.gif_burst'], 'a host that sends no gates reads as on');
+  assert.deepEqual(ids('nomore', { gates: {} }), ['fx.sub_single'], 'a missing subliminal gate reads as on');
+});
+
+test('Calm strips motion (the burst, the storm, the hero) and keeps the words and spirals for the host to halve', () => {
+  assert.deepEqual(ids('launch', { calm: true }), []);
+  assert.deepEqual(ids('land.win', { calm: true, streak: 4 }), ['fx.sub_pair']);
+  assert.deepEqual(ids('land.full', { calm: true, full: true }), ['fx.sub_cascade'], 'Calm beats Full: no hero, the cascade instead');
+  assert.deepEqual(ids('near', { calm: true }), ['fx.spiral_brief']);
+  assert.deepEqual(ids('land.wake', { calm: true }), ['fx.spiral_full']);
+  assert.deepEqual(ids('nomore', { calm: true }), ['fx.sub_single']);
+});
+
+test('the streak: STREAK_FROM paying spins in a row bring the storm, a miss resets it, the hero keeps its frame', () => {
+  assert.equal(FX.STREAK_FROM, 2);
+  assert.deepEqual(ids('land.win', { streak: 1 }), ['fx.sub_pair']);
+  assert.deepEqual(ids('land.win', { streak: 2 }), ['fx.sub_pair', 'fx.gif_storm']);
+  assert.deepEqual(ids('land.straight', { streak: 3 }), ['fx.sub_cascade', 'fx.gif_storm']);
+  assert.deepEqual(ids('land.miss', { streak: 5 }), [], 'a miss never storms');
+  assert.deepEqual(ids('near', { streak: 5 }), ['fx.spiral_brief']);
+  assert.deepEqual(ids('land.full', { full: true, streak: 2 }), ['fx.jackpot'], 'Brake 2: one hero per beat');
+  assert.deepEqual(ids('land.full', { streak: 2 }), ['fx.sub_cascade', 'fx.gif_storm']);
+});
+
+test('the landing beat by outcome, and a near miss from the wheel order (never the mat)', () => {
+  assert.equal(landBeat({ pay: 0 }), 'land.miss');
+  assert.equal(landBeat({ pay: 0 }, [32]), 'near');
+  assert.equal(landBeat({ pay: 2, wake: true, straight: false }, [32]), 'land.wake', 'a paying spin is never a near miss');
+  assert.equal(landBeat({ pay: 2 }), 'land.win');
+  assert.equal(landBeat({ pay: 36, straight: true }), 'land.straight');
+  assert.equal(landBeat({ pay: 72, straight: true, wake: true }), 'land.full');
+  assert.equal(landBeat(null), 'land.miss');
+  const bets = [{ spot: 's32', amt: 1 }, { spot: 'rose', amt: 1 }, { spot: 's26', amt: 1 }];
+  assert.deepEqual(nearMisses({ index: 0 }, bets, WHEEL), [26, 32], '0 sits between 26 and 32 on the wheel');
+  assert.deepEqual(nearMisses({ index: 1 }, bets, WHEEL), [], '32 itself is not a near miss of 32 (15 and 0 are uncovered)');
+  assert.deepEqual(nearMisses({ index: 36 }, [{ spot: 's0' }], WHEEL), [0], 'the ring closes: 26 is next to 0');
+  assert.deepEqual(nearMisses({ index: 0 }, [{ spot: 's17' }], WHEEL), [], '17 is far away on the wheel although next to 0 on nothing');
+  assert.deepEqual(nearMisses({ index: -1 }, bets, WHEEL), []);
+  assert.deepEqual(nearMisses({ index: 0 }, null, WHEEL), []);
+});
+
+test('symbols: the spin picture rides the gif steps, word keys turn with the spin index', () => {
+  assert.deepEqual(fxSymbols({ fx: 'fx.gif_burst', gif: true }, { gif: 'g2', spin: 0 }), ['g2']);
+  assert.deepEqual(fxSymbols({ fx: 'fx.gif_burst', gif: true }, { gif: null }), [], 'no deck yet: the host picks from its own deal');
+  assert.deepEqual(fxSymbols({ fx: 'fx.gif_burst', gif: true }, { gif: '../x' }), [], 'only a dealt key ever goes back');
+  assert.deepEqual(fxSymbols({ fx: 'fx.sub_pair', words: 2 }, { spin: 3 }), ['s3', 's0']);
+  assert.deepEqual(fxSymbols({ fx: 'fx.sub_single', words: 1 }, { spin: 5 }), ['s1']);
+  assert.deepEqual(fxSymbols({ fx: 'fx.sub_cascade', gif: true }, { gif: 'g0', spin: 1 }), ['g0']);
+});
+
+test('the cooldowns: one clock per id, the rattle once a spin, Back resets', () => {
+  const c = createFxCooldowns();
+  const single = { fx: 'fx.sub_single', once: null }, rattle = { fx: 'fx.sub_single', once: 'spin' };
+  assert.equal(c.take(single, 0), true, 'nomore at the press');
+  assert.equal(c.take(single, 100), false, 'the wake at the launch, 100 ms on: cooled');
+  assert.equal(c.take(rattle, 4500, 0), true, 'the first clip of spin 0, 4.5 s on');
+  assert.equal(c.take(rattle, 5000, 0), false, 'the second clip of the same spin: once a spin');
+  assert.equal(c.take(rattle, 12500, 1), true, 'spin 1 gets its own');
+  assert.equal(c.take('fx.gif_storm', 0), true);
+  assert.equal(c.take('fx.gif_storm', FX.COOLDOWN_MS['fx.gif_storm'] - 1), false);
+  assert.equal(c.take('fx.gif_storm', FX.COOLDOWN_MS['fx.gif_storm']), true);
+  assert.equal(c.take({ fx: 'fx.spiral_brief' }, 0), true);
+  assert.equal(c.take({ fx: 'fx.spiral_full' }, 0), true, 'each id has its own clock');
+  c.reset();
+  assert.equal(c.take(single, 200), true, 'Law VI: Back drops the ledger');
+  assert.equal(c.take(rattle, 300, 1), false, 'the rattle word is cooled by the press word...');
+  assert.equal(c.take(rattle, 4300, 1), true, '...and still owed to the spin once the clock allows');
+  for (const fx of Object.keys(FX_GATE)) assert.ok(FX.COOLDOWN_MS[fx] >= 4000, fx + ' has a cooldown of 4 s or more');
 });

@@ -12,7 +12,12 @@
  *             room seats the player (ctx.stage, CONTRACT 10.18); a phone frames the
  *             mat while bets are open and the whole table once the ball runs
  *   shared/hypno  the Loom kit (turret whirl), the deal (a picture key for
- *             fx.gif_from) and the moments (every host fx goes through them)
+ *             fx.gif_from) and the moments (the tunnel run, the haze, the wake
+ *             spiral, the wash and the pocket GIF)
+ *   feel.FX_RECIPE  the host recipe on top: every beat of a spin (no more bets,
+ *             the launch, the wake, the fret rattle, a near miss, the landing by
+ *             outcome, a streak) fires section 4 ids through ctx.fx, gated,
+ *             cooled and stripped for Calm in feel.js (pure)
  *
  * A spin: chips on the mat (1 to 3 SP), 1 to 5 spins, Spin. The bowl answers on
  * the press (Law VIII), the server settles every spin at once, and the page
@@ -24,7 +29,7 @@
 
 import { createLoomKit, createDeck, createMoments, strengthK, rouletteRunLevel, pocketColor, viewportRect } from '../../shared/hypno/index.js';
 import { MAX_CHIPS, MAX_SPINS, addChip, removeChip, chipsOf, chipTotal, checkLayout, adoptTape, owed, shownSp, cursorOf, readOutcome, classify, spinBody, mintId, ROWS } from './tape.js';
-import { FEEL, planRun, seedFor, landMoment, nextLaunchAt } from './feel.js';
+import { FEEL, planRun, seedFor, landMoment, nextLaunchAt, landBeat, nearMisses, fxPlan, fxSymbols, createFxCooldowns } from './feel.js';
 import { createBowl } from './bowl.js';
 import { createMat } from './mat.js';
 
@@ -49,7 +54,7 @@ export async function mount(ctx) {
   const stillNow = () => ctx.motion === 'off' || ctx.motion === 'still' || !!ctx.reduced || prefersReduced || String(ctx.intensity || '').toLowerCase() === 'calm';
   const fullNow = () => ctx.intensity === 'full' && !ctx.reduced && !prefersReduced;
   const kNow = () => (prefersReduced ? 0.5 : strengthK(ctx));
-  const gates = () => { const g = ctx.gates || {}; return { flash: g.flash !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false, tunnel: g.tunnel !== false }; };
+  const gates = () => { const g = ctx.gates || {}; return { flash: g.flash !== false, subliminal: g.subliminal !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false, tunnel: g.tunnel !== false }; };
   const stage = ctx.stage?.fixture && ctx.stage?.register ? ctx.stage : null;
   const makeBowl3D = stage ? (await import('./bowl-3d.js')).createBowl3D : null;
   const makeMat3D = stage ? (await import('./mat-3d.js')).createMat3D : null;
@@ -62,6 +67,7 @@ export async function mount(ctx) {
   let alive = false, suspended = false, session = 0, phase = 'loading', raf = 0, unSp = null, unSettings = null;
   let st = null, sp = 0, tape = null, chips = {}, count = 1, why = null, hover = null, cur = null, resume = false;
   let status = '', history = [], feelLog = [], cursorSent = null, pausedAt = 0, pausedMs = 0, size = { w: 0, h: 0, dpr: 1 };
+  let cool = createFxCooldowns(), streak = 0;   // the host recipe's cooldowns and the paying spins in a row
   const $ = (sel) => el.querySelector(sel);
   const clock = () => (suspended ? pausedAt : performance.now()) - pausedMs;
   const note = (what, extra = {}) => { feelLog = [...feelLog.slice(-99), { what, at: Math.round(performance.now()), ...extra }]; };
@@ -207,6 +213,22 @@ export async function mount(ctx) {
   }
   function ring(sel) { const b = el && $(sel); if (!b) return; b.classList.add('is-ringing'); setTimeout(() => b.classList.remove('is-ringing'), 400); }
 
+  /** The host recipe (feel.FX_RECIPE): a beat fires its section 4 ids through ctx.fx, gated, cooled, never awaited (fx-ack is advisory). */
+  function beat(name, { i = null, streak: run = 0 } = {}) {
+    const fired = [];
+    if (!alive || suspended || typeof ctx.fx !== 'function') return fired;
+    const plan = fxPlan(name, { gates: gates(), calm: stillNow(), full: fullNow(), streak: run });
+    const now = performance.now();
+    for (const step of plan) {
+      if (!cool.take(step, now, i)) continue;
+      const symbols = fxSymbols(step, { gif: deck && tape && i != null ? deck.pickKey(tape.id + ':' + i) : null, spin: i || 0 });
+      try { const p = ctx.fx(step.fx, symbols.length ? symbols : undefined); if (p && typeof p.catch === 'function') p.catch(() => {}); } catch (e) { /* noop */ }
+      fired.push(step.fx);
+    }
+    note('fx', { beat: name, fired, planned: plan.map((s) => s.fx) });
+    return fired;
+  }
+
   /* ----------------------------------------------------------------- spin */
   async function press() {
     if (!alive || suspended || !st || phase !== 'bet' || stage?.ready === false) return;
@@ -216,6 +238,7 @@ export async function mount(ctx) {
     if (!c.ok) { ring('.roul-spin'); why = whyText(c.why, c); sync(); return; }
     // Law VIII: the rotor picks up and the button rings on this frame, before any reply.
     phase = 'asking'; why = null; status = t('br_roulette_no_more', 'No more bets...'); bowl.kick(); ring('.roul-spin'); sync();
+    beat('nomore');   // the same for every press: nothing here knows the pocket (Law I)
     note('answer', { ms: Math.round(performance.now() - pressedAt) });
     const my = session, idem = mintId(), body = spinBody({ idem, count, chips, spots: st.spots, tape });
     for (let tries = 1; ; tries++) {
@@ -263,7 +286,9 @@ export async function mount(ctx) {
     bowl.launch(plan, now, { wake: read.wake });
     const run = moments.play('roulette.run');
     const wake = read.wake ? moments.play('roulette.wake', { wake: true }) : null;
-    cur = { i, read, plan, launchAt: now, landed: false, restAt: null, page: [...run.page, ...(wake ? wake.page : [])] };
+    cur = { i, read, plan, launchAt: now, landed: false, rattled: false, restAt: null, page: [...run.page, ...(wake ? wake.page : [])] };
+    beat('launch', { i });                 // every spin alike (Law I)
+    if (read.wake) beat('wake', { i });    // the wake is on screen as text from this frame
     status = (read.wake ? t('br_roulette_waking', 'No more bets... the bowl is waking.') : t('br_roulette_no_more', 'No more bets...'))
       + '\n' + t('br_roulette_progress', 'Spin {i} of {n}', { i: i + 1, n: tape.outcomes.length });
     note('launch', { i, pocket: read.pocket, wake: read.wake, hits: plan.hits, restAt: Math.round(plan.restAt * 1000), page: cur.page });
@@ -276,6 +301,9 @@ export async function mount(ctx) {
     cur.landed = true;
     moments.tunnel(0);
     const id = landMoment(r), box = bowl.pocketBox(r.index);
+    streak = r.pay > 0 ? streak + 1 : 0;
+    const near = nearMisses(r, tape.bets, st.wheel), hostBeat = landBeat(r, near);
+    const hostFx = beat(hostBeat, { i: r.i, streak });   // the recipe first; the moment's wash and pocket GIF close the frame
     const m = moments.play(id, { color: pocketColor(r.pocket, st.rose), from: viewportRect(cv, box.x, box.y, box.w, box.h),
       gif: deck ? deck.pickKey(tape.id + ':' + r.i) : undefined, wake: r.wake });
     const list = tape.bets.filter((b) => !r.hits.includes(b.spot)).map((b) => ({ kind: 'lose', spot: b.spot }));
@@ -289,7 +317,7 @@ export async function mount(ctx) {
     const line = resultLine(r);
     history = [...history.slice(-4), `${r.pocket} ${r.pocket === 0 ? '' : spotName(r.color) + ' '}${r.pay > 0 ? '+' + fmt(r.pay) : '+0'}${r.wake ? ' ~' : ''}`.replace(/\s+/g, ' ')];
     status = line + '\n' + t('br_roulette_progress', 'Spin {i} of {n}', { i: r.i + 1, n: tape.outcomes.length });
-    note('land', { i: r.i, pocket: r.pocket, pay: r.pay, wake: r.wake, straight: r.straight, moment: id, page: m.page, fx: m.tokens.length, text: line });
+    note('land', { i: r.i, pocket: r.pocket, pay: r.pay, wake: r.wake, straight: r.straight, moment: id, page: m.page, fx: m.tokens.length, beat: hostBeat, near, streak, hostFx, text: line });
     sync();
   }
 
@@ -334,6 +362,7 @@ export async function mount(ctx) {
     const u = bowl.update(now, { still });
     if (cur && !cur.landed) {
       if (u.speed > 0) moments.tunnel(rouletteRunLevel(u.speed));
+      if (!cur.rattled && u.phase === 'rattle') { cur.rattled = true; beat('rattle', { i: cur.i }); }   // the first fret clip, once a spin
       if (u.landed) land(now);
     }
     if (cur && cur.landed && cur.restAt == null && u.phase === 'rest') cur.restAt = now;
@@ -423,6 +452,7 @@ export async function mount(ctx) {
     unSp = null; unSettings = null;
     // Law VI: Back drops every ceremony. What has landed is flushed; a spin still running stays unplayed.
     if (moments) { moments.cancel(); moments.dispose(); }
+    cool.reset(); streak = 0; note('fx', { beat: 'skip', fired: [], planned: [] });   // one-shots settle on the host; nothing new fires
     if (tape && tape.played > 0 && cursorSent !== tape.played) flushCursor();
     if (hook) { hook.owe(owedNow()); if (typeof hook.set === 'function') hook.set(null); }   // a plain number for the room
     if (unStage) { unStage(); unStage = null; }
@@ -441,6 +471,7 @@ export async function mount(ctx) {
       if (on) {
         suspended = true; pausedAt = performance.now();
         if (moments) moments.cancel();
+        cool.reset(); note('fx', { beat: 'skip', fired: [], planned: [] });   // Law VI: the recipe stops with the moments
         if (kit) { kit.dispose(); kit = null; }
         if (deck) deck.dispose();   // its keys still pick (pickKey needs no pictures)
       } else {
@@ -464,6 +495,7 @@ export async function mount(ctx) {
       cur: cur && { i: cur.i, landed: cur.landed, pocket: cur.read.pocket, wake: cur.read.wake, page: cur.page },
       bowl: bowl && bowl.debug(), mat: mat && { ...mat.debug(), rects: Object.fromEntries((st ? st.spots : []).map((s) => [s, mat.rectOf(s)])) },
       kit: kit && kit.debug(), moments: moments && moments.debug(), deck: deck && { keys: deck.keys }, log: feelLog.slice(), rows: ROWS,
+      fx: { ...cool.debug(), streak },
     }),
     /** Test seams for the checks: the same paths the mat and buttons take. */
     dev: { place, setCount, press, clock, clearChips: () => { if (phase === 'bet' && !resume) { chips = {}; sync(); } } },
