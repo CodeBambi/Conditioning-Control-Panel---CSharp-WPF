@@ -95,6 +95,12 @@ const pressAndMeasure = () => ev(`(async () => { const t0 = performance.now(); d
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   const d = window.dev.station.debug(); return { ms: performance.now() - t0, coasting: d.feel.scene.coasting, busy: d.busy, answer: d.feel.log.find(x => x.what === 'answer') }; })()`);
 const fxCalls = () => ev('window.dev.host.fx.map(r => ({ fxId: r.fxId, symbols: r.symbols, args: r.args, fired: r.ack.fired.length > 0 }))');
+// THE DESKTOP RECIPE (feel.js FX_MOMENTS): the coast wash is the one plum 0.35 wash every press fires (Law I); everything
+// else recorded after a press is the landing's (the kit's moment, then the row for the result).
+const isCoast = f => f.fxId === 'fx.wash' && !!f.args && f.args.color === '#9b6bff' && f.args.strength === 0.35 && !f.symbols;
+const coastFx = fx => fx.filter(isCoast);
+const landFx = fx => fx.filter(f => !isCoast(f));
+const lastFx = async () => (await dbg()).fx.last;
 const tunnels = () => ev('window.dev.host.tunnel.map(r => r.level)');
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const boxOk = from => !!from && from.w === 60 && from.h === 44 && Number.isInteger(from.x) && Number.isInteger(from.y);
@@ -172,9 +178,13 @@ await still('st-wheel-05-quiet-room.jpg', 'Quiet room: others grey, the landed s
 d = await dbg();
 ok(d.feel.scene.landed === 'glow' && d.feel.scene.under === 'glow', `lands on result.sliceIndex (glow) after ${spinMs} ms`);
 ok(d.feel.scene.hypno.quiet !== null && d.feel.scene.hypno.outline, 'quiet room ran with the mint outline');
-let fx = await fxCalls();
-ok(fx.length === 1 && fx[0].fxId === 'fx.wash' && fx[0].args.strength === 0.55 && HEX.test(fx[0].args.color) && !fx[0].symbols, `wheel.land.flash: ${JSON.stringify(fx)}`);
+let all = await fxCalls(), fx = landFx(all);
+ok(coastFx(all).length === 1 && isCoast(all[0]), `coast: one plum wash on the press, before anything else: ${JSON.stringify(all[0])}`);
+ok(fx[0] && fx[0].fxId === 'fx.wash' && fx[0].args.strength === 0.55 && HEX.test(fx[0].args.color) && !fx[0].symbols, `wheel.land.flash: ${JSON.stringify(fx)}`);
 ok(d.hypno.lastMoment && d.hypno.lastMoment.id === 'wheel.land.flash', 'moment wheel.land.flash on the landing frame');
+ok(fx.map(f => f.fxId).join() === 'fx.wash,fx.gif_burst,fx.sub_single' && fx[1].symbols.length === 2 && fx[1].symbols.every(k => /^g[0-3]$/.test(k))
+   && fx[2].symbols.length === 1 && /^s[0-3]$/.test(fx[2].symbols[0]) && fx[1].fired && fx[2].fired, `mid row after the kit's moment: a burst of two dealt pictures and one dealt word: ${JSON.stringify(fx.slice(1))}`);
+ok(d.fx.last && d.fx.last.moment === 'mid' && d.fx.last.ids.join() === 'fx.gif_burst,fx.sub_single' && d.fx.cool.seen.mid === 1, `the feel log: ${JSON.stringify(d.fx.last)}`);
 await sleep(2200);
 const tl2 = await tunnels();
 ok(tl2.at(-1) === 0, `tunnel back to 0 after the landing (${tl2.length} posts)`);
@@ -210,7 +220,8 @@ await sleep(300);
 const closeMs = await ev('(async () => { const t = performance.now(); await window.dev.stand(); return performance.now() - t; })()');
 ok(closeMs < 420 && (await ev("!document.querySelector('.wheel-station')")), `Back in the long last turn: closed in ${Math.round(closeMs)} ms`);
 await sleep(200);
-ok((await fxCalls()).length === 0 && (await tunnels()).at(-1) === 0, 'and skipped the landing (no fx), the tunnel posted 0');
+all = await fxCalls();
+ok(landFx(all).length === 0 && coastFx(all).length === 1 && (await tunnels()).at(-1) === 0, 'and skipped the landing (no fx past the coast wash), the tunnel posted 0');
 
 // 3. Snooze (Normal): quiet, no fx; sleepy EMI, "+2 tomorrow", a muted thud and the yawn, THE SHIVER. No taffy or moire below Full.
 await boot('?next=snooze');
@@ -225,7 +236,8 @@ d = await dbg();
 ok(d.feel.scene.landed === 'snooze' && d.feel.scene.mood === 'sleepy' && d.pose === 'melt', 'Snooze: sleepy EMI');
 ok(await ev("!document.querySelector('.wheel-zzz').hidden") && /Snooze\. \+2 SP tomorrow/.test(d.status), `"+2 tomorrow" as text: "${d.status}"`);
 ok(d.feel.cues.some(c => c.name === 'thud-muted') && d.feel.cues.some(c => c.name === 'snooze'), 'a muted thud and a yawn, never silence');
-ok(d.readout.value === 57 && (await fxCalls()).length === 0 && d.hypno.lastMoment.id === 'wheel.land.quiet' && d.feel.scene.hypno.quiet !== null, 'wheel.land.quiet: no pay, no fx, the quiet room');
+ok(d.readout.value === 57 && landFx(await fxCalls()).length === 0 && d.hypno.lastMoment.id === 'wheel.land.quiet' && d.feel.scene.hypno.quiet !== null, 'wheel.land.quiet: no pay, no fx, the quiet room');
+ok(d.fx.last && d.fx.last.moment === 'snooze' && d.fx.last.ids.length === 0, 'Snooze: the desktop row is empty (Brake 6 keeps THE SHIVER and the yawn in the page)');
 
 // 4. A big win (Deep, 40 SP): the wash, then the GIF growing out of the slice.
 await boot('?next=deep');
@@ -238,12 +250,28 @@ await sleep(380);
 await still('st-wheel-08-land-gif-grow.jpg', 'Big win: the picture growing out of the slice');
 await sleep(1100);
 await still('st-wheel-09-land-gif-full.jpg', 'Big win: the picture fills the screen');
-fx = await fxCalls();
+fx = landFx(await fxCalls());
 const moment4 = (await dbg()).hypno.lastMoment;
-ok(fx.length === 2 && fx[0].fxId === 'fx.wash' && fx[0].args.strength === 0.9 && HEX.test(fx[0].args.color)
+ok(fx.length === 4 && fx[0].fxId === 'fx.wash' && fx[0].args.strength === 0.9 && HEX.test(fx[0].args.color)
    && fx[1].fxId === 'fx.gif_from' && fx[1].args.ms === 3400 && boxOk(fx[1].args.from) && /^g[0-3]$/.test(fx[1].symbols[0]),
-   `wheel.land.gif: ${JSON.stringify(fx)}`);
+   `wheel.land.gif: ${JSON.stringify(fx.slice(0, 2))}`);
 ok(moment4.gif === fx[1].symbols[0], `the picture key is the deck's pick for the result (${moment4.gif})`);
+ok(fx[2].fxId === 'fx.gif_storm' && fx[2].symbols.length === 3 && new Set(fx[2].symbols).size === 3 && fx[3].fxId === 'fx.sub_pair' && fx[3].symbols.length === 2 && fx[2].fired && fx[3].fired
+   && (await lastFx()).moment === 'big', `big row: the storm with three dealt pictures, then a pair of words: ${JSON.stringify(fx.slice(2))}`);
+
+// 4b. THE ALMOST: Sip (1 SP) sits one slice clockwise of the star: the small row (a word) and then the brief spiral. Law I: after the answer only.
+await boot('?next=sip_a');
+await ev("document.querySelector('.wheel-spin').click()");
+await sleep(400);
+ok(landFx(await fxCalls()).length === 0, 'near miss: nothing but the coast wash while the wheel turns (the answer is in, the pointer is not)');
+ok(await waitLanded(), 'sip lands');
+await sleep(120);
+fx = landFx(await fxCalls());
+d = await dbg();
+ok(d.feel.scene.landed === 'sip_a' && fx.map(f => f.fxId).join() === 'fx.sub_single,fx.spiral_brief' && /^s[0-3]$/.test(fx[0].symbols[0]) && !fx[1].symbols && fx[1].fired,
+   `near miss: the small row's word, then fx.spiral_brief on the landing frame: ${JSON.stringify(fx)}`);
+ok(d.fx.last.moment === 'nearMiss' && d.fx.cool.seen.nearMiss === 1 && d.fx.cool.seen.small === 1, 'both rows counted for the sit-down cap');
+await still('st-wheel-21-near-miss.jpg', 'THE ALMOST: Sip, one slice off the star, the brief spiral on the host stand-in');
 
 // 5. The jackpot: a 12-day pot (550), the fullscreen Loom spiral with the picture inside, the brass wash, THE REVEAL.
 await boot('?next=jackpot&pot=12');
@@ -257,12 +285,14 @@ await still('st-wheel-10-jackpot-spiral-in.jpg', 'Jackpot: the Loom spiral fadin
 await sleep(1100);
 await still('st-wheel-11-jackpot-spiral-picture.jpg', 'Jackpot: the fullscreen Loom spiral with the picture inside at 46%');
 d = await dbg();
-fx = await fxCalls();
+fx = landFx(await fxCalls());
 ok(d.feel.scene.landed === 'jackpot' && d.pose === 'jackpot', 'jackpot: lands on the star');
-ok(fx.map(f => f.fxId).join() === 'fx.loom_spiral,fx.gif_from,fx.wash'
+ok(fx.map(f => f.fxId).join() === 'fx.loom_spiral,fx.gif_from,fx.wash,fx.jackpot'
    && fx[0].args.preset === 'screen' && fx[0].args.ms === 4200 && fx[0].args.alpha === 0.9
    && fx[1].args.ms === 4600 && fx[1].args.scale === 0.46 && boxOk(fx[1].args.from) && /^g\d$/.test(fx[1].symbols[0])
-   && fx[2].args.color === '#e8c27a' && fx[2].args.strength === 1, `wheel.land.jackpot in order: ${JSON.stringify(fx)}`);
+   && fx[2].args.color === '#e8c27a' && fx[2].args.strength === 1, `wheel.land.jackpot in order: ${JSON.stringify(fx.slice(0, 3))}`);
+ok(fx[3].symbols.length === 6 && fx[3].symbols.slice(0, 3).every(k => /^g[0-3]$/.test(k)) && fx[3].symbols.slice(3).every(k => /^s[0-3]$/.test(k)) && fx[3].fired && !fx[3].args
+   && d.fx.last.moment === 'jackpot', `then fx.jackpot, the hero, with three pictures and three words: ${JSON.stringify(fx[3])}`);
 ok(d.feel.cues.some(c => c.name === 'reveal') && d.hypno.lastMoment.page.includes('reveal'), 'THE REVEAL cue and page');
 await sleep(2400);
 d = await dbg();
@@ -281,6 +311,9 @@ await strip('strip-reduced.png', [0, 150, 400, 1200], t0);
 d = await dbg();
 ok(d.feel.scene.landed === 'deep' && !d.busy && d.readout.value === 97 && (await ev("document.querySelectorAll('.wheel-token').length")) === 0, 'reduced: settled on Deep, 97 SP, no tokens');
 ok(!(await tunnels()).some(v => v > 0), 'reduced: no tunnel');
+all = await fxCalls();
+ok(coastFx(all).length === 0 && landFx(all).map(f => f.fxId).join() === 'fx.wash,fx.gif_from,fx.gif_burst,fx.sub_pair' && (await lastFx()).still === true,
+   `reduced strips motion: no coast wash, the storm is a burst, the words stay: ${JSON.stringify(landFx(all).map(f => f.fxId))}`);
 summary.hubRateReduced = await hubRate();
 ok(d.hypno.kit && !d.hypno.kit.still && summary.hubRateReduced > 0.175 * 0.7 && summary.hubRateReduced < 0.175 * 1.3,
    `MotionLevel reduced (Calm): the hub keeps turning at half strength, ${summary.hubRateReduced.toFixed(3)} rad/s (0.175)`);
@@ -313,6 +346,8 @@ for (const [dir, next] of [[1, 'dazzle'], [-1, 'sip_b']]) {
   for (const [x, y] of pts.slice(1)) { await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'left', buttons: 1 }); await sleep(16); }
   await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x: pts.at(-1)[0], y: pts.at(-1)[1], button: 'left', clickCount: 1 });
   await sleep(60);
+  const grabFx = await fxCalls();
+  ok(grabFx.length === 2 && grabFx[0].fxId === 'fx.sub_single' && /^s[0-3]$/.test(grabFx[0].symbols[0]) && isCoast(grabFx[1]), `rim grab: one word on the grab, the plum wash on the fling: ${JSON.stringify(grabFx.map(f => f.fxId))}`);
   const s0 = await dbg(), r0 = s0.feel.scene.rotation;
   await sleep(300);
   const r1 = (await dbg()).feel.scene.rotation;
@@ -343,7 +378,7 @@ await ev("window.dev.server.setOpen(false)");
 await ev("document.querySelector('.wheel-spin').click()");
 for (let i = 0; i < 40 && (await dbg()).busy; i++) await sleep(100);
 d = await dbg();
-ok(await ev("!document.querySelector('.wheel-card').hidden && /closed/.test(document.querySelector('.wheel-card').textContent)") && d.feel.scene.landed === null && (await fxCalls()).length === 0, 'a closed door winds the wheel down and says so, nothing lit, no fx');
+ok(await ev("!document.querySelector('.wheel-card').hidden && /closed/.test(document.querySelector('.wheel-card').textContent)") && d.feel.scene.landed === null && landFx(await fxCalls()).length === 0, 'a closed door winds the wheel down and says so, nothing lit, no landing fx');
 
 // 10. The day turns: spun at 23:59:57 UTC, the countdown hits zero, state refreshes, the spin is free again.
 const nearMidnight = new Date(Math.ceil(Date.now() / 86400000) * 86400000 - 3000).toISOString();
@@ -376,6 +411,7 @@ await sleep(700);
 await still('st-wheel-14-gated-off-landed.jpg', 'Gated off: 40 SP lands with the quiet room and text only');
 d = await dbg();
 ok((await fxCalls()).length === 0 && !(await tunnels()).some(v => v > 0) && d.hypno.lastMoment.id === 'wheel.land.gif' && d.feel.scene.hypno.quiet !== null, 'gated off: wheel.land.gif fires no host fx and no tunnel, the quiet room still runs');
+ok(d.fx.last && d.fx.last.moment === 'big' && d.fx.last.ids.length === 0 && d.fx.last.why === 'gated', `gated off: the big row is planned and dropped whole (${JSON.stringify(d.fx.last)})`);
 ok(/Deep: \+40 SP/.test(d.status), `gated off: the result as text "${d.status}"`);
 await ev("window.dev.host.settings({ gates: { flash: true, spiral: true, brainDrain: true, tunnel: true } })");
 await sleep(300);
@@ -398,8 +434,9 @@ ok(await waitLanded(6000), 'Calm: lands once the server answers');
 await sleep(300);
 await still('st-wheel-15-calm-jackpot.jpg', 'Calm: jackpot, spiral at half alpha and 60% duration on the host stand-in');
 d = await dbg();
-fx = await fxCalls();
-ok(fx.length === 3 && fx[0].args.alpha === 0.9 && fx[2].args.strength === 1 && d.hypno.dress.k === 0.5 && d.hypno.kit && !d.hypno.kit.still, 'Calm: the page sends Normal args (nobody halves twice), k 0.5, the Loom hub not held');
+all = await fxCalls(); fx = landFx(all);
+ok(fx.length === 4 && fx[0].args.alpha === 0.9 && fx[2].args.strength === 1 && fx[3].fxId === 'fx.jackpot' && coastFx(all).length === 0 && d.hypno.dress.k === 0.5 && d.hypno.kit && !d.hypno.kit.still,
+   'Calm: the page sends Normal args (nobody halves twice), the pot still gets fx.jackpot, no coast wash, k 0.5, the Loom hub not held');
 ok(!d.feel.scene.hypno.moire && !(await tunnels()).some(v => v > 0), 'Calm: no moire, no travel so no tunnel');
 await boot('?calm&next=shimmer');
 await ev("document.querySelector('.wheel-spin').click()");
@@ -408,6 +445,7 @@ await sleep(700);
 await still('st-wheel-16-calm-quiet-room.jpg', 'Calm: an 8 SP landing, the wash halved on the host stand-in, the quiet room at half strength');
 d = await dbg();
 ok(d.hypno.lastMoment.id === 'wheel.land.flash' && d.feel.scene.hypno.quiet !== null && (await fxCalls())[0].args.strength === 0.55, 'Calm: 8 SP is still wheel.land.flash with Normal args');
+ok(landFx(await fxCalls()).map(f => f.fxId).join() === 'fx.wash,fx.gif_burst,fx.sub_single', 'Calm: the mid row keeps its burst and its word (neither is motion)');
 
 // 14. Suspend in the long last turn: moments cancelled (tunnel 0), kit and deck freed; resume re-deals.
 await boot('?next=dreamy');

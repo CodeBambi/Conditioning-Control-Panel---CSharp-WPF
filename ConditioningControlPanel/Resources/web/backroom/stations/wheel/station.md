@@ -8,7 +8,7 @@ One free spin a day (CONTRACT.md sections 2-7, owner decisions of 2026-09-13: wh
 |---|---|
 | `station.js` | `mount(ctx)` -> `{open, close, suspend, destroy}`. DOM, readouts, the spin flow, fx, the day's countdown. |
 | `wheel.js` | Pure: slice layout from `state.slices`, `sliceAt`, the seeded landing inside `result.sliceIndex`, the deceleration plan, `countdown`, `readResult`, Law I `shownSp`. |
-| `feel.js` | THE HOUSE BOOK, pure: tiers, the recipe, the 6 Hz tick gate and chime ladder, glance, token counts. No fx ids: the fullscreen moment is the kit's. |
+| `feel.js` | THE HOUSE BOOK, pure: tiers, the recipe, the 6 Hz tick gate and chime ladder, glance, token counts, and the desktop recipe (`FX_MOMENTS`, `fxPlan`: the section 4 ids per moment, gates, Calm, cooldowns). The fullscreen landing moment is still the kit's. |
 | `hypno.js` | Hypno v3, pure (CONTRACT 10.13.F): the long last turn's time warp, the stage dim, the quiet room curve, the taffy shear and ghosts, the hub angle, the moire rings, the dress for intensity and gates. |
 | `scene.js` | three.js close-up. One WebGL context per `open`, freed in `close`. Runtime slices, drag, coast, landing, bulbs, star, screens, and the v3 page effects (Loom hub disc, long last turn, quiet room, moire rim, taffy). |
 | `emi.js` | EMI on the perch: face atlas, spiral eyes while turning, win/jackpot/sleepy poses. |
@@ -120,6 +120,41 @@ never names a section 4 id.
 - A landing with no slice to point at (`resultIndex < 0`, the wheel winds down) plays no moment (Law I).
 - **Lifecycle**: `suspend(true)` and `close()` call `moments.cancel()` (tunnel 0, holds released) and dispose the kit
   and the deck; resuming re-deals and the hub paints again on the next frame.
+
+### The desktop recipe (owner ask, 2026-09-15)
+
+On top of the kit's moment the station fires the section 4 ids the host already renders (`fx.gif_burst`, `fx.gif_storm`,
+`fx.jackpot`, `fx.melt`, `fx.spiral_brief`, `fx.sub_single`, `fx.sub_pair`, `fx.wash`), one row a moment, the way the
+slot's paylines map onto them. The table is `feel.js` `FX_MOMENTS` (pure); `station.js` `playFx(moment, seed)` posts
+exactly what `fxPlan` returns and logs `{ moment, ids, why }` (`debug().fx.last`).
+
+| Moment | Fires on | Normal | Calm / reduced / Motion off |
+|---|---|---|---|
+| `grab` | a live rim grab (`onGrab(true)`) | `fx.sub_single` (one dealt word) | same |
+| `coast` | the press or the fling, the frame the wheel starts turning | `fx.wash` #9b6bff 0.35, no picture | nothing |
+| `nearMiss` | the landing, when the pointer rests one slice off the pot on either side (`nearMiss`) | `fx.spiral_brief` | nothing |
+| `snooze` | Snooze, no pay | nothing (THE SHIVER and the yawn stay in the page, Brake 6) | nothing |
+| `small` | 1 to 3 SP | `fx.sub_single` | same |
+| `mid` | 5 to 30 SP (tier 2; 10.19: Pocket Sparkles, Good Behaviour) | `fx.gif_burst` (2 pictures), `fx.sub_single` | same |
+| `big` | 40 SP and up, Dazed, a complete collection's 75 SP (tier 3; 10.19: Keep the Change, Spoiled Rotten) | `fx.gif_storm` (3 pictures), `fx.sub_pair` (2 words) | `fx.gif_burst`, `fx.sub_pair` |
+| `jackpot` | the pot, after the kit's `wheel.land.jackpot` | `fx.jackpot` (3 pictures, 3 words; the host's hero) | same (the host's own Calm recipe) |
+| `double` | Seeing Double | `fx.sub_pair` | same |
+| `gift` | Room Service, a decoration granted | `fx.gif_burst`, `fx.wash` #ff5fa2 0.6 | same |
+| `empty` | Head Empty | `fx.melt` | nothing |
+
+- **Law I**: `grab` and `coast` are the same for every press and carry no result; every landing row fires in `land()` on
+  the frame the pointer settles, after the kit's moment, never on the reply. A reopen after spinning fires nothing.
+- **Gates**: `FX_GATE` names the toggle(s) behind each id (`flash`, `subliminal`, `spiral`, `brainDrain`); a row's id
+  fires while at least one of its gates is on and the host skips the rest per primitive. No gates reported reads as on.
+- **Calm**: the `calm` list replaces the row under reduced motion, Calm or Motion off. It strips travel (the coast wash,
+  the near-miss spiral, the storm's rain, the melt) and keeps cues that are not motion. Args are always Normal.
+- **Cooldowns and the cap**: `grab` waits 6 s between plays, `coast` 2 s; a `capped` row goes quiet after
+  `FX_REPEAT_CAP` (3) plays in one sit-down (Brake 3). The ledger (`freshCool()`) is new on every `open()`.
+- **Symbols**: pictures are `deck.keys` and words the `s0..s3` keys of the same deal (`dealDeck` reads them off the
+  `media` reply), picked by `hash32(seed)` so a result always shows the same ones; an empty deal sends none and the host
+  picks from its own.
+- **Law VI**: Back and suspend fire nothing more (`fireFx` refuses while suspended, `land()` never runs for a gone
+  session); whatever is already on the desktop settles or is cancelled by the host's `station-close`.
 
 ## What the page needs from the room
 
