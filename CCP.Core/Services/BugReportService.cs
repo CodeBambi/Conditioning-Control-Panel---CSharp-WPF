@@ -68,12 +68,20 @@ namespace ConditioningControlPanel.Services
 
         private readonly HttpClient _httpClient;
 
-        public BugReportService()
+        public BugReportService() : this(new HttpClient()) { }
+
+        /// <summary>
+        /// Test seam that keeps the production client owned by this service while allowing an
+        /// in-memory handler to intercept every request. The endpoint, headers, timeout and
+        /// signing path remain the same as the parameterless constructor.
+        /// </summary>
+        public BugReportService(HttpMessageHandler handler)
+            : this(new HttpClient(handler ?? throw new ArgumentNullException(nameof(handler)))) { }
+
+        private BugReportService(HttpClient httpClient)
         {
-            _httpClient = new HttpClient
-            {
-                Timeout = TimeSpan.FromSeconds(30),
-            };
+            _httpClient = httpClient;
+            _httpClient.Timeout = TimeSpan.FromSeconds(30);
             _httpClient.DefaultRequestHeaders.Add("X-Client-Version", CoreReleaseContent.AppVersion);
             _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{CoreReleaseContent.AppVersion}");
         }
