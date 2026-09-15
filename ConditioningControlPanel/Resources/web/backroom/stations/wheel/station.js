@@ -29,6 +29,8 @@ import { recipe, tierOf, winTokens, glance, landPose, pressPose, revealCount, FE
 import { dressOf, edgeAlpha, captionAlpha, hubStill } from './hypno.js';
 import { createLoomKit, createDeck, createMoments, wheelSize, strengthK, wheelTurnLevel, boxAround } from '../../shared/hypno/index.js';
 import { createScene } from './scene.js';
+import { createRoomScene } from './room-scene.js';
+export const roomStage = true;
 import { createReadout, jackpotChip } from './readout.js';
 import { createBank } from './bank.js';
 import { createSound } from './sound.js';
@@ -73,10 +75,10 @@ export async function mount(ctx) {
 
   function build() {
     const root = document.createElement('div');
-    root.className = 'wheel-station'; root.dataset.phase = 'loading';
+    root.className = 'wheel-station'; if (ctx.stage) root.dataset.seated = '';  root.dataset.phase = 'loading';
     root.innerHTML = `
       <div class="wheel-dim"></div>
-      <canvas class="wheel-stage" aria-label="${t('br_wheel_stage', 'Daily Daze wheel. Drag the rim to spin.')}"></canvas>
+      ${ctx.stage ? '' : `<canvas class="wheel-stage" aria-label="${t('br_wheel_stage', 'Daily Daze wheel. Drag the rim to spin.')}"></canvas>`}
       <div class="wheel-edges" aria-hidden="true"></div>
       <div class="wheel-slowly" aria-hidden="true">${t('br_wheel_slowly', 's l o w l y')}</div>
       <header class="wheel-top">
@@ -353,7 +355,7 @@ export async function mount(ctx) {
     if (typeof ctx.onSp === 'function') unSp = ctx.onSp(v => { if (readout) readout.setServer(v); });
     dealDeck(my);   // count 4: the wheel only lends fx.gif_from a key (10.13.C)
     const [made, res] = await Promise.all([
-      createScene({ canvas: $('.wheel-stage'), hud: $('.wheel-face'), reduced: still, dress, paintHub, onFrame,
+      (ctx.stage ? createRoomScene : createScene)({ stage: ctx.stage, canvas: $('.wheel-stage'), hud: $('.wheel-face'), reduced: still, dress, paintHub, onFrame,
         labels: s => sliceText(s, t, fmt),
         canSpin: () => !busy && !suspended && !!st && !st.spun,
         onGrab: ok => { sound.arm(); if (!ok) press(); else glanceTo(pressPose()); },

@@ -95,3 +95,10 @@
 .daze-delivery[data-kind=nothing]{background:#f3e9db;box-shadow:none}.daze-delivery.is-still *{animation:none!important}
 @keyframes daze-cloche{from{transform:translateY(0);opacity:1}to{transform:translateY(-47px);opacity:0}}
 @media(max-width:600px){.daze-delivery{bottom:102px;padding:8px 12px}.daze-cloche{height:46px}.daze-delivery p{font-size:13px}}
+
+/* Seated gameplay shares the room canvas; only the controls intercept input. */
+.wheel-station[data-seated]{pointer-events:none}.wheel-station[data-seated] .wheel-dim,.wheel-station[data-seated] .wheel-emi{display:none}
+.wheel-station[data-seated] :is(button,details,.wheel-card){pointer-events:auto}
+.wheel-station[data-seated] .wheel-top{top:112px;max-width:min(320px,70vw)}
+.wheel-station[data-seated] .wheel-odds[open]{max-width:calc(100vw - 24px);max-height:55vh}
+.wheel-station[data-seated] .wheel-odds td{white-space:normal}
