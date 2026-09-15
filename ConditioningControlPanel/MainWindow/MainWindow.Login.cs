@@ -41,6 +41,41 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Repaints the account surfaces after <see cref="Services.MergedAccountRecovery"/> swapped
+        /// the stored unified id (contract D). Progression is deliberately NOT cleared: the merge
+        /// joined this human's two records, so the local state still belongs to the account now
+        /// held, and the post-swap profile load reconciles it take-higher.
+        /// </summary>
+        internal void RefreshAccountUiAfterMergedSwap()
+        {
+            UpdateQuickLoginUI();
+            UpdateQuickPatreonUI();
+            UpdateQuickDiscordUI();
+            UpdatePatreonUI();
+            UpdateSubscribeStarUI();
+            UpdateDiscordUI();
+            UpdateBannerWelcomeMessage();
+            UpdateAccountLinkingUI();
+        }
+
+        /// <summary>
+        /// The no-credential landing of a merged swap: one line of explanation, then the ordinary
+        /// sign-in dialog. The swap already put the canonical id in settings, so
+        /// <see cref="OpenUnifiedLoginDialog"/> reads the re-login as the same account and keeps
+        /// local progression.
+        /// </summary>
+        internal void OpenLoginAfterMergedSwap()
+        {
+            var choice = MessageBox.Show(this,
+                Loc.Get("account_merged_signin_body"),
+                Loc.Get("account_merged_signin_title"),
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Information);
+            if (choice != MessageBoxResult.OK) return;
+            OpenUnifiedLoginDialog();
+        }
+
+        /// <summary>
         /// Opens the unified login dialog and handles the result
         /// </summary>
         private void OpenUnifiedLoginDialog()

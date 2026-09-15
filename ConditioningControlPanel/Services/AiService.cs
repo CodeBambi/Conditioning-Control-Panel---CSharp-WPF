@@ -472,6 +472,7 @@ namespace ConditioningControlPanel.Services
                     v2Msg.Content = JsonContent.Create(v2Request);
 
                     response = await _httpClient.SendAsync(v2Msg, cancellationToken);
+                    await MergedAccountRecovery.TryHandleAsync(response);   // contract D
 
                     // If V2 endpoint not deployed yet (404), fall back to legacy Patreon auth
                     if (response.StatusCode == System.Net.HttpStatusCode.NotFound)

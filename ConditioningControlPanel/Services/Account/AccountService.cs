@@ -201,6 +201,18 @@ public static class AccountService
 
                     return true;
                 }
+
+                // The link door validates the TARGET account's token and this desktop only holds
+                // its own, so this attempt fails for exactly the split case it was meant to catch.
+                // Do not fall into registration silently: ask, and let No send the user to the
+                // sign-in method that account already uses.
+                App.Logger?.Warning("AccountService: Auto-link {Provider} -> {UnifiedId} failed ({Error}); asking before minting a new account",
+                    provider, lookupResult.AutoLinkUnifiedId, linkResult.Error);
+                if (!ConfirmCreateNewDespiteExistingAccount(owner, provider, lookupResult.AutoLinkDisplayName))
+                {
+                    LogoutProvider(provider);
+                    return false;
+                }
             }
 
             // Step 5: First-time user - needs to choose display name
@@ -271,6 +283,15 @@ public static class AccountService
             // Step 2: If needs registration, show username picker
             if (authResponse.NeedsRegistration)
             {
+                // Same-email hint (see V2AuthResponse.CanAutoLink): an account already exists for
+                // this person under another sign-in method. Ask before minting a twin.
+                if (authResponse.CanAutoLink &&
+                    !ConfirmCreateNewDespiteExistingAccount(owner, provider, authResponse.AutoLinkDisplayName))
+                {
+                    LogoutProvider(provider);
+                    return new V2AuthResult { Success = false, Error = "Existing account found; sign in with its original method" };
+                }
+
                 App.Logger?.Information("AccountService: User needs registration, showing username picker");
 
                 var dialog = new UsernamePickerDialog
@@ -465,6 +486,54 @@ public static class AccountService
             return false;
         }
     }
+
+    /// <summary>
+    /// The same-email choice. The server has said an account with this provider's verified email
+    /// already exists (the auto-link hint), the desktop cannot link to it on its own, and the only
+    /// alternative is minting a second account for the same person. Returns true when the user
+    /// explicitly chooses to create a new, separate account anyway; false means "go back and sign
+    /// in the way that account signs in". Default button is No.
+    /// </summary>
+    internal static bool ConfirmCreateNewDespiteExistingAccount(Window? owner, string provider, string? existingDisplayName)
+    {
+        var providerLabel = ProviderLabel(provider);
+        var body = string.IsNullOrWhiteSpace(existingDisplayName)
+            ? Loc.GetF("account_existing_email_prompt_unnamed", providerLabel)
+            : Loc.GetF("account_existing_email_prompt", providerLabel, existingDisplayName);
+
+        App.Logger?.Information("AccountService: existing same-email account hint for {Provider} (named={Named})",
+            provider, !string.IsNullOrWhiteSpace(existingDisplayName));
+
+        var choice = owner != null
+            ? MessageBox.Show(owner, body, Loc.Get("account_existing_email_title"),
+                MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No)
+            : MessageBox.Show(body, Loc.Get("account_existing_email_title"),
+                MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+
+        var createNew = choice == MessageBoxResult.Yes;
+        App.Logger?.Information("AccountService: user chose {Choice} on the existing-account prompt",
+            createNew ? "create new account" : "sign in with the other method");
+        return createNew;
+    }
+
+    /// <summary>Signs the given provider out so its cached token cannot re-run the mint next launch.</summary>
+    internal static void LogoutProvider(string provider)
+    {
+        switch (provider)
+        {
+            case "patreon": App.Patreon?.Logout(); break;
+            case "discord": App.Discord?.Logout(); break;
+            case "substar": App.SubscribeStar?.Logout(); break;
+        }
+    }
+
+    private static string ProviderLabel(string provider) => provider switch
+    {
+        "patreon" => "Patreon",
+        "discord" => "Discord",
+        "substar" => "SubscribeStar",
+        _ => provider,
+    };
 
     #endregion
 
