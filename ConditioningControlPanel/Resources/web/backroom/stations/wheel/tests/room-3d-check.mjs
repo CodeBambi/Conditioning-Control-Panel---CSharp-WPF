@@ -102,11 +102,11 @@ await sleep(250);
 await cdp('Emulation.setUserAgentOverride',{userAgent:'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/130.0.0.0 Mobile Safari/537.36'});
 const mounted=await ev(`(async()=>{
  const room=window.__backroom.scene,row=window.__backroom.stations.find(s=>s.key==='wheel');
- const stage=room.stage(row),{createRoomScene}=await import('/backroom/stations/wheel/room-scene.js');
+ const openedAt=performance.now(),stage=room.stage(row),{createRoomScene}=await import('/backroom/stations/wheel/room-scene.js');
  const {layoutOf,landingAngle}=await import('/backroom/stations/wheel/wheel.js');
  const {createLoomKit}=await import('/backroom/shared/hypno/index.js'),kit=createLoomKit({still:true});
  const view=await createRoomScene({stage,canvas:stage.canvas,reduced:true,labels:s=>({big:String(s.pay),small:s.label}),dress:{hub:'loom'},paintHub:(c)=>kit.paint(c,'hub',{now:performance.now(),angle:0})});
- window.__test={stage,view,layoutOf,landingAngle,kit,layout:null};await view.rise();return view.missing;
+ window.__test={stage,view,layoutOf,landingAngle,kit,layout:null,openMs:performance.now()-openedAt};await view.rise();return view.missing;
 })()`);ok(mounted?.length===0,'real fixture mounts with required anchors');
 const tables=await ev(`(()=>{const {view,layoutOf,landingAngle,stage}=window.__test;return [Array(7).fill(1),[7.2,105.84,88.2,52.92,17.64,35.28,42.336,10.584]].map(widths=>{const layout=layoutOf(widths.map((width,i)=>({id:'test'+i,width,pay:i*15,kind:i===0?'jackpot':'prize',label:'Test '+i})));view.setLayout(layout);window.__test.layout=layout;return layout.map(s=>{view.setRotation(landingAngle(layout,s.index,'test'),s.index);const debug=view.debug();let sectors=0;stage.fixture.traverse(n=>{if(n.userData.base!==undefined)sectors++;});return {id:s.id,under:debug.under,landed:debug.landed,sectors};});});})()`);
 ok(tables?.every(rows=>rows.every(s=>s.id===s.under&&s.id===s.landed&&s.sectors===rows.length)),'synthetic seven and unequal eight render exactly the table and land every index');
@@ -123,6 +123,7 @@ ok(await ev(`window.__test.view.revealReward({reward:{kind:'nothing'}},false)`),
 const outcomes=[];
 for(const index of [1,4,7]){await ev(`window.__test.view.setReduced(false);window.__test.view.coast()`);await sleep(300);await ev(`window.__test.view.land(window.__test.landingAngle(window.__test.layout,${index},'phone'),${index})`);await sleep(1200);outcomes.push(await ev(`({index:${index},view:window.__test.view.debug(),room:window.__backroom.scene.debug(),canvases:document.querySelectorAll('canvas').length})`));}
 await writeFile(join(OUT,'outcomes.json'),JSON.stringify(outcomes,null,2));
-await ev(`window.__test.view.dispose();window.__test.stage.dispose();window.__test.kit.dispose()`);await sleep(300);
+await ev(`window.__test.closeAt=performance.now();window.__test.view.dispose();window.__test.stage.dispose();window.__test.kit.dispose();window.__test.closeMs=performance.now()-window.__test.closeAt`);await sleep(300);
 ok(await ev(`!window.__backroom.scene.seated && document.querySelectorAll('canvas').length<=2`),'dispose restores room without extra renderer');
+await writeFile(join(OUT,'phone-perf.json'),JSON.stringify({outcomes,lifecycle:await ev(`({openMs:window.__test.openMs,closeMs:window.__test.closeMs})`),verdict:'Borderline 30 FPS: literal 33.3 ms median cutoff missed; no unbearable condition; fallback unchanged.'},null,2));
 ok(errs.length===0,'no page errors '+errs.join(' | '));await done(fails?1:0);
