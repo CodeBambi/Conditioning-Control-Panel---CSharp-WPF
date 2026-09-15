@@ -84,3 +84,21 @@
 .wheel-slowly { position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); z-index: 3; pointer-events: none; opacity: 0;
   padding: 3px 12px; border-radius: 20px; background: #140a1ccc; color: #e8c27a; font: 500 12px Consolas, "DM Mono", ui-monospace, monospace;
   letter-spacing: .08em; white-space: nowrap; }
+
+/* A small brass service cloche rises on the landed frame. Back remains above it. */
+.daze-delivery{position:absolute;left:50%;bottom:110px;transform:translateX(-50%);width:min(340px,82vw);padding:12px 18px;border:1px solid #d6ac69;border-radius:18px;background:#fff1df;color:#482235;text-align:center;pointer-events:none;z-index:4;box-shadow:0 8px 30px #170c2580}
+.daze-delivery[hidden]{display:none}.daze-delivery p{margin:6px 0;font:600 15px/1.35 Georgia,serif}
+.daze-cloche{height:62px;position:relative;display:grid;place-items:center}.daze-cloche span{font:700 32px Georgia;color:#a63668}
+.daze-cloche b{position:absolute;bottom:0;width:112px;border-bottom:5px solid #b58b48;border-radius:50%}
+.daze-cloche i{position:absolute;z-index:1;bottom:4px;width:104px;height:48px;border-radius:60px 60px 5px 5px;background:linear-gradient(100deg,#8c622e,#f6dca1 48%,#c39653);transform:translateY(-47px);opacity:0;animation:daze-cloche 620ms cubic-bezier(.2,1.5,.4,1) both}
+.daze-delivery[data-kind=double] .daze-cloche i,.daze-delivery[data-kind=nothing] .daze-cloche i,.daze-delivery[data-kind=nothing] .daze-cloche b{display:none}
+.daze-delivery[data-kind=nothing]{background:#f3e9db;box-shadow:none}.daze-delivery.is-still *{animation:none!important}
+@keyframes daze-cloche{from{transform:translateY(0);opacity:1}to{transform:translateY(-47px);opacity:0}}
+@media(max-width:600px){.daze-delivery{bottom:102px;padding:8px 12px}.daze-cloche{height:46px}.daze-delivery p{font-size:13px}}
+
+/* Seated gameplay shares the room canvas; only the controls intercept input. */
+.wheel-station[data-seated]{pointer-events:none}.wheel-station[data-seated] .wheel-dim,.wheel-station[data-seated] .wheel-emi{display:none}
+.wheel-station[data-seated] :is(button,details,.wheel-card){pointer-events:auto}
+.wheel-station[data-seated] .wheel-top{top:112px;max-width:min(320px,70vw)}
+.wheel-station[data-seated] .wheel-odds[open]{max-width:calc(100vw - 24px);max-height:55vh}
+.wheel-station[data-seated] .wheel-odds td{white-space:normal}

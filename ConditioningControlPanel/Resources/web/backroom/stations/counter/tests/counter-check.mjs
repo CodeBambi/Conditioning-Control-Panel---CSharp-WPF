@@ -175,7 +175,18 @@ ok(await until("!!document.querySelector('.counter-card[data-id=rt_demo] .counte
 await size(400, 800);
 await boot('?sp=260&on=jackpot_remix,rt_demo,flashes_v2&latency=60');
 ok(await ev('document.documentElement.scrollWidth <= 400'), 'phone width: no sideways scroll');
-await still('11-phone.png', 'phone width, two columns');
+await still('11-phone.png', 'phone width, readable single column');
+
+// Expanded prize copy stays readable in every shipped locale at phone width.
+for (const lang of ['en','de','es','fr','pt-BR','ru','ja','ko','zh-CN']) {
+  const lex = JSON.parse(await readFile(join(RES, '../Localization/Languages', lang + '.json'), 'utf8'));
+  await ev(`(async()=>{const lex=${JSON.stringify(lex)};window.dev.ctx.lex=(k,f)=>lex[k]??f;await window.dev.stand();await window.dev.open();document.querySelectorAll('.counter-details').forEach(e=>e.open=true);})()`);
+  ok(await ev(`document.querySelectorAll('.counter-details').length===3 && [...document.querySelectorAll('.counter-card')].every(e=>e.scrollWidth<=e.clientWidth+1)`),lang+': all prize details expand without horizontal clipping');
+  if(lang==='en')for(const id of ['jackpot_remix','flashes_v2','bubbles_v2']){
+    await ev(`document.querySelector('.counter-card[data-id="${id}"] .counter-name').scrollIntoView({block:'start'})`);
+    await still('12-phone-'+id+'.png','expanded '+id+' contents');
+  }
+}
 
 ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
 summary.errors = errs; summary.fails = fails;

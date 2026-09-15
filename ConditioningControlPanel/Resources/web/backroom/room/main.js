@@ -1,3 +1,5 @@
+import { sliceText } from '../stations/wheel/rewards.js';
+import { setWheelFace } from './wheel-face.js';
 /* ============================================================================
  * backroom/room/main.js - boot, the Back button, visiting, and the ways out.
  *
@@ -29,6 +31,10 @@ import { normaliseStations } from './walk.js';
 import { createScene } from './scene.js';
 import { createLoader } from './loader.js';
 import { createHud } from './hud.js';
+import { createRoomRewards, createDoubleCharm } from './rewards.js';
+const rewards = createRoomRewards();
+let doubleCharm = null;
+function applyRewards(body) { if (leaving) return; if (rewards.apply(body)) { scene?.setRewards(rewards.snapshot()); doubleCharm?.paint(); } }
 
 const PAGE_SETTLE_MS = 300;
 const BELL_TIMEOUT_MS = 6000;
@@ -152,11 +158,10 @@ function setSp(sp) {
 }
 
 async function visit(row) {
-  if(row?.key==='customization'){scene?.customization.open();return;}
-  if (leaving || visiting || !scene || !loader || scene.overview) return;
+  if (leaving || visiting || !scene || !loader || scene.overview || scene.transitioning || scene.seated) return;
+  if(row?.key==='customization'){scene.customization.open();return;}
   visiting = true;
-  scene.hold();
-  hud.hideWhileVisiting(true);
+  scene.prepareVisit();
   await loader.open(row, { variant: row.variant ? { id: row.variant, name: label(row), palette: row.fixture.palette } : null });
 }
 
@@ -181,6 +186,7 @@ async function back(reason) {
 
 async function settle() {
   if (hud) hud.stop();
+  doubleCharm?.dispose(); doubleCharm = null;
   if (scene) scene.halt();
   if (loader) await loader.close(PAGE_SETTLE_MS - 60);
   bridge.send({ type: 'exit-done' });
@@ -276,9 +282,11 @@ async function refreshBell(why) {
   bell.fetching = true;
   bell.fetches++;
   try {
+    const rewardRevision = rewards.revision;
     const res = await bellRequest('state', {});
     const b = res && res.ok && res.body && typeof res.body === 'object' ? res.body : null;
     if (!b || b.ok === false) return;   // closed, too_fast, offline: keep the lines we have
+    if (rewards.revision === rewardRevision) applyRewards(b);
     if (Array.isArray(b.entries)) bell.entries = b.entries;
     bell.optIn = b.optIn === true;
     bell.mustHit = !!(b.jackpot && b.jackpot.mustHit === true);
@@ -314,6 +322,7 @@ function media() {
 }
 
 async function start(init) {
+  rewards.reset();
   Object.assign(state, {
     sp: Number.isFinite(init.sp) ? init.sp : 0,
     reduced: !!init.reduced,
@@ -336,7 +345,7 @@ async function start(init) {
     state.intensityChoice = readChoice(m.intensityChoice, state.intensityChoice);
     paintChrome();
     paintMotion();
-    const frame = { motion: state.motion, intensity: state.intensity, reduced: state.reduced, gates: state.gates };
+    const frame = { motion: state.userStill ? 'off' : state.motion, intensity: state.intensity, reduced: state.reduced, gates: state.gates };
     for (const fn of Array.from(settingsListeners)) { try { fn(frame); } catch (e) { bridge.log('warn', 'onSettings threw: ' + e); } }
   });
   bridge.on('suspend', (m) => {
@@ -351,12 +360,16 @@ async function start(init) {
     onVisit: (row) => visit(row),
     onGo: (row) => { if (scene) { scene.go(row); hud.overview(false); } },
     onOverview: (on) => { if (scene) { scene.setOverview(on); hud.overview(scene.overview); } },
-    onMotion: () => { if (forcedStill()) return; state.userStill = !state.userStill; paintMotion(); },
+    onMotion: () => { if (forcedStill()) return; state.userStill = !state.userStill; paintMotion();
+      const frame={motion:state.userStill?'off':state.motion,intensity:state.intensity,reduced:state.reduced,gates:state.gates};
+      for(const fn of Array.from(settingsListeners)){try{fn(frame);}catch(e){bridge.log('warn','onSettings threw: '+e);}}
+    },
     onOption: setOption,
     onBellOpt: (on) => { setBellOptIn(on); },
   });
   paintMotion();
   hud.bellOptIn(bell.optIn);
+  doubleCharm = createDoubleCharm({mount:$('.br-sp'),lex,read:now=>rewards.snapshot(now)});
 
   const stations = await readStations();
   if (leaving) return;
@@ -364,18 +377,33 @@ async function start(init) {
   loader = createLoader({
     layer: $('#br-layer'),
     state,
+    stage: (row) => {
+      scene.release();
+      const stage = scene.stage(row);
+      if (!stage) { scene.hold(); return null; }
+      hud.hideWhileVisiting(false);
+      hud.seated(true);
+      return { ...stage, get ready(){return stage.ready;}, dispose() { stage.dispose(); hud.seated(false); } };
+    },
+    approach:row=>{
+      scene.release();const trip=scene.stage(row);if(!trip){scene.hold();return null;}
+      hud.hideWhileVisiting(false);hud.seated(true);
+      return {arrived:trip.arrived.then(ok=>{if(ok){scene.hold();hud.hideWhileVisiting(true);}return ok;}),
+        dispose(){scene.release();trip.dispose();hud.seated(false);}};
+    },
     lex,
     onSp: (fn) => { spListeners.add(fn); return () => spListeners.delete(fn); },
     onSettings: (fn) => { settingsListeners.add(fn); return () => settingsListeners.delete(fn); },
     spReadout,
     spChanged,
     chipSettle,
+    rewardLanded: body => applyRewards(body),
     revealedWin: (key,amount,tier,text)=>scene?.celebrate(key,amount,tier,text),
     standUp: () => back('back'),
     log: (level, msg) => bridge.log(level, msg),
   });
   // Test seam for the smoke checks (never read by the room itself).
-  window.__backroom = { state, stations, loader, back, lex, visit, bell, refreshBell, get hud() { return hud; }, get scene() { return scene; } };
+  window.__backroom = { state, stations, loader, back, lex, visit, bell, refreshBell, rewards, get hud() { return hud; }, get scene() { return scene; } };
 
   try {
     scene = await createScene({
@@ -387,6 +415,7 @@ async function start(init) {
       label: (row, key) => (key === '@name' ? label(row) : lex(key, LABEL_FALLBACK[key])),
       media, lex,
       still: still(),
+      cameraMotion:()=>({off:state.userStill||state.motion==='off'||state.motion==='still',reduced:state.reduced||state.motion==='reduced'||state.intensity==='calm'}),
       onProgress: (f) => hud.progress(f),
       onNearest: (row) => hud.nearest(row),
       onVisit: (row) => visit(row),
@@ -405,6 +434,14 @@ async function start(init) {
   hud.ready();
   paintMustHit();
   refreshBell('room-open');
+  // One read on room entry paints the fixture from the same table used when seated.
+  if (stations.some(row => row.id === 'wheel' && row.state === 'live') && !seated()) {
+    const reqId = bridge.mintId();
+    bridge.request({type:'station-request',reqId,station:'wheel',op:'state',body:{}},
+      'station-result', m => m.reqId === reqId, BELL_TIMEOUT_MS).then(res => {
+        if (!leaving && !seated() && res?.ok && res.body?.ok) setWheelFace(scene?.scene, res.body.slices, s=>sliceText(s,lex,n=>Number(n||0).toLocaleString()));
+      }).catch(() => {});
+  }
   document.documentElement.classList.add('br-ready');
   bridge.log('info', 'room up: ' + stations.length + ' fixtures, ' + stations.filter((s) => s.state === 'live').length
     + ' live, built in ' + Math.round(scene.buildMs) + ' ms');

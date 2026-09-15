@@ -1,12 +1,13 @@
 /* media.js - the sit-down deal (CONTRACT.md section 5) as the reel painter sees it.
  * gif0..gif3 = gifs[i % gifs.length] (CONTRACT 10.14: a deal of fewer than 4 of the player's own GIFs cycles them;
  * fallback art only with none), sub0..sub3 = words[0..3], kept until the player stands up. GIFs load as
- * <img> inside a hidden holder in the document so Chromium keeps them animating while the reel
- * canvas redraws them. Only ccp.assets / ccp.game (or this page's own origin, for dev.html) URLs
+ * explicit decoded canvases because drawImage(<img>) captures the default image.
+ * Hidden <img> elements supply a still only when decoding is unavailable. Only ccp.assets / ccp.game (or this page's own origin, for dev.html) URLs
  * are loaded; anything else, or a load failure, falls back to the built-in art in symbols.js.
  * Keys, never URLs, leave this file. */
 
 import { kindOf } from './symbols.js';
+import { decodedSource } from '../../room/gif-decode.js';
 
 const LOAD_MS = 2500;
 
@@ -30,9 +31,10 @@ function readable(img) {
 }
 
 export function createMedia(holder, lex = (k, f) => f) {
-  let gifs = [], words = [], imgs = [];
+  let gifs = [], words = [], imgs = [], sources = [], epoch = 0;
 
   function clear() {
+    epoch++; sources.forEach(src => src?.dispose()); sources = [];
     imgs.forEach(img => img && img.remove());
     imgs = []; gifs = []; words = [];
   }
@@ -41,6 +43,7 @@ export function createMedia(holder, lex = (k, f) => f) {
     /** Adopt a `media` reply. Resolves once every GIF loaded or failed (capped), never rejects. */
     deal(media) {
       clear();
+      const dealEpoch = epoch;
       gifs = Array.isArray(media && media.gifs) ? media.gifs.slice(0, 4) : [];
       words = Array.isArray(media && media.words) ? media.words.slice(0, 4) : [];
       imgs = gifs.map(g => {
@@ -54,14 +57,22 @@ export function createMedia(holder, lex = (k, f) => f) {
         holder.append(img);
         return img;
       });
+      const decoded = gifs.map(async (item, i) => {
+        if (!item?.url || !allowed(item.url)) return;
+        const source = await decodedSource(item.url, { maxEdge: 256, maxFps: 12 });
+        if (dealEpoch !== epoch) { source?.dispose(); return; }
+        sources[i] = source;
+      });
       const waits = imgs.filter(Boolean).map(img => new Promise(done => {
         if (img.complete) return done();
         img.onload = img.onerror = () => done();
       }));
-      return Promise.race([Promise.all(waits), new Promise(done => setTimeout(done, LOAD_MS))]);
+      return Promise.race([Promise.all([...waits, ...decoded]), new Promise(done => setTimeout(done, LOAD_MS))]);
     },
     /** A drawable for gif{i} (cycled over the deal), or null when missing or broken (the painter draws fallback art). */
     gif(i) {
+      const source = sources.length ? sources[i % gifs.length] : null;
+      if (source) { source.tick(performance.now(), false); return source.canvas; }
       const img = imgs.length ? imgs[i % imgs.length] : null;
       return img && img.complete && img.naturalWidth > 0 && readable(img) ? img : null;
     },

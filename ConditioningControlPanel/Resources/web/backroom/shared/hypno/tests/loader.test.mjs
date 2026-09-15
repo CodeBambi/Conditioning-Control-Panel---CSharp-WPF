@@ -10,7 +10,13 @@ globalThis.window = { chrome: { webview: {
   addEventListener(type, fn) { if (type === 'message') listeners.push(fn); },
   postMessage(m) { posted.push(m); },
 } } };
-globalThis.document = { createElement: () => ({ className: '', dataset: {}, remove() {} }) };
+globalThis.document = { createElement: () => {
+  const node={className:'',dataset:{},remove(){}};
+  node.classList={add(...names){node.className=[...new Set([...node.className.split(/\s+/).filter(Boolean),...names])].join(' ');},
+    remove(...names){node.className=node.className.split(/\s+/).filter(n=>n&&!names.includes(n)).join(' ');},
+    contains(name){return node.className.split(/\s+/).includes(name);}};
+  return node;
+} };
 const emit = (data) => listeners.forEach((fn) => fn({ data }));
 
 const bridge = await import('../../../bridge.js');
@@ -33,6 +39,8 @@ test('a live station gets the hypno ctx members', async () => {
   for (const k of ['fx', 'fxRelease', 'fxTunnel', 'media', 'gates', 'onSettings']) assert.ok(keys.includes(k), k);
   assert.deepEqual({ ...ctx.gates }, { flash: true, subliminal: true, spiral: false, brainDrain: true });
   assert.ok(Object.isFrozen(ctx.gates));
+  state.userStill=true;assert.equal(ctx.motion,'off','room motion toggle reaches a seated station');
+  state.userStill=false;assert.equal(ctx.motion,'full','restores host motion choice');
   state.gates = Object.freeze({ flash: false, subliminal: true, spiral: true, brainDrain: true });
   assert.equal(ctx.gates.flash, false, 'gates is a live getter');
 });

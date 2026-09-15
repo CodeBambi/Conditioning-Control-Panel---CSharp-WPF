@@ -64,3 +64,24 @@
   .cards-move { min-width: 64px; }
 }
 @media (prefers-reduced-motion: reduce) { .cards-station * { transition: none !important; } }
+
+/* Seated game chrome leaves the shared room and its live HUD exposed. */
+.cards-station.cards-in-room { background: transparent; pointer-events: none; }
+.cards-in-room :is(button,input,label,.cards-card) { pointer-events: auto; }
+.cards-in-room .cards-stage { pointer-events: none; }
+.cards-in-room .cards-top { top: 90px; }
+@media (max-width: 600px) {
+  .cards-in-room .cards-side { bottom: 72px; left: 10px; right: 10px; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 10px; }
+  .cards-in-room .cards-controls { bottom: 12px; left: 10px; right: 10px; max-width: none; }
+  .cards-in-room .cards-move { min-width: 70px; padding: 8px; }
+}
+.cards-station.cards-in-room .cards-top { top: 105px; max-width: calc(100vw - 24px); }
+.cards-in-room .cards-side { background: #201229e8; border-radius: 12px; padding: 10px; }
+
+@media (max-width: 600px) {
+  .cards-in-room[data-open] .cards-side { right: auto; }
+  .cards-in-room[data-open] :is(.cards-bet,.cards-sit,.cards-sitting) { display: none; }
+  .cards-in-room .cards-hint-toggle { min-height: 28px; }
+  .cards-in-room[data-open] .cards-controls { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .cards-in-room[data-open] .cards-move { min-width: 0; padding: 8px 4px; font-size: 12px; }
+}

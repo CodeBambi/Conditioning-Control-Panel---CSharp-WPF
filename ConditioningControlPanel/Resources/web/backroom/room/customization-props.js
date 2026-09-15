@@ -4,7 +4,7 @@ import * as T from 'three';
  * backroom/room/customization-props.js - the six Room Service props that had no
  * room spot: three plants and three wall frames.
  *
- * Each one is a fixed placement, on by default, switched off and on again from
+ * Each one is a fixed placement, off until owned and explicitly enabled from
  * the Room Service panel's own row of items. Nothing here persists and nothing
  * here talks to the bridge: the room is the preview (CONTRACT 10.13.7).
  *
@@ -116,7 +116,7 @@ function bakeStatic(model) {
  */
 export async function createCustomizationProps({ root, loader, base }) {
   const brass = new T.MeshStandardMaterial({ color: 0xba8654, metalness: 0.72, roughness: 0.32 });
-  const geometries = new Set(), orphaned = new Set(), screens = [], placed = [], enabled = PROPS.map(() => true);
+  const geometries = new Set(), orphaned = new Set(), screens = [], placed = [], enabled = PROPS.map(() => false);
   let triangles = 0, batches = 0, pruned = 0;
 
   const models = await Promise.all(PROPS.map((row) => loader.loadAsync(base + 'customization/' + row.file + '.glb')));
@@ -156,6 +156,7 @@ export async function createCustomizationProps({ root, loader, base }) {
       screens.push(surface);
     }
 
+    group.visible=false;
     group.position.fromArray(row.position);
     group.rotation.y = row.yaw;
     group.updateMatrixWorld(true);
@@ -166,6 +167,7 @@ export async function createCustomizationProps({ root, loader, base }) {
 
   const bounds = new T.Box3(), center = new T.Vector3(), size = new T.Vector3();
   return {
+    models: placed.map(group => group.children[0]),
     screens,
     /** @param {number} index  @param {boolean} on */
     set(index, on) {
@@ -173,14 +175,15 @@ export async function createCustomizationProps({ root, loader, base }) {
       enabled[index] = on; placed[index].visible = on; return true;
     },
     getState: () => [...enabled],
+    endPreview(){placed.forEach((group,i)=>{group.visible=enabled[i];});},
     /** Where the catalogue close-up stands to look at one prop, in room coordinates. */
     preview(index) {
       const group = placed[index], row = PROPS[index];
       if (!group) return null;
-      const wasVisible = group.visible;
       group.visible = true;
       bounds.setFromObject(group);
-      group.visible = wasVisible;
+      // The catalogue may preview an unowned prop without enabling it.
+      group.visible = true;
       bounds.getCenter(center); bounds.getSize(size);
       const distance = Math.max(1.35, size.y * 1.6, size.x * 1.15, size.z * 1.15);
       return {

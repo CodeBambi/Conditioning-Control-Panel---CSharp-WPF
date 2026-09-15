@@ -164,3 +164,9 @@ node ConditioningControlPanel/Resources/web/backroom/stations/wheel/tests/room-m
 Dev harness: serve `ConditioningControlPanel/Resources` as the web root and open
 `/web/backroom/stations/wheel/dev.html` (`?sp=57&next=jackpot|snooze|deep&pot=12&musthit&young&taken&carry=2&spun&reduced&calm&full&gates=off&hook&day=<ISO>`).
 `dev.station.debug()` shows the state, the readout, the feel log, the cue trace and the scene.
+
+
+## Daily Daze reward presentation (10.19)
+`rewards.js` reads the server `result.reward` discriminant without minting rewards. Decoration, double and blank receipts survive `readResult`. Reveal happens in `land`, never when the response arrives; reopening keeps the stored result text without replaying delivery. Legacy cash and Snooze receipts remain readable. Head Empty skips winning sounds and fullscreen moments.
+New lexicon keys, present in all nine locales: br_wheel_slice_pocket_sparkles, br_wheel_slice_good_behaviour, br_wheel_slice_keep_the_change, br_wheel_slice_spoiled_rotten, br_wheel_slice_room_service, br_wheel_slice_seeing_double, br_wheel_slice_head_empty, br_daze_empty, br_daze_double_won, br_daze_complete, br_daze_delivered, br_daze_gift, br_daze_gift_odds, br_daze_double_odds, br_daze_nothing.
+`node stations/wheel/tests/rewards-check.mjs <evidence>` drives four canned local receipts through the real wheel, verifies hidden-before-reply, once-only reveal, cleanup and narrow layout. No server code or live account is used.

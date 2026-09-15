@@ -90,3 +90,18 @@ node ConditioningControlPanel/Resources/web/backroom/stations/roulette/tests/rou
 Dev harness: serve `ConditioningControlPanel/Resources/web` as the web root and open
 `/backroom/stations/roulette/dev.html` (`?sp=40&next=17w,5,0&floor=0&calm&reduced&full&gates=off&hook&tape=3`).
 `dev.station.debug()` shows the phase, Law I, the tape, the bowl (lit numbers, plan), the mat and the feel log.
+
+
+## Seated 3D view (draft amendment)
+
+When ctx.stage is present, the room renderer owns the bowl and authored mat.
+`bet_hit_<spot>` anchors provide spot id, hit_width, hit_depth and chip_radius.
+All 42 hit targets route into the existing place/remove action. Chip-count opens
+an optional bet picker for cells outside a narrow viewport; its chips still land
+on the physical mat. The camera pose never changes. Without a stage the canvas
+view remains available. No new lexicon keys or server operations.
+
+Rebuild the model variant from the separate Blender workspace's
+`roulette/add_play_anchors.py`, then use the room asset pipeline with
+`--only roulette.glb --asset-source <roulette/play-out/roulette.glb>`.
+Runtime resources are disposed by the stage subscription.

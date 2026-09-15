@@ -113,6 +113,10 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/jav
 const server = createServer(async (req, res) => {
   const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   if (path.indexOf('..') >= 0) { res.writeHead(400); return res.end(); }
+  if (path === '/backroom/smoke/seated-station.js') {
+    res.writeHead(200, { 'content-type': 'text/javascript' });
+    return res.end((await readFile(join(HERE, 'mock-station.js'), 'utf8')) + '\nexport const roomStage = true;');
+  }
   const file = path === '/backroom/stations/slot/station.js' ? join(HERE, 'mock-station.js') : join(WEB, path);
   try {
     const body = await readFile(file);
@@ -204,7 +208,15 @@ ws.onmessage = (e) => {
 const cdp = (method, params) => new Promise((res) => { const i = ++msgId; waits.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
 const ev = async (x) => (await cdp('Runtime.evaluate', { expression: x, returnByValue: true, awaitPromise: true })).result?.result?.value;
 await cdp('Runtime.enable'); await cdp('Page.enable'); await cdp('Network.enable');
-await cdp('Page.addScriptToEvaluateOnNewDocument', { source: FAKE_HOST });
+await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
+  window.__glContexts = new Set();
+  const get = HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext = function(type, ...args) {
+    const ctx = get.call(this, type, ...args);
+    if (ctx && /^(webgl2?|experimental-webgl)$/.test(type)) window.__glContexts.add(ctx);
+    return ctx;
+  };
+` + FAKE_HOST });
 
 async function shot(name) {
   const r = await cdp('Page.captureScreenshot', { format: 'png' });
@@ -282,7 +294,9 @@ ok(Math.abs((await dbg()).yaw) > 0.2, 'a drag turns the view');
 
 // A visible mascot reacts to a real click, without opening a game or spending SP.
 ok((await dbg()).emis.every(e => e.articulated), 'all four mascots retain their shoulder joints');
-await ev(`window.__backroom.scene.go(${row('counter')})`);
+// go() travels the camera (2.1 s at full motion); every pose check below reads the arrived pose.
+const goTo = async (r) => { await ev(`window.__backroom.scene.go(${r})`); for (let i = 0; i < 80 && await ev('window.__backroom.scene.debug().transitioning'); i++) await sleep(100); };
+await goTo(row('counter'));
 await sleep(300);
 const emiPoint = await ev(`import('/vendor/three/three.module.min.js').then(T => { const s=window.__backroom.scene;
   const face=s.scene.getObjectByName('emi_idle_counter').getObjectByName('EMI_glass');
@@ -296,9 +310,50 @@ await shot('emi-click-wave.png');
 await key('Escape'); await key('Escape', 'keyUp');
 ok(!(await dbg()).emiBubble.id && (await posted('exit')).length === 0 && (await posted('station-open')).length === opensBeforeEmi, 'Escape dismisses the bark without exiting or opening a station');
 
+// The three settled poses keep the room renderer alive and input locked.
+for (const id of ['cards', 'roulette', 'wheel']) {
+  const prior = await dbg();
+  await goTo(row(id));
+  const expected = await dbg();
+  await ev(`window.__backroom.scene.pose(${JSON.stringify(prior.position)}, ${prior.yaw}, ${prior.pitch});
+    window.__backroom.scene.seat(${row(id)}); window.__backroom.hud.seated(true)`);
+  await hold('KeyW', 100);
+  await key('KeyM'); await key('KeyM', 'keyUp');
+  const seated = await dbg();
+  ok(seated.seated && seated.running && !seated.held, id + ': seat keeps drawing');
+  ok(JSON.stringify(seated.position) === JSON.stringify(expected.position)
+    && Math.abs(seated.yaw - expected.yaw) < 1e-4 && Math.abs(seated.pitch - expected.pitch) < 1e-4,
+    id + ': existing go pose is exact and walking/map input is locked');
+  ok(await ev(`[...window.__glContexts].filter(gl => !gl.isContextLost()).length === 1`), id + ': one live WebGL context');
+  ok(await ev(`['#br-back', '.br-nav .br-pill:nth-child(3)'].every(sel => {
+    const node = document.querySelector(sel), r = node.getBoundingClientRect();
+    return node.contains(document.elementFromPoint(r.x+r.width/2, r.y+r.height/2));
+  }) && getComputedStyle(document.querySelector('.br-bell')).visibility === 'visible'`), id + ': Back, Options and bell stay visible');
+  await shot('seat-' + id + '.png');
+  await ev(`window.__backroom.scene.unseat(); window.__backroom.hud.seated(false)`);
+  const after = await dbg();
+  ok(JSON.stringify(after.position) === JSON.stringify(prior.position) && after.yaw === prior.yaw && after.pitch === prior.pitch,
+    id + ': unseat restores the prior pose');
+}
+
+// Exercise loader opt-in and cleanup, including a shared renderer update registration.
+await ev(`window.__backroom.visit({...${row('cards')}, id:'slot', entry:'smoke/seated-station.js'})`);
+ok((await dbg()).seated && (await dbg()).running, 'loader opt-in seats before station mount');
+await ev(`window.__stageUpdates=0; window.__stageDisposals=0;
+  const original=window.__backroom.scene.stage;
+  window.__backroom.scene.stage = function(row) { const stage=original(row);
+    stage.register({update(){window.__stageUpdates++},dispose(){window.__stageDisposals++}}); return stage; };`);
+await ev(`window.__backroom.back('test')`);
+await ev(`window.__backroom.visit({...${row('cards')}, id:'slot', entry:'smoke/seated-station.js'})`);
+await sleep(120);
+ok(await ev(`window.__stageUpdates > 0`), 'registered view advances on the shared room loop');
+await ev(`window.__backroom.back('test')`);
+ok(await ev(`window.__stageDisposals === 1 && !window.__backroom.scene.seated`), 'loader close disposes the view once and unseats');
+await ev(`window.__mockStation = null`);
+
 // 2c. every approach: stand there, shot, push forward into the fixture, never clip
 for (const s of stations) {
-  await ev(`window.__backroom.scene.go(${row(s.key)})`);
+  await goTo(row(s.key));
   await sleep(250);
   await shot(`approach-${s.key.replace(':', '-')}.png`);
   await hold('KeyW', 1500);
@@ -308,12 +363,12 @@ for (const s of stations) {
 }
 
 // 2d. E at the violet slot opens the one slot station with the violet variant; Back restores the pose
-await ev(`window.__backroom.scene.go(${row('slot:violet')})`);
+await goTo(row('slot:violet'));
 await ev(`window.__backroom.scene.pose(${row('slot:violet')}.approach, 1.4, -0.1)`);
 await sleep(200);
 const before = await dbg();
 ok(before.nearest === 'slot:violet', 'standing by the violet slot makes it nearest');
-ok(await ev(`!document.querySelector('.br-visit').hidden && /Visit/.test(document.querySelector('.br-visit').textContent)`), 'the Visit prompt shows');
+ok(await ev(`/Visit/.test(document.querySelector('.br-hint').title)`), 'the walk hint names the visit');
 await key('KeyE'); await key('KeyE', 'keyUp');
 for (let i = 0; i < 40 && !(await ev(`!!(window.__mockStation && window.__mockStation.seen.state)`)); i++) await sleep(100);
 ok((await posted('station-open')).some((m) => m.station === 'slot'), 'E posts station-open slot');
@@ -334,7 +389,7 @@ ok(d.position.every((v, i) => Math.abs(v - before.position[i]) < 1e-9) && d.yaw 
 ok(tBack >= 0 && tBack < 1000, `resume took ${Math.round(tBack)} ms (rebuild would be ${perf.buildMs} ms)`);
 ok((await posted('exit')).length === 0, 'the room itself stays open');
 await ev(`window.__mockStation = null`);
-await ev(`window.__backroom.scene.go(${row('slot:rose')})`);
+await goTo(row('slot:rose'));
 await sleep(150);
 await key('KeyE'); await key('KeyE', 'keyUp');
 for (let i = 0; i < 40 && !(await ev(`!!(window.__mockStation && window.__mockStation.seen.opened)`)); i++) await sleep(100);
@@ -353,7 +408,7 @@ await sleep(300);
   };
   const openSlot = async () => {
     await ev(`window.__mockStation = null`);
-    await ev(`window.__backroom.scene.go(${row('slot:violet')})`);
+    await goTo(row('slot:violet'));
     await sleep(150);
     await key('KeyE'); await key('KeyE', 'keyUp');
     for (let i = 0; i < 40 && !(await ev(`!!(window.__mockStation && window.__mockStation.seen.opened)`)); i++) await sleep(100);
@@ -397,7 +452,7 @@ await sleep(300);
   const frame = () => ev(`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))`);
   const openViolet = async () => {
     await ev(`window.__mockStation = null`);
-    await ev(`window.__backroom.scene.go(${row('slot:violet')})`);
+    await goTo(row('slot:violet'));
     await sleep(150);
     await key('KeyE'); await key('KeyE', 'keyUp');
     for (let i = 0; i < 40 && !(await ev(`!!(window.__mockStation && window.__mockStation.seen.state)`)); i++) await sleep(100);
@@ -430,7 +485,7 @@ await sleep(300);
 }
 
 // 2e. a soon station: the dust-sheet card, no code (every row is live now, so a soon copy of the counter row)
-await ev(`window.__backroom.scene.go(${row('counter')})`);
+await goTo(row('counter'));
 await sleep(150);
 await ev(`void window.__backroom.visit({ ...${row('counter')}, state: 'soon', entry: null })`);
 for (let i = 0; i < 20 && !(await ev(`!!document.querySelector('.br-card-veil.is-soon')`)); i++) await sleep(100);
@@ -492,7 +547,7 @@ ok(!(await dbg()).overview, 'M again walks');
 }
 
 // 2g. host close with a station open: exit-done inside the 300 ms budget
-await ev(`window.__backroom.scene.go(${row('slot:mint')})`);
+await goTo(row('slot:mint'));
 await sleep(150);
 await key('KeyE'); await key('KeyE', 'keyUp');
 for (let i = 0; i < 40 && !(await ev(`!!(window.__mockStation && window.__mockStation.seen.opened)`)); i++) await sleep(100);
@@ -575,7 +630,7 @@ await shot('wall-picture-from-feed.png');
   ok(await reads() === 1, 'the rotation never asks the server for anything');
 
   // never while seated, and a refresh after each station close
-  await ev(`window.__backroom.scene.go(${row('slot:violet')})`);
+  await goTo(row('slot:violet'));
   await sleep(150);
   await key('KeyE'); await key('KeyE', 'keyUp');
   for (let i = 0; i < 40 && !(await ev(`!!window.__backroom.loader.current`)); i++) await sleep(100);
@@ -658,7 +713,7 @@ await shot('wall-picture-from-feed.png');
 // 2k. Room Service: the catalogue panel opens no second WebGL context, every item toggles, and the
 // room keeps drawing behind it (CONTRACT 7 and 10.13.7: the close-up is a scissored pass, not a context).
 {
-  const canvases = () => ev(`document.querySelectorAll('canvas').length`);
+  const canvases = () => ev(`[...window.__glContexts].filter(gl => !gl.isContextLost()).length`);
   const errsBefore = errs.length;
   const before = await canvases();
   ok(before === 1, `the walking room owns one canvas (${before})`);
@@ -666,26 +721,29 @@ await shot('wall-picture-from-feed.png');
   await sleep(400);
   ok(await ev(`!document.querySelector('.br-custom-panel').hidden`), 'Room Service opens its panel');
   ok(await canvases() === 1, 'and adds no canvas of its own: the close-up draws on the room renderer');
-  // The Options pill and the floor bell are shifted out from under the panel, never hidden by it.
+  // Navigation stays reachable; the ticker stays quiet during customization.
   ok(await ev(`getComputedStyle(document.querySelector('.br-nav')).visibility === 'visible'
-    && getComputedStyle(document.querySelector('.br-bell')).visibility === 'visible'`), 'the nav pills and the bell stay visible');
+    && getComputedStyle(document.querySelector('.br-bell')).visibility === 'hidden'`), 'navigation stays visible and the ticker is hidden');
   ok(await ev(`(() => { const p = document.querySelector('.br-nav .br-pill:nth-child(3)').getBoundingClientRect();
     const hit = document.elementFromPoint(p.left + p.width / 2, p.top + p.height / 2);
     return !!hit && hit.closest('.br-nav') !== null && !document.querySelector('.br-custom-panel').contains(hit); })()`),
     'and the Options pill is still the thing under its own pixels');
   const seen = [];
-  const itemCount = await ev(`document.querySelectorAll('.br-custom-items button').length`);
-  ok(itemCount === 15, `the catalogue lists fifteen items: nine bays and the six decoration props (${itemCount})`);
+  const itemCount = 15;
+  ok(await ev(`document.querySelectorAll('.br-custom-items button').length===2`), 'two cabinet displays replace numbered buttons');
   for (let i = 0; i < itemCount; i++) {
-    await ev(`document.querySelectorAll('.br-custom-items button')[${i}].click()`);
+    if(i===0||i===9)await ev(`document.querySelectorAll('.br-custom-items button')[${i===0?0:1}].click()`);
+    await sleep(200);
+    const pick=await ev(`window.__backroom.scene.customization.debug().view.picks[${i%9}]`);
+    for(const type of ['mousePressed','mouseReleased'])await cdp('Input.dispatchMouseEvent',{type,x:pick.x,y:pick.y,button:'left',clickCount:1});
     await sleep(120);
-    await ev(`(document.querySelector('.br-custom-actions button') || {}).click?.()`);
+    await ev(`(document.querySelector('.br-custom-hud > .br-custom-actions button') || {}).click?.()`);
     await sleep(220);
     const d = await dbg();
     seen.push({ i, focus: d.customization.view.selected, calls: d.calls, triangles: d.triangles, chosen: JSON.stringify(d.customization.selected) });
   }
-  ok(seen.every((s) => s.focus === (s.i < 9 ? s.i : -1)),
-    'each of the nine bay items pulls the close-up onto its own bay, and a decoration prop pulls it back to the whole cabinet');
+  ok(seen.every((s) => s.focus === s.i),
+    'every actual cabinet item selects its own preview');
   ok(seen.every((s) => s.calls > 0 && s.triangles > 0), `the room still submits work under every toggle (${seen.map((s) => s.calls).join(', ')} calls)`);
   ok(new Set(seen.map((s) => s.chosen)).size >= 4, 'and the toggles change the room state, not just the panel');
   ok(seen.slice(9).every((s) => JSON.parse(s.chosen).props.length === 6), 'the six decoration props each report their own switch');
@@ -717,7 +775,7 @@ await shot('wall-picture-from-feed.png');
   ok(box.left >= 0 && box.right <= 400.5 && box.width > 320,
     `the panel is a full-width sheet, not a third of one (${Math.round(box.width)} px of 400)`);
   ok(box.top > 66, `and it starts below the nav pills and the bell (panel top ${Math.round(box.top)} px)`);
-  ok(await ev(`!document.querySelector('.br-bell').hidden`), 'the floor bell still shows its line');
+  ok(await ev(`getComputedStyle(document.querySelector('.br-bell')).visibility==='hidden'`), 'the ticker stays hidden in customization');
   const chrome = await ev(`(() => { const r = (s) => { const b = document.querySelector(s).getBoundingClientRect();
     return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, width: b.width }; };
     return { 'the Options pill row': r('.br-nav'), 'the floor bell': r('.br-bell') }; })()`);
@@ -728,14 +786,15 @@ await shot('wall-picture-from-feed.png');
     const hit = document.elementFromPoint(p.left + p.width / 2, p.top + p.height / 2);
     return !!hit && hit.closest('.br-nav') !== null && !document.querySelector('.br-custom-panel').contains(hit); })()`),
     'and the Options pill is still the thing under its own pixels');
-  ok(await ev(`document.querySelectorAll('canvas').length`) === 1, 'still one canvas: the close-up is the same scissored pass');
+  ok(await ev(`[...window.__glContexts].filter(gl => !gl.isContextLost()).length`) === 1, 'still one canvas: the close-up is the same scissored pass');
   const stage = await ev(`(() => { const r = document.querySelector('.br-custom-stage').getBoundingClientRect();
     return { w: r.width, h: r.height }; })()`);
   ok(stage.w > 320 && stage.h > 80, `the stage keeps a rectangle worth drawing into (${Math.round(stage.w)} x ${Math.round(stage.h)})`);
   const grid = await ev(`(() => { const g = document.querySelector('.br-custom-items');
     return { scroll: g.scrollHeight, client: g.clientHeight, buttons: g.children.length }; })()`);
   ok(grid.scroll <= grid.client, `all ${grid.buttons} item buttons fit the sheet's grid without scrolling it (${grid.scroll} of ${grid.client} px)`);
-  await ev(`document.querySelectorAll('.br-custom-items button')[4].click()`);
+  const pick=await ev(`window.__backroom.scene.customization.debug().view.picks[4]`);
+  for(const type of ['mousePressed','mouseReleased'])await cdp('Input.dispatchMouseEvent',{type,x:pick.x,y:pick.y,button:'left',clickCount:1});
   await sleep(320);
   const phone = await dbg();
   ok(phone.customization.view.selected === 4 && phone.calls > 0,
@@ -745,7 +804,7 @@ await shot('wall-picture-from-feed.png');
   await key('Escape');
   await sleep(320);
   ok(await ev(`document.querySelector('.br-custom-panel').hidden`), 'Escape closes the sheet');
-  ok(await ev(`document.querySelectorAll('canvas').length`) === 1, 'and the phone room is back to its one canvas');
+  ok(await ev(`[...window.__glContexts].filter(gl => !gl.isContextLost()).length`) === 1, 'and the phone room is back to its one canvas');
   await boot(1280, 720);
 }
 
@@ -753,6 +812,8 @@ await shot('wall-picture-from-feed.png');
 // photographed from the player's own eye height at each of them, for the placement review.
 let propProbe = null;
 {
+  await ev(`window.__backroom.scene.setRewards({owned:['monstera','ivy','terrarium','gallery','portraits','billboard']})`);
+  for(let i=0;i<6;i++) await ev(`window.__backroom.scene.customization.select('props',true,${i})`);
   const ROOM_SERVICE = [
     ['customization_vending', 'vending', [5.5, 1.65, 6.6], -1.635, -0.16],
     ['statue_spot_0_knight', 'knight-pedestal', [-4.9, 1.65, -5.3], -0.477, -0.499],
@@ -770,7 +831,7 @@ let propProbe = null;
   ok(Array.isArray(found) && found.length === 0, 'all ten Room Service props are in the scene graph by name' + (found && found.length ? ': missing ' + found.join(', ') : ''));
   const shown = await ev(`${JSON.stringify(ROOM_SERVICE.map((r) => r[0]))}.filter((n) => {
     for (let o = window.__backroom.scene.scene.getObjectByName(n); o; o = o.parent) if (!o.visible) return true; return false; })`);
-  ok(Array.isArray(shown) && shown.length === 0, 'and every one of them is switched on when the room opens' + (shown && shown.length ? ': hidden ' + shown.join(', ') : ''));
+  ok(Array.isArray(shown) && shown.length === 0, 'and owned props are enabled for the placement check' + (shown && shown.length ? ': hidden ' + shown.join(', ') : ''));
   // A prop's own spot is not inside a station's body: the placement never swallowed a fixture.
   {
     const boxes = (await dbg()).customization.props.boxes;

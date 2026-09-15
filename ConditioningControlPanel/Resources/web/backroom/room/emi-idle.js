@@ -37,7 +37,7 @@ export function createEmiIdle({ model, row, atlas }) {
     texture.needsUpdate = true; face.material = originalMaterial.clone();
     face.material.map = texture; face.material.emissiveMap = texture; face.material.needsUpdate = true;
   }
-  let elapsed = 0, disposed = false, faceIndex = 3, action = null, age = 0;
+  let elapsed = 0, disposed = false, faceIndex = 3, action = null, age = 0, faceOverride = null;
   const phase = PHASES[row.id];
   function expression(index) { faceIndex = index; if (texture) texture.offset.set((index*152+.5)/1672,.5/137); }
   function rest() { for(const h of [body,left,right,antenna])h?.reset(); tool?.show(0); expression(3); }
@@ -72,10 +72,12 @@ export function createEmiIdle({ model, row, atlas }) {
       right.pivot.quaternion.slerp(targetRotation,gesture.dust);
     }
     if(antenna)antenna.pivot.rotation.z=.045*Math.sin(t*1.7)+gesture.roll*.4;
-    expression(t%5.9<.14?2:(gesture.face??3));
+    expression(t%5.9<.14?2:(faceOverride??gesture.face??3));
   }
   rest();
   return { id:row.id, root, pivot, interactionRoot:pivot, update, trigger,
+    setExpression(index) { faceOverride = index; expression(index ?? 3); },
+    settle() { action=null; age=0; rest(); },
     debug:()=>({id:row.id,phase:elapsed,pose:[pivot.rotation.x,pivot.rotation.y,pivot.rotation.z],blink:faceIndex===2,action:action||'idle',age,articulated:!!(left&&right),arms:[left?.pivot.rotation.z||0,right?.pivot.rotation.z||0]}),
     dispose() {
       if(disposed)return;disposed=true;rest();tool?.dispose();

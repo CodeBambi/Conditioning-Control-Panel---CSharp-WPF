@@ -82,7 +82,9 @@ export function createEmiInteraction({ canvas, camera, scene, emis, mount, isAct
     bubble.style.left = Math.max(rect.left + 12, Math.min(rect.right - bubble.offsetWidth - 12, x - bubble.offsetWidth / 2)) + 'px';
     bubble.style.top = Math.max(rect.top + 112, Math.min(rect.bottom - 130 - bubble.offsetHeight, y - bubble.offsetHeight)) + 'px';
   }
-  return { update, dismiss, setEnabled(on) { enabled = !!on; if (!enabled) { dismiss(); cancel(); } }, debug: () => ({ id: selected?.id || null, text: bubble.hidden ? null : bubble.textContent }), dispose() {
+  return { update, dismiss, setEnabled(on) { enabled = !!on; if (!enabled) { dismiss(); cancel(); } },
+    /** The NPC id under a client point, or null: the room asks before treating a tap as a visit. */
+    npcAt: (x, y) => hitAt(x, y)?.id || null, debug: () => ({ id: selected?.id || null, text: bubble.hidden ? null : bubble.textContent }), dispose() {
     if (disposed) return; disposed = true; dismiss();
     canvas.removeEventListener('pointerdown', onDown); canvas.removeEventListener('pointermove', onMove);
     canvas.removeEventListener('pointerup', onUp); canvas.removeEventListener('pointercancel', cancel);

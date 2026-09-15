@@ -256,7 +256,18 @@ export async function createScene(o) {
     const side = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), dir).normalize();
     const quarter = dir.clone().addScaledVector(side, 0.75).add(new THREE.Vector3(0, 0.45, 0)).normalize();
     rig.position.y = y; rig.updateMatrixWorld(true);
-    return { play: fit(playBox, dir, target), arrive: fit(whole, quarter), drop: (whole.max.y - whole.min.y) * 1.6 };
+    const play = fit(playBox, dir, target);
+    if (aspect < 0.8) {
+      // Keep the reels prominent, with the whole working lever inside the phone frame.
+      const reelBox = new THREE.Box3();
+      (glass ? [glass] : reels).forEach(n => reelBox.expandByObject(n));
+      reelBox.expandByObject(lever);
+      const close = fit(reelBox, dir);
+      play.look.copy(close.look);
+      play.dist = close.dist * 1.06;
+      play.pos.copy(play.look).addScaledVector(dir, play.dist);
+    }
+    return { play, arrive: fit(whole, quarter), drop: (whole.max.y - whole.min.y) * 1.6 };
   }
   const aim = (pos, lookAt) => { camera.position.copy(pos); camera.lookAt(lookAt); };
   function resize() {
@@ -548,7 +559,7 @@ export async function createScene(o) {
         s.opacity = lit.toFixed(3);
       }
     }
-    if (!reduced && (ghost || t - lastPaint > PAINT_MS)) paint(t);   // A2's ghost repaints every frame while it runs
+    if (!stillFx() && (ghost || t - lastPaint > PAINT_MS)) paint(t);   // A2's ghost repaints every frame while it runs
     if (ghost && t - ghost.at >= FEEL_ALMOST.TELL_MS) ghost = null;
     if (o.hint) {
       o.hint.hidden = phase !== 'play' || !!spin;

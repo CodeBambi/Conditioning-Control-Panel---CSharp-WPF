@@ -21,6 +21,9 @@ import { buildRoom } from './fixtures.js';
 import { createScreens } from './screens.js';
 import { createEmiInteraction } from './emi-interaction.js';
 import { createCasinoDecor } from './casino-decor.js';
+import { cardCounts } from '../stations/cards/layout-3d.js';
+import { seatPose, easeSeat, shortAngle } from './seat-camera.js';
+import { createTouchControl } from './touch-control.js';
 import { createCustomization } from './customization.js';
 import { START, WALK_SPEED, RUN_SPEED, step, worldDelta, nearestStation, facing } from './walk.js';
 
@@ -75,7 +78,7 @@ export async function createScene(o) {
   const room = await buildRoom({ scene, loader, stations: o.stations, base: o.base, faces: o.faces, label: o.label, onProgress: o.onProgress });
   const decor = createCasinoDecor({ scene });
   let customization, catalogueView=null;
-  customization = await createCustomization({scene,loader,room,onPreview:view=>{catalogueView=view;},base:o.base,mount:o.mount,lex:o.lex,canvas,camera,isActive:()=>!held&&!halted&&!suspended&&!overview&&!customization?.opened});
+  customization = await createCustomization({scene,loader,room,onPreview:view=>{catalogueView=view;},base:o.base,mount:o.mount,lex:o.lex,canvas,camera,isActive:()=>!pendingVisit&&!transition&&!seated&&!held&&!halted&&!suspended&&!overview&&!customization?.opened});
   const screens = await createScreens({ meshes: [...room.screens,...customization.screens], ads: o.ads, media: o.media, log: say });
   // Subtle cartridge refraction otherwise renders the entire room a second time.
   scene.traverse(node => { for (const m of [].concat(node.material || [])) {
@@ -87,17 +90,35 @@ export async function createScene(o) {
   // ---- state ----
   const pos = START.slice();
   let yaw = 0, pitch = 0, sway = 0, walkPhase = 0, ambient = 0;
-  let still = !!o.still, overview = false, held = null, halted = false, suspended = false;
+  let still = !!o.still, overview = false, held = null, seated = null, halted = false, suspended = false;
   let raf = 0, last = performance.now(), lastTick = last, nearest = null, drag = null;
+  let pendingVisit=false, transition=null, viewOffset=0, viewOffsetX=0, arrival=Promise.resolve(true), cardHands=1, counts={d:2,0:2}, composition='';
+  const views = new Set();
+  const ray = new T.Raycaster(), pointer = new T.Vector2();
   const saved = { pos: null, yaw: 0, pitch: 0 };
   const keys = new Set();
   const vel = new T.Vector2(), want = new T.Vector2();
+  const canWalk = () => !pendingVisit && !transition && !seated && !held && !halted && !suspended && !overview && !customization.opened && !document.hidden;
+  const touch = createTouchControl({ mount: o.mount, onReset: () => vel.set(0, 0) });
   const frames = [];
   const stationRows = [...o.stations, customization.row];
   const previewTarget = new T.Vector3();
+  const roofFloor=room.ceiling?new T.Box3().setFromObject(room.ceiling).min.y:Infinity;
+  const roofMaterials=[];let roofAlpha=1;
+  function fadeRoof(){
+    if(!room.ceiling||overview)return;
+    const alpha=1-T.MathUtils.clamp((camera.position.y-roofFloor+.9)/.7,0,1);
+    if(alpha===roofAlpha)return;roofAlpha=alpha;
+    if(!roofMaterials.length)room.ceiling.traverse(n=>{if(n.material){const original=n.material;const copies=[].concat(original).map(m=>m.clone());roofMaterials.push({node:n,original,copies});}});
+    for(const {node,original,copies} of roofMaterials){
+      for(const m of copies){m.transparent=true;m.opacity=alpha;m.depthWrite=false;}
+      node.material=alpha===1?original:Array.isArray(original)?copies:copies[0];
+    }
+    room.ceiling.visible=alpha>.001;
+  }
 
   const interaction = createEmiInteraction({ canvas, camera, scene, emis: room.emis, mount: o.mount, label: o.lex,
-    isActive: () => !held && !halted && !suspended && !overview && !customization.opened,
+    isActive: () => !pendingVisit && !transition && !seated && !held && !halted && !suspended && !overview && !customization.opened,
     // Law VI: a still room keeps every NPC at rest, so a click gets the bark without the gesture.
     canGesture: () => !still });
 
@@ -111,12 +132,17 @@ export async function createScene(o) {
     camera.updateProjectionMatrix();
     room.auras.resize(h * dpr, camera.fov);
     if (overview) topDown();
+    else if (seated?.row) {
+      const target=gamePose(seated.row);
+      if(transition)transition.to=target;
+      else {pos.splice(0,3,...target.pos);yaw=target.yaw;pitch=target.pitch;viewOffset=target.offset;viewOffsetX=target.offsetX;}
+    }
   }
   window.addEventListener('resize', resize);
 
-  function resetInput() { keys.clear(); vel.set(0, 0); drag = null; }
+  function resetInput() { keys.clear(); vel.set(0, 0); drag = null; touch.reset(); touch.setEnabled(canWalk()); }
   window.addEventListener('keydown', (e) => {
-    if (held || halted || suspended || customization.opened || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (pendingVisit || transition || seated || held || halted || suspended || customization.opened || e.ctrlKey || e.altKey || e.metaKey) return;
     if (KEYS.has(e.code)) { e.preventDefault(); keys.add(e.code); }
     if (e.repeat) return;
     if (e.code === 'KeyE' && !overview && nearest) { e.preventDefault(); visit(nearest); }
@@ -125,17 +151,27 @@ export async function createScene(o) {
   window.addEventListener('keyup', (e) => keys.delete(e.code));
   window.addEventListener('blur', resetInput);
   canvas.addEventListener('pointerdown', (e) => {
-    if (held || overview || customization.opened || e.button !== 0) return;
-    drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    if (!canWalk() || drag || e.button !== 0) return;
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, startX:e.clientX, startY:e.clientY, moved:false };
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
   });
   canvas.addEventListener('pointermove', (e) => {
-    if (!drag || drag.id !== e.pointerId || overview || held || customization.opened) return;
+    if (!drag || drag.id !== e.pointerId || overview || seated || held || customization.opened) return;
+    drag.moved ||= Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)>8;
+    if(!drag.moved)return;
     yaw -= (e.clientX - drag.x) * 0.003;
     pitch = T.MathUtils.clamp(pitch - (e.clientY - drag.y) * 0.003, -1.12, 1.2);
     drag.x = e.clientX; drag.y = e.clientY;
   });
-  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(ev, () => { drag = null; });
+  canvas.addEventListener('pointerup',e=>{
+    if(!canWalk()||drag?.id!==e.pointerId||drag.moved)return;
+    const hit=pickAt(e,scene.children).find(h=>{for(let n=h.object;n;n=n.parent)if(!n.visible)return false;return true;});
+    if(!hit)return;
+    // A mascot stands inside its fixture, often behind its glass: a tap that reaches an NPC is the bark (emi-interaction), never a visit.
+    if(interaction.npcAt(e.clientX,e.clientY))return;
+    for(let n=hit.object;n;n=n.parent){const row=o.stations.find(r=>room.holders.get(r.key)===n);if(row){drag=null;visit(row);break;}}
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(ev, (e) => { if (drag?.id === e.pointerId) drag = null; });
 
   function setNearest(row) {
     if (row === nearest) return;
@@ -144,16 +180,16 @@ export async function createScene(o) {
   }
 
   function visit(row) {
-    if (!row || held || halted) return;
-    if(row.key==='customization'){resetInput();customization.open();return;}
+    if (!row || transition || seated || held || halted) return;
+    if(row.key==='customization'){resetInput();customization.open();touch.setEnabled(false);return;}
     try { o.onVisit(row); } catch (e) { say('onVisit threw: ' + ((e && e.message) || e)); }
   }
 
   function setOverview(on) {
-    if (held || halted || !!on === overview) return;
+    if (transition || seated || held || halted || !!on === overview) return;
     resetInput();
     customization.dismiss();
-    overview = !!on;
+    overview = !!on; touch.setEnabled(canWalk());
     decor.setOverview(overview);
     interaction.dismiss();
     if (room.ceiling) room.ceiling.visible = !overview;
@@ -163,11 +199,10 @@ export async function createScene(o) {
 
   /** Stand at a station's approach point, facing it. */
   function go(row) {
-    if (!row || held) return;
-    if (overview) { overview = false; decor.setOverview(false); if (room.ceiling) room.ceiling.visible = true; }
-    resetInput();
-    pos.splice(0, 3, ...row.approach);
-    ({ yaw, pitch } = facing(row.approach, row.look));
+    if (!row || held || seated || pendingVisit) return;
+    if (overview) { overview=false;decor.setOverview(false); if (room.ceiling) room.ceiling.visible = roofAlpha > .001; }
+    resetInput();setNearest(null);
+    moveCamera({pos:row.approach.slice(),...facing(row.approach,row.look),offset:0,offsetX:0});
   }
 
   function frame(now) {
@@ -175,32 +210,48 @@ export async function createScene(o) {
     if (held || halted || suspended) return;
     raf = requestAnimationFrame(frame);
     const raw = now - last;
-    const active = keys.size > 0 || drag || customization.opened;
+    touch.setEnabled(canWalk());
+    const active = !!transition || !!seated || keys.size > 0 || drag || touch.value.x || touch.value.z || customization.opened;
     const gap = 1000 / (active && !budget.mobile ? 60 : 30);
     if (raw < gap - 1) return;
     last = raw < gap ? now : now - (raw % gap);
     if (document.hidden) return;
     if (budget.sample(now - lastTick, gap)) resize();
     const dt = Math.min(0.1, Math.max(0, (now - lastTick) / 1000));
+    const frameElapsed = now - lastTick;
     lastTick = now;
-    frames.push(raw);
+    frames.push(frameElapsed);
     if (frames.length > 240) frames.shift();
-    if(customization.opened)resetInput();
+    if(seated?.row.id==='cards'){
+      const view=scene.getObjectByName('cards_runtime')?.userData.debug?.();
+      const hands=view?.hands||1, next=cardCounts(view?.cards), key=JSON.stringify([hands,next]);
+      if(key!==composition){composition=key;cardHands=hands;counts=next;if(view)moveCamera(gamePose(seated.row),700);}
+    }
+    if(customization.opened || seated || transition)resetInput();
+    if(transition){
+      const tr=transition; tr.elapsed+=dt*1000;
+      const t=o.cameraMotion?.().off?1:Math.min(1,tr.elapsed/tr.duration), k=easeSeat(t);
+      pos.splice(0,3,...tr.from.pos.map((v,i)=>v+(tr.to.pos[i]-v)*k));
+      yaw=tr.from.yaw+(shortAngle(tr.from.yaw,tr.to.yaw)-tr.from.yaw)*k;
+      pitch=tr.from.pitch+(tr.to.pitch-tr.from.pitch)*k; viewOffset=tr.from.offset+(tr.to.offset-tr.from.offset)*k;viewOffsetX=tr.from.offsetX+(tr.to.offsetX-tr.from.offsetX)*k;
+      if(t===1){transition=null;tr.resolve(true);resetInput();}
+    }
     if (!overview) {
-      const x = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
-      let z = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
+      const x = touch.value.x + (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
+      let z = touch.value.z + (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
       const speed = keys.has('ShiftLeft') || keys.has('ShiftRight') ? RUN_SPEED : WALK_SPEED;
       vel.lerp(want.set(x, z).clampLength(0, 1).multiplyScalar(speed), 1 - Math.exp(-dt * 12));
       const [dx, dz] = worldDelta(yaw, vel.x * dt, vel.y * dt);
-      step(pos, dx, dz, o.stations);
-      sway = T.MathUtils.damp(sway, still ? 0 : Math.min(1, vel.length() / WALK_SPEED), 10, dt);
+      if(!seated&&!transition)step(pos, dx, dz, o.stations);
+      sway = T.MathUtils.damp(sway, still || seated ? 0 : Math.min(1, vel.length() / WALK_SPEED), 10, dt);
       walkPhase += vel.length() * dt * 3.1;
       camera.position.set(pos[0], pos[1] + Math.sin(walkPhase * 2) * 0.004 * sway, pos[2]);
       camera.rotation.set(pitch + Math.sin(walkPhase * 2) * 0.0008 * sway, yaw, Math.sin(walkPhase) * 0.0014 * sway, 'YXZ');
-      setNearest(customization.opened?null:nearestStation(pos,stationRows));
+      setNearest(customization.opened || seated || transition ?null:nearestStation(pos,stationRows));
     }
     if (!still) ambient += dt;
     room.update(dt, ambient, still);
+    for (const view of views) view.update?.(dt, still);
     decor.update(dt, still);
     customization.update(dt, still);
     const fullWidth=Math.max(1,o.mount.clientWidth||window.innerWidth);
@@ -219,7 +270,8 @@ export async function createScene(o) {
       }
       camera.lookAt(target);
     }
-    camera.updateMatrixWorld();
+    if(viewOffset||viewOffsetX)camera.setViewOffset(fullWidth,height,viewOffsetX*fullWidth,viewOffset*height,fullWidth,height);else camera.clearViewOffset();
+    camera.updateMatrixWorld();fadeRoof();
     interaction.update(dt, still);
     screens.update(ambient, overview ? null : camera, still);
     // The catalogue close-up shares this context (CONTRACT 7): its own scissored pass, drawn first so
@@ -228,8 +280,79 @@ export async function createScene(o) {
     renderer.setViewport(box.x,box.y,box.w,box.h);
     renderer.setScissor(box.x,box.y,box.w,box.h);
     renderer.setScissorTest(customization.opened);
-    renderer.render(scene, camera);
+    const autoReset = renderer.info.autoReset;
+    renderer.info.autoReset = false; renderer.info.reset();
+    if(![...views].some(view=>view.coversRoom))renderer.render(scene, camera);
+    if (seated && views.size) {
+      renderer.setScissorTest(true);
+      const autoClear = renderer.autoClear;
+      renderer.autoClear = false;
+      try { for (const view of views) view.draw?.(renderer, camera); }
+      finally { renderer.autoClear = autoClear; }
+    }
+    renderer.info.autoReset = autoReset;
     renderer.setScissorTest(false);
+  }
+
+  function gamePose(row) {
+    const width=Math.max(1,o.mount.clientWidth),height=Math.max(1,o.mount.clientHeight);
+    return seatPose(row,room.holders.get(row.key),camera,width,height,cardHands,counts)||{pos:row.approach.slice(),...facing(row.approach,row.look),offset:0,offsetX:0};
+  }
+  function moveCamera(to, duration=2100) {
+    if(transition){transition.resolve(false);transition=null;}
+    const motion=o.cameraMotion?.()||{off:still};
+    motion.reduced ||= matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(motion.off||halted){pos.splice(0,3,...to.pos);yaw=to.yaw;pitch=to.pitch;viewOffset=to.offset;viewOffsetX=to.offsetX;camera.position.fromArray(pos);camera.rotation.set(pitch,yaw,0,'YXZ');camera.updateMatrixWorld();return Promise.resolve(!halted);}
+    const rotation=new T.Euler().setFromQuaternion(camera.quaternion,'YXZ');
+    const rendered={pos:camera.position.toArray(),yaw:rotation.y,pitch:rotation.x,offset:viewOffset,offsetX:viewOffsetX};
+    return new Promise(resolve=>{transition={from:rendered,to,elapsed:0,duration:motion.reduced?duration*1.35:duration,resolve};resetInput();run();});
+  }
+  function seat(row) {
+    if (!row || seated || held || halted || transition) return false;
+    pendingVisit=false;seated={pos:pos.slice(),yaw,pitch,row}; sway=0;cardHands=1;counts={d:2,0:2};composition='';
+    if(overview){overview=false;decor.setOverview(false);}
+    if(room.ceiling)room.ceiling.visible=true;
+    interaction.dismiss();customization.dismiss();setNearest(null);resetInput();
+    arrival=moveCamera(gamePose(row));run();return true;
+  }
+  function unseat() {
+    if (!seated) return;
+    for (const view of [...views]) dropView(view);
+    const previous=seated;seated=null;resetInput();
+    arrival=moveCamera({...previous,offset:0,offsetX:0});
+    arrival.then(()=>{if(!seated&&room.ceiling)room.ceiling.visible=true;});run();
+  }
+  function dropView(view) {
+    if (!views.delete(view)) return;
+    try { view.dispose?.(); } catch (e) { say('stage dispose failed: ' + e); }
+  }
+  function pickAt(event, objects) {
+    if (transition || halted || suspended || !Array.isArray(objects) || !objects.length) return [];
+    const box = canvas.getBoundingClientRect();
+    if (!box.width || !box.height) return [];
+    pointer.set((event.clientX - box.left) / box.width * 2 - 1, 1 - (event.clientY - box.top) / box.height * 2);
+    scene.updateMatrixWorld(true); camera.updateMatrixWorld();
+    ray.setFromCamera(pointer, camera);
+    return ray.intersectObjects(objects, true);
+  }
+  function stage(row) {
+    const fixture = room.holders.get(row.key);
+    if (!fixture || !seat(row)) return null;
+    let closed = false;
+    const owned = new Set();
+    return { get ready(){return !closed&&!transition&&!!seated;}, arrived:arrival, renderer, scene, fixture, camera, canvas, emi: room.emis.find(e => e.id === row.id), pick: pickAt,
+      register(view) {
+        if (closed || halted) { view.dispose?.(); return () => {}; }
+        views.add(view); owned.add(view);
+        return () => { owned.delete(view); dropView(view); };
+      },
+      dispose() {
+        if (closed) return;
+        closed = true;
+        for (const view of owned) dropView(view);
+        owned.clear(); unseat();
+      },
+    };
   }
 
   function run() {
@@ -246,17 +369,20 @@ export async function createScene(o) {
   screens.deal(() => ambient).catch(() => {});
 
   return {
-    renderer, camera, scene, buildMs,
+    prepareVisit(){pendingVisit=true;resetInput();},
+    setRewards: snapshot => customization.setOwned(snapshot.owned),
+    renderer, camera, scene, buildMs, seat, unseat, pickAt, stage,
     /** A station is taking the screen: keep the pose, stop drawing, keep the context. */
     hold() { if (held) return; held = { pos: pos.slice(), yaw, pitch }; resetInput(); interaction.dismiss(); customization.dismiss(); stop(); setNearest(null); },
     /** Back from a station: the exact spot and facing, on the next frame. */
     release() {
-      if (!held) return;
+      pendingVisit=false;
+      if (!held) {resetInput();run();return;}
       pos.splice(0, 3, ...held.pos); yaw = held.yaw; pitch = held.pitch;
       held = null; resetInput(); run();
     },
     pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); interaction.dismiss(); customization.dismiss(); } else run(); },
-    halt() { halted = true; stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); resetInput(); interaction.dispose(); for(const e of room.emis)e.dispose(); customization.dispose(); decor.dispose(); for(const p of room.payouts.values())p.coins.dispose(); },
+    halt() { halted = true; if(transition){transition.resolve(false);transition=null;} for (const view of [...views]) dropView(view); stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); for(const r of roofMaterials){r.node.material=r.original;for(const m of r.copies)m.dispose();} room.disposeSurfaces(); resetInput(); touch.dispose(); interaction.dispose(); for(const e of room.emis)e.dispose(); customization.dispose(); decor.dispose(); for(const p of room.payouts.values())p.coins.dispose(); },
     setStill(on) { still = !!on; },
     /** Repaint one fixture label, e.g. the wheel's screen for MUST HIT (10.16.E). */
     setLabel(rowKey, node, text) { return room.setLabel(rowKey, node, text); },
@@ -264,23 +390,26 @@ export async function createScene(o) {
     celebrate: (key,amount,tier,text)=>room.celebrate(key,amount,tier,text),
     customization, setOverview, go, visit,
     pose(p, y = 0, tilt = 0) { pos.splice(0, 3, ...p); yaw = y; pitch = tilt; },
+    get transitioning() { return !!transition; },
     get nearest() { return nearest; },
     get overview() { return overview; },
+    get seated() { return !!seated; },
     get held() { return !!held; },
     /** Test seam: plain numbers only. */
     debug() {
       const sorted = frames.slice().sort((a, b) => a - b);
       return {
-        renderBudget: {...budget.debug(), dpr}, position: pos.slice(), yaw, pitch, overview, held: !!held, running: !!raf, still,
+        renderBudget: {...budget.debug(), dpr}, position: pos.slice(), yaw, pitch, transitioning:!!transition, viewOffset, viewOffsetX, overview, held: !!held, seated: !!seated, running: !!raf, still,
         nearest: nearest ? nearest.key : null, fixtures: room.fixtures, bulbs: room.bulbs, screens: room.screens.length,
         pictures: screens.pictures, animation: screens.animation, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
-        decor: decor.debug(), customization: customization.debug(),
+        touch: touch.debug(), decor: decor.debug(), customization: customization.debug(),
         payouts: Object.fromEntries([...room.payouts].map(([key,p])=>[key,p.coins.debug()])),
         emiBubble: interaction.debug(),
         emis: room.emis.map((e) => e.debug()),
         marquee: room.marquee?.userData.text,
         bulbColors: scene.children.filter((o) => o.isInstancedMesh && o.instanceColor).slice(0, 2).map((o) => Array.from(o.instanceColor.array.slice(0, 9))),
         floorAngle: room.floor ? room.floor.material.uniforms.angle.value : null, ambient, sway,
+        frameP95: sorted.length ? sorted[Math.floor(sorted.length * 0.95)] : null,
         frameMedian: sorted.length ? sorted[Math.floor(sorted.length / 2)] : null, buildMs: Math.round(buildMs),
         ceiling: room.ceiling ? room.ceiling.visible : null,
         labels: Object.fromEntries(Array.from(room.labels, ([k, v]) => [k, v.text])),

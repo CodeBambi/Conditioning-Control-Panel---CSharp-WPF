@@ -21,6 +21,8 @@ import { readState, readHand, legalOf, controls, classify, createIntent, mayRetr
 import { planSteps, momentOf, aceSlot, bestCard, vortexOf, resultLines, screenHoldMs, TIMING } from './feel.js';
 import { createTable } from './table.js';
 
+export const roomStage = true;
+
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
 const wait = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
 const mintId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
@@ -35,6 +37,7 @@ function loadCss() {
 }
 
 export async function mount(ctx) {
+  const createTable3D = ctx.stage ? (await import('./table-3d.js')).createTable3D : null;
   const t = (key, fallback, vars = {}) => {
     const s = typeof ctx.lex === 'function' ? ctx.lex(key, fallback) : fallback;
     return String(s ?? fallback).replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : `{${k}}`));
@@ -54,16 +57,16 @@ export async function mount(ctx) {
 
   /** Calm, reduced motion and the gates, read live every frame (the loader's ctx getters follow settings frames). */
   function dress() {
-    const reduced = !!ctx.reduced || prefersReduced, intensity = String(ctx.intensity || 'normal').toLowerCase(), g = ctx.gates || {};
+    const reduced = !!ctx.reduced || prefersReduced || ['off', 'still'].includes(String(ctx.motion).toLowerCase()), intensity = String(ctx.intensity || 'normal').toLowerCase(), g = ctx.gates || {};
     return { still: reduced || intensity === 'calm', k: prefersReduced ? 0.5 : strengthK(ctx), full: intensity === 'full' && !reduced,
       gates: { flash: g.flash !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false, tunnel: g.tunnel !== false } };
   }
 
   function build() {
     const root = document.createElement('div');
-    root.className = 'cards-station'; root.dataset.phase = 'loading';
+    root.className = 'cards-station' + (ctx.stage ? ' br-seat cards-in-room' : ''); root.dataset.phase = 'loading';
     root.innerHTML = `
-      <canvas class="cards-stage"></canvas>
+      ${ctx.stage ? '<div class="cards-stage"></div>' : '<canvas class="cards-stage"></canvas>'}
       <header class="cards-top">
         <button class="cards-back" type="button"></button>
         <span class="cards-sp"></span>
@@ -256,7 +259,7 @@ export async function mount(ctx) {
   /** Every Deal path (the button, Space and Enter, a direct call) lands here. During a fullscreen moment the press is
    *  dropped before anything else: no ring, no note, nothing kept for later (owner 2026-09-14, CONTRACT 10.14 item 10). */
   async function deal() {
-    if (!alive || suspended) return;
+    if (!alive || suspended || (ctx.stage && !ctx.stage.ready)) return;
     if (screenBusy(performance.now())) { dropped++; log('deal-dropped', { why: 'screen' }); return; }
     ring($('.cards-deal'));
     const c = view(performance.now());
@@ -270,7 +273,7 @@ export async function mount(ctx) {
   }
 
   async function move(m) {
-    if (!alive || suspended) return;
+    if (!alive || suspended || (ctx.stage && !ctx.stage.ready)) return;
     ring(el && $(`.cards-move[data-move="${m}"]`));
     if (!view(performance.now()).moves[m]) return;
     busy = true; decide = false; note = '';
@@ -338,15 +341,16 @@ export async function mount(ctx) {
     const c = view(now);
     const open = isOpen(st && st.hand);
     el.toggleAttribute('data-open', open);
+    const cameraReady = !ctx.stage || ctx.stage.ready;
     const dealBtn = $('.cards-deal');
-    dealBtn.disabled = !c.deal;
+    dealBtn.disabled = !c.deal || !cameraReady;
     dealBtn.toggleAttribute('data-held', c.dealWhy === 'screen');
     const small = c.dealWhy === 'screen' ? t('br_cards_moment', 'One moment')
       : c.dealWhy === 'floor' ? t('br_cards_wait', '{s} s', { s: Math.ceil((dealReadyAt - now) / 1000) }) : t('br_cards_bet_line', '{n} SP', { n: stake });
     if (dealBtn.querySelector('small').textContent !== small) dealBtn.querySelector('small').textContent = small;
     for (const b of el.querySelectorAll('.cards-move')) {
       const m = b.dataset.move;
-      b.disabled = !c.moves[m];
+      b.disabled = !c.moves[m] || !cameraReady;
       b.classList.toggle('is-hint', !!(hint && decide && st && st.hint === m && c.moves[m]));
     }
     for (const b of el.querySelectorAll('.cards-bet button')) { b.disabled = !c.bet; b.setAttribute('aria-pressed', String(Number(b.dataset.stake) === stake)); }
@@ -408,7 +412,7 @@ export async function mount(ctx) {
     chip = createChip();
     moments = createMoments(ctx, { station: 'cards' });
     kit = createLoomKit({ still: dress().still, log: say });
-    table = createTable($('.cards-stage'), { kit: () => kit });
+    table = ctx.stage ? createTable3D(ctx.stage, { kit: () => kit, onDeal: deal }) : createTable($('.cards-stage'), { kit: () => kit });
     if (typeof ctx.onSp === 'function') unSp = ctx.onSp((v) => { if (chip) chip.setServer(v); });
     raf = requestAnimationFrame(frame);
     const deckP = createDeck(ctx, { count: 13, still: dress().still }).catch(() => null);

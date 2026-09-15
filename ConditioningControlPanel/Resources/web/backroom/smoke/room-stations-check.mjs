@@ -163,7 +163,7 @@ const STATIONS = [
     } },
   { key: 'roulette', id: 'roulette', root: '.roul-station', ready: `!!document.querySelector('.roul-station[data-phase=bet]')`,
     async moment() {
-      const at = await ev(`(() => { const c = document.querySelector('.roul-stage'); const r = c.getBoundingClientRect(); const w = c.clientWidth, h = c.clientHeight;
+      const at = await ev(`(() => { const button=document.querySelector('.roul-mat-strip [data-spot=s36]');if(button){document.querySelector('.roul-chips-label').click();const b=button.getBoundingClientRect();return {x:b.x+b.width/2,y:b.y+b.height/2};} const c = document.querySelector('.roul-stage'); const r = c.getBoundingClientRect(); const w = c.clientWidth, h = c.clientHeight;
         const mw = w * 0.47, mh = h * 0.46, cell = Math.max(14, Math.min(mw / 13, mh / 5.4)), ox = w * 0.5 + (mw - cell * 13) / 2, oy = h * 0.16 + (mh - cell * 5.4) / 2;
         return { x: r.left + ox + 12 * cell + cell / 2, y: r.top + oy + cell / 2 }; })()`);
       await click(Math.round(at.x), Math.round(at.y));
@@ -193,7 +193,8 @@ for (const st of STATIONS) {
   report.stations[st.key] = r;
   const i0 = await ev(`window.__posted.length`);
   await ev(`window.__backroom.scene.go(window.__backroom.stations.find((s) => s.key === ${JSON.stringify(st.key)}))`);
-  await sleep(300);
+  await until("!window.__backroom.scene.transitioning", 5000);
+  await sleep(100);
   r.nearest = (await ev(`window.__backroom.scene.debug().nearest`));
   ok(r.nearest === st.key, `${st.key}: standing at its approach makes it nearest`);
   await key('KeyE'); await key('KeyE', 'keyUp');
@@ -204,16 +205,17 @@ for (const st of STATIONS) {
   ok(p.some((m) => m.type === 'station-open' && m.station === st.id), `${st.key}: station-open ${st.id} posted`);
   ok(p.some((m) => m.type === 'station-request' && m.station === st.id && m.op === 'state'), `${st.key}: GET state relayed as ${st.id}`);
   const cur = await ev(`window.__backroom.loader.current`);
-  const dbg = await ev(`(() => { const d = window.__backroom.scene.debug(); return { held: d.held, running: d.running }; })()`);
+  const dbg = await ev(`(() => { const d = window.__backroom.scene.debug(); return { held: d.held, running: d.running, seated: d.seated }; })()`);
   ok(cur && cur.id === st.id && cur.kind === 'live', `${st.key}: the loader holds ${st.id} as live`);
-  ok(dbg.held && !dbg.running, `${st.key}: the room loop is held while it is open`);
+  const staged = await ev(`import('/backroom/' + window.__backroom.stations.find(s => s.key === ${JSON.stringify(st.key)}).entry).then(m => m.roomStage === true)`);
+  ok(staged ? dbg.seated && dbg.running && !dbg.held : dbg.held && !dbg.running, `${st.key}: the room loop follows its declared view mode`);
   ok(await ev(`!!document.querySelector(${JSON.stringify(st.root)} + '[data-host-back]') || !!document.querySelector('.br-station [data-host-back]')`), `${st.key}: the room owns Back (ctx.hostBack)`);
   await sleep(400);
   await shot(`${st.id}-01-open.png`);
   await st.moment();
   await ev(`document.querySelector('#br-back').click()`);
   ok(await until(`!document.querySelector(${JSON.stringify(st.root)}) && !window.__backroom.loader.current`, 3000), `${st.key}: Back unmounts the station`);
-  ok(await until(`(() => { const d = window.__backroom.scene.debug(); return d.running && !d.held; })()`, 2000), `${st.key}: the room loop runs again`);
+  ok(await until(`(() => { const d = window.__backroom.scene.debug(); return d.running && !d.held && !d.transitioning; })()`, 7000), `${st.key}: the room loop runs again`);
   p = await since();
   ok(p.some((m) => m.type === 'station-close' && m.station === st.id), `${st.key}: station-close ${st.id} posted`);
   ok(!p.some((m) => m.type === 'exit'), `${st.key}: the room itself stays open`);
@@ -229,6 +231,7 @@ for (const st of STATIONS) {
 
 /* ---------------------------------------------------------------- 3. Escape is Back too, then the room view */
 await ev(`window.__backroom.scene.go(window.__backroom.stations.find((s) => s.key === 'roulette'))`);
+await until('!window.__backroom.scene.transitioning', 5000);
 await sleep(250);
 await key('KeyE'); await key('KeyE', 'keyUp');
 ok(await until(`!!document.querySelector('.roul-station')`, 10000), 'roulette reopens');

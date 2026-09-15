@@ -31,10 +31,13 @@ import { FEEL, tick, breath, shiverPx, bezier } from './feel.js';
 import { warpStep, warpedRotation, stepDim, quietMix, quietDone, outlineAlpha, distance01, mixRgb, QUIET, taffyShear, stepShear,
          trailOffset, sliceU, ghostRotations, TAFFY, stepHub, moireRotations, moireSegments, MOIRE, dressOf } from './hypno.js';
 import { createEmi } from './emi.js';
+import { createRoomEmi } from './room-emi.js';
+import { createRoomReward } from './room-reward.js';
+import { createPrizeSector } from './prize-art.js';
 
 const LENS_DEG = 30, FIT = 1.16, RISE_MS = 620, SINK_MS = 300, DEFAULT_OMEGA = -0.011, HUB_AT_REST_MS = 33;
-const COLORS = ['#DE87B4', '#AE89DE', '#68BFB9', '#C35F9F'], GOLD = '#F4CA68', SNOOZE = '#553967';
-const CHASE = [0xff269f, 0x7840ff, 0x00cbb8, 0xff9a20].map(c => new THREE.Color(c));
+const COLORS = ['#F7BDD2', '#FFEBDD', '#F2AFC9', '#FFE7D2'], GOLD = '#F4D896', SNOOZE = '#C48CA7';
+const CHASE = [0xf7bdd2, 0xffebdd, 0xf2afc9, 0xf4d896].map(c => new THREE.Color(c));
 const asset = p => new URL(p, import.meta.url).href;
 const clamp = x => Math.min(1, Math.max(0, x));
 const thudEase = x => bezier(FEEL.THUD_EASE, x);
@@ -84,21 +87,6 @@ function paintStar(c) {
   g.closePath(); g.fill();
 }
 
-/** One slice's printed face: the pay as a number (Brake 9), the label under it; radial text on a narrow slice. */
-function sliceLabel(s, w, h, text) {
-  const c = document.createElement('canvas'); c.height = 512; c.width = Math.max(48, Math.round((512 * w) / h));
-  const g = c.getContext('2d'), narrow = c.width < 150;
-  g.fillStyle = '#fff3e8'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round'; g.strokeStyle = '#3a1d45';
-  const both = (txt, x, y, max) => { g.lineWidth = Math.max(4, parseInt(g.font.split(' ')[1], 10) * 0.09); g.strokeText(txt, x, y, max); g.fillText(txt, x, y, max); };
-  if (narrow) {
-    g.translate(c.width / 2, 256); g.rotate(-Math.PI / 2);
-    g.font = `700 ${Math.round(c.width * 0.62)}px Segoe UI, Arial, sans-serif`; both(`${text.big} ${text.small}`, 0, 0, 480);
-  } else {
-    g.font = `800 ${Math.min(150, Math.round(c.width * 0.48))}px Segoe UI, Arial, sans-serif`; both(text.big, c.width / 2, 150, c.width * 0.92);
-    g.font = `600 ${Math.min(70, Math.round(c.width * 0.2))}px Segoe UI, Arial, sans-serif`; both(text.small, c.width / 2, 300, c.width * 0.95);
-  }
-  return canvasTexture(c);
-}
 function paintScreen(canvas, text, gold) {
   const g = canvas.getContext('2d'), { width: w, height: h } = canvas;
   const grad = g.createLinearGradient(0, 0, w, h);
@@ -115,54 +103,75 @@ function paintScreen(canvas, text, gold) {
  *          paintHub?:(canvas, angle, now)=>boolean, onFrame?:({dim, slowing, speed, turning})=>void}} o
  */
 export async function createScene(o) {
-  const { canvas } = o;
+  const { canvas, stage } = o;
+  const originals = new Map(); let model = null, unregister = null, rewardView = null;
   let reduced = !!o.reduced;
   const budget = createRenderBudget(navigator, devicePixelRatio);
   let lastDraw = -Infinity;
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'default' });
-  renderer.setPixelRatio(budget.dpr(canvas.clientWidth, canvas.clientHeight));
-  renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(LENS_DEG, 16 / 9, 0.05, 30);
-  scene.add(new THREE.HemisphereLight(0xfbd7f4, 0x36243e, 1.2));
-  for (const [p, c, i] of [[[-3, 4, 5], 0xffd5eb, 2.1], [[3, 2, 3], 0xa5b6ff, 1.4], [[1, 4, -3], 0xff75c1, 2.2]]) {
+  const renderer = stage?.renderer || new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'default' });
+  if (!stage) renderer.setPixelRatio(budget.dpr(canvas.clientWidth, canvas.clientHeight));
+  if (!stage) { renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; }
+  const scene = stage?.scene || new THREE.Scene(), camera = stage?.camera || new THREE.PerspectiveCamera(LENS_DEG, 16 / 9, 0.05, 30);
+  if (!stage) scene.add(new THREE.HemisphereLight(0xfbd7f4, 0x36243e, 1.2));
+  if (!stage) for (const [p, c, i] of [[[-3, 4, 5], 0xffd5eb, 2.1], [[3, 2, 3], 0xa5b6ff, 1.4], [[1, 4, -3], 0xff75c1, 2.2]]) {
     const l = new THREE.DirectionalLight(c, i); l.position.set(...p); scene.add(l);
   }
   const owned = [];
-  let raf = 0, disposed = false, onDown, onMove, onUp;
+  let raf = 0, disposed = false, drag = null, onDown, onMove, onUp;
+  function cancelDrag() {
+    const held=drag;drag=null;canvas.style.cursor='';
+    if(held && canvas.hasPointerCapture(held.id)) canvas.releasePointerCapture(held.id);
+  }
   function dispose() {
     if (disposed) return;
     disposed = true;
+    cancelDrag();
     cancelAnimationFrame(raf);
+    rewardView?.dispose();
     if (settle) settle();
     if (onDown) { canvas.removeEventListener('pointerdown', onDown); canvas.removeEventListener('pointermove', onMove); canvas.removeEventListener('pointerup', onUp); canvas.removeEventListener('pointercancel', onUp); }
-    scene.traverse(n => {
-      if (n.geometry) n.geometry.dispose();
-      for (const m of [].concat(n.material || [])) { for (const k of Object.keys(m)) if (m[k] && m[k].isTexture) m[k].dispose(); m.dispose(); }
+    const disposable = [], resources = new Set(), borrowed = new Set();
+    originals.forEach((s,n) => { if(n.geometry) borrowed.add(n.geometry); for(const m of [].concat(s.material||[])) { borrowed.add(m); for(const v of Object.values(m)) if(v?.isTexture) borrowed.add(v); } });
+    (stage ? model : scene)?.traverse(n => { if (!stage || !originals.has(n)) disposable.push(n); });
+    disposable.forEach(n => {
+      if (n.geometry) resources.add(n.geometry);
+      for (const m of [].concat(n.material || [])) { for (const v of Object.values(m)) if (v?.isTexture) resources.add(v); resources.add(m); }
     });
-    owned.forEach(x => x.dispose());
+    if (stage) {
+      disposable.forEach(n => n.removeFromParent());
+      originals.forEach((s, n) => { n.visible = s.visible; n.material = s.material; });
+      const rotor = model?.getObjectByName('wheel_rotor'), pointer = model?.getObjectByName('pointer');
+      if (rotor) rotor.rotation.copy(originals.get(rotor).rotation);
+      if (pointer) pointer.rotation.copy(originals.get(pointer).rotation);
+      unregister?.();
+    }
+    owned.forEach(x => resources.add(x));
+    resources.forEach(x => { if(!borrowed.has(x)) x.dispose(); });
     if (emi) emi.dispose();
-    renderer.dispose(); renderer.forceContextLoss();
+    if (!stage) { renderer.dispose(); renderer.forceContextLoss(); }
   }
   let settle = null, emi = null, gltf, atlas;
   try {
-    [gltf, atlas] = await Promise.all([new GLTFLoader().loadAsync(asset('./assets/wheel.glb')),
+    [gltf, atlas] = stage ? [{ scene: stage.fixture }, null] : await Promise.all([new GLTFLoader().loadAsync(asset('./assets/wheel.glb')),
       new THREE.TextureLoader().loadAsync(asset('./assets/emi-faces-slot.png')).catch(() => null)]);
   } catch (e) { dispose(); throw e; }
-  const model = gltf.scene, get = n => model.getObjectByName(n) || null;
-  scene.add(model);
+  model = gltf.scene; const get = n => model.getObjectByName(n) || null;
+  if (!stage) scene.add(model);
+  else model.traverse(n => originals.set(n, { visible: n.visible, material: n.material, rotation: n.rotation.clone() }));
   const missing = REQUIRED.filter(n => !get(n));
   if (missing.length) return { missing, dispose };
   const absent = OPTIONAL.filter(n => !get(n));
   if (absent.length) console.warn(`[wheel] glb lacks optional nodes, degrading: ${absent.join(', ')}`);
 
   const rotor = get('wheel_rotor'), pointer = get('pointer'), pointerRest = pointer.rotation.z, modelRest = model.position.clone();
+  if (get('room_wheel_face')) get('room_wheel_face').visible = false;
   if (get('layout_sectors')) get('layout_sectors').visible = false;
-  model.traverse(n => { if (/^peg_/.test(n.name)) n.visible = false; });
+  model.traverse(n => { if (/^(peg_|glyph_)/.test(n.name)) n.visible = false; });
   for (const n of ['title_letters', 'status_letters', 'hub_spiral']) if (get(n)) get(n).visible = false;
 
   if (atlas) Object.assign(atlas, { flipY: false, colorSpace: THREE.SRGBColorSpace, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, generateMipmaps: false });
   owned.push(...(atlas ? [atlas] : []));
-  emi = createEmi({ root: model, faceMesh: get('EMI_glass'), atlas, hud: o.hud, reduced });
+  emi = stage ? createRoomEmi(stage.emi, o.hud) : createEmi({ root: model, faceMesh: get('EMI_glass'), atlas, hud: o.hud, reduced });
 
   const screens = {};
   for (const [name, w] of [['title_screen', 1024], ['status_screen', 1024]]) {
@@ -274,28 +283,11 @@ export async function createScene(o) {
     if (ghosts) { ghosts.forEach(g => { rotor.parent.remove(g); g.material.dispose(); }); ghosts[0].geometry.dispose(); ghosts = null; }
     outline = null;
     layout = next; sliceGroup = new THREE.Group(); sliceGroup.name = 'runtime_sectors';
-    let prize = 0;
     const flat = [];
     for (const s of layout) {
-      const color = s.kind === 'jackpot' ? GOLD : s.kind === 'malus' ? SNOOZE : COLORS[prize++ % COLORS.length];
-      const gap = Math.min(0.003, s.span * 0.08), n = Math.max(3, Math.ceil(s.span * 32)), shape = new THREE.Shape();
-      for (let j = 0; j <= n; j++) { const a = s.start + gap + ((s.span - 2 * gap) * j) / n; j ? shape.lineTo(Math.sin(a) * 0.711, Math.cos(a) * 0.711) : shape.moveTo(Math.sin(a) * 0.711, Math.cos(a) * 0.711); }
-      for (let j = n; j >= 0; j--) { const a = s.start + gap + ((s.span - 2 * gap) * j) / n; shape.lineTo(Math.sin(a) * 0.185, Math.cos(a) * 0.185); }
-      const mat = twist(new THREE.MeshPhysicalMaterial({ color, roughness: 0.3, metalness: 0.04, clearcoat: 0.6 }), shearU);
-      mat.emissive.set(color).lerp(new THREE.Color(0xffdca8), 0.35); mat.emissiveIntensity = 0;
-      const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.018, bevelEnabled: true, bevelSegments: 2, steps: 1,
-        bevelSize: Math.min(0.002, (0.185 * (s.span - 2 * gap)) / 4), bevelThickness: 0.002 }), mat);
-      mesh.position.z = 0.076; mesh.userData = { index: s.index, h: 0, base: color, mid: s.mid };
-      flat.push({ pts: sectorPoints(s.start + gap, s.end - gap, 0.185, 0.711), color });
-      const w = Math.min(0.17, s.span * 0.5 * 0.82), h = 0.3;
-      const label = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: sliceLabel(s, w, h, o.labels(s)), transparent: true, depthWrite: false }));
-      label.position.set(Math.sin(s.mid) * 0.5, Math.cos(s.mid) * 0.5, 0.1); label.rotation.z = -s.mid;
-      label.userData = { a: s.mid, r: 0.5, spin: -s.mid, index: s.index };
-      const prev = layout[(s.index + layout.length - 1) % layout.length], pr = Math.min(0.01, 0.738 * Math.min(s.span, prev.span) * 0.3);
-      const peg = new THREE.Mesh(new THREE.CylinderGeometry(pr, pr, 0.038, 12), new THREE.MeshStandardMaterial({ color: 0xd7af6e, metalness: 0.65, roughness: 0.3 }));
-      peg.rotation.x = Math.PI / 2; peg.position.set(Math.sin(s.start) * 0.738, Math.cos(s.start) * 0.738, 0.094);
-      peg.userData = { a: s.start, r: 0.738 };
-      sliceGroup.add(mesh, label, peg);
+      const { mesh, label, peg, border, pts, color } = createPrizeSector(s, o.labels(s), m => twist(m, shearU));
+      flat.push({ pts, color });
+      sliceGroup.add(mesh, label, peg, border);
     }
     rotor.add(sliceGroup);
     under = sliceAt(layout, rotor.rotation.z).index; lit = under;
@@ -337,6 +329,7 @@ export async function createScene(o) {
     return { pos: new THREE.Vector3(c.x, c.y, c.z + dist), look: c };
   }
   function resize() {
+    if (stage) return;
     const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
     renderer.setPixelRatio(budget.dpr(w, h));
     renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
@@ -345,7 +338,7 @@ export async function createScene(o) {
   }
 
   // Motion state.
-  let phase = 'hidden', tl = null, drag = null, coast = null, plan = null, under = 0, lit = 0, crossAt = -Infinity, ladder = null;
+  let phase = 'hidden', tl = null, coast = null, plan = null, under = 0, lit = 0, crossAt = -Infinity, ladder = null;
   let landed = -1, thudAt = -Infinity, kickAt = -Infinity, kickSign = 1, kickAmp = 0, shiverAt = -Infinity;
   let party = null, heat = 0, gold = false, energy = 0, lightMotion = 0, prev = performance.now();
   let dim = 0, slowing = false, shear = 0, omega = 0, lastRot = null, quietAt = -Infinity, quietK = 1, frameSpeed = 0;
@@ -395,6 +388,7 @@ export async function createScene(o) {
   }
 
   function update(t) {
+    rewardView?.update(t);
     const dt = Math.min(0.05, Math.max(0, (t - prev) / 1000)); prev = t;
     const dtMs = dt * 1000;
     if (tl) {
@@ -464,7 +458,7 @@ export async function createScene(o) {
     hypnoFrame(t, dtMs);
     emi.update(t);
     const gap = 1000 / (budget.mobile ? 30 : 60);
-    if (!document.hidden && t - lastDraw >= gap - 1) {
+    if (!stage && !document.hidden && t - lastDraw >= gap - 1) {
       renderer.render(scene, camera); lastDraw = t;
     }
   }
@@ -477,7 +471,7 @@ export async function createScene(o) {
     const r = canvas.getBoundingClientRect();
     ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, 1 - ((e.clientY - r.top) / r.height) * 2);
     ray.setFromCamera(ndc, camera);
-    return ray.intersectObject(rotor, true).length > 0;
+    return sliceGroup ? (stage ? stage.pick(e, sliceGroup.children.filter(n => n.userData.base !== undefined)) : ray.intersectObjects(sliceGroup.children.filter(n => n.userData.base !== undefined), false)).length > 0 : false;
   }
   function angleOf(e) {
     const v = rotor.getWorldPosition(new THREE.Vector3()).project(camera), r = canvas.getBoundingClientRect();
@@ -501,6 +495,7 @@ export async function createScene(o) {
   };
   onUp = e => {
     if (!drag || drag.id !== e.pointerId) return;
+    if(e.type==='pointercancel'){cancelDrag();return;}
     const d = drag; drag = null; canvas.style.cursor = '';
     if (canvas.hasPointerCapture(d.id)) canvas.releasePointerCapture(d.id);
     // Drag strength changes the picture only: the speed is clamped, the landing is the server's.
@@ -509,8 +504,10 @@ export async function createScene(o) {
   canvas.addEventListener('pointerdown', onDown); canvas.addEventListener('pointermove', onMove);
   canvas.addEventListener('pointerup', onUp); canvas.addEventListener('pointercancel', onUp);
 
+  if(stage) rewardView=createRoomReward(stage,()=>hub?.mode==='loom'?hub.c:null);
   resize();
-  raf = requestAnimationFrame(loop);
+  if (stage) unregister = stage.register({ update: () => update(performance.now()), dispose });
+  else raf = requestAnimationFrame(loop);
 
   return {
     missing: [], faceImage: atlas && atlas.image,
@@ -518,11 +515,12 @@ export async function createScene(o) {
     get rotation() { return rotor.rotation.z; },
     get spinning() { return rotating(); },
     resize, screen, setLayout, dispose,
+    revealReward(result, still = reduced) { return rewardView?.reveal(result, still) || false; },
     /** Live dress (hypno.dressOf): the hub mode, Full-only moire and taffy, k. */
     setDress(d) { dress = { ...dress, ...(d || {}) }; },
     /** Live reduced motion / Calm (a settings frame): the next gesture, landing, rise or sink takes the settled
      *  state. A landing already in flight finishes its path (no jump mid-turn); the stage dim and EMI settle now. */
-    setReduced(on) { reduced = !!on; emi.setReduced(reduced); if (reduced) dim = 0; },
+    setReduced(on) { reduced = !!on; emi.setReduced(reduced); rewardView?.setStill(reduced); if (reduced) dim = 0; },
     /** The slice's own colour, for the landing wash. */
     sliceColor(index) {
       const m = sliceGroup && sliceGroup.children.find(n => n.userData && n.userData.base !== undefined && n.userData.index === index);
@@ -559,6 +557,8 @@ export async function createScene(o) {
     },
     /** Law VI: Back and suspend skip every ceremony to its settled state. */
     skip() {
+      cancelDrag();
+      rewardView?.skip();
       if (plan) { const p = plan; plan = null; rotor.rotation.z = p.to; if (p.done) p.done(); }
       coast = null; party = null; shiverAt = thudAt = kickAt = -Infinity; energy = 0; dim = 0; shear = 0; emi.skip();
     },
@@ -571,12 +571,14 @@ export async function createScene(o) {
       return { x: r.left + ((v.x + 1) * r.width) / 2, y: r.top + ((1 - v.y) * r.height) / 2 };
     },
     rise() {
+      if (stage) { phase = 'play'; return Promise.resolve(); }
       if (reduced) { phase = 'play'; camera.position.copy(play.pos); camera.lookAt(play.look); return Promise.resolve(); }
       phase = 'rise';
       return new Promise(done => { tl = { kind: 'rise', start: performance.now(), ms: RISE_MS, done }; });
     },
     sink() {
-      if (drag) { drag = null; canvas.style.cursor = ''; }
+      cancelDrag();
+      if (stage) { phase = 'hidden'; return Promise.resolve(); }
       if (reduced || phase === 'hidden') { phase = 'hidden'; return Promise.resolve(); }
       const prevTl = tl; phase = 'sink';
       return new Promise(done => { tl = { kind: 'sink', start: performance.now(), ms: SINK_MS, done: () => { done(); if (prevTl && prevTl.done) prevTl.done(); } }; });

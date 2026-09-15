@@ -32,7 +32,7 @@ export function layoutOf(slices) {
 
 /** The table carries no kind: the jackpot and the Snooze are known by id (server TABLE_V2). */
 export function kindOf(s) {
-  if (s && (s.kind === 'jackpot' || s.kind === 'malus' || s.kind === 'prize')) return s.kind;
+  if (s && (s.kind === 'jackpot' || s.kind === 'malus' || s.kind === 'prize' || s.kind === 'decoration' || s.kind === 'double' || s.kind === 'nothing')) return s.kind;
   return s && s.id === 'jackpot' ? 'jackpot' : s && s.id === 'snooze' ? 'malus' : 'prize';
 }
 
@@ -72,8 +72,8 @@ export function readResult(r) {
   const n = v => (Number.isFinite(Number(v)) ? Math.max(0, Math.trunc(Number(v))) : 0);
   const pay = n(r.pay), carry = n(r.snoozeCarryPaid);
   return { day: String(r.day ?? ''), sliceId: r.sliceId == null ? null : String(r.sliceId), sliceIndex: r.sliceIndex,
-           pay, carryPaid: carry, total: r.total == null ? pay + carry : n(r.total), jackpotWon: r.jackpot === true,
-           fallback: r.jackpotFallback === true, snoozed: r.snoozed === true, capped: r.capped === true };
+           pay, ...(r.credited == null ? {} : { credited: n(r.credited) }), carryPaid: carry, total: r.total == null ? pay + carry : n(r.total), jackpotWon: r.jackpot === true,
+           ...(r.reward ? {reward: r.reward} : {}), fallback: r.jackpotFallback === true, snoozed: r.snoozed === true, capped: r.capped === true };
 }
 
 /** The rotor rotation that rests `landing` under the pointer, reached from `from` turning `sign` (+1/-1)
