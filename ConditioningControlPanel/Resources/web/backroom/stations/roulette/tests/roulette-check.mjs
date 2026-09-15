@@ -86,6 +86,18 @@ async function click(x, y, button = 'left') {
   await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button, buttons: button === 'left' ? 1 : 2, clickCount: 1 });
   await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button, clickCount: 1 });
 }
+/** THE THROW (flick.js): press on the wheel, swing through `turn` radians in `steps`, wait `pause`, lift. */
+async function flick(turn, steps = 8, pause = 0) {
+  const b = (await dbg()).bowl.geo, r = b.R * 0.72;
+  const at = (a) => ({ x: Math.round(b.cx + Math.cos(a) * r), y: Math.round(b.cy + Math.sin(a) * r) });
+  const a0 = -Math.PI / 2, p0 = at(a0);
+  await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: p0.x, y: p0.y });
+  await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', x: p0.x, y: p0.y, button: 'left', buttons: 1, clickCount: 1 });
+  let p = p0;
+  for (let i = 1; i <= steps; i++) { p = at(a0 + (turn * i) / steps); await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: p.x, y: p.y, buttons: 1 }); }
+  if (pause) await sleep(pause);
+  await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x: p.x, y: p.y, button: 'left', clickCount: 1 });
+}
 async function clickSpot(spot) {
   const r = (await dbg()).mat.rects[spot];
   await click(Math.round(r.x + r.w / 2), Math.round(r.y + r.h / 2));
@@ -319,6 +331,31 @@ await clickSel('.roul-spin');
 await until('window.dev.station.debug().phase === "closed"', 5000);
 ok(await ev('!document.querySelector(".roul-card").hidden && /closed/.test(document.querySelector(".roul-card").textContent)'), 'a closed door says so');
 
+/* ------------------------------------------------ 8b. THE THROW: the wheel is spun by hand (flick.js) */
+await boot('?sp=40&next=11');
+const sent = () => ev("window.dev.server.log.filter((l) => l.op === 'spin').length");
+d = await dbg();
+ok(d.flick && d.flick.armed === false && d.bowl.hint === false, 'no chips down: the throw is not armed and the arrow is not drawn');
+await clickSpot('s11');
+d = await dbg();
+ok(d.flick.armed === true && d.bowl.hint === true, 'a chip down: the throw arms and the arrow comes up around the rim');
+await shot('17b-flick-arrow.png');
+await flick(0.9, 8, 400);   // a hand that pushes the wheel round and then stops: a nudge, never a spin
+d = await dbg();
+ok(d.phase === 'bet' && d.flick.last && d.flick.last.ok === false && (await sent()) === 0,
+  `a stale swing turns the wheel and sends nothing (${d.flick.last && d.flick.last.why})`);
+await flick(-2.4, 8);       // a real throw, the other way round
+await until('window.dev.station.debug().cur !== null', 8000);
+const throwLog = (await logOf('flick')).pop(), launched = (await logOf('launch')).pop();
+report.flick = { last: throwLog, rotVel0: launched && launched.rotVel0, sent: await sent(), hint: (await dbg()).bowl.hint };
+ok(throwLog && throwLog.ok === true && throwLog.sign === -1 && launched && launched.rotVel0 < 0 && report.flick.sent === 1,
+  `a flick across the wheel sends the one spin, its direction and all (rotVel0 ${launched && launched.rotVel0})`);
+ok(launched && Math.abs(launched.rotVel0) >= 0.9 && Math.abs(launched.rotVel0) <= 2 && report.flick.hint === false,
+  `the throw's strength is clamped into the band (${launched && Math.abs(launched.rotVel0)}) and the arrow is gone while it spins`);
+await until('window.dev.station.debug().cur && window.dev.station.debug().cur.landed', 14000);
+d = await dbg();
+ok(d.cur.pocket === 11 && d.bowl.pocket === 11, `Law I: however it was thrown, the ball lands in the server's pocket (${d.bowl.pocket})`);
+
 /* ------------------------------------------------ 9. inside the real room: mount, open, a spin, Back */
 const FAKE_HOST = `(() => {
   const listeners = [];
@@ -357,6 +394,15 @@ const cellCentre = await ev(`(async () => {
   const mw = w * 0.47, mh = h * 0.46, cell = Math.max(14, Math.min(mw / 13, mh / 5.4)), ox = w * 0.5 + (mw - cell * 13) / 2, oy = h * 0.16 + (mh - cell * 5.4) / 2;
   return { x: ox + 12 * cell + cell / 2, y: oy + cell / 2 }; })()`);
 await click(Math.round(roomRect.x + cellCentre.x), Math.round(roomRect.y + cellCentre.y));
+await sleep(300);
+// THE THROW's arrow on the room's own wheel: a mesh on the rotor, up only while the throw is armed.
+const seated3d = await ev(`!!window.__backroom.scene.scene.getObjectByName('roulette_runtime_mat')`);
+const hint3d = await ev(`(() => { const o = window.__backroom.scene.scene.getObjectByName('roulette_flick_hint');
+  return o ? { visible: o.visible, opacity: o.children[0].material.opacity, parts: o.children.length, parent: o.parent && o.parent.name } : null; })()`);
+report.hint3d = { seated3d, hint3d };
+ok(!seated3d || (hint3d && hint3d.visible && hint3d.opacity > 0 && hint3d.parts === 2 && hint3d.parent === 'roulette_rotor'),
+  `the seated wheel wears the throw's arrow once the bet is down (${JSON.stringify(hint3d)})`);
+await shot('18b-room-flick-arrow.png');
 await ev(`document.querySelector('.roul-spin').click()`);
 await until(`(document.querySelector('.roul-history') || {}).childElementCount >= 1`, 12000, 50);
 await sleep(1000);   // the landing's fx follow the glow at FX_DELAY_MS
