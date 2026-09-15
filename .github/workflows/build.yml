@@ -47,6 +47,9 @@ jobs:
       # writes a PNG, which is the only form of visual proof that survives on a runner with no
       # display server. Both exit non-zero on failure.
       - run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --smoke
+      # Consent runs in its own testhost: CorePaths is process-global and the headless Avalonia
+      # lifetime must not share state with the language/notification suites.
+      - run: dotnet test Tests/CCP.Avalonia.Consent.Tests/CCP.Avalonia.Consent.Tests.csproj -c Release
 
       # The language and notification suites stay separate: each command gets its own
       # testhost and each assembly owns its own process-immutable profile setup.
@@ -109,6 +112,8 @@ jobs:
         run: dotnet test Tests/CCP.Avalonia.Language.Tests/CCP.Avalonia.Language.Tests.csproj -c Release
       - name: Test Avalonia notification suite
         run: dotnet test Tests/CCP.Avalonia.Tests/CCP.Avalonia.Tests.csproj -c Release
+      - name: Test Avalonia consent flow
+        run: dotnet test Tests/CCP.Avalonia.Consent.Tests/CCP.Avalonia.Consent.Tests.csproj -c Release
 
   # Greps the compiler cannot do: APIs that compile fine in a net8.0 library and only fail at
   # runtime, plus the XAML clr-namespace tripwire. See the script for what and why.
