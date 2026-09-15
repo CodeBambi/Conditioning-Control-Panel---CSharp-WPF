@@ -340,8 +340,8 @@ await sleep(500);
 await shot('18-room-roulette-open.png');
 // place 36 through the canvas in the room page (the room page has no window.dev; find the cell by the mat layout)
 const cellCentre = await ev(`(async () => {
-  const button = document.querySelector('.roul-mat-strip [data-spot=s36]');
-  if (button) { const r = button.getBoundingClientRect(); return { x:r.x+r.width/2, y:r.y+r.height/2 }; }
+  const T = await import('three'), s = window.__backroom.scene, plane = s.scene.getObjectByName('roulette_runtime_mat')?.children.find((o) => o.userData.spot === 's36');
+  if (plane) { const v = plane.getWorldPosition(new T.Vector3()).project(s.camera), r = s.renderer.domElement.getBoundingClientRect(); return { x: (v.x + 1) * r.width / 2, y: (1 - v.y) * r.height / 2 }; }   // the seated 3D mat
   const c = document.querySelector('.roul-stage'); const w = c.clientWidth, h = c.clientHeight;
   const mw = w * 0.47, mh = h * 0.46, cell = Math.max(14, Math.min(mw / 13, mh / 5.4)), ox = w * 0.5 + (mw - cell * 13) / 2, oy = h * 0.16 + (mh - cell * 5.4) / 2;
   return { x: ox + 12 * cell + cell / 2, y: oy + cell / 2 }; })()`);

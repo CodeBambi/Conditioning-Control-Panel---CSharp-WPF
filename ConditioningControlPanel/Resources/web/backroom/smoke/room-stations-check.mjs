@@ -163,10 +163,13 @@ const STATIONS = [
     } },
   { key: 'roulette', id: 'roulette', root: '.roul-station', ready: `!!document.querySelector('.roul-station[data-phase=bet]')`,
     async moment() {
-      const at = await ev(`(() => { const button=document.querySelector('.roul-mat-strip [data-spot=s36]');if(button){document.querySelector('.roul-chips-label').click();const b=button.getBoundingClientRect();return {x:b.x+b.width/2,y:b.y+b.height/2};} const c = document.querySelector('.roul-stage'); const r = c.getBoundingClientRect(); const w = c.clientWidth, h = c.clientHeight;
+      const at = await ev(`(async () => { const T = await import('three'), s = window.__backroom.scene, plane = s.scene.getObjectByName('roulette_runtime_mat')?.children.find((o) => o.userData.spot === 's36');
+        if (plane) { const v = plane.getWorldPosition(new T.Vector3()).project(s.camera), r = s.renderer.domElement.getBoundingClientRect(); return { x: r.left + (v.x + 1) * r.width / 2, y: r.top + (1 - v.y) * r.height / 2 }; }   // the seated 3D mat
+        const c = document.querySelector('.roul-stage'); const r = c.getBoundingClientRect(); const w = c.clientWidth, h = c.clientHeight;
         const mw = w * 0.47, mh = h * 0.46, cell = Math.max(14, Math.min(mw / 13, mh / 5.4)), ox = w * 0.5 + (mw - cell * 13) / 2, oy = h * 0.16 + (mh - cell * 5.4) / 2;
         return { x: r.left + ox + 12 * cell + cell / 2, y: r.top + oy + cell / 2 }; })()`);
       await click(Math.round(at.x), Math.round(at.y));
+      ok(await until("window.__backroom.scene.scene.getObjectByName('roulette_live_chips')?.count === 1", 1500), 'roulette: the click lands a chip on the 3D mat');
       ok(await clickSel('.roul-spin'), 'roulette: a chip on 36 and Spin pressed');
       ok(await until(`window.__posted.some((m) => m.type === 'fx-tunnel' && m.station === 'roulette' && m.level > 0)`, 12000), 'roulette: the run posts fx-tunnel');
       await shot('roulette-02-run.png');
