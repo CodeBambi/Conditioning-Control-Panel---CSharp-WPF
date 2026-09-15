@@ -36,13 +36,10 @@ public sealed record BackRoomWord(string Key, string Text, string Src);
 /// Serialised lower-case on the wire.</summary>
 public enum BackRoomFxSkipReason
 {
-    /// <summary>The feature's own toggle is off; never forced on.</summary>
-    Toggle,
-    /// <summary>MotionLevel rules removed it.</summary>
-    Motion,
-    /// <summary>Not part of the Calm recipe.</summary>
-    Calm,
-    /// <summary>Waited more than 4 s behind a running hero window.</summary>
+    // The Back Room is an authored show (2026-09-15): no setting ever skips a primitive, so the old
+    // toggle / motion / calm reasons are gone. Only these two remain.
+    /// <summary>Waited more than 4 s behind a running hero window, or inside a Brake gap (a wash within
+    /// 360 ms of the last, a second gif-from while one shows).</summary>
     Busy,
     /// <summary>The fx id or primitive is not known to this host (page shipped ahead).</summary>
     Unknown,

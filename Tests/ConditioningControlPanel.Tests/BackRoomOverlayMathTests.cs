@@ -136,42 +136,31 @@ public class BackRoomOverlayMathTests
     public void GifFrom_GrowsFromTheRectToCover_ThenFades()
     {
         var from = new PxRect(600, 180, 60, 44);
-        var start = BackRoomOverlayMath.GifFrom(0, 3400, from, 1920, 1080, 16.0 / 9, 1, 1, false);
+        var start = BackRoomOverlayMath.GifFrom(0, 3400, from, 1920, 1080, 16.0 / 9, 1, 1);
         Assert.Equal(from, start.Image);
         Assert.Equal(1.0, start.ImageAlpha);
         Assert.Equal(0.55 * 0.55, start.DimAlpha, 6);
 
-        var grown = BackRoomOverlayMath.GifFrom(700, 3400, from, 1920, 1080, 16.0 / 9, 1, 1, false);
+        var grown = BackRoomOverlayMath.GifFrom(700, 3400, from, 1920, 1080, 16.0 / 9, 1, 1);
         Near(new PxRect(0, 0, 1920, 1080), grown.Image);
         Assert.Equal(0.55, grown.DimAlpha, 6);
 
-        var tall = BackRoomOverlayMath.GifFrom(1000, 3400, from, 1920, 1080, 0.5, 1, 1, false);
+        var tall = BackRoomOverlayMath.GifFrom(1000, 3400, from, 1920, 1080, 0.5, 1, 1);
         Assert.Equal((1920.0, 3840.0, -1380.0), (tall.Image.W, tall.Image.H, tall.Image.Y));   // cover, centred
 
-        var fading = BackRoomOverlayMath.GifFrom(3400 - 450, 3400, from, 1920, 1080, 16.0 / 9, 1, 0.8, false);
+        var fading = BackRoomOverlayMath.GifFrom(3400 - 450, 3400, from, 1920, 1080, 16.0 / 9, 1, 0.8);
         Assert.Equal(0.5, fading.ImageAlpha, 6);
         Assert.Equal(0.55 * 0.5 * 0.8, fading.DimAlpha, 6);
-        Assert.Equal(0, BackRoomOverlayMath.GifFrom(3400, 3400, from, 1920, 1080, 1, 1, 1, false).ImageAlpha);
+        Assert.Equal(0, BackRoomOverlayMath.GifFrom(3400, 3400, from, 1920, 1080, 1, 1, 1).ImageAlpha);
     }
 
     [Fact]
     public void GifFrom_BelowFullScale_SkipsTheDim_AndSitsHalfSize()
     {
-        var f = BackRoomOverlayMath.GifFrom(2000, 4600, new PxRect(0, 0, 60, 44), 1920, 1080, 16.0 / 9, 0.46, 1, false);
+        var f = BackRoomOverlayMath.GifFrom(2000, 4600, new PxRect(0, 0, 60, 44), 1920, 1080, 16.0 / 9, 0.46, 1);
         Assert.Equal(0, f.DimAlpha);
         Assert.Equal(1920 * 0.46, f.Image.W, 6);
         Assert.Equal(960, f.Image.Cx, 6);
-    }
-
-    [Fact]
-    public void GifFrom_Still_HasNoGrowth_And300msFades()
-    {
-        var from = new PxRect(600, 180, 60, 44);
-        var early = BackRoomOverlayMath.GifFrom(150, 2040, from, 1920, 1080, 16.0 / 9, 1, 1, true);
-        Near(new PxRect(0, 0, 1920, 1080), early.Image);
-        Assert.Equal(0.5, early.ImageAlpha, 6);
-        Assert.Equal(1, BackRoomOverlayMath.GifFrom(1000, 2040, from, 1920, 1080, 16.0 / 9, 1, 1, true).ImageAlpha);
-        Assert.Equal(0.5, BackRoomOverlayMath.GifFrom(1890, 2040, from, 1920, 1080, 16.0 / 9, 1, 1, true).ImageAlpha, 6);
     }
 
     // ---- spiral ----------------------------------------------------------------------------------
@@ -187,19 +176,25 @@ public class BackRoomOverlayMathTests
     }
 
     [Fact]
-    public void Spiral_FadesIn800_HoldsThenOut1200_OrOutFromARelease()
+    public void Spiral_FadesIn250_HoldsThenOut500_OrOutFromARelease_NeverPops()
     {
-        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(400, 4200, null), 6);
-        Assert.Equal(1, BackRoomOverlayMath.SpiralEnvelope(4200, 4200, null));
-        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(4800, 4200, null), 6);
-        Assert.False(BackRoomOverlayMath.SpiralDone(5399, 4200, null));
-        Assert.True(BackRoomOverlayMath.SpiralDone(5400, 4200, null));
+        Assert.Equal((250, 500), (BackRoomOverlayMath.SpiralFadeInMs, BackRoomOverlayMath.SpiralFadeOutMs));
+        Assert.Equal(0, BackRoomOverlayMath.SpiralEnvelope(0, 4000, null));
+        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(125, 4000, null), 6);
+        Assert.Equal(1, BackRoomOverlayMath.SpiralEnvelope(250, 4000, null));
+        Assert.Equal(1, BackRoomOverlayMath.SpiralEnvelope(4000, 4000, null));
+        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(4250, 4000, null), 6);
+        Assert.False(BackRoomOverlayMath.SpiralDone(4499, 4000, null));
+        Assert.True(BackRoomOverlayMath.SpiralDone(4500, 4000, null));
+        // The brief spiral (1500 ms) fades the same way.
+        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(1750, 1500, null), 6);
+        Assert.True(BackRoomOverlayMath.SpiralDone(2000, 1500, null));
 
         // A hold released at 2 s, while still at full: out from there, whatever the 20 s cap says.
-        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(2600, 20000, 2000), 6);
-        Assert.True(BackRoomOverlayMath.SpiralDone(3200, 20000, 2000));
+        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(2250, 20000, 2000), 6);
+        Assert.True(BackRoomOverlayMath.SpiralDone(2500, 20000, 2000));
         // Released during the fade in: both curves multiply, as the mockup draws it.
-        Assert.Equal(0.625 * 0.75, BackRoomOverlayMath.SpiralEnvelope(500, 20000, 200), 6);
+        Assert.Equal(0.8 * 0.8, BackRoomOverlayMath.SpiralEnvelope(200, 20000, 100), 6);
     }
 
     // ---- tunnel ----------------------------------------------------------------------------------
@@ -209,10 +204,10 @@ public class BackRoomOverlayMathTests
     {
         var t = new TunnelModel();
         t.Set(0.8, 0);
-        Assert.Equal(0.8 * 0.14, t.Step(100, 100, false), 6);        // (want - level) x dt x 1.4
+        Assert.Equal(0.8 * 0.14, t.Step(100, 100), 6);        // (want - level) x dt x 1.4
         t.Set(0, 100);
         double before = t.Level;
-        Assert.Equal(before - before * 0.22, t.Step(200, 100, false), 6);
+        Assert.Equal(before - before * 0.22, t.Step(200, 100), 6);
     }
 
     [Fact]
@@ -221,28 +216,28 @@ public class BackRoomOverlayMathTests
         var t = new TunnelModel();
         long now = 0;
         t.Set(0.62, now);
-        for (; now < 1500; now += 50) t.Step(now, 50, false);
+        for (; now < 1500; now += 50) t.Step(now, 50);
         Assert.Equal(0.62, t.Want);
         Assert.True(t.Level > 0.5);
         now += 50;
-        t.Step(now, 50, false);
+        t.Step(now, 50);
         Assert.Equal(0, t.Want);
-        for (int i = 0; i < 80; i++) { now += 50; t.Step(now, 50, false); }
+        for (int i = 0; i < 80; i++) { now += 50; t.Step(now, 50); }
         Assert.True(t.Idle);
     }
 
     [Fact]
-    public void Tunnel_RefreshKeepsIt_StillSteps_CancelIsInstant()
+    public void Tunnel_RefreshKeepsIt_CancelIsInstant()
     {
         var t = new TunnelModel();
-        for (long now = 0; now < 6000; now += 100) { if (now % 1000 == 0) t.Set(0.5, now); t.Step(now, 100, false); }
+        for (long now = 0; now < 6000; now += 100) { if (now % 1000 == 0) t.Set(0.5, now); t.Step(now, 100); }
         Assert.Equal(0.5, t.Want);
 
-        var still = new TunnelModel();
-        still.Set(0.7, 0);
-        Assert.Equal(0.7, still.Step(16, 16, true));
-        still.Cancel();
-        Assert.True(still.Idle);
+        var eased = new TunnelModel();
+        eased.Set(0.7, 0);
+        Assert.True(eased.Step(16, 16) < 0.7);   // always eased: there is no still variant
+        eased.Cancel();
+        Assert.True(eased.Idle);
     }
 
     [Fact]

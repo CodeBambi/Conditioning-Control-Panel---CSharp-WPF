@@ -49,24 +49,25 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
     private DispatcherTimer? _drainTimer;
     private string? _drainKind;
 
+    /// <summary>The melt's alpha ramp (0 to its peak over the step) is written this often.</summary>
+    private const int MeltRampStepMs = 100;
+    private DispatcherTimer? _meltRamp;
+    private long _meltStart;
+    private int _meltMs;
+    private double _meltPeak;
+
     private static long Now => Environment.TickCount64;
     private static bool Recent(long at) => Now - at < OwnershipMs;
 
-    /// <summary>Settings for one fire. Motion is the EFFECTIVE level (user setting capped by the OS).</summary>
+    /// <summary>Settings for one fire: the EFFECTIVE motion level (the user's setting capped by the OS animation flag,
+    /// safety line a) and the room's intensity (safety line b). No feature toggle: the Back Room is an authored show.
+    /// No settings at all (a desk run before they load) reads as Calm.</summary>
     public static FxEnvironment ReadEnvironment()
     {
         var s = App.Settings?.Current;
-        if (s == null)
-            return new FxEnvironment(MotionFx.Level, BackRoomFxIntensity.Calm, FxGates.AllOff);
-        var spiralPath = s.SpiralPath;
+        var spiralPath = s?.SpiralPath;
         string? Woven(string preset) => WovenFor(preset, spiralPath);
-        double opacity = s.SpiralOpacity > 0 ? Math.Clamp(s.SpiralOpacity / 100.0, 0.05, 1.0) : 0.85;
-        // A woven GIF always has a first frame, so the spiral's still exists whenever its weave does.
-        return new FxEnvironment(MotionFx.Level, s.BackRoomFxIntensity,
-            // Melt and Tunnel are the room's own switches (10.14), not the app's Brain Drain toggles.
-            new FxGates(s.FlashEnabled, s.SubliminalEnabled, s.SpiralEnabled, s.BrainDrainEnabled, s.BackRoomMelt,
-                Woven(BackRoomSpiralSource.Screen) != null, s.BackRoomTunnel),
-            Woven, opacity);
+        return new FxEnvironment(MotionFx.Level, s?.BackRoomFxIntensity ?? BackRoomFxIntensity.Calm, Woven);
     }
 
     // The woven spiral's file probes, kept per SpiralPath for a few seconds: every fire and every tunnel
@@ -120,26 +121,29 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
         catch (Exception ex) { Diag.Swallowed(ex, "bad media url"); return null; }
     }
 
-    public void FlashBurst(int amount)
+    public void FlashBurst(int amount, double opacity, int gapMs)
     {
         var s = App.Settings?.Current;
         // FlashDuration is SECONDS; TriggerFlashOnce's customDuration is MILLISECONDS.
         int? duration = s != null && s.FlashDuration > 0 ? s.FlashDuration * 1000 : null;
         _flashAt = Now;
-        App.Flash?.TriggerFlashOnce(amount, duration, null, true);
+        // Medium images at the authored opacity, staggered at the authored gap (334 ms under reduced motion: the
+        // 3 Hz cap), whatever the user's own Flash sliders say.
+        App.Flash?.TriggerFlashOnce(amount, duration, BackRoomFxPlan.FlashSize, true, new FlashBurstLook(opacity, gapMs));
     }
 
-    public void GifRain(int durationMs)
+    public void GifRain(int count, int durationMs, double opacity)
     {
         // A chaos run's rain already on screen keeps its own; a second cascade on top is noise.
         if (ChaosGifCascadeOverlay.IsRaining) return;
         _rainAt = Now;
+        double seconds = Math.Max(1.0, durationMs / 1000.0);
         ChaosGifCascadeOverlay.Show(
-            spawnRatePerSec: GifCascadePayload.SPAWN_RATE_PER_SEC,
-            durationSec: Math.Max(1.0, durationMs / 1000.0),
+            spawnRatePerSec: Math.Max(1, count) / seconds,
+            durationSec: seconds,
             gifSize: GifCascadePayload.GIF_SIZE,
             fallSpeed: GifCascadePayload.FALL_SPEED,
-            opacity: GifCascadePayload.OPACITY,
+            opacity: opacity,
             startScale: GifCascadePayload.START_SCALE);
     }
 
@@ -149,10 +153,12 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
         ChaosFlashOverlay.Show(durationMs, opacity);
     }
 
-    public void Subliminal(string text)
+    public void Subliminal(string text, double opacity)
     {
         _subAt = Now;
-        App.Subliminal?.FlashSubliminalCustom(text, null, null, true);
+        // The authored word envelope: visible, then fades (in 80 ms, hold 400 ms, out 350 ms), never a blink.
+        App.Subliminal?.FlashSubliminalCustom(text, (int)Math.Round(Math.Clamp(opacity, 0, 1) * 100), BackRoomFxPlan.WordHoldMs, true,
+            BackRoomFxPlan.WordFadeInMs, BackRoomFxPlan.WordFadeOutMs);
     }
 
     // ---- Hypno v3 primitives (CONTRACT 10.13.B), on the overlays in Services/BackRoom/Overlays ----
@@ -178,42 +184,74 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
     }
 
     public void Wash(FxRgb color, double peak, BackRoomGif? picture, Action shown)
-        => BackRoomWashOverlay.Show(color, peak, LocalFile(picture), picture == null ? null : Target(null).ScreenPx, MotionFx.Level == MotionLevel.Off, shown);
+        => BackRoomWashOverlay.Show(color, peak, LocalFile(picture), picture == null ? null : Target(null).ScreenPx, shown);
 
-    public bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, bool still, Action shown)
+    public bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, Action shown)
     {
         if (LocalFile(gif) is not { } path) return false;
         double aspect = gif.W > 0 && gif.H > 0 ? (double)gif.W / gif.H : 4.0 / 3;
-        BackRoomGifFromOverlay.Show(path, aspect, Target(from), durationMs, scale, dim, still, shown);
+        BackRoomGifFromOverlay.Show(path, aspect, Target(from), durationMs, scale, dim, shown);
         return true;
     }
 
-    public void SpiralLoom(string gifPath, int durationMs, double alpha, bool hold, bool still)
-        => BackRoomLoomSpiralOverlay.Show(gifPath, durationMs, alpha, still);
+    public void SpiralLoom(string gifPath, int durationMs, double alpha, bool hold, bool slow)
+        => BackRoomLoomSpiralOverlay.Show(gifPath, durationMs, alpha, slow);
 
     public void ReleaseSpiralLoom() => BackRoomLoomSpiralOverlay.Release();
 
     public void ReleaseBrainDrain() => StopDrain();
 
-    public void Tunnel(double level, bool still) => BackRoomTunnelOverlay.Set(level, still);
+    public void Tunnel(double level) => BackRoomTunnelOverlay.Set(level);
 
     public void CancelTunnel() => BackRoomTunnelOverlay.Cancel();
 
     public void BrainDrain(int durationMs, double level, bool melt)
     {
-        var s = App.Settings?.Current;
-        double strength = Math.Clamp((s?.BrainDrainIntensity ?? 20) / 100.0 * level, 0.01, 1.0);
         var kind = melt ? "braindrain_melt" : "braindrain";
         if (_drainKind != null && _drainKind != kind) App.Overlay?.HideOverlaySustained(_drainKind);
         _drainKind = kind;
-        App.Overlay?.ShowOverlaySustained(kind, strength);
+        StopMeltRamp();
+        if (melt)
+        {
+            // Authored: the melt's alpha ramps from 0 to `level` over the step, then lets go. The blur's
+            // strength IS its alpha on the app's path (AlphaFor(intensity)), so the ramp drives that.
+            _meltPeak = Math.Clamp(level, 0.01, 1.0);
+            _meltStart = Now;
+            _meltMs = Math.Max(1, durationMs);
+            App.Overlay?.ShowOverlaySustained(kind, 0.01);
+            _meltRamp = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(MeltRampStepMs) };
+            _meltRamp.Tick += (_, _) => MeltTick();
+            _meltRamp.Start();
+        }
+        else
+        {
+            // The haze: the user's own Brain Drain blur at the recipe's fraction, held flat.
+            var s = App.Settings?.Current;
+            double strength = Math.Clamp((s?.BrainDrainIntensity ?? 20) / 100.0 * level, 0.01, 1.0);
+            App.Overlay?.ShowOverlaySustained(kind, strength);
+        }
         _drainUntil = Math.Max(_drainUntil, Now + durationMs);
         _drainTimer = Rearm(_drainTimer, _drainUntil, StopDrain);
     }
 
-    public void GifFull(BackRoomGif gif, int durationMs, bool still, Action shown)
+    private void MeltTick()
     {
-        if (LocalFile(gif) is { } path) ChaosFlashOverlay.ShowHero(path, durationMs, 0.9, still, shown);
+        if (_drainKind == null) { StopMeltRamp(); return; }
+        double t = Math.Clamp((Now - _meltStart) / (double)_meltMs, 0, 1);
+        try { App.Overlay?.SetSustainedOverlayOpacity(_drainKind, Math.Max(0.01, t * _meltPeak)); }
+        catch (Exception ex) { App.Logger?.Warning(ex, "[BackRoom] melt ramp failed"); }
+        if (t >= 1) StopMeltRamp();
+    }
+
+    private void StopMeltRamp()
+    {
+        _meltRamp?.Stop();
+        _meltRamp = null;
+    }
+
+    public void GifFull(BackRoomGif gif, int durationMs, double opacity, Action shown)
+    {
+        if (LocalFile(gif) is { } path) ChaosFlashOverlay.ShowHero(path, durationMs, opacity, false, shown);
     }
 
     public void StopAll()
@@ -238,6 +276,7 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
     {
         _drainTimer?.Stop();
         _drainTimer = null;
+        StopMeltRamp();
         if (_drainKind == null) return;
         var kind = _drainKind;
         _drainKind = null;

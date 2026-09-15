@@ -29,6 +29,14 @@ using Image = System.Windows.Controls.Image;
 namespace ConditioningControlPanel.Services
 {
     /// <summary>
+    /// How a one-shot burst looks when its caller authors it (THE BACK ROOM, CONTRACT section 4): every image
+    /// of the burst at <paramref name="Opacity"/> (0..1, whatever the user's Flash opacity slider says) and
+    /// its images staggered <paramref name="StaggerMs"/> apart (the ambient default is 300 ms). Null = the
+    /// user's own settings, as every other one-shot.
+    /// </summary>
+    public readonly record struct FlashBurstLook(double Opacity, int StaggerMs);
+
+    /// <summary>
     /// Handles flash image display with full GIF animation support.
     /// Ported from Python engine.py with all features intact.
     /// </summary>
@@ -653,7 +661,7 @@ namespace ConditioningControlPanel.Services
         /// Trigger a one-shot flash that works even when service is not running.
         /// Used by Autonomy Mode to trigger flashes independently of engine state.
         /// </summary>
-        public void TriggerFlashOnce(int? amount = null, int? duration = null, int? size = null, bool suppressHaptic = false)
+        public void TriggerFlashOnce(int? amount = null, int? duration = null, int? size = null, bool suppressHaptic = false, FlashBurstLook? look = null)
         {
             if (_isBusy)
             {
@@ -684,7 +692,7 @@ namespace ConditioningControlPanel.Services
             // #1045: carry the generation this flash was dispatched under, so StopOneShotFlashes
             // can cancel it on arrival even while the ambient scheduler keeps _isRunning true.
             int oneShotGen = Volatile.Read(ref _oneShotGeneration);
-            Task.Run(() => LoadAndShowImages(amount, duration, size, suppressHaptic, oneShotGen));
+            Task.Run(() => LoadAndShowImages(amount, duration, size, suppressHaptic, oneShotGen, look));
         }
 
         /// <summary>
@@ -833,7 +841,7 @@ namespace ConditioningControlPanel.Services
 
         #region Image Loading
 
-        private async void LoadAndShowImages(int? amount = null, int? duration = null, int? size = null, bool suppressHaptic = false, int? oneShotGen = null)
+        private async void LoadAndShowImages(int? amount = null, int? duration = null, int? size = null, bool suppressHaptic = false, int? oneShotGen = null, FlashBurstLook? look = null)
         {
             try
             {
@@ -901,7 +909,7 @@ namespace ConditioningControlPanel.Services
                 // Show on UI thread - pass sound path only ONCE
                 await DispatcherHelper.RunOnUIAsync(() =>
                 {
-                    ShowImages(loadedImages, soundPath, false, customDuration: duration, suppressHaptic: suppressHaptic, oneShotGen: oneShotGen);
+                    ShowImages(loadedImages, soundPath, false, customDuration: duration, suppressHaptic: suppressHaptic, oneShotGen: oneShotGen, look: look);
                 });
             }
             catch (Exception ex)
@@ -1354,7 +1362,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         /// <param name="overrideLifetimeMs">If provided, overrides the calculated lifetime (used for hydra linked timing)~ 🔗</param>
         /// <param name="hydraGeneration">How many hydra hops deep these spawns are (0 = original flash)~ 🐙</param>
-        private void ShowImages(List<LoadedImageData> images, string? soundPath, bool isMultiplication, int? overrideLifetimeMs = null, int hydraGeneration = 0, int? customDuration = null, bool suppressHaptic = false, int? oneShotGen = null, FlashMotionStyle? inheritMotion = null)
+        private void ShowImages(List<LoadedImageData> images, string? soundPath, bool isMultiplication, int? overrideLifetimeMs = null, int hydraGeneration = 0, int? customDuration = null, bool suppressHaptic = false, int? oneShotGen = null, FlashMotionStyle? inheritMotion = null, FlashBurstLook? look = null)
         {
             // #1045: this load was dispatched by a point-fired flash that has since been cancelled.
             // Checked BEFORE the _isRunning/_oneShotActive pair because that pair is inert while the
@@ -1449,14 +1457,17 @@ namespace ConditioningControlPanel.Services
             }
 
             // Spawn windows — each gets its own lifetime CTS~ ✨
+            // An authored burst (the Back Room) names its own stagger; the ambient default is 300 ms.
+            int staggerMs = Math.Max(0, look?.StaggerMs ?? 300);
+            double? alphaOverride = look?.Opacity;
             for (int i = 0; i < images.Count; i++)
             {
                 var imageData = images[i];
-                var delayMs = imageData.IsRemix ? 0 : isMultiplication ? i * 100 : i * 300;
+                var delayMs = imageData.IsRemix ? 0 : isMultiplication ? i * 100 : i * staggerMs;
                 
                 if (delayMs == 0)
                 {
-                    SpawnFlashWindow(imageData, settings, lifetimeMs, hydraGeneration, suppressHaptic, oneShotGen, inheritMotion);
+                    SpawnFlashWindow(imageData, settings, lifetimeMs, hydraGeneration, suppressHaptic, oneShotGen, inheritMotion, alphaOverride);
                 }
                 else
                 {
@@ -1477,7 +1488,7 @@ namespace ConditioningControlPanel.Services
                                 if (OneShotGate.IsRetired(capturedOneShotGen, Volatile.Read(ref _oneShotGeneration)))
                                     return;
                                 if (_isRunning || _oneShotActive)
-                                    SpawnFlashWindow(capturedData, settings, capturedLifetime, capturedGeneration, capturedSuppressHaptic, capturedOneShotGen, capturedMotion);
+                                    SpawnFlashWindow(capturedData, settings, capturedLifetime, capturedGeneration, capturedSuppressHaptic, capturedOneShotGen, capturedMotion, alphaOverride);
                             });
                         }
                         catch (Exception ex) { Diag.Swallowed(ex); }
@@ -1508,7 +1519,7 @@ namespace ConditioningControlPanel.Services
         /// CopilotNotes: Each window gets a CTS that fires after lifetimeMs, triggering independent fade-out.
         /// When hydraGeneration > 0 and independent timing is active, XP is reduced by 25% per generation (floor 10%).
         /// </summary>
-        private void SpawnFlashWindow(LoadedImageData imageData, AppSettings settings, int lifetimeMs, int hydraGeneration = 0, bool suppressHaptic = false, int? oneShotGen = null, FlashMotionStyle? inheritMotion = null)
+        private void SpawnFlashWindow(LoadedImageData imageData, AppSettings settings, int lifetimeMs, int hydraGeneration = 0, bool suppressHaptic = false, int? oneShotGen = null, FlashMotionStyle? inheritMotion = null, double? alphaOverride = null)
         {
             // #1045: the point-fired flash that asked for this spawn has been cancelled since.
             if (OneShotGate.IsRetired(oneShotGen, Volatile.Read(ref _oneShotGeneration))) return;
@@ -1607,6 +1618,8 @@ namespace ConditioningControlPanel.Services
                 // their parent's screen (TriggerMultiplication reads window.Monitor).
                 window.Monitor = monitor;
                 window.IsRemix = imageData.IsRemix;
+                // Always written (the classic shell is recycled), so an authored burst's alpha never leaks into the next.
+                window.AlphaOverride = alphaOverride;
 
                 // Register cancellation callback — when the token fires, mark this window for fade-out~ 🌙
                 // Store the registration so we can dispose it in SafeCloseFlashWindow
@@ -2792,7 +2805,7 @@ namespace ConditioningControlPanel.Services
 
                     // Per-window fade control — each window manages its own lifetime~ 🌸
                     var showThisWindow = DateTime.Now < window.ExpiresAt && !window.IsFadingOut;
-                    var targetAlpha = showThisWindow ? maxAlpha : 0.0;
+                    var targetAlpha = showThisWindow ? (window.AlphaOverride ?? maxAlpha) : 0.0;
 
                     // #1134: the compositor spawn is off-thread, so the item can still be missing
                     // here (the liveness check above kept the window alive for exactly that case).
@@ -4865,6 +4878,9 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>Jackpot Remix: a click pops it like any flash but never spawns hydra children.</summary>
         public bool IsRemix { get; set; }
+
+        /// <summary>An authored one-shot's peak alpha (<see cref="FlashBurstLook"/>), instead of the user's Flash opacity.</summary>
+        public double? AlphaOverride { get; set; }
 
         /// <summary>
         /// Solid mode: this instance is never Show()n — it stays a pure state bag (lifetime CTS,

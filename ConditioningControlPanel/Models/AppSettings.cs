@@ -4980,9 +4980,11 @@ namespace ConditioningControlPanel.Models
 
         private Services.BackRoom.BackRoomFxIntensity _backRoomFxIntensity = Services.BackRoom.BackRoomFxIntensity.Normal;
         /// <summary>
-        /// THE BACK ROOM effects intensity (CONTRACT section 4): Calm, Normal or Full. Calm is also
-        /// forced whenever the effective motion level is not Full, and Full never breaks the Brake
-        /// (no strobe over 6 Hz, one hero at a time, feature toggles still win).
+        /// THE BACK ROOM effects intensity (CONTRACT section 4): Calm, Normal or Full. The room is an
+        /// authored show (2026-09-15): Calm is gentle (every opacity halved, every duration kept), Full
+        /// stretches durations x1.3, and no feature toggle gates a room effect. Reduced motion only caps
+        /// flash onsets at 3 Hz and slows the spiral. Full never breaks the Brake (no strobe over 6 Hz,
+        /// one hero at a time).
         /// </summary>
         [JsonProperty]
         public Services.BackRoom.BackRoomFxIntensity BackRoomFxIntensity
@@ -5001,6 +5003,7 @@ namespace ConditioningControlPanel.Models
         /// THE BACK ROOM tunnel vision (CONTRACT 10.14): the room's own switch, shown in the room's
         /// Options and not in Settings, because nothing else uses it. ON by default; a settings file
         /// written before the switch existed has no key, so it reads as on until the player turns it off.
+        /// Since the authored show (2026-09-15) it dresses the room only: the host always honours <c>fx-tunnel</c>.
         /// </summary>
         [JsonProperty]
         public bool BackRoomTunnel
@@ -5011,10 +5014,10 @@ namespace ConditioningControlPanel.Models
 
         private bool _backRoomMelt = true;
         /// <summary>
-        /// THE BACK ROOM melt (CONTRACT 10.14): whether the slot's <c>fx.melt</c> plays the Brain Drain
-        /// melt. The room's own switch in the room's Options, ON by default and independent of the
-        /// app-wide Brain Drain toggles (<see cref="BrainDrainEnabled"/> and <see cref="BrainDrainMeltEnabled"/>
-        /// both default off, which kept every room melt dark). A missing key reads as on; a player's off is kept.
+        /// THE BACK ROOM melt (CONTRACT 10.14): the room's own switch in the room's Options, ON by default and
+        /// independent of the app-wide Brain Drain toggles (<see cref="BrainDrainEnabled"/> and
+        /// <see cref="BrainDrainMeltEnabled"/> both default off). A missing key reads as on; a player's off is kept.
+        /// Since the authored show (2026-09-15) it dresses the room only: <c>fx.melt</c> always plays.
         /// </summary>
         [JsonProperty]
         public bool BackRoomMelt

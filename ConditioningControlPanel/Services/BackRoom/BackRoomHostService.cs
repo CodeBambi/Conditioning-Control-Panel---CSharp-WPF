@@ -36,8 +36,8 @@ internal static class BackRoomHostService
         => keys.Distinct(StringComparer.Ordinal).ToDictionary(k => k, get, StringComparer.Ordinal);
 
     /// <summary><c>init.gates</c> / <c>settings.gates</c> (10.13.A, 10.14): the four feature toggles plus the room's own
-    /// <c>tunnel</c> and <c>melt</c> switches, sent in full every time. For dressing only; the dispatcher still
-    /// enforces each one.</summary>
+    /// <c>tunnel</c> and <c>melt</c> switches, sent in full every time. For dressing only: since the authored show
+    /// (2026-09-15) nothing on the host gates a Back Room effect on any of them.</summary>
     internal static object GatesWire(Models.AppSettings? s) => new
     {
         flash = s?.FlashEnabled ?? false,
@@ -377,9 +377,6 @@ internal static class BackRoomHostService
     {
         if (_bridge == null || sender is not Models.AppSettings s) return;
         if (e.PropertyName == nameof(Models.AppSettings.SkillPoints)) _bridge.OnSpChanged(s.SkillPoints, "earn");
-        // The room's tunnel switch off under a running tunnel: the dispatcher's gate check cancels it now (10.14).
-        // The page still gets the frame, so it dresses plain from the next frame.
-        if (e.PropertyName == nameof(Models.AppSettings.BackRoomTunnel) && !s.BackRoomTunnel) Fx.Tunnel(string.Empty, 0);
         if (e.PropertyName != null && SettingsFrameProperties.Contains(e.PropertyName)) _bridge.PushSettings(SettingsMessage());
     }
 

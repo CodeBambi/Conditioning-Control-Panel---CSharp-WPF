@@ -194,24 +194,24 @@ internal abstract class BackRoomOverlayWindow : Window
 
     /// <summary>
     /// Put a local picture on <paramref name="img"/> off the UI thread: every frame the budget keeps (through
-    /// the shared decode gate), or (still, or not animated) its first frame. <paramref name="onReady"/> runs on
+    /// the shared decode gate), or (not animated) its first frame. <paramref name="onReady"/> runs on
     /// the UI thread with true once the first frame is on, false when nothing could be decoded, so an effect
     /// starts its clock at its picture. The last decode is kept until the window hides.
     /// </summary>
-    protected void SetPicture(Image img, string path, bool still, int maxDim, int maxFrames, double budgetMb, Action<bool> onReady)
+    protected void SetPicture(Image img, string path, int maxDim, int maxFrames, double budgetMb, Action<bool> onReady)
     {
         ClearPicture(img);
         var token = new object();
         img.Tag = token;
         string key = path + "|" + maxDim + "|" + maxFrames + "|" + budgetMb;
-        if (!still && _lastDecode is { } hit && hit.Key == key) { Put(hit.Frames, hit.Delay); return; }
+        if (_lastDecode is { } hit && hit.Key == key) { Put(hit.Frames, hit.Delay); return; }
         Task.Run(() =>
         {
             (List<BitmapSource> Frames, TimeSpan Delay)? frames = null;
             BitmapSource? first = null;
             try
             {
-                if (!still) frames = AnimatedWebp.DecodeFrames(path, maxDim, maxFrames, budgetMb);
+                frames = AnimatedWebp.DecodeFrames(path, maxDim, maxFrames, budgetMb);
                 if (frames == null) first = DecodeStill(path, maxDim);
             }
             catch (Exception ex) { App.Logger?.Debug("[BackRoom] overlay picture decode: {E}", ex.Message); }
@@ -226,17 +226,17 @@ internal abstract class BackRoomOverlayWindow : Window
 
         void Put(List<BitmapSource> f, TimeSpan delay)
         {
-            PlayFrames(img, f, delay, still);
+            PlayFrames(img, f, delay);
             onReady(true);
         }
     }
 
-    /// <summary>Frame 0 now, then (unless still) the loop at <paramref name="delay"/> a frame.</summary>
-    protected static void PlayFrames(Image img, List<BitmapSource> frames, TimeSpan delay, bool still)
+    /// <summary>Frame 0 now, then the loop at <paramref name="delay"/> a frame.</summary>
+    protected static void PlayFrames(Image img, List<BitmapSource> frames, TimeSpan delay)
     {
         img.BeginAnimation(Image.SourceProperty, null);
         img.Source = frames[0];
-        if (still || frames.Count < 2) return;
+        if (frames.Count < 2) return;
         var anim = new ObjectAnimationUsingKeyFrames
         {
             Duration = TimeSpan.FromMilliseconds(delay.TotalMilliseconds * frames.Count),
