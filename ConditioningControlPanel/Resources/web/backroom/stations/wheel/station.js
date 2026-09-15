@@ -32,6 +32,7 @@ import { createScene } from './scene.js';
 import { createReadout, jackpotChip } from './readout.js';
 import { createBank } from './bank.js';
 import { createSound } from './sound.js';
+import { rewardText, sliceText, rewardOdds, createRewardReveal } from './rewards.js';
 
 const fmt = n => Number(n || 0).toLocaleString('en-US');
 const wait = ms => new Promise(r => setTimeout(r, Math.max(0, ms)));
@@ -64,6 +65,7 @@ export async function mount(ctx) {
 
   let el = null, scene = null, readout = null, bank = null, sound = null, session = 0, alive = false, suspended = false;
   let st = null, layout = null, busy = false, pose = 'idle0_0', unSp = null, timer = 0, refreshAt = 0, lines = [], lineAt = 0;
+  let rewardReveal = null;
   let gainTimer = 0, glanceTimer = 0, feelLog = [], revealAt = -Infinity;
   let moments = null, kit = null, deck = null, unSettings = null, dress = dressOf(), hubPainted = false, turnPlayed = false, lastMoment = null, dealSeq = 0;
   const $ = sel => el.querySelector(sel);
@@ -107,12 +109,14 @@ export async function mount(ctx) {
   const clock = () => (st ? countdown(st.nextResetAt, Date.now()) : null);
   function resultLine(r, carry) {
     if (!r) return '';
+    const special = rewardText(r, t);
+    if (special) return special;
     const row = layout && layout[resultIndex(layout, { sliceId: r.sliceId, sliceIndex: r.sliceIndex })];
     const name = row ? t(`br_wheel_slice_${row.id.replace(/_[a-z]$/, '')}`, row.label) : '';
     let s = r.jackpotWon ? t('br_wheel_jackpot_won', 'JACKPOT! +{n} SP.', { n: fmt(r.pay) })
       : r.snoozed ? t('br_wheel_snoozed', 'Snooze. +{n} SP tomorrow.', { n: fmt(carry) })
       : t('br_wheel_won', '{name}: +{n} SP.', { name, n: fmt(r.pay) });
-    if (r.fallback) s += ' ' + t('br_wheel_fallback', 'The star slipped past, so Dazed pays instead.');
+    if (r.fallback && row?.id === 'dazed') s += ' ' + t('br_wheel_fallback', 'The star slipped past, so Dazed pays instead.');
     if (r.carryPaid > 0) s += ' ' + t('br_wheel_carry_paid', '+{n} SP from Snooze.', { n: fmt(r.carryPaid) });
     if (r.capped) s += ' ' + t('br_wheel_capped', 'Your SP is at the cap.');
     return s;
@@ -134,7 +138,7 @@ export async function mount(ctx) {
     scene.screen('title_screen', t('br_wheel_title', 'DAILY DAZE'));
     const now = performance.now();
     const rq = (now - revealAt) / FEEL.REVEAL_MS, counting = r && r.jackpotWon && rq >= 0 && rq < 1;   // THE REVEAL counts the pot up
-    const want = r ? [r.jackpotWon ? t('br_wheel_screen_jackpot', 'JACKPOT +{n}', { n: fmt(counting ? revealCount(r.pay, rq) : r.pay) }) : r.snoozed ? t('br_wheel_screen_snooze', 'SNOOZE +{n} TOMORROW', { n: fmt(st.snoozeCarry) }) : t('br_wheel_screen_win', '+{n} SP', { n: fmt(r.total) }),
+    const want = r ? [rewardText(r, t) || (r.jackpotWon ? t('br_wheel_screen_jackpot', 'JACKPOT +{n}', { n: fmt(counting ? revealCount(r.pay, rq) : r.pay) }) : r.snoozed ? t('br_wheel_screen_snooze', 'SNOOZE +{n} TOMORROW', { n: fmt(st.snoozeCarry) }) : t('br_wheel_screen_win', '+{n} SP', { n: fmt(r.total) })),
                      c ? t('br_wheel_screen_next', 'NEXT {time}', { time: c.text }) : '']
       : [busy ? t('br_wheel_screen_spinning', 'ROUND IT GOES') : t('br_wheel_screen_ready', 'GIVE IT A SPIN'), t('br_wheel_screen_pot', 'JACKPOT {n}', { n: fmt(j.amount) })];
     if (want.join() !== lines.join()) { lines = want; }
@@ -145,7 +149,7 @@ export async function mount(ctx) {
     const rows = layout.map(s => {
       const tr = document.createElement('tr');
       const name = t(`br_wheel_slice_${s.id.replace(/_[a-z]$/, '')}`, s.label);
-      for (const [tag, text] of [['th', name], ['td', s.kind === 'malus' ? t('br_wheel_odds_snooze', '+{n} next spin', { n: 2 }) : `${fmt(s.pay)} SP`], ['td', s.odds]]) {
+      for (const [tag, text] of [['th', name], ['td', rewardOdds(s, t, fmt)], ['td', s.odds]]) {
         const cell = document.createElement(tag); cell.textContent = text; tr.append(cell);
       }
       return tr;
@@ -222,7 +226,7 @@ export async function mount(ctx) {
   }
   /** The landing moment, sized to the prize, on the frame the result shows (Law I). */
   function fire(raw, r, idx) {
-    if (suspended || !moments || !scene || idx < 0) return;   // no slice to point at: the wheel wound down, no moment
+    if (r.reward?.kind === 'nothing' || r.reward?.kind === 'decoration' || r.reward?.kind === 'double' || suspended || !moments || !scene || idx < 0) return;   // no slice to point at: the wheel wound down, no moment
     const id = 'wheel.land.' + wheelSize(raw);
     const p = scene.project('landed');
     const from = p ? boxAround(p.x, p.y, 60, 44) : undefined;
@@ -237,15 +241,17 @@ export async function mount(ctx) {
     const rec = recipe(r, { still }), tier = tierOf(r);
     lineAt = performance.now();   // the result line shows first
     if (fresh && rec.reveal) { revealAt = lineAt; const step = () => { if (!alive || performance.now() - revealAt > FEEL.REVEAL_MS + 40) return; sync(); requestAnimationFrame(step); }; requestAnimationFrame(step); }
-    sound.thud(tier === 0);
-    if (fresh) { scene.celebrate(rec); sound.win(rec.sound); fire(raw, r, idx); }
+    if (r.reward?.kind !== 'nothing') sound.thud(tier === 0);
+    if (fresh && r.reward?.kind !== 'nothing') { scene.celebrate(rec); sound.win(rec.sound); fire(raw, r, idx); }
     glanceTo(landPose(r));
     $('.wheel-zzz').hidden = !r.snoozed;
     if (gained > 0 && fresh) {
       bank.start({ n: winTokens(tier, calm), fromValue: readout.server - gained, toValue: readout.server,
                    from: () => scene && scene.project('landed'), to: () => readout.target() });
     } else readout.settle();
-    if (fresh) gain(r.snoozed ? t('br_wheel_gain_snooze', '+{n} tomorrow', { n: fmt(st.snoozeCarry) }) : t('br_wheel_gain', '+{n} SP', { n: fmt(gained) }));
+    if (fresh && rewardText(r, t)) rewardReveal.show(r, still);
+    if (fresh) ctx.rewardLanded?.(raw);
+    if (fresh && !rewardText(r, t)) gain(r.snoozed ? t('br_wheel_gain_snooze', '+{n} tomorrow', { n: fmt(st.snoozeCarry) }) : t('br_wheel_gain', '+{n} SP', { n: fmt(gained) }));
     note('land', { slice: r.sliceId, pay: r.pay, total: r.total, gained, tier, party: rec.sound, fresh, still });
   }
 
@@ -276,6 +282,7 @@ export async function mount(ctx) {
     const my = session, pressedAt = performance.now();
     if (st.spun) { glanceTo(pressPose(), landPose(readResult(st.result))); $('.wheel-spin').classList.add('is-ringing'); setTimeout(() => el && $('.wheel-spin').classList.remove('is-ringing'), 400); return; }
     // Law VIII: the wheel turns (or, still, the button rings) and EMI glances on this frame.
+    rewardReveal.hide();
     busy = true; scene.coast(omega); scene.setMood('spin'); glanceTo(pressPose());
     $('.wheel-spin').classList.add('is-ringing'); card(null); lineAt = performance.now(); sync();
     note('answer', { ms: Math.round(performance.now() - pressedAt), omega: omega || null });
@@ -332,7 +339,7 @@ export async function mount(ctx) {
     alive = true; busy = false; suspended = false; pose = 'idle0_0'; feelLog = []; lines = []; lineAt = performance.now(); lastMoment = null;
     const my = ++session;
     readMotion(); dress = dressOf(hypnoCtx());
-    el = build(); ctx.root.append(el); el.dataset.hub = dress.hub;
+    el = build(); ctx.root.append(el); rewardReveal = createRewardReveal(el, t); el.dataset.hub = dress.hub;
     moments = createMoments(ctx, { station: 'wheel' });
     if (typeof ctx.onSettings === 'function') unSettings = ctx.onSettings(() => { if (alive) applyDress(); });
     addEventListener('keydown', onKey); addEventListener('resize', onResize);
@@ -347,8 +354,7 @@ export async function mount(ctx) {
     dealDeck(my);   // count 4: the wheel only lends fx.gif_from a key (10.13.C)
     const [made, res] = await Promise.all([
       createScene({ canvas: $('.wheel-stage'), hud: $('.wheel-face'), reduced: still, dress, paintHub, onFrame,
-        labels: s => ({ big: s.kind === 'jackpot' ? `★ ${fmt(s.pay)}` : s.kind === 'malus' ? 'Zz' : fmt(s.pay),
-                        small: t(`br_wheel_slice_${s.id.replace(/_[a-z]$/, '')}`, s.label) }),
+        labels: s => sliceText(s, t, fmt),
         canSpin: () => !busy && !suspended && !!st && !st.spun,
         onGrab: ok => { sound.arm(); if (!ok) press(); else glanceTo(pressPose()); },
         onRelease: omega => press(omega),
@@ -388,6 +394,7 @@ export async function mount(ctx) {
     if (typeof unSettings === 'function') unSettings();
     unSp = null; unSettings = null;
     freeHypno();
+    rewardReveal?.dispose(); rewardReveal = null;
     if (moments) { moments.dispose(); moments = null; }
     // Law VI: Back skips every ceremony to its settled state and hands the readout the plain server number.
     if (bank) { bank.skip(); bank.dispose(); }

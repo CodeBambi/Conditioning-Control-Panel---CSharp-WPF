@@ -5405,5 +5405,20 @@
   "br_custom_off": "Aus",
   "br_custom_lever": "Spielautomatenhebel",
   "br_custom_use": "Verwenden",
-  "br_custom_remove": "Entfernen"
+  "br_custom_remove": "Entfernen",
+  "br_wheel_slice_pocket_sparkles": "Taschenfunkeln",
+  "br_wheel_slice_good_behaviour": "Brav gewesen",
+  "br_wheel_slice_keep_the_change": "Stimmt so",
+  "br_wheel_slice_spoiled_rotten": "Rundum verwöhnt",
+  "br_wheel_slice_room_service": "Zimmerservice",
+  "br_wheel_slice_seeing_double": "Doppelt sehen",
+  "br_wheel_slice_head_empty": "Kopf leer",
+  "br_daze_empty": "Kein Gedanke. Kein Funkeln.",
+  "br_daze_double_won": "Doppelt sehen. Gewinne für 24 Stunden verdoppelt.",
+  "br_daze_complete": "Sammlung komplett. +{n} SP.",
+  "br_daze_delivered": "{name} geliefert. Beim Zimmerservice platzieren.",
+  "br_daze_gift": "Eine Dekoration",
+  "br_daze_gift_odds": "Fehlende Dekoration oder 75 SP bei voller Sammlung",
+  "br_daze_double_odds": "Doppelte Gewinne für 24 Stunden",
+  "br_daze_nothing": "Nichts"
 }

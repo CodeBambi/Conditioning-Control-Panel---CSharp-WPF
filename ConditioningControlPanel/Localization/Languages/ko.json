@@ -5403,5 +5403,20 @@
   "br_custom_off": "끄기",
   "br_custom_lever": "슬롯 레버",
   "br_custom_use": "사용",
-  "br_custom_remove": "제거"
+  "br_custom_remove": "제거",
+  "br_wheel_slice_pocket_sparkles": "주머니 속 반짝임",
+  "br_wheel_slice_good_behaviour": "착하게 지냈어요",
+  "br_wheel_slice_keep_the_change": "잔돈은 가지세요",
+  "br_wheel_slice_spoiled_rotten": "응석받이",
+  "br_wheel_slice_room_service": "룸서비스",
+  "br_wheel_slice_seeing_double": "두 개로 보여요",
+  "br_wheel_slice_head_empty": "텅 빈 머리",
+  "br_daze_empty": "생각도 없고. 반짝임도 없고.",
+  "br_daze_double_won": "두 개로 보여요. 24시간 동안 당첨금이 두 배예요.",
+  "br_daze_complete": "수집 완료. +{n} SP.",
+  "br_daze_delivered": "{name} 도착. 룸서비스에서 배치하세요.",
+  "br_daze_gift": "장식품",
+  "br_daze_gift_odds": "미보유 장식품, 모두 보유했다면 75 SP",
+  "br_daze_double_odds": "24시간 동안 당첨금 두 배",
+  "br_daze_nothing": "꽝"
 }

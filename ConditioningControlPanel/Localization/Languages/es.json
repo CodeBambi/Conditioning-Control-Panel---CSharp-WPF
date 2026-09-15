@@ -5396,5 +5396,20 @@
   "br_custom_off": "Desactivar",
   "br_custom_lever": "Palanca",
   "br_custom_use": "Usar",
-  "br_custom_remove": "Quitar"
+  "br_custom_remove": "Quitar",
+  "br_wheel_slice_pocket_sparkles": "Brillos de bolsillo",
+  "br_wheel_slice_good_behaviour": "Buen comportamiento",
+  "br_wheel_slice_keep_the_change": "Quédate el cambio",
+  "br_wheel_slice_spoiled_rotten": "Con todos los caprichos",
+  "br_wheel_slice_room_service": "Servicio de habitaciones",
+  "br_wheel_slice_seeing_double": "Ver doble",
+  "br_wheel_slice_head_empty": "Mente en blanco",
+  "br_daze_empty": "Ni una idea. Ni un brillo.",
+  "br_daze_double_won": "Ver doble. Premios duplicados durante 24 horas.",
+  "br_daze_complete": "Colección completa. +{n} SP.",
+  "br_daze_delivered": "Entrega: {name}. Colócalo en Servicio de habitaciones.",
+  "br_daze_gift": "Una decoración",
+  "br_daze_gift_odds": "Decoración nueva, o 75 SP si la colección está completa",
+  "br_daze_double_odds": "Premios dobles durante 24 horas",
+  "br_daze_nothing": "Nada"
 }

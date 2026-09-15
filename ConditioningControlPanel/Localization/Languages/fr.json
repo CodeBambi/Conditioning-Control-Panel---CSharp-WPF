@@ -5405,5 +5405,20 @@
   "br_custom_off": "Désactiver",
   "br_custom_lever": "Levier",
   "br_custom_use": "Utiliser",
-  "br_custom_remove": "Retirer"
+  "br_custom_remove": "Retirer",
+  "br_wheel_slice_pocket_sparkles": "Paillettes de poche",
+  "br_wheel_slice_good_behaviour": "Bonne conduite",
+  "br_wheel_slice_keep_the_change": "Gardez la monnaie",
+  "br_wheel_slice_spoiled_rotten": "Pourri gâté",
+  "br_wheel_slice_room_service": "Service en chambre",
+  "br_wheel_slice_seeing_double": "Voir double",
+  "br_wheel_slice_head_empty": "Tête vide",
+  "br_daze_empty": "Pas une pensée. Pas une paillette.",
+  "br_daze_double_won": "Voir double. Gains doublés pendant 24 heures.",
+  "br_daze_complete": "Collection complète. +{n} SP.",
+  "br_daze_delivered": "Livraison : {name}. À placer au Service en chambre.",
+  "br_daze_gift": "Une décoration",
+  "br_daze_gift_odds": "Décoration manquante, ou 75 SP si la collection est complète",
+  "br_daze_double_odds": "Gains doublés pendant 24 heures",
+  "br_daze_nothing": "Rien"
 }

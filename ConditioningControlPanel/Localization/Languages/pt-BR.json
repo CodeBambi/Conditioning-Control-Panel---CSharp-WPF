@@ -5404,5 +5404,20 @@
   "br_custom_off": "Desativar",
   "br_custom_lever": "Alavanca",
   "br_custom_use": "Usar",
-  "br_custom_remove": "Remover"
+  "br_custom_remove": "Remover",
+  "br_wheel_slice_pocket_sparkles": "Brilhos no bolso",
+  "br_wheel_slice_good_behaviour": "Bom comportamento",
+  "br_wheel_slice_keep_the_change": "Fique com o troco",
+  "br_wheel_slice_spoiled_rotten": "Todos os mimos",
+  "br_wheel_slice_room_service": "Serviço de quarto",
+  "br_wheel_slice_seeing_double": "Visão dupla",
+  "br_wheel_slice_head_empty": "Cabeça vazia",
+  "br_daze_empty": "Nem um pensamento. Nem um brilho.",
+  "br_daze_double_won": "Visão dupla. Prêmios dobrados por 24 horas.",
+  "br_daze_complete": "Coleção completa. +{n} SP.",
+  "br_daze_delivered": "Entrega: {name}. Coloque no Serviço de quarto.",
+  "br_daze_gift": "Uma decoração",
+  "br_daze_gift_odds": "Decoração inédita, ou 75 SP se a coleção estiver completa",
+  "br_daze_double_odds": "Prêmios dobrados por 24 horas",
+  "br_daze_nothing": "Nada"
 }

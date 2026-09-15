@@ -6131,5 +6131,20 @@
   "br_custom_off": "Off",
   "br_custom_lever": "Slot lever",
   "br_custom_use": "Use",
-  "br_custom_remove": "Remove"
+  "br_custom_remove": "Remove",
+  "br_wheel_slice_pocket_sparkles": "Pocket Sparkles",
+  "br_wheel_slice_good_behaviour": "Good Behaviour",
+  "br_wheel_slice_keep_the_change": "Keep the Change",
+  "br_wheel_slice_spoiled_rotten": "Spoiled Rotten",
+  "br_wheel_slice_room_service": "Room Service",
+  "br_wheel_slice_seeing_double": "Seeing Double",
+  "br_wheel_slice_head_empty": "Head Empty",
+  "br_daze_empty": "Not a thought. Not a sparkle.",
+  "br_daze_double_won": "Seeing Double. Winnings doubled for 24 hours.",
+  "br_daze_complete": "Collection complete. +{n} SP.",
+  "br_daze_delivered": "{name} delivered. Place it at Room Service.",
+  "br_daze_gift": "A decoration",
+  "br_daze_gift_odds": "Unowned decoration, or 75 SP if complete",
+  "br_daze_double_odds": "Double winnings for 24 hours",
+  "br_daze_nothing": "Nothing"
 }

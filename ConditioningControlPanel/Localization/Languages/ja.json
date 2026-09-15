@@ -5396,5 +5396,20 @@
   "br_custom_off": "オフ",
   "br_custom_lever": "スロットレバー",
   "br_custom_use": "使用",
-  "br_custom_remove": "取り外す"
+  "br_custom_remove": "取り外す",
+  "br_wheel_slice_pocket_sparkles": "ポケットのきらめき",
+  "br_wheel_slice_good_behaviour": "おりこうさん",
+  "br_wheel_slice_keep_the_change": "おつりはどうぞ",
+  "br_wheel_slice_spoiled_rotten": "甘やかされ放題",
+  "br_wheel_slice_room_service": "ルームサービス",
+  "br_wheel_slice_seeing_double": "ダブルビジョン",
+  "br_wheel_slice_head_empty": "頭からっぽ",
+  "br_daze_empty": "考えも、きらめきも、なし。",
+  "br_daze_double_won": "ダブルビジョン。24時間、獲得賞金が2倍。",
+  "br_daze_complete": "コレクション完成。+{n} SP。",
+  "br_daze_delivered": "{name}が届きました。ルームサービスで配置できます。",
+  "br_daze_gift": "装飾品",
+  "br_daze_gift_odds": "未所持の装飾品。全所持なら75 SP",
+  "br_daze_double_odds": "24時間、獲得賞金が2倍",
+  "br_daze_nothing": "何もなし"
 }

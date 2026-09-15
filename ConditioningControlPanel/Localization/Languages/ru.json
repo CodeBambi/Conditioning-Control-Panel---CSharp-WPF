@@ -5403,5 +5403,20 @@
   "br_custom_off": "Выкл.",
   "br_custom_lever": "Рычаг автомата",
   "br_custom_use": "Применить",
-  "br_custom_remove": "Убрать"
+  "br_custom_remove": "Убрать",
+  "br_wheel_slice_pocket_sparkles": "Блёстки в кармане",
+  "br_wheel_slice_good_behaviour": "За хорошее поведение",
+  "br_wheel_slice_keep_the_change": "Сдачи не надо",
+  "br_wheel_slice_spoiled_rotten": "Все капризы",
+  "br_wheel_slice_room_service": "Обслуживание номера",
+  "br_wheel_slice_seeing_double": "В глазах двоится",
+  "br_wheel_slice_head_empty": "Пустая голова",
+  "br_daze_empty": "Ни мысли. Ни блёстки.",
+  "br_daze_double_won": "В глазах двоится. Выигрыши удвоены на 24 часа.",
+  "br_daze_complete": "Коллекция собрана. +{n} SP.",
+  "br_daze_delivered": "Доставка: {name}. Разместите через обслуживание номера.",
+  "br_daze_gift": "Украшение",
+  "br_daze_gift_odds": "Новое украшение или 75 SP, если коллекция собрана",
+  "br_daze_double_odds": "Двойные выигрыши на 24 часа",
+  "br_daze_nothing": "Ничего"
 }

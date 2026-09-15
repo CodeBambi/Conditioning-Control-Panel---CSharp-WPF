@@ -1904,3 +1904,9 @@ restore changed fixture state and release their own textures, geometry and liste
 No view creates a WebGL context. Texture canvases are permitted; context checks distinguish them
 from WebGL canvases and do not create a context while counting. `.br-seat` holds controls below
 the persistent room chrome, passes empty-space input through, and fits 400 px without overflow.
+
+## 10.19 Daily Daze reward wheel (owner approved 2026-09-15)
+One free UTC-day spin remains. Ordinary results: Pocket Sparkles 15 SP 30%; Good Behaviour 30 SP 25%; Keep the Change 60 SP 15%; Spoiled Rotten 150 SP 5%; Room Service 10%; Seeing Double 12%; Head Empty 3%. Existing shared jackpot draw remains separate. Slice geometry follows server widths, never model placeholders.
+Room Service grants a random unowned collectible decoration; a complete collection pays 75 SP. Collectibles are the six optional Room Service props: monstera, ivy, terrarium, gallery, portraits, billboard. Existing core customization remains free. Ownership is server-authoritative; no purchase or local ownership inference.
+Seeing Double lasts 24 hours from the win, refreshes without stacking, and doubles actual Back Room winnings including SP gifts and jackpots, excluding returned stakes. A blackjack push gains no bonus. Server receipts own credited amounts; prepaid tapes settle their bonus at purchase time. Head Empty pays nothing and has a short quiet reaction.
+Presentation: pink and cream enamel, brass dividers, large SP amounts with short names; Room Service cloche reveal; Seeing Double spiral-eye mark and a timed x2 charm by the balance; Head Empty bare cream wedge; Spoiled Rotten raspberry and coin shower. No auto-enable of decorations, no guest pass or bonus spins. All effects obey motion settings. Reward revelation occurs at the landed frame; server state may never reveal it early through another surface.
