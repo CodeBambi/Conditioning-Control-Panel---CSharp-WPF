@@ -1,19 +1,4 @@
-/* ============================================================================
- * backroom/smoke/room-stations-check.mjs - every live station through the REAL room, one page, one host.
- *
- *   node backroom/smoke/room-stations-check.mjs [evidenceDir]    (exit 0 = pass)
- *
- * What it proves that the per-station checks cannot: the room reads stations.json and sets out every fixture,
- * the fake host answers init with the stations the C# host whitelists (BackRoomApi.Ops keys: slot, wheel,
- * cards, roulette, counter), and each of the five stations mounts from its stations.json entry through the loader,
- * opens (station-open, hostBack), plays one moment against its own mock-server.js, and closes on the room's
- * Back (station-close, the loader empty, the room loop running again, no tunnel left above 0). The slot here
- * is the REAL slot station, not smoke/mock-station.js.
- *
- * Nothing leaves the machine: Resources/web is served on 127.0.0.1 (ROOM_STATIONS_PORT, default 8931, debug
- * +500). The only process it stops is the Chrome it started, by its own handle.
- * CHROME: CHROME_PATH, else the usual Windows install.
- * ==========================================================================*/
+/* Real room camera checks: responsive game framing, continuous arrival, cancellation and return. */
 
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -43,7 +28,7 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/jav
 const server = createServer(async (req, res) => {
   const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   if (path.includes('..')) { res.writeHead(400); return res.end(); }
-  try { const body = await readFile(join(WEB, path)); res.writeHead(200, { 'content-type': MIME[extname(path).toLowerCase()] || 'application/octet-stream' }); res.end(body); }
+  try { if(path.endsWith('/cards/station.js'))await sleep(400); const body = await readFile(join(WEB, path)); res.writeHead(200, { 'content-type': MIME[extname(path).toLowerCase()] || 'application/octet-stream' }); res.end(body); }
   catch { res.writeHead(404); res.end('no'); }
 });
 await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
@@ -114,6 +99,20 @@ const clickSel = (sel) => ev(`(() => { const b = document.querySelector(${JSON.s
 const report = { stations: {}, registry: LIVE.map((s) => s.id + (s.variant ? ':' + s.variant : '')) };
 
 
+// An intentionally slow import must leave the last walking frame visible, never a blank layer.
+await cdp('Emulation.setDeviceMetricsOverride',{width:400,height:730,deviceScaleFactor:1,mobile:true});
+await cdp('Page.navigate',{url:`http://127.0.0.1:${PORT}/backroom/index.html`});
+ok(await until("document.documentElement.classList.contains('br-ready')",45000),'continuity room boots');
+await ev('window.__backroom.scene.setStill(true)');await sleep(100);await shot('continuity-0-walking.png');
+const prior=await ev('window.__backroom.scene.debug()');
+await ev("window.__backroom.visit(window.__backroom.stations.find(s=>s.id==='cards'));true");
+await sleep(40);await shot('continuity-1-importing.png');
+const importing=await ev("({scene:window.__backroom.scene.debug(),background:getComputedStyle(document.querySelector('.br-station')).backgroundColor})");
+ok(importing.background==='rgba(0, 0, 0, 0)'&&importing.scene.running&&!importing.scene.held,'pending import preserves visible room renderer');
+ok(importing.scene.position.every((v,i)=>v===prior.position[i]),'pending import preserves walking pose');
+ok(await until('window.__backroom.scene.transitioning',3000),'arrival follows import');
+await sleep(40);await shot('continuity-2-pan-start.png');await sleep(500);await shot('continuity-3-pan-middle.png');
+await ev('window.__backroom.back();true');ok(await until('!window.__backroom.scene.transitioning',6000),'continuity return completes');
 for(const [width,height] of (process.argv.includes('--phone')?[[400,730]]:process.argv.includes('--landscape')?[[730,400]]:[[400,730],[1280,720],[730,400]])){
  await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<800});
  await cdp('Page.navigate',{url:`http://127.0.0.1:${PORT}/backroom/index.html`});

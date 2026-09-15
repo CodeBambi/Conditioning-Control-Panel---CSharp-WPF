@@ -151,7 +151,7 @@ export function createLoader(room) {
     }
 
     const root = document.createElement('div');
-    root.className = 'br-station';
+    root.className = 'br-station br-seat'; // The room stays visible while code and camera arrive.
     root.dataset.station = station.id;
     room.layer.appendChild(root);
     const subs = new Set();   // .closed once dropSubs has run
@@ -170,6 +170,7 @@ export function createLoader(room) {
         const trip=room.approach(station);
         if(trip){subs.add(()=>trip.dispose());const arrived=await trip.arrived;if(my!==seq||arrived===false){dropSubs(subs);return 'superseded';}}
       }
+      if(!stage)root.classList.remove('br-seat');
       const handle = await mod.mount(buildCtx(station, root, extra && extra.variant, subs, stage));
       if (my !== seq) { dropSubs(subs); try { handle && handle.destroy && handle.destroy(); } catch (e) { /* noop */ } return 'superseded'; }
       current.handle = handle;

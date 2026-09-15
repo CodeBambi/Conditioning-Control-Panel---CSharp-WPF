@@ -160,8 +160,7 @@ async function visit(row) {
   if (leaving || visiting || !scene || !loader || scene.overview || scene.transitioning || scene.seated) return;
   if(row?.key==='customization'){scene.customization.open();return;}
   visiting = true;
-  scene.hold();
-  hud.hideWhileVisiting(true);
+  scene.prepareVisit();
   await loader.open(row, { variant: row.variant ? { id: row.variant, name: label(row), palette: row.fixture.palette } : null });
 }
 
