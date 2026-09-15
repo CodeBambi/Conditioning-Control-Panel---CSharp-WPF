@@ -22,7 +22,7 @@ public class BackRoomFxXpTests
         var clock = new FakeScheduler();
         var sink = new RecordingSink(clock);
         var paid = new List<int>();
-        var fx = new BackRoomFx(sink, clock, () => new FxEnvironment(motion, intensity, FxGates.AllOn, BackRoomFxPlanTests.Woven),
+        var fx = new BackRoomFx(sink, clock, () => new FxEnvironment(motion, intensity, BackRoomFxPlanTests.Woven),
             new Random(5), paid.Add);
         return (fx, clock, sink, paid);
     }
@@ -127,7 +127,7 @@ public class BackRoomFxXpTests
     public void AMergedDuplicate_PaysOnce_AndACancelledOnsetNever()
     {
         var (fx, clock, _, paid) = Make(BackRoomFxIntensity.Full);
-        fx.Fire("fx.jackpot", "slot", new[] { "gif1" }, Deal);   // Full: gif-full at 4000 ms
+        fx.Fire("fx.jackpot", "slot", new[] { "gif1" }, Deal);   // Full: gif-full at 5200 ms
         fx.Fire("fx.jackpot", "slot", new[] { "gif1" }, Deal);   // merged into the one on stage
         clock.Advance(20_000);
         Assert.Equal(new[] { 4 }, paid);

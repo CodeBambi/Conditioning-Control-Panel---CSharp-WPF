@@ -78,7 +78,7 @@ request never rejects: a missing reply resolves as `{ok:false, reason:'timeout'}
 | `balance` | `sp, why:'server'\|'earn'\|'sync'` | Authoritative SP changed outside a station result. |
 | `media` | `reqId, gifs[4], words[4], seed` | Sit-down media (section 5). |
 | `station-result` | `reqId, ok, status, reason?, body` | Server answer, or a host refusal (`offline`, `closed`, `bad_op`). |
-| `fx-ack` | `token, fired[], skipped[]` | What actually played. `skipped` entries: `{prim, why:'toggle'\|'motion'\|'calm'\|'busy'\|'unknown'}`. |
+| `fx-ack` | `token, fired[], skipped[]` | What actually played. `skipped` entries: `{prim, why:'busy'\|'unknown'}` (the authored show, 2026-09-15: no setting skips a primitive; `toggle`/`motion`/`calm` are gone). |
 | `settings` | `motion, intensity, reduced, gates` | A setting changed while open (`gates` 10.13.A). |
 | `suspend` | `on, reason:'panic'\|'focus'\|'minimise'` | Stop audio and fx now; `on:false` resumes. |
 | `close` | `reason:'app-exit'\|'panic'` | Host wants the window gone. Page answers `exit-done` within 300 ms; host force-closes at 800 ms. |
@@ -245,39 +245,56 @@ A spin pays its single best line, top row first. Class counts are over the three
 | `none` | nothing | 0 | none (page: SHIVER + muted thud) |
 | (overlay) | any subliminal showing, not already in the line fx | 0 | `fx.sub_single` |
 
-Effect ids are global (every station reuses them) and resolve on the host into primitives:
+Effect ids are global (every station reuses them) and resolve on the host into primitives. **The Back Room is an
+AUTHORED show (owner direction, 2026-09-15):** every fx id always plays its full recipe. The app's Flash /
+Subliminal / Spiral / Brain Drain / Tunnel toggles and the room's own switches gate NOTHING here. One authored row
+per id; `Full` keeps the counts and stretches every duration x1.3; `Calm` is "gentle": every opacity and strength
+x0.5, every duration kept, never a step skipped.
 
-| fxId | Calm recipe | Normal recipe (design doc) | Full recipe | Gated by |
-|---|---|---|---|---|
-| `fx.jackpot` | `spiral-full` 2 s + `gif-full` 1.5 s + `sub-single` | hero window 2.4 s: `spiral-full` 2.4 s, then `flash-burst` 4, `gif-rain` 2 s, `glitch-bubbles` 1, `sub-burst9` | hero window 4 s: `spiral-full` 4 s, `flash-burst` 8, `gif-rain` 4 s, `glitch-bubbles` 3, `sub-burst9` twice, `gif-full` 2 s | per primitive |
-| `fx.gif_storm` | `flash-burst` 1 | `flash-burst` 4 + `gif-rain` 2 s + `glitch-bubbles` 1 | `flash-burst` 6 + `gif-rain` 3.5 s + `glitch-bubbles` 2 | Flash |
-| `fx.sub_cascade` | `sub-seq` 2 + `gif-full` 1.5 s | `sub-burst9` then `gif-full` 1.5 s | `sub-burst9` then `gif-full` 2.5 s | Subliminal, Flash |
-| `fx.spiral_full` | `spiral-full` 2.5 s, half opacity | `spiral-full` 2.5 s | `spiral-full` 4 s | Spiral |
-| `fx.spiral_brief` | `spiral-full` 1.2 s, half opacity | `spiral-full` 1.2 s | `spiral-full` 2 s | Spiral |
-| `fx.gif_burst` | `flash-burst` 1 | `flash-burst` 2 | `flash-burst` 3 | Flash |
-| `fx.sub_pair` | `sub-seq` 2 | `sub-seq` 2 then `spiral-full` 1.2 s | `sub-seq` 3 then `spiral-full` 2 s | Subliminal, Spiral |
-| `fx.sub_single` | `sub-single` per word | same | same | Subliminal |
-| `fx.melt` | `brain-drain-melt` 4 s, half intensity | `brain-drain-melt` 6 s | `brain-drain-melt` 9 s | BrainDrain |
+| fxId | Authored recipe (Normal) | `args` it reads |
+|---|---|---|
+| `fx.jackpot` (hero, 4 s) | `spiral-full` 4 s at 0.7; then at 4 s: `flash-burst` 8 (medium, opacity 1.0, 300 ms apart), `gif-rain` 4 s (19 GIFs at 0.9), `glitch-bubbles` 3, `sub-burst9` twice (the second right after the first), `gif-full` 2 s at 0.8 | |
+| `fx.gif_storm` | `flash-burst` 5 + `gif-rain` 14 GIFs over 3 s at 0.9 + `glitch-bubbles` 1 | |
+| `fx.sub_cascade` | `sub-burst9` (9 words, onsets 350 ms apart) then `gif-full` 1.5 s at 0.8 | `wordsShown` |
+| `fx.spiral_full` | `spiral-full` 4 s, alpha 0.7 | |
+| `fx.spiral_brief` | `spiral-full` 1.5 s, alpha 0.55 | |
+| `fx.gif_burst` | `flash-burst` 5 (medium images, opacity 1.0, 300 ms apart) | `count` 1..8 (the slot's GIF tease sends 1) |
+| `fx.sub_pair` | `sub-seq` 2 then `spiral-full` 1.5 s at 0.55 | `wordsShown` |
+| `fx.sub_single` | `sub-single` per word, onsets 500 ms apart | `wordsShown` |
+| `fx.melt` | `brain-drain-melt` 6 s, alpha ramping 0 to 0.8 | |
 
-Full never breaks the Brake: no strobe over 6 Hz, one hero at a time, toggles still win.
+Every word is VISIBLE then FADES, never a blink: in 80 ms, hold 400 ms, out 350 ms, full opacity. Every spiral fades
+in over 250 ms and out over 500 ms (the same for `fx.loom_spiral`); a fullscreen glitch pulse is 600 ms at 0.35; a
+wash is 900 ms at default strength 0.7. `args.wordsShown: true` on the three word ids means the page rendered the
+words itself: the host leaves the word steps out and plays only the rest (single: nothing; pair: the spiral; cascade:
+the fullscreen GIF), each at its authored offset.
+
+Exactly two safety lines remain, and neither one skips a step:
+- **Reduced motion** (the effective `MotionLevel` below `Full`, which is also where the OS animation flag lands):
+  flash onsets are capped at 3 Hz (334 ms apart) and every spiral plays its slower variant (the weave at half speed).
+  Nothing is stilled, renamed or dropped.
+- **Calm**: every opacity and strength x0.5, every duration kept.
+
+Full never breaks the Brake: no strobe over 6 Hz, one hero at a time.
 
 Primitives (C3 maps them onto existing services; `gif-full` is the only new overlay):
 
-| Primitive | Service call | Motion rule |
-|---|---|---|
-| `flash-burst n` | `App.Flash.TriggerFlashOnce(n, FlashDuration, null, true)` with the dealt GIFs | `Off` -> n=1 |
-| `gif-rain s` | `ChaosGifCascadeOverlay.Show(...)` / `EmiGifRain` constants | skipped at `Reduced`/`Off` |
-| `glitch-bubbles n` | `ChaosFlashOverlay.Show(ms, 0.3)` | skipped at `Off` |
-| `sub-single` | `App.Subliminal.FlashSubliminalCustom(text, null, null, true)` | always |
-| `sub-seq n` / `sub-burst9` | the same, looped at >= 220 ms per word (Brake: no strobe over 6 Hz) | `Reduced` -> `sub-seq 2` |
-| `spiral-full s` | ~~`OverlayService.ShowOverlayTimed("spiral", ms, opacity)`~~ amended 10.13.B: plays `spiral-loom` (preset `screen`), a Loom-woven spiral | `Off` -> static frame |
-| `brain-drain-melt s` | `ShowOverlayTimed("braindrain_melt", ms, BrainDrainIntensity)` | `Off` -> `braindrain` (no drip) |
-| `gif-full s` | NEW: fullscreen single-GIF overlay across screens | `Off` -> still frame |
+| Primitive | Service call |
+|---|---|
+| `flash-burst n` | `App.Flash.TriggerFlashOnce(n, FlashDuration, 100, true, new FlashBurstLook(opacity, gapMs))` with the dealt GIFs: medium images, authored opacity, authored stagger |
+| `gif-rain s` | `ChaosGifCascadeOverlay.Show(...)`, the count over the seconds at the authored opacity |
+| `glitch-bubbles n` | `ChaosFlashOverlay.Show(600, 0.35)` per pulse, 600 ms apart |
+| `sub-single` | `App.Subliminal.FlashSubliminalCustom(text, opacity, 400, true, 80, 350)` |
+| `sub-seq n` / `sub-burst9` | the same, at 500 ms / 350 ms per word (the pacer's floor is the burst gap, across fx) |
+| `spiral-full s` | ~~`OverlayService.ShowOverlayTimed("spiral", ms, opacity)`~~ amended 10.13.B: plays `spiral-loom` (preset `screen`), a Loom-woven spiral, at the authored alpha and fades |
+| `brain-drain-melt s` | `ShowOverlaySustained("braindrain_melt", ...)` ramped 0 to the authored alpha over the step, then released |
+| `gif-full s` | fullscreen single-GIF overlay across screens at the authored opacity |
 
 Rules the host enforces, not the page:
-- A primitive whose feature toggle is off is skipped and reported, never forced on.
-- New setting `AppSettings.BackRoomFxIntensity` = `Calm | Normal | Full` (default `Normal`), shown in
-  the room and in Settings. `Calm` also applies whenever `MotionLevel != Full`, whatever the setting.
+- No primitive is ever skipped for a setting. The only skips are `busy` (the hero queue, the Brake gaps) and
+  `unknown` (an id the host does not know, or media it does not have).
+- Setting `AppSettings.BackRoomFxIntensity` = `Calm | Normal | Full` (default `Normal`), shown in the room and in
+  Settings. It is never forced by the motion level.
 - One hero at a time (Brake 2): an `fx` arriving while a hero window runs is queued, merged if it is the
   same id, and dropped after 4 s in queue (`busy`).
 - `suspend` or `close` cancels every running primitive the room started.
@@ -585,8 +602,8 @@ host: a missing `ctx` member is feature-detected and the effect is skipped, neve
 
 - Sources: `AppSettings.FlashEnabled`, `SubliminalEnabled`, `SpiralEnabled`, `BrainDrainEnabled`. The host pushes a
   full `settings` frame when any of the four, `MotionLevel` or `BackRoomFxIntensity` changes, and on `CurrentReplaced`.
-- Gates are for DRESSING. The host still enforces every toggle in `BackRoomFxPlan` (its `FxGates` keeps `Melt` and
-  `SpiralStill`). A page never forces an effect because a gate said true.
+- Gates are for DRESSING only. Since the authored show (2026-09-15) the host gates NOTHING on them: `BackRoomFxPlan`
+  has no `FxGates` any more, and every fx id plays its full recipe whatever the toggles say.
 - Page side (K1, `room/loader.js`): `ctx.gates` is a live frozen `{flash, subliminal, spiral, brainDrain}` getter;
   `ctx.onSettings(fn)` subscribes to `{motion, intensity, reduced, gates}` and returns an unsubscribe. A host that sends
   no `gates` reads as all `true` (the host is the enforcer).
@@ -1000,11 +1017,10 @@ field per screen, centred on each | Off: the woven GIF's first frame.
 - What kept it dark: `fx.melt` (the slot's melt) needed the app-wide `AppSettings.BrainDrainEnabled` (default `false`)
   and lost its drip without `AppSettings.BrainDrainMeltEnabled` (default `false`), so a player who never opened Brain
   Drain never saw a Back Room melt.
-- Now `AppSettings.BackRoomMelt`, default `true`, is the ONLY gate on `fx.melt` (`FxGates.Melt`): on, the melt plays
-  (the drip included; MotionLevel Off still turns it into the still blur, reported `motion`); off, the whole melt is
-  skipped `toggle`. The app-wide Brain Drain toggles no longer gate it, and nothing about the app's own Brain Drain
-  feature or its defaults changed. A settings file without the key reads as on, so new AND existing players get it;
-  a player who turns it off in the room's Options keeps that off. `fx.haze` stays on `brainDrain`.
+- Now `AppSettings.BackRoomMelt`, default `true`, is the room's own switch. Superseded 2026-09-15 by the authored
+  show: `fx.melt` ALWAYS plays (6 s, alpha ramping 0 to 0.8, the drip included, at every motion level), the switch
+  dresses the room's Options only, and `fx.haze` is gated by nothing either. The app-wide Brain Drain toggles never
+  gated it, and nothing about the app's own Brain Drain feature or its defaults changed.
 - The page sees it as `gates.melt` (dressing only).
 
 **4. Screen preset: both layers turn the same way.** `LOOM_PRESETS.screen` layer2 (the thin gold layer) runs
