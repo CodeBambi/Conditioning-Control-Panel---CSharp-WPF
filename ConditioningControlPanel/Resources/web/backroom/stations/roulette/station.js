@@ -113,12 +113,12 @@ export async function mount(ctx) {
     if (!hook) $('.roul-sp').textContent = t('br_roulette_sp', '{n} SP', { n: fmt(shownSp(sp, tape)) });
     const pips = el.querySelectorAll('.roul-pips i'), used = chipTotal(chips);
     pips.forEach((p, i) => p.classList.toggle('is-used', i < used));
-    $('.roul-chips-label').textContent = stage ? t('br_roulette_place_bets', 'Place bets · {n}/{max}', { n: used, max: MAX_CHIPS }) : t('br_roulette_chips', 'Chips {n} of {max}', { n: used, max: MAX_CHIPS });
+    $('.roul-chips-label').textContent = stage && !mat?.split ? t('br_roulette_place_bets', 'Place bets · {n}/{max}', { n: used, max: MAX_CHIPS }) : t('br_roulette_chips', 'Chips {n} of {max}', { n: used, max: MAX_CHIPS });
     $('.roul-chips-label').dataset.chips = String(used);
     const locked = phase !== 'bet' || resume || stage?.ready === false;
     $('.roul-clear').disabled = locked || used === 0;
-    $('.roul-chips-label').disabled = !stage || locked;
-    if (betSelector && locked) betSelector.hide();
+    $('.roul-chips-label').disabled = !stage || mat?.split || locked;
+    if (betSelector && (locked || mat?.split)) betSelector.hide();
     el.querySelectorAll('.roul-spins button').forEach((b) => { b.setAttribute('aria-pressed', String(Number(b.dataset.n) === count)); b.disabled = locked; });
     const shownWhy = why || (phase === 'bet' && !resume && !c.ok && c.why !== 'empty' ? whyText(c.why, c) : '');
     $('.roul-why').textContent = shownWhy; $('.roul-why').hidden = !shownWhy;
@@ -328,6 +328,7 @@ export async function mount(ctx) {
     if (suspended || !bowl) return;
     if (stage && stageReady !== (stage.ready !== false)) { stageReady = stage.ready !== false; sync(); }
     const now = clock(), still = stillNow(), k = kNow();
+    if(stage){mat.layout();const split=mat.split;if(el.hasAttribute('data-split')!==split){el.toggleAttribute('data-split',split);sync();}}
     layout();
     if (kit) kit.setStill(still);
     const u = bowl.update(now, { still });
@@ -350,7 +351,7 @@ export async function mount(ctx) {
     bowl.draw(g, { dpr: size.dpr, now, k, full: fullNow(), spiral: gt.spiral, kit,
       still, slowText: t('br_roulette_slowly', 's l o w l y') });
     const landedShown = cur && cur.landed ? cur.read : null;
-    if (betSelector) betSelector.draw(null, { chips, hits: [], locked: phase !== 'bet' || resume || !stageReady });
+    if (betSelector) betSelector.draw(null, { chips, hits: [], locked: phase !== 'bet' || resume || !stageReady || mat?.split });
     mat.draw(g, { now, chips, hover, hits: landedShown ? landedShown.hits : [], landed: landedShown ? landedShown.pocket : null, k, still,
       bowl: bowl.geo, locked: phase !== 'bet' || resume });
   }
@@ -400,7 +401,7 @@ export async function mount(ctx) {
     mat = stage ? makeMat3D({ stage, spots: st.spots, label: matLabel }) : createMat({ spots: st.spots, rose: st.rose, label: matLabel });
     if (stage) {
       betSelector = createMatStrip({ root: el, spots: st.spots, label: matLabel, place, onToggle: open => $('.roul-chips-label').setAttribute('aria-expanded',String(open)) }); betSelector.hide();
-      unStage = stage.register({ update: frame, dispose() { bowl?.dispose(); mat?.dispose(); betSelector?.dispose(); betSelector = null; } });
+      unStage = stage.register({ update: frame, draw: renderer => mat?.drawSplit(renderer), dispose() { bowl?.dispose(); mat?.dispose(); betSelector?.dispose(); betSelector = null; } });
     }
     if (tape) {
       chips = chipsOf(tape.bets); resume = tape.played < tape.outcomes.length;
@@ -409,6 +410,7 @@ export async function mount(ctx) {
     if (hook) hook.owe(reader);   // registered once the tape state is back (CONTRACT 7.1)
     renderOdds();
     layout();   // the mat takes clicks from the first interactive frame
+    if(stage)el.toggleAttribute('data-split',mat.split);
     phase = 'bet'; sync();
     if (!stage) raf = requestAnimationFrame(frame);
     note('open', { resume, sp, still: stillNow(), gates: gates() });
