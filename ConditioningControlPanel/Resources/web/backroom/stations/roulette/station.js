@@ -14,6 +14,9 @@
  *   shared/hypno  the Loom kit (turret whirl), the deal (a picture key for
  *             fx.gif_from) and the moments (the tunnel run, the haze, the wake
  *             spiral, the wash and the pocket GIF)
+ *   glyphs.js the pocket glyphs (GLYPHS.md): four faded marks on the wheel's inner
+ *             slope keyed by the pocket number, one section 4 id each; every
+ *             landing fires the landed pocket's id on the thud frame (Law X)
  *   feel.FX_RECIPE  the host recipe on top: every beat of a spin (no more bets,
  *             the launch, the wake, the fret rattle, a near miss, the landing by
  *             outcome, a streak) fires section 4 ids through ctx.fx, cooled and
@@ -179,6 +182,7 @@ export async function mount(ctx) {
     $('.roul-odds table').replaceChildren(...rows);
     $('.roul-odds p').textContent = t('br_roulette_odds_note', 'Pays are the SP a chip returns, the chip included. Spiral Wake {wake}: every winning chip pays double. 1 to {max} SP a spin, up to {spins} spins. A layout covering all of 1-36 is refused.',
       { wake: String((st.table && st.table.wake) || ''), max: MAX_CHIPS, spins: MAX_SPINS });
+    $('.roul-glyphs').textContent = t('br_roulette_glyphs_note', 'The faded marks on the wheel are the spell of each pocket, win or lose. Spiral: a spiral. Eye: a flash of pictures. Bubble: words. Drop: a melt. The mark lights when the ball settles there.');
   }
 
   /* ---------------------------------------------------------------- build */
@@ -201,7 +205,7 @@ export async function mount(ctx) {
         <p class="roul-why" hidden></p>
         <button class="roul-spin" type="button"><span></span><small></small></button>
       </div>
-      <details class="roul-odds"><summary></summary><table></table><p></p></details>
+      <details class="roul-odds"><summary></summary><table></table><p></p><p class="roul-glyphs"></p></details>
       <div class="roul-card" role="status" hidden><p></p><button class="roul-card-back" type="button"></button></div>
       <div class="roul-loading"></div>`;
     const set = (sel, text) => { root.querySelector(sel).textContent = text; };
@@ -251,11 +255,11 @@ export async function mount(ctx) {
     else if (name === 'land.full') { sound.play('drop'); sound.play('win', { tier: 'hero' }); sound.play('chips', { n: 8, at: 0.4 }); }
   }
   /** The host recipe (feel.FX_RECIPE): a beat fires its section 4 ids through ctx.fx, gated, cooled, never awaited (fx-ack is advisory). */
-  function beat(name, { i = null, streak: run = 0 } = {}) {
+  function beat(name, { i = null, streak: run = 0, pocket = null } = {}) {
     const fired = [];
     cue(name);
     if (!alive || suspended || typeof ctx.fx !== 'function') return fired;
-    const plan = fxPlan(name, { gates: gates(), calm: stillNow(), full: fullNow(), streak: run });
+    const plan = fxPlan(name, { gates: gates(), calm: stillNow(), full: fullNow(), streak: run, pocket });
     const now = performance.now();
     for (const step of plan) {
       if (!cool.take(step, now, i)) continue;
@@ -364,6 +368,7 @@ export async function mount(ctx) {
     const r = cur.read;
     cur.landed = true; cur.landAt = now; cur.win = r.pay > 0;
     moments.tunnel(0);
+    const glyphFx = beat('glyph', { i: r.i, pocket: r.pocket });   // THE POCKET GLYPH: the mark lights and its effect fires on the thud frame (Law X), win or lose
     const id = landMoment(r);
     streak = r.pay > 0 ? streak + 1 : 0;
     const near = nearMisses(r, tape.bets, st.wheel), hostBeat = landBeat(r, near);
@@ -379,12 +384,12 @@ export async function mount(ctx) {
         if (my !== session || !alive || suspended || !cur || cur.i !== i) return;
         landFx(r, id, hostBeat, near, co);
       }, FX_DELAY_MS);
-      note('landed', { i: r.i, pocket: r.pocket, pay: r.pay, beat: hostBeat, callout: co ? co.key : null });
+      note('landed', { i: r.i, pocket: r.pocket, pay: r.pay, beat: hostBeat, callout: co ? co.key : null, glyph: glyphFx });
     } else {
       const box = bowl.pocketBox(r.index);
       const hostFx = beat(hostBeat, { i: r.i, streak });   // a near miss's spiral, or nothing
       const m = moments.play(id, { color: pocketColor(r.pocket, st.rose), from: viewportRect(cv, box.x, box.y, box.w, box.h), wake: r.wake });   // releases the run's holds
-      note('land', { i: r.i, pocket: r.pocket, pay: r.pay, wake: r.wake, straight: r.straight, moment: id, page: m.page, fx: m.tokens.length, beat: hostBeat, near, streak, hostFx, callout: null, delayed: false });
+      note('land', { i: r.i, pocket: r.pocket, pay: r.pay, wake: r.wake, straight: r.straight, moment: id, page: m.page, fx: m.tokens.length, beat: hostBeat, near, streak, hostFx, glyph: glyphFx, callout: null, delayed: false });
     }
     tape.played = r.i + 1;
     if (hook) { hook.owe(reader); if (r.pay > 0 && typeof hook.thud === 'function') hook.thud(); }
