@@ -32,6 +32,7 @@ import { createScene } from './scene.js';
 import { createLoader } from './loader.js';
 import { createHud } from './hud.js';
 import { createRoomRewards, createDoubleCharm } from './rewards.js';
+import { kit } from '../shared/sound/kit.js';
 const rewards = createRoomRewards();
 let doubleCharm = null;
 function applyRewards(body) { if (leaving) return; if (rewards.apply(body)) { scene?.setRewards(rewards.snapshot()); doubleCharm?.paint(); } }
@@ -188,6 +189,7 @@ async function settle() {
   if (hud) hud.stop();
   doubleCharm?.dispose(); doubleCharm = null;
   if (scene) scene.halt();
+  kit.dispose();   // the ambience and every voice go with the room
   if (loader) await loader.close(PAGE_SETTLE_MS - 60);
   bridge.send({ type: 'exit-done' });
 }
@@ -227,8 +229,16 @@ function wireHudKeys() {
   window.addEventListener('keyup', guard, true);
 }
 
+/** The ambience bed starts on the first gesture (the browser's rule for a context) and loops while the room is open. */
+function wireAmbience() {
+  const wake = () => { if (kit.arm()) kit.play('ambience'); };
+  window.addEventListener('pointerdown', wake, { once: true, capture: true });
+  window.addEventListener('keydown', wake, { once: true, capture: true });
+}
+
 function wireExits() {
   wireHudKeys();
+  wireAmbience();
   $('#br-back').addEventListener('click', () => back('back'));
   window.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
@@ -345,11 +355,13 @@ async function start(init) {
     state.intensityChoice = readChoice(m.intensityChoice, state.intensityChoice);
     paintChrome();
     paintMotion();
+    kit.setTrim(state.intensity === 'calm' ? 0.6 : 1);   // a quieter floor under Calm; no volume setting of its own
     const frame = { motion: state.userStill ? 'off' : state.motion, intensity: state.intensity, reduced: state.reduced, gates: state.gates };
     for (const fn of Array.from(settingsListeners)) { try { fn(frame); } catch (e) { bridge.log('warn', 'onSettings threw: ' + e); } }
   });
   bridge.on('suspend', (m) => {
     state.suspended = !!m.on;
+    kit.suspend(state.suspended);   // Law VI: every voice and the ambience hold; the ambience comes back on resume
     if (scene) scene.pause(state.suspended);   // a held room stays held either way
     if (loader) loader.suspend(state.suspended);
     paintChrome();
