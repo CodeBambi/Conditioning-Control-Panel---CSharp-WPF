@@ -548,7 +548,9 @@ export async function mount(ctx) {
       const next = stake + Number(b.dataset.delta);
       b.disabled = !c.bet || !st.rules.stakes.includes(next) || next < 1 || next > 3 || next > chip.value;
     }
-    $('.cards-bet-value').textContent = t('br_cards_stake', '{n} SP', { n: open && shownHand ? shownHand.hands[shownHand.active].bet : stake });
+    const betValue = $('.cards-bet-value');
+    // Frames run while the initial state request is pending, before renderStakes builds this output.
+    if (betValue) betValue.textContent = t('br_cards_stake', '{n} SP', { n: open && shownHand ? shownHand.hands[shownHand.active].bet : stake });
     if (ctx.stage && !open && !queue.length) table.setBets([stake]);
     syncTableHud();
     $('.cards-sit').disabled = !c.sit;
