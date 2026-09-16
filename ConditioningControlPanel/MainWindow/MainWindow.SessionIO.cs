@@ -271,99 +271,12 @@ namespace ConditioningControlPanel
             return Models.Session.GetAllSessions();
         }
 
-        private bool RackAccepts(Models.Session session)
-        {
-            switch (_rackSourceFilter)
-            {
-                case RackSourceBuiltIn:
-                    if (session.Source != Models.SessionSource.BuiltIn) return false;
-                    break;
-                case RackSourceYours:
-                    if (session.Source != Models.SessionSource.Custom) return false;
-                    break;
-                case RackSourceCatalogue:
-                    if (session.Source != Models.SessionSource.Imported) return false;
-                    break;
-            }
+        private bool RackAccepts(Models.Session session) =>
+            Services.SessionRackQuery.RackAccepts(session, _rackSourceFilter, _rackDifficulties, _rackSearch);
 
-            if (!_rackDifficulties.Contains(session.Difficulty)) return false;
-
-            if (_rackSearch.Length > 0)
-            {
-                // Mode-aware text, because that is what is ON the row: searching "bambi" on a
-                // drone build should find nothing rather than find rows that do not say it.
-                var name = session.GetModeAwareName() ?? "";
-                var desc = session.GetModeAwareDescription() ?? "";
-                if (name.IndexOf(_rackSearch, StringComparison.OrdinalIgnoreCase) < 0 &&
-                    desc.IndexOf(_rackSearch, StringComparison.OrdinalIgnoreCase) < 0)
-                    return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Order the visible rows. <paramref name="registryOrder"/> is the unfiltered list and is
-        /// the tie-breaker for every mode - without it a sort on a field half the sessions share
-        /// (three 45-minute Easy runs) would shuffle on each repaint.
-        /// </summary>
-        private List<Models.Session> SortRackSessions(List<Models.Session> rows, List<Models.Session> registryOrder)
-        {
-            var index = new Dictionary<string, int>(StringComparer.Ordinal);
-            for (int i = 0; i < registryOrder.Count; i++)
-                index[registryOrder[i].Id ?? ""] = i;
-
-            int Idx(Models.Session s) => index.TryGetValue(s.Id ?? "", out var i) ? i : int.MaxValue;
-
-            switch (_rackSort)
-            {
-                case "name":
-                    return rows.OrderBy(s => s.GetModeAwareName() ?? "", StringComparer.OrdinalIgnoreCase)
-                               .ThenBy(Idx).ToList();
-                case "easiest":
-                    return rows.OrderBy(s => (int)s.Difficulty)
-                               .ThenBy(s => s.DurationMinutes)
-                               .ThenBy(Idx).ToList();
-                case "hardest":
-                    return rows.OrderByDescending(s => (int)s.Difficulty)
-                               .ThenByDescending(s => s.DurationMinutes)
-                               .ThenBy(Idx).ToList();
-                case "shortest":
-                    return rows.OrderBy(s => s.DurationMinutes).ThenBy(Idx).ToList();
-                case "xp":
-                    return rows.OrderByDescending(s => s.BonusXP).ThenBy(Idx).ToList();
-                default:
-                {
-                    // RECENT. Newest file first; anything without a real file on disk (the
-                    // hard-coded built-ins, which only exist when assets/sessions is missing)
-                    // sinks to the bottom in registry order rather than pretending to a date.
-                    // The stamps are read ONCE - a Comparer that hits the filesystem per
-                    // comparison would stat the same file O(n log n) times.
-                    var stamps = new Dictionary<string, DateTime?>(StringComparer.Ordinal);
-                    foreach (var s in rows) stamps[s.Id ?? ""] = RackFileStamp(s);
-
-                    DateTime? Stamp(Models.Session s) => stamps.TryGetValue(s.Id ?? "", out var t) ? t : null;
-
-                    return rows.OrderByDescending(s => Stamp(s).HasValue)
-                               .ThenByDescending(s => Stamp(s) ?? DateTime.MinValue)
-                               .ThenBy(Idx).ToList();
-                }
-            }
-        }
-
-        /// <summary>Last-write time of a session's backing file, or null when it has none (or the
-        /// path is stale/unreadable). Never throws: a locked or vanished file must degrade to
-        /// "undated", not break the sort.</summary>
-        private static DateTime? RackFileStamp(Models.Session session)
-        {
-            try
-            {
-                var path = session.SourceFilePath;
-                if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
-                return File.GetLastWriteTime(path);
-            }
-            catch { return null; }
-        }
+        /// <summary>Order the visible rows through the shared Core rack contract.</summary>
+        private List<Models.Session> SortRackSessions(List<Models.Session> rows, List<Models.Session> registryOrder) =>
+            Services.SessionRackQuery.SortRackSessions(rows, registryOrder, _rackSort);
 
         // ------------------------------ one row ------------------------------
 
