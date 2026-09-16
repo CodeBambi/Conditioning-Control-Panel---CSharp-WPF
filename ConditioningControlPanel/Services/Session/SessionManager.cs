@@ -237,14 +237,6 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Open the custom sessions folder in Explorer
-        /// </summary>
-        public void OpenCustomSessionsFolder()
-        {
-            _fileService.OpenCustomSessionsFolder();
-        }
-
-        /// <summary>
         /// Get the default export filename for a session
         /// </summary>
         public string GetExportFileName(Session session)

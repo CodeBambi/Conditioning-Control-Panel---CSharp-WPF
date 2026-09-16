@@ -297,15 +297,6 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Open the custom sessions folder in Explorer
-        /// </summary>
-        public void OpenCustomSessionsFolder()
-        {
-            EnsureCustomFolderExists();
-            System.Diagnostics.Process.Start("explorer.exe", CustomSessionsFolder);
-        }
-
-        /// <summary>
         /// Get a safe filename from session ID
         /// </summary>
         private static string SanitizeFileName(string name)
