@@ -209,6 +209,13 @@ export function createTable(canvas, { kit = null } = {}) {
       const [x, y] = target(L, c);
       return { x: x - L.cw / 2, y: y - L.ch / 2, w: L.cw, h: L.ch };
     },
+    /** THE POT's box in canvas CSS px: the chip spot the bets sit on, and where THE BANK's tokens leave from
+     *  on a paid hand (Law XII, lane BR2-rw-cards). The same space as `cardRect`. Never null - the spot is
+     *  printed on the felt whether a bet is down on it or not. */
+    potRect() {
+      const L = tableLayout(W, H), r = L.spot.r * 1.6;
+      return { x: L.spot.x - r, y: L.spot.y - r, w: r * 2, h: r * 2 };
+    },
     /** Every card has landed and turned. */
     settled(now, still) { return cards.every((c) => c.landed && (c.faceAt == null || flipOf(c, now, still) >= 1)); },
 

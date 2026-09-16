@@ -11,6 +11,8 @@ page node contract, so the station draws a **2D canvas table** filling the stati
 | `hand.js` | Pure: `readHand` / `readState` (publicHand), `controls` (which buttons are live), `classify` (what a reply means), `createIntent` + `mayRetry` (one idem per press), `owedFor` (Law I), the hint preference. |
 | `feel.js` | Pure: `planSteps` (a reply's hand against the felt -> timed steps), `momentOf`, `isBloom`, `bestCard`, `vortexOf`, `resultLines`, `fanCard`, `lampBreath`, `TIMING`. |
 | `table.js` | The canvas: lamp, felt weave, printed arc, shoe, chip spot, hands, and the page effects. |
+| `reward.js` | Pure: what a settled hand is WORTH and what its party may SPEND, over `shared/win/` (`settleTier`, `bloomTier`, `settleCue`, `ladderRoot`, `climbSteps`, `joinParty`, `calloutTier`, `showsRoom`). |
+| `bank.js` | THE BANK at the table: the tokens, the layer and the rAF loop over `shared/win/bank.js` (the maths, the clock and the event order are the shared engine's). |
 | `mock-server.js`, `dev.html` | Standalone harness on the 10.13.E shapes with scripted fixture shoes. Not shipped behaviour, never the server's rules. |
 | `tests/*.test.mjs`, `tests/cards-check.mjs` | Node tests; the headless check (`CARDS_PORT` default 8898, debug +500). |
 
@@ -115,6 +117,49 @@ rotate through the four dealt words (`wordKeys`). The streak counter resets on `
   and disposes the moments, the kit and the deck. `suspend(true)` keeps the deck (confirmed 2026-09-14, against 10.13.F's
   dispose): re-dealing on resume would ask the host for 13 new pictures and swap them under an open hand. Leaving the
   station (close) and sitting down again re-deals. cards-check asserts both.
+
+## The reward pass (CONTRACT 10.22)
+
+The table used to take `spReadout.set` and `.owe` and never `.thud()`, and a winning hand paid by having the SP number
+change - Law XII broken outright. Every paid hand now asks `shared/win/` for a plan and obeys it. **Nothing in this
+station re-decides Law IX or Brakes 2, 3, 5 or 8**: `shared/win/plan.js` owns all of it and `reward.js` only asks.
+
+- **The rung** (`reward.settleTier`). `feel.settleMoment` through `shared/win/tier.js`, raised by the settled net:
+  `cards.win` / `cards.dealer_bust` **1**, `cards.bloom` / `cards.streak` **3**, `cards.sweep` **4** (this table's hero),
+  `cards.lose` / `cards.push` **0**. Those are the `CALLOUTS` sizes this file already had; the table hands out no bare 2.
+- **THE BANK** (`bank.js` over `shared/win/bank.js`, Law XII). On the settle frame of a paid hand, beside the winning
+  cards' glow: `plan.bank` tokens (3-7, 4 under Calm) leave THE POT (`table.potRect`, the chip spot on the felt or the
+  authored `bet_spot` anchors in the room view) and arc to `ctx.spReadout.target()`. The chip is pinned to the
+  pre-settle number until the first token lands, ticks a rung per landing (Law X, never before), keeps counting over
+  `plan.partyMs`, and takes its thud at the END of the count, not the end of the flight. Reduced motion takes the STATE:
+  no tokens, the settled number and the cue at once (`plan.bank === 0`). A loss and a push keep the plain chip thud.
+- **THE CHIME LADDER** (`reward.ladderRoot` / `climbSteps` over `shared/win/ladder.js`). The streak is the root: the
+  first win of a run is the root note and every win after it starts a semitone higher, capped at seven. The landing cue
+  is step 0 (Law X) and only the steps after it are scheduled, across `plan.partyMs`. A skip, a suspend, Back and a new
+  deal all `stop('ladder')`: the climb is silenced, never played faster (Law VI).
+- **The cue** (`reward.settleCue`). Chosen by what the plan SPENT, not by the moment id: `small` / `mid` / `big` /
+  `hero`. A worn-down streak (Brake 3) sounds like the chime it has become. A loss is still THE SETTLE and a push still
+  a sigh, whatever the plan says - neither is a party and both always sound.
+- **THE GLOW and THE SPARKLE BURST** (10.22.D, `arcademy/shell/counterfx.js`). `warmGlow` on the SP chip at every paying
+  rung (`plan.glow`, 480 ms; 0 while melted and under reduced motion) and `sparkBurst` into `.cards-tokens` at
+  `plan.sparkle` (7 at tier 3, 9 at tier 4; never under Calm, lite or reduced motion).
+- **The room** (10.22.B). `ctx.revealedWin(net, plan.shower, name)` fires ONCE a result, on the settle frame, and only
+  when `plan.shower > 0` - a tier 1 is a close-up event and does not show from across the room, and a loss or a push
+  tells the room nothing. `net` is `hand.result.net`; the name is the callout's own localised text.
+- **THE REVEAL** (`reward.calloutTier`). The hero callout (14vh, a rim and a short shake) is the declared hero move and
+  plays once a sit-down: a second sweep, a sweep under Calm and a sweep in a trance all name themselves at `big`. A
+  callout never shouts above what the brakes left the rung.
+- **Brake 2** (`reward.joinParty`). A beat that lands while an earlier party still owns the station merges into the
+  HIGHER plan and throws no second ceremony - in practice a blackjack's settle inside its own bloom, which pays but
+  says nothing more. THE BANK ignores the merge: a pay must be seen to move at every rung.
+- **Brake 5**. This table's focus state is a fullscreen hypno moment from an EARLIER beat still on the screen (the
+  bloom's four seconds of picture). A settle under it is `melted`: rung 1, no shower, no sparkle, no glow, no reveal,
+  the ladder an octave down - and the tokens still fly.
+- **Brake 3 and the sit-down**. `freshSit` / `sitPlan` / `afterParty`, one ledger per sitting, counted PER RUNG.
+  "Stand up, sit back down" is a new sitting: the worn rungs come back and the once-a-sitting hero is owed again.
+  `afterParty` only counts a hero the frame it actually fired, so a sweep under Calm does not burn it.
+- `debug().reward` carries the last plan, the live party and its ms left, the sit ledger and the bank's state.
+
 
 **Calm and reduced motion** (`reduced`, `intensity: calm`, or `prefers-reduced-motion`): every step lands at once in
 order (cards on their spots, face up), except that a blackjack keeps the bloom's 1.6 s to the reveal and 0.9 s to the

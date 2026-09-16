@@ -112,6 +112,16 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
       const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]);
       return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
     },
+    // THE POT: the authored bet spot (both of them on a split), projected to the same canvas space cardRect
+    // uses, so THE BANK's tokens leave the felt where the chips are and not from a guessed screen point.
+    potRect() {
+      const p = point('bet_spot_0');
+      if (hands === 2) p.lerp(point('bet_spot_1'), .5);
+      const v = p.project(stage.camera), rect = stage.canvas.getBoundingClientRect(), r = layout.width * .5;
+      const q = new T.Vector3(r, 0, 0).applyQuaternion(base).add(point('bet_spot_0')).project(stage.camera);
+      const w = Math.max(12, Math.abs(q.x - v.x) * rect.width);
+      return { x: (v.x + 1) * rect.width / 2 - w / 2, y: (1 - v.y) * rect.height / 2 - w / 2, w, h: w };
+    },
     settled(time, still) { return cards.every((c) => c.landed && flipAt(c, time, still) >= (c.code ? 1 : 0)); },
     draw(o) {
       if (disposed) return; frameStep=1-Math.exp(-Math.max(0,o.now-now)/90);now = o.now;
