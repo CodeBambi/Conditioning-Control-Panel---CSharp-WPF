@@ -94,8 +94,9 @@ export async function mount(ctx) {
   // motion, the settled STATE with no travel at all; `still` is Calm or Motion off, which strips the decoration
   // and KEEPS the value moving, because a number that just changes is a Law XII break at every motion level.
   const reducedNow = () => !!ctx.reduced || prefersReduced;
-  // Brake 8. The room sends no lite flag today; the day it does, the bank flies 4 tokens and drops the sparks.
-  const liteNow = () => ctx.lite === true;
+  // Brake 8: a lite board, or Calm, flies 4 tokens and drops the sparks, and keeps every sound. The room now
+  // sends the board test (room/loader.js), so this reads the device AND the setting, as the other three do.
+  const liteNow = () => ctx.lite === true || String(ctx.intensity || '').toLowerCase() === 'calm';
   const fullNow = () => ctx.intensity === 'full' && !ctx.reduced && !prefersReduced;
   const kNow = () => (prefersReduced ? 0.5 : strengthK(ctx));
   const gates = () => { const g = ctx.gates || {}; return { flash: g.flash !== false, subliminal: g.subliminal !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false, tunnel: g.tunnel !== false }; };

@@ -80,7 +80,9 @@ export async function mount(ctx) {
   const variant = ctx.variant && typeof ctx.variant === 'object' ? ctx.variant : null;
   // CONTRACT 7.1: the room's SP chip, { set(value), owe(n), thud(), target() }. Standalone keeps .slot-sp.
   const hostSp = ctx.spReadout && typeof ctx.spReadout.set === 'function' && typeof ctx.spReadout.owe === 'function' ? ctx.spReadout : null;
-  const lite = String(ctx.intensity || '').toLowerCase() === 'calm';   // Brake 8: Calm bank flies 4 tokens at most
+  // Brake 8: a Calm bank, or a lite board, flies 4 tokens at most. ctx.lite is the device (room/loader.js) and
+  // cannot change under a sit-down; the Calm half is read at open, as it has been.
+  const lite = ctx.lite === true || String(ctx.intensity || '').toLowerCase() === 'calm';
   // Law VI: the coin shower is travel, so Calm and Motion off settle it exactly as reduced motion
   // does. Read live, because a settings frame changes ctx.intensity and ctx.motion under a sit-down.
   const stillFx = () => reduced || String(ctx.intensity || '').toLowerCase() === 'calm' || String(ctx.motion || '').toLowerCase() === 'off';

@@ -208,7 +208,7 @@ export async function mount(ctx) {
    *  this table's lite board (Brake 8: four tokens, no particles, every sound kept). */
   function partyCtx(melted) {
     const d = dress();
-    return { reduced: d.reduced, still: d.still, lite: d.calm, melted: !!melted };
+    return { reduced: d.reduced, still: d.still, lite: d.calm || ctx.lite === true, melted: !!melted };
   }
   /** Brake 5 at the card table. The focus state here is a fullscreen hypno moment from an EARLIER beat still
    *  on the screen - in practice the bloom's own four seconds of picture, which a blackjack's settle lands

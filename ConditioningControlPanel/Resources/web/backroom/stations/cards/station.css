@@ -37,7 +37,7 @@
 .cards-status:empty { display: none; }
 .cards-hint { color: #5fffd0; border-color: #5fffd055; }
 
-.cards-side { position: absolute; left: 22px; bottom: 18px; z-index: 4; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.cards-side { position: absolute; left: 22px; bottom: max(18px, var(--br-sill, 0px)); z-index: 4; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .cards-bet { display: flex; align-items: center; gap: 6px; }
 .cards-bet-label { font-size: 12px; color: #e8c27a; margin-right: 2px; }
 .cards-bet button { min-width: 58px; padding: 7px 12px; min-height: 36px; }
@@ -46,7 +46,7 @@
 .cards-sit { font-size: 13px; background: transparent !important; }
 .cards-sitting { font: 11px Consolas, monospace; color: #e8c27a99; }
 
-.cards-controls { position: absolute; right: 22px; bottom: 18px; z-index: 4; display: flex; flex-wrap: wrap; justify-content: flex-end;
+.cards-controls { position: absolute; right: 22px; bottom: max(18px, var(--br-sill, 0px)); z-index: 4; display: flex; flex-wrap: wrap; justify-content: flex-end;
   gap: 8px; max-width: min(460px, calc(100vw - 300px)); }
 .cards-move { min-width: 84px; font-weight: 600; }
 .cards-move.is-hint { border-color: #5fffd0; box-shadow: 0 0 0 2px #5fffd066; }
@@ -72,8 +72,8 @@
 @media (max-width: 800px) {
   .cards-top { top: 10px; left: 12px; max-width: 220px; }
   .cards-sp, .cards-status, .cards-hint { font-size: 11px; padding: 5px 10px; }
-  .cards-side { left: 12px; bottom: 12px; }
-  .cards-controls { right: 12px; bottom: 12px; max-width: calc(100vw - 200px); }
+  .cards-side { left: 12px; bottom: max(12px, var(--br-sill, 0px)); }
+  .cards-controls { right: 12px; bottom: max(12px, var(--br-sill, 0px)); max-width: calc(100vw - 200px); }
   .cards-move { min-width: 64px; }
 }
 @media (prefers-reduced-motion: reduce) { .cards-station * { transition: none !important; } }
@@ -85,7 +85,7 @@
 .cards-in-room .cards-top { top: 90px; }
 @media (max-width: 600px) {
   .cards-in-room .cards-side { bottom: 72px; left: 10px; right: 10px; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 10px; }
-  .cards-in-room .cards-controls { bottom: 12px; left: 10px; right: 10px; max-width: none; }
+  .cards-in-room .cards-controls { bottom: max(12px, var(--br-sill, 0px)); left: 10px; right: 10px; max-width: none; }
   .cards-in-room .cards-move { min-width: 70px; padding: 8px; }
 }
 .cards-station.cards-in-room .cards-top { top: 105px; max-width: calc(100vw - 24px); }

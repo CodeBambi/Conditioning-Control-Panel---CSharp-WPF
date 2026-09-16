@@ -212,7 +212,7 @@ export async function mount(ctx) {
    * `melted` is never set: the wheel has no focus state of its own - no trance, no melt, no halved spin - so
    * there is nothing here for Brake 5 to quiet. The hypno dress is the room's mood, not the player's.
    */
-  const planCtx = () => ({ reduced, still: calm, lite: calm });
+  const planCtx = () => ({ reduced, still: calm, lite: calm || ctx.lite === true });
 
   function setFace(name) { pose = name; if (scene) scene.setFace(name); }   // emi.js mirrors the face into the HUD canvas
   function glanceTo(want, rest) {

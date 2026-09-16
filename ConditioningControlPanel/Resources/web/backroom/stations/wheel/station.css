@@ -50,15 +50,17 @@
 /* Law VIII: a press answers on its frame with a ring (a state, so reduced motion keeps it). */
 .wheel-station .is-ringing, .wheel-station .wheel-back:active { box-shadow: 0 0 0 3px #ff8ed2cc !important; }
 
-.wheel-spin { position: absolute; z-index: 4; right: 22px; bottom: 18px; min-width: 132px; font-weight: 700; color: #26122f !important;
+.wheel-spin { position: absolute; z-index: 4; right: 22px; bottom: max(18px, var(--br-sill, 0px)); min-width: 132px; font-weight: 700; color: #26122f !important;
   background: linear-gradient(135deg, #e59cca, #a562b4) !important; border-color: #efc4de !important;
   box-shadow: inset 0 1px 0 #fff5, 0 4px 22px #c767b32b, 0 5px 24px #08040b99; }
 .wheel-spin span, .wheel-spin small { display: block; }
 .wheel-spin small { font-size: 10px; font-weight: 500; opacity: .85; font-variant-numeric: tabular-nums; }
 
-.wheel-odds { position: absolute; left: 22px; bottom: 18px; z-index: 4; font-size: 12px; max-width: min(380px, calc(100vw - 190px)); }
+.wheel-odds { position: absolute; left: 22px; bottom: max(18px, var(--br-sill, 0px)); z-index: 4; font-size: 12px; max-width: min(380px, calc(100vw - 190px)); }
 .wheel-odds summary { list-style: none; border: 1px solid #ab79a766; background: #28172fe8; border-radius: 8px; padding: 7px 12px; display: inline-block; }
-.wheel-odds[open] { background: #24142df5; border: 1px solid #ab79a766; border-radius: 12px; padding: 10px; max-height: calc(100vh - 150px); overflow: auto; }
+/* dvh, not vh: see roulette/station.css. The vh line is the fallback and has to come first. */
+.wheel-odds[open] { background: #24142df5; border: 1px solid #ab79a766; border-radius: 12px; padding: 10px; overflow: auto;
+  max-height: calc(100vh - 150px); max-height: calc(100dvh - 150px); }
 .wheel-odds table { border-collapse: collapse; margin-top: 8px; width: 100%; }
 .wheel-odds th { text-align: left; font-weight: 500; padding: 2px 10px 2px 0; }
 .wheel-odds td { text-align: right; padding: 2px 0 2px 10px; color: #edc7df; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -77,8 +79,8 @@
   .wheel-sp, .wheel-jackpot, .wheel-status { font-size: 11px; padding: 5px 10px; }
   .wheel-emi { top: 10px; right: 12px; }
   .wheel-face { width: 44px; height: 40px; }
-  .wheel-spin { right: 12px; bottom: 12px; min-width: 104px; }
-  .wheel-odds { left: 12px; bottom: 12px; }
+  .wheel-spin { right: 12px; bottom: max(12px, var(--br-sill, 0px)); min-width: 104px; }
+  .wheel-odds { left: 12px; bottom: max(12px, var(--br-sill, 0px)); }
 }
 @media (prefers-reduced-motion: reduce) { .wheel-station * { transition: none !important; } }
 

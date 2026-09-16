@@ -80,7 +80,7 @@
   background: linear-gradient(180deg, #8c48a0, #a45fb4 55%, #b877c6);
   box-shadow: inset 0 3px 8px #2a0c3aa8, inset 0 -1px 0 #ffffff2e, 0 0 22px #d37ad78c; }
 /* The one button the whole station is about: a lit key, domed, sitting proud of the cabinet. */
-.slot-spin { position: absolute; z-index: 4; right: 22px; bottom: 18px; min-width: 120px; font-weight: 700; color: #26122f !important;
+.slot-spin { position: absolute; z-index: 4; right: 22px; bottom: max(18px, var(--br-sill, 0px)); min-width: 120px; font-weight: 700; color: #26122f !important;
   background: linear-gradient(180deg, #ffd2ec, #e59cca 42%, #b06ac0 78%, #8e4ea0) !important;
   border-color: #ffe0f1 !important; border-top-color: #fff !important; text-shadow: 0 1px 0 #ffffff66 !important;
   box-shadow: inset 0 2px 0 #ffffffb3, inset 0 -3px 0 #6d3a7f8c, 0 3px 0 #592c68, 0 8px 26px #0a0413a6, 0 0 26px #d97cc23d !important; }
@@ -90,7 +90,7 @@
 .slot-spin span, .slot-spin small { display: block; }
 .slot-spin small { font-size: 10px; font-weight: 500; opacity: .8; }
 
-.slot-odds { position: absolute; left: 22px; bottom: 18px; z-index: 4; font-size: 12px; max-width: min(360px, calc(100vw - 180px)); }
+.slot-odds { position: absolute; left: 22px; bottom: max(18px, var(--br-sill, 0px)); z-index: 4; font-size: 12px; max-width: min(360px, calc(100vw - 180px)); }
 .slot-odds summary { list-style: none; border: 1px solid #c58bbd59; border-top-color: #efc0e47a; border-radius: 10px;
   padding: 7px 12px; display: inline-block; background: linear-gradient(180deg, #3d2449, #2a1734 54%, #1d0f26);
   box-shadow: inset 0 1px 0 #ffeafb26, inset 0 -2px 0 #00000057, 0 2px 0 #150b1f, 0 6px 16px #05020a73; }
@@ -117,8 +117,8 @@
   .slot-controls { bottom: 72px; width: calc(100vw - 24px); gap: 8px; }
   .slot-freeze { gap: 4px; }
   .slot-freeze button { min-width: 0; padding: 8px; font-size: 10px; }
-  .slot-spin { right: 12px; bottom: 12px; min-width: 96px; }
-  .slot-odds { left: 12px; bottom: 12px; }
+  .slot-spin { right: 12px; bottom: max(12px, var(--br-sill, 0px)); min-width: 96px; }
+  .slot-odds { left: 12px; bottom: max(12px, var(--br-sill, 0px)); }
 }
 @media (prefers-reduced-motion: reduce) { .slot-station * { transition: none !important; } }
 
@@ -130,11 +130,11 @@
    Freeze along the bottom sill, Odds and Spin in the bottom corners, and EMI's pixel face gone, because she
    is standing on her shelf in the frame and a portrait of her beside it is the one thing that is not needed. */
 @media (max-height: 500px) and (orientation: landscape) {
-  .slot-station .slot-controls { left: 50%; right: auto; bottom: 10px; width: auto; transform: translateX(-50%); }
+  .slot-station .slot-controls { left: 50%; right: auto; bottom: max(10px, var(--br-sill, 0px)); width: auto; transform: translateX(-50%); }
   .slot-station .slot-freeze { flex-direction: row; gap: 8px; flex: none; }
   .slot-station .slot-freeze button { min-width: 88px; min-height: 34px; padding: 6px 8px; font-size: 10px; letter-spacing: .4px; }
-  .slot-station .slot-spin { right: 10px; bottom: 10px; min-width: 104px; padding: 7px 12px; min-height: 34px; }
-  .slot-station .slot-odds { left: 10px; bottom: 10px; max-width: min(300px, calc(100vw - 420px)); }
+  .slot-station .slot-spin { right: 10px; bottom: max(10px, var(--br-sill, 0px)); min-width: 104px; padding: 7px 12px; min-height: 34px; }
+  .slot-station .slot-odds { left: 10px; bottom: max(10px, var(--br-sill, 0px)); max-width: min(300px, calc(100vw - 420px)); }
   .slot-station .slot-odds summary { padding: 6px 10px; }
   /* The readings drop to the bottom of the left edge: sideways the camera is close enough that the top-left
      corner is EMI on her shelf, and a chip stack parked over her is the one thing a close-up cannot carry. */

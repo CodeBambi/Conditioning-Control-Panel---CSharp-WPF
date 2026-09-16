@@ -8,6 +8,15 @@
   --br-pink: #ff6fb5;
   --br-gold: #ffcf6b;
   --br-lav: #b99cff;
+  /* THE PHONE'S OWN EDGES. Only the thumbstick knew about these; every station's bottom bar was pinned on plain
+     pixels, and the roulette's seated bar at 8 px sat entirely inside an iPhone's home-indicator zone. Every
+     bottom bar in the room now reads max(its own gap, --br-sill), and env() is 0px where there is no notch, so
+     nothing moves on a desk. The fallback in each var() keeps a station's standalone dev page working, where
+     this block is not loaded at all. */
+  --br-sill: env(safe-area-inset-bottom, 0px);
+  --br-brow: env(safe-area-inset-top, 0px);
+  --br-edge-l: env(safe-area-inset-left, 0px);
+  --br-edge-r: env(safe-area-inset-right, 0px);
   color-scheme: dark;
 }
 
@@ -34,7 +43,7 @@ html.br-visiting .br-room-ui, html.br-visiting.br-seated .br-room-ui { visibilit
 .br-loading-bar { width: 180px; height: 3px; border-radius: 3px; background: rgba(255, 255, 255, .12); overflow: hidden; }
 .br-loading-bar i { display: block; height: 100%; width: 0; background: var(--br-pink); transition: width 200ms ease-out; }
 
-.br-hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); pointer-events: none;
+.br-hint { position: absolute; left: 50%; bottom: max(14px, var(--br-sill, 0px)); transform: translateX(-50%); pointer-events: none;
   color: var(--br-ink-dim); font-size: 12px; white-space: nowrap; }
 .br-crosshair { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%;
   background: rgba(255, 224, 240, .6); box-shadow: 0 0 5px #120914; pointer-events: none; }
@@ -108,7 +117,8 @@ html.br-reduced .br-bell span.is-in, html.br-still .br-bell span.is-in { animati
 @media (prefers-reduced-motion: reduce) { .br-bell span.is-in { animation: none; } }
 
 /* HUD: Back is always on top of everything, stations included (Law VI). */
-.br-hud { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; justify-content: space-between;
+.br-hud { position: fixed; top: max(12px, var(--br-brow, 0px)); left: max(12px, var(--br-edge-l, 0px));
+  right: max(12px, var(--br-edge-r, 0px)); display: flex; justify-content: space-between;
   align-items: center; z-index: 30; pointer-events: none; }
 .br-back, .br-card-back { pointer-events: auto; font: 600 14px/1 "Segoe UI", system-ui, sans-serif; color: var(--br-ink);
   background: linear-gradient(180deg, #4a2a51e6, #2f1b3de0 54%, #20112ae0);

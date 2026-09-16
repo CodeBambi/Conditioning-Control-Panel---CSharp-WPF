@@ -31,7 +31,7 @@
 .roul-history li { background: #1a0f24e0; border: 1px solid #e8c27a33; border-radius: 20px; padding: 2px 8px; color: #e8d6f3;
   font-variant-numeric: tabular-nums; }
 
-.roul-controls { position: absolute; right: 3vw; bottom: 16px; z-index: 4; display: flex; flex-direction: column; align-items: flex-end;
+.roul-controls { position: absolute; right: 3vw; bottom: max(16px, var(--br-sill, 0px)); z-index: 4; display: flex; flex-direction: column; align-items: flex-end;
   gap: 8px; width: min(47vw, 560px); }
 .roul-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; font-size: 12px; }
 .roul-pips { display: inline-flex; gap: 4px; margin-right: 4px; }
@@ -51,9 +51,12 @@
 /* Law VIII: a press answers on its frame with a ring (a state, so reduced motion keeps it). */
 .roul-station .is-ringing { box-shadow: 0 0 0 3px #5fffd0cc !important; }
 
-.roul-odds { position: absolute; left: 14px; bottom: 16px; z-index: 4; font-size: 12px; max-width: min(420px, calc(100vw - 32px)); }
+.roul-odds { position: absolute; left: 14px; bottom: max(16px, var(--br-sill, 0px)); z-index: 4; font-size: 12px; max-width: min(420px, calc(100vw - 32px)); }
 .roul-odds summary { list-style: none; border: 1px solid #ab79a766; background: #28172fe8; border-radius: 8px; padding: 7px 12px; display: inline-block; }
-.roul-odds[open] { background: #24142df5; border: 1px solid #ab79a766; border-radius: 12px; padding: 10px; max-height: calc(100vh - 150px); overflow: auto; }
+/* dvh, not vh: on mobile Safari 100vh is the LARGE viewport, so an open panel ran under the browser chrome and
+   its last rows could not be reached. The vh line stays first as the fallback for a browser without dvh. */
+.roul-odds[open] { background: #24142df5; border: 1px solid #ab79a766; border-radius: 12px; padding: 10px; overflow: auto;
+  max-height: calc(100vh - 150px); max-height: calc(100dvh - 150px); }
 .roul-odds table { border-collapse: collapse; margin-top: 8px; width: 100%; }
 .roul-odds th { text-align: left; font-weight: 500; padding: 2px 10px 2px 0; }
 .roul-odds td { text-align: right; padding: 2px 0 2px 10px; color: #edc7df; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -71,9 +74,11 @@
 .roul-gain { position: absolute; left: 50%; bottom: 88px; transform: translateX(-50%); z-index: 7; margin: 0;
   padding: 7px 18px; border-radius: 30px; background: #2a1a33e8; border: 1px solid #e8c27a77; color: #ffe8bd;
   font-size: 19px; font-weight: 700; letter-spacing: .02em; font-variant-numeric: tabular-nums; white-space: nowrap;
-  text-shadow: 0 2px 10px #0d0616; }
-/* The hero's own look, held for as long as the badge is up: the move is the 620 ms animate() in station.js. */
-.roul-gain[data-reveal] { font-size: 34px; padding: 10px 26px; color: #fff3d6; border-color: #ffe3a6;
+  text-shadow: 0 2px 10px #0d0616; max-width: calc(100vw - 24px); }
+/* The hero's own look, held for as long as the badge is up: the move is the 620 ms animate() in station.js.
+   34 px of nowrap with no ceiling ran off BOTH edges of a phone on a five-figure pay or a longer locale, and
+   this is the one frame of 10.22.D that must not look broken. It shrinks to fit instead. */
+.roul-gain[data-reveal] { font-size: min(34px, 8.2vw); padding: 10px min(26px, 5vw); color: #fff3d6; border-color: #ffe3a6;
   box-shadow: 0 0 34px #e8c27a66, 0 0 70px #ff5fa233; }
 
 .roul-card { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 6; background: #28172ff2;
@@ -89,7 +94,7 @@
   .roul-controls { left: 16px; right: 16px; width: auto; align-items: stretch; }
   .roul-row { justify-content: flex-start; }
   .roul-why { text-align: left; }
-  .roul-odds { bottom: auto; top: 50%; }
+  .roul-odds { bottom: auto; top: 84px; }   /* it grows DOWNWARD, so anchoring it at the middle put its tail off screen */
 }
 @media (prefers-reduced-motion: reduce) { .roul-station * { transition: none !important; } }
 /* Seated play (CONTRACT 10.18) uses the room canvas: the room camera frames the authored mat, taps land on it. */
@@ -100,12 +105,12 @@
 .roul-station[data-seated] .roul-top { top: 108px; max-width: calc(100% - 104px); }
 .roul-chips-label { font-weight: 600; padding: 4px 0; white-space: nowrap; }
 @media (max-width: 800px), (max-aspect-ratio: 11/10) {
-  .roul-station[data-seated] .roul-controls { top: auto; bottom: 16px; }
+  .roul-station[data-seated] .roul-controls { top: auto; bottom: max(16px, var(--br-sill, 0px)); }
 }
 
 /* A phone held upright: the mat fills the width, the controls hold one bar under it (seat-camera.js keeps 108 px clear). */
 @media (max-width: 800px) and (orientation: portrait) {
-  .roul-station[data-seated] .roul-controls { left: 10px; right: 10px; width: auto; top: auto; bottom: 8px; display: grid; grid-template-columns: 1fr 112px; gap: 4px 8px; align-items: stretch; }
+  .roul-station[data-seated] .roul-controls { left: 10px; right: 10px; width: auto; top: auto; bottom: max(8px, var(--br-sill, 0px)); display: grid; grid-template-columns: 1fr 112px; gap: 4px 8px; align-items: stretch; }
   .roul-station[data-seated] .roul-controls > .roul-row:first-child { grid-column: 1; }
   .roul-station[data-seated] .roul-spins { grid-column: 1; }
   .roul-station[data-seated] .roul-spin { grid-column: 2; grid-row: 1 / 3; min-width: 0; padding: 8px 4px; }
@@ -118,7 +123,7 @@
 /* A phone on its side: status and controls in one column at the right (seat-camera.js keeps 200 px clear), the mat beside it. */
 @media (max-height: 500px) and (orientation: landscape) {
   .roul-station[data-seated] .roul-top { top: 84px; left: auto; right: 12px; width: 196px; max-width: 196px; align-items: stretch; }
-  .roul-station[data-seated] .roul-controls { left: auto; right: 12px; width: 196px; top: auto; bottom: 12px; gap: 5px; align-items: stretch; }
+  .roul-station[data-seated] .roul-controls { left: auto; right: 12px; width: 196px; top: auto; bottom: max(12px, var(--br-sill, 0px)); gap: 5px; align-items: stretch; }
   .roul-station[data-seated] .roul-pips { display: none; }
   .roul-station[data-seated] .roul-row { gap: 4px; justify-content: flex-start; }
   .roul-station[data-seated] .roul-spins-label { flex-basis: 100%; }

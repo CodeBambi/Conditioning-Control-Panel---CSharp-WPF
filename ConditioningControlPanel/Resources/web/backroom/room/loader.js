@@ -20,6 +20,12 @@
  * ==========================================================================*/
 
 import * as bridge from '../bridge.js';
+import { createRenderBudget } from './render-budget.js';
+
+/* The same board test the render budget makes, so the room's echo and a station's echo can never disagree
+ * about the device they are both running on. It is hardware, so it is asked once. */
+const LITE_BOARD = createRenderBudget(typeof navigator === 'undefined' ? {} : navigator,
+  typeof devicePixelRatio === 'number' ? devicePixelRatio : 1).mobile;
 
 export const CLOSE_BUDGET_MS = 420;
 export const REQUEST_TIMEOUT_MS = 6000;
@@ -134,6 +140,12 @@ export function createLoader(room) {
       standUp: () => room.standUp(),
       /** { id, name, palette:{materialName: 'rrggbb'} | null } or null. Optional for a station to honour. */
       variant: variant || null,
+      /** BRAKE 8, the board test (CONTRACT 10.22.C): a lite board flies 4 tokens, never 7, drops the sparks and
+       *  keeps every sound. The room's own win echo has always read this (room/scene.js `lite: budget.mobile`);
+       *  the stations had no way to ask, so the roulette's `ctx.lite` was a field nobody set and its Brake 8
+       *  could never fire on any device, while the other three read Calm instead and disagreed with the floor
+       *  about the same board. It is the device, so it is settled once and never changes under a sit-down. */
+      lite: LITE_BOARD,
       /** The room draws the only Back (CONTRACT 7): a station hides its own. */
       hostBack: true,
     };
