@@ -28,3 +28,21 @@ test('cardRect is the resting spot, known on the frame a card is put down (a sti
   assert.deepEqual(t.debug().cards.map((c) => [c.landed, c.face]), [[false, false], [true, true]], 'settled: landed and face up');
   assert.equal(t.cardRect(1, 0), null);
 });
+
+test('potRect is THE BANK\'s origin: the chip spot, in cardRect\'s space, with or without a bet on it', () => {
+  const t = createTable({ getContext: () => ({}), getBoundingClientRect: () => ({ width: 0, height: 0 }) });
+  const L = tableLayout(0, 0), r = t.potRect(), ring = L.spot.r * 1.6;
+  assert.deepEqual(r, { x: L.spot.x - ring, y: L.spot.y - ring, w: ring * 2, h: ring * 2 });
+  assert.equal(r.x + r.w / 2, L.spot.x, 'centred on the spot the bets sit on');
+  assert.equal(r.y + r.h / 2, L.spot.y);
+  t.setBets([1, 1]);
+  assert.deepEqual(t.potRect(), r, 'a split bets on the same spot, so the tokens leave from the same place');
+  t.clear();
+  assert.deepEqual(t.potRect(), r, 'never null: the spot is printed whether a bet is down or not');
+});
+
+test('the drawn table agrees: the printed ring is the box potRect hands THE BANK', () => {
+  const L = tableLayout(1280, 720);
+  assert.ok(L.spot.r * 1.6 > 8, 'the tokens leave from something bigger than a point');
+  assert.ok(L.spot.y + L.spot.r * 1.6 < 720, 'the origin is on the table, never off the bottom of it');
+});

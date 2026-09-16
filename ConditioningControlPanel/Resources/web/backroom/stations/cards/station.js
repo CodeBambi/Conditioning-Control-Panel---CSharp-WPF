@@ -22,6 +22,26 @@
  * its bloom (both cards glow, then the bloom and "Blackjack"). A loss keeps its
  * breath of tunnel on the settle frame; a push shows nothing. Gates no longer
  * drop a step (moments.js); ctx.gates only dresses the table.
+ *
+ * THE REWARD PASS (CONTRACT 10.22, lane BR2-rw-cards). The table used to take
+ * spReadout.set and .owe and never .thud(), and a winning hand paid by having
+ * the number change - Law XII broken outright. From here every paid hand:
+ *
+ *   asks the spine for a plan   reward.settleTier -> sitPlan (Law IX and
+ *                               Brakes 2, 3, 5, 8 live in shared/win/plan.js
+ *                               and NOWHERE in this file)
+ *   flies THE BANK              plan.bank tokens out of the pot to the room's
+ *                               SP chip, the readout ticking as each one LANDS
+ *   climbs THE CHIME LADDER     the streak is the root, the rollup is the climb
+ *   spends the garnish          plan.glow on the chip, plan.sparkle on the felt,
+ *                               plan.shower to the room (ctx.revealedWin), and
+ *                               the callout's own size capped by plan.reveal
+ *
+ * The bank leaves on the settle frame, beside the winning cards' glow; the
+ * moment, the callout and the shower still ride FX_DELAY_MS together. A settle
+ * that lands INSIDE the bloom's fullscreen picture is a focus state: it merges
+ * into the bloom's party (Brake 2) and drops an octave (Brake 5), and its bank
+ * still flies, because a pay is not a ceremony.
  * ==========================================================================*/
 
 import { createLoomKit, createDeck, createMoments, strengthK, viewportRect, DECK_VALUES } from '../../shared/hypno/index.js';
@@ -30,6 +50,10 @@ import { readState, readHand, legalOf, controls, classify, createIntent, mayRetr
   readHintPref, writeHintPref, isOpen, totalOf, MOVES } from './hand.js';
 import { planSteps, settleMoment, streakAfter, mayFire, wordKeys, aceSlot, bestCard, vortexOf, resultLines, screenHoldMs, TIMING,
   calloutFor, winningCards, isBloom, WIN_HOLD_MS } from './feel.js';
+import { freshSit, sitPlan, afterParty } from '../../shared/win/plan.js';
+import { settleTier, bloomTier, netOf, settleCue, climbSteps, ladderRoot, joinParty, partyHoldMs, calloutTier, showsRoom, BLOOM } from './reward.js';
+import { createCardsBank } from './bank.js';
+import { sparkBurst, warmGlow } from '../../../arcademy/shell/counterfx.js';
 import { kit as sound } from '../../shared/sound/kit.js';
 import { MOMENTS } from '../../shared/hypno/moments.js';
 import { createTable } from './table.js';
@@ -40,10 +64,6 @@ const fmt = (n) => Number(n || 0).toLocaleString('en-US');
 const wait = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
 const mintId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
 const MOVE_LABEL = { hit: 'Hit', stand: 'Stand', double: 'Double', split: 'Split' };
-/** The kit's cue on a settle, by its moment: a pay is a win by tier that only rises, a loss is THE SETTLE (soft,
- *  never a fail), a push is a sigh. A bust (cards.bust) is a beat with nothing in it, so no cue either. */
-const SETTLE_CUE = { 'cards.win': ['win', { tier: 'mid' }], 'cards.dealer_bust': ['win', { tier: 'mid' }], 'cards.streak': ['win', { tier: 'big' }],
-  'cards.sweep': ['win', { tier: 'hero' }], 'cards.lose': ['settle'], 'cards.push': ['sigh', { level: 0.6 }] };
 const DECK_WAIT_MS = 2500;
 
 function loadCss() {
@@ -71,6 +91,9 @@ export async function mount(ctx) {
   let lastStill = null, unSp = null, feelLog = [], statusText = '', seat = 0, seating = false, dropped = 0;
   let streak = 0, beatAt = {}, wordCursor = 0;   // the table beats: wins in a row, each beat's last frame (cooldowns), the whisper rotation
   let callout = null, lastCallout = null, fxTimers = new Set();   // the winning flow: the callout and the delayed fx frames
+  // THE REWARD PASS (10.22): THE BANK, Brake 3's sit-down ledger (one per sitting, per RUNG) and the party
+  // still running, which the next beat merges into instead of stacking on (Brake 2).
+  let bank = null, sit = freshSit(), party = null, lastPlan = null, bankTicks = 0;
   const $ = (sel) => el.querySelector(sel);
   const log = (what, extra = {}) => { feelLog = [...feelLog.slice(-99), { what, at: Math.round(performance.now()), ...extra }]; };
   /** `fn(now)` after `ms`, unless the visit ended or paused first (Law VI: suspend and Back fire nothing more). */
@@ -79,17 +102,23 @@ export async function mount(ctx) {
     fxTimers.add(id);
   }
   function dropTimers() { for (const id of fxTimers) clearTimeout(id); fxTimers.clear(); if (callout) callout.cancel(); }
-  function showCallout(co) {
+  /** The name of the beat. `plan` sizes it: THE REVEAL (the hero callout, 14vh with a rim and a shake) is the
+   *  declared hero move and plays once a sit-down, so a second sweep names itself at big instead (10.22.D). */
+  function showCallout(co, plan = null) {
     if (!co || !callout) return;
-    callout.show(co.key, co.fallback, { tier: co.tier });
-    lastCallout = { key: co.key, tier: co.tier, at: Math.round(performance.now()) };
+    const tier = calloutTier(co, plan) || co.tier;
+    callout.show(co.key, co.fallback, { tier });
+    lastCallout = { key: co.key, tier, at: Math.round(performance.now()) };
     log('callout', lastCallout);
   }
 
-  /** Calm, reduced motion and the gates, read live every frame (the loader's ctx getters follow settings frames). */
+  /** Calm, reduced motion and the gates, read live every frame (the loader's ctx getters follow settings frames).
+   *  `still` is the table's own conflation (it draws the same either way); `reduced` and `calm` are kept APART
+   *  for shared/win/plan.js, which treats them as two different things: reduced motion takes the settled state
+   *  and no travel, Calm only strips the decoration and the bank still flies (10.22.C, Law XII). */
   function dress() {
     const reduced = !!ctx.reduced || prefersReduced || ['off', 'still'].includes(String(ctx.motion).toLowerCase()), intensity = String(ctx.intensity || 'normal').toLowerCase(), g = ctx.gates || {};
-    return { still: reduced || intensity === 'calm', k: prefersReduced ? 0.5 : strengthK(ctx), full: intensity === 'full' && !reduced,
+    return { still: reduced || intensity === 'calm', reduced, calm: intensity === 'calm', k: prefersReduced ? 0.5 : strengthK(ctx), full: intensity === 'full' && !reduced,
       gates: { flash: g.flash !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false, tunnel: g.tunnel !== false } };
   }
 
@@ -114,6 +143,7 @@ export async function mount(ctx) {
         ${MOVES.map((m) => `<button class="cards-move" type="button" data-move="${m}"></button>`).join('')}
         <button class="cards-deal" type="button"><span></span><small></small></button>
       </div>
+      <div class="cards-tokens" aria-hidden="true"></div>
       <div class="cards-card" role="status" hidden><p></p><button class="cards-card-back" type="button"></button></div>
       <div class="cards-loading"></div>`;
     const q = (s) => root.querySelector(s);
@@ -144,27 +174,104 @@ export async function mount(ctx) {
   /* ------------------------------------------------------------ SP chip */
   function createChip() {
     const hook = ctx.spReadout && typeof ctx.spReadout.set === 'function' && typeof ctx.spReadout.owe === 'function' ? ctx.spReadout : null;
-    let server = Number(typeof ctx.sp === 'function' ? ctx.sp() : 0) || 0, owed = 0;
+    let server = Number(typeof ctx.sp === 'function' ? ctx.sp() : 0) || 0, owed = 0, flying = null;
     const paint = () => {
-      if (hook) { hook.owe(owed); return; }
-      const n = el && $('.cards-sp'), text = t('br_cards_sp', '{n} SP', { n: fmt(shownSp(server, owed)) });
+      if (hook) { hook.owe(owed); hook.set(flying); return; }   // set(null) hands the rule back to the room (7.1)
+      const n = el && $('.cards-sp'), text = t('br_cards_sp', '{n} SP', { n: fmt(flying != null ? flying : shownSp(server, owed)) });
       if (n && n.textContent !== text) n.textContent = text;
     };
     if (hook) { el.dataset.hostSp = ''; hook.set(null); }
     paint();
     return {
       kind: hook ? 'hook' : 'own',
-      get server() { return server; }, get owed() { return owed; }, get value() { return shownSp(server, owed); },
+      get server() { return server; }, get owed() { return owed; }, get value() { return flying != null ? flying : shownSp(server, owed); },
       setServer(v) { if (Number.isFinite(Number(v))) { server = Number(v); paint(); } },
       owe(n) { owed = Math.max(0, Math.trunc(Number(n) || 0)); paint(); },
+      /** THE BANK is flying: the chip says exactly this until the last token is down (`show(null)` releases it
+       *  back to the room's Law I rule). Nothing else may write the number while a run owns it. */
+      show(v) { flying = Number.isFinite(Number(v)) ? Math.round(Number(v)) : null; paint(); },
+      /** THE BANK's target: the room's chip, or the station's own in a standalone page. */
+      target() { return hook && typeof hook.target === 'function' ? hook.target() : (el && $('.cards-sp')); },
       thud() {
         if (hook) { if (typeof hook.thud === 'function') hook.thud(); return; }
         const n = el && $('.cards-sp');
         if (n && typeof n.animate === 'function') n.animate([{ filter: 'brightness(2)' }, { filter: 'brightness(1)' }], { duration: 340 });
       },
       /** close(): the plain server number, nothing owed, no flight value. */
-      handOver() { owed = 0; if (hook) { hook.owe(0); hook.set(null); } else paint(); },
+      handOver() { owed = 0; flying = null; if (hook) { hook.owe(0); hook.set(null); } else paint(); },
     };
+  }
+
+  /* ------------------------------------------- THE REWARD PASS (CONTRACT 10.22) */
+  /** What the spine is told about this board. `reduced` and `still` are two different things and go in apart:
+   *  reduced motion takes the settled STATE with no travel, Calm only strips the decoration - and Calm is also
+   *  this table's lite board (Brake 8: four tokens, no particles, every sound kept). */
+  function partyCtx(melted) {
+    const d = dress();
+    return { reduced: d.reduced, still: d.still, lite: d.calm, melted: !!melted };
+  }
+  /** Brake 5 at the card table. The focus state here is a fullscreen hypno moment from an EARLIER beat still
+   *  on the screen - in practice the bloom's own four seconds of picture, which a blackjack's settle lands
+   *  inside. Read on the beat's own frame, BEFORE it adds a hold of its own, or every beat is melted. */
+  const inTrance = (now) => screenBusy(now);
+  /** THE BANK's two ends, client px, measured every frame: the camera is still moving while a seated hand
+   *  settles, so neither end may be cached. `potRect` is the chip spot on the felt (2D) or the authored
+   *  `bet_spot` anchors (the room view). */
+  function potAt() {
+    const r = table && typeof table.potRect === 'function' ? table.potRect() : null;
+    if (!r) return null;
+    const v = viewportRect($('.cards-stage'), r.x, r.y, r.w, r.h);
+    return { x: v.x + v.w / 2, y: v.y + v.h / 2 };
+  }
+  function chipAt() {
+    const n = chip && chip.target(), b = n && typeof n.getBoundingClientRect === 'function' ? n.getBoundingClientRect() : null;
+    return b && b.width ? { x: b.left + b.width / 2, y: b.top + b.height / 2 } : null;
+  }
+
+  /** This beat owns the station for its party: the next beat merges into it instead of stacking (Brake 2),
+   *  the next deal waits it out, and Brake 3's ledger counts the rung that was asked for. */
+  function ownParty(plan, now, floorMs = 0) {
+    const ms = partyHoldMs(plan, floorMs);
+    party = { plan, until: now + ms };
+    lastPlan = plan;
+    if (ms > 0) screenUntil = Math.max(screenUntil, now + ms);
+    sit = afterParty(sit, plan);
+  }
+
+  /**
+   * What a plan buys, spent HERE and nowhere else (this file re-decides none of Law IX or Brakes 2, 3, 5, 8).
+   * `ceremony` false is Brake 2: a live party is already as big as this one, so only the beats that are not a
+   * celebration are left. THE BANK is not run from here - a pay must be seen to move at every rung (Law XII).
+   */
+  function spendParty(plan, { id, ceremony, amount = 0, text = '' }) {
+    const cue = settleCue(id, plan, streak);
+    // A loss's SETTLE and a push's sigh are the beat itself and always sound; THE WIN only when this beat
+    // still owns the frame, so a blackjack's settle never rings a second time over its own bloom.
+    if (cue && (cue[0] !== 'win' || ceremony)) sound.play(cue[0], cue[1]);
+    if (!ceremony || !plan || plan.spent <= 0) return false;
+    // THE CHIME LADDER climbs while THE BANK's readout counts. Step 0 is the cue above (Law X), so only what
+    // follows it is scheduled; a skip takes back whatever has not sounded (Law VI).
+    const climb = climbSteps(plan);
+    sound.stop('ladder');
+    if (climb.length) sound.play('ladder', { plan: climb, semis: ladderRoot(streak, plan.octave < 0) });
+    if (plan.glow > 0) warmGlow(chip.target(), { reduced: dress().reduced });                 // THE GLOW, 480 ms
+    if (plan.sparkle > 0) sparkBurst(el && $('.cards-tokens'), { count: plan.sparkle });      // THE SPARKLE BURST
+    // 10.22.B: the room learns what the player has just learnt, once a result, never for a loss or a push.
+    if (showsRoom(plan, amount) && typeof ctx.revealedWin === 'function') ctx.revealedWin(amount, plan.shower, text);
+    log('party', { id, tier: plan.tier, spent: plan.spent, bank: plan.bank, shower: plan.shower, ladder: plan.ladder,
+      sparkle: plan.sparkle, glow: plan.glow, reveal: plan.reveal, emi: plan.emi, partyMs: plan.partyMs, why: plan.why });
+    return true;
+  }
+
+  /** THE BANK (Law XII): the pay leaves the pot on the settle frame, beside the winning cards' glow, and the
+   *  room's chip ticks as each token LANDS (Law X). `plan.bank` of 0 is reduced motion - the settled state. */
+  function flyPay(plan, from, to, now) {
+    if (!bank || !(Math.round(to) > Math.round(from))) { chip.show(null); return null; }
+    bankTicks = 0;
+    const how = bank.pay({ n: Math.max(1, plan.bank), fromValue: from, toValue: to, from: potAt, to: chipAt,
+      rollupMs: plan.partyMs, reduced: plan.bank === 0 });
+    log('bank', { from: Math.round(from), to: Math.round(to), n: plan.bank, roll: plan.partyMs, how });
+    return how;
   }
 
   /* ------------------------------------------------------------ the felt */
@@ -193,16 +300,19 @@ export async function mount(ctx) {
       case 'bloom': {
         if (s.quiet) break;
         // The blackjack's frame: both cards glow now; the bloom, its picture, its swell and "Blackjack" follow at FX_DELAY_MS.
+        // The bloom is the table's big rung and it pays NOTHING yet - the hand has not settled, so no bank flies
+        // here (Law I). Its plan owns the station from this frame, which is what the settle then merges into.
         const slot = aceSlot(h), r = table.cardRect(0, slot), canvas = $('.cards-stage');
+        const joined = joinParty(party, sitPlan(bloomTier(), sit, partyCtx(inTrance(now))), now);
         table.hitCards(h.hands[0].cards.map((_, j) => ({ owner: 0, slot: j })), now);
-        screenUntil = Math.max(screenUntil, now + WIN_HOLD_MS);
+        ownParty(joined.plan, now, WIN_HOLD_MS);
         later(FX_DELAY_MS, (at) => {
-          sound.play('win', { tier: 'big' });
-          const out = moments.play('cards.bloom', { from: r ? viewportRect(canvas, r.x, r.y, r.w, r.h) : undefined, gif: deck ? deck.keyFor(h.hands[0].cards[slot]) : undefined });
+          spendParty(joined.plan, { id: BLOOM, ceremony: joined.ceremony });   // the pay is announced at the settle, not here
+          const out = moments.play(BLOOM, { from: r ? viewportRect(canvas, r.x, r.y, r.w, r.h) : undefined, gif: deck ? deck.keyFor(h.hands[0].cards[slot]) : undefined });
           if (out.page.includes('ace_glow')) table.glowCard(0, slot, at);
-          holdScreenFor('cards.bloom', out, at);
-          showCallout(calloutFor('cards.bloom'));
-          log('moment', { id: 'cards.bloom', tokens: out.tokens.length, page: out.page, held: out.held, from: r, delayed: FX_DELAY_MS });
+          holdScreenFor(BLOOM, out, at);
+          showCallout(calloutFor(BLOOM), joined.plan);
+          log('moment', { id: BLOOM, tokens: out.tokens.length, page: out.page, held: out.held, from: r, delayed: FX_DELAY_MS });
         });
         break;
       }
@@ -220,15 +330,23 @@ export async function mount(ctx) {
         break;
       }
       case 'settle': {
+        // Brake 5, read FIRST: a fullscreen moment from an earlier beat (the bloom's picture) still owns the
+        // screen, so this settle lands inside a focus state. Law I: `before` is what the chip says while the
+        // pay is still owed, and the pin goes on before owe(0) so the number never jumps and then flies.
+        const melted = inTrance(now), net = netOf(h), paid = !s.quiet && net > 0, before = chip.value;
+        if (paid) chip.show(before);
         moments.holdScreen(false);
         decide = false;
         chip.owe(0);
         lines = resultLines(h);
         streak = streakAfter(streak, h);
         if (s.quiet) { log('settled-quiet', { hand: h.id }); break; }
-        chip.thud();
         const id = settleMoment(h, streak), best = bestCard(h);
-        if (SETTLE_CUE[id]) sound.play(SETTLE_CUE[id][0], SETTLE_CUE[id][1]);
+        // THE PLAN: the rung this result is worth, what the brakes leave of it, and the party already running
+        // (Brake 2). Every restraint lives in shared/win/plan.js; nothing below re-decides any of it.
+        const joined = joinParty(party, sitPlan(settleTier(h, streak), sit, partyCtx(melted)), now);
+        const plan = joined.plan, co = calloutFor(id, { bloomed: isBloom(h) });
+        spendParty(plan, { id, ceremony: joined.ceremony, amount: net, text: co ? t(co.key, co.fallback) : '' });
         const n = (MOMENTS[id] ? MOMENTS[id].host : []).reduce((m, st) => Math.max(m, st.words | 0), 0);
         const words = n > 0 ? wordKeys(n, wordCursor) : undefined;
         if (n > 0) wordCursor += n;
@@ -240,13 +358,14 @@ export async function mount(ctx) {
           if (out.page.includes('chip_vortex') && v) table.vortex(v.dir, v.n, at);
           log('moment', { id, tokens: out.tokens.length, page: out.page, held: out.held, net: h.result.net, best, streak, delayed });
         };
-        if (h.result.net > 0) {
-          // THE WINNING FLOW: the winning cards glow from this frame; the moment and the callout follow at FX_DELAY_MS.
+        if (paid) {
+          // THE WINNING FLOW: the winning cards glow and THE BANK leaves the pot on this frame (the chip's own
+          // thud now waits for the last token, Law X); the moment and the callout still follow at FX_DELAY_MS.
           table.hitCards(winningCards(h), now);
-          screenUntil = Math.max(screenUntil, now + WIN_HOLD_MS);
-          const co = calloutFor(id, { bloomed: isBloom(h) });
-          later(FX_DELAY_MS, (at) => { play(at, FX_DELAY_MS); showCallout(co); });
-        } else play(now, 0);   // a loss keeps its breath of tunnel on this frame; a push shows nothing
+          ownParty(plan, now, WIN_HOLD_MS);
+          flyPay(plan, before, chip.server, now);
+          later(FX_DELAY_MS, (at) => { play(at, FX_DELAY_MS); showCallout(co, plan); });
+        } else { chip.thud(); play(now, 0); }   // a loss keeps its breath of tunnel on this frame; a push shows nothing
         break;
       }
       default: break;
@@ -328,6 +447,8 @@ export async function mount(ctx) {
     if (!alive || suspended || (ctx.stage && !ctx.stage.ready)) return;
     if (screenBusy(performance.now())) { dropped++; log('deal-dropped', { why: 'screen' }); return; }
     ring($('.cards-deal')); sound.arm();
+    // Law VI: a new press takes the settled state of whatever is still running, never a faster version of it.
+    if (bank && bank.busy) { bank.skip({ land: true }); sound.stop('ladder'); }
     const c = view(performance.now());
     if (!c.deal) { if (c.dealWhy === 'sp') note = t('br_cards_insufficient', 'You need {n} SP for that bet.', { n: stake }); return; }
     busy = true; lines = []; note = ''; card(null);
@@ -362,6 +483,9 @@ export async function mount(ctx) {
     deck = d; seating = false;
     if (!d) deckP.then((x) => { if (my === session && mine === seat && alive && !deck) deck = x; else if (x) x.dispose(); });
     table.clear(); shownHand = null; lines = [];
+    // Brake 3 and Law IX count PER SIT-DOWN, and standing up and sitting back down is a new one: the worn-down
+    // rungs come back and the once-a-sitting hero is owed again.
+    sit = freshSit(); party = null;
     const out = moments.play('cards.sit');
     if (out.page.includes('sit_fan')) table.startFan(performance.now(), dress().still);
     log('moment', { id: 'cards.sit', sitting, page: out.page });
@@ -473,10 +597,19 @@ export async function mount(ctx) {
     alive = true; suspended = false; busy = false; decide = false; queue = []; shownHand = null; note = ''; lines = []; feelLog = [];
     sitting = 0; seating = false; firstSit = true; stakePicked = false; dealReadyAt = 0; screenUntil = 0; dropped = 0; phase = 'loading'; statusText = ''; lastStill = null;
     streak = 0; beatAt = {}; wordCursor = 0; lastCallout = null;
+    sit = freshSit(); party = null; lastPlan = null; bankTicks = 0;   // one reward ledger per visit (Brake 3, Law IX)
     const my = ++session;
     el = build(); ctx.root.append(el);
     addEventListener('keydown', onKey);
     chip = createChip();
+    // THE BANK (Law XII). Law X: the readout ticks as each token LANDS, each one a rung higher, and the
+    // mini-thud waits for the END of the rollup's count - never for the end of the flight.
+    bank = createCardsBank({
+      layer: $('.cards-tokens'),
+      onTick: (value, kind, tail) => { if (chip) chip.show(value); if (!tail) sound.play('token', { i: bankTicks++ }); },
+      onLand: (kind, counting) => { if (counting) return; sound.play('token', { last: true }); if (chip) chip.thud(); },
+      onDone: () => { if (chip) chip.show(null); },   // the room's Law I rule takes the chip back
+    });
     moments = createMoments(ctx, { station: 'cards' });
     callout = createCallout({ mount: el, lex: typeof ctx.lex === 'function' ? ctx.lex : undefined });
     kit = createLoomKit({ still: dress().still, log: say });
@@ -510,6 +643,10 @@ export async function mount(ctx) {
     unSp = null;
     // Law VI: every ceremony skips; the chip gets the plain server number; the kit, the deck and every hold go.
     dropTimers();
+    // THE BANK leaves QUIETLY on a close (no mini-thud, no "+N"): the room's own chip is already on the
+    // settled number the moment the station hands it back, and the climb is silenced with it.
+    if (bank) { bank.skip(); bank.dispose(); }
+    sound.stop('ladder');
     if (callout) { callout.dispose(); callout = null; }
     if (moments) { moments.cancel(); moments.dispose(); }
     if (kit) kit.dispose();
@@ -517,7 +654,7 @@ export async function mount(ctx) {
     if (chip) chip.handOver();
     if (table) table.dispose();
     if (el) el.remove();
-    el = null; table = null; kit = null; deck = null; moments = null; chip = null; queue = []; shownHand = null; busy = false; decide = false;
+    el = null; table = null; kit = null; deck = null; moments = null; chip = null; bank = null; party = null; queue = []; shownHand = null; busy = false; decide = false;
     return Promise.resolve();
   }
 
@@ -530,6 +667,9 @@ export async function mount(ctx) {
         dropTimers();
         flush();
         moments.cancel();
+        if (bank) bank.skip();   // Law VI: the readout settles at once and leaves quietly; the climb is hushed
+        sound.stop('ladder');
+        party = null;
         screenUntil = 0;   // the moments are cancelled, and the host's own suspend stops every overlay (gif_from too)
         if (raf) cancelAnimationFrame(raf);
         raf = 0;
@@ -543,6 +683,10 @@ export async function mount(ctx) {
       screenLeftMs: Math.max(0, Math.round(screenUntil - performance.now())), dealText: el ? $('.cards-deal small').textContent : null,
       state: st && { sp: st.sp, legal: st.legal, hint: st.hint, hand: st.hand }, shown: shownHand,
       chip: chip && { kind: chip.kind, value: chip.value, server: chip.server, owed: chip.owed },
+      // THE REWARD PASS (10.22): the last plan the spine handed out, what is still flying, and the sit-down ledger.
+      reward: { plan: lastPlan, sit: { seen: sit.seen.slice(), heroes: sit.heroes },
+        party: party && { spent: party.plan.spent, leftMs: Math.max(0, Math.round(party.until - performance.now())) },
+        bank: bank && { busy: bank.busy, kind: bank.kind, settled: bank.settled } },
       status: statusText, controls: el ? view(performance.now()) : null, table: table && table.debug(), kit: kit && kit.debug(),
       deck: deck && { ...deck.debug(), keys: deck.keys, map: DECK_VALUES.map((v) => deck.keyFor(v)) }, moments: moments && moments.debug(), log: feelLog,
       callout: { last: lastCallout, pending: fxTimers.size, ...(callout ? callout.debug() : { shown: [] }) },
