@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 
-// Both attributes are LOAD-BEARING - do not delete either as unused scaffolding.
+// All attributes are LOAD-BEARING - do not delete any as unused scaffolding.
 //
 // Core holds `internal` types that are called from the app and from the test project (which
 // reaches Core transitively through the app). Without these attributes those call sites are
@@ -15,3 +15,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("ConditioningControlPanel")]
 [assembly: InternalsVisibleTo("ConditioningControlPanel.Tests")]
 [assembly: InternalsVisibleTo("CCP.Avalonia")]
+[assembly: InternalsVisibleTo("CCP.Avalonia.Language.Tests")]

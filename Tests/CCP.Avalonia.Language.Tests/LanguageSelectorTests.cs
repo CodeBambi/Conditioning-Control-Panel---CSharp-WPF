@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -168,38 +167,48 @@ public sealed class LanguageSelectorTests
             Assert.Equal(1, Volatile.Read(ref callbackFaulted));
             Assert.False(faultInvocation.Completed);
 
-            // Queue work from a background caller, then perform the final mutation immediately
-            // before actual application exit. The file must still contain the old value until the
-            // Exit handler's SaveImmediate runs.
-            var queuedBeforeExit = 0;
-            var queuedPostThread = new Thread(() => CoreDispatch.Post(() =>
-                Interlocked.Exchange(ref queuedBeforeExit, 1))) { IsBackground = true };
-            queuedPostThread.Start();
-            Assert.True(queuedPostThread.Join(TimeSpan.FromSeconds(5)));
-            var diskBeforeExit = File.ReadAllText(settingsPath);
-            CoreSettings.Current.Language = "fr";
-            CoreSettings.Current.SuppressPerkNotifications = true;
-            var exitTimer = Stopwatch.StartNew();
-            CoreSettings.Save();
-            Assert.Equal(diskBeforeExit, File.ReadAllText(settingsPath));
-            lifetime.Shutdown();
-            var reloaded = new SettingsService();
-            exitTimer.Stop();
-            Assert.True(exitTimer.Elapsed < TimeSpan.FromMilliseconds(500),
-                $"Save through reload took {exitTimer.Elapsed.TotalMilliseconds:0}ms; debounce could mask exit flush");
-            Dispatcher.UIThread.RunJobs();
-            Assert.Equal(0, Volatile.Read(ref queuedBeforeExit));
+            Assert.NotNull(App.Settings);
+            var settingsService = App.Settings!;
+            Assert.Equal(500, settingsService.SaveDebounceDueTimeMilliseconds);
+            var originalSaveDebounceDueTimeMilliseconds = settingsService.SaveDebounceDueTimeMilliseconds;
+            try
+            {
+                // Queue work from a background caller, then perform the final mutation immediately
+                // before actual application exit. Hold the real timer past its normal due time so
+                // the file must still contain the old value until the Exit handler's SaveImmediate.
+                var queuedBeforeExit = 0;
+                var queuedPostThread = new Thread(() => CoreDispatch.Post(() =>
+                    Interlocked.Exchange(ref queuedBeforeExit, 1))) { IsBackground = true };
+                queuedPostThread.Start();
+                Assert.True(queuedPostThread.Join(TimeSpan.FromSeconds(5)));
+                var diskBeforeExit = File.ReadAllText(settingsPath);
+                CoreSettings.Current.Language = "fr";
+                CoreSettings.Current.SuppressPerkNotifications = true;
+                settingsService.SaveDebounceDueTimeMilliseconds = Timeout.Infinite;
+                CoreSettings.Save();
+                Assert.Equal(diskBeforeExit, File.ReadAllText(settingsPath));
+                Thread.Sleep(650); // Beyond the production 500ms due time, without pumping the UI queue.
+                Assert.Equal(diskBeforeExit, File.ReadAllText(settingsPath));
+                lifetime.Shutdown();
+                var reloaded = new SettingsService();
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(0, Volatile.Read(ref queuedBeforeExit));
 
-            Assert.Equal("fr", reloaded.Current.Language);
-            Assert.True(reloaded.Current.SuppressPerkNotifications);
-            using var roadmapReload = new RoadmapService();
-            Assert.NotNull(roadmapReload.GetStepProgress("t1_step1")?.StartedAt);
+                Assert.Equal("fr", reloaded.Current.Language);
+                Assert.True(reloaded.Current.SuppressPerkNotifications);
+                using var roadmapReload = new RoadmapService();
+                Assert.NotNull(roadmapReload.GetStepProgress("t1_step1")?.StartedAt);
 
-            var afterExit = 0;
-            CoreDispatch.Post(() => Interlocked.Exchange(ref afterExit, 1));
-            var afterExitInvoke = CoreDispatch.Invoke(() => 7, TimeSpan.FromMilliseconds(50));
-            Assert.False(afterExitInvoke.Completed);
-            Assert.Equal(0, Volatile.Read(ref afterExit));
+                var afterExit = 0;
+                CoreDispatch.Post(() => Interlocked.Exchange(ref afterExit, 1));
+                var afterExitInvoke = CoreDispatch.Invoke(() => 7, TimeSpan.FromMilliseconds(50));
+                Assert.False(afterExitInvoke.Completed);
+                Assert.Equal(0, Volatile.Read(ref afterExit));
+            }
+            finally
+            {
+                settingsService.SaveDebounceDueTimeMilliseconds = originalSaveDebounceDueTimeMilliseconds;
+            }
         }
         finally
         {
