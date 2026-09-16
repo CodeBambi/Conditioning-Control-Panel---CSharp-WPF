@@ -37,8 +37,23 @@
 .counter-card:hover { transform: perspective(800px) rotateX(2.5deg) rotateY(-3deg) translateY(-2px);
   box-shadow: 0 0 0 1px #ff8ed255, 0 10px 30px #c767b340, inset 0 1px 0 #ffffff1c; }
 .counter-card[data-face="owned"] { border-color: #5fffd077; }
-.counter-card.is-flip { animation: counter-flip .6s ease-out; }
-@keyframes counter-flip { 0% { transform: perspective(800px) rotateY(90deg); } 100% { transform: perspective(800px) rotateY(0); } }
+/* A successful purchase delivers the art into a shallow collection tray. Ownership is already live. */
+.counter-card.is-flip .counter-art > img,
+.counter-card.is-flip .counter-art[data-plate] > .counter-plate { animation: counter-deliver 620ms both; transform-origin: 50% 90%; }
+.counter-card.is-flip .counter-art::after { content: ''; position: absolute; z-index: 2; pointer-events: none;
+  left: 12%; right: 12%; bottom: 6%; height: 8px; border-radius: 3px 3px 9px 9px;
+  background: linear-gradient(#f7d9a4, #765137); box-shadow: 0 5px 9px #08040b99;
+  animation: counter-tray 620ms both; }
+.counter-card.is-flip .counter-badge.is-owned { animation: counter-receipt 620ms both; }
+@keyframes counter-deliver {
+  0% { transform: translateY(-20%) scale(.84) rotate(-3deg); animation-timing-function: cubic-bezier(.5,0,1,.7); }
+  52% { transform: translateY(6%) scale(.86,.8) rotate(1deg); animation-timing-function: ease-out; }
+  70% { transform: translateY(-3%) scale(.86) rotate(-1deg); }
+  84% { transform: translateY(2%) scale(.87,.85); }
+  100% { transform: none; }
+}
+@keyframes counter-tray { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes counter-receipt { 0%, 55% { transform: none; } 72% { transform: scale(1.08); } 100% { transform: none; } }
 
 .counter-art { position: relative; flex: none; aspect-ratio: 16 / 11; max-width: 100%; display: grid; place-items: center; overflow: hidden;
   background: radial-gradient(circle at 50% 42%, #7a3b7a, #3a1f45 62%, #2a1734); }

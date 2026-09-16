@@ -21,6 +21,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
 import { stripTransform } from './strip-transform.js';
+import { settleCells, recoilCells, leverRebound, latchTravel } from './juice.js';
 import { drawSymbol, disposeSpirals, CELL } from './symbols.js';
 import { fitText } from '../../shared/text/wrap.js';
 import { PACE, reelStopMs, reelsMs, respinStopMs, respinMs } from './pace.js';
@@ -305,7 +306,7 @@ export async function createScene(o) {
         // THE GLYPH HIT (shared/hypno/callout.js timings): the landed cell pops 6% inside its own cell and takes a
         // rim, reel order, HIGHLIGHT_GAP_MS apart. Reduced motion takes the lit rim and no pop (Law VI).
         const hit = j === stopsNow[r] ? hitGlow(r, t) : 0;
-        if (hit > 0 && !reduced) { ctx.beginPath(); ctx.rect(-cell.hw, -cell.hh, CH, CW); ctx.clip(); ctx.scale(1 + 0.06 * hit, 1 + 0.06 * hit); }
+        if (hit > 0 && !reduced && !stillFx()) { ctx.beginPath(); ctx.rect(-cell.hw, -cell.hh, CH, CW); ctx.clip(); ctx.scale(1 + 0.06 * hit, 1 + 0.06 * hit); }
         // One bad drawable (a broken or tainted GIF) paints the fallback tile, never the whole reel.
         try { ctx.save(); drawSymbol(ctx, strips[r][j], t, {...look,cover:shared&&canvas.clientHeight>canvas.clientWidth},cell); } catch { ctx.restore(); ctx.save(); drawSymbol(ctx, strips[r][j], t, { reduced: look.reduced, face: look.face },cell); }
         ctx.restore();
@@ -643,8 +644,17 @@ export async function createScene(o) {
     s.resolve();
   }
 
+  function settleMechanical() {
+    pulse.fill(-Infinity); shiverAt = -Infinity; pullBack = null;
+    if (spin && !spin.motionSuppressed) {
+      spin.motionSuppressed = true;
+      spin.from = reelAngles.map((a, i) => a - restX[i]);
+    }
+  }
+
   function update(t) {
     const reduced = !!o.reduced || stillFx();
+    if (reduced) settleMechanical();
     for(const n of roomVisibility.keys())n.visible=false;
     coinShower.update((t-coinTick)/1000,stillFx()); coinTick=t;
     if (tl) {
@@ -669,10 +679,10 @@ export async function createScene(o) {
       : t - spin.start >= reelStopMs(1) && t - spin.start < reelStopMs(2, PACE, spin.teaseMs));
     const partying = !!party && t < party.end, pr = partying ? party.r : null;
     if (spin) {
-      const s = spin, dt = t - s.start;
+      const s = spin, dt = t - s.start, stillSpin = reduced || !!s.motionSuppressed;
       // The pull carries on from wherever the Law VIII lean (or the drag) left the lever.
       const wholeMs = s.solo ? respinMs(PACE, s.teaseMs) : reelsMs(PACE, s.teaseMs);
-      lever.rotation.x = reduced ? (dt < wholeMs ? LEAN : 0) : Math.max(0.4 * Math.sin(Math.PI * clamp(dt / 420)), s.leverFrom * (1 - ease(dt / 420)));
+      lever.rotation.x = stillSpin ? (dt < wholeMs ? LEAN : 0) : Math.max(0.4 * Math.sin(Math.PI * clamp(dt / 420)), s.leverFrom * (1 - ease(dt / 420))) + leverRebound(dt - 420);
       let all = true;
       for (let i = 0; i < 3; i++) {
         if (s.held === i || s.keep.includes(i)) continue;
@@ -684,21 +694,21 @@ export async function createScene(o) {
         // A1's hold stretches reel 3's slow-down across the whole hold, so it crawls into its stop instead of
         // blurring longer and stopping as sharply as ever (the stop itself is the tape's; only the curve moves).
         const down = i === 2 && s.teaseMs > 0 ? Math.min(PACE.DECEL_MS + s.teaseMs, dur * 0.5) : Math.min(PACE.DECEL_MS, dur * 0.5);
-        let x = reduced ? s.from[i] : THREE.MathUtils.lerp(s.from[i], target, reelTravel(dt, dur, 180, down));
+        let x = stillSpin ? s.from[i] : THREE.MathUtils.lerp(s.from[i], target, reelTravel(Math.max(0, dt - 100), dur - 100, 180, down)) + recoilCells(dt) * cellRad(i);
         // THE ROLL follows the drum off the curve itself, so reduced motion keeps it: sound is where the beat
         // lives when the travel is gone (Law VI), and it is the same slope whether the drum is drawn or not.
-        if (o.onReelSpeed && dt < dur) o.onReelSpeed(i, reelSpeed(dt, dur, 180, down));
+        if (o.onReelSpeed && dt < dur) o.onReelSpeed(i, reelSpeed(Math.max(0, dt - 100), dur - 100, 180, down));
         if (dt >= dur) {
           if (!s.stopped[i]) { s.stopped[i] = true; stopAt[i] = t; if (o.onReelStop) o.onReelStop(i); }   // THE THUD: cue on this frame
           const k = clamp((dt - dur) / THUD_MS);
-          x = reduced ? home : target + (1 - thud(k)) * 0.035;
+          x = stillSpin ? home : target + settleCells(dt - dur, THUD_MS) * cellRad(i);
           if (k < 1) all = false;
         } else all = false;
         reelAngles[i] = restX[i] + x;
       }
       if (all && dt >= wholeMs) settleSpin();   // a held column never shortens the pace
     } else if (pull) lever.rotation.x = PULL_MAX * pull.amount;
-    else if (pullBack) { const q = clamp((t - pullBack.start) / 200); lever.rotation.x = pullBack.angle * (1 - ease(q)); if (q === 1) pullBack = null; }
+    else if (pullBack) { const dt = t - pullBack.start, q = clamp(dt / 200); lever.rotation.x = reduced ? 0 : pullBack.angle * (1 - ease(q)) + leverRebound(dt - 200); if (dt >= 400 || reduced) pullBack = null; }
     else if (lean) lever.rotation.x = reduced ? LEAN : lean.from + (LEAN - lean.from) * ease((t - lean.start) / FEEL.LEAN_MS);   // Law VIII
     else lever.rotation.x = reduced || phase !== 'play' || partying ? 0 : BREATH_RAD * breath(t);   // THE BREATH, the only breather
 
@@ -729,7 +739,7 @@ export async function createScene(o) {
     freezers.forEach((f, i) => {
       if (!f) return;
       if (f.material && 'emissiveIntensity' in f.material) f.material.emissiveIntensity = hold === i ? 1.8 : 0.1;
-      f.position.y = f.userData.restY - (reduced ? 0 : Math.sin(clamp((t - pulse[i]) / 200) * Math.PI) * 0.012);
+      f.position.y = f.userData.restY - (reduced ? 0 : latchTravel(t - pulse[i]));
     });
 
     // THE MARQUEE: the chase runs at the heat of the last win, the tier's own palette while it celebrates.
@@ -974,6 +984,7 @@ export async function createScene(o) {
     },
     /** THE BANK touches the tray: when a win starts paying out, or when a spend lands in it. */
     trayThud() { trayAt = performance.now(); },
+    malus() { shiverAt = performance.now(); },
     /** A6: frame the winning row for `ms` (THE BANK's rollup), then let THE GLOW out. It rides the landing
      *  beat the reveal already owns (Law X): tier 1 takes one soft pulse, reduced motion and a melted spin
      *  take a steady frame. `r` is feel.recipe's verdict for the outcome. */
@@ -987,7 +998,7 @@ export async function createScene(o) {
     /** Law VI: a press or a new spin takes the frame straight to its settled end, never a faster pulse. */
     paylineOut() { if (paylineAt > -Infinity) paylineHold = Math.max(0, Math.min(paylineHold, performance.now() - paylineAt)); },
     /** Law VI: Back and suspend skip every ceremony to its settled state. */
-    skip() { marqueeMsg = null; party = null; shiverAt = trayAt = -Infinity; stopAt.fill(-Infinity); revealAt = -Infinity; lean = null; ghost = null; teasing = false; heat = { ...heat, from: heat.to, at: -Infinity }; paylineAt = -Infinity; if (o.payline) o.payline.hidden = true; hitAt.fill(-Infinity); hitDirty = true; hazeOn = null; hazeOut = null; },
+    skip() { settleMechanical(); marqueeMsg = null; party = null; shiverAt = trayAt = -Infinity; stopAt.fill(-Infinity); revealAt = -Infinity; lean = null; ghost = null; teasing = false; heat = { ...heat, from: heat.to, at: -Infinity }; paylineAt = -Infinity; if (o.payline) o.payline.hidden = true; hitAt.fill(-Infinity); hitDirty = true; hazeOn = null; hazeOut = null; },
     /** THE GLYPH HIT (feel.highlightPlan): the landed cells on `plan` ([{ reel, at }]) glow from this frame, reel
      *  order, each `at` ms in, all out by HIGHLIGHT_MS. Nothing moves a stop; it lights what the tape landed. */
     highlight(plan) {

@@ -56,7 +56,7 @@ export function createSound(k = kit, over = null) {
   function note(name, semis, level, inMs = 0) { trace.push({ name, semis, level, at: Math.round(now()), in: Math.round(inMs) }); if (trace.length > 60) trace.shift(); }
   const live = () => !disposed && !suspended;
   /** Every voice this station may have scheduled ahead, the drums included. */
-  const quiet = () => { k.stop('riser'); k.stop('ladder'); k.stop('breath'); k.stop('reel'); rolling.clear(); sent.clear(); };
+  const quiet = () => { k.stop('riser'); k.stop('ladder'); k.stop('breath'); k.stop('reel'); k.stop('freeze-latch'); k.stop('cabinet-knock'); rolling.clear(); sent.clear(); };
 
   const api = {
     /** Wake the kit inside a gesture (a press or a pull). */
@@ -141,6 +141,8 @@ export function createSound(k = kit, over = null) {
     },
     /** A melt landing: a deep slow breath under it (6 s). */
     melt() { note('melt', 0, 0.12); if (live()) k.play('breath'); },
+    freeze(released = false) { if (live()) k.play('freeze-latch', { released }); },
+    malus() { if (live()) k.play('cabinet-knock'); },
     suspend(on) {
       suspended = !!on;
       if (suspended) quiet();   // the room suspends the kit itself; this only takes the slot's own voices back

@@ -33,13 +33,12 @@ function h(tag, cls, text) {
   return e;
 }
 
-/** THE BUY's chime (Brake 1: one small earned moment), on the room's kit: three chips into the tray and the small
- *  win's two notes, synthesised, no clip. The kit is armed inside the Confirm press. */
+/** One delivery cue per successful buy. The kit is armed inside the Confirm press. */
 function createChime(k = kit) {
   let off = false;
   return {
     arm() { if (!off) k.arm(); },
-    play() { if (off) return; k.play('chips', { n: 3, gap: 0.05 }); k.play('win', { tier: 'small', at: 0.12 }); },
+    play() { if (off) return; k.play('prize-drop'); },
     suspend(on) { off = !!on; },
     dispose() { off = true; },
   };
@@ -67,7 +66,7 @@ export async function mount(ctx) {
 
   function still() {
     const pr = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    return !!ctx.reduced || pr || String(ctx.intensity || '').toLowerCase() === 'calm';
+    return !!ctx.reduced || pr || String(ctx.motion || '').toLowerCase() === 'off' || String(ctx.intensity || '').toLowerCase() === 'calm';
   }
   function back() { if (typeof ctx.standUp === 'function') ctx.standUp(); else close(); }
   const backButton = (cls) => { const b = h('button', cls, t('br_back', 'Back')); b.type = 'button'; b.onclick = back; b.hidden = hostBack; return b; };
@@ -239,7 +238,12 @@ export async function mount(ctx) {
       c.card.dataset.face = v.face;
       c.price.textContent = L('br_counter_price', fmt(v.priceSp));
       if (c.tryBtn) c.tryBtn.hidden = v.face === 'soon';   // under the dust sheet nothing is tried
-      if (v.flip && !flipped.has(v.id)) { flipped.add(v.id); if (!still()) c.card.classList.add('is-flip'); }
+      if (still() || suspended) c.card.classList.remove('is-flip');
+      if (v.flip && !flipped.has(v.id)) {
+        flipped.add(v.id);
+        if (demo?.id === v.id) stopDemo();
+        if (!still() && !suspended) c.card.classList.add('is-flip');
+      }
       const sig = JSON.stringify([v.face, v.short, v.deliveryKey, v.confirm, v.priceSp]);
       if (sig !== c.sig) { c.sig = sig; actFor(v, c); }
     }
@@ -284,7 +288,7 @@ export async function mount(ctx) {
 
   return {
     open, close,
-    suspend(on) { suspended = !!on; chime.suspend(suspended); if (suspended) stopDemo(); },
+    suspend(on) { suspended = !!on; chime.suspend(suspended); if (suspended) { stopDemo(); for (const c of cards.values()) c.card.classList.remove('is-flip'); } },
     destroy() { close(); if (cssLink) { cssLink.remove(); cssLink = null; } },
     /** For dev.html and the checks only. */
     debug: () => ({ alive, suspended, hostBack, still: still(), phase: counter.phase, sp: counter.sp(), confirm: counter.confirm,

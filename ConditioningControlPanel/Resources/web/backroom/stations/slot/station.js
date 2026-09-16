@@ -247,11 +247,11 @@ export async function mount(ctx) {
     jarChip.hidden = !jar;
     if (jar && jarChip.textContent !== jar) jarChip.textContent = jar;
     const status=$('.slot-status');
-    status.textContent=ctx.stage?t('br_slot_last_win','Last win {n}',{n:fmt(s.lastWin)}):parts.join('  ·  ');
-    status.setAttribute('aria-label',parts.join('  ·  '));
+    status.textContent=ctx.stage?t('br_slot_last_win','Last win {n}',{n:fmt(s.lastWin)}):parts.join('  Â·  ');
+    status.setAttribute('aria-label',parts.join('  Â·  '));
     const extraNote=$('.slot-state-note');
     extraNote.hidden=!ctx.stage||!(s.comp||s.free||s.melt);
-    extraNote.textContent=[s.comp?t('br_slot_comp','On the house: {n} spins',{n:s.comp.spins}):'',s.free?t('br_slot_free_left','Free spins {n}',{n:s.free}):'',s.melt?t('br_slot_melt_left','Melt: {n} spins at half',{n:s.melt}):''].filter(Boolean).join(' · ');
+    extraNote.textContent=[s.comp?t('br_slot_comp','On the house: {n} spins',{n:s.comp.spins}):'',s.free?t('br_slot_free_left','Free spins {n}',{n:s.free}):'',s.melt?t('br_slot_melt_left','Melt: {n} spins at half',{n:s.melt}):''].filter(Boolean).join(' Â· ');
     const playable = el.dataset.phase === 'play';
     el.dataset.pace = pace;
     el.querySelectorAll('[data-col]').forEach((b, i) => {
@@ -454,7 +454,10 @@ export async function mount(ctx) {
   function toggleFreeze(col) {
     endAttract(); armIdle();
     if (!alive || busy || !tape || el.dataset.phase !== 'play') return;
+    const previous = tape.snapshot().hold;
     tape.toggleHold(col);
+    const held = tape.snapshot().hold;
+    if (held !== previous) { sound.arm(); sound.freeze(held === null); }
     sync();   // scene.setHold dips the button this frame (Law VIII)
   }
 
@@ -555,6 +558,7 @@ export async function mount(ctx) {
     sit = afterParty(sit, r.reveal ? { ...plan, reveal: true } : plan);
     if (tier > 0) { sound.win(r.sound, semis); streak++; } else streak = 0;   // the no-pay cue was the last reel's muted thud
     scene.setMelted(melted); if (melted) sound.melt();
+    if (o.line === 'melt') { scene.malus(); sound.malus(); }
     scene.celebrate(r, o.pay, t('br_slot_screen_win', 'WIN +{n}', { n: fmt(o.pay) }));
     // 10.22.B: the room is told ONCE, on the frame the player learns it, and it is told the PLAN's shower
     // tier, never the slot's own rung. 0 means no shower at all (Law IX: a small win is a close-up event and
