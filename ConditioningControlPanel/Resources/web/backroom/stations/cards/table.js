@@ -17,6 +17,7 @@
  * brass crosshatch back.
  * ==========================================================================*/
 
+import { cardTilt, landing, flipLift, deckRecoil, touchdown } from './juice.js';
 import { TIMING, fanCard, lampBreath } from './feel.js';
 import { rankLabel, suitOf, totalOf } from './hand.js';
 import { DECK_VALUES } from '../../shared/hypno/media.js';
@@ -49,11 +50,12 @@ export function slotXY(L, owner, slot, count, hands = 1) {
 }
 
 /** @param {{kit?: Object | (() => Object)}} o  the Loom kit, or a getter (a station swaps its kit on suspend) */
-export function createTable(canvas, { kit = null } = {}) {
+export function createTable(canvas, { kit = null, onCue = () => {} } = {}) {
   const g = canvas.getContext('2d');
   const loom = () => (typeof kit === 'function' ? kit() : kit);
   let cards = [], seq = 0, hands = 1, active = -1, bets = [], betsShown = true;
   let fan = null, ripples = [], chips = [], tunnelAt = -1, glow = null, lastNow = 0;
+  let deckAt = -Infinity;
   let hits = [];   // THE GLYPH HIT (callout.js): { id, t0 } per winning card, a mint rim and a 1.06 pop over HIGHLIGHT_MS
   const hitPulse = (c, now) => { const h = hits.find((x) => x.id === c.id); if (!h) return 0; const q = (now - h.t0) / HIGHLIGHT_MS; return q >= 0 && q < 1 ? Math.sin(q * Math.PI) : 0; };
   let W = 0, H = 0, D = 1, cache = { key: '', weave: null, print: null };
@@ -157,7 +159,7 @@ export function createTable(canvas, { kit = null } = {}) {
   function move(L, c, now, still, dt) {
     const [tx, ty] = target(L, c);
     if (still) {
-      if (!c.landed) { c.landed = true; if (c.code) c.faceAt = c.bornAt; }
+      if (!c.landed) { c.landed = true; if (c.code) c.faceAt = c.bornAt; touchdown(c, now, true, onCue); }
       c.x = tx; c.y = ty; c.lift = 0; c.rot = 0;
       return;
     }
@@ -165,7 +167,7 @@ export function createTable(canvas, { kit = null } = {}) {
     if (!c.landed) {
       c.x = lerp(L.shoe.x, tx, e); c.y = lerp(L.shoe.y, ty, e) - Math.sin(p * Math.PI) * H * 0.08;
       c.rot = (1 - e) * -0.9; c.lift = Math.sin(p * Math.PI);
-      if (p >= 1) { c.landed = true; c.lift = 0; c.rot = 0; if (c.code) c.faceAt = now; ripples.push({ x: tx, y: ty, t0: now }); }
+      if (p >= 1) { touchdown(c, now, false, onCue); c.landed = true; c.lift = 0; c.rot = 0; if (c.code) c.faceAt = now; ripples.push({ x: tx, y: ty, t0: now }); }
     } else {
       if (!Number.isFinite(c.x)) { c.x = tx; c.y = ty; }   // put down settled: straight onto its spot
       const s = Math.min(1, dt * 0.012);
@@ -181,10 +183,20 @@ export function createTable(canvas, { kit = null } = {}) {
   }
 
   const api = {
-    clear() { cards = []; hands = 1; active = -1; bets = []; betsShown = true; chips = []; tunnelAt = -1; glow = null; hits = []; },
+    clear() { cards = []; hands = 1; active = -1; bets = []; betsShown = true; chips = []; tunnelAt = -1; glow = null; hits = []; deckAt = -Infinity; },
     /** `settled`: already on its spot and turned (a quiet adopt, a suspend's flush), no flight. */
     addCard({ owner, slot, code, settled = false }, now) {
-      cards.push({ id: ++seq, owner, slot, code: code || null, bornAt: now, faceAt: settled && code ? now - TIMING.flipMs : null, landed: !!settled, x: NaN, y: NaN, rot: 0, lift: 0 });
+      if (!settled) deckAt = now;
+      cards.push({ quiet: settled, touchdown: settled, id: ++seq, owner, slot, code: code || null, bornAt: now, faceAt: settled && code ? now - TIMING.flipMs : null, landed: !!settled, x: NaN, y: NaN, rot: 0, lift: 0 });
+    },
+    // Suspend keeps the dealt state and discards unfinished presentation, including its sounds.
+    skip(now) {
+      for (const c of cards) {
+        c.quiet = c.touchdown = c.landed = true; c.landAt = -Infinity;
+        if (c.code) c.faceAt = now - TIMING.flipMs;
+        c.x = c.y = NaN; c.rot = c.lift = 0;
+      }
+      fan = null; deckAt = -Infinity; chips = []; ripples = []; hits = []; glow = null; tunnelAt = -1;
     },
     split() { const c = cards.find((x) => x.owner === 0 && x.slot === 1); if (c) { c.owner = 1; c.slot = 0; } hands = 2; },
     reveal(code, now, settled = false) { const c = cards.find((x) => x.owner === 'd' && x.slot === 1); if (c) { c.code = code; c.faceAt = c.landed ? (settled ? now - TIMING.flipMs : now) : null; } },
@@ -231,7 +243,7 @@ export function createTable(canvas, { kit = null } = {}) {
       const tunnelOn = tunnelAt >= 0 && now - tunnelAt < TIMING.tunnelMs;
       const glowOn = glow && now - glow.t0 < TIMING.glowMs;
       const fanMs = fan ? now - fan.t0 : -1;
-      if (fan && api.fanDone(now)) fan = null;
+      if (fan && api.fanDone(now)) { fan = null; onCue('deck-square'); }
       const sitLift = fan ? Math.sin(clamp(fanMs / (fan.still ? TIMING.sitStillMs : TIMING.sitMs), 0, 1) * Math.PI) : 0;
       const breath = 0.5 + (lampBreath(now, tunnelOn || glowOn) - 0.5) * k;
       const lampR = W * (0.55 + 0.16 * (breath - 0.5) * 2 + 0.12 * sitLift);
@@ -245,7 +257,11 @@ export function createTable(canvas, { kit = null } = {}) {
       // shoe: a brass box with the top card's back showing
       g.fillStyle = '#2a1a3c'; rrect(g, L.shoe.x - L.cw * 0.75, L.shoe.y - L.ch * 0.5, L.cw * 1.5, L.ch, 8); g.fill();
       g.strokeStyle = COL.brass; g.lineWidth = 1.5; g.stroke();
-      g.save(); g.translate(L.shoe.x, L.shoe.y); g.rotate(-0.12); g.scale(0.82, 0.82); drawCard(null, L.cw, L.ch, 0, { ...o, now }); g.restore();
+      const recoil = deckRecoil(now - deckAt, still) * k;
+      for (let layer = 2; layer >= 0; layer--) {
+        g.save(); g.translate(L.shoe.x + layer * (1 + recoil * 5), L.shoe.y + layer * 2 - recoil * 5);
+        g.rotate(-0.12 + recoil * .04 * layer); g.scale(.82, .82); drawCard(null, L.cw, L.ch, 0, { ...o, now }); g.restore();
+      }
 
       // chip spot and the bet
       g.strokeStyle = 'rgba(232,194,122,.5)'; g.lineWidth = 1.5; g.beginPath(); g.arc(L.spot.x, L.spot.y, L.spot.r * 1.6, 0, TAU); g.stroke();
@@ -269,7 +285,10 @@ export function createTable(canvas, { kit = null } = {}) {
       for (const c of cards) move(L, c, now, still, dt);
       for (const c of cards) {
         if (!Number.isFinite(c.x)) continue;
-        shadow(L, c.x, c.y, c.rot, c.lift, breath);
+        const flip = flipOf(c, now, still), lift = c.lift + flipLift(flip, still);
+        const slide = landing(now - (c.landAt ?? -Infinity), still) * L.cw * .1 * k;
+        const rotation = c.rot + (still ? 0 : cardTilt(c.owner, c.slot) * k);
+        shadow(L, c.x, c.y, rotation, lift, breath);
         if (glowOn && glow.id === c.id) {
           const gp = clamp((now - glow.t0) / TIMING.glowMs, 0, 1);
           g.save(); g.globalAlpha = (still ? 0.6 : Math.sin(gp * Math.PI) * 0.9) * k; g.shadowColor = COL.rose; g.shadowBlur = 30; g.fillStyle = COL.rose;
@@ -281,7 +300,7 @@ export function createTable(canvas, { kit = null } = {}) {
           g.translate(c.x, c.y - c.lift * 6); g.rotate(c.rot); g.scale(1 + 0.06 * pulse, 1 + 0.06 * pulse);
           rrect(g, -L.cw / 2 - 2, -L.ch / 2 - 2, L.cw + 4, L.ch + 4, L.cw * 0.12); g.stroke(); g.restore();
         }
-        g.save(); g.translate(c.x, c.y - c.lift * 6); g.rotate(c.rot); if (pulse > 0) g.scale(1 + 0.06 * pulse, 1 + 0.06 * pulse);
+        g.save(); g.translate(c.x + slide, c.y - lift * 6); g.rotate(rotation); if (pulse > 0) g.scale(1 + 0.06 * pulse, 1 + 0.06 * pulse);
         drawCard(c.code, L.cw, L.ch, flipOf(c, now, still), { ...o, now }); g.restore();
       }
       // totals as the felt shows them (face-up cards only)
@@ -296,7 +315,10 @@ export function createTable(canvas, { kit = null } = {}) {
         const name = hands === 2 ? (o.handName ? o.handName(i) : `${i + 1}`) : (o.youName || '');
         const on = o.decide && i === active;
         g.fillStyle = on ? COL.mint : COL.text;
-        g.fillText(`${name}  ${v.length ? totalOf(v).total : ''}`, cx, y);
+        const value = v.length ? totalOf(v).total : '', newest = mine.filter((c) => !c.quiet && c.landed && c.code && flipOf(c, now, still) >= .5).reduce((a, c) => Math.max(a, c.faceAt + TIMING.flipMs / 2), -Infinity);
+        const bump = Math.max(0, Math.sin(Math.min(1, (now - newest) / 260) * Math.PI)) * (still ? 0 : k);
+        g.save(); g.translate(cx, y + (value > 21 ? 3 * bump : 0)); g.scale(1 + .08 * bump, 1 + .08 * bump);
+        g.fillText(`${name}  ${value}`, 0, 0); g.restore();
         if (on && hands === 2) { g.strokeStyle = COL.mint; g.lineWidth = 2; g.beginPath(); g.moveTo(cx - L.cw * 0.9, y + 11); g.lineTo(cx + L.cw * 0.9, y + 11); g.stroke(); }
       }
 

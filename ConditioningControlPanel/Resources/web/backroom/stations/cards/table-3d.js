@@ -1,5 +1,6 @@
 // Soft Hand's room view. The station owns all cards, steps, locks, moments and SP.
 // Large cards use authored origin/dimensions and the same hand layout as the seating camera.
+import { cardTilt, landing, flipLift, deckRecoil, touchdown } from './juice.js';
 import * as T from 'three';
 import { cardsNodes, validCardSlot } from '../../room/nodes-cards.js';
 import { TIMING, fanCard, lampBreath } from './feel.js';
@@ -11,13 +12,14 @@ import { HIGHLIGHT_MS, HIGHLIGHT_GAP_MS } from '../../shared/hypno/callout.js';
 const clamp = (v) => Math.max(0, Math.min(1, v));
 const ease = (p) => 1 - (1 - p) ** 3;
 
-export function createTable3D(stage, { kit, onDeal } = {}) {
+export function createTable3D(stage, { kit, onDeal, onCue = () => {} } = {}) {
   const nodes = cardsNodes(stage.fixture), group = new T.Group();
   group.name = 'cards_runtime'; stage.scene.add(group);
   const authored = [], cards = [], fans = [], sparks = [], betChips = [];
   let active = -1, hands = 1, fan = null, disposed = false, now = 0, lastPaint = -Infinity, frameStep=1;
   const point = (name) => nodes[name].getWorldPosition(new T.Vector3());
   const shoe = point('deck_shoe_mouth');
+  let deckAt = -Infinity;
   const width = Number(nodes.card_slot_p0_0.userData.card_width), height = Number(nodes.card_slot_p0_0.userData.card_height);
   if (!(width > 0 && height > 0)) { group.removeFromParent(); throw new Error('Card anchors require card_width/card_height'); }
   const size = nodes.card_slot_p0_0.getWorldScale(new T.Vector3());
@@ -36,9 +38,11 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
   function makeCard(c) {
     const face = createCardFace(), material = new T.MeshBasicMaterial({ map: face.texture, side: T.DoubleSide, transparent: true, toneMapped: false });
     const mesh = new T.Mesh(geometry, material); mesh.quaternion.copy(base); mesh.renderOrder = 2; group.add(mesh);
-    return { ...c, mesh, material, face, landed: !!c.settled, faceAt: c.settled && c.code ? c.bornAt - TIMING.flipMs : null };
+    const shadow = new T.Mesh(geometry, new T.MeshBasicMaterial({ color: '#031014', transparent: true, opacity: .22, depthWrite: false, side: T.DoubleSide }));
+    shadow.quaternion.copy(base); shadow.renderOrder = 1; group.add(shadow);
+    return { ...c, mesh, material, face, shadow, quiet: !!c.settled, touchdown: !!c.settled, landed: !!c.settled, faceAt: c.settled && c.code ? c.bornAt - TIMING.flipMs : null };
   }
-  function drop(c) { c.mesh.removeFromParent(); c.material.dispose(); c.face.dispose(); if (c.rim) { c.rim.removeFromParent(); c.rim.material.dispose(); c.rim = null; } }
+  function drop(c) { c.shadow.removeFromParent(); c.shadow.material.dispose(); c.mesh.removeFromParent(); c.material.dispose(); c.face.dispose(); if (c.rim) { c.rim.removeFromParent(); c.rim.material.dispose(); c.rim = null; } }
   function rimFor(c) {
     if (c.rim) return c.rim;
     const m = new T.Mesh(rimGeometry, new T.MeshBasicMaterial({ color: '#5fffd0', transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide }));
@@ -51,6 +55,9 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
     c.material.opacity = alpha;
   }
   const flipAt = (c, time, still) => c.faceAt == null ? 0 : still ? 1 : clamp((time - c.faceAt) / TIMING.flipMs);
+  // Animate the authored deck cards, retaining their exact transforms for teardown.
+  const stack = [];
+  stage.fixture.traverse((m) => { if (/^deck_card_[0-4]$/.test(m.name)) stack.push({ m, position: m.position.clone(), rotation: m.quaternion.clone() }); });
   const off = stage.register({ dispose: release });
   function release() {
     if (disposed) return; disposed = true;
@@ -58,6 +65,7 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
     for (const c of [...cards, ...fans]) drop(c);
     betChips.forEach((m) => { m.geometry.dispose(); m.material.dispose(); });
     for (const s of sparks) { s.mesh.geometry.dispose(); s.mesh.material.dispose(); }
+    stack.forEach(({ m, position, rotation }) => { m.position.copy(position); m.quaternion.copy(rotation); });
     geometry.dispose(); rimGeometry.dispose(); group.removeFromParent();
     authored.forEach(([n, visible]) => { n.visible = visible; });
   }
@@ -76,9 +84,22 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
     }
   }
   const api = {
-    clear() { cards.splice(0).forEach(drop); hands = 1; active = -1; },
+    clear() { deckAt = -Infinity; cards.splice(0).forEach(drop); hands = 1; active = -1; },
     // Ignore malformed cards without inventing a placement or stopping the station.
-    addCard(c, time) { if (!validCardSlot(c.owner, c.slot)) return false; cards.push(makeCard({ ...c, code: c.code || null, bornAt: time })); return true; },
+    addCard(c, time) { if (!validCardSlot(c.owner, c.slot)) return false; if (!c.settled) deckAt = time; cards.push(makeCard({ ...c, code: c.code || null, bornAt: time })); return true; },
+    // Never replay a touchdown or fan-square after the app returns from suspension.
+    skip(time) {
+      for (const c of cards) {
+        c.quiet = c.touchdown = c.landed = true; c.landAt = -Infinity;
+        if (c.code) c.faceAt = time - TIMING.flipMs;
+        c.rest = target(c); setPose(c, c.rest, c.code ? 1 : 0); c.hit = c.glow = null;
+        c.shadow.position.copy(c.rest).addScaledVector(normal, -.001);
+        if (c.rim) c.rim.visible = false;
+      }
+      fan = null; fans.splice(0).forEach(drop); deckAt = -Infinity;
+      stack.forEach(({ m, position, rotation }) => { m.position.copy(position); m.quaternion.copy(rotation); });
+      for (const s of sparks.splice(0)) { s.mesh.removeFromParent(); s.mesh.geometry.dispose(); s.mesh.material.dispose(); }
+    },
     split() { const c = cards.find((x) => x.owner === 0 && x.slot === 1); if (c) { c.owner = 1; c.slot = 0; } hands = 2; },
     reveal(code, time, settled = false) { const c = cards.find((x) => x.owner === 'd' && x.slot === 1); if (c) { c.code = code; c.faceAt = settled ? time - TIMING.flipMs : time; } },
     setActive(i) { active = i; },
@@ -127,16 +148,22 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
       if (disposed) return; frameStep=1-Math.exp(-Math.max(0,o.now-now)/90);now = o.now;
       layout=cardLayout(stage.fixture,hands,cardCounts(cards));
       // Freeze any in-flight gesture on a settings transition; never replay it later.
-      if (o.still) { for (const c of cards) { c.landed = true; if (c.code) c.faceAt = now - TIMING.flipMs; } if (fan) fan.still = true; }
+      if (o.still) { for (const c of cards) { if (!c.landed) touchdown(c, now, true, onCue); c.landed = true; if (c.code) c.faceAt = now - TIMING.flipMs; } if (fan) fan.still = true; }
       const repaint = now - lastPaint >= 1000 / 15;
       if (repaint) lastPaint = now;
       lamp.intensity = (o.still ? .35 : lampBreath(now, false)) * o.k * .7;
+      const recoil = deckRecoil(now - deckAt, o.still) * o.k;
+      stack.forEach(({ m, position, rotation }, i) => { m.position.copy(position); m.position.y += recoil * .006 * (i + 1); m.position.z += recoil * .012 * i; m.quaternion.copy(rotation); m.rotateY(recoil * .015 * i); });
       for (const c of cards) {
         const end = target(c), p = c.landed ? 1 : clamp((now - c.bornAt) / TIMING.flyMs), pos = shoe.clone().lerp(end, ease(p));
         if(c.landed){c.rest ||=end.clone();c.rest.lerp(end,o.still?1:frameStep);pos.copy(c.rest);}
         if (!o.still) pos.addScaledVector(normal, Math.sin(p * Math.PI) * height * o.k);
-        if (p === 1 && !c.landed) { c.landed = true; if (c.code) c.faceAt = now; if (o.full) effect('ripple', now); }
-        const flip = flipAt(c, now, o.still); setPose(c, pos, flip);
+        if (p === 1 && !c.landed) { touchdown(c, now, false, onCue); c.landed = true; if (c.code) c.faceAt = now; if (o.full) effect('ripple', now); }
+        const flip = flipAt(c, now, o.still), lift = flipLift(flip, o.still) * height * o.k;
+        c.shadow.position.copy(pos).addScaledVector(normal, -.001); c.shadow.material.opacity = .22 - flipLift(flip, o.still) * .4;
+        pos.addScaledVector(normal, lift);
+        pos.add(new T.Vector3(landing(now - (c.landAt ?? -Infinity), o.still) * width * .1 * o.k, 0, 0).applyQuaternion(basis));
+        setPose(c, pos, flip); c.mesh.rotateZ(o.still ? 0 : cardTilt(c.owner, c.slot) * o.k);
         const pulse = hitPulse(c, now);
         if (pulse > 0 || c.rim) {
           const rim = rimFor(c); rim.visible = pulse > 0;
@@ -145,11 +172,11 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
         c.material.color.set(c.glow && now - c.glow < TIMING.glowMs ? '#ffb2d0' : '#ffffff');
         if (repaint) c.face.paint(c.code, flip >= .5, o, typeof kit === 'function' ? kit() : kit);
       }
-      if (fan && api.fanDone(now)) { fan = null; fans.splice(0).forEach(drop); }
+      if (fan && api.fanDone(now)) { fan = null; fans.splice(0).forEach(drop); onCue('deck-square'); }
       if (fan) fans.forEach((c, i) => {
         const f = fanCard(i, now - fan.at, fan.still), a = point('card_slot_p1_0'), b = point('card_slot_p0_5');
         const end = a.lerp(b, i / 12).addScaledVector(normal, height * .6), pos = shoe.clone().lerp(end, ease(f.q > 0 ? 1 - f.q : f.p));
-        c.mesh.visible = f.visible; setPose(c, fan.still ? end : pos, f.flip, f.alpha); c.mesh.scale.multiplyScalar(.65);
+        c.shadow.visible = false; c.mesh.visible = f.visible; setPose(c, fan.still ? end : pos, f.flip, f.alpha); c.mesh.scale.multiplyScalar(.65);
         if (repaint) c.face.paint(c.code, f.flip >= .5, o, typeof kit === 'function' ? kit() : kit);
       });
       for (let i = sparks.length - 1; i >= 0; i--) {

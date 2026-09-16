@@ -428,7 +428,7 @@ export async function mount(ctx) {
     if (st.spun) { glanceTo(pressPose(), landPose(readResult(st.result))); $('.wheel-spin').classList.add('is-ringing'); setTimeout(() => el && $('.wheel-spin').classList.remove('is-ringing'), 400); return; }
     // Law VIII: the wheel turns (or, still, the button rings) and EMI glances on this frame.
     rewardReveal.hide();
-    busy = true; scene.coast(omega); scene.setMood('spin'); glanceTo(pressPose());
+    busy = true; sound.start(); scene.coast(omega); scene.setMood('spin'); glanceTo(pressPose());
     playFx('coast');   // the same plum wash for every press: it says nothing about where the wheel stops (Law I)
     $('.wheel-spin').classList.add('is-ringing'); card(null); lineAt = performance.now(); sync();
     note('answer', { ms: Math.round(performance.now() - pressedAt), omega: omega || null });

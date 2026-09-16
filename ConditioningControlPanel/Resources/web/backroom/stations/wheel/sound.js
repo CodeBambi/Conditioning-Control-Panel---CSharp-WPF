@@ -27,10 +27,11 @@ export function createSound(k = kit) {
 
   return {
     trace,
+    start() { if (live()) k.play('wheel-start'); },
     /** Wake the kit inside a gesture (a press or a drag). */
     arm() { if (live()) k.arm(); },
     /** THE CLACK on a peg crossing, `semis` from feel.tick. */
-    tick(semis) { note('tick', semis, LEVEL.tick); if (live()) k.play('clack', { semis }); },
+    tick(semis) { note('tick', semis, LEVEL.tick); if (live()) k.play('wheel-peg', { semis }); },
     /** The long last turn: the riser while the wheel slows into its slice, resolving as it lands. */
     slowing(ms = 2000) { note('rise', 0, LEVEL.rise); if (live()) { k.stop('riser'); k.play('riser', { ms }); } },
     /** THE THUD when the pointer settles; `muted` (Snooze) is THE SETTLE (Brake 6: never silence, never a fail). */
@@ -65,7 +66,7 @@ export function createSound(k = kit) {
       if (!live()) return;
       if (last) { k.play('token', { last: true }); tokens = 0; } else k.play('token', { i: tokens++ });
     },
-    suspend(on) { suspended = !!on; if (suspended) { k.stop('riser'); k.stop('ladder'); } },
-    dispose() { disposed = true; k.stop('riser'); k.stop('ladder'); },
+    suspend(on) { suspended = !!on; if (suspended) { k.stop('riser'); k.stop('ladder'); k.stop('wheel-start'); k.stop('wheel-peg'); } },
+    dispose() { disposed = true; k.stop('riser'); k.stop('ladder'); k.stop('wheel-start'); k.stop('wheel-peg'); },
   };
 }

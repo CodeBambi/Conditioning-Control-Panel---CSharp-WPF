@@ -284,10 +284,10 @@ export async function mount(ctx) {
   function setCount(n) { if (phase !== 'bet' || resume) return; count = Math.max(1, Math.min(MAX_SPINS, Math.trunc(n) || 1)); why = null; sync(); }
   function place(spot, remove = false) {
     if (phase !== 'bet' || resume || !st || stage?.ready === false) return false;
-    if (remove) { chips = removeChip(chips, spot); why = null; sync(); return true; }
+    if (remove) { chips = removeChip(chips, spot); mat?.place(spot, -Infinity); why = null; sync(); return true; }
     const r = addChip(chips, spot, { spots: st.spots });
     chips = r.chips; why = r.ok ? null : whyText(r.why);
-    if (r.ok) { sound.arm(); sound.play('chips'); }
+    if (r.ok) { sound.arm(); mat?.place(spot, clock()); sound.play('chip-place', { at: stillNow() ? 0 : .12 }); }
     sync();
     return r.ok;
   }
@@ -308,11 +308,11 @@ export async function mount(ctx) {
     if (name === 'nomore') { sound.arm(); sound.play('tap'); sound.play('whir'); sound.play('wheel', { speed: 1 }); }
     else if (name === 'launch') { sound.play('launch'); sound.play('wheel', { speed: 1 }); }
     else if (name === 'rattle') { sound.play('rattle'); if (cur && cur.plan) sound.play('riser', { ms: Math.min(2500, Math.max(800, cur.plan.restAt * 1000 - (clock() - cur.launchAt))) }); }
-    else if (name === 'near') { sound.play('drop'); sound.play('almost'); }
-    else if (name === 'land.miss') { sound.play('drop'); sound.play('settle'); }
-    else if (name === 'land.win') { sound.play('drop'); sound.play('chips', { n: 4, at: 0.2 }); }
-    else if (name === 'land.wake' || name === 'land.straight') { sound.play('drop'); sound.play('chips', { n: 6, at: 0.3 }); }
-    else if (name === 'land.full') { sound.play('drop'); sound.play('chips', { n: 8, at: 0.4 }); }
+    else if (name === 'near') { sound.play('roulette-pocket'); sound.play('almost'); }
+    else if (name === 'land.miss') { sound.play('roulette-pocket'); sound.play('settle'); }
+    else if (name === 'land.win') { sound.play('roulette-pocket'); sound.play('chips', { n: 4, at: 0.2 }); }
+    else if (name === 'land.wake' || name === 'land.straight') { sound.play('roulette-pocket'); sound.play('chips', { n: 6, at: 0.3 }); }
+    else if (name === 'land.full') { sound.play('roulette-pocket'); sound.play('chips', { n: 8, at: 0.4 }); }
   }
   /** The host recipe (feel.FX_RECIPE): a beat fires its section 4 ids through ctx.fx, gated, cooled, never awaited (fx-ack is advisory). */
   function beat(name, { i = null, streak: run = 0, pocket = null } = {}) {
@@ -565,7 +565,7 @@ export async function mount(ctx) {
     const near = nearMisses(r, tape.bets, st.wheel), hostBeat = landBeat(r, near);
     const co = r.pay > 0 ? calloutFor(hostBeat, { streak }) : null;
     const lose = tape.bets.filter((b) => !r.hits.includes(b.spot)).map((b) => ({ kind: 'lose', spot: b.spot }));
-    mat.animate(lose, now);
+    mat.animate(lose, now); mat.trace(r.pocket, now);
     if (r.pay > 0) {
       bowl.glow(r.index, now); mat.glow(r.hits, now);   // THE GLYPH HIT: the pocket and the paying chips, 0..HIGHLIGHT_MS
       const my = session, i = r.i;
@@ -801,7 +801,7 @@ export async function mount(ctx) {
     if (bank) { bank.dispose(); bank = null; }
     if (callout) { callout.dispose(); callout = null; }
     if (moments) { moments.cancel(); moments.dispose(); }
-    sound.stop('riser'); sound.stop('wheel');
+    sound.stop('riser'); sound.stop('wheel'); sound.stop('chip-place'); sound.stop('roulette-pocket');
     cool.reset(); streak = 0; note('fx', { beat: 'skip', fired: [], planned: [] });   // one-shots settle on the host; nothing new fires
     if (tape && tape.played > 0 && cursorSent !== tape.played) flushCursor();
     bankShown = null;
@@ -824,7 +824,7 @@ export async function mount(ctx) {
         dropLanding();
         if (moments) moments.cancel();
         cool.reset(); note('fx', { beat: 'skip', fired: [], planned: [] });   // Law VI: the recipe stops with the moments
-        sound.stop('wheel');   // THE THROW's loop never rides a suspend
+        sound.stop('wheel'); sound.stop('chip-place'); sound.stop('roulette-pocket'); mat?.clearAnims();   // Sound and physical responses never ride a suspend
         if (kit) { kit.dispose(); kit = null; }
         if (deck) deck.dispose();   // its keys still pick (pickKey needs no pictures)
       } else {

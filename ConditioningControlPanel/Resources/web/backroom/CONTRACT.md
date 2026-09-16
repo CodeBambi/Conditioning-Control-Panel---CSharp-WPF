@@ -2154,3 +2154,14 @@ a short drop and a squash under it when a won decoration is finally placed at Ro
 (`room/prop-landing.js`) - the one reward in the room with no number on it, which used to arrive by
 `visible = true`.
 
+
+
+### Physical feedback pass (2026-09-16)
+
+- Reel startup recoil and damped settle bounce scroll the shared cabinet's shallow reel UVs. They do not rotate the shallow meshes or move any result/stop deadline. The lever rebounds and a new melt result gives one cabinet shiver.
+- Cards use authored deck transforms, varied felt landings and weighted flips. Card landing cues occur on rendered touchdown, never when a suspended queue is flushed.
+- Wheel peg clicks follow pointer crossings; the cabinet takes a short starting recoil. Roulette chips drop and settle at the bet location, and each result briefly traces from pocket to board without implying a win.
+- Counter ownership applies as soon as the server confirms; a prize-art drop into a tray is presentation only. Back, failure handling and idempotency are unchanged.
+- Calm, Off, reduced motion and suspension settle cosmetic responses. No new effects setting, spin delay, economy change or result weighting is added.
+- `shared/sound/kit.js` remains the only audio context and mixer. `foley.js` supplies physical cues and loads three locally bundled ElevenLabs sound effects (card slide, cabinet knock, chip placement) after the first gesture. Ready samples replace the procedural cue; pending or failed samples use the immediate procedural fallback. No runtime generation or credentials.
+- Foley follows master mute/volume, Calm trim, suspend, stop and disposal. Preloading never plays a cue. A late decode cannot populate a replaced context. The owner's quiet ambience and B/A lever/reel selection are retained.

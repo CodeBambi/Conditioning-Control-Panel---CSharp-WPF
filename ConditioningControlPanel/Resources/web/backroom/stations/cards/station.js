@@ -292,10 +292,10 @@ export async function mount(ctx) {
     switch (s.op) {
       case 'clear': table.clear(); lines = []; break;
       case 'bets': table.setBets(s.list); if (!s.quiet) sound.play('chips', { n: Math.min(6, 1 + (Array.isArray(s.list) ? s.list.length : 0)) }); break;
-      case 'card': table.addCard({ ...s, settled: s.quiet }, now); if (!s.quiet) sound.play('card'); break;
+      case 'card': table.addCard({ ...s, settled: s.quiet }, now); if (!s.quiet) sound.play('card-slide'); break;
       case 'split': table.split(now); break;
       case 'active': table.setActive(s.index); break;
-      case 'reveal': table.reveal(s.code, now, s.quiet); if (!s.quiet) sound.play('card', { kind: 'flip' }); break;
+      case 'reveal': table.reveal(s.code, now, s.quiet); if (!s.quiet) sound.play('card-flip'); break;
       case 'ready': decide = true; table.setActive(h.active); break;
       case 'bloom': {
         if (s.quiet) break;
@@ -613,7 +613,7 @@ export async function mount(ctx) {
     moments = createMoments(ctx, { station: 'cards' });
     callout = createCallout({ mount: el, lex: typeof ctx.lex === 'function' ? ctx.lex : undefined });
     kit = createLoomKit({ still: dress().still, log: say });
-    table = ctx.stage ? createTable3D(ctx.stage, { kit: () => kit, onDeal: deal }) : createTable($('.cards-stage'), { kit: () => kit });
+    table = ctx.stage ? createTable3D(ctx.stage, { kit: () => kit, onDeal: deal, onCue: (cue) => sound.play(cue) }) : createTable($('.cards-stage'), { kit: () => kit, onCue: (cue) => sound.play(cue) });
     if (typeof ctx.onSp === 'function') unSp = ctx.onSp((v) => { if (chip) chip.setServer(v); });
     raf = requestAnimationFrame(frame);
     const deckP = createDeck(ctx, { count: 13, still: dress().still }).catch(() => null);
@@ -666,6 +666,7 @@ export async function mount(ctx) {
       if (suspended) {
         dropTimers();
         flush();
+        if (table) table.skip(performance.now());
         moments.cancel();
         if (bank) bank.skip();   // Law VI: the readout settles at once and leaves quietly; the climb is hushed
         sound.stop('ladder');

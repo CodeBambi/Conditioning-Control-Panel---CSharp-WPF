@@ -27,6 +27,7 @@ import { createRenderBudget } from '../../room/render-budget.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { REQUIRED, OPTIONAL } from './nodes.js';
 import { TAU, sliceAt, planLanding, rotationAt } from './wheel.js';
+import { startRecoil } from './juice.js';
 import { FEEL, tick, breath, shiverPx, bezier } from './feel.js';
 import { warpStep, warpedRotation, stepDim, quietMix, quietDone, outlineAlpha, distance01, mixRgb, QUIET, taffyShear, stepShear,
          trailOffset, sliceU, ghostRotations, TAFFY, stepHub, moireRotations, moireSegments, MOIRE, dressOf } from './hypno.js';
@@ -147,6 +148,7 @@ export async function createScene(o) {
       const rotor = model?.getObjectByName('wheel_rotor'), pointer = model?.getObjectByName('pointer');
       if (rotor) rotor.rotation.copy(originals.get(rotor).rotation);
       if (pointer) pointer.rotation.copy(originals.get(pointer).rotation);
+      if (originals.has(model)) model.rotation.copy(originals.get(model).rotation);
       unregister?.();
     }
     owned.forEach(x => resources.add(x));
@@ -365,6 +367,8 @@ export async function createScene(o) {
 
   // Motion state.
   let phase = 'hidden', tl = null, coast = null, plan = null, under = 0, lit = 0, crossAt = -Infinity, ladder = null;
+  let recoilAt = -Infinity, recoilDirection = 1;
+  const modelTilt = model.rotation.z;
   let landed = -1, thudAt = -Infinity, kickAt = -Infinity, kickSign = 1, kickAmp = 0, shiverAt = -Infinity;
   let hitAt = -Infinity, hitIndex = -1;   // THE GLYPH HIT: the landed slice's emissive pulse over HIGHLIGHT_MS (callout.js)
   let party = null, heat = 0, gold = false, energy = 0, lightMotion = 0, prev = performance.now();
@@ -469,6 +473,7 @@ export async function createScene(o) {
         m.material.emissiveIntensity = m.userData.h * flash * hit;
       }
     }
+    model.rotation.z = modelTilt + startRecoil(t - recoilAt, recoilDirection, reduced || dress.calm);
     // Pointer: a damped kick per played tick, a knock on the landing (THE THUD). Reduced: at rest.
     pointer.rotation.z = pointerRest;
     if (!reduced) { const q = (t - kickAt) / 1000; if (q >= 0 && q < 0.6) pointer.rotation.z += kickSign * kickAmp * Math.exp(-18 * q) * Math.sin(q * 35); }
@@ -575,7 +580,7 @@ export async function createScene(o) {
     /** Put the rotor at `r` with no travel (a replay, a reduced landing). */
     setRotation(r, landedIndex = -1) { coast = null; plan = null; rotor.rotation.z = r; lastRot = r; landed = landedIndex; quietAt = -Infinity; if (layout) { under = sliceAt(layout, r).index; lit = under; } },
     /** Law VIII: the wheel starts turning this frame, before the server answers. */
-    coast(omega = DEFAULT_OMEGA) { if (reduced) return; landed = -1; quietAt = -Infinity; ladder = null; plan = null; coast = { omega }; },
+    coast(omega = DEFAULT_OMEGA) { if (reduced) return; landed = -1; quietAt = -Infinity; ladder = null; plan = null; coast = { omega }; recoilAt = performance.now(); recoilDirection = Math.sign(omega); },
     /** Retarget the coast (or a rest) onto `landing`; resolves when the pointer settles. Reduced: at once. */
     land(landing, index) {
       const omega = coast ? coast.omega : DEFAULT_OMEGA;
@@ -604,6 +609,7 @@ export async function createScene(o) {
       cancelDrag();
       rewardView?.skip();
       if (plan) { const p = plan; plan = null; rotor.rotation.z = p.to; if (p.done) p.done(); }
+      recoilAt = -Infinity; model.rotation.z = modelTilt;
       coast = null; party = null; shiverAt = thudAt = kickAt = hitAt = -Infinity; energy = 0; dim = 0; shear = 0; emi.skip();
     },
     /** A point in client px: 'landed' is the landed slice's printed face, else a node's centre. */
