@@ -1,5 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
+using ConditioningControlPanel.Avalonia.Controls;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.Studio
 {
@@ -32,10 +34,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Studio
         public SchedulerRackPanel()
         {
             AvaloniaXamlLoader.Load(this);
-            // ponytail: blocked ONLY on the popover control - ConditioningControlPanel/Views/
-            // Controls/HelpPopover.cs has no Avalonia twin. HelpContentService
-            // is already in Core; the popover control is the only thing still missing, and
-            // it is what would call .GetContent("Scheduler") for HelpBtnStudioScheduler.
+            HelpPopover.Attach(
+                this.FindControl<Button>("HelpBtnStudioScheduler")!,
+                HelpContentService.GetContent("Scheduler"));
         }
 
         /// <summary>The live control this panel hosts, for callers that need the real editor.</summary>

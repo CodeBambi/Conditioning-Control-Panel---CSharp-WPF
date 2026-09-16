@@ -4946,5 +4946,8 @@
   "label_gaze_interaction": "Blick-Interaktion",
   "label_stare_to_pop": "Ansehen zum Platzen",
   "tooltip_bubble_gaze_pop": "Sieh eine Blase etwa 1 Sekunde lang an, um sie ohne Klicken platzen zu lassen. Gilt nur für Blasen; Flashes haben ihren eigenen Schalter auf der Flash-Seite.",
-  "label_gaze_needs_calibration": "Benötigt eine laufende Webcam und eine kalibrierte Blickverfolgung. Einrichtung unter Play, Blick-Fokus."
+  "label_gaze_needs_calibration": "Benötigt eine laufende Webcam und eine kalibrierte Blickverfolgung. Einrichtung unter Play, Blick-Fokus.",
+  "help_heading_what_it_does": "Was es tut",
+  "help_heading_tips": "Tipps",
+  "help_heading_how_it_works": "So funktioniert es"
 }
