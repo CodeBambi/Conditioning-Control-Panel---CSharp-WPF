@@ -101,6 +101,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Built-in sessions are runtime JSON, not Avalonia resources. Match WPF's lowercase
+         assets/sessions output path so Core's loader sees the same files on every head. -->
+    <Content Include="..\Assets\sessions\*.session.json"
+             Link="assets\sessions\%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\CCP.Core\CCP.Core.csproj" />
   </ItemGroup>
 

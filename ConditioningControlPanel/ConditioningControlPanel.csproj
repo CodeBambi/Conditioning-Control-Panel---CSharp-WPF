@@ -189,8 +189,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Session files -->
-    <Content Include="assets\sessions\*.session.json">
+    <!-- Shared built-in session files; keep the legacy lowercase output path. -->
+    <Content Include="..\Assets\sessions\*.session.json"
+             Link="assets\sessions\%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
