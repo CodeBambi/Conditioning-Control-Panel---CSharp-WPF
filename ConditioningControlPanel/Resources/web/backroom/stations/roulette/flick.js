@@ -23,7 +23,7 @@ export const FLICK = Object.freeze({
   EASE: 0.4,             // how hard each sample pulls the running speed (the wheel station's feel)
   INTENT_CAP: 0.12, INTENT_MIN: 0.025,   // the direction only turns over once the swing commits
   SOFT: 0.0015, HARD: 0.012,             // rad/ms mapped across VEL_MIN..VEL_MAX
-  VEL_MIN: 0.9, VEL_MAX: 2.0,            // rad/s handed to planRun (the button's own kick is 1.5)
+  VEL_MIN: 1.2, VEL_MAX: 8.0,            // rad/s: a hard throw is visibly faster than the button's 1.5 kick
 });
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));

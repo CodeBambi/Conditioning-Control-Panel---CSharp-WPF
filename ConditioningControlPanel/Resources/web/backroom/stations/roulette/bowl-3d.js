@@ -28,8 +28,16 @@ export function createBowl3D({ stage, wheel, rose }) {
   const rotorScale = rotor.getWorldScale(new T.Vector3()).y;
   const lift = ballRadius / rotorScale;
   const track = center(nodes.ball_track);
-  const trackBox = new T.Box3().setFromObject(nodes.ball_track);
-  const trackRadius = Math.max(trackBox.getSize(new T.Vector3()).x, trackBox.getSize(new T.Vector3()).z) / (2 * rotorScale);
+  // Horizontal radius cannot be divided by world Y scale: the room compresses this
+  // table vertically, which otherwise stretches the lighthouse out across the felt.
+  let trackRadius=0;
+  const trackToRotor=rotor.matrixWorld.clone().invert(),trackTransform=new T.Matrix4(),trackVertex=new T.Vector3();
+  nodes.ball_track.traverse(n=>{
+    if(!n.isMesh||!n.geometry?.attributes.position)return;
+    trackTransform.multiplyMatrices(trackToRotor,n.matrixWorld);
+    const a=n.geometry.attributes.position;
+    for(let i=0;i<a.count;i++){trackVertex.fromBufferAttribute(a,i).applyMatrix4(trackTransform);trackRadius=Math.max(trackRadius,Math.hypot(trackVertex.x,trackVertex.z));}
+  });
   const path=createBallPath(rotor,ball,nodes.ball_track,restRadius,lift);
   const pocketTops=wheel.map(n=>{
     const node=nodes['pocket_'+n],bounds=node.geometry.boundingBox||new T.Box3().setFromBufferAttribute(node.geometry.attributes.position);
@@ -61,7 +69,29 @@ export function createBowl3D({ stage, wheel, rose }) {
   const hintHead=new T.Mesh(new T.CircleGeometry(hintTube*3.6,3),hintMaterial);
   hintHead.position.set(Math.cos(HINT_ARC)*hintR,-Math.sin(HINT_ARC)*hintR,0);hintHead.rotation.z=-HINT_ARC-Math.PI/2;
   const hint=new T.Group();hint.name='roulette_flick_hint';hint.add(hintArc,hintHead);
-  hint.rotation.x=-Math.PI/2;hint.position.y=track.y+lift*3;hint.renderOrder=4;hint.visible=false;rotor.add(hint);
+  // The complete arrow, including its widest breathing head, clears the authored brim.
+  // A track centre is below that lip, so a fixed multiple of ball height cuts through it.
+  const hintScaleMax=1.035, hintOuter=(hintR+hintTube*3.6)*hintScaleMax;
+  const hintInner=Math.max(0,(hintR-hintTube*3.6)/hintScaleMax);
+  const toRotor=rotor.matrixWorld.clone().invert(), meshToRotor=new T.Matrix4(), vertex=new T.Vector3();
+  let hintSurface=track.y;
+  function scanHintSurface(node){
+    if(!node.isMesh||!node.geometry?.attributes.position||node===ball)return;
+    meshToRotor.multiplyMatrices(toRotor,node.matrixWorld);
+    const position=node.geometry.attributes.position,index=node.geometry.index,count=index?index.count:position.count;
+    for(let i=0;i<count;i+=3){
+      let lo=Infinity,hi=-Infinity,top=-Infinity;
+      for(let j=0;j<3;j++){
+        vertex.fromBufferAttribute(position,index?index.getX(i+j):i+j).applyMatrix4(meshToRotor);
+        const r=Math.hypot(vertex.x,vertex.z);lo=Math.min(lo,r);hi=Math.max(hi,r);top=Math.max(top,vertex.y);
+      }
+      // Lathe facets are chords; a small radial padding keeps this bound conservative.
+      if(hi>=hintInner-.01 && lo<=hintOuter+.01)hintSurface=Math.max(hintSurface,top);
+    }
+  }
+  rotor.traverse(scanHintSurface);nodes.ball_track.traverse(scanHintSurface);
+  const hintMargin=Math.max(.008,lift*.3), hintHeight=hintSurface+hintTube*hintScaleMax+hintMargin;
+  hint.rotation.x=-Math.PI/2;hint.position.y=hintHeight;hint.renderOrder=4;hint.visible=false;rotor.add(hint);
   // THE POCKET GLYPHS (glyphs.js, GLYPHS.md): one faded decal per numbered pocket on the rotor's inner slope, just
   // inside the ball's footprint, keyed by the pocket number. A ray down from above finds the authored surface under
   // each so the mark lies on the wheel, whatever its profile; a miss falls back to the pocket's own top.
@@ -223,7 +253,7 @@ export function createBowl3D({ stage, wheel, rose }) {
     get geo() { return core.geo; }, get phase() { return core.phase; },
     debug() { return { ...core.debug(), view: '3d', lit: [...lit], whirlDrawn: !!lastView.whirlDrawn, hint: hint.visible,
       glyphs: glyphs.filter(Boolean).map((g) => ({ n: g.n, id: g.id })), glyphLit: glyphLitIndex >= 0 ? wheel[glyphLitIndex] : null,
-      clearance: {rimRadius:path.rimRadius,ballRadius:lift,profileEdges:path.edges,margin:path.margin},
+      clearance: {trackRadius,rimRadius:path.rimRadius,ballRadius:lift,profileEdges:path.edges,margin:path.margin, hint:{surface:hintSurface,bottom:hintHeight-hintTube*hintScaleMax,margin:hintMargin,inner:hintInner,outer:hintOuter}},
       ballWorld: ball.getWorldPosition(new T.Vector3()).toArray(),
       pockets: centers.map(p => rotor.localToWorld(p.clone()).toArray()), disposed }; },
   };

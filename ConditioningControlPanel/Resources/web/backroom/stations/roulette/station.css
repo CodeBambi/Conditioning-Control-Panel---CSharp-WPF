@@ -112,31 +112,6 @@
   .roul-station[data-seated] .roul-controls { top: auto; bottom: max(16px, var(--br-sill, 0px)); }
 }
 
-/* A phone held upright: the mat fills the width, the controls hold one bar under it (seat-camera.js keeps 108 px clear). */
-@media (max-width: 800px) and (orientation: portrait) {
-  .roul-station[data-seated] .roul-controls { left: 10px; right: 10px; width: auto; top: auto; bottom: max(8px, var(--br-sill, 0px)); display: grid; grid-template-columns: 1fr 112px; gap: 4px 8px; align-items: stretch; }
-  .roul-station[data-seated] .roul-controls > .roul-row:first-child { grid-column: 1; }
-  .roul-station[data-seated] .roul-spins { grid-column: 1; }
-  .roul-station[data-seated] .roul-spin { grid-column: 2; grid-row: 1 / 3; min-width: 0; padding: 8px 4px; }
-  .roul-station[data-seated] .roul-row { gap: 3px; justify-content: flex-start; }
-  .roul-station[data-seated] .roul-pips { display: none; }
-  .roul-station[data-seated] .roul-spins button { min-width: 31px; padding: 6px 0; }
-  .roul-station[data-seated] .roul-why { grid-column: 1 / -1; position: absolute; bottom: 100%; right: 0; margin-bottom: 4px; }
-}
-
-/* A phone on its side: status and controls in one column at the right (seat-camera.js keeps 200 px clear), the mat beside it. */
-@media (max-height: 500px) and (orientation: landscape) {
-  .roul-station[data-seated] .roul-top { top: 84px; left: auto; right: 12px; width: 196px; max-width: 196px; align-items: stretch; }
-  .roul-station[data-seated] .roul-controls { left: auto; right: 12px; width: 196px; top: auto; bottom: max(12px, var(--br-sill, 0px)); gap: 5px; align-items: stretch; }
-  .roul-station[data-seated] .roul-pips { display: none; }
-  .roul-station[data-seated] .roul-row { gap: 4px; justify-content: flex-start; }
-  .roul-station[data-seated] .roul-spins-label { flex-basis: 100%; }
-  .roul-station[data-seated] .roul-spins button { min-width: 30px; padding: 5px 0; }
-  .roul-station[data-seated] .roul-spin { min-width: 0; padding: 6px 4px; }
-  .roul-station[data-seated] .roul-why { text-align: left; }
-  .roul-station[data-seated] .roul-odds { top: 84px; left: 12px; right: auto; }
-}
-
 /* THE GLYPH HIT (shared/hypno/callout.js): a winning element on the DOM glows and pops 1.06 over HIGHLIGHT_MS (400 ms).
    The same rule in every game's station.css; the canvas and three.js views draw the same pulse themselves. */
 .br-glyph-hit { animation: br-glyph-hit 400ms cubic-bezier(.2, 1.5, .4, 1) both; }
@@ -147,3 +122,35 @@
 }
 @media (prefers-reduced-motion: reduce) { .br-glyph-hit { animation-name: br-glyph-hit-still; } }
 @keyframes br-glyph-hit-still { 0%, 100% { box-shadow: 0 0 0 0 #5fffd000; } 50% { box-shadow: 0 0 18px 4px #5fffd0cc; } }
+
+/* The close-up keeps one thin control bar below the whole betting board. */
+.roul-station[data-seated] .roul-top { top: 54px; left: 12px; max-width: min(310px, 32vw); }
+.roul-station[data-seated] .roul-status { font-size: 11px; padding: 4px 8px; }
+.roul-station[data-seated] .roul-controls { left: 86px; right: 12px; bottom: max(8px, var(--br-sill, 0px)); width: auto;
+  display: flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 14px; }
+.roul-station[data-seated] .roul-row { flex-wrap: nowrap; }
+.roul-station[data-seated] .roul-odds { left: 12px; right: auto; top: auto; bottom: max(12px, var(--br-sill, 0px)); }
+.roul-station[data-seated] .roul-odds[open] { bottom: 12px; }
+.roul-station[data-seated] .roul-why { position: absolute; bottom: 100%; right: 0; margin-bottom: 5px; }
+.roul-station[data-seated] .roul-gain { bottom: 76px; }
+html:has(.roul-station[data-seated]) .br-nav > button:first-child { display: none; }
+@media (orientation: portrait) {
+  .roul-station[data-seated] .roul-top { top: 108px; max-width: calc(100% - 24px); }
+  .roul-station[data-seated] .roul-controls { left: 74px; right: 8px; display: grid; grid-template-columns: 1fr 84px; gap: 4px 6px; }
+  .roul-station[data-seated] .roul-controls > .roul-row:first-child { grid-column: 1; }
+  .roul-station[data-seated] .roul-spins { grid-column: 1; }
+  .roul-station[data-seated] .roul-spin { grid-column: 2; grid-row: 1 / 3; min-width: 0; }
+  .roul-station[data-seated] .roul-pips { display: none; }
+  .roul-station[data-seated] .roul-row { gap: 3px; }
+  .roul-station[data-seated] .roul-spins button { min-width: 29px; }
+  .roul-station[data-seated] .roul-spins-label { display: none; }
+  .roul-station[data-seated] .roul-gain { bottom: 102px; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .roul-station[data-seated] .roul-controls { gap: 9px; }
+  .roul-station[data-seated] .roul-top { width: auto; align-items: flex-start; }
+  .roul-station[data-seated] .roul-spins-label { flex-basis: auto; }
+  .roul-station[data-seated] .roul-row { justify-content: flex-end; }
+  .roul-station[data-seated] .roul-spins button { min-width: 30px; }
+  .roul-station[data-seated] .roul-spin { min-width: 90px; }
+}

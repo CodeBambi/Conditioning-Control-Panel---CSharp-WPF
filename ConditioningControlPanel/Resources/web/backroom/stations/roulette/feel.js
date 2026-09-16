@@ -177,9 +177,15 @@ function simulate(rnd, { calm, rotVel0 }) {
  */
 export function planRun({ index, seed = 1, calm = false, rotVel0 = FEEL.ROTOR_KICK } = {}) {
   const target = ((Math.trunc(Number(index)) % POCKETS) + POCKETS) % POCKETS;
+  // The ball's validated rattle uses the original rotor-speed range. A stronger throw
+  // adds decaying whole-wheel momentum to the picture, carrying ball and wheel together,
+  // so the relative landing and its timing remain exactly the server-directed plan.
+  const launchVelocity=Number.isFinite(rotVel0)?rotVel0:FEEL.ROTOR_KICK;
+  const simulatedVelocity=clamp(launchVelocity,-2,2), excess=launchVelocity-simulatedVelocity;
+  const momentumDecay=.7;
   let best = null;
   for (let k = 0; k < 24; k++) {
-    const sim = simulate(mulberry32((seed >>> 0) + k * 977), { calm, rotVel0 });
+    const sim = simulate(mulberry32((seed >>> 0) + k * 977), { calm, rotVel0:simulatedVelocity });
     if (sim.landIdx < 0) continue;
     const fits = sim.restT <= FEEL.RUN_BUDGET_S;
     const score = (fits ? 0 : 100) + (sim.hits >= 2 ? 0 : sim.hits === 1 ? 10 : 50) + sim.restT;
@@ -192,7 +198,7 @@ export function planRun({ index, seed = 1, calm = false, rotVel0 = FEEL.ROTOR_KI
     index: target, calm: !!calm, hits: s.hits,
     landAt: s.landT, restAt: s.restT, duration: s.restT,
     sparks: s.sparks.map((x) => ({ at: x.at, a: x.a + shift })),
-    rot: f32(s.rot), rel: f32(s.rel, shift), r: f32(s.rr), tscale: f32(s.ts), speed: f32(s.sp), phase: Uint8Array.from(s.ph),
+    rot: Float32Array.from(s.rot,(v,i)=>v+excess*(1-Math.exp(-momentumDecay*i*FEEL.DT))/momentumDecay), rel: f32(s.rel, shift), r: f32(s.rr), tscale: f32(s.ts), speed: f32(s.sp), phase: Uint8Array.from(s.ph),
   };
 }
 
