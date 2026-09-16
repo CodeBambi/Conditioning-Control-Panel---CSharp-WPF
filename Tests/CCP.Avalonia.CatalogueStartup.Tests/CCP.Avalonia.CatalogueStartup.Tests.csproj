@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsPublishable>false</IsPublishable>
+    <IsTestProject>true</IsTestProject>
+    <AssemblyName>CCP.Avalonia.CatalogueStartup.Tests</AssemblyName>
+    <RootNamespace>CCP.Avalonia.CatalogueStartup.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageReference Include="Avalonia.Headless" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Skia" Version="12.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\AvaloniaTestDispatcher.cs" Link="AvaloniaTestDispatcher.cs" />
+    <ProjectReference Include="..\..\CCP.Avalonia\CCP.Avalonia.csproj" />
+  </ItemGroup>
+</Project>

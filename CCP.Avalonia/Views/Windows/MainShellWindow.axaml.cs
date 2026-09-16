@@ -47,6 +47,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -97,6 +98,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // (MainWindow.xaml.cs:555) and opens the wizard once the window is up. Same here -
             // see MainShellWindow.FirstRun.cs, which owns both halves.
             HookFirstRun();
+        }
+
+        /// <summary>Uses an already-loaded catalogue without making the parameterless shell open
+        /// the user's profile. The child is resolved by name because this window uses
+        /// AvaloniaXamlLoader.Load, which does not populate generated fields.</summary>
+        internal MainShellWindow(SessionManager sessions) : this()
+        {
+            Named<Tabs.PresetsTabView>("PresetsTab")?.UseSessionManager(sessions);
         }
 
         // ---- window-level drag and drop ------------------------------------------------------

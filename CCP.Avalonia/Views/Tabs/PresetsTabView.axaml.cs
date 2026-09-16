@@ -12,6 +12,7 @@ using Avalonia.Threading;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
@@ -90,9 +91,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtSessionDifficulty.Text = Loc.Get("label_easy_2");
         }
 
-        private readonly IReadOnlyList<Session> _availableSessions =
+        private IReadOnlyList<Session> _availableSessions =
             Session.GetAllSessions().Where(session => session.IsAvailable).ToArray();
         private Session? _selectedSession;
+
+        /// <summary>Replaces the offline built-in source with an already-loaded manager. Loading
+        /// stays in App's desktop composition so constructing a view for render/nav never touches
+        /// the user's session folders.</summary>
+        internal void UseSessionManager(SessionManager manager)
+        {
+            ArgumentNullException.ThrowIfNull(manager);
+            _availableSessions = manager.AllSessions.Where(session => session.IsAvailable).ToArray();
+            _selectedSession = null;
+            RackSourceChips.Children.Clear();
+            RackDifficultyChips.Children.Clear();
+            SessionRackPanel.Children.Clear();
+            SeedRackToolbar();
+            SeedSessionRack();
+            RefreshLocalizedDetails();
+        }
 
         // ---- placeholder furniture + Core-backed session rack --------------------
         //

@@ -8,6 +8,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Headless;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia;
@@ -16,6 +18,7 @@ using ConditioningControlPanel.Avalonia.Views.Controls.AppSettings;
 using ConditioningControlPanel.Avalonia.Views.Tabs;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using Xunit;
 
@@ -39,21 +42,71 @@ internal static class TestProfile
 /// <summary>Headless proof for the saved language and the two live selector surfaces.</summary>
 public sealed class LanguageSelectorTests
 {
+    private sealed class CatalogueTestApp : App
+    {
+        private readonly string _customFolder;
+        private readonly string _builtInFolder;
+
+        internal CatalogueTestApp(string customFolder, string builtInFolder)
+        {
+            _customFolder = customFolder;
+            _builtInFolder = builtInFolder;
+        }
+
+        protected override SessionManager CreateSessionManager() =>
+            new(new SessionFileService(_customFolder, _builtInFolder));
+    }
+
     [Fact]
     public void LanguageSelectorsRestoreAndDesktopExitFlushesPendingState()
     {
         var settingsPath = Path.Combine(TestProfile.DirectoryPath, "settings.json");
         var settingsBeforeStartup = SeedProfile(settingsPath);
         var settingsWriteBeforeStartup = File.GetLastWriteTimeUtc(settingsPath);
-        AvaloniaTestDispatcher.Run(() =>
+        var catalogue = CreateSessionCatalogue();
+        try
         {
-            var (shell, lifetime) = StartApp();
+            AvaloniaTestDispatcher.Run(() =>
+            {
+                var (shell, lifetime) = StartApp(catalogue.CustomFolder, catalogue.BuiltInFolder);
 
             try
         {
             Assert.Equal("ja", LocalizationManager.Instance.CurrentLanguage);
             Assert.Equal("ja", SelectedCode(Pill(shell)));
             Assert.Equal("ja", SelectedCode(General(shell)));
+
+            var presets = Assert.IsType<PresetsTabView>(shell.FindControl<PresetsTabView>("PresetsTab"));
+            var rows = presets.FindControl<StackPanel>("SessionRackPanel")!.Children.OfType<Border>().ToArray();
+            Assert.Equal(2, rows.Length);
+            var builtIn = Assert.Single(rows, row => (row.Tag as Session)?.Id == "language_builtin");
+            var builtInSession = Assert.IsType<Session>(builtIn.Tag);
+            Assert.Equal(SessionSource.BuiltIn, builtInSession.Source);
+            Assert.Equal(Path.Combine(catalogue.BuiltInFolder, "language_builtin.session.json"),
+                builtInSession.SourceFilePath);
+            var customRow = Assert.Single(rows, row => (row.Tag as Session)?.Id == "language_custom");
+            var custom = Assert.IsType<Session>(customRow.Tag);
+            Assert.Equal(SessionSource.Custom, custom.Source);
+            Assert.Equal(Path.Combine(catalogue.CustomFolder, "language_custom.session.json"),
+                custom.SourceFilePath);
+            Assert.Equal("Language Custom", custom.Name);
+            Assert.True(custom.IsAvailable);
+            Assert.DoesNotContain(rows, row => (row.Tag as Session)?.Id == "language_unavailable");
+
+            // Navigate through the real shell door before exercising the row's keyboard path.
+            shell.FindControl<Button>("BtnPresets")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+            customRow.Focus();
+            shell.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "");
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("🧭 Language Custom", presets.FindControl<TextBlock>("TxtDetailTitle")!.Text);
+            Assert.Equal("Raw language description",
+                presets.FindControl<TextBlock>("TxtSessionDescription")!.Text);
+            Assert.Equal(Loc.GetF("rack_duration", 23),
+                presets.FindControl<TextBlock>("TxtSessionDuration")!.Text);
+            Assert.Equal(custom.GetDifficultyText(),
+                presets.FindControl<TextBlock>("TxtSessionDifficulty")!.Text);
+
             WaitForDebouncedSave(); // A startup save must not hide behind the first user edit.
             Assert.Equal(settingsBeforeStartup, File.ReadAllText(settingsPath));
             Assert.Equal(settingsWriteBeforeStartup, File.GetLastWriteTimeUtc(settingsPath));
@@ -63,6 +116,11 @@ public sealed class LanguageSelectorTests
             Assert.Equal("fr", CoreSettings.Current.Language);
             Assert.Equal("fr", LocalizationManager.Instance.CurrentLanguage);
             Assert.Equal("fr", SelectedCode(General(shell)));
+            Assert.Equal("🧭 Language Custom", presets.FindControl<TextBlock>("TxtDetailTitle")!.Text);
+            Assert.Equal("Raw language description",
+                presets.FindControl<TextBlock>("TxtSessionDescription")!.Text);
+            Assert.Equal(custom.GetDifficultyText(),
+                presets.FindControl<TextBlock>("TxtSessionDifficulty")!.Text);
             Assert.Equal(Loc.Get("msg_restart_to_apply"),
                 shell.FindControl<TextBlock>("TxtBannerSecondary")?.Text);
             Assert.True(shell.FindControl<TextBlock>("TxtBannerSecondary")?.Opacity > 0);
@@ -218,7 +276,13 @@ public sealed class LanguageSelectorTests
             CoreDispatch.PostProvider = null;
                 CoreDispatch.InvokeProvider = null;
             }
-        });
+            });
+        }
+        finally
+        {
+            if (Directory.Exists(catalogue.Root))
+                Directory.Delete(catalogue.Root, recursive: true);
+        }
     }
 
     private static ComboBox Pill(MainShellWindow shell) =>
@@ -254,18 +318,56 @@ public sealed class LanguageSelectorTests
         return File.ReadAllText(settingsPath);
     }
 
-    private static (MainShellWindow Shell, ClassicDesktopStyleApplicationLifetime Lifetime) StartApp()
+    private static (string Root, string CustomFolder, string BuiltInFolder) CreateSessionCatalogue()
+    {
+        var root = Path.Combine(TestProfile.DirectoryPath, "session-catalogue-" + Guid.NewGuid().ToString("N"));
+        var customFolder = Path.Combine(root, "custom");
+        var builtInFolder = Path.Combine(root, "built-in");
+        Directory.CreateDirectory(customFolder);
+        Directory.CreateDirectory(builtInFolder);
+        var service = new SessionFileService(customFolder, builtInFolder);
+        service.ExportSession(new SessionDefinition
+        {
+            Id = "language_builtin",
+            Name = "Language Built In",
+            Icon = "🧪",
+            Description = "Built-in language fixture",
+            DurationMinutes = 11,
+            IsAvailable = true
+        }, Path.Combine(builtInFolder, "language_builtin.session.json"));
+        service.ExportSession(new SessionDefinition
+        {
+            Id = "language_custom",
+            Name = "Language Custom",
+            Icon = "🧭",
+            Description = "Raw language description",
+            DurationMinutes = 23,
+            Difficulty = SessionDifficulty.Medium,
+            BonusXP = 123,
+            IsAvailable = true
+        }, Path.Combine(customFolder, "language_custom.session.json"));
+        service.ExportSession(new SessionDefinition
+        {
+            Id = "language_unavailable",
+            Name = "Unavailable Language Fixture",
+            IsAvailable = false
+        }, Path.Combine(customFolder, "language_unavailable.session.json"));
+        return (root, customFolder, builtInFolder);
+    }
+
+    private static (MainShellWindow Shell, ClassicDesktopStyleApplicationLifetime Lifetime) StartApp(
+        string customFolder, string builtInFolder)
     {
         var lifetime = new ClassicDesktopStyleApplicationLifetime
         {
             ShutdownMode = ShutdownMode.OnExplicitShutdown,
         };
 
-        AppBuilder.Configure<App>()
+        AppBuilder.Configure<CatalogueTestApp>(() => new CatalogueTestApp(customFolder, builtInFolder))
             .UseSkia()
             .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
             .SetupWithLifetime(lifetime);
-        var app = Assert.IsType<App>(Application.Current);
+        var app = Assert.IsType<CatalogueTestApp>(Application.Current);
         Assert.True(app.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime,
             $"lifetime={app.ApplicationLifetime?.GetType().FullName}");
         Assert.NotNull(App.Settings);
