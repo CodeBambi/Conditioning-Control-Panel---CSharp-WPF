@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -7,6 +8,7 @@ using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -60,6 +62,7 @@ public sealed class LanguageSelectorTests
     [Fact]
     public void LanguageSelectorsRestoreAndDesktopExitFlushesPendingState()
     {
+        var previousLanguage = LocalizationManager.Instance.CurrentLanguage;
         var settingsPath = Path.Combine(TestProfile.DirectoryPath, "settings.json");
         var settingsBeforeStartup = SeedProfile(settingsPath);
         var settingsWriteBeforeStartup = File.GetLastWriteTimeUtc(settingsPath);
@@ -111,6 +114,34 @@ public sealed class LanguageSelectorTests
             Assert.Equal(settingsBeforeStartup, File.ReadAllText(settingsPath));
             Assert.Equal(settingsWriteBeforeStartup, File.GetLastWriteTimeUtc(settingsPath));
 
+            // This is the real desktop/provider path: the mounted chip writes the actual settings
+            // file, and a newly constructed view restores the validated token without another app
+            // lifetime or a second profile.
+            var sourceChips = presets.FindControl<StackPanel>("RackSourceChips")!
+                .Children.OfType<ToggleButton>().ToArray();
+            var yours = sourceChips.Single(chip => (string)chip.Tag! == "yours");
+            Click(shell, yours);
+            Assert.Equal("yours", CoreSettings.Current.SessionRackSourceFilter);
+            WaitForPersistedSetting(settingsPath, "SessionRackSourceFilter", "yours");
+            Assert.Equal("yours", new SettingsService().Current.SessionRackSourceFilter);
+
+            var restoredView = new PresetsTabView();
+            var restoredSources = restoredView.FindControl<StackPanel>("RackSourceChips")!
+                .Children.OfType<ToggleButton>().ToArray();
+            Assert.Single(restoredSources, chip => (string)chip.Tag! == "yours" && chip.IsChecked == true);
+            Assert.All(restoredSources.Where(chip => (string)chip.Tag! != "yours"),
+                chip => Assert.False(chip.IsChecked == true));
+
+            // Leave the profile in its original state for the remainder of this lifecycle test.
+            var all = sourceChips.Single(chip => (string)chip.Tag! == "all");
+            Click(shell, all);
+            Assert.Equal("all", CoreSettings.Current.SessionRackSourceFilter);
+            Assert.True(all.IsChecked == true, "the All source chip did not stay selected after the click");
+            Assert.All(sourceChips.Where(chip => !ReferenceEquals(chip, all)),
+                chip => Assert.False(chip.IsChecked == true));
+            WaitForPersistedSetting(settingsPath, "SessionRackSourceFilter", "all");
+            Assert.Equal("all", new SettingsService().Current.SessionRackSourceFilter);
+
             Select(Pill(shell), "fr");
 
             Assert.Equal("fr", CoreSettings.Current.Language);
@@ -124,7 +155,7 @@ public sealed class LanguageSelectorTests
             Assert.Equal(Loc.Get("msg_restart_to_apply"),
                 shell.FindControl<TextBlock>("TxtBannerSecondary")?.Text);
             Assert.True(shell.FindControl<TextBlock>("TxtBannerSecondary")?.Opacity > 0);
-            WaitForDebouncedSave();
+            WaitForPersistedSetting(settingsPath, "Language", "fr");
             Assert.Equal("fr", new SettingsService().Current.Language);
 
             Select(General(shell), "de");
@@ -132,7 +163,7 @@ public sealed class LanguageSelectorTests
             Assert.Equal("de", CoreSettings.Current.Language);
             Assert.Equal("de", LocalizationManager.Instance.CurrentLanguage);
             Assert.Equal("de", SelectedCode(Pill(shell)));
-            WaitForDebouncedSave();
+            WaitForPersistedSetting(settingsPath, "Language", "de");
             Assert.Equal("de", new SettingsService().Current.Language);
             Assert.False(RoadmapExists());
             DisposeRoadmapIfCreated();
@@ -272,6 +303,8 @@ public sealed class LanguageSelectorTests
         {
             try { shell.Close(); } catch { }
             try { Dispatcher.UIThread.RunJobs(); } catch { }
+            LocalizationManager.Instance.SetLanguage(previousLanguage);
+            Dispatcher.UIThread.RunJobs();
             CoreSettings.ServiceProvider = null;
             CoreDispatch.PostProvider = null;
                 CoreDispatch.InvokeProvider = null;
@@ -303,16 +336,60 @@ public sealed class LanguageSelectorTests
         Dispatcher.UIThread.RunJobs();
     }
 
+    private static void Click(TopLevel host, Control target)
+    {
+        var point = target.TranslatePoint(
+            new Point(target.Bounds.Width / 2, target.Bounds.Height / 2), host);
+        Assert.True(point.HasValue, "could not translate control into host");
+        host.MouseMove(point!.Value, RawInputModifiers.None);
+        host.MouseDown(point.Value, MouseButton.Left, RawInputModifiers.None);
+        host.MouseUp(point.Value, MouseButton.Left, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+    }
+
     private static void WaitForDebouncedSave()
     {
-        System.Threading.Thread.Sleep(650);
+        Thread.Sleep(650);
         Dispatcher.UIThread.RunJobs();
+    }
+
+    private static void WaitForPersistedSetting(string settingsPath, string property, string expected)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var actual = ReadSetting(settingsPath, property);
+        while (!string.Equals(actual, expected, StringComparison.Ordinal)
+            && stopwatch.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(25);
+            actual = ReadSetting(settingsPath, property);
+        }
+
+        Assert.True(string.Equals(actual, expected, StringComparison.Ordinal),
+            $"Timed out waiting for {property}={expected}; last disk value was {actual} after {stopwatch.Elapsed.TotalMilliseconds:0}ms");
+    }
+
+    private static string ReadSetting(string settingsPath, string property)
+    {
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(settingsPath));
+            if (!document.RootElement.TryGetProperty(property, out var value)) return "<missing>";
+            return value.ValueKind == System.Text.Json.JsonValueKind.String
+                ? value.GetString() ?? "<null>"
+                : value.ToString();
+        }
+        catch (Exception ex)
+        {
+            return $"<error:{ex.GetType().Name}>";
+        }
     }
 
     private static string SeedProfile(string settingsPath)
     {
         var settings = new SettingsService();
         settings.Current.Language = "ja";
+        settings.Current.SessionRackSourceFilter = "all";
         settings.Current.Welcomed = true;
         settings.SaveImmediate();
         return File.ReadAllText(settingsPath);

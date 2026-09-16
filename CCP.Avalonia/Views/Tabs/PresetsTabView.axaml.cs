@@ -160,18 +160,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 })}  {count}");
             }
 
-            var difficulties = new[]
+            foreach (var dot in RackDifficultyChips.Children.OfType<ToggleButton>())
             {
-                SessionDifficulty.Easy,
-                SessionDifficulty.Medium,
-                SessionDifficulty.Hard,
-                SessionDifficulty.Extreme
-            };
-            for (var i = 0; i < Math.Min(difficulties.Length, RackDifficultyChips.Children.Count); i++)
-                if (RackDifficultyChips.Children[i] is ToggleButton dot)
-                    ToolTip.SetTip(dot, Loc.Get($"rack_diff_{difficulties[i].ToString().ToLowerInvariant()}"));
+                if (dot.Tag is not SessionDifficulty difficulty) continue;
+                ToolTip.SetTip(dot, Loc.Get($"rack_diff_{difficulty.ToString().ToLowerInvariant()}"));
+            }
 
-            TxtRackCount.Text = Loc.GetF("rack_count_all", _availableSessions.Count);
+            if (SessionRackPanel.Children.OfType<TextBlock>().FirstOrDefault() is TextBlock empty)
+                empty.Text = Loc.Get("rack_empty");
+            UpdateRackCount(SessionRackPanel.Children.OfType<Border>().Count());
         }
 
         private static void SetTextContent(ToggleButton control, string text)
@@ -196,9 +193,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 ToolTip.SetTip(buttons[i], Loc.Get(keys[i]));
         }
 
+        private const string RackSourceAll = "all";
+        private const string RackSourceBuiltIn = "builtin";
+        private const string RackSourceYours = "yours";
+        private const string RackSourceCatalogue = "catalogue";
+
+        private string _rackSourceFilter = InitialRackSourceFilter();
+        private readonly HashSet<SessionDifficulty> _rackDifficulties = new()
+        {
+            SessionDifficulty.Easy,
+            SessionDifficulty.Medium,
+            SessionDifficulty.Hard,
+            SessionDifficulty.Extreme
+        };
+        private bool _rackToolbarSyncing;
+
         private IReadOnlyList<Session> _availableSessions =
             Session.GetAllSessions().Where(session => session.IsAvailable).ToArray();
         private Session? _selectedSession;
+
+        private static string InitialRackSourceFilter() =>
+            CoreSettings.HasProvider ? CoreSettings.Current.SessionRackSourceFilter : RackSourceAll;
 
         /// <summary>Replaces the offline built-in source with an already-loaded manager. Loading
         /// stays in App's desktop composition so constructing a view for render/nav never touches
@@ -278,52 +293,148 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var custom = _availableSessions.Count(session => session.Source == SessionSource.Custom);
             var imported = _availableSessions.Count(session => session.Source == SessionSource.Imported);
 
-            RackSourceChips.Children.Add(SourceChip("rack_source_all", _availableSessions.Count, "all", isOn: true));
-            RackSourceChips.Children.Add(SourceChip("rack_source_builtin", builtIn, "builtin", isOn: false));
-            RackSourceChips.Children.Add(SourceChip("rack_source_yours", custom, "yours", isOn: false));
-            RackSourceChips.Children.Add(SourceChip("rack_source_catalogue", imported, "catalogue", isOn: false));
+            RackSourceChips.Children.Add(SourceChip("rack_source_all", _availableSessions.Count,
+                RackSourceAll, _rackSourceFilter == RackSourceAll));
+            RackSourceChips.Children.Add(SourceChip("rack_source_builtin", builtIn,
+                RackSourceBuiltIn, _rackSourceFilter == RackSourceBuiltIn));
+            RackSourceChips.Children.Add(SourceChip("rack_source_yours", custom,
+                RackSourceYours, _rackSourceFilter == RackSourceYours));
+            RackSourceChips.Children.Add(SourceChip("rack_source_catalogue", imported,
+                RackSourceCatalogue, _rackSourceFilter == RackSourceCatalogue));
 
-            RackDifficultyChips.Children.Add(Dot("SessionDiffEasyBrush", Loc.Get("rack_diff_easy"), on: true));
-            RackDifficultyChips.Children.Add(Dot("SessionDiffMediumBrush", Loc.Get("rack_diff_medium"), on: true));
-            RackDifficultyChips.Children.Add(Dot("SessionDiffHardBrush", Loc.Get("rack_diff_hard"), on: true));
-            RackDifficultyChips.Children.Add(Dot("SessionDiffExtremeBrush", Loc.Get("rack_diff_extreme"), on: false));
+            RackDifficultyChips.Children.Add(Dot(SessionDifficulty.Easy, "SessionDiffEasyBrush",
+                Loc.Get("rack_diff_easy")));
+            RackDifficultyChips.Children.Add(Dot(SessionDifficulty.Medium, "SessionDiffMediumBrush",
+                Loc.Get("rack_diff_medium")));
+            RackDifficultyChips.Children.Add(Dot(SessionDifficulty.Hard, "SessionDiffHardBrush",
+                Loc.Get("rack_diff_hard")));
+            RackDifficultyChips.Children.Add(Dot(SessionDifficulty.Extreme, "SessionDiffExtremeBrush",
+                Loc.Get("rack_diff_extreme")));
 
-            TxtRackCount.Text = Loc.GetF("rack_count_all", _availableSessions.Count);
+            UpdateRackCount(SessionRackPanel.Children.OfType<Border>().Count());
         }
 
-        private ToggleButton SourceChip(string labelKey, int count, string tag, bool isOn) => new()
+        private ToggleButton SourceChip(string labelKey, int count, string tag, bool isOn)
         {
-            Theme = TabTheme("SdRackChip"),
-            Tag = tag,
-            IsChecked = isOn,
-            IsEnabled = false,
-            Opacity = 0.5,
-            // A TextBlock rather than a string Content: the labels are localized words today, but
-            // every other button on this page had to opt out of Avalonia's access-key parse and a
-            // chip is not the place to discover that a translation gained an underscore.
-            Content = new TextBlock { Text = $"{Loc.Get(labelKey)}  {count}" },
-        };
+            var chip = new ToggleButton
+            {
+                Theme = TabTheme("SdRackChip"),
+                Tag = tag,
+                IsChecked = isOn,
+                IsEnabled = true,
+                // A TextBlock rather than a string Content: the labels are localized words today, but
+                // every other button on this page had to opt out of Avalonia's access-key parse and a
+                // chip is not the place to discover that a translation gained an underscore.
+                Content = new TextBlock { Text = $"{Loc.Get(labelKey)}  {count}" },
+            };
+            chip.IsCheckedChanged += RackSourceChip_Changed;
+            return chip;
+        }
 
-        private ToggleButton Dot(string solidKey, string tip, bool on)
+        private ToggleButton Dot(SessionDifficulty difficulty, string solidKey, string tip)
         {
             var dot = new ToggleButton
             {
                 Theme = TabTheme("SdRackDot"),
-                IsChecked = on,
-                IsEnabled = false,
-                Opacity = 0.5,
+                Tag = difficulty,
+                IsChecked = _rackDifficulties.Contains(difficulty),
+                IsEnabled = true,
                 Content = new TextBlock { Text = "●" },
                 Foreground = Brush(solidKey),
             };
             ToolTip.SetTip(dot, tip);
+            dot.IsCheckedChanged += RackDifficultyChip_Changed;
             return dot;
         }
 
-        /// <summary>Build the selectable rows from the available Core built-ins only.</summary>
+        private void UpdateRackCount(int shownCount) =>
+            TxtRackCount.Text = shownCount == _availableSessions.Count
+                ? Loc.GetF("rack_count_all", _availableSessions.Count)
+                : Loc.GetF("rack_count_filtered", shownCount, _availableSessions.Count);
+
+        private bool RackAccepts(Session session)
+        {
+            var sourceMatches = _rackSourceFilter switch
+            {
+                RackSourceBuiltIn => session.Source == SessionSource.BuiltIn,
+                RackSourceYours => session.Source == SessionSource.Custom,
+                RackSourceCatalogue => session.Source == SessionSource.Imported,
+                _ => true,
+            };
+            return sourceMatches && _rackDifficulties.Contains(session.Difficulty);
+        }
+
+        private void RackSourceChip_Changed(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (_rackToolbarSyncing || sender is not ToggleButton chip) return;
+
+            _rackToolbarSyncing = true;
+            try
+            {
+                // The active source is a strict single-select chip: clicking it again must leave it
+                // selected instead of creating a no-source state.
+                if (chip.IsChecked != true)
+                {
+                    chip.IsChecked = true;
+                    return;
+                }
+
+                foreach (var other in RackSourceChips.Children.OfType<ToggleButton>())
+                    other.IsChecked = ReferenceEquals(other, chip);
+            }
+            finally
+            {
+                _rackToolbarSyncing = false;
+            }
+
+            var key = chip.Tag as string ?? RackSourceAll;
+            if (key == _rackSourceFilter) return;
+            _rackSourceFilter = key;
+
+            if (CoreSettings.HasProvider)
+            {
+                CoreSettings.Current.SessionRackSourceFilter = key;
+                CoreSettings.Save();
+            }
+
+            RepaintSessionRack();
+        }
+
+        private void RackDifficultyChip_Changed(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (_rackToolbarSyncing || sender is not ToggleButton dot ||
+                dot.Tag is not SessionDifficulty difficulty) return;
+
+            if (dot.IsChecked == true) _rackDifficulties.Add(difficulty);
+            else _rackDifficulties.Remove(difficulty);
+            RepaintSessionRack();
+        }
+
+        /// <summary>Rebuild only the filtered rows; details and selected model remain view state.</summary>
+        private void RepaintSessionRack()
+        {
+            SessionRackPanel.Children.Clear();
+            SeedSessionRack();
+        }
+
+        /// <summary>Build the selectable rows from the available Core session snapshot.</summary>
         private void SeedSessionRack()
         {
-            foreach (var session in _availableSessions)
+            var shown = _availableSessions.Where(RackAccepts).ToArray();
+            foreach (var session in shown)
                 SessionRackPanel.Children.Add(RackRow(session));
+
+            if (shown.Length == 0)
+            {
+                SessionRackPanel.Children.Add(new TextBlock
+                {
+                    Theme = TabTheme("SdRackEmpty"),
+                    Text = Loc.Get("rack_empty"),
+                });
+            }
+
+            UpdateRackCount(shown.Length);
+            RefreshSessionRackSelection();
         }
 
         private Border RackRow(Session session)

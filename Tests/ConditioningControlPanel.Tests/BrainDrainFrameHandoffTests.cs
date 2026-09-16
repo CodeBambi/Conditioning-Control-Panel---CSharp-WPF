@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Services.Compositor;
@@ -115,29 +114,78 @@ public class BrainDrainFrameHandoffTests
         var held = new Frame(1);
         slot.Publish(held);
 
-        var holding = new ManualResetEventSlim(false);
-        var release = new ManualResetEventSlim(false);
-        var hog = Task.Run(() =>
+        // These are liveness watchdogs, not a wall-clock performance budget. Stopwatch elapsed time
+        // includes time the test thread is descheduled under a busy Windows CI test host (#1326).
+        const int WatchdogMs = 5000;
+        using var holding = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        using var consumerFinished = new ManualResetEventSlim(false);
+        Frame? taken = null;
+        Exception? consumerError = null;
+
+        var hog = new Thread(() =>
         {
             lock (slot.Gate)      // stand in for a producer mid-swap
             {
                 holding.Set();
-                release.Wait(5000);
+                release.Wait();
             }
-        });
-        Assert.True(holding.Wait(5000));
+        })
+        {
+            IsBackground = true,
+            Name = "BrainDrain-test-holder",
+        };
+        var consumer = new Thread(() =>
+        {
+            try { taken = slot.TryTake(2); }
+            catch (Exception ex) { consumerError = ex; }
+            finally { consumerFinished.Set(); }
+        })
+        {
+            IsBackground = true,
+            Name = "BrainDrain-test-consumer",
+        };
 
-        var sw = Stopwatch.StartNew();
-        var taken = slot.TryTake(2);
-        sw.Stop();
+        var holdingAcquired = false;
+        var completedWhileHeld = false;
+        var holderStopped = false;
+        var consumerStopped = true;
+        try
+        {
+            hog.Start();
+            holdingAcquired = holding.Wait(WatchdogMs);
+            if (holdingAcquired)
+            {
+                consumer.Start();
+                completedWhileHeld = consumerFinished.Wait(WatchdogMs);
+            }
+        }
+        finally
+        {
+            // A blocking implementation is released only after the finite watchdog has observed
+            // that the consumer did not finish. Joining here lets the negative mutation fail cleanly
+            // instead of turning a test failure into a permanently hung test host.
+            release.Set();
+            holderStopped = hog.Join(WatchdogMs);
+            consumerStopped = !consumer.IsAlive || consumer.Join(WatchdogMs);
+        }
 
-        release.Set();
-        hog.Wait(5000);
+        if (consumerStopped)
+        {
+            taken?.Dispose();
+            slot.Clear();
+        }
 
+        Assert.True(holdingAcquired, "the contention thread did not acquire the slot gate");
+        Assert.True(holderStopped, "the contention thread did not release the slot gate");
+        Assert.True(consumerStopped, "the consumer did not exit after the contention gate was released");
+        Assert.True(completedWhileHeld,
+            "TryTake did not complete while the slot gate was held - a blocking hand-off would " +
+            "freeze the UI thread through the #777 seam.");
+        Assert.Null(consumerError);
         Assert.Null(taken);   // skipped this frame rather than waiting on the capture thread
-        Assert.True(sw.ElapsedMilliseconds < 250,
-            $"TryTake blocked for {sw.ElapsedMilliseconds}ms on a busy slot - on the UI thread that " +
-            "is the #777 freeze coming back through the front door.");
+        Assert.True(held.Disposed);
+        Assert.Equal(1, held.DisposeCount);
     }
 
     // ---- concurrent hammering: no double free, no leak ----

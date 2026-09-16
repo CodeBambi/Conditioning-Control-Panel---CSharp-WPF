@@ -63,10 +63,15 @@ public sealed class PresetsSessionCatalogueTests
                 Assert.False(view.FindControl<Border>("SessionDropZone")!.IsEnabled);
                 Assert.False(view.FindControl<ComboBox>("CmbRackSort")!.IsEnabled);
                 Assert.False(view.FindControl<TextBox>("TxtRackSearch")!.IsEnabled);
-                Assert.All(view.FindControl<StackPanel>("RackSourceChips")!.Children.OfType<ToggleButton>(),
-                    chip => Assert.False(chip.IsEnabled));
+                var sourceChips = view.FindControl<StackPanel>("RackSourceChips")!.Children.OfType<ToggleButton>().ToArray();
+                Assert.All(sourceChips, chip => Assert.True(chip.IsEnabled));
+                Assert.Single(sourceChips, chip => (string)chip.Tag! == "all" && chip.IsChecked == true);
                 Assert.All(view.FindControl<StackPanel>("RackDifficultyChips")!.Children.OfType<ToggleButton>(),
-                    chip => Assert.False(chip.IsEnabled));
+                    chip =>
+                    {
+                        Assert.True(chip.IsEnabled);
+                        Assert.True(chip.IsChecked);
+                    });
 
                 var first = available[0];
                 var second = available.First(session => session.Id != first.Id);
@@ -344,9 +349,9 @@ public sealed class PresetsSessionCatalogueTests
                 Assert.False(view.FindControl<ComboBox>("CmbRackSort")!.IsEnabled);
                 Assert.False(view.FindControl<TextBox>("TxtRackSearch")!.IsEnabled);
                 Assert.All(view.FindControl<StackPanel>("RackSourceChips")!.Children.OfType<ToggleButton>(),
-                    chip => Assert.False(chip.IsEnabled));
+                    chip => Assert.True(chip.IsEnabled));
                 Assert.All(view.FindControl<StackPanel>("RackDifficultyChips")!.Children.OfType<ToggleButton>(),
-                    chip => Assert.False(chip.IsEnabled));
+                    chip => Assert.True(chip.IsEnabled));
                 Assert.All(rows, row =>
                 {
                     var rowGrid = Assert.IsType<Grid>(row.Child);
@@ -366,6 +371,224 @@ public sealed class PresetsSessionCatalogueTests
                     view.FindControl<TextBlock>("TxtSessionDuration")!.Text);
                 Assert.Equal(Loc.GetF("rack_xp", 777),
                     view.FindControl<TextBlock>("TxtSessionXP")!.Text);
+            }
+            finally
+            {
+                try
+                {
+                    host?.Close();
+                    Dispatcher.UIThread.RunJobs();
+                }
+                finally
+                {
+                    LocalizationManager.Instance.SetLanguage(previousLanguage);
+                    Dispatcher.UIThread.RunJobs();
+                    if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+                }
+            }
+
+            return Task.CompletedTask;
+        });
+    }
+
+    [Fact]
+    public async Task MountedCatalogueFiltersWithNativeSourceAndDifficultyToggles()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            var previousLanguage = LocalizationManager.Instance.CurrentLanguage;
+            var root = Path.Combine(Path.GetTempPath(), "ccp-mounted-filter-tests-" + Guid.NewGuid().ToString("N"));
+            var builtInFolder = Path.Combine(root, "built-in");
+            var customFolder = Path.Combine(root, "custom");
+            Window? host = null;
+            try
+            {
+                EnsureAvalonia();
+                Assert.False(CoreSettings.HasProvider);
+                var fallbackSource = CoreSettings.Current.SessionRackSourceFilter;
+                Directory.CreateDirectory(builtInFolder);
+                Directory.CreateDirectory(customFolder);
+                var service = new SessionFileService(customFolder, builtInFolder);
+                service.ExportSession(new SessionDefinition
+                {
+                    Id = "filter_builtin_easy",
+                    Name = "Filter Built In Easy",
+                    Icon = "🟢",
+                    Difficulty = SessionDifficulty.Easy,
+                    IsAvailable = true
+                }, Path.Combine(builtInFolder, "filter_builtin_easy.session.json"));
+                service.ExportSession(new SessionDefinition
+                {
+                    Id = "filter_builtin_hard",
+                    Name = "Filter Built In Hard",
+                    Icon = "🔴",
+                    Difficulty = SessionDifficulty.Hard,
+                    IsAvailable = true
+                }, Path.Combine(builtInFolder, "filter_builtin_hard.session.json"));
+                service.ExportSession(new SessionDefinition
+                {
+                    Id = "filter_custom_hard",
+                    Name = "Filter Yours Hard",
+                    Icon = "🟣",
+                    Difficulty = SessionDifficulty.Hard,
+                    IsAvailable = true
+                }, Path.Combine(customFolder, "filter_custom_hard.session.json"));
+
+                var manager = new SessionManager(service);
+                manager.LoadAllSessions();
+                var imported = new Session
+                {
+                    Id = "filter_imported_extreme",
+                    Name = "Filter Catalogue Extreme",
+                    Icon = "⚫",
+                    Difficulty = SessionDifficulty.Extreme,
+                    Source = SessionSource.Imported,
+                    IsAvailable = true
+                };
+                manager.AllSessions.Add(imported);
+                manager.AllSessions.Add(new Session
+                {
+                    Id = "filter_imported_unavailable",
+                    Name = "Filter Unavailable",
+                    Source = SessionSource.Imported,
+                    IsAvailable = false
+                });
+
+                var view = new PresetsTabView { Width = 1100, Height = 760 };
+                view.UseSessionManager(manager);
+                host = new Window { Width = 1100, Height = 760, Content = view };
+                host.Show();
+                Dispatcher.UIThread.RunJobs();
+                Dispatcher.UIThread.RunJobs();
+
+                var panel = view.FindControl<StackPanel>("SessionRackPanel")!;
+                var sourceChips = view.FindControl<StackPanel>("RackSourceChips")!
+                    .Children.OfType<ToggleButton>().ToArray();
+                var difficultyDots = view.FindControl<StackPanel>("RackDifficultyChips")!
+                    .Children.OfType<ToggleButton>().ToArray();
+                ToggleButton Source(string key) => Assert.Single(sourceChips, chip => (string)chip.Tag! == key);
+                ToggleButton Difficulty(SessionDifficulty value) =>
+                    Assert.Single(difficultyDots, dot => (SessionDifficulty)dot.Tag! == value);
+
+                Assert.Equal(new[]
+                {
+                    "filter_builtin_easy", "filter_builtin_hard", "filter_custom_hard", "filter_imported_extreme"
+                }.OrderBy(id => id), RowIds(panel).OrderBy(id => id));
+                Assert.Single(sourceChips, chip => (string)chip.Tag! == "all" && chip.IsChecked == true);
+                Assert.All(sourceChips, chip => Assert.True(chip.IsEnabled));
+                Assert.All(difficultyDots, dot =>
+                {
+                    Assert.True(dot.IsEnabled);
+                    Assert.True(dot.IsChecked);
+                });
+                Assert.Equal("4 sessions", view.FindControl<TextBlock>("TxtRackCount")!.Text);
+                Assert.Equal(new[] { "All  4", "Built-in  2", "Yours  1", "Catalogue  1" },
+                    sourceChips.Select(chip => ((TextBlock)chip.Content!).Text));
+
+                // The source control is a real ToggleButton: a keyboard activation selects Yours,
+                // not a direct handler call. Re-clicking the active source is a no-op and leaves its row intact.
+                var yours = Source("yours");
+                yours.Focus();
+                Assert.True(yours.IsFocused);
+                host.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "");
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(new[] { "filter_custom_hard" }, RowIds(panel));
+                Assert.Single(sourceChips, chip => (string)chip.Tag! == "yours" && chip.IsChecked == true);
+
+                Click(host, Source("catalogue"));
+                Assert.Equal(new[] { "filter_imported_extreme" }, RowIds(panel));
+                Click(host, Source("all"));
+                Assert.Equal(new[]
+                {
+                    "filter_builtin_easy", "filter_builtin_hard", "filter_custom_hard", "filter_imported_extreme"
+                }.OrderBy(id => id), RowIds(panel).OrderBy(id => id));
+                Click(host, Source("builtin"));
+                var builtInRow = Assert.Single(panel.Children.OfType<Border>(),
+                    row => (row.Tag as Session)?.Id == "filter_builtin_hard");
+                var builtInSession = Assert.IsType<Session>(builtInRow.Tag);
+                Click(host, builtInRow);
+                Assert.Equal("🔴 Filter Built In Hard", view.FindControl<TextBlock>("TxtDetailTitle")!.Text);
+                Assert.Equal(builtInSession.GetDifficultyText(),
+                    view.FindControl<TextBlock>("TxtSessionDifficulty")!.Text);
+                var activeRow = builtInRow;
+                Click(host, Source("builtin"));
+                Assert.Same(activeRow, panel.Children.OfType<Border>().Single(
+                    row => (row.Tag as Session)?.Id == "filter_builtin_hard"));
+
+                // Hide the selected model, then restore it. Filtering rebuilds row controls but not
+                // details, and the selected theme is reapplied when the model becomes visible.
+                Click(host, Source("yours"));
+                Assert.DoesNotContain(panel.Children.OfType<Border>(),
+                    row => (row.Tag as Session)?.Id == builtInSession.Id);
+                Assert.Single(panel.Children.OfType<Border>(),
+                    row => (row.Tag as Session)?.Id == "filter_custom_hard");
+                Assert.Equal("🔴 Filter Built In Hard", view.FindControl<TextBlock>("TxtDetailTitle")!.Text);
+                Click(host, Source("builtin"));
+                var restoredRow = Assert.Single(panel.Children.OfType<Border>(),
+                    row => (row.Tag as Session)?.Id == builtInSession.Id);
+                Assert.Same(builtInSession, restoredRow.Tag);
+                Assert.True(view.Resources.TryGetResource("SdSessionRowSelected", null, out var selectedTheme));
+                Assert.Same(selectedTheme, restoredRow.Theme);
+
+                // A keyboard activation toggles a difficulty natively; source + difficulty compose with AND.
+                var easy = Difficulty(SessionDifficulty.Easy);
+                easy.Focus();
+                Assert.True(easy.IsFocused);
+                host.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "");
+                Dispatcher.UIThread.RunJobs();
+                Assert.False(easy.IsChecked == true);
+                Assert.Equal(new[] { "filter_builtin_hard" }, RowIds(panel));
+                Assert.Equal("1 of 4", view.FindControl<TextBlock>("TxtRackCount")!.Text);
+                Assert.Equal(new[] { "All  4", "Built-in  2", "Yours  1", "Catalogue  1" },
+                    sourceChips.Select(chip => ((TextBlock)chip.Content!).Text));
+
+                Click(host, Difficulty(SessionDifficulty.Hard));
+                Assert.Empty(panel.Children.OfType<Border>());
+                Assert.Equal("No sessions match - clear a filter.",
+                    Assert.Single(panel.Children.OfType<TextBlock>()).Text);
+                Assert.Equal("0 of 4", view.FindControl<TextBlock>("TxtRackCount")!.Text);
+                Assert.Equal("🔴 Filter Built In Hard", view.FindControl<TextBlock>("TxtDetailTitle")!.Text);
+
+                Click(host, Difficulty(SessionDifficulty.Medium));
+                Click(host, Difficulty(SessionDifficulty.Extreme));
+                Assert.All(difficultyDots, dot => Assert.False(dot.IsChecked == true));
+                var empty = Assert.Single(panel.Children.OfType<TextBlock>());
+
+                LocalizationManager.Instance.SetLanguage("zh-CN");
+                Dispatcher.UIThread.RunJobs();
+                Dispatcher.UIThread.RunJobs();
+                Assert.Same(empty, panel.Children.Single());
+                Assert.Equal(Loc.Get("rack_empty"), empty.Text);
+                Assert.Equal(Loc.GetF("rack_count_filtered", 0, 4),
+                    view.FindControl<TextBlock>("TxtRackCount")!.Text);
+                Assert.Equal(new[] { "全部  4", "内置  2", "你的  1", "目录  1" },
+                    sourceChips.Select(chip => ((TextBlock)chip.Content!).Text));
+                LocalizationManager.Instance.SetLanguage("en");
+                Dispatcher.UIThread.RunJobs();
+
+                foreach (var dot in difficultyDots)
+                    if (dot.IsChecked != true) Click(host, dot);
+                Click(host, Source("all"));
+                Assert.Equal(new[]
+                {
+                    "filter_builtin_easy", "filter_builtin_hard", "filter_custom_hard", "filter_imported_extreme"
+                }.OrderBy(id => id), RowIds(panel).OrderBy(id => id));
+                Assert.Equal("4 sessions", view.FindControl<TextBlock>("TxtRackCount")!.Text);
+                Assert.Equal(fallbackSource, CoreSettings.Current.SessionRackSourceFilter);
+
+                // Sort/search/drop/CRUD and all row actions remain deliberately unavailable.
+                Assert.False(view.FindControl<Button>("BtnStartSession")!.IsEnabled);
+                Assert.False(view.FindControl<StackPanel>("SessionButtonsPanel")!.IsVisible);
+                Assert.False(view.FindControl<Button>("BtnRevealSpoilers")!.IsEnabled);
+                Assert.False(view.FindControl<Button>("BtnExportSession")!.IsEnabled);
+                Assert.False(view.FindControl<ComboBox>("CmbRackSort")!.IsEnabled);
+                Assert.False(view.FindControl<TextBox>("TxtRackSearch")!.IsEnabled);
+                Assert.False(view.FindControl<Border>("SessionDropZone")!.IsEnabled);
+                Assert.All(panel.Children.OfType<Border>(), row =>
+                {
+                    var actions = Assert.IsType<StackPanel>(Assert.IsType<Grid>(row.Child).Children[8]);
+                    Assert.All(actions.Children.OfType<Button>(), button => Assert.False(button.IsEnabled));
+                });
             }
             finally
             {
@@ -421,6 +644,13 @@ public sealed class PresetsSessionCatalogueTests
         Assert.True(view.FindControl<ScrollViewer>("SessionDetailScroller")!.IsVisible);
         Assert.False(view.FindControl<ScrollViewer>("PresetDetailScroller")!.IsVisible);
     }
+
+    private static string[] RowIds(StackPanel panel) =>
+        panel.Children.OfType<Border>()
+            .Select(row => (row.Tag as Session)?.Id)
+            .Where(id => id is not null)
+            .Cast<string>()
+            .ToArray();
 
     private static string RowText(Border row, int column)
     {
