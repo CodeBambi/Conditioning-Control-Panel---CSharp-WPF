@@ -51,6 +51,10 @@ jobs:
       # testhost and each assembly owns its own process-immutable profile setup.
       - name: Test Avalonia language suite
         run: dotnet test Tests/CCP.Avalonia.Language.Tests/CCP.Avalonia.Language.Tests.csproj -c Release
+      # This suite runs the real desktop startup failure branch against explicit temporary
+      # Core/session roots, so it must keep its own testhost and process-global App state.
+      - name: Test Avalonia catalogue startup fallback
+        run: dotnet test Tests/CCP.Avalonia.CatalogueStartup.Tests/CCP.Avalonia.CatalogueStartup.Tests.csproj -c Release
       - name: Test Avalonia notification suite
         run: dotnet test Tests/CCP.Avalonia.Tests/CCP.Avalonia.Tests.csproj -c Release
       - name: Test Avalonia scheduler gesture
@@ -112,6 +116,8 @@ jobs:
       # need independent testhost processes and isolated process-immutable profiles.
       - name: Test Avalonia language suite
         run: dotnet test Tests/CCP.Avalonia.Language.Tests/CCP.Avalonia.Language.Tests.csproj -c Release
+      - name: Test Avalonia catalogue startup fallback
+        run: dotnet test Tests/CCP.Avalonia.CatalogueStartup.Tests/CCP.Avalonia.CatalogueStartup.Tests.csproj -c Release
       - name: Test Avalonia notification suite
         run: dotnet test Tests/CCP.Avalonia.Tests/CCP.Avalonia.Tests.csproj -c Release
       - name: Test Avalonia scheduler gesture

@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -15,6 +16,12 @@ namespace ConditioningControlPanel.Avalonia
 
         private AvaloniaCoreDispatch? _desktopDispatch;
         private int _exitHandled;
+
+        /// <summary>
+        /// Creates the desktop session catalogue. Headless paths never call this factory; tests can
+        /// override it with a manager backed by explicit temporary folders.
+        /// </summary>
+        protected virtual SessionManager CreateSessionManager() => new();
 
         public override void Initialize()
         {
@@ -146,7 +153,25 @@ namespace ConditioningControlPanel.Avalonia
                 // yet, and the seam's unseeded answers (no mic, empty device list, NotProbed) are
                 // exactly what that is. Seeding it with anything else would be a lie.
 
-                desktop.MainWindow = new Views.Windows.MainShellWindow();
+                // Open the session catalogue only on the ordinary desktop path. A failed load must
+                // not leak the manager that may already contain built-ins into the shell: the custom
+                // folder can fail after built-in files have been read, so publish only a fully loaded
+                // candidate and keep the parameterless hardcoded rack as the fallback.
+                SessionManager? sessions = null;
+                try
+                {
+                    var candidate = CreateSessionManager();
+                    candidate.LoadAllSessions();
+                    sessions = candidate;
+                }
+                catch (Exception ex)
+                {
+                    Serilog.Log.Warning(ex, "Session catalogue could not be loaded; showing built-in fallback");
+                }
+
+                desktop.MainWindow = sessions is null
+                    ? new Views.Windows.MainShellWindow()
+                    : new Views.Windows.MainShellWindow(sessions);
             }
             base.OnFrameworkInitializationCompleted();
         }
