@@ -11,7 +11,13 @@ using Xunit;
 namespace ConditioningControlPanel.Tests;
 
 /// <summary>
-/// The dashboard's nameless TEASE tile and its teaser card (owner, 2026-08-13).
+/// The TEASE COSTUME (owner, 2026-08-13) and its teaser card.
+///
+/// <para><b>No tile wears it right now.</b> The one that did was the dashboard's nameless Just
+/// Drop tease, and on 2026-09-12 the owner had that slot given to the Deeper editor. What is left
+/// is the mechanism: <c>FeatureCard.TeaseTier</c> puts the costume on any card, and
+/// <see cref="TeaseRevealPopup"/> is the generic teaser behind it. Both are kept, and kept tested,
+/// because the next unannounced feature is a tier number and a click handler away.</para>
 ///
 /// <para><b>What can rot here, silently.</b> The tease is a costume made of four separate things -
 /// a blur, a veil, a livery rim and a badge - and every one of them survives a clean compile if it
@@ -31,9 +37,12 @@ public class TeaseCardRenderTests
     /// <summary>Every string the loc keys must never contain, in any of the nine languages.</summary>
     private static readonly string[] ForbiddenNames = { "just drop", "justdrop", "just-drop" };
 
+    // tease_card_tooltip was retired with the tile on 2026-09-12: it was the hover copy of a
+    // teased TILE, and nothing wears the costume at the moment. The popup's three keys stay, and
+    // so does the no-name guard over them, because the popup is still built and still generic.
     private static readonly string[] TeaseKeys =
     {
-        "tease_card_tooltip", "tease_popup_title", "tease_popup_body", "tease_popup_dismiss",
+        "tease_popup_title", "tease_popup_body", "tease_popup_dismiss",
     };
 
     private static void Realize(FrameworkElement element, double width = 240, double height = 180)
@@ -94,9 +103,9 @@ public class TeaseCardRenderTests
         {
             var card = new FeatureCard { TeaseTier = 2 };
             Realize(card);
-            // Badge written AFTER the tease, which is the order MainWindow.ApplyTeaseCard uses and
-            // the order that would silently repaint it pink if OnTierBadgeChanged forgot to
-            // re-apply the costume.
+            // Badge written AFTER the tease, which is the order a tease repaint would use and the
+            // order that would silently repaint it pink if OnTierBadgeChanged forgot to re-apply
+            // the costume.
             card.TierBadge = "◆";
 
             Assert.Equal(Visibility.Visible, card.TierBadgeHost.Visibility);

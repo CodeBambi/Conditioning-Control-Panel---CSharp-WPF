@@ -73,6 +73,16 @@ public class QuestDefinition
     public bool RequiresPremium { get; set; }
 
     /// <summary>
+    /// Devices this quest cannot be completed without, as published by the definitions channel:
+    /// "camera"/"webcam", "microphone"/"mic", or several separated by commas or spaces. Null on
+    /// every embedded quest - their requirements come from the category instead
+    /// (QuestHardwareGate.NeedsCamera / NeedsMicrophone). Unknown words are ignored, so a typo in
+    /// hand-authored JSON costs the gate rather than the player's quest. ccp-bugs#1151.
+    /// </summary>
+    [JsonProperty("requiresHardware")]
+    public string? RequiresHardware { get; set; }
+
+    /// <summary>
     /// Whether this is a seasonal quest (temporary/event-based)
     /// </summary>
     [JsonProperty("seasonal")]
@@ -132,6 +142,48 @@ public class QuestDefinition
     }
 
     /// <summary>
+    /// The categories whose underlying feature is behind the premium bar, as a set the roll can
+    /// consult directly.
+    ///
+    /// ccp-bugs#1186 / #1192. Until now the ONLY thing that made a quest premium was the
+    /// <see cref="RequiresPremium"/> flag, and that flag is hand-authored: it lives in
+    /// quests_payload.json and in the server's DEFAULT_QUEST_DEFINITIONS, and a quest published
+    /// by the definitions channel without it reads as free to every client. A free user then
+    /// rolls "Let Bambi Takeover run for 25 minutes" or "Log 50 blinks in the live blink
+    /// trainer", cannot open the feature at all, and loses the day's XP - which is exactly what
+    /// both reports describe.
+    ///
+    /// The category is not hand-authored in the same way: it is what the client counts progress
+    /// against, so a quest that moves on Takeover minutes MUST carry category "autonomy" or it
+    /// would never move at all. Deriving the bar from it makes the gate impossible to
+    /// under-declare, and the flag stays as an additive override for a free-category quest that
+    /// still wants the bar.
+    ///
+    /// <see cref="QuestCategory.RemoteIssue"/> is deliberately NOT here: the giving side of
+    /// remote control is open to every tier (see its declaration above). The receiving side
+    /// (<see cref="QuestCategory.Remote"/>) is the premium one.
+    /// </summary>
+    private static readonly HashSet<QuestCategory> PremiumCategories = new()
+    {
+        QuestCategory.Autonomy,        // Bambi Takeover - TierGate.DemandPremium
+        QuestCategory.Lockdown,        // Lockdown Mode  - TierGate.DemandPremium
+        QuestCategory.Remote,          // Remote control, subject side - TierGate.RequiresPremium
+        QuestCategory.KeywordTrigger,  // Awareness Engine - TierGate.DemandPremium
+        QuestCategory.BlinkTrainer     // Blink Trainer  - TierGate.RequiresPremium
+    };
+
+    /// <summary>True when the category's feature is premium-only. See PremiumCategories.</summary>
+    public static bool IsPremiumCategory(QuestCategory category) => PremiumCategories.Contains(category);
+
+    /// <summary>
+    /// THE ONE QUESTION THE ROLL ASKS: does finishing this quest need premium access? True when
+    /// the definition says so OR when the category's feature is premium-only, so a definition
+    /// that forgot the flag still cannot land on a free user's board (ccp-bugs#1186 / #1192).
+    /// </summary>
+    [JsonIgnore]
+    public bool NeedsPremium => RequiresPremium || IsPremiumCategory(Category);
+
+    /// <summary>
     /// Parse QuestCategory from server string (case-insensitive)
     /// </summary>
     public static QuestCategory ParseCategory(string category)
@@ -159,8 +211,25 @@ public class QuestDefinition
             "keywordtrigger" => QuestCategory.KeywordTrigger,
             "blink" => QuestCategory.BlinkTrainer,
             "blinktrainer" => QuestCategory.BlinkTrainer,
-            _ => QuestCategory.Combined
+            _ => UnknownCategory(category)
         };
+    }
+
+    /// <summary>
+    /// Combined is the safe bucket for a category this build does not know (a server-side quest
+    /// type newer than the client), but silently is how a typo in a quest definition shipped for
+    /// a month as a "Combined" quest. Say so once per unknown value.
+    /// </summary>
+    private static readonly System.Collections.Generic.HashSet<string> _warnedCategories = new(StringComparer.OrdinalIgnoreCase);
+    private static QuestCategory UnknownCategory(string? category)
+    {
+        var key = category ?? "(null)";
+        lock (_warnedCategories)
+        {
+            if (_warnedCategories.Add(key))
+                App.Logger?.Warning("Quest: unknown category '{Category}' mapped to Combined", key);
+        }
+        return QuestCategory.Combined;
     }
 
     /// <summary>

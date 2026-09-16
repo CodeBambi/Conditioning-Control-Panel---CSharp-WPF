@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Linq;
 using System.Windows;
@@ -57,6 +57,15 @@ namespace ConditioningControlPanel.Features
                 TxtFreq.Text = s.LockCardFrequency.ToString();
                 SliderRepeats.Value = s.LockCardRepeats;
                 TxtRepeats.Text = $"{s.LockCardRepeats}x";
+                ChkRandomRepeats.IsChecked = s.LockCardRandomRepeats;
+                SliderRepeatsMin.Value = s.LockCardRepeatsMin;
+                TxtRepeatsMin.Text = $"{s.LockCardRepeatsMin}x";
+                ChkTargetLength.IsChecked = s.LockCardTargetLengthEnabled;
+                SliderTargetLength.Value = s.LockCardTargetLength;
+                TxtTargetLength.Text = s.LockCardTargetLength.ToString();
+                SliderTargetVariance.Value = s.LockCardTargetLengthVariance;
+                TxtTargetVariance.Text = $"\u00B1{s.LockCardTargetLengthVariance}";
+                UpdateRepeatRowVisibility();
                 ChkStrict.IsChecked = s.LockCardStrict;
                 ChkVoiceMode.IsChecked = s.LockCardVoiceMode && s.MicConsentGiven;
                 UpdateVoiceHint();
@@ -69,6 +78,11 @@ namespace ConditioningControlPanel.Features
             if (e.PropertyName == nameof(Models.AppSettings.LockCardEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.LockCardFrequency) ||
                 e.PropertyName == nameof(Models.AppSettings.LockCardRepeats) ||
+                e.PropertyName == nameof(Models.AppSettings.LockCardRandomRepeats) ||
+                e.PropertyName == nameof(Models.AppSettings.LockCardRepeatsMin) ||
+                e.PropertyName == nameof(Models.AppSettings.LockCardTargetLengthEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.LockCardTargetLength) ||
+                e.PropertyName == nameof(Models.AppSettings.LockCardTargetLengthVariance) ||
                 e.PropertyName == nameof(Models.AppSettings.LockCardStrict) ||
                 e.PropertyName == nameof(Models.AppSettings.LockCardVoiceMode))
             {
@@ -115,6 +129,78 @@ namespace ConditioningControlPanel.Features
             TxtRepeats.Text = $"{v}x";
             s.LockCardRepeats = v;
             App.Settings?.Save();
+        }
+
+        private void ChkRandomRepeats_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.LockCardRandomRepeats = ChkRandomRepeats.IsChecked ?? false;
+            App.Settings?.Save();
+            UpdateRepeatRowVisibility();
+        }
+
+        private void SliderRepeatsMin_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var v = (int)e.NewValue;
+            TxtRepeatsMin.Text = $"{v}x";
+            s.LockCardRepeatsMin = v;
+            App.Settings?.Save();
+        }
+
+        private void ChkTargetLength_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.LockCardTargetLengthEnabled = ChkTargetLength.IsChecked ?? false;
+            App.Settings?.Save();
+            UpdateRepeatRowVisibility();
+        }
+
+        private void SliderTargetLength_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var v = (int)e.NewValue;
+            TxtTargetLength.Text = v.ToString();
+            s.LockCardTargetLength = v;
+            App.Settings?.Save();
+        }
+
+        private void SliderTargetVariance_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var v = (int)e.NewValue;
+            TxtTargetVariance.Text = $"\u00B1{v}";
+            s.LockCardTargetLengthVariance = v;
+            App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// Progressive disclosure for the three repeat modes. Length mode owns the card outright -
+        /// it derives the count - so it hides the flat Repeats slider AND the random switch rather
+        /// than leaving two controls on screen that no longer decide anything. This mirrors the
+        /// precedence in <c>LockCardService.ResolveRepeats</c>; if one of the two ever changes,
+        /// change both or the panel starts lying about what the next card will do.
+        /// </summary>
+        private void UpdateRepeatRowVisibility()
+        {
+            var byLength = ChkTargetLength.IsChecked ?? false;
+            var random = ChkRandomRepeats.IsChecked ?? false;
+
+            RowRepeats.Visibility = byLength ? Visibility.Collapsed : Visibility.Visible;
+            RowRandomRepeats.Visibility = byLength ? Visibility.Collapsed : Visibility.Visible;
+            RowRepeatsMin.Visibility = (!byLength && random) ? Visibility.Visible : Visibility.Collapsed;
+            RowTargetLength.Visibility = byLength ? Visibility.Visible : Visibility.Collapsed;
+            RowTargetVariance.Visibility = byLength ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void ChkStrict_Changed(object sender, RoutedEventArgs e)

@@ -115,6 +115,7 @@ namespace ConditioningControlPanel.Services.JustDrop
                 using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode)
                 {
+                    await MergedAccountRecovery.TryHandleAsync(response).ConfigureAwait(false);   // contract D
                     App.Logger?.Debug("JustDrop orders: {Status}; shelf stays empty", (int)response.StatusCode);
                     return Array.Empty<Order>();
                 }

@@ -1,0 +1,419 @@
+/* race/menu.css - the main menu of Racing Thoughts (.rm-*). Scoped under #race-root.
+ * Same pixel look as the HUD: hard plates, stepped shadows, Poppins, lowercase.
+ * The left column is DOM; the right side is a hole the stage shows through.
+ * THE BOUNCE on press (Law VIII, inside 100 ms), THE GLOW on focus, springs never linear tweens (Law XI).
+ *
+ * PHONE: the column scrolls itself rather than spilling past #race-root's overflow:hidden (a landscape
+ * 844x390 used to lose the top and bottom verbs with no way to reach them), it keeps clear of the notch
+ * through env(safe-area-inset-*), a short-viewport rule packs the seven verbs into 390 px, and
+ * @media (pointer: coarse) puts every verb, value arrow and roster arrow on a 44 px target.
+ * One column also cuts the screen into three: the title at the top, the verbs at the bottom, and THE
+ * BAND between them, which is EMI's and nothing else's (race/menu.js measures it, aims the stage
+ * camera inside it and hands back the two scrim heights). */
+
+#race-root .rm-root {
+  position: fixed; inset: 0; z-index: 25;
+  /* one row exactly the height of the screen: an auto row would grow to the content and the column
+     would spill under the clip instead of scrolling inside itself */
+  display: grid; grid-template-columns: minmax(300px, 38%) 1fr; grid-template-rows: minmax(0, 1fr);
+  font-family: var(--rh-font, 'Poppins', 'Segoe UI', system-ui, sans-serif);
+  color: #fff1f8; text-transform: lowercase; user-select: none;
+  pointer-events: auto;
+  --rm-sa-t: env(safe-area-inset-top, 0px); --rm-sa-b: env(safe-area-inset-bottom, 0px);
+  --rm-sa-l: env(safe-area-inset-left, 0px); --rm-sa-r: env(safe-area-inset-right, 0px);
+}
+#race-root .rm-root[hidden] { display: none; }
+#race-root .rm-root.is-in .rm-col { animation: rmIn 0.42s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+
+#race-root .race-hud.is-lobby .rh-chrome { display: none; }   /* the run's score / speed plates stay out of the menu and the intro */
+
+/* ---- the column ---- */
+#race-root .rm-col {
+  display: flex; flex-direction: column; gap: 14px;
+  /* `safe center` so a column taller than the screen starts at the top and scrolls, instead of
+     centring and putting the first verbs above the scrollable area where nothing can reach them */
+  justify-content: center; justify-content: safe center;
+  /* the bottom pad is a variable because a sticky foot inside this column (the levels panel's
+     `back`) has to reach past it to the real bottom edge: Chrome sticks to the CONTENT box. */
+  --rm-pad-b: calc(6vh + var(--rm-sa-b));
+  padding: calc(6vh + var(--rm-sa-t)) calc(28px + var(--rm-sa-r)) var(--rm-pad-b) calc(5vw + var(--rm-sa-l));
+  min-width: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin; scrollbar-color: rgba(255, 105, 180, 0.5) transparent;
+  background: linear-gradient(90deg, rgba(18, 11, 36, 0.92) 0%, rgba(18, 11, 36, 0.86) 78%, rgba(18, 11, 36, 0) 100%);
+}
+#race-root .rm-title {
+  font-size: clamp(30px, 4.6vw, 62px); font-weight: 800; line-height: 0.95; letter-spacing: -0.02em;
+  color: #fff; text-shadow: 0 3px 0 #b5177c, 0 6px 0 #4a0a35, 0 0 22px rgba(255, 105, 180, 0.55);
+}
+#race-root .rm-tag { font-size: 15px; font-weight: 600; color: #ffb6dc; letter-spacing: 0.08em; margin-bottom: 10px; }
+#race-root .rm-foot { font-size: 12px; color: rgba(255, 214, 234, 0.55); margin-top: 8px; }
+
+/* ---- verbs ---- */
+#race-root .rm-list { display: flex; flex-direction: column; gap: 8px; }
+/* `display: flex` beats the UA's [hidden] rule, so open('options') and open('how') left the verbs
+   standing above the panel and pushed the panel itself off the bottom of a short screen. */
+#race-root .rm-list[hidden] { display: none; }
+#race-root .rm-btn {
+  position: relative; text-align: left; font: inherit; font-size: 22px; font-weight: 700;
+  padding: 10px 18px 10px 34px; border: 0; cursor: pointer;
+  color: #fff; background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 0 2px #2b1b3f, 0 0 0 3px rgba(255, 105, 180, 0.35);
+  transition: transform 0.09s cubic-bezier(0.2, 1.4, 0.4, 1), background 0.12s, box-shadow 0.12s;
+}
+#race-root .rm-btn::before { content: '›'; position: absolute; left: 14px; top: 50%; transform: translateY(-55%); color: var(--pink, #ff69b4); opacity: 0; transition: opacity 0.1s, transform 0.12s; }
+#race-root .rm-btn.is-focus { background: rgba(255, 105, 180, 0.18); box-shadow: 0 0 0 2px #2b1b3f, 0 0 0 3px var(--pink, #ff69b4), 0 0 18px rgba(255, 105, 180, 0.45); transform: translateX(4px); }
+#race-root .rm-btn.is-focus::before { opacity: 1; transform: translateY(-55%) translateX(2px); }
+#race-root .rm-btn:active, #race-root .rm-btn.is-hit { animation: rmBounce 0.28s cubic-bezier(0.2, 1.6, 0.4, 1); }
+
+/* ---- panels: options + how to drive, opened in place ---- */
+#race-root .rm-panel { display: flex; flex-direction: column; gap: 6px; }
+#race-root .rm-panel[hidden] { display: none; }
+#race-root .rm-h { margin: 0 0 6px; font-size: 18px; font-weight: 800; color: var(--pink, #ff69b4); letter-spacing: 0.04em; }
+#race-root .rm-row {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 12px;
+  padding: 8px 14px; cursor: pointer; font-size: 17px; font-weight: 600;
+  background: rgba(255, 255, 255, 0.04); box-shadow: 0 0 0 2px #2b1b3f;
+  transition: transform 0.09s cubic-bezier(0.2, 1.4, 0.4, 1), background 0.12s, box-shadow 0.12s;
+}
+#race-root .rm-row.is-focus { background: rgba(255, 105, 180, 0.16); box-shadow: 0 0 0 2px #2b1b3f, 0 0 0 3px var(--pink, #ff69b4); transform: translateX(4px); }
+#race-root .rm-row.is-hit { animation: rmBounce 0.28s cubic-bezier(0.2, 1.6, 0.4, 1); }
+#race-root .rm-row.is-dim { opacity: 0.45; }
+#race-root .rm-row-val { color: #ffd6ea; font-weight: 800; font-variant-numeric: tabular-nums; }
+/* the two arrows used to be ::before / ::after on the value: drawn, never touchable. They are real
+   buttons now, hidden until the row has focus so the resting look is the one it always had. */
+#race-root .rm-row-ctl { display: flex; align-items: center; gap: 2px; }
+#race-root .rm-row-arrow {
+  font: inherit; font-size: 16px; font-weight: 800; line-height: 1; padding: 0; border: 0;
+  min-width: 20px; align-self: stretch; cursor: pointer;
+  color: var(--pink, #ff69b4); background: none; opacity: 0; transition: opacity 0.1s;
+}
+#race-root .rm-row.is-focus .rm-row-arrow { opacity: 1; }
+#race-root .rm-row.is-dim .rm-row-arrow { cursor: default; }
+#race-root .rm-row-hint { grid-column: 1 / -1; font-size: 11px; font-weight: 500; color: rgba(255, 214, 234, 0.6); }
+#race-root .rm-seed {
+  font: inherit; font-size: 16px; font-weight: 700; color: #fff; width: 160px; padding: 6px 10px;
+  background: #1d1230; border: 0; box-shadow: 0 0 0 2px #2b1b3f, 0 0 0 3px rgba(255, 105, 180, 0.5); outline: 0;
+}
+#race-root .rm-seed[hidden] { display: none; }
+#race-root .rm-seed:focus { box-shadow: 0 0 0 2px #2b1b3f, 0 0 0 3px var(--pink, #ff69b4), 0 0 14px rgba(255, 105, 180, 0.45); }
+#race-root .rm-key { display: grid; grid-template-columns: 120px 1fr; align-items: center; column-gap: 12px; font-size: 14px; }
+#race-root .rm-key kbd {
+  font: inherit; font-size: 12px; font-weight: 800; text-align: center; padding: 4px 8px;
+  color: #fff; background: #2b1b3f; box-shadow: 0 2px 0 #b5177c, 0 0 0 2px #120b24;
+}
+#race-root .rm-key span { color: #ffd6ea; }
+#race-root .rm-hint { font-size: 12px; color: rgba(255, 214, 234, 0.6); margin-top: 6px; }
+/* the how-to card is two halves on a phone (a thumb, then keys and a pad): this labels them */
+#race-root .rm-sub {
+  font-size: 12px; font-weight: 800; letter-spacing: 0.1em; margin: 8px 0 2px;
+  color: rgba(255, 214, 234, 0.55);
+}
+#race-root .rm-sub:first-of-type { margin-top: 2px; }
+/* the key card's own way out, for the hand that has no esc key */
+#race-root .rm-how-back { font-size: 17px; padding: 8px 16px 8px 30px; margin-top: 8px; align-self: flex-start; }
+#race-root .rm-btn[hidden] { display: none; }
+
+/* ---- your media (web only): the pickers, and what is in the tab right now ---- */
+#race-root .rm-media-btn { font-size: 17px; padding: 8px 16px 8px 30px; align-self: flex-start; }
+/* posted, waiting on the host's `setting` echo. Dimmed and un-pressable, never hidden: the button
+   has to stay under the thumb that just left it. */
+#race-root .rm-media-btn.is-pending { opacity: 0.55; pointer-events: none; }
+#race-root .rm-media-count { font-size: 13px; color: #ffd6ea; letter-spacing: 0.02em; margin: 0 0 6px 2px; }
+/* the online feed group's mount point. Empty on a host that ships no catalog, so it takes no room. */
+#race-root .rm-media-more:empty { display: none; }
+/* ---- the online feed group inside that mount point (race/feedGroup.js) ----
+   A group heading is smaller than the panel's own, so the panel still reads as one list with a rule
+   through it rather than as two panels stacked. */
+#race-root .rm-media-more { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%; }
+#race-root .rm-feed-h { margin: 12px 0 2px; font-size: 15px; border-top: 2px solid rgba(255, 105, 180, 0.28); padding-top: 10px; align-self: stretch; }
+#race-root .rm-feed-line { margin-top: 0; margin-bottom: 4px; max-width: 42ch; line-height: 1.45; }
+#race-root .rm-feed-sub { margin-top: 8px; margin-bottom: 2px; color: rgba(255, 214, 234, 0.75); font-weight: 700; letter-spacing: 0.06em; }
+#race-root .rm-feed-btn { display: flex; gap: 10px; align-items: baseline; }
+#race-root .rm-feed-val { color: #ffd6ea; font-weight: 800; letter-spacing: 0.06em; }
+/* the niches only mean anything while the feed is on. Dimmed, never disabled: picking ahead of
+   consent is a real thing to want and it costs no network. */
+#race-root .rm-feed-btn.is-off .rm-feed-label, #race-root .rm-feed-btn.is-off .rm-feed-val { opacity: 0.5; }
+
+/* ---- the levels list (race/levels.js): the first thing a player sees ---- */
+/* One row per track, full width, and never under 48 px anywhere: this is the whole happy path on
+   a phone and a thumb has to be able to hit it without aiming. */
+#race-root .rm-levels { display: flex; flex-direction: column; gap: 4px; }
+#race-root .rm-levels-set { margin-top: 0; margin-bottom: 6px; color: #ffd6ea; letter-spacing: 0.08em; text-transform: uppercase; }
+#race-root .rm-level-btn {
+  display: grid; grid-template-columns: 2.4em 1fr auto; grid-template-areas: 'n title len' 'n bar bar' 'n mark best';
+  gap: 0 10px; align-items: center; width: 100%; min-height: 48px; text-align: left;
+  padding: 7px 14px 7px 28px; font-size: 16px;
+}
+#race-root .rm-level-n { grid-area: n; color: rgba(255, 214, 234, 0.6); font-weight: 800; font-variant-numeric: tabular-nums; }
+#race-root .rm-level-title { grid-area: title; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#race-root .rm-level-len { grid-area: len; color: rgba(255, 214, 234, 0.75); font-variant-numeric: tabular-nums; }
+#race-root .rm-level-mark { grid-area: mark; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255, 214, 234, 0.55); }
+/* the best on this level, on the same line as the mark and hard against the right edge */
+#race-root .rm-level-best { grid-area: best; justify-self: end; font-size: 11px; letter-spacing: 0.04em; color: rgba(255, 214, 234, 0.6); font-variant-numeric: tabular-nums; }
+#race-root .rm-level-best[hidden] { display: none; }
+/* a hand-made road is the one thing on this list worth pointing at, so it is the one thing lit */
+#race-root .rm-level-btn.is-hand .rm-level-mark { color: var(--pink, #ff69b4); }
+#race-root .rm-level-btn.is-on .rm-level-title { color: #fff; }
+#race-root .rm-level-btn.is-on .rm-level-mark { color: #ffd6ea; }
+/* THE PICKED ROW. The row a player tapped is the only status this panel has: a lit plate with a
+   hard stripe down its left edge and its own bar under the title. Nothing opens below the list,
+   so there is nothing to scroll down to and read. The stripe is background, never box-shadow, so
+   the FOCUS ring still fits around it and the two states never fight over one property: focus is
+   where the arrows are, picked is what is loading. */
+#race-root .rm-level-btn.is-picked {
+  background-color: rgba(255, 105, 180, 0.2);
+  background-image: linear-gradient(90deg, var(--pink, #ff69b4) 0 5px, rgba(255, 105, 180, 0) 5px);
+}
+#race-root .rm-level-btn.is-picked .rm-level-title { color: #fff; }
+#race-root .rm-level-btn.is-picked .rm-level-mark { color: #ffd6ea; }
+#race-root .rm-level-bar { grid-area: bar; display: none; height: 5px; margin: 5px 0 3px; background: rgba(255, 255, 255, 0.12); box-shadow: 0 0 0 2px #2b1b3f; }
+#race-root .rm-level-bar > i { display: block; height: 100%; width: 0; background: var(--pink, #ff69b4); transition: width 0.25s linear; }
+#race-root .rm-level-btn.is-picked .rm-level-bar { display: block; }
+/* in hand: the bar fills and goes the same teal the track plate has always gone when a road is ready */
+#race-root .rm-level-btn.is-loaded {
+  background-color: rgba(91, 231, 216, 0.16);
+  background-image: linear-gradient(90deg, #5be7d8 0 5px, rgba(91, 231, 216, 0) 5px);
+}
+#race-root .rm-level-btn.is-loaded .rm-level-bar > i { background: #5be7d8; }
+#race-root .rm-level-btn.is-loaded .rm-level-mark { color: #5be7d8; }
+#race-root .rm-levels-tail, #race-root .rm-levels-foot { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+#race-root .rm-levels-btn { align-self: flex-start; }
+/* `back` IS ALWAYS ON SCREEN. Eleven levels are taller than any phone and taller than most windows,
+   so the foot rides the bottom edge of the scrolling column instead of sitting at the end of it.
+   Still the last row in the DOM, so the arrows, the pad and the smokes walk the same order. */
+#race-root .rm-levels-foot {
+  position: sticky; bottom: calc(-1 * var(--rm-pad-b, 0px)); z-index: 2; align-items: flex-start;
+  padding: 10px 0 calc(var(--rm-pad-b, 0px) + 8px); margin-top: 8px;
+  background: linear-gradient(180deg, rgba(13, 10, 20, 0) 0%, rgba(13, 10, 20, 0.9) 38%, rgba(13, 10, 20, 0.97) 100%);
+}
+#race-root .rm-cloud-paste { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255, 105, 180, 0.22); }
+#race-root .rm-cloud-paste[hidden] { display: none; }
+
+/* ---- the paste box and the pasted list (race/cloud.js), nested under the levels ---- */
+#race-root .rm-cloud-line { margin-top: 0; margin-bottom: 6px; max-width: 42ch; line-height: 1.45; }
+#race-root .rm-cloud-in { width: 100%; max-width: 42ch; margin: 0 0 6px; }
+#race-root .rm-cloud-next { margin: 2px 0 6px 2px; color: rgba(255, 214, 234, 0.75); }
+#race-root .rm-cloud-next[hidden] { display: none; }
+#race-root .rm-cloud-btn { display: flex; gap: 10px; align-items: baseline; }
+#race-root .rm-cloud-val { color: #ffd6ea; font-weight: 800; letter-spacing: 0.06em; }
+/* a locked or a broken link is dimmed, never removed: the player has to be able to see which of
+   their links did nothing and why. The row is still pressable, and says so again when pressed. */
+#race-root .rm-cloud-btn.is-off .rm-cloud-label, #race-root .rm-cloud-btn.is-off .rm-cloud-val { opacity: 0.5; }
+#race-root .rm-cloud-btn.is-on .rm-cloud-label { color: #fff; }
+
+/* ---- the status lines under the verbs: the track and the media the next run is made of ---- */
+#race-root .rm-status { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; font-size: 12px; color: rgba(255, 214, 234, 0.72); letter-spacing: 0.02em; }
+#race-root .rm-status[hidden] { display: none; }
+#race-root .rm-status-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#race-root .rm-status-line[hidden] { display: none; }
+/* the media line can name a feed AND a pile: it may take a second line, never a third */
+#race-root .rm-status-media { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+/* `start · <a long track name>` never wraps a verb: it is cut with an ellipsis instead */
+#race-root .rm-list .rm-btn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- the track plate: a file in hand, or the host still reading it ---- */
+#race-root .rm-track {
+  margin-top: 14px; padding: 10px 14px; background: rgba(18, 11, 36, 0.82);
+  box-shadow: 0 0 0 2px #2b1b3f, 0 0 0 3px rgba(255, 105, 180, 0.35);
+  animation: rmIn 0.32s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+#race-root .rm-track-name { font-size: 14px; font-weight: 800; letter-spacing: 0.06em; color: #fff; text-transform: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#race-root .rm-track-bar { height: 6px; margin: 8px 0 6px; background: rgba(255, 255, 255, 0.08); box-shadow: 0 0 0 2px #2b1b3f; }
+#race-root .rm-track-bar i { display: block; height: 100%; width: 0; background: var(--pink, #ff69b4); transition: width 0.25s linear; }
+#race-root .rm-track.is-ready .rm-track-bar i { background: #5be7d8; }
+#race-root .rm-track.is-ready { box-shadow: 0 0 0 2px #2b1b3f, 0 0 0 3px rgba(91, 231, 216, 0.7), 0 0 18px rgba(91, 231, 216, 0.35); }
+#race-root .rm-track.is-error { box-shadow: 0 0 0 2px #2b1b3f, 0 0 0 3px rgba(255, 90, 120, 0.8); }
+#race-root .rm-track.is-error .rm-track-bar { display: none; }
+#race-root .rm-track-cap { font-size: 12px; color: rgba(255, 214, 234, 0.75); }
+#race-root .rm-track.is-busy .rm-track-cap::after { content: '…'; animation: rmDots 1.2s steps(3, end) infinite; }
+/* The best on this track: a count, so it reads quieter than the caption above it. */
+#race-root .rm-track-best { font-size: 11px; letter-spacing: 0.04em; color: rgba(255, 214, 234, 0.6); }
+#race-root .rm-track-best[hidden] { display: none; }
+/* The authored mark: a chart a person wrote, not one the analysis found. */
+#race-root .rm-track-mark { display: inline-block; margin-top: 6px; padding: 1px 6px; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; color: #0d0a14; background: #5be7d8; }
+#race-root .rm-track-mark[hidden] { display: none; }
+@keyframes rmDots { from { opacity: 0.2; } to { opacity: 1; } }
+
+/* ---- the stage hole + nameplate ---- */
+#race-root .rm-stage { position: relative; min-width: 0; }
+#race-root .rm-plate {
+  position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 14px; background: rgba(18, 11, 36, 0.82);
+  box-shadow: 0 0 0 2px #2b1b3f, 0 0 0 3px rgba(255, 105, 180, 0.55);
+}
+#race-root .rm-name { font-size: 18px; font-weight: 800; text-transform: none; letter-spacing: 0.12em; color: #fff; }
+#race-root .rm-arrow {
+  font: inherit; font-size: 22px; font-weight: 800; line-height: 1; width: 30px; height: 30px; padding: 0; border: 0;
+  color: var(--pink, #ff69b4); background: rgba(255, 255, 255, 0.06); cursor: pointer;
+  box-shadow: 0 0 0 2px #2b1b3f;
+}
+#race-root .rm-arrow[aria-disabled="true"] { opacity: 0.3; cursor: default; }
+
+@keyframes rmIn { from { opacity: 0; transform: translateX(-22px); } to { opacity: 1; transform: none; } }
+@keyframes rmBounce { 0% { transform: translateX(4px) scale(1); } 35% { transform: translateX(4px) scale(0.96); } 100% { transform: translateX(4px) scale(1); } }
+
+/* portrait phones: one column, the stage folds away, the notch insets stay on.
+   THE BAND. There is no right half to park EMI in on a phone, so the column hands her the middle of
+   the screen instead: the title block rides the top under the notch, the verbs ride the bottom above
+   the home bar, and the strip left between them is hers. race/menu.js measures that strip, aims the
+   stage camera inside it, and sets --rm-scrim-t / --rm-scrim-b to the two heights left over, so the
+   dark that carries the words stops where she starts. With `is-band` off (no strip worth the
+   trouble, or the column is scrolling past the bottom) the one sheet below stands, as before. */
+@media (max-width: 720px) {
+  #race-root .rm-root { grid-template-columns: 1fr; }
+  #race-root .rm-col {
+    justify-content: flex-start;
+    --rm-pad-b: calc(4vh + var(--rm-sa-b));
+    padding: calc(4vh + var(--rm-sa-t)) calc(22px + var(--rm-sa-r)) var(--rm-pad-b) calc(22px + var(--rm-sa-l));
+    background: linear-gradient(180deg, rgba(18, 11, 36, 0.94) 0%, rgba(18, 11, 36, 0.86) 70%, rgba(18, 11, 36, 0) 100%);
+  }
+  /* the verbs go to the bottom. A column too tall to fit eats the auto margin and scrolls, top first. */
+  #race-root .rm-list { margin-top: auto; }
+  #race-root .rm-root.is-band .rm-col { position: relative; z-index: 1; background: none; }
+  #race-root .rm-root.is-band::before, #race-root .rm-root.is-band::after {
+    content: ''; position: absolute; left: 0; right: 0; z-index: 0; pointer-events: none;
+  }
+  /* the fade is a fixed 64 px at the band's edge, never a percentage: a tall scrim (a panel open
+     above her) still has to be opaque under the words all the way down to that edge. */
+  #race-root .rm-root.is-band::before {
+    top: 0; height: var(--rm-scrim-t, 0px);
+    background: linear-gradient(0deg, rgba(18, 11, 36, 0) 0px, rgba(18, 11, 36, 0.9) 64px, rgba(18, 11, 36, 0.94) 100%);
+  }
+  #race-root .rm-root.is-band::after {
+    bottom: 0; height: var(--rm-scrim-b, 0px);
+    background: linear-gradient(180deg, rgba(18, 11, 36, 0) 0px, rgba(18, 11, 36, 0.9) 64px, rgba(18, 11, 36, 0.94) 100%);
+  }
+  #race-root .rm-stage { display: none; }
+}
+/* the wordmark is at the top of the screen now, where the run's `sound` and `ii` pills live: under
+   about 380 px the two would touch, so the title takes two lines the way the desktop one does. */
+@media (max-width: 380px) {
+  #race-root .rm-title { max-width: 62%; }
+}
+
+/* Law VI: nobody is held by a transition. System preference or the menu's own switch. */
+@media (prefers-reduced-motion: reduce) {
+  #race-root .rm-root.is-in .rm-col, #race-root .rm-btn.is-hit, #race-root .rm-row.is-hit, #race-root .rm-btn:active { animation: none; }
+  #race-root .rm-btn, #race-root .rm-row { transition: none; }
+}
+#race-root .rm-root[data-motion="on"] .rm-col, #race-root .rm-root[data-motion="on"] .is-hit, #race-root .rm-root[data-motion="on"] .rm-btn:active { animation: none; }
+#race-root .rm-root[data-motion="on"] .rm-btn, #race-root .rm-root[data-motion="on"] .rm-row { transition: none; }
+
+/* ---- the cards ---- */
+/* race/cards.js, z26: above the menu (z25), below the boot splash (z30). Same column as .rm-root
+   so EMI keeps the right half of the frame while the four cards read. */
+#race-root .rc-root {
+  position: fixed; inset: 0; z-index: 26;
+  display: grid; grid-template-columns: minmax(300px, 38%) 1fr; grid-template-rows: minmax(0, 1fr);
+  font-family: var(--rh-font, 'Poppins', 'Segoe UI', system-ui, sans-serif);
+  color: #fff1f8; text-transform: lowercase; user-select: none;
+  pointer-events: auto; cursor: pointer;
+  --rm-sa-t: env(safe-area-inset-top, 0px); --rm-sa-b: env(safe-area-inset-bottom, 0px);
+  --rm-sa-l: env(safe-area-inset-left, 0px); --rm-sa-r: env(safe-area-inset-right, 0px);
+}
+#race-root .rc-root[hidden] { display: none; }
+#race-root .rc-col {
+  display: flex; flex-direction: column; gap: 14px;
+  justify-content: center; justify-content: safe center;
+  padding: calc(6vh + var(--rm-sa-t)) calc(28px + var(--rm-sa-r)) calc(6vh + var(--rm-sa-b)) calc(5vw + var(--rm-sa-l));
+  min-width: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin; scrollbar-color: rgba(255, 105, 180, 0.5) transparent;
+  background: linear-gradient(90deg, rgba(18, 11, 36, 0.92) 0%, rgba(18, 11, 36, 0.86) 88%, rgba(18, 11, 36, 0) 100%);
+}
+#race-root .rc-deck { display: flex; flex-direction: column; min-height: 46vh; justify-content: center; }
+/* the copy stops before the plate thins: this column is prose, not a verb list with its own box */
+#race-root .rc-card { display: flex; flex-direction: column; gap: 14px; padding-right: 9%; }
+#race-root .rc-card[hidden] { display: none; }
+#race-root .rc-card.is-in { animation: rcIn 0.42s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+#race-root .rc-card.is-hit { animation: rcBounce 0.28s cubic-bezier(0.2, 1.6, 0.4, 1); }
+
+/* card 1 wears the menu wordmark: 800 weight, the pink stepped shadow */
+#race-root .rc-word {
+  font-size: clamp(30px, 4.6vw, 62px); font-weight: 800; line-height: 0.95; letter-spacing: -0.02em;
+  color: #fff; text-shadow: 0 3px 0 #b5177c, 0 6px 0 #4a0a35, 0 0 22px rgba(255, 105, 180, 0.55);
+}
+#race-root .rc-h { margin: 0; font-size: clamp(22px, 2.6vw, 32px); font-weight: 800; letter-spacing: 0.02em; color: var(--pink, #ff69b4); }
+#race-root .rc-h.rc-face { font-size: clamp(30px, 4vw, 48px); letter-spacing: 0.06em; text-shadow: 0 0 22px rgba(255, 105, 180, 0.5); }
+#race-root .rc-line { margin: 0; max-width: 30em; font-size: clamp(15px, 1.5vw, 19px); font-weight: 500; line-height: 1.55; color: #ffe4f2; }
+
+/* the rail: 1 · 2 · 3 · 4, the one you are on lit */
+#race-root .rc-dots { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+#race-root .rc-dot {
+  min-width: 22px; padding: 3px 0; text-align: center; color: rgba(255, 214, 234, 0.45);
+  background: rgba(255, 255, 255, 0.04); box-shadow: 0 0 0 2px #2b1b3f;
+  transition: color 0.12s, background 0.12s, box-shadow 0.12s;
+}
+#race-root .rc-dot.is-on { color: #fff; background: rgba(255, 105, 180, 0.2); box-shadow: 0 0 0 2px #2b1b3f, 0 0 0 3px var(--pink, #ff69b4); }
+#race-root .rc-sep { color: rgba(255, 214, 234, 0.3); }
+#race-root .rc-foot { display: flex; flex-wrap: wrap; gap: 18px; font-size: 12px; color: rgba(255, 214, 234, 0.55); }
+#race-root .rc-foot-k[hidden] { display: none; }
+
+@keyframes rcIn { from { opacity: 0; transform: translateX(-22px); } to { opacity: 1; transform: none; } }
+@keyframes rcBounce { 0% { transform: scale(1); } 35% { transform: scale(0.97); } 100% { transform: scale(1); } }
+
+@media (max-width: 720px) {
+  #race-root .rc-root { grid-template-columns: 1fr; }
+  #race-root .rc-col {
+    padding: calc(4vh + var(--rm-sa-t)) calc(22px + var(--rm-sa-r)) calc(4vh + var(--rm-sa-b)) calc(22px + var(--rm-sa-l));
+    background: linear-gradient(180deg, rgba(18, 11, 36, 0.94) 0%, rgba(18, 11, 36, 0.86) 70%, rgba(18, 11, 36, 0) 100%);
+  }
+}
+
+/* ---- a short screen (a phone on its side, 390 px tall): the seven verbs still all fit ----
+   The keyboard footer and the tagline are the two lines a thumb never needs, so they go first. */
+@media (max-height: 480px) {
+  #race-root .rm-col, #race-root .rc-col {
+    gap: 8px; --rm-pad-b: calc(8px + var(--rm-sa-b));
+    padding-top: calc(8px + var(--rm-sa-t)); padding-bottom: var(--rm-pad-b);
+  }
+  #race-root .rm-title, #race-root .rc-word { font-size: clamp(20px, 3.2vw, 26px); }
+  #race-root .rm-tag, #race-root .rm-foot { display: none; }
+  #race-root .rm-list { gap: 4px; }
+  #race-root .rm-btn { font-size: 16px; padding: 6px 14px 6px 28px; }
+  #race-root .rm-how-back { font-size: 15px; padding: 6px 14px 6px 28px; margin-top: 4px; }
+  #race-root .rm-media-btn { font-size: 15px; padding: 6px 14px 6px 28px; }
+  #race-root .rm-media-count { font-size: 11px; margin-bottom: 3px; }
+  #race-root .rm-media-more { gap: 2px; }
+  #race-root .rm-feed-h { margin-top: 8px; padding-top: 6px; font-size: 13px; }
+  #race-root .rm-feed-line { line-height: 1.35; }
+  #race-root .rm-feed-sub { margin-top: 5px; }
+  #race-root .rm-cloud-line { line-height: 1.35; }
+  #race-root .rm-cloud-in { margin-bottom: 4px; }
+  /* the rows keep their 48 px: a short screen scrolls the column, it does not shrink the target */
+  #race-root .rm-level-btn { font-size: 15px; padding: 5px 14px 5px 28px; }
+  #race-root .rm-level-mark { font-size: 10px; }
+  #race-root .rm-level-best { font-size: 10px; }
+  #race-root .rm-level-bar { height: 4px; margin: 3px 0 2px; }
+  #race-root .rm-levels-foot { margin-top: 4px; padding: 4px 0 2px; }
+  #race-root .rm-h { margin-bottom: 2px; font-size: 16px; }
+  #race-root .rm-row { padding: 5px 12px; font-size: 15px; }
+  #race-root .rm-row-hint, #race-root .rm-hint { font-size: 10px; margin-top: 2px; }
+  #race-root .rm-key { grid-template-columns: 104px 1fr; font-size: 12px; }
+  #race-root .rm-sub { font-size: 10px; margin: 4px 0 0; }
+  #race-root .rm-panel { gap: 4px; }
+  #race-root .rm-track { margin-top: 8px; padding: 6px 12px; }
+  #race-root .rm-status { margin-top: 4px; font-size: 10px; }
+  #race-root .rm-plate { bottom: calc(10px + var(--rm-sa-b)); }
+  #race-root .rc-deck { min-height: 0; }
+  #race-root .rc-card { gap: 8px; }
+  #race-root .rc-h { font-size: clamp(18px, 2.4vw, 24px); }
+  #race-root .rc-line { font-size: clamp(13px, 1.4vw, 16px); line-height: 1.4; }
+}
+
+/* ---- a finger, not a mouse: nothing tappable under 44 px, and the arrows stop hiding ---- */
+@media (pointer: coarse) {
+  #race-root .rm-btn { min-height: 44px; }
+  #race-root .rm-row { min-height: 44px; }
+  #race-root .rm-row-arrow { min-width: 44px; min-height: 44px; opacity: 1; }
+  #race-root .rm-arrow { width: 44px; height: 44px; }
+  #race-root .rm-foot { display: none; }   /* keys and a pad, neither of which is in the room */
+}
+
+/* Law VI again: no card holds anyone. The system preference or the menu's own switch. */
+@media (prefers-reduced-motion: reduce) {
+  #race-root .rc-card.is-in, #race-root .rc-card.is-hit { animation: none; }
+  #race-root .rc-dot { transition: none; }
+}
+#race-root .rc-root[data-motion="on"] .rc-card.is-in, #race-root .rc-root[data-motion="on"] .rc-card.is-hit { animation: none; }
+#race-root .rc-root[data-motion="on"] .rc-dot { transition: none; }

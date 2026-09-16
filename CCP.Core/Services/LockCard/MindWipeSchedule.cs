@@ -93,6 +93,10 @@ namespace ConditioningControlPanel.Services
         public static string LegacyAudioFolder =>
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "mindwipe");
 
+        /// <summary>"no clips installed" is the shipped default, so it is said once a session
+        /// rather than once a scan (main, 2026-09).</summary>
+        private static bool _loggedNoAudio;
+
         /// <summary>
         /// The candidate clips. A user-chosen custom file that exists wins over both folders (a
         /// short ~2s clip is what the picker recommends); otherwise the advertised folder and the
@@ -110,7 +114,7 @@ namespace ConditioningControlPanel.Services
                 }
 
                 var folder = AudioFolder;
-                Log.Information("MindWipe: Looking for audio files in {Path} (and legacy {Legacy})",
+                Log.Debug("MindWipe: Looking for audio files in {Path} (and legacy {Legacy})",
                     folder, LegacyAudioFolder);
 
                 // Create the advertised folder so it exists to be found; the legacy folder is left
@@ -128,7 +132,15 @@ namespace ConditioningControlPanel.Services
                     .ToArray();
 
                 if (files.Length == 0)
-                    Log.Warning("MindWipe: No .mp3/.wav/.ogg files found in {Path}", folder);
+                {
+                    // Normal state for anyone who never dropped clips in, so it is not a warning and
+                    // it is not worth repeating: Information, once per session.
+                    if (!_loggedNoAudio)
+                    {
+                        _loggedNoAudio = true;
+                        Log.Information("MindWipe: no .mp3/.wav/.ogg files in {Path} - the feature stays idle", folder);
+                    }
+                }
                 else
                     Log.Information("MindWipe: Loaded {Count} audio files: {Files}",
                         files.Length, string.Join(", ", files.Select(Path.GetFileName)));

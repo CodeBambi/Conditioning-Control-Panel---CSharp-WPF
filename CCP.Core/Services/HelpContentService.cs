@@ -439,7 +439,7 @@ namespace ConditioningControlPanel.Services
                 HowItWorks = "Quests track specific activities: videos watched, targets clicked, session time, " +
                              "and more. Progress updates in real-time as you use the app. When you complete " +
                              "the objective, the quest turns green and awards XP immediately. Quests reset " +
-                             "at midnight (daily) or Sunday midnight (weekly) in your local timezone."
+                             "at midnight (daily) or Monday midnight (weekly) in your local timezone."
             },
 
             ["QuestStats"] = new HelpContent
@@ -1100,7 +1100,7 @@ namespace ConditioningControlPanel.Services
                 Icon = "\uD83D\uDCFA",
                 Title = "Bouncing Text",
                 WhatItDoes = "DVD-screensaver-style text that bounces around your screen with customizable " +
-                             "phrases. Earns XP every time the text bounces off a corner.",
+                             "phrases. Earns 15 XP each time the text bounces off a screen edge, up to 150 XP a minute.",
                 Tips = new List<string>
                 {
                     "Use Edit Phrases to load your own affirmations into the rotation",
@@ -1111,7 +1111,7 @@ namespace ConditioningControlPanel.Services
                 },
                 HowItWorks = "A topmost transparent window hosts a text block that moves across the screen " +
                              "by updating its position on a timer. Each time the text hits a screen edge " +
-                             "it flips direction and awards +25 XP (up to the per-minute cap). Phrases " +
+                             "it flips direction and awards +15 XP (up to the per-minute cap). Phrases " +
                              "rotate through your list between bounces."
             },
 

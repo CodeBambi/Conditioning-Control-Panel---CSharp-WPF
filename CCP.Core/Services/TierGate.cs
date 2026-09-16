@@ -50,6 +50,15 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public static class TierGate
     {
+        /// <summary>
+        /// The tier-1 bar as a bare boolean, for callers that need the answer without a verdict
+        /// to render - the quest roll asks it once per candidate, thousands of times a session,
+        /// and must not build a localized refusal string to do it. Same read
+        /// <see cref="RequiresPremium(string)"/> makes, same fail-closed behaviour when the
+        /// entitlement seam is unseeded, so the quest board and the locked door can never disagree.
+        /// </summary>
+        public static bool HasPremium => CoreEntitlement.HasPremium;
+
         /// <summary>Tier 1+ ("premium"): any pledge, whitelist, SubscribeStar, or the grace cache.</summary>
         public static TierVerdict RequiresPremium(string featureName)
         {

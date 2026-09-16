@@ -222,12 +222,17 @@ export const PLAYTEST = Object.freeze({
   /** How long the near-miss "warm" shimmer sits on the true target. */
   NEAR_TWIN_SHIMMER_MS: 400,
   /**
-   * How many near-twins may carry the target's ACTUAL media (at a different hue).
-   * The rest are same-gradient/adjacent-hue lookalikes. Uncapped, half a tier-4
-   * board would be literal copies of the target - which reads as a bug, not as
-   * difficulty. Prime tuning candidate once the provider honours nearTwinBias.
+   * How many times a seat re-draws when the one-picture law (board.js
+   * mediaKey / setUrl) refuses what the pool handed it - another seat already
+   * wears that picture. After the last try the seat takes the repeat rather
+   * than sit on the glyph floor (`lastResort`), because a library smaller than
+   * the wall is ordinary and a bare seat is the worse answer. The TARGET's
+   * picture is never the repeat that gets taken; that tier of the law has no
+   * last resort. (The old NEAR_TWIN_URL_CAP - up to four near-twins carrying
+   * the target's ACTUAL picture - is gone: the owner read those copies as a
+   * bug, and they were one.)
    */
-  NEAR_TWIN_URL_CAP: 4,
+  UNIQUE_DRAW_TRIES: 3,
 });
 
 /* ----------------------------------------------------------------------------

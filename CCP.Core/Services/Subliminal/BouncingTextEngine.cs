@@ -173,8 +173,10 @@ public sealed class BouncingTextEngine
                 .Select(kv => kv.Key)
                 .ToList();
 
+        // Last resort: every entry in the pool was unticked. Neutral by design - a themed mod
+        // supplies its own pool long before this line is reached.
         if (enabledTexts.Count == 0)
-            return "GOOD GIRL";
+            return "DEEPER";
         return enabledTexts[_random.Next(enabledTexts.Count)];
     }
 

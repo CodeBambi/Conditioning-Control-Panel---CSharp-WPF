@@ -1,0 +1,12 @@
+.br-thumbstick { position: absolute; z-index: 15; left: max(18px, env(safe-area-inset-left));
+  bottom: max(24px, env(safe-area-inset-bottom)); width: 112px; height: 112px; border-radius: 50%;
+  border: 1px solid #e9b3dc80; background: radial-gradient(circle, #8d518936 0 36%, #25132999 37% 100%);
+  box-shadow: inset 0 0 0 10px #ffffff05; touch-action: none; user-select: none; -webkit-user-select: none;
+  pointer-events: auto; }
+.br-thumbstick[hidden] { display: none !important; }
+.br-thumbstick::before { content: '\2191'; position: absolute; top: 2px; width: 100%; text-align: center; color: #ebc0df9c; font-size: 17px; }
+.br-thumbstick i { position: absolute; left: 35px; top: 35px; width: 40px; height: 40px; border-radius: 50%;
+  border: 1px solid #e8c5e4; background: #78416bdd; box-shadow: 0 3px 9px #0008; pointer-events: none; }
+@media (max-height: 480px) { .br-thumbstick { bottom: max(12px, env(safe-area-inset-bottom)); } }
+
+@media (any-pointer: coarse) { .br-hint { display: none !important; } }

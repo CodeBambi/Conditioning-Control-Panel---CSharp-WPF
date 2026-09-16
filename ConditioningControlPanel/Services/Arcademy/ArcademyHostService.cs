@@ -10,6 +10,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json;
@@ -183,13 +184,13 @@ internal static class ArcademyHostService
         }
 
         // EMI Desk: the ring learns from every open, not just its own cards.
-        try { App.EmiDesk?.NoteOpen("arcademy"); } catch { }
+        try { App.EmiDesk?.NoteOpen("arcademy"); } catch (Exception ex) { Diag.Swallowed(ex); }
         // She does not follow you to school. If she is out, she says goodbye here and winks
         // herself off screen a couple of seconds later, BEFORE `arcademyOpened` and before the
         // ring's own `arcademyFromRing` can land: the farewell claims her voice for that window,
         // so whichever of the three paths opened the Arcademy, the last thing you get is the bye.
-        try { App.EmiDesk?.FarewellForArcademy(); } catch { }
-        try { App.EmiDesk?.Fire("arcademyOpened", null); } catch { }
+        try { App.EmiDesk?.FarewellForArcademy(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { App.EmiDesk?.Fire("arcademyOpened", null); } catch (Exception ex) { Diag.Swallowed(ex); }
         _emiOpenedUtc = DateTime.UtcNow;
 
         _devDoor = devDoor;
@@ -565,6 +566,13 @@ internal static class ArcademyHostService
                 break;
             case "meta-command":
                 _meta?.Handle(o);
+                // THE LOCKER DRESSES THE DESKTOP TOO. Every equip the player makes is one of these
+                // (locker.js `metaSet(OUTFIT_KEY, ...)`), so this is where the desk hears about it
+                // without a poll and without the Arcademy having to close first. Read back through
+                // EquippedEmiOutfit, never off `o`: the store may have clamped or refused the write,
+                // and the wallet still has the last word on whether she may wear it.
+                if (string.Equals((string?)o["key"], EmiOutfitKey, StringComparison.Ordinal))
+                    PushEmiOutfitToDesk();
                 break;
             case "class-started":
                 _classActive = true;
@@ -576,7 +584,7 @@ internal static class ArcademyHostService
                     (string?)o["gameKey"], (int?)o["gradeTier"] ?? 0);
                 // CAMPUS PRESENCE: a door opened. Best-effort and gated on the share rung inside;
                 // at `off`, or with no identity, this line does nothing at all.
-                try { ArcademyPresenceService.NoteRoomEnter((string?)o["gameKey"]); } catch { }
+                try { ArcademyPresenceService.NoteRoomEnter((string?)o["gameKey"]); } catch (Exception ex) { Diag.Swallowed(ex); }
                 break;
             case "class-ended":
                 OnClassEnded(o);
@@ -614,6 +622,11 @@ internal static class ArcademyHostService
                 // discordLinked is false - a linked account moves the rung with an ordinary
                 // set-setting instead (contract trap 1).
                 OnLinkDiscord();
+                break;
+            case "share-image":
+                // The report card's PNG, on its way to the Windows clipboard. Fire-and-forget
+                // from the page's side; exactly one reply always comes back.
+                OnShareImage((string?)o["png"]);
                 break;
             case "annex-stats":
                 // The registry link downstairs. Fire-and-forget: exactly one reply comes back,
@@ -899,6 +912,126 @@ internal static class ArcademyHostService
             App.Logger?.Debug("ArcademyHost.ReadOwnedSkus: {E}", ex.Message);
         }
         return owned;
+    }
+
+    // ============================ the Locker's outfit, read from outside ============================
+
+    /// <summary>The meta key the Locker arms EMI's outfit in (<c>OUTFIT_KEY</c>,
+    /// <c>Resources/web/arcademy/shell/locker.js</c>). Page-owned and free-form, like every other
+    /// non host-owned key in the blob.</summary>
+    public const string EmiOutfitKey = "lockerOutfit";
+
+    /// <summary>Which prize each garment is: the gate the Locker itself applies
+    /// (<c>OUTFIT_SKU</c>, locker.js) repeated verbatim so BOTH sides refuse the same thing.</summary>
+    private static readonly IReadOnlyDictionary<string, string> EmiOutfitSku =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["varsity"] = "emi_varsity",
+            ["labcoat"] = "emi_labcoat",
+            ["cheer"] = "emi_cheer",
+            ["swim"] = "emi_swim",
+        };
+
+    /// <summary>
+    /// WHAT IS EMI WEARING? The second door out of the Arcademy's state, and the one the EMI Desk
+    /// widget dresses off: the Locker arms an outfit on the campus, and the girl on the user's
+    /// desktop is the same girl, so she wears it there too (community ask, 2026-09-01).
+    ///
+    /// <para>Same two sources as <see cref="WalletOwnsSku"/> and for the same reason: the LIVE store
+    /// first, because while the Arcademy is open it is the only copy holding a pick made ten seconds
+    /// ago, and the persisted blob when it is closed (the store is minted at launch and dropped at
+    /// teardown, after a flush).</para>
+    ///
+    /// <para><b>Ownership is enforced HERE, not only page-side.</b> locker.js already clamps its own
+    /// read against the wallet (<c>readOutfit</c>), but that clamp lives in the same file that writes
+    /// the key, so a blob carrying a garment nobody bought - an older build, a hand-edited save, a
+    /// wallet that got rolled back by a sync - would dress her anyway. The desk asks the wallet
+    /// itself and answers null when the prize is not held.</para>
+    ///
+    /// <para>NEVER THROWS. Anything it cannot read, parse, recognise or verify is null, which is
+    /// "the standard art" - the sheet that has always been there.</para>
+    /// </summary>
+    /// <returns>An <see cref="EmiDesk.EmiChains.Outfits"/> name, or null for the standard art.</returns>
+    public static string? EquippedEmiOutfit()
+    {
+        try
+        {
+            var live = _meta;
+            var raw = live != null ? (string?)live.Get(EmiOutfitKey) : EmiOutfitOnDisk();
+
+            var name = EmiDesk.EmiChains.OutfitName(raw);
+            if (name == null) return null;
+
+            // Bought, or she is not wearing it. `varsity` has been gated since the restock and the
+            // other three got skus of their own in the same wave, so every name in the list has one.
+            if (!EmiOutfitSku.TryGetValue(name, out var sku)) return null;
+            if (!WalletOwnsSku(sku))
+            {
+                App.Logger?.Debug("ArcademyHost.EquippedEmiOutfit: '{Outfit}' is armed but {Sku} is not owned - standard art", name, sku);
+                return null;
+            }
+            return name;
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ArcademyHost.EquippedEmiOutfit: {E}", ex.Message);
+            return null;
+        }
+    }
+
+    private static readonly object _outfitDiskLock = new();
+    private static string? _outfitDiskValue;
+    private static long _outfitDiskStamp = -1L;   // -1 = never read; any write to the file moves it
+
+    /// <summary>The armed outfit out of the persisted blob, re-read only when the file's stamp
+    /// moves - the same cache shape as <see cref="WalletOwnsOnDisk"/>, so a desk that asks on every
+    /// summon costs one <c>FileInfo</c> and not one parse.</summary>
+    private static string? EmiOutfitOnDisk()
+    {
+        var path = Path.Combine(App.UserDataPath, "arcademy_meta.json");
+        long stamp;
+        try
+        {
+            var info = new FileInfo(path);
+            stamp = info.Exists ? (info.LastWriteTimeUtc.Ticks ^ info.Length) : 0L;
+        }
+        catch { stamp = 0L; }
+
+        lock (_outfitDiskLock)
+        {
+            if (_outfitDiskStamp != stamp)
+            {
+                _outfitDiskValue = ReadArmedOutfit(path);
+                _outfitDiskStamp = stamp;
+            }
+            return _outfitDiskValue;
+        }
+    }
+
+    private static string? ReadArmedOutfit(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return null;
+            return (string?)JObject.Parse(File.ReadAllText(path))[EmiOutfitKey];
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ArcademyHost.ReadArmedOutfit: {E}", ex.Message);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Tell the desk widget to re-read what the Locker armed. Cheap and safe from anywhere: it is a
+    /// no-op when she has never been summoned (the window is built on the first summon and lives
+    /// until the app closes), and the window itself re-reads on the way in, so this is only ever the
+    /// LIVE half - the swap that lands while she is already out.
+    /// </summary>
+    private static void PushEmiOutfitToDesk()
+    {
+        try { App.EmiDesk?.Window?.RefreshOutfit(); }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.PushEmiOutfitToDesk: {E}", ex.Message); }
     }
 
     /// <summary>
@@ -1267,7 +1400,7 @@ internal static class ArcademyHostService
                 catch (Exception ex)
                 {
                     // A phrase whose clip cannot be resolved is a TEXT row, never a missing row.
-                    App.Logger?.Debug("ArcademyHost.BuildTriggers({Text}): {E}", text, ex.Message);
+                    App.Logger?.Debug("ArcademyHost.BuildTriggers: clip resolve failed for a {Chars}-char phrase: {E}", (text ?? "").Length, ex.Message);
                     url = null;
                 }
             }
@@ -1318,7 +1451,7 @@ internal static class ArcademyHostService
                     if (name == norm) return ToAudioUrl(host, Path.GetFileName(f));
                 }
             }
-            catch { /* the scan is best-effort; the exact-match pass already ran */ }
+            catch (Exception ex) { Diag.Swallowed(ex, "the scan is best effort, the exact-match pass already ran"); }
         }
         return null;
     }
@@ -1715,8 +1848,8 @@ internal static class ArcademyHostService
         ["prize_id_frame_navy_blurb"] = "Deep navy with a varsity edge, like the old team photos.",
         ["prize_confetti_stamp"] = "Confetti Stamp",
         ["prize_confetti_stamp_blurb"] = "Your stamp lands in a little burst of paper now, every time.",
-        ["prize_late_slip"] = "Late Slip",
-        ["prize_late_slip_blurb"] = "Slide one over and a single missed day never touches your streak.",
+        ["prize_late_slip"] = "Tardy Slip",
+        ["prize_late_slip_blurb"] = "Hand one in and the night you missed is filed as excused. Two on the desk, no more.",
         ["prize_honors_lever"] = "Honors Lever",
         ["prize_honors_lever_blurb"] = "Unbolts the third notch, which is where the S+ nights live.",
         ["prize_free_swim_key"] = "Free Swim Key",
@@ -1779,7 +1912,10 @@ internal static class ArcademyHostService
         ["free_swim_key_hint"] = "Your key opens this one for a practice run. Nothing counts, nothing costs.",
         ["payout_tickets"] = "Tickets",
         ["payout_token_minted"] = "A token dropped in the tray. That is your one for today.",
-        ["late_slip_used"] = "A late slip covered you. Your streak never noticed.",
+        ["late_slip_used"] = "A tardy slip was handed in for you. Your streak never noticed.",
+        // THE ONE SMALL BUTTON under the jeopardy line (Deck V, the Rake). `{name}` is filled
+        // from the catalog row itself, so a mod that renames the slip renames the offer too.
+        ["rake_slip_offer"] = "The counter sells a {name}.",
         // Reserved vocabulary: designed for, not built in v1 (GROUND-RULES §3).
         ["detention"] = "Detention",
         ["diploma"] = "Diploma",
@@ -1812,6 +1948,14 @@ internal static class ArcademyHostService
         ["replay_board"] = "Flip the board again",
         ["share"] = "Copy share card",
         ["shared"] = "Copied to clipboard",
+        // The SLIP (shell/sharecard.js). The drawn card is unskinnable on purpose - a
+        // paste must never name the player's mod - but its chrome is ordinary chrome.
+        ["share_image"] = "Share report card",
+        ["share_add_name"] = "Add my name",
+        ["share_saved"] = "Report card saved",
+        ["share_copied"] = "Report card copied",
+        ["share_shared"] = "Report card shared",
+        ["share_unavailable"] = "Sharing is not available here",
         ["done"] = "Done",
         ["retake"] = "Retake",
         ["xp"] = "XP",
@@ -1857,6 +2001,18 @@ internal static class ArcademyHostService
         ["campus_desc_entrance"] = "The notice board carries announcements. The trophy case waits for your diplomas.",
         ["campus_notice_board"] = "Notice Board",
         ["campus_trophy_case"] = "Trophy Case",
+        // THE TIME CAPSULE (Resources/web/arcademy/shell/capsule.js). The plaque
+        // line is TWO clause rows joined with one space in the page: the whole
+        // sentence is 102 characters and MergeModTable drops any mod string over
+        // 96, so a single row could never be re-voiced (trap 26).
+        ["campus_desc_trophy"] = "One exhibit under glass. The school keeps its own first night in here.",
+        ["capsule_on_view"] = "On view",
+        ["capsule_title"] = "Time Capsule",
+        ["capsule_line_2026_02_a"] = "The first dashboard. February 2026.",
+        ["capsule_line_2026_02_b"] = "Everything was pink and the DROP button was the size of a doormat.",
+        ["capsule_footer"] = "Sealed by the Registrar. Opened at thirty nights.",
+        ["capsule_sealed_tag"] = "opens at 30 nights",
+        ["capsule_sealed_hint"] = "The case is wrapped and taped. The tag has a number on it.",
         ["campus_admissions"] = "Admissions",
         ["campus_bell_tower"] = "Bell Tower",
         ["campus_main_gate"] = "Main Gate",
@@ -2650,7 +2806,7 @@ internal static class ArcademyHostService
         ["sort_rules_go"] = "Begin",
         ["sort_rules_keys"] = "Arrow keys work too. A key is a swipe.",
         ["sort_rules_left"] = "Left: everything else.",
-        ["sort_rules_pass"] = "Let it close and the card comes back. That is not a mistake.",
+        ["sort_rules_pass"] = "Let it close and the card comes back, one rung down.",
         ["sort_rules_right"] = "Right: yours.",
         ["sort_rules_ring"] = "The ring closes. Swipe in the gold and the chain grows.",
         ["sort_rules_title"] = "One rule",
@@ -3093,6 +3249,11 @@ internal static class ArcademyHostService
         ["account_signed_in_as"] = "Signed in as",
         ["account_open_card"] = "Open my card",
         ["account_profile"] = "Profile",
+        // THE FRONT GATE (2026-09-03): the third account verb, the way back to the CC Labs site.
+        // Web/activity hosts only (they alone list "dashboard" in account.actions); mirrored here
+        // so a mod can re-voice it, same as the other four rows.
+        ["account_dashboard"] = "Front Gate",
+        ["account_dashboard_hint"] = "back to CC Labs",
         ["account_sign_out"] = "Sign out",
 
         // THE LOCKER (2026-08-28): RM 004 + the booth arrival beat and the purchase toast verbs.
@@ -3109,7 +3270,7 @@ internal static class ArcademyHostService
         // All four are well inside MergeModTable's 96-char skin cap (trap 26).
         ["booth_holdings"] = "What you are holding",
         ["booth_hold_none"] = "Nothing in your pockets tonight. The shelf is through the window.",
-        ["booth_hold_late_slip"] = "It spends itself the night you miss one. Nothing to press.",
+        ["booth_hold_late_slip"] = "It files itself the night you miss one. Nothing to press.",
         ["booth_hold_passive"] = "It spends itself the moment it is needed.",
         // The two wayfinding plates in the alley (shell/alleysign.js): the booth's
         // right-hand wall points at RM 004 and the Locker's left wall points back.
@@ -3645,8 +3806,11 @@ internal static class ArcademyHostService
             // running it unconditionally is what keeps a retake on a NEW local day (same UTC day,
             // player east of UTC) crediting the streak it has earned.
             var localDate = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-            var (streak, perfect, classesToday, lateSlipUsed) =
-                _meta?.RecordAttendance(localDate, gameKey) ?? (0, 0, 0, false);
+            var (streak, perfect, classesToday, slipsSpent) =
+                _meta?.RecordAttendance(localDate, gameKey) ?? (0, 0, 0, 0);
+            // The page and the debrief only ever needed "did one cover me"; the COUNT is the
+            // server's business, because it holds the bag the slips come out of.
+            var lateSlipUsed = slipsSpent > 0;
 
             // ============================ THE TILL ============================
             // Tickets and tokens, wrapped on their own: the attendance credit above is the thing we
@@ -3659,7 +3823,7 @@ internal static class ArcademyHostService
             // MintCurrency runs here, in this order, exactly as it always has.
             var mintFrame = ArcademyWalletSyncService.DoorOpen
                 ? ArcademyWalletSyncService.BuildMintFrame(
-                    gameKey, grade, zen, streak, localDate, lever, lateSlipUsed, dayUtc)
+                    gameKey, grade, zen, streak, localDate, lever, slipsSpent, dayUtc)
                 : null;
             var till = mintFrame == null
                 ? MintCurrency(gameKey, grade, zen, streak, localDate, lever)
@@ -3698,7 +3862,7 @@ internal static class ArcademyHostService
             // junk field from the page cannot mint a grade for a stranger's map. A zen `pass` is
             // not one of S/A/B/C and rides as null, which the renderer draws as a finish with no
             // letter. Own try/catch: nothing about company may cost the payout frame below.
-            try { ArcademyPresenceService.NoteClassEnd(gameKey, grade); } catch { }
+            try { ArcademyPresenceService.NoteClassEnd(gameKey, grade); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // Everything the debrief needs that is NOT money, gathered once so both endings below
             // send the same frame and there is only one place to change the wording of a payout.
@@ -4270,7 +4434,7 @@ internal static class ArcademyHostService
                 App.Logger?.Information("ArcademyHost: Discord link timed out after {S}s - cancelled",
                     LinkDeadline.TotalSeconds);
                 _linkCancelled = true;
-                try { d.CancelOAuthFlow(); } catch { }
+                try { d.CancelOAuthFlow(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 PushProfile("cancelled");
                 return;
             }
@@ -4335,7 +4499,7 @@ internal static class ArcademyHostService
         if (Volatile.Read(ref _linkInFlight) == 0) return;
         App.Logger?.Information("ArcademyHost: cancelling the open Discord link-up ({Why})", why);
         _linkCancelled = true;
-        try { App.Discord?.CancelOAuthFlow(); } catch { }
+        try { App.Discord?.CancelOAuthFlow(); } catch (Exception ex) { Diag.Swallowed(ex); }
         if (tellPage) PushProfile("cancelled");
     }
 
@@ -4569,7 +4733,7 @@ internal static class ArcademyHostService
             App.Logger?.Warning("ArcademyHost: remote batch failed: {E}", ex.Message);
             if (Volatile.Read(ref _generation) == epoch)
             {
-                try { _host?.Post(new { type = "assets", reqId, urls = Array.Empty<object>(), done = true }); } catch { }
+                try { _host?.Post(new { type = "assets", reqId, urls = Array.Empty<object>(), done = true }); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
             }
         }
         finally { Interlocked.Exchange(ref _remoteFetchInFlight, 0); }
@@ -4638,7 +4802,7 @@ internal static class ArcademyHostService
         foreach (var w in list)
         {
             if (w.Epoch != epoch) continue;
-            try { PostTaggedAssets(w.ReqId, w.Tag, TakeBuffered(key, w.Want), true); } catch { }
+            try { PostTaggedAssets(w.ReqId, w.Tag, TakeBuffered(key, w.Want), true); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
     }
 
@@ -4854,7 +5018,7 @@ internal static class ArcademyHostService
             App.Logger?.Warning("ArcademyHost: tagged batch failed: {E}", ex.Message);
             if (Volatile.Read(ref _generation) == epoch)
             {
-                try { PostTaggedAssets(reqId, tag, Array.Empty<AssetUrl>(), true); } catch { }
+                try { PostTaggedAssets(reqId, tag, Array.Empty<AssetUrl>(), true); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
             }
             DrainTaggedWaiters(key);
         }
@@ -5184,7 +5348,7 @@ internal static class ArcademyHostService
             App.Logger?.Warning("ArcademyHost: sub probe failed: {E}", ex.Message);
             if (Volatile.Read(ref _generation) == epoch)
             {
-                try { PostSubProbe(reqId, clean, false, null, "offline"); } catch { }
+                try { PostSubProbe(reqId, clean, false, null, "offline"); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
             }
         }
         finally { lock (ProbesInFlight) ProbesInFlight.Remove(clean); }
@@ -5334,6 +5498,92 @@ internal static class ArcademyHostService
         catch (Exception ex) { App.Logger?.Debug("ArcademyHost.PostAnnexStats: {E}", ex.Message); }
     }
 
+    /// <summary>Biggest base64 payload the share card may push over the bridge: about 4.4 MB of
+    /// text, which is roughly 3.3 MB of PNG. The page caps itself well under this; the wall is
+    /// here because a page is a page and the bridge is not a file transfer.</summary>
+    private const int MaxShareImageChars = 4_400_000;
+
+    /// <summary>THE SHARE CARD'S LAST RUNG BEFORE THE FLOOR.
+    ///
+    /// WebView2 gives the page no async clipboard image write worth the name, so the page draws
+    /// the report card, hands the finished PNG over as base64, and C# puts it on the Windows
+    /// clipboard itself. Exactly ONE reply always goes back - <c>ok</c> true or false - because a
+    /// missing reply leaves a button spinning until its own deadline, and a share that quietly did
+    /// not happen is the worst outcome the whole feature has.
+    ///
+    /// The decode and the clipboard write both happen on the UI thread: WPF's clipboard is STA and
+    /// a BitmapImage handed across threads unfrozen is a crash waiting for a slow night.</summary>
+    private static void OnShareImage(string? png)
+    {
+        try
+        {
+            var epoch = Volatile.Read(ref _generation);
+            var win = _host?.Window;
+            if (win == null) return;
+            win.Dispatcher.BeginInvoke(() =>
+            {
+                var ok = false;
+                try
+                {
+                    if (_host == null || Volatile.Read(ref _generation) != epoch) return;
+                    ok = PutPngOnClipboard(png);
+                }
+                catch (Exception ex) { App.Logger?.Debug("ArcademyHost.share-image: {E}", ex.Message); }
+                try { _host?.Post(new { type = "share-image-result", ok }); }
+                catch (Exception ex) { App.Logger?.Debug("ArcademyHost.share-image reply: {E}", ex.Message); }
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.OnShareImage: {E}", ex.Message); }
+    }
+
+    /// <summary>Decode a base64 PNG and put it on the clipboard. UI thread only. Never throws:
+    /// every refusal - junk base64, something that is not a PNG, a clipboard another process is
+    /// holding open - is a plain false, and the page falls to its download rung.</summary>
+    private static bool PutPngOnClipboard(string? png)
+    {
+        if (string.IsNullOrEmpty(png) || png!.Length > MaxShareImageChars) return false;
+
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(png); }
+        catch (FormatException) { return false; }
+
+        // The PNG signature, checked before anything is asked to decode it. The page is our own
+        // and the bytes are still validated: a share card is never anything but a share card.
+        if (bytes.Length < 8 || bytes[0] != 0x89 || bytes[1] != 0x50 || bytes[2] != 0x4E || bytes[3] != 0x47)
+            return false;
+
+        BitmapImage img;
+        try
+        {
+            using var ms = new MemoryStream(bytes, writable: false);
+            img = new BitmapImage();
+            img.BeginInit();
+            img.CacheOption = BitmapCacheOption.OnLoad;   // the stream is gone the moment we leave
+            img.StreamSource = ms;
+            img.EndInit();
+            img.Freeze();
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ArcademyHost: share image would not decode: {E}", ex.Message);
+            return false;
+        }
+
+        // CLIPBRD_E_CANT_OPEN: another process is holding the clipboard for a moment. One retry is
+        // what every other app on this machine does, and it is nearly always enough.
+        for (var attempt = 0; attempt < 2; attempt += 1)
+        {
+            try { Clipboard.SetImage(img); return true; }
+            catch (System.Runtime.InteropServices.COMException) { Thread.Sleep(60); }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ArcademyHost: clipboard refused the share image: {E}", ex.Message);
+                return false;
+            }
+        }
+        return false;
+    }
+
     /// <summary>True when remote media may appear anywhere in the app. Copied verbatim from
     /// <c>IntakeHostService.RemoteMediaEnabled()</c> (the canonical gate): reads
     /// <c>HasRemoteMediaConsent</c>, never the raw consent flags.</summary>
@@ -5379,7 +5629,7 @@ internal static class ArcademyHostService
                 App.Video.VideoEnded -= OnVideoEnded;
             }
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     /// <summary>
@@ -5407,7 +5657,7 @@ internal static class ArcademyHostService
                 App.BrowserMedia.PlayingChanged -= OnBrowserVideoPlayingChanged;
             }
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     private static void OnBrowserVideoPlayingChanged(object? sender, bool playing)
@@ -5483,7 +5733,7 @@ internal static class ArcademyHostService
                 _settingsReplaceHooked = true;
             }
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     private static void OnSettingsCurrentReplaced()
@@ -5657,7 +5907,7 @@ internal static class ArcademyHostService
 
     private static void CancelBootDeadline()
     {
-        try { _bootWatch?.Stop(); } catch { }
+        try { _bootWatch?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
         _bootWatch = null;
     }
 
@@ -5686,7 +5936,7 @@ internal static class ArcademyHostService
 
     private static void StopHeartbeatWatch()
     {
-        try { _heartbeatWatch?.Stop(); } catch { }
+        try { _heartbeatWatch?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
         _heartbeatWatch = null;
     }
 
@@ -5729,7 +5979,7 @@ internal static class ArcademyHostService
                     Loc.GetF("arcademy_boot_error_body", ProductName, msg ?? string.Empty),
                     ProductName, MessageBoxButton.OK, MessageBoxImage.Warning);
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         });
     }
 
@@ -5745,7 +5995,7 @@ internal static class ArcademyHostService
 
     private static void CancelExitWatchdog()
     {
-        try { _exitWatchdog?.Stop(); } catch { }
+        try { _exitWatchdog?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
         _exitWatchdog = null;
     }
 
@@ -5763,7 +6013,13 @@ internal static class ArcademyHostService
         {
             int emiMinutes = Math.Max(0, (int)(DateTime.UtcNow - _emiOpenedUtc).TotalMinutes);
             _emiOpenedUtc = DateTime.MinValue;
-            try { App.EmiDesk?.Fire("arcademyClosed", new { minutes = emiMinutes }); } catch { }
+            try { App.EmiDesk?.Fire("arcademyClosed", new { minutes = emiMinutes }); } catch (Exception ex) { Diag.Swallowed(ex); }
+
+            // ...and she comes home in whatever the Locker put her in. The live hook on
+            // `meta-command` has normally already done this; this is the backstop for the session
+            // that changed an outfit and never sent the message we expected (a page error, a
+            // watchdog kill), so at worst the swap lands one Arcademy visit late instead of never.
+            PushEmiOutfitToDesk();
         }
 
         try
@@ -5780,17 +6036,17 @@ internal static class ArcademyHostService
             // Unbind the mirror BEFORE the store goes: a push still sitting in the debounce is
             // sent now (payload taken first, so the request outlives this window without touching
             // anything being disposed) and every reply still in the air is dropped by generation.
-            try { ArcademySyncService.Detach(); } catch { }
+            try { ArcademySyncService.Detach(); } catch (Exception ex) { Diag.Swallowed(ex); }
             // And the wallet with it. Nothing to flush here: a frame the server never took is
             // already on disk in `pendingMints`, and the next launch is what carries it up.
-            try { ArcademyWalletSyncService.Detach(); } catch { }
+            try { ArcademyWalletSyncService.Detach(); } catch (Exception ex) { Diag.Swallowed(ex); }
             // Stop the presence poll BEFORE the host goes: the timer must never outlive the window
             // that armed it, and Detach also sends this session's one best-effort `campus_leave`.
-            try { ArcademyPresenceService.Detach(); } catch { }
+            try { ArcademyPresenceService.Detach(); } catch (Exception ex) { Diag.Swallowed(ex); }
             // A link-up the player started from the student ID belongs to THIS window. No frame:
             // there is nothing left to paint it.
-            try { CancelPendingLink("teardown", tellPage: false); } catch { }
-            try { _meta?.FlushSave(); } catch { }
+            try { CancelPendingLink("teardown", tellPage: false); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _meta?.FlushSave(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _meta = null;
             _classActive = false;
             _panicSuspended = false;
@@ -5800,7 +6056,7 @@ internal static class ArcademyHostService
             // The piles belong to the class that picked them; the next launch names its own.
             lock (TaggedChannels) TaggedChannels.Clear();
             _taggedSubsEmptyLogged = false;
-            try { _host?.Dispose(); } catch { }
+            try { _host?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _host = null;
             _exiting = false;
             // Bring the control panel back from the tray if we tucked it away at launch. Every
@@ -5809,7 +6065,7 @@ internal static class ArcademyHostService
             if (_minimizedMainWindow)
             {
                 _minimizedMainWindow = false;
-                try { (Application.Current?.MainWindow as MainWindow)?.ShowFromTray(); } catch { }
+                try { (Application.Current?.MainWindow as MainWindow)?.ShowFromTray(); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
             App.Logger?.Information("ArcademyHostService: closed");
         }

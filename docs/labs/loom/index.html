@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<!-- THE LOOM (public) - the CCP spiral creator, running standalone on the web.
+     Same studio module + gifenc worker as the desktop app; the only swap is
+     bridge.js (web shim): SAVE downloads the .gif instead of filing it into the
+     app's Spirals library. The GIF is woven entirely in the visitor's browser -
+     nothing is uploaded, nothing is server-rendered.
+
+     The page-local CSS below is CHROME ONLY (nav, title block, page ground) and
+     is styled to the CCP OS neon-arcade language that index.html sets. The
+     studio itself keeps the desktop app's look: styles.css and the CSS
+     loomStudio.js injects are shared with the app and are never touched here.
+     See "studio font/colour isolation" below for how the two layers stay apart. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>The Loom - CC Labs</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="description" content="Weave your own hypnotic spiral GIF, right in your browser, then download it free." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F300;</text></svg>" />
+  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="../assets/cookie-consent.css">
+<style>
+    /* ---- CCP OS arcade tokens (same values as index.html) ---- */
+    :root {
+      --crt-black: #140f13;
+      --panel: #1e1620;
+      --panel-deep: #181119;
+      --ink: #f1e8ee;
+      --ink-dim: #a893a6;
+      --phosphor: #e84a97;
+      --phosphor-bright: #ff7dc0;
+      --phosphor-deep: #7e2c59;
+      --amber: #e9a53d;
+      --teal: #35e0c8;
+      --glow-pink: rgba(232, 74, 151, 0.55);
+      --glow-teal: rgba(53, 224, 200, 0.4);
+      --font-ui: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
+      --font-display: "Segoe UI", Arial, sans-serif;
+      --r: 12px;
+      --r-sm: 7px;
+    }
+
+    /* styles.css paints html+body with the Fall radial gradient; the arcade
+       ground replaces it on both so nothing purple shows through on mobile,
+       where the body scrolls and no longer covers the viewport. */
+    html, body { height: 100%; }
+    html { background: var(--crt-black); }
+    body {
+      margin: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: var(--crt-black);
+      color: var(--ink);
+      font-family: var(--font-ui);
+    }
+
+    /* ============ site bar - funnels visitors back to CC Labs ============ */
+    .loom-nav {
+      flex: none;
+      position: relative;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 11px 22px;
+      border-bottom: 4px solid var(--phosphor);
+      background: var(--panel);
+      box-shadow: 0 4px 0 var(--phosphor-deep), 0 0 30px rgba(232, 74, 151, 0.25);
+    }
+    /* scanlines stay on the chrome only - a page-wide overlay would veil the
+       studio, and the studio is meant to look exactly like the desktop pane. */
+    .loom-nav::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.45) 0px, rgba(0, 0, 0, 0.45) 1px, transparent 1px, transparent 3px);
+      opacity: 0.35;
+    }
+    .loom-nav-brand {
+      position: relative;
+      z-index: 1;
+      text-decoration: none;
+      font-family: var(--font-display);
+      font-weight: 900;
+      font-size: 1.35rem;
+      letter-spacing: 0.08em;
+      line-height: 1.05;
+      color: var(--ink);
+      text-shadow: -2px 0 var(--phosphor), 2px 0 var(--teal), 0 0 18px var(--glow-pink);
+    }
+    .loom-nav-brand small {
+      display: block;
+      font-family: var(--font-ui);
+      font-weight: 400;
+      font-size: 0.58rem;
+      letter-spacing: 0.3em;
+      color: var(--ink-dim);
+      text-shadow: none;
+    }
+    .loom-nav-links {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .loom-nav-links a {
+      font-size: 0.76rem;
+      padding: 8px 13px;
+      text-decoration: none;
+      border: 2px solid var(--phosphor-deep);
+      border-radius: var(--r-sm);
+      color: var(--ink);
+      background: var(--panel-deep);
+      box-shadow: 3px 3px 0 #000;
+      transition: transform 0.1s, box-shadow 0.1s, background 0.1s, color 0.1s;
+    }
+    .loom-nav-links a:hover {
+      background: var(--phosphor);
+      color: var(--crt-black);
+      transform: translate(-2px, -2px);
+      box-shadow: 5px 5px 0 #000, 0 0 18px var(--glow-pink);
+    }
+    .loom-nav-links a.loom-nav-cta {
+      border-color: var(--phosphor);
+      background: var(--phosphor);
+      color: var(--crt-black);
+      font-weight: 700;
+    }
+    .loom-nav-links a.loom-nav-cta:hover { background: var(--phosphor-bright); }
+
+    .loom-page {
+      flex: 1;
+      min-height: 0;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 1760px;
+      margin: 0 auto;
+      padding: 14px 22px 12px;
+    }
+    .loom-page-head {
+      flex: none;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .loom-page-head h1 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-weight: 900;
+      text-transform: uppercase;
+      font-size: 1.6rem;
+      letter-spacing: 0.14em;
+      color: var(--ink);
+      text-shadow: -2px 0 var(--phosphor), 2px 0 var(--teal), 0 0 22px var(--glow-pink);
+    }
+    .loom-page-head p {
+      margin: 6px 0 0;
+      font-size: 0.72rem;
+      color: var(--teal);
+      letter-spacing: 0.28em;
+      text-transform: lowercase;
+      text-shadow: 0 0 10px var(--glow-teal);
+    }
+    .loom-page-head .loom-page-hint {
+      margin-top: 7px;
+      font-size: 0.7rem;
+      letter-spacing: 0.04em;
+      text-transform: none;
+      color: var(--ink-dim);
+      text-shadow: none;
+    }
+    .loom-page-head .loom-page-hint a { color: var(--phosphor-bright); text-decoration: none; }
+    .loom-page-head .loom-page-hint a:hover { text-decoration: underline; }
+    .loom-page-head .loom-page-hint b { color: var(--amber); font-weight: 400; }
+
+    #loom { flex: 1; min-height: 0; display: flex; }
+
+    /* studio font/colour isolation: the arcade chrome owns body, but the studio
+       is shared with the desktop app, so hand its own font and ink back at the
+       mount point. Most studio rules set var(--rh-font) themselves; this catches
+       the ones that just inherit. Do not fold these into body. */
+    #loom {
+      font-family: var(--rh-font, system-ui, -apple-system, 'Segoe UI', sans-serif);
+      color: #fff;
+    }
+
+    /* the studio-split grid: stage | dials, rack across the bottom */
+    .loom-page .wr-loom-studio {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(430px, 1.2fr) minmax(390px, 1fr);
+      grid-template-rows: minmax(0, 1fr) auto;
+      gap: 12px;
+    }
+
+    /* left: the stage card - preview grows to fill, save/patterns pinned under */
+    .loom-page .wr-loom-studio > .wr-card.wr-loom {
+      grid-column: 1;
+      grid-row: 1;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow-y: auto;
+    }
+    .loom-page .loom-stage { flex: 1; min-height: 220px; }
+    .loom-page .loom-stage-inner {
+      height: 100%;
+      max-width: 100%;
+      aspect-ratio: 1 / 1;
+    }
+    .loom-page .wr-loom-preview { width: 100%; height: 100%; margin: 0; }
+
+    /* right: the dial cards scroll as their own column */
+    .loom-page .loom-controls {
+      grid-column: 2;
+      grid-row: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .loom-page .loom-controls > .wr-card { margin: 0 0 10px; }
+    .loom-page .loom-controls > .wr-card:last-child { margin-bottom: 0; }
+
+    /* bottom: the rack as a filmstrip of tiles.
+       HIDDEN on the web build: the public loom is download-only (bridge.js
+       always reports an empty rack), so the "0/12 - they hang in the app's
+       spiral library too" card reads as desktop copy leaking through. */
+    .loom-page .wr-loom-rack {
+      display: none;
+      grid-column: 1 / -1;
+      grid-row: 2;
+      margin: 0;
+      padding: 12px 16px;
+    }
+    .loom-page .loom-rack-strip {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+    .loom-page .wr-loom-rackrow {
+      flex: 0 0 auto;
+      width: 118px;
+      flex-direction: column;
+      align-items: center;
+      gap: 7px;
+      padding: 10px;
+      margin: 0;
+      text-align: center;
+    }
+    .loom-page .wr-loom-thumb { width: 82px; height: 82px; }
+    .loom-page .wr-loom-rackrow .wr-row-mid { width: 100%; min-width: 0; flex: none; }
+    .loom-page .wr-loom-rackrow .wr-row-name {
+      font-size: 0.8rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .loom-page .wr-loom-rackrow .wr-row-right {
+      width: auto;
+      flex-direction: row;
+      align-items: center;
+    }
+
+    /* narrow window: fall back to the stacked column */
+    @media (max-width: 980px) {
+      body { overflow: auto; }
+      .loom-nav { padding: 8px 14px; gap: 10px; }
+      .loom-nav-links { gap: 6px; }
+      .loom-nav-links a { font-size: 0.68rem; padding: 6px 10px; }
+      .loom-page { height: auto; display: block; max-width: 640px; padding: 12px 16px 20px; }
+      #loom { display: block; }
+      .loom-page .wr-loom-studio { display: block; }
+      .loom-page .loom-stage-inner { height: auto; aspect-ratio: auto !important; }
+      .loom-page .wr-loom-preview { width: min(200px, 48vw); max-height: 46vh; height: auto; margin: 2px auto 8px; }
+      .loom-page .loom-rack-strip { flex-wrap: wrap; }
+
+      /* mobile: pin ONLY the spiral to the top so it stays in view while you
+         scroll the dials. display:contents drops the stage card's own box so its
+         children lay out directly in the studio column - that makes the sticky
+         stage's containing block the full-height studio (so it stays stuck the
+         whole scroll), while the name/save + presets/random below it scroll away
+         normally, as asked. */
+      .loom-page .wr-loom-studio > .wr-card.wr-loom { display: contents; }
+      .loom-page .loom-stage {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        margin: 0 -16px 8px;               /* bleed to the viewport edges */
+        padding: 8px 16px 10px;
+        border-bottom: 3px solid var(--phosphor);
+        background: var(--crt-black);      /* opaque: everything scrolls cleanly under it */
+        box-shadow: 0 12px 22px rgba(8, 5, 16, 0.5);
+      }
+      /* trim the desktop-only chrome that display:contents would otherwise expose */
+      .loom-page .wr-card.wr-loom > .wr-card-sub,
+      .loom-page .wr-card.wr-loom .loom-hint { display: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .loom-nav-links a { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="loom-nav">
+    <a class="loom-nav-brand" href="https://cclabs.app/">CCP<small>the loom</small></a>
+    <nav class="loom-nav-links">
+      <a href="https://cclabs.app/">home</a>
+      <a href="https://cclabs.app/explore.html">explore</a>
+      <a href="https://cclabs.app/tools.html">tools</a>
+      <a href="https://cclabs.app/guide.html">guide</a>
+      <a href="https://discord.gg/YxVAMt4qaZ" target="_blank" rel="noopener">discord</a>
+      <a href="https://app.cclabs.app/" target="_blank" rel="noopener">login</a>
+      <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest" class="loom-nav-cta">get the app</a>
+    </nav>
+  </header>
+
+  <div class="loom-page">
+    <div class="loom-page-head">
+      <h1>the loom</h1>
+      <p>spin a spiral of your own</p>
+      <p class="loom-page-hint">woven right here in your browser - <b>nothing is uploaded</b>. hit save to download the looping gif, then set it spinning across your screen inside <a href="https://cclabs.app/">conditioning control panel</a>.</p>
+    </div>
+    <div id="loom"></div>
+  </div>
+  <script type="module" src="./loomBoot.js"></script>
+<script src="../assets/cookie-consent.js" defer></script>
+</body>
+</html>

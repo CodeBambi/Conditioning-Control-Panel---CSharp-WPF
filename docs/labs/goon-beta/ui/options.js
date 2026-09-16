@@ -1,0 +1,311 @@
+/* ============================================================================
+ * ui/options.js — the side drawer (#gg-drawer, .sf-panel geometry from the
+ * Fall's fall-styles.css, re-namespaced to gg-*).
+ *
+ * TWO MODES, one drawer:
+ *   out of a match — volumes, motion, skippable videos, shader spirals,
+ *                    fullscreen, reset;
+ *   IN a match     — volumes, motion, skippable videos, shader spirals,
+ *                    fullscreen ONLY, plus the line "Match settings are locked
+ *                    once you start."
+ * Everything offered mid-match is a knob about YOUR OWN SCREEN. The locked
+ * settings are the ones on the wire.
+ *
+ * IT IS AN OVERLAY, NOT A SCREEN. In a live match it opens over the HUD from the
+ * HUD's own gear (ui/hud.js dispatches `gg-options-open`, boot.js listens) and
+ * changes nothing about the phase, the router or the match clock. Opening it is
+ * never a pause.
+ * The match terms are on the wire and countersigned; a drawer that appeared to
+ * let you change them mid-duel would be lying, and the engine would ignore it.
+ *
+ * THE MERCY CLEARANCE IS NOT COSMETIC. #gg-drawer is z70 and #gg-mercy is z60,
+ * so an unclipped drawer WOULD cover the mercy button. While the HUD is up the
+ * drawer clips its own bottom 96px (--gg-drawer-clip) so the player's guaranteed
+ * way out is never behind a settings panel. See the isolation banner in
+ * goon.css — same contract, enforced from the other side.
+ * ==========================================================================*/
+
+import { createLedger, el, button } from './router.js';
+import { S } from './strings.js';
+
+/** Height reserved at the bottom of the drawer for the mercy button. */
+const MERCY_CLEARANCE_PX = 96;
+
+/**
+ * @param {object} o
+ * @param {object} o.prefs
+ * @param {object} [o.audio]
+ * @param {object} [o.session] boot's session (hosted / fullscreen state)
+ * @param {(on:boolean)=>void} [o.setFullscreen] hosted only
+ * @param {()=>boolean} [o.isInMatch]
+ * @param {object} [o.logger]
+ */
+export function createOptions({ prefs, audio = null, session = null, setFullscreen = null, isInMatch = null, logger = null } = {}) {
+  const doc = (typeof document !== 'undefined') ? document : null;
+  const host = doc ? doc.getElementById('gg-drawer') : null;
+  let ledger = null;
+  let open = false;
+
+  function close() {
+    if (!open) return;
+    open = false;
+    const panel = host ? host.querySelector('.gg-panel') : null;
+    const done = () => {
+      try { ledger?.dispose(); } catch (_e) { /* ignore */ }
+      ledger = null;
+      if (host) { host.replaceChildren(); host.hidden = true; }
+    };
+    if (panel && !prefs?.get?.('reduceMotion')) {
+      panel.classList.remove('is-open');
+      setTimeout(done, 260);
+    } else { done(); }
+  }
+
+  function row(label, node, extraClass) {
+    return el('div', { class: 'gg-panel-row' + (extraClass ? ' ' + extraClass : '') }, [
+      el('span', { class: 'gg-panel-label', text: label }),
+      node,
+    ]);
+  }
+
+  function volumeRow(key, label) {
+    const value = el('span', { class: 'gg-panel-value', text: '' });
+    const input = el('input', {
+      type: 'range', min: '0', max: '100', step: '1',
+      value: String(Math.round((prefs.get(key) || 0) * 100)),
+      'aria-label': label,
+    });
+    const paint = () => { value.textContent = Math.round(Number(input.value)) + '%'; };
+    paint();
+    ledger.listen(input, 'input', () => {
+      paint();
+      prefs.set(key, Number(input.value) / 100);
+      audio?.setVolume?.(key.replace('Volume', ''), Number(input.value) / 100);
+    });
+    ledger.listen(input, 'change', () => { try { audio?.sfx?.('ui-move'); } catch (_e) { /* stub */ } });
+    return el('div', { class: 'gg-panel-row gg-panel-row--slider' }, [
+      el('span', { class: 'gg-panel-label' }, [el('span', { text: label }), value]),
+      input,
+    ]);
+  }
+
+  function toggleRow(label, get, set) {
+    const b = el('button', { type: 'button', class: 'gg-toggle', 'aria-pressed': String(!!get()) });
+    b.appendChild(el('i'));
+    const paint = () => b.setAttribute('aria-pressed', String(!!get()));
+    ledger.listen(b, 'click', () => {
+      set(!get());
+      paint();
+      try { audio?.sfx?.('ui-select'); } catch (_e) { /* stub bus */ }
+    });
+    return { node: row(label, b), paint };
+  }
+
+  function build() {
+    const inMatch = !!(isInMatch && isInMatch());
+
+    /* SEVEN VOLUME ROWS, all on one piece of machinery: `key.replace('Volume','')`
+     * hands ui/audio.js the bus name, and every one of those buses is a gain
+     * node something is ALREADY playing through, so a drag retunes what you can
+     * hear rather than the next thing to start. Offered mid-match like every
+     * other knob about your own screen — the moment a player wants the match
+     * quieter is the moment the match is loud.
+     *
+     * The ORDER is loudest-context-first: the two masters of everything, then
+     * the bed under the match, then the two halves of what used to be one "SFX"
+     * slider, then the opponent's videos. `media` is the odd one out and rides
+     * the same row anyway: it is not a WebAudio bus at all (see ui/prefs.js's
+     * MEDIA_SPEC) but it is a volume, and a player looking for "why is that clip
+     * so loud" looks in the volume block.
+     *
+     * VOICE IS LAST, and it is last because it is the loudest thing on the list in
+     * every sense except decibels: it is another person actually speaking to you.
+     * A player who wants it turned down wants it turned down NOW, mid-match, and
+     * the bottom of the volume block is where the eye lands after the six knobs
+     * it already knows. It is a real bus (ui/audio.js), so a drag retunes a note
+     * that is already playing rather than only the next one. */
+    const body = el('div', { class: 'gg-panel-body' }, [
+      volumeRow('masterVolume', S.options.master),
+      volumeRow('musicVolume', S.options.music),
+      volumeRow('droneVolume', S.options.drone),
+      volumeRow('uiVolume', S.options.ui),
+      volumeRow('gameVolume', S.options.game),
+      volumeRow('mediaVolume', S.options.media),
+      volumeRow('voiceVolume', S.options.voice),
+    ]);
+    body.appendChild(el('p', { class: 'gg-panel-note', text: S.options.mediaNote }));
+
+    const motion = toggleRow(S.options.motion,
+      () => prefs.get('reduceMotion'),
+      (v) => {
+        prefs.set('reduceMotion', v);
+        try { doc.documentElement.setAttribute('data-gg-motion', v ? 'reduced' : 'full'); } catch (_e) { /* ignore */ }
+      });
+    body.appendChild(motion.node);
+
+    /* SKIPPABLE VIDEOS — and it is offered IN a match as well as out of one,
+     * which is not a hole in "match settings are locked once you start". The
+     * locked settings are the ones on the WIRE (the consent terms both players
+     * countersigned); this is a comfort knob about your own screen, like the
+     * volumes and reduce-motion above it, and the moment a player wants it is
+     * the moment a window is floating in front of them. ui/prefs.js mirrors it
+     * onto <html> and exec/videos.js reads it there, so flipping it reaches
+     * windows that are already up. */
+    const skippable = toggleRow(S.options.skippable,
+      () => prefs.get('skippableVideos'),
+      (v) => prefs.set('skippableVideos', v));
+    body.appendChild(skippable.node);
+    // A sibling, not a child of the row: .gg-panel-row is a label/control pair
+    // and a second line inside it would land in the control column.
+    body.appendChild(el('p', { class: 'gg-panel-note', text: S.options.skippableNote }));
+
+    /* SHADER SPIRALS — the freeze escape hatch, and it is offered mid-match for
+     * the same reason skippable videos is: the moment a player wants it is the
+     * moment the picture has stopped moving. Default ON (it is the good bed);
+     * off, exec/spiral.js drops to a baked still of the same generated spiral
+     * within a second and stays there for the life of the pane. Same chain as
+     * the toggle above —
+     * prefs writes <html data-gg-shader> and exec/ reads it there, because exec/
+     * never imports ui/. */
+    const shaders = toggleRow(S.options.shaderSpirals,
+      () => prefs.get('shaderSpirals'),
+      (v) => prefs.set('shaderSpirals', v));
+    body.appendChild(shaders.node);
+    body.appendChild(el('p', { class: 'gg-panel-note', text: S.options.shaderSpiralsNote }));
+
+    /* LITE GRAPHICS — the device performance tier, and the third mid-match
+     * comfort knob in this run: the moment a player wants it is the moment the
+     * match is dropping frames. The toggle READS the resolved answer off
+     * <html data-gg-perf> (the pref may still be 'auto' — phones detect lite,
+     * desks full) and a touch writes the EXPLICIT tier, the same one-way door
+     * out of 'auto' the arsenal handle uses. The stamp itself is boot.js's:
+     * it subscribes to `perfMode` and re-applies exec/perfTier.js, because
+     * resolving 'auto' needs the detector and ui/ never imports exec/. */
+    const perf = toggleRow(S.options.perfLite,
+      () => {
+        try { return doc.documentElement.getAttribute('data-gg-perf') === 'lite'; }
+        catch (_e) { return false; }
+      },
+      (v) => prefs.set('perfMode', v ? 'lite' : 'full'));
+    body.appendChild(perf.node);
+    body.appendChild(el('p', { class: 'gg-panel-note', text: S.options.perfLiteNote }));
+
+    /* OPPONENT AVATARS — the viewer's half of the Discord sharing feature
+     * (contract §1). It is offered mid-match like the two knobs above it,
+     * because it is the same kind of switch: what MY screen shows me. Turning
+     * it off mid-duel stops the face on the desk and stops the next fetch;
+     * ui/discord.js consults it before it asks the host for anything. */
+    const oppAva = toggleRow(S.options.oppAvatars,
+      () => prefs.get('showOpponentAvatars'),
+      (v) => prefs.set('showOpponentAvatars', v));
+    body.appendChild(oppAva.node);
+    body.appendChild(el('p', { class: 'gg-panel-note', text: S.options.oppAvatarsNote }));
+
+    /* COACHING HINTS — the one-time explainers (ui/coach.js), and the fourth
+     * mid-match knob for the fourth time for the same reason: the moment a
+     * player wants this off is the moment a hint has just told them something
+     * they already knew. It is read live on every fire, so flipping it here
+     * silences the very next one rather than the next match.
+     *
+     * The pref alone is the switch — no handle is threaded in. ui/coach.js reads
+     * `coachHints` off the same store on every fire, which is what keeps this
+     * drawer free of a dependency on a singleton it is built before. */
+    const hints = toggleRow(S.coach.hints,
+      () => prefs.get('coachHints'),
+      (v) => prefs.set('coachHints', v));
+    body.appendChild(hints.node);
+    body.appendChild(el('p', { class: 'gg-panel-note', text: S.coach.hintsNote }));
+
+    if (session && session.hosted && setFullscreen) {
+      const fs = toggleRow(S.options.fullscreen,
+        () => !!session.fullscreen,
+        (v) => setFullscreen(v));
+      body.appendChild(fs.node);
+      // The host echoes `fullscreen` back; repaint whenever the drawer is open.
+      ledger.interval(fs.paint, 500);
+    }
+
+    if (inMatch) {
+      body.appendChild(el('p', { class: 'gg-panel-note', text: S.options.lockedNote }));
+    } else {
+      body.appendChild(button(ledger, S.options.reset, () => {
+        prefs.reset();
+        close();
+        setTimeout(() => { if (!open) openDrawer(); }, 30);
+      }, { variant: 'ghost', audio, sfx: 'ui-back' }));
+    }
+
+    const closeBtn = el('button', { type: 'button', class: 'gg-panel-close', 'aria-label': S.options.close, text: '×' });
+    ledger.listen(closeBtn, 'click', close);
+
+    const panel = el('aside', { class: 'gg-panel', role: 'dialog', 'aria-label': S.options.headline }, [
+      el('div', { class: 'gg-panel-head' }, [
+        el('h2', { class: 'gg-grad', text: S.options.headline }),
+        closeBtn,
+      ]),
+      body,
+    ]);
+    // The clearance the mercy button is entitled to (see the banner above).
+    panel.style.setProperty('--gg-drawer-clip', inMatch ? MERCY_CLEARANCE_PX + 'px' : '0px');
+    panel.classList.toggle('is-inmatch', inMatch);
+    return panel;
+  }
+
+  /** Ancestor walk. Element.closest does not exist in the node test harness. */
+  function within(node, root) {
+    for (let n = node; n; n = n.parentNode) if (n === root) return true;
+    return false;
+  }
+
+  /** The HUD gear toggles; an outside-close here would fight it into a no-op. */
+  function isToggleControl(node) {
+    for (let n = node; n; n = n.parentNode) {
+      try { if (n.classList && n.classList.contains('gg-gear')) return true; } catch (_e) { /* stub */ }
+    }
+    return false;
+  }
+
+  function openDrawer() {
+    if (!host || open) return;
+    open = true;
+    ledger = createLedger();
+    ledger.logger = logger;
+
+    const panel = build();
+    host.replaceChildren(panel);
+    host.hidden = false;
+    // One frame so the slide-in transition has a start state to animate from.
+    ledger.timer(() => panel.classList.add('is-open'), 16);
+    ledger.timer(() => { try { panel.querySelector('input,button')?.focus(); } catch (_e) { /* ignore */ } }, 40);
+
+    /* ESCAPE IS SPOKEN FOR. In a live match Escape means MERCY (boot.js's escape
+     * ladder) and this drawer must never take that key away from the player —
+     * so it is NOT closable with Escape while a match is up. The ways out are
+     * the ×, the gear again, and a click anywhere off the panel.
+     *
+     * Deliberately no scrim: a full-bleed z70 backdrop would sit on top of
+     * #gg-mercy (z60), which is the one thing that may never be covered. That
+     * also means this listener has to be on the document, and armed a tick late
+     * so the click that opened the drawer does not immediately shut it. */
+    ledger.timer(() => {
+      if (ledger.isDisposed) return;
+      ledger.listen(doc, 'pointerdown', (e) => {
+        const t = e && e.target;
+        if (!t || within(t, panel) || isToggleControl(t)) return;
+        close();
+      }, true);
+    }, 0);
+
+    try { audio?.sfx?.('ui-select'); } catch (_e) { /* stub bus */ }
+  }
+
+  return {
+    open: openDrawer,
+    close,
+    toggle() { if (open) close(); else openDrawer(); },
+    get isOpen() { return open; },
+    dispose() { close(); },
+  };
+}
+
+export default createOptions;

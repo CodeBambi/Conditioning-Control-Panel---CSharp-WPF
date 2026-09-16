@@ -142,6 +142,11 @@ namespace ConditioningControlPanel
             // Only allow actual close if exit was explicitly requested
             if (_exitRequested)
             {
+                // The Jackpot Remix builder's off-screen window is owned by this one when it was
+                // made after us; drop it here anyway so an unowned copy can never hold
+                // OnLastWindowClose open after the UI is gone.
+                try { Services.Remix.JackpotRemixBuilder.DisposeDefault(); } catch { }
+
                 // Kill all audio and effects first - ensures clean exit
                 App.KillAllAudio();
 
@@ -175,7 +180,9 @@ namespace ConditioningControlPanel
                 _remoteNotificationTimer?.Stop();
                 _remoteSessionInfoTimer?.Stop();
                 _bannerRotationTimer?.Stop();
+                _bannerPoolTimer?.Stop();
                 _marqueeRefreshTimer?.Stop();
+                ShutdownMarqueeReads();
                 _statPillUpdateTimer?.Stop();
                 _conditioningTimeTimer?.Stop();
                 _conditioningTimeSyncTimer?.Stop();

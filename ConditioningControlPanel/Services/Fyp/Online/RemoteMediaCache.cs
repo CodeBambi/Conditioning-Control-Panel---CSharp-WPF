@@ -121,7 +121,7 @@ internal static class RemoteMediaCache
         }
         catch (Exception ex)
         {
-            App.Logger?.Debug("[remote media] stream open failed for {Url}: {E}", url, ex.Message);
+            App.Logger?.Debug("[remote media] stream open failed for {Host}: {E}", Logging.UrlLog.Host(url), ex.Message);
             return null;
         }
     }
@@ -157,7 +157,7 @@ internal static class RemoteMediaCache
         {
             // A half-written file is worse than none: a video player would open it and stall.
             TryDelete(path);
-            App.Logger?.Warning("[remote media] temp materialize failed for {Url}: {E}", url, ex.Message);
+            App.Logger?.Warning("[remote media] temp materialize failed for {Host}: {E}", Logging.UrlLog.Host(url), ex.Message);
             return null;
         }
 
@@ -246,7 +246,7 @@ internal static class RemoteMediaCache
     {
         if (!IsUsable(url))
         {
-            App.Logger?.Debug("[remote media] refused non-media url {Url}", url);
+            App.Logger?.Debug("[remote media] refused non-media url from {Host}", Logging.UrlLog.Host(url));
             return null;
         }
 
@@ -265,7 +265,7 @@ internal static class RemoteMediaCache
         }
         catch (Exception ex)
         {
-            App.Logger?.Debug("[remote media] fetch of {Url} failed: {E}", url, ex.Message);
+            App.Logger?.Debug("[remote media] fetch from {Host} failed: {E}", Logging.UrlLog.Host(url), ex.Message);
             return null;
         }
     }
@@ -300,15 +300,15 @@ internal static class RemoteMediaCache
 
             if (!resp.IsSuccessStatusCode)
             {
-                App.Logger?.Debug("[remote media] HTTP {Code} for {Url}", (int)resp.StatusCode, url);
+                App.Logger?.Debug("[remote media] HTTP {Code} for {Host}", (int)resp.StatusCode, Logging.UrlLog.Host(url));
                 return null;
             }
 
             long declared = resp.Content.Headers.ContentLength ?? -1;
             if (declared > MaxSingleEntryBytes)
             {
-                App.Logger?.Debug("[remote media] {Url} is {Size} bytes — over the per-item cap, skipped",
-                    url, declared);
+                App.Logger?.Debug("[remote media] item from {Host} is {Size} bytes — over the per-item cap, skipped",
+                    Logging.UrlLog.Host(url), declared);
                 return null;
             }
 
@@ -322,7 +322,7 @@ internal static class RemoteMediaCache
         {
             // Includes the HttpClient timeout (surfaces as TaskCanceledException) and every
             // transport failure. One log line at Debug: a flaky CDN must not spam the log.
-            App.Logger?.Debug("[remote media] download of {Url} failed: {E}", url, ex.Message);
+            App.Logger?.Debug("[remote media] download from {Host} failed: {E}", Logging.UrlLog.Host(url), ex.Message);
             return null;
         }
         finally
@@ -349,7 +349,7 @@ internal static class RemoteMediaCache
             if (read <= 0) break;
             if (buffer.Length + read > MaxSingleEntryBytes)
             {
-                App.Logger?.Debug("[remote media] {Url} exceeded the per-item cap mid-stream, dropped", url);
+                App.Logger?.Debug("[remote media] item from {Host} exceeded the per-item cap mid-stream, dropped", Logging.UrlLog.Host(url));
                 return null;
             }
             buffer.Write(chunk, 0, read);

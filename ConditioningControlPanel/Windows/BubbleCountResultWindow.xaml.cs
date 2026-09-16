@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -308,7 +308,7 @@ namespace ConditioningControlPanel
             }
             
             // Mod-aware mercy phrases (no answer included!)
-            var mercyPhrases = App.Mods?.GetPhrases("BubbleCountMercy") ?? new[] { "GOOD GIRLS PAY ATTENTION" };
+            var mercyPhrases = App.Mods?.GetPhrases("BubbleCountMercy") ?? new[] { $"{VocabTokens.Collective.ToUpperInvariant()} PAY ATTENTION" };
 
             var phrase = mercyPhrases[Random.Shared.Next(mercyPhrases.Length)];
             

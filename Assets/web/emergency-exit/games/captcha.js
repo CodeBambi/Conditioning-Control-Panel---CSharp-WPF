@@ -164,7 +164,9 @@
       var rng = (api && typeof api.rng === 'function') ? api.rng : Math.random;
       var photosafe = !!(api && api.photosafe) || !!(init && init.photosafe);
       var mod = (api && api.mod) || (init && init.mod) || {};
-      var hon = mod.honorific || 'good girl';
+      // The host always sends honorific/subject; these only apply if it sent nothing at all.
+      // 'sweetie' matches VocabTokens.VanillaPetName on the C# side.
+      var hon = mod.honorific || 'sweetie';
       var subj = mod.subject || mod.name || 'you';
       var fill = function (t) { return String(t == null ? '' : t).replace(/\{honorific\}/g, hon).replace(/\{subject\}/g, subj); };
       var say = function (t) { try { if (api && api.say) api.say(t); } catch (_e) {} };

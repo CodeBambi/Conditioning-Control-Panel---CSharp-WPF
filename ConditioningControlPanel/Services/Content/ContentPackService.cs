@@ -778,6 +778,12 @@ namespace ConditioningControlPanel.Services
                 using var response = await _httpClient.SendAsync(request);
                 var responseJson = await response.Content.ReadAsStringAsync();
 
+                if (await MergedAccountRecovery.TryHandleAsync(response, responseJson))   // contract D
+                {
+                    AuthenticationRequired?.Invoke(this, Localization.Loc.Get("account_merged_retry_hint"));
+                    return null;
+                }
+
                 if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                 {
                     App.Logger?.Warning("External pack download auth failed for pack {PackId}", packId);

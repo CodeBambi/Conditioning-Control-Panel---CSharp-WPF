@@ -119,26 +119,48 @@ public sealed class PossessionEvents
     }
 
     /// <summary>Any setting flip. The label nearest the cursor is the one the user was reading when
-    /// they did it, which makes the mis-typing land as an answer rather than as a coincidence.</summary>
+    /// they did it, which makes the mis-typing land as an answer rather than as a coincidence.
+    ///
+    /// <para>THREAD: unlike the two pointer triggers above, this one arrives on whatever thread wrote
+    /// the setting. AppSettings.OnPropertyChanged raises PropertyChanged inline with no marshalling,
+    /// and plenty of settings are written off the UI thread - the wake-word calibration sweep
+    /// (SherpaWakeService.ApplyAndReturn), the auth-token refresh in ProfileSyncService, chaos slot
+    /// bookkeeping. Reacting on that thread walked the host's registry from a thread pool worker,
+    /// where the first dependency-property read throws VerifyAccess: "Possession: target walk failed"
+    /// with InvalidOperationException (ccp-bugs #1160, #1167, #1184). Everything downstream of the
+    /// name filter touches the visual tree - NearestTarget walks the registry and measures bounds,
+    /// RequestReactive mutates the live ledger - so the whole reaction is posted to the UI thread.
+    /// BeginInvoke, not Invoke: a settings write must never block on a dispatcher that is busy
+    /// animating a ghost, and one skipped typo effect costs nothing.</para></summary>
     private void OnSettingChanged(object? sender, PropertyChangedEventArgs e)
     {
         var director = _director;
         if (director == null) return;
-        try
-        {
-            // The Possession settings themselves are exempt: reacting to "the user just turned the
-            // haunt down" by haunting them is the one joke that reads as the app ignoring consent.
-            var name = e?.PropertyName ?? "";
-            if (name.StartsWith("LockdownPossession", StringComparison.Ordinal)
-                || name.StartsWith("LockdownPhotosafe", StringComparison.Ordinal)
-                || name.StartsWith("LockdownTripwires", StringComparison.Ordinal)
-                || name.StartsWith("LockdownWarden", StringComparison.Ordinal))
-                return;
 
-            var label = director.NearestTarget(PossessionRole.Label);
-            if (label != null) director.RequestReactive("typo", label, PossessionRung.Drift);
-        }
-        catch (Exception ex) { App.Logger?.Debug("Possession reactive setting failed: {Error}", ex.Message); }
+        // The Possession settings themselves are exempt: reacting to "the user just turned the haunt
+        // down" by haunting them is the one joke that reads as the app ignoring consent. The test is
+        // a string compare and safe on any thread, so an exempt setting never pays for a hop.
+        var name = e?.PropertyName ?? "";
+        if (name.StartsWith("LockdownPossession", StringComparison.Ordinal)
+            || name.StartsWith("LockdownPhotosafe", StringComparison.Ordinal)
+            || name.StartsWith("LockdownTripwires", StringComparison.Ordinal)
+            || name.StartsWith("LockdownWarden", StringComparison.Ordinal))
+            return;
+
+        // Runs inline when we are already on the UI thread, which is the common case (a user
+        // flipping a toggle), so nothing about the timing of a hand-driven change moves.
+        Helpers.DispatcherHelper.RunOnUI(() =>
+        {
+            try
+            {
+                // Re-read: Detach may have happened while this was queued.
+                var d = _director;
+                if (d == null) return;
+                var label = d.NearestTarget(PossessionRole.Label);
+                if (label != null) d.RequestReactive("typo", label, PossessionRung.Drift);
+            }
+            catch (Exception ex) { App.Logger?.Debug("Possession reactive setting failed: {Error}", ex.Message); }
+        });
     }
 
     /// <summary>Name or caption says Start / Stop. Deliberately loose (the label is localized, the

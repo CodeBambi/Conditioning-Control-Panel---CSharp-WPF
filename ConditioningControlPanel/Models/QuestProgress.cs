@@ -79,6 +79,15 @@ public class QuestProgress
     // in): treated as owned by whoever logs in next, matching the old behavior at worst.
     public string? OwnerUnifiedId { get; set; }
 
+    // ccp-bugs#1186 / #1192: the last moment this account was OBSERVED with resolved premium
+    // access, stamped by QuestService on any pass that sees one. It is the only durable answer to
+    // "was this user ever premium", and the premium-loss reroll needs that answer: keeping an
+    // in-progress premium quest is right for a LAPSED patron and wrong for someone who was never
+    // premium at all, who is simply stuck with a quest they cannot finish. Null = never seen
+    // premium (a fresh file, or a genuinely free account). Never cleared except by the
+    // different-account wipe, because "used to be a patron" does not stop being true.
+    public DateTime? LastPremiumSeenUtc { get; set; }
+
     /// <summary>
     /// Get remaining daily rerolls (1 base + 2 for Patreon + skill tree bonuses)
     /// </summary>
@@ -112,6 +121,15 @@ public class QuestProgress
         }
 
         int maxRerolls = hasPatreon ? 3 : 1;
+        // DELIBERATE, not the copy-paste from the daily branch above that it looks like. The skill
+        // tree has no weekly reroll node - quest_refresh and reroll_addict are the only two that
+        // feed GetDailyFreeRerolls - so the choice is between their bonus applying to both budgets
+        // or only to the daily one, and the shipped copy says both: the weekly reroll tooltip
+        // (tooltip_reroll_for_a_different_quest_once_per_week) reads "One reroll a week, three with
+        // Patreon, plus anything the skill tree adds", in all nine languages. Dropping this line
+        // would take rerolls off everyone who spent 15 and 20 skill points on those nodes and make
+        // nine translated strings wrong, which is not a thing to do quietly in a patch. If the
+        // weekly allowance is ever meant to be flat, the tooltip has to change with it.
         maxRerolls += App.SkillTree?.GetDailyFreeRerolls() ?? 0;
         maxRerolls += App.Settings?.Current?.BonusWeeklyRerolls ?? 0;
         return Math.Max(0, maxRerolls - WeeklyRerollsUsed);

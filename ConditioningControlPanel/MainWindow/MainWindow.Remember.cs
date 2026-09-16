@@ -88,7 +88,7 @@ namespace ConditioningControlPanel
             SetPremiumFeature(PremiumFeature.Haptics, rc.Haptics);
 
             App.Settings?.Save();
-            RefreshPremiumRail();
+            RefreshDashboardRail();
         }
 
         private void SetPremiumFeature(PremiumFeature f, bool target)

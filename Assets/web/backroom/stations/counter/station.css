@@ -1,0 +1,119 @@
+/* station.css - The Prize Parlour. The other stations' chrome (plum glass, rose borders, gold and mint accents),
+   scoped under .counter-station. No backdrop-filter (CONTRACT 10.13, law 7). Still (reduced, Calm) = no tilt, no flip. */
+.counter-station { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; overflow: hidden; color: #fce5f3;
+  font-family: Segoe UI, Arial, sans-serif; color-scheme: dark;
+  background: radial-gradient(ellipse at 50% 0%, #6b2d6a66, transparent 60%), radial-gradient(ellipse at 50% 110%, #2d6b6040, transparent 55%), #140a1cf2; }
+.counter-station * { box-sizing: border-box; }
+.counter-station [hidden] { display: none !important; }
+.counter-station button { font: inherit; cursor: pointer; border: 1px solid #ab79a766; color: #fce5f3; background: #28172fe8;
+  border-radius: 10px; padding: 8px 16px; min-height: 38px; transition: background .15s, transform .1s; }
+.counter-station button:hover:not(:disabled) { background: #583056; }
+.counter-station button:active:not(:disabled) { transform: scale(.96); }
+.counter-station button:focus-visible { outline: 2px solid #ff8ed2; outline-offset: 3px; }
+.counter-station button:disabled { opacity: .5; cursor: default; }
+
+/* Inside the room (ctx.hostBack) the room's Back and SP chips hold the top corners: the title sits between them. */
+.counter-top { display: flex; align-items: center; gap: 12px; padding: 14px 16px 6px; flex: none; }
+.counter-station[data-host-back] .counter-top { padding: 14px 120px 6px; justify-content: center; }
+.counter-station[data-host-sp] .counter-sp { display: none; }
+.counter-title { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: .04em; color: #ffd6ee;
+  text-shadow: 0 0 12px #ff8ed288, 0 0 28px #c767b355; }
+.counter-station:not([data-host-back]) .counter-title { flex: 1; text-align: center; }
+.counter-sp { background: #201229e8; border: 1px solid #b77da247; padding: 6px 12px; border-radius: 30px; font-size: 12px; font-weight: 600;
+  color: #ffe3f2; font-variant-numeric: tabular-nums; }
+
+.counter-grid { flex: 1; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); gap: 14px;
+  grid-auto-rows: max-content; padding: 8px 16px 20px; align-content: start; max-width: 1240px; width: 100%; margin: 0 auto; }
+.counter-card { position: relative; display: flex; flex-direction: column; border-radius: 16px; overflow: hidden;
+  background: linear-gradient(160deg, #3a1f45, #221330 70%); border: 1px solid #edb1d155;
+  box-shadow: 0 0 0 1px #0a041222, 0 6px 22px #08040bb0, inset 0 1px 0 #ffffff14;
+  transform: perspective(800px) rotateX(0) rotateY(0); transition: transform .25s ease-out, box-shadow .25s; }
+.counter-card:hover { transform: perspective(800px) rotateX(2.5deg) rotateY(-3deg) translateY(-2px);
+  box-shadow: 0 0 0 1px #ff8ed255, 0 10px 30px #c767b340, inset 0 1px 0 #ffffff1c; }
+.counter-card[data-face="owned"] { border-color: #5fffd077; }
+.counter-card.is-flip { animation: counter-flip .6s ease-out; }
+@keyframes counter-flip { 0% { transform: perspective(800px) rotateY(90deg); } 100% { transform: perspective(800px) rotateY(0); } }
+
+.counter-art { position: relative; flex: none; aspect-ratio: 16 / 11; max-width: 100%; display: grid; place-items: center; overflow: hidden;
+  background: radial-gradient(circle at 50% 42%, #7a3b7a, #3a1f45 62%, #2a1734); }
+.counter-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; padding: 8px;
+  filter: drop-shadow(0 6px 14px #0a0412aa); }
+.counter-plate { padding: 10px 14px; border-radius: 10px; border: 1px solid #e8c27a88; background: #2a1734; color: #f7d9a4;
+  font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-size: 13px; text-align: center; max-width: 80%;
+  box-shadow: inset 0 0 12px #e8c27a33; }
+.counter-art:not([data-plate]) .counter-plate { visibility: hidden; }
+
+/* "Try it": a preview of an effect prize, drawn inside the art box by the page (demo.js), never by the host. */
+.counter-try { padding: 5px 12px; min-height: 30px; font-size: 12px; color: #cdb8ff; border-color: #cdb8ff55; }
+.counter-demo { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, #1b0f24, #0d0713 75%); }
+.counter-art[data-demo] > img, .counter-art[data-demo] > .counter-plate { visibility: hidden; }
+.counter-demo-pic { position: absolute; left: 0; top: 0; width: 30%; transform: translate(-50%, -50%); object-fit: cover; padding: 0;
+  inset: auto; height: auto; filter: none; background: linear-gradient(135deg, #e59cca, #a562b4); }
+.counter-demo-pic[data-kind="tile"] { aspect-ratio: 4 / 3; border-radius: 4px; }
+.counter-demo-pic[data-kind="flash"] { aspect-ratio: 4 / 3; border-radius: 8px; box-shadow: 0 0 0 2px #ffffff22, 0 6px 16px #0a0412aa; }
+.counter-demo-pic[data-kind="flash"][data-pivot="top"] { transform-origin: 50% 0; }
+.counter-demo-pic[data-kind="bubble"] { aspect-ratio: 1; border-radius: 50%; box-shadow: inset 0 0 0 2px #ffffff33, 0 0 12px #ff8ed255; }
+
+/* Soon: a dust sheet over the whole card, the price and name still readable. */
+.counter-sheet { display: none; position: absolute; inset: 0; z-index: 2; pointer-events: none; border-radius: inherit;
+  background: repeating-linear-gradient(100deg, #d8c8d80d 0 14px, #00000012 14px 30px),
+    linear-gradient(175deg, #b9a6bf66, #6d5a7555 45%, #2a1a33aa); }
+.counter-card[data-face="soon"] .counter-sheet { display: block; }
+.counter-card[data-face="soon"] .counter-art { filter: saturate(.35) brightness(.75); }
+
+.counter-body { position: relative; z-index: 3; display: flex; flex-direction: column; gap: 6px; padding: 10px 14px 14px; flex: 1; }
+.counter-name { margin: 0; font-size: 15px; color: #ffe3f2; }
+.counter-blurb, .counter-note, .counter-delivery, .counter-retry { margin: 0; font-size: 12px; line-height: 1.4; color: #edc7df; }
+.counter-note { color: #cdb8ff; font-style: italic; }
+.counter-delivery { color: #5fffd0; flex-basis: 100%; }
+.counter-retry { color: #ffcf6b; }
+.counter-foot { margin-top: auto; padding-top: 6px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.counter-price { font-weight: 700; color: #ffcf6b; font-variant-numeric: tabular-nums; text-shadow: 0 0 10px #ffcf6b44; }
+.counter-act { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+.counter-badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid #ab79a766; background: #201229e8; }
+.counter-badge.is-owned { color: #5fffd0; border-color: #5fffd077; }
+.counter-badge.is-soon { color: #e7d9ec; }
+.counter-badge.is-discord { color: #cdb8ff; border-color: #cdb8ff66; }
+.counter-buy { font-weight: 700; color: #26122f !important; background: linear-gradient(135deg, #e59cca, #a562b4) !important;
+  border-color: #efc4de !important; box-shadow: inset 0 1px 0 #fff5, 0 4px 18px #c767b32b; }
+.counter-buy:disabled { color: #f5d8ea !important; background: #28172fe8 !important; border-color: #ab79a766 !important; box-shadow: none; }
+
+.counter-confirm { display: grid; gap: 4px; margin-top: 6px; padding: 10px 12px; border-radius: 12px; background: #1a0f24f2;
+  border: 1px solid #ff8ed266; font-size: 12px; }
+.counter-confirm-name { font-size: 13px; }
+.counter-confirm-price { color: #ffcf6b; font-weight: 600; }
+.counter-after { color: #edc7df; font-variant-numeric: tabular-nums; }
+.counter-yesno { display: flex; gap: 8px; margin-top: 6px; }
+.counter-yes { flex: 1; font-weight: 700; color: #1a0f2b !important; background: linear-gradient(135deg, #8fffe0, #5fd6b4) !important;
+  border-color: #b9ffec !important; }
+.counter-yes[aria-busy="true"] { background: repeating-linear-gradient(110deg, #5fd6b4 0 12px, #8fffe0 12px 24px) !important;
+  background-size: 200% 100% !important; animation: counter-pending 1s linear infinite; }
+@keyframes counter-pending { to { background-position: -48px 0; } }
+
+.counter-closed { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 6; background: #28172ff2;
+  border: 1px solid #edb1d177; border-radius: 14px; padding: 18px 22px; text-align: center; max-width: min(420px, calc(100vw - 32px)); }
+.counter-closed p { margin: 0 0 12px; }
+.counter-station[data-host-back] .counter-closed p { margin: 0; }
+
+/* Still: reduced motion or Calm. The state swap is instant. */
+.counter-station[data-still] .counter-card, .counter-station[data-still] .counter-card:hover { transform: none; transition: none; animation: none; }
+.counter-station[data-still] .counter-yes[aria-busy="true"] { animation: none; }
+@media (prefers-reduced-motion: reduce) { .counter-station * { transition: none !important; animation: none !important; } }
+
+@media (max-width: 800px) {
+  .counter-station[data-host-back] .counter-top { padding: 12px 16px 6px; margin-top: 44px; }
+  .counter-grid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px; }
+  .counter-title { font-size: 17px; }
+}
+
+.counter-details { font-size: 13px; line-height: 1.55; color: #edc7df; }
+.counter-details summary { cursor: pointer; padding: 8px 0; color: #ffe3f2; }
+.counter-details summary:focus-visible { outline: 2px solid #ff8ed2; outline-offset: 2px; }
+.counter-details p { margin: 0 0 8px; }
+@media (max-width: 480px) {
+  .counter-grid { grid-template-columns: minmax(0, 1fr); }
+  .counter-art { aspect-ratio: 16 / 7; }
+  .counter-blurb, .counter-note { font-size: 14px; line-height: 1.5; }
+  .counter-details { font-size: 14px; }
+}

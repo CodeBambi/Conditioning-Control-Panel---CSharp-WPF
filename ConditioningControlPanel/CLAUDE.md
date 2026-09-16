@@ -10,6 +10,49 @@ dotnet build
 dotnet run
 ```
 
+## Cross-Platform Port Collaboration (agreed 2026-09-03)
+
+A contractor (GitHub `ObviouslyNotMich`) is porting the app to Avalonia. Rules so the two sides do not
+trip over each other:
+
+| Area | Owner |
+|------|-------|
+| `CCP.Core/`, `CCP.Avalonia/`, `CCP.VR/`, Linux CI jobs | contractor |
+| `ConditioningControlPanel/`, `Tests/`, server, web, mobile | CodeBambi (and Claude sessions) |
+
+- **Port work lands on `avalonia/main`.** The contractor merges their own `port/*` branches there
+  without review. Once a week ONE merge-up PR `avalonia/main -> main` is reviewed as a unit. It must
+  contain only files under the contractor's directories (additive). It is the only exception to the
+  600-line cap.
+- **Seam PRs** (anything touching both a contractor directory and `ConditioningControlPanel/`): under
+  200 changed lines, based on `main` directly, labelled `seam`, reviewed within a day.
+- **Structural moves** (mass renames such as the `/Assets` move) land only the day after a release
+  tag, never during a hotfix week, and never with red CI.
+- **Coordination issue:** the pinned "Port coordination" issue on this repo gets three lines from
+  each side at the start of a session: what merged, what is in flight, which files under the other
+  side's directories will be touched next. Read it before starting WPF work.
+- **Claude sessions:** never edit files under the contractor's directories; never merge a contractor
+  PR that touches `ConditioningControlPanel/` unless it carries the `seam` label; check the
+  coordination issue for "touching next" before opening a WPF PR.
+
+## Pull Request Size Rule
+
+Every PR is capped at about **600 changed lines** (additions + deletions, as reported by
+`git diff --stat origin/main...HEAD`). Bigger work ships as a stack of small PRs that each
+build, review and land on their own. Check before opening:
+
+```bash
+git diff --stat origin/main...HEAD | tail -1
+```
+
+- The only exception is a mechanical bulk change (lockfiles, generated files, binary assets,
+  a rename that touches many files). Put it in its own PR and say so in the body.
+- If a feature cannot fit, split it by layer (data model, service, UI) or by sub-feature,
+  and open the PRs in order. Each one must build on its own.
+- Agents driving PRs get this cap in their brief and report the line count in the PR body.
+
+Why: this is a multi-person codebase now, and a 2k-line PR cannot be reviewed.
+
 ## Quick File Reference
 
 ### Version Locations (ALL must be updated for releases)
@@ -23,7 +66,7 @@ dotnet run
 | `MainWindow/MainWindow.xaml:~1985` | `BtnUpdateAvailable` Content + ToolTip loc keys |
 | `Localization/Languages/*.json` (9 files) | `btn_vX_Y_Z_is_out` + `tooltip_vX_Y_Z_*` keys |
 
-Use `/release X.Y.Z "Subtitle"` to automate this. Also write `../notes-vX.Y.Z.txt` (plain-text notes for the GitHub release; no em-dashes). After signing: push main, tag `vX.Y.Z`, create the GitHub release (mark Latest), POST server marquee + update-banner (`x-admin-token`), update download links + version badge in `C:\Projects\cclabs-site` (index.html + guide-getting-started.html, then commit+push and `vercel deploy --prod`), announce on Discord. The language files are strict-JSON clean as of 2026-07-29 - see **Localization** under Known Issues before editing them.
+Use `/release X.Y.Z "Subtitle"` to automate this. Also write `../notes-vX.Y.Z.txt` (plain-text notes for the GitHub release body; gitignored, never committed; no em-dashes). After signing: push main, tag `vX.Y.Z`, create the GitHub release (mark Latest), POST server marquee + update-banner (`x-admin-token`), update download links + version badge in `C:\Projects\cclabs-site` (index.html + guide-getting-started.html, then commit+push and `vercel deploy --prod`), announce on Discord. The language files are strict-JSON clean as of 2026-07-29 - see **Localization** under Known Issues before editing them.
 
 ### Important Paths
 | Path | Purpose |
@@ -107,6 +150,12 @@ of truth.)
 - Assets path: `App.EffectiveAssetsPath` returns custom path if set, else default `App.UserAssetsPath`
 - User data in `%LOCALAPPDATA%/ConditioningControlPanel/` (`App.UserDataPath`, via `SpecialFolder.LocalApplicationData`)
 - Patreon features gated by `App.Patreon?.HasPremiumAccess` or `App.Patreon?.HasAiAccess`
+
+### Logging policy
+- **No new empty catch.** Use `Diag.Swallowed(ex)` (`Services/Diag.cs`, namespace `ConditioningControlPanel`), or a typed catch of an expected exception with a `// swallow: reason` comment on the closing brace. `Diag.Swallowed` logs one Warning the first time a site fires, Debug for the next nine, then only counts, so it is safe in render loops and timer ticks. Pass a short `note:` when the no-op is deliberate: `Diag.Swallowed(ex, "window tearing down")`.
+- **No content in logs at any level.** No screen text, chat text, spoken lines, URLs beyond the host, profile JSON, display names, or Discord ids. IDs, counts, enums, and status codes only. This applies to Debug too: Debug lines sit in the in-memory flight recorder and ship with bug reports.
+- **Prefix new log messages with `[Category]`**, and send noisy periodic lines to Debug so they reach the flight recorder instead of the file.
+- **Never log absolute paths.** The redactor rewrites them to `%DATA%`/`%APP%`/`~`, so a logged path is noise at best and PII at worst.
 
 ### UI Architecture
 - Dark theme with pink/purple accent colors (#FF69B4, #252542, #1A1A2E)

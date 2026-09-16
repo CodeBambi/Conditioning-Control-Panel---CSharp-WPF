@@ -132,6 +132,10 @@ public static class HangContext
         try
         {
             sb.Append("uptime=").Append((UptimeMs / 1000.0).ToString("F0", CultureInfo.InvariantCulture)).AppendLine("s");
+            // WHICH dispatcher operation the UI thread is inside. The #1189 family all show a
+            // Send-priority op running for a minute-plus with lockCardRunning=True and no name;
+            // this line is what turns that into something greppable. See UiOpTracker.
+            sb.Append("op=").AppendLine(Safe(UiOpTracker.Describe));
             sb.Append("lastUiMark=").AppendLine(Safe(() => VideoDiag.UiMarkDescription));
             sb.Append("uiStallMs=").AppendLine(Safe(() => VideoDiag.UiStallMs.ToString(CultureInfo.InvariantCulture)));
             // Input starved while uiStallMs stays small = the thread is BUSY above Input priority,
@@ -158,6 +162,7 @@ public static class HangContext
         {
             return string.Concat(
                 "uptime=", (UptimeMs / 1000).ToString(CultureInfo.InvariantCulture), "s",
+                " op=", Safe(UiOpTracker.Describe),
                 " active=[", DescribeActive(), "]",
                 " last=", LastBreadcrumb());
         }

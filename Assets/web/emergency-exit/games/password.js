@@ -205,8 +205,9 @@
     var mod = init.mod || {};
     var ctx = {
       mod: mod,
-      honorific: mod.honorific || 'good girl',
-      subject: mod.subject || mod.name || 'Bambi',
+      // Only used when the host sent nothing; 'sweetie' matches VocabTokens.VanillaPetName.
+      honorific: mod.honorific || 'sweetie',
+      subject: mod.subject || mod.name || 'you',
       weekday: DAYS[now.getDay()],
       weekdayLocal: (weekdayLocal && lc(weekdayLocal) !== lc(DAYS[now.getDay()])) ? weekdayLocal : '',
       minutesLeft: function () { return Math.max(0, Math.floor((api.remainingSec ? api.remainingSec() : (init.remainingSec || 0)) / 60)); },

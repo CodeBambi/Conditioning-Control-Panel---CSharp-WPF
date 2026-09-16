@@ -82,18 +82,50 @@ namespace ConditioningControlPanel.Services
             public V2AuthService.V2User? User { get; set; }
         }
 
+        /// <summary>
+        /// The initiate request, split out so it can be pinned by a test without a network.
+        /// </summary>
+        /// <remarks>
+        /// Split-accounts contract A: when the app already holds a unified id AND its auth token,
+        /// both ride along (unified_id in the body, X-Auth-Token as the header) so the server can
+        /// record a bind hint on the device-code record and /confirm can bind the web identity to
+        /// THIS account instead of minting a twin. Either one missing means the request is byte
+        /// for byte what it was before: {client, version} and no auth header. The server ignores
+        /// an absent or invalid hint, so this is safe against a server that predates the contract.
+        /// </remarks>
+        internal readonly record struct InitiatePayload(JObject Body, string? AuthToken);
+
+        internal static InitiatePayload BuildInitiatePayload(string? unifiedId, string? authToken)
+        {
+            var body = new JObject
+            {
+                ["client"] = "ccp-desktop",
+                ["version"] = UpdateService.AppVersion
+            };
+
+            var hasSession = !string.IsNullOrWhiteSpace(unifiedId) && !string.IsNullOrWhiteSpace(authToken);
+            if (!hasSession) return new InitiatePayload(body, null);
+
+            body["unified_id"] = unifiedId;
+            return new InitiatePayload(body, authToken);
+        }
+
         public async Task<InitiateResponse> InitiateAsync(CancellationToken ct = default)
         {
             try
             {
-                var payload = new JObject
-                {
-                    ["client"] = "ccp-desktop",
-                    ["version"] = UpdateService.AppVersion
-                };
+                // Same source every other V2 call reads the session from (V2AuthService.AddAuthHeader).
+                var payload = BuildInitiatePayload(App.Settings?.Current?.UnifiedId, App.Settings?.Current?.AuthToken);
 
-                var content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
-                var response = await _http.PostAsync($"{SERVER_URL}/v2/auth/device/initiate", content, ct);
+                using var request = new HttpRequestMessage(HttpMethod.Post, $"{SERVER_URL}/v2/auth/device/initiate")
+                {
+                    Content = new StringContent(payload.Body.ToString(), Encoding.UTF8, "application/json")
+                };
+                // Never logged: the token is a live credential.
+                if (!string.IsNullOrEmpty(payload.AuthToken))
+                    request.Headers.Add("X-Auth-Token", payload.AuthToken);
+
+                var response = await _http.SendAsync(request, ct);
                 var json = await response.Content.ReadAsStringAsync(ct);
 
                 if (!response.IsSuccessStatusCode)
@@ -125,7 +157,8 @@ namespace ConditioningControlPanel.Services
                     return new InitiateResponse { Success = false, Error = "Invalid expiry" };
                 }
 
-                Log.Information("[DeviceCode] Initiated session={Session}", raw.SessionId?.Substring(0, Math.Min(8, raw.SessionId.Length)));
+                Log.Information("[DeviceCode] Initiated session={Session} bindHint={BindHint}",
+                    raw.SessionId?.Substring(0, Math.Min(8, raw.SessionId.Length)), payload.AuthToken != null);
                 return new InitiateResponse
                 {
                     Success = true,

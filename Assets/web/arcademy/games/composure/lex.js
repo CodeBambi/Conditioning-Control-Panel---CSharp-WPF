@@ -49,7 +49,7 @@ export const CP_LEX = Object.freeze({
   cp_wash_line: 'Keep sliding. The board is still exactly where you left it.',
   cp_rescue_line: 'Take the lit piece. The grade eases; the class does not end.',
   cp_solved_line: 'Whole. Watch it play.',
-  cp_bank_line: 'Banked. Here is a fresh one.',
+  cp_bank_line: 'Earned. Here is a fresh one.',
   cp_bell_warn: 'Twenty seconds.',
   cp_bell_line: 'The bell. Hands off the board.',
   cp_zen_done: 'Whole, in your own time.',

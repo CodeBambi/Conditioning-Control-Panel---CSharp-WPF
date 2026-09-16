@@ -18,6 +18,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using ConditioningControlPanel.Services.Logging;
 using Rectangle = System.Windows.Shapes.Rectangle;
 using NAudio.Wave;
 using ConditioningControlPanel.Localization;
@@ -44,6 +45,10 @@ namespace ConditioningControlPanel
 
         private async System.Threading.Tasks.Task InitializeBrowserAsync(string? overrideStartUrl = null)
         {
+            // Anything that brings the browser up wants it on screen, so a folded card opens here
+            // once rather than at each of the six callers.
+            RevealDashboardBrowser("browser-init");
+
             if (_browserInitialized || _browserInitializing) return;
 
             // A browser whose CoreWebView2 never came up leaves the flag cleared but the dead
@@ -136,8 +141,8 @@ namespace ConditioningControlPanel
                         var hapticsConnected = App.Haptics?.IsConnected == true;
                         var isHypnotube = url.Contains("hypnotube", StringComparison.OrdinalIgnoreCase);
 
-                        App.Logger?.Information("AudioSync check: Enabled={Enabled}, HapticsConnected={Connected}, IsHypnotube={IsHT}, URL={Url}",
-                            audioSyncEnabled, hapticsConnected, isHypnotube, url);
+                        App.Logger?.Information("AudioSync check: Enabled={Enabled}, HapticsConnected={Connected}, IsHypnotube={IsHT}, Host={Host}",
+                            audioSyncEnabled, hapticsConnected, isHypnotube, UrlLog.Host(url));
 
                         if (audioSyncEnabled && hapticsConnected && isHypnotube)
                         {
@@ -330,9 +335,46 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // MainWindow itself may be away: TRAY-HIDDEN (Window.Hide(), via MinimizeToTrayForChaos
+            // when an Arcademy class or a DtRH descent takes the screen) or minimized (Graded
+            // Intake's duck). Activate()/Focus() are no-ops on both, so without this the page loads
+            // into a surface the user can never see and the navigation reads as "nothing happened"
+            // (ccp-bugs#1138).
+            RestoreWindowForBrowserSurface();
             ShowTab("settings");
+            // The card may be folded shut (AppSettings.DashboardBrowserCollapsed, on by default).
+            // Bringing the surface forward and leaving the page behind a closed card is the same
+            // "nothing happened" this method exists to prevent, so the fold opens too. A reveal
+            // never writes the preference - see MainWindow.DashboardFold.cs.
+            RevealDashboardBrowser("focus-surface");
             Activate();
             Focus();
+        }
+
+        /// <summary>
+        /// Brings the control panel itself back before we try to focus the embedded browser.
+        /// Tray-tucked (Hide()) and minimized are both states in which Activate() does nothing at
+        /// all, so a navigation into the embedded browser would stay invisible for as long as the
+        /// window stayed away - which for a remote-control command means "until someone happens to
+        /// restore the window", i.e. long after the controller has given up.
+        /// </summary>
+        private void RestoreWindowForBrowserSurface()
+        {
+            try
+            {
+                if (!IsVisible)
+                {
+                    App.Logger?.Information("Browser surface requested while the control panel was tray-hidden - restoring it");
+                    RestoreFromTrayForRemote();   // TrayIconService.ShowWindow(): Show + Normal + on-screen repair
+                    return;
+                }
+                if (WindowState == WindowState.Minimized)
+                {
+                    App.Logger?.Information("Browser surface requested while the control panel was minimized - restoring it");
+                    WindowState = WindowState.Normal;
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("RestoreWindowForBrowserSurface failed: {Error}", ex.Message); }
         }
 
         private async System.Threading.Tasks.Task InitAndNavigateAsync(string url, bool autoPlayFullscreen)
@@ -417,7 +459,7 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            App.Logger?.Warning("Browser never finished initializing - opening externally: {Url}", url);
+            App.Logger?.Warning("Browser never finished initializing - opening externally: {Host}", UrlLog.Host(url));
             OpenUrlExternallyAfterBrowserFailure(url);
         }
 
@@ -430,12 +472,12 @@ namespace ConditioningControlPanel
             try
             {
                 if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps) return;
-                App.Logger?.Warning("Embedded browser init failed, opening externally: {Url}", url);
+                App.Logger?.Warning("Embedded browser init failed, opening externally: {Host}", UrlLog.Host(url));
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to open URL externally: {Url}", url);
+                App.Logger?.Warning(ex, "Failed to open URL externally: {Host}", UrlLog.Host(url));
             }
         }
 
@@ -555,6 +597,8 @@ namespace ConditioningControlPanel
             }
             if (_browser == null) return;
 
+            RevealDashboardBrowser("site-toggle");
+
             var isBambiCloud = SettingsTab.RbBambiCloud.IsChecked == true;
             var url = isBambiCloud
                 ? "https://bambicloud.com/"
@@ -598,7 +642,7 @@ namespace ConditioningControlPanel
             // Block navigation in offline mode.
             if (App.Settings?.Current?.OfflineMode == true)
             {
-                App.Logger?.Debug("Browser navigation blocked in offline mode: {Url}", url);
+                App.Logger?.Debug("Browser navigation blocked in offline mode: {Host}", UrlLog.Host(url));
                 if (userInitiated) NotifyBrowserBlockedOffline();
                 return false;
             }
@@ -624,8 +668,8 @@ namespace ConditioningControlPanel
                 }
                 if (_browserInitialized)
                 {
-                    App.Logger?.Warning("Browser flagged ready but is not usable (service init={Init}, core={HasCore}) - re-initializing for {Url}",
-                        _browser?.IsInitialized == true, _browser?.WebView?.CoreWebView2 != null, url);
+                    App.Logger?.Warning("Browser flagged ready but is not usable (service init={Init}, core={HasCore}) - re-initializing for {Host}",
+                        _browser?.IsInitialized == true, _browser?.WebView?.CoreWebView2 != null, UrlLog.Host(url));
                     _browserInitialized = false; // let InitializeBrowserAsync tear down and rebuild
                 }
                 _ = InitAndNavigateAsync(url, autoPlayFullscreen);
@@ -634,7 +678,7 @@ namespace ConditioningControlPanel
 
             if (_browser == null)
             {
-                App.Logger?.Warning("Browser not available for navigation: {Url}", url);
+                App.Logger?.Warning("Browser not available for navigation: {Host}", UrlLog.Host(url));
                 return false;
             }
 
@@ -692,7 +736,7 @@ namespace ConditioningControlPanel
                 }
                 else if (autoPlayFullscreen)
                 {
-                    App.Logger?.Warning("Auto-play/fullscreen requested but CoreWebView2 is null - takeover skipped: {Url}", url);
+                    App.Logger?.Warning("Auto-play/fullscreen requested but CoreWebView2 is null - takeover skipped: {Host}", UrlLog.Host(url));
                 }
 
                 // Navigate. A dropped Navigate must surface as failure: reporting success here is
@@ -703,18 +747,18 @@ namespace ConditioningControlPanel
                     if (navCompletedHandler != null && _browser.WebView?.CoreWebView2 != null)
                         _browser.WebView.CoreWebView2.NavigationCompleted -= navCompletedHandler;
 
-                    App.Logger?.Warning("Speech link navigation dropped by browser service: {Url}", url);
+                    App.Logger?.Warning("Speech link navigation dropped by browser service: {Host}", UrlLog.Host(url));
                     return false;
                 }
 
-                App.Logger?.Information("Speech link navigated to: {Url} (Site: {Site}, AutoPlay: {AutoPlay})",
-                    url, lowerUrl.Contains("bambicloud") ? "BambiCloud" : "HypnoTube", autoPlayFullscreen);
+                App.Logger?.Information("Speech link navigated to {Host} (Site: {Site}, AutoPlay: {AutoPlay})",
+                    UrlLog.Host(url), lowerUrl.Contains("bambicloud") ? "BambiCloud" : "HypnoTube", autoPlayFullscreen);
 
                 return true;
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Browser navigation failed for URL: {Url}", url);
+                App.Logger?.Error(ex, "Browser navigation failed for host: {Host}", UrlLog.Host(url));
                 return false;
             }
         }
@@ -951,11 +995,12 @@ namespace ConditioningControlPanel
                 // Log audio sync messages at Information level for debugging
                 if (message.Contains("audioSync"))
                 {
-                    App.Logger?.Information("AudioSync message received: {Message}", message);
+                    // Page messages carry the page title and video URL. Shape only.
+                    App.Logger?.Information("AudioSync message received ({Bytes} bytes)", message?.Length ?? 0);
                 }
                 else
                 {
-                    App.Logger?.Debug("Browser web message received: {Message}", message);
+                    App.Logger?.Debug("Browser web message received ({Bytes} bytes)", message?.Length ?? 0);
                 }
 
                 // Force-exit our WPF "forced fullscreen" surface — sent by the
@@ -1088,7 +1133,7 @@ namespace ConditioningControlPanel
                 if (urlMatch.Success)
                 {
                     var videoUrl = urlMatch.Groups[1].Value;
-                    App.Logger?.Information("AudioSync: Starting processing for video URL: {Url}", videoUrl);
+                    App.Logger?.Information("AudioSync: Starting processing for video on {Host}", UrlLog.Host(videoUrl));
 
                     // Wire up progress events
                     void OnProgress(object? sender, Services.Audio.ChunkProgressEventArgs e)
@@ -1561,7 +1606,7 @@ namespace ConditioningControlPanel
                         UseShellExecute = false
                     };
                     System.Diagnostics.Process.Start(startInfo);
-                    App.Logger?.Information("Opened Discord profile for user: {DiscordId}", discordId);
+                    App.Logger?.Information("Opened Discord profile for a leaderboard entry");
                 }
                 catch (Exception ex)
                 {
@@ -2381,7 +2426,7 @@ namespace ConditioningControlPanel
                             }
                             catch (Exception ex)
                             {
-                                App.Logger?.Warning(ex, "Failed to load profile avatar from {Url}", avatarUrl);
+                                App.Logger?.Warning(ex, "Failed to load profile avatar from {Host}", UrlLog.Host(avatarUrl));
                                 DiscordTab.ProfileViewerAvatar.ImageSource = null;
                                 SetProfilePictureLoad(ProfilePictureLoad.None);
                             }
@@ -2637,6 +2682,8 @@ namespace ConditioningControlPanel
                             SettingsTab.BrowserContainer.Children.Add(_browser.WebView);
                         }
                         SettingsTab.BrowserLoadingText.Visibility = Visibility.Collapsed;
+                        // The page is back in the card, so the card cannot stay shut over it.
+                        RevealDashboardBrowser("popout-closed");
                     }
                     _browserPopoutWindow = null;
                     SettingsTab.BtnPopOutBrowser.Content = Loc.Get("btn_pop_out");
@@ -2669,8 +2716,9 @@ namespace ConditioningControlPanel
 
             if (isFullscreen)
             {
-                var screens = App.GetAllScreensCached();
-                var useDualMonitor = App.Settings.Current.DualMonitorEnabled && screens.Length > 1;
+                // Mirror only when the "Show content on" picker actually covers more than one
+                // screen - pinning content to a single monitor must not clone it onto the others.
+                var useDualMonitor = App.GetGlobalScreens().Length > 1;
 
                 if (useDualMonitor)
                 {
@@ -2985,14 +3033,54 @@ namespace ConditioningControlPanel
         private bool _remoteBrowserVideoActive;
 
         /// <summary>
+        /// Names the screen-owning WebView2 host sitting ABOVE the control panel right now, or null
+        /// when nothing is. These windows are natively owned by MainWindow
+        /// (<c>ChaosWebViewHost.OwnedByMainWindow</c> glue), which is a rule about the future:
+        /// Windows will never let the owner - and therefore the browser embedded inside it - be
+        /// placed above them. A remote video routed into the embedded browser while one of these is
+        /// up therefore plays somewhere nobody can look at, no matter how hard we focus it.
+        /// </summary>
+        private static string? ScreenOwningWebHostName()
+        {
+            try
+            {
+                if (Services.Arcademy.ArcademyHostService.IsActive)
+                    return Services.Arcademy.ArcademyHostService.ProductName;
+                if (Services.Chaos.DtrhHostService.IsActive)
+                    return "Down the Rabbit Hole";
+                if (Services.Quiz.IntakeHostService.IsActive)
+                    return Services.Quiz.IntakeHostService.ProductName;
+            }
+            catch { /* a gate must never be the thing that throws */ }
+            return null;
+        }
+
+        /// <summary>
         /// Play a controller-supplied HypnoTube URL in the embedded browser (remote-control
         /// "play_hypnotube" command). Marks the browser video as remote-active so a later panic
         /// / session-end can stop it. The URL has already been allowlist-validated by
         /// RemoteControlService (HtUrlHelper.IsEligibleHtUrl).
         /// </summary>
-        public void PlayHypnotubeFromRemote(string url)
+        /// <returns>
+        /// null when the video was handed to the browser, otherwise a short reason the caller
+        /// reports back to the controller. Silence was the whole bug in ccp-bugs#1138: the command
+        /// was accepted, nothing appeared, and the controller kept pressing.
+        /// </returns>
+        public string? PlayHypnotubeFromRemote(string url)
         {
+            // Refuse, loudly, rather than navigate into a window that cannot be raised. The class
+            // / descent / intake stays where the subject put it - a controller command is not
+            // authority to close someone's game - but the controller is told why nothing happened
+            // instead of watching three commands vanish.
+            var ownedBy = ScreenOwningWebHostName();
+            if (ownedBy != null) return ownedBy + " is on screen";
+
             _remoteBrowserVideoActive = true;
+            // The remote-control overlay blindfolds the embedded browser for the WHOLE controller
+            // session (WebView2 airspace would otherwise paint over the WPF overlay). A video the
+            // controller just asked for is the one thing that has to win that contest, so lift the
+            // blindfold for as long as the remote video is up.
+            RevealBrowserForRemoteVideo(true);
             // A controller command is an explicit instruction from another person, so it takes
             // precedence over an in-flight video rather than being refused — but it must hand the
             // session over cleanly instead of navigating out from under the previous claim and
@@ -3004,8 +3092,11 @@ namespace ConditioningControlPanel
                 // Nothing is playing here, so don't leave the claim standing until the heartbeat
                 // retires it — panic/session-end would otherwise act on a video that never loaded.
                 _remoteBrowserVideoActive = false;
+                RevealBrowserForRemoteVideo(false);
                 App.BrowserMedia?.OnMediaStopped("remote-browser-unavailable");
+                return "the browser could not open it";
             }
+            return null;
         }
 
         /// <summary>
@@ -3019,6 +3110,9 @@ namespace ConditioningControlPanel
         {
             if (!_remoteBrowserVideoActive) return;
             _remoteBrowserVideoActive = false;
+            // Put the overlay's browser blindfold back: with the video gone there is nothing left
+            // for the WebView to paint over the "someone else is controlling your app" card with.
+            RevealBrowserForRemoteVideo(false);
             try
             {
                 if (_isBrowserFullscreen) ExitBrowserFullscreen();
@@ -3040,12 +3134,13 @@ namespace ConditioningControlPanel
         private void NavigateBrowserToCurrentSiteHome()
         {
             if (_browser?.WebView?.CoreWebView2 == null) return;
+            RevealDashboardBrowser("reload");
             try
             {
                 var isBambiCloud = SettingsTab.RbBambiCloud?.IsChecked == true;
                 var url = isBambiCloud ? "https://bambicloud.com/" : "https://hypnotube.com/";
                 _browser.Navigate(url);
-                App.Logger?.Information("Browser navigated to current site home: {Url}", url);
+                App.Logger?.Information("Browser navigated to current site home: {Host}", UrlLog.Host(url));
             }
             catch (Exception ex)
             {

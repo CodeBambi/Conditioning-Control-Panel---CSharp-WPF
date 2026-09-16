@@ -33,8 +33,8 @@ namespace ConditioningControlPanel.Services
             lock (_sync) { _output = output; stop = _stopRequested; pause = _pauseRequested; }
             // A Stop() that arrived while the clip was still queued must not be lost, or the
             // caller's "cut off the previous line" contract silently breaks.
-            if (stop) { try { output.Stop(); } catch { } }
-            else if (pause) { try { output.Pause(); } catch { } }
+            if (stop) { try { output.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); } }
+            else if (pause) { try { output.Pause(); } catch (Exception ex) { Diag.Swallowed(ex); } }
         }
 
         internal void Detach() { lock (_sync) { _output = null; } }
@@ -43,21 +43,21 @@ namespace ConditioningControlPanel.Services
         {
             WaveOutEvent? o;
             lock (_sync) { _stopRequested = true; o = _output; }
-            if (o != null) { try { o.Stop(); } catch { } }
+            if (o != null) { try { o.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); } }
         }
 
         public void Pause()
         {
             WaveOutEvent? o;
             lock (_sync) { _pauseRequested = true; o = _output; }
-            if (o != null) { try { if (o.PlaybackState == PlaybackState.Playing) o.Pause(); } catch { } }
+            if (o != null) { try { if (o.PlaybackState == PlaybackState.Playing) o.Pause(); } catch (Exception ex) { Diag.Swallowed(ex); } }
         }
 
         public void Resume()
         {
             WaveOutEvent? o;
             lock (_sync) { _pauseRequested = false; o = _output; }
-            if (o != null) { try { if (o.PlaybackState == PlaybackState.Paused) o.Play(); } catch { } }
+            if (o != null) { try { if (o.PlaybackState == PlaybackState.Paused) o.Play(); } catch (Exception ex) { Diag.Swallowed(ex); } }
         }
     }
 
@@ -249,7 +249,7 @@ namespace ConditioningControlPanel.Services
             {
                 if (!handle.TryFinish()) return;   // PlaybackStopped and the safety timer race — one wins
                 handle.Detach();
-                try { safety?.Dispose(); } catch { }
+                try { safety?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 ScheduleTeardown(output, reader);
                 Interlocked.Decrement(ref _oneShotsInFlight);
                 if (ok) NoteOutputSuccess();
@@ -282,7 +282,7 @@ namespace ConditioningControlPanel.Services
                             return;
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                     Complete(false, "playback never reported stopped");
                 }, null, Timeout.Infinite, Timeout.Infinite);
 
@@ -294,7 +294,7 @@ namespace ConditioningControlPanel.Services
 
                 // Safety net: if PlaybackStopped never arrives (endpoint yanked mid-clip, driver
                 // stops pumping) this is what still frees the device, the reader and the slot.
-                try { safety.Change(safetyMs, Timeout.Infinite); } catch { }
+                try { safety.Change(safetyMs, Timeout.Infinite); } catch (Exception ex) { Diag.Swallowed(ex); }
 
                 NoteOutputSuccess();
                 if (onStarted != null)
@@ -305,9 +305,9 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                try { safety?.Dispose(); } catch { }
-                try { output?.Dispose(); } catch { }
-                try { reader?.Dispose(); } catch { }
+                try { safety?.Dispose(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
+                try { output?.Dispose(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
+                try { reader?.Dispose(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 if (handle.TryFinish())
                 {
                     handle.Detach();
@@ -333,9 +333,9 @@ namespace ConditioningControlPanel.Services
                 // teardown: true — never dropped by the queue cap, or the cap itself would leak.
                 EnqueuePlaybackWork(() =>
                 {
-                    try { output?.Stop(); } catch { }
-                    try { output?.Dispose(); } catch { }
-                    try { reader?.Dispose(); } catch { }
+                    try { output?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { output?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { reader?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 }, teardown: true);
             }
 
@@ -344,7 +344,7 @@ namespace ConditioningControlPanel.Services
                 System.Threading.Timer? t = null;
                 t = new System.Threading.Timer(_ =>
                 {
-                    try { t?.Dispose(); } catch { }
+                    try { t?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     Teardown();
                 }, null, 50, Timeout.Infinite);
             }
@@ -365,7 +365,7 @@ namespace ConditioningControlPanel.Services
                     catch (Exception ex) { App.Logger?.Debug("[Audio] one-shot completion callback threw: {E}", ex.Message); }
                 }, null);
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         #endregion
@@ -479,10 +479,10 @@ namespace ConditioningControlPanel.Services
             {
                 foreach (var item in _playbackWork.GetConsumingEnumerable())
                 {
-                    try { item(); } catch { }
+                    try { item(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 }
             }
-            catch { /* collection completed / disposed */ }
+            catch (Exception ex) { Diag.Swallowed(ex, "collection completed or disposed"); }
 
             TryUnregisterEndpointWatcher();
         }
@@ -518,9 +518,9 @@ namespace ConditioningControlPanel.Services
                 if (_notifyEnumerator != null && _endpointWatcher != null)
                     _notifyEnumerator.UnregisterEndpointNotificationCallback(_endpointWatcher);
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
             _endpointWatcher = null;
-            try { _notifyEnumerator?.Dispose(); } catch { }
+            try { _notifyEnumerator?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _notifyEnumerator = null;
         }
 
@@ -547,7 +547,7 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Information("[Audio] audio endpoint change ({Reason}) — device cache dropped, playback re-enabled", reason);
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private sealed class EndpointWatcher : IMMNotificationClient
@@ -570,7 +570,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>Stop accepting new playback work and drop the endpoint watcher. Called from Dispose.</summary>
         private void ShutdownPlayback()
         {
-            try { _playbackWork.CompleteAdding(); } catch { }
+            try { _playbackWork.CompleteAdding(); } catch (Exception ex) { Diag.Swallowed(ex); }
             if (Volatile.Read(ref _playbackWorkerStarted) == 0) TryUnregisterEndpointWatcher();
         }
 

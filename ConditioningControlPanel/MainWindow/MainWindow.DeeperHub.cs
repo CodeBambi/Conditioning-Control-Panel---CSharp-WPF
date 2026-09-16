@@ -50,6 +50,11 @@ namespace ConditioningControlPanel
             public string TimestampDisplay { get; init; } = "";
             public Visibility ShowTimestamp { get; init; } = Visibility.Collapsed;
 
+            // Media length in the mini timeline's m:ss / h:mm:ss shape.
+            // Collapsed (not "0:00") while nobody knows.
+            public string DurationDisplay { get; init; } = "";
+            public Visibility ShowDuration { get; init; } = Visibility.Collapsed;
+
             // Tag chips (small visual list)
             public List<DeeperAutoTagVm> Tags { get; init; } = new();
             public Visibility ShowTags { get; init; } = Visibility.Collapsed;
@@ -217,6 +222,9 @@ namespace ConditioningControlPanel
 
                 TimestampDisplay = FormatRelativeTime(e.LastModified),
                 ShowTimestamp    = e.LastModified == default ? Visibility.Collapsed : Visibility.Visible,
+
+                DurationDisplay  = e.DurationSeconds > 0 ? MediaDurationCache.Format(e.DurationSeconds) : "",
+                ShowDuration     = e.DurationSeconds > 0 ? Visibility.Visible : Visibility.Collapsed,
 
                 Tags     = tags,
                 ShowTags = tags.Count == 0 ? Visibility.Collapsed : Visibility.Visible,
@@ -522,6 +530,66 @@ namespace ConditioningControlPanel
             ApplyDeeperFilterAndSort();
             if (DeeperTab.TxtDeeperLibraryCount != null)
                 DeeperTab.TxtDeeperLibraryCount.Text = string.Format(Loc.Get("deeper_library_count_fmt"), _deeperAllEntries.Count);
+            ProbeDeeperDurations();
+        }
+
+        // -------------------------------------------------------------------
+        // Duration back-fill. The list renders first; then rows whose file
+        // carries no media_duration and whose media is a local file get
+        // probed one at a time on a worker thread. Each answer lands in
+        // MediaDurationCache (so the next scan reads it for free) and on the
+        // matching entries; the list is rebuilt in small batches so a long
+        // library fills in as it goes. Failures are remembered for the
+        // session so a broken file is never opened twice. Remote media is
+        // never touched.
+        // -------------------------------------------------------------------
+
+        private bool _deeperDurationProbeRunning;
+        private readonly HashSet<string> _deeperDurationProbeTried = new(StringComparer.OrdinalIgnoreCase);
+        private const int DeeperDurationRefreshBatch = 5;
+
+        private List<string> PendingDeeperDurationProbes() => _deeperAllEntries
+            .Where(e => e.DurationSeconds <= 0
+                        && !string.IsNullOrEmpty(e.MediaSource)
+                        && !_deeperDurationProbeTried.Contains(e.MediaSource)
+                        && MediaDurationCache.IsProbeable(e.MediaSource))
+            .Select(e => e.MediaSource)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        private async void ProbeDeeperDurations()
+        {
+            if (_deeperDurationProbeRunning) return;
+            var pending = PendingDeeperDurationProbes();
+            if (pending.Count == 0) return;
+            _deeperDurationProbeRunning = true;
+            try
+            {
+                while (pending.Count > 0)
+                {
+                    int found = 0;
+                    foreach (var source in pending)
+                    {
+                        _deeperDurationProbeTried.Add(source);
+                        var seconds = await MediaDurationCache.ProbeAsync(source);
+                        if (seconds is not > 0) continue;
+                        MediaDurationCache.Remember(source, seconds.Value);
+                        foreach (var entry in _deeperAllEntries)
+                        {
+                            if (entry.DurationSeconds <= 0
+                                && string.Equals(entry.MediaSource, source, StringComparison.OrdinalIgnoreCase))
+                                entry.DurationSeconds = seconds.Value;
+                        }
+                        found++;
+                        if (found % DeeperDurationRefreshBatch == 0) ApplyDeeperFilterAndSort();
+                    }
+                    if (found > 0 && found % DeeperDurationRefreshBatch != 0) ApplyDeeperFilterAndSort();
+                    // A reload while probing can bring in fresh rows; sweep again.
+                    pending = PendingDeeperDurationProbes();
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("ProbeDeeperDurations error: {Error}", ex.Message); }
+            finally { _deeperDurationProbeRunning = false; }
         }
     }
 }

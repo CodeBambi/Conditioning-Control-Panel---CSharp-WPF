@@ -1,0 +1,209 @@
+/* ============================================================================
+ * ramp/ramp.css - the ramp's two planes.
+ *
+ * BACK plane (.pbp-fx, the page's #fx): washes, flashes, falling gifs, the
+ * spiral veil. It sits over the board but under the HUD.
+ * FRONT plane (.pbp-fx-front): the video card only, so a tape can ride in front
+ * of the POV while everything else stays behind it.
+ *
+ * Both planes and everything in them are click-through. The player must always
+ * be able to reach a piece, even under a card they cannot see past - that is
+ * the whole point of the card. Layer styles land on top of this file.
+ * ==========================================================================*/
+
+.pbp-fx {
+  position: absolute; inset: 0; z-index: 4; overflow: hidden;
+  pointer-events: none !important;
+}
+.pbp-fx * { pointer-events: none !important; }
+
+/* a #fx the page never supplied: pin it to the viewport instead of a stage */
+.pbp-fx-fallback { position: fixed; }
+
+.pbp-fx-front {
+  position: fixed; inset: 0; z-index: 9; overflow: hidden;
+  pointer-events: none !important;
+}
+.pbp-fx-front * { pointer-events: none !important; }
+
+/* The stage carries the CSS filters (melt tint, blur). Transitioning the filter
+ * rather than snapping it keeps a retune from strobing; will-change keeps the
+ * board on its own layer so a filter change never repaints the whole page. */
+.pbp-stage-fx { transition: filter 420ms ease; will-change: filter; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pbp-fx *, .pbp-fx-front * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
+}
+
+/* ===========================================================================
+ * ONE-SHOTS
+ * ==========================================================================*/
+
+/* flash pops: an image punched over the board or ringing its edges. Sized and
+ * timed from custom properties the layer sets, so the animation is shared. */
+.pbp-flash {
+  position: absolute;
+  width: var(--pbp-size, 22vmin);
+  max-width: 38vmin; max-height: 38vmin;
+  border-radius: 10px;
+  filter: drop-shadow(0 0 26px rgba(255, 105, 180, 0.85));
+  animation: pbp-flash-pop var(--pbp-dur, 1600ms) ease forwards;
+  will-change: transform, opacity;
+}
+@keyframes pbp-flash-pop {
+  0%   { opacity: 0; transform: translate(-50%, -50%) rotate(var(--pbp-rot, 0deg)) scale(0.8); }
+  13%  { opacity: var(--pbp-peak, 0.85); transform: translate(-50%, -50%) rotate(var(--pbp-rot, 0deg)) scale(1); }
+  70%  { opacity: var(--pbp-peak, 0.85); transform: translate(-50%, -50%) rotate(var(--pbp-rot, 0deg)) scale(1.02); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--pbp-rot, 0deg)) scale(1.07); }
+}
+
+/* falling gifs: one sprite per spawn, drifting sideways as it goes. */
+.pbp-rain {
+  position: absolute; top: -28vh;
+  width: var(--pbp-size, 14vmin);
+  border-radius: 8px;
+  filter: drop-shadow(0 0 14px rgba(255, 105, 180, 0.7));
+  animation: pbp-rain-fall var(--pbp-fall, 3200ms) linear forwards;
+  will-change: transform, opacity;
+}
+@keyframes pbp-rain-fall {
+  0%   { opacity: 0; transform: translate(0, 0) scale(0.5) rotate(0deg); }
+  12%  { opacity: var(--pbp-peak, 0.85); }
+  88%  { opacity: var(--pbp-peak, 0.85); }
+  100% { opacity: 0; transform: translate(var(--pbp-drift, 0), 145vh) scale(1) rotate(var(--pbp-spin, 0deg)); }
+}
+
+/* ===========================================================================
+ * SUSTAINED
+ * ==========================================================================*/
+
+/* the melt veil: a pink wash that breathes. ONE element for the whole game -
+ * a retune writes opacity, it never appends a second veil. */
+.pbp-melt {
+  position: absolute; inset: -12%;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255, 150, 205, 0.62) 0%, rgba(255, 20, 147, 0.7) 62%, rgba(120, 0, 70, 0.55) 100%);
+  mix-blend-mode: screen;
+  opacity: 0; transition: opacity 520ms ease;
+  will-change: opacity, transform;
+}
+.pbp-melt.is-on { animation: pbp-melt-drift var(--pbp-melt-ms, 9000ms) ease-in-out infinite alternate; }
+@keyframes pbp-melt-drift {
+  from { transform: translate(-1.5%, -1%) scale(1.02); }
+  to   { transform: translate(1.5%, 1.6%) scale(1.09); }
+}
+
+/* the spiral veil: ONE element, screen-blended, over-scanned so a rotation
+ * never bares a corner (the DtRH .sf-pfx-spiral posture). It PULSES rather than
+ * sitting on - the hold grows with the meter - so it can be waited out. */
+.pbp-spiral {
+  position: absolute; inset: 0;
+  background-position: center; background-size: cover; background-repeat: no-repeat;
+  mix-blend-mode: screen;
+  opacity: 0; transition: opacity 620ms ease;
+  transform-origin: 50% 50%; scale: 1.6;
+  will-change: opacity, transform;
+}
+.pbp-spiral.is-on { animation: pbp-spin var(--pbp-spiral-ms, 16000ms) linear infinite; }
+/* no gif in the pool: draw the spiral instead of reaching into another game's
+ * asset folder. A spun pinwheel reads the same at this opacity. */
+.pbp-spiral.is-drawn {
+  background-image:
+    repeating-conic-gradient(from 0deg at 50% 50%,
+      rgba(255, 105, 180, 0.9) 0deg 9deg, rgba(28, 8, 34, 0.9) 9deg 18deg);
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 26%, transparent 74%);
+  mask-image: radial-gradient(circle at 50% 50%, #000 26%, transparent 74%);
+}
+@keyframes pbp-spin { to { transform: rotate(360deg); } }
+
+/* the fullscreen gif overlay: the top of the ramp. Semi-transparent by design,
+ * so the board is dimmed and distracting rather than gone. */
+.pbp-overlay {
+  position: absolute; inset: 0;
+  background-position: center; background-size: cover; background-repeat: no-repeat;
+  background-color: rgba(24, 6, 30, 0.35);
+  mix-blend-mode: screen;
+  opacity: 0; transition: opacity 900ms ease, background-image 300ms ease;
+  will-change: opacity;
+}
+
+/* ===========================================================================
+ * THE VIDEO CARD (front plane)
+ * ==========================================================================*/
+
+/* rushes up at the POV from the top, holds semi-transparent over the board,
+ * slides out the bottom. Click-through like everything else: the player can
+ * still reach the piece underneath, they just cannot see it. */
+.pbp-card {
+  position: fixed; left: 50%; top: 50%;
+  width: min(72vmin, 88vw);
+  transform: translate(-50%, -186%) scale(0.42);
+  opacity: 0;
+  transition: transform 620ms cubic-bezier(0.16, 0.9, 0.3, 1), opacity 380ms ease;
+  will-change: transform, opacity;
+}
+.pbp-card.is-in { transform: translate(-50%, -50%) scale(1); opacity: 0.76; }
+.pbp-card.is-out {
+  transform: translate(-50%, 190%) scale(0.86); opacity: 0;
+  transition: transform 700ms cubic-bezier(0.5, 0, 0.75, 0), opacity 600ms ease;
+}
+/* the cage carries the shudder so its animation never fights the card's own
+ * transform transition (both would target transform) */
+.pbp-card-frame {
+  position: relative; border-radius: 14px; overflow: hidden;
+  border: 3px solid rgba(255, 46, 46, 0.95);
+  box-shadow: 0 0 0 3px rgba(255, 0, 0, 0.35), 0 0 42px rgba(255, 30, 30, 0.7),
+    0 0 96px rgba(255, 0, 40, 0.36), 0 18px 60px rgba(0, 0, 0, 0.6);
+  animation: pbp-card-shake 0.09s steps(2) infinite, pbp-card-arc 0.9s steps(3) infinite;
+}
+.pbp-card-frame::after {
+  content: ''; position: absolute; inset: 0; border-radius: 11px;
+  box-shadow: inset 0 0 26px rgba(255, 60, 60, 0.55), inset 0 0 5px rgba(255, 230, 230, 0.9);
+  mix-blend-mode: screen;
+  animation: pbp-card-flicker 0.14s steps(2) infinite;
+}
+/* aspect-ratio, not intrinsic size: a clip that has not reported its
+ * dimensions yet (or that this build cannot decode) would otherwise collapse
+ * the frame to a red line instead of a card */
+.pbp-card video {
+  display: block; width: 100%; max-height: 74vh;
+  aspect-ratio: 16 / 10; object-fit: cover;
+  background: #150a20;
+}
+@keyframes pbp-card-shake {
+  0%   { transform: translate(1px, -0.8px); }
+  25%  { transform: translate(-1.2px, 0.5px); }
+  50%  { transform: translate(0.7px, 1.1px); }
+  75%  { transform: translate(-0.6px, -1.1px); }
+  100% { transform: translate(1.1px, 0.6px); }
+}
+@keyframes pbp-card-arc {
+  0%, 14%, 26%, 52%, 66%, 100% { border-color: rgba(255, 46, 46, 0.95); }
+  18% { border-color: rgba(255, 214, 214, 1); }
+  58% { border-color: rgba(255, 150, 150, 1); }
+}
+@keyframes pbp-card-flicker { 0%, 100% { opacity: 0.5; } 45% { opacity: 1; } }
+
+/* ===========================================================================
+ * THE DRAG GLITCH
+ * ==========================================================================*/
+
+/* stuck to the piece in your hand. Smaller than the piece is tall, so it reads
+ * as a sticker on the piece and never blots out the destination square. */
+.pbp-grab {
+  position: fixed; left: 0; top: 0;
+  width: var(--pbp-grab-size, 132px); height: var(--pbp-grab-size, 132px);
+  background-position: center; background-size: cover; background-repeat: no-repeat;
+  border-radius: 8px;
+  opacity: 0; transition: opacity 140ms ease;
+  will-change: transform, opacity;
+}
+.pbp-grab.is-on {
+  animation: pbp-grab-glitch 0.13s steps(2) infinite;
+  filter: drop-shadow(0 0 16px rgba(255, 40, 90, 0.8));
+}
+@keyframes pbp-grab-glitch {
+  0%   { filter: hue-rotate(0deg) saturate(1.4) drop-shadow(0 0 16px rgba(255, 40, 90, 0.8)); }
+  50%  { filter: hue-rotate(48deg) saturate(2) drop-shadow(-3px 0 12px rgba(0, 220, 255, 0.7)); }
+  100% { filter: hue-rotate(-32deg) saturate(1.7) drop-shadow(3px 0 12px rgba(255, 0, 140, 0.8)); }
+}

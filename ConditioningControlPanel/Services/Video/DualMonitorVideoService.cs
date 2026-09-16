@@ -130,8 +130,8 @@ namespace ConditioningControlPanel.Services
                 _mediaPlayer.Play(media);
                 _isPlaying = true;
 
-                App.Logger?.Information("DualMonitorVideo: Started playback of {Url} on {Count} monitors",
-                    videoUrl, _windowData.Count);
+                App.Logger?.Information("DualMonitorVideo: Started playback from {Host} on {Count} monitors",
+                    Logging.UrlLog.Host(videoUrl), _windowData.Count);
             }
             catch (Exception ex)
             {
@@ -253,7 +253,7 @@ namespace ConditioningControlPanel.Services
                 });
             }
 
-            App.Logger?.Information("DualMonitorVideo: Playback stopped");
+            App.Logger?.Debug("DualMonitorVideo: Playback stopped");
         }
 
         /// <summary>
@@ -681,7 +681,7 @@ namespace ConditioningControlPanel.Services
             }
             _libVLC = null;
 
-            App.Logger?.Information("DualMonitorVideoService disposed");
+            App.Logger?.Debug("DualMonitorVideoService disposed");
         }
     }
 }

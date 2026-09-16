@@ -25,7 +25,7 @@ Exploration & planning only. No code, no art generation, no promotion. Code in
 - **No art exists yet** for: boon icons, curse icons, upgrade/branch crests, HUD glyphs,
   power-up FX, hero banner, results art, cosmetic skins. All currently render as vector
   placeholders / Unicode glyphs.
-- **Tooling** lives in the parent dir (gitignored), **`C:\Projects\Conditioning-Control-Panel---CSharp-WPF\Tools\asset_gen\`** and `Tools\avatar-emotes\`:
+- **Tooling** lives in the parent dir (gitignored), **`C:\Projects\Conditioning-Control-Panel---CSharp-WPF\ConditioningControlPanel\tools\asset_gen\`** and `Tools\avatar-emotes\`:
   - Model: `gemini-2.5-flash-image` (GA, "nano-banana") via `gen_avatars.DEFAULT_MODEL`;
     `gemini-3.1-flash-image` is the pixel/seed model used by `pixelate_levels.py` (falls
     back to GA). Shared helpers: `load_api_key`, `extract_image_bytes`, `crop_to_alpha`.

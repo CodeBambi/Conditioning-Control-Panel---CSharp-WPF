@@ -124,7 +124,7 @@ export const SHOP_POOLS = Object.freeze({
     { t: "every grade gets a party now. even the c. especially the c.", face: '^_^' },
   ]),
   boughtLateSlip: bought('late_slip', [
-    { t: "a late slip. for emergencies. i won't tell the office.", face: '^_~', chain: 'wink' },
+    { t: "a tardy slip. for emergencies. i won't tell the office.", face: '^_~', chain: 'wink' },
     { t: "one free oops. keep it in the bag. don't spend it on a whim.", face: '0_0' },
     { t: "the slip! streak insurance. very grown up of you.", face: '(◠‿◠)' },
   ]),

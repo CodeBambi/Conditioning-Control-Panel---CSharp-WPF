@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -238,12 +238,16 @@ internal sealed class ArcademyMetaStore
     /// toward perfect attendance. A gap of exactly one day continues the streak, a larger gap
     /// restarts it at 1, and a day already credited leaves the streak alone.</para>
     /// </summary>
-    /// <para>THE LATE SLIP (economy, 2026-08-26). A gap of exactly two days is one missed day, and
-    /// a slip on the shelf covers it: the slip is spent, the streak carries on as though the player
-    /// had been there, and the caller is told so the debrief can say so. Nothing wider than one day
-    /// is coverable, and a player with no slips is exactly where they were before.</para>
-    /// <returns>(streak, perfectAttendance, classesToday, lateSlipUsed) after the write.</returns>
-    public (int Streak, int Perfect, int ClassesToday, bool LateSlipUsed) RecordAttendance(
+    /// <para>THE TARDY SLIP (economy 2026-08-26, STACKED 2026-09-04). A gap of N+1 days is N missed
+    /// nights, and the slips in the bag cover one night each: two slips carry a player over two
+    /// consecutive missed nights, a THIRD missed night breaks the streak exactly as it always did,
+    /// and nothing is spent unless the whole gap is covered (half a cover is not a cover — see
+    /// <see cref="ArcademyEconomy.ConsumeLateSlips"/>). The slip is spent HERE, automatically, with
+    /// nothing for the player to press, and the caller is told so the debrief can say so.</para>
+    /// <returns>(streak, perfectAttendance, classesToday, slipsSpent) after the write. The last is
+    /// a COUNT, not a flag: the server holds the authoritative bag and has to be told how many came
+    /// off it, and "a slip was used" is simply <c>&gt; 0</c>.</returns>
+    public (int Streak, int Perfect, int ClassesToday, int SlipsSpent) RecordAttendance(
         string localDate, string? gameKey)
     {
         lock (_lock)
@@ -251,18 +255,31 @@ internal sealed class ArcademyMetaStore
             var last = (string?)_state[AttendanceKey];
             int streak = (int?)_state[StreakKey] ?? 0;
             int perfect = (int?)_state[PerfectKey] ?? 0;
-            bool lateSlip = false;
+            int slipsSpent = 0;
 
             if (!string.Equals(last, localDate, StringComparison.Ordinal))
             {
+                // A gap of G days is G-1 missed nights. One slip per missed night, all or nothing,
+                // and never more than the desk will hold — so 2 covers two nights and a third
+                // night is the break it has always been. `spent` is 0 whenever the gap is not
+                // covered, which is the same "no" the no-slips player already got.
+                var gap = ArcademyEconomy.DayGap(last, localDate);
+                var missed = gap > 1 ? gap - 1 : 0;
+                int spent = 0;
+                if (!IsPreviousDay(last, localDate)
+                    && missed is > 0 and <= ArcademyEconomy.SlipStackMax)
+                {
+                    spent = ArcademyEconomy.ConsumeLateSlips(WalletUnlocked(), missed);
+                }
+
                 if (IsPreviousDay(last, localDate)) streak += 1;
-                else if (ArcademyEconomy.DayGap(last, localDate) == 2
-                         && ArcademyEconomy.ConsumeLateSlip(WalletUnlocked()))
+                else if (spent > 0)
                 {
                     streak += 1;
-                    lateSlip = true;
+                    slipsSpent = spent;
                     App.Logger?.Information(
-                        "ArcademyMetaStore: a late slip covered {Last} - streak carries on at {N}", last, streak);
+                        "ArcademyMetaStore: {Spent} tardy slip(s) covered {Missed} missed night(s) after {Last} - streak carries on at {N}",
+                        spent, missed, last, streak);
                 }
                 else streak = 1;
                 _state[AttendanceKey] = localDate;
@@ -289,7 +306,7 @@ internal sealed class ArcademyMetaStore
             }
 
             Touch();
-            return (streak, perfect, today.Count, lateSlip);
+            return (streak, perfect, today.Count, slipsSpent);
         }
     }
 

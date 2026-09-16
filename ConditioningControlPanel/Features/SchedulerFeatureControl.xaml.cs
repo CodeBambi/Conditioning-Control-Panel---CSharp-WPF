@@ -64,7 +64,13 @@ namespace ConditioningControlPanel.Features
             if (_isLoading) return;
             var s = App.Settings?.Current;
             if (s == null) return;
-            s.SchedulerEnabled = ChkEnabled.IsChecked ?? false;
+            var enabled = ChkEnabled.IsChecked ?? false;
+            if (s.SchedulerEnabled == enabled) return;
+            s.SchedulerEnabled = enabled;
+            // The scheduler starts the engine on its own, so every flip leaves a line: without one,
+            // "the app started by itself" has no trail back to when the switch went on.
+            App.Logger?.Information("[Scheduler] enabled {Enabled} (window {Start}-{End})",
+                enabled, s.SchedulerStartTime, s.SchedulerEndTime);
             App.Settings?.Save();
         }
 

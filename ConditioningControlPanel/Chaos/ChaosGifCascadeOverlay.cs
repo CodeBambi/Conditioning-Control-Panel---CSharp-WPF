@@ -410,7 +410,7 @@ public sealed class ChaosGifCascadeOverlay : Window
 
                         var dispatcher = Application.Current?.Dispatcher;
                         if (dispatcher == null || dispatcher.HasShutdownStarted) return;
-                        dispatcher.BeginInvoke(() => { try { img.Source = bmp; } catch { } });
+                        _ = dispatcher.BeginInvoke(() => { try { img.Source = bmp; } catch { } });
                     }
                     catch (Exception ex) { App.Logger?.Debug("GifCascade decode: {E}", ex.Message); }
                 });

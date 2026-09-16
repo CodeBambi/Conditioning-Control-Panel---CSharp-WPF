@@ -1,0 +1,170 @@
+# Racing Thoughts - audio
+
+One module, `race/audio.js`, owns every sound. Two doors: the hot beats are WebAudio in the page
+on the dive's shared context (`engine/audioBus.js`, so the DtRH master colour applies); the
+fanfares the host already ships (`Resources/sounds/chaos/*.mp3`) go out as `sfx` bridge messages.
+`run.js` only calls `audio.sfx(name, scale)`, `audio.update(dt, { world, run, kart })` once per
+step, `audio.duck(on, why)` on brake / host pause / end, and `audio.dispose()`. Everything else
+audio.js reads off the live world it is handed: it subscribes to `field.onPop` and `score.onEvent`
+itself (re-subscribing when "again" builds a new world) and watches
+per-frame edges (airborne, boost, drift, the Big Wheel span, the room).
+
+`bubbles.js` plays its own kind-blind pop through `makeSfxPlayer`; that player honours
+`shared/audioMute.isDucked()`, so audio.js sets ducked for the page's life and owns the pop.
+
+## Levels and laws
+
+- Master = host `init.settings.masterVolume / 100` (60 standalone). `M` toggles the dive's shared
+  mute (`shared/audioMute.js`, persisted in localStorage as `rh-audio-muted`) with a HUD toast;
+  a persisted mute is announced on boot. Muted = no in-page voices AND no host legs.
+- One-shots are capped at **8 voices**; the 9th drops the quietest (logged, rate-limited 5 s).
+  Two pops inside 28 ms are one pop (a chain, not a machine gun); the near-miss whisper fires
+  at most every 260 ms. `Burst.mp3` and `GG.mp3` are not loaded: the owner cut both.
+  Loops (music, the speed bed, drift sparks) do not count.
+- Pops climb with the combo: **+1 semitone per 4 combo, capped at +7**, plus +-20 cents of jitter
+  so a chain never machine-guns. Rungs climb the chime ladder: x2 chime1, x3 chime2, x4 chime3,
+  x6/x8 chime3 at +3/+6 semitones.
+- Pops pan by lateral offset from the kart (`(x - kart.x) / ROAD_HALF_W * 0.6`).
+- Music sits at `MUSIC_LEVEL` 0.3 (the OSTs are mastered at about -15.5 LUFS); the bed and sparks
+  under it. No pitch shifting on the music, ever: room colour is filters only.
+- Duck: brake and host pause (native video) pull the music to 10%; the end card to 45%; the first
+  `update()` after resume lifts it (and the explicit `duck(false)` hooks do too).
+- Autoplay: the run starts on a key, so the context is unlocked; if `play()` still rejects
+  (`?autostart=1`), the track retries on the next pointer/key. A missing file marks the track dead,
+  re-rolls that room from what is left, and never throws.
+- The screen goes dark (2026-09-09, phone testing: "the audio seems to keep going while screen is
+  off"): audio.js watches `visibilitychange` itself. Hidden pauses the music element and suspends
+  the context (the bed's loops with it); visible resumes the context and plays the same element
+  back if it was the one playing, with the usual gesture retry if `play()` rejects. It covers the
+  menu theme too. The loaded file is run.js's: hidden brakes the run, which posts `track-pause`.
+
+## The speed bed
+
+Three loops under the music, outside the voice cap, on their own `bedBus` (the duck pulls it to
+0 with the music): **wind** = lowpassed noise, cutoff 160 Hz -> 1.46 kHz and gain 0.012 -> 0.062
+with normalised speed (`(speed - KART_MIN_SPEED) / (KART_MAX_SPEED - KART_MIN_SPEED)`), boost
+adds +500 Hz / +0.03, airborne opens it another 400 Hz and +40%; **hum** = a triangle at
+46 -> 110 Hz under a 180 Hz lowpass, gain 0.022 -> 0.042, thinned in the air; **sparks** =
+noise above 4.5 kHz whose gain is re-rolled every frame between 0.03 and 0.075 while drifting
+on the ground, 0 otherwise (that is the crackle). Nothing here is built while muted.
+
+## The menu
+
+`audio.menu(on)`, `audio.ui(name, value)` and `audio.setLevels({ music, sfx })` are the front
+door's three. race/menu.js calls them; race/cards.js calls `ui`.
+
+- **The theme.** No new file: `MENU_TRACK` is `ost_campus` ("Star Byte Loop", the tea garden's own
+  hub tune), played through the SAME chain and the same `MUSIC_LEVEL` as the run. `menu(true)`
+  writes it into the playlist under the pseudo-room `MENU_ROOM` and enters it like any other room,
+  so the fade in and the fade out are the ordinary `CROSSFADE_SEC` 1.5 s. `menu(false)` (the boot
+  calls it as the run starts) stops nothing: the first room's track crossfades over the theme, and
+  when that room is the Tea Garden the same tune simply plays on. Options and the story cards keep
+  it: only `show()` turns it on, nothing turns it off. Autoplay is the run's rule, unchanged: a
+  rejected `play()` arms the pointer/key retry, a missing file marks the track dead and never
+  throws. `duck('track')` still pulls it to `TRACK_DUCK` under a loaded file, and `M` covers it.
+  A different theme is one line: `MENU_TRACK`.
+- **The blips.** Five synth voices, no files, all on the shared context through `sfxBus`:
+  `tick` (a triangle 1180 -> 1130 Hz, 35 ms, 0.045: hover and focus, very quiet), `pick` (sine 660
+  then 990 Hz at 60 ms, two notes up), `back` (sine 620 then 415 Hz, two notes down), `step` (a
+  triangle at 520 Hz doubling to 1040 across the slider, 45 ms, so the ear hears the number move)
+  and `page` (a bandpass noise sweep 2200 -> 700 Hz over 160 ms with a soft triangle on top: the
+  story card turning). The name set is closed; anything else is dropped. Every blip is rate
+  limited to one per `UI_GAP_MS` 45 ms, so holding an arrow on a slider ticks, it does not fire.
+- **The levels.** `setLevels({ music, sfx })` takes 0..1 each (menu.js persists them under
+  `race.options`, the boot applies them once before the first frame, and the slider applies them
+  live). `music` multiplies `MUSIC_LEVEL` on the music chain's level node; `sfx` multiplies
+  `sfxBus`, which every in-page one-shot and every blip rides. The host legs are NOT scaled: those
+  play on the host's own mixer at its own volume. The speed bed rides its own bus and follows the
+  master, not the sfx slider.
+
+## Event map
+
+| beat | source | in-page (WebAudio) | host leg (`sfx` name) |
+|------|--------|--------------------|-----------------------|
+| treat pop | `field.onPop` treat | Pop / Pop2 / Pop3 round-robin, combo pitch, panned, 0.34 | - |
+| lucky pop | `field.onPop` lucky | Pop2 + chime1 at +5 (the 25 point treat) | - |
+| prism pop | `field.onPop` prism | Pop2 at +3 + chime1 at +5 (its chained pops sound themselves) | - |
+| golden pop | `field.onPop` golden | Pop3 at +2, chime3 at +7 (50 ms), chime3 at +12 (140 ms) | swallowed (`golden_pop` 0.9) |
+| jackpot | `score` jackpot | chime1-2-3 arpeggio 80 ms (minor 0.7), major adds chime3 at +12 (300 ms) | - |
+| effect pop | `field.onPop` effect (not "held") | Pop at -5 semis through a 1.1 kHz lowpass + 140>50 Hz sine thud | - |
+| near miss | `score` almost | Pop2 at -4, 0.10 (the whisper) | - |
+| rung up | `score` mult (to > from) | chime ladder (above) | swallowed (`streak_milestone` 0.6) |
+| bank | `score` bank | thud (120>38 Hz sine + click) + chime1-2-3 arpeggio 90 ms | `streak_milestone` 0.9 or `pb_fanfare` 0.9 |
+| boost (pad or the pump) | `kart.boostSec` rising edge | noise whoosh, bandpass 300>3200 Hz, 0.7 s | `tunnel_powerup_collect` 0.8 |
+| ramp launch | `kart.airborne` rising | sine rise 220>700 Hz, 0.36 s, soft | - |
+| ramp land | `kart.airborne` falling | thump 110>42 Hz + click | - |
+| Big Wheel | `layout.featuresBetween` loop | two noise sweeps up then down, 1.3 s + 1.0 s | - |
+| pickup take | run.js `pickupTake` | - | `tunnel_powerup_collect` 0.8 (and `chain_pop` 0.5 per pop while the pump sweeps) |
+| gate (room change) | `run.room.id` edge | chime2 at -3 + the crossfade | `depth_change` 0.7 |
+| brake open / close | `duck('brake')` | Pop at -7 / Pop2 at +3 | `ui_click` 0.5 (open) |
+| end card | `sfx('surface')` | chime arpeggio 130 ms + chime3 at +5 | `surface` 0.8 |
+
+Every host name is verified against `Resources/sounds/chaos/` (`HOST_SFX` in audio.js is the
+closed set; anything else is dropped and logged). A leg an in-page event already covers is
+swallowed in `sfx()` so nothing sounds twice.
+
+## Room -> track (the Arcademy OST, for now)
+
+Nobody here has listened. Moods come from `arcademy/shell/ost.js` (the owner's own "softer:
+the two Midnight Statics, active: the rest") and the file lengths; re-order freely.
+
+| track | title | mood | energy | length |
+|-------|-------|------|--------|--------|
+| ost_campus | Star Byte Loop | soft | 0.45 | 75 s |
+| ost_deep_end | Pixel Rush | loud | 0.80 | 77 s |
+| ost_sort | Pixel Rush 2 | loud | 0.85 | 52 s |
+| ost_records | Midnight Static | soft | 0.30 | 109 s |
+| ost_lost_found | Neon Skyline | soft | 0.50 | 141 s |
+| ost_instant_recall | Midnight Static 2 | soft | 0.25 | 121 s |
+| ost_anomaly | Midnight Static 3 | soft | 0.30 | 124 s |
+| ost_daily_trigger | Neon Pixel Rain | loud | 0.75 | 164 s |
+| ost_impulse_control | Neon Pixel Rain 2 | loud | 0.80 | 159 s |
+| ost_prizes | Neon Jackpot 3 | loud | 0.70 | 98 s |
+| ost_misdirection | Neon Jackpot | loud | 0.75 | 76 s |
+| ost_deja_vu | Neon Jackpot 2 | loud | 0.70 | 41 s |
+| ost_annex | Corroded Pulse | soft | 0.35 | 139 s |
+
+| room | loud | pool (best first; the run rotates by seed and skips a track another room took) | colour |
+|------|------|------|--------|
+| The Tea Garden | no | ost_campus (always: the hub tune opens every lap) | - |
+| The Toybox | yes | ost_daily_trigger, ost_deep_end, ost_impulse_control | - |
+| The Fool's Casino | yes | ost_misdirection, ost_prizes, ost_deja_vu | - |
+| The Pink Chapel | yes | ost_impulse_control, ost_sort, ost_daily_trigger | - |
+| The Coronation | yes | ost_prizes, ost_deep_end, ost_misdirection | - |
+| The Undertow | no | ost_instant_recall, ost_records, ost_anomaly | lowpass 650 Hz |
+| The Hall of Mirrors | no | ost_anomaly, ost_lost_found, ost_deja_vu | - |
+| The Grey Ward | no | ost_annex, ost_records, ost_instant_recall | highpass 240 Hz |
+
+Plus, in any room: the fraught state (effects stacked, `run.effects.length / 3`) eases a lowpass
+from open down to 800 Hz; tea time caps it at 1.4 kHz. Crossfade at every gate is 1.5 s (linear
+ramps on per-track gain nodes; the outgoing element pauses 200 ms after the ramp and resumes
+from where it was next lap). At most two elements are resident: the room's track and the next
+room's, which `residentTracks` names along the run's route (the dresser's spans, or a chart's acts
+via `audio.setRoute`, since a loaded chart re-orders the gates) and the gate prefetches (`preload=auto`, so it is buffered
+by the time its room comes). Every other element is released after its crossfade (src emptied,
+the file buffer with it; a lap of eight rooms used to hold all eight, 10-14 MB) and its position
+parked, so the resume-next-lap rule holds through a re-fetch. Nothing is fetched before the menu
+asks for its theme. The Arcademy mp3s (0.77-2.74 MB each) are the only variants shipped: there
+is no lower-bitrate set for phones. Each track is one `<audio>` element through a
+`MediaElementSource` into the chain `duck -> lowpass -> highpass -> level -> master`. If that
+route ever throws (it should not: the files are same-origin on `ccp.game`, the same route
+`engine/scene.js` uses for the drone) the player falls back to element volume with a 50 ms
+stepped fade and logs `media element route failed`.
+
+## Swapping the soundtrack
+
+1. Drop the mp3s in `Resources/web/arcademy/assets/sfx/` (or change `OST_BASE`).
+2. Edit `TRACKS` in `race/audio.js`: one row per file (`name`, `title`, `mood`, `energy`, `sec`,
+   `start` = seconds to skip on first play).
+3. Edit `ROOM_POOLS`: each room lists the tracks it may draw, best first. That is the whole change.
+4. Optional per-track level: add `level: 0.8` to a row and multiply it in `fade()` (one line;
+   not wired until a mix needs it).
+
+## When the owner's mix lands
+
+Send: the files, one line per track saying which room(s) it is for and whether it is loud or
+soft, an integrated LUFS if you have it (the Arcademy files are -15.2 to -16.0 and `MUSIC_LEVEL`
+was set for that), any loop point (start/end seconds) if a file should not loop whole, and a
+call on the two colours (Undertow lowpass, Grey Ward highpass) once heard on real speakers.
+Debug: every track start, crossfade, voice-cap drop and missing file logs as `[audio] ...`
+through `bridge.log` (the host log, or the console as `[race->host] log` standalone).

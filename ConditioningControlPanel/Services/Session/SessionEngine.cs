@@ -25,7 +25,11 @@ namespace ConditioningControlPanel.Services
         public event EventHandler<SessionCompletedEventArgs>? SessionCompleted;
         public event EventHandler? SessionStarted;
         public event EventHandler? SessionStopped;
-        
+        /// <summary>Raised after a pause takes effect. Payload = the pause count this session (1-based).</summary>
+        public event EventHandler<int>? SessionPaused;
+        /// <summary>Raised after a resume takes effect. Payload = how long the pause lasted.</summary>
+        public event EventHandler<TimeSpan>? SessionResumed;
+
         // State
         private Session? _currentSession;
         private bool _isRunning;
@@ -239,6 +243,11 @@ namespace ConditioningControlPanel.Services
             _mainTimer.Tick += MainTimer_Tick;
             _mainTimer.Start();
             
+            // Local session ledger (recent start times + same-mod run) feeds the companion's
+            // "I noticed" bark conditions. Recorded BEFORE SessionStarted so the bark that fires
+            // on this very start already counts it. Local settings only, never sent anywhere.
+            try { App.Settings?.Current?.RecordSessionStart(App.Settings.Current.ActiveModId); } catch { }
+
             // Fire started event
             SessionStarted?.Invoke(this, EventArgs.Empty);
 
@@ -500,6 +509,7 @@ namespace ConditioningControlPanel.Services
             try { App.EmiDesk?.Fire("sessionPaused", new { n = _pauseCount }); } catch { }
             _pauseStartTime = DateTime.Now;
             _wallClockStopwatch.Stop();
+            try { SessionPaused?.Invoke(this, _pauseCount); } catch (Exception ex) { App.Logger?.Debug(ex, "SessionPaused handler threw"); }
 
             // Stop timers but keep session state
             _mainTimer?.Stop();
@@ -564,8 +574,9 @@ namespace ConditioningControlPanel.Services
             if (settings.BouncingTextEnabled && !IsFeaturePending("bouncing text")) App.BouncingText?.Start();
             if (settings.MindWipeEnabled && !IsFeaturePending("mind wipe"))
                 App.MindWipe?.Start(settings.MindWipeBaseMultiplier, settings.MindWipeVolume / 100.0);
-            // DISABLED: Brain Drain is up for rework due to performance issues
-            // if (_brainDrainActive && App.Settings.Current.IsLevelUnlocked(70)) App.BrainDrain?.Start();
+            // Brain Drain (#1147). The pause stopped both halves; the visual one comes back with
+            // App.Overlay?.Start() below. No level gate - that one went with the other dead gates.
+            if (settings.BrainDrainEnabled && _brainDrainActive) App.BrainDrain?.Start();
             if (settings.MandatoryVideosEnabled && !IsFeaturePending("mandatory videos")) App.Video?.Start();
             // Re-enable overlays via the overlay service
             App.Overlay?.Start();
@@ -587,6 +598,10 @@ namespace ConditioningControlPanel.Services
             // EMI Desk (MOMENTS 4.B).
             try { App.EmiDesk?.Fire("sessionResumed", new { minutes = (int)Math.Round(RemainingTime.TotalMinutes) }); }
             catch { }
+
+            var pausedFor = DateTime.Now - _pauseStartTime;
+            if (pausedFor < TimeSpan.Zero) pausedFor = TimeSpan.Zero;
+            try { SessionResumed?.Invoke(this, pausedFor); } catch (Exception ex) { App.Logger?.Debug(ex, "SessionResumed handler threw"); }
         }
 
         private void MainTimer_Tick(object? sender, EventArgs e)
@@ -776,15 +791,21 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            // DISABLED: Brain Drain is up for rework due to performance issues
-            // if (settings.BrainDrainEnabled && _brainDrainActive && elapsedMinutes >= settings.BrainDrainStartMinute)
-            // {
-            //     var brainDrainDuration = totalMinutes - settings.BrainDrainStartMinute;
-            //     var brainDrainProgress = (elapsedMinutes - settings.BrainDrainStartMinute) / brainDrainDuration;
-            //     brainDrainProgress = Math.Clamp(brainDrainProgress, 0, 1);
-            //     _currentBrainDrainIntensity = Lerp(settings.BrainDrainStartIntensity, settings.BrainDrainEndIntensity, brainDrainProgress);
-            //     if (IsMainWindowValid) _mainWindow.UpdateBrainDrainIntensity((int)_currentBrainDrainIntensity);
-            // }
+            // Brain Drain intensity ramp (#1147). Drives the SERVICE directly instead of writing
+            // App.Settings.Current.BrainDrainIntensity every second: that is the USER's persisted
+            // value and it auto-saves, so a kill mid-session would freeze the ramp maximum into
+            // settings.json for good - the pink filter's #471/#476 bug, which is why pink ramps
+            // this way too. Ramp-only, like the flash and spiral ramps above.
+            if (settings.BrainDrainEnabled && _brainDrainActive
+                && settings.BrainDrainStartIntensity != settings.BrainDrainEndIntensity
+                && elapsedMinutes >= settings.BrainDrainStartMinute)
+            {
+                var brainDrainDuration = Math.Max(0.01, totalMinutes - settings.BrainDrainStartMinute);
+                var brainDrainProgress = Math.Clamp((elapsedMinutes - settings.BrainDrainStartMinute) / brainDrainDuration, 0, 1);
+                brainDrainProgress = RampCurves.ApplyCurve(brainDrainProgress, curve);
+                if (App.BrainDrain != null)
+                    App.BrainDrain.Intensity = Lerp(settings.BrainDrainStartIntensity, settings.BrainDrainEndIntensity, brainDrainProgress);
+            }
         }
         
         private void CheckDelayedFeatures(double elapsedMinutes)
@@ -910,16 +931,31 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            // DISABLED: Brain Drain is up for rework due to performance issues
-            // if (settings.BrainDrainEnabled && !_brainDrainActive && settings.BrainDrainStartMinute > 0)
-            // {
-            //     if (elapsedMinutes >= settings.BrainDrainStartMinute)
-            //     {
-            //         _brainDrainActive = true;
-            //         if (IsMainWindowValid) _mainWindow.EnableBrainDrain(true, settings.BrainDrainStartIntensity);
-            //         App.Logger?.Information("Brain Drain activated at {Minutes:F1} minutes", elapsedMinutes);
-            //     }
-            // }
+            // Brain Drain delayed start (#1147). The settings write is what raises the VISUAL
+            // half: OverlayService reconciles BrainDrainEnabled every 500ms. Start() is the AUDIO
+            // half, and it reads the same flag, so the write has to come first.
+            if (settings.BrainDrainEnabled && !_brainDrainActive && settings.BrainDrainStartMinute > 0
+                && elapsedMinutes >= settings.BrainDrainStartMinute)
+            {
+                _brainDrainActive = true;
+                App.Settings.Current.BrainDrainEnabled = true;
+                App.Settings.Current.BrainDrainIntensity = settings.BrainDrainStartIntensity;
+                App.BrainDrain?.Start();
+                App.Logger?.Information("Brain Drain activated at {Minutes:F1} minutes (target was {Target})",
+                    elapsedMinutes, settings.BrainDrainStartMinute);
+            }
+
+            // Brain Drain delayed end - the timeline editor writes a stop event as an end minute,
+            // same shape as the corner GIF above.
+            if (_brainDrainActive && settings.BrainDrainEndMinute > 0
+                && elapsedMinutes >= settings.BrainDrainEndMinute)
+            {
+                _brainDrainActive = false;
+                App.Settings.Current.BrainDrainEnabled = false;
+                App.BrainDrain?.Stop();
+                App.Logger?.Information("Brain Drain deactivated at {Minutes:F1} minutes (target was {Target})",
+                    elapsedMinutes, settings.BrainDrainEndMinute);
+            }
         }
         
         /// <summary>
@@ -1046,6 +1082,9 @@ namespace ConditioningControlPanel.Services
             
             _savedSettings.SpiralEnabled = current.SpiralEnabled;
             _savedSettings.SpiralOpacity = current.SpiralOpacity;
+
+            _savedSettings.BrainDrainEnabled = current.BrainDrainEnabled;
+            _savedSettings.BrainDrainIntensity = current.BrainDrainIntensity;
             
             _savedSettings.BubblesEnabled = current.BubblesEnabled;
             _savedSettings.BubblesFrequency = current.BubblesFrequency;
@@ -1456,6 +1495,28 @@ namespace ConditioningControlPanel.Services
             {
                 current.SpiralEnabled = false;
             }
+
+            // Brain Drain (delayed start - don't enable yet if delayed).
+            // #1147: this whole path used to be commented out ("up for rework due to performance
+            // issues"), which made a brain-drain block on the timeline a no-op and got the icon
+            // pulled from the creator palette (#430). The rework shipped - the blur renders on the
+            // compositor off its own capture pump and OverlayService.BrainDrainWithheld is false -
+            // so the session half is wired back up. Writing the flag is the whole of the VISUAL
+            // half (OverlayService.Start reads it, and its 500ms reconciler keeps it honest); the
+            // service call below is the AUDIO half, whose Start() reads the same flag.
+            _brainDrainActive = false;
+            if (settings.BrainDrainEnabled && settings.BrainDrainStartMinute == 0)
+            {
+                current.BrainDrainEnabled = true;
+                current.BrainDrainIntensity = settings.BrainDrainStartIntensity;
+                _brainDrainActive = true;
+                App.BrainDrain?.Start();
+            }
+            else
+            {
+                current.BrainDrainEnabled = false;
+                App.BrainDrain?.Stop();
+            }
             
             // Bubbles
             if (settings.BubblesEnabled)
@@ -1655,6 +1716,12 @@ namespace ConditioningControlPanel.Services
             
             current.SpiralEnabled = _savedSettings.SpiralEnabled;
             current.SpiralOpacity = _savedSettings.SpiralOpacity;
+
+            // The session owned Brain Drain for its run and may have ramped the service past the
+            // user's own intensity; hand both halves back.
+            current.BrainDrainEnabled = _savedSettings.BrainDrainEnabled;
+            current.BrainDrainIntensity = _savedSettings.BrainDrainIntensity;
+            App.BrainDrain?.UpdateSettings();
             
             current.BubblesEnabled = _savedSettings.BubblesEnabled;
             current.BubblesFrequency = _savedSettings.BubblesFrequency;

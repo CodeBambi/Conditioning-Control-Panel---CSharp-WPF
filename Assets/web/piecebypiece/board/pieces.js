@@ -1,0 +1,486 @@
+/* ============================================================================
+ * board/pieces.js - the men on the board.
+ *
+ * Placeholder art: every type is a lathed profile (turned on a lathe, like real
+ * wooden chessmen) in a glossy silicone material. If a matching glb turns up in
+ * assets/pieces/ it is used instead, per type AND side, without a reload:
+ * `<name>.glb` dresses white, `<name>_purple.glb` dresses black, and a missing
+ * purple file falls back to the white glb.
+ *
+ * A glb is +Y up, origin at the centre of its base, front facing -Z (the way
+ * white looks down the board), and it carries its OWN height: one board square
+ * is 1.0, so a 1.25-tall king glb is a king a square and a quarter tall.
+ * Nothing rescales it.
+ *
+ * The body is the mesh carrying vertex colours (COLOR_0): those hold the
+ * piece's scheme, so it is lit through a white base colour with vertexColors
+ * on. Any other mesh in the file is jewellery (the king's crown, the queen's
+ * tiara) and keeps the material it was exported with, metal and all. The lathe
+ * placeholders keep the flat SKIN colours and the HEIGHT table.
+ * ==========================================================================*/
+
+import * as THREE from 'three';
+import { squareToWorld } from './scene.js';
+
+export const TYPES = ['p', 'n', 'b', 'r', 'q', 'k'];
+export const GLB_NAMES = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
+// Heights for the lathe placeholders only. A glb brings its own.
+export const HEIGHT = { p: 0.62, n: 0.80, b: 0.90, r: 0.70, q: 1.02, k: 1.15 };
+
+// Lathe profiles in NORMALISED space: y runs 0 (base) to 1 (crown), x is the
+// radius at that height. A placeholder is built at height 1 and then scaled by
+// HEIGHT[type].
+const PROFILE = {
+  p: [[0,0],[0.34,0],[0.36,0.06],[0.26,0.14],[0.16,0.22],[0.145,0.46],[0.22,0.53],[0.13,0.58],[0.10,0.66],[0.17,0.74],[0.19,0.84],[0.14,0.94],[0.06,0.99],[0,1]],
+  r: [[0,0],[0.38,0],[0.40,0.07],[0.30,0.15],[0.26,0.58],[0.30,0.68],[0.38,0.72],[0.38,1.0],[0.30,1.0],[0.30,0.86],[0,0.84]],
+  n: [[0,0],[0.37,0],[0.39,0.07],[0.29,0.15],[0.24,0.30],[0.21,0.42],[0,0.44]],
+  b: [[0,0],[0.36,0],[0.38,0.06],[0.27,0.14],[0.17,0.26],[0.155,0.46],[0.24,0.54],[0.27,0.60],[0.20,0.64],[0.13,0.70],[0.15,0.80],[0.11,0.88],[0.06,0.95],[0.065,0.965],[0,0.97]],
+  q: [[0,0],[0.38,0],[0.40,0.06],[0.29,0.14],[0.18,0.28],[0.16,0.48],[0.26,0.58],[0.30,0.64],[0.23,0.70],[0.28,0.78],[0.20,0.84],[0.10,0.88],[0.11,0.94],[0.06,0.97],[0,0.98]],
+  k: [[0,0],[0.38,0],[0.40,0.06],[0.29,0.14],[0.19,0.28],[0.17,0.50],[0.27,0.60],[0.31,0.66],[0.24,0.72],[0.15,0.80],[0.13,0.86],[0.16,0.89],[0.10,0.90],[0,0.90]],
+};
+
+const SKIN = { w: { color: 0xFFF0F5, sheen: 0xFF9EC4 }, b: { color: 0x3B2A63, sheen: 0x7B6CFF } };
+
+// The men cast shadows but do not take one. Their sculpt detail (ribs, suckers,
+// veins) is finer than any shadow texel we can afford, so every crease shadowed
+// the crease beside it and a whole flank of every piece went black: that is the
+// "hollow shell" the board used to read as. Proven by sweep: at 4096 over a
+// frustum drawn to the board it is unchanged, and at normalBias 0.6 (over half
+// a square) it only trades the black flanks for black pits. Their form comes
+// from the lights, the fake subsurface and the contact patch instead. The board
+// still receives, so the shadow a man throws is still there.
+const RECEIVES_SHADOW = false;
+
+// A glb node is allowed a transform of its own; if it has one it is baked into
+// the geometry, because only the geometry travels out of the file.
+const IDENTITY = new THREE.Matrix4();
+
+function lathe(points, segments = 40) {
+  const geo = new THREE.LatheGeometry(points.map(([x, y]) => new THREE.Vector2(Math.max(x, 0.0001), y)), segments);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/** Every number the silicone and its contact patch are made of. */
+export const SKIN_TUNING = Object.freeze({
+  roughness: 0.33,
+  clearcoat: 0.42,          // was 0.6: a hard gloss over a dark body is a shell
+  clearcoatRoughness: 0.28,
+  sheen: 0.72,
+  sheenRoughness: 0.52,
+  // Fake subsurface. Not transmission and not thickness: those two are what
+  // make a soft body read as glass, which is the hollow look we are getting
+  // rid of. This is the two things a thick soft body actually does. It never
+  // goes to black in its own shade, because light that went in came back out,
+  // and it lights up along an edge where the body is thin.
+  fillFloor: 0.16,          // how much of its own colour a shaded face keeps
+  fillKnee: 0.30,           // the light level that floor has faded out by
+  rimGain: 0.16,            // how bright a thin edge gets
+  rimPower: 2.4,            // how tight to the edge that is
+  rimMix: 0.5,              // how far the rim leans off the body colour
+  // The contact patch: a disc of shade under the man, so he sits ON the board.
+  contactSpread: 2.15,      // disc width, in widths of the man's own footprint
+  contactAlpha: 0.46,
+  contactLiftFade: 0.62,    // world units of lift the patch fades out over
+  contactLiftGrow: 0.45,    // and how far it spreads while it goes
+  contactLean: 0.55,        // how far it slides under a leaning man
+  contactSquash: 0.7,       // and how far it spreads under a squatting one
+  contactUpright: 0.72,     // below this much "up" (a tumble) it is gone
+});
+
+const SK = SKIN_TUNING;
+const n2 = (v) => v.toFixed(4);
+
+// Fake subsurface, injected after <opaque_fragment> so it lands on the lit
+// colour and before the tone mapping. Everything it reads (outgoingLight,
+// diffuseColor, geometryNormal, geometryViewDir) is in scope there in
+// meshphysical_frag; diffuseColor already carries the vertex colours, so a
+// purple man is lifted by purple and a pink one by pink.
+const SKIN_PRELUDE = `
+uniform vec3 uSkinTint;
+`;
+const SKIN_FRAGMENT = `#include <opaque_fragment>
+{
+  float pbpLum = dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722));
+  float pbpShade = 1.0 - smoothstep(0.0, ${n2(SK.fillKnee)}, pbpLum);
+  gl_FragColor.rgb += diffuseColor.rgb * (${n2(SK.fillFloor)} * pbpShade);
+  float pbpFres = pow(1.0 - clamp(dot(geometryNormal, geometryViewDir), 0.0, 1.0), ${n2(SK.rimPower)});
+  gl_FragColor.rgb += mix(diffuseColor.rgb, uSkinTint, ${n2(SK.rimMix)}) * (pbpFres * ${n2(SK.rimGain)});
+}`;
+
+/**
+ * The silicone. `painted` is a piece whose geometry brings its own COLOR_0: the
+ * base colour goes white and the vertex colours do the tinting, but the sheen,
+ * the clearcoat and the emissive the buzz drives are the side's either way.
+ *
+ * The patch is left on onBeforeCompile for jiggle.js to chain the flex onto,
+ * and `userData.pbpPatch` tells jiggle to key this program apart from a plain
+ * material's, so a jewel can never be handed the silicone's shader.
+ */
+function material(side, painted = false) {
+  const skin = SKIN[side] || SKIN.w;
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: painted ? 0xFFFFFF : skin.color, vertexColors: painted,
+    roughness: SK.roughness, clearcoat: SK.clearcoat,
+    clearcoatRoughness: SK.clearcoatRoughness, metalness: 0.0,
+    sheen: SK.sheen, sheenColor: new THREE.Color(skin.sheen), sheenRoughness: SK.sheenRoughness,
+    emissive: new THREE.Color(skin.sheen), emissiveIntensity: 0,
+  });
+  const uSkinTint = { value: new THREE.Color(skin.sheen) };
+  mat.userData.pbpPatch = 'skin';
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uSkinTint = uSkinTint;
+    shader.fragmentShader = SKIN_PRELUDE + shader.fragmentShader
+      .replace('#include <opaque_fragment>', SKIN_FRAGMENT);
+  };
+  return mat;
+}
+
+// --- the contact patch ------------------------------------------------------
+// One radial gradient, drawn once into a canvas and shared by every man. It is
+// a picture of shade, not a shadow map: it casts nothing, receives nothing, and
+// its raycast is stubbed out so it can never be the thing a pointer picks up.
+let contactTex = null;
+let contactGeo = null;
+
+function contactTexture() {
+  if (contactTex) return contactTex;
+  const N = 128;
+  const cv = document.createElement('canvas');
+  cv.width = N; cv.height = N;
+  const g = cv.getContext('2d');
+  const grad = g.createRadialGradient(N / 2, N / 2, 0, N / 2, N / 2, N / 2);
+  grad.addColorStop(0.00, 'rgba(0,0,0,1)');
+  grad.addColorStop(0.34, 'rgba(0,0,0,0.78)');
+  grad.addColorStop(0.68, 'rgba(0,0,0,0.24)');
+  grad.addColorStop(1.00, 'rgba(0,0,0,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, N, N);
+  contactTex = new THREE.CanvasTexture(cv);
+  contactTex.colorSpace = THREE.SRGBColorSpace;
+  return contactTex;
+}
+
+/** The disc that goes under one man. `foot` is his own width in local units. */
+function contactPatch(foot) {
+  if (!contactGeo) {
+    contactGeo = new THREE.PlaneGeometry(1, 1);
+    contactGeo.rotateX(-Math.PI / 2);
+  }
+  const mat = new THREE.MeshBasicMaterial({
+    map: contactTexture(), transparent: true, opacity: SK.contactAlpha,
+    depthWrite: false, toneMapped: false, fog: false,
+  });
+  const disc = new THREE.Mesh(contactGeo, mat);
+  disc.position.y = 0.005;
+  // No renderOrder of its own: it has to draw in the transparent pass, AFTER
+  // the board. Drawn early with depthWrite off, the squares simply paint over
+  // it and the patch is never seen.
+  disc.castShadow = false;
+  disc.receiveShadow = false;
+  disc.raycast = () => {};        // never the thing a pointer picks up
+  disc.userData.foot = Math.max(0.12, foot) * SK.contactSpread;
+  disc.scale.setScalar(disc.userData.foot);
+  return disc;
+}
+
+/** Extra bits a lathe cannot turn, also in normalised space. */
+function trim(type, mat) {
+  const parts = [];
+  if (type === 'n') {
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.23, 0.20, 20), mat);
+    neck.position.y = 0.50;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.46, 0.34), mat);
+    head.position.set(0, 0.68, -0.03);
+    head.rotation.x = -0.24;
+    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.20, 0.30), mat);
+    snout.position.set(0, 0.74, -0.26);
+    snout.rotation.x = 0.22;
+    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.18, 8), mat);
+    ear.position.set(0, 0.94, 0.04);
+    parts.push(neck, head, snout, ear);
+  } else if (type === 'q') {
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 12), mat);
+    ball.position.y = 1.0;
+    parts.push(ball);
+  } else if (type === 'k') {
+    const up = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.20, 0.07), mat);
+    up.position.y = 0.94;
+    const across = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.065, 0.07), mat);
+    across.position.y = 0.965;
+    parts.push(up, across);
+  } else if (type === 'b') {
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.058, 14, 10), mat);
+    ball.position.y = 0.99;
+    parts.push(ball);
+  }
+  return parts;
+}
+
+export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {}, jiggle = null }) {
+  const geoCache = new Map();
+  const glb = new Map();          // "type:side" -> art from a supplied glb
+  const bySquare = new Map();     // square -> piece object
+  let wobble = 0;
+  let clock = 0;
+
+  const artKey = (type, side) => type + ':' + side;
+  const artFor = (type, side) => glb.get(artKey(type, side)) || null;
+
+  function geometryFor(type, side) {
+    const art = artFor(type, side);
+    if (art) return art.geometry;
+    if (!geoCache.has(type)) geoCache.set(type, lathe(PROFILE[type]));
+    return geoCache.get(type);
+  }
+
+  function build(type, side) {
+    const root = new THREE.Group();
+    const art = artFor(type, side);
+    const mat = material(side, !!art && art.painted);
+    const mats = [mat];
+    const body = new THREE.Mesh(geometryFor(type, side), mat);
+    body.castShadow = true;
+    body.receiveShadow = RECEIVES_SHADOW;
+    root.add(body);
+    // Jewellery: every mesh in the glb that is not the body is metal, not
+    // silicone, so it keeps the material it was exported with. It shares the
+    // body's origin, so it needs no offset, and jiggle installs the flex on its
+    // material too - the crown bends with the head instead of hovering over it.
+    if (art) for (const bit of art.trims) {
+      const jewel = new THREE.Mesh(bit.geometry, bit.material ? bit.material.clone() : mat);
+      jewel.castShadow = true;
+      jewel.receiveShadow = RECEIVES_SHADOW;
+      root.add(jewel);
+      mats.push(jewel.material);
+    }
+    // Trim is baked into the body's own space before it joins the piece: the
+    // flex shader reads position.y as a height up the piece, so a part that
+    // carried its own offset would bend around the wrong origin.
+    if (!art) for (const part of trim(type, mat)) {
+      part.updateMatrix();
+      part.geometry = part.geometry.clone().applyMatrix4(part.matrix);
+      part.position.set(0, 0, 0);
+      part.rotation.set(0, 0, 0);
+      part.castShadow = true;
+      root.add(part);
+    }
+    // A lathe is normalised, so it is scaled to its type height; a glb already
+    // stands the height it was modelled at and is left alone at scale 1.
+    root.scale.setScalar(art ? 1 : HEIGHT[type]);
+    // Knights (and any modelled piece) look at the far side.
+    root.rotation.y = side === 'w' ? 0 : Math.PI;
+    root.userData = {
+      type, side, material: mat, materials: mats,
+      scaleBase: art ? art.height : HEIGHT[type],
+      phase: Math.random() * Math.PI * 2,
+    };
+    if (jiggle) jiggle.attach(root);
+    // The contact patch goes on AFTER the flex, on purpose: it must not be
+    // handed the vertex shader or a depth material, because it is a picture of
+    // shade lying on the board and not a part of the man. It is kept out of
+    // userData.materials for the same reason, so the capture fade and the buzz
+    // never touch it.
+    body.geometry.computeBoundingBox();
+    const bb = body.geometry.boundingBox;
+    const disc = contactPatch(Math.max(bb.max.x - bb.min.x, bb.max.z - bb.min.z));
+    root.add(disc);
+    root.userData.contact = disc;
+    return root;
+  }
+
+  function place(piece, square) {
+    const p = squareToWorld(square, 0);
+    piece.position.set(p.x, 0, p.z);
+    piece.userData.home = { x: p.x, z: p.z };
+    piece.userData.square = square;
+  }
+
+  /** Position map: { e1: {type:'k', side:'w'}, ... }. Rebuilds only what moved. */
+  function setPosition(map) {
+    for (const [sq, piece] of [...bySquare]) {
+      const want = map[sq];
+      if (!want || want.type !== piece.userData.type || want.side !== piece.userData.side) {
+        group.remove(piece);
+        bySquare.delete(sq);
+      }
+    }
+    for (const sq of Object.keys(map)) {
+      if (bySquare.has(sq)) continue;
+      const { type, side } = map[sq];
+      const piece = build(type, side);
+      place(piece, sq);
+      group.add(piece);
+      bySquare.set(sq, piece);
+    }
+  }
+
+  function pieceAt(sq) { return bySquare.get(sq) || null; }
+
+  /** A man leaves the board. anim.js takes him if it wants a send-off. */
+  function retire(piece) {
+    if (hooks.onCaptured) hooks.onCaptured(piece);
+    else group.remove(piece);
+  }
+
+  function move(from, to) {
+    const piece = bySquare.get(from);
+    if (!piece) return null;
+    bySquare.delete(from);
+    const taken = bySquare.get(to) || null;
+    if (taken) { retire(taken); bySquare.delete(to); piece.userData.tookOne = true; }
+    const was = piece.position.clone();
+    place(piece, to);
+    bySquare.set(to, piece);
+    if (hooks.onMoved) hooks.onMoved(piece, was);
+    return piece;
+  }
+
+  function remove(sq) {
+    const piece = bySquare.get(sq);
+    if (piece) { retire(piece); bySquare.delete(sq); }
+    return piece || null;
+  }
+
+  // The contact patches. Every man on the board, every frame, because a patch
+  // has to follow a drag and a drag happens with the wobble turned all the way
+  // down. It stays welded to the board while the man goes up, fades over the
+  // first two thirds of a square of lift, spreads as it fades, and slides and
+  // widens with whatever the spring is doing to him.
+  const upVec = new THREE.Vector3();
+  function updateContacts() {
+    for (const piece of group.children) {
+      const disc = piece.userData && piece.userData.contact;
+      if (!disc) continue;
+      const scale = piece.scale.y || 1;
+      const lift = Math.abs(piece.position.y);
+      const t = Math.min(1, lift / SK.contactLiftFade);
+      upVec.set(0, 1, 0).applyQuaternion(piece.quaternion);
+      const upright = THREE.MathUtils.smoothstep(upVec.y, SK.contactUpright, 1);
+      const body = piece.userData.material;
+      const fade = body && body.transparent ? body.opacity : 1;
+      const j = piece.userData.jiggleUniforms;
+      const bendX = j ? j.uBend.value.x : 0;
+      const bendZ = j ? j.uBend.value.y : 0;
+      const squash = j ? j.uSquash.value : 0;
+      disc.material.opacity = SK.contactAlpha * (1 - t) * upright * fade;
+      disc.visible = disc.material.opacity > 0.002;
+      if (!disc.visible) continue;
+      disc.scale.setScalar(disc.userData.foot * (1 + t * SK.contactLiftGrow) * (1 + squash * SK.contactSquash));
+      disc.position.set(bendX * SK.contactLean, 0.005 - piece.position.y / scale, bendZ * SK.contactLean);
+      // Flat on the board whatever the man is doing above it.
+      disc.quaternion.copy(piece.quaternion).invert();
+    }
+  }
+
+  function update(dt) {
+    clock += dt;
+    updateContacts();
+    if (wobble <= 0.001) return;
+    for (const piece of bySquare.values()) {
+      if (piece.userData.held || piece.userData.busy) continue;
+      const ph = piece.userData.phase;
+      piece.rotation.z = Math.sin(clock * 1.7 + ph) * 0.055 * wobble;
+      piece.rotation.x = Math.sin(clock * 1.3 + ph * 1.7) * 0.04 * wobble;
+      piece.position.y = Math.abs(Math.sin(clock * 0.9 + ph)) * 0.025 * wobble;
+    }
+  }
+
+  // --- optional glb art ------------------------------------------------------
+  // Probed with HEAD first so a missing file is a quiet 404, not a loader throw.
+  let loader = null;
+
+  /**
+   * One piece's art. The body is the mesh carrying COLOR_0, because that is
+   * what the silicone material is for; every other mesh is a jewel (the king's
+   * crown, the queen's tiara) and keeps the material it was exported with.
+   * Order is NOT the test: the crowned king export lists its crown first.
+   * Each geometry is baked into its node's transform, because only geometry
+   * travels out of the file.
+   *   -> { geometry, trims: [{geometry, material}], height }
+   */
+  async function loadArt(url) {
+    const head = await fetch(url, { method: 'HEAD' });
+    if (!head.ok) return null;
+    if (!loader) {
+      const mod = await import('three/addons/loaders/GLTFLoader.js');
+      loader = new mod.GLTFLoader();
+    }
+    const gltf = await loader.loadAsync(url);
+    const meshes = [];
+    gltf.scene.updateMatrixWorld(true);
+    gltf.scene.traverse((o) => {
+      if (!o.isMesh || !o.geometry) return;
+      let geo = o.geometry;
+      if (!o.matrixWorld.equals(IDENTITY)) geo = geo.clone().applyMatrix4(o.matrixWorld);
+      geo.computeBoundingBox();
+      meshes.push({ geometry: geo, material: Array.isArray(o.material) ? o.material[0] : o.material });
+    });
+    if (!meshes.length) return null;
+    let body = meshes.findIndex((m) => m.geometry.attributes.color);
+    if (body < 0) body = 0;
+    let height = 0;
+    for (const m of meshes) if (m.geometry.boundingBox) height = Math.max(height, m.geometry.boundingBox.max.y);
+    return {
+      geometry: meshes[body].geometry,
+      trims: meshes.filter((_, i) => i !== body),
+      height: height > 0.05 ? height : 1,
+      // vertexColors on a geometry with no COLOR_0 renders the piece black, so
+      // a glb that brought no vertex colours is lit with the flat side colour.
+      painted: !!meshes[body].geometry.attributes.color,
+    };
+  }
+
+  /** Re-dress every man of this type and side that is already standing. */
+  function redress(type, side) {
+    for (const [sq, piece] of [...bySquare]) {
+      if (piece.userData.type !== type || piece.userData.side !== side) continue;
+      group.remove(piece);
+      bySquare.delete(sq);
+      const next = build(type, side);
+      place(next, sq);
+      group.add(next);
+      bySquare.set(sq, next);
+    }
+  }
+
+  async function tryLoadGlb() {
+    for (const type of TYPES) {
+      const name = GLB_NAMES[type];
+      let white = null;
+      try { white = await loadArt(assetsBase + name + '.glb'); }
+      catch { /* no art for this type, the lathe stands in */ }
+      if (!white) continue;
+      glb.set(artKey(type, 'w'), white);
+      redress(type, 'w');
+      // Black wears the purple cut of the same model. Without one it borrows
+      // white's art, which still reads as the other side: it is turned to face
+      // back down the board and lit with black's sheen.
+      let purple = null;
+      try { purple = await loadArt(assetsBase + name + '_purple.glb'); }
+      catch { /* fall through to white's art */ }
+      glb.set(artKey(type, 'b'), purple || white);
+      redress(type, 'b');
+    }
+  }
+
+  // The flex system talks in pieces; the board talks in squares. This is the
+  // translation, and it is what the harness and the ramp reach for.
+  const jiggleApi = jiggle ? {
+    poke(square, opts = {}) { jiggle.poke(bySquare.get(square), opts); },
+    debug(square) { return jiggle.debug(bySquare.get(square)); },
+    stats() { return jiggle.stats(); },
+    system: jiggle,
+  } : null;
+
+  return {
+    setPosition, pieceAt, move, remove, update, tryLoadGlb,
+    pieces: bySquare,
+    jiggle: jiggleApi,
+    setWobble(v) {
+      wobble = Math.max(0, Math.min(1, Number(v) || 0));
+      if (jiggle) jiggle.setWobble(wobble);
+    },
+    getWobble() { return wobble; },
+  };
+}

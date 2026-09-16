@@ -1,0 +1,743 @@
+/* ============================================================================
+ * raceBoot.js - boots Racing Thoughts page. Implements CONTRACT.md
+ * "race/run.js + raceBoot.js + race.html (PR 5, integration)" and the
+ * "race/menu.js + race/intro.js" section (the front door).
+ *
+ * Order: capability detect (reduced motion does not block the boot: the race
+ * turns its own motion down through settings.reducedMotion) -> quality tier ->
+ * bridge handlers -> announceReady
+ * -> wait for `init` (+ `manifest`, `favorites`) with a 4 s timeout -> hostMedia
+ * -> createRace + createMenu -> the splash is a 1 s title flash (it covers the
+ * module import, the world build and the glb fetch, and hosts the wait note
+ * and boot errors) -> on a first open the four introduction cards
+ * (race/cards.js) -> the MENU is the resting state -> `race` plays the intro
+ * on the menu stage -> the run starts under the camera whip. The End
+ * screen's `surface` comes BACK HERE (backToMenu, run.js `onExit`): the menu is
+ * the resting state either side of a run, and only the menu's own `surface`
+ * verb and the host's exit-request take the page away.
+ *
+ * THE SHUTTER (race/shutter.js, `race.shutter`) covers every one of those cuts:
+ * it closes on `race` and opens on the intro (the world is built behind it), it
+ * claps on the countdown's `go`, and run.js closes it over the whole way home
+ * from the End screen. `?autostart=1` has no menu to leave, so it plays none of
+ * it. Reduced motion, as the MENU has it (motionOff()), is one flat fade.
+ *
+ * Host messages owned here: init, manifest, favorites, loom-list, ping, exit-request,
+ * fullscreen, local-media, setting (run.js owns pause + payout-result). Sent
+ * here: pong, boot-error, fullscreen-set, exit + exit-done on a host
+ * exit-request or a menu surface. A `manifest` that lands AFTER boot is honoured
+ * the same way the first one is: hostMedia swaps its pool, so a pile loaded from
+ * the menu is on the walls of the very next run.
+ *
+ * HOST CAPABILITIES on `init.settings`. `bridge.isHosted` says a host is on the
+ * other end, never which services it has. The browser host (cclabs-web
+ * scripts/race-web-ext) is a real transport with no C# behind it, so three keys
+ * say what it cannot do, all of them absent (and so unchanged) on the desktop:
+ * `trackPick: false` takes the file-dialog verb off the menu, `canSurface:
+ * false` takes `surface` off when there is nowhere to go, and `hostSfx: false`
+ * (read by race/audio.js) plays the eleven host cues in page instead of posting
+ * `sfx` frames nothing answers. `mediaControls: true` is the fourth: it turns on
+ * the menu's `your media` panel. `cloud: true` is the fifth: it puts the
+ * `levels` panel on the menu. On a host that can open a browser window of its
+ * own (the desktop has one: Services/Race/RaceCloudWindow.cs) tapping a level
+ * asks the host to open that track's page, and the player presses play there.
+ *
+ * STANDALONE DEV MODE (no WebView2): `bridge.isHosted` is false, so `init` is
+ * synthesised (masterVolume 60, reducedMotion from matchMedia, empty manifest)
+ * and every would-be host message is logged to the console with a
+ * `[race->host]` prefix. Query switches: `?autostart=1` skips the menu AND the
+ * intro and boots straight into the run (headless checks depend on it);
+ * `?intro=0` keeps the menu and skips the intro; `?scene=intro` boots straight
+ * into the intro and `?hold=ms` freezes it at that intro time (screenshots);
+ * `?cards=1` forces the introduction cards and `?cards=0` skips them (without
+ * either they show once, gated on localStorage `race.cards`), and `?card=N`
+ * opens them on card N (1..4, a screenshot aid the way `?hold=` is one);
+ * `?pixel=N` (0 = off) beats `race.options` which beats `settings.pixel` from
+ * the host init, and with none of the three the block is race/pixel.js's own
+ * pixelDefault(): off on a coarse pointer, the smallest step on a mouse
+ * (`?coarse=1` / `?coarse=0` force that answer for a check);
+ * `?pickup=<id>` stands that pickup up on the next spot ahead
+ * once the run is up, a screenshot aid for it (race/pickups.js);
+ * `?panel=howto` opens the menu on the key card (race/menu.js).
+ *
+ * `?back=<same-origin path>` is WHERE THE MENU'S `surface` VERB GOES when there
+ * is no host to hand the page back to. Hosted, `surface` posts exit + exit-done
+ * and the shell takes the window away. In a plain browser there is no shell, so
+ * the old build disposed everything and left a black page. Now: `?back=` first,
+ * then a same-origin `document.referrer` (history.back()), and with neither the
+ * verb is taken off the list entirely, so no tap can reach a dead end. A
+ * cross-origin `?back=` or referrer is ignored: this never becomes an open
+ * redirect.
+ *
+ * PERF AIDS: `?tier=mobile` / `?tier=desktop` overrides the quality tier
+ * capability.js detected (headless Chrome reads as a coarse pointer, so it
+ * lands on mobile at any window size; this pins either tier). `?perf=1` logs
+ * one `[race-perf]` line every 2 s: draw calls + triangles summed over the
+ * pixelizer's passes, programs, live geometries / textures, the biggest
+ * texture edge in the run scene, the JS heap (Chrome only), resident <audio>
+ * elements, the governor's device pixel ratio, the pixel block, whether the
+ * world is built and which of stage / run is drawing. Read the numbers off
+ * the console (standalone) or the host log.
+ *
+ * TRACK CHARTS (CHART.md): the host posts track-progress / track-chart /
+ * track-clock / track-ended / track-error and this file hands them to the run.
+ * With no host - or under one that says `trackPick: false`, which is the browser
+ * host - `?chart=demo&dur=240` builds the demo chart and
+ * `?chart=<url>` fetches one; `?audio=<url>` plays an <audio> element and its
+ * currentTime is the clock, and without it the clock is wall time. Either way the
+ * page ticks race.trackClock on the host's own 250 ms cadence.
+ *
+ * PLAY FROM BAMBICLOUD (web only, race/cloud.js). A host that says `cloud: true`
+ * in its init - and cannot pick a file itself, so `trackPick: false` - gets a
+ * menu verb that pastes a link and plays it through an <audio> element in this
+ * page. That element becomes the clock exactly the way `?audio=` does, and the
+ * mini-player answers the track frames run.js posts, so the Brake pauses the
+ * file and the end of the file is the end of the lap. `?cloud=1` turns it on
+ * for a page with no host at all, which is how the smoke drives it.
+ * ==========================================================================*/
+
+import * as bridge from './bridge.js';
+import { detectMode } from './shared/capability.js';
+import { setQuality, Q } from './shared/quality.js';
+import { createHostMediaSource } from './hostMedia.js';
+// The feed's pictures start loading the moment a manifest carrying them lands, so a run built
+// later opens with pictures already on the wall. Imports nothing itself: this is the boot path.
+import { warmWallPosters } from './race/wallWarm.js';
+// THE LOOM: the player's own woven spirals, so a race pop can draw one of theirs.
+import { setLoomSpirals } from './engine/loomSpirals.js';
+
+const INIT_TIMEOUT_MS = 4000, SPLASH_MS = 1000, TRACK_TICK_MS = 250, PERF_LOG_MS = 2000;
+const params = new URLSearchParams(location.search);
+const hosted = bridge.isHosted;
+/**
+ * Where `surface` goes with no host under the page: `?back=<path>` if it is same origin, else a
+ * same-origin referrer, else null and the verb comes off the list. Same origin only, always, so the
+ * query string can never point a player somewhere else.
+ */
+function resolveBack() {
+  const want = params.get('back');
+  if (want) {
+    try { const u = new URL(want, location.href); if (u.origin === location.origin) return () => { location.href = u.href; }; }
+    catch (e) { /* not a url, fall through */ }
+  }
+  try { const r = document.referrer; if (r && new URL(r).origin === location.origin) return () => history.back(); }
+  catch (e) { /* no referrer */ }
+  return null;
+}
+const standaloneExit = hosted ? null : resolveBack();
+const rawHost = hosted ? bridge : {
+  on: bridge.on,
+  isHosted: false,
+  send: (m) => { try { console.log('[race->host]', JSON.stringify(m)); } catch (e) { console.log('[race->host]', m); } },
+  log: (m) => console.log('[race->host] log', String(m)),
+  announceReady: () => console.log('[race->host] ready (standalone)'),
+};
+/**
+ * The one send in the page, with an OUTBOUND TAP on it. run.js posts the CHART.md track frames
+ * (track-play on a start, track-pause on the Brake, track-stop at the end) to whatever it thinks is
+ * hosting the file. On the web that is race/cloud.js, living in this page, so the frames are handed
+ * to it on their way past. Everything else is unchanged and still goes out to the real host.
+ */
+const host = {
+  on: rawHost.on,
+  isHosted: rawHost.isHosted,
+  log: (m) => rawHost.log(m),
+  announceReady: () => rawHost.announceReady(),
+  send: (m) => {
+    if (cloud && m && typeof m.type === 'string' && m.type.indexOf('track-') === 0) {
+      try { cloud.hostFrame(m); } catch (e) { rawHost.log('cloud frame: ' + e); }
+    }
+    rawHost.send(m);
+  },
+};
+
+const root = document.getElementById('race-root');
+const hudRoot = document.querySelector('#race-root .race-hud');
+const splash = document.getElementById('race-splash');
+const waitEl = document.getElementById('race-wait');
+const media = createHostMediaSource();
+const rollSeed = () => (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
+let initMsg = null, haveManifest = false, race = null, menu = null, booted = false, started = false, exiting = false;
+let localMedia = null;              // the last `local-media` push, replayed into the menu on boot
+const settingEchoes = [];           // `setting` echoes that landed before there was a menu to paint
+let settings = {}, seed = 0;
+let trackProgress = null, trackReady = null, errorTimer = 0, startTrackClock = null, trackTimer = 0, trackAudio = null;
+let cloud = null;                   // race/cloud.js, when the host says this build has it
+let levels = null;                  // race/levels.js, the panel the mini-player hangs under
+let cloudSource = null;             // race/cloudChart.js, the thing that answers hooks.chart
+let cloudWhere = '';                // ' · 3 of 9', kept so an upgraded chart repaints the same plate
+
+const note = (t) => { if (waitEl) waitEl.textContent = t || ''; };
+function fail(err) {
+  const msg = String((err && (err.stack || err.message)) || err || 'unknown').slice(0, 600);
+  console.error('[race] boot-error', msg);
+  note('something broke. the host has the log.');
+  showDetail(msg);
+  host.send({ type: 'boot-error', msg, message: msg });
+}
+/**
+ * The first line of the error, on the splash under the note. A phone has no console and no host
+ * log to open (cclabs-web's race host only console.errors the frame), so without this a boot that
+ * dies on an iPhone is a sad face and nothing to report. Selectable, so it can be copied.
+ */
+function showDetail(msg) {
+  if (!waitEl || !waitEl.parentNode) return;
+  let el = document.getElementById('race-err');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'race-err';
+    const s = el.style;
+    s.marginTop = '12px'; s.padding = '0 24px'; s.fontSize = '11px'; s.lineHeight = '1.4';
+    s.fontFamily = 'ui-monospace, Menlo, Consolas, monospace'; s.color = 'rgba(255,255,255,0.45)';
+    s.whiteSpace = 'pre-wrap'; s.wordBreak = 'break-word'; s.userSelect = 'text'; s.webkitUserSelect = 'text';
+    s.maxWidth = '92vw'; s.textAlign = 'center';
+    waitEl.parentNode.insertBefore(el, waitEl.nextSibling);
+  }
+  el.textContent = String(msg || '').split('\n').slice(0, 4).join('\n').slice(0, 320);
+}
+window.addEventListener('error', (e) => {
+  const src = e.filename ? ` @ ${String(e.filename).split('/').pop()}:${e.lineno}` : '';
+  if (!started) fail((e.message || 'script error') + src);
+  else host.log('error: ' + (e.message || 'script error') + src);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const r = e.reason;
+  const msg = (r && (r.stack || r.message)) || r || 'unknown';
+  if (!started) fail('promise: ' + msg); else host.log('promise: ' + msg);
+});
+
+// ---- capability -> quality tier ----
+// reducedIs3d: prefers-reduced-motion is NOT a boot blocker here. The race owns
+// a complete reduced path (menu stage, HUD, flashes, cards, intro and the run's
+// own shake/whip all read settings.reducedMotion, which boot() resolves from the
+// host init, the menu's motion option and matchMedia), so "reduce" turns the
+// motion down inside the 3D scene instead of showing a boot error. Only a real
+// hard wall - no WebGL, no import maps - still fails.
+const mode = detectMode({ reducedIs3d: true });
+const tierParam = params.get('tier');
+if (mode.hardBlock || !mode.canTry3d) {
+  fail('no webgl here: ' + (mode.reason || mode.mode));
+} else {
+  setQuality(tierParam === 'mobile' || tierParam === 'desktop' ? tierParam : mode.tier);
+}
+
+// ---- host wiring ----
+bridge.on('init', (m) => { initMsg = m; maybeBoot(); });
+bridge.on('manifest', (m) => {
+  try { media.setManifest(m); warmWallPosters(media); } catch (e) { host.log('manifest: ' + e); }
+  haveManifest = true; maybeBoot();
+  if (menu) { try { menu.refresh(); } catch (e) { /* the status line reads the pool on its next paint */ } }
+});
+bridge.on('favorites', (m) => { try { media.setFavorites(m && m.names || []); } catch (e) { host.log('favorites: ' + e); } });
+// The media panel's two frames (race/menu.js "YOUR MEDIA"). Both can land before the menu exists -
+// the pickers are only reachable from the menu, but the host pushes the pile it already holds on
+// `ready` - so the last count is remembered and the echoes are queued, and boot() hands both over
+// the moment createMenu returns. After that they go straight through.
+bridge.on('local-media', (m) => { localMedia = m; if (menu) { try { menu.setLocalMedia(m); } catch (e) { host.log('local-media: ' + e); } } });
+bridge.on('setting', (m) => {
+  if (!menu) { if (settingEchoes.length < 24) settingEchoes.push(m); return; }
+  try { menu.settingEcho(m); } catch (e) { host.log('setting: ' + e); }
+});
+bridge.on('ping', (m) => host.send({ type: 'pong', t: m && m.t }));
+bridge.on('fullscreen', (m) => host.send({ type: 'fullscreen-set', on: !!(m && m.on) }));
+bridge.on('exit-request', surface);
+// THE LOOM (crafting Part 2): the host's saved-spiral library, the same frame boot.js takes.
+// An entry carrying `params` is woven live by race/loomSpiralFx.js; one without is still its
+// gif. The host pushes this on `ready` and again after every save or delete, so a spiral woven
+// mid-session is on the road the next time one pops. Nothing here reaches into a run: the pool
+// lives in engine/loomSpirals.js and the picker reads it when it draws.
+bridge.on('loom-list', (m) => { try { setLoomSpirals((m && m.spirals) || []); } catch (e) { host.log('loom-list: ' + e); } });
+/**
+ * The two names a chart answers to, carried on every `ready` plate state: race/menu.js looks the
+ * track's popped best up by them (race/popped.js keys by the file hash, and by the cloud id for a
+ * file that was never hashed). Nothing else in the plate reads them.
+ */
+const keysOf = (chart) => {
+  const s = (chart && chart.source) || {};
+  return { hash: String(s.hash || ''), cloudId: String(s.cloudId || '') };
+};
+
+// ---- track charts (CHART.md host protocol). The run owns the clock; this only relays. ----
+bridge.on('track-chart', (m) => {
+  if (!race || !m || !m.chart) return;
+  try { (race.track && started) ? race.replaceTrack(m.chart) : race.setTrack(m.chart); }
+  catch (err) { host.log('track-chart: ' + ((err && err.message) || err)); trackError(String((err && err.message) || err)); return; }
+  const t = race.track, st = race.trackStats ? race.trackStats() : null;
+  // `authored` is the host saying a person wrote this chart: the plate marks it, and nothing
+  // fuller is coming behind it (an authored chart is never partial and never replaced).
+  trackReady = t ? { stage: 'ready', name: t.name, durationSec: t.durationSec, countable: st ? st.countable : 0, partial: !!m.partial, authored: !!m.authored, ...keysOf(t.chart) } : null;
+  plate(trackReady);
+});
+bridge.on('track-clock', (m) => { if (race && m) race.trackClock(Number(m.t) || 0, m.playing !== false); });
+bridge.on('track-ended', () => { if (race) race.trackEnded(); });
+bridge.on('track-error', (m) => trackError((m && m.message) || 'the track would not load'));
+// bambicloud: the host saw their player start, so the run starts too - the audio over there is the
+// clock, and a run that waited for a menu press would already be behind it. The chart lands after,
+// through track-chart, the same swap-in a picked file's partial chart makes.
+bridge.on('cloud-run', () => { if (!started && !exiting && race) startRun(false); });
+bridge.on('track-progress', (m) => {
+  trackProgress = m || null;
+  host.log(`track-progress: ${(m && m.stage) || '?'} ${Math.round(((m && m.pct) || 0) * 100)}% ${(m && m.name) || ''}`);
+  if (!m) return;
+  // a cancelled dialog leaves whatever was loaded before in place; any other stage is the host at work
+  plate(m.stage === 'cancelled' ? trackReady : { stage: m.stage, pct: m.pct, name: m.name });
+});
+/**
+ * Where a track's progress goes while the menu is up (the run has the toast instead). The LEVELS
+ * panel gets first refusal: a state that belongs to a row picked in there is painted ON that row,
+ * bar and all, and the menu keeps its plate down while that panel is open. On the main list (where a
+ * tap on a level lands) the plate shows the same state, bar and all, and the first verb reads
+ * `start · <name>` once the chart is in. Anything the panel does not claim - a pasted link, a file
+ * the host picked, the seeded road - is the plate's, exactly as it always was.
+ */
+function plate(state) {
+  let onRow = false;
+  try { onRow = !!(levels && levels.setTrack(state)); } catch (e) { host.log('levels plate: ' + e); }
+  try { if (menu && !started) menu.setTrack(state, onRow); } catch (e) { host.log('plate: ' + e); }
+}
+function trackError(message) {
+  host.log('track-error: ' + message);
+  try { if (race && race.hud) race.hud.toast(String(message).slice(0, 60).toLowerCase(), 'effect'); } catch (e) { /* no hud yet */ }
+  plate({ stage: 'error', message: String(message).slice(0, 80).toLowerCase() });
+  errorTimer = setTimeout(() => plate(trackReady), 4000);
+}
+/**
+ * THE WAY BACK FROM THE END SCREEN (run.js `leave()` calls this through `onExit`). The run has
+ * already stopped the file, dropped its world and reset itself; this puts the front door back:
+ * the lobby chrome, the menu stage, the menu theme (menu.show -> theme(true)) and the levels
+ * panel's picked row. `started` goes false so `race` can fire again (race.prepare() rebuilds the
+ * world it just dropped) and a `cloud-run` from the host is heard again.
+ * Answers false when there is no menu to go back to (`?autostart=1` never built one, `?scene=intro`
+ * is on its way into a run) and run.js then closes the page the old way.
+ */
+function backToMenu() {
+  if (exiting || !race || !menu) return false;
+  started = false;
+  stopTrackClock();
+  if (errorTimer) { clearTimeout(errorTimer); errorTimer = 0; }
+  if (hudRoot) hudRoot.classList.add('is-lobby');
+  try { race.setStage(menu.stage); } catch (e) { host.log('to menu stage: ' + e); }
+  menu.show();
+  if (trackReady) plate(trackReady);
+  host.log('back to the menu');
+  return true;
+}
+/** The one exit: the menu's `surface` and the host's exit-request (the End screen's own goes back to the menu). */
+function surface() {
+  if (exiting) return;
+  exiting = true;
+  stopTrackClock();
+  if (errorTimer) clearTimeout(errorTimer);
+  try { if (levels) levels.dispose(); } catch (e) { host.log('levels dispose: ' + e); }
+  try { if (cloud) cloud.dispose(); } catch (e) { host.log('cloud dispose: ' + e); }
+  try { if (cloudSource) cloudSource.dispose(); } catch (e) { host.log('cloud source dispose: ' + e); }
+  try { if (menu) menu.dispose(); } catch (e) { host.log('menu dispose: ' + e); }
+  try { if (race) race.dispose(); } catch (e) { host.log('exit dispose: ' + e); }
+  host.send({ type: 'exit' });
+  host.send({ type: 'exit-done' });
+  // no host means nothing takes the window away, so the page has to leave on its own or the tear-down
+  // above is all anyone sees. The verb is hidden when there is nowhere to go, so this is never null here.
+  if (!hosted && standaloneExit) { try { standaloneExit(); } catch (e) { host.log('back: ' + e); } }
+}
+
+function synthInit() {
+  return {
+    type: 'init', protocol: 1, modId: null, modContent: null,
+    settings: { masterVolume: 60, reducedMotion: !!(matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) },
+  };
+}
+
+function maybeBoot() {
+  if (booted || !initMsg || !haveManifest) return;
+  boot();
+}
+
+async function boot() {
+  if (booted) return;
+  booted = true;
+  const t0 = performance.now();
+  try {
+    const [{ createRace }, { createMenu, loadOptions, seedFromOptions, wantsReducedMotion, wantsLite }] = await Promise.all([import('./race/run.js'), import('./race/menu.js')]);
+    const opts = loadOptions();
+    settings = { ...((initMsg && initMsg.settings) || {}) };
+    if (opts.pixel !== undefined) settings.pixel = opts.pixel;
+    if (params.has('pixel') && params.get('pixel') !== '') settings.pixel = Number(params.get('pixel'));
+    settings.reducedMotion = wantsReducedMotion(opts, settings.reducedMotion != null ? settings.reducedMotion : !!(matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches));
+    settings.musicVolume = opts.music; settings.sfxVolume = opts.sfx;   // audio.js reads masterVolume; the two sliders go in through setLevels below
+    // LIGHTER (race/menu.js): the options row, or `?lite=1|0` for a check. run.js reads settings.lite.
+    settings.lite = wantsLite(opts);
+    if (params.get('lite') === '1') settings.lite = true; else if (params.get('lite') === '0') settings.lite = false;
+    settings.seedLock = seedFromOptions(opts);
+    // The file dialog is the host's; standalone loads a track off the query string. A host may also
+    // say `trackPick: false` in its init: the browser host (cclabs-web scripts/race-web-ext) is
+    // hosted in every way the bridge can see and has no file dialog to open, and a verb that answers
+    // nothing is worse than no verb at all.
+    settings.trackPick = hosted && settings.trackPick !== false;
+    // `?trackpick=1` is a CHECK AID, nothing else: it makes an unhosted page claim the desktop
+    // host's track door so race/smoke/levels-check.mjs can walk that branch of the levels panel.
+    if (params.get('trackpick') === '1') settings.trackPick = true;
+    // `cloud` is the browser host's capability flag; `?cloud=1` is the same switch for a page with
+    // no host under it. A desktop host that carries it gets the LEVELS panel (which hands a track
+    // to the desktop) and never the mini-player: race/cloud.js's own rule still refuses that.
+    settings.cloud = settings.cloud === true || params.get('cloud') === '1';
+    cloud = await makeCloud();
+    // run.js posts the track frames only when it believes something is hosting the file. With the
+    // mini-player on, something is: this page. audio.js reads the same flag to decide where the
+    // eleven host cues play, so an unhosted page is told outright to keep playing them itself.
+    if (cloud && !hosted) settings.hostSfx = false;
+    seed = settings.seedLock != null ? settings.seedLock : rollSeed();
+    note('the road is drawing');
+    race = createRace({ root, bridge: cloud ? { ...host, isHosted: true } : host, media, settings, seed, onExit: backToMenu });
+    // the persisted option sliders, before the first frame: the menu theme comes up at the right level
+    try { if (race.audio && race.audio.setLevels) race.audio.setLevels({ music: opts.music, sfx: opts.sfx }); } catch (e) { host.log('levels: ' + e); }
+    note('');
+    host.log(`race booted: seed ${seed} (${opts.seed}), tier ${Q.tier}${tierParam ? ' (?tier)' : ''}, hosted ${hosted}, manifest ${haveManifest}`);
+    if (params.get('perf') === '1') perfLog();
+    await standaloneTrack();
+    if (params.get('autostart') === '1') { startRun(false); debugPickup(); return; }
+    if (hudRoot) hudRoot.classList.add('is-lobby');   // the run's chrome stays out of the menu and the intro
+    levels = await makeLevels();
+    menu = createMenu({ root, renderer: race.renderer, pixel: race.pixel, audio: race.audio, settings, log: host.log, send: host.send, levels, media });
+    if (localMedia) { try { menu.setLocalMedia(localMedia); } catch (e) { host.log('local-media: ' + e); } }
+    while (settingEchoes.length) { try { menu.settingEcho(settingEchoes.shift()); } catch (e) { host.log('setting: ' + e); } }
+    // Nowhere to surface to: no host and no `?back=`, or a host that says outright it cannot take
+    // the window away (the browser host with neither a same-origin ?back= nor a same-origin referrer).
+    if ((!hosted && !standaloneExit) || settings.canSurface === false) { menu.hideVerb('surface'); host.log('surface hidden: nowhere to go'); }
+    menu.onPick((id) => {
+      if (id === 'race') startRun(true);
+      else if (id === 'surface') surface();
+      else if (id === 'track') { plate({ stage: 'picking' }); host.send({ type: 'track-pick' }); }
+      else if (id === 'clear') { host.send({ type: 'track-cancel' }); race.setTrack(null); trackReady = null; plate(null); }
+      else if (id === 'story') { menu.hide(); menu.refreshView(); showCards().then(() => { if (!exiting && !started) menu.show(); }); }
+    });
+    if (trackReady) plate(trackReady); else if (trackProgress && trackProgress.stage !== 'cancelled') plate(trackProgress);
+    menu.seedCheck = () => {   // the menu may have changed the seed rule: rebuild the world once, before the intro
+      const lock = seedFromOptions(menu.options);
+      if (lock === settings.seedLock) return;
+      settings.seedLock = lock; seed = lock != null ? lock : rollSeed();
+      race.reseed(seed);
+      host.log(`race reseeded: ${seed} (${menu.options.seed})`);
+    };
+    race.setStage(menu.stage);
+    if (params.get('scene') === 'intro') { startRun(true); return; }
+    setTimeout(() => { hideSplash(); firstCards(); }, Math.max(0, SPLASH_MS - (performance.now() - t0)));
+  } catch (err) {
+    fail(err);
+  }
+}
+
+/**
+ * No host, but a track was asked for on the query string: `?chart=demo&dur=240` builds the demo
+ * chart, `?chart=<url>` fetches one. `?audio=<url>` plays the file and its currentTime becomes the
+ * clock; without it the clock is wall time from the moment the run starts. Nothing here runs hosted.
+ */
+async function standaloneTrack() {
+  const want = params.get('chart');
+  // `settings.trackPick` is the resolved answer to "can this host open a file dialog", which is not
+  // the same question as `hosted`: the browser host (cclabs-web scripts/race-web-ext) is hosted and
+  // cannot, so the query-string chart road stays open under it exactly as it is with no host at all.
+  // A desktop host resolves it true and owns track loading outright, so nothing changes there.
+  if (settings.trackPick || !want || !race) return;
+  let chart = null;
+  try {
+    const mod = await import('./race/chart.js');
+    if (want === 'demo') chart = mod.demoChart({ durationSec: Number(params.get('dur')) || 240 });
+    else chart = mod.normalizeChart(await (await fetch(want)).json());
+    race.setTrack(chart);
+    const st = race.trackStats ? race.trackStats() : null;
+    trackReady = { stage: 'ready', name: chart.source.name, durationSec: chart.source.durationSec, countable: st ? st.countable : 0, partial: false, ...keysOf(chart) };
+  } catch (err) {
+    trackError('chart: ' + ((err && err.message) || err));
+    return;
+  }
+  const src = params.get('audio');
+  if (src) {
+    try { trackAudio = new Audio(src); trackAudio.preload = 'auto'; } catch (e) { trackAudio = null; }
+  }
+  const dur = chart.source.durationSec;
+  startTrackClock = () => {
+    if (trackTimer) return;
+    // from the top every time, the way race/cloud.js starts its element on `track-play`: a run
+    // taken again after the End screen sent us back to the menu is a replay, not a resume.
+    if (trackAudio) { try { trackAudio.currentTime = 0; } catch (e) { /* not seekable yet */ } const p = trackAudio.play(); if (p && p.catch) p.catch((e) => host.log('track audio: ' + e)); }
+    race.trackClock(0, true);
+    trackTimer = setInterval(() => {
+      // with audio the file is the authority and its currentTime snaps the clock. Without it the run
+      // integrates the wall itself (race/track.js), and a second clock here would only race it, so
+      // the tick just watches for the end. Same 250 ms cadence either way, same as the host's.
+      if (trackAudio) race.trackClock(trackAudio.currentTime, !trackAudio.paused);
+      if ((race.track ? race.track.t : dur) >= dur) { stopTrackClock(); race.trackEnded(); }
+    }, TRACK_TICK_MS);
+  };
+  host.log(`track: ${chart.source.name}, ${Math.round(dur)}s, clock ${trackAudio ? 'audio' : 'wall'}`);
+}
+/**
+ * PLAY FROM BAMBICLOUD (race/cloud.js). Built before the race so the menu can be handed a live
+ * player, and wired to the run through hooks only: the mini-player never sees `race`, so it stays
+ * importable in node and the smoke can drive it with a stub element.
+ *
+ *   chart  race/cloudChart.js: an authored chart if one is written for this track, else the one
+ *          this browser cached for it, else a road decoded and generated from the file itself.
+ *          It answers inside a couple of seconds whatever happens, on a plain road if it has
+ *          to, and swaps the real one in through onUpgrade when it lands.
+ *   track  the chart landing: the run takes it and the menu plate says which track, and where in
+ *          the list it is ("3 of 9"), with the next one named under it.
+ *   prefetch  the next playable track, named while this one plays, so the next lap starts with
+ *          its road already in hand. One at a time; closing the panel lets it go.
+ *   pause  the panel's own pause goes through the run, which posts track-pause straight back here,
+ *          so there is ONE pause path and the file and the road can never disagree.
+ */
+/**
+ * The plate for a cloud track: the name, where it sits in the list, and how much of
+ * the file the road actually found. A partial road says so, because "0 treats" on a
+ * plain road is a number the player would otherwise read as a broken track.
+ */
+function showTrack(chart) {
+  const st = race && race.trackStats ? race.trackStats() : null;
+  const partial = !!(chart.analysis && chart.analysis.partial);
+  trackReady = { stage: 'ready', name: chart.source.name + cloudWhere, durationSec: chart.source.durationSec,
+    countable: st ? st.countable : 0, partial, ...keysOf(chart) };
+  plate(trackReady);
+}
+
+async function makeCloud() {
+  if (!settings.cloud) return null;
+  let mod = null, chartMod = null, cacheMod = null;
+  try {
+    mod = await import('./race/cloud.js');
+    chartMod = await import('./race/cloudChart.js');
+    cacheMod = await import('./race/chartCache.js');
+  } catch (err) { host.log('cloud: ' + ((err && err.message) || err)); return null; }
+  const toast = (line) => {
+    const msg = String(line || '').slice(0, 80).toLowerCase();
+    host.log('cloud toast: ' + msg);
+    try { if (race && race.hud) race.hud.toast(msg.slice(0, 60), 'effect'); } catch (e) { /* no hud yet */ }
+  };
+  // The cache is the only piece here that can be missing (a private window, blocked site
+  // data): it opens to a stub that answers null, and every track is charted fresh.
+  const cache = await cacheMod.openCache({ log: host.log });
+  cloudSource = chartMod.createChartSource({
+    indexUrl: new URL('race/charts/index.json', import.meta.url).href,
+    cache, log: host.log, toast,
+    // Which of the four steps a track is on, landing on that track's own row in the levels
+    // panel. The panel is built after this one, so it is read at call time and not captured.
+    onStage: (id, word) => { try { if (levels) levels.setStage(id, word); } catch (e) { /* no panel yet */ } },
+    // The road landing on a plain one: `replaceTrack` while a lap is live keeps everything
+    // already fired and adopts only the future, which is CHART.md's partial rule.
+    onUpgrade(chart) {
+      if (!race) return;
+      try { (race.track && started) ? race.replaceTrack(chart) : race.setTrack(chart); }
+      catch (err) { host.log('cloud upgrade: ' + ((err && err.message) || err)); return; }
+      showTrack(chart);
+    },
+  });
+  return mod.createCloud({
+    settings,
+    log: host.log,
+    ui: (n) => { try { if (race && race.audio && race.audio.ui) race.audio.ui(n); } catch (e) { /* audio gone */ } },
+    origin: (typeof location !== 'undefined' && location.origin) || null,
+    hooks: {
+      clock: (t, playing) => { if (race) race.trackClock(t, playing); },
+      ended: () => { if (race) race.trackEnded(); },
+      pause: (on) => { if (race) race.setPaused(!!on); },
+      chart: (info) => cloudSource.chartFor(info),
+      prefetch: (info) => (info ? cloudSource.prefetch(info) : cloudSource.cancel()),
+      track(chart, info) {
+        if (!race) return;
+        cloudWhere = info && info.total > 1 ? ` · ${info.pos} of ${info.total}` : '';
+        if (!chart) { race.setTrack(null); trackReady = null; plate(null); return; }
+        try { race.setTrack(chart); } catch (err) { trackError('chart: ' + ((err && err.message) || err)); return; }
+        showTrack(chart);
+      },
+      toast,
+    },
+  });
+}
+
+/**
+ * THE LEVELS PANEL (race/levels.js). The first thing a player sees: the tracks of the set that
+ * ships in race/levels.json, one big row each, and a tap plays one.
+ *
+ * Both files it reads are OURS and SAME ORIGIN - the level list and the authored-chart index -
+ * so the list, the lengths and the `hand-tuned` marks are all decided before anything touches a
+ * cdn. `?levels=` swaps the list for the check's own, same origin only, so a query string can
+ * never point the panel at somebody else's file.
+ *
+ *   play  the web path: race/cloud.js takes exactly these tracks and starts the first one.
+ *   open  the desktop path: the host is asked to open the track's PAGE and the player presses
+ *         play over there. This page loads no audio at all in that mode.
+ */
+async function makeLevels() {
+  if (!settings.cloud) return null;
+  let mod = null, src = null;
+  try {
+    mod = await import('./race/levels.js');
+    src = await import('./race/chartSource.js');
+  } catch (err) { host.log('levels: ' + ((err && err.message) || err)); return null; }
+  let listUrl = new URL('race/levels.json', import.meta.url).href;
+  const want = params.get('levels');
+  if (want) {
+    try { const u = new URL(want, location.href); if (u.origin === location.origin) listUrl = u.href; else host.log('levels: ?levels is off origin, ignored'); }
+    catch (e) { host.log('levels: ?levels is not a url, ignored'); }
+  }
+  const indexUrl = new URL('race/charts/index.json', import.meta.url).href;
+  const [sets, index] = await Promise.all([
+    mod.loadLevels(listUrl, { log: host.log }),
+    src.loadIndex(indexUrl, { log: host.log }),
+  ]);
+  const toast = (line) => {
+    const msg = String(line || '').slice(0, 80).toLowerCase();
+    host.log('levels toast: ' + msg);
+    try { if (race && race.hud) race.hud.toast(msg.slice(0, 60), 'effect'); } catch (e) { /* no hud yet */ }
+  };
+  return mod.createLevels({
+    settings, sets, index, cloud, log: host.log,
+    hooks: {
+      play: (entries) => { if (cloud) cloud.setTracks(entries); },
+      // cloud-open, with the track's own page on it: the desktop host lands its browser
+      // window there (Services/Race/RaceCloudWindow.cs) and the player presses play over
+      // there. A host that only knows the bare message ignores the url and opens the front
+      // door, which is still a working answer.
+      open: (url) => { host.send({ type: 'cloud-open', url }); if (settings.trackPick) plate({ stage: 'opening' }); },
+      toast,
+    },
+  });
+}
+
+function stopTrackClock() {
+  if (trackTimer) { clearInterval(trackTimer); trackTimer = 0; }
+  if (trackAudio) { try { trackAudio.pause(); } catch (e) { /* already gone */ } }
+}
+
+/** `?perf=1`: one `[race-perf]` line every PERF_LOG_MS with the counters in the header. */
+function perfLog() {
+  const t0 = performance.now();
+  const tick = () => {
+    if (exiting || !race || !race.perf) return;
+    let p;
+    try { p = race.perf(); } catch (e) { host.log('perf: ' + e); return; }
+    const heap = (performance.memory && performance.memory.usedJSHeapSize) ? (performance.memory.usedJSHeapSize / 1048576).toFixed(1) + 'MB' : 'n/a';
+    host.log(`[race-perf] t+${((performance.now() - t0) / 1000).toFixed(0)}s calls ${p.calls} tris ${p.triangles} passes ${p.passes} frame ${p.frameMs.toFixed(1)}ms`
+      + ` progs ${p.programs} geos ${p.geometries} texs ${p.textures} texMax ${p.texMax} heap ${heap} audio ${p.audio} dpr ${p.dpr.toFixed(2)} block ${p.block}`
+      + ` bubbles ${p.bubbles} ${p.world ? 'world' : 'no-world'} ${p.stage ? 'stage' : p.running ? 'run' : 'idle'} tier ${Q.tier}`);
+  };
+  setInterval(tick, PERF_LOG_MS);
+}
+/** `?pickup=<id>`: the screenshot aid. Waits for the run, then retries until a spot is ahead. */
+function debugPickup() {
+  const id = params.get('pickup');
+  if (!id || !race || !race.debugPickup) return;
+  setTimeout(function tick() {
+    let hit = false;
+    try { hit = race.debugPickup(id); } catch (e) { host.log('pickup: ' + e); return; }
+    if (hit) host.log('pickup: ' + id + ' lit at ' + Math.round(performance.now()) + ' ms');
+    else if (!exiting) setTimeout(tick, 90);
+  }, 600);
+}
+
+function hideSplash() {
+  splash.classList.add('is-off');
+  setTimeout(() => { splash.hidden = true; }, 600);
+}
+/**
+ * The four introduction cards (race/cards.js) on the menu's own stage framing. Resolves when they
+ * end, read through or escaped; either way they count as seen. A card layer that will not build is
+ * never worth the front door, so it is logged and swallowed.
+ */
+async function showCards() {
+  try {
+    const { createCards } = await import('./race/cards.js');
+    const reducedMotion = menu ? (menu.options.motion === 'on' || (menu.options.motion === 'system' && settings.reducedMotion)) : !!settings.reducedMotion;
+    const cards = createCards({ root, audio: race && race.audio, reducedMotion, log: host.log, start: (Number(params.get('card')) || 1) - 1 });
+    await cards.show();   // show() writes the gate itself, so a window closed mid-read still counts
+    cards.dispose();
+  } catch (err) {
+    host.log('cards: ' + ((err && err.message) || err));
+  }
+}
+/** First open: the cards, then the menu. `?cards=1` forces them, `?cards=0` says never. */
+async function firstCards() {
+  const want = params.get('cards');
+  if (want !== '0' && !started) {
+    try {
+      const { cardsSeen } = await import('./race/cards.js');
+      if (want === '1' || !cardsSeen()) { menu.refreshView(); await showCards(); }
+    } catch (err) { host.log('cards gate: ' + ((err && err.message) || err)); }
+  }
+  if (!exiting && !started) menu.show();
+}
+/** Reduced motion as the MENU has it: the option beats the system, `system` defers to the host's init. */
+function motionOff() {
+  if (!menu) return !!settings.reducedMotion;
+  return menu.options.motion === 'on' || (menu.options.motion === 'system' && !!settings.reducedMotion);
+}
+/** race: the intro on the menu stage, then the run under the camera whip. autostart / intro=0 go straight to the run. */
+async function startRun(withIntro) {
+  if (started || !race) return;
+  started = true;
+  hideSplash();
+  try {
+    const reducedMotion = motionOff();
+    // THE SHUTTER (race/shutter.js): the menu goes and the world is built behind a shut door, so
+    // neither the cut nor the build hitch is something the player watches. There is nothing to
+    // transition FROM without a menu (`?autostart=1`), so that boot keeps going straight in.
+    const shut = menu ? race.shutter : null;
+    if (shut) { shut.setReduced(reducedMotion); await shut.close(); }
+    if (menu) { menu.hide(); menu.seedCheck(); }
+    if (race.prepare) race.prepare();   // the world is built here, not under the menu (race/CONTRACT.md); the intro's clock starts after
+    // the menu theme keeps playing: the run's first room crossfades over it (race/AUDIO.md)
+    try { if (race.audio && race.audio.menu) race.audio.menu(false); } catch (e) { /* audio gone */ }
+    if (menu && withIntro && params.get('intro') !== '0') {
+      const { createIntro, cameraWhip } = await import('./race/intro.js');
+      const intro = createIntro({ stage: menu.stage.live, hud: race.hud, audio: race.audio, reducedMotion, log: host.log });
+      const hold = Number(params.get('hold')) / 1000;   // screenshot aid: freeze the intro at that intro time
+      race.setStage(hold > 0 ? { update(dt) { if (intro.time < hold) intro.update(dt); }, render: intro.render } : intro);
+      if (shut) shut.open();   // the intro is already up behind it; the play() below is not made to wait on a curtain
+      await intro.play();
+      if (exiting) return;
+      race.setStage(null);
+      intro.dispose();
+      if (hudRoot) hudRoot.classList.remove('is-lobby');
+      if (shut) shut.flash();   // intro.play() resolves ON `go`: the countdown's shutter, 0.25 s each way
+      race.start();
+      if (startTrackClock) startTrackClock();
+      race.setCameraOverride(cameraWhip(0.8));
+    } else {
+      race.setStage(null);
+      if (hudRoot) hudRoot.classList.remove('is-lobby');
+      race.start();
+      if (startTrackClock) startTrackClock();
+      if (shut) shut.open();
+    }
+  } catch (err) {
+    host.log('start: ' + ((err && err.stack) || err));
+    try { if (race.shutter) race.shutter.open(); } catch (e) { /* no curtain is left down over a fallback start */ }
+    try { race.setStage(null); race.start(); } catch (e) { fail(e); }
+  }
+}
+
+// STANDALONE DEV HANDLE. With no host under the page there is nothing to ask the run's state of,
+// so the three live objects are hung on the window through getters (they are built inside boot()).
+// Gated on `hosted`: under a real host this is never defined and nothing can reach in.
+if (!hosted) {
+  try {
+    window.__race = { get race() { return race; }, get cloud() { return cloud; }, get levels() { return levels; }, get menu() { return menu; }, get settings() { return settings; } };
+  } catch (e) { /* no window */ }
+}
+
+// ---- go ----
+bridge.announceReady();
+host.log('race: ready posted, waiting for init + manifest');
+if (!hosted) {
+  initMsg = synthInit();
+  media.setManifest({ images: [], videos: [], skipped: 0, truncated: false });
+  haveManifest = true;
+  maybeBoot();
+} else {
+  setTimeout(() => {
+    if (booted) return;
+    host.log('race: init timeout, booting with ' + (initMsg ? 'init' : 'defaults') + (haveManifest ? '' : ', no manifest'));
+    if (!initMsg) initMsg = synthInit();
+    boot();
+  }, INIT_TIMEOUT_MS);
+}

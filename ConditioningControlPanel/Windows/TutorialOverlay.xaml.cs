@@ -58,7 +58,7 @@ namespace ConditioningControlPanel
             {
                 Owner = Application.Current?.MainWindow ?? targetWindow;
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             _tutorialService.StepChanged += OnStepChanged;
             _tutorialService.TutorialCompleted += OnTutorialCompleted;
@@ -82,7 +82,7 @@ namespace ConditioningControlPanel
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             AttachToTarget(_targetWindow);
 
@@ -135,11 +135,11 @@ namespace ConditioningControlPanel
                     }
                     if (activeCcpWindow != null)
                     {
-                        try { Activate(); } catch { }
+                        try { Activate(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     }
                 }), System.Windows.Threading.DispatcherPriority.Background);
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void OnAppExit(object? sender, ExitEventArgs e) => ForceShutdown();
@@ -155,11 +155,11 @@ namespace ConditioningControlPanel
         {
             DetachAllSubscriptions();
             // Mark service inactive (it may already be).
-            try { if (_tutorialService.IsActive) _tutorialService.Skip(); } catch { }
+            try { if (_tutorialService.IsActive) _tutorialService.Skip(); } catch (Exception ex) { Diag.Swallowed(ex); }
             // Stop any running animations on this window so Close() doesn't
             // leave the dispatcher pumping a fade that's already moot.
-            try { BeginAnimation(OpacityProperty, null); } catch { }
-            try { Close(); } catch { }
+            try { BeginAnimation(OpacityProperty, null); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         // Idempotent teardown: removes every event subscription this overlay
@@ -171,13 +171,13 @@ namespace ConditioningControlPanel
         private void DetachAllSubscriptions()
         {
             _thisOverlayCompleted = true;
-            try { _spotlightDelayTimer?.Stop(); } catch { }
+            try { _spotlightDelayTimer?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _spotlightDelayTimer = null;
             UnsubscribeAdvanceTrigger();
-            try { TutorialEventBus.Event -= OnBusEvent; } catch { }
-            try { _tutorialService.StepChanged -= OnStepChanged; } catch { }
-            try { _tutorialService.TutorialCompleted -= OnTutorialCompleted; } catch { }
-            try { DetachFromTarget(_targetWindow); } catch { }
+            try { TutorialEventBus.Event -= OnBusEvent; } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _tutorialService.StepChanged -= OnStepChanged; } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _tutorialService.TutorialCompleted -= OnTutorialCompleted; } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { DetachFromTarget(_targetWindow); } catch (Exception ex) { Diag.Swallowed(ex); }
             try
             {
                 if (Application.Current != null)
@@ -188,12 +188,12 @@ namespace ConditioningControlPanel
                         Application.Current.MainWindow.Closed -= OnMainWindowClosed;
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         protected override void OnClosed(EventArgs e)
         {
-            try { DetachAllSubscriptions(); } catch { }
+            try { DetachAllSubscriptions(); } catch (Exception ex) { Diag.Swallowed(ex); }
             base.OnClosed(e);
         }
 
@@ -227,7 +227,7 @@ namespace ConditioningControlPanel
                 w.SizeChanged += OnTargetResized;
                 w.Closed += OnTargetClosed;
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void DetachFromTarget(Window w)
@@ -238,7 +238,7 @@ namespace ConditioningControlPanel
                 w.SizeChanged -= OnTargetResized;
                 w.Closed -= OnTargetClosed;
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void OnTargetClosed(object? sender, EventArgs e)
@@ -282,10 +282,10 @@ namespace ConditioningControlPanel
                         }
                     }
 
-                    try { _tutorialService.Skip(); } catch { }
+                    try { _tutorialService.Skip(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 }), System.Windows.Threading.DispatcherPriority.Background);
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void OnTargetMoved(object? s, EventArgs e) => UpdateOverlayPosition();
@@ -297,7 +297,7 @@ namespace ConditioningControlPanel
             {
                 Dispatcher.BeginInvoke(new Action(() => HandleBusEventOnUi(eventName)));
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void HandleBusEventOnUi(string eventName)
@@ -395,7 +395,7 @@ namespace ConditioningControlPanel
                     Height = bounds.Height;
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             if (_tutorialService.CurrentStep != null && IsLoaded)
             {
@@ -525,14 +525,14 @@ namespace ConditioningControlPanel
             // button below never sets IsPressed — so ButtonBase skips Click on
             // MouseUp and the dialog never closes. UpdateSpotlight has its own
             // timer-based retry for the rare "target not laid out yet" case.
-            try { UpdateSpotlight(step); } catch { }
-            try { SubscribeAdvanceTrigger(step); } catch { }
+            try { UpdateSpotlight(step); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { SubscribeAdvanceTrigger(step); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // Defer Focus(). UpdateStep can be called synchronously from inside
             // a PreviewMouseLeftButtonUp handler (rails advance). Calling Focus()
             // there steals keyboard focus from the dialog mid-click, which broke
             // the button's Click sequence so DialogResult/Close never ran.
-            Dispatcher.BeginInvoke(new Action(() => { try { Focus(); } catch { } }),
+            Dispatcher.BeginInvoke(new Action(() => { try { Focus(); } catch (Exception ex) { Diag.Swallowed(ex); } }),
                 System.Windows.Threading.DispatcherPriority.Background);
         }
 
@@ -552,7 +552,7 @@ namespace ConditioningControlPanel
             // Cancel any retry from a previous step — otherwise rapid
             // StepChanged events queue up overlapping ticks that paint stale
             // bounds over the new step's layout.
-            try { _spotlightDelayTimer?.Stop(); } catch { }
+            try { _spotlightDelayTimer?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _spotlightDelayTimer = null;
 
             SpotlightCanvas.Children.Clear();
@@ -580,8 +580,8 @@ namespace ConditioningControlPanel
             // Give the target window a chance to prepare itself (e.g. expand
             // a collapsed drawer that contains TargetElementName). Wrapped so
             // a buggy callback can't break the tutorial.
-            try { step.PrepareTargetWindowAction?.Invoke(_targetWindow); } catch { }
-            try { _targetWindow.UpdateLayout(); } catch { }
+            try { step.PrepareTargetWindowAction?.Invoke(_targetWindow); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _targetWindow.UpdateLayout(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             var targetElement = FindElementByName(_targetWindow, step.TargetElementName);
             if (targetElement == null)
@@ -596,8 +596,8 @@ namespace ConditioningControlPanel
             // overlay swallows the click and the box never gets focus.
             if (targetElement is TextBox) clickThroughHole = true;
 
-            try { targetElement.BringIntoView(); } catch { }
-            try { _targetWindow.UpdateLayout(); } catch { }
+            try { targetElement.BringIntoView(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _targetWindow.UpdateLayout(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             var bounds = GetElementBounds(targetElement);
             bool unmeasured = bounds.X == 0 && bounds.Y == 0 && bounds.Width <= 100;
@@ -644,7 +644,7 @@ namespace ConditioningControlPanel
 
             void StopSelf()
             {
-                try { timer.Stop(); } catch { }
+                try { timer.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 if (ReferenceEquals(_spotlightDelayTimer, timer)) _spotlightDelayTimer = null;
             }
 
@@ -832,7 +832,7 @@ namespace ConditioningControlPanel
                 // SetWindowRgn region would then clip the window to a tiny rect
                 // and the spotlight area outside that rect wouldn't get
                 // hit-tested at all (Down/Up not delivered to anything).
-                try { UpdateLayout(); } catch { }
+                try { UpdateLayout(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
                 var dpi = VisualTreeHelper.GetDpi(this);
                 var sx = dpi.DpiScaleX <= 0 ? 1.0 : dpi.DpiScaleX;
@@ -882,7 +882,7 @@ namespace ConditioningControlPanel
                 // SetWindowRgn(hwnd, IntPtr.Zero, true) clears any custom region.
                 SetWindowRgn(hwnd, IntPtr.Zero, true);
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void PositionTextPanel(Rect targetBounds, TutorialStepPosition position)
@@ -1003,7 +1003,7 @@ namespace ConditioningControlPanel
                     if (result != null) return result;
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
             return null;
         }
 
@@ -1081,7 +1081,7 @@ namespace ConditioningControlPanel
                                         AdvanceSync();
                                     }
                                 }
-                                catch { }
+                                catch (Exception ex) { Diag.Swallowed(ex); }
                             };
                             parentWindow.Closing += _subParentWindowClosing;
                         }
@@ -1128,11 +1128,11 @@ namespace ConditioningControlPanel
             {
                 if (_subButtonHandler != null)
                 {
-                    try { _subButton.RemoveHandler(ButtonBase.ClickEvent, _subButtonHandler); } catch { }
+                    try { _subButton.RemoveHandler(ButtonBase.ClickEvent, _subButtonHandler); } catch (Exception ex) { Diag.Swallowed(ex); }
                 }
                 if (_subButtonMouseHandler != null)
                 {
-                    try { _subButton.RemoveHandler(UIElement.PreviewMouseLeftButtonUpEvent, _subButtonMouseHandler); } catch { }
+                    try { _subButton.RemoveHandler(UIElement.PreviewMouseLeftButtonUpEvent, _subButtonMouseHandler); } catch (Exception ex) { Diag.Swallowed(ex); }
                 }
                 _subButton = null;
                 _subButtonHandler = null;
@@ -1140,18 +1140,18 @@ namespace ConditioningControlPanel
             }
             if (_subParentWindow != null && _subParentWindowClosing != null)
             {
-                try { _subParentWindow.Closing -= _subParentWindowClosing; } catch { }
+                try { _subParentWindow.Closing -= _subParentWindowClosing; } catch (Exception ex) { Diag.Swallowed(ex); }
                 _subParentWindow = null;
                 _subParentWindowClosing = null;
             }
             if (_subTextBox != null)
             {
-                try { _subTextBox.TextChanged -= OnSubTextChanged; } catch { }
+                try { _subTextBox.TextChanged -= OnSubTextChanged; } catch (Exception ex) { Diag.Swallowed(ex); }
                 _subTextBox = null;
             }
             if (_subSelector != null)
             {
-                try { _subSelector.SelectionChanged -= OnSubSelectionChanged; } catch { }
+                try { _subSelector.SelectionChanged -= OnSubSelectionChanged; } catch (Exception ex) { Diag.Swallowed(ex); }
                 _subSelector = null;
             }
             if (_subSlider != null)
@@ -1161,7 +1161,7 @@ namespace ConditioningControlPanel
                     _subSlider.RemoveHandler(UIElement.PreviewMouseLeftButtonUpEvent,
                         (MouseButtonEventHandler)OnSubSliderMouseUp);
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
                 _subSlider = null;
             }
             _subscribedStep = null;
@@ -1265,7 +1265,7 @@ namespace ConditioningControlPanel
                     if (_tutorialService.IsActive) _tutorialService.Next();
                 }));
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void Advance()
@@ -1280,7 +1280,7 @@ namespace ConditioningControlPanel
                     if (_tutorialService.IsActive) _tutorialService.Next();
                 }));
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         // -- Button click handlers --------------------------------------------
@@ -1313,18 +1313,18 @@ namespace ConditioningControlPanel
                     UseShellExecute = true
                 });
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void OnTutorialCompleted(object? sender, EventArgs e)
         {
             DetachAllSubscriptions();
-            try { Deactivated -= OnOverlayDeactivated; } catch { }
+            try { Deactivated -= OnOverlayDeactivated; } catch (Exception ex) { Diag.Swallowed(ex); }
 
             var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(200));
             fadeOut.Completed += (s, args) =>
             {
-                try { Close(); } catch { }
+                try { Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
             };
             BeginAnimation(OpacityProperty, fadeOut);
         }

@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -47,6 +48,8 @@ namespace ConditioningControlPanel.Features
                 TxtFade.Text = $"{s.FadeDuration}%";
                 SliderDuration.Value = s.FlashDuration;
                 TxtDuration.Text = $"{s.FlashDuration}s";
+                SliderGifSpeed.Value = s.FlashGifSpeedMultiplier;
+                TxtGifSpeed.Text = FormatGifSpeed(s.FlashGifSpeedMultiplier);
                 ChkAudio.IsChecked = s.FlashAudioEnabled;
             }
             finally { _isLoading = false; }
@@ -58,6 +61,7 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.FlashOpacity) ||
                 e.PropertyName == nameof(Models.AppSettings.FadeDuration) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashDuration) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashGifSpeedMultiplier) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashAudioEnabled))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
@@ -105,6 +109,20 @@ namespace ConditioningControlPanel.Features
             var v = (int)e.NewValue;
             TxtDuration.Text = $"{v}s";
             s.FlashDuration = v;
+            App.Settings?.Save();
+        }
+
+        /// <summary>One decimal, invariant, so the readout is "1.0x" in every locale.</summary>
+        private static string FormatGifSpeed(double multiplier)
+            => multiplier.ToString("0.0", CultureInfo.InvariantCulture) + "x";
+
+        private void SliderGifSpeed_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.FlashGifSpeedMultiplier = e.NewValue;   // the setter clamps to 0.25-4.0
+            TxtGifSpeed.Text = FormatGifSpeed(s.FlashGifSpeedMultiplier);
             App.Settings?.Save();
         }
 

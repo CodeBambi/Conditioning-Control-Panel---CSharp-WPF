@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Windows.Media;
 using ConditioningControlPanel.Models;
 
@@ -6,7 +7,11 @@ namespace ConditioningControlPanel.Services.Quiz
 {
     /// <summary>
     /// Single source of truth for "which flavour of intake is this user in" - the niche slug
-    /// (bambi / sissy / drone / circe) derived from the active mod.
+    /// (default / bambi / sissy / drone / circe) derived from the active mod. "default" is the
+    /// neutral house niche an unmodded install gets; the four themed niches are opt-ins a mod asks
+    /// for. It is a REAL niche, not a stand-in: it ships its own pass card
+    /// (Resources/intake/pass_card_default.png) and prompt bank
+    /// (Resources/web/intake/banks/default.json).
     ///
     /// This existed first as <c>IntakeHostService.DesiredNiche()</c>, which picks the prompt bank
     /// for a run. The weekly pass card and its nudge popup need the SAME answer so the art a user
@@ -16,44 +21,71 @@ namespace ConditioningControlPanel.Services.Quiz
     /// </summary>
     internal static class IntakeNiche
     {
-        /// <summary>Every niche this app ships art and prompt banks for. Order is display order.</summary>
-        internal static readonly string[] All = { "bambi", "sissy", "drone", "circe" };
+        /// <summary>Every niche this app ships art and prompt banks for. Order is display order,
+        /// neutral first.</summary>
+        internal static readonly string[] All = { "default", "bambi", "sissy", "drone", "circe" };
 
-        internal const string Fallback = "bambi";
+        /// <summary>Niche for an install with no themed mod signal. Neutral by design - a themed
+        /// niche here would hand every unmodded user someone else's persona.</summary>
+        internal const string Fallback = "default";
 
         /// <summary>
         /// Niche the ACTIVE MOD asks for, before any bank-availability clamp. Built-in ids win;
-        /// third-party .ccpmod files declare theirs via a manifest tag. Falls back to the legacy
-        /// two-value <see cref="ContentMode"/> enum only when there is no mod signal at all - that
-        /// enum has no drone value and collapses every non-sissy mod to bambi, so it is a last
-        /// resort, never a primary source.
+        /// third-party .ccpmod files declare theirs via a manifest tag. The legacy two-value
+        /// <see cref="ContentMode"/> enum is consulted only for its one positive signal (SissyHypno)
+        /// when there is no mod signal at all; its other value is "not sissy", which is NOT a request
+        /// for bambi, so it resolves to the neutral <see cref="Fallback"/>.
         /// </summary>
         internal static string Current()
         {
             try
             {
-                var modId = App.Mods?.ActiveModId;
-                if (modId == BuiltInMods.DronificationId) return "drone";
-                if (modId == BuiltInMods.SissyHypnoId) return "sissy";
-                if (modId == BuiltInMods.LockedId) return "circe";
-
-                // Locked's own tags ("locked"/"chastity") read as circe too.
-                var tags = App.Mods?.ActiveMod?.Manifest?.Tags;
-                if (tags != null)
-                {
-                    foreach (var tag in tags)
-                    {
-                        if (string.Equals(tag, "drone", StringComparison.OrdinalIgnoreCase)) return "drone";
-                        if (string.Equals(tag, "sissy", StringComparison.OrdinalIgnoreCase)) return "sissy";
-                        if (string.Equals(tag, "circe", StringComparison.OrdinalIgnoreCase)) return "circe";
-                        if (string.Equals(tag, "locked", StringComparison.OrdinalIgnoreCase)) return "circe";
-                        if (string.Equals(tag, "chastity", StringComparison.OrdinalIgnoreCase)) return "circe";
-                    }
-                }
-
-                return App.Settings?.Current?.ContentMode == ContentMode.SissyHypno ? "sissy" : Fallback;
+                return Resolve(
+                    App.Mods?.ActiveModId,
+                    App.Mods?.ActiveMod?.Manifest?.Tags,
+                    App.Settings?.Current?.ContentMode == ContentMode.SissyHypno);
             }
             catch { return Fallback; }
+        }
+
+        /// <summary>
+        /// The pure half of <see cref="Current"/>: mod id, then manifest tags, then the one legacy
+        /// signal. Separated so it can be exercised without an App - the four themed ids are easy to
+        /// drop one of (6.9.4 shipped without the BambiSleep branch, which silently moved every
+        /// Bambi user onto the neutral pass card and prompt bank), and a test is the only thing that
+        /// notices.
+        /// </summary>
+        /// <param name="modId">Active mod id, or null when there is no mod service yet.</param>
+        /// <param name="tags">Active mod's manifest tags, for third-party .ccpmod files.</param>
+        /// <param name="sissyContentMode">The legacy enum's one positive reading.</param>
+        internal static string Resolve(string? modId, IEnumerable<string>? tags, bool sissyContentMode)
+        {
+            // BambiSleep ships its own pass card and prompt bank, so it names its own niche here
+            // like every other themed built-in. It was the Fallback until 6.9.4 made the fallback
+            // neutral, which left "bambi" unreachable from every code path.
+            if (modId == BuiltInMods.BambiSleepId) return "bambi";
+            if (modId == BuiltInMods.DronificationId) return "drone";
+            if (modId == BuiltInMods.SissyHypnoId) return "sissy";
+            if (modId == BuiltInMods.LockedId) return "circe";
+
+            // Locked's own tags ("locked"/"chastity") read as circe too.
+            if (tags != null)
+            {
+                foreach (var tag in tags)
+                {
+                    if (string.Equals(tag, "bambi", StringComparison.OrdinalIgnoreCase)) return "bambi";
+                    if (string.Equals(tag, "drone", StringComparison.OrdinalIgnoreCase)) return "drone";
+                    if (string.Equals(tag, "sissy", StringComparison.OrdinalIgnoreCase)) return "sissy";
+                    if (string.Equals(tag, "circe", StringComparison.OrdinalIgnoreCase)) return "circe";
+                    if (string.Equals(tag, "locked", StringComparison.OrdinalIgnoreCase)) return "circe";
+                    if (string.Equals(tag, "chastity", StringComparison.OrdinalIgnoreCase)) return "circe";
+                }
+            }
+
+            // Only the positive SissyHypno reading counts. ContentMode's other value means
+            // "no sissy mod", not "bambi", so everything else lands on the neutral niche.
+            if (sissyContentMode) return "sissy";
+            return Fallback;
         }
 
         /// <summary>

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>race menu touch smoke</title>
+  <!-- race/smoke/menu-touch.html - the touch paths of race/menu.js, driven in a browser.
+
+       node has no DOM and menu.js builds one, so this check runs where the menu runs:
+
+         python -m http.server 8804 --bind 127.0.0.1     (from Resources/web)
+         chrome --headless=new --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader
+                --enable-logging=stderr --virtual-time-budget=15000
+                --screenshot=out.png "http://127.0.0.1:8804/dtrh/race/smoke/menu-touch.html"
+
+       It stands up a real menu on a stubbed pixelizer and a silent audio (no renderer is ever
+       touched: the stage is only built, never drawn), then taps its way through the two traps this
+       page exists for - the value arrows that only ever went UP, and a key card whose only exit was
+       a keyboard. Every line prints to the console AND lands on the page, so the screenshot is the
+       report. The title ends 'PASS' or 'FAIL n'. -->
+  <link rel="stylesheet" href="/dtrh/styles.css">
+  <link rel="stylesheet" href="/dtrh/race/race.css">
+  <link rel="stylesheet" href="/dtrh/race/menu.css">
+  <script type="importmap">
+  { "imports": { "three": "/dtrh/vendor/three/three.module.min.js", "three/addons/": "/dtrh/vendor/three/addons/" } }
+  </script>
+  <style>
+    body { margin: 0; background: #12261f; font-family: 'Segoe UI', system-ui, sans-serif; }
+    #race-root { position: fixed; inset: 0; overflow: hidden; }
+    #out { position: fixed; right: 0; top: 0; z-index: 90; width: 46%; max-height: 100%; overflow: auto;
+           padding: 10px 14px; background: rgba(8, 6, 16, 0.94); color: #d6ffe4; font-size: 13px; line-height: 1.5; }
+    #out b { display: block; margin-bottom: 6px; font-size: 15px; color: #ffd6ea; }
+    #out .fail { color: #ff6a88; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div id="race-root"><div class="race-hud is-lobby"></div></div>
+  <div id="out"><b>race menu touch smoke</b></div>
+  <script type="module">
+    import { createMenu, OPTIONS_KEY } from '/dtrh/race/menu.js';
+
+    const out = document.getElementById('out');
+    let fails = 0;
+    const ok = (cond, what) => {
+      if (!cond) fails++;
+      const line = document.createElement('div');
+      line.className = cond ? '' : 'fail';
+      line.textContent = (cond ? '  ok  ' : 'FAIL  ') + what;
+      out.appendChild(line);
+      console.log((cond ? 'ok   ' : 'FAIL ') + what);
+    };
+    window.addEventListener('error', (e) => ok(false, 'page error: ' + e.message));
+    window.addEventListener('unhandledrejection', (e) => ok(false, 'page rejection: ' + e.reason));
+
+    // music starts at the top so a tap on the left arrow has somewhere to go
+    try { localStorage.setItem(OPTIONS_KEY, JSON.stringify({ pixel: 0, music: 1, sfx: 0.8, motion: 'off', seed: 'daily', seedValue: 7 })); } catch (e) { /* private mode */ }
+
+    const pixel = { block: 0, setBlock(n) { this.block = n | 0; }, retexture() {}, render() {} };
+    const audio = { ui() {}, menu() {}, setLevels() {} };
+    const menu = createMenu({ root: document.getElementById('race-root'), renderer: null, pixel, audio, settings: {}, log: () => {} });
+    menu.show();
+
+    const tap = (node) => node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    const q = (sel) => document.querySelector('#race-root ' + sel);
+    const val = (id) => { const r = q(`.rm-row[data-id="${id}"] .rm-row-val`); return r ? r.textContent : '(no row)'; };
+    const shown = (node) => !!node && !node.hidden;
+
+    // ---- trap 1: a tap could only ever step the value UP ----
+    tap(q('.rm-btn[data-id="options"]'));
+    ok(shown(q('.rm-options')), 'the options verb opens the options panel');
+    ok(val('music') === '100%', 'music starts at 100%');
+    const dec = q('.rm-row[data-id="music"] .rm-row-arrow.is-dec');
+    const inc = q('.rm-row[data-id="music"] .rm-row-arrow.is-inc');
+    ok(!!dec && !!inc, 'the music row carries a left and a right button');
+    tap(dec);
+    ok(val('music') === '90%', 'a tap on the left arrow lowers music 100% -> 90% (was: only up)');
+    tap(dec);
+    ok(val('music') === '80%', 'a second tap keeps lowering it, 90% -> 80%');
+    tap(inc);
+    ok(val('music') === '90%', 'a tap on the right arrow raises it again, 80% -> 90%');
+    tap(q('.rm-row[data-id="music"] .rm-row-label'));
+    ok(val('music') === '100%', 'a press on the row itself still steps up, the way the pad does');
+    tap(q('.rm-row[data-id="back"]'));
+    ok(shown(q('.rm-list')) && !shown(q('.rm-options')), 'the options back row returns to the verbs');
+
+    // ---- trap 2: the key card had no way out but a keyboard ----
+    tap(q('.rm-btn[data-id="how"]'));
+    ok(shown(q('.rm-how')), 'the how to drive verb opens the key card');
+    const back = q('.rm-how .rm-how-back');
+    ok(!!back, 'the key card carries a back row');
+    tap(back);
+    ok(!shown(q('.rm-how')) && shown(q('.rm-list')), 'the back row closes the key card');
+    tap(q('.rm-btn[data-id="how"]'));
+    ok(shown(q('.rm-how')), 'the key card opens again (the verb tap does not close it on the way in)');
+    tap(q('.rm-stage'));
+    ok(!shown(q('.rm-how')) && shown(q('.rm-list')), 'a tap off the panel closes the key card');
+
+    // ---- the verbs a finger has to be able to reach ----
+    const verbs = [...document.querySelectorAll('#race-root .rm-list .rm-btn:not([hidden])')];
+    ok(verbs.length >= 5 && verbs.every((b) => b.getBoundingClientRect().height > 0), `every visible verb has a box to hit (${verbs.length} of them)`);
+    ok(getComputedStyle(q('.rm-col')).overflowY === 'auto', 'the column scrolls itself instead of spilling under the clip');
+    // the landscape phone. Run this page at 844x390 and the number below is the whole point of the
+    // short-viewport rule: all SEVEN verbs (track and clear only ever show under a host) in 390 px.
+    // Only asserted while the short-viewport rule is live, so the same page passes on a desktop too.
+    for (const b of document.querySelectorAll('#race-root .rm-list .rm-btn')) b.hidden = false;
+    const col = q('.rm-col'), short = matchMedia('(max-height: 480px)').matches;
+    ok(!short || col.scrollHeight <= 390, `all seven verbs in 390 px: ${col.scrollHeight} px${short ? '' : ' (tall screen, not asserted)'}`);
+
+    const head = document.createElement('div');
+    head.textContent = fails ? `FAIL ${fails}` : 'PASS';
+    head.className = fails ? 'fail' : '';
+    out.appendChild(head);
+    document.title = 'race menu touch smoke ' + (fails ? `FAIL ${fails}` : 'PASS');
+    console.log('menu-touch smoke: ' + (fails ? `FAIL ${fails}` : 'PASS'));
+  </script>
+</body>
+</html>

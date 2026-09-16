@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -33,6 +33,24 @@ namespace ConditioningControlPanel.Features
         private const double RimLightOpacity = 0.85;
         private const int RimLightMs = 150;
         private const int AmbientFrameRate = 24;
+
+        /// <summary>Resting opacity for a locked card. Unchanged from the value that has always
+        /// ridden on <see cref="IsLocked"/>.</summary>
+        private const double LockedContentOpacity = 0.35;
+
+        /// <summary>Resting opacity for a switched-OFF card that opted into
+        /// <see cref="DimWhenInactive"/>. Deep enough that the lit tiles win the eye at a glance,
+        /// shallow enough that the art still reads and the tile still looks clickable - and well
+        /// clear of the 0.35 lock veil, which has to keep meaning something else.
+        ///
+        /// <para>Since 6.9.4 the dim is not the whole story: the same off tile also drains to
+        /// greyscale (ImgIconMute, <see cref="ApplyMute"/>). Opacity alone was read as "a bit
+        /// further away", never as "off"; colour is what a glance actually sorts by.</para></summary>
+        private const double InactiveContentOpacity = 0.62;
+
+        /// <summary>The title's weight on a muted tile. Chrome follows the art: a grey picture
+        /// with a bright white label still half-says "on".</summary>
+        private const double MutedTitleOpacity = 0.72;
 
         /// <summary>Blur radius for a teased card's art. Tuned to "coloured smear": at the
         /// mosaic's tile size this leaves a mood and a palette and no recognisable shape, which
@@ -76,6 +94,10 @@ namespace ConditioningControlPanel.Features
             DependencyProperty.Register(nameof(IsActive), typeof(bool), typeof(FeatureCard),
                 new PropertyMetadata(false, OnActiveStateChanged));
 
+        public static readonly DependencyProperty DimWhenInactiveProperty =
+            DependencyProperty.Register(nameof(DimWhenInactive), typeof(bool), typeof(FeatureCard),
+                new PropertyMetadata(false, OnActiveStateChanged));
+
         public static readonly DependencyProperty HelpSectionIdProperty =
             DependencyProperty.Register(nameof(HelpSectionId), typeof(string), typeof(FeatureCard),
                 new PropertyMetadata(null, OnHelpSectionIdChanged));
@@ -87,6 +109,57 @@ namespace ConditioningControlPanel.Features
         public static readonly DependencyProperty TeaseTierProperty =
             DependencyProperty.Register(nameof(TeaseTier), typeof(int), typeof(FeatureCard),
                 new PropertyMetadata(0, OnTeaseTierChanged));
+
+        public static readonly DependencyProperty ShowV2BadgeProperty =
+            DependencyProperty.Register(nameof(ShowV2Badge), typeof(bool), typeof(FeatureCard),
+                new PropertyMetadata(false, OnShowV2BadgeChanged));
+
+        /// <summary>
+        /// The v2 pill's metal: one step fancier than the pink accent (champagne). Shared with
+        /// <see cref="NewV2Badge"/> so the option pickers wear the very same pill as the card.
+        /// </summary>
+        internal static readonly System.Windows.Media.Brush V2BadgeBrush = MakeV2Brush();
+
+        private static System.Windows.Media.Brush MakeV2Brush()
+        {
+            var b = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(0xFF, 0xE0, 0x8A));
+            b.Freeze();
+            return b;
+        }
+
+        /// <summary>
+        /// A loose copy of the card's v2 pill for other surfaces (the Flashes motion picker, and
+        /// the dashboard side rail's chips).
+        /// </summary>
+        /// <param name="compact">
+        /// The rail's size. A chip is 36 DIP tall against a card's hundred-odd, and the card's
+        /// pill pinned into a corner of one reads as a second caption rather than as a mark, so
+        /// the compact fork takes the type down two points and the padding down with it. Same
+        /// metal, same text, same corner family: one pill at two sizes, not two pills.
+        /// </param>
+        internal static Border NewV2Badge(Thickness margin, bool compact = false)
+        {
+            return new Border
+            {
+                Margin = margin,
+                Padding = compact ? new Thickness(3, 0, 4, 1) : new Thickness(6, 2, 7, 3),
+                CornerRadius = new CornerRadius(compact ? 5 : 7),
+                Background = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromArgb(0xD9, 0x1A, 0x1A, 0x2E)),
+                BorderBrush = V2BadgeBrush,
+                BorderThickness = new Thickness(1),
+                VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false,
+                Child = new TextBlock
+                {
+                    Text = Localization.Loc.Get("badge_v2"),
+                    Foreground = V2BadgeBrush,
+                    FontSize = compact ? 7 : 9,
+                    FontWeight = FontWeights.Bold,
+                },
+            };
+        }
 
         public static readonly RoutedEvent ClickEvent =
             EventManager.RegisterRoutedEvent(nameof(Click), RoutingStrategy.Bubble,
@@ -138,6 +211,23 @@ namespace ConditioningControlPanel.Features
         }
 
         /// <summary>
+        /// Opt-in: while this card's feature is OFF, rest the art at
+        /// <see cref="InactiveContentOpacity"/> so the wall's lit tiles are the ones the eye
+        /// lands on. Hovering lifts it back to full, so an off tile still reads as a live
+        /// affordance rather than as something disabled.
+        ///
+        /// <para>Opt-in rather than automatic because <see cref="IsActive"/> is only meaningful
+        /// on the tiles that actually toggle. The destination tiles (Just Drop, Mystery, the
+        /// Vault) never receive an IsActive write, so an automatic rule would park them at 62%
+        /// forever and say "off" about something that has no off.</para>
+        /// </summary>
+        public bool DimWhenInactive
+        {
+            get => (bool)GetValue(DimWhenInactiveProperty);
+            set => SetValue(DimWhenInactiveProperty, value);
+        }
+
+        /// <summary>
         /// ID of the entry in <see cref="Services.HelpContentService"/> whose rich
         /// tooltip should be shown when hovering the "?" icon. Null/unknown IDs
         /// hide the icon entirely.
@@ -166,6 +256,16 @@ namespace ConditioningControlPanel.Features
         }
 
         /// <summary>
+        /// Flashes/Bubbles v2: the card wears the "v2" pill while the feature owns a Back Room
+        /// v2 style. Presentation only; the picker inside the feature is where the style is set.
+        /// </summary>
+        public bool ShowV2Badge
+        {
+            get => (bool)GetValue(ShowV2BadgeProperty);
+            set => SetValue(ShowV2BadgeProperty, value);
+        }
+
+        /// <summary>
         /// Turns this card into a nameless TEASE: 0 = a normal card, 1 = gold livery (a Tier 1
         /// feature is being teased), 2 = diamond livery (Tier 2). Any other positive value is
         /// treated as diamond.
@@ -176,9 +276,11 @@ namespace ConditioningControlPanel.Features
         /// icon. The card is otherwise untouched: it still clicks, still hovers, still lives on
         /// the same wall, so the tease is a costume rather than a second control.</para>
         ///
-        /// <para>Generic on purpose. Teasing a different feature later is a matter of moving
-        /// this one property (see the switch block at the top of
-        /// <c>MainWindow.TeaseCard.cs</c>), not of writing another card.</para>
+        /// <para>Generic on purpose, and currently unworn: the one tile that carried a tease was
+        /// the dashboard's nameless Just Drop slot, which became the Deeper editor tile on
+        /// 2026-09-12. Teasing a feature again is a matter of setting this one property on a card
+        /// and pointing its click at <c>TeaseRevealPopup.ShowFor</c>, not of writing another
+        /// card.</para>
         /// </summary>
         public int TeaseTier
         {
@@ -233,12 +335,23 @@ namespace ConditioningControlPanel.Features
                     Stretch = System.Windows.Media.Stretch.UniformToFill,
                     AlignmentY = AlignmentY.Center
                 };
+                // The grey twin rides the same brush settings, so the two layers register
+                // pixel for pixel and the fade between them reads as colour draining, not as
+                // a second picture sliding in. Null (non-bitmap art) leaves the opacity dim
+                // to say "off" on its own.
+                var grey = ArtDesaturate.Of(src);
+                c.ImgIconMute.Background = grey == null ? null : new ImageBrush(grey)
+                {
+                    Stretch = System.Windows.Media.Stretch.UniformToFill,
+                    AlignmentY = AlignmentY.Center
+                };
                 c.ImgIconHost.Visibility = Visibility.Visible;
                 c.GlyphHost.Visibility = Visibility.Collapsed;
             }
             else
             {
                 c.ImgIconHost.Background = null;
+                c.ImgIconMute.Background = null;
                 if (!string.IsNullOrEmpty(c.Glyph))
                 {
                     c.ImgIconHost.Visibility = Visibility.Collapsed;
@@ -291,9 +404,19 @@ namespace ConditioningControlPanel.Features
             if (c.TeaseTier > 0) c.ApplyTeaseState();
         }
 
+        private static void OnShowV2BadgeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is not FeatureCard c || c.V2BadgeHost == null) return;
+            c.V2BadgeHost.BorderBrush = V2BadgeBrush;
+            c.TxtV2Badge.Foreground = V2BadgeBrush;
+            c.V2BadgeHost.Visibility = (bool)e.NewValue ? Visibility.Visible : Visibility.Collapsed;
+        }
+
         private static void OnTeaseTierChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            if (d is FeatureCard c) c.ApplyTeaseState();
+            if (d is not FeatureCard c) return;
+            c.ApplyTeaseState();
+            c.ApplyMute(0);
         }
 
         /// <summary>
@@ -391,12 +514,10 @@ namespace ConditioningControlPanel.Features
             {
                 LockedOverlay.Visibility = Visibility.Visible;
                 TxtLockLabel.Text = LockLevel > 0 ? $"Lvl {LockLevel}" : "Locked";
-                ContentRoot.Opacity = 0.35;
             }
             else
             {
                 LockedOverlay.Visibility = Visibility.Collapsed;
-                ContentRoot.Opacity = 1.0;
             }
             ApplyActiveState();
         }
@@ -407,7 +528,62 @@ namespace ConditioningControlPanel.Features
             // can't really be "on" even if the underlying setting is true.
             var showActive = IsActive && !IsLocked;
             ActiveBorder.Visibility = showActive ? Visibility.Visible : Visibility.Collapsed;
+            ApplyRestOpacity();
+            ApplyMute(CardMuteRule.TransitionMs(MotionFx.AllowTransitions, IsLoaded));
             ApplyActiveBreath(showActive);
+        }
+
+        /// <summary>
+        /// The ONE writer for <c>ContentRoot.Opacity</c>. Lock, inactive-dim and hover all want
+        /// that channel, so they are resolved here in priority order instead of each assigning it
+        /// from its own handler - two writers on one property is how a card ends up stuck at 35%
+        /// after a lock is lifted.
+        ///
+        /// <para>A plain assignment, never a DoubleAnimation: an animation on this property would
+        /// hold its final value at local precedence, and every later assignment here would then be
+        /// silently ignored.</para>
+        /// </summary>
+        private void ApplyRestOpacity()
+        {
+            if (ContentRoot == null) return;
+            double target =
+                IsLocked ? LockedContentOpacity
+                : DimWhenInactive && !IsActive && !_hovered ? InactiveContentOpacity
+                : 1.0;
+            ContentRoot.Opacity = target;
+        }
+
+        /// <summary>
+        /// The ONE writer for the grey layer's opacity and the title's muted weight. Lock, tease,
+        /// active and hover are weighed by <see cref="CardMuteRule"/>; this only paints the
+        /// verdict. A locked tile is never muted (its veil is a different sentence), a teased
+        /// tile keeps its blur, and a hover hands the colour straight back.
+        ///
+        /// <para>Always through BeginAnimation: a To-only fade when <paramref name="ms"/> is
+        /// positive, a cleared animation plus a plain assignment otherwise, so an earlier fade
+        /// can never be left holding the property against a later snap.</para>
+        /// </summary>
+        private void ApplyMute(int ms)
+        {
+            try
+            {
+                if (ImgIconMute == null || TxtTitle == null) return;
+                bool mute = CardMuteRule.ShouldMute(DimWhenInactive, IsActive, IsLocked, _hovered, TeaseTier > 0);
+                double to = mute ? 1.0 : 0.0;
+                TxtTitle.Opacity = mute ? MutedTitleOpacity : 1.0;
+                if (ms <= 0)
+                {
+                    ImgIconMute.BeginAnimation(OpacityProperty, null);
+                    ImgIconMute.Opacity = to;
+                    return;
+                }
+                var fade = new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms))
+                {
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+                };
+                ImgIconMute.BeginAnimation(OpacityProperty, fade);
+            }
+            catch (Exception ex) { App.Logger?.Debug("FeatureCard.ApplyMute: {E}", ex.Message); }
         }
 
         // ============================== FX ==============================
@@ -583,6 +759,12 @@ namespace ConditioningControlPanel.Features
                 // A locked tile is not an affordance; lighting it up on hover promises a click
                 // that does nothing.
                 if (IsLocked) on = false;
+
+                // An inactive tile rests dim and grey; hovering hands it back its full art so the
+                // pointer proves the tile is still live. Both writers re-read IsLocked, so this
+                // stays correct for a locked card, whose veil must not lift.
+                ApplyRestOpacity();
+                ApplyMute(CardMuteRule.TransitionMs(MotionFx.AllowTransitions, IsLoaded));
 
                 MotionFx.HoverLift(RootBorder, on);
                 if (on) HoverPop.Enter(ImgIconHost); else HoverPop.Leave(ImgIconHost);

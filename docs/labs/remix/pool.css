@@ -1,0 +1,100 @@
+/* The pool: the strip under the Auto stage and the grid that opens from it.
+   Tokens come from remix.css. Slots read as the canvas's guest list: pins first, then this roll's picks,
+   then empty seats the next roll fills. Nothing here decodes anything; the thumbs are one small frame each. */
+
+/* ---- the picture column: stage on top, strip beneath ---- */
+.auto-pic { flex:1 1 auto; min-width:0; min-height:0; align-self:stretch; display:flex; flex-direction:column; gap:10px; }
+.auto-pic .auto-stage { flex:1 1 auto; align-self:stretch; }
+
+/* ---- the strip ---- */
+.pool-strip { flex:0 0 auto; display:flex; align-items:center; gap:10px; min-height:56px; padding:0 2px; animation:fade 200ms var(--ease); }
+.pool-slots { display:flex; align-items:center; gap:6px; flex:1 1 auto; min-width:0; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; padding:2px; }
+.pool-slots::-webkit-scrollbar { display:none; }
+.pool-slot { position:relative; flex:0 0 auto; width:56px; height:56px; border-radius:8px; border:1px solid var(--line); background:var(--panel); overflow:hidden;
+             display:flex; align-items:center; justify-content:center; color:var(--ink-faint); padding:0;
+             transition:border-color var(--t) var(--ease), box-shadow var(--t) var(--ease), transform var(--t) var(--ease); }
+.pool-slot canvas { width:100%; height:100%; object-fit:cover; display:block; }
+.pool-slot:hover { border-color:var(--lav); color:var(--ink); }
+.pool-slot:active { transform:scale(.95); }
+.pool-slot.empty { border-style:dashed; background:transparent; }
+.pool-slot.empty svg { width:16px; height:16px; opacity:.7; }
+.pool-slot.pinned { border-color:var(--pink); box-shadow:0 0 0 1px var(--pink), 0 0 14px rgba(255,105,180,.28); }
+.pool-slot.rolled { opacity:.92; }
+/* the tick: a pink coin in the corner of anything that stays on every roll */
+.pool-check { position:absolute; right:3px; top:3px; width:16px; height:16px; border-radius:50%; background:var(--pink); color:var(--ground);
+              display:flex; align-items:center; justify-content:center; opacity:0; transform:scale(.6); transition:opacity var(--t) var(--ease), transform 180ms cubic-bezier(.2,1.5,.4,1); pointer-events:none; }
+.pool-check svg { width:10px; height:10px; }
+.pinned .pool-check { opacity:1; transform:scale(1); }
+.pool-count { display:flex; align-items:center; gap:6px; flex:0 0 auto; min-height:44px; padding:8px 8px; border-radius:8px; border:1px solid transparent;
+              color:var(--ink-faint); font:11px/1.3 var(--mono); letter-spacing:.08em; white-space:nowrap; transition:color var(--t), border-color var(--t); }
+.pool-count:hover { color:var(--ink); border-color:var(--line); }
+.pool-count svg { transition:transform var(--t); }
+.pool-count[aria-expanded="true"] { color:var(--pink); }
+.pool-count[aria-expanded="true"] svg { transform:rotate(180deg); }
+.pool-slot.shiver, .pool-pick.shiver { animation:shiver 250ms var(--ease); }
+
+/* the pill while the picks decode: the label reads Loading, the dot breathes */
+.roll-pill.busy:not(.rolling) { opacity:.85; }
+.roll-pill.busy:not(.rolling) .roll-label { animation:poolBreathe 900ms ease-in-out infinite alternate; }
+@keyframes poolBreathe { from { opacity:.55; } to { opacity:1; } }
+
+/* ---- the manager: a bottom sheet on a phone, a centred panel on a desktop ---- */
+.pool-host { position:fixed; inset:0; z-index:45; background:rgba(20,20,43,.62); display:flex; align-items:flex-end; justify-content:center; animation:fade 160ms var(--ease); }
+.pool-sheet { width:100%; max-height:min(86dvh, 720px); display:flex; flex-direction:column; gap:12px; padding:8px 16px calc(16px + var(--sab, 0px));
+              background:var(--navy); border:1px solid var(--line); border-radius:16px 16px 0 0; box-shadow:0 -18px 48px rgba(0,0,0,.55); animation:poolUp 220ms var(--ease); }
+@keyframes poolUp { from { transform:translateY(24px); opacity:0; } to { transform:none; opacity:1; } }
+.pool-sheet .sheet-grab { width:36px; height:4px; border-radius:2px; background:var(--line); margin:0 auto 2px; }
+.pool-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.pool-title { font-family:var(--disp); font-size:22px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); line-height:1; display:flex; align-items:baseline; gap:10px; }
+.pool-n { font:11px/1.3 var(--mono); letter-spacing:.08em; color:var(--ink-faint); text-transform:none; }
+.pool-close { width:44px; height:44px; display:flex; align-items:center; justify-content:center; border-radius:8px; color:var(--ink-dim); }
+.pool-close:hover { color:var(--ink); background:var(--panel); }
+.pool-tools { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.pool-stepper { display:flex; align-items:center; gap:2px; border:1px solid var(--line); border-radius:999px; padding:0 4px 0 12px; min-height:36px; }
+.pool-use { font:11px/1 var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--ink-faint); margin-right:6px; }
+.pool-step { width:32px; height:32px; border-radius:50%; color:var(--ink-dim); font-size:18px; line-height:1; display:flex; align-items:center; justify-content:center; }
+.pool-step:hover:not(:disabled) { color:var(--ink); background:var(--panel); }
+.pool-step:disabled { opacity:.3; }
+.pool-num { min-width:22px; text-align:center; font:16px/1 var(--mono); color:var(--pink); }
+.pool-tools .chip { display:inline-flex; align-items:center; gap:6px; }
+.pool-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(84px, 1fr)); gap:8px; overflow-y:auto; min-height:0; padding:2px; scrollbar-width:thin; }
+.pool-cell { position:relative; }
+.pool-pick { position:relative; width:100%; aspect-ratio:1; border-radius:8px; border:1px solid var(--line); background:var(--panel); overflow:hidden; padding:0; display:block;
+             transition:border-color var(--t) var(--ease), box-shadow var(--t) var(--ease), transform var(--t) var(--ease); }
+.pool-pick canvas { width:100%; height:100%; object-fit:cover; display:block; }
+.pool-pick:hover { border-color:var(--lav); }
+.pool-pick:active { transform:scale(.96); }
+.pool-cell.pinned .pool-pick { border-color:var(--pink); box-shadow:0 0 0 1px var(--pink), 0 0 16px rgba(255,105,180,.3); }
+.pool-cell.rolled .pool-pick { border-color:var(--lav); }
+.pool-cell.rolled .pool-pick::after { content:"in this roll"; position:absolute; left:0; right:0; bottom:0; padding:3px 0; text-align:center; background:rgba(20,20,43,.78);
+                                      font:9px/1.2 var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--lav); }
+.pool-cell .pool-check { width:20px; height:20px; right:5px; top:5px; }
+.pool-cell .pool-check svg { width:12px; height:12px; }
+.pool-cell .thumb-kind { left:4px; right:auto; top:4px; }
+.pool-rm { position:absolute; left:-6px; top:-6px; width:24px; height:24px; border-radius:50%; background:var(--ground); border:1px solid var(--line); color:var(--ink-dim);
+           display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity var(--t), color var(--t), border-color var(--t); }
+.pool-rm svg { width:11px; height:11px; }
+.pool-cell:hover .pool-rm, .pool-rm:focus-visible { opacity:1; }
+.pool-rm:hover { color:var(--gold); border-color:var(--gold); }
+html.is-mobile .pool-rm { opacity:1; }
+.pool-hint { margin:0; color:var(--ink-faint); font-size:12px; line-height:1.5; }
+
+/* the desktop: a panel in the middle, the grid wider */
+html:not(.is-mobile) .pool-host { align-items:center; padding:24px; }
+html:not(.is-mobile) .pool-sheet { max-width:720px; border-radius:16px; padding:16px 20px 20px; box-shadow:0 24px 64px rgba(0,0,0,.6); }
+html:not(.is-mobile) .pool-sheet .sheet-grab { display:none; }
+html:not(.is-mobile) .pool-grid { grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); }
+
+/* a phone: smaller seats, the count keeps its tap size */
+html.is-mobile .pool-strip { min-height:48px; gap:8px; }
+html.is-mobile .pool-slot { width:48px; height:48px; }
+html.is-mobile .pool-count { font-size:10px; padding:6px 6px; }
+html.is-mobile .pool-grid { grid-template-columns:repeat(4, 1fr); }
+@media (max-height: 500px) and (orientation: landscape) {
+  html.is-mobile .pool-strip { min-height:40px; }
+  html.is-mobile .pool-slot { width:40px; height:40px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pool-strip, .pool-host, .pool-sheet, .pool-check, .pool-slot.shiver, .pool-pick.shiver, .roll-pill.busy:not(.rolling) .roll-label { animation:none !important; transition:none !important; }
+}

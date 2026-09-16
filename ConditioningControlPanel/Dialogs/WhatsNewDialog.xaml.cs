@@ -10,9 +10,10 @@ namespace ConditioningControlPanel
     /// the button off-screen (the old MessageBox-based version could — see ccp-bugs #427).
     ///
     /// <para>A release that moves things around can also hand the dialog a secondary CTA
-    /// (<paramref name="tourAction"/>) - v6.8's "Show me around (60s)" upgrade tour. The button
-    /// is Collapsed whenever no action is passed, so every other caller gets the dialog it
-    /// always got. Copy is hardcoded English by repo convention (Windows/FeatureIntroPopup).</para>
+    /// (<paramref name="tourAction"/>) - v6.8's upgrade tour. The button is Collapsed whenever no
+    /// action is passed, so every other caller gets the dialog it always got. Its default label is
+    /// the welcome-back sheet's <c>wb_tour</c>, so the same offer reads the same on both surfaces
+    /// in every language.</para>
     /// </summary>
     public partial class WhatsNewDialog : Window
     {
@@ -29,10 +30,27 @@ namespace ConditioningControlPanel
             if (tourAction != null)
             {
                 BtnTour.Content = string.IsNullOrWhiteSpace(tourButtonText)
-                    ? "Show me around (60s)"
+                    ? TourLabel()
                     : tourButtonText;
                 BtnTour.Visibility = Visibility.Visible;
             }
+        }
+
+        /// <summary>
+        /// The tour button's default label, shared with the welcome-back sheet so the two never
+        /// word the same offer differently. Falls back to the English draft rather than to a raw
+        /// key if a language file is missing it.
+        /// </summary>
+        private static string TourLabel()
+        {
+            try
+            {
+                var value = Localization.Loc.Get("wb_tour");
+                return string.IsNullOrEmpty(value) || value == "wb_tour"
+                    ? "Show me around (60 seconds)"
+                    : value;
+            }
+            catch { return "Show me around (60 seconds)"; }
         }
 
         private void BtnOk_Click(object sender, RoutedEventArgs e)

@@ -60,7 +60,7 @@ export const SORT_LEX = Object.freeze({
   sort_rules_right: 'Right: yours.',
   sort_rules_left: 'Left: everything else.',
   sort_rules_ring: 'The ring closes. Swipe in the gold and the chain grows.',
-  sort_rules_pass: 'Let it close and the card comes back. That is not a mistake.',
+  sort_rules_pass: 'Let it close and the card comes back, one rung down.',
   sort_rules_keys: 'Arrow keys work too. A key is a swipe.',
   sort_rules_go: 'Begin',
 

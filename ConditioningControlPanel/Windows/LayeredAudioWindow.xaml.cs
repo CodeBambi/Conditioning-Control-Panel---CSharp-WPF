@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel
@@ -383,9 +384,8 @@ namespace ConditioningControlPanel
                 try
                 {
                     MessageBox.Show(
-                        "Audio Layers could not open.\n\n" + ex.Message +
-                        "\n\nThe full details are in the app log - please include them if you report this.",
-                        "Audio Layers", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        Loc.GetF("msg_audio_layers_open_failed", ex.Message),
+                        Loc.Get("title_audio_layers"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
                 catch { }
             }

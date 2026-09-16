@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -30,6 +30,11 @@ namespace ConditioningControlPanel.Services
     public class ModService
     {
         private static readonly ILogger? _log = Log.Logger;
+
+        /// <summary>Built-ins that adopted a bundled asset package, for the one startup summary line.
+        /// Interlocked: a downloaded pack finishes extracting on a background thread, so this is
+        /// still being incremented after the constructor has already logged its summary.</summary>
+        private int _builtInsRegistered;
 
         private ModPackage _activeMod;
         private readonly ModPackage _baseMod; // Always CCP Default — neutral fallback for missing fields
@@ -113,6 +118,11 @@ namespace ConditioningControlPanel.Services
 
             // Load user-installed mods from disk
             LoadInstalledMods();
+
+            // One line for the whole roll-call. Each built-in used to file its own Information
+            // line naming an absolute extract path, so a stock install spent six identical lines
+            // per launch saying nothing had changed. The per-mod detail is still at Debug.
+            _log?.Information("Registered {Count} built-in mod(s) with bundled assets", _builtInsRegistered);
 
             // Default to base mod until Initialize is called
             _activeMod = _baseMod;
@@ -574,6 +584,7 @@ namespace ConditioningControlPanel.Services
 
                     sanitized[key] = val;
                 }
+                FillFeatureLabelAliases(sanitized);
                 manifest.TextReplacements = sanitized;
             }
 
@@ -634,6 +645,18 @@ namespace ConditioningControlPanel.Services
                 if (manifest.Messages.AttentionCheckFail?.Length > 500) manifest.Messages.AttentionCheckFail = manifest.Messages.AttentionCheckFail[..500];
                 if (manifest.Messages.AttentionCheckMercy?.Length > 500) manifest.Messages.AttentionCheckMercy = manifest.Messages.AttentionCheckMercy[..500];
                 if (manifest.Messages.BubbleCountRetry?.Length > 500) manifest.Messages.BubbleCountRetry = manifest.Messages.BubbleCountRetry[..500];
+                if (manifest.Messages.AttentionCheckTroll?.Length > 500) manifest.Messages.AttentionCheckTroll = manifest.Messages.AttentionCheckTroll[..500];
+                if (manifest.Messages.GazeCorrect?.Length > 500) manifest.Messages.GazeCorrect = manifest.Messages.GazeCorrect[..500];
+                // Capped shorter: both land inside a fixed quiz card, not a scrolling surface.
+                if (manifest.Messages.QuizTrickQuestion?.Length > 200) manifest.Messages.QuizTrickQuestion = manifest.Messages.QuizTrickQuestion[..200];
+                if (manifest.Messages.QuizTrickAnswer?.Length > 60) manifest.Messages.QuizTrickAnswer = manifest.Messages.QuizTrickAnswer[..60];
+                // Both quiz questions land on a fixed card, like the trick pair above.
+                if (manifest.Messages.QuizPraise?.Length > 60) manifest.Messages.QuizPraise = manifest.Messages.QuizPraise[..60];
+                if (manifest.Messages.QuizObedienceQuestion?.Length > 200) manifest.Messages.QuizObedienceQuestion = manifest.Messages.QuizObedienceQuestion[..200];
+                if (manifest.Messages.QuizPraiseHeardQuestion?.Length > 200) manifest.Messages.QuizPraiseHeardQuestion = manifest.Messages.QuizPraiseHeardQuestion[..200];
+                // The marquee scrolls one line forever; a long one is a performance problem, not a
+                // wrapping one, so it is capped hardest of the set.
+                if (manifest.Messages.MarqueeBanner?.Length > 120) manifest.Messages.MarqueeBanner = manifest.Messages.MarqueeBanner[..120];
             }
             if (manifest.Triggers != null)
             {
@@ -1145,6 +1168,50 @@ namespace ConditioningControlPanel.Services
         public string GetBubbleCountRetryMessage() =>
             GetStringValue(m => m.Messages?.BubbleCountRetry, m => m.Messages!.BubbleCountRetry!);
 
+        /// <summary>
+        /// Praise line for the troll replay (attention check passed, watch it again anyway). Walks
+        /// the same ActiveMod -> CCP Default chain as its sibling above, so an unmodded run gets the
+        /// neutral line and a themed mod keeps its own voice.
+        /// </summary>
+        public string GetAttentionCheckTrollMessage() =>
+            GetStringValue(m => m.Messages?.AttentionCheckTroll, m => m.Messages!.AttentionCheckTroll!);
+
+        /// <summary>Fullscreen praise word after a correct gaze-minigame round.</summary>
+        public string GetGazeCorrectMessage() =>
+            GetStringValue(m => m.Messages?.GazeCorrect, m => m.Messages!.GazeCorrect!);
+
+        /// <summary>
+        /// This mod's default marquee banner, walking to CCP Default (the neutral house banner) for
+        /// a mod that names none. Read only where a banner has to be INVENTED - a blank saved
+        /// message, or a retired house default nobody typed - never over text the user wrote.
+        /// </summary>
+        public string GetMarqueeBannerMessage() =>
+            GetStringValue(m => m.Messages?.MarqueeBanner, m => m.Messages!.MarqueeBanner!);
+
+        // The quiz trick question deliberately does NOT walk to the base mod, and deliberately
+        // returns null rather than a default: the neutral pool lives in QuizWindow.TrickQuestions
+        // and is six lines, not one. Null here means "this mod has no themed trick question, leave
+        // the neutral pool alone" - the same contract as GetPetNameOverride above.
+
+        /// <summary>Active mod's themed trick question, or null when it ships none.</summary>
+        public string? GetQuizTrickQuestionOverride() => NullIfBlank(_activeMod.Manifest.Messages?.QuizTrickQuestion);
+
+        /// <summary>Active mod's answer for <see cref="GetQuizTrickQuestionOverride"/>, or null.</summary>
+        public string? GetQuizTrickAnswerOverride() => NullIfBlank(_activeMod.Manifest.Messages?.QuizTrickAnswer);
+
+        // The Pop Quiz overrides follow the same contract as the trick pair above: active mod only,
+        // null for "no opinion". The neutral wording is the 25-question array in PopQuizService, so
+        // walking to CCP Default would replace a pool with a single line.
+
+        /// <summary>Active mod's Pop Quiz praise sentence, or null when it ships none.</summary>
+        public string? GetQuizPraiseOverride() => NullIfBlank(_activeMod.Manifest.Messages?.QuizPraise);
+
+        /// <summary>Active mod's wording for the Pop Quiz obedience question, or null.</summary>
+        public string? GetQuizObedienceQuestionOverride() => NullIfBlank(_activeMod.Manifest.Messages?.QuizObedienceQuestion);
+
+        /// <summary>Active mod's wording for the Pop Quiz "when I hear praise" question, or null.</summary>
+        public string? GetQuizPraiseHeardQuestionOverride() => NullIfBlank(_activeMod.Manifest.Messages?.QuizPraiseHeardQuestion);
+
         // Browser (defense-in-depth: validate URL at point of use, not just at install)
         public string GetDefaultBrowserUrl()
         {
@@ -1243,6 +1310,42 @@ namespace ConditioningControlPanel.Services
         public string MakeModAware(string text)
         {
             return ApplyTextReplacements(_activeMod.Manifest.TextReplacements, text);
+        }
+
+        /// <summary>
+        /// Feature labels the UI probes in BOTH a singular and a plural spelling. The English
+        /// literal in the code IS the lookup key (see MainWindow.UiUpdates ModAwareLabel), so a
+        /// manifest that renames only one spelling renames only some of the surfaces: Infection
+        /// Control ships "Mandatory Videos": "Goon Fuel" and the dashboard card, which probes
+        /// "Mandatory Video", kept saying Mandatory Video. That is the lost rename in the port
+        /// ticket, and it cannot be fixed in the pack alone because the pack is a downloaded
+        /// artifact, so the twin is filled in here for every mod, built-in or user-installed.
+        /// </summary>
+        private static readonly (string A, string B)[] FeatureLabelTwins =
+        {
+            ("Mandatory Videos", "Mandatory Video"),
+            ("Lock Cards", "Lock Card"),
+            ("Flash Images", "Flash Image"),
+            ("Bubble Pops", "Bubble Pop"),
+        };
+
+        /// <summary>
+        /// Copies a feature rename onto its missing singular/plural twin. Only ever ADDS a key,
+        /// so an author who spelled both forms out (and gave them different wording) is untouched.
+        /// Runs after the author's own entries are counted against the 200 cap: these are ours,
+        /// not theirs, and refusing a mod for a key it did not write would be nonsense.
+        /// </summary>
+        internal static void FillFeatureLabelAliases(IDictionary<string, string> replacements)
+        {
+            if (replacements == null) return;
+
+            foreach (var (a, b) in FeatureLabelTwins)
+            {
+                if (replacements.TryGetValue(a, out var valA) && !replacements.ContainsKey(b))
+                    replacements[b] = valA;
+                else if (replacements.TryGetValue(b, out var valB) && !replacements.ContainsKey(a))
+                    replacements[a] = valB;
+            }
         }
 
         /// <summary>
@@ -1417,7 +1520,15 @@ namespace ConditioningControlPanel.Services
                 {
                     AttentionCheckFail = GetAttentionCheckFailMessage(),
                     AttentionCheckMercy = GetAttentionCheckMercyMessage(),
-                    BubbleCountRetry = GetBubbleCountRetryMessage()
+                    BubbleCountRetry = GetBubbleCountRetryMessage(),
+                    AttentionCheckTroll = GetAttentionCheckTrollMessage(),
+                    GazeCorrect = GetGazeCorrectMessage(),
+                    QuizTrickQuestion = GetQuizTrickQuestionOverride(),
+                    QuizTrickAnswer = GetQuizTrickAnswerOverride(),
+                    MarqueeBanner = GetMarqueeBannerMessage(),
+                    QuizPraise = GetQuizPraiseOverride(),
+                    QuizObedienceQuestion = GetQuizObedienceQuestionOverride(),
+                    QuizPraiseHeardQuestion = GetQuizPraiseHeardQuestionOverride()
                 },
                 Browser = new ModBrowser
                 {
@@ -2125,7 +2236,8 @@ namespace ConditioningControlPanel.Services
                     }
                     // Keep the in-code manifest authoritative; only adopt the assets.
                     AdoptBuiltInPackage(builtInId, new ModPackage(codeManifest, extractDir, isBuiltIn: true));
-                    _log?.Information("Registered resource mod {BuiltInId} with assets at {Path}", builtInId, extractDir);
+                    System.Threading.Interlocked.Increment(ref _builtInsRegistered);
+                    _log?.Debug("Registered resource mod {BuiltInId} with assets at {Path}", builtInId, extractDir);
                     return true;
                 }
 
@@ -2157,7 +2269,8 @@ namespace ConditioningControlPanel.Services
                 manifest.Id = builtInId;
 
                 AdoptBuiltInPackage(builtInId, new ModPackage(manifest, extractDir, isBuiltIn: true));
-                _log?.Information("Registered bundled built-in mod {BuiltInId} from {Path}", builtInId, extractDir);
+                System.Threading.Interlocked.Increment(ref _builtInsRegistered);
+                _log?.Debug("Registered bundled built-in mod {BuiltInId} from {Path}", builtInId, extractDir);
                 return true;
             }
             catch (Exception ex)

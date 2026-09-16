@@ -608,6 +608,9 @@ public static class ChaosBubbleVariants
         "prism"       => "10x!",
         "brittle"     => "SHATTER",
         "echo"        => "SPLIT",
+        // Bubbles v2 dashboard trigger bubbles. Not rows in the variant table, but their pop
+        // still reaches this label, so they get a word rather than a blank.
+        "magnet_pull" => "PULL",
         _             => ""
     };
 

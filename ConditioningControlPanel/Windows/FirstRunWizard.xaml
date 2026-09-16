@@ -12,13 +12,19 @@
         ShowInTaskbar="False"
         PreviewKeyDown="Window_PreviewKeyDown">
 
-    <!-- Phase 8 · the three-step first run (Welcome -> mod pick -> doors tour) that replaces the
-         WelcomeDialog + ModPickerDialog + 7-step spotlight gauntlet.
+    <!-- The first run, in two steps: Welcome (language, your own content, the 18+ gate) and
+         Flavour (which mod to run). Nothing else. The seven-doors step and its "Take the tour"
+         button are gone - EMI offers the one walk there is, once, from her chip, after this
+         window closes.
+
+         The age check IS this window's primary button, not a MessageBox in front of it: Enter
+         stays disabled until the box is ticked, and closing step 1 without ticking hands the
+         first run back and shuts the app down, exactly as the old MessageBox "No" did.
 
          Card visuals are driven by plain INPC properties on FirstRunModCard (Visibility included)
-         rather than value converters — a converter declared in the wrong resource scope inside a
+         rather than value converters - a converter declared in the wrong resource scope inside a
          DataTemplate is one of this codebase's recurring WPF traps. Same discipline as
-         ModPickerDialog, which this screen's mod step is modelled on.
+         ModPickerDialog, which this screen's flavour step is modelled on.
 
          Every string is assigned in code-behind through the Str() fallback helper, so a missing
          fr8_ key renders its English draft instead of the raw key. -->
@@ -29,6 +35,39 @@
             <Setter Property="Padding" Value="12"/>
             <Setter Property="Margin" Value="0,0,0,10"/>
             <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+
+        <!-- One quiet row on the Welcome step: language, content folder, the age tick. -->
+        <Style x:Key="FrWelcomeRow" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="16,14"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+
+        <Style x:Key="FrRowLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="FrRowHint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,3,0,0"/>
+        </Style>
+
+        <!-- PinkButton has no disabled look of its own, and this button spends most of step 1
+             disabled, so the gate has to be visible rather than merely enforced. -->
+        <Style x:Key="FrPrimaryButton" TargetType="Button" BasedOn="{StaticResource PinkButton}">
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.4"/>
+                    <Setter Property="Cursor" Value="Arrow"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
     </Window.Resources>
 
@@ -67,15 +106,16 @@
             <!-- ================= body ================= -->
             <Grid Grid.Row="1" x:Name="StepHost" Margin="0">
 
-                <!-- ========== step 1: welcome ========== -->
-                <Grid x:Name="Step1" Visibility="Visible" Margin="26,18,26,10">
+                <!-- ========== step 1: welcome, and the one gate ========== -->
+                <Grid x:Name="Step1" Visibility="Visible" Margin="34,22,34,10">
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
                     <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center"
-                                Margin="0,0,0,14">
+                                Margin="0,0,0,12">
                         <Image x:Name="ImgWelcomeLogo" Width="46" Height="46" Margin="0,0,14,0"
                                VerticalAlignment="Center"
                                RenderOptions.BitmapScalingMode="HighQuality"/>
@@ -87,45 +127,79 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
+                    <TextBlock x:Name="TxtWelcomeBody" Grid.Row="1" Foreground="#E0E0E0" FontSize="13.5"
+                               TextWrapping="Wrap" LineHeight="22" TextAlignment="Center"
+                               Margin="30,0,30,20"/>
+
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
                         <StackPanel>
-                            <TextBlock x:Name="TxtWelcomeBody" Foreground="#E0E0E0" FontSize="13.5"
-                                       TextWrapping="Wrap" LineHeight="22" TextAlignment="Center"
-                                       Margin="20,0,20,16"/>
 
-                            <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="16">
-                                <StackPanel>
-                                    <TextBlock x:Name="TxtTipsTitle" Foreground="#FFB347" FontSize="13"
-                                               FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                                    <TextBlock x:Name="TxtTipHelp" Foreground="{DynamicResource PinkBrush}"
-                                               FontSize="12.5" TextWrapping="Wrap" TextAlignment="Center"
-                                               FontWeight="SemiBold" Margin="0,9,0,0"/>
-                                    <TextBlock x:Name="TxtTipHover" Foreground="{DynamicResource TextMutedBrush}" FontSize="12.5"
-                                               TextWrapping="Wrap" TextAlignment="Center" Margin="0,5,0,0"/>
-                                    <TextBlock x:Name="TxtTipAssets" Foreground="{DynamicResource TextMutedBrush}" FontSize="12.5"
-                                               TextWrapping="Wrap" TextAlignment="Center" Margin="0,5,0,0"/>
-                                </StackPanel>
+                            <!-- language -->
+                            <Border Style="{StaticResource FrWelcomeRow}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                        <TextBlock x:Name="TxtLanguageLabel" Style="{StaticResource FrRowLabel}"/>
+                                        <TextBlock x:Name="TxtLanguageHint" Style="{StaticResource FrRowHint}"/>
+                                    </StackPanel>
+                                    <ComboBox x:Name="CmbWizardLanguage" Grid.Column="1" Width="200"
+                                              VerticalAlignment="Center"
+                                              SelectionChanged="CmbWizardLanguage_SelectionChanged"/>
+                                </Grid>
                             </Border>
 
-                            <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8"
-                                    Padding="16" Margin="0,12,0,0">
-                                <StackPanel>
-                                    <TextBlock x:Name="TxtPerfTitle" Foreground="#FFB347" FontSize="13"
-                                               FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                                    <TextBlock x:Name="TxtPerfBody" Foreground="#FFB347" FontSize="12.5"
-                                               TextWrapping="Wrap" TextAlignment="Center" Margin="0,9,0,0"/>
-                                </StackPanel>
+                            <!-- your own content -->
+                            <Border Style="{StaticResource FrWelcomeRow}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                        <TextBlock x:Name="TxtFolderLabel" Style="{StaticResource FrRowLabel}"/>
+                                        <TextBlock x:Name="TxtFolderHint" Style="{StaticResource FrRowHint}"/>
+                                    </StackPanel>
+                                    <Button x:Name="BtnPickFolder" Grid.Column="1" Click="BtnPickFolder_Click"
+                                            Style="{StaticResource OutlineButton}" FontSize="12"
+                                            Padding="16,8" VerticalAlignment="Center" Cursor="Hand"/>
+                                </Grid>
                             </Border>
 
-                            <Button x:Name="BtnPickFolder" Click="BtnPickFolder_Click"
-                                    Style="{StaticResource OutlineButton}" FontSize="12"
-                                    Padding="18,9" Margin="0,14,0,4"
-                                    HorizontalAlignment="Center" Cursor="Hand"/>
+                            <!-- the gate -->
+                            <Border x:Name="AgeRow" Style="{StaticResource FrWelcomeRow}"
+                                    BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <CheckBox x:Name="ChkAgeConfirm" Grid.Column="0"
+                                              Style="{StaticResource ItemCheckBox}"
+                                              VerticalAlignment="Top" Margin="0,1,14,0"
+                                              Checked="AgeConfirm_Changed" Unchecked="AgeConfirm_Changed"/>
+
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock x:Name="TxtAgeConfirm" Foreground="White" FontSize="13.5"
+                                                   TextWrapping="Wrap" LineHeight="20" Cursor="Hand"
+                                                   MouseLeftButtonUp="AgeConfirmLabel_Click"/>
+                                        <TextBlock Margin="0,6,0,0" FontSize="12.5">
+                                            <Hyperlink x:Name="LnkContentPolicy" Click="LnkContentPolicy_Click"
+                                                       Foreground="{DynamicResource PinkBrush}">
+                                                <Run x:Name="RunContentPolicy"/>
+                                            </Hyperlink>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>
 
-                <!-- ========== step 2: mod pick ========== -->
+                <!-- ========== step 2: flavour ========== -->
                 <Grid x:Name="Step2" Visibility="Collapsed" Margin="26,18,26,10">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -220,48 +294,35 @@
                     <TextBlock x:Name="TxtModHint" Grid.Row="3" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,8,0,0"/>
                 </Grid>
-
-                <!-- ========== step 3: the doors ========== -->
-                <Grid x:Name="Step3" Visibility="Collapsed" Margin="26,18,26,10">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <TextBlock x:Name="TxtTourHeading" Grid.Row="0" Foreground="White"
-                               FontSize="17" FontWeight="Bold" Margin="0,0,0,10"/>
-
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
-                        <StackPanel x:Name="DoorsHost"/>
-                    </ScrollViewer>
-
-                    <TextBlock x:Name="TxtTourOutro" Grid.Row="2" Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5"
-                               TextWrapping="Wrap" Margin="0,10,0,0"/>
-                </Grid>
             </Grid>
 
             <!-- ================= footer ================= -->
             <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="0,0,12,12"
                     Padding="20,14">
                 <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                    <Button x:Name="BtnBack" Grid.Column="0" Click="BtnBack_Click"
-                            Style="{StaticResource OutlineButton}" FontSize="12" Padding="18,10"
-                            HorizontalAlignment="Left" Cursor="Hand" Visibility="Collapsed"/>
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                    <Button x:Name="BtnSkip" Grid.Column="2" Click="BtnSkip_Click"
-                            Style="{StaticResource OutlineButton}" FontSize="12" Padding="18,10"
-                            Margin="0,0,12,0" Cursor="Hand"/>
+                        <Button x:Name="BtnSkip" Grid.Column="1" Click="BtnSkip_Click"
+                                Style="{StaticResource OutlineButton}" FontSize="12" Padding="18,10"
+                                Margin="0,0,12,0" Cursor="Hand"/>
 
-                    <Button x:Name="BtnNext" Grid.Column="3" Click="BtnNext_Click"
-                            Style="{StaticResource PinkButton}" Cursor="Hand"/>
+                        <Button x:Name="BtnNext" Grid.Column="2" Click="BtnNext_Click"
+                                Style="{StaticResource FrPrimaryButton}" Cursor="Hand"/>
+                    </Grid>
+
+                    <TextBlock x:Name="TxtCloseHint" Grid.Row="1" HorizontalAlignment="Right"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5"
+                               Margin="0,9,2,0" TextWrapping="Wrap" TextAlignment="Right"/>
                 </Grid>
             </Border>
         </Grid>

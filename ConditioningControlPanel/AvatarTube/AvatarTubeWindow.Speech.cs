@@ -17,6 +17,7 @@ using System.Windows.Navigation;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.Logging;
 using ConditioningControlPanel.Services.Moderation;
 using XamlAnimatedGif;
 using ConditioningControlPanel.Helpers;
@@ -185,7 +186,8 @@ namespace ConditioningControlPanel
             }
 
             var (nextText, source, nextEmotionLineId, nextMood) = _speechQueue.Dequeue();
-            App.Logger?.Debug("Dequeued speech ({Source}): {Text}", source, nextText);
+            App.Logger?.Debug("Dequeued speech ({Source}, line={LineId}, {Chars} chars)",
+                source, nextEmotionLineId ?? "-", (nextText ?? "").Length);
 
             // Calculate how long since last speech ended (delay based on PREVIOUS speech properties)
             double timeSinceLastSpeech = (DateTime.Now - _lastSpeechEndTime).TotalSeconds;
@@ -242,14 +244,14 @@ namespace ConditioningControlPanel
             // Block if waiting for AI response
             if (_isWaitingForAi)
             {
-                App.Logger?.Debug("Giggle blocked - waiting for AI: {Text}", text);
+                App.Logger?.Debug("Giggle blocked - waiting for AI ({Chars} chars)", (text ?? "").Length);
                 return;
             }
 
             // Block (discard) preset phrases while AI bubble is visible - don't queue them
             if (_isShowingAiBubble)
             {
-                App.Logger?.Debug("Giggle discarded - AI bubble visible: {Text}", text);
+                App.Logger?.Debug("Giggle discarded - AI bubble visible ({Chars} chars)", (text ?? "").Length);
                 return;
             }
 
@@ -265,14 +267,14 @@ namespace ConditioningControlPanel
                 // Double-check AI bubble state on UI thread
                 if (_isShowingAiBubble)
                 {
-                    App.Logger?.Debug("Giggle discarded (UI thread) - AI bubble visible: {Text}", text);
+                    App.Logger?.Debug("Giggle discarded (UI thread) - AI bubble visible ({Chars} chars)", (text ?? "").Length);
                     return;
                 }
 
                 if (_isGiggling)
                 {
                     _speechQueue.Enqueue((text, SpeechSource.Preset, emotionLineId, mood));
-                    App.Logger?.Debug("Queued preset speech: {Text}", text);
+                    App.Logger?.Debug("Queued preset speech (line={LineId}, {Chars} chars)", emotionLineId ?? "-", (text ?? "").Length);
                     return;
                 }
 
@@ -354,7 +356,7 @@ namespace ConditioningControlPanel
                 ShowGiggle(text, playSound: playSound, source: SpeechSource.AI, aiGenerated: aiGenerated,
                     phraseAudioPath: phraseAudioPath, barkVoice: barkVoice, emotionLineId: emotionLineId, mood: mood);
 
-                App.Logger?.Debug("Priority speech (queue cleared): {Text}", text);
+                App.Logger?.Debug("Priority speech, queue cleared (line={LineId}, {Chars} chars)", emotionLineId ?? "-", (text ?? "").Length);
             });
         }
 
@@ -577,17 +579,23 @@ namespace ConditioningControlPanel
                 var currentSource = source;
                 var currentLength = (text ?? "").Length;
 
+                // When the hover hold started, so it can be capped. A collapsed bubble raises no
+                // MouseLeave, so without a cap one missed leave parks the latch up forever.
+                DateTime? hoverHoldSince = null;
+
                 _speechTimer.Tick += (s, e) =>
                 {
                     // If mouse is over speech bubble, keep it open - recheck in 1 second
-                    if (_isMouseOverSpeechBubble)
+                    hoverHoldSince ??= DateTime.UtcNow;
+                    if (Services.Companion.SpeechLatchRule.HoldForHover(
+                            _isMouseOverSpeechBubble, DateTime.UtcNow - hoverHoldSince.Value))
                     {
                         _speechTimer.Interval = TimeSpan.FromSeconds(1);
                         return; // Don't stop timer, keep checking
                     }
 
                     _speechTimer.Stop();
-                    SpeechBubble.Visibility = Visibility.Collapsed;
+                    CollapseSpeechBubble();
                     _isShowingAiBubble = false; // Clear AI bubble flag when any bubble hides
 
                     // Track this speech's properties for delay calculation on next speech
@@ -603,8 +611,8 @@ namespace ConditioningControlPanel
                 // Reset idle timer when speaking
                 ResetIdleTimer();
 
-                App.Logger?.Debug("Companion says ({Source}, {Chars} chars, {Duration:F1}s): {Text}",
-                    source, (text ?? "").Length, displayDuration, text);
+                App.Logger?.Debug("Companion says ({Source}, {Chars} chars, {Duration:F1}s)",
+                    source, (text ?? "").Length, displayDuration);
             };
 
             _speechLeadInTimer?.Stop();
@@ -794,7 +802,7 @@ namespace ConditioningControlPanel
                     if (!_isListeningBubble) return; // a real bubble already took over
                     _isListeningBubble = false;
 
-                    SpeechBubble.Visibility = Visibility.Collapsed;
+                    CollapseSpeechBubble();
                     _lastSpeechEndTime = DateTime.Now;
                     ProcessNextSpeech();
                 }
@@ -829,7 +837,7 @@ namespace ConditioningControlPanel
             _mutedIndicatorTimer.Tick += (s, e) =>
             {
                 _mutedIndicatorTimer.Stop();
-                SpeechBubble.Visibility = Visibility.Collapsed;
+                CollapseSpeechBubble();
             };
             _mutedIndicatorTimer.Start();
         }
@@ -1157,7 +1165,8 @@ namespace ConditioningControlPanel
                 if (fuzzy != null)
                 {
                     linkPositions.Add((spanStart, spanLength, fuzzy.Value.Title, fuzzy.Value.Url));
-                    App.Logger?.Information("Fuzzy-linked video: '{Span}' -> '{Title}'", span, fuzzy.Value.Title);
+                    App.Logger?.Information("Fuzzy-linked video on {Host} ({Chars} chars of link text)",
+                        UrlLog.Host(fuzzy.Value.Url), span.Length);
                 }
             }
 
@@ -1224,7 +1233,8 @@ namespace ConditioningControlPanel
                     };
                     hyperlink.RequestNavigate += SpeechBubbleHyperlink_RequestNavigate;
                     target.Add(hyperlink);
-                    App.Logger?.Information("Auto-linked video: '{Name}' -> {Url}", displayText, url);
+                    App.Logger?.Information("Auto-linked video on {Host} ({Chars} chars of link text)",
+                        UrlLog.Host(url), (displayText ?? "").Length);
                 }
                 catch
                 {
@@ -1271,7 +1281,7 @@ namespace ConditioningControlPanel
                 }
 
                 var url = e.Uri.AbsoluteUri;
-                App.Logger?.Information("Speech bubble link clicked - Raw URI: {Uri}, AbsoluteUri: {Url}", e.Uri, url);
+                App.Logger?.Information("Speech bubble link clicked: {Host}", UrlLog.Host(url));
 
                 // Find MainWindow - it might not be Application.Current.MainWindow if AvatarTube is detached
                 var mainWindow = _parentWindow as MainWindow
@@ -1286,7 +1296,7 @@ namespace ConditioningControlPanel
 
                 if (mainWindow?.NavigateToUrlInBrowser(url, autoPlayFullscreen: true) == true)
                 {
-                    App.Logger?.Information("Speech bubble link routed to embedded browser: {Url}", url);
+                    App.Logger?.Information("Speech bubble link routed to embedded browser: {Host}", UrlLog.Host(url));
                 }
                 else
                 {
@@ -1298,7 +1308,7 @@ namespace ConditioningControlPanel
                     // Fallback: open in external browser (HTTPS only for safety)
                     if (Uri.TryCreate(url, UriKind.Absolute, out var fallbackUri) && fallbackUri.Scheme == "https")
                     {
-                        App.Logger?.Warning("Embedded browser unavailable, opening externally: {Url}", url);
+                        App.Logger?.Warning("Embedded browser unavailable, opening externally: {Host}", UrlLog.Host(url));
                         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
                     }
                 }
@@ -1378,6 +1388,10 @@ namespace ConditioningControlPanel
             {
                 _idleTimer.Interval = TimeSpan.FromSeconds(configured);
             }
+
+            // A wedged latch would make IsSpeechReady() false for the rest of the session, and this
+            // timer is the only beat still running once she is stuck, so the watchdog lives here.
+            ClearStaleSpeechLatch();
 
             // Skip if speech is on cooldown or currently showing
             if (!IsSpeechReady()) return;
@@ -1665,7 +1679,7 @@ namespace ConditioningControlPanel
             catch { }
             try
             {
-                SpeechBubble.Visibility = Visibility.Collapsed;
+                CollapseSpeechBubble();
                 _lastSpeechEndTime = DateTime.Now;
             }
             catch { }
@@ -1814,7 +1828,8 @@ namespace ConditioningControlPanel
                 // (alluring/dreamy/entrancing/teasing), pose count scaled to the line's audio length.
                 PlayEmotionForLine(System.IO.Path.GetFileNameWithoutExtension(filePath), filePath, text);
 
-                App.Logger?.Information("VoiceLine: Displayed '{Text}'", text);
+                App.Logger?.Information("VoiceLine: Displayed {Line} ({Chars} chars)",
+                    System.IO.Path.GetFileNameWithoutExtension(filePath), (text ?? "").Length);
 
                 // Calculate display duration based on text length
                 double baseDuration = 5.0;
@@ -1835,7 +1850,7 @@ namespace ConditioningControlPanel
                     _speechTimer.Stop();
                     _isGiggling = false;
                     _isShowingAiBubble = false; // Clear AI bubble flag when any bubble hides
-                    SpeechBubble.Visibility = Visibility.Collapsed;
+                    CollapseSpeechBubble();
 
                     _lastSpeechEndTime = DateTime.Now;
                     _lastSpeechSource = SpeechSource.Preset;
@@ -1961,17 +1976,23 @@ namespace ConditioningControlPanel
                 // Capture trigger length for delay calculation
                 var triggerLength = trigger.Length;
 
+                // When the hover hold started, so it can be capped. A collapsed bubble raises no
+                // MouseLeave, so without a cap one missed leave parks the latch up forever.
+                DateTime? hoverHoldSince = null;
+
                 _speechTimer.Tick += (s, e) =>
                 {
                     // If mouse is over speech bubble, keep it open - recheck in 1 second
-                    if (_isMouseOverSpeechBubble)
+                    hoverHoldSince ??= DateTime.UtcNow;
+                    if (Services.Companion.SpeechLatchRule.HoldForHover(
+                            _isMouseOverSpeechBubble, DateTime.UtcNow - hoverHoldSince.Value))
                     {
                         _speechTimer.Interval = TimeSpan.FromSeconds(1);
                         return; // Don't stop timer, keep checking
                     }
 
                     _speechTimer.Stop();
-                    SpeechBubble.Visibility = Visibility.Collapsed;
+                    CollapseSpeechBubble();
                     _isShowingAiBubble = false; // Clear AI bubble flag when any bubble hides
 
                     // Track this speech's properties for delay calculation on next speech
@@ -2857,6 +2878,39 @@ namespace ConditioningControlPanel
         // ============================================================
         // SPEECH BUBBLE MOUSE HANDLERS
         // ============================================================
+
+        /// <summary>
+        /// The one way this window takes the bubble off screen. Collapsing it also drops the hover
+        /// latch: WPF raises no <c>MouseLeave</c> for an element that vanishes from under the
+        /// pointer, and a latch left up there stops the hide tick forever - which stops
+        /// <c>ProcessNextSpeech</c>, which never lowers <c>_isGiggling</c>, which silences her.
+        /// </summary>
+        private void CollapseSpeechBubble()
+        {
+            SpeechBubble.Visibility = Visibility.Collapsed;
+            _isMouseOverSpeechBubble = false;
+        }
+
+        /// <summary>
+        /// Drops a speech latch that nothing can lower any more (see <c>SpeechLatchRule</c>). Called
+        /// from the idle tick, which is the one beat guaranteed to keep running while she is wedged.
+        /// </summary>
+        private void ClearStaleSpeechLatch()
+        {
+            if (!Services.Companion.SpeechLatchRule.IsLatchStale(
+                    isGiggling: _isGiggling,
+                    bubbleVisible: SpeechBubble.Visibility == Visibility.Visible,
+                    waitingForAi: _isWaitingForAi,
+                    queueEmpty: _speechQueue.Count == 0,
+                    leadInPending: _speechLeadInTimer != null,
+                    delayPending: _speechDelayTimer?.IsEnabled == true))
+                return;
+
+            _isGiggling = false;
+            _isMouseOverSpeechBubble = false;
+            _lastSpeechEndTime = DateTime.Now;
+            App.Logger?.Warning("[Speech] stale speech latch cleared - the companion was wedged silent");
+        }
 
         private void SpeechBubble_MouseEnter(object sender, MouseEventArgs e)
         {

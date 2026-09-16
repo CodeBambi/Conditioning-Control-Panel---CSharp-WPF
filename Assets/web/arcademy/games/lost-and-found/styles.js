@@ -101,7 +101,24 @@ export const CSS = [
   '.g-lf-strip { display:flex; gap:var(--g-lf-gap); width:max-content; height:100%;',
   '  animation:g-lf-driftL var(--g-lf-dur,26s) linear infinite; }',
   '.g-lf-strip.g-lf-rev { animation-name:g-lf-driftR; }',
-  '.g-lf-strip.g-lf-static { animation:none; }',
+  /* THE WRAP SHIFT, one keyframe set per clone count (board.js WRAP_REPS_MAX,
+     the attribute is `data-lf-reps`). The shift is exactly one copy of the
+     row, and it is written as a plain percentage of the strip rather than the
+     `calc(-100% / var(--g-lf-reps))` it used to be, so no engine has to
+     resolve a custom property inside @keyframes to land the wrap on the seam,
+     and a wrap the board GROWS mid-class (a rotation) re-targets by attribute.
+     The var form stays as the fallback for a strip with no attribute. */
+  ...[2, 3, 4, 5, 6].map((n) => {
+    const pct = (100 / n).toFixed(4);
+    return '.g-lf-strip[data-lf-reps="' + n + '"] { animation-name:g-lf-driftL' + n + '; }'
+      + ' .g-lf-strip.g-lf-rev[data-lf-reps="' + n + '"] { animation-name:g-lf-driftR' + n + '; }'
+      + ' @keyframes g-lf-driftL' + n + ' { from { transform:translateX(0); } to { transform:translateX(-' + pct + '%); } }'
+      + ' @keyframes g-lf-driftR' + n + ' { from { transform:translateX(-' + pct + '%); } to { transform:translateX(0); } }';
+  }),
+  /* Reduced motion wins over every attribute form above (same specificity as
+     the rev+attr selector, later in the sheet). */
+  '.g-lf-strip.g-lf-static, .g-lf-strip.g-lf-static[data-lf-reps],',
+  '.g-lf-strip.g-lf-rev.g-lf-static[data-lf-reps] { animation:none; }',
   '@keyframes g-lf-driftL { from { transform:translateX(0); }',
   '  to { transform:translateX(calc(-100% / var(--g-lf-reps,2))); } }',
   '@keyframes g-lf-driftR { from { transform:translateX(calc(-100% / var(--g-lf-reps,2))); }',

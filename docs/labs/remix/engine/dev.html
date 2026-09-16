@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Remix engine bench</title>
+<style>
+  body { background:#14142B; color:#F2EBDD; font:14px/1.5 'Segoe UI',system-ui,sans-serif; margin:16px; }
+  canvas { background:#000; display:block; margin:8px 0; image-rendering:auto; }
+  button, select { background:#252542; color:#F2EBDD; border:1px solid #3A3A5E; padding:6px 10px; margin:2px; cursor:pointer; }
+  button.on { background:#FF69B4; color:#14142B; }
+  pre { background:#1A1A2E; padding:8px; white-space:pre-wrap; }
+  .row { margin:6px 0; }
+  a { color:#FF69B4; }
+</style>
+</head>
+<body>
+<h3>Remix engine bench</h3>
+<p>No styling here on purpose. Drop a gif, video or image anywhere on the page.</p>
+
+<div class="row">
+  <input type="file" id="file" multiple accept="image/*,video/*">
+  <button id="samples">load samples</button>
+  <button id="play">play</button>
+  <span id="code"></span>
+</div>
+
+<div class="row">
+  vibe:
+  <button data-vibe="grow">grow</button>
+  <button data-vibe="sink">sink</button>
+  <button data-vibe="flashdeck">flash deck</button>
+  <button data-vibe="didyouseeit">did you see it</button>
+  <button id="surprise">surprise me</button>
+</div>
+
+<div class="row">
+  effect:
+  <button data-fx="drain">drain</button>
+  <button data-fx="tint">tint</button>
+  <button data-fx="spiral">spiral</button>
+  <button data-fx="glitch">glitch</button>
+  <button data-fx="caption">caption</button>
+  <button data-fx="focus">focus</button>
+  <button id="clear">clear blocks</button>
+</div>
+
+<div class="row">
+  layout:
+  <select id="layout">
+    <option>grow</option><option>flat</option><option>shuffle</option><option>mirror</option><option>stack</option><option>spread</option><option>slide</option>
+  </select>
+  orientation:
+  <select id="orient">
+    <option>landscape</option><option>portrait</option><option>square</option>
+  </select>
+  length:
+  <select id="len"><option>3</option><option selected>5</option><option>8</option></select>
+  loop:
+  <select id="loopk"><option>clean</option><option selected>snap</option><option>seamless</option></select>
+</div>
+
+<div class="row">
+  <button id="perf">measure render</button>
+  <button id="gif">export gif</button>
+  <button id="video">export video</button>
+  <input type="range" id="scrub" min="0" max="74" value="0" style="width:320px">
+  <span id="frameno">0</span>
+</div>
+
+<canvas id="view" width="480" height="270"></canvas>
+<pre id="out">ready</pre>
+
+<script>
+/* surface every failure in the page so a headless run can read it */
+window.__errors = [];
+function note(msg) {
+  window.__errors.push(String(msg));
+  var out = document.getElementById('out');
+  if (out) out.textContent += '\n! ' + msg;
+}
+window.addEventListener('error', function (e) {
+  note((e.message || 'load failed') + (e.filename ? '  ' + e.filename + ':' + e.lineno : ''));
+});
+window.addEventListener('unhandledrejection', function (e) {
+  note('promise: ' + ((e.reason && e.reason.stack) || e.reason));
+});
+</script>
+
+<script type="module">
+import { createProject, sizeFor, DURATIONS, framesForSeconds } from './index.js';
+
+const view = document.getElementById('view');
+const vctx = view.getContext('2d');
+const out = document.getElementById('out');
+const q = new URLSearchParams(location.search);
+
+let p = createProject({ orientation: 'landscape' });
+window.project = p;
+
+function log(msg) { out.textContent = String(msg); console.log(msg); }
+function append(msg) { out.textContent += '\n' + msg; console.log(msg); }
+
+function fit() {
+  const s = p.size;
+  if (view.width !== s.w || view.height !== s.h) { view.width = s.w; view.height = s.h; }
+  document.getElementById('scrub').max = String(p.frames - 1);
+  document.getElementById('code').textContent = p.code + '  ' + p.frames + ' frames  ' + p.tiles.length + ' tiles';
+}
+
+function draw() {
+  fit();
+  p.renderFrame(p.frame, vctx);
+  document.getElementById('frameno').textContent = String(p.frame);
+  document.getElementById('scrub').value = String(p.frame);
+}
+
+p.on('frame', draw);
+p.on('change', draw);
+p.on('media', draw);
+
+/* ------------------------------------------------------------- media ----*/
+
+async function addFiles(files) {
+  for (const f of files) {
+    try {
+      const m = await p.addMedia(f);
+      if (p.tiles.length < 8) p.addTile(m.id);
+      append('added ' + m.name + '  ' + m.kind + '  ' + m.strip.length + ' frames');
+    } catch (err) {
+      append('rejected: ' + err.message);
+    }
+  }
+  draw();
+}
+
+async function loadSamples(count = 4) {
+  const names = ['drift', 'pulse', 'spin'];
+  const media = [];
+  for (const n of names) {
+    append('fetch ' + n);
+    const res = await fetch('../assets/sample/' + n + '.gif');
+    const blob = await res.blob();
+    append('decode ' + n + '  ' + blob.size + ' bytes');
+    media.push(await p.addMedia(new File([blob], n + '.gif', { type: 'image/gif' })));
+    append('ok ' + n);
+  }
+  for (let i = 0; i < count; i++) p.addTile(media[i % media.length].id);
+  draw();
+  return media;
+}
+
+document.getElementById('file').addEventListener('change', (e) => addFiles(e.target.files));
+document.getElementById('samples').addEventListener('click', () => loadSamples(4).then(() => log('samples in')));
+
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', (e) => {
+  e.preventDefault();
+  addFiles(e.dataTransfer.files);
+});
+
+/* ------------------------------------------------------------ controls --*/
+
+document.getElementById('play').addEventListener('click', (e) => {
+  if (p.playing) { p.pause(); e.target.textContent = 'play'; e.target.classList.remove('on'); }
+  else { p.play(); e.target.textContent = 'pause'; e.target.classList.add('on'); }
+});
+
+document.getElementById('scrub').addEventListener('input', (e) => { p.pause(); p.seek(+e.target.value); draw(); });
+
+for (const b of document.querySelectorAll('[data-vibe]')) {
+  b.addEventListener('click', () => { p.commit('vibe'); p.applyVibe(b.dataset.vibe); log('vibe ' + b.dataset.vibe + ', ' + p.blocks.length + ' blocks'); });
+}
+document.getElementById('surprise').addEventListener('click', () => { p.commit('surprise'); log('surprise -> ' + p.surprise()); });
+
+for (const b of document.querySelectorAll('[data-fx]')) {
+  b.addEventListener('click', () => {
+    const blk = p.blockFor(b.dataset.fx, 'canvas');
+    p.seek(Math.round(p.frames * 0.5));
+    log(b.dataset.fx + ' block ' + blk.start + '..' + blk.end + '  mode ' + blk.mode);
+  });
+}
+document.getElementById('clear').addEventListener('click', () => {
+  for (const b of [...p.blocks]) p.removeBlock(b.id);
+  log('blocks cleared');
+});
+
+document.getElementById('layout').addEventListener('change', (e) => p.setLayout({ mode: e.target.value }));
+document.getElementById('len').addEventListener('change', (e) => p.setDuration(+e.target.value));
+document.getElementById('loopk').addEventListener('change', (e) => p.setLoop(e.target.value));
+document.getElementById('orient').addEventListener('change', async (e) => {
+  log('re-decoding at ' + e.target.value);
+  await p.setOrientation(e.target.value);
+  draw();
+  append('done');
+});
+
+/* --------------------------------------------------------------- bench --*/
+
+async function measure(passes = 60) {
+  const s = p.size;
+  const c = document.createElement('canvas');
+  c.width = s.w; c.height = s.h;
+  const ctx = c.getContext('2d');
+  p.renderFrame(0, ctx); // warm
+  const t0 = performance.now();
+  for (let i = 0; i < passes; i++) p.renderFrame(i % p.frames, ctx);
+  const ms = (performance.now() - t0) / passes;
+  return ms;
+}
+
+document.getElementById('perf').addEventListener('click', async () => {
+  const ms = await measure(90);
+  log('render ' + ms.toFixed(2) + ' ms per frame at ' + p.size.w + 'x' + p.size.h
+    + ' with ' + p.tiles.length + ' tiles and ' + p.blocks.length + ' blocks');
+});
+
+document.getElementById('gif').addEventListener('click', async () => {
+  log('encoding');
+  const t0 = performance.now();
+  const blob = await p.exportGif({ onProgress: (u) => { out.textContent = 'encoding ' + Math.round(u * 100) + '%'; } });
+  const ms = performance.now() - t0;
+  log('gif ' + (blob.size / 1024).toFixed(1) + ' KB in ' + ms.toFixed(0) + ' ms  (' + p.frames + ' frames at ' + p.size.w + 'x' + p.size.h + ')');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = p.filename('gif');
+  a.textContent = 'download ' + a.download;
+  out.appendChild(document.createElement('br'));
+  out.appendChild(a);
+});
+
+document.getElementById('video').addEventListener('click', async () => {
+  log('recording');
+  try {
+    const blob = await p.exportVideo({ onProgress: (u) => { out.textContent = 'recording ' + Math.round(u * 100) + '%'; } });
+    log('video ' + (blob.size / 1024).toFixed(1) + ' KB  ' + blob.type);
+  } catch (err) { log(err.message); }
+});
+
+/* ------------------------------------------------- headless probe path --*/
+/*  ?probe=drain&mode=drip&frame=40&tiles=4&strength=80&layout=flat
+ *  ?probe=perf   measures and writes the number into #out
+ *  window.__ready flips true when the page has finished setting up.       */
+
+async function boot() {
+  const probe = q.get('probe') || 'none';
+  if (!probe) { fit(); draw(); window.__ready = true; return; }
+
+  await loadSamples(Number(q.get('tiles') || 4));
+  p.setLayout({ mode: q.get('layout') || 'flat' });
+  p.setLoop(q.get('loop') || 'clean');
+  if (q.get('orient')) await p.setOrientation(q.get('orient'));
+
+  if (probe === 'perf') {
+    // ?fx=drain,tint  measures just those; ?fx=none is the bare mosaic
+    const fx = (q.get('fx') || 'drain,tint,spiral').split(',').filter((n) => n && n !== 'none');
+    for (const name of fx) p.blockFor(name, 'canvas');
+    p.seek(Math.round(p.frames * 0.5));
+    const ms = await measure(120);
+    log('render ' + ms.toFixed(2) + ' ms/frame  ' + p.size.w + 'x' + p.size.h
+      + '  tiles ' + p.tiles.length + '  blocks ' + p.blocks.length);
+    window.__result = ms;
+    window.__ready = true;
+    return;
+  }
+
+  if (probe === 'gifbench') {
+    p.blockFor('drain', 'canvas');
+    p.blockFor('tint', 'canvas');
+    p.blockFor('spiral', 'canvas');
+    const t0 = performance.now();
+    const blob = await p.exportGif({});
+    const ms = performance.now() - t0;
+    log('gif ' + (blob.size / 1024).toFixed(1) + ' KB in ' + ms.toFixed(0) + ' ms, '
+      + p.frames + ' frames at ' + p.size.w + 'x' + p.size.h);
+    window.__result = { bytes: blob.size, ms };
+    window.__ready = true;
+    return;
+  }
+
+  const vibe = q.get('vibe');
+  if (vibe) p.applyVibe(vibe);
+
+  if (probe !== 'none') {
+    const ti = q.get('tile');
+    const target = ti != null && p.tiles[Number(ti)] ? p.tiles[Number(ti)].id : 'canvas';
+    const blk = p.blockFor(probe, target);
+    const patch = { mode: q.get('mode') || blk.mode, params: {} };
+    for (const key of ['strength', 'intensity', 'speed', 'glow', 'size', 'radius']) {
+      if (q.get(key)) patch.params[key] = Number(q.get(key));
+    }
+    if (q.get('colour')) patch.params.colour = q.get('colour');
+    if (q.get('style')) patch.params.style = Number(q.get('style'));
+    if (q.get('text')) patch.params.text = q.get('text');
+    if (patch.mode === 'flash') { patch.start = blk.start; patch.end = blk.start + 1; }
+    p.updateBlock(blk.id, patch);
+  }
+  const dock = q.get('dock');
+  if (dock) {
+    // dock=0,3,left  -> tile 0 docks on the left of tile 3
+    const [a, b, side] = dock.split(',');
+    p.dockTile(p.tiles[Number(a)].id, p.tiles[Number(b)].id, side);
+  }
+  const swap = q.get('swap');
+  if (swap) {
+    const [a, b] = swap.split(',');
+    p.swapTiles(p.tiles[Number(a)].id, p.tiles[Number(b)].id);
+  }
+  p.seek(Number(q.get('frame') || Math.round(p.frames * 0.5)));
+  draw();
+  log(probe + '  frame ' + p.frame + '  blocks ' + p.blocks.length);
+  window.__ready = true;
+}
+
+boot().catch((err) => {
+  append('boot failed: ' + (err && err.stack || err));
+  window.__ready = true;
+});
+</script>
+</body>
+</html>

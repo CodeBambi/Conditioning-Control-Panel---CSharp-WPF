@@ -420,7 +420,9 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             try
             {
                 if (string.IsNullOrWhiteSpace(line)) return;
-                var speaker = App.Mods?.GetCompanionName() ?? "she";
+                // Neutral speaker label when the mod stack is not up. House style is singular
+                // they, so an unmodded install never puts a gender on the wire.
+                var speaker = App.Mods?.GetCompanionName() ?? "they";
                 // BarkEchoes are flavor: capped at 5 per window and never persisted (they replay from
                 // bark_rules.json anyway, and they say nothing about the user).
                 Session.Append(TurnKind.BarkEcho, CompanionTurn.FormatBarkEcho(speaker, line),

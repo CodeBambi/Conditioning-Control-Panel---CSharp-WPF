@@ -1898,10 +1898,15 @@
                             </ControlTheme>
                         </ComboBox.ItemContainerTheme>
                     </ComboBox>
-                    <!-- Language Pill -->
+                    <!-- Language Pill.
+                         main retired the pill and tooltip_change_language with the WPF header chrome
+                         (3ee513455), and no surviving key says "change language". This head still
+                         draws the pill, so it carries a compatibility key holding main's own last
+                         translation verbatim in all nine languages. Temporary: it retires when this
+                         shell follows main and moves the picker into Settings. -->
                     <ComboBox x:Name="CmbLanguagePill" Width="90" Margin="0,0,10,0"
                               SelectionChanged="CmbLanguagePill_SelectionChanged"
-                              ToolTip.Tip="{loc:Str tooltip_change_language}">
+                              ToolTip.Tip="{loc:Str avalonia_compat_language_hint}">
                         <ComboBox.Theme>
                             <ControlTheme TargetType="ComboBox">
                                 <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>

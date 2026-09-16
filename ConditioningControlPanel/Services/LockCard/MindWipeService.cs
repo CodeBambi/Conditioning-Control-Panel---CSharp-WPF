@@ -143,6 +143,10 @@ namespace ConditioningControlPanel.Services
         /// still scanned; <c>CorePaths.EffectiveAssets</c> is seeded from
         /// <c>App.EffectiveAssetsPath</c> in App's static ctor, so it resolves the same folder.
         /// </summary>
+        // main rewrote LoadAudioFiles here (custom clip > advertised folder > legacy folder, plus
+        // the once-a-session "no clips" line). That discovery already lives in Core as
+        // MindWipeSchedule.DiscoverClips, which is where main's new log levels were carried, so
+        // this head keeps the one-line delegate rather than a second copy of the same walk.
         private void LoadAudioFiles() =>
             _audioFiles = MindWipeSchedule.DiscoverClips(App.Settings?.Current?.MindWipeAudioPath);
         
@@ -225,7 +229,7 @@ namespace ConditioningControlPanel.Services
             // Update Discord presence back to idle
             App.DiscordRpc?.SetIdleActivity();
 
-            App.Logger?.Information("MindWipe: Stopped");
+            App.Logger?.Debug("MindWipe: Stopped");
         }
         
         public void UpdateSettings(double frequencyPerHour, double volume)
@@ -650,7 +654,7 @@ namespace ConditioningControlPanel.Services
             DisposePlayerA();
             DisposePlayerB();
 
-            App.Logger?.Information("MindWipe: Loop stopped");
+            App.Logger?.Debug("MindWipe: Loop stopped");
         }
         
         private void Timer_Tick(object? sender, EventArgs e)

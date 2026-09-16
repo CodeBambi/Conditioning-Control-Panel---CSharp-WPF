@@ -1120,7 +1120,19 @@ export function createSettingsPage({ init, bridge, games, keybinds, assets, stor
       label: t('presence_share_label', 'Show yourself on campus'),
       hint: t('presence_share_hint',
         'Your last 24 hours replay as a ghost. Room head counts include you at every rung.'),
-      value: PRESENCE_RUNGS.indexOf(String(src.presenceShare)) >= 0 ? String(src.presenceShare) : 'off',
+      /* READ BOTH PROJECTIONS (phone bug, 2026-09-15). The desktop host ships
+       * this rung TOP-LEVEL beside the other global scalars (ArcademyHostService
+       * `presenceShare = PresenceShare(s)`), but the web shim only ever put it
+       * in the flat bag - so on a phone `src.presenceShare` was undefined, the
+       * indexOf missed, and the row drew 'off' on every open no matter what the
+       * player had chosen. The choice itself was stored correctly the whole
+       * time (the ID card photo and the presence snapshots honoured it), which
+       * is why it looked like a settings-persistence failure and was not one.
+       * Top-level wins where it exists, so desktop is untouched. */
+      value: (() => {
+        const rung = String(src.presenceShare != null ? src.presenceShare : flatBag.presenceShare);
+        return PRESENCE_RUNGS.indexOf(rung) >= 0 ? rung : 'off';
+      })(),
       options: PRESENCE_RUNGS,
       format: (o) => t('presence_share_' + o, PRESENCE_FALLBACK[o] || String(o)),
     }));

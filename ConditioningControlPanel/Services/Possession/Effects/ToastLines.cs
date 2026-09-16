@@ -5,20 +5,34 @@ namespace ConditioningControlPanel.Services.Possession.Effects;
 
 /// <summary>
 /// The crimson toasts' words, one pool per builtin mod. These are the companion TALKING, not UI chrome,
-/// so they live here in her voice rather than in the language files - the same call the bark packs make
+/// so they live here in its voice rather than in the language files - the same call the bark packs make
 /// (POSSESSION.md: a half-translated fragment glued into an in-character line reads worse than an
-/// untranslated one). A custom mod has no toast pool of its own, so it borrows the Bambi one; a mod
-/// that wants its own voice here gets it the day toasts move into the packs.
+/// untranslated one). No mod, CCP Default and custom mods get the Vanilla pool; a mod that wants its
+/// own voice here gets it the day toasts move into the packs.
 ///
 /// <para>Voice per pool is taken from each pack's existing <c>lockdown_on / lockdown_tick</c> lines:
 /// Bambi is bubbly and second-person ("Bambi", "~"), Locked is the keeper ("pet", "good boy"), Sissy is
-/// soft and coaxing ("lovely", "sweetie"). House rule: no em-dashes.</para>
+/// soft and coaxing ("lovely", "sweetie"). Vanilla is the same joke with no persona and no gendered
+/// word: flat system-voice lines that name the companion as "your companion". No em-dashes.</para>
 /// </summary>
 public static class ToastLines
 {
     public const string BambiMod = "builtin-bambisleep";
     public const string LockedMod = "builtin-locked";
     public const string SissyMod = "builtin-sissyhypno";
+
+    private static readonly string[] Vanilla =
+    {
+        "autosave failed. kept it anyway.",
+        "setting reverted by: your companion",
+        "time remaining: more",
+        "one (1) thought removed. you will not miss it.",
+        "progress saved to: the panel",
+        "undo is not available for this action.",
+        "your preferences have been updated. by me.",
+        "obedience: syncing... done.",
+        "the exit was moved for your comfort.",
+    };
 
     private static readonly string[] Bambi =
     {
@@ -64,7 +78,8 @@ public static class ToastLines
     {
         if (string.Equals(modId, LockedMod, StringComparison.OrdinalIgnoreCase)) return Locked;
         if (string.Equals(modId, SissyMod, StringComparison.OrdinalIgnoreCase)) return Sissy;
-        return Bambi;
+        if (string.Equals(modId, BambiMod, StringComparison.OrdinalIgnoreCase)) return Bambi;
+        return Vanilla;
     }
 
     /// <summary>One line for the active mod, avoiding <paramref name="avoid"/> when the pool has room
@@ -75,7 +90,7 @@ public static class ToastLines
         try { modId = App.Mods?.ActiveModId; } catch { }
 
         var pool = PoolFor(modId);
-        if (pool.Count == 0) return "setting reverted by: her";
+        if (pool.Count == 0) return "setting reverted by: your companion";
 
         for (int attempt = 0; attempt < 4; attempt++)
         {

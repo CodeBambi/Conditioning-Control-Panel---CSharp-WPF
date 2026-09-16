@@ -53,6 +53,8 @@
  *               deckFull           a card for every active class
  *               afterBadDay        the previous play-day's best was C or worse
  *               awayCountAtLeast:N the tabAway/suspend escalation count
+ *               sameGameAsLast / newGameTonight   classStart only: this
+ *               room against the one you went through last
  *               hoursAtLeast:N     lifetime msVisible, in hours
  *               flingsAtLeast:N / bubblesAtLeast:N   the widget's own counters
  * perception    calendarDaysAtLeast:N  calendar days since her first day (the
@@ -390,6 +392,8 @@ export function createVoice(o) {
       postLabSessions: intOf(b.postLabSessions),
       once: Object.assign({}, plain(b.once)),
       punchDay: strOf(b.punchDay),
+      /* The last class you actually started, for the room diff below. */
+      lastGameKey: strOf(b.lastGameKey),
       punchesToday: intOf(b.punchesToday),
       dayBest: strOf(b.dayBest),
       prevDayBest: strOf(b.prevDayBest),
@@ -757,6 +761,14 @@ export function createVoice(o) {
        * ask someone. It is cleared with the latch, so a campus beat can never
        * inherit the last class's colour. */
       S.gameKey = typeof (p && p.gameKey) === 'string' && p.gameKey ? p.gameKey : null;
+      /* THE ROOM DIFF. Read before it is written, exactly like `gradeUp`
+       * below: a gate that compared against a key this same moment had
+       * already stored would answer "same room" every single time. No key
+       * on either side is NEITHER answer, never a guess. */
+      const room = S.gameKey;
+      c.sameGame = !!room && !!blob.lastGameKey && room === blob.lastGameKey;
+      c.newGame = !!room && !!blob.lastGameKey && room !== blob.lastGameKey;
+      if (room && blob.lastGameKey !== room) { blob.lastGameKey = room; touch(); }
     }
 
     /* TODAY'S HOLES, for the double-punch beat. Counted off the stamp moments
@@ -879,6 +891,12 @@ export function createVoice(o) {
     /** Which class fired the moment - the per-game colour gate. Closed only
      *  by the payload: no gameKey, no match, never a guess. */
     gameIs: (a, c) => !!c.gameKey && c.gameKey === String(a),
+    /** THE ROOM DIFF (2026-09-07). classStart only, written by bookkeep off
+     *  `blob.lastGameKey`; false on every other moment. The inverse is
+     *  deliberately NOT `!sameGameAsLast`: a first class ever, and a
+     *  classStart that carried no gameKey, are neither. */
+    sameGameAsLast: (a, c) => c.sameGame === true,
+    newGameTonight: (a, c) => c.newGame === true,
     /* --- the EMI ASKS wave (2026-08-25) --------------------------------- */
     /** She asked and you answered - an IGNORED ask is deliberately NOT an
      *  answer, so a callback can never reference a conversation you declined. */
@@ -1086,18 +1104,23 @@ export function createVoice(o) {
     return false;
   }
 
-  function eligiblePool(name, c) {
-    let best = null;
+  /** Every pool that may answer this moment, best first. Priority is the data's
+   * own word; a tie goes to the more specific gate. */
+  function eligiblePools(name, c) {
+    const out = [];
     for (const p of POOLS) {
       if (p.on.indexOf(name) < 0) continue;
       if (poolBlocked(p, c)) continue;
       if (!holds(p.when, c)) continue;
-      // Priority is the data's own word; a tie goes to the more specific gate.
-      if (!best
-        || p.priority > best.priority
-        || (p.priority === best.priority && p.when.length > best.when.length)) best = p;
+      out.push(p);
     }
-    return best;
+    out.sort((a, b) => (b.priority - a.priority) || (b.when.length - a.when.length));
+    return out;
+  }
+
+  function eligiblePool(name, c) {
+    const pools = eligiblePools(name, c);
+    return pools.length ? pools[0] : null;
   }
 
   /** No-repeat, the rations, and unheard lines weighted `FRESH_WEIGHT`x. */
@@ -1147,7 +1170,20 @@ export function createVoice(o) {
      * afterwards): a one-second face on her own glass is the tension mirror,
      * a sentence is a distraction with a fanbase. */
     if (S.holdWords && (isGameNote(name) || name === 'heartbeat')) return false;
-    const pool = eligiblePool(name, c);
+    /* THE FALL-THROUGH (2026-09-07). The best pool by priority is not always a
+     * pool with something to say: `smallHolidays` sits on greet at 35 with every
+     * line gated by a date, so on an ordinary day it won the beat, found no
+     * usable line and returned false, and every greet pool under it went silent
+     * all year. The SPEAKING pool is now the best one whose pickLine actually
+     * answers; the floor, the ceiling and the odds are then charged to THAT
+     * pool, exactly as before. A failed odds roll still means silence: a pool
+     * that rolled and lost was meant to stay quiet, not be replaced. */
+    const pools = eligiblePools(name, c);
+    let pool = null, line = null;
+    for (const p of pools) {
+      const l = pickLine(p, c);
+      if (l) { pool = p; line = l; break; }
+    }
     if (!pool) return false;
     /* THE FLOOR, and since the heartbeat wave there are two of them: 40s on the
      * campus, 20s mid-class. A ceremony is rare by nature and is exempt from
@@ -1159,8 +1195,6 @@ export function createVoice(o) {
     let odds = typeof pool.odds === 'number' ? pool.odds : D.BARK_ODDS;
     if (!mid && !S.inClass) odds = Math.min(1, odds * D.CAMPUS_ODDS_MULT);
     if (odds < 1 && rng() >= odds) return false;
-    const line = pickLine(pool, c);
-    if (!line) return false;
     if (!perform(line, c)) return false;
 
     if (mid) S.classBarks += 1;
@@ -1311,6 +1345,8 @@ export function createVoice(o) {
       visitsIgnored: Number(st.visitsIgnored) || 0,
       hours: (Number(st.msVisible) || 0) / 3600000,
       gradeUp: false,
+      sameGame: false,
+      newGame: false,
     };
   }
 

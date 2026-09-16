@@ -195,6 +195,24 @@
                                                 </ComboBox>
                                             </Grid>
 
+                                            <!-- Hide the clock. The digits' TextBlock stays in place either way (it is the
+                                                 five-click exit handle); only what it says changes. Masks the badge and the
+                                                 Home chip too - see AppSettings.HideLockdownTimer. -->
+                                            <Grid Height="28" Background="Transparent"
+                                                  ToolTip="{loc:Str lockdown_hide_timer_tip}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{loc:Str lockdown_hide_timer}" FontSize="11.5"
+                                                           Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <CheckBox Grid.Column="1" x:Name="ChkLockdownHideTimer" x:FieldModifier="internal"
+                                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                          poss:Possession.Role="Toggle" poss:Possession.Name="the hidden clock toggle"
+                                                          Checked="ChkLockdownHideTimer_Changed" Unchecked="ChkLockdownHideTimer_Changed"/>
+                                            </Grid>
+
                                             <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
 
                                             <!-- ===== POSSESSION =====================================================

@@ -95,10 +95,18 @@ export function send(msg) {
   try { if (webview) webview.postMessage(msg); } catch (_e) { /* host gone */ }
 }
 
-/** Hosted: tunnel to the C# log (400-char clamp). Standalone: console. */
-export function log(msg) {
+/**
+ * Hosted: tunnel to the C# log (400-char clamp). Standalone: console.
+ *
+ * `level` is optional and defaults to 'debug' - `log(msg)` or `log(level, msg)`, the same
+ * signature the arcademy bridge uses. The host files 'info' and above; 'debug' still reaches
+ * the flight recorder (so it lands in any crash/hang/bug-report dump) without being written to
+ * disk every run. Say 'warn' for a degraded surface, 'error' for a broken one.
+ */
+export function log(level, msg) {
+  if (msg === undefined) { msg = level; level = 'debug'; }
   const s = String(msg).slice(0, 400);
-  if (webview) send({ type: 'log', msg: s });
+  if (webview) send({ type: 'log', level: String(level), msg: s });
   else if (typeof console !== 'undefined') console.log('[goon]', s);
 }
 
@@ -362,7 +370,7 @@ export function safeServerBase(candidate) {
   if (!raw) return defaultServerBase();
   if (serverBaseAllowed(raw)) return raw;
   const fallback = defaultServerBase();
-  log('serverBase refused: "' + raw.slice(0, 120) + '" is not an allowed origin — using '
+  log('warn', 'serverBase refused: "' + raw.slice(0, 120) + '" is not an allowed origin — using '
     + (fallback || '(none)'));
   return fallback;
 }

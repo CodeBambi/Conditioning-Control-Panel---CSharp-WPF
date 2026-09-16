@@ -30,11 +30,16 @@ namespace ConditioningControlPanel
     ///     block; it is the one request that can light a dark key up,
     ///   • every 60s while the card is the visible tab AND the window is in front of
     ///     somebody AND the key is lit (<see cref="EvaluateVatPoll"/>),
-    ///   • and immediately after an accepted /v2/user/sync, also key-gated
+    ///   • immediately after an accepted /v2/user/sync, also key-gated
     ///     (ProfileSyncService.SyncProfileAsync) — the moment today's XP actually
-    ///     lands in the server vat.
+    ///     lands in the server vat,
+    ///   • and on sign-in (DescentService.OnSignedIn, from every login path), which
+    ///     is what repaints a card opened before the auth token landed: the open's
+    ///     request is remembered by the service and goes out then.
     /// A 10s floor inside DescentService keeps a burst of those from becoming a
-    /// burst of requests, and offline mode stops all three at the service.
+    /// burst of requests (a request inside it after a failed fetch is deferred to
+    /// the end of the floor rather than dropped), and offline mode stops all of
+    /// them at the service.
     /// </summary>
     public partial class MainWindow
     {

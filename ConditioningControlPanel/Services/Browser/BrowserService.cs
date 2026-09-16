@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
+using ConditioningControlPanel.Services.Logging;
 
 namespace ConditioningControlPanel.Services
 {
@@ -477,7 +478,7 @@ namespace ConditioningControlPanel.Services
 
                 // Navigate to URL
                 var url = _pendingUrl ?? _defaultUrl;
-                App.Logger?.Information("Navigating to: {Url}", url);
+                App.Logger?.Information("Navigating to: {Host}", UrlLog.Host(url));
                 _webView.CoreWebView2.Navigate(url);
 
                 _isInitialized = true;
@@ -537,7 +538,7 @@ namespace ConditioningControlPanel.Services
                 // Check if it's an ad popup (no user gesture or suspicious URL)
                 if (IsAdUrl(e.Uri))
                 {
-                    App.Logger?.Debug("Blocked ad popup: {Url}", e.Uri);
+                    App.Logger?.Debug("Blocked ad popup: {Host}", UrlLog.Host(e.Uri));
                     e.Handled = true;
                     return;
                 }
@@ -1198,8 +1199,8 @@ namespace ConditioningControlPanel.Services
         {
             if (_disposed || !_isInitialized || _webView?.CoreWebView2 == null)
             {
-                App.Logger?.Warning("Navigate dropped - browser not ready (disposed={Disposed}, init={Init}, core={HasCore}): {Url}",
-                    _disposed, _isInitialized, _webView?.CoreWebView2 != null, url);
+                App.Logger?.Warning("Navigate dropped - browser not ready (disposed={Disposed}, init={Init}, core={HasCore}): {Host}",
+                    _disposed, _isInitialized, _webView?.CoreWebView2 != null, UrlLog.Host(url));
                 return false;
             }
 
@@ -1215,7 +1216,10 @@ namespace ConditioningControlPanel.Services
                     lowerUrl.StartsWith("data:") ||
                     lowerUrl.StartsWith("vbscript:"))
                 {
-                    App.Logger?.Warning("Blocked potentially dangerous URL scheme: {Url}", url);
+                    // Scheme only: the rest of a javascript:/data: URL is a payload, and for
+                    // file: it is a local path.
+                    App.Logger?.Warning("Blocked potentially dangerous URL scheme: {Scheme}",
+                        lowerUrl.Substring(0, lowerUrl.IndexOf(':') + 1));
                     return false;
                 }
 
@@ -1230,19 +1234,19 @@ namespace ConditioningControlPanel.Services
                 if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
                 {
                     url = "https://" + url.Substring(7);
-                    App.Logger?.Debug("Upgraded HTTP to HTTPS: {Url}", url);
+                    App.Logger?.Debug("Upgraded HTTP to HTTPS: {Host}", UrlLog.Host(url));
                 }
 
                 // Validate URL format
                 if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
                     (uri.Scheme != Uri.UriSchemeHttps))
                 {
-                    App.Logger?.Warning("Invalid URL rejected: {Url}", url);
+                    App.Logger?.Warning("Invalid URL rejected ({Chars} chars)", url.Length);
                     return false;
                 }
 
                 _webView.CoreWebView2.Navigate(url);
-                App.Logger?.Debug("Navigating to: {Url}", url);
+                App.Logger?.Debug("Navigating to: {Host}", UrlLog.Host(url));
                 return true;
             }
             catch (Exception ex)
@@ -1379,7 +1383,7 @@ namespace ConditioningControlPanel.Services
 
                 if (Uri.TryCreate(url, UriKind.Absolute, out _))
                 {
-                    App.Logger?.Information("Extracted video URL: {Url}", url);
+                    App.Logger?.Information("Extracted video URL from {Host}", UrlLog.Host(url));
                     return url;
                 }
 

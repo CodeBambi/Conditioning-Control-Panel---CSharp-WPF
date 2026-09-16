@@ -1,0 +1,201 @@
+/* ============================================================================
+ * shell/capsule.css - the skin for shell/capsule.js, THE TIME CAPSULE.
+ * A real file, not a template literal in the module, so traps 37/84 (a
+ * backtick in a CSS comment kills the sheet and node --check cannot see it)
+ * cannot happen here. capsule.js links it once, lazily, module-relative.
+ *
+ * HOUSE LAWS: no font is fetched (trap 2 - --disp is the bundled Graduate); no
+ * bare `display:` on a shell-toggled node and no [hidden] rule, the stage is
+ * REMOVED (trap 27); the entrance is transform and opacity only (trap 36); the
+ * case scrolls and Back rides the sticky bar, so a short window cannot bury
+ * the way out (trap 46). Every colour is a color-mix off the shell's own
+ * tokens, so init.palette reskins the case for free.
+ *
+ * LAYER: z 38, the rung the corkboard and the Bugle take - campus-chrome
+ * overlays, never up at once. Under fx (40), the ceremony (42/45), the annex
+ * reveal (48), EMI (50) and the toast (60).
+ * ==========================================================================*/
+
+.arc-capsulestage {
+  --wood:      color-mix(in srgb, var(--panel), var(--gold) 22%);
+  --wood-lo:   color-mix(in srgb, var(--wood), black 34%);
+  --wood-hi:   color-mix(in srgb, var(--wood), var(--gold) 26%);
+  --brass:     var(--gold);
+  --brass-lo:  color-mix(in srgb, var(--gold), black 42%);
+  --brass-ink: color-mix(in srgb, var(--navy), black 40%);
+  --kraft:     color-mix(in srgb, var(--ink) 62%, var(--gold) 38%);
+  --kraft-lo:  color-mix(in srgb, var(--kraft), black 30%);
+  --twine:     color-mix(in srgb, var(--pink-deep), var(--ink) 12%);
+  position:fixed; inset:0; z-index:38;
+  display:flex; align-items:flex-start; justify-content:center;
+  padding:clamp(10px, 4vh, 40px);
+  overflow:auto;                 /* the case scrolls, Back never clips (trap 46) */
+  background:
+    radial-gradient(760px 520px at 50% 26%, color-mix(in srgb, var(--gold), transparent 92%), transparent 68%),
+    radial-gradient(140% 120% at 50% 50%, var(--ground) 36%,
+                                          color-mix(in srgb, var(--ground), black 62%) 100%);
+  animation:arc-capsule-dusk .2s ease-out both;
+}
+@keyframes arc-capsule-dusk { from { opacity:0; } to { opacity:1; } }
+
+/* --- THE CASE --- */
+.arc-capsule-box {
+  width:min(760px, 100%);
+  margin:auto;
+  display:flex; flex-direction:column; align-items:center; gap:18px;
+  animation:arc-capsule-lift .26s cubic-bezier(.2,.8,.3,1) both;
+}
+@keyframes arc-capsule-lift {
+  from { opacity:0; transform:translateY(14px) scale(.985); }
+  to   { opacity:1; transform:none; }
+}
+
+/* --- THE FRAME. Wood, a brass fillet, a mat, and the photograph inside it,
+ * shown AS IT WAS: nothing here crops, blurs or tints the picture. ------- */
+.arc-capsule-frame {
+  width:100%;
+  padding:clamp(10px, 2.4vw, 22px);
+  border-radius:6px;
+  background:
+    linear-gradient(160deg, var(--wood-hi), var(--wood) 34%, var(--wood-lo));
+  border:1px solid color-mix(in srgb, var(--brass), transparent 46%);
+  box-shadow:
+    0 22px 54px rgba(0,0,0,.55),
+    inset 0 1px 0 color-mix(in srgb, var(--wood-hi), transparent 40%),
+    inset 0 -2px 6px rgba(0,0,0,.35);
+}
+.arc-capsule-mat {
+  padding:clamp(8px, 1.8vw, 16px);
+  border-radius:2px;
+  background:color-mix(in srgb, var(--ink) 88%, var(--slate));
+  border:1px solid var(--brass-lo);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--brass), transparent 62%);
+  min-height:60px;
+}
+.arc-capsule-pic {
+  display:block; width:100%; height:auto;
+  border:1px solid color-mix(in srgb, var(--brass-lo), transparent 30%);
+}
+/* THE EMPTY MOUNT. A missing or undecodable exhibit file costs the picture and
+ * nothing else - the plaque under it, half the exhibit, still reads. */
+.arc-capsule-box[data-art="off"] .arc-capsule-pic { display:none; }
+.arc-capsule-box[data-art="off"] .arc-capsule-mat {
+  min-height:clamp(160px, 34vh, 300px);
+  background:
+    repeating-linear-gradient(135deg,
+      color-mix(in srgb, var(--ink) 84%, var(--slate)) 0 9px,
+      color-mix(in srgb, var(--ink) 78%, var(--slate)) 9px 18px);
+}
+
+/* --- THE BRASS PLAQUE, under the picture where a plaque goes. ----------- */
+.arc-capsule-plaque {
+  width:min(560px, 100%);
+  padding:14px 20px 12px;
+  border-radius:3px;
+  text-align:center;
+  color:var(--brass-ink);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--brass), white 22%),
+                            var(--brass) 42%, var(--brass-lo));
+  border:1px solid var(--brass-lo);
+  box-shadow:0 10px 26px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.35);
+}
+.arc-capsule-ptitle {
+  font-family:var(--disp);
+  font-size:clamp(17px, 2.6vw, 23px);
+  letter-spacing:.16em; text-transform:uppercase;
+  margin-bottom:6px;
+}
+.arc-capsule-pline {
+  font-family:var(--body);
+  font-size:clamp(13px, 1.7vw, 15px);
+  line-height:1.5;
+  max-width:46ch; margin:0 auto;
+}
+.arc-capsule-pfoot {
+  margin-top:8px; padding-top:7px;
+  border-top:1px solid color-mix(in srgb, var(--brass-ink), transparent 74%);
+  font-family:var(--mono);
+  font-size:clamp(10px, 1.3vw, 11.5px);
+  letter-spacing:.09em; text-transform:uppercase;
+  color:color-mix(in srgb, var(--brass-ink), var(--brass) 26%);
+}
+
+/* --- THE PARCEL, what the case holds before the thirtieth night: paper, two
+ * ribbons, a tag with the count. All drawn, so nothing here can 404. ----- */
+.arc-capsule-parcel {
+  position:relative;
+  width:min(340px, 76%); aspect-ratio:4 / 3;
+  border-radius:5px;
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--kraft), white 10%),
+                            var(--kraft) 44%, var(--kraft-lo));
+  border:1px solid color-mix(in srgb, var(--kraft-lo), black 20%);
+  box-shadow:0 20px 46px rgba(0,0,0,.5), inset 0 -3px 10px rgba(0,0,0,.22);
+}
+.arc-capsule-ribv, .arc-capsule-ribh {
+  position:absolute; background:var(--twine);
+  box-shadow:0 0 0 1px rgba(0,0,0,.16);
+}
+.arc-capsule-ribv { top:0; bottom:0; left:calc(50% - 9px); width:18px; }
+.arc-capsule-ribh { left:0; right:0; top:calc(50% - 9px); height:18px; }
+.arc-capsule-knot {
+  position:absolute; left:calc(50% - 15px); top:calc(50% - 15px);
+  width:30px; height:30px; border-radius:50%;
+  background:color-mix(in srgb, var(--twine), white 16%);
+  box-shadow:0 2px 6px rgba(0,0,0,.35);
+}
+
+.arc-capsule-tag {
+  width:min(300px, 84%);
+  padding:11px 16px 10px;
+  text-align:center;
+  border-radius:3px;
+  color:var(--brass-ink);
+  background:linear-gradient(180deg, color-mix(in srgb, var(--ink), white 8%), var(--ink));
+  border:1px solid color-mix(in srgb, var(--slate), transparent 30%);
+  box-shadow:0 8px 20px rgba(0,0,0,.4);
+}
+.arc-capsule-tagline {
+  font-family:var(--mono);
+  font-size:clamp(11px, 1.5vw, 12.5px);
+  letter-spacing:.1em; text-transform:uppercase;
+}
+.arc-capsule-count {
+  margin-top:5px;
+  font-family:var(--disp);
+  font-size:clamp(21px, 3.4vw, 30px);
+  letter-spacing:.08em;
+  color:color-mix(in srgb, var(--brass-ink), var(--pink-deep) 34%);
+}
+.arc-capsule-hint {
+  max-width:44ch; text-align:center; color:var(--ink-dim);
+  font-family:var(--body); font-size:13px; line-height:1.5;
+}
+
+/* --- THE WAY OUT. exits.js mints the button; the bar is the shell's own
+ * sticky one, pinned under the case so a short window cannot bury it. ---- */
+.arc-capsule-box .arc-exitbar {
+  width:100%;
+  justify-content:center;
+  background:none; border:0; box-shadow:none;
+}
+
+/* --- REDUCED MOTION. Both entrances collapse to a plain appearance; the
+ * words, the picture and the count are the information and none of them move.
+ * Two doors for one rule: the page's own class and the OS preference. ---- */
+.arc-capsulestage.arc-capsule-reduced,
+.arc-capsulestage.arc-capsule-reduced .arc-capsule-box { animation:none; }
+html.arc-reduced .arc-capsulestage,
+html.arc-reduced .arc-capsule-box { animation:none; }
+@media (prefers-reduced-motion: reduce) {
+  .arc-capsulestage, .arc-capsule-box { animation:none; }
+}
+
+/* --- PHONE. The frame keeps its proportions and the plaque its measure;
+ * only the padding and the parcel give ground. --------------------------- */
+@media (max-width:560px), (max-height:460px) {
+  .arc-capsulestage { padding:8px; align-items:center; }
+  .arc-capsule-box { gap:12px; }
+  .arc-capsule-parcel { width:min(260px, 72%); }
+}

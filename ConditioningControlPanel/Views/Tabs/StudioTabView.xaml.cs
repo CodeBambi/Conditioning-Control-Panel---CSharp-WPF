@@ -150,6 +150,13 @@ namespace ConditioningControlPanel.Views.Tabs
             public TextBlock? TileLabel;
             public Ellipse? TileDot;
 
+            /// <summary>The champagne V2 pill on the two prize-bearing rows (flash, bubbles), one
+            /// per visual state. Null on every other row. Visibility is owned by
+            /// <see cref="RefreshV2Pills"/>, which reads <see cref="Services.Prizes.V2Badges"/>
+            /// so the rack, the dashboard tile and the Home rail cannot disagree.</summary>
+            public Border? V2Pill;
+            public Border? TileV2Pill;
+
             /// <summary>The comet lapping this row's tile outline while it is the checked row,
             /// or null. Exactly one entry can hold one at a time — see
             /// <see cref="SetTileComet"/>.</summary>
@@ -532,9 +539,19 @@ namespace ConditioningControlPanel.Views.Tabs
             // Neither is a wall tile either, and neither drives a service directly (the 30s
             // SchedulerTimer_Tick and the session ramp read the flags), so the honest quick-toggle
             // is the panel's own enable box - it writes the flag and Saves in one place.
+            // Scheduler is OFF-ONLY on right-click: switching it on starts the engine within 30s
+            // (the default window is 00:00-22:00, every day) and every later launch auto-starts
+            // and hides to the tray. A stray right-click beside Haptics did exactly that to the
+            // owner (Sep 15 2026), so turning it ON opens the panel and leaves the box to the user.
             Add("scheduler", "📅", null, "Scheduler", "section_scheduler", HostScheduler, PanelScheduler, "SchedulerRamp",
                 () => App.Settings?.Current?.SchedulerEnabled,
-                toggle: () => FlipMasterCheckBox(PanelScheduler?.Inner.ChkEnabled));
+                toggle: () =>
+                {
+                    if (App.Settings?.Current?.SchedulerEnabled == true)
+                        FlipMasterCheckBox(PanelScheduler?.Inner.ChkEnabled);
+                    else
+                        SelectEntry("scheduler", announce: true, animate: true);
+                });
             Add("ramp", "📈", null, "Intensity Ramp", "section_intensity_ramp", HostRamp, PanelRamp, "SchedulerRamp",
                 () => App.Settings?.Current?.IntensityRampEnabled,
                 toggle: () => FlipMasterCheckBox(PanelRamp?.Inner.ChkEnabled));
@@ -802,6 +819,20 @@ namespace ConditioningControlPanel.Views.Tabs
                 grid.Children.Add(newPill);
             }
 
+            // The V2 pill (owner, 2026-09-15: "having the V2 also on the studio rail"). Same
+            // column trick as the NEW pill above: a column of its own on THIS row only, and the
+            // dot still takes the last column. Built collapsed; RefreshV2Pills lights it from
+            // ownership, on load and again whenever a prize lands.
+            if (V2PillFamily(e.Key) != null)
+            {
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                e.V2Pill = Features.FeatureCard.NewV2Badge(new Thickness(6, 0, 0, 0), compact: true);
+                e.V2Pill.VerticalAlignment = VerticalAlignment.Center;
+                e.V2Pill.Visibility = Visibility.Collapsed;
+                Grid.SetColumn(e.V2Pill, grid.ColumnDefinitions.Count - 1);
+                grid.Children.Add(e.V2Pill);
+            }
+
             if (e.Dot != null)
             {
                 e.DotShape = new Ellipse
@@ -888,6 +919,17 @@ namespace ConditioningControlPanel.Views.Tabs
                 Margin = new Thickness(12, 0, 26, 0),
             };
             tile.Children.Add(e.TileLabel);
+
+            // Same pill as the resting strip, right-anchored just inside the dot's slot so the
+            // caption keeps its room. See RefreshV2Pills.
+            if (V2PillFamily(e.Key) != null)
+            {
+                e.TileV2Pill = Features.FeatureCard.NewV2Badge(new Thickness(0, 0, 24, 0), compact: true);
+                e.TileV2Pill.HorizontalAlignment = HorizontalAlignment.Right;
+                e.TileV2Pill.VerticalAlignment = VerticalAlignment.Center;
+                e.TileV2Pill.Visibility = Visibility.Collapsed;
+                tile.Children.Add(e.TileV2Pill);
+            }
 
             if (e.Dot != null)
             {
@@ -1127,7 +1169,12 @@ namespace ConditioningControlPanel.Views.Tabs
                 try
                 {
                     RefreshDots();
-                    if (SafeDotState(entry) != before) PingDot(entry.DotShape);
+                    var after = SafeDotState(entry);
+                    if (after != before)
+                    {
+                        PingDot(entry.DotShape);
+                        App.Logger?.Information("[Studio] rack right-click toggled {Key}: {Before} -> {After}", key, before, after);
+                    }
                 }
                 catch (Exception ex) { App.Logger?.Debug("StudioTabView rack toggle repaint: {E}", ex.Message); }
             }));
@@ -1400,6 +1447,43 @@ namespace ConditioningControlPanel.Views.Tabs
                 Opacity = 0.85,
             };
 
+        /// <summary>Which v2 prize family a rack key wears, or null for rows that carry none.
+        /// Only the two rows whose panels host the V2 boxes qualify.</summary>
+        private static string? V2PillFamily(string? rackKey) => rackKey?.ToLowerInvariant() switch
+        {
+            "flash" => "flash",
+            "bubbles" => "bubbles",
+            _ => null,
+        };
+
+        /// <summary>
+        /// Lights or hides the V2 pill on the flash and bubbles rows from live ownership. One
+        /// rule for every surface: <see cref="Services.Prizes.V2Badges"/>. Called on load and
+        /// from <c>PrizeGrants.GrantsChanged</c>, so a prize bought in the Back Room shows on
+        /// the rack without a restart.
+        /// </summary>
+        private void RefreshV2Pills()
+        {
+            bool flash, bubbles;
+            try { flash = Services.Prizes.V2Badges.FlashOwned(); } catch { flash = false; }
+            try { bubbles = Services.Prizes.V2Badges.BubbleOwned(); } catch { bubbles = false; }
+            foreach (var e in _entries)
+            {
+                var fam = V2PillFamily(e.Key);
+                if (fam == null) continue;
+                var vis = (fam == "flash" ? flash : bubbles) ? Visibility.Visible : Visibility.Collapsed;
+                if (e.V2Pill != null) e.V2Pill.Visibility = vis;
+                if (e.TileV2Pill != null) e.TileV2Pill.Visibility = vis;
+            }
+        }
+
+        private bool _grantsHooked;
+
+        private void OnGrantsChanged()
+        {
+            try { Dispatcher.BeginInvoke(new Action(RefreshV2Pills)); } catch { }
+        }
+
         private void RefreshDots()
         {
             var on = (Brush?)TryFindResource("PinkBrush") ?? Brushes.HotPink;
@@ -1449,6 +1533,13 @@ namespace ConditioningControlPanel.Views.Tabs
                 if (App.Settings != null) App.Settings.CurrentReplaced += OnSettingsCurrentReplaced;
                 _settingsHooked = true;
             }
+            if (!_grantsHooked)
+            {
+                // The rack lives for the whole session, so this is a once-only hook by design.
+                try { Services.Prizes.PrizeGrants.GrantsChanged += OnGrantsChanged; _grantsHooked = true; }
+                catch (Exception ex) { App.Logger?.Debug("StudioTabView grants hook: {E}", ex.Message); }
+            }
+            RefreshV2Pills();
             // Per-module hosting wiring contributed by the module partials
             // (StudioTabView.<Area>.cs). Each is idempotent and self-guarding.
             HookHapticsModule();

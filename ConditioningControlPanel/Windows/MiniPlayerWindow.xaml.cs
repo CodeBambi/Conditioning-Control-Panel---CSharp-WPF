@@ -140,7 +140,7 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "MiniPlayerWindow: Failed to load video");
-                MessageBox.Show($"Failed to load video: {ex.Message}", "Error",
+                MessageBox.Show(Loc.GetF("msg_video_load_failed", ex.Message), Loc.Get("title_error"),
                     MessageBoxButton.OK, MessageBoxImage.Error);
                 Close();
             }
@@ -185,7 +185,7 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "MiniPlayerWindow: Failed to load image");
-                MessageBox.Show($"Failed to load image: {ex.Message}", "Error",
+                MessageBox.Show(Loc.GetF("msg_image_load_failed", ex.Message), Loc.Get("title_error"),
                     MessageBoxButton.OK, MessageBoxImage.Error);
                 Close();
             }

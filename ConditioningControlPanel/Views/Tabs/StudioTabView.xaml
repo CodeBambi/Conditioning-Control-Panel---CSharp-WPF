@@ -120,6 +120,20 @@
             </Setter>
         </Style>
 
+        <!-- The rack's gesture line. Same shape and size as the Home dashboard's
+             RailGestureHint (SettingsTabView.xaml): 10pt, muted rather than pink, centred,
+             wrapping, with LineHeight pinned at 13 so a sentence that takes two lines in a
+             230px column reads as lines instead of a slab. Muted because it explains the
+             column, it does not head a section. -->
+        <Style x:Key="RackGestureHint" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="LineHeight" Value="13"/>
+            <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
+        </Style>
+
     </UserControl.Resources>
 
     <Grid>
@@ -167,9 +181,44 @@
             <Border Grid.Column="0" Width="230" Margin="0,0,14,0"
                     Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2A2A46"
                     BorderThickness="1" CornerRadius="12" Padding="8,10">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel x:Name="RackList"/>
-                </ScrollViewer>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <!-- The rack takes whatever is left once the gesture line has been paid
+                             for, and scrolls inside it. Star above Auto, not the other way
+                             round: an Auto row for the list would let thirteen modules push the
+                             line off the bottom of the card, which is the one thing it must
+                             never do. Same shape as the Home rail. -->
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="RackList"/>
+                    </ScrollViewer>
+
+                    <!-- THE GESTURE LINE (owner, 2026-09-12: "add a nudge to the studio too to
+                         click to quickly activate or deactivate a feat from the rail (the right
+                         click)"). Nobody was told that the rack rows carry a second gesture:
+                         RackEntry_RightClick calls entry.Toggle() without moving the selection,
+                         so a right-click flips a module on or off while the detail pane stays
+                         where it is (StudioTabView.xaml.cs).
+
+                         Two sentences, left before right, because left-click means something
+                         different here than on the dashboard wall: on the rack it PICKS the
+                         module rather than opening it. The second sentence says "a module" and
+                         not "any module" on purpose - Visuals has no single on/off, so its row
+                         falls through the handler unhandled and the line must not promise a
+                         switch for every row.
+
+                         Docked, never hidden and never retired by count: it sits outside the
+                         ScrollViewer in its own Auto row, and unlike DashboardToggleHintRule's
+                         logo-face caption it stays for good (owner call), the same way the Home
+                         rail's line does. A 1px top rule rather than a Separator so it stops
+                         short of the card's rounded corners. -->
+                    <Border Grid.Row="1" Margin="2,0,2,0" Padding="0,5,0,1"
+                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="0,1,0,0">
+                        <TextBlock Text="{loc:Str st4_rack_gesture_hint}" Style="{StaticResource RackGestureHint}"/>
+                    </Border>
+                </Grid>
             </Border>
 
             <!-- The detail column. -->

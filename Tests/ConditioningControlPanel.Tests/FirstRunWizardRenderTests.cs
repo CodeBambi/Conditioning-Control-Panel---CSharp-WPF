@@ -5,17 +5,19 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using ConditioningControlPanel;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using Xunit;
 
 namespace ConditioningControlPanel.Tests;
 
 /// <summary>
-/// UX restructure Phase 8 — the first-run wizard that replaces the up-to-ten popup gauntlet.
+/// The first-run wizard: two steps, Welcome and Flavour, and the 18+ gate that used to be a
+/// MessageBox in front of it.
 ///
 /// <para><b>Why this suite exists.</b> This screen is seen exactly once per install, by a user who
-/// has never run the app, and only on a fresh box — which is the hardest thing in this codebase to
-/// exercise by hand and the easiest to ship broken. Three failure modes it guards:</para>
+/// has never run the app, and only on a fresh box - which is the hardest thing in this codebase to
+/// exercise by hand and the easiest to ship broken. Four failure modes it guards:</para>
 /// <list type="number">
 /// <item>A <c>{StaticResource}</c> or a converter declared in the wrong scope throws inside
 /// <c>InitializeComponent()</c>. The wizard opens from MainWindow's constructor path with its
@@ -24,14 +26,18 @@ namespace ConditioningControlPanel.Tests;
 /// <item>A step that measures to zero height. The window is a fixed 900x680 with
 /// <c>WindowStyle="None"</c>, so a collapsed step reads as an empty pink box rather than an
 /// error.</item>
-/// <item>The step-2 card list going empty or losing its single-select invariant — the mod choice is
-/// committed on close, so "nothing selected" and "two selected" are both real data bugs.</item>
+/// <item>The flavour card list going empty or losing its single-select invariant - the mod choice
+/// is committed on close, so "nothing selected" and "two selected" are both real data bugs.</item>
+/// <item>The gate coming un-gated. Enter must be dead until the 18+ box is ticked; a wizard that
+/// ships with it enabled is an app with no age check at all, because App.OnStartup's MessageBox no
+/// longer covers this population.</item>
 /// </list>
 ///
 /// <para>The window is never <c>Show()</c>n: layout is driven on its content root, which is enough
 /// to realize every template and resolve every resource lookup, and avoids putting a real HWND (and
-/// a modal) on a test agent's desktop. Closing is deliberately skipped too — <c>Closed</c> runs
-/// <c>CommitModChoice</c>, which is production behaviour that has no business firing in a test.</para>
+/// a modal) on a test agent's desktop. Closing is deliberately skipped too - <c>Closed</c> runs the
+/// gate verdict and <c>CommitModChoice</c>, which are production behaviour (including
+/// <c>Application.Current.Shutdown()</c>) that has no business firing in a test.</para>
 /// </summary>
 [Collection(CompanionWpfRenderCollection.Name)]
 public class FirstRunWizardRenderTests
@@ -40,7 +46,7 @@ public class FirstRunWizardRenderTests
 
     /// <summary>
     /// The constructor is private (the entry points are <c>ShouldRunAndClaim</c> + <c>Run</c>), and
-    /// deliberately so — this reaches past that rather than widening the production surface for a
+    /// deliberately so - this reaches past that rather than widening the production surface for a
     /// test. A null owner is a supported argument: the parameter is <c>MainWindow?</c> and every
     /// use of it in the class is null-conditional.
     /// </summary>
@@ -53,7 +59,7 @@ public class FirstRunWizardRenderTests
             modifiers: null);
 
         Assert.True(ctor != null,
-            "FirstRunWizard(MainWindow?) is gone — MainWindow's first-launch branch constructs exactly this");
+            "FirstRunWizard(MainWindow?) is gone - MainWindow's first-launch branch constructs exactly this");
 
         return (FirstRunWizard)ctor!.Invoke(new object?[] { null });
     }
@@ -69,7 +75,7 @@ public class FirstRunWizardRenderTests
         root.UpdateLayout();
 
         Assert.True(root.DesiredSize.Height > 0,
-            "the wizard measured to zero height — its content did not realize");
+            "the wizard measured to zero height - its content did not realize");
         return root;
     }
 
@@ -94,15 +100,15 @@ public class FirstRunWizardRenderTests
     [Fact]
     public void EveryStepRealizesWithRealHeight()
     {
-        // Steps 2 and 3 are Collapsed at construction, so the first render only proves step 1.
-        // A step that throws (or measures to nothing) would otherwise only show up when a real
-        // first-run user pressed Next.
+        // Step 2 is Collapsed at construction, so the first render only proves step 1. A step that
+        // throws (or measures to nothing) would otherwise only show up when a real first-run user
+        // pressed Enter.
         OnStaThread(() =>
         {
             var w = NewWizard();
             Realize(w);
 
-            var steps = new[] { Find<Grid>(w, "Step1"), Find<Grid>(w, "Step2"), Find<Grid>(w, "Step3") };
+            var steps = new[] { Find<Grid>(w, "Step1"), Find<Grid>(w, "Step2") };
             foreach (var step in steps)
             {
                 step.Visibility = Visibility.Visible;
@@ -115,18 +121,30 @@ public class FirstRunWizardRenderTests
     }
 
     [Fact]
-    public void ItOpensOnStepOneWithTheOtherTwoPutAway()
+    public void ItOpensOnTheWelcomeStepWithTheFlavourStepPutAway()
     {
         OnStaThread(() =>
         {
             var w = NewWizard();
             Assert.Equal(Visibility.Visible, Find<Grid>(w, "Step1").Visibility);
             Assert.Equal(Visibility.Collapsed, Find<Grid>(w, "Step2").Visibility);
-            Assert.Equal(Visibility.Collapsed, Find<Grid>(w, "Step3").Visibility);
-
-            // Back is meaningless on the first step and must not be offered.
-            Assert.Equal(Visibility.Collapsed, Find<Button>(w, "BtnBack").Visibility);
         });
+    }
+
+    [Fact]
+    public void TheDoorsStepIsGone()
+    {
+        // The seven-doors list and its "Take the tour" button left with the redesign: one tour,
+        // offered once, by EMI, from her chip. Re-adding either here is re-adding the second
+        // tutorial the owner complained about.
+        OnStaThread(() =>
+        {
+            var w = NewWizard();
+            Assert.Null(w.FindName("Step3"));
+            Assert.Null(w.FindName("DoorsHost"));
+        });
+
+        Assert.Null(typeof(FirstRunWizard).GetProperty("StartTourRequested"));
     }
 
     // =====================================================================================
@@ -134,15 +152,16 @@ public class FirstRunWizardRenderTests
     // =====================================================================================
 
     [Fact]
-    public void EveryTextBlockOnTheWelcomeStepCarriesRealCopy()
+    public void EveryTextBlockOnTheWizardCarriesRealCopy()
     {
         // Str()/StrF() fall back to their English draft, so an empty TextBlock here means the
         // assignment itself was lost, and a value equal to the key means the fallback broke.
         var names = new[]
         {
             "TxtWizardTitle", "TxtStepCounter", "TxtAppTitle", "TxtWelcomeHeading", "TxtWelcomeBody",
-            "TxtTipsTitle", "TxtTipHelp", "TxtTipHover", "TxtTipAssets", "TxtPerfTitle", "TxtPerfBody",
-            "TxtModHeading", "TxtModSub", "TxtModHint", "TxtTourHeading", "TxtTourOutro",
+            "TxtLanguageLabel", "TxtLanguageHint", "TxtFolderLabel", "TxtFolderHint",
+            "TxtAgeConfirm", "TxtCloseHint",
+            "TxtModHeading", "TxtModSub", "TxtModHint",
         };
 
         OnStaThread(() =>
@@ -154,6 +173,9 @@ public class FirstRunWizardRenderTests
                 Assert.False(string.IsNullOrWhiteSpace(text), $"{name} rendered empty");
                 Assert.DoesNotContain("fr8_", text, StringComparison.Ordinal);
             }
+
+            var link = Find<System.Windows.Documents.Run>(w, "RunContentPolicy").Text;
+            Assert.False(string.IsNullOrWhiteSpace(link), "the content policy link rendered empty");
         });
     }
 
@@ -162,22 +184,91 @@ public class FirstRunWizardRenderTests
     {
         // fr8_wizard_step_of is the one format string on the screen, and ko.json reorders its two
         // placeholders. A FormatException there is caught and would silently render the raw
-        // template — so assert the substituted numbers, not just non-emptiness.
+        // template - so assert the substituted numbers, not just non-emptiness.
         OnStaThread(() =>
         {
             var text = Find<TextBlock>(NewWizard(), "TxtStepCounter").Text;
             Assert.Contains("1", text, StringComparison.Ordinal);
-            Assert.Contains("3", text, StringComparison.Ordinal);
+            Assert.Contains("2", text, StringComparison.Ordinal);
             Assert.DoesNotContain("{0}", text, StringComparison.Ordinal);
         });
     }
 
     // =====================================================================================
-    //  step 2: the mod cards
+    //  step 1: the gate, the language row, the folder row
     // =====================================================================================
 
     [Fact]
-    public void TheModStepOffersEveryCatalogueEntryExactlyOnce()
+    public void EnterIsDeadUntilTheAgeBoxIsTicked()
+    {
+        // The whole point of the redesign's "one gate": this button IS the age check. If it ships
+        // enabled, a fresh install walks straight past a check nothing else performs any more.
+        OnStaThread(() =>
+        {
+            var w = NewWizard();
+            Realize(w);
+
+            var enter = Find<Button>(w, "BtnNext");
+            var box = Find<CheckBox>(w, "ChkAgeConfirm");
+
+            Assert.NotEqual(true, box.IsChecked);
+            Assert.False(enter.IsEnabled, "Enter was live before anyone confirmed their age");
+
+            box.IsChecked = true;
+            Assert.True(enter.IsEnabled, "ticking the 18+ box did not release Enter");
+
+            box.IsChecked = false;
+            Assert.False(enter.IsEnabled, "un-ticking the 18+ box left Enter live");
+        });
+    }
+
+    [Fact]
+    public void TheWelcomeStepOffersNoWayPastTheGateButEnter()
+    {
+        // No "Skip setup" on step 1: the only alternatives to accepting are closing the window
+        // (which shuts the app down) and the muted line that says so.
+        OnStaThread(() =>
+        {
+            var w = NewWizard();
+            Assert.Equal(Visibility.Collapsed, Find<Button>(w, "BtnSkip").Visibility);
+            Assert.Equal(Visibility.Visible, Find<TextBlock>(w, "TxtCloseHint").Visibility);
+        });
+    }
+
+    [Fact]
+    public void TheLanguageRowOffersEveryLanguageTheAppHas()
+    {
+        // Same list as the title-bar pill and Settings, from MainWindow.FillLanguageCombo. A row
+        // that lists its own subset is the drift this reuse exists to prevent.
+        OnStaThread(() =>
+        {
+            var combo = Find<ComboBox>(NewWizard(), "CmbWizardLanguage");
+            Assert.Equal(LocalizationManager.AvailableLanguages.Length, combo.Items.Count);
+
+            var tags = combo.Items.Cast<ComboBoxItem>().Select(i => i.Tag as string).ToList();
+            Assert.Equal(LocalizationManager.AvailableLanguages.Select(l => l.Code).ToList(), tags);
+
+            // Something must be selected, or the first SelectionChanged is a language switch to
+            // nothing.
+            Assert.True(combo.SelectedIndex >= 0, "the language row opened with no language selected");
+        });
+    }
+
+    [Fact]
+    public void TheContentPolicyLinkPointsAtTheOnePolicyUrl()
+    {
+        // The wizard links to the same constant the moderation warning opens. Two copies of this
+        // URL is one copy that gets left behind when the site moves.
+        Assert.Equal("https://app.cclabs.app/policies/prohibited-content",
+                     ContentPolicyWarningDialog.PolicyUrl);
+    }
+
+    // =====================================================================================
+    //  step 2: the flavour cards
+    // =====================================================================================
+
+    [Fact]
+    public void TheFlavourStepOffersEveryCatalogueEntryExactlyOnce()
     {
         OnStaThread(() =>
         {
@@ -195,7 +286,7 @@ public class FirstRunWizardRenderTests
     public void ExactlyOneModCardIsSelectedOnArrival()
     {
         // Single-select is the whole contract of this step (the picker's multi-select download
-        // queue is a different screen). Zero selected means pressing Next commits nothing; two
+        // queue is a different screen). Zero selected means pressing Enter commits nothing; two
         // means CommitModChoice picks by accident.
         OnStaThread(() =>
         {
@@ -223,67 +314,27 @@ public class FirstRunWizardRenderTests
     }
 
     // =====================================================================================
-    //  step 3: the doors
+    //  the claim (pure - no WPF)
     // =====================================================================================
 
     [Fact]
-    public void TheDoorsStepListsAllSevenDoors()
-    {
-        // Seven rows, built in code from the Doors table. Six would mean a door the first-run user
-        // is never told exists.
-        OnStaThread(() =>
-        {
-            var host = Find<Panel>(NewWizard(), "DoorsHost");
-            Assert.Equal(7, host.Children.Count);
-        });
-    }
-
-    [Fact]
-    public void EveryDoorRowCarriesALabelAndABlurb()
-    {
-        OnStaThread(() =>
-        {
-            var w = NewWizard();
-            Realize(w);
-
-            var host = Find<Panel>(w, "DoorsHost");
-            foreach (var child in host.Children.OfType<FrameworkElement>())
-            {
-                var texts = Descendants(child).OfType<TextBlock>()
-                                              .Select(t => t.Text)
-                                              .Where(t => !string.IsNullOrWhiteSpace(t))
-                                              .ToList();
-                // glyph + label + blurb
-                Assert.True(texts.Count >= 3, "a door row is missing its label or blurb: " + string.Join(" | ", texts));
-                Assert.DoesNotContain(texts, t => t.Contains("fr8_", StringComparison.Ordinal)
-                                               || t.Contains("nav_door_", StringComparison.Ordinal));
-            }
-        });
-    }
-
-    private static System.Collections.Generic.IEnumerable<DependencyObject> Descendants(DependencyObject root)
-    {
-        int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
-        for (int i = 0; i < count; i++)
-        {
-            var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
-            yield return child;
-            foreach (var d in Descendants(child)) yield return d;
-        }
-    }
-
-    // =====================================================================================
-    //  the gate (pure — no WPF)
-    // =====================================================================================
-
-    [Fact]
-    public void TheGateIsSilentWhenThereAreNoSettingsToRead()
+    public void TheClaimIsSilentWhenThereAreNoSettingsToRead()
     {
         // App.Settings is null in the test host, which is the same shape as the "settings failed to
-        // load" case on a real box. The gate must answer "no first run" rather than throw: it is
+        // load" case on a real box. The claim must answer "no first run" rather than throw: it is
         // called from MainWindow's constructor, where an exception is a failed launch.
         Assert.False(FirstRunWizard.ShouldRunAndClaim());
         FirstRunWizard.HandBackFirstRun("unit test");   // must not throw either
+    }
+
+    [Fact]
+    public void AppStartupCanTellWhoseLaunchThisIs()
+    {
+        // App.OnStartup's age MessageBox reads this to stay off a fresh install's screen: by the
+        // time it runs, ShouldRunAndClaim has already set Welcomed = true for this same launch, so
+        // the flag alone cannot tell the two populations apart.
+        Assert.NotNull(typeof(FirstRunWizard).GetProperty("FirstRunClaimedThisLaunch",
+            BindingFlags.Public | BindingFlags.Static));
     }
 
     [Fact]

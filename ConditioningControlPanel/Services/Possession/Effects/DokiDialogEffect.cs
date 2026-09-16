@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services.Possession.Effects;
 
@@ -20,12 +21,25 @@ namespace ConditioningControlPanel.Services.Possession.Effects;
 /// </summary>
 public sealed class DokiDialogEffect : PossessionEffectBase
 {
+    // The persona title is only in the pool while that persona's mod is actually on; everyone else
+    // gets the neutral pair, so a fresh install never fake-crashes as "bambi.exe".
     private static readonly string[] _titles =
+    {
+        "the panel has stopped pretending",
+        "lockdown is not responding to you",
+    };
+
+    private static readonly string[] _bambiTitles =
     {
         "bambi.exe has stopped pretending",
         "the panel has stopped pretending",
         "lockdown is not responding to you",
     };
+
+    private static string[] TitlePool =>
+        string.Equals(RewritePools.ActiveModId, BuiltInMods.BambiSleepId, StringComparison.OrdinalIgnoreCase)
+            ? _bambiTitles
+            : _titles;
 
     private const double BarMs = 2200;
     private const double BarWidth = 260;
@@ -135,10 +149,11 @@ public sealed class DokiDialogEffect : PossessionEffectBase
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
         // Crimson caption strip: obviously OURS, and obviously not desktop chrome.
+        var titles = TitlePool;
         var caption = new Border { Background = crimsonBrush, Padding = new Thickness(10, 5, 10, 5) };
         caption.Child = new TextBlock
         {
-            Text = _titles[Rng.Next(_titles.Length)],
+            Text = titles[Rng.Next(titles.Length)],
             Foreground = Brushes.White,
             FontSize = 12.5,
             FontWeight = FontWeights.SemiBold

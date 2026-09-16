@@ -1,15 +1,42 @@
 # Ask EMI - Wave 1 ("the knock") build contract
 
-> Owner-acked 2026-08-30. This file is the ONLY coordination point between the build lane and the
+> Owner-acked 2026-08-30. Amended by the first-run redesign, Sep 2026 (lane B): the knock now makes
+> the offer directly. This file is the ONLY coordination point between the build lane and the
 > writing lane. Ids here are load-bearing: a pool id that does not match a moment id is a silent
 > mute, not an error. Nobody renames anything in here without changing both lanes.
 
 ## What Wave 1 is
 
-1. The EMI dock chip knocks **once, ever** on a settled first launch.
-2. Clicking it summons her; she introduces herself and makes **one offer**.
-3. Saying yes runs **the short walk**: 7 spotlit steps, EMI narrating each one.
+1. On a settled first launch the EMI dock chip pulses **and she is summoned in the same beat**,
+   `why: "knock"`. **Once, ever.** No click is needed and none is waited for.
+2. She opens with `firstContact`, whose **ask is the offer**: a two-chip question that introduces
+   her and ends on the walk.
+3. Saying yes runs **the short walk**: 7 spotlit steps, EMI narrating each one. Saying no, or
+   sending her away with the ask still up, is a **no** - and it is the last word, because the one
+   offer was already spent when she appeared.
 4. Tour completion **persists** for the first time (`TutorialService` currently remembers nothing).
+
+### What the redesign changed, and why
+
+The knock used to be **only** three pink pulses on a 40 px ring, with the offer reachable solely if
+the user read those six seconds as an invitation and clicked. Almost nobody did, and the offer was
+counted at the flash regardless - so the app's only tour was routinely spent on a light nobody knew
+was a button. A shrug therefore bought one softer re-offer (`firstContactLater`) on a later launch
+to make up for it.
+
+Now she asks out loud the first time, so there is nothing to make up for:
+
+- `OfferCap` is **1**, not 2.
+- `firstContactLater` and `EmiKnockMachine.LaterMoment` are **deleted**, moment and pool.
+- `Population` returns `None` for **upgraders**. Their launch already carries What's New, which is
+  where the upgrade tour is offered from; a companion appearing on top of that to offer a second
+  tour is the pile-up the redesign exists to end. `firstContactUpgrade`, `TourFor(Upgrader)` and
+  `EffectFor(Upgrader)` all survive as ids for that surface to fire.
+- The **pulses stay**, and they are no longer a request for a click. They point at the ring she
+  stepped out of, which is the one control a first-run user has to be able to find again after they
+  send her away. `EmiDock.Refresh` therefore no longer stops them when she comes out - that rule
+  would kill the animation in the frame it started, since `OutChanged` now fires from inside the
+  knock's own summon. A click on the chip still cuts them short, and still toggles her away.
 
 Wave 1 does NOT include the codex. There is no book to open yet, so the offer is two chips, not
 three (see "The two-chip law" below).
@@ -26,9 +53,8 @@ The pitch's third chip ("give me the book") arrives in Wave 2 with the book itse
 
 | id | what fires it | shape |
 |----|---------------|-------|
-| `firstContact` | she is summoned by the knock, fresh install, walk not yet taken | pool + ask |
-| `firstContactUpgrade` | same, but `LastSeenVersion` is non-empty and older | pool + ask |
-| `firstContactLater` | they said no; also the single next-launch re-offer | pool |
+| `firstContact` | the knock summons her, fresh install, walk not yet taken | pool + ask |
+| `firstContactUpgrade` | an upgrader is offered their tour. NOT by the knock any more; the id is kept for What's New / the Welcome-back sheet | pool + ask |
 | `tourStarted` | any tour begins while she is available | pool |
 | `tourFinished` | a tour reaches its last step | pool |
 | `tourSkipped` | a tour is abandoned part way | pool |
@@ -48,8 +74,18 @@ The pitch's third chip ("give me the book") arrives in Wave 2 with the book itse
 | `ask.firstContact.*` | `firstContact` | e.g. `["show me","later"]` | `tour:shortwalk` |
 | `ask.firstContactUpgrade.*` | `firstContactUpgrade` | e.g. `["show me","nah"]` | `tour:upgrade` |
 
-`no` replies live inside the ask (`"no": {...}`) as usual; the `firstContactLater` pool is what she
-says on the NEXT launch, not the immediate no-reply.
+`no` replies live inside the ask (`"no": {...}`) as usual, and that reply is the END of it: there is
+no next-launch beat behind them any more.
+
+**The ask carries the whole of first contact.** `EmiLineEngine` returns the ask INSTEAD of the pool
+line, never as well as it (`PickAsk` hits, `_pendingAsk` is set, the draw returns null). She now
+arrives unbidden, so there is no greeting in front of the question either - which means each
+`ask.firstContact.*` `q` has to introduce her AND land on the walk, in one line under 60 characters.
+The `firstContact` **pool** is the fallback the engine falls through to when `PickAsk` comes back
+empty, and on this moment that means the walk is not feasible at all (already taken, a session
+running, a tutorial up). Pool lines therefore introduce her and stop; a line there that ends on
+"shall we?" is an offer with no chips underneath it. Both halves are pinned by
+`EmiKnockLinesFileTests`.
 
 ### Short walk step ids (`TutorialService`)
 
@@ -71,19 +107,20 @@ as done.
 |------|------|---------|
 | `knockState` | int | 0 never knocked, 1 knocked, 2 answered/spent |
 | `knockAtUtc` | long | when the knock fired (ticks); 0 = never |
-| `knockOffers` | int | offers made; hard cap 2 (the knock, plus one re-offer next launch) |
+| `knockOffers` | int | offers made; hard cap **1**. A ledger carrying 2 from before the redesign reads as over, which is correct - they were asked twice |
 | `toursDone` | List&lt;string&gt; | `TutorialType` names completed end to end |
 
 ## The four brakes (copied from `EmiNudgeMachine`, deliberately)
 
 The knock is onboarding, not nagging. Any one of these ends it forever:
-1. `knockState == 2` - they said YES. A **no** does not latch state 2; it spends one offer
-   and leaves the state at Knocked, which is what makes brake 2's single re-offer reachable
-   at all. (As first written, brakes 1 and 2 contradicted each other: if any answer latched
-   2, the second offer could never happen. This is the reading both lanes implement.)
-2. `knockOffers >= 2` - the knock plus one quieter re-offer, and never again. The offer is
-   counted **at the flash, not at the click**; counting on click lets somebody who never
-   touches the chip re-trigger the knock every launch forever.
+1. `knockState == 2` - they said YES. A **no** still does not latch state 2, and no longer needs
+   to: brake 2 was already spent when she appeared. The latch earns its keep by surviving a QA
+   counter reset, so replaying the knock cannot put the same question to somebody who took the
+   walk. (The two brakes used to contradict each other under a cap of 2; at a cap of 1 they
+   simply agree.)
+2. `knockOffers >= 1` - she comes out, she asks, and that was the feature. The offer is counted
+   **at the knock, not at the answer**; counting on the answer lets somebody who closes the app
+   mid-bubble re-trigger her every launch forever.
 3. `limit: {per:"ever", max:1}` - which lives on the **moment definition**, not on the ask.
    No shipped ask carries a `limit` key; the engine reads it off the moment.
 4. `toursDone` contains the tour she would offer. An unreadable ledger answers **no** (see
@@ -98,13 +135,19 @@ disabled in settings, or she is already out. Fires at `DispatcherPriority.Normal
 `IsLoaded` check - **never `Loaded` priority**, which is what starved the original app tour into
 never running at all.
 
+**The startup quiet window is deliberately NOT a gate.** Every other first-run surface is held or
+sent to the Inbox for the first ten minutes; this one offer is the single thing allowed through,
+because it *is* the onboarding the quiet window is protecting. It arrives non-modally, in a bubble,
+from a companion one click sends away. Gating it on quiet would push the app's only tour offer past
+the point where anyone is still wondering what the app does.
+
 ## Branching
 
 | population | detected by | offer |
 |-----------|-------------|-------|
-| fresh install, skipped the wizard's tour | `LastSeenVersion` empty | `firstContact` -> short walk |
-| fresh install, already took the walk | `toursDone` has `ShortWalk` | no ask; greeting only |
-| upgrader | `LastSeenVersion` non-empty AND older | `firstContactUpgrade` -> `UpgradeTour` |
+| fresh install, skipped the wizard's tour | `LastSeenVersion` empty | `Fresh`: `firstContact` -> short walk |
+| fresh install, already took the walk | `toursDone` has `ShortWalk` | `Walked`: no ask; greeting only |
+| anyone with a version stamp, older or not | `LastSeenVersion` non-empty | `None`: the knock offers nothing. Upgraders get their tour from What's New / the Welcome-back sheet |
 
 Never gate on a bare seen-flag: that is the bug that showed every fresh install a migration notice
 for a move it never witnessed.

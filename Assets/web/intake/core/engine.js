@@ -360,7 +360,7 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
   const usableBank = (bank && Array.isArray(bank.prompts) && bank.prompts.length) ? bank : null;
   const niche = NICHES.includes(cfg.niche) ? cfg.niche
     : (usableBank && NICHES.includes(usableBank.niche)) ? usableBank.niche
-    : Niche.Bambi;
+    : Niche.Default;
 
   const activeBank = usableBank || placeholderBank(niche);
   const theme = themeOf(activeBank);          // resolved fiction voice (interviewer asides)

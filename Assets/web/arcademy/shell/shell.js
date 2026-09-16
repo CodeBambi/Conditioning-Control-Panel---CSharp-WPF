@@ -99,7 +99,7 @@ import { installPaCaption } from './pacaption.js';
  * the `music` bus through the same door the beds use. The shell tells it where
  * the player is (campus, records, a class) and clearScreen tells it they left. */
 import { createOst } from './ost.js';
-import { createIdSpotlight, idReducedMotion } from './idcard.js';
+import { createIdSpotlight, idReducedMotion, studentNumber } from './idcard.js';
 import { createAccountChip, readAccount } from './accountchip.js';
 import { createAnnexReveal } from './annexreveal.js';
 /* THE SEEP - the foreshadowing layer. ONE director, and the shell's whole
@@ -124,6 +124,9 @@ import { initMail, triggerHolds } from './mail.js';
 import { openMailbox, closeMailbox, isMailboxOpen } from './mailbox.js';
 import { initCorkboard, openCorkboard, currentCorkboard } from './corkboard.js';
 import { initBugle, openBugle, currentBugle } from './bugle.js';
+/* THE TIME CAPSULE: the trophy case in the entrance hall. An overlay, never a
+ * screen - the campus offers the press, the shell mints the case. */
+import { openCapsule, currentCapsule, capsuleDoor, CAPSULE_NIGHTS } from './capsule.js';
 import { loadFaceGeometry, ENROLL_PUNCHES } from './punchcard.js';
 /* EMI, the mascot. Two of B's own modules: `mountEmi` builds the floating widget
  * (which dynamic-imports agent A's renderer optionally, so a broken face costs
@@ -565,6 +568,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         && html.getAttribute('data-ae-touch-global') === '1');
     } catch (e) { return false; }
   };
+
+  /* THE PA IS EXEMPT FROM THE DEVICE HALF, and it is the one twin that has to
+   * be. `shellLite` is a GPU dial: every other thing it gates (rooms breath,
+   * alley bloom, counter lamps, scene dust, particles) is something the phone
+   * pays for in frames. A spoken line costs no frames - for pa.js "lite" is not
+   * a diet, it is a MUTE (its law 3, and `arm()` returns before the timer is
+   * even set). So when the device half started firing on phones the announcer
+   * went silent on every phone in the school, which is not what that wave was
+   * buying. `performanceMode` stays honoured: a player who explicitly asked for
+   * the stripped-down school still gets a quiet one. */
+  const paLite = () => !!src.performanceMode;
 
   /* ---------------------- look & lexicon -------------------------------- */
   setLexicon(src.lexicon);
@@ -1016,6 +1030,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   let roomPage = null;
   /** The one in-flight annex stats request ({promise, resolve, timer}|null). */
   let annexStatsWait = null;
+  let shareImageWait = null;
   /* THE PUNCH-CARD CEREMONY. `punchStage` is the live overlay; `punchArm` is
    * what the shell is WAITING for while the host answers `class-ended`.
    * Both are null the rest of the time. */
@@ -1241,6 +1256,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           try { if (isMailboxOpen()) return true; } catch (e) { /* noop */ }
           try { const c = currentCorkboard(); if (c && !c.closed) return true; } catch (e) { /* noop */ }
           try { const b = currentBugle(); if (b && !b.closed) return true; } catch (e) { /* noop */ }
+          try { const cp = currentCapsule(); if (cp && !cp.closed) return true; } catch (e) { /* noop */ }
           /* A door card is a modal over the plan; a slip behind it is a slip
            * nobody sees. `seepSeam().cardIsOpen()` is a READ - `closeCard()`
            * would have closed it. */
@@ -1290,6 +1306,24 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   } : null;
   reportCard = createReportCard({
     ceremonies, seep, toast: shout, log: say, onCounter: counterFromReport,
+    /* THE SLIP's two seams. `identity` is only ever CALLED when the player has
+     * ticked the box - the card is anonymous by default and the report card
+     * never reads a name it was not asked for - and `shareNamed` is where that
+     * tick lives. It is a page-owned meta key (it is not in HOST_OWNED_KEYS),
+     * so store.set write-throughs are legal and the tick survives the night. */
+    identity: () => {
+      const p = idProfile();
+      const num = studentNumber(p.selfId, p.enrolled, p.name);
+      return { name: p.name, number: num && num.no };
+    },
+    shareNamed: {
+      get: () => store.get('shareNamed', false) === true,
+      set: (v) => store.set('shareNamed', v === true),
+    },
+    /* The app only. On the web `src.mediaControls` is true and there is no
+     * host behind the bridge to ask, so that rung of the ladder is absent
+     * rather than present-and-broken. */
+    shareToHost: src.mediaControls === true ? null : shareImageToHost,
   });
 
   /* ---------------------- helpers --------------------------------------- */
@@ -1766,6 +1800,53 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     };
   }
 
+  /* ------------------------- THE TIME CAPSULE ---------------------------
+   * THE DOOR IS MONOTONIC: the case opens at a streak of CAPSULE_NIGHTS and
+   * never closes again. `streak` is HOST-OWNED and is a CURRENT count, so it
+   * cannot answer "has this player EVER reached thirty" - the high-water mark
+   * is banked here in ONE page-owned meta blob, `capsule = {opened, best}`.
+   *
+   * A PAGE KEY AND NOT A SYNCED ONE, by necessity: the synced-state whitelist
+   * lives in the web shim, which is not in this repo, and no synced field
+   * means "best streak ever" - `perfectAttendance` counts perfect NIGHTS, a
+   * different rule that would open the case for a player who never held a
+   * streak. So the mark rides ArcademyMetaStore on the desktop (new top-level
+   * keys are accepted; only host-owned ones are refused) and localStorage on
+   * the web, and the worst case is a player who crosses thirty on one device
+   * seeing the parcel on another until their streak is read there once.
+   *
+   * The ARITHMETIC is capsule.js's pure `capsuleDoor`; bankCapsule is only the
+   * read and the conditional write, run on every campus mount - the one moment
+   * a night's streak is certainly known.
+   * ------------------------------------------------------------------- */
+  function bankCapsule() {
+    try {
+      const d = capsuleDoor(store.get('capsule'), store.streak().count | 0, CAPSULE_NIGHTS);
+      if (d.changed) store.set('capsule', { opened: d.opened, best: d.best });
+      return d;
+    } catch (e) {
+      say('capsule bank failed: ' + ((e && e.message) || e));
+      return { opened: false, best: 0, changed: false };
+    }
+  }
+
+  /** Nights on the tag: what the case has seen, against what it asks for. */
+  function capsuleNights() { return { have: bankCapsule().best, need: CAPSULE_NIGHTS }; }
+
+  function capsuleSealed() { return !bankCapsule().opened; }
+
+  /** Open the case. One at a time, the post overlays' own re-entry guard. */
+  function openCapsuleOverlay() {
+    const up = currentCapsule();
+    if (up && !up.closed) return;
+    const n = capsuleNights();
+    openCapsule({
+      t, sealed: capsuleSealed(), have: n.have, need: n.need,
+      reducedMotion, onClose: refreshCampusPost, log: say,
+    });
+    fireMoment('campus.trophyOpened', { inClass: false });      // EMI SEAM
+  }
+
   /** Descriptor detail the campus door card shows (family, budget, tier). */
   function campusDescriptors() {
     return timetable.classes.map((c) => ({
@@ -1871,7 +1952,21 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // overlay that outlived its screen would be a second, invisible Esc rung).
     dismissEndCard();
     dismissPunchStage();
-    dismissAnnexStage();
+    /* A SILENT REPAINT IS NOT A SCREEN CHANGE, AND IT MUST NOT TOUCH THE ANNEX.
+     * This line used to be unconditional, and it is why the Records Annex never
+     * opened for a save that sealed the school before the reveal wave shipped:
+     *   - the catch-up probe below arms for 5600ms on arrival at the campus;
+     *   - the host echoes a `meta` frame after EVERY page write and pushes a
+     *     whole-blob snapshot on the launch mirror pull (ArcademyHostService
+     *     OnMirrorCardsChanged), each of which lands here as showBoard({silent});
+     *   - the old call cleared `annexProbe` on the way past and then the fast
+     *     repaint RETURNED below, before the re-arm could run.
+     * One network round trip inside 5.6s of the board painting was enough to
+     * make the reveal unreachable for the rest of the session - and, since the
+     * flag stamps at mount, unreachable forever. The stage itself is an overlay
+     * on `document.body`: a board being patched underneath it is no reason to
+     * tear a cinematic down either. Every non-silent path still dismisses. */
+    if (!silent) dismissAnnexStage();
 
     // FAST REPAINT: a live campus is patched, never rebuilt - tearing the stage
     // down on every meta echo would restart every ambient animation mid-frame.
@@ -2019,6 +2114,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * school: the catch below renders the plain panel the shell shipped with
      * (full chip rows, same buttons), which is also what the headless suites
      * drive when the stage cannot build. */
+    /* THE CAPSULE'S HIGH-WATER MARK, banked before the plan is drawn: the
+     * case about to be drawn reads the latch a line later. */
+    bankCapsule();
     try {
       campus = createCampus({
         state: buildCampusState(),
@@ -2069,6 +2167,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         annex: (annexPeek || (store.get('annexRevealSeen') && (store.get('annex') || {}).visited))
           ? { open: () => walkThen('annex', () => showAnnex()) }
           : null,
+        /* THE TROPHY CASE. Same bag contract as `post` and `annex`: the campus
+         * draws the door and the tooltip, the shell keeps the state and mints
+         * the overlay. Handed unconditionally - the case is always pressable,
+         * and what is BEHIND the glass is the thing that changes. */
+        capsule: { open: openCapsuleOverlay, sealed: capsuleSealed },
         /* THE ECONOMY, handed down rather than read. campus.js is under the
          * header law (it imports no store and no bridge), so the wallet chip in
          * its top-right cluster and the Extra Credit lever on its door card
@@ -2913,12 +3016,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   }
 
   /** How many of a consumable may be held at once. Display only - the host is
-   *  the one that refuses the third late slip, with reason "full". */
+   *  the one that refuses an over-full stack, with reason "full". The fallback
+   *  is the Tardy Slip's own ceiling, because it is the only consumable on the
+   *  shelf and a row that reached here without a `max` is a host that predates
+   *  the field. */
   function stackMaxFor(sku) {
     const row = catalogRow(sku);
     if (!row || row.kind !== 'consumable') return 0;
     const n = Number(row.max);
-    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 3;
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 2;
   }
 
   /** Tonight's hot room, or null. Seeded per UTC day in C#; the page displays. */
@@ -3218,7 +3324,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       owned: () => ownsSku('pa_pack'),
       t,
       log: say,
-      lite: () => shellLite(),
+      lite: paLite,
       reduced: () => reducedMotion,
       inClass: () => !!active,
       /* THE DUCK CAP. pa.js scales LINE_DUCK by this exactly the way
@@ -3242,6 +3348,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     paCaption = installPaCaption({
       t,
       log: say,
+      /* NOT `paLite`: for the caption, lite is a genuine diet and not a mute -
+       * it only adds `is-still` (pacaption.js liteNow), so the words still
+       * appear, they just do not animate. That is exactly what the perf wave
+       * wanted on a phone, and the line is legible either way. Only pa.js
+       * needed the exemption, because there lite stops the cue at the source. */
       lite: () => shellLite(),
       reduced: () => reducedMotion,
       /* SHE STEPS ASIDE WHILE THE SCHOOL TALKS. campusDoorRects() already hands
@@ -3454,8 +3565,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
        * facts the shelf already reads, and not one of them is a proposal.
        *
        * NO `onUse`. Nothing on this shelf can be spent by hand: the one
-       * consumable, `late_slip`, is burned by the HOST inside the attendance
-       * credit (ArcademyEconomy.ConsumeLateSlip), so there is no press to wire
+       * consumable, `late_slip` (THE TARDY SLIP), is burned by the HOST inside
+       * the attendance credit (ArcademyEconomy.ConsumeLateSlips), so there is no
+       * press to wire
        * and the tray says so in words instead of growing a button that lies. */
       balance: () => walletBalance(),
       payday: () => economyPayday(),
@@ -4171,6 +4283,30 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     return w.promise;
   }
 
+  /* THE SHARE CARD'S LAST RUNG BEFORE THE FLOOR. WebView2 has no async
+   * clipboard image write the page can use, so the desktop app carries the PNG
+   * over the bridge and C# puts it on the Windows clipboard itself. Same shape
+   * as the registry link above: one request in flight, a deadline, and every
+   * failure resolves FALSE rather than hanging a button forever. A web build
+   * never gets here - reportcard.js is handed this only on the app. */
+  function shareImageToHost(png) {
+    if (typeof png !== 'string' || !png) return Promise.resolve(false);
+    if (shareImageWait) return Promise.resolve(false);
+    const w = {};
+    w.promise = new Promise((resolve) => {
+      w.resolve = resolve;
+      w.timer = setTimeout(() => { shareImageWait = null; resolve(false); }, 8000);
+    });
+    shareImageWait = w;
+    try { bridge.send({ type: 'share-image', png }); }
+    catch (e) {
+      clearTimeout(w.timer);
+      shareImageWait = null;
+      return Promise.resolve(false);
+    }
+    return w.promise;
+  }
+
   /* ============================ THE PUNCH CARD ==========================
    * PUNCHCARD §4. The ceremony is the ONLY place the page draws a hole, and it
    * draws the one the HOST minted: `punchcard-result` carries the post-mint
@@ -4398,7 +4534,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    *   - the numbers are unknown    -> say NOTHING (never invent jeopardy)
    * @returns {?string}
    */
-  function jeopardyLine() {
+  function streakFacts() {
     let s;
     try { s = store.streak(); } catch (e) { return null; }
     if (!s) return null;
@@ -4409,10 +4545,77 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     if (!Number.isFinite(n) || n <= 0) return null;
     const credited = (s.lastLocalDate && String(s.lastLocalDate) === localDate)
       || (s.classesToday | 0) > 0;
-    const tpl = credited
-      ? t('rake_streak_credited', 'Attendance x{n} is banked for today already.')
+    return { n, credited };
+  }
+
+  function jeopardyLine() {
+    const f = streakFacts();
+    if (!f) return null;
+    const tpl = f.credited
+      ? t('rake_streak_credited', 'Attendance x{n} is earned for today already.')
       : t('rake_streak_cold', 'Attendance x{n} goes cold if today ends here.');
-    return String(tpl).replace('{n}', String(n));
+    return String(tpl).replace('{n}', String(f.n));
+  }
+
+  /* ---------------- THE TARDY SLIP, OFFERED ONCE AND QUIETLY -------------
+   * House Book Deck V: the loss is disguised as a purchase. The jeopardy line
+   * above is the LOSS; this is the purchase, and it is ONE SMALL BUTTON that
+   * WALKS TO THE COUNTER. It never buys anything (the counter's echo law is
+   * the only thing that may move a wallet, trap 1), it never appears when a
+   * slip is already in the bag - the cover is bought, and saying so a second
+   * time is the nag Law VI forbids - never on a night the streak is already
+   * banked, never when the shutter is down, and never when the shelf does not
+   * stock the row at all. The line above it reads exactly the same whether the
+   * button is there or not, so nothing about the jeopardy changes to sell.
+   * -------------------------------------------------------------------- */
+
+  /** The wire id of the Tardy Slip. It is `late_slip` and it always will be:
+   *  the sku is a KEY (held inventory, the server catalog, EMI's bark pool),
+   *  and only the words on the shelf were ever rebranded. */
+  const SKU_TARDY_SLIP = 'late_slip';
+
+  /** How many slips are in the bag. A COUNT - the desk holds two. */
+  function slipsHeld() {
+    try {
+      const row = walletInv()[SKU_TARDY_SLIP];
+      const n = row && typeof row === 'object' ? Number(row.n) : 0;
+      return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+    } catch (e) { return 0; }
+  }
+
+  /** Does the offer stand right now? Five facts, and every one of them is the
+   *  host's own - the page invents no jeopardy and no stock. */
+  function slipOfferWanted() {
+    if (slipsHeld() > 0) return false;                  // already covered
+    if (counterClosed()) return false;                  // the shutter answers first
+    if (!catalogRow(SKU_TARDY_SLIP)) return false;      // the shelf does not stock it
+    const f = streakFacts();
+    return !!f && !f.credited;                          // only a COLD streak is jeopardy
+  }
+
+  /** OUT OF THE CLASS AND INTO RM 003. `teardownClass()` first because the
+   *  counter's own screen does not tear a live class down - only showBoard()
+   *  does - and a class left standing behind the shelf would keep its clock,
+   *  its listeners and its cameo. Then the booth, WITH its walk: the player
+   *  did cross the quad to get here, even if the quad never painted. */
+  function walkToCounter() {
+    say('tardy slip offer taken - walking to the counter');
+    try { teardownClass(); } catch (e) { /* noop */ }
+    showPrizeBooth({});
+  }
+
+  /** The one small button, or null when the offer does not stand. Mounting it
+   *  is the caller's business; it is never a second answer to the question the
+   *  card is asking, and it never holds focus. */
+  function slipOfferButton() {
+    if (!slipOfferWanted()) return null;
+    const name = t('prize_late_slip', 'Tardy Slip');
+    const label = String(t('rake_slip_offer', 'The counter sells a {name}.'))
+      .replace('{name}', name);
+    const b = el('button', 'btn ghost arc-slip-offer', label);
+    b.type = 'button';
+    b.addEventListener('click', () => walkToCounter());
+    return b;
   }
 
   /** Say the jeopardy on the way out. Never blocks, never delays, never asks. */
@@ -4813,6 +5016,8 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // What leaving actually costs, in the HOST's own attendance numbers.
       // Unknown numbers print nothing at all - never invent jeopardy.
       note: jeopardyLine(),
+      // ...and the counter's one small offer under it. Null nine nights in ten.
+      noteAction: slipOfferButton(),
       onConfirm: () => {
         // No toast on the way out: the card's own note has already said what
         // this costs, and saying it twice reads as a scold.
@@ -5973,6 +6178,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         const jeopardy = jeopardyLine();
         if (jeopardy) {
           overlay.appendChild(el('p', 'arc-note arc-jeopardy', jeopardy));
+          /* ...and the ONE small button under it, when the streak is cold and
+           * the bag is empty. Under the line, below Resume/Options/Leave, so
+           * it can never be mistaken for the answer to "paused". */
+          const offer = slipOfferButton();
+          if (offer) overlay.appendChild(offer);
         }
         overlay.appendChild(el('p', 'arc-note', 'Hold Esc to leave the Arcademy.'));
         active.root.appendChild(overlay);
@@ -6401,6 +6611,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       w.resolve(m && m.body && typeof m.body === 'object' ? m.body : null);
     },
 
+    /** {type:'share-image-result'} - the host either put the PNG on the
+     *  Windows clipboard or it did not. Resolves the one pending request;
+     *  an unsolicited frame is dropped on the floor. */
+    onShareImageResult(m) {
+      const w = shareImageWait;
+      if (!w) return;
+      shareImageWait = null;
+      try { clearTimeout(w.timer); } catch (e) { /* noop */ }
+      w.resolve(!!(m && m.ok));
+    },
+
     /** {type:'setting'} post-clamp echo. THE only path that moves a setting. */
     onSetting(m) {
       if (!m || typeof m.key !== 'string') return;
@@ -6519,11 +6740,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           };
         }
       }
-      /* THE LATE SLIP. The host consumed one inside the attendance path, which
-       * is the one purchase a player never sees happen - so it is the one that
-       * has to be said out loud. */
+      /* THE TARDY SLIP. The host consumed one (or two) inside the attendance
+       * path, which is the one purchase a player never sees happen - so it is
+       * the one that has to be said out loud. */
       if (m.lateSlipUsed === true) {
-        try { shout(t('late_slip_used', 'A late slip covered you. Your streak never noticed.')); }
+        try { shout(t('late_slip_used', 'A tardy slip was handed in for you. Your streak never noticed.')); }
         catch (e) { /* a toast may never hold a door */ }
       }
       if (m.levelUp) shout('Level up');
@@ -6715,6 +6936,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       }
       {
         const up = currentBugle();
+        if (up && !up.closed) { try { up.close(); } catch (e) { /* noop */ } return true; }
+      }
+      /* THE TROPHY CASE is the fourth of that set and takes the same rung: a
+       * campus-chrome overlay at z 38, opened one press ago, and it binds no
+       * key of its own (trap 29 - the ladder owns Escape). */
+      {
+        const up = currentCapsule();
         if (up && !up.closed) { try { up.close(); } catch (e) { /* noop */ } return true; }
       }
       if (active && active.confirmEl) { dismissConfirm(); return true; }

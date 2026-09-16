@@ -140,10 +140,13 @@ public partial class EmiDock : UserControl
     {
         try
         {
-            // ANY route out - the chip, the chord, the tray, an automated summon - answers the
-            // knock, so the pulses stop here and not only in the click handler below.
-            if (isOut) StopKnock();
-
+            // THE PULSES SURVIVE HER ARRIVAL (first-run redesign, Sep 2026). This used to stop the
+            // knock on any route out, because back then the knock WAS the request to come out and
+            // her standing there meant it had been answered. Now TryKnock summons her itself, and
+            // that rule would kill the pulse in the frame it started: OutChanged fires from inside
+            // the very summon the knock just made. The six seconds are the point now - they say
+            // WHERE she came from, so the ring can be found again after she is sent away. They run
+            // out on their own, and a click on the chip still cuts them short.
             var face = App.EmiDesk?.Window?.Face;
             if (isOut && face != null)
             {
@@ -179,6 +182,13 @@ public partial class EmiDock : UserControl
         });
     }
 
+    /// <summary>
+    /// The chip is a TOGGLE, and it stays one during the knock. She now arrives unasked, so the
+    /// most likely click in those six seconds is somebody reaching for the thing that just
+    /// appeared - and <see cref="EmiDeskService.Toggle"/> reads that correctly as "put her away".
+    /// The pulses stop here whatever the toggle decides: the ring has been found, which is all they
+    /// were ever for.
+    /// </summary>
     private void OnChipClick(object sender, RoutedEventArgs e)
     {
         try

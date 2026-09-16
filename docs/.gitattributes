@@ -1,0 +1,4 @@
+# GitHub Pages cannot serve Git LFS pointers, so media published under docs/
+# is committed as plain blobs. This opts docs/ out of the repo-wide LFS rules.
+*.mp4 -filter -diff -merge
+*.mov -filter -diff -merge

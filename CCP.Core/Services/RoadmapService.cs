@@ -379,7 +379,7 @@ public class RoadmapService : IDisposable
             Save();
         }
 
-        Log.Information("RoadmapService disposed");
+        Log.Debug("RoadmapService disposed");
     }
 
     #endregion

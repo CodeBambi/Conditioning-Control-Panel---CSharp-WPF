@@ -253,10 +253,10 @@ public class LockdownEmergencyExitTests
 
     // ---- consent copy ----------------------------------------------------------
 
+    // One dialog since 2026-09-11: the dashboard rail's Lock In card went with the premium rail.
     [Theory]
     [InlineData("MainWindow.Lab.cs")]
-    [InlineData("MainWindow.PremiumRail.cs")]
-    public void BothConsentDialogs_SayTheEmergencyExitCanRestartTheTimer(string file)
+    public void TheConsentDialog_SaysTheEmergencyExitCanRestartTheTimer(string file)
     {
         var src = SourceRoots.ReadProductFile("MainWindow", file);
         Assert.Contains("The Emergency Exit button is a gamble", src);

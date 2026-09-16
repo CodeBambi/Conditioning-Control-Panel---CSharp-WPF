@@ -200,6 +200,11 @@ export function wrapQuickPool(claimPool) {
       try { if (p && typeof p.ready === 'function') return p.ready(url, opts); } catch (e) { /* fall through */ }
       return Promise.resolve(true);
     },
+    /** The synchronous read (phone, 2026-09-11). A pool without the verb
+     *  answers false, which is "never reorder the deal" - the old behaviour. */
+    isReady(url) {
+      try { return !!(p && typeof p.isReady === 'function' && p.isReady(url)); } catch (e) { return false; }
+    },
     markBroken(url) {
       try { if (p && typeof p.markBroken === 'function') p.markBroken(url); } catch (e) { /* noop */ }
     },

@@ -1097,7 +1097,7 @@ namespace ConditioningControlPanel
         // ============================== feedback ===============================
 
         /// <summary>One rung of the rising ladder (faucet_charge_1..6.wav, generated
-        /// by Tools/asset_gen/gen_faucet_charge_sfx.py).</summary>
+        /// by tools/asset_gen/gen_faucet_charge_sfx.py).</summary>
         private static void PlayChargeRung(int index)
         {
             int rung = Math.Clamp(index, 0, ChargeRungs - 1) + 1;

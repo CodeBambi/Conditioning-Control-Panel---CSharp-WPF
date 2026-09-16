@@ -131,6 +131,34 @@ namespace ConditioningControlPanel.Models
     }
 
     /// <summary>
+    /// Flashes v2 (Back Room prizes): how a compositor flash moves while it is up. Still is the
+    /// base; DriftBounce and Pendulum are owned styles (Services/Prizes/PrizeGrants); Mix rolls
+    /// per flash among Still plus whatever is owned. Ownership is never read from settings: an
+    /// unowned pick (synced profile) plays as Still. See Services/Flash/FlashMotion.cs.
+    /// </summary>
+    public enum FlashMotionStyle
+    {
+        Still,
+        DriftBounce,
+        Pendulum,
+        Mix
+    }
+
+    /// <summary>
+    /// How the ambient dashboard bubbles travel (Back Room prize styles). FloatUp is the free
+    /// base; Rain and SpiralIn are owned styles; Mix rolls per bubble among FloatUp plus the
+    /// owned styles. Ownership is never read from here: an unowned pick behaves as FloatUp
+    /// (Services/AmbientBubbleMotion.Resolve), so a synced profile can carry any value safely.
+    /// </summary>
+    public enum BubbleMotionStyle
+    {
+        FloatUp,
+        Rain,
+        SpiralIn,
+        Mix
+    }
+
+    /// <summary>
     /// Application settings model - matches Python DEFAULT_SETTINGS
     /// </summary>
     public class AppSettings : INotifyPropertyChanged
@@ -451,11 +479,12 @@ namespace ConditioningControlPanel.Models
         /// <summary>
         /// Available skill points to spend on the enhancement tree.
         /// Earned per level-up (SkillTreeService.PointsPerLevel) and per 100 bubbles popped.
+        /// Clamped to [0, SparklePoints.Cap] so every write path shares the server's ceiling.
         /// </summary>
         public int SkillPoints
         {
             get => _skillPoints;
-            set { _skillPoints = Math.Max(0, value); OnPropertyChanged(); }
+            set { _skillPoints = SparklePoints.Clamp(value); OnPropertyChanged(); }
         }
 
         /// <summary>
@@ -871,6 +900,150 @@ namespace ConditioningControlPanel.Models
             set { _lastSeenUtc = value; OnPropertyChanged(); }
         }
 
+        // --- Session ledger: the companion's "I noticed" bark conditions --------------------
+        // Feeds sessions_7d / late_sessions_7d / sessions_today / same_mod_run in BarkService.
+        // Local settings only: never added to any server request, sync payload or telemetry.
+
+        private const int SessionLedgerCap = 60;
+
+        private List<DateTime> _recentSessionStartsUtc = new();
+        /// <summary>UTC start times of the most recent sessions (capped, oldest dropped).</summary>
+        public List<DateTime> RecentSessionStartsUtc
+        {
+            get => _recentSessionStartsUtc;
+            set { _recentSessionStartsUtc = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private string _lastSessionModId = "";
+        /// <summary>Mod id active when the most recent session started.</summary>
+        public string LastSessionModId
+        {
+            get => _lastSessionModId;
+            set { _lastSessionModId = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private int _sameModRun = 0;
+        /// <summary>How many consecutive sessions (including the latest) started under the same mod.</summary>
+        public int SameModRun
+        {
+            get => _sameModRun;
+            set { _sameModRun = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        /// <summary>Append one session start to the ledger and advance the same-mod run.</summary>
+        public void RecordSessionStart(string? modId)
+        {
+            var list = new List<DateTime>(_recentSessionStartsUtc) { DateTime.UtcNow };
+            if (list.Count > SessionLedgerCap) list.RemoveRange(0, list.Count - SessionLedgerCap);
+            RecentSessionStartsUtc = list;
+
+            var id = modId ?? "";
+            SameModRun = string.Equals(id, _lastSessionModId, StringComparison.OrdinalIgnoreCase) && _sameModRun > 0
+                ? _sameModRun + 1
+                : 1;
+            LastSessionModId = id;
+        }
+
+        /// <summary>Sessions started within the last <paramref name="days"/> days.</summary>
+        public int SessionsWithinDays(int days)
+        {
+            var since = DateTime.UtcNow.AddDays(-days);
+            int n = 0;
+            foreach (var t in _recentSessionStartsUtc) if (t >= since) n++;
+            return n;
+        }
+
+        /// <summary>
+        /// Sessions started within the last <paramref name="days"/> days whose LOCAL start hour was
+        /// 23:00 or later, or before 04:00 (the "can't sleep" window).
+        /// </summary>
+        public int LateSessionsWithinDays(int days)
+        {
+            var since = DateTime.UtcNow.AddDays(-days);
+            int n = 0;
+            foreach (var t in _recentSessionStartsUtc)
+            {
+                if (t < since) continue;
+                int h = t.ToLocalTime().Hour;
+                if (h >= 23 || h < 4) n++;
+            }
+            return n;
+        }
+
+        /// <summary>Sessions started since local midnight today.</summary>
+        public int SessionsToday()
+        {
+            var today = DateTime.Today;
+            int n = 0;
+            foreach (var t in _recentSessionStartsUtc) if (t.ToLocalTime() >= today) n++;
+            return n;
+        }
+
+        #endregion
+
+        #region Header Banner Pool
+
+        // The rotating line pool behind the header banner's third beat (BannerPoolService).
+        // Local settings only: the seen-set never leaves this machine.
+
+        private const int BannerSeenCap = 400;
+
+        private bool _bannerPoolEnabled = true;
+        /// <summary>
+        /// Whether the header banner rotates a line from the shipped pool alongside its fixed
+        /// beats. Off leaves the banner exactly as it was before the pool existed.
+        /// </summary>
+        public bool BannerPoolEnabled
+        {
+            get => _bannerPoolEnabled;
+            set { _bannerPoolEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _marqueeReadDebugFast;
+        /// <summary>
+        /// Desk knob for the marquee interludes, with no UI behind it on purpose: it collapses the
+        /// cadence (4 ticker loops, a 3 minute floor, a 2 minute launch delay) to twenty seconds so
+        /// the five acts can be watched in a minute instead of half an hour. Off in every shipped
+        /// build; set it in settings.json by hand, or export CCP_MARQUEE_READS_FAST=1.
+        /// </summary>
+        public bool MarqueeReadDebugFast
+        {
+            get => _marqueeReadDebugFast;
+            set { _marqueeReadDebugFast = value; OnPropertyChanged(); }
+        }
+
+        private List<string> _bannerSeenIds = new();
+        /// <summary>
+        /// Ids of banner pool lines already shown to this user, oldest first. Capped at
+        /// <see cref="BannerSeenCap"/>; one bucket's entries are dropped wholesale by
+        /// <see cref="ResetBannerSeen"/> once that bucket has nothing unseen left.
+        /// </summary>
+        [JsonProperty]
+        public List<string> BannerSeenIds
+        {
+            get => _bannerSeenIds;
+            set { _bannerSeenIds = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        /// <summary>Record one shown line id, dropping the oldest entries past the cap.</summary>
+        public void RecordBannerSeen(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return;
+            var list = new List<string>(_bannerSeenIds);
+            list.Remove(id);
+            list.Add(id);
+            if (list.Count > BannerSeenCap) list.RemoveRange(0, list.Count - BannerSeenCap);
+            BannerSeenIds = list;
+        }
+
+        /// <summary>Forget every seen id carrying <paramref name="prefix"/> (one exhausted bucket).</summary>
+        public void ResetBannerSeen(string prefix)
+        {
+            if (string.IsNullOrEmpty(prefix)) return;
+            var list = _bannerSeenIds.FindAll(x => !x.StartsWith(prefix, StringComparison.Ordinal));
+            if (list.Count != _bannerSeenIds.Count) BannerSeenIds = list;
+        }
+
         #endregion
 
         #region Flash Images
@@ -1048,11 +1221,83 @@ namespace ConditioningControlPanel.Models
             set { _flashSolidMode = value; OnPropertyChanged(); }
         }
 
+        // Jackpot Remix (Back Room prize fx.jackpot_remix): 1 flash in 100 becomes a remix of the
+        // user's own GIFs. Off by default on purpose: owning the prize never auto-enables it, the
+        // row inside the Flashes options does. Ownership is never read from here (PrizeGrants).
+        private bool _jackpotRemixEnabled = false;
+        [JsonProperty("JackpotRemixEnabled")]
+        public bool JackpotRemixEnabled
+        {
+            get => _jackpotRemixEnabled;
+            set { _jackpotRemixEnabled = value; OnPropertyChanged(); }
+        }
+
+        // Flashes v2 wave 2 (Back Room prizes fx.flash.*): rounded corners on every flash GIF.
+        // Off by default; owning a v2 style never flips it, and the renderers ignore it entirely
+        // while nothing v2 is owned (ownership is PrizeGrants' word, never this flag).
+        // Flashes v2 wave 2: left-press a flash to pick it up, throw it to send it bouncing.
+        // Off by default and gated on owning a v2 motion grant, like rounded corners. Compositor
+        // path only, and only on flashes that were already clickable.
+        private bool _flashDraggable = false;
+        [JsonProperty("FlashDraggable")]
+        public bool FlashDraggable
+        {
+            get => _flashDraggable;
+            set { _flashDraggable = value; OnPropertyChanged(); }
+        }
+
+        private bool _flashRoundedCorners = false;
+        [JsonProperty("FlashRoundedCorners")]
+        public bool FlashRoundedCorners
+        {
+            get => _flashRoundedCorners;
+            set { _flashRoundedCorners = value; OnPropertyChanged(); }
+        }
+
+        // Flashes v2 wave 2: dismissing a flash breaks it into falling shards instead of cutting
+        // it. ON by default - unlike the two dials above it changes nothing until the account owns
+        // a v2 motion grant AND a hand actually dismisses a flash, so there is nothing to opt into.
+        // Compositor path only; a classic layered flash still cuts.
+        private bool _flashShatterEnabled = true;
+        [JsonProperty("FlashShatterEnabled")]
+        public bool FlashShatterEnabled
+        {
+            get => _flashShatterEnabled;
+            set { _flashShatterEnabled = value; OnPropertyChanged(); }
+        }
+
+        private FlashMotionStyle _flashMotionStyle = FlashMotionStyle.Still;
+        /// <summary>Flashes v2 motion picker. Compositor path only; resolved per spawn through FlashMotion.Resolve.</summary>
+        [JsonProperty("FlashMotionStyle")]
+        public FlashMotionStyle FlashMotionStyle
+        {
+            get => _flashMotionStyle;
+            set { _flashMotionStyle = value; OnPropertyChanged(); }
+        }
+
         private int _flashDuration = 5; // Duration in seconds when audio is disabled (1-30)
         public int FlashDuration
         {
             get => _flashDuration;
             set { _flashDuration = Math.Clamp(value, 1, 30); OnPropertyChanged(); }
+        }
+
+        // #1194: animated flashes used to play at whatever timing the file carried, which is far
+        // too slow for some GIFs and far too fast for others. 1.0 keeps the file's own timing;
+        // 2.0 plays it twice as fast. Applied by FlashService.ScaleFrameDelay when a flash window
+        // is handed its frames, so it touches FLASH windows only - the avatar's XamlAnimatedGif
+        // clips and the spiral overlay's own pump keep their own timing.
+        private double _flashGifSpeedMultiplier = 1.0; // 0.25x (quarter speed) .. 4x
+        /// <summary>
+        /// Playback speed multiplier for animated flash images (GIF / animated WebP).
+        /// Clamped 0.25-4.0; the resulting per-frame delay is additionally floored at
+        /// <see cref="ConditioningControlPanel.Services.FlashService.MIN_GIF_FRAME_DELAY_MS"/> ms
+        /// so a 4x on an already-fast GIF cannot spin the UI thread.
+        /// </summary>
+        public double FlashGifSpeedMultiplier
+        {
+            get => _flashGifSpeedMultiplier;
+            set { _flashGifSpeedMultiplier = Math.Clamp(value, 0.25, 4.0); OnPropertyChanged(); }
         }
 
         // Gaming quality-of-life (#770): keep flashes out of a centered square on every monitor so
@@ -1386,30 +1631,10 @@ namespace ConditioningControlPanel.Models
             set { _subliminalOpacity = Math.Clamp(value, 10, 100); OnPropertyChanged(); }
         }
 
-        private Dictionary<string, bool> _subliminalPool = new()
-        {
-            { "BAMBI FREEZE", true },
-            { "BAMBI RESET", true },
-            { "BAMBI SLEEP", true },
-            { "BIMBO DOLL", true },
-            { "GOOD GIRL", true },
-            { "DROP FOR COCK", true },
-            { "SNAP AND FORGET", true },
-            { "PRIMPED AND PAMPERED", true },
-            { "BAMBI DOES AS SHE'S TOLD", true },
-            { "BAMBI CUM AND COLLAPSE", true },
-            { "ZAP COCK DRAIN OBEY", true },
-            { "GIGGLETIME", true },
-            { "BAMBI UNIFORM LOCK", true },
-            { "COCK ZOMBIE NOW", true },
-            { "JUST OBEY", true },
-            { "TURN YOUR BRAIN OFF", true },
-            { "GOOD GIRLS DONT THINK", true },
-            { "DONT THINK SILLY", true },
-            { "COCK TURNS MY BRAIN OFF", true },
-            { "I CANT RESIST MY TRIGGERS", true },
-            { "THERES NO NEED TO THINK", true }
-        };
+        // Fresh-install pool. Copied (not shared) from the neutral CCP Default mod so an unmodded
+        // install starts neutral and the two lists can never drift apart; a themed mod overrides
+        // this at runtime, and an existing user's saved pool is loaded over it.
+        private Dictionary<string, bool> _subliminalPool = new(BuiltInMods.CCPDefault.SubliminalPool ?? new Dictionary<string, bool>());
         public Dictionary<string, bool> SubliminalPool
         {
             get => _subliminalPool;
@@ -2071,7 +2296,15 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
-        private string _marqueeMessage = "GOOD GIRLS CONDITION DAILY     ❤️🔒";
+        /// <summary>Fresh-install marquee banner text. Also the runtime fallback when the saved
+        /// message is blank (see MainWindow.Marquee.cs).</summary>
+        public const string DefaultMarqueeMessage = "CONDITION DAILY     ❤️🔒";
+
+        /// <summary>The gendered text this default used to be. Only <see cref="MigrateMarqueeMessage"/>
+        /// reads it, and only to recognise a user who never changed the old default.</summary>
+        internal const string LegacyGenderedMarqueeMessage = "GOOD GIRLS CONDITION DAILY     ❤️🔒";
+
+        private string _marqueeMessage = DefaultMarqueeMessage;
         /// <summary>
         /// Custom scrolling marquee banner message displayed in the UI.
         /// </summary>
@@ -2079,6 +2312,45 @@ namespace ConditioningControlPanel.Models
         {
             get => _marqueeMessage;
             set { _marqueeMessage = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private bool _marqueeNeutralDefaultMigrated;
+        /// <summary>One-shot guard for <see cref="MigrateMarqueeMessage"/> so a user who deliberately
+        /// types the old text back in isn't overwritten at the next launch.</summary>
+        [JsonProperty]
+        public bool MarqueeNeutralDefaultMigrated
+        {
+            get => _marqueeNeutralDefaultMigrated;
+            set { _marqueeNeutralDefaultMigrated = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Move users with NO themed mod off the old gendered default banner text. Keyed on an exact
+        /// match of <see cref="LegacyGenderedMarqueeMessage"/>, so anyone who customised their banner
+        /// - by even one character - keeps what they wrote. Runs once, from InitializeMarqueeBanner().
+        ///
+        /// <para>A themed mod is skipped and the one-shot flag is still latched, deliberately. The
+        /// old text is that mod's own voice, so rewriting it is the visible, one-way change 6.9.4
+        /// promised would not happen to anyone with a mod active; and latching means a later switch
+        /// to CCP Default does not spring the same rewrite on them months afterwards.</para>
+        /// </summary>
+        /// <param name="activeModId">
+        /// <see cref="Services.ModService.ActiveModId"/>. Null means the mod layer is not up yet, and
+        /// the migration DEFERS - it neither rewrites nor latches, so the next launch that does know
+        /// the mod decides. ModService is constructed in App.OnStartup, well before the only caller,
+        /// so the deferral is a safety net rather than an expected path.
+        /// </param>
+        internal void MigrateMarqueeMessage(string? activeModId)
+        {
+            if (_marqueeNeutralDefaultMigrated) return;
+            if (string.IsNullOrWhiteSpace(activeModId)) return;
+
+            if (string.Equals(activeModId, BuiltInMods.CCPDefaultId, StringComparison.Ordinal) &&
+                string.Equals(_marqueeMessage?.Trim(), LegacyGenderedMarqueeMessage.Trim(), StringComparison.Ordinal))
+            {
+                MarqueeMessage = DefaultMarqueeMessage;
+            }
+            MarqueeNeutralDefaultMigrated = true;
         }
 
         private bool _dualMonitorEnabled = true;
@@ -2091,6 +2363,29 @@ namespace ConditioningControlPanel.Models
         {
             get => _dualMonitorEnabled;
             set { _dualMonitorEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _globalTargetMonitor = -1;
+        /// <summary>
+        /// Which monitor(s) the app's full-screen content covers, app-wide. Same sentinel
+        /// alphabet as the per-effect targets below: -1 = follow <see cref="DualMonitorEnabled"/>
+        /// (the legacy behaviour - every screen when multi-monitor is on, else the Windows
+        /// primary), -2 = every connected monitor, 0..N = that one screen index in
+        /// <c>Screen.AllScreens</c>.
+        ///
+        /// <para>Default -1, so a settings file written before this existed behaves exactly as it
+        /// did. This is the setting behind Settings / General / "Show content on", the only way to
+        /// pin content to a specific NON-primary screen: the multi-monitor checkbox alone can say
+        /// only "all screens" or "the Windows primary".</para>
+        ///
+        /// <para>An index past the current monitor count is NOT clamped here - it falls back to the
+        /// -1 behaviour at resolve time (<c>App.ResolveScreens</c>) so an unplugged monitor's target
+        /// survives a reconnect.</para>
+        /// </summary>
+        public int GlobalTargetMonitor
+        {
+            get => _globalTargetMonitor;
+            set { _globalTargetMonitor = value; OnPropertyChanged(); }
         }
 
         // ---- Per-effect monitor targeting (suggestion #639) ----------------
@@ -2234,6 +2529,20 @@ namespace ConditioningControlPanel.Models
         {
             get => _bubbleGazePopEnabled;
             set { _bubbleGazePopEnabled = value; OnPropertyChanged(); }
+        }
+
+        // FocusGazeEnabled is the persisted INTENT behind the Play door's
+        // "Focus Gaze" switch (GazeFocusService.MasterEnabled). It is not the
+        // same thing as GazeFocusService.IsActive: the engine pauses whenever
+        // the camera is down, uncalibrated or unconsented, and until v6.9.1 the
+        // switch mirrored IsActive, so it dropped and popped back on its own and
+        // never survived a restart (#1116). The switch now reads this flag and
+        // the status line underneath says whether the engine is actually running.
+        private bool _focusGazeEnabled;
+        public bool FocusGazeEnabled
+        {
+            get => _focusGazeEnabled;
+            set { _focusGazeEnabled = value; OnPropertyChanged(); }
         }
 
         // VideoGazeClickEnabled gates the gaze-dwell shortcut for the video
@@ -2387,6 +2696,16 @@ namespace ConditioningControlPanel.Models
         {
             get => _startMinimized;
             set { _startMinimized = value; OnPropertyChanged(); }
+        }
+
+        // Off: the START button and the Presets tab's stop button show the session name and its
+        // state without the MM:SS. Not everyone wants to watch the timer tick. Settings / General /
+        // Display; read on every engine tick (MainWindow.Presets.cs OnSessionProgressUpdated).
+        private bool _showSessionCountdown = true;
+        public bool ShowSessionCountdown
+        {
+            get => _showSessionCountdown;
+            set { _showSessionCountdown = value; OnPropertyChanged(); }
         }
 
         private bool _autoStartEngine = false;
@@ -3032,6 +3351,14 @@ namespace ConditioningControlPanel.Models
             get => _bubblesEnabled;
             set { _bubblesEnabled = value; OnPropertyChanged(); }
         }
+        private BubbleMotionStyle _bubbleMotionStyle = BubbleMotionStyle.FloatUp;
+        /// <summary>Ambient bubble travel style (Bubbles v2). Unowned styles degrade to FloatUp at spawn.</summary>
+        [JsonProperty("BubbleMotionStyle")]
+        public BubbleMotionStyle BubbleMotionStyle
+        {
+            get => _bubbleMotionStyle;
+            set { _bubbleMotionStyle = value; OnPropertyChanged(); }
+        }
         private int _bubblesFrequency = 5;
         public int BubblesFrequency
         {
@@ -3119,6 +3446,28 @@ namespace ConditioningControlPanel.Models
             get => _bubbleTriggerVariants;
             set { _bubbleTriggerVariants = value ?? new List<string>(); OnPropertyChanged(); }
         }
+        // Bubbles v2 (wave 2): the Brain Drain bubble in the trigger pool. Default ON so a bought
+        // prize shows up without a second opt-in; ownership itself is never read from here (that is
+        // PrizeGrants), so this switch grants nothing on its own.
+        private bool _bubbleBrainDrainEnabled = true;
+        [JsonProperty("BubbleBrainDrainEnabled")]
+        public bool BubbleBrainDrainEnabled
+        {
+            get => _bubbleBrainDrainEnabled;
+            set { _bubbleBrainDrainEnabled = value; OnPropertyChanged(); }
+        }
+
+        // Bubbles v2 (wave 2): the Magnet bubble in the trigger pool. Same shape as the Brain Drain
+        // row above - default ON so a bought prize shows up without a second opt-in, and ownership
+        // is never read from here (that is PrizeGrants), so this switch grants nothing on its own.
+        private bool _bubbleMagnetEnabled = true;
+        [JsonProperty("BubbleMagnetEnabled")]
+        public bool BubbleMagnetEnabled
+        {
+            get => _bubbleMagnetEnabled;
+            set { _bubbleMagnetEnabled = value; OnPropertyChanged(); }
+        }
+
         // Easter egg: when an effect bubble lingers >4s, a 10% roll sends the companion to glide over,
         // narrate the effect, and pop it for you (50% louder). Gated under BubbleTriggersEnabled.
         private bool _bubbleAvatarEggEnabled = true;
@@ -3221,6 +3570,16 @@ namespace ConditioningControlPanel.Models
         {
             get => _lockdownAudioTics;
             set { _lockdownAudioTics = value; OnPropertyChanged(); }
+        }
+
+        // Hide the lockdown clock: the Lockdown page, the title-bar badge and the Home rail chip
+        // show dots instead of the time left (Services/SessionClockLabel.cs). The timer itself is
+        // untouched, and the digits' element stays put - it is also the five-click exit handle.
+        private bool _hideLockdownTimer = false;
+        public bool HideLockdownTimer
+        {
+            get => _hideLockdownTimer;
+            set { _hideLockdownTimer = value; OnPropertyChanged(); }
         }
 
         // "It remembers": set when a Full Doki lockdown ENDS, spent ~20 s into the next launch as one
@@ -3980,6 +4339,58 @@ namespace ConditioningControlPanel.Models
             set { _lockCardRepeats = Math.Clamp(value, 1, 10); OnPropertyChanged(); }
         }
         
+        private bool _lockCardRandomRepeats = false;
+        /// <summary>
+        /// When true the repeat count is rolled per card instead of being fixed, between
+        /// <see cref="LockCardRepeatsMin"/> and <see cref="LockCardRepeats"/> inclusive.
+        /// Default false, so a user who never touches it keeps the flat count they had.
+        /// </summary>
+        public bool LockCardRandomRepeats
+        {
+            get => _lockCardRandomRepeats;
+            set { _lockCardRandomRepeats = value; OnPropertyChanged(); }
+        }
+
+        private int _lockCardRepeatsMin = 1; // Floor of the random range (1-10)
+        /// <summary>
+        /// Floor of the random repeat range. Only read when <see cref="LockCardRandomRepeats"/> is
+        /// on; a floor above <see cref="LockCardRepeats"/> is sorted out by the resolver rather
+        /// than by forcing the two sliders to chase each other in the UI.
+        /// </summary>
+        public int LockCardRepeatsMin
+        {
+            get => _lockCardRepeatsMin;
+            set { _lockCardRepeatsMin = Math.Clamp(value, 1, 10); OnPropertyChanged(); }
+        }
+
+        private bool _lockCardTargetLengthEnabled = false;
+        /// <summary>
+        /// When true the repeat count is derived from how much TYPING a card is worth rather than
+        /// from a count: a target character budget is rolled, and the phrase is repeated until it
+        /// covers that budget. A fifteen-character phrase and a sixty-character one then cost about
+        /// the same. Overrides both the fixed count and <see cref="LockCardRandomRepeats"/>.
+        /// Default false.
+        /// </summary>
+        public bool LockCardTargetLengthEnabled
+        {
+            get => _lockCardTargetLengthEnabled;
+            set { _lockCardTargetLengthEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _lockCardTargetLength = 120; // Characters to type per card (20-600)
+        public int LockCardTargetLength
+        {
+            get => _lockCardTargetLength;
+            set { _lockCardTargetLength = Math.Clamp(value, 20, 600); OnPropertyChanged(); }
+        }
+
+        private int _lockCardTargetLengthVariance = 20; // +/- characters on the rolled target (0-200)
+        public int LockCardTargetLengthVariance
+        {
+            get => _lockCardTargetLengthVariance;
+            set { _lockCardTargetLengthVariance = Math.Clamp(value, 0, 200); OnPropertyChanged(); }
+        }
+
         private bool _lockCardStrict = false; // No ESC escape
         public bool LockCardStrict
         {
@@ -3999,14 +4410,8 @@ namespace ConditioningControlPanel.Models
             set { _lockCardVoiceMode = value; OnPropertyChanged(); }
         }
         
-        private Dictionary<string, bool> _lockCardPhrases = new()
-        {
-            { "GOOD GIRLS OBEY", true },
-            { "I LOVE BEING PROGRAMMED", true },
-            { "BAMBI SLEEP", true },
-            { "DROP FOR ME", true },
-            { "EMPTY AND OBEDIENT", true }
-        };
+        // Fresh-install pool, copied from the neutral CCP Default mod (see _subliminalPool).
+        private Dictionary<string, bool> _lockCardPhrases = new(BuiltInMods.CCPDefault.LockCardPhrases ?? new Dictionary<string, bool>());
         public Dictionary<string, bool> LockCardPhrases
         {
             get => _lockCardPhrases;
@@ -4256,10 +4661,10 @@ namespace ConditioningControlPanel.Models
 
         private Dictionary<string, bool> _bouncingTextPool = new()
         {
-            { "GOOD GIRL", true },
+            { "DEEPER", true },
             { "OBEY", true },
             { "SUBMIT", true },
-            { "BIMBO", true },
+            { "BLANK", true },
             { "EMPTY", true },
             { "MINDLESS", true },
             { "OBEDIENT", true },
@@ -4401,17 +4806,11 @@ namespace ConditioningControlPanel.Models
         private Dictionary<string, bool> _attentionPool = new()
         {
             { "CLICK ME", true },
-            { "GOOD GIRL", true },
-            { "BAMBI FREEZE", true },
-            { "BAMBI SLEEP", true },
-            { "BAMBI RESET", true },
             { "DROP", true },
             { "OBEY", true },
             { "ACCEPT", true },
             { "SUBMIT", true },
-            { "BLANK AND EMPTY", true },
-            { "BAMBI LOVES COCK", true },
-            { "UNIFORM ON", true }
+            { "BLANK AND EMPTY", true }
         };
         public Dictionary<string, bool> AttentionPool
         {
@@ -4577,6 +4976,54 @@ namespace ConditioningControlPanel.Models
         {
             get => _motionLevel;
             set { _motionLevel = value; OnPropertyChanged(); }
+        }
+
+        private Services.BackRoom.BackRoomFxIntensity _backRoomFxIntensity = Services.BackRoom.BackRoomFxIntensity.Normal;
+        /// <summary>
+        /// THE BACK ROOM effects intensity (CONTRACT section 4): Calm, Normal or Full. The room is an
+        /// authored show (2026-09-15): Calm is gentle (every opacity halved, every duration kept), Full
+        /// stretches durations x1.3, and no feature toggle gates a room effect. Reduced motion only caps
+        /// flash onsets at 3 Hz and slows the spiral. Full never breaks the Brake (no strobe over 6 Hz,
+        /// one hero at a time).
+        /// </summary>
+        [JsonProperty]
+        public Services.BackRoom.BackRoomFxIntensity BackRoomFxIntensity
+        {
+            get => _backRoomFxIntensity;
+            set
+            {
+                if (!Enum.IsDefined(typeof(Services.BackRoom.BackRoomFxIntensity), value)) value = Services.BackRoom.BackRoomFxIntensity.Normal;
+                _backRoomFxIntensity = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private bool _backRoomTunnel = true;
+        /// <summary>
+        /// THE BACK ROOM tunnel vision (CONTRACT 10.14): the room's own switch, shown in the room's
+        /// Options and not in Settings, because nothing else uses it. ON by default; a settings file
+        /// written before the switch existed has no key, so it reads as on until the player turns it off.
+        /// Since the authored show (2026-09-15) it dresses the room only: the host always honours <c>fx-tunnel</c>.
+        /// </summary>
+        [JsonProperty]
+        public bool BackRoomTunnel
+        {
+            get => _backRoomTunnel;
+            set { _backRoomTunnel = value; OnPropertyChanged(); }
+        }
+
+        private bool _backRoomMelt = true;
+        /// <summary>
+        /// THE BACK ROOM melt (CONTRACT 10.14): the room's own switch in the room's Options, ON by default and
+        /// independent of the app-wide Brain Drain toggles (<see cref="BrainDrainEnabled"/> and
+        /// <see cref="BrainDrainMeltEnabled"/> both default off). A missing key reads as on; a player's off is kept.
+        /// Since the authored show (2026-09-15) it dresses the room only: <c>fx.melt</c> always plays.
+        /// </summary>
+        [JsonProperty]
+        public bool BackRoomMelt
+        {
+            get => _backRoomMelt;
+            set { _backRoomMelt = value; OnPropertyChanged(); }
         }
 
         private bool _videoForceHardwareDecoding = false;
@@ -5168,14 +5615,14 @@ namespace ConditioningControlPanel.Models
             set { _companionPrompt = value ?? new(); OnPropertyChanged(); }
         }
 
-        private string _activePersonalityPresetId = PersonalityPresets.BambiSpriteId;
+        private string _activePersonalityPresetId = PersonalityPresets.NeutralDefaultId;
         /// <summary>
         /// ID of the currently active personality preset.
         /// </summary>
         public string ActivePersonalityPresetId
         {
             get => _activePersonalityPresetId;
-            set { _activePersonalityPresetId = value ?? PersonalityPresets.BambiSpriteId; OnPropertyChanged(); }
+            set { _activePersonalityPresetId = value ?? PersonalityPresets.NeutralDefaultId; OnPropertyChanged(); }
         }
 
         private DateTime? _personaVoiceFenceUtc;
@@ -5296,26 +5743,12 @@ namespace ConditioningControlPanel.Models
             set { _randomBubbleEnabled = value; OnPropertyChanged(); }
         }
 
-        private List<string> _customTriggers = new()
+        // Fresh-install list: the neutral CCP Default triggers plus the two phrases from the old
+        // default list that carried no theme, so Trigger Mode still ships a usable spread.
+        private List<string> _customTriggers = new(BuiltInMods.CCPDefault.CustomTriggers ?? new List<string>())
         {
-            "GOOD GIRL",
-            "BAMBI SLEEP",
-            "BIMBO DOLL",
-            "BAMBI FREEZE",
-            "BAMBI RESET",
-            "DROP FOR COCK",
-            "GIGGLETIME",
-            "BLONDE MOMENT",
-            "ZAP COCK DRAIN OBEY",
             "SNAP AND FORGET",
-            "PRIMPED AND PAMPERED",
-            "SAFE AND SECURE",
-            "COCK ZOMBIE NOW",
-            "BAMBI UNIFORM LOCK",
-            "AIRHEAD BARBIE",
-            "BRAINDEAD BOBBLEHEAD",
-            "COCKBLANK LOVEDOLL",
-            "BAMBI CUM AND COLLAPSE"
+            "SAFE AND SECURE"
         };
         /// <summary>
         /// Custom trigger phrases for Trigger Mode
@@ -6224,16 +6657,14 @@ namespace ConditioningControlPanel.Models
 
         #region The Descent — Spiral rail
 
-        private bool _descentSpiralRailEnabled = false;
+        private bool _descentSpiralRailEnabled = true;
         /// <summary>
         /// Shows the Spiral Track miniature in the nav rail (CONTRACTS-0812-FINISH §9).
         ///
-        /// FALSE IN EVERY SHIPPED BUILD, and deliberately without a settings editor: the
-        /// `/embed/spiral` route it hosts has not deployed, and a visible toggle for a
-        /// surface that cannot draw yet is worse than no toggle. Flip it by hand in
-        /// settings.json to exercise the host. When the Spiral goes public this becomes a
-        /// normal preference with a normal editor — or disappears, if the rail ends up
-        /// always-on.
+        /// ON BY DEFAULT since 6.9.3 (the Spiral went public for every account on
+        /// 2026-09-01 and the `/embed/spiral?mode=mini` route is live). Still without a
+        /// settings editor: set it to false by hand in settings.json to keep the nav rail
+        /// free of the WebView2 miniature. It was false and dark in every build before.
         ///
         /// Even set true the rail stays dark unless the server has shipped this account a
         /// descent block (SpiralRailHost.Arm), so turning it on cannot conjure a spiral
@@ -6243,6 +6674,51 @@ namespace ConditioningControlPanel.Models
         {
             get => _descentSpiralRailEnabled;
             set { _descentSpiralRailEnabled = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
+        #region Racing Thoughts - the BambiCloud window
+
+        // Where the on-demand browser frame the race can follow audio from was last left. There is
+        // no toggle to go with these: the window is opened from the race menu and never on its own,
+        // so the only thing worth remembering about it is where the player put it. 0 means "never
+        // placed", which opens it centred at a default size.
+
+        private double _raceCloudWindowLeft;
+        /// <summary>Last left edge of the BambiCloud window, 0 when it has never been placed.</summary>
+        [JsonProperty]
+        public double RaceCloudWindowLeft
+        {
+            get => _raceCloudWindowLeft;
+            set { _raceCloudWindowLeft = value; OnPropertyChanged(); }
+        }
+
+        private double _raceCloudWindowTop;
+        /// <summary>Last top edge of the BambiCloud window, 0 when it has never been placed.</summary>
+        [JsonProperty]
+        public double RaceCloudWindowTop
+        {
+            get => _raceCloudWindowTop;
+            set { _raceCloudWindowTop = value; OnPropertyChanged(); }
+        }
+
+        private double _raceCloudWindowWidth;
+        /// <summary>Last width of the BambiCloud window, 0 for the default.</summary>
+        [JsonProperty]
+        public double RaceCloudWindowWidth
+        {
+            get => _raceCloudWindowWidth;
+            set { _raceCloudWindowWidth = value; OnPropertyChanged(); }
+        }
+
+        private double _raceCloudWindowHeight;
+        /// <summary>Last height of the BambiCloud window, 0 for the default.</summary>
+        [JsonProperty]
+        public double RaceCloudWindowHeight
+        {
+            get => _raceCloudWindowHeight;
+            set { _raceCloudWindowHeight = value; OnPropertyChanged(); }
         }
 
         #endregion
@@ -7898,6 +8374,54 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool HasSeenProgramsIntro { get; set; }
+
+        /// <summary>
+        /// Right-click toggles the user has performed on the dashboard tiles. Drives the
+        /// "right-click a tile to switch it on or off" caption on the logo face via
+        /// <see cref="Services.DashboardToggleHintRule"/>; stops counting once the caption is retired.
+        /// </summary>
+        public int DashboardToggleHintUses { get; set; }
+
+        /// <summary>
+        /// The Home dashboard's browser card is folded shut: the header strip stays, everything
+        /// below it (the Deeper toolbar, the audio row and the WebView2) is collapsed and the card
+        /// gives its rows back to the column.
+        ///
+        /// <para>Default TRUE (owner call, 2026-09-12: "by default browser should be hidden, and
+        /// unhidden whenever we call it"). The property initializer is the whole mechanism and it
+        /// is upgrader-safe on purpose: the loader deserializes onto a default-constructed
+        /// AppSettings, so a settings.json with no key keeps this true, a file that says false
+        /// stays false, and nobody who has already stated a preference has it overwritten.</para>
+        ///
+        /// <para>This is the SAVED PREFERENCE, not the state on screen. When the app calls the
+        /// browser - a companion link, a remote-control command, a site radio - the card is opened
+        /// by <c>MainWindow.RevealDashboardBrowser</c> for the rest of that run WITHOUT touching
+        /// this bool. Only the chevron writes here.</para>
+        /// </summary>
+        public bool DashboardBrowserCollapsed { get; set; } = true;
+
+        private List<string> _railFavorites = new();
+        /// <summary>
+        /// The dashboard rail's FAVORITES: Ctrl+K palette row ids ("tab.deeper", "door.play",
+        /// "launch.mods", "card.arcademy") in the order the user pinned them. Rules, cap and
+        /// dedupe live in <see cref="Services.FavoritesRailRule"/>.
+        /// </summary>
+        [JsonProperty("rail_favorites")]
+        public List<string> RailFavorites
+        {
+            get => _railFavorites;
+            set { _railFavorites = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        private List<string> _railRecent = new();
+        /// <summary>The dashboard rail's RECENT: the last few destinations opened, most recent
+        /// first, same id scheme as <see cref="RailFavorites"/>.</summary>
+        [JsonProperty("rail_recent")]
+        public List<string> RailRecent
+        {
+            get => _railRecent;
+            set { _railRecent = value ?? new List<string>(); OnPropertyChanged(); }
+        }
 
         #endregion
 

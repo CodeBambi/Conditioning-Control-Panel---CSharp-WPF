@@ -14,10 +14,10 @@ namespace ConditioningControlPanel
     /// persistence (see JustDropService for why the tier gates' 24h-cache posture would be wrong
     /// here).</para>
     ///
-    /// <para>This used to show and hide a pair of rail rows. It no longer does: the shop is a
-    /// window (<see cref="JustDropHostService"/>), reached from the Play rack, the Exclusives shelf
-    /// and the dashboard tease tile, so what is left here is fanning the flag out to the surfaces
-    /// that render it.</para>
+    /// <para>The shop is a window (<see cref="JustDropHostService"/>). Since 2026-09-11 (owner
+    /// call: a creator tool, not a game) it is reached from one rail row, Studio > Creator Tools,
+    /// plus the Exclusives shelf and the dashboard tease tile; this file shows and hides that row
+    /// and fans the flag out to the other surfaces that render it.</para>
     ///
     /// <para>The refusal itself lives in <c>ShowTab</c>, which is also what launches the window -
     /// one gate, one entry point, every caller.</para>
@@ -94,12 +94,12 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// The only place either rail row's Visibility is written.
+        /// The only place the rail row's Visibility is written.
         ///
-        /// <para>The panel follows the header rather than being left Visible-at-Height-0 like the
-        /// other shut doors: those are doors you can open, and a hit-testable strip belonging to a
-        /// door with no header would be a row that does nothing. It is re-collapsed to Height 0 on
-        /// reveal so the accordion starts from the same closed state every other door does.</para>
+        /// <para>Collapsed rather than Height 0: a shut door's rows stay hit-testable at Height 0
+        /// because you can open that door, and a row the account cannot open would be a row that
+        /// does nothing. MeasureDoorPanel skips Collapsed children, so the Studio accordion's open
+        /// height follows.</para>
         /// </summary>
         private void ApplyJustDropDoorVisibility()
         {
@@ -107,24 +107,16 @@ namespace ConditioningControlPanel
             {
                 var available = JustDropService.DoorAvailable;
 
-                // No rail rows to show or hide any more - the shop is a window, reached from the
-                // Play rack, the Exclusives shelf and the dashboard tease tile. What is left is
-                // telling the surfaces that DO render the flag.
+                // The rail row (Studio > Creator Tools).
+                if (BtnNavJustDrop != null)
+                    BtnNavJustDrop.Visibility = available ? Visibility.Visible : Visibility.Collapsed;
 
-                // The dashboard's tease tile reads the same flag to know when to take its costume
-                // off. Called here rather than left to the next mosaic repaint so a mid-session
-                // reveal lands on every surface in the same frame.
-                ApplyTeaseCard();
-
-                // The Play door's SESSIONS zone carries the card that opens the shop, and it is
-                // hidden on an account the server has not opened the door for. Repainted here for
-                // the same reason the tile is: a mid-session reveal has to land everywhere at once,
-                // or two surfaces disagree about whether the feature exists.
-                try { RefreshPlayCards(); }
-                catch (Exception ex) { App.Logger?.Debug("JustDrop: Play card refresh failed: {E}", ex.Message); }
-
+                // Then the one other surface that renders the flag. There were two until
+                // 2026-09-12, when the dashboard's nameless tease tile became the Deeper editor
+                // tile and stopped reading this flag at all.
+                //
                 // The Session door's Takeaway shelf ends in an "order a drop" card that only
-                // exists while the door does. Rebuilt here for the same reason the tease tile is:
+                // exists while the door does. Rebuilt here rather than left to the next repaint:
                 // a reveal that lands mid-session must reach every surface that reads the flag,
                 // not just the ones the user happens to open next.
                 RefreshTakeawayShelf();

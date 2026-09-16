@@ -221,8 +221,8 @@ namespace ConditioningControlPanel.Services
             Door("play", "nav_door_play", "🎮", "play", "play games lab");
             Door("you", "nav_door_you", "👤", "discord", "you profile progress");
             Door("library", "nav_door_library", "📚", "assets", "library assets media");
-            // The withheld Just Drop door. Declared in rail order (below Library, above the pinned
-            // Settings door) and carrying the ONLY IsAvailable predicate in this index: the row is
+            // The withheld Just Drop row (Studio > Creator Tools since 2026-09-11, a creator tool by
+            // owner call). It carries the first IsAvailable predicate in this index: the row is
             // in All - so the door/tab parity tests still see it, and so the day the server opens
             // the door there is nothing left to remember - but Search skips it while
             // JustDropService.DoorAvailable is false. Without that, Ctrl+K would be the one place
@@ -236,7 +236,7 @@ namespace ConditioningControlPanel.Services
                 LabelKey = "jd_door_title",
                 Glyph = "🎚",
                 TabKey = "justdrop",
-                ContextKeys = new[] { GroupDoors },
+                ContextKeys = new[] { GroupNav, "nav_door_studio" },
                 Aliases = "just drop shop session order drop express",
                 IsAvailable = () => JustDrop.JustDropService.DoorAvailable,
             });
@@ -293,6 +293,18 @@ namespace ConditioningControlPanel.Services
                 Aliases = "arcademy academy class classes school timetable homeroom mini games "
                           + "daily trigger lost and found deja vu impulse control grades attendance",
                 IsAvailable = () => Arcademy.ArcademyHostService.DoorAvailable,
+            });
+            // THE BACK ROOM, the Arcademy's neighbour on the Play wall and built the same way. No
+            // gate: the room is free for every account (CONTRACT section 1).
+            list.Add(new SettingsPaletteEntry
+            {
+                Id = "card.backroom",
+                LabelKey = "play_backroom_title",
+                Glyph = "🎰",
+                TabKey = "play",
+                ElementNames = new[] { "BtnPlayBackRoom", "SlotBackRoom" },
+                ContextKeys = new[] { GroupNav, "nav_door_play" },
+                Aliases = "back room backroom casino slot slots machine sparkle points sp prize counter wheel scratcher cards",
             });
             Tab("deeper", "tab_deeper", "🌊", "deeper", "deeper files audio video");
             Tab("exclusives", "tab_exclusives", "⭐", "exclusives", "premium exclusives velvet vault showcase");
@@ -429,6 +441,15 @@ namespace ConditioningControlPanel.Services
                     new[] { "ChkAutoRun" }, "set2_section_general", "auto start engine run");
             Setting("startup_video", "rf_palette_startup_video", "📼", "general",
                     new[] { "TxtStartupVideo" }, "set2_section_general", "startup video pick file");
+            // The app-wide monitor picker. Heavily aliased on purpose: "monitor"/"screen" used to
+            // surface only the WEBCAM's calibration monitor, which moves nothing (ask-support
+            // 2026-09-08 - the reporter found that row, changed it, and content still covered
+            // every screen).
+            Setting("content_monitor", "setting_content_monitor", "🖥️", "general",
+                    new[] { "ContentMonitorPicker", "CmbContentMonitor", "DisplayGeneralCard" },
+                    "set2_section_general",
+                    "monitor screen display multi monitor dual monitor second screen one screen "
+                    + "single monitor primary only all monitors show content on");
             Setting("enable_deeper", "setting_deeper_enable", "🌊", "general",
                     new[] { "ChkEnableDeeper" }, "set2_section_general", "deeper enable tab");
 
@@ -487,6 +508,9 @@ namespace ConditioningControlPanel.Services
             Setting("suppress_perk_notifications", "label_suppress_perk_notifications", "🔕", "notifications",
                     new[] { "ChkSuppressPerkNotifications" }, "set2_section_notifications",
                     "silence mute perk popup toast lucky 10x 20x xp multiplier pink rush quest complete ping sound immersion");
+            Setting("banner_pool", "banner_pool_enabled", "💬", "notifications",
+                    new[] { "ChkBannerPool" }, "set2_section_notifications",
+                    "banner header line pool taglines trivia rotating message");
 
             // Account (landed)
             Setting("patreon_login", "set2_palette_patreon_login", "🅿️", "account",

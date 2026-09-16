@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Forms;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Services;
 
@@ -93,18 +94,18 @@ namespace ConditioningControlPanel.Services;
             // Create context menu
             var contextMenu = new ContextMenuStrip();
 
-            var showItem = new ToolStripMenuItem("Show Dashboard");
+            var showItem = new ToolStripMenuItem(Loc.Get("tray_show"));
             showItem.Click += (s, e) => ShowWindow();
             contextMenu.Items.Add(showItem);
 
-            var wakeLabel = App.Mods?.IsBambiMode == true ? "Wake Bambi Up!" : "Wake Up!";
+            var wakeLabel = Loc.Get(App.Mods?.IsBambiMode == true ? "tray_wake_bambi" : "tray_wake");
             var wakeBambiItem = new ToolStripMenuItem(wakeLabel);
             wakeBambiItem.Click += (s, e) => OnWakeBambiRequested?.Invoke();
             contextMenu.Items.Add(wakeBambiItem);
 
             contextMenu.Items.Add(new ToolStripSeparator());
 
-            var exitItem = new ToolStripMenuItem("Exit");
+            var exitItem = new ToolStripMenuItem(Loc.Get("tray_exit"));
             exitItem.Click += (s, e) => OnExitRequested?.Invoke();
             contextMenu.Items.Add(exitItem);
 
@@ -152,8 +153,8 @@ namespace ConditioningControlPanel.Services;
         if (!_hasShownFirstMinimizeNotification)
         {
             _hasShownFirstMinimizeNotification = true;
-            _notifyIcon?.ShowBalloonTip(2000, "Conditioning Control Panel",
-                "Running in background. Click the tray icon to restore.", ToolTipIcon.Info);
+            _notifyIcon?.ShowBalloonTip(2000, Loc.Get("app_title"),
+                Loc.Get("tray_balloon_body"), ToolTipIcon.Info);
         }
     }
 

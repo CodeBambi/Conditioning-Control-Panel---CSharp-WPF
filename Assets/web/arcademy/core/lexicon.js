@@ -79,6 +79,17 @@ export const DEFAULT_LEXICON = Object.freeze({
   replay_board: 'Flip the board again',
   share: 'Copy share card',
   shared: 'Copied to clipboard',
+
+  /* the SLIP (shell/sharecard.js): the night drawn as a paper report card.
+   * The image itself is deliberately unskinnable - its header and its class
+   * names are the neutral English ones, so a paste never names your mod - but
+   * the BUTTONS around it are ordinary chrome and a mod may re-voice them. */
+  share_image: 'Share report card',
+  share_add_name: 'Add my name',
+  share_saved: 'Report card saved',
+  share_copied: 'Report card copied',
+  share_shared: 'Report card shared',
+  share_unavailable: 'Sharing is not available here',
   done: 'Done',
   xp: 'XP',
   streak: 'Streak',
@@ -134,6 +145,18 @@ export const DEFAULT_LEXICON = Object.freeze({
   campus_desc_entrance: 'The notice board carries announcements. The trophy case waits for your diplomas.',
   campus_notice_board: 'Notice Board',
   campus_trophy_case: 'Trophy Case',
+  /* THE TIME CAPSULE (shell/capsule.js), the trophy case's one exhibit. The
+     plaque line is TWO clause rows joined with one space: the whole sentence is
+     102 characters and a NeutralLexicon value over 96 can never be mod-skinned
+     (trap 26), so it is split the way vn/lex.js PAPERS splits its two papers. */
+  campus_desc_trophy: 'One exhibit under glass. The school keeps its own first night in here.',
+  capsule_on_view: 'On view',
+  capsule_title: 'Time Capsule',
+  capsule_line_2026_02_a: 'The first dashboard. February 2026.',
+  capsule_line_2026_02_b: 'Everything was pink and the DROP button was the size of a doormat.',
+  capsule_footer: 'Sealed by the Registrar. Opened at thirty nights.',
+  capsule_sealed_tag: 'opens at 30 nights',
+  capsule_sealed_hint: 'The case is wrapped and taped. The tag has a number on it.',
   campus_admissions: 'Admissions',
   campus_bell_tower: 'Bell Tower',
   campus_main_gate: 'Main Gate',
@@ -408,6 +431,10 @@ export const DEFAULT_LEXICON = Object.freeze({
   account_signed_in_as: 'Signed in as',
   account_open_card: 'Open my card',
   account_profile: 'Profile',
+  /* THE FRONT GATE (2026-09-03): the way back out to the CC Labs site. Two
+     rows because the row is two lines - the verb and the quiet line under it. */
+  account_dashboard: 'Front Gate',
+  account_dashboard_hint: 'back to CC Labs',
   account_sign_out: 'Sign out',
 
   /* Semester II ghost labels behind the tape (unregistered games get their
@@ -608,7 +635,7 @@ export const DEFAULT_LEXICON = Object.freeze({
   prize_full: 'Your pockets are full of those. Use one first.',
   prize_locked_msg: 'That one stays in the case for now.',
   prize_unknown: 'The counter does not know that one. Odd.',
-  prize_offline: 'The counter cannot reach the bank right now. Nothing was charged.',
+  prize_offline: 'The counter cannot reach the till right now. Nothing was charged.',
   prize_busy: 'Somebody is already at the drawer. Give it a second and ask again.',
   prize_quiet: 'The counter went quiet on that one. Try again in a moment.',
   prize_empty: 'Shelf is bare tonight. Come back when the truck has been.',
@@ -649,12 +676,12 @@ export const DEFAULT_LEXICON = Object.freeze({
    * translated string is a number a translator has to be trusted to keep.
    *
    * THE PASSIVE LINES ARE THE HONEST PART. There is exactly one consumable on
-   * this shelf and it has no press: a late slip is spent by the HOST, on the
+   * this shelf and it has no press: a tardy slip is spent by the HOST, on the
    * night you are not here, inside the attendance credit. So the row says so
    * rather than growing a button that would have nowhere to send you. */
   booth_holdings: 'What you are holding',
   booth_hold_none: 'Nothing in your pockets tonight. The shelf is through the window.',
-  booth_hold_late_slip: 'It spends itself the night you miss one. Nothing to press.',
+  booth_hold_late_slip: 'It files itself the night you miss one. Nothing to press.',
   booth_hold_passive: 'It spends itself the moment it is needed.',
   /* THE TWO SIGNS IN THE ALLEY (shell/alleysign.js). One pair, one alley: the
    * plate on the booth's right-hand wall points at RM 004 and the plate on the
@@ -687,7 +714,11 @@ export const DEFAULT_LEXICON = Object.freeze({
   /* the payout beat on the report card */
   payout_tickets: 'Tickets',
   payout_token_minted: 'A token dropped in the tray. That is your one for today.',
-  late_slip_used: 'A late slip covered you. Your streak never noticed.',
+  late_slip_used: 'A tardy slip was handed in for you. Your streak never noticed.',
+  /* THE ONE SMALL BUTTON under the jeopardy line (Deck V). `{name}` is filled
+   * from the catalog row's own name, so a mod that renames the slip renames
+   * the offer with it. */
+  rake_slip_offer: 'The counter sells a {name}.',
 
   /* ------------------------------------------------------------------------
    * THE LOCKER, RM 004 (the Locker wave, 2026-08-28).

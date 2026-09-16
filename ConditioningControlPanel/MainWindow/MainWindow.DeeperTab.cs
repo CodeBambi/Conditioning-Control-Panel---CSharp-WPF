@@ -481,38 +481,34 @@ namespace ConditioningControlPanel
                 // Never stack on top of the update popup: both are modal on the UI
                 // thread, and whichever ShowDialog nests second owns input while the
                 // Topmost update dialog covers it - neither can be dismissed (#481).
-                // Wait for the update dialog, then take the startup-dialog flag so
-                // the update path's own wait loop defers to us symmetrically.
-                for (int i = 0; i < 60 && App.IsUpdateDialogActive; i++)
-                    await Task.Delay(500);
-                if (App.IsUpdateDialogActive) return;
+                // That wait (and the hand-rolled IsStartupDialogShowing claim that went
+                // with it) is now the ladder's job: priority 70, behind everything that
+                // belongs to the launch itself and ahead of the update dialog at 80.
+                await Task.Yield();
                 if (!IsLoaded || Dispatcher.HasShutdownStarted || !_isRunning) return;
 
-                bool confirmed;
-                IsStartupDialogShowing = true;
-                try
+                var body = sb.ToString();
+                EnqueueStartupModal("deeper-enhance-nudge", 70, _ =>
                 {
-                    confirmed = ShowStyledDialog("✨ Enhanced videos detected", sb.ToString(), yes, "Not now");
-                }
-                finally
-                {
-                    IsStartupDialogShowing = false;
-                }
-                if (!confirmed) return;
+                    // Re-read at open time. The nudge can have waited minutes on the ladder, and
+                    // the session it is about may be over by the time its turn comes.
+                    if (!_isRunning) return;
+                    if (!ShowStyledDialog("✨ Enhanced videos detected", body, yes, "Not now")) return;
 
-                if (enhanceOff)
-                {
-                    settings.VideoEnhanceIfPossible = true;
-                    App.Settings?.Save();
-                    App.Logger?.Information("Mandatory-video enhancement enabled via engine-start nudge.");
-                }
+                    if (enhanceOff)
+                    {
+                        settings.VideoEnhanceIfPossible = true;
+                        App.Settings?.Save();
+                        App.Logger?.Information("Mandatory-video enhancement enabled via engine-start nudge.");
+                    }
 
-                if (webcamGap)
-                {
-                    // Reuse the manual toggle's flow so consent + calibration
-                    // gating is identical to clicking the webcam button.
-                    BtnWebcamTracking_Click(this, new RoutedEventArgs());
-                }
+                    if (webcamGap)
+                    {
+                        // Reuse the manual toggle's flow so consent + calibration
+                        // gating is identical to clicking the webcam button.
+                        BtnWebcamTracking_Click(this, new RoutedEventArgs());
+                    }
+                });
             }
             catch (Exception ex)
             {

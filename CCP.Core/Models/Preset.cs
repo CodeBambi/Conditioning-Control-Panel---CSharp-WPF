@@ -120,6 +120,13 @@ namespace ConditioningControlPanel.Models
         public int LockCardFrequency { get; set; } = 2;
         public int LockCardRepeats { get; set; } = 3;
         public bool LockCardStrict { get; set; } = false;
+        // The 6.9.4 dials. Defaults mirror AppSettings so a preset saved before they existed
+        // applies as "off, fixed count", exactly what it meant when it was written.
+        public bool LockCardRandomRepeats { get; set; } = false;
+        public int LockCardRepeatsMin { get; set; } = 1;
+        public bool LockCardTargetLengthEnabled { get; set; } = false;
+        public int LockCardTargetLength { get; set; } = 120;
+        public int LockCardTargetLengthVariance { get; set; } = 20;
 
         // Bubble Count Settings (Level 50+)
         public bool BubbleCountEnabled { get; set; } = false;
@@ -390,6 +397,11 @@ namespace ConditioningControlPanel.Models
             settings.LockCardFrequency = LockCardFrequency;
             settings.LockCardRepeats = LockCardRepeats;
             settings.LockCardStrict = LockCardStrict;
+            settings.LockCardRandomRepeats = LockCardRandomRepeats;
+            settings.LockCardRepeatsMin = LockCardRepeatsMin;
+            settings.LockCardTargetLengthEnabled = LockCardTargetLengthEnabled;
+            settings.LockCardTargetLength = LockCardTargetLength;
+            settings.LockCardTargetLengthVariance = LockCardTargetLengthVariance;
 
             // Bubble Count
             settings.BubbleCountEnabled = BubbleCountEnabled;
@@ -500,6 +512,11 @@ namespace ConditioningControlPanel.Models
                 LockCardFrequency = settings.LockCardFrequency,
                 LockCardRepeats = settings.LockCardRepeats,
                 LockCardStrict = settings.LockCardStrict,
+                LockCardRandomRepeats = settings.LockCardRandomRepeats,
+                LockCardRepeatsMin = settings.LockCardRepeatsMin,
+                LockCardTargetLengthEnabled = settings.LockCardTargetLengthEnabled,
+                LockCardTargetLength = settings.LockCardTargetLength,
+                LockCardTargetLengthVariance = settings.LockCardTargetLengthVariance,
 
                 // Bubble Count
                 BubbleCountEnabled = settings.BubbleCountEnabled,

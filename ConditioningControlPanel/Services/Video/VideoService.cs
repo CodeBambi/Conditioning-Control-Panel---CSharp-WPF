@@ -165,6 +165,20 @@ namespace ConditioningControlPanel.Services
         // it treats the player as wedged and quarantines it. Only a real wedge should ever spend a
         // retire from the per-session budget.
         private const int StopStragglerGraceMs = 4000;
+        // Stop() tasks from the LAST teardown that were still running when CloseAll returned, plus
+        // the instance they belong to. The vmem/blur path deliberately never waits for them on the
+        // dispatcher and the VideoView path gives up after ~4.5s, so the NEXT video can start while
+        // a previous Stop() is still inside native code. A Play() that overlaps a wedged Stop() on
+        // the same instance never presents a frame: "fullscreen goes black for 2-3 seconds and then
+        // the video counts as watched" (#1121).
+        private static volatile Task[]? _pendingStopTasks;
+        private static LibVLC? _pendingStopOwner;
+        // How long the next video waits (pumping) for those stragglers before it abandons the owning
+        // instance and builds its players on a fresh one.
+        private const int PendingStopWaitMs = 2000;
+        // The "no videos found" guidance dialog is a per-LAUNCH one-off (#1124). Every trigger used
+        // to raise its own modal, so a long session stacked dozens of them on the dispatcher.
+        private static int _noVideosDialogShown;
 
 #if DEBUG
         // Fault injection for the wedge cluster (#765/#766/#767). Set CCP_FAULT_WEDGE_STOP=1 and the
@@ -196,6 +210,91 @@ namespace ConditioningControlPanel.Services
         // teardown path.
         private volatile bool _playbackStarted;
         private bool _triggerInProgress; // Guards the 800ms freeze delay window in TriggerVideo
+
+        /// <summary>When the in-flight trigger claimed <see cref="_triggerInProgress"/>. Read only by
+        /// the stale-trigger escape in TriggerVideo (#1135) - a flag with no timestamp cannot tell
+        /// "a trigger is genuinely mid-flight" from "a trigger died on the way to PlayVideo and
+        /// latched the guard shut".</summary>
+        private DateTime _triggerStartedUtc = DateTime.MinValue;
+
+        /// <summary>How long a trigger may sit between claiming <see cref="_triggerInProgress"/> and
+        /// reaching PlayVideo before the next trigger declares it dead and takes over. Generously
+        /// past the real path (an off-thread clip selection, which for a content-pack clip decrypts
+        /// the whole file, plus the 800ms freeze delay) and far short of the InteractionQueue's
+        /// 5-minute stuck detector, which is what used to be the only way out.</summary>
+        internal static readonly TimeSpan TriggerStallCeiling = TimeSpan.FromSeconds(45);
+
+        // ---- a video the descent asked for (ccp-bugs #1201) ------------------------------
+        // A chaos video is REQUESTED when the bubble detonates and only reaches the screen much
+        // later: clip selection runs off the UI thread, the freeze delay adds another 800ms, and
+        // the request can sit parked in the InteractionQueue behind a bubble count or a lock card
+        // for longer still. "Is a video playing" therefore cannot answer "does the descent still
+        // own a video" at run exit, and quitting right after a video bubble popped left the tape
+        // opening over the results card and the lobby behind it - the reported #1201 symptom.
+        //
+        // So every chaos request carries a token. ChaosModeService cancels through the last token
+        // handed out when the run ends by any path, and each resumption point between the request
+        // and the first frame abandons a cancelled one. A request with no token (0) belongs to the
+        // user or to the scheduler, and nothing here can touch it.
+        private int _chaosVideoToken;             // last token handed out; 0 is never a token
+        private int _chaosVideoCancelledThrough;  // every token <= this one has been cancelled
+
+        /// <summary>
+        /// The pure rule behind the cancellation, extracted so a test can pin it without LibVLC
+        /// behind it (the same seam <see cref="EvaluateTriggerGuard"/> uses). A request is
+        /// abandoned only when it carries a token AND a cancel has swept through that token, so a
+        /// video requested AFTER the cancel - the next run's, or the user's own - still plays.
+        /// </summary>
+        internal static bool ShouldAbandonVideoRequest(int requestToken, int cancelledThrough)
+            => requestToken != 0 && requestToken <= cancelledThrough;
+
+        /// <summary>
+        /// Take a token for a video a descent run is about to fire. Claimed at DETONATION time,
+        /// not at playback time: the whole point is to own the request through the window where
+        /// nothing is on screen yet.
+        /// </summary>
+        public int ClaimChaosVideoToken() => Interlocked.Increment(ref _chaosVideoToken);
+
+        /// <summary>
+        /// Cancel every chaos-owned video request made so far that has not reached the screen.
+        /// Cheap, synchronous and non-blocking: it moves one integer, and the requests discover
+        /// they are obsolete at their own next step. It cannot touch a video the user or the
+        /// scheduler asked for (those carry no token), and it does not tear down a tape already
+        /// playing - that stays <see cref="ForceCleanup"/>'s job, behind the caller's ownership
+        /// check. Returns true if there was anything outstanding to cancel.
+        /// </summary>
+        public bool CancelPendingChaosVideo(string reason)
+        {
+            int through = Volatile.Read(ref _chaosVideoToken);
+            if (through <= Volatile.Read(ref _chaosVideoCancelledThrough)) return false;
+            Volatile.Write(ref _chaosVideoCancelledThrough, through);
+            App.Logger?.Information("VideoService: every pending chaos video request through #{Token} is cancelled ({Reason})",
+                through, reason);
+            return true;
+        }
+
+        private bool IsChaosVideoRequestCancelled(int requestToken)
+            => ShouldAbandonVideoRequest(requestToken, Volatile.Read(ref _chaosVideoCancelledThrough));
+
+        /// <summary>
+        /// The shared abandon step for a cancelled chaos request. It also hands the InteractionQueue
+        /// its Video slot back when this call is a dequeued replay holding it, or the next
+        /// interaction would wait out the queue's 5-minute stuck window. Guarded exactly like the
+        /// cascade and feed releases: current==Video with nothing playing only happens right after
+        /// a dequeue.
+        /// </summary>
+        private bool AbandonCancelledChaosRequest(int requestToken, string where)
+        {
+            if (!IsChaosVideoRequestCancelled(requestToken)) return false;
+            App.Logger?.Information("VideoService: {Where} abandoned - the descent that asked for this video has ended", where);
+            if (!_videoPlaying &&
+                App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.Video)
+            {
+                App.InteractionQueue.Complete(InteractionQueueService.InteractionType.Video);
+            }
+            return true;
+        }
+
         private bool _strictActive;
         // True across the strict retry GAP: from the moment a strict run's attention check fails
         // until the replacement video is actually on screen. ShowMessage deliberately clears
@@ -698,7 +797,7 @@ namespace ConditioningControlPanel.Services
                 if (_libVLCReady.Task.Wait(timeoutMs))
                     return _libVLC != null;
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             App.Logger?.Warning("VideoService: Timed out waiting for LibVLC initialization");
             return _libVLC != null;
@@ -824,7 +923,7 @@ namespace ConditioningControlPanel.Services
                         if (outputs != null)
                         {
                             var names = string.Join(", ", outputs.Select(o => $"{o.Name} ({o.Description})"));
-                            App.Logger?.Information("LibVLC available aout modules: {Outputs}", names);
+                            App.Logger?.Debug("LibVLC available aout modules: {Outputs}", names);
                         }
                     }
                     catch (Exception aoutEx)
@@ -874,6 +973,92 @@ namespace ConditioningControlPanel.Services
             // becomes true — including on the vmem path, where CloseAll no longer waits on the
             // dispatcher and therefore never logs the "Stop() WEDGED" line itself.
             RecordNativePoisoning($"{nativeObj.GetType().Name} quarantined: {reason}");
+        }
+
+        // ---- Player teardown funnel (#1196, follow-up to #1121) ----
+        // The ONE place a mandatory-video MediaPlayer is taken down. Every exit path funnels here -
+        // natural end, ESC, panic key, attention-check fail, window close, engine/session stop, app
+        // exit, and a window whose creation threw - and nothing calls MediaPlayer.Dispose() directly
+        // any more.
+        //
+        // Why it has to exist: MediaPlayer.Media is NOT a stored reference. Every READ calls
+        // libvlc_media_player_get_media(), which takes a ref on the native media and hands back a
+        // brand new managed wrapper. A wrapper that is never disposed keeps that native ref - and
+        // with it the clip's input, demuxer, decoder chain and audio output - alive until the GC
+        // happens to run its finalizer, and the wrapper is a few dozen managed bytes pinning
+        // megabytes of native ones, so nothing about the managed heap ever makes that urgent. That
+        // is the shape of #1196: a "libvlc" entry that stays in the Windows volume mixer after the
+        // video is closed, RAM that only climbs across repeated video tests, and eventually clips
+        // that show their first frame and nothing more. The read site is fixed at source (the vmem
+        // aspect probe in CreateLibVLCVideoWindow) and this funnel drops the player's own media
+        // reference explicitly at teardown rather than leaving it to Dispose.
+        //
+        // CONTRACT: never call this on the UI thread and never from a LibVLC callback thread, and
+        // only once the player's Stop() has actually completed - a player whose Stop() is still
+        // inside native code is quarantined instead (QuarantineNative), because disposing a wedged
+        // player is what poisons the shared instance (#559). Idempotent: a player is released
+        // exactly once. The claim table holds WEAK keys, so it can never root a player itself.
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<
+            LibVLCSharp.Shared.MediaPlayer,
+            System.Runtime.CompilerServices.StrongBox<int>> _playerReleaseClaims = new();
+
+        private static bool ClaimPlayerRelease(LibVLCSharp.Shared.MediaPlayer player)
+        {
+            var claim = _playerReleaseClaims.GetValue(
+                player, static _ => new System.Runtime.CompilerServices.StrongBox<int>(0));
+            return Interlocked.Exchange(ref claim.Value, 1) == 0;
+        }
+
+        /// <summary>
+        /// Stop-completed teardown for one LibVLC <see cref="LibVLCSharp.Shared.MediaPlayer"/>:
+        /// release the media it still holds, then dispose the player. Idempotent, never throws.
+        /// See the contract note above - OFF the dispatcher, OFF any LibVLC callback thread, and
+        /// only for a player whose Stop() has returned.
+        /// </summary>
+        /// <param name="reason">Which exit path this is, for the log line and the trace.</param>
+        internal static void ReleasePlayer(LibVLCSharp.Shared.MediaPlayer? player, string reason)
+        {
+            if (player == null) return;
+            if (!ClaimPlayerRelease(player))
+            {
+                // Two teardown paths reaching the same player is a bug elsewhere, not a crash here.
+                VideoDiag.Log("CLOSE", $"player release skipped ({reason}) - already released");
+                return;
+            }
+
+            bool hadMedia = false;
+            try
+            {
+                // `using` is the whole point: the getter itself takes a ref, so reading this
+                // property and dropping the result on the floor leaks one media reference per read.
+                using var media = player.Media;
+                hadMedia = media != null;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("VideoService: releasing the player's media failed ({Reason}) - {Error}",
+                    reason, ex.Message);
+            }
+
+            try
+            {
+                player.Dispose();
+                // Information, not Debug: the next "libvlc is still in my sound mixer" report should
+                // be answerable from the log alone - either these lines are there (the players were
+                // released and something else holds the audio session) or they are not (the teardown
+                // never reached them). One line per player, and a mandatory video has at most one
+                // per monitor.
+                App.Logger?.Information(
+                    "VideoService: LibVLC player torn down ({Reason}) - media {MediaState}, player disposed",
+                    reason, hadMedia ? "released" : "already detached");
+                VideoDiag.Log("CLOSE", $"player torn down ({reason}) - hadMedia={hadMedia}");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("VideoService: disposing a LibVLC player failed ({Reason}) - {Error}",
+                    reason, ex.Message);
+                VideoDiag.Log("CLOSE", $"player Dispose() threw ({reason}) - {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -1152,8 +1337,7 @@ namespace ConditioningControlPanel.Services
                         return;
                     }
 
-                    player.Dispose();
-                    VideoDiag.Log("LEASE", $"{ownerTag}: managed player disposed");
+                    ReleasePlayer(player, $"leased player released ({ownerTag})");
                 }
                 catch (Exception ex)
                 {
@@ -1224,7 +1408,7 @@ namespace ConditioningControlPanel.Services
             // a previous run that never disarmed (its teardown threw). Those handles are dead, and
             // acting on them would make the escape hatch's trace line lie about what it released.
             lock (_managedLock) { _managedWindowHandles.Clear(); }
-            try { _managedWedgeWatchdog?.Dispose(); } catch { }
+            try { _managedWedgeWatchdog?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _managedWedgeWatchdog = new System.Threading.Timer(_ => ManagedWedgeTick(), null, 3000, 3000);
             VideoDiag.Log("WEDGE", $"{label}: managed wedge watchdog armed");
         }
@@ -1236,7 +1420,7 @@ namespace ConditioningControlPanel.Services
             // not a game was running), so stay silent when there was nothing armed rather than write
             // a WEDGE line naming a run that ended long ago.
             bool wasArmed = _managedWedgeWatchdog != null;
-            try { _managedWedgeWatchdog?.Dispose(); } catch { }
+            try { _managedWedgeWatchdog?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _managedWedgeWatchdog = null;
             lock (_managedLock) { _managedWindowHandles.Clear(); }
             if (wasArmed) VideoDiag.Log("WEDGE", $"{_managedLabel}: managed wedge watchdog disarmed");
@@ -1416,7 +1600,12 @@ namespace ConditioningControlPanel.Services
         /// and the play path force-unmutes, so folding this into GetEffectiveVolume is the
         /// one place that covers every site at once - play-time AND live slider drags.
         /// </summary>
-        private static volatile bool _externalMute;
+        ///
+        /// INSTANCE, not static (#1103). As a static it outlived the VideoService that owned it: a
+        /// dive torn down on an unusual path left it set and every video for the rest of the process
+        /// was created silent, with nothing in the log to say why. Per-instance, a service restart
+        /// clears it, and the only writer is the DtRH host.
+        private volatile bool _externalMute;
 
         /// <summary>Silence (or release) every video for an external owner. Applies live.
         /// MUST be released on teardown - see DtrhHostService.DisposeAll.</summary>
@@ -1437,6 +1626,23 @@ namespace ConditioningControlPanel.Services
             var master = App.Settings.Current.MasterVolume;
             var video = App.Settings.Current.VideoVolume;
             return (int)((master / 100.0) * (video / 100.0) * 100);
+        }
+
+        /// <summary>
+        /// Where the current effective volume comes from, for the one play-time log line (#1103).
+        /// "The video had no sound" reports used to carry nothing that separated "the user's slider
+        /// is at zero" from "a DtRH dive left the external mute set", which are the same silence
+        /// with completely different fixes. Audio ducking is named here only to rule it out: Duck()
+        /// lowers OTHER apps, never this player.
+        /// </summary>
+        private string DescribeVolumeOrigin()
+        {
+            var master = App.Settings.Current.MasterVolume;
+            var video = App.Settings.Current.VideoVolume;
+            if (_externalMute) return $"DtRH dive external mute (user setting is master {master}%, video {video}%)";
+            if (master <= 0) return "user setting: master volume is 0";
+            if (video <= 0) return "user setting: video volume is 0";
+            return $"user setting (master {master}%, video {video}%)";
         }
 
         /// <summary>
@@ -1505,7 +1711,11 @@ namespace ConditioningControlPanel.Services
                     // drags: player.Mute reads true while no audio output exists yet (transient),
                     // so the primary player got skipped. Volume and Mute are independent in
                     // LibVLC - setting Volume never unmutes, and no-audio secondaries ignore it.
+                    // Mute is driven from the same number (#1103): silence is the PLAYER's state
+                    // now, so a drag back up has to clear it or the video stays silent for the rest
+                    // of the clip. Secondaries carry :no-audio and ignore both.
                     player.Volume = effectiveVolume;
+                    player.Mute = effectiveVolume <= 0;
                 }
                 catch (Exception ex)
                 {
@@ -1590,9 +1800,9 @@ namespace ConditioningControlPanel.Services
             _feedDeferDeadlineUtc = DateTime.MinValue;
 
             try { Microsoft.Win32.SystemEvents.SessionSwitch -= OnSessionSwitch; }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
             try { Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged; }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             // Force cleanup of any playing video. Every caller of Stop() is a LIVE stop
             // (engine stop, panic, remote control, feature toggle) — app shutdown never
@@ -1608,7 +1818,7 @@ namespace ConditioningControlPanel.Services
             ClearGraceState();   // defensive: CloseAll also does it, but it early-returns if already cleaning (#735)
             try
             {
-                CloseAll(synchronous: false);
+                CloseAll(synchronous: false, reason: "engine stop");
             }
             catch (FileNotFoundException)
             {
@@ -1624,7 +1834,7 @@ namespace ConditioningControlPanel.Services
             // CompleteIfCurrent never clears a claim that isn't ours.
             App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.Video);
 
-            App.Logger?.Information("VideoService stopped");
+            App.Logger?.Debug("VideoService stopped");
         }
 
         private void OnSessionSwitch(object? sender, Microsoft.Win32.SessionSwitchEventArgs e)
@@ -1700,7 +1910,7 @@ namespace ConditioningControlPanel.Services
         private DateTime _cascadeDeferDeadlineUtc = DateTime.MinValue;
 
         /// <summary>#871: hold a trigger the gif-cascade guard refused and replay it once the rain stops.</summary>
-        private void DeferTriggerPastCascade(bool silentIfEmpty, bool? strictOverride)
+        private void DeferTriggerPastCascade(bool silentIfEmpty, bool? strictOverride, bool userEarned = false, int chaosToken = 0)
         {
             if (_cascadeDeferPending)
             {
@@ -1734,14 +1944,20 @@ namespace ConditioningControlPanel.Services
                     // thing that justified it — the engine stopped, the user turned mandatory
                     // videos off — and replaying then pops a fullscreen video out of a feature
                     // that is switched off. Same guard the scheduler uses (see ScheduleNext).
-                    if (!_isRunning || App.Settings?.Current?.MandatoryVideosEnabled != true)
+                    //
+                    // #1135: NOT for a user-earned trigger. Trigger bubbles are their own dashboard
+                    // feature and have never required the mandatory-video scheduler - the direct
+                    // path above has no such gate - so a popped video bubble was fine until a
+                    // cascade happened to be falling, at which point this line quietly binned it
+                    // for a setting that never applied to it.
+                    if (!userEarned && (!_isRunning || App.Settings?.Current?.MandatoryVideosEnabled != true))
                     {
                         App.Logger?.Information("VideoService: cascade replay abandoned - mandatory videos no longer running");
                         _cascadeDeferDeadlineUtc = DateTime.MinValue;
                         return;
                     }
 
-                    TriggerVideo(silentIfEmpty, strictOverride);
+                    TriggerVideo(silentIfEmpty, strictOverride, userEarned, chaosToken);
 
                     // TriggerVideo may have parked itself again (a new cascade). Only release the
                     // ceiling when the chain really ended, so the re-defer above inherits it.
@@ -1782,7 +1998,7 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>#1073: hold a trigger the For You guard refused and replay it once the feed leaves
         /// the screen (closed, or ghosted away).</summary>
-        private void DeferTriggerPastFeed(bool silentIfEmpty, bool? strictOverride)
+        private void DeferTriggerPastFeed(bool silentIfEmpty, bool? strictOverride, bool userEarned = false, int chaosToken = 0)
         {
             if (_feedDeferPending)
             {
@@ -1814,15 +2030,16 @@ namespace ConditioningControlPanel.Services
                     // Re-assert the preconditions at FIRE time. The defer can easily outlive the thing
                     // that justified it — the engine stopped, the user turned mandatory videos off —
                     // and replaying then pops a fullscreen video out of a feature that is switched off.
-                    // Same guard the cascade replay and the scheduler use.
-                    if (!_isRunning || App.Settings?.Current?.MandatoryVideosEnabled != true)
+                    // Same guard the cascade replay and the scheduler use - and, like there, NOT for a
+                    // user-earned trigger, which never depended on the mandatory-video scheduler (#1135).
+                    if (!userEarned && (!_isRunning || App.Settings?.Current?.MandatoryVideosEnabled != true))
                     {
                         App.Logger?.Information("VideoService: For You replay abandoned - mandatory videos no longer running");
                         _feedDeferDeadlineUtc = DateTime.MinValue;
                         return;
                     }
 
-                    TriggerVideo(silentIfEmpty, strictOverride);
+                    TriggerVideo(silentIfEmpty, strictOverride, userEarned, chaosToken);
 
                     // TriggerVideo may have parked itself again (the feed came back, or a cascade
                     // started). Only release the ceiling when the chain really ended, so a re-defer
@@ -1857,7 +2074,7 @@ namespace ConditioningControlPanel.Services
             if (dispatcher == null || dispatcher.HasShutdownStarted)
             {
                 // No dispatcher to poll on, so the action can never run — release the caller's latch.
-                try { onExpired?.Invoke(); } catch { }
+                try { onExpired?.Invoke(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 return;
             }
 
@@ -1887,13 +2104,39 @@ namespace ConditioningControlPanel.Services
                 }
                 catch (Exception ex)
                 {
-                    try { timer.Stop(); } catch { }
-                    try { onExpired?.Invoke(); } catch { }
+                    try { timer.Stop(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
+                    try { onExpired?.Invoke(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                     App.Logger?.Debug("VideoService.RunWhenFeedClear: {E}", ex.Message);
                 }
             };
             timer.Start();
             App.Logger?.Information("VideoService: deferring mandatory video until the For You feed leaves the screen");
+        }
+
+        /// <summary>What a fresh TriggerVideo call should do about the in-progress guard.</summary>
+        internal enum TriggerGuardDecision
+        {
+            /// <summary>Nothing in flight - claim the guard and go.</summary>
+            Proceed,
+            /// <summary>A trigger really is mid-flight; this one is a genuine overlap and is dropped.</summary>
+            Skip,
+            /// <summary>The in-flight trigger is older than anything real can be: it died on the way
+            /// to PlayVideo and latched the guard. Clear it and let this trigger through.</summary>
+            ClearStaleAndProceed
+        }
+
+        /// <summary>
+        /// Pure decision for the <see cref="_triggerInProgress"/> guard, extracted so the escape
+        /// hatch is unit-testable without LibVLC (the seam pattern EvaluateGraceRequest already uses).
+        /// The escape exists because the guard could latch forever and silently eat every later
+        /// video: the #1135 "video bubbles do nothing" report.
+        /// </summary>
+        internal static TriggerGuardDecision EvaluateTriggerGuard(bool triggerInProgress, TimeSpan sinceTriggerStarted)
+        {
+            if (!triggerInProgress) return TriggerGuardDecision.Proceed;
+            return sinceTriggerStarted < TriggerStallCeiling
+                ? TriggerGuardDecision.Skip
+                : TriggerGuardDecision.ClearStaleAndProceed;
         }
 
         /// <param name="silentIfEmpty">
@@ -1908,15 +2151,60 @@ namespace ConditioningControlPanel.Services
         /// its videos follow the global setting like every other one (the TakeoverVideosStrict
         /// override is retired - see AppSettings.TakeoverVideosStrict and AutonomyService).
         /// </param>
-        public void TriggerVideo(bool silentIfEmpty = false, bool? strictOverride = null)
+        /// <param name="userEarned">
+        /// True when a human action asked for THIS video right now - today that means a popped
+        /// video bubble (VideoPayload), as opposed to the background scheduler. Two guards read it,
+        /// and both for the same reason: a bubble the user popped is explicit consent, so it must
+        /// not be stood down for a feature the user is not using, nor abandoned mid-defer because
+        /// the unrelated mandatory-video SCHEDULER happens to be off. See the For You guard below
+        /// and the replay re-asserts in DeferTriggerPastFeed / DeferTriggerPastCascade.
+        /// </param>
+        /// <param name="chaosToken">
+        /// Nonzero when a descent run asked for this video (<see cref="ClaimChaosVideoToken"/>).
+        /// The request is then abandoned, at every point between here and the first frame, once the
+        /// run that asked for it has ended (#1201). Zero - the default - is a video the user or the
+        /// scheduler asked for, which nothing here may cancel.
+        /// </param>
+        public void TriggerVideo(bool silentIfEmpty = false, bool? strictOverride = null, bool userEarned = false, int chaosToken = 0)
         {
-            App.Logger?.Information("VideoService: TriggerVideo called");
+            App.Logger?.Information("VideoService: TriggerVideo called (userEarned={UserEarned})", userEarned);
 
-            // Prevent overlapping triggers (e.g. during 800ms freeze delay)
-            if (_triggerInProgress)
+            // The run can have ended while this request sat in the queue, or behind a cascade or
+            // the feed. Nothing is on screen yet, so this is the cheapest place to stop.
+            if (AbandonCancelledChaosRequest(chaosToken, "TriggerVideo")) return;
+
+            // Prevent overlapping triggers (e.g. during 800ms freeze delay).
+            //
+            // #1135: this flag used to be able to LATCH. It is set here and cleared at the top of
+            // PlayVideo, and the only thing carrying the trigger from here to there was a bounded
+            // DispatcherHelper.RunOnUISync - which ABANDONS its queued work after 5 seconds and
+            // returns normally (a Warning, no exception). Five seconds of UI-thread time is not
+            // exotic in this app: CloseAll alone documents blocking the dispatcher for up to ~4.9s.
+            // When that happened PlayVideo never ran, nothing cleared the flag, and EVERY later
+            // trigger - every video bubble the user popped - was dropped right here until the
+            // InteractionQueue's 5-minute stuck detector force-cleaned. That is the reported
+            // "video bubbles do nothing most of the time", with no error anywhere.
+            //
+            // The RunOnUISync is gone (see ContinueTriggerVideo), and this guard no longer trusts
+            // the flag indefinitely: a trigger that has not reached PlayVideo within
+            // TriggerStallCeiling is declared dead and this one takes over.
+            var triggerAge = DateTime.UtcNow - _triggerStartedUtc;
+            switch (EvaluateTriggerGuard(_triggerInProgress, triggerAge))
             {
-                App.Logger?.Information("VideoService: TriggerVideo skipped - trigger already in progress");
-                return;
+                case TriggerGuardDecision.Skip:
+                    App.Logger?.Information("VideoService: TriggerVideo skipped - trigger already in progress ({Sec:F1}s ago)",
+                        triggerAge.TotalSeconds);
+                    return;
+
+                case TriggerGuardDecision.ClearStaleAndProceed:
+                    App.Logger?.Warning("VideoService: clearing a STALE in-progress trigger ({Sec:F0}s old, ceiling {Ceiling:F0}s) - the previous trigger never reached PlayVideo; this one proceeds",
+                        triggerAge.TotalSeconds, TriggerStallCeiling.TotalSeconds);
+                    _triggerInProgress = false;
+                    // The dead trigger claimed the queue's Video slot and will never release it. Only
+                    // release when nothing is actually on screen - a live video's claim is its own.
+                    if (!_videoPlaying && _windows.Count == 0)
+                        App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.Video);
+                    break;
             }
 
             // Teardown of a previous video is pumping messages (CloseAll/WaitWithMessagePump
@@ -1951,7 +2239,7 @@ namespace ConditioningControlPanel.Services
                 {
                     App.InteractionQueue.Complete(InteractionQueueService.InteractionType.Video);
                 }
-                DeferTriggerPastCascade(silentIfEmpty, strictOverride);
+                DeferTriggerPastCascade(silentIfEmpty, strictOverride, userEarned, chaosToken);
                 return;
             }
 
@@ -1968,12 +2256,25 @@ namespace ConditioningControlPanel.Services
             //     cost #871 above), and a video the user popped a bubble to earn must not evaporate.
             //     So the trigger is held and replayed once the feed leaves the screen — closed, or
             //     ghosted away — exactly like the cascade guard.
+            //  3. #1135: the defer still swallowed a popped bubble whenever the user kept BROWSING.
+            //     It is capped at 90s, so on a feed the user stays in for minutes - which is what an
+            //     endless feed is for - the held video expires and the pop produced nothing, the same
+            //     outcome the outright drop had. The guard's whole justification is that the feed IS
+            //     the video experience and a SCHEDULED video must not barge in on it; a bubble the
+            //     user deliberately popped is not the scheduler barging in, it is the user asking for
+            //     a video while looking at the feed. So a user-earned trigger is not stood down for
+            //     the feed at all. (Audio: the feed renders in an out-of-process WebView2, so the
+            //     normal audio duck reaches it like any other app's playback.)
             //
             // The old comment's concern ("never queue: the feed can stay open far longer than the
             // queue's stuck window") is still honoured, twice over: the queue slot is RELEASED here
             // rather than held across the wait, and the wait itself is capped at FeedDeferMaxWait,
             // so nothing parks behind an all-evening feed session.
-            if (FeedOwnsTheScreen)
+            if (FeedOwnsTheScreen && userEarned)
+            {
+                App.Logger?.Information("VideoService: For You feed is on screen but this video was earned by a bubble pop - playing it rather than deferring");
+            }
+            else if (FeedOwnsTheScreen)
             {
                 App.Logger?.Information("VideoService: TriggerVideo deferred - For You feed on screen");
                 // Same release as the cascade guard: when this trigger was DEQUEUED the queue already
@@ -1986,7 +2287,7 @@ namespace ConditioningControlPanel.Services
                 {
                     App.InteractionQueue.Complete(InteractionQueueService.InteractionType.Video);
                 }
-                DeferTriggerPastFeed(silentIfEmpty, strictOverride);
+                DeferTriggerPastFeed(silentIfEmpty, strictOverride, userEarned, chaosToken);
                 return;
             }
 
@@ -2000,7 +2301,7 @@ namespace ConditioningControlPanel.Services
                     App.InteractionQueue.CurrentInteraction);
                 App.InteractionQueue.TryStart(
                     InteractionQueueService.InteractionType.Video,
-                    () => TriggerVideo(silentIfEmpty, strictOverride),
+                    () => TriggerVideo(silentIfEmpty, strictOverride, userEarned, chaosToken),
                     queue: true);
                 return;
             }
@@ -2022,6 +2323,7 @@ namespace ConditioningControlPanel.Services
             }
 
             _triggerInProgress = true;
+            _triggerStartedUtc = DateTime.UtcNow;   // stamped so a dead trigger cannot latch the guard (#1135)
 
             // Resolve strictness NOW (trigger time), not after the 800ms freeze delay —
             // the global setting can change inside that window.
@@ -2058,7 +2360,7 @@ namespace ConditioningControlPanel.Services
                 {
                     try
                     {
-                        ContinueTriggerVideo(selected, strict, silentIfEmpty);
+                        ContinueTriggerVideo(selected, strict, silentIfEmpty, chaosToken);
                     }
                     catch (Exception ex)
                     {
@@ -2075,9 +2377,18 @@ namespace ConditioningControlPanel.Services
         /// chosen off it (#732). Split out rather than inlined so the expensive selection cannot
         /// drift back onto the dispatcher.
         /// </summary>
-        private void ContinueTriggerVideo(string? path, bool strict, bool silentIfEmpty)
+        private void ContinueTriggerVideo(string? path, bool strict, bool silentIfEmpty, int chaosToken = 0)
         {
             App.Logger?.Information("VideoService: GetNextVideo returned: {Path}", path ?? "(null)");
+
+            // Selection ran off the UI thread and can take seconds (a content-pack decrypt, a
+            // full-library refill), which is most of the window #1201 falls into. Release the
+            // trigger guard along with the request, or the next video is dropped as an overlap.
+            if (AbandonCancelledChaosRequest(chaosToken, "the chosen clip"))
+            {
+                _triggerInProgress = false;
+                return;
+            }
 
             if (string.IsNullOrEmpty(path))
             {
@@ -2096,9 +2407,31 @@ namespace ConditioningControlPanel.Services
                 // Startup auto-play: a user who hasn't added videos shouldn't get a blocking
                 // dialog on every launch (#333). Log and bail quietly — manual triggers still
                 // fall through to the guidance prompt below.
+                //
+                // #1135: silentIfEmpty is NOT only the startup video any more - every popped video
+                // bubble comes through here with it set, and the old line claimed "startup video
+                // skipped" for a pop the user had just made, with no counts to say WHY the pool came
+                // back empty (no files, everything disabled, a duration filter that excludes the whole
+                // library, a pack that would not decrypt). Say what actually happened instead.
                 if (silentIfEmpty)
                 {
-                    App.Logger?.Information("VideoService: startup video skipped — no videos in {Path}", _videosPath);
+                    int remoteBuffered;
+                    lock (_remoteLock) remoteBuffered = _remoteVideoQueue.Count;
+                    App.Logger?.Information(
+                        "VideoService: video request refused - the pool handed back nothing (local={Local}, pack={Pack}, remote buffered={Remote}, minLen={Min}s, maxLen={Max}s, path={Path})",
+                        _videoQueue.Count, _packVideoQueue.Count, remoteBuffered,
+                        App.Settings?.Current?.VideoMinDurationSeconds ?? 0,
+                        App.Settings?.Current?.VideoMaxDurationSeconds ?? 0,
+                        _videosPath);
+                    return;
+                }
+
+                // One dialog per app launch (#1124). A trigger fires every couple of minutes, so a
+                // 33-minute session used to stack dozens of identical modals - each one blocking
+                // this call and pumping a nested message loop on the dispatcher.
+                if (Interlocked.Exchange(ref _noVideosDialogShown, 1) != 0)
+                {
+                    App.Logger?.Information("VideoService: still no videos in {Path}; the guidance dialog was already shown this launch", _videosPath);
                     return;
                 }
 
@@ -2119,13 +2452,25 @@ namespace ConditioningControlPanel.Services
 
                 message += Loc.Get("video_add_files_hint");
 
-                System.Windows.MessageBox.Show(message, Loc.Get("video_no_videos_title"));
+                // Posted, not called: MessageBox.Show blocks its caller and pumps a nested message
+                // loop, and this caller is the trigger path. It returns immediately now and the box
+                // opens on the dispatcher's own time (#1124).
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        System.Windows.MessageBox.Show(message, Loc.Get("video_no_videos_title"));
 
-                // AFTER the box closes, never before: MessageBox.Show runs a nested message pump,
-                // so the coaching card's Normal-priority BeginInvoke would be dispatched while the
-                // box is still up and stack a window on a modal. App keeps the one-offer-per-launch
-                // budget, shared with the flash/wallpaper/first-run dead ends.
-                App.OfferRemoteMediaSource("videos");
+                        // AFTER the box closes, never before: MessageBox.Show runs a nested message pump,
+                        // so the coaching card's Normal-priority BeginInvoke would be dispatched while the
+                        // box is still up and stack a window on a modal. App keeps the one-offer-per-launch
+                        // budget, shared with the flash/wallpaper/first-run dead ends.
+                        App.OfferRemoteMediaSource("videos");
+                    }
+                    catch (Exception ex) { App.Logger?.Debug("VideoService: no-videos dialog failed: {Error}", ex.Message); }
+                }));
                 return;
             }
 
@@ -2155,9 +2500,22 @@ namespace ConditioningControlPanel.Services
                         }
 
                         App.Logger?.Debug("VideoService: Freeze delay complete, calling PlayVideo on UI thread");
-                        DispatcherHelper.RunOnUISync(() =>
+                        // RunOnUI (BeginInvoke), never RunOnUISync (#1135). The sync helper is bounded
+                        // at 5 seconds and, on timeout, ABANDONS the queued PlayVideo and returns
+                        // normally - so the video simply never happened, _triggerInProgress stayed
+                        // latched, and every video bubble popped for the next five minutes was dropped
+                        // as "trigger already in progress". Five seconds of UI-thread time is ordinary
+                        // here: CloseAll alone documents blocking the dispatcher for up to ~4.9s. There
+                        // is no result to wait for, so the queued call just runs when the thread frees.
+                        DispatcherHelper.RunOnUI(() =>
                         {
-                            PlayVideo(path, strict);
+                            try { PlayVideo(path, strict, chaosToken: chaosToken); }
+                            catch (Exception ex)
+                            {
+                                App.Logger?.Error(ex, "VideoService: PlayVideo after the freeze delay failed");
+                                _triggerInProgress = false;
+                                App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.Video);
+                            }
                         });
                     }
                     catch (Exception ex)
@@ -2172,7 +2530,7 @@ namespace ConditioningControlPanel.Services
             {
                 // Attention checks or minigame active - play video without freeze
                 App.Logger?.Debug("VideoService: Playing video immediately (skipFreeze=true)");
-                PlayVideo(path, strict);
+                PlayVideo(path, strict, chaosToken: chaosToken);
             }
         }
 
@@ -2246,9 +2604,17 @@ namespace ConditioningControlPanel.Services
                         }
 
                         App.Logger?.Debug("VideoService: Freeze delay complete, calling PlayVideo for specific video");
-                        DispatcherHelper.RunOnUISync(() =>
+                        // RunOnUI, not RunOnUISync - same reasoning as the TriggerVideo path (#1135):
+                        // the bounded sync helper abandons the queued PlayVideo after 5s of busy UI
+                        // thread and reports nothing but a Warning, so the video silently never plays.
+                        DispatcherHelper.RunOnUI(() =>
                         {
-                            PlayVideo(videoPath, strictMode);
+                            try { PlayVideo(videoPath, strictMode); }
+                            catch (Exception ex)
+                            {
+                                App.Logger?.Error(ex, "VideoService: PlayVideo for the specific video failed");
+                                App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.Video);
+                            }
                         });
                     }
                     catch (Exception ex)
@@ -2288,7 +2654,7 @@ namespace ConditioningControlPanel.Services
             _strictActive = false;
             CancelPendingRetry();
             ClearGraceState();   // defensive: CloseAll also does it, but it early-returns if already cleaning (#735)
-            CloseAll(synchronous);
+            CloseAll(synchronous, reason: synchronous ? "app exit" : "force cleanup (panic / stuck / session switch)");
             App.Audio?.ForceUnduck();
             _penalties = 0;
 
@@ -2326,11 +2692,13 @@ namespace ConditioningControlPanel.Services
                 _strictActive = false;
                 CancelPendingRetry();
 
-                var allScreens = App.GetAllScreensCached().ToList();
+                // Global "Show content on" picker, not every screen: with one monitor picked
+                // this list has exactly one entry and no secondary window is ever created.
+                var allScreens = App.GetGlobalScreens().ToList();
                 if (allScreens.Count == 0) return;
 
                 var primary = allScreens.FirstOrDefault(s => s.Primary) ?? allScreens[0];
-                var secondaries = allScreens.Where(s => !s.Primary).ToList();
+                var secondaries = allScreens.Where(s => s.DeviceName != primary.DeviceName).ToList();
 
                 // Create primary window with audio
                 var primaryWin = CreateLibVLCUrlWindow(url, primary, withAudio: true);
@@ -2351,7 +2719,7 @@ namespace ConditioningControlPanel.Services
                         secondaries.Count, allScreens.Count);
                 }
 
-                App.Logger?.Information("Playing URL via LibVLC on {Count} screen(s): {Url}", _windows.Count, url);
+                App.Logger?.Information("Playing URL via LibVLC on {Count} screen(s), host {Host}", _windows.Count, Logging.UrlLog.Host(url));
             });
         }
 
@@ -2364,7 +2732,10 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private static bool ShouldFillSecondaryMonitors(int screenCount)
         {
-            if (!App.Settings.Current.DualMonitorEnabled) return false;
+            // screenCount is the TARGETED screen count (App.GetGlobalScreens), so the
+            // DualMonitorEnabled test this used to open with is already applied: one targeted
+            // screen means there is no secondary to fill.
+            if (screenCount <= 1) return false;
             if (screenCount <= 2) return true; // 1–2 monitors: unchanged
             return App.Settings.Current.FillAllMonitorsWithVideo;
         }
@@ -2440,7 +2811,7 @@ namespace ConditioningControlPanel.Services
                             {
                                 if (_isCleaningUp) return; // Double-check on UI thread
                                 _videoPlaying = false;
-                                CloseAll();
+                                CloseAll(reason: "url playback ended");
                             });
                         }
                         catch (Exception ex)
@@ -2451,7 +2822,7 @@ namespace ConditioningControlPanel.Services
                                 if (!_isCleaningUp)
                                     Application.Current?.Dispatcher?.Invoke(() => ForceCleanup());
                             }
-                            catch { /* Last resort failed */ }
+                            catch (Exception exIgnored) { Diag.Swallowed(exIgnored, "last-resort cleanup failed"); }
                         }
                     });
                 };
@@ -2468,7 +2839,7 @@ namespace ConditioningControlPanel.Services
                             dispatcher.BeginInvoke(() =>
                             {
                                 _videoPlaying = false;
-                                CloseAll();
+                                CloseAll(reason: "url playback error");
                             });
                         }
                         catch (Exception ex)
@@ -2498,10 +2869,10 @@ namespace ConditioningControlPanel.Services
             // Create media from URL — disposed after Play() (LibVLC ref-counts internally)
             using var media = new Media(_libVLC!, url, FromType.FromLocation);
             // Secondaries skip audio decoding entirely — prevents a parallel WASAPI session
-            // from opening on the same MMDevice and racing the primary's mixer state. Also
-            // skip it when audio is deactivated (effective volume 0), else the async Play()
-            // lets the video blip at 100% before the volume set below lands (see file path).
-            if (!withAudio || GetEffectiveVolume() <= 0) media.AddOption(":no-audio");
+            // from opening on the same MMDevice and racing the primary's mixer state. A zero
+            // effective volume no longer bakes it in: that made the silence permanent for the
+            // whole clip, mute state included (#1103, see the file path for the full note).
+            if (!withAudio) media.AddOption(":no-audio");
 
             // Subscribed BEFORE Play(): a fast start raises Playing inside Play() itself, and this
             // handler owns everything that needs a live aout - the volume re-apply (the set after
@@ -2511,7 +2882,12 @@ namespace ConditioningControlPanel.Services
                 int audioRouted = 0; // Playing can fire again after a seek/restart - route once
                 mediaPlayer.Playing += (s, e) =>
                 {
-                    try { mediaPlayer.Mute = false; mediaPlayer.Volume = GetEffectiveVolume(); }
+                    try
+                    {
+                        var eff = GetEffectiveVolume();
+                        mediaPlayer.Mute = eff <= 0;
+                        mediaPlayer.Volume = eff;
+                    }
                     catch (Exception ex) { App.Logger?.Debug(ex, "VideoService: URL volume apply on Playing failed"); }
 
                     if (System.Threading.Interlocked.Exchange(ref audioRouted, 1) == 0)
@@ -2523,8 +2899,11 @@ namespace ConditioningControlPanel.Services
 
             if (withAudio)
             {
-                mediaPlayer.Mute = false;
-                mediaPlayer.Volume = GetEffectiveVolume();
+                var effective = GetEffectiveVolume();
+                mediaPlayer.Mute = effective <= 0;
+                mediaPlayer.Volume = effective;
+                App.Logger?.Information("VideoService: effective URL video volume {Vol}% (mute={Mute}) - origin: {Origin}",
+                    effective, effective <= 0, DescribeVolumeOrigin());
             }
 
             return win;
@@ -2617,7 +2996,7 @@ namespace ConditioningControlPanel.Services
             _scheduler.Start();
         }
 
-        private void PlayVideo(string path, bool strict, bool isVoutRetry = false)
+        private void PlayVideo(string path, bool strict, bool isVoutRetry = false, int chaosToken = 0)
         {
             App.Logger?.Information("VideoService: PlayVideo called for {File}", Path.GetFileName(path));
 
@@ -2636,6 +3015,15 @@ namespace ConditioningControlPanel.Services
                 App.Settings?.Current?.DualMonitorEnabled == true));
 
             _triggerInProgress = false;
+
+            // The last gate before any fullscreen surface exists, and the one the 800ms freeze
+            // delay lands on: a descent that ended while this request waited does not get its tape
+            // opened over the results card and the lobby (#1201).
+            if (AbandonCancelledChaosRequest(chaosToken, "PlayVideo"))
+            {
+                VideoDiag.Log("VIDEO", "SKIP - the descent that asked for this video has ended");
+                return;
+            }
 
             if (_videoPlaying)
             {
@@ -2741,7 +3129,7 @@ namespace ConditioningControlPanel.Services
                 if (App.Achievements?.Progress?.TotalVideoMinutes <= 0)
                     App.EmiDesk?.Fire("firstVideoEver", null);
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             // ---- hybrid routing (docs/BROWSER_VIDEO_ENGINE_PLAN.md §4) ----
             // The ONLY change to this path. When the browser engine takes the clip it satisfies the
@@ -2791,6 +3179,12 @@ namespace ConditioningControlPanel.Services
                 StartMaxLengthCapTimer();
                 VideoDiag.Log("VIDEO", $"safety + max-length timers armed +{showSw.ElapsedMilliseconds}ms");
 
+                // A previous teardown's Stop() may still be inside native code right now (#1121):
+                // the vmem/blur path hands its stop tasks straight to the async quarantine without
+                // ever waiting on the dispatcher. Building this video's players on an instance whose
+                // last Stop() has not returned is how a clip ends up black for its whole run.
+                AwaitPendingStops();
+
                 // Ensure LibVLC is initialized (deferred from startup for faster launch).
                 // #616-#623 NOTE: this call runs ON THE UI THREAD and takes _libVLCLock, which a
                 // background rebuild (RetireSharedLibVLC's Task.Run) can hold for the whole duration
@@ -2810,7 +3204,8 @@ namespace ConditioningControlPanel.Services
                 {
                     try
                     {
-                        var allScreens = App.GetAllScreensCached().ToList();
+                        // Global "Show content on" picker, not every screen (see GetGlobalScreens).
+                        var allScreens = App.GetGlobalScreens().ToList();
                         VideoDiag.Log("VIDEO", $"screens enumerated ({allScreens.Count}) +{showSw.ElapsedMilliseconds}ms");
                         if (allScreens.Count == 0)
                         {
@@ -2819,7 +3214,7 @@ namespace ConditioningControlPanel.Services
                             return;
                         }
                         var primary = allScreens.FirstOrDefault(s => s.Primary) ?? allScreens[0];
-                        var secondaries = allScreens.Where(s => !s.Primary).ToList();
+                        var secondaries = allScreens.Where(s => s.DeviceName != primary.DeviceName).ToList();
 
                         App.Logger?.Information("VideoService: Detected {Total} screens - Primary: {Primary}, Secondary: {SecCount} ({SecNames})",
                             allScreens.Count, primary.DeviceName, secondaries.Count,
@@ -3199,7 +3594,7 @@ namespace ConditioningControlPanel.Services
                             {
                                 Application.Current?.Dispatcher?.Invoke(() => ForceCleanup());
                             }
-                            catch { /* Last resort failed */ }
+                            catch (Exception exIgnored) { Diag.Swallowed(exIgnored, "last-resort cleanup failed"); }
                         }
                     });
                 };
@@ -3291,7 +3686,15 @@ namespace ConditioningControlPanel.Services
                 {
                     try
                     {
-                        var tracks = aspectPlayer.Media?.Tracks;
+                        // #1196: `using`, because MediaPlayer.Media is a GETTER that calls
+                        // libvlc_media_player_get_media() and returns a NEW ref-counted wrapper
+                        // every time. This probe is wired to Playing, ESSelected AND Vout, so the
+                        // un-disposed reads leaked several native media references - each pinning a
+                        // whole input/decoder/aout chain - per mandatory video, on the DEFAULT
+                        // (blurred-background) render path. Matches the shape of the pattern already
+                        // used by the vout watchdog's track probe.
+                        using var probeMedia = aspectPlayer.Media;
+                        var tracks = probeMedia?.Tracks;
                         if (tracks == null) return;
                         // Pick the BIGGEST video ES, not the first one that parses. A container can
                         // carry an attached cover-art/thumbnail video track, and since #786 the sharp
@@ -3373,15 +3776,15 @@ namespace ConditioningControlPanel.Services
             // Secondaries skip audio decoding entirely. Setting Mute=true after Play() opened
             // a second WASAPI session on the same MMDevice; Windows collapsed both into one
             // per-app mixer slider and the result was doubled/desynced or zero-volume audio.
-            // Also skip it when audio is deactivated (effective volume 0): Play() is async, so
-            // the Volume=0 set below no-ops until the aout exists and the video would start at
-            // 100% for a beat before the Playing handler cuts it — the audible blip a
-            // "deactivated audio" user hears. :no-audio never decodes audio, so nothing blips.
-            // Same reasoning covers a muted player (dive master-mute or a zeroed slider): it has to
-            // start SILENT, and killing audio at the media level is the only way to beat the aout.
-            // Trade-off: un-muting mid-video won't restore sound - fine for the mandatory dive
-            // video, and any later playback opens a fresh Media that re-evaluates this.
-            if (!withAudio || GetEffectiveVolume() <= 0)
+            // It is NOT baked in for a zero effective volume any more (#1103). ":no-audio" is a
+            // permanent property of the Media: a clip created while the volume happened to be 0 -
+            // a slider at zero, or a DtRH dive holding the external mute - could never make a sound
+            // again, however far the user pushed the slider back up mid-video, and if the mute
+            // state was stale the silence lasted for every video until the app restarted. Mute and
+            // volume are applied through the PLAYER below instead, which a live change can reach.
+            // The cost is the beat between Play() and the aout coming up, where a zero-volume clip
+            // can blip; the Playing handler is the first moment the volume can actually land.
+            if (!withAudio)
             {
                 media.AddOption(":no-audio");
             }
@@ -3409,7 +3812,15 @@ namespace ConditioningControlPanel.Services
                     // with no aout) and the video starts at 100% regardless of the slider. Only
                     // this re-apply lands the Video Volume slider (matches
                     // DualMonitorVideoService/MiniPlayerWindow).
-                    try { mediaPlayer!.Mute = false; mediaPlayer.Volume = GetEffectiveVolume(); }
+                    // Mute follows the CURRENT effective volume rather than being forced off: the
+                    // silence is now the player's state, not the media's, so a later unmute (dive
+                    // released, slider dragged back up) reaches this same live player (#1103).
+                    try
+                    {
+                        var eff = GetEffectiveVolume();
+                        mediaPlayer!.Mute = eff <= 0;
+                        mediaPlayer.Volume = eff;
+                    }
                     catch (Exception ex) { App.Logger?.Debug(ex, "VideoService: volume apply on Playing failed"); }
 
                     // Anything heavier than a property set goes off the LibVLC event thread.
@@ -3429,8 +3840,14 @@ namespace ConditioningControlPanel.Services
             // LibVLC auto-selects the first audio track once the media is parsed.
             if (withAudio)
             {
-                mediaPlayer.Mute = false;
-                mediaPlayer.Volume = GetEffectiveVolume();
+                var effective = GetEffectiveVolume();
+                mediaPlayer.Mute = effective <= 0;
+                mediaPlayer.Volume = effective;
+                // WHY this video is as loud as it is, in one line (#1103). A "no audio" report used
+                // to be unable to tell a zeroed slider from a stale DtRH dive mute - the same
+                // silence, opposite fixes - because nothing ever logged which one was in force.
+                App.Logger?.Information("VideoService: effective video volume {Vol}% (mute={Mute}) - origin: {Origin}",
+                    effective, effective <= 0, DescribeVolumeOrigin());
                 // REQUESTED values only. No aout exists this early, so this line says nothing about
                 // audibility - it read "Volume=99, Mute=false" on both #707 and #708, which were
                 // dead silent. RouteAndProbeAudio logs the RESOLVED routing once the aout is live;
@@ -3472,11 +3889,13 @@ namespace ConditioningControlPanel.Services
                         {
                             _mediaPlayers.Remove(mediaPlayer);
                         }
-                        mediaPlayer.Dispose();
+                        // Nothing ever called Play() on this one, so there is no Stop() to wait for
+                        // and the funnel's contract holds even on the UI thread (#1196).
+                        ReleasePlayer(mediaPlayer, "video window creation failed");
                     }
                     win?.Close();
                 }
-                catch { /* Ignore cleanup errors */ }
+                catch (Exception exIgnored) { Diag.Swallowed(exIgnored, "cleanup error"); }
 
                 // Create a black placeholder window so we don't crash
                 var fallbackDpi = BubbleCountWindow.GetDpiForScreen(screen);
@@ -3648,9 +4067,10 @@ namespace ConditioningControlPanel.Services
         ///     fallback safety timer (black and silent for minutes, un-closable in strict mode). The
         ///     retry only moves that skip from ~8s to ~16s, and buys back the runs where the decoder
         ///     was merely slow to come up while three screens spun up at once.
-        ///   * on a SINGLE-surface rig (the majority) the primary is the only surface and gets NO retry
-        ///     rung at all, so that path skips at exactly the ~8s the released build does. The rung is
-        ///     decided by the RIG, not by the role: a lone primary has no siblings to be starved by.
+        ///   * a LONE primary gets that one rung too, as of #1121. Denying it was what left the
+        ///     single-monitor majority with no recovery of any kind: the one surface that could have
+        ///     come back was the one surface not allowed to try. Worst case it costs one more grace
+        ///     window before the same skip.
         ///
         /// See VideoSurfaceHealth.DecideFrameWatchdog / ShouldAbortClip for both rules in pure form.
         /// </summary>
@@ -3686,11 +4106,11 @@ namespace ConditioningControlPanel.Services
                 try
                 {
                     bool tornDown = !_videoPlaying || _isCleaningUp || gen != _teardownGeneration;
-                    // How many surfaces this clip armed. The retry rung is decided by the RIG, not by
-                    // the role (see the ladder note above): a mirror always gets its second chance, and
-                    // so does the audio-bearing surface as soon as it has siblings. A lone primary —
-                    // the single-monitor majority — gets none, which keeps that path's ~8s skip exactly
-                    // where the released build has it.
+                    // How many surfaces this clip armed. Every armed surface now gets its one second
+                    // chance (see the ladder note above and AllowsFrameRetry): a mirror because the
+                    // clip keeps playing while it retries, the audio-bearing surface because a skip
+                    // is otherwise the only outcome - including on the single-monitor rig, which is
+                    // where the #1121 reports come from. Zero armed surfaces still gets none.
                     int armed;
                     lock (_blurFrameWatchLock) { armed = _blurWatches.Count; }
                     switch (VideoSurfaceHealth.DecideFrameWatchdog(tornDown, _gracePaused, surface.HasRendered, watch.RetryUsed,
@@ -3709,7 +4129,7 @@ namespace ConditioningControlPanel.Services
                             // Judging it here would skip to the next video the moment the user paused
                             // inside the grace window. Re-arm for another full grace instead.
                             VideoDiag.Log("BLUR", $"[{surfaceTag}] frame watchdog deferred - video is grace-paused");
-                            try { watch.Timer?.Change(VoutGraceMs, System.Threading.Timeout.Infinite); } catch { }
+                            try { watch.Timer?.Change(VoutGraceMs, System.Threading.Timeout.Infinite); } catch (Exception ex) { Diag.Swallowed(ex); }
                             return;
 
                         case VideoSurfaceHealth.FrameWatchdogAction.Retry:
@@ -3718,7 +4138,7 @@ namespace ConditioningControlPanel.Services
                                 VoutGraceMs, surfaceTag);
                             VideoDiag.Log("BLUR", $"[{surfaceTag}] NO FRAME within {VoutGraceMs}ms - per-surface retry, clip untouched");
                             RetryBlurSurface(watch, gen);
-                            try { watch.Timer?.Change(VoutGraceMs, System.Threading.Timeout.Infinite); } catch { }
+                            try { watch.Timer?.Change(VoutGraceMs, System.Threading.Timeout.Infinite); } catch (Exception ex) { Diag.Swallowed(ex); }
                             return;
 
                         case VideoSurfaceHealth.FrameWatchdogAction.GiveUp:
@@ -3738,7 +4158,7 @@ namespace ConditioningControlPanel.Services
                             VideoSurfaceHealth.Report("libvlc", monitor, primary, -1,
                                 watch.RetryUsed
                                     ? $"no frame within {VoutGraceMs}ms, and none after one retry"
-                                    : $"no frame within {VoutGraceMs}ms, no retry rung on a single-surface rig");
+                                    : $"no frame within {VoutGraceMs}ms, no retry rung available for this surface");
                             if (!VideoSurfaceHealth.ShouldAbortClip(total, dead, primaryDead))
                             {
                                 App.Logger?.Warning("VideoService: giving up on the blurred surface {Surface} ({Dead}/{Total} dead) - the clip keeps playing on the live screen(s)",
@@ -3934,7 +4354,7 @@ namespace ConditioningControlPanel.Services
                         if (hwnd != IntPtr.Zero)
                             lock (_videoWindowHandlesLock) { _videoWindowHandles.Remove(hwnd); }
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
 
                     win.Hide();
                     App.Logger?.Warning("VideoService: the dead blurred surface {Surface} was hidden - that monitor is free instead of holding a black fullscreen window for the rest of the clip",
@@ -3957,7 +4377,7 @@ namespace ConditioningControlPanel.Services
             }
             foreach (var t in watches.Select(w => w.Timer).Where(t => t != null))
             {
-                try { t!.Dispose(); } catch { }
+                try { t!.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
         }
 
@@ -4189,7 +4609,7 @@ namespace ConditioningControlPanel.Services
                 {
                     if (_frameBuffer != IntPtr.Zero)
                     {
-                        try { Marshal.FreeHGlobal(_frameBuffer); } catch { /* ignore */ }
+                        try { Marshal.FreeHGlobal(_frameBuffer); } catch (Exception ex) { global::ConditioningControlPanel.Diag.Swallowed(ex); }
                     }
                     _frameBuffer = Marshal.AllocHGlobal((int)(bw * bh * 4));
                     _w = bw;
@@ -4448,7 +4868,7 @@ namespace ConditioningControlPanel.Services
             private void Unhook()
             {
                 if (!_hooked) return;
-                try { CompositionTarget.Rendering -= OnRendering; } catch { /* ignore */ }
+                try { CompositionTarget.Rendering -= OnRendering; } catch (Exception ex) { global::ConditioningControlPanel.Diag.Swallowed(ex); }
                 _hooked = false;
             }
 
@@ -4732,7 +5152,7 @@ namespace ConditioningControlPanel.Services
                 }
                 if (buf != IntPtr.Zero)
                 {
-                    try { Marshal.FreeHGlobal(buf); } catch { /* ignore */ }
+                    try { Marshal.FreeHGlobal(buf); } catch (Exception ex) { global::ConditioningControlPanel.Diag.Swallowed(ex); }
                     Diag("frame buffer freed (player Stop() completed)");
                 }
             }
@@ -4974,7 +5394,7 @@ namespace ConditioningControlPanel.Services
                     if (e.Key == Key.Escape)
                     {
                         try { App.Lockdown?.NotifyEscapeAttempt(Services.Possession.EscapeKinds.SystemKey); }
-                        catch { /* never let the haunt break key suppression */ }
+                        catch (Exception ex) { Diag.Swallowed(ex, "the haunt must never break key suppression"); }
                     }
 
                     // In strict mode, block panic key, Alt+F4, and system keys
@@ -5227,7 +5647,7 @@ namespace ConditioningControlPanel.Services
                 lock (_targets) { left = _targets.Count; }
                 if (left == 0) App.EmiDesk?.ReleaseHold("attentionCheckShown");
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void SpawnTarget()
@@ -5238,7 +5658,7 @@ namespace ConditioningControlPanel.Services
                 var pool = settings.AttentionPool.Where(p => p.Value).Select(p => p.Key).ToList();
                 var text = pool.Count > 0 ? pool[_random.Next(pool.Count)] : "CLICK ME";
 
-                var screens = settings.DualMonitorEnabled ? App.GetAllScreensCached() : new[] { Screen.PrimaryScreen };
+                var screens = App.GetGlobalScreens();
                 // Safety check: ensure we have at least one screen
                 if (screens == null || screens.Length == 0 || screens[0] == null)
                 {
@@ -5264,11 +5684,11 @@ namespace ConditioningControlPanel.Services
                     var h = toyHandler;
                     if (h == null) return;
                     toyHandler = null;
-                    try { App.Haptics!.ToyInput.ButtonPressed -= h; } catch { }
+                    try { App.Haptics!.ToyInput.ButtonPressed -= h; } catch (Exception ex) { Diag.Swallowed(ex); }
                 }
 
-                App.Logger?.Debug("Spawning attention target: '{Text}' on {ScreenCount} screen(s) ({Spawned}/{Total})",
-                    text, screens.Length, _spawned, _total);
+                App.Logger?.Debug("Spawning attention target ({Chars} chars) on {ScreenCount} screen(s) ({Spawned}/{Total})",
+                    (text ?? "").Length, screens.Length, _spawned, _total);
 
                 foreach (var screen in screens)
                 {
@@ -5351,7 +5771,7 @@ namespace ConditioningControlPanel.Services
                 // A HOLD, not a line. Released the moment no target is left on the books.
                 if (spawnedTargets.Count > 0)
                 {
-                    try { App.EmiDesk?.Fire("attentionCheckShown", null); } catch { }
+                    try { App.EmiDesk?.Fire("attentionCheckShown", null); } catch (Exception ex) { Diag.Swallowed(ex); }
                 }
 
                 // PHASE F: arm the toy-button alternative for this spawn's lifetime.
@@ -5423,7 +5843,7 @@ namespace ConditioningControlPanel.Services
                         // stops the WPF routed event, not Win32 WM_MOUSEACTIVATE), which raised
                         // it above the chaos run's bubbles/HUD/overlays. Lift the game layer
                         // back first, then the attention targets on top of everything.
-                        try { App.Chaos?.RaiseGameLayerAboveVideo(); } catch { }
+                        try { App.Chaos?.RaiseGameLayerAboveVideo(); } catch (Exception ex) { Diag.Swallowed(ex); }
                         lock (_targets)
                         {
                             foreach (var t in _targets)
@@ -5570,7 +5990,12 @@ namespace ConditioningControlPanel.Services
 
                     try
                     {
-                        ShowMessage(troll ? "GOOD GIRL!\nWATCH AGAIN 😜" : (App.Mods?.GetAttentionCheckFailMessage() ?? "DUMB BAMBI!\nTRY AGAIN"), 2000, replay);
+                        // Both halves go through the mod: the troll line is praise for a
+                        // PASSED check, so it gets its own manifest field rather than
+                        // reusing the scolding one. Unmodded, both resolve to CCP Default.
+                        ShowMessage(troll
+                            ? (App.Mods?.GetAttentionCheckTrollMessage() ?? "NICE TRY!\nWATCH AGAIN \U0001F61C")
+                            : (App.Mods?.GetAttentionCheckFailMessage() ?? "MISSED IT!\nTRY AGAIN"), 2000, replay);
                     }
                     catch
                     {
@@ -5615,9 +6040,9 @@ namespace ConditioningControlPanel.Services
             // CRITICAL: Set _videoPlaying to false BEFORE CloseAll() so strict mode
             // handlers don't cancel window closing (they check _videoPlaying in Closing event)
             _videoPlaying = false;
-            CloseAll();
+            CloseAll(reason: "attention-check message");
 
-            var screens = App.Settings.Current.DualMonitorEnabled ? App.GetAllScreensCached() : new[] { Screen.PrimaryScreen };
+            var screens = App.GetGlobalScreens();
             // Safety check: ensure we have at least one screen
             if (screens == null || screens.Length == 0 || screens[0] == null)
             {
@@ -6027,7 +6452,7 @@ namespace ConditioningControlPanel.Services
 
         private void StopGraceCountdown()
         {
-            try { _graceCountdownTimer?.Stop(); } catch { }
+            try { _graceCountdownTimer?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _graceCountdownTimer = null;
         }
 
@@ -6110,7 +6535,7 @@ namespace ConditioningControlPanel.Services
             arm.Remaining = TimeSpan.Zero;
             if (timer == null || !timer.IsEnabled) return;
             arm.Remaining = RemainingTimerInterval(arm.ArmedUtc, arm.Interval, nowUtc);
-            try { timer.Stop(); } catch { }
+            try { timer.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void ResumeGuardTimers(DateTime nowUtc)
@@ -6374,9 +6799,9 @@ namespace ConditioningControlPanel.Services
 
         private void StopVoutWatchdog()
         {
-            try { _voutWatchTimer?.Dispose(); } catch { }
+            try { _voutWatchTimer?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _voutWatchTimer = null;
-            try { _voutMidWatchTimer?.Dispose(); } catch { }
+            try { _voutMidWatchTimer?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _voutMidWatchTimer = null;
         }
 
@@ -6398,12 +6823,12 @@ namespace ConditioningControlPanel.Services
                 if (_gracePaused)
                 {
                     VideoDiag.Log("VOUT", "start watchdog deferred - video is grace-paused");
-                    try { _voutWatchTimer?.Change(VoutGraceMs, System.Threading.Timeout.Infinite); } catch { }
+                    try { _voutWatchTimer?.Change(VoutGraceMs, System.Threading.Timeout.Infinite); } catch (Exception ex) { Diag.Swallowed(ex); }
                     return;
                 }
                 if (_voutSeen) return;
                 // Authoritative live check — covers a vout that appeared before the event was wired.
-                try { if (player.VoutCount > 0) return; } catch { }
+                try { if (player.VoutCount > 0) return; } catch (Exception ex) { Diag.Swallowed(ex); }
 
                 // Reaching here IS the white-screen state the reports describe (#557-#560/#574, and
                 // now #616/#617/#621/#622/#623): the clip is decoding but nothing is on screen.
@@ -6442,7 +6867,7 @@ namespace ConditioningControlPanel.Services
                         return;
                     }
                 }
-                catch { /* track probe is best-effort; fall through to the heal */ }
+                catch (Exception ex) { Diag.Swallowed(ex, "track probe is best effort, the heal follows"); }
 
                 // Retire first, retry only if the retire actually happened — if the circuit breaker
                 // tripped (or another heal already swapped the instance) a replay would just fail the
@@ -6622,7 +7047,7 @@ namespace ConditioningControlPanel.Services
                         _fallbackSafetyTimer?.Stop();
                         _fallbackSafetyTimer = null;
                         _videoPlaying = false;
-                        CloseAll();
+                        CloseAll(reason: "vout self-heal");
                         App.InteractionQueue?.ExtendTimeout(300, InteractionQueueService.InteractionType.Video);
                         App.Logger?.Information("VideoService: vout self-heal - replaying {File} on a fresh LibVLC instance",
                             Path.GetFileName(path));
@@ -6672,9 +7097,9 @@ namespace ConditioningControlPanel.Services
 
         private void StopWedgeWatchdog()
         {
-            try { _wedgeWatchdog?.Dispose(); } catch { }
+            try { _wedgeWatchdog?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _wedgeWatchdog = null;
-            try { _heartbeatTimer?.Stop(); } catch { }
+            try { _heartbeatTimer?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _heartbeatTimer = null;
         }
 
@@ -6942,7 +7367,13 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private void CloseAll(bool synchronous = false)
+        /// <param name="reason">
+        /// Which exit path asked for the teardown - natural end / ESC dismiss ("cleanup"), panic key
+        /// or any other forced close ("force cleanup"), engine stop, app exit. Carried into the
+        /// Information-level teardown lines and into ReleasePlayer so a #1196-shaped report ("libvlc
+        /// is still in my sound mixer") can be answered from the log without a repro.
+        /// </param>
+        private void CloseAll(bool synchronous = false, string reason = "teardown")
         {
             // Use lock to prevent race conditions between multiple cleanup triggers
             // (panic key, EndReached, safety timer, etc.)
@@ -6955,7 +7386,15 @@ namespace ConditioningControlPanel.Services
             // "the panic key did nothing". Every phase is timestamped so the next report tells us
             // which phase the teardown died in instead of just going quiet.
             var closeSw = System.Diagnostics.Stopwatch.StartNew();
-            VideoDiag.Log("CLOSE", $"CloseAll begin (synchronous={synchronous}, windows={_windows.Count})");
+            // A teardown with no windows open is the common case (every panic press, every engine
+            // stop, every session end funnels here) and it produced the same four CLOSE lines as a
+            // real teardown - four lines of "nothing happened" per event, in the one trace whose
+            // whole value is a short readable timeline. Trace the phases only when there is
+            // actually a window to take down; the wedge/straggler/skip lines below stay
+            // unconditional because those only fire when something IS wrong.
+            bool traceClose = _windows.Count > 0;
+            if (traceClose)
+                VideoDiag.Log("CLOSE", $"CloseAll begin (synchronous={synchronous}, windows={_windows.Count})");
             lock (_cleanupLock)
             {
                 if (_isCleaningUp)
@@ -6995,7 +7434,12 @@ namespace ConditioningControlPanel.Services
 
                 lock (_targets)
                 {
-                    App.Logger?.Information("ATTENTION: CloseAll() called - destroying {Count} targets", _targets.Count);
+                    // Destroying nothing is the normal case and was logged at Information on every
+                    // single teardown; only a real destroy is worth a line on disk.
+                    if (_targets.Count > 0)
+                        App.Logger?.Information("ATTENTION: CloseAll() destroying {Count} target(s)", _targets.Count);
+                    else
+                        App.Logger?.Debug("ATTENTION: CloseAll() called - no targets to destroy");
                     foreach (var t in _targets.ToList()) t.Destroy();
                     _targets.Clear();
                 }
@@ -7012,6 +7456,19 @@ namespace ConditioningControlPanel.Services
                 {
                     playersCopy = _mediaPlayers.ToList();
                     _mediaPlayers.Clear();
+                }
+
+                // #1196: one Information line per REAL teardown, naming the exit path and what it
+                // is taking down. Gated on there being something to take down, so the no-op
+                // teardowns (every panic press, every engine stop) stay off disk - same rule as
+                // traceClose above. Paired with ReleasePlayer's per-player line, a log now shows
+                // whether a video's players were actually released or left holding their audio
+                // output, without needing the reporter to reproduce anything.
+                if (playersCopy.Count > 0 || _windows.Count > 0)
+                {
+                    App.Logger?.Information(
+                        "VideoService: video teardown ({Reason}) - {Players} LibVLC player(s), {Windows} window(s), {Surfaces} vmem surface(s)",
+                        reason, playersCopy.Count, _windows.Count, _blurSurfaces.Count);
                 }
 
                 // Drop primary refs before tearing players down so any concurrent
@@ -7052,6 +7509,11 @@ namespace ConditioningControlPanel.Services
                 // Snapshot the instance these players belong to, so the (possibly delayed) retire below
                 // can never condemn a FRESH instance that a vout-retry has since built.
                 var owningLibVLC = _libVLC;
+                // Hand the stop tasks to the NEXT video (#1121). Whatever this method decides below -
+                // wait for them, or skip the wait entirely on the vmem path - a straggler that
+                // outlives the teardown must not have the next Play() built on top of it.
+                _pendingStopTasks = stopPairs.Select(p => p.task).ToArray();
+                _pendingStopOwner = owningLibVLC;
 
                 // The waits below exist for ONE reason: detaching a VideoView/HwndHost from a player
                 // that is still presenting is the historic multi-monitor crash (see the detach comment
@@ -7121,7 +7583,8 @@ namespace ConditioningControlPanel.Services
                 // Now detach MediaPlayers from VideoViews (safe since players are stopped and we waited).
                 // Detaching an HwndHost surface from a player that is still presenting is the
                 // historical multi-monitor freeze; if the trace stops here, that is what happened.
-                VideoDiag.Log("CLOSE", $"detaching VideoViews at +{closeSw.ElapsedMilliseconds}ms");
+                if (traceClose)
+                    VideoDiag.Log("CLOSE", $"detaching VideoViews at +{closeSw.ElapsedMilliseconds}ms");
                 var windowsCopy = _windows.ToList();
                 foreach (var w in windowsCopy)
                 {
@@ -7154,7 +7617,8 @@ namespace ConditioningControlPanel.Services
                 }
 
                 // Close video windows AFTER media players are stopped and detached
-                VideoDiag.Log("CLOSE", $"closing {_windows.Count} video window(s) at +{closeSw.ElapsedMilliseconds}ms");
+                if (traceClose)
+                    VideoDiag.Log("CLOSE", $"closing {_windows.Count} video window(s) at +{closeSw.ElapsedMilliseconds}ms");
                 foreach (var w in _windows.ToList())
                 {
                     try
@@ -7229,14 +7693,7 @@ namespace ConditioningControlPanel.Services
                                 QuarantineNative(player, "Stop() still wedged at app exit");
                                 continue;
                             }
-                            try
-                            {
-                                player.Dispose();
-                            }
-                            catch (Exception ex)
-                            {
-                                App.Logger?.Debug("CloseAll: Failed to dispose LibVLC player - {Error}", ex.Message);
-                            }
+                            ReleasePlayer(player, reason + " (synchronous)");
                         }
                     }
                     else
@@ -7267,14 +7724,9 @@ namespace ConditioningControlPanel.Services
                                     RetireSharedLibVLC(owningLibVLC, "a wedged player was quarantined");
                                     continue;
                                 }
-                                try
-                                {
-                                    player.Dispose();
-                                }
-                                catch (Exception ex)
-                                {
-                                    App.Logger?.Debug("CloseAll: Failed to dispose LibVLC player - {Error}", ex.Message);
-                                }
+                                // Already off the dispatcher and past this player's Stop(), which is
+                                // exactly ReleasePlayer's contract.
+                                ReleasePlayer(player, reason);
                             }
                         });
                     }
@@ -7318,7 +7770,51 @@ namespace ConditioningControlPanel.Services
 
                 // Total UI-thread block for this teardown. Anything past ~1s here is the app being
                 // unresponsive to the user (and to the low-level keyboard hook) — #616-#623.
-                VideoDiag.Log("CLOSE", $"CloseAll end after {closeSw.ElapsedMilliseconds}ms of UI-thread time");
+                if (traceClose)
+                    VideoDiag.Log("CLOSE", $"CloseAll end after {closeSw.ElapsedMilliseconds}ms of UI-thread time");
+            }
+        }
+
+        /// <summary>
+        /// Wait for the PREVIOUS teardown's Stop() tasks before this video builds any player (#1121).
+        /// Pumping, so the dispatcher keeps draining exactly as it does during CloseAll's own waits,
+        /// and bounded at <see cref="PendingStopWaitMs"/>.
+        ///
+        /// A Stop() that is still inside native code owns the audio output and the decoder of the
+        /// instance it was created from. Play() on that same instance comes back "playing", presents
+        /// no frame, and the clip is skipped a couple of seconds later with nothing but black on
+        /// screen. If the straggler outlives the wait we do not fight it: the instance is retired
+        /// (quarantined forever - a wedged native call is still inside it, so it is never disposed)
+        /// and EnsureLibVLCInitialized builds a fresh one for this video.
+        /// </summary>
+        private void AwaitPendingStops()
+        {
+            var pending = _pendingStopTasks;
+            var owner = _pendingStopOwner;
+            _pendingStopTasks = null;
+            _pendingStopOwner = null;
+            if (pending == null || pending.Length == 0) return;
+            if (pending.All(t => t.IsCompleted)) return;
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            VideoDiag.Log("VIDEO", $"pre-roll: {pending.Count(t => !t.IsCompleted)} previous Stop() task(s) still running - waiting up to {PendingStopWaitMs}ms");
+            while (sw.ElapsedMilliseconds < PendingStopWaitMs && pending.Any(t => !t.IsCompleted))
+                WaitWithMessagePump(100);
+
+            bool wedged = pending.Any(t => !t.IsCompleted);
+            // One line per overrun, at Warning, carrying the elapsed ms: a report that contains it
+            // says the black screen came from the previous teardown rather than from this clip.
+            App.Logger?.Warning(
+                "VideoService: the previous video's Stop() overran into this one by {Ms}ms - {Outcome} (#1121)",
+                sw.ElapsedMilliseconds,
+                wedged ? "still running, abandoning it and starting this video on a fresh LibVLC instance" : "it finished, playback continues on the same instance");
+            VideoDiag.Log("VIDEO", $"pre-roll: previous Stop() overran {sw.ElapsedMilliseconds}ms, stillRunning={wedged}");
+
+            if (wedged)
+            {
+                // fromCurrentPlayback:false - the clip these players belonged to is already down, so
+                // there is no sibling decoding on this instance to protect.
+                RetireSharedLibVLC(owner, "the previous video's Stop() was still running when the next video started", fromCurrentPlayback: false);
             }
         }
 
@@ -7363,7 +7859,10 @@ namespace ConditioningControlPanel.Services
             _videoPlaying = false;
             _triggerInProgress = false;
             ClearGraceState();   // defensive: CloseAll also does it, but it early-returns if already cleaning (#735)
-            CloseAll();
+            // "cleanup" covers both doors into this method: the natural end of a clip and the ESC
+            // dismiss (SetupStrictHandlers / TryEscapeFromGlobalKey). The VideoDiag PANIC line
+            // immediately before an ESC-driven call says which one it was.
+            CloseAll(reason: "cleanup");
 
             App.Logger?.Information("VideoService: Cleanup() - CloseAll completed, _windows now={WinCount}", _windows.Count);
             // Audio unduck now happens inside CloseAll (above) so every teardown path releases the
@@ -7483,7 +7982,11 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Debug("Using pack video: {Name} from pack {PackId}", packVideo.File.OriginalName, packVideo.PackId);
                     return tempPath;
                 }
-                // If decryption failed, try regular queue
+                // If decryption failed, try regular queue. Logged at Information, not swallowed
+                // (#1135): a pack that will not decrypt hands back null from a pool that LOOKS full,
+                // and the caller can only report "nothing happened when I popped the bubble".
+                App.Logger?.Information("VideoService: pack clip '{Name}' from pack {PackId} could not be decrypted - falling back to the regular queue ({Count} left)",
+                    packVideo.File.OriginalName, packVideo.PackId, _videoQueue.Count);
             }
 
             return _videoQueue.Count > 0 ? _videoQueue.Dequeue() : null;
@@ -7723,9 +8226,30 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Refills both video queues (regular and pack videos).
         /// </summary>
+        /// <summary>
+        /// Containers the local video walk accepts. Everything here is something LibVLC demuxes and
+        /// the browser engine either plays or hands back to LibVLC, so the cost of a wide list is a
+        /// clip that fails at play time; the cost of a narrow one is a folder that silently scans to
+        /// zero videos and a "no videos" dialog on a folder that visibly has some (#1124).
+        /// </summary>
+        internal static readonly string[] SupportedVideoExtensions =
+        {
+            ".mp4", ".mov", ".avi", ".wmv", ".mkv", ".webm",
+            ".m4v", ".mpg", ".mpeg", ".flv", ".ts"
+        };
+
+        /// <summary>Extension gate of the local video walk, case-insensitive. Pure, so it is unit
+        /// tested (VideoExtensionFilterTests) rather than only exercised through a disk scan.</summary>
+        internal static bool IsSupportedVideoExtension(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            var ext = Path.GetExtension(path);
+            if (string.IsNullOrEmpty(ext)) return false;
+            return SupportedVideoExtensions.Contains(ext.ToLowerInvariant());
+        }
+
         private void RefillVideoQueues()
         {
-            var validExtensions = new[] { ".mp4", ".mov", ".avi", ".wmv", ".mkv", ".webm" };
 
             // Remote injection point. A refill is the moment the pipeline admits it needs more
             // material, so it is where the remote buffer gets topped up too - but ONLY as a
@@ -7739,22 +8263,29 @@ namespace ConditioningControlPanel.Services
 
             App.Logger?.Debug("VideoService: Scanning for videos in {Path}", _videosPath);
 
-            // Load regular videos
+            // Load regular videos.
+            // The counters below are the #1124 funnel: a Release log used to say nothing at all
+            // about WHY a folder full of files scanned to zero videos, because every step here was
+            // Debug-only. One Information line at the end reports the whole ladder.
+            int seen = 0, keptExt = 0, keptSecurity = 0;
+            bool folderMissing = false;
             var files = new List<string>();
             if (Directory.Exists(_videosPath))
             {
                 // Scan subfolders to support user-organized categories
                 var allFiles = Directory.GetFiles(_videosPath, "*.*", SearchOption.AllDirectories);
+                seen = allFiles.Length;
                 App.Logger?.Debug("VideoService: Found {Count} total files in videos folder", allFiles.Length);
 
                 foreach (var file in allFiles)
                 {
                     var ext = Path.GetExtension(file).ToLowerInvariant();
-                    if (!validExtensions.Contains(ext))
+                    if (!IsSupportedVideoExtension(file))
                     {
                         App.Logger?.Debug("VideoService: Skipping non-video file: {Path} (ext: {Ext})", file, ext);
                         continue;
                     }
+                    keptExt++;
 
                     // Security: Validate path is within allowed directories (app dir, user assets, or custom path)
                     var isInAppDir = SecurityHelper.IsPathSafe(file, AppDomain.CurrentDomain.BaseDirectory);
@@ -7777,14 +8308,17 @@ namespace ConditioningControlPanel.Services
                     }
 
                     files.Add(file);
+                    keptSecurity++;
                 }
             }
             else
             {
+                folderMissing = true;
                 App.Logger?.Warning("VideoService: Videos directory does not exist: {Path}", _videosPath);
             }
 
             App.Logger?.Debug("VideoService: {Count} videos passed security checks", files.Count);
+            int keptEnabled = files.Count;
 
             // Filter out disabled assets (blacklist approach).
             // Normalize for case-insensitive, separator-agnostic comparison so saved
@@ -7809,6 +8343,7 @@ namespace ConditioningControlPanel.Services
                 }).ToList();
                 App.Logger?.Debug("VideoService: {Before} -> {After} after disabled filter", beforeCount, files.Count);
             }
+            keptEnabled = files.Count;
 
             // Duration filter (Phase 5). Best-effort: videos with no cached
             // duration are included and parsed lazily — they'll get filtered
@@ -7852,6 +8387,28 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("VideoService: {Before} -> {After} after duration filter [{Min}s, {Max}s]",
                     beforeDur, files.Count, minSec, maxSec);
             }
+            int keptDuration = files.Count;
+
+            // The #1124 funnel line. Information, not Debug: the report that needs it is a Release
+            // log from a user whose folder "has videos" and whose app says it has none, and until
+            // now that log carried the final count and nothing about the ladder that produced it.
+            // The path goes through the same scrubber as every other logged path.
+            var drops = new (int Count, string Reason)[]
+            {
+                (seen - keptExt, $"extension filter ({seen - keptExt} file(s); supported: {string.Join(" ", SupportedVideoExtensions)})"),
+                (keptExt - keptSecurity, $"path/name security checks ({keptExt - keptSecurity} file(s))"),
+                (keptSecurity - keptEnabled, $"the user's disabled-assets list ({keptSecurity - keptEnabled} file(s))"),
+                (keptEnabled - keptDuration, $"duration filter ({keptEnabled - keptDuration} file(s); min {minSec}s max {maxSec}s)")
+            };
+            var worstDrop = drops.OrderByDescending(d => d.Count).First();
+            string biggestDrop =
+                folderMissing ? "the videos folder does not exist"
+                : seen == 0 ? "the folder is empty"
+                : worstDrop.Count <= 0 ? "nothing was dropped"
+                : worstDrop.Reason;
+            App.Logger?.Information(
+                "VideoService: refill funnel for {Path} - {Seen} file(s) seen, {Ext} kept by extension, {Sec} after path/name checks, {Enabled} after the disabled list, {Dur} after the duration filter. Biggest drop: {Drop}",
+                _videosPath, seen, keptExt, keptSecurity, keptEnabled, keptDuration, biggestDrop);
 
             // Shuffle using Fisher-Yates algorithm for reliable randomization
             ShuffleList(files);
@@ -8321,7 +8878,7 @@ namespace ConditioningControlPanel.Services
                 };
 
                 _win.Show();
-                App.Logger?.Debug("Attention target window created: '{Text}' size {W}x{H}", text, w, h);
+                App.Logger?.Debug("Attention target window created ({Chars} chars) size {W}x{H}", (text ?? "").Length, w, h);
             }
             catch (Exception ex)
             {

@@ -20,10 +20,13 @@
  * it takes to climb back and never the whole class. Rung 0 is the floor; there
  * is no rung below it and there is no fail state under it.
  *
- * A PASS IS NOT AN ERROR. Letting a ring close sinks the card under the stack
- * to be dealt again later. It costs the tempo it costs and nothing else: no
- * rung, no chain, no accuracy. That is the pressure valve that lets a player
- * actually LOOK at a card they cannot place instead of guessing.
+ * A PASS IS A MISS (owner, 2026-09-11: "the streak doesn't go down when we
+ * miss"). Letting a ring close sinks the card under the stack to be dealt
+ * again later, and it costs the chain what a wrong swipe costs: one rung down,
+ * never to zero, never out. It is NOT a wrong call - accuracy never sees it -
+ * so a player who cannot place a card still has the honest way out, it just
+ * costs the climb. Until this date a pass was free ("the pressure valve"), and
+ * on a phone that read as a streak that ignored misses.
  *
  * Everything here is a function of numbers. No DOM, no clock, no engine: the
  * room reads these and paints, the suite reads these and asserts.
@@ -139,9 +142,14 @@ export function afterWrong(chain, rung) {
   };
 }
 
-/** A pass keeps everything. It is here so the room has one call per moment. */
+/**
+ * A pass: the same step down a wrong swipe takes (one rung, chain to that
+ * rung's floor, the same fade), kept as its own call so the room has one call
+ * per moment and the suite can hold the two apart if they ever differ again.
+ * @returns {{chain:number, rung:number, rungDown:boolean, from:number, fadeMs:number}}
+ */
 export function afterPass(chain, rung) {
-  return { chain: Math.max(0, Math.round(Number(chain) || 0)), rung: clamp(rung, 0, CHAIN.MAX_RUNG) };
+  return afterWrong(chain, rung);
 }
 
 /** The chime ratchet: +1 semitone per link, capped, as a playback rate. */
@@ -175,4 +183,4 @@ export function ladderFrac(chain, rung, cap) {
   return clamp((c - from) / span, 0, 1);
 }
 
-export default { CHAIN, rungForStreak, ringMsFor, verdictFor, afterClean, afterWrong };
+export default { CHAIN, rungForStreak, ringMsFor, verdictFor, afterClean, afterWrong, afterPass };

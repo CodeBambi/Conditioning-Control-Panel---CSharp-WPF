@@ -65,11 +65,24 @@
         </Border.Effect>
 
         <Grid x:Name="ContentRoot" SizeChanged="OnContentSizeChanged">
-            <!-- The two art halves. Full-bleed brushes, triangle-clipped in code. -->
+            <!-- The two art halves. Full-bleed brushes, triangle-clipped in code. Each host
+                 carries its own greyscale twin as a child (Services/ArtDesaturate), faded in
+                 while that half's feature is off - so a combo tile with one half lit says so
+                 in colour, not only in ring. Inside the host so the region clip, the fill
+                 sweep and the peek wedge take both layers as one picture; opacity is written
+                 only by SplitFeatureCard.ApplyHalfMute. -->
             <Border x:Name="HalfHostA" CornerRadius="11"
-                    RenderOptions.BitmapScalingMode="HighQuality"/>
+                    RenderOptions.BitmapScalingMode="HighQuality">
+                <Border x:Name="HalfMuteA" CornerRadius="11"
+                        RenderOptions.BitmapScalingMode="HighQuality"
+                        IsHitTestVisible="False" Opacity="0"/>
+            </Border>
             <Border x:Name="HalfHostB" CornerRadius="11"
-                    RenderOptions.BitmapScalingMode="HighQuality"/>
+                    RenderOptions.BitmapScalingMode="HighQuality">
+                <Border x:Name="HalfMuteB" CornerRadius="11"
+                        RenderOptions.BitmapScalingMode="HighQuality"
+                        IsHitTestVisible="False" Opacity="0"/>
+            </Border>
 
             <!-- Per-half hover wash: opacity flips on MouseMove, and the geometry rides
                  the same seam parameter as the clips, so the wash fills with its half. -->

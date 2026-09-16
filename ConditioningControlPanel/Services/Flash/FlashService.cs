@@ -19,12 +19,23 @@ using NAudio.Wave;
 using Serilog;
 using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.Flash;
 using ConditioningControlPanel.Services.Fyp.Online;
+using ConditioningControlPanel.Services.Prizes;
+using ConditioningControlPanel.Services.Remix;
 using SkiaSharp;
 using Image = System.Windows.Controls.Image;
 
 namespace ConditioningControlPanel.Services
 {
+    /// <summary>
+    /// How a one-shot burst looks when its caller authors it (THE BACK ROOM, CONTRACT section 4): every image
+    /// of the burst at <paramref name="Opacity"/> (0..1, whatever the user's Flash opacity slider says) and
+    /// its images staggered <paramref name="StaggerMs"/> apart (the ambient default is 300 ms). Null = the
+    /// user's own settings, as every other one-shot.
+    /// </summary>
+    public readonly record struct FlashBurstLook(double Opacity, int StaggerMs);
+
     /// <summary>
     /// Handles flash image display with full GIF animation support.
     /// Ported from Python engine.py with all features intact.
@@ -65,6 +76,32 @@ namespace ConditioningControlPanel.Services
             => (useLayer || useHost) ? MAX_CONCURRENT_FLASH_HOST : MAX_CONCURRENT_FLASH;
 
         /// <summary>
+        /// Floor for an animated flash's per-frame delay, in milliseconds. A 4x multiplier on a GIF
+        /// that already carries a 10-20ms frame time would otherwise ask the heartbeat for a new
+        /// frame every tick on every live window; 10ms (100fps) is past what anyone can see and
+        /// keeps the UI thread out of a spin. It also guards the frame-index division below against
+        /// a decoder that hands back a zero delay.
+        /// </summary>
+        internal const double MIN_GIF_FRAME_DELAY_MS = 10.0;
+
+        /// <summary>
+        /// The per-frame delay an animated flash should actually play at: the file's own delay
+        /// divided by the user's speed multiplier (2x = half the delay = twice as fast), floored at
+        /// <see cref="MIN_GIF_FRAME_DELAY_MS"/>. A non-positive or non-finite source delay falls back
+        /// to the decoders' own 100ms default, and a garbage multiplier falls back to 1.0 before the
+        /// 0.25-4.0 clamp, so this never returns zero or NaN.
+        /// Pure so it can be unit-tested without spinning up WPF.
+        /// </summary>
+        internal static TimeSpan ScaleFrameDelay(TimeSpan sourceDelay, double multiplier)
+        {
+            var ms = sourceDelay.TotalMilliseconds;
+            if (double.IsNaN(ms) || double.IsInfinity(ms) || ms <= 0) ms = 100.0;
+            if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier <= 0) multiplier = 1.0;
+            multiplier = Math.Clamp(multiplier, 0.25, 4.0);
+            return TimeSpan.FromMilliseconds(Math.Max(MIN_GIF_FRAME_DELAY_MS, ms / multiplier));
+        }
+
+        /// <summary>
         /// The current run's cancellation token, or <see cref="CancellationToken.None"/> when no run
         /// owns one (Stop retires it - see #1107). Tolerates a source disposed by a racing Stop.
         /// </summary>
@@ -93,7 +130,7 @@ namespace ConditioningControlPanel.Services
                 catch (Exception ex)
                 {
                     try { App.Logger?.Debug("FlashService unduck failed: {Error}", ex.Message); }
-                    catch { }
+                    catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 }
             });
         }
@@ -107,12 +144,17 @@ namespace ConditioningControlPanel.Services
         private const int FLASH_SHELL_SLACK = 64;
         private static int BucketUp(int v) => ((Math.Max(0, v) + FLASH_SHELL_SLACK + FLASH_SHELL_BUCKET - 1) / FLASH_SHELL_BUCKET) * FLASH_SHELL_BUCKET;
         private List<string> _imageList = new();  // Cached image list for random selection
+        // Jackpot Remix (prize fx.jackpot_remix): rolls per scheduled flash, prebuilds while quiet.
+        private JackpotRemixDirector? _remix;
         private List<(string PackId, PackFileEntry File)> _packImageList = new();  // Cached pack images for random selection
         // Size of DisabledAssetPaths when the live pools were last reconciled against it. Every
         // asset-manager toggle moves that count, so one int compare per draw is enough to notice a
         // pool that predates the user's latest selection — see PruneDeselectedFromPools.
         private int _poolDisabledStamp = -1;
         private Queue<string> _soundQueue = new();  // Performance: Changed to Queue for O(1) dequeue
+        // Last flash voice-line pool size written to the log, so BuildVoiceLinePool only speaks up
+        // when the number CHANGES (#1099). Guarded by _lockObj, like _soundQueue.
+        private int _lastLoggedVoicePoolCount = -1;
         private readonly List<string> _tempPackFiles = new();  // Track temp files for cleanup
         private readonly object _lockObj = new();
         private FlashWindow[] _windowsSnapshot = Array.Empty<FlashWindow>(); // Reusable snapshot for heartbeat
@@ -165,6 +207,13 @@ namespace ConditioningControlPanel.Services
             public float X, Y, W, H;   // world px
         }
         private volatile LayerHit[] _layerHits = Array.Empty<LayerHit>();
+        // Flashes v2 wave 2: the flash currently under a thumb. Written on the UI thread, read by
+        // the hook's move/up callbacks, so volatile. Null means nothing is being dragged and the
+        // hook is carrying no move/up callbacks at all (see BeginLayerDrag).
+        private volatile FlashWindow? _dragWindow;
+        // Whether a left-down should start a drag instead of popping. Refreshed on the heartbeat
+        // so the hook never reads AppSettings or PrizeGrants from its own callback.
+        private volatile bool _layerDragEnabled;
         // While a mandatory video is playing, the compositor host is pinned BELOW the video
         // (#497 reconciler), so a layer flash under the video rect is invisible — swallowing
         // clicks there would eat the user's attention-check clicks on a flash they can't see.
@@ -282,7 +331,7 @@ namespace ConditioningControlPanel.Services
                             NativeMethods.SetWindowPos(hostHwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
                                 NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 }
             });
         }
@@ -314,7 +363,7 @@ namespace ConditioningControlPanel.Services
                     }
                 }
             }
-            catch { /* a diagnostic/reconciler accessor must never throw */ }
+            catch (Exception ex) { Diag.Swallowed(ex, "diagnostic accessor must never throw"); }
             return handles;
         }
 
@@ -438,6 +487,7 @@ namespace ConditioningControlPanel.Services
 
             _runStartedUtc = DateTime.UtcNow;
             _isRunning = true;
+            EnsureRemixDirector().Start();
             _cancellationSource?.Dispose();
             _cancellationSource = new CancellationTokenSource();
             StartHeartbeat();
@@ -455,7 +505,7 @@ namespace ConditioningControlPanel.Services
             App.Logger.Information("FlashService started, images path: {Path}", _imagesPath);
 
             // EMI Desk (MOMENTS 4.B). Fire last: nothing about her may sit in front of the start.
-            try { App.EmiDesk?.Fire("flashesStarted", null); } catch { }
+            try { App.EmiDesk?.Fire("flashesStarted", null); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         public void Stop()
@@ -471,11 +521,12 @@ namespace ConditioningControlPanel.Services
             var retiredCts = _cancellationSource;
             _cancellationSource = null;
             try { retiredCts?.Cancel(); }
-            catch (ObjectDisposedException) { }
+            catch (ObjectDisposedException) { } // swallow: retired CTS already disposed
             try { retiredCts?.Dispose(); }
-            catch (ObjectDisposedException) { }
+            catch (ObjectDisposedException) { } // swallow: retired CTS already disposed
             StopHeartbeat();
             _schedulerTimer?.Stop();
+            _remix?.Stop();
 
             StopCurrentSound();
             CloseAllWindows();
@@ -489,7 +540,7 @@ namespace ConditioningControlPanel.Services
             App.DiscordRpc?.SetIdleActivity();
 
             // EMI Desk (MOMENTS 4.B): how long it ran, read before the start stamp is cleared.
-            try { App.EmiDesk?.Fire("flashesStopped", new { minutes = RunMinutes }); } catch { }
+            try { App.EmiDesk?.Fire("flashesStopped", new { minutes = RunMinutes }); } catch (Exception ex) { Diag.Swallowed(ex); }
             _runStartedUtc = null;
 
             App.Logger.Information("FlashService stopped");
@@ -610,7 +661,7 @@ namespace ConditioningControlPanel.Services
         /// Trigger a one-shot flash that works even when service is not running.
         /// Used by Autonomy Mode to trigger flashes independently of engine state.
         /// </summary>
-        public void TriggerFlashOnce(int? amount = null, int? duration = null, int? size = null, bool suppressHaptic = false)
+        public void TriggerFlashOnce(int? amount = null, int? duration = null, int? size = null, bool suppressHaptic = false, FlashBurstLook? look = null)
         {
             if (_isBusy)
             {
@@ -641,7 +692,7 @@ namespace ConditioningControlPanel.Services
             // #1045: carry the generation this flash was dispatched under, so StopOneShotFlashes
             // can cancel it on arrival even while the ambient scheduler keeps _isRunning true.
             int oneShotGen = Volatile.Read(ref _oneShotGeneration);
-            Task.Run(() => LoadAndShowImages(amount, duration, size, suppressHaptic, oneShotGen));
+            Task.Run(() => LoadAndShowImages(amount, duration, size, suppressHaptic, oneShotGen, look));
         }
 
         /// <summary>
@@ -790,7 +841,7 @@ namespace ConditioningControlPanel.Services
 
         #region Image Loading
 
-        private async void LoadAndShowImages(int? amount = null, int? duration = null, int? size = null, bool suppressHaptic = false, int? oneShotGen = null)
+        private async void LoadAndShowImages(int? amount = null, int? duration = null, int? size = null, bool suppressHaptic = false, int? oneShotGen = null, FlashBurstLook? look = null)
         {
             try
             {
@@ -818,11 +869,17 @@ namespace ConditioningControlPanel.Services
                     // same two destinations, and the moment's launch/1 limit is what keeps the
                     // three sites that can reach this beat (here, the wallpaper, the summon) to
                     // exactly one line.
-                    try { EmiDesk.EmiOffers.AnnounceEmptyLibrary(); } catch { }
+                    try { EmiDesk.EmiOffers.AnnounceEmptyLibrary(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
                     _isBusy = false;
                     return;
                 }
+
+                // Jackpot Remix: only the ambient scheduler rolls (a one-shot asked for by a
+                // minigame or Autonomy keeps its own size and timing). A remix replaces the whole
+                // flash event with one centred composite per targeted monitor.
+                if (oneShotGen == null && amount == null && await TryShowRemixAsync(duration, suppressHaptic))
+                    return;
 
                 App.Logger.Information("FlashService: Displaying {Count} flash image(s)", images.Count);
 
@@ -852,7 +909,7 @@ namespace ConditioningControlPanel.Services
                 // Show on UI thread - pass sound path only ONCE
                 await DispatcherHelper.RunOnUIAsync(() =>
                 {
-                    ShowImages(loadedImages, soundPath, false, customDuration: duration, suppressHaptic: suppressHaptic, oneShotGen: oneShotGen);
+                    ShowImages(loadedImages, soundPath, false, customDuration: duration, suppressHaptic: suppressHaptic, oneShotGen: oneShotGen, look: look);
                 });
             }
             catch (Exception ex)
@@ -860,6 +917,75 @@ namespace ConditioningControlPanel.Services
                 App.Logger.Error(ex, "Error loading flash images");
                 _isBusy = false;
             }
+        }
+
+        private JackpotRemixDirector EnsureRemixDirector()
+            => _remix ??= new JackpotRemixDirector(
+                SnapshotGifPool,
+                () => ActiveWindowCount > 0,
+                () => App.Video?.IsPlaying == true || App.DualMonitorVideo?.IsPlaying == true || App.BrowserMedia?.IsPlaying == true,
+                () => App.Settings?.Current?.JackpotRemixEnabled == true,
+                Path.Combine(App.UserDataPath, "cache", "remix"));
+
+        /// <summary>The local flash pool's gifs under the assets root (what the remix page can read).</summary>
+        private IReadOnlyList<string> SnapshotGifPool()
+        {
+            lock (_lockObj)
+            {
+                if (_imageList.Count == 0 && _packImageList.Count == 0) RefreshImageLists();
+                var root = App.EffectiveAssetsPath;
+                return _imageList
+                    .Where(p => p.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) && JackpotRemixPlan.ToAssetUrl(root, p) != null)
+                    .ToList();
+            }
+        }
+
+        /// <summary>
+        /// Ask the director for a built remix and show it as ONE flash: the same gif loader as a
+        /// library gif, big and centred on every monitor the flash feature targets. Only the first
+        /// copy pays XP (the others are mirrors), no hydra children, no overlap re-roll. False
+        /// (with the roll spent) when there is nothing to show or the file would not load, so the
+        /// caller carries on with an ordinary flash.
+        /// </summary>
+        private async Task<bool> TryShowRemixAsync(int? duration, bool suppressHaptic)
+        {
+            var path = _remix?.TakeForFlash();
+            if (path == null) return false;
+
+            var data = await LoadImageAsync(path);
+            lock (_imageDecodeCache) _imageDecodeCache.Remove(path);
+            if (data == null || data.Frames.Count == 0)
+            {
+                App.Logger?.Warning("JackpotRemix: could not load {Path}, ordinary flash instead", path);
+                _remix?.LoadFailed(path);
+                return false;
+            }
+            _remix?.Consumed(path);   // frames are in memory now; the file is spent
+
+            FlashAboutToDisplay?.Invoke(this, EventArgs.Empty);
+            await Task.Delay(1000);
+            var soundPath = GetNextSound();
+
+            var shows = new List<LoadedImageData>();
+            foreach (var monitor in GetMonitors())
+            {
+                var copy = CloneImageData(data);
+                var (x, y, w, h) = JackpotRemixRoll.CentredGeometry(monitor.X, monitor.Y, monitor.Width, monitor.Height, data.Width, data.Height);
+                copy.Geometry = new ImageGeometry { X = x, Y = y, Width = w, Height = h };
+                copy.Monitor = monitor;
+                copy.IsRemix = true;
+                copy.RemixMirror = shows.Count > 0;
+                shows.Add(copy);
+            }
+            if (shows.Count == 0) return false;
+
+            App.Logger?.Information("JackpotRemix: showing {File} ({Frames} frames) on {N} monitor(s)",
+                Path.GetFileName(path), data.Frames.Count, shows.Count);
+            await DispatcherHelper.RunOnUIAsync(() =>
+            {
+                ShowImages(shows, soundPath, false, customDuration: duration, suppressHaptic: suppressHaptic);
+            });
+            return true;
         }
 
         /// <summary>
@@ -914,7 +1040,7 @@ namespace ConditioningControlPanel.Services
             // Drain any stragglers so unobserved exceptions don't linger.
             if (pending.Count > 0)
             {
-                try { await Task.WhenAll(pending); } catch { /* individual tasks are already guarded */ }
+                try { await Task.WhenAll(pending); } catch (Exception ex) { Diag.Swallowed(ex, "individual tasks are already guarded"); }
             }
 
             return loaded;
@@ -998,7 +1124,7 @@ namespace ConditioningControlPanel.Services
                                 BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
                             srcW = probe.PixelWidth; srcH = probe.PixelHeight;
                         }
-                        catch { }
+                        catch (Exception ex) { Diag.Swallowed(ex); }
 
                         var bmp = new BitmapImage();
                         bmp.BeginInit();
@@ -1183,7 +1309,7 @@ namespace ConditioningControlPanel.Services
                         BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
                     srcW = probe.PixelWidth; srcH = probe.PixelHeight;
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
 
                 var bmp = new BitmapImage();
                 bmp.BeginInit();
@@ -1236,7 +1362,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         /// <param name="overrideLifetimeMs">If provided, overrides the calculated lifetime (used for hydra linked timing)~ 🔗</param>
         /// <param name="hydraGeneration">How many hydra hops deep these spawns are (0 = original flash)~ 🐙</param>
-        private void ShowImages(List<LoadedImageData> images, string? soundPath, bool isMultiplication, int? overrideLifetimeMs = null, int hydraGeneration = 0, int? customDuration = null, bool suppressHaptic = false, int? oneShotGen = null)
+        private void ShowImages(List<LoadedImageData> images, string? soundPath, bool isMultiplication, int? overrideLifetimeMs = null, int hydraGeneration = 0, int? customDuration = null, bool suppressHaptic = false, int? oneShotGen = null, FlashMotionStyle? inheritMotion = null, FlashBurstLook? look = null)
         {
             // #1045: this load was dispatched by a point-fired flash that has since been cancelled.
             // Checked BEFORE the _isRunning/_oneShotActive pair because that pair is inert while the
@@ -1326,19 +1452,22 @@ namespace ConditioningControlPanel.Services
                             }
                         });
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 }, TaskContinuationOptions.NotOnCanceled);
             }
 
             // Spawn windows — each gets its own lifetime CTS~ ✨
+            // An authored burst (the Back Room) names its own stagger; the ambient default is 300 ms.
+            int staggerMs = Math.Max(0, look?.StaggerMs ?? 300);
+            double? alphaOverride = look?.Opacity;
             for (int i = 0; i < images.Count; i++)
             {
                 var imageData = images[i];
-                var delayMs = isMultiplication ? i * 100 : i * 300;
+                var delayMs = imageData.IsRemix ? 0 : isMultiplication ? i * 100 : i * staggerMs;
                 
                 if (delayMs == 0)
                 {
-                    SpawnFlashWindow(imageData, settings, lifetimeMs, hydraGeneration, suppressHaptic, oneShotGen);
+                    SpawnFlashWindow(imageData, settings, lifetimeMs, hydraGeneration, suppressHaptic, oneShotGen, inheritMotion, alphaOverride);
                 }
                 else
                 {
@@ -1347,6 +1476,7 @@ namespace ConditioningControlPanel.Services
                     var capturedGeneration = hydraGeneration;
                     var capturedSuppressHaptic = suppressHaptic;
                     var capturedOneShotGen = oneShotGen;
+                    var capturedMotion = inheritMotion;
                     var spawnToken = CurrentRunToken();
                     Task.Delay(delayMs, spawnToken).ContinueWith(_ =>
                     {
@@ -1358,10 +1488,10 @@ namespace ConditioningControlPanel.Services
                                 if (OneShotGate.IsRetired(capturedOneShotGen, Volatile.Read(ref _oneShotGeneration)))
                                     return;
                                 if (_isRunning || _oneShotActive)
-                                    SpawnFlashWindow(capturedData, settings, capturedLifetime, capturedGeneration, capturedSuppressHaptic, capturedOneShotGen);
+                                    SpawnFlashWindow(capturedData, settings, capturedLifetime, capturedGeneration, capturedSuppressHaptic, capturedOneShotGen, capturedMotion, alphaOverride);
                             });
                         }
-                        catch { }
+                        catch (Exception ex) { Diag.Swallowed(ex); }
                     }, TaskContinuationOptions.NotOnCanceled);
                 }
             }
@@ -1389,7 +1519,7 @@ namespace ConditioningControlPanel.Services
         /// CopilotNotes: Each window gets a CTS that fires after lifetimeMs, triggering independent fade-out.
         /// When hydraGeneration > 0 and independent timing is active, XP is reduced by 25% per generation (floor 10%).
         /// </summary>
-        private void SpawnFlashWindow(LoadedImageData imageData, AppSettings settings, int lifetimeMs, int hydraGeneration = 0, bool suppressHaptic = false, int? oneShotGen = null)
+        private void SpawnFlashWindow(LoadedImageData imageData, AppSettings settings, int lifetimeMs, int hydraGeneration = 0, bool suppressHaptic = false, int? oneShotGen = null, FlashMotionStyle? inheritMotion = null, double? alphaOverride = null)
         {
             // #1045: the point-fired flash that asked for this spawn has been cancelled since.
             if (OneShotGate.IsRetired(oneShotGen, Volatile.Read(ref _oneShotGeneration))) return;
@@ -1428,7 +1558,7 @@ namespace ConditioningControlPanel.Services
                 
                 for (int attempt = 0; attempt < 10; attempt++)
                 {
-                    if (!IsOverlapping(finalX, finalY, geom.Width, geom.Height))
+                    if (imageData.IsRemix || !IsOverlapping(finalX, finalY, geom.Width, geom.Height))
                         break;
 
                     // MUST go through PickSpawnPoint, not a raw re-randomize: this loop used to
@@ -1468,7 +1598,8 @@ namespace ConditioningControlPanel.Services
                 window.Left = finalX;
                 window.Top = finalY;
                 window.Frames = imageData.Frames;
-                window.FrameDelay = imageData.FrameDelay;
+                // #1194: the user's GIF speed slider, applied once here rather than per tick.
+                window.FrameDelay = ScaleFrameDelay(imageData.FrameDelay, settings.FlashGifSpeedMultiplier);
                 window.StartTime = DateTime.Now;
                 window.CurrentFrameIndex = 0;
                 // The shared host is fully click-through (pops on it would need the global mouse
@@ -1486,6 +1617,9 @@ namespace ConditioningControlPanel.Services
                 // Capture the monitor on the window so hydra children can inherit
                 // their parent's screen (TriggerMultiplication reads window.Monitor).
                 window.Monitor = monitor;
+                window.IsRemix = imageData.IsRemix;
+                // Always written (the classic shell is recycled), so an authored burst's alpha never leaks into the next.
+                window.AlphaOverride = alphaOverride;
 
                 // Register cancellation callback — when the token fires, mark this window for fade-out~ 🌙
                 // Store the registration so we can dispose it in SafeCloseFlashWindow
@@ -1498,7 +1632,7 @@ namespace ConditioningControlPanel.Services
                             window.IsFadingOut = true;
                         });
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 });
 
                 // Create image control (layer mode has no WPF visual tree at all - the layer
@@ -1529,6 +1663,11 @@ namespace ConditioningControlPanel.Services
                 // Stays null in layer mode (no WPF visual), which never reaches the attach branches.
                 FrameworkElement content = null!;
 
+                // Wave 2 rounded corners: the switch plus ownership, read once per spawn. The
+                // compositor path resolves its own radius inside SpawnLayerVisual.
+                bool roundedWpf = settings.FlashRoundedCorners;
+                bool ownsFlashV2 = OwnsFlashV2();
+
                 // Layer-mode glow parameters, filled by the glow branch below and consumed at
                 // the layer spawn (the WPF DropShadow content build is skipped entirely).
                 double layerGlowRadius = 0, layerGlowOpacity = 0;
@@ -1551,7 +1690,7 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Debug("Hydra XP: gen {Gen}, xp {XP}", hydraGeneration, xpAmount);
                 }
 
-                multiplier = (hydraGeneration > 0) ? 1 : (App.SkillTree?.RollLuckyFlash() ?? 1);
+                multiplier = (hydraGeneration > 0 || imageData.RemixMirror) ? 1 : (App.SkillTree?.RollLuckyFlash() ?? 1);
                 var isLucky = multiplier > 1;
                 window.IsLucky = isLucky;
 
@@ -1613,10 +1752,16 @@ namespace ConditioningControlPanel.Services
                         Opacity = glowOpacity
                     };
 
-                    // Clip the image with rounded corners so the glow wraps softly
+                    // Clip the image with rounded corners so the glow wraps softly. Wave 2: the
+                    // radius comes from the shared resolver (12 px card, or 14 with the switch on),
+                    // and the IMAGE carries a rounded Clip - a Border's CornerRadius rounds its own
+                    // chrome, never its child, so ClipToBounds alone left square picture corners.
+                    var wpfRadius = FlashCorners.Resolve(roundedWpf, ownsFlashV2, hasGlow: true,
+                        Math.Min(trueW, trueH), dpiScale: 1.0);
+                    ApplyCornerClip(image, trueW, trueH, wpfRadius);
                     var clipBorder = new Border
                     {
-                        CornerRadius = new CornerRadius(12),
+                        CornerRadius = new CornerRadius(wpfRadius),
                         ClipToBounds = true,
                         Child = image
                     };
@@ -1625,7 +1770,7 @@ namespace ConditioningControlPanel.Services
                     {
                         Background = System.Windows.Media.Brushes.Transparent,
                         Effect = glowEffect,
-                        CornerRadius = new CornerRadius(12),
+                        CornerRadius = new CornerRadius(wpfRadius),
                         Padding = new Thickness(blurRadius / 2),
                         Child = clipBorder
                     };
@@ -1672,15 +1817,30 @@ namespace ConditioningControlPanel.Services
                     // The image gets the black backing the window shell used to provide directly: the
                     // per-window shell background is Transparent now (so the bucket padding stays
                     // invisible), and host mode needs it because the image is a bare Canvas child.
-                    content = new Border { Background = System.Windows.Media.Brushes.Black, Child = image };
+                    // Wave 2: the black backing rounds with the picture, so a rounded flash has no
+                    // square black shoulders poking out behind its corners (classic AND solid host).
+                    var plainRadius = FlashCorners.Resolve(roundedWpf, ownsFlashV2, hasGlow: false,
+                        Math.Min(trueW, trueH), dpiScale: 1.0);
+                    ApplyCornerClip(image, trueW, trueH, plainRadius);
+                    content = new Border
+                    {
+                        Background = System.Windows.Media.Brushes.Black,
+                        CornerRadius = new CornerRadius(plainRadius),
+                        Child = image
+                    };
                 }
 
                 if (useLayer)
                 {
                     // Convert frames + spawn the layer item; the heartbeat drives it from here
                     // via window.LayerItem (fade, GIF frames, gaze dwell).
+                    // Flashes v2: a hydra child inherits the parent's kind (its own start state
+                    // is rolled at spawn); an original resolves the picker through ownership and
+                    // MotionLevel. The classic and solid paths never move.
+                    window.MotionStyle = ResolveMotionStyle(settings, inheritMotion);
                     SpawnLayerVisual(window, imageData, monitor,
-                        layerGlowColor, layerGlowRadius, layerGlowOpacity, isLucky);
+                        layerGlowColor, layerGlowRadius, layerGlowOpacity, isLucky, window.MotionStyle,
+                        roundedWpf && ownsFlashV2);
 
                     if (!suppressHaptic)
                         _ = App.Haptics?.FlashDecayVibeAsync();
@@ -1768,8 +1928,8 @@ namespace ConditioningControlPanel.Services
             {
                 // If anything fails before the window is tracked, dispose the CTS so it doesn't leak~ 🧹
                 App.Logger?.Debug("SpawnFlashWindow failed: {Error}", ex.Message);
-                try { windowCts.Cancel(); } catch { }
-                try { windowCts.Dispose(); } catch { }
+                try { windowCts.Cancel(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
+                try { windowCts.Dispose(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 if (window != null)
                 {
                     try
@@ -1790,10 +1950,13 @@ namespace ConditioningControlPanel.Services
                         if (window.UsesLayer) CloseStateBagWindow(window);
                         else if (!window.UsesHost) window.Close();
                     }
-                    catch { }
+                    catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 }
                 return;
             }
+
+            // A remix is ONE flash: its copies on the other monitors pay and count nothing.
+            if (imageData.RemixMirror) return;
 
             App.Progression?.AddXP(xpAmount * multiplier, XPSource.Flash);
 
@@ -1811,7 +1974,7 @@ namespace ConditioningControlPanel.Services
                     if (App.Achievements?.Progress?.TotalFlashImages == 1)
                         App.EmiDesk?.Fire("firstFlashEver", null);
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
             }
         }
 
@@ -1936,6 +2099,87 @@ namespace ConditioningControlPanel.Services
         #endregion
 
         /// <summary>
+        /// Flashes v2: the style one flash plays. A hydra child takes the parent's kind; an
+        /// original takes the picker. Both go through FlashMotion.Resolve, which asks PrizeGrants
+        /// (never settings) and MotionFx.Level, so an unowned or Off pick plays as Still.
+        /// </summary>
+        /// <summary>
+        /// Flashes v2 wave 2: true when the account owns ANY Flashes v2 motion grant. The wave-2
+        /// dials (rounded corners, draggable GIFs) ride the same ownership as the motion picker,
+        /// so nothing v2 shows up on an account that bought none of it.
+        /// </summary>
+        internal static bool OwnsFlashV2()
+            => PrizeGrants.IsGranted(PrizeGrants.FlashDriftBounce)
+               || PrizeGrants.IsGranted(PrizeGrants.FlashPendulum);
+
+        /// <summary>
+        /// Flashes v2 wave 2: the state for a dismissed compositor flash breaking into shards, or
+        /// null to keep the plain cut. Null covers every reason not to break: this teardown was
+        /// not a dismiss (a timer expiry, a retired one-shot, the run stopping), the switch is off,
+        /// the account owns no v2 motion grant, or MotionLevel.Off - at which FlashShatter itself
+        /// returns a done, shardless state, and this hands back the same null either way.
+        /// UI thread (every SafeCloseFlashWindow caller is), so _random needs no guard.
+        /// </summary>
+        private FlashShatterState? BuildShatter(FlashWindow window, Compositor.FlashLayer.FlashItem item)
+        {
+            if (App.Settings?.Current?.FlashShatterEnabled != true) return null;
+            if (!OwnsFlashV2()) return null;
+
+            var (bx, by, bw, bh) = ShatterBounds(window, item);
+            var state = FlashShatter.Create(item.X, item.Y, item.W, item.H, bx, by, bw, bh,
+                MotionFx.Level, _random);
+            return state.Shards.Length > 0 ? state : null;
+        }
+
+        /// <summary>
+        /// The screen a break falls off, world px. It comes from the monitor the picture is
+        /// ACTUALLY on rather than the one it spawned on: a drift can carry a flash across a
+        /// seam and a drag can put it anywhere, and reading the spawn monitor would leave the
+        /// shards "off screen" from their first tick, ending the break before it was seen.
+        /// Falls back to the spawn monitor when there is no screen under the picture.
+        /// </summary>
+        private static (double X, double Y, double W, double H) ShatterBounds(
+            FlashWindow window, Compositor.FlashLayer.FlashItem item)
+        {
+            try
+            {
+                var mid = new System.Drawing.Point((int)(item.X + item.W / 2), (int)(item.Y + item.H / 2));
+                var b = Screen.FromPoint(mid).Bounds;
+                if (b.Width > 0 && b.Height > 0) return (b.X, b.Y, b.Width, b.Height);
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "no screen under the broken flash"); }
+
+            var d = window.Monitor.DpiScale > 0 ? window.Monitor.DpiScale : 1.0;
+            return (window.Monitor.X * d, window.Monitor.Y * d,
+                    window.Monitor.Width * d, window.Monitor.Height * d);
+        }
+
+        /// <summary>
+        /// Round the corners of a WPF flash picture. A Border's CornerRadius rounds its own chrome
+        /// and never its child, so the image itself needs the geometry; a zero radius clears any
+        /// clip a pooled/recycled Image control is still carrying.
+        /// </summary>
+        private static void ApplyCornerClip(System.Windows.Controls.Image? image, double w, double h, double radius)
+        {
+            if (image == null) return;
+            if (radius <= 0 || w <= 0 || h <= 0) { image.Clip = null; return; }
+            var clip = new System.Windows.Media.RectangleGeometry(
+                new Rect(0, 0, w, h), radius, radius);
+            clip.Freeze();
+            image.Clip = clip;
+        }
+
+        private FlashMotionStyle ResolveMotionStyle(AppSettings settings, FlashMotionStyle? inherit)
+        {
+            var picked = inherit ?? settings.FlashMotionStyle;
+            if (picked == FlashMotionStyle.Still) return FlashMotionStyle.Still;
+            return FlashMotion.Resolve(picked,
+                PrizeGrants.IsGranted(PrizeGrants.FlashDriftBounce),
+                PrizeGrants.IsGranted(PrizeGrants.FlashPendulum),
+                MotionFx.Level, _random);
+        }
+
+        /// <summary>
         /// COMPOSITOR: convert the decoded frames and spawn this flash's layer item. The
         /// bookkeeping rect on <paramref name="window"/> (DIPs, already glow-expanded) converts
         /// to world px with the spawn monitor's own scale — the same math as host mode's Place.
@@ -1946,7 +2190,8 @@ namespace ConditioningControlPanel.Services
         /// from sweeping the still-itemless window during the conversion window.
         /// </summary>
         private void SpawnLayerVisual(FlashWindow window, LoadedImageData imageData, MonitorInfo monitor,
-            System.Windows.Media.Color glowColor, double glowRadius, double glowOpacity, bool luckyPulse)
+            System.Windows.Media.Color glowColor, double glowRadius, double glowOpacity, bool luckyPulse,
+            FlashMotionStyle motion = FlashMotionStyle.Still, bool roundedCorners = false)
         {
             if (_flashLayer == null)
             {
@@ -1966,9 +2211,20 @@ namespace ConditioningControlPanel.Services
             var w = (float)(window.Width * dpi);
             var h = (float)(window.Height * dpi);
             var paddingPx = (float)(hasGlow ? glowRadius / 2 * dpi : 0);
-            var cornerRadiusPx = hasGlow ? (float)(12 * dpi) : 0f;
+            // Wave 2: one resolver for all three render paths (glow keeps its 12 px card unless
+            // the Rounded corners switch is on). The cap reads the IMAGE box, glow inset removed.
+            var cornerRadiusPx = (float)FlashCorners.Resolve(roundedCorners, OwnsFlashV2(), hasGlow,
+                Math.Min(w - 2 * paddingPx, h - 2 * paddingPx), dpi);
             var skGlowColor = new SkiaSharp.SKColor(glowColor.R, glowColor.G, glowColor.B);
             var glowSigmaPx = (float)(glowRadius * dpi / 3.0);   // WPF blur radius -> sigma (R/3)
+
+            // Flashes v2: roll the motion here on the UI thread (MotionFx.Level, _random) before the
+            // off-thread conversion. The spawn monitor converts to world px like the window rect;
+            // a pendulum re-homes under the monitor's top centre and the rope is clamped on screen.
+            FlashMotionState? motionState = motion == FlashMotionStyle.Still ? null
+                : FlashMotion.Create(motion, x, y, w, h,
+                    monitor.X * dpi, monitor.Y * dpi, monitor.Width * dpi, monitor.Height * dpi,
+                    MotionFx.Level, _random);
 
             window.LayerSpawnPending = true;
 
@@ -2019,7 +2275,7 @@ namespace ConditioningControlPanel.Services
 
                         window.LayerItem = layer.Spawn(frames, x, y, w, h,
                             paddingPx, cornerRadiusPx, skGlowColor, glowSigmaPx,
-                            glowOpacity, luckyPulse);
+                            glowOpacity, luckyPulse, motionState);
                         frames = null;   // ownership transferred — FlashLayer.Remove disposes them
 
                         if (window.IsClickable)
@@ -2040,7 +2296,7 @@ namespace ConditioningControlPanel.Services
             if (frames == null) return;
             foreach (var f in frames)
             {
-                try { f?.Dispose(); } catch { }
+                try { f?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
         }
 
@@ -2051,14 +2307,19 @@ namespace ConditioningControlPanel.Services
             if (_layerHook != null) return;
             // Right-click dismisses too: layer flashes own no right-button verb, so the right
             // message routes into the same hit-test (a miss still passes the click through).
-            _layerHook = new GlobalMouseHook { LeftDown = OnLayerFlashLeftDown, RightDown = OnLayerFlashLeftDown };
+            _layerHook = new GlobalMouseHook
+            {
+                LeftDown = p => OnLayerFlashDown(p, right: false),
+                RightDown = p => OnLayerFlashDown(p, right: true),
+            };
             _layerHook.Start();
         }
 
         private void ReleaseLayerHook()
         {
             if (_layerHook == null) return;
-            try { _layerHook.Dispose(); } catch { }
+            CancelLayerDrag();
+            try { _layerHook.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _layerHook = null;
             _layerHits = Array.Empty<LayerHit>();
         }
@@ -2068,7 +2329,7 @@ namespace ConditioningControlPanel.Services
         /// (most recent spawn) first. A hit swallows the click — exactly what a clickable flash
         /// window did by consuming it — and pops on the dispatcher.
         /// </summary>
-        private bool OnLayerFlashLeftDown(System.Windows.Point px)
+        private bool OnLayerFlashDown(System.Windows.Point px, bool right)
         {
             // Clicks inside a playing mandatory video's rect belong to the video (attention
             // checks) — the flash there is pinned below it and invisible, so never swallow.
@@ -2085,13 +2346,19 @@ namespace ConditioningControlPanel.Services
                 if (px.X < hit.X || px.X > hit.X + hit.W || px.Y < hit.Y || px.Y > hit.Y + hit.H)
                     continue;
                 var win = hit.Win;
+                // Wave 2: a left press on a draggable flash takes hold of it instead of popping
+                // it, and the release decides between the pop, a placement and a throw. A right
+                // press still pops on the spot - that is the escape hatch while dragging is on.
+                var startDrag = !right && _layerDragEnabled;
+                var grab = px;
                 System.Windows.Application.Current?.Dispatcher?.BeginInvoke(() =>
                 {
                     try
                     {
                         // Re-check on the UI thread — the flash may have expired since the snapshot.
-                        if (!win.IsFadingOut && win.LayerItem != null)
-                            OnFlashClicked(win, App.Settings.Current);
+                        if (win.IsFadingOut || win.LayerItem == null) return;
+                        if (startDrag) BeginLayerDrag(win, grab);
+                        else OnFlashClicked(win, App.Settings.Current);
                     }
                     catch (Exception ex)
                     {
@@ -2102,6 +2369,126 @@ namespace ConditioningControlPanel.Services
             }
             return false;
         }
+
+        #region Flashes v2 wave 2 - drag and fling (compositor path)
+
+        /// <summary>
+        /// UI THREAD: take hold of a compositor flash. A still flash has no motion state yet, so
+        /// one is minted from its current rect; FlashDrag.Begin then converts whatever was there
+        /// into the rect-driven shape a hand can move. Only now are the hook's move and up
+        /// callbacks attached, so a session with nothing being dragged pays nothing per move.
+        /// </summary>
+        private void BeginLayerDrag(FlashWindow window, System.Windows.Point px)
+        {
+            if (_dragWindow != null) return;              // one thumb at a time
+            var item = window.LayerItem;
+            var hook = _layerHook;
+            if (item == null || hook == null) return;
+
+            var d = window.Monitor.DpiScale > 0 ? window.Monitor.DpiScale : 1.0;
+            var motion = item.Motion ??= new FlashMotionState
+            {
+                Style = FlashMotionStyle.Still,
+                X = item.X, Y = item.Y, W = item.W, H = item.H,
+                MediaW = item.W, MediaH = item.H,
+                BoundsX = window.Monitor.X * d, BoundsY = window.Monitor.Y * d,
+                BoundsW = window.Monitor.Width * d, BoundsH = window.Monitor.Height * d,
+            };
+            FlashDrag.Begin(motion, px.X, px.Y, Environment.TickCount64);
+            _dragWindow = window;
+            hook.MouseMove = OnLayerDragMove;
+            hook.LeftUp = OnLayerDragUp;
+        }
+
+        /// <summary>HOOK: feed the drag one pointer sample. The compositor tick reads it.</summary>
+        private void OnLayerDragMove(System.Windows.Point px)
+        {
+            var drag = _dragWindow?.LayerItem?.Motion?.Drag;
+            if (drag != null) FlashDrag.Sample(drag, px.X, px.Y, Environment.TickCount64);
+        }
+
+        /// <summary>HOOK: the thumb came off. Timestamp here, decide on the dispatcher.</summary>
+        private void OnLayerDragUp(System.Windows.Point px)
+        {
+            var window = _dragWindow;
+            if (window == null) return;
+            var nowMs = Environment.TickCount64;
+            System.Windows.Application.Current?.Dispatcher?.BeginInvoke(() =>
+            {
+                try { EndLayerDrag(window, px, nowMs); }
+                catch (Exception ex) { App.Logger?.Debug("Layer flash drop failed: {E}", ex.Message); }
+            });
+        }
+
+        /// <summary>
+        /// UI THREAD: finish the press. A tap pops the flash exactly as a click always did (hydra
+        /// and XP included); anything else either parks it or throws it, and neither of those ever
+        /// reaches OnFlashClicked - so a dragged flash spawns no hydra, and the Jackpot Remix roll
+        /// (which happens in the ambient scheduler, before any flash exists) can never see it.
+        /// </summary>
+        private void EndLayerDrag(FlashWindow window, System.Windows.Point px, long nowMs)
+        {
+            // Order matters: a cancel may already have handed the hook to a DIFFERENT flash while
+            // this release was in flight, and clearing first would strip that one's callbacks.
+            if (!ReferenceEquals(_dragWindow, window)) return;
+            _dragWindow = null;
+            ClearDragCallbacks();
+
+            var motion = window.LayerItem?.Motion;
+            var drag = motion?.Drag;
+            if (motion == null || drag == null) return;
+
+            FlashDrag.Sample(drag, px.X, px.Y, nowMs);
+            // A drag can cross screens, so the walls come from the monitor it was let go over -
+            // and from its WORK AREA, so a flung flash never vanishes behind the taskbar.
+            ApplyWorkAreaBounds(motion, px);
+
+            if (FlashDrag.Release(motion, nowMs, MotionFx.Level) == FlashDragOutcome.Tap
+                && !window.IsFadingOut)
+            {
+                OnFlashClicked(window, App.Settings.Current);
+            }
+        }
+
+        /// <summary>Point a fling's walls at the work area of the monitor under this point.</summary>
+        private static void ApplyWorkAreaBounds(FlashMotionState motion, System.Windows.Point px)
+        {
+            try
+            {
+                var wa = Screen.FromPoint(new System.Drawing.Point((int)px.X, (int)px.Y)).WorkingArea;
+                if (wa.Width <= 0 || wa.Height <= 0) return;
+                motion.BoundsX = wa.X; motion.BoundsY = wa.Y;
+                motion.BoundsW = wa.Width; motion.BoundsH = wa.Height;
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "no screen under the drop point"); }
+        }
+
+        /// <summary>Stop paying for move and up messages the instant the gesture is over.</summary>
+        private void ClearDragCallbacks()
+        {
+            var hook = _layerHook;
+            if (hook == null) return;
+            hook.MouseMove = null;
+            hook.LeftUp = null;
+        }
+
+        /// <summary>
+        /// End a drag that never got its release: the flash expired or was torn down under the
+        /// thumb, or the hook itself is going away. The picture parks where it was last seen.
+        /// Pass a window to cancel only that one. UI thread.
+        /// </summary>
+        private void CancelLayerDrag(FlashWindow? only = null)
+        {
+            var window = _dragWindow;
+            if (window == null) return;
+            if (only != null && !ReferenceEquals(only, window)) return;
+            _dragWindow = null;
+            ClearDragCallbacks();
+            var motion = window.LayerItem?.Motion;
+            if (motion != null) { motion.Drag = null; motion.Vx = 0; motion.Vy = 0; }
+        }
+
+        #endregion
 
         /// <summary>
         /// Refresh the hook-thread hit snapshot from the live layer items (heartbeat cadence),
@@ -2129,6 +2516,11 @@ namespace ConditioningControlPanel.Services
             }
             _layerHits = hits?.ToArray() ?? Array.Empty<LayerHit>();
 
+            // Wave 2: whether a press grabs or pops, resolved here so the hook's own callback
+            // never touches settings or ownership. Dragging rides the same clickable gate as the
+            // pop it replaces, so a click-through (solid mode) flash stays untouchable.
+            _layerDragEnabled = App.Settings?.Current?.FlashDraggable == true && OwnsFlashV2();
+
             // Publish the playing video's physical rect so the hook thread won't swallow
             // clicks on a flash the video is covering (the host sits pinned below the video).
             float[]? exclude = null;
@@ -2141,7 +2533,7 @@ namespace ConditioningControlPanel.Services
                         exclude = new float[] { r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top };
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
             _layerVideoExcludePx = exclude;
 
             if (!anyLayer) ReleaseLayerHook();
@@ -2151,13 +2543,18 @@ namespace ConditioningControlPanel.Services
         private void OnFlashClicked(FlashWindow window, AppSettings settings, bool fromGaze = false)
         {
             // Cancel only THIS window's lifetime — other windows keep living~ ✨
-            try { window.LifetimeCts?.Cancel(); } catch { }
+            try { window.LifetimeCts?.Cancel(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             lock (_lockObj)
             {
                 _activeWindows.Remove(window);
             }
 
+            // Wave 2: a hand (or a gaze dwell, which is the same "stare to pop = click" dismiss)
+            // took this flash off the screen, so the compositor may break it instead of cutting
+            // it. Purely how the picture leaves - the XP below, the hydra roll and the active list
+            // all run exactly as they did, and a timer expiry never reaches here.
+            window.ShatterOnDismiss = true;
             SafeCloseFlashWindow(window);
             FlashClicked?.Invoke(this, EventArgs.Empty);
             _ = App.Haptics?.FlashClickVibeAsync();
@@ -2171,7 +2568,7 @@ namespace ConditioningControlPanel.Services
             // flash (the documented "stare to pop = click, including hydra") and stop there;
             // children of a gaze pop just dismiss. Mouse clicks are unchanged — a human hand is
             // the throttle there.
-            if (settings.CorruptionMode && (!fromGaze || window.HydraGeneration == 0))
+            if (settings.CorruptionMode && !window.IsRemix && (!fromGaze || window.HydraGeneration == 0))
             {
                 var maxHydra = Math.Min(settings.HydraLimit, 20);
                 int currentCount;
@@ -2184,7 +2581,7 @@ namespace ConditioningControlPanel.Services
                 {
                     // Calculate remaining lifetime from the clicked window for linked timing~ 🔗
                     var remainingMs = Math.Max(1000, (int)(window.ExpiresAt - DateTime.Now).TotalMilliseconds);
-                    TriggerMultiplication(maxHydra, currentCount, window.OriginalLifetimeMs, remainingMs, window.HydraGeneration, window.Monitor, window.OneShotGeneration);
+                    TriggerMultiplication(maxHydra, currentCount, window.OriginalLifetimeMs, remainingMs, window.HydraGeneration, window.Monitor, window.OneShotGeneration, window.MotionStyle);
                 }
             }
         }
@@ -2195,7 +2592,7 @@ namespace ConditioningControlPanel.Services
         /// When HydraLinkedTiming is true, children get parentRemainingMs; when false, they get a fresh full lifetime.
         /// parentGeneration is the clicked window's generation — children will be parentGeneration + 1.
         /// </summary>
-        private async void TriggerMultiplication(int maxHydra, int currentCount, int parentLifetimeMs, int parentRemainingMs, int parentGeneration, MonitorInfo? parentMonitor = null, int? oneShotGen = null)
+        private async void TriggerMultiplication(int maxHydra, int currentCount, int parentLifetimeMs, int parentRemainingMs, int parentGeneration, MonitorInfo? parentMonitor = null, int? oneShotGen = null, FlashMotionStyle parentMotion = FlashMotionStyle.Still)
         {
             try
             {
@@ -2251,7 +2648,8 @@ namespace ConditioningControlPanel.Services
                     await DispatcherHelper.RunOnUIAsync(() =>
                     {
                         // Pass null for sound - NO AUDIO FOR HYDRA
-                        ShowImages(loadedImages, null, true, capturedLifetime, capturedGeneration, oneShotGen: oneShotGen);
+                        // Flashes v2: children inherit the parent's motion kind, own start state.
+                        ShowImages(loadedImages, null, true, capturedLifetime, capturedGeneration, oneShotGen: oneShotGen, inheritMotion: parentMotion);
                     });
                 }
             }
@@ -2276,21 +2674,36 @@ namespace ConditioningControlPanel.Services
         // DropShadowEffect glow on top of that. At 0% the ramp is 2 writes per flash; at 100% it was
         // ~60 in and ~60 out per window, times MAX_CONCURRENT_FLASH. Two cheap brakes, layered path
         // only: cap the ramp length, and only write when the alpha has actually moved a visible step.
-        // Compositor/solid-host flashes write LayerItem.Opacity / a hosted element's Opacity, which
-        // costs nothing, so they keep the exact per-frame ramp.
+        //
+        // meadow again (#1134, still spiking on 6.9.1): that fix exempted the COMPOSITOR path on the
+        // premise that a LayerItem.Opacity write "costs nothing". It does not. Every write moves
+        // FlashLayer.FlashItem.Opacity, FlashLayer.Update sees the change and reports Dirty, and
+        // CompositorEngine.OnRendering answers one dirty layer with PresentSurface for the whole
+        // MAIN surface - a fullscreen raster of the entire layer stack plus a layered present, on
+        // every monitor. So a fading flash pins the unified renderer at one fullscreen present per
+        // composition frame, and because the ramp scales with the slider the duty cycle saturates:
+        // at 100% (1.0 s in, 1.0 s out) a flash is ramping for essentially its whole life, so the
+        // surface is dirty continuously with up to MAX_CONCURRENT_FLASH_HOST items on it. Lower
+        // percentages leave clean gaps, which is exactly the "smooth below 100%" the report says.
+        // Only the SOLID host is genuinely cheap (a plain WPF element opacity, composited off the
+        // UI thread by WPF itself), so the compositor now rides the quantiser as well. It keeps the
+        // slider's full ramp LENGTH: the quantiser bounds the writes per fade (target/epsilon),
+        // which makes a long ramp cost no more presents than a short one.
         private const double LAYERED_MAX_FADE_SECONDS = 0.5;
-        private const double LAYERED_ALPHA_EPSILON = 1.0 / 32.0;
+        private const double FADE_ALPHA_EPSILON = 1.0 / 32.0;
 
         /// <summary>
         /// Fade ramp length for one window. The layered (per-window, AllowsTransparency) path is
-        /// clamped to <see cref="LAYERED_MAX_FADE_SECONDS"/>; compositor and solid-host visuals are
-        /// cheap to nudge and keep the slider's full ramp. Pure so it can be unit-tested.
+        /// clamped to <see cref="LAYERED_MAX_FADE_SECONDS"/> because its cost is per FRAME of ramp;
+        /// compositor and solid-host visuals keep the slider's full ramp (their writes are thinned
+        /// instead, so ramp length is cost-neutral). Pure so it can be unit-tested.
         /// </summary>
-        internal static double ResolveFadeSeconds(double fadeSeconds, bool cheapAlpha)
-            => cheapAlpha ? fadeSeconds : Math.Min(fadeSeconds, LAYERED_MAX_FADE_SECONDS);
+        internal static double ResolveFadeSeconds(double fadeSeconds, bool fullRamp)
+            => fullRamp ? fadeSeconds : Math.Min(fadeSeconds, LAYERED_MAX_FADE_SECONDS);
 
         /// <summary>
-        /// Quantiser for the layered fade path: skip an opacity write the viewer cannot see, but
+        /// Quantiser for the layered and compositor fade paths: skip an opacity write the viewer
+        /// cannot see (on the compositor that write would cost a fullscreen present), but
         /// ALWAYS write the terminal values - the exact target alpha (so a fade-in settles where the
         /// Opacity slider says) and an exact 0 (the heartbeat's removal trigger reads
         /// <c>newAlpha &lt;= 0</c>, so a skipped zero would strand the window on screen).
@@ -2392,14 +2805,24 @@ namespace ConditioningControlPanel.Services
 
                     // Per-window fade control — each window manages its own lifetime~ 🌸
                     var showThisWindow = DateTime.Now < window.ExpiresAt && !window.IsFadingOut;
-                    var targetAlpha = showThisWindow ? maxAlpha : 0.0;
+                    var targetAlpha = showThisWindow ? (window.AlphaOverride ?? maxAlpha) : 0.0;
+
+                    // #1134: the compositor spawn is off-thread, so the item can still be missing
+                    // here (the liveness check above kept the window alive for exactly that case).
+                    // Hold the ramp instead of running it forward against a dropped write, or the
+                    // flash pops in at whatever alpha the ramp reached while it was converting.
+                    if (window.UsesLayer && window.LayerItem == null) continue;
 
                     // Fade in/out per-window~ uwu (VisualOpacity routes to the hosted root in solid mode)
-                    // Layered windows pay a monitor-sized blit per opacity write, so their ramp is
-                    // clamped and their writes quantised; the ramp itself still advances every frame
-                    // (window.FadeAlpha), only the writes are thinned.
-                    var cheapAlpha = window.UsesLayer || window.UsesHost;
-                    var winFadeSeconds = ResolveFadeSeconds(fadeSeconds, cheapAlpha);
+                    // Only the SOLID host is cheap to nudge. A layered window pays a monitor-sized
+                    // blit per opacity write; a compositor write marks FlashLayer dirty, and the
+                    // engine answers that with a fullscreen re-raster + present of the shared
+                    // surface on every monitor (#1134). Both therefore quantise their writes; the
+                    // ramp itself still advances every frame (window.FadeAlpha), only the writes are
+                    // thinned. The compositor keeps the slider's full ramp length because the
+                    // quantiser, not the frame rate, is what bounds its writes.
+                    var cheapAlpha = window.UsesHost;
+                    var winFadeSeconds = ResolveFadeSeconds(fadeSeconds, fullRamp: cheapAlpha || window.UsesLayer);
                     var fadeStep = winFadeSeconds > 0 ? dt / winFadeSeconds : 1.0;
 
                     var currentAlpha = cheapAlpha ? window.VisualOpacity : window.FadeAlpha;
@@ -2407,7 +2830,7 @@ namespace ConditioningControlPanel.Services
                     {
                         var newAlpha = Math.Min(targetAlpha, currentAlpha + fadeStep);
                         window.FadeAlpha = newAlpha;
-                        if (cheapAlpha || ShouldWriteAlpha(window.LastWrittenAlpha, newAlpha, targetAlpha, LAYERED_ALPHA_EPSILON))
+                        if (cheapAlpha || ShouldWriteAlpha(window.LastWrittenAlpha, newAlpha, targetAlpha, FADE_ALPHA_EPSILON))
                         {
                             window.VisualOpacity = newAlpha;
                             window.LastWrittenAlpha = newAlpha;
@@ -2417,7 +2840,7 @@ namespace ConditioningControlPanel.Services
                     {
                         var newAlpha = Math.Max(0.0, currentAlpha - fadeStep);
                         window.FadeAlpha = newAlpha;
-                        if (cheapAlpha || ShouldWriteAlpha(window.LastWrittenAlpha, newAlpha, targetAlpha, LAYERED_ALPHA_EPSILON))
+                        if (cheapAlpha || ShouldWriteAlpha(window.LastWrittenAlpha, newAlpha, targetAlpha, FADE_ALPHA_EPSILON))
                         {
                             window.VisualOpacity = newAlpha;
                             window.LastWrittenAlpha = newAlpha;
@@ -2428,6 +2851,19 @@ namespace ConditioningControlPanel.Services
                             toRemove.Add(window);
                             continue;
                         }
+                    }
+
+                    // Flashes v2: a moving layer item owns its rect. Mirror it back into the state
+                    // bag in this monitor's DIPs so GazeFocusService (Left/Top/Width/Height) and the
+                    // overlap check keep reading the live picture; the click snapshot below reads
+                    // the item directly. A state bag has no hwnd, so these are plain properties.
+                    if (window.LayerItem is { Motion: { Style: not FlashMotionStyle.Still } } moving)
+                    {
+                        var d = window.Monitor.DpiScale > 0 ? window.Monitor.DpiScale : 1.0;
+                        window.Left = moving.X / d;
+                        window.Top = moving.Y / d;
+                        window.Width = moving.W / d;
+                        window.Height = moving.H / d;
                     }
 
                     // Animate GIF frames
@@ -2467,8 +2903,8 @@ namespace ConditioningControlPanel.Services
             if (toRemove.Count > 0)
                 App.Overlay?.NotifyTopWindowClosed();
 
-            // Layer flashes: refresh the click-hook hit snapshot (positions are static but
-            // items expire), and release the hook once the last one is gone.
+            // Layer flashes: refresh the click-hook hit snapshot (a v2 flash moves, and items
+            // expire), and release the hook once the last one is gone.
             RebuildLayerHitSnapshot();
 
             // Clear stale references in snapshot so removed windows can be GC'd
@@ -2485,7 +2921,8 @@ namespace ConditioningControlPanel.Services
         ///      is supplied (passed by TriggerMultiplication so children stay
         ///      on the parent's screen) and exists in the candidate list,
         ///      return it.
-        ///   2. Random pick from GetMonitors(DualMonitorEnabled).
+        ///   2. Random pick from GetMonitors(), i.e. the screens the global
+        ///      "Show content on" picker targets (App.GetGlobalScreens).
         /// Flashes are baseline content — they do not consult the gaze
         /// calibration clamp. Off-cal-screen flashes are filtered out of
         /// gaze-pop / gaze-linger interaction by GazeFocusService.FindBestTarget;
@@ -2493,7 +2930,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private MonitorInfo PickMonitor(AppSettings settings, MonitorInfo? preferred = null)
         {
-            var candidates = GetMonitors(settings.DualMonitorEnabled);
+            var candidates = GetMonitors();
 
             // Hydra inheritance: keep children on the parent's screen.
             if (preferred != null)
@@ -2509,13 +2946,18 @@ namespace ConditioningControlPanel.Services
             return candidates[_random.Next(candidates.Count)];
         }
 
-        private List<MonitorInfo> GetMonitors(bool dualMonitor)
+        /// <summary>
+        /// The monitors a flash may spawn on, in DIPs. Sourced from <c>App.GetGlobalScreens()</c>
+        /// so the app-wide "Show content on" picker is honoured - reading DualMonitorEnabled
+        /// directly (what this did before) could only ever mean "all" or "the Windows primary".
+        /// </summary>
+        private List<MonitorInfo> GetMonitors()
         {
             var monitors = new List<MonitorInfo>();
 
             try
             {
-                foreach (var screen in App.GetAllScreensCached())
+                foreach (var screen in App.GetGlobalScreens())
                 {
                     // Get DPI scale for THIS specific screen (not just primary)
                     var dpiScale = GetDpiForScreen(screen);
@@ -2548,13 +2990,6 @@ namespace ConditioningControlPanel.Services
                     Height = (int)SystemParameters.PrimaryScreenHeight,
                     IsPrimary = true
                 });
-            }
-
-            // If dual monitor is disabled, only use primary
-            if (!dualMonitor)
-            {
-                var primary = monitors.FirstOrDefault(m => m.IsPrimary) ?? monitors[0];
-                return new List<MonitorInfo> { primary };
             }
 
             return monitors;
@@ -3085,6 +3520,23 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// The DISK half of the flash pool as a copy, after the same refresh and deselection prune
+        /// <see cref="GetChaosImagePaths"/> runs. The Back Room media feed deals from this instead:
+        /// it needs the whole list to run a seeded shuffle (a random draw cannot be replayed), and
+        /// only disk files have a <c>ccp.assets</c> url behind them - pack entries decrypt to temp
+        /// copies and remote entries are https urls, neither of which the page can be pointed at.
+        /// </summary>
+        internal List<string> SnapshotLocalImagePaths()
+        {
+            lock (_lockObj)
+            {
+                if (_imageList.Count == 0 && _packImageList.Count == 0) RefreshImageLists();
+                PruneDeselectedFromPools();
+                return new List<string>(_imageList);
+            }
+        }
+
+        /// <summary>
         /// Refreshes both image lists (regular and pack images) from disk cache.
         /// Called when lists are empty or cache has expired.
         /// </summary>
@@ -3291,7 +3743,7 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Information("FlashService: warmed {Warmed} remote still(s), {Ready} ready", warmed, ready);
                 }
             }
-            catch (OperationCanceledException) { /* teardown */ }
+            catch (OperationCanceledException) { } // swallow: teardown
             catch (Exception ex)
             {
                 App.Logger?.Debug("FlashService: remote prefetch failed (non-fatal): {Error}", ex.Message);
@@ -3384,7 +3836,7 @@ namespace ConditioningControlPanel.Services
             catch (OperationCanceledException) { return null; }
             catch (Exception ex)
             {
-                App.Logger?.Debug("FlashService: remote still {Url} failed to load: {Error}", url, ex.Message);
+                App.Logger?.Debug("FlashService: remote still from {Host} failed to load: {Error}", Logging.UrlLog.Host(url), ex.Message);
                 return null;
             }
         }
@@ -3425,7 +3877,7 @@ namespace ConditioningControlPanel.Services
                 return LooksLikeGif(header.Slice(0, read));
             }
             catch { return false; }
-            finally { try { if (stream.CanSeek) stream.Position = 0; } catch { } }
+            finally { try { if (stream.CanSeek) stream.Position = 0; } catch (Exception ex) { Diag.Swallowed(ex); } }
         }
 
         /// <param name="allowAnimated">False for the single-bitmap overlay caller, which only ever
@@ -3455,9 +3907,9 @@ namespace ConditioningControlPanel.Services
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Debug("FlashService: remote GIF {Url} frame decode failed, falling back to still: {Error}", url, ex.Message);
+                    App.Logger?.Debug("FlashService: remote GIF from {Host} frame decode failed, falling back to still: {Error}", Logging.UrlLog.Host(url), ex.Message);
                 }
-                finally { try { if (stream.CanSeek) stream.Position = 0; } catch { } }
+                finally { try { if (stream.CanSeek) stream.Position = 0; } catch (Exception ex) { Diag.Swallowed(ex); } }
             }
 
             // WIC first - same decoder, same decode-time downscale and same WPF-owned buffer as
@@ -3471,7 +3923,7 @@ namespace ConditioningControlPanel.Services
                     var probe = BitmapFrame.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
                     srcW = probe.PixelWidth; srcH = probe.PixelHeight;
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
 
                 stream.Position = 0;
                 var bmp = new BitmapImage();
@@ -3498,7 +3950,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("FlashService: WIC could not decode remote still {Url}: {Error}", url, ex.Message);
+                App.Logger?.Debug("FlashService: WIC could not decode remote still from {Host}: {Error}", Logging.UrlLog.Host(url), ex.Message);
             }
 
             // WEBP IS WHY THIS FALLBACK EXISTS. Scrolller's stills are mostly webp (the largest
@@ -3541,7 +3993,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning("FlashService: Skia could not decode remote still {Url}: {Error}", url, ex.Message);
+                App.Logger?.Warning("FlashService: Skia could not decode remote still from {Host}: {Error}", Logging.UrlLog.Host(url), ex.Message);
                 return null;
             }
         }
@@ -3629,7 +4081,7 @@ namespace ConditioningControlPanel.Services
             catch (OperationCanceledException) { return null; }
             catch (Exception ex)
             {
-                App.Logger?.Debug("FlashService: chaos overlay could not load remote still {Url}: {Error}", url, ex.Message);
+                App.Logger?.Debug("FlashService: chaos overlay could not load remote still from {Host}: {Error}", Logging.UrlLog.Host(url), ex.Message);
                 return null;
             }
         }
@@ -3699,7 +4151,7 @@ namespace ConditioningControlPanel.Services
             {
                 if (_soundQueue.Count == 0)
                 {
-                    var files = GetMediaFiles(SoundsPath, new[] { ".mp3", ".wav", ".ogg" });
+                    var files = BuildVoiceLinePool();
                     if (files.Count == 0) return null;
 
                     // Performance: Shuffle and enqueue all at once
@@ -3708,6 +4160,60 @@ namespace ConditioningControlPanel.Services
 
                 return _soundQueue.Count > 0 ? _soundQueue.Dequeue() : null; // Performance: O(1) instead of O(n)
             }
+        }
+
+        /// <summary>
+        /// The clips a flash may speak (#1099).
+        ///
+        /// <para>Starts from the same list the phrase library shows,
+        /// <see cref="CompanionPhraseService.GetEnabledVoiceLineFiles"/> - the UNION of the bundled
+        /// install dir and the downloaded content pack, already minus the lines the user disabled or
+        /// removed there. Then adds whatever the folder scan finds that the library cannot see: clips
+        /// a user dropped into category subfolders (the scan is recursive, the library is top-level
+        /// only) and packaged-mod folders. Those extras get filtered by the same removed/disabled
+        /// ids, so a line deleted in the library stays deleted wherever it lives.</para>
+        ///
+        /// <para>Until this, the flash path called <see cref="GetMediaFiles"/> on
+        /// <see cref="SoundsPath"/> alone: it honoured no phrase-library toggle at all, and it saw
+        /// only ONE of the two content roots, because <c>ContentLocator.ResolveDirectory</c> stops at
+        /// the first root that exists rather than merging them. That is both halves of the report - a
+        /// reporter deleted the line in the phrase library and still heard it on every flash, and the
+        /// pool that actually played could be a fraction of the list the library showed, small enough
+        /// that one clip came back on every single flash.</para>
+        ///
+        /// <para>Mirrors <c>AvatarTubeWindow.GetRandomVoiceLinePath</c>, which has always taken the
+        /// filtered list with an unfiltered fallback. Caller holds <see cref="_lockObj"/>.</para>
+        /// </summary>
+        private List<string> BuildVoiceLinePool()
+        {
+            var pool = App.CompanionPhrases?.GetEnabledVoiceLineFiles() ?? new List<string>();
+            var libraryCount = pool.Count;
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var file in pool) seen.Add(Path.GetFileName(file));
+
+            var settings = App.Settings?.Current;
+            foreach (var file in GetMediaFiles(SoundsPath, new[] { ".mp3", ".wav", ".ogg" }))
+            {
+                if (!seen.Add(Path.GetFileName(file))) continue;
+                var id = CompanionPhraseService.VoiceLineId(file);
+                if (settings?.RemovedPhraseIds?.Contains(id) == true) continue;
+                if (settings?.DisabledPhraseIds?.Contains(id) == true) continue;
+                pool.Add(file);
+            }
+
+            // Says out loud how much variety a flash actually has. A pool of 1 is the shape of
+            // "she says the same line every time", and is invisible from the outside otherwise.
+            // Only on a CHANGE: an empty pool rebuilds on every flash, and this would be spam.
+            if (pool.Count != _lastLoggedVoicePoolCount)
+            {
+                _lastLoggedVoicePoolCount = pool.Count;
+                App.Logger?.Information(
+                    "FlashService: flash voice-line pool = {Count} clip(s) ({LibraryCount} from the phrase library) in {Folder}",
+                    pool.Count, libraryCount, SoundsPath);
+            }
+
+            return pool;
         }
 
         /// <summary>
@@ -4008,7 +4514,7 @@ namespace ConditioningControlPanel.Services
                         // process lifetime. Close it explicitly - a leaked USER object per pool
                         // eviction is exactly the kind of drip that ends a 4h session with
                         // CreateWindowEx failing (#627).
-                        try { pooled.Close(); } catch { }
+                        try { pooled.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
                         continue;
                     }
                     if (match == null && (int)pooled.Width == width && (int)pooled.Height == height)
@@ -4055,10 +4561,10 @@ namespace ConditioningControlPanel.Services
             {
                 if (s is FlashWindow fw)
                 {
-                    try { fw.LifetimeRegistration?.Dispose(); } catch { }
+                    try { fw.LifetimeRegistration?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     fw.LifetimeRegistration = null;
-                    try { fw.LifetimeCts?.Cancel(); } catch { }
-                    try { fw.LifetimeCts?.Dispose(); } catch { }
+                    try { fw.LifetimeCts?.Cancel(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { fw.LifetimeCts?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     fw.LifetimeCts = null;
                 }
             };
@@ -4095,13 +4601,18 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                // Wave 2: this flash may be the one under a thumb (expired mid-drag, popped by gaze,
+                // swept by a teardown). Drop the drag before the item goes, or the hook keeps
+                // paying for move messages nothing reads.
+                CancelLayerDrag(window);
+
                 // Dispose CTS registration first to release the closure capturing this window
-                try { window.LifetimeRegistration?.Dispose(); } catch { }
+                try { window.LifetimeRegistration?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 window.LifetimeRegistration = null;
 
                 // Cancel and dispose per-window lifetime token~ 🧹
-                try { window.LifetimeCts?.Cancel(); } catch { }
-                try { window.LifetimeCts?.Dispose(); } catch { }
+                try { window.LifetimeCts?.Cancel(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { window.LifetimeCts?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 window.LifetimeCts = null;
 
                 // Release bitmap references before retiring to prevent memory accumulation
@@ -4127,9 +4638,15 @@ namespace ConditioningControlPanel.Services
                         glow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.BlurRadiusProperty, null);
                         glow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, null);
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                     window.GlowEffect = null;
                 }
+
+                // Wave 2: consumed here and nowhere else, so clear it before any path returns -
+                // a classic window goes back into _windowPool and must not carry a dismiss from
+                // its previous life into the next spawn's teardown.
+                var shatterThis = window.ShatterOnDismiss;
+                window.ShatterOnDismiss = false;
 
                 // Compositor: detach the layer item — this disposes its SKImage frames
                 // deterministically. No hwnd, nothing to pool.
@@ -4139,7 +4656,9 @@ namespace ConditioningControlPanel.Services
                     {
                         var item = window.LayerItem;
                         window.LayerItem = null;
-                        _flashLayer?.Remove(item);
+                        var shatter = shatterThis ? BuildShatter(window, item) : null;
+                        if (shatter != null) _flashLayer?.BeginShatter(item, shatter);
+                        else _flashLayer?.Remove(item);
                     }
                     window.IsFadingOut = false;
                     // The state bag is still a real Window: constructing it registered it in
@@ -4193,7 +4712,7 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Debug("Failed to close flash window: {Error}", ex.Message);
-                try { window.Close(); } catch { }
+                try { window.Close(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
             }
         }
 
@@ -4214,11 +4733,11 @@ namespace ConditioningControlPanel.Services
                 {
                     window.Dispatcher.BeginInvoke(() =>
                     {
-                        try { window.Close(); } catch { }
+                        try { window.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     });
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         // WndProc hook for flash windows: drop WM_DPICHANGED so WPF never runs its auto DPI-rescale
@@ -4319,19 +4838,20 @@ namespace ConditioningControlPanel.Services
         public void Dispose()
         {
             Stop();
-            try { _flashLayer?.Clear(); } catch { }
+            try { _remix?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _flashLayer?.Clear(); } catch (Exception ex) { Diag.Swallowed(ex); }
             // Drain the recycled-window pool — the only place pooled hwnds actually close
             // (app shutdown; nothing else is animating, so the close is safe here).
             while (_windowPool.Count > 0)
             {
-                try { _windowPool.Pop().Close(); } catch { }
+                try { _windowPool.Pop().Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
             _cancellationSource?.Dispose();
             // Stop any remote prefetch mid-download. Separate from _cancellationSource, which
             // Stop() already cancelled - the warm pool is meant to survive a stop/start cycle
             // and only dies with the service.
-            try { _remoteCts.Cancel(); } catch { }
-            try { _remoteCts.Dispose(); } catch { }
+            try { _remoteCts.Cancel(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _remoteCts.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             lock (_remoteLock) _remoteReady.Clear();
             StopCurrentSound();
             CleanupTempPackFiles();
@@ -4355,6 +4875,12 @@ namespace ConditioningControlPanel.Services
         public int CurrentFrameIndex { get; set; }
         public Image? ImageControl { get; set; }
         public bool IsClickable { get; set; }
+
+        /// <summary>Jackpot Remix: a click pops it like any flash but never spawns hydra children.</summary>
+        public bool IsRemix { get; set; }
+
+        /// <summary>An authored one-shot's peak alpha (<see cref="FlashBurstLook"/>), instead of the user's Flash opacity.</summary>
+        public double? AlphaOverride { get; set; }
 
         /// <summary>
         /// Solid mode: this instance is never Show()n — it stays a pure state bag (lifetime CTS,
@@ -4392,6 +4918,18 @@ namespace ConditioningControlPanel.Services
         /// not sweep it. Cleared by the spawn continuation whether it spawns or bails.
         /// </summary>
         public bool LayerSpawnPending { get; set; }
+
+        /// <summary>Flashes v2: the motion kind this flash resolved to; hydra children inherit it.</summary>
+        public FlashMotionStyle MotionStyle { get; set; }
+
+        /// <summary>
+        /// Flashes v2 wave 2, compositor only: true when THIS teardown is a hand dismissing the
+        /// flash rather than its timer running out, a one-shot being retired or the run stopping.
+        /// Set by OnFlashClicked immediately before the close and read once, in
+        /// SafeCloseFlashWindow, which is the only place that decides between the shatter and the
+        /// plain cut. Presentation only - XP, hydra and the active list are untouched by it.
+        /// </summary>
+        public bool ShatterOnDismiss { get; set; }
 
         /// <summary>
         /// The fade alpha the heartbeat animates: window Opacity in per-window mode, the hosted
@@ -4501,10 +5039,9 @@ namespace ConditioningControlPanel.Services
                 LifetimeCts.CancelAfter(extraMs);
                 ExpiresAt = DateTime.Now.AddMilliseconds(extraMs);
             }
-            catch
+            catch (Exception ex)
             {
-                // CTS may have been disposed (window fading out) — silent
-                // is fine, the window is already on its way out.
+                Diag.Swallowed(ex, "lifetime CTS disposed, the window is already fading out");
             }
         }
 
@@ -4557,6 +5094,10 @@ namespace ConditioningControlPanel.Services
         public TimeSpan FrameDelay { get; set; }
         public ImageGeometry Geometry { get; set; } = new();
         public MonitorInfo Monitor { get; set; } = new();
+        /// <summary>Jackpot Remix composite: centred, no overlap re-roll, no hydra.</summary>
+        public bool IsRemix { get; set; }
+        /// <summary>A remix copy on a second monitor: shown, but pays no XP and counts nothing.</summary>
+        public bool RemixMirror { get; set; }
     }
 
     internal class ImageGeometry

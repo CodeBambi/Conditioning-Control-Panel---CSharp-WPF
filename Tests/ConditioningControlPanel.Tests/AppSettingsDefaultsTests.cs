@@ -68,4 +68,18 @@ public class AppSettingsDefaultsTests
     [Fact]
     public void ModPickerShown_DefaultsFalse_SoUpgradersStillGetTheOffer()
         => Assert.False(Load("{}").ModPickerShown);
+
+    /// <summary>
+    /// The app-wide monitor picker's sentinel. -1 means "follow DualMonitorEnabled", i.e. exactly
+    /// what every install did before the key existed, so an upgrader's screen layout must not move
+    /// on first launch. A default of 0 would silently pin everyone to Screen.AllScreens[0].
+    /// </summary>
+    [Fact]
+    public void GlobalTargetMonitor_DefaultsToFollowTheMultiMonitorToggle()
+    {
+        Assert.Equal(-1, new AppSettings().GlobalTargetMonitor);
+        Assert.Equal(-1, Load("{}").GlobalTargetMonitor);
+        Assert.Equal(-1, Load("{ \"DualMonitorEnabled\": false }").GlobalTargetMonitor);
+        Assert.Equal(2, Load("{ \"GlobalTargetMonitor\": 2 }").GlobalTargetMonitor);
+    }
 }

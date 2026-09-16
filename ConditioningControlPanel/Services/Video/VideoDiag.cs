@@ -47,6 +47,7 @@ namespace ConditioningControlPanel.Services
     public static class VideoDiag
     {
         private const int MaxQueued = 4000;          // hard cap; drop rather than balloon during a freeze
+        private static readonly long AliveMarkerTicks = TimeSpan.TicksPerMinute * 10; // "dispatcher alive" cadence
         private const long MaxFileBytes = 1_000_000; // ~1MB, then roll to .1 (two files kept, ever)
 
         private static readonly ConcurrentQueue<string> _queue = new();
@@ -69,6 +70,12 @@ namespace ConditioningControlPanel.Services
         // starved by higher-priority work" instead of the generic "dispatcher unresponsive", and
         // the two ages read together name the whole class from the first log.
         private static long _lastUiInputBeatTicks;
+
+        // Per-line stamps are HH:mm:ss.fff only (deliberately - the column has to stay narrow), so
+        // the file carried no date at all: a trace tailed a day later could not be placed in time.
+        // The date is written ONCE, as a header, when a file is opened empty (fresh install, after
+        // a roll) and again if the clock crosses midnight mid-session.
+        private static string _headerDate = "";
 
         /// <summary>Milliseconds since the UI thread last ran a posted callback (0 if never started).</summary>
         public static long UiStallMs
@@ -263,8 +270,27 @@ namespace ConditioningControlPanel.Services
                     using var fs = new FileStream(_path, FileMode.Append, FileAccess.Write,
                         FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.WriteThrough);
                     using var sw = new StreamWriter(fs, Encoding.UTF8);
+                    var today = DateTime.Now.ToString("yyyy-MM-dd");
+                    if (fs.Length == 0 || _headerDate != today)
+                    {
+                        _headerDate = today;
+                        sw.WriteLine($"==== {today} (local, UTC{DateTime.Now:zzz}) ====");
+                    }
+                    // Redact on the way to disk. This file bypasses Serilog entirely, so none of
+                    // the pipeline's redaction reaches it, and its callers hand it raw paths -
+                    // UiHangWatchdog writes the dump path and the log folder verbatim. video-diag
+                    // is attached to bug reports like any other log, so "C:\Users\<name>\..." in it
+                    // is the same leak the session file was fixed for.
+                    //
+                    // Here rather than in Log(): Log() is called from the UI thread and from
+                    // LibVLC's native callback threads while the UI may already be wedged, and the
+                    // redactor's assets-root rule does a Directory.Exists that can block on an
+                    // unplugged drive. On this thread - the writer's own, which is what keeps the
+                    // trace alive during a freeze - that cost is paid where it is safe to pay it.
+                    // The redactor itself is regex-only: no locks, no Serilog, no shared state
+                    // beyond the cached roots.
                     while (_queue.TryDequeue(out var line))
-                        sw.WriteLine(line);
+                        sw.WriteLine(Services.Logging.LogRedactor.Redact(line));
                     int dropped = Interlocked.Exchange(ref _dropped, 0);
                     if (dropped > 0) sw.WriteLine($"(diag queue overflow — {dropped} line(s) dropped)");
                     sw.Flush();
@@ -294,7 +320,7 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Posts a stamp to the dispatcher every second and reports the stall timeline. Escalating
-        /// thresholds keep the file quiet during normal use (one line per minute) while giving a
+        /// thresholds keep the file quiet during normal use (one line per 10 minutes) while giving a
         /// second-resolution picture of a freeze: when it began, how deep it got, whether it ever
         /// came back.
         ///
@@ -373,7 +399,11 @@ namespace ConditioningControlPanel.Services
                         }
                         // Low-rate "still alive" marker so a trace that simply ends tells us the
                         // process died, while a trace whose markers stop tells us the UI thread did.
-                        if (DateTime.UtcNow.Ticks - aliveMarkerTicks > TimeSpan.TicksPerMinute)
+                        // Every 10 minutes, not every minute: at one a minute these were 42% of the
+                        // whole file and could push a real freeze out of the 1 MB window before
+                        // anyone got to read it. The stall ladder still reports at 3s resolution,
+                        // so nothing about detecting a hang depends on this cadence.
+                        if (DateTime.UtcNow.Ticks - aliveMarkerTicks > AliveMarkerTicks)
                         {
                             aliveMarkerTicks = DateTime.UtcNow.Ticks;
                             Log("UI", "dispatcher alive");

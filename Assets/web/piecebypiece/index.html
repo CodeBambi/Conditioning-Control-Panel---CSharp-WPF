@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Piece by Piece</title>
+<link rel="stylesheet" href="./styles.css">
+<link rel="stylesheet" href="./door/door.css">
+<!--
+  Piece by Piece - a 3D chess board for the in-app browser games.
+  Standard chess rules, no house rules. three.js is resolved from the shared
+  vendored ESM build; the specifiers below are relative to this document so the
+  page works from any mount point (dev server root, or the app host).
+-->
+<script type="importmap">
+{
+  "imports": {
+    "three": "../vendor/three/three.module.min.js",
+    "three/addons/": "../vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+  <!-- 3D layer. Agent-facing contract: #fx is an empty sibling ABOVE #stage and
+       is owned entirely by the effects module (ramp/index.js). -->
+  <div id="stage"><canvas id="board-canvas"></canvas></div>
+
+  <!-- The HUD. Clocks in the left corners, out of the lane the ramp's video
+       card slides through; the status column rides under whichever clock is on
+       the move. hud.js layers the behaviour on top by listening to the bus, so
+       the three ids hotseat.js writes into (time-w, time-b, status) stay exactly
+       where they were. #hud sits under #fx on purpose: the effects layer washes
+       over it, and the meter vignette lives in here for the same reason. -->
+  <div id="hud" class="hud">
+    <div class="vig" id="hud-vig" aria-hidden="true"></div>
+
+    <div class="chip chip-b" id="chip-b" data-side="b">
+      <span class="who">black</span>
+      <span class="time" id="time-b">15:00</span>
+      <span class="tally" id="tally-b"></span>
+    </div>
+    <div class="chip chip-w" id="chip-w" data-side="w">
+      <span class="who">white</span>
+      <span class="time" id="time-w">15:00</span>
+      <span class="tally" id="tally-w"></span>
+    </div>
+
+    <!-- the light that moves between the chips IS the turn indicator -->
+    <span class="turn-line" id="turn-line" aria-hidden="true"></span>
+
+    <!-- The moves, written down. Right edge, clear of the middle lane the
+         ramp's card rides down, and the one part of the HUD that takes a
+         click. Hidden until movelist.js takes it, so a missing module leaves
+         nothing half-built on screen. -->
+    <div class="moves closed" id="moves" hidden>
+      <button type="button" class="moves-tab" id="moves-tab" aria-expanded="false" aria-controls="moves-list">
+        <span class="chev" aria-hidden="true"></span><span class="word">moves</span>
+      </button>
+      <ol class="moves-list" id="moves-list"></ol>
+    </div>
+
+    <div class="statuscol" id="status-col">
+      <p class="status" id="status">white to move</p>
+      <p class="hint" id="hud-hint" hidden>hold esc to leave the board</p>
+      <div class="dots" id="hud-dots" hidden aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    </div>
+
+    <!-- Resign and the draw: the two things a player can say to the referee
+         in an online game that are not a move. hud.js shows this block only
+         while an online seat is in the chair (game.isOnline); a hotseat game
+         never sees it. Bottom right rather than under the status line, which
+         slides with the turn: a button that moves is a button a stray tap
+         lands on, and "resign" is the one tap that must not be stray. The
+         rows swap in place - the question, or his offer, in the buttons'
+         stead - so the eye learns one spot. -->
+    <div class="online" id="hud-online" hidden>
+      <p class="online-note" id="hud-online-note" hidden></p>
+      <div class="online-row" id="hud-draw-ask" hidden>
+        <span class="word">he offers a draw</span>
+        <button type="button" class="hud-btn warm" id="hud-draw-accept">accept</button>
+        <button type="button" class="hud-btn" id="hud-draw-decline">decline</button>
+      </div>
+      <div class="online-row" id="hud-resign-ask" hidden>
+        <span class="word">resign?</span>
+        <button type="button" class="hud-btn warm" id="hud-resign-yes">yes</button>
+        <button type="button" class="hud-btn" id="hud-resign-no">no</button>
+      </div>
+      <div class="online-row" id="hud-online-btns">
+        <button type="button" class="hud-btn" id="hud-draw">offer draw</button>
+        <button type="button" class="hud-btn" id="hud-resign">resign</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="fx"></div>
+
+  <!-- Camera views. Self-contained little component, class prefix .cam-, so a
+       later HUD redesign can pick it up and move it whole. -->
+  <div id="cam-views" class="cam-views">
+    <button type="button" class="cam-btn" data-view="normal" title="Normal view (1)" aria-label="Normal view">◧</button>
+    <button type="button" class="cam-btn" data-view="top" title="Top view (2)" aria-label="Top view">▦</button>
+    <button type="button" class="cam-btn" data-view="side" title="Side view (3)" aria-label="Side view">▤</button>
+    <button type="button" class="cam-btn" data-view="opponent" title="Opponent view (4)" aria-label="Opponent view">◨</button>
+    <span class="cam-free" hidden>free</span>
+  </div>
+
+  <!-- The front door: menu, lobby, past games, profile and the end card, as one
+       glass card over the live board. Above #fx so the card reads over whatever
+       the effects layer is doing at the end of a game; hidden for the whole of a
+       game, so the board never has an extra layer in the way of a drag. -->
+  <div id="door" class="door" hidden></div>
+
+  <div id="loader" class="loader">
+    <div class="loader-ring" aria-hidden="true"></div>
+    <p>Setting up the board...</p>
+  </div>
+
+  <div id="nope" class="nope" hidden>
+    <h1>piece by piece</h1>
+    <p id="nope-msg">The 3D board could not start. Check that hardware acceleration is available.</p>
+  </div>
+
+  <script type="module" src="./boot.js"></script>
+</body>
+</html>

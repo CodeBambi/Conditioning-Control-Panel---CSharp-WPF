@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
 using Serilog;
 
@@ -36,7 +37,7 @@ namespace ConditioningControlPanel
             _fetching = true;
             _countdown.Stop();
             BtnRefresh.IsEnabled = false;
-            TxtStatus.Text = "Fetching code...";
+            TxtStatus.Text = Loc.Get("status_link_phone_fetching");
             ImgQrCode.Source = null;
             TxtLinkCode.Text = "--- ---";
 
@@ -81,7 +82,7 @@ namespace ConditioningControlPanel
                 _countdown.Stop();
                 ImgQrCode.Source = null;
                 TxtLinkCode.Text = "--- ---";
-                TxtStatus.Text = "Code expired — get a new one.";
+                TxtStatus.Text = Loc.Get("msg_link_phone_code_expired");
                 BtnRefresh.IsEnabled = true;
                 return;
             }
@@ -117,7 +118,7 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 Log.Warning(ex, "[LinkPhone] Failed to render QR code");
-                TxtStatus.Text = "Couldn't render the QR — use the code below instead.";
+                TxtStatus.Text = Loc.Get("msg_link_phone_qr_failed");
             }
         }
 

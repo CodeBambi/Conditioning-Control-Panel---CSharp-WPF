@@ -16,7 +16,12 @@ namespace ConditioningControlPanel
     /// </summary>
     public partial class ContentPolicyWarningDialog : Window
     {
-        private const string PolicyUrl = "https://app.cclabs.app/policies/prohibited-content";
+        /// <summary>
+        /// The content policy, in one place. Internal rather than private because the first-run
+        /// wizard's 18+ row links to the same page, and a second copy of this string is a second
+        /// thing to forget when the site moves.
+        /// </summary>
+        internal const string PolicyUrl = "https://app.cclabs.app/policies/prohibited-content";
 
         public ContentPolicyWarningDialog(int hitCount)
         {

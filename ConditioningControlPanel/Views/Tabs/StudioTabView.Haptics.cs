@@ -10,7 +10,7 @@ namespace ConditioningControlPanel.Views.Tabs
     /// Settings into sections and paid for it in passthroughs, one per x:Name a MainWindow
     /// partial dereferences. Haptics has <b>71</b> such names spread over
     /// <c>MainWindow.Haptics.cs</c> (1090 lines of state), <c>.Patreon.cs</c>,
-    /// <c>.PremiumRail.cs</c>, <c>.Presets.cs</c>, <c>.Remember.cs</c>,
+    /// <c>.Presets.cs</c>, <c>.Remember.cs</c>,
     /// <c>.SessionFeatureLock.cs</c>, <c>.TabFxTakeoverLabStatus.cs</c> and <c>.xaml.cs</c> —
     /// plus a live <c>IsVisibleChanged</c> subscription and two <c>features/vibe.png</c> repaint
     /// rows. Moving the <see cref="HapticsTabView"/> <i>instance</i> rather than its contents
