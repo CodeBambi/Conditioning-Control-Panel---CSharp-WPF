@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Features
 {
@@ -110,7 +111,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         private void ChkEnabled_Changed(object? sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            CoreSettings.Current.SchedulerEnabled = ChkEnabled.IsChecked ?? false;
+            var s = CoreSettings.Current;
+            var enabled = ChkEnabled.IsChecked ?? false;
+            if (s.SchedulerEnabled == enabled) return;
+            s.SchedulerEnabled = enabled;
+            Log.Information("[Scheduler] enabled {Enabled} (window {Start}-{End})",
+                enabled, s.SchedulerStartTime, s.SchedulerEndTime);
             CoreSettings.Save();
         }
 

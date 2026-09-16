@@ -573,7 +573,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // enable box - it writes the flag and Saves in one place.
             Add("scheduler", "📅", null, "Scheduler", "section_scheduler", HostScheduler, PanelScheduler, "SchedulerRamp",
                 () => CoreSettings.Current.SchedulerEnabled,
-                toggle: () => FlipMasterCheckBox(PanelScheduler?.Inner.FindControl<CheckBox>("ChkEnabled")));
+                toggle: () =>
+                {
+                    if (CoreSettings.Current.SchedulerEnabled)
+                        FlipMasterCheckBox(PanelScheduler?.Inner.FindControl<CheckBox>("ChkEnabled"));
+                    else
+                        SelectEntry("scheduler", announce: true);
+                });
             Add("ramp", "📈", null, "Intensity Ramp", "section_intensity_ramp", HostRamp, PanelRamp, "SchedulerRamp",
                 () => CoreSettings.Current.IntensityRampEnabled,
                 toggle: () => FlipMasterCheckBox(PanelRamp?.Inner.FindControl<CheckBox>("ChkEnabled")));
@@ -1041,8 +1047,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (entry?.Toggle == null) return;   // Visuals: no single on/off, so no gesture
 
             e.Handled = true;
+            var before = SafeDotState(entry);
             try { entry.Toggle(); }
-            catch { /* a quick-toggle must never break the rack */ }
+            catch (Exception ex) { Log.Warning(ex, "[Studio] rack quick-toggle failed for {Key}", key); }
 
             // One beat late, at Normal priority: a refusal can undo the write (the haptics premium
             // gate flips IsChecked back) or never make it at all (the session-lock refusal writes
@@ -1050,9 +1057,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // what was asked for.
             Dispatcher.UIThread.Post(() =>
             {
-                try { RefreshDots(); }
-                catch { /* a state dot must never break a toggle */ }
+                try
+                {
+                    RefreshDots();
+                    var after = SafeDotState(entry);
+                    if (after != before)
+                        Log.Information("[Studio] rack right-click toggled {Key}: {Before} -> {After}",
+                            key, before, after);
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug(ex, "[Studio] rack toggle repaint failed for {Key}", key);
+                }
             }, DispatcherPriority.Normal);
+        }
+
+        private static bool? SafeDotState(StudioRackEntry entry)
+        {
+            if (entry.Dot == null) return null;
+            try { return entry.Dot(); }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[Studio] rack state read failed for {Key}", entry.Key);
+                return null;
+            }
         }
 
         /// <summary>
