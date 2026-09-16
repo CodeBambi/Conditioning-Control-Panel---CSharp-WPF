@@ -33,6 +33,8 @@ Avalonia, compiled in and addressed with `avares://`:
 Loaded off disk at runtime instead of compiled in — audio, models, mod assets, web content — is
 `<Content>` with `CopyToOutputDirectory`, on any head. The `Link` puts it under `Resources/` in the
 output, so runtime paths that were written against the old layout still resolve.
+Built-in session JSONs in `sessions/` are an exception: both heads link them to lowercase
+`assets/sessions/`, the on-disk path used by Core's `SessionFileService`, not `Resources/sessions/`.
 
 CCP.VR and a mobile head add their own link with whatever item type their toolkit wants. Nothing
 here changes for them, and they do not take a dependency on another head to get a picture.
