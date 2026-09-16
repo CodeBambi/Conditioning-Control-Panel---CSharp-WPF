@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -121,7 +122,7 @@ public sealed class LanguageSelectorTests
             var yours = sourceChips.Single(chip => (string)chip.Tag! == "yours");
             Click(shell, yours);
             Assert.Equal("yours", CoreSettings.Current.SessionRackSourceFilter);
-            WaitForDebouncedSave();
+            WaitForPersistedSetting(settingsPath, "SessionRackSourceFilter", "yours");
             Assert.Equal("yours", new SettingsService().Current.SessionRackSourceFilter);
 
             var restoredView = new PresetsTabView();
@@ -132,8 +133,13 @@ public sealed class LanguageSelectorTests
                 chip => Assert.False(chip.IsChecked == true));
 
             // Leave the profile in its original state for the remainder of this lifecycle test.
-            Click(shell, sourceChips.Single(chip => (string)chip.Tag! == "all"));
-            WaitForDebouncedSave();
+            var all = sourceChips.Single(chip => (string)chip.Tag! == "all");
+            Click(shell, all);
+            Assert.Equal("all", CoreSettings.Current.SessionRackSourceFilter);
+            Assert.True(all.IsChecked == true, "the All source chip did not stay selected after the click");
+            Assert.All(sourceChips.Where(chip => !ReferenceEquals(chip, all)),
+                chip => Assert.False(chip.IsChecked == true));
+            WaitForPersistedSetting(settingsPath, "SessionRackSourceFilter", "all");
             Assert.Equal("all", new SettingsService().Current.SessionRackSourceFilter);
 
             Select(Pill(shell), "fr");
@@ -149,7 +155,7 @@ public sealed class LanguageSelectorTests
             Assert.Equal(Loc.Get("msg_restart_to_apply"),
                 shell.FindControl<TextBlock>("TxtBannerSecondary")?.Text);
             Assert.True(shell.FindControl<TextBlock>("TxtBannerSecondary")?.Opacity > 0);
-            WaitForDebouncedSave();
+            WaitForPersistedSetting(settingsPath, "Language", "fr");
             Assert.Equal("fr", new SettingsService().Current.Language);
 
             Select(General(shell), "de");
@@ -157,7 +163,7 @@ public sealed class LanguageSelectorTests
             Assert.Equal("de", CoreSettings.Current.Language);
             Assert.Equal("de", LocalizationManager.Instance.CurrentLanguage);
             Assert.Equal("de", SelectedCode(Pill(shell)));
-            WaitForDebouncedSave();
+            WaitForPersistedSetting(settingsPath, "Language", "de");
             Assert.Equal("de", new SettingsService().Current.Language);
             Assert.False(RoadmapExists());
             DisposeRoadmapIfCreated();
@@ -343,8 +349,40 @@ public sealed class LanguageSelectorTests
 
     private static void WaitForDebouncedSave()
     {
-        System.Threading.Thread.Sleep(650);
+        Thread.Sleep(650);
         Dispatcher.UIThread.RunJobs();
+    }
+
+    private static void WaitForPersistedSetting(string settingsPath, string property, string expected)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var actual = ReadSetting(settingsPath, property);
+        while (!string.Equals(actual, expected, StringComparison.Ordinal)
+            && stopwatch.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(25);
+            actual = ReadSetting(settingsPath, property);
+        }
+
+        Assert.True(string.Equals(actual, expected, StringComparison.Ordinal),
+            $"Timed out waiting for {property}={expected}; last disk value was {actual} after {stopwatch.Elapsed.TotalMilliseconds:0}ms");
+    }
+
+    private static string ReadSetting(string settingsPath, string property)
+    {
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(settingsPath));
+            if (!document.RootElement.TryGetProperty(property, out var value)) return "<missing>";
+            return value.ValueKind == System.Text.Json.JsonValueKind.String
+                ? value.GetString() ?? "<null>"
+                : value.ToString();
+        }
+        catch (Exception ex)
+        {
+            return $"<error:{ex.GetType().Name}>";
+        }
     }
 
     private static string SeedProfile(string settingsPath)
