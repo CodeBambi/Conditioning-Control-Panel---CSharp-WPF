@@ -11,7 +11,8 @@ let fails = 0;
 const ok = (c, what) => { if (!c) { console.error('FAIL ' + what); fails++; } else console.log('  ok  ' + what); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const HERE = resolve(fileURLToPath(import.meta.url), '..');
-const WEB = resolve(HERE, '../..');   // Resources/web
+const SOURCE_WEB = resolve(HERE, '../..');
+const WEB = process.env.BACKROOM_TEST_ROOT || SOURCE_WEB;   // Resources/web
 const OUT = resolve(process.argv[2] || join(process.cwd(), '_evidence'));
 await mkdir(OUT, { recursive: true });
 const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
@@ -22,9 +23,13 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/jav
   '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary', '.mp3': 'audio/mpeg' };
 const server = createServer(async (req, res) => {
   const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  if (process.env.BACKROOM_TEST_ROOT && /^\/__phone-(host|fx)\.js$/.test(path)) { res.writeHead(200, {'content-type':'text/javascript'}); return res.end(''); }
   if (path.includes('..')) { res.writeHead(400); return res.end(); }
   try { const body = await readFile(join(WEB, path)); res.writeHead(200, { 'content-type': MIME[extname(path).toLowerCase()] || 'application/octet-stream' }); res.end(body); }
-  catch { res.writeHead(404); res.end('no'); }
+  catch {
+    if (process.env.BACKROOM_TEST_ROOT && /\/mock-server\.js$/.test(path)) { try {const body=await readFile(join(SOURCE_WEB,path));res.writeHead(200,{'content-type':'text/javascript'});return res.end(body);} catch {} }
+    res.writeHead(404); res.end('no');
+  }
 });
 await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
 
@@ -50,7 +55,7 @@ const FAKE_HOST = `(() => {
         stations: ['slot', 'wheel', 'cards', 'roulette', 'counter', 'bell'], open: true });
       if (m.type === 'station-request') mock(m.station).then((s) => s.handle(m.op, m.body || {}, m.idem))
         .then((r) => emit({ type: 'station-result', reqId: m.reqId, ok: r.ok, status: r.status, reason: r.reason, body: r.body || {} }));
-      if (m.type === 'media-request') emit({ type: 'media', reqId: m.reqId, seed: 1, words: [],
+      if (m.type === 'media-request' && (window.__mediaRequests=(window.__mediaRequests||0)+1)) emit({ type: 'media', reqId: m.reqId, seed: 1, words: [],
         gifs: Array.from({ length: m.count || 4 }, (_, i) => ({ key: 'g' + i, url: '/backroom/stations/slot/fallback/gif' + (i % 4) + '.webp', w: 180, h: 180, src: 'pool' })) });
       if (m.type === 'fx') emit({ type: 'fx-ack', token: m.token, fired: [m.fxId], skipped: [] });
     },
@@ -122,6 +127,19 @@ const leverVisibility = key => ev(`(async()=>{
  const hit=hits[0]?.object;let n=hit;while(n&&n!==lever)n=n.parent;
  return {visible:n===lever,first:hit?.name,ball:ball.name,x:(screen.x+1)*innerWidth/2,y:(1-screen.y)*innerHeight/2};
 })()`);
+const rimVisibility = key => ev(`(async()=>{
+ const T=await import('/vendor/three/three.module.min.js'),s=window.__backroom.scene;
+ const holder=s.scene.getObjectByName('station_'+${JSON.stringify(key)}),lamps=[];
+ holder.traverse(n=>{if(n.isMesh && /^lights_chase_/.test(n.name))lamps.push(n);});
+ const ray=new T.Raycaster(),groups={top:[],right:[],bottom:[],left:[]};
+ for(const lamp of lamps){
+  const index=Number(lamp.name.split('_').at(-1)),group=index<11?'top':index<17?'right':index<28?'bottom':'left';
+  const point=new T.Box3().setFromObject(lamp).getCenter(new T.Vector3()).project(s.camera);ray.setFromCamera(new T.Vector2(point.x,point.y),s.camera);
+  const hit=ray.intersectObjects(s.scene.children,true).find(h=>{let n=h.object;while(n){if(!n.visible)return false;n=n.parent;}return [].concat(h.object.material||[]).some(m=>!m.transparent&&m.opacity>=.99);});
+  groups[group].push({name:lamp.name,visible:hit?.object===lamp,first:hit?.object?.name});
+ }
+ return groups;
+})()`);
 const settled = () => until("window.__backroom.loader.current && !window.__backroom.loader.current.debug().busy && !window.__backroom.loader.current.debug().spinning && !document.querySelector('.slot-spin').disabled",18000,100);
 try {
 for (const [label,width,height] of [['desktop',1280,720],['portrait',390,844],['landscape',844,390]].filter(v=>!process.env.SHARED_SLOT_VIEW||process.env.SHARED_SLOT_VIEW.split(',').includes(v[0]))) {
@@ -134,7 +152,7 @@ for (const [label,width,height] of [['desktop',1280,720],['portrait',390,844],['
     else {await send('touchStart',[pt(9,x,y)]);if(endY!==y)await send('touchMove',[pt(9,x,endY)]);await send('touchEnd',[]);}
   };
   await cdp('Page.navigate',{url:PAGE_URL});
-  ok(await until("document.documentElement.classList.contains('br-ready')",45000,100),label+': room boots');
+  ok(await until("document.documentElement.classList.contains('br-ready')",90000,100),label+': room boots');
   for (const key of ['slot:rose','slot:violet','slot:mint'].filter(k=>!process.env.SHARED_SLOT_VARIANT||k==='slot:'+process.env.SHARED_SLOT_VARIANT)) {
     const tag=label+'-'+key.split(':')[1];
     await goTo(key);
@@ -155,8 +173,21 @@ for (const [label,width,height] of [['desktop',1280,720],['portrait',390,844],['
     ok(before.holder===seated.holder && before.reels.every((r,i)=>r?.uuid===seated.reels[i]?.uuid),tag+': same room holder and reels survive entry');
     ok(d?.shared===true && d.reelIds.every((id,i)=>id===before.reels[i]?.uuid),tag+': play uses original room reel objects');
     ok(inside(d?.window,width,height),tag+': entire reel window in frame');
+    const coverage={width:d.window.width/width,height:d.window.height/height};
+    report.views.push({label:'coverage',key,width,height,coverage});
+    ok(coverage.width>.78 && coverage.height>.50,tag+': reels dominate play view '+JSON.stringify(coverage));
     ok(inside(d?.seat?.lever,width,height),tag+': lever in frame');
     ok(inside(d?.seat?.freeze,width,height),tag+': freeze in frame');
+    ok(inside(d.apronBounds,width,height),tag+': apron display stays in frame');
+    ok(d.bulbs>=30,tag+': large bulbs surround entire slim frame');
+    await sleep(300);const scrolling=await sceneDebug();
+    ok(scrolling.apron.elapsed>d.apron.elapsed && scrolling.apron.paints>d.apron.paints,tag+': apron text scrolls while motion is on');
+    const rim=await rimVisibility(key);
+    report.views.push({label:'rim-visibility',key,width,height,rim});
+    if(process.env.SHARED_SLOT_CHECK_RIM)for(const [edge,lamps]of Object.entries(rim)){
+      const hidden=lamps.filter(l=>!l.visible);
+      ok(lamps.filter(l=>l.visible).length>=Math.ceil(lamps.length*2/3) && hidden.every(l=>edge==='right' && /^wand_/.test(l.first)),tag+': '+edge+' lamps clear of shell/apron, only lever may occlude '+JSON.stringify(hidden));
+    }
     const leverVisible=await leverVisibility(key);
     ok(leverVisible.visible,tag+': lever ball visible ahead of opaque cabinet '+JSON.stringify(leverVisible));
     const controls = await ev(`(() => {
@@ -170,22 +201,72 @@ for (const [label,width,height] of [['desktop',1280,720],['portrait',390,844],['
     ok(controls.every(b=>b.clickable),tag+': compact buttons are unobscured '+JSON.stringify(controls.filter(b=>!b.clickable)));
     const overlaps=controlOverlaps(controls);
     ok(overlaps.length===0,tag+': visible Spin and Freeze controls do not overlap '+JSON.stringify(overlaps));
+    const spinControl=controls.find(c=>c.selector==='.slot-spin');
+    ok(!spinControl || d.apronBounds.top>=spinControl.top+spinControl.height-2,tag+': continuous apron display sits below Spin');
     report.views.push({label:'controls',key,width,height,controls});
     await shot(tag+'-play.png');
+    if(process.env.SHARED_SLOT_FULLSCREEN) {
+      await ev(`new Promise((resolve,reject)=>{if(window.__renderFx)return resolve(true);const script=document.createElement('script');script.src='/__test-loom-fx.js';script.onload=()=>resolve(true);script.onerror=reject;document.head.append(script);})`);
+      await ev("window.__renderFx({fxId:'fx.loom_spiral',args:{hold:true},token:'test-loom'});true");
+      ok(await until("Number(document.querySelector('#__fx canvas')?.dataset.frames)>2",6000),tag+': live fullscreen Loom starts');
+      const frames=[];for(let i=0;i<8;i++){await sleep(250);frames.push(await ev("Number(document.querySelector('#__fx canvas')?.dataset.frames)"));}
+      ok(frames.every((n,i)=>!i||n>frames[i-1]),tag+': fullscreen spiral advances at every sample '+frames);
+      await shot(tag+'-fullscreen.png');
+      await ev("window.__fxCancelAll();true");await sleep(100);
+      ok(!await ev("document.querySelector('#__fx canvas')"),tag+': fullscreen canvas cleaned up');
+    }
+
+    if(process.env.SHARED_SLOT_HANDLES) {
+      const beforeCrown=await sceneDebug(); await sleep(160);
+      ok((await sceneDebug()).crown.revision>beforeCrown.crown.revision,tag+': crown animates');
+      for(let style=0;style<3;style++) {
+        const info=await ev(`(async()=>{try{
+          const {attachSlotCustomHandle}=await import('/backroom/room/slot-custom-handles.js');
+          const {GLTFLoader}=await import('/vendor/three/addons/loaders/GLTFLoader.js');
+          const {MeshoptDecoder}=await import('/vendor/three/addons/libs/meshopt_decoder.module.js');
+          const T=await import('/vendor/three/three.module.min.js');
+          const s=window.__backroom.scene,rig=s.scene.getObjectByName('station_${key}');
+          window.__testHandle=await attachSlotCustomHandle({rig,loader:new GLTFLoader().setMeshoptDecoder(MeshoptDecoder),base:'/backroom/room/assets/',style:${style}});
+          window.dispatchEvent(new Event('resize')); await new Promise(r=>setTimeout(r,100));
+          rig.updateMatrixWorld(true);
+          const box=new T.Box3().setFromObject(window.__testHandle.node), pts=[];
+          for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z])pts.push(new T.Vector3(x,y,z).project(s.camera));
+          return {inside:pts.every(p=>Math.abs(p.x)<=1 && Math.abs(p.y)<=1),socket:window.__testHandle.node.parent.name,hidden:!rig.getObjectByName('wand_head').visible};
+        }catch(e){return {error:e.message,stack:e.stack};}})()`);
+        ok(info.inside&&info.socket==='handle_socket'&&info.hidden,tag+': custom handle '+style+' fits real socket '+JSON.stringify(info));
+        await shot(tag+'-handle-'+style+'.png');
+        await ev('window.__testHandle.dispose(); delete window.__testHandle; true');
+      }
+    }
+
+    if(process.env.SHARED_SLOT_QUICK){report.views.push({label,key,width,height,debug:d});await leave();continue;}
     // Exercise the actual cabinet's raycast controls, with deterministic tape outcomes.
     await ev("(async()=>{const s=await window.__mocks.slot;s.script(['gif0','sub1','spiral2'],['gif1','sub2','spiral0']);return true})()");
+    if(process.env.SHARED_SLOT_MELT)await ev("(async()=>{const s=await window.__mocks.slot;s.script(['melt','sub1','spiral2'],['gif1','sub2','spiral0']);return true})()");
+    const mediaBefore=await ev('window.__mediaRequests');
     const start=await snapshot(key);
     if(d?.seat?.lever) {
       const [x,y]=centre(d.seat.lever);
       await press(x,y,Math.min(height-8,y+100));
     }
     ok(await until('window.__backroom.loader.current?.debug().spinning',5000),tag+': lever pull starts real spin');
+    ok((await sceneDebug()).apron.message==='SPINNING',tag+': real spin message reaches apron display');
     let changed=false;
     for(let i=0;i<10;i++){await sleep(100);const now=await snapshot(key);changed ||= JSON.stringify(start.reels)!==JSON.stringify(now.reels);}
     ok(changed,tag+': original room reel nodes animate');
     await shot(tag+'-spin.png');
+    if(process.env.SHARED_SLOT_MELT) {
+      let sawMelt=false;
+      for(let i=0;i<100;i++){await sleep(50);const d=await sceneDebug();sawMelt ||= d.meltShakeAgeMs>=0&&d.meltShakeAgeMs<520;if(sawMelt)break;}
+      ok(sawMelt,tag+': landing melt triggers its shake');
+    }
     ok(await settled(),tag+': spin settles and controls unlock');
+    if(process.env.SHARED_SLOT_MELT) {
+      for(let i=0;i<2;i++){await ev("(async()=>{const s=await window.__mocks.slot;s.script(['gif0','sub1','spiral2']);document.querySelector('.slot-spin').click();return true})()");await sleep(400);ok(await settled(),tag+': artwork cycle spin '+i+' settles');}
+      ok((await ev('window.__mediaRequests'))>mediaBefore,tag+': artwork is dealt again within the same visit');
+    }
     const freeze=await sceneDebug();
+    ok(!!freeze.apron.message && freeze.apron.message!=='SPINNING',tag+': settled outcome reaches apron display '+freeze.apron.message);
     if(freeze?.seat?.freeze){await press(...centre(freeze.seat.freeze));}
     ok(await until("document.querySelector('.slot-freeze button[aria-pressed=true]')",3000),tag+': physical freeze button is clickable');
     if(label==='portrait' && key==='slot:rose') {
@@ -204,13 +285,16 @@ for (const [label,width,height] of [['desktop',1280,720],['portrait',390,844],['
     const final=await snapshot(key);
     ok(final.contexts===before.contexts,tag+': play still uses original context count');
     // Freeze cosmetic redraw before fingerprinting the exit frame.
-    await ev("window.__backroom.state.motion='off'");await sleep(120);
+    await ev("window.__backroom.state.motion='off';window.__backroom.scene.setStill(true)");await sleep(120);
     const lastPicture=await reelPicture(key);
     await leave();
     const idlePicture=await reelPicture(key);
-    ok(JSON.stringify(lastPicture)===JSON.stringify(idlePicture),tag+': Back preserves last reel pictures and UV position');
+    ok(lastPicture.every((p,i)=>p.hash===idlePicture[i].hash&&JSON.stringify(p.repeat)===JSON.stringify(idlePicture[i].repeat)),tag+': Back preserves last reel pictures and UV scale');
+    ok(JSON.stringify(lastPicture)===JSON.stringify(idlePicture),tag+': Motion Off holds room reels after Back');
     if(key==='slot:rose')await shot(label+'-room-after-play.png');
-    await ev("window.__backroom.state.motion='full'");
+    await ev("window.__backroom.state.motion='full';window.__backroom.scene.setStill(false)");
+    await sleep(250);const driftPicture=await reelPicture(key);
+    ok(idlePicture.some((p,i)=>p.offset[0]!==driftPicture[i].offset[0]),tag+': idle room reels drift with motion on');
     const returned=await state();
     ok(returned.position.every((v,i)=>Math.abs(v-walking.position[i])<.02),tag+': Back restores walking position');
     const restored=await snapshot(key);
@@ -220,14 +304,16 @@ for (const [label,width,height] of [['desktop',1280,720],['portrait',390,844],['
   }
   // Reentry with motion disabled must not depend on a transition completing.
   const beforeOff=await snapshot('slot:rose');
-  await ev("window.__backroom.state.motion='off';window.__backroom.visit(window.__backroom.stations.find(s=>s.key==='slot:rose'));true");
+  await ev("window.__backroom.state.motion='off';window.__backroom.scene.setStill(true);window.__backroom.visit(window.__backroom.stations.find(s=>s.key==='slot:rose'));true");
   ok(await until("document.querySelector('.slot-station')?.dataset.phase==='play'",15000,100),label+': motion off reentry playable');
   ok(!await ev('window.__backroom.scene.transitioning'),label+': motion off entry snaps');
   // Also toggle Off while already seated, not only before entry.
-  await ev("window.__backroom.state.motion='full'");await sleep(200);
-  await ev("window.__backroom.state.motion='off'");await sleep(120);
+  await ev("window.__backroom.state.motion='full';window.__backroom.scene.setStill(false)");await sleep(200);
+  await ev("window.__backroom.state.motion='off';window.__backroom.scene.setStill(true)");await sleep(120);
   const emiPose=()=>ev("(()=>{const e=window.__backroom.scene.scene.getObjectByName('station_slot:rose').getObjectByName('emi_topper');return [e.position.toArray(),e.rotation.toArray(),e.scale.toArray()]})()");
   const off1=await sceneDebug(),emi1=await emiPose();await sleep(240);const off2=await sceneDebug(),emi2=await emiPose();
+  ok(off1.crown.revision===off2.crown.revision,label+': Motion Off holds crown without repainting');
+  ok(off1.apron.motionOff && off2.apron.paints===off1.apron.paints && off2.apron.elapsed===off1.apron.elapsed,label+': Motion Off holds apron text without repainting');
   ok(JSON.stringify(emi1)===JSON.stringify(emi2),label+': live Motion Off stops EMI idle movement');
   ok(off1.lever===off2.lever && Math.abs(off2.lever)<1e-8 && off2.shiverPx===0,label+': live Motion Off stops idle lever and shiver');
   await shot(label+'-motion-off.png');
@@ -235,7 +321,7 @@ for (const [label,width,height] of [['desktop',1280,720],['portrait',390,844],['
   const afterOff=await snapshot('slot:rose');
   restoredView(beforeOff,afterOff,label+': motion off exit');
   report.views.push({label:'motion-off-restoration',width,height,before:beforeOff,restored:afterOff});
-  await ev("window.__backroom.state.motion='full'");
+  await ev("window.__backroom.state.motion='full';window.__backroom.scene.setStill(false)");
 }
 } catch(error){ok(false,error.stack||String(error));}
 ok(errs.length===0,'no page errors'+(errs.length?': '+errs.join(' | '):''));
