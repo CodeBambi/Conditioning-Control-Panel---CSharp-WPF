@@ -1,32 +1,37 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.Threading;
+using ConditioningControlPanel;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
     /// <summary>
     /// PORTED from ConditioningControlPanel/Views/Tabs/PresetsTabView.xaml.cs.
     ///
-    /// The WPF code-behind holds NO view logic: all 21 handlers are two-line forwards into
-    /// <c>MainWindow</c> (<c>Window.GetWindow(this) is MainWindow mw</c> -> <c>mw.Whatever(...)</c>)
-    /// and the page's real behaviour lives in MainWindow.Presets.cs, .SessionIO.cs, .PresetIO.cs,
-    /// .Takeaway.cs and .TabFxPresetsQuestsAchievements.cs. So no handler is wired in the XAML.
+    /// The WPF code-behind holds the full preset/session store and feature wiring. This head keeps
+    /// those head-owned dependencies out of the view; the built-in Core session rack is the one
+    /// honest read-only slice restored here, including pointer and keyboard selection.
     ///
-    /// ponytail: needs MainWindow (preset CRUD, SessionManager, JustDropOrdersService, the
-    /// catalogue and the tab FX clock), wired when they move to Core. The wiring points, all
-    /// named in the XAML:
+    /// ponytail: needs MainWindow (preset CRUD, SessionManager, JustDropOrdersService, and the
+    /// tab FX clock), wired when those services move to Core. The remaining wiring points, all
+    /// named in the XAML, are:
     ///   BtnCreateSession / BtnSessionHistory / BtnStartSession / BtnRevealSpoilers /
     ///   BtnLoadPreset / BtnSaveOverPreset / BtnDeletePreset / BtnExportPreset / BtnSharePreset /
     ///   BtnExportSession / BtnSelectCornerGif / ChkCornerGifEnabled / RbCornerTL..BR /
     ///   SliderCornerGifSize + SliderCornerGifOpacity / CmbRackSort.SelectionChanged /
     ///   TxtRackSearch.TextChanged / the "+ New" preset chip / SessionDropZone (catalogue) /
-    ///   every rack row and preset chip click, and IsVisibleChanged ->
-    ///   OnPresetsTabVisibilityChanged (the card-sheen clock, started on show, dropped on hide).
+    ///   preset chip clicks and IsVisibleChanged -> OnPresetsTabVisibilityChanged (the card-sheen
+    ///   clock, started on show, dropped on hide).
     ///
     /// Two handlers that look view-only are NOT wired on purpose. SliderCornerGif*_ValueChanged
     /// stamps "{n}px" / "{n}%" into TxtCornerGifSize / TxtCornerGifOpacity, but it also writes
@@ -42,20 +47,58 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // x:Name fields, and Load leaves every one of them permanently null - a silent no-op
             // that compiles, renders and reviews clean.
             InitializeComponent();
+            TxtDetailTitle.Text = Loc.Get("label_select_a_preset");
+            TxtDetailSubtitle.Text = Loc.Get("label_click_on_a_preset_or_session_to_see_details");
+            TxtSessionDuration.Text = Loc.Get("label_30_minutes");
+            TxtSessionXP.Text = Loc.Get("label_50_xp");
+            TxtSessionDifficulty.Text = Loc.Get("label_easy_2");
             SeedPlaceholders();
         }
 
-        // ---- PLACEHOLDER CONTENT ---------------------------------------------------
+        protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            base.OnAttachedToVisualTree(e);
+            LocalizationManager.Instance.LanguageChanged += OnLanguageChanged;
+            RefreshLocalizedDetails();
+        }
+
+        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
+            base.OnDetachedFromVisualTree(e);
+        }
+
+        private void OnLanguageChanged(object? sender, EventArgs e) =>
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (VisualRoot is null) return;
+                RefreshLocalizedDetails();
+            });
+
+        private void RefreshLocalizedDetails()
+        {
+            if (_selectedSession is Session selected)
+            {
+                SelectSession(selected);
+                return;
+            }
+
+            TxtDetailTitle.Text = Loc.Get("label_select_a_preset");
+            TxtDetailSubtitle.Text = Loc.Get("label_click_on_a_preset_or_session_to_see_details");
+            TxtSessionDuration.Text = Loc.Get("label_30_minutes");
+            TxtSessionXP.Text = Loc.Get("label_50_xp");
+            TxtSessionDifficulty.Text = Loc.Get("label_easy_2");
+        }
+
+        private readonly IReadOnlyList<Session> _availableSessions =
+            Session.GetAllSessions().Where(session => session.IsAvailable).ToArray();
+        private Session? _selectedSession;
+
+        // ---- placeholder furniture + Core-backed session rack --------------------
         //
-        // The rail chips, the toolbar chips, the rack rows and the Takeaway strip are ALL built
-        // in code on WPF too (MainWindow.Presets.CreatePresetCard, EnsureSessionRackToolbar,
-        // BuildSessionRackRow, PaintTakeawayShelf), reaching the styles in this view's own
-        // dictionary through TryFindTabStyle. The same shapes are built here against the same
-        // keys, with sample data, so the ControlThemes actually draw in the render proof - four
-        // empty panels would compile clean and prove nothing (CLAUDE.md traps 4 and 6).
-        //
-        // ponytail: replace with the real builders when SessionManager / the preset store /
-        // JustDropOrdersService move to Core.
+        // The preset rail, toolbar chrome and Takeaway strip remain render furniture until their
+        // own Core stores move. The session rack is different: the built-in catalogue already
+        // lives in Core, so it must not keep presenting sample rows.
 
         private void SeedPlaceholders()
         {
@@ -107,20 +150,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Four source chips (single-select) and four difficulty dots (independent).</summary>
         private void SeedRackToolbar()
         {
-            // RackSourceChipLabel: "<label>  <count>".
-            RackSourceChips.Children.Add(SourceChip("rack_source_all", 4, "all", isOn: true));
-            RackSourceChips.Children.Add(SourceChip("rack_source_builtin", 2, "builtin", isOn: false));
-            RackSourceChips.Children.Add(SourceChip("rack_source_yours", 1, "yours", isOn: false));
-            RackSourceChips.Children.Add(SourceChip("rack_source_catalogue", 1, "catalogue", isOn: false));
+            // Counts come from the same available Core catalogue as the rows; unavailable
+            // placeholders must never make the rack claim that they can be selected.
+            var builtIn = _availableSessions.Count(session => session.Source == SessionSource.BuiltIn);
+            var custom = _availableSessions.Count(session => session.Source == SessionSource.Custom);
+            var imported = _availableSessions.Count(session => session.Source == SessionSource.Imported);
+
+            RackSourceChips.Children.Add(SourceChip("rack_source_all", _availableSessions.Count, "all", isOn: true));
+            RackSourceChips.Children.Add(SourceChip("rack_source_builtin", builtIn, "builtin", isOn: false));
+            RackSourceChips.Children.Add(SourceChip("rack_source_yours", custom, "yours", isOn: false));
+            RackSourceChips.Children.Add(SourceChip("rack_source_catalogue", imported, "catalogue", isOn: false));
 
             RackDifficultyChips.Children.Add(Dot("SessionDiffEasyBrush", Loc.Get("rack_diff_easy"), on: true));
             RackDifficultyChips.Children.Add(Dot("SessionDiffMediumBrush", Loc.Get("rack_diff_medium"), on: true));
             RackDifficultyChips.Children.Add(Dot("SessionDiffHardBrush", Loc.Get("rack_diff_hard"), on: true));
             RackDifficultyChips.Children.Add(Dot("SessionDiffExtremeBrush", Loc.Get("rack_diff_extreme"), on: false));
 
-            // The zone hint. UpdateRackToolbarCounts picks rack_count_all when nothing is
-            // filtered out and rack_count_filtered otherwise.
-            TxtRackCount.Text = Loc.GetF("rack_count_all", 4);
+            TxtRackCount.Text = Loc.GetF("rack_count_all", _availableSessions.Count);
         }
 
         private ToggleButton SourceChip(string labelKey, int count, string tag, bool isOn) => new()
@@ -128,6 +174,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Theme = TabTheme("SdRackChip"),
             Tag = tag,
             IsChecked = isOn,
+            IsEnabled = false,
+            Opacity = 0.5,
             // A TextBlock rather than a string Content: the labels are localized words today, but
             // every other button on this page had to opt out of Avalonia's access-key parse and a
             // chip is not the place to discover that a translation gained an underscore.
@@ -140,6 +188,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             {
                 Theme = TabTheme("SdRackDot"),
                 IsChecked = on,
+                IsEnabled = false,
+                Opacity = 0.5,
                 Content = new TextBlock { Text = "●" },
                 Foreground = Brush(solidKey),
             };
@@ -147,32 +197,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             return dot;
         }
 
-        /// <summary>Four rack rows, one of them selected - built-in, custom and catalogue all
-        /// present so the three provenance colours and two row themes are all exercised.</summary>
+        /// <summary>Build the selectable rows from the available Core built-ins only.</summary>
         private void SeedSessionRack()
         {
-            SessionRackPanel.Children.Add(RackRow("🌅", "Morning Drift", "Ease into the day.", "Easy", 15, 45, "rack_src_builtin", false, false));
-            SessionRackPanel.Children.Add(RackRow("🎮", "Gamer Girl", "Play while she watches.", "Medium", 30, 90, "rack_src_builtin", true, false));
-            SessionRackPanel.Children.Add(RackRow("🪆", "Distant Doll", "Long, quiet, and very far away.", "Hard", 60, 180, "rack_src_yours", false, true));
-            SessionRackPanel.Children.Add(RackRow("💀", "Good Girls", "Nothing left to decide.", "Extreme", 90, 320, "rack_src_catalogue", false, true));
+            foreach (var session in _availableSessions)
+                SessionRackPanel.Children.Add(RackRow(session));
         }
 
-        private Border RackRow(string icon, string name, string blurb, string difficulty,
-                               int minutes, int xp, string srcKey, bool selected, bool deletable)
+        private Border RackRow(Session session)
         {
-            var (diffSolid, diffWash) = difficulty switch
+            var (diffSolid, diffWash) = session.Difficulty switch
             {
-                "Medium" => ("SessionDiffMediumBrush", "SessionDiffMediumWashBrush"),
-                "Hard" => ("SessionDiffHardBrush", "SessionDiffHardWashBrush"),
-                "Extreme" => ("SessionDiffExtremeBrush", "SessionDiffExtremeWashBrush"),
+                SessionDifficulty.Medium => ("SessionDiffMediumBrush", "SessionDiffMediumWashBrush"),
+                SessionDifficulty.Hard => ("SessionDiffHardBrush", "SessionDiffHardWashBrush"),
+                SessionDifficulty.Extreme => ("SessionDiffExtremeBrush", "SessionDiffExtremeWashBrush"),
                 _ => ("SessionDiffEasyBrush", "SessionDiffEasyWashBrush"),
             };
-            var (srcSolid, srcWash) = srcKey switch
-            {
-                "rack_src_yours" => ("SessionSrcCustomBrush", "SessionSrcCustomWashBrush"),
-                "rack_src_catalogue" => ("SessionSrcImportedBrush", "SessionSrcImportedWashBrush"),
-                _ => ("SessionSrcBuiltInBrush", "SessionSrcBuiltInWashBrush"),
-            };
+            var (srcKey, srcSolid, srcWash) = RackSourceKeys(session.Source);
+            var icon = string.IsNullOrWhiteSpace(session.Icon) ? "🎬" : session.Icon;
+            var name = SessionName(session);
+            var blurb = SessionDescription(session);
+            var difficulty = session.GetDifficultyText();
 
             var grid = new Grid
             {
@@ -197,7 +242,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Grid.SetColumn(title, 2);
             grid.Children.Add(title);
 
-            var desc = new TextBlock { Text = blurb, Theme = TabTheme("SdRowBlurb") };
+            var rowBlurb = string.IsNullOrWhiteSpace(blurb) ? Loc.Get("label_custom_session") : blurb.Split('\n')[0].Trim();
+            var desc = new TextBlock { Text = rowBlurb, Theme = TabTheme("SdRowBlurb") };
             ToolTip.SetTip(desc, blurb);
             Grid.SetColumn(desc, 3);
             grid.Children.Add(desc);
@@ -206,11 +252,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Grid.SetColumn(diffPill, 4);
             grid.Children.Add(diffPill);
 
-            var duration = Meta(Loc.GetF("rack_duration", minutes), 56);
+            var duration = Meta(Loc.GetF("rack_duration", session.DurationMinutes), 56);
             Grid.SetColumn(duration, 5);
             grid.Children.Add(duration);
 
-            var reward = Meta(Loc.GetF("rack_xp", xp), 66);
+            var reward = Meta(Loc.GetF("rack_xp", session.BonusXP), 66);
             Grid.SetColumn(reward, 6);
             grid.Children.Add(reward);
 
@@ -219,29 +265,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Grid.SetColumn(badges, 7);
             grid.Children.Add(badges);
 
-            // Edit + export on everything; share + delete only where they could ever succeed -
-            // DeleteSession refuses a built-in outright. WPF reveals these on hover; see the note
-            // on SdRackActions in the XAML for why they are always shown here.
+            // Session CRUD/import is not on this head yet. Keep the existing action geometry, but
+            // do not offer controls that would silently do nothing in this read-only slice.
             var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             actions.Children.Add(RowAction("✎", Loc.Get("tooltip_edit_session"), danger: false));
             actions.Children.Add(RowAction("↗", Loc.Get("tooltip_export_session"), danger: false));
-            if (deletable)
-            {
-                actions.Children.Add(RowAction("☁", Loc.Get("tooltip_share_to_catalogue"), danger: false));
-                actions.Children.Add(RowAction("\U0001F5D1", Loc.Get("tooltip_delete_session"), danger: true));
-            }
-            // Pad out to four buttons' worth (28px wide, 3px margin) so a two-button built-in row
-            // reserves the same width as a four-button custom one - without it the meta columns
-            // step sideways every time the list crosses from one kind of row to the other.
+            // Pad out to four buttons' worth (28px wide, 3px margin) so the existing row columns
+            // keep their layout if custom rows are restored later.
             actions.Margin = new Thickness(8 + (4 - actions.Children.Count) * 31, 0, 4, 0);
             Grid.SetColumn(actions, 8);
             grid.Children.Add(actions);
 
-            return new Border
+            var row = new Border
             {
-                Theme = TabTheme(selected ? "SdSessionRowSelected" : "SdSessionRow"),
+                Name = $"SessionRow_{session.Id}",
+                Tag = session,
+                Theme = TabTheme(_selectedSession?.Id == session.Id ? "SdSessionRowSelected" : "SdSessionRow"),
+                Focusable = true,
+                IsTabStop = true,
                 Child = grid,
             };
+            row.PointerPressed += SessionRow_PointerPressed;
+            row.KeyDown += SessionRow_KeyDown;
+            return row;
         }
 
         private Button RowAction(string glyph, string tip, bool danger)
@@ -250,9 +296,87 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             {
                 Theme = TabTheme(danger ? "SdRowActionDanger" : "SdRowAction"),
                 Content = new TextBlock { Text = glyph },
+                IsEnabled = false,
             };
             ToolTip.SetTip(btn, tip);
             return btn;
+        }
+
+        private static (string labelKey, string solidKey, string washKey) RackSourceKeys(SessionSource source) =>
+            source switch
+            {
+                SessionSource.Custom => ("rack_src_yours", "SessionSrcCustomBrush", "SessionSrcCustomWashBrush"),
+                SessionSource.Imported => ("rack_src_catalogue", "SessionSrcImportedBrush", "SessionSrcImportedWashBrush"),
+                _ => ("rack_src_builtin", "SessionSrcBuiltInBrush", "SessionSrcBuiltInWashBrush")
+            };
+
+        private static string SessionName(Session session) =>
+            LocalizedOrFallback(session.LocalizedName, $"session_{session.Id}_name", session.GetModeAwareName());
+
+        private static string SessionDescription(Session session) =>
+            LocalizedOrFallback(session.LocalizedDescription, $"session_{session.Id}_desc", session.GetModeAwareDescription());
+
+        private static string LocalizedOrFallback(string localized, string key, string fallback) =>
+            string.IsNullOrWhiteSpace(localized) || string.Equals(localized, key, StringComparison.Ordinal)
+                ? fallback
+                : CoreMods.MakeModAware(localized);
+
+        private void SessionRow_PointerPressed(object? sender, PointerPressedEventArgs e)
+        {
+            if (sender is not Border row || !e.GetCurrentPoint(row).Properties.IsLeftButtonPressed)
+                return;
+            if (row.Tag is not Session session || !session.IsAvailable) return;
+
+            row.Focus();
+            SelectSession(session);
+            e.Handled = true;
+        }
+
+        private void SessionRow_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.Key is not (Key.Enter or Key.Space) ||
+                sender is not Border { Tag: Session session } || !session.IsAvailable)
+                return;
+
+            SelectSession(session);
+            e.Handled = true;
+        }
+
+        private void SelectSession(Session session)
+        {
+            if (!session.IsAvailable) return;
+
+            _selectedSession = session;
+            PresetDetailScroller.IsVisible = false;
+            PresetButtonsPanel.IsVisible = false;
+            SessionDetailScroller.IsVisible = true;
+            SessionButtonsPanel.IsVisible = false;
+            BtnStartSession.IsEnabled = false;
+            BtnExportSession.IsEnabled = false;
+            SessionSpoilerPanel.IsVisible = false;
+            CornerGifOptionPanel.IsVisible = false;
+
+            TxtDetailTitle.Text = $"{(string.IsNullOrWhiteSpace(session.Icon) ? "🎬" : session.Icon)} {SessionName(session)}";
+            TxtDetailSubtitle.Text = session.GenerateFeatureDescription();
+            TxtSessionDuration.Text = Loc.GetF("rack_duration", session.DurationMinutes);
+            TxtSessionXP.Text = Loc.GetF("rack_xp", session.BonusXP);
+            TxtSessionDifficulty.Text = session.GetDifficultyText();
+            TxtSessionDescription.Text = SessionDescription(session);
+
+            RefreshSessionRackSelection();
+        }
+
+        private void RefreshSessionRackSelection()
+        {
+            var selectedStyle = TabTheme("SdSessionRowSelected");
+            var normalStyle = TabTheme("SdSessionRow");
+            if (selectedStyle is null || normalStyle is null) return;
+
+            foreach (var row in SessionRackPanel.Children.OfType<Border>())
+            {
+                var selected = row.Tag is Session session && session.Id == _selectedSession?.Id;
+                row.Theme = selected ? selectedStyle : normalStyle;
+            }
         }
 
         /// <summary>Three pinned receipts, the "+n more" toggle, the shop door, and three tray
