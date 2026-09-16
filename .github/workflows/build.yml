@@ -44,15 +44,17 @@ jobs:
       # display server. Both exit non-zero on failure.
       - run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --smoke
       # Consent runs in its own testhost: CorePaths is process-global and the headless Avalonia
-      # lifetime must not share state with the language/notification suites.
+      # lifetime must not share state with the language/notification/scheduler suites.
       - run: dotnet test Tests/CCP.Avalonia.Consent.Tests/CCP.Avalonia.Consent.Tests.csproj -c Release
 
-      # The language and notification suites stay separate: each command gets its own
+      # The language, notification and scheduler suites stay separate: each command gets its own
       # testhost and each assembly owns its own process-immutable profile setup.
       - name: Test Avalonia language suite
         run: dotnet test Tests/CCP.Avalonia.Language.Tests/CCP.Avalonia.Language.Tests.csproj -c Release
       - name: Test Avalonia notification suite
         run: dotnet test Tests/CCP.Avalonia.Tests/CCP.Avalonia.Tests.csproj -c Release
+      - name: Test Avalonia scheduler gesture
+        run: dotnet test Tests/CCP.Avalonia.Scheduler.Tests/CCP.Avalonia.Scheduler.Tests.csproj -c Release
       - name: Test Avalonia report workflow
         run: dotnet test Tests/CCP.Avalonia.Report.Tests/CCP.Avalonia.Report.Tests.csproj -c Release
 
@@ -106,12 +108,14 @@ jobs:
         run: dotnet test Tests/ConditioningControlPanel.Tests/ConditioningControlPanel.Tests.csproj -c Release -p:ValidateExecutableReferencesMatchSelfContained=false
       - name: Test Core suite
         run: dotnet test Tests/CCP.Core.Tests/CCP.Core.Tests.csproj -c Release
-      # Keep these as separate invocations: the language and notification assemblies need
-      # independent testhost processes and isolated process-immutable profiles.
+      # Keep these as separate invocations: the language, notification and scheduler assemblies
+      # need independent testhost processes and isolated process-immutable profiles.
       - name: Test Avalonia language suite
         run: dotnet test Tests/CCP.Avalonia.Language.Tests/CCP.Avalonia.Language.Tests.csproj -c Release
       - name: Test Avalonia notification suite
         run: dotnet test Tests/CCP.Avalonia.Tests/CCP.Avalonia.Tests.csproj -c Release
+      - name: Test Avalonia scheduler gesture
+        run: dotnet test Tests/CCP.Avalonia.Scheduler.Tests/CCP.Avalonia.Scheduler.Tests.csproj -c Release
       - name: Test Avalonia report workflow
         run: dotnet test Tests/CCP.Avalonia.Report.Tests/CCP.Avalonia.Report.Tests.csproj -c Release
       - name: Test Avalonia consent flow
