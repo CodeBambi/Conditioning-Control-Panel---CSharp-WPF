@@ -914,6 +914,9 @@ export const DEFAULT_LEXICON = Object.freeze({
   dt_cat_arcade: 'hometown',
   dt_cat_school: 'classroom',
   dt_cat_melt: 'melty',
+  // The store build's own band (words-answers.store.js). Never drawn on any
+  // other host, and harmless where it is not: an unused row costs nothing.
+  dt_cat_focus: 'fresh air',
   dt_cat_common: 'civilian',
 });
 
