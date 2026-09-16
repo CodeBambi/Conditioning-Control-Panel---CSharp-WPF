@@ -1,3 +1,4 @@
+import { rotateSpiralDeal } from './symbols.js';
 /* ============================================================================
  * station.js - the slot station (CONTRACT.md section 7). The room calls
  * mount(ctx) once, then open()/close() per sit-down. Back is live at every
@@ -430,7 +431,7 @@ export async function mount(ctx) {
    * nobody is looking at it. */
   let payRaf = 0, payAt = -Infinity;
   const lookNow = () => ({ gif: i => (media ? media.gif(i) : null), word: i => (media ? media.word(i) : null),
-                           reduced, face: scene ? scene.faceImage : null });
+                           reduced: stillFx(), face: scene ? scene.faceImage : null });
   function paintCombos(now) {
     if (!el || !alive || !combos.length) return;
     const look = lookNow();
@@ -637,7 +638,18 @@ export async function mount(ctx) {
    * tape was asked, so the spend, the melt, the strips and the jar are all read at the right moment.
    * Answers false when the sit-down moved on under it.
    */
+  let visualDealSpins = 0;
   async function beat(r, before, my) {
+    // Refresh between ordinary spins, never midway through a result or free re-spin.
+    if (r.held == null && !playsWithoutPress(r.outcome.kind) && ++visualDealSpins % 3 === 0) {
+      try {
+        const next = await ctx.media?.();
+        if (my !== session) return false;
+        if (next?.gifs?.length) await media.deal(next);
+        if (my !== session) return false;
+        rotateSpiralDeal();
+      } catch { /* Keep the current artwork if the host cannot deal. */ }
+    }
     const o = r.outcome, after = tape.snapshot();
     if (after.shownSp < before.shownSp) flyBank('spend', before.shownSp, after.shownSp, spendTokens(before.shownSp - after.shownSp, lite));
     scene.setMelted(before.melt > 0);
@@ -738,6 +750,7 @@ export async function mount(ctx) {
     ctx.root.append(el);
     addEventListener('keydown', onKey); addEventListener('resize', onResize);
     tape = createTape({ request: (op, body, idem) => ctx.request(op, body, idem), onMelt: sendMelt });
+    visualDealSpins = 0; rotateSpiralDeal();
     media = createMedia($('.slot-media'), ctx.lex);
     sound = createSound();
     callout = createCallout({ mount: $('.slot-callout'), lex: t });   // one per open; the layer sits above the reels
@@ -763,7 +776,8 @@ export async function mount(ctx) {
                     canPull: () => (!busy || pace === 'reveal') && !suspended,
                     onLever: () => press(), onFreeze: col => toggleFreeze(col),
                     onReelSpeed: (i, speed) => sound.roll(i, speed),
-                    onReelStop: i => { const p = playing; sound.thud(i, !!p && i === p.lastReel && !(p.o.pay > 0));
+                    onReelStop: i => { const p = playing;
+                      if (p?.o.symbols?.[i] === 'melt') scene.meltShake(); sound.thud(i, !!p && i === p.lastReel && !(p.o.pay > 0));
                       // A5: EMI landed on this reel, so the cell wiggles after this thud and she glances. The next
                       // reel's thud is untouched (Law X); reduced motion takes the settled state, so no wiggle.
                       if (p && p.emi.includes(i) && !reduced) { scene.wiggle(i, PACE.THUD_MS); glanceTo('hearts', glanceHoldMs(meltedBy(p.o)), null); note('emi-wiggle', { reel: i }); }

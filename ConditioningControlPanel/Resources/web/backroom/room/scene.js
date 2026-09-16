@@ -117,6 +117,8 @@ export async function createScene(o) {
     slotShape.factor=factor;slotShape.factorX=xFactor;slotShape.holder.scale.y=slotShape.baseY*factor;slotShape.holder.scale.x=slotShape.baseX*xFactor;
     slotShape.holder.userData.slotStretch=factor;slotShape.holder.userData.slotStretchX=xFactor;
     if(slotShape.emi){slotShape.emi.scale.y=slotShape.emiY/factor;slotShape.emi.scale.x=slotShape.emiX/xFactor;}
+    const handle=slotShape.holder.getObjectByName('chess_handle_socket');
+    if(handle)handle.scale.set(1/xFactor,1/factor,1);
     slotShape.holder.updateMatrixWorld(true);
   }
   const ray = new T.Raycaster(), pointer = new T.Vector2();

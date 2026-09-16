@@ -25,6 +25,19 @@ function sculpture(model, kind) {
 
 /** Replace the moving wand, with the sculpture base on the cabinet's real axle. */
 function socket(rig) {
+  const anchor = rig.getObjectByName('handle_socket');
+  if (anchor) {
+    const mount = new T.Group(); mount.name = 'chess_handle_socket';
+    anchor.add(mount);
+    // Widen the existing side axle to clear the cabinet with a full-size sculpture.
+    const extension=new T.Mesh(new T.CylinderGeometry(.022,.022,.10,12),new T.MeshStandardMaterial({color:0xbd8b50,metalness:.7,roughness:.3}));
+    extension.rotation.z=-Math.PI/2;extension.position.set(.05,-.025,0);anchor.add(extension);
+    mount.position.x=.10;
+    let h=rig;while(h&&!h.userData.slotStretch)h=h.parent;
+    if(h)mount.scale.set(1/(h.userData.slotStretchX||1),1/(h.userData.slotStretch||1),1);
+    const originals=['wand_head','wand_grip','wand_switch'].map(n=>rig.getObjectByName(n)).filter(Boolean).map(n=>[n,n.visible]);
+    return { mount, originals, height: .34, width: .16, depth: .18, restore(){extension.removeFromParent();extension.geometry.dispose();extension.material.dispose();} };
+  }
   const lever = rig.getObjectByName('lever'), assembly = rig.getObjectByName('wand_assembly');
   if (!lever || !assembly) return roomSocket(rig);
   rig.updateMatrixWorld(true);
@@ -81,7 +94,7 @@ export async function attachSlotCustomHandle({rig,loader,base,style,source=null}
   const model = source || (await loader.loadAsync(base + 'customization/' + KINDS[style] + '.glb')).scene;
   const handle = sculpture(model,KINDS[style]), slot = socket(rig);
   const box = new T.Box3().setFromObject(handle), size = box.getSize(new T.Vector3());
-  const factor = slot.height / size.y;
+  const factor = Math.min(slot.height / size.y, (slot.width || Infinity) / size.x, (slot.depth || Infinity) / size.z);
   const wrapper = new T.Group(); wrapper.scale.setScalar(factor);
   handle.position.set(-(box.min.x+box.max.x)/2,-box.min.y,-(box.min.z+box.max.z)/2);
   wrapper.add(handle); slot.mount.add(wrapper);
@@ -118,11 +131,12 @@ export async function createSlotCustomHandles({holders,loader,base,sources=[],on
   function pull(index,{still=false}={}){
     if(disposed||!Number.isInteger(index)||index<0||index>2||pulls[index])return false;
     const rig=rigOf(index);if(!rig||rig.userData.slotPlaying)return false;
-    const pivot=active[index]?.node||rig.getObjectByName('lever')||null;
+    const pivot=rig.getObjectByName('lever')||active[index]?.node||null;
     const reels=reelsOf(rig).map(mesh=>({map:mesh.material.map,to:face()}));
     if(!pivot&&!reels.length)return false;
     onCue('pull',index);
     if(still){reels.forEach((r,i)=>{r.map.offset.x=r.to;onCue('stop',index,i);});return true;}
+    rig.userData.slotHandlePulling=true;
     pulls[index]={t:0,pivot,rest:pivot?pivot.quaternion.clone():null,reels,stopped:[false,false,false]};
     return true;}
   function rest(p){if(p.pivot&&p.rest)p.pivot.quaternion.copy(p.rest);}
@@ -130,14 +144,14 @@ export async function createSlotCustomHandles({holders,loader,base,sources=[],on
     if(disposed)return;
     pulls.forEach((p,index)=>{
       if(!p)return;
-      if(rigOf(index)?.userData.slotPlaying){rest(p);pulls[index]=null;return;}
+      if(rigOf(index)?.userData.slotPlaying){rest(p);rigOf(index).userData.slotHandlePulling=false;pulls[index]=null;return;}
       p.t+=still?9:Math.min(Math.max(dt,0),.1);
       if(p.pivot)p.pivot.quaternion.copy(p.rest).multiply(swing.setFromAxisAngle(AXIS,
         p.t<DOWN_S?PULL_MAX*ease(p.t/DOWN_S):p.t<DOWN_S+UP_S?PULL_MAX*(1-ease((p.t-DOWN_S)/UP_S)):0));
       p.reels.forEach((r,i)=>{
         if(p.t>=STOP_AT[i]){if(!p.stopped[i]){p.stopped[i]=true;r.map.offset.x=r.to;onCue('stop',index,i);}return;}
         r.map.offset.x=(r.map.offset.x+ROLL*Math.min(Math.max(dt,0),.1))%1;});
-      if(p.t>=Math.max(DOWN_S+UP_S,STOP_AT[2])+.06){rest(p);pulls[index]=null;}});}
+      if(p.t>=Math.max(DOWN_S+UP_S,STOP_AT[2])+.06){rest(p);rigOf(index).userData.slotHandlePulling=false;pulls[index]=null;}});}
   await Promise.all(styles.map((style,index)=>set(index,style)));
   return {set,pull,update,pulling:index=>!!pulls[index],getState:()=>styles.slice(),
     dispose(){disposed=true;pulls.forEach((p,i)=>{if(p){rest(p);pulls[i]=null;}});active.forEach(h=>h?.dispose());}};

@@ -14,6 +14,9 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { createApronTicker } from './apron-ticker.js';
+import { createCrownDisplay } from './crown-display.js';
+import { createRimLighting } from './rim-lighting.js';
 import { createRenderBudget } from '../../room/render-budget.js';
 import { attachSlotCustomHandle, slotHandleStyle } from '../../room/slot-custom-handles.js';
 import { createCoinShower } from '../../room/coin-shower.js';
@@ -131,7 +134,7 @@ function paintDisplay(ctx, w, h, marquee, text, aspect=1) {
 export async function createScene(o) {
   const { reduced } = o;
   const shared = o.stage || null, canvas = shared ? shared.canvas : o.canvas;
-  let releaseView = null, rig = null, coinShower = null, retainReels = null;
+  let releaseView = null, rig = null, coinShower = null, retainReels = null, apronTicker = null, rimLighting = null;
   const extras = [], borrowed = new Map(), roomVisibility=new Map();
   const initialStretch=shared?.fixture.userData.slotStretch||1,initialStretchX=shared?.fixture.userData.slotStretchX||1;
   if(shared)for(const n of shared.scene.children)if(n!==shared.fixture&&!n.isLight){roomVisibility.set(n,n.visible);n.visible=false;}
@@ -166,6 +169,8 @@ export async function createScene(o) {
     customHandle?.dispose();
     disposeSpirals();            // the reel spirals' Loom tiles, and the page's field context with them
     coinShower?.dispose();
+    apronTicker?.dispose();
+    rimLighting?.dispose();
     if (shared) {
       const oldMaterials = new Set([...borrowed.values()].flatMap(v => [].concat(v.material || [])));
       const oldGeometry = new Set([...borrowed.values()].map(v => v.geometry));
@@ -224,15 +229,13 @@ export async function createScene(o) {
   const bulbs = [];
   rig.traverse(n => { if (n.isMesh && /^lights_chase_\d+$/.test(n.name)) bulbs.push(n); });
   bulbs.sort((a, b) => a.name.localeCompare(b.name));
-  // Owner, 2026-09-16: the chase bulbs read half the size they should from a seat. Scaled here and not in the
-  // glb (section 9.6 asks nothing of the model), about their own centres, so the rail's spacing is untouched -
-  // the beads simply grow into the gaps between them.
-  const BULB_SCALE = 1;
+  const bulbScales = bulbs.map(b => b.scale.clone());
+  // Bulb dimensions and perimeter placement belong to the shared cabinet asset.
   bulbs.forEach((b, i) => {
-    b.scale.multiplyScalar(BULB_SCALE);
     b.material = new THREE.MeshPhysicalMaterial({ color: PALETTES.idle[i % 5], emissive: PALETTES.idle[i % 5],
-      emissiveIntensity: 0.1, roughness: 0.24, metalness: 0.08, clearcoat: 1, clearcoatRoughness: 0.14 });
+      emissiveIntensity: .6, roughness: .24, metalness: .08, clearcoat: 1, clearcoatRoughness: .14 });
   });
+  rimLighting = createRimLighting(scene, bulbs, camera, renderer);
   const glass = get('reel_window');
   if (glass && glass.material) Object.assign(glass.material, { transparent: true, opacity: 0.035, depthWrite: false });
   // THE MARQUEE's heat lives on marquee_glow (its own clone: neon_pink is shared with the piping).
@@ -261,6 +264,24 @@ export async function createScene(o) {
     mesh.material = new THREE.MeshStandardMaterial({ map: t, emissiveMap: t, emissive: 0xffffff, emissiveIntensity: 0.45, roughness: 0.6 });
     owned.push(t);
     screens[name] = { c, t, mesh, text: null };
+  }
+
+  const crown = screens.screen_jackpot;
+  const crownDisplay = crown ? createCrownDisplay(crown.c, () => { crown.t.needsUpdate = true; }) : null;
+  const crownSize = new THREE.Vector3(), crownScale = new THREE.Vector3();
+  if (crown) { crown.mesh.geometry.computeBoundingBox(); crown.mesh.geometry.boundingBox.getSize(crownSize); }
+
+  const apronDisplay = get('apron_display');
+  const apronScale = new THREE.Vector3(), apronSize = new THREE.Vector3();
+  if (apronDisplay?.isMesh) {
+    apronDisplay.geometry.computeBoundingBox();
+    apronDisplay.geometry.boundingBox.getSize(apronSize);
+    let texture;
+    apronTicker = createApronTicker({ reduced: stillFx(), onDirty: () => { if (texture) texture.needsUpdate = true; } });
+    texture = canvasTexture(apronTicker.canvas);
+    apronDisplay.material = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false });
+    owned.push(texture);
+    apronTicker.update(performance.now(), stillFx());
   }
 
   const spinFace=get('spin_button_face');
@@ -491,6 +512,7 @@ export async function createScene(o) {
   // Timeline state.
   let phase = 'hidden', tl = null, spin = null, pull = null, pullBack = null, hold = null, mood = 'idle', moodAt = 0;
   settle = () => { const t = tl, s = spin; tl = null; spin = null; if (t && t.done) t.done(); if (s && s.resolve) s.resolve(); };
+  let meltShakeAt = -Infinity;
   let revealAt = -Infinity, revealGain = 0, lean = null, party = null, shiverAt = -Infinity, trayAt = -Infinity, melted = false;
   let teasing = false;   // A1: reel 3 is alone and holding (the marquee's tease mood, the lights a notch down)
   // A4 attract and A5 the EMI land-wiggle: both live on the loop, so neither holds a timer of its own.
@@ -655,6 +677,11 @@ export async function createScene(o) {
   function update(t) {
     const reduced = !!o.reduced || stillFx();
     if (reduced) settleMechanical();
+    if (apronTicker) {
+      apronDisplay.getWorldScale(apronScale);
+      apronTicker.setAspect(apronSize.x * apronScale.x / Math.max(.001, apronSize.y * apronScale.y));
+      apronTicker.update(t, reduced);
+    }
     for(const n of roomVisibility.keys())n.visible=false;
     coinShower.update((t-coinTick)/1000,stillFx()); coinTick=t;
     if (tl) {
@@ -747,12 +774,17 @@ export async function createScene(o) {
     const partyMood = pr && pr.chase ? (pr.gold ? 'jackpot' : pr.tier >= 3 ? 'big' : 'win') : null;
     const m = spin ? (teasing ? (spin.teaseGold ? 'tease_gold' : 'tease') : 'spin')
       : partyMood || (mood !== 'idle' ? mood : hold !== null ? 'freeze' : pull ? 'pull' : 'idle');
+    const bulbStretchX = shared?.fixture.userData.slotStretchX || 1;
+    const bulbStretchY = shared?.fixture.userData.slotStretch || 1;
+    const customHandle=get('chess_handle_socket');
+    if(customHandle)customHandle.scale.set(1/bulbStretchX,1/bulbStretchY,1);
     const colors = PALETTES[m], period = m === 'spin' ? 420 : chaseMs(partyMood ? Math.max(h, pr.tier) : h);
     const travel = reduced ? 0 : (t - (partyMood ? party.start : moodAt)) / period;
     bulbs.forEach((b, i) => {
+      b.scale.copy(bulbScales[i]); b.scale.x /= bulbStretchX; b.scale.y /= bulbStretchY;
       const p = i * 0.65 + travel, step = Math.floor(p), mix = p - step;
       b.material.color.setHex(colors[step % colors.length]).lerp(nextColor.setHex(colors[(step + 1) % colors.length]), mix * mix * (3 - 2 * mix));
-      b.material.emissive.copy(b.material.color); b.material.emissiveIntensity = (0.1 + 0.04 * h) * (teasing ? TEASE_DIM : 1);
+      b.material.emissive.copy(b.material.color); b.material.emissiveIntensity = (0.6 + 0.1 * h) * (teasing ? TEASE_DIM : 1);
     });
     // A4: one chase sweeps the bulbs every ~8 s while attracting. Brightness only, one pulse a bulb, no colour
     // change and nothing near the strobe floor.
@@ -763,6 +795,7 @@ export async function createScene(o) {
         if (d < 4) b.material.emissiveIntensity += 0.9 * (1 - d / 4) ** 2;
       });
     }
+    rimLighting?.update(t, reduced);
     if (glowMat) {
       glowMat.emissive.copy(glowRest.color).lerp(GOLD, heat.gold ? clamp(h / 4) : 0);
       glowMat.emissiveIntensity = glowRest.intensity * (0.55 + 0.45 * h);
@@ -800,7 +833,9 @@ export async function createScene(o) {
         lit = reduced ? 1 : pr.tier >= 3 ? 0.45 * (1 + 1.2 * (1 - ease(pa / THUD_MS))) + 0.35 : 0.45 + 0.5 * (1 - ease(pa / FEEL.GLOW_OUT_MS));
       }
       sj.mesh.material.emissiveIntensity = lit;
-      screen('screen_jackpot', text);
+      sj.mesh.getWorldScale(crownScale);
+      crownDisplay.update(t, { base: sj.base || '', result: pr?.screen ? text : '', still: reduced,
+        aspect: Math.abs(crownSize.x*crownScale.x / (crownSize.y*crownScale.y || 1)) });
     }
     // THE MARQUEE BOARD: the live line while it holds, then the cabinet name, with a short neon restrike
     // on every change. Reduced motion takes the steady level and no stutter (Law VI).
@@ -830,7 +865,9 @@ export async function createScene(o) {
       if (!reduced && k >= 0 && k < 1) tray.scale.y *= 1 + 0.12 * (1 - thud(k));
     }
     // THE SHIVER: the whole cabinet, +-4 px across the screen, no colour change. Reduced motion plays nothing.
-    const px = reduced ? 0 : shiverPx(t - shiverAt);
+    const meltAge = (t - meltShakeAt) / 520;
+    const meltPx = meltAge >= 0 && meltAge < 1 ? Math.sin(meltAge*37)*9*(1-meltAge)*(1-meltAge) : 0;
+    const px = reduced ? 0 : shiverPx(t - shiverAt) + meltPx;
     if (poses && phase === 'play') {
       const wpp = (2 * poses.play.dist * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) / (canvas.clientHeight || 1);
       const localRight = shared ? poses.play.right.clone().transformDirection(rig.parent.matrixWorld.clone().invert()) : poses.play.right;
@@ -859,11 +896,13 @@ export async function createScene(o) {
     }
     if (ghost && t - ghost.at >= FEEL_ALMOST.TELL_MS) ghost = null;
     if(shared) {
+      const compact = canvas.clientHeight <= 500 && canvas.clientWidth > canvas.clientHeight;
       const windowBox=screenBox(glass);
       if(windowBox && o.topRow){
         const width=Math.min(canvas.clientWidth-12,windowBox.width+20);
         o.topRow.style.left=`${Math.max(6,windowBox.left+windowBox.width/2-width/2)}px`;
-        o.topRow.style.top=`${Math.max(6,windowBox.top-31)}px`;
+        const crown = screenBox(get('screen_jackpot'));
+        o.topRow.style.top=`${Math.max(4,windowBox.top-(compact?22:31),(crown?.top||0)+(crown?.height||0)+2)}px`;
         o.topRow.style.width=`${width}px`;
       }
       if(o.freezeLabels)for(let i=0;i<3;i++){
@@ -873,8 +912,11 @@ export async function createScene(o) {
       const buttonBox=screenBox(get('spin_button'));
       if(buttonBox && o.spinControl){
         o.spinControl.style.left=`${buttonBox.left+buttonBox.width/2}px`;
-        const freezeBottom=Math.max(...(o.freezeLabels||[]).map(n=>parseFloat(n.style.top)||0))+26;
-        o.spinControl.style.top=`${Math.min(canvas.clientHeight-94,Math.max(freezeBottom+8,buttonBox.top+buttonBox.height/2-22))}px`;
+        const buttonHeight = compact ? 28 : 44;
+        const freezeBottom=Math.max(...(o.freezeLabels||[]).map(n=>(parseFloat(n.style.top)||0)+(compact?22:26)));
+        const apron = screenBox(apronDisplay);
+        const bottomLimit = Math.min(canvas.clientHeight-50, apron ? apron.top-3 : Infinity);
+        o.spinControl.style.top=`${Math.min(bottomLimit-buttonHeight,Math.max(freezeBottom+3,buttonBox.top+buttonBox.height/2-buttonHeight/2))}px`;
         o.spinControl.style.width=`${Math.max(110,Math.min(180,buttonBox.width+12))}px`;
       }
     }
@@ -961,9 +1003,11 @@ export async function createScene(o) {
     marquee(text) {
       const line = text == null ? '' : String(text).trim();
       marqueeMsg = line || null;
+      apronTicker?.message(line);
       marqueeAt = performance.now();
     },
     get marqueeLine() { return marqueeMsg; },
+    meltShake() { meltShakeAt = performance.now(); },
     setLook(next) { look = { ...next, reduced, face: atlas && atlas.image }; paint(performance.now()); },
     /** A freeze lit or cleared: the button dips either way (Law VIII). */
     setHold(col) { if (col !== hold) { const c = col !== null ? col : hold; if (c !== null) pulse[c] = performance.now(); } hold = col; },
@@ -998,7 +1042,7 @@ export async function createScene(o) {
     /** Law VI: a press or a new spin takes the frame straight to its settled end, never a faster pulse. */
     paylineOut() { if (paylineAt > -Infinity) paylineHold = Math.max(0, Math.min(paylineHold, performance.now() - paylineAt)); },
     /** Law VI: Back and suspend skip every ceremony to its settled state. */
-    skip() { settleMechanical(); marqueeMsg = null; party = null; shiverAt = trayAt = -Infinity; stopAt.fill(-Infinity); revealAt = -Infinity; lean = null; ghost = null; teasing = false; heat = { ...heat, from: heat.to, at: -Infinity }; paylineAt = -Infinity; if (o.payline) o.payline.hidden = true; hitAt.fill(-Infinity); hitDirty = true; hazeOn = null; hazeOut = null; },
+    skip() { settleMechanical(); meltShakeAt = -Infinity; apronTicker?.message(null); marqueeMsg = null; party = null; shiverAt = trayAt = -Infinity; stopAt.fill(-Infinity); revealAt = -Infinity; lean = null; ghost = null; teasing = false; heat = { ...heat, from: heat.to, at: -Infinity }; paylineAt = -Infinity; if (o.payline) o.payline.hidden = true; hitAt.fill(-Infinity); hitDirty = true; hazeOn = null; hazeOut = null; },
     /** THE GLYPH HIT (feel.highlightPlan): the landed cells on `plan` ([{ reel, at }]) glow from this frame, reel
      *  order, each `at` ms in, all out by HIGHLIGHT_MS. Nothing moves a stop; it lights what the tape landed. */
     highlight(plan) {
@@ -1096,11 +1140,12 @@ export async function createScene(o) {
     /** For dev.html and CDP checks only. */
     debug() {
       const t = performance.now();
-      return { shared:!!shared, responsiveStretch:shared?.fixture.userData.slotStretch||1, fov:camera.fov, hiddenRoomObjects:roomVisibility.size, rigId:rig.uuid, reelIds:reels.map(r=>r.uuid), reelAngles:reelAngles.slice(), reelOffsets:reels.map(r=>r.material?.map?.offset.x), lever: lever.rotation.x, heat: heatNow(t), gold: heat.gold, party: party && t < party.end ? party.r.party : null,
+      return { meltShakeAgeMs: performance.now()-meltShakeAt, crown: crownDisplay?.debug(), shared:!!shared, responsiveStretch:shared?.fixture.userData.slotStretch||1, fov:camera.fov, hiddenRoomObjects:roomVisibility.size, rigId:rig.uuid, reelIds:reels.map(r=>r.uuid), reelAngles:reelAngles.slice(), reelOffsets:reels.map(r=>r.material?.map?.offset.x), lever: lever.rotation.x, heat: heatNow(t), gold: heat.gold, party: party && t < party.end ? party.r.party : null,
                tier: party && t < party.end ? party.r.tier : 0, face: faceName, shiverPx: reduced ? 0 : shiverPx(t - shiverAt),
                reelBrightness: reels.map(r => r.material && r.material.color ? r.material.color.r : 1), leaning: !!lean,
                tease: teasing, teaseMs: spin ? spin.teaseMs : 0, teaseGold: !!(spin && spin.teaseGold),
                almost: ghost ? { cell: ghost.j, reel: ghost.r, amt: Number(ghostAmt(t).toFixed(3)) } : null,
+               apron: apronTicker?.debug() || null, apronBounds: screenBox(apronDisplay), bulbs: bulbs.length,
                tray: !!tray, glow: !!glowMat, emiScale: emi ? emi.scale.x / emiRest.s.x : null,
                payline: { lit: paylineGlow(t - paylineAt, paylineHold, paylinePulseN), hold: paylineHold, pulses: paylinePulseN, rect: paylineRect() },
                window: screenBox(glass), band: poses ? poses.band : null, canvas: { w: canvas.clientWidth, h: canvas.clientHeight },

@@ -213,3 +213,11 @@ html:has(.slot-station[data-shared-room]) #__opt-btn { top:auto !important;botto
   .slot-station[data-shared-room] .slot-top > * { padding:3px 5px;font-size:9px; }
   .slot-station[data-shared-room] .slot-freeze button { font-size:9px;padding:3px; }
 }
+
+/* Short landscape screens keep the full apron display clear beneath the controls. */
+@media (max-height:500px) and (orientation:landscape) {
+  .slot-station[data-shared-room] .slot-spin { min-height:28px;height:28px;padding:1px 10px;font-size:12px;line-height:13px; }
+  .slot-station[data-shared-room] .slot-spin small { font-size:9px;line-height:10px; }
+  .slot-station[data-shared-room] .slot-freeze button { min-height:22px;height:22px;padding:1px 6px; }
+  .slot-station[data-shared-room] .slot-top > * { min-height:20px;height:20px;padding:1px 5px;font-size:9px;line-height:16px; }
+}

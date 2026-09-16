@@ -39,14 +39,16 @@ export function kindOf(id) {
  * too. Cost (loom law 7): each preset is painted into ONE 256 px tile per repaint clock, and every cell
  * showing that preset draws the same tile - a strip of thirteen spirals costs one GL render, not
  * thirteen. No WebGL, no document, or a kit that will not paint: the drawn coil stays as the fallback. */
-const SPIRAL_PRESETS = ['screen', 'whirl', 'wake', 'hub'];
+const SPIRAL_PRESETS = ['screen', 'candy', 'pinwheel', 'mint', 'ribbon', 'star', 'whirl', 'wake', 'hub'];
+let spiralDeal = 0;
+export function rotateSpiralDeal() { spiralDeal = (spiralDeal + 4) % SPIRAL_PRESETS.length; }
 const SPIRAL_TILE = 256;
 let loomKit = null;
 const spiralTiles = new Map();   // preset -> { canvas, at }
 
 function spiralTile(n, t, reduced) {
   if (typeof document === 'undefined' || !document.createElement) return null;
-  const name = SPIRAL_PRESETS[n % SPIRAL_PRESETS.length];
+  const name = SPIRAL_PRESETS[(n + spiralDeal) % SPIRAL_PRESETS.length];
   if (!loomKit) loomKit = createLoomKit({ still: !!reduced });
   loomKit.setStill(!!reduced);
   let tile = spiralTiles.get(name);
