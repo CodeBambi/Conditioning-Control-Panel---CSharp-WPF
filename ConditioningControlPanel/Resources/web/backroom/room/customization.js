@@ -4,9 +4,13 @@ import { createSlotCustomHandles } from './slot-custom-handles.js';
 import { createCustomizationScreens } from './customization-screens.js';
 import { createCustomizationProps } from './customization-props.js';
 import { createSpiralSamples } from './vending-spirals.js';
+import { placePlan, placeFeel } from './prop-landing.js';
+import { freshSit, afterParty } from '../shared/win/plan.js';
 import { kit } from '../shared/sound/kit.js';
 
 const PIECES=['knight','queen','rook'];
+/** A restore is the room reading its own saved state back, never a placement: it lands nothing. */
+const SILENT=Object.freeze({silent:true});
 
 /** Local room previews. Ownership and SP are unchanged. */
 export async function createCustomization({scene,loader,base,mount,lex,canvas,camera,isActive,room,onPreview=()=>{}}) {
@@ -50,9 +54,19 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
   };
   const handles=await createSlotCustomHandles({holders:room.holders,loader,base,sources:sculptures,onCue:cue});
   const getState=()=>({screens:extras.getState(),props:props.getState(),statues:[...selected.statues],handles:handles.getState(),floor:floorEnabled?room.getFloorStyle().design:-1,palette:room.getFloorStyle().palette});
-  const select=(category,index,target=0)=>{
+  /* THE PLACED PROP (CONTRACT 10.22.D). The decoration won at the wheel is the room's only reward with
+   * no number on it, and it used to arrive by `visible = true`. Now it lands: a drop, the furniture cut
+   * of THE THUD and THE GLOW, sized by shared/win/plan.js off Room Service's own Brake 3 ledger, so a
+   * player flicking the same plant on and off gets less ceremony each time and never none. */
+  let placeSit=freshSit();
+  const placement=()=>{
+    const ctx={still:quiet,reduced:matchMedia('(prefers-reduced-motion: reduce)').matches};
+    const plan=placePlan(placeSit,ctx);placeSit=afterParty(placeSit,plan);
+    return placeFeel(plan,ctx);
+  };
+  const select=(category,index,target=0,opts)=>{
     if(category==='screens')return extras.set(target,index);
-    if(category==='props')return (!index || owned.has(propIds[target])) && props.set(target,index);
+    if(category==='props')return (!index || owned.has(propIds[target])) && props.set(target,index,index&&!opts?.silent?placement():undefined);
     if(!Number.isInteger(index))return false;
     if(category==='handles')return handles.set(target,index);
     if(category==='floor'||category==='palette'){
@@ -69,7 +83,7 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
   };
   const restore=async state=>{
     state.screens.forEach((on,index)=>select('screens',on,index));
-    state.props.forEach((on,index)=>select('props',on,index));
+    state.props.forEach((on,index)=>select('props',on,index,SILENT));
     select('floor',state.floor);select('palette',state.palette);
     await Promise.all(state.statues.map((piece,spot)=>{select('statues',piece,spot);return select('handles',state.handles[spot],spot);}));
   };
@@ -128,7 +142,7 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
   canvas.addEventListener('pointerdown',onDown);canvas.addEventListener('pointerup',onUp);
   return {setOwned(ids){owned=new Set(ids);propIds.forEach((id,index)=>{if(!owned.has(id))props.set(index,false);});panel.refresh();},row,screens:[...extras.screens,...props.screens],select,getState,restore,preview,open:()=>panel.open(),get opened(){return panel.opened;},
     dismiss(){if(!panel.opened)return false;panel.close();return true;},
-    update(dt,still){spirals.update(dt,still);panel.update?.(dt,still);handles.update(dt,still);quiet=!!still;
+    update(dt,still){spirals.update(dt,still);panel.update?.(dt,still);handles.update(dt,still);props.update(dt);quiet=!!still;
       if(travel){travel.elapsed+=dt;const t=still?1:Math.min(1,travel.elapsed/travel.duration),k=1-Math.pow(1-t,3);
         shown={...travel.to,position:mix(travel.from.position,travel.to.position,k),look:mix(travel.from.look,travel.to.look,k)};onPreview(shown);if(t>=1)travel=null;}},
     /** The close-up: a scissored pass on the room's own renderer, so it opens no second context. */

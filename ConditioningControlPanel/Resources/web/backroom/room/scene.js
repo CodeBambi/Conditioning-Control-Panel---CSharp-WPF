@@ -76,7 +76,16 @@ export async function createScene(o) {
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
   const t0 = performance.now();
-  const room = await buildRoom({ scene, loader, stations: o.stations, base: o.base, faces: o.faces, label: o.label, onProgress: o.onProgress });
+  /* THE WIN ECHO's motion (CONTRACT 10.22). `still` and `reduced` are two different questions and the
+   * plan answers them differently: Calm takes the room's decoration and keeps the news, reduced motion
+   * takes the state. `lite` is the same board test the render budget already made. Read live, never
+   * captured: a player turning Calm on mid-echo is answered on the next frame. */
+  const motion = () => {
+    const m = o.cameraMotion?.() || {};
+    return { still, lite: budget.mobile,
+      reduced: !!m.reduced || matchMedia('(prefers-reduced-motion: reduce)').matches };
+  };
+  const room = await buildRoom({ scene, loader, stations: o.stations, base: o.base, faces: o.faces, label: o.label, onProgress: o.onProgress, motion });
   const decor = createCasinoDecor({ scene });
   let customization, catalogueView=null;
   customization = await createCustomization({scene,loader,room,onPreview:view=>{catalogueView=view;},base:o.base,mount:o.mount,lex:o.lex,canvas,camera,isActive:()=>!pendingVisit&&!transition&&!seated&&!held&&!halted&&!suspended&&!overview&&!customization?.opened});
@@ -478,7 +487,7 @@ export async function createScene(o) {
       held = null; resetInput(); run();
     },
     pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); interaction.dismiss(); customization.dismiss(); } else run(); },
-    halt() { halted = true; if(transition){transition.resolve(false);transition=null;} for (const view of [...views]) dropView(view); stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); for(const r of roofMaterials){r.node.material=r.original;for(const m of r.copies)m.dispose();} room.disposeSurfaces(); resetInput(); touch.dispose(); interaction.dispose(); for(const e of room.emis)e.dispose(); customization.dispose(); decor.dispose(); for(const p of room.payouts.values())p.coins.dispose(); },
+    halt() { halted = true; if(transition){transition.resolve(false);transition=null;} for (const view of [...views]) dropView(view); stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); for(const r of roofMaterials){r.node.material=r.original;for(const m of r.copies)m.dispose();} room.disposeSurfaces(); resetInput(); touch.dispose(); interaction.dispose(); for(const e of room.emis)e.dispose(); customization.dispose(); decor.dispose(); room.echo.clear(); for(const p of room.payouts.values()){p.coins.dispose();p.host?.removeFromParent();} },
     setStill(on) { still = !!on; },
     /** Repaint one fixture label, e.g. the wheel's screen for MUST HIT (10.16.E). */
     setLabel(rowKey, node, text) { return room.setLabel(rowKey, node, text); },
@@ -500,6 +509,7 @@ export async function createScene(o) {
         pictures: screens.pictures, animation: screens.animation, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
         touch: touch.debug(), decor: decor.debug(), customization: customization.debug(),
         payouts: Object.fromEntries([...room.payouts].map(([key,p])=>[key,p.coins.debug()])),
+        winEcho: room.echo.debug(),
         emiBubble: interaction.debug(),
         emis: room.emis.map((e) => e.debug()),
         marquee: room.marquee?.userData.text,
