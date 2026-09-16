@@ -23,15 +23,18 @@ export async function createCustomizationScreens({scene,root,room}) {
     if(feed)screens.push(surface);
     return model;
   }
-  // Upper wall bands clear the existing attraction signs, screens and walking paths.
-  const sites=[[-6.65,3.79,-6.35], [6.65,3.79,-6.35], [-6.65,3.79,4.3], [7.10,3.79,3.0],
-    [-6.65,3.79,-4.3],[-6.65,3.79,0],[-6.65,3.79,6.2],
-    [6.65,3.79,-3.9],[6.65,3.79,-.5],[7.535,3.79,5.9]];
+  // Separate wall bays, including the entrance wall; keep the middle band clear of existing screens.
+  const sites=[
+    {p:[-6.78,3.42,-5.8],yaw:Math.PI/2}, {p:[6.78,3.42,-4.9],yaw:-Math.PI/2},
+    {p:[-5.1,3.42,7.78],yaw:Math.PI}, {p:[5.1,3.42,7.78],yaw:Math.PI},
+    {p:[-6.78,3.42,-3.35],yaw:Math.PI/2}, {p:[-6.78,3.42,-.9],yaw:Math.PI/2},
+    {p:[6.78,3.42,-2.3],yaw:-Math.PI/2}, {p:[7.38,3.42,4.35],yaw:-Math.PI/2},
+    {p:[-2.65,3.42,7.78],yaw:Math.PI}, {p:[2.65,3.42,7.78],yaw:Math.PI}];
   for(let pack=0;pack<2;pack++) {
     const group=new T.Group();group.name='extra_screens_'+(pack===0?4:6);root.add(group);groups.push(group);
-    for(const [i,position] of sites.slice(pack===0?0:4,pack===0?4:10).entries()) {
-      const model=display(1.28,.72,'pack_'+pack+'_'+i);model.position.fromArray(position);
-      model.rotation.y=position[0]<0?Math.PI/2:-Math.PI/2;group.add(model);
+    for(const [i,site] of sites.slice(pack===0?0:4,pack===0?4:10).entries()) {
+      const model=display(1.8,1.02,'pack_'+pack+'_'+i);model.position.fromArray(site.p);
+      model.rotation.y=site.yaw;group.add(model);
     }
     group.visible=false;
     const mini=new T.Group();mini.name='sample_extra_screens_'+(pack===0?4:6);
@@ -46,7 +49,7 @@ export async function createCustomizationScreens({scene,root,room}) {
   const projectionUV=projectionGeometry.attributes.uv;for(let i=0;i<projectionUV.count;i++)projectionUV.setY(i,1-projectionUV.getY(i));
   const projectionMaterial=new T.MeshBasicMaterial({color:0x251334});materials.add(projectionMaterial);
   const mega=new T.Mesh(projectionGeometry,projectionMaterial);mega.name='screen_surface_ceiling_projection';
-  mega.userData.screenAspect=14/16;mega.userData.screenCover=true;mega.userData.screenTurn=4.5;mega.userData.screenNoTitles=true;screens.push(mega);
+  mega.userData.screenAspect=14/16;mega.userData.screenCover=true;mega.userData.screenGrid=true;mega.userData.screenTurn=4.5;mega.userData.screenNoTitles=true;screens.push(mega);
   mega.position.set(0,4.35,0);mega.rotation.x=Math.PI/2;
   const ceilingParent=room.ceiling||root;ceilingParent.updateWorldMatrix(true,false);
   ceilingParent.add(mega);ceilingParent.worldToLocal(mega.position);mega.visible=false;groups.push(mega);
@@ -70,8 +73,7 @@ export async function createCustomizationScreens({scene,root,room}) {
   return {screens,models,
     set(index,on) {if(!Number.isInteger(index)||index<0||index>2||typeof on!=='boolean')return false;enabled[index]=on;groups[index].visible=on;if(index===2)ceilingDecor(on);return true;},
     getState:()=>[...enabled],
-    preview(index) {return index===2?{position:[0,1.6,4.4],look:[0,4.35,0]}:{position:[0,2.4,packLook(index)],look:[-6.65,3.79,index===0?4.3:6.2]};},
+    preview(index) {return index===2?{position:[0,1.6,4.4],look:[0,4.35,0]}:{position:[0,2.1,2.5],look:[index===0?-4.7:2.4,3.42,7.78]};},
     dispose() {ceilingDecor(false);groups.forEach(g=>g.removeFromParent());models.forEach(g=>g.removeFromParent());for(const m of screens)materials.add(m.material);geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}
   };
 }
-function packLook(index){return index===0?4.3:6.2;}

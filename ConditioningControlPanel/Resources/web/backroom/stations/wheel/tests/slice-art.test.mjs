@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { drawFace, wedgePath, faceKey, FACE_MS, R0, R1 } from '../slice-art.js';
+import { drawFace, wedgePath, faceKey, faceKeys, sliceBounds, FACE_MS, R0, R1 } from '../slice-art.js';
 
 /** A recording 2D context: every call in order, so the ORDER of clip, picture, tint and scrim can be asserted. */
 function recorder() {
@@ -120,4 +120,24 @@ test('the picture a layout wears is stable, and is its OWN seed, not the result 
 
 test('the repaint clock is the decoder clock: 12 Hz, not the frame rate', () => {
   assert.equal(FACE_MS, 83, 'gif-decode.js MAX_FPS is 12, so 83 ms is one frame of the source');
+});
+
+
+test('each slice has its own stable picture and cover-fit bounds', () => {
+  const deck = { ...deckStub(), keyAt: i => 'g' + i };
+  const keys = faceKeys(deck, LAYOUT);
+  assert.deepEqual(keys, ['g0','g1','g2','g3']);
+  const calls = []; deck.draw = (_c, ...a) => { calls.push(a); return true; };
+  drawFace(canvasWith(recorder()), LAYOUT, deck, keys, COLOR);
+  assert.deepEqual(calls.map(c => c[0]), keys);
+  for (const c of calls) { assert.ok(c[3] <= 257 && c[4] <= 257); }
+});
+
+test('slice crop contains the complete curved wedge, including cardinal extrema', () => {
+  const s = {start: -.2, end: 2.5, span: 2.7};
+  const b = sliceBounds(s, 256, 256, 256 / R1);
+  for(let a=s.start;a<s.end;a+=.01) for(const r of [R0,R1]) {
+    const x=256+Math.sin(a)*r*256/R1, y=256-Math.cos(a)*r*256/R1;
+    assert.ok(x>=b.x-1e-6 && x<=b.x+b.w+1e-6 && y>=b.y-1e-6 && y<=b.y+b.h+1e-6);
+  }
 });

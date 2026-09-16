@@ -179,35 +179,28 @@ function payoutHost(holder, model, row) {
 export async function buildRoom({ scene, loader, stations, base, faces, label, onProgress, motion }) {
   const readMotion = typeof motion === 'function' ? motion : () => ({});
   const echo = createWinEcho();
-  /* THE ROOM'S REEL STRIPS (owner, 2026-09-16: "the slots in the 3d room still show placeholder glyphs").
-   * They did: three font characters in system-ui on a flat field. CONTRACT 10.13.D says every spiral in the
-   * Back Room comes from the Loom, and the seated station was fixed for it; the cabinets standing in the room
-   * were still wearing the stand-in. They now carry real Loom fields, painted ONCE at build and left still.
-   *
-   * Once, and still, on purpose. The room is already at ~250 draw calls and the wall screens share one budget
-   * of 12 decodes a second; repainting nine drums per frame would buy a moving reel on a cabinet nobody is
-   * sitting at by starving the screens that the owner had to have fixed last week. A cabinet at walking
-   * distance is a still picture, and a still picture is also exactly what Calm and reduced motion want.
-   *
-   * THREE canvases, not nine: the strip varies only with the reel index, and the per-cabinet palette recolours
-   * body materials, never these. The 128 px cell is kept from the stand-in - a 256 px cell would be 30 MB of
-   * texture across the room for art seen from across it. */
-  const REEL_CELL = 128, REEL_CELLS = 13, REEL_PRESETS = ['screen', 'whirl', 'wake', 'hub'];
+  // Three shared 128px strips animate at 8Hz; nine independent offsets drift in the room.
+  // Paused while playing, under Motion Off, and during Room Service handle pulls.
+  const REEL_CELL = 128, REEL_CELLS = 13, REEL_PRESETS = ['screen', 'candy', 'pinwheel', 'mint', 'ribbon', 'star', 'whirl', 'wake', 'hub'];
+  const roomTiles = new Map();
+  const idleReels = []; let reelPaintAt = -Infinity;
   let reelKit = null;
   const reelStrips = new Map();
-  function reelStrip(i) {
+  function reelStrip(i, now = 0, animate = false) {
     const cached = reelStrips.get(i);
-    if (cached) return cached;
-    const c = document.createElement('canvas');
+    if (cached && !animate) return cached;
+    const c = cached || document.createElement('canvas');
     c.width = REEL_CELLS * REEL_CELL; c.height = REEL_CELL;
     const x = c.getContext('2d');
     x.fillStyle = '#291635'; x.fillRect(0, 0, c.width, REEL_CELL);
-    if (reelKit === null) reelKit = createLoomKit({ still: true });
-    const tile = document.createElement('canvas'); tile.width = tile.height = 256;
+    if (reelKit === null) reelKit = createLoomKit({ still: false });
     let woven = false;
     for (let k = 0; k < REEL_CELLS; k++) {
       const preset = REEL_PRESETS[(k + i) % REEL_PRESETS.length];
-      if (reelKit && reelKit.paint(tile, preset, { now: 0 })) {
+      let tile=roomTiles.get(preset);
+      if(!tile){tile=document.createElement('canvas');tile.width=tile.height=128;roomTiles.set(preset,tile);}
+      if(tile.__at!==now && reelKit?.paint(tile,preset,{now}))tile.__at=now;
+      if (tile.__at===now) {
         x.save(); x.translate((k + 0.5) * REEL_CELL, REEL_CELL / 2); x.rotate(-Math.PI / 2); x.scale(1, -1);
         x.drawImage(tile, -REEL_CELL / 2, -REEL_CELL / 2, REEL_CELL, REEL_CELL); x.restore();
         woven = true;
@@ -218,7 +211,6 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
         x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(['✦', '♡', '◎'][(k + i) % 3], 0, 0); x.restore();
       }
     }
-    tile.width = tile.height = 1;
     if (!woven && reelKit) { reelKit.dispose(); reelKit = null; }
     reelStrips.set(i, c);
     return c;
@@ -248,7 +240,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
   // Widen the southeast corner gently, preserving all game fixture positions.
   const point = new T.Vector3(), warpBounds = new T.Box3();
   shell.traverse(o => {
-    if (!o.isMesh) return;
+    if (!o.isMesh || /^media_screen_/.test(o.name)) return;
     o.geometry.computeBoundingBox();
     warpBounds.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld);
     if(warpBounds.max.x<=6.5 || warpBounds.max.z<=0)return;
@@ -264,6 +256,17 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     g.computeVertexNormals();g.computeBoundingSphere();o.geometry=g;previous.dispose();
   });
 
+  // The old frames are baked into the shell. Larger runtime casings cover them,
+  // preserving the separate screen UVs and keeping every bay below the ceiling.
+  for(let i=0;i<4;i++) {
+    const mount=shell.getObjectByName('screen_mount_'+i),screen=shell.getObjectByName('media_screen_'+i);
+    if(!mount||!screen)continue;
+    screen.scale.multiplyScalar(1.24);screen.position.z=.18;
+    for(const [w,h,d,z,color,metalness] of [[2.9512,1.8228,.08,.10,0xbd8b50,.7],[2.8148,1.6864,.04,.145,0x251334,.25]]) {
+      const frame=new T.Mesh(new T.BoxGeometry(w,h,d),new T.MeshStandardMaterial({color,metalness,roughness:.35}));
+      frame.name='screen_enlarged_frame_'+i;frame.position.z=z;mount.add(frame);
+    }
+  }
   shell.traverse(o => { o.updateMatrix(); o.matrixAutoUpdate=false; });
   const oldFloor = shell.getObjectByName('spiral_inlay');
   if (oldFloor) oldFloor.visible = false;
@@ -349,6 +352,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
         // Its OWN Texture over the shared canvas: slot-custom-handles.js rolls offset.x per cabinet, so three
         // cabinets sharing one Texture object would all turn when one of them is pulled.
         reel.material = new T.MeshBasicMaterial({ map: t });
+        idleReels.push({model, reel, map:t, index:i});
       }
     }
     if (f.hub) { const spiral = model.getObjectByName('center_spiral'); if (spiral) hubs.push(createHub(spiral)); }
@@ -398,9 +402,11 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     im.name = 'bulbs_' + list[0].row.id;
     list.forEach((b, i) => {
       b.mesh.updateWorldMatrix(true, false);
-      im.setMatrixAt(i, b.mesh.matrixWorld);
+      const matrix=b.mesh.matrixWorld.clone();
+      if(b.row.id==='wheel')matrix.scale(new T.Vector3(1.45,1.45,1.45));
+      im.setMatrixAt(i, matrix);
       b.slot = i; b.im = im;
-      b.aura = auras.add(b.mesh.getWorldPosition(tmp), b.row.id === 'slot' ? 0.19 : 0.23);
+      b.aura = auras.add(b.mesh.getWorldPosition(tmp), b.row.id === 'wheel' ? .32 : b.row.id === 'slot' ? 0.19 : 0.23);
       b.mesh.visible = false;
     });
     im.instanceMatrix.needsUpdate = true;
@@ -414,11 +420,26 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
 
   const c = new T.Color(), target = new T.Color();
   const sconceColor = new T.Color(0xff79ce);
+  const wheelColors=[0xff328f,0x963cff,0x29cfff,0x36ffc2,0xffc329,0xff6742].map(hex=>new T.Color(hex));
   function update(dt, t, still) {
     // The echo's own clock. Clamped like the shower's, so a tab left in the background for a minute
     // does not age a win away unseen, and STOPPED with the loop while a station holds the screen.
     clock += Math.min(.05, Math.max(0, dt)) * 1000;
     const gains = echo.gains(clock, still);
+    if (!still) {
+      const repaint = clock - reelPaintAt >= 125;
+      if (repaint) { for(let i=1;i<=3;i++) reelStrip(i,clock,true); reelPaintAt=clock; }
+      for (const r of idleReels) {
+        let parent=r.model, busy=false;
+        while(parent){if(parent.userData.slotPlaying||parent.userData.slotHandlePulling){busy=true;break;}parent=parent.parent;}
+        if (busy) continue;
+        const map=r.reel.material?.map;
+        if (!map) continue;
+        map.offset.x=(map.offset.x+Math.min(.05,Math.max(0,dt))*.013)%1;
+        // A departed game's retained pictures keep their own texture until the room next boots.
+        if(repaint && map.image===reelStrips.get(r.index)) map.needsUpdate=true;
+      }
+    }
     for (const b of bulbs) {
       const offset = b.row.variant === 'violet' ? .33 : b.row.variant === 'mint' ? .66 : 0;
       const travel = t / (b.row.id === 'wheel' ? 6 : 8) * (b.rim ? -1 : 1) + offset;
@@ -426,6 +447,11 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
       let power = .30 + wave * .65, op = .16 + wave * .36;
       const phase = (t / 12 + b.phase * .5 + offset) % 4, i = Math.floor(phase);
       c.copy(CHASE[i]).lerp(CHASE[(i + 1) % 4], T.MathUtils.smoothstep(phase % 1, 0, 1));
+      if(b.row.id==='wheel') {
+        const hue=(b.phase*wheelColors.length+(still?0:t*.22))%wheelColors.length,j=Math.floor(hue);
+        c.copy(wheelColors[j]).lerp(wheelColors[(j+1)%wheelColors.length],hue-j);
+        power=.58+wave*.3;op=.26+wave*.35;
+      }
       // THE WALK-BACK (10.22.A): a fixture that just paid keeps its aura hot and leans gold for the
       // length of the echo, so the win is still settling when the player stands up and turns round.
       const gain = gains.size ? gains.get(b.row.key) || 0 : 0;
@@ -503,5 +529,6 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     if (reelKit) { reelKit.dispose(); reelKit = null; }
     for (const strip of reelStrips.values()) strip.width = strip.height = 1;
     reelStrips.clear();
+    for(const tile of roomTiles.values())tile.width=tile.height=1; roomTiles.clear();
   }, shell, ceiling, floor, setFloorStyle: floorStyle.setFloorStyle, getFloorStyle: floorStyle.getFloorStyle, screens, holders, fixtures: set.length, bulbs: bulbs.length, update, auras, hubs, labels, setLabel, emis, marquee, payouts, celebrate, echo };
 }

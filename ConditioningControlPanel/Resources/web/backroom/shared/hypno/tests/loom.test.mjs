@@ -5,10 +5,10 @@ import assert from 'node:assert/strict';
 import { normalizeParams2, loopMs2 } from '../../../../arcademy/engine/loom/loomField.js';
 import { LOOM_PRESETS, LOOM_BACKING, phaseForAngle, phaseAt, spanRad, backingFor, createLoomKit } from '../index.js';
 
-const NAMES = ['backs', 'hub', 'whirl', 'wake', 'screen'];
+const NAMES = ['backs', 'hub', 'whirl', 'wake', 'screen', 'candy', 'pinwheel', 'ribbon', 'mint', 'star'];
 const TAU = Math.PI * 2;
 
-test('five presets, frozen, already normalised by the real loomField', () => {
+test('ten presets, frozen, already normalised by the real loomField', () => {
   assert.deepEqual(Object.keys(LOOM_PRESETS).sort(), [...NAMES].sort());
   assert.ok(Object.isFrozen(LOOM_PRESETS));
   for (const n of NAMES) {

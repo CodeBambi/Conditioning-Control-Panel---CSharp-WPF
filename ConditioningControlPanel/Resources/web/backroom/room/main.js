@@ -341,7 +341,7 @@ async function setBellOptIn(on) {
 /** The wall pictures' deal, under its own station id so it never replaces a sit-down deal. */
 function media() {
   const reqId = bridge.mintId();
-  return bridge.request({ type: 'media-request', reqId, station: 'room' }, 'media', (m) => m.reqId === reqId, 6000,
+  return bridge.request({ type: 'media-request', reqId, station: 'room', count: 8 }, 'media', (m) => m.reqId === reqId, 6000,
     { reqId, seed: 0, gifs: [], words: [], timeout: true });
 }
 

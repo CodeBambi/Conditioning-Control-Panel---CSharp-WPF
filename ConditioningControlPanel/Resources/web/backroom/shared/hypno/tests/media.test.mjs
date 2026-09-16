@@ -108,3 +108,30 @@ test('no decoder: the still comes from a CORS <img>, so a texture upload of imag
     deck.dispose();
   } finally { delete globalThis.document; delete globalThis.Image; globalThis.fetch = fetchBefore; }
 });
+
+
+test('three loads overlap; a stalled first GIF does not block visible cards or disposal', async () => {
+  const saved={fetch:globalThis.fetch,document:globalThis.document,ImageDecoder:globalThis.ImageDecoder,location:globalThis.location};
+  const requests=[],pending=[];
+  globalThis.location={href:'https://ccp.game/'};
+  globalThis.document={createElement:()=>({width:0,height:0,getContext:()=>({drawImage(){}})})};
+  globalThis.fetch=url=>new Promise(resolve=>{requests.push(url);pending.push(()=>resolve({ok:true,headers:{get:()=> 'image/gif'},arrayBuffer:async()=>new ArrayBuffer(1)}));});
+  globalThis.ImageDecoder=class {
+    static async isTypeSupported(){return true;}
+    tracks={ready:Promise.resolve(),selectedTrack:{frameCount:1}};completed=Promise.resolve();
+    async decode(){return {image:{displayWidth:30,displayHeight:40,close(){}}};} close(){}
+  };
+  const settle=()=>new Promise(r=>setTimeout(r,0));
+  let deck;
+  try {
+    deck=await createDeck(createMockHost({deal:urls(13)}).ctx);
+    assert.equal(requests.length,3);assert.equal(deck.debug().loadingCount,3);
+    deck.image('g12');pending[1]();await settle();await settle();
+    assert.ok(deck.image('g1'),'second source is usable while first is pending');
+    assert.match(requests[3],/12.gif$/,'visible king jumps ahead of unseen ranks');
+    assert.equal(deck.debug().loadingCount,3,'concurrency stays bounded');
+    deck.dispose();const count=requests.length;
+    pending.forEach(resolve=>resolve());await settle();await settle();
+    assert.equal(requests.length,count,'closing never starts more downloads');
+  } finally {deck?.dispose();for(const [key,value] of Object.entries(saved)){if(value===undefined)delete globalThis[key];else globalThis[key]=value;}}
+});

@@ -5,10 +5,9 @@
  * showing a fraction of a gif there, animated, but we need to keep the text
  * visible over them."
  *
- * Read literally, and that is how it is built: ONE picture is cover-fitted over
- * the whole disc and each wedge is a CLIP into it, so every slice shows its own
- * fraction of the same moving image and the ring reads as one thing turning
- * rather than as N unrelated stamps. It also costs one decoded source, not N.
+ * Each wedge wears its own dealt picture, cover-fitted to the wedge bounds.
+ * All wedges share one canvas texture and the deck's bounded decode queue.
+ * Pictures stay assigned through a spin, independent of the winning result.
  *
  * THE TEXT IS THE CONSTRAINT, not the decoration, and the wheel has to still be
  * a wheel. Three passes, and between them the result is bounded at BOTH ends:
@@ -53,8 +52,8 @@ export function wedgePath(ctx, s, cx, cy, k) {
 }
 
 /**
- * Paint the whole ring. `media` is a deck from shared/hypno/media.js (draw/tick/setStill); `key` is one of its
- * keys, picked once per layout so the picture does not change under the player mid-spin. `colorOf(slice)` is
+ * Paint the whole ring. `media` is a deck from shared/hypno/media.js (draw/tick/setStill); `key` is an array of its
+ * keys, assigned once per layout so the picture does not change under the player mid-spin. `colorOf(slice)` is
  * prize-art.js prizeColor. Returns true when a picture actually landed: false means the deck has nothing yet,
  * and the caller keeps the enamel it already has rather than flashing an empty ring.
  */
@@ -78,17 +77,16 @@ export function drawFace(canvas, layout, media, key, colorOf) {
   sheen.addColorStop(0.62, `rgba(255, 255, 255, ${SHEEN_ALPHA * 0.25})`);
   sheen.addColorStop(1, 'rgba(255, 255, 255, 0)');
   let painted = false;
-  for (const s of layout) {
+  for (const [index, s] of layout.entries()) {
     ctx.save();
     wedgePath(ctx, s, cx, cy, k);
     ctx.clip();
     ctx.fillStyle = colorOf(s);
     ctx.fill();                                  // the enamel, opaque: the wedge's colour is its floor
-    // One picture across the whole disc; the clip above is what makes this wedge's fraction of it. It lies down
-    // at ART_ALPHA rather than at 1, so the enamel is always a few per cent of the answer and a black frame is
-    // a very dark PLUM wedge instead of a hole. draw() keeps the alpha it is handed.
+    // Fit the image to this wedge, then let its curved clip crop the corners.
+    const box = sliceBounds(s, cx, cy, k);
     ctx.globalAlpha = ART_ALPHA;
-    if (media.draw(ctx, key, cx - R, cy - R, 2 * R, 2 * R)) painted = true;
+    if (media.draw(ctx, Array.isArray(key) ? key[index] : key, box.x, box.y, box.w, box.h)) painted = true;
     ctx.globalAlpha = 1;
     // draw() begins its own path, and a path is not part of the state save() keeps, so the wedge is laid again.
     wedgePath(ctx, s, cx, cy, k);
@@ -107,3 +105,19 @@ export function drawFace(canvas, layout, media, key, colorOf) {
  *  and wheel-check.mjs asserts that one separately. */
 export const faceKey = (media, layout) =>
   (media && Array.isArray(layout) && layout.length ? media.pickKey(layout.map(s => s.id).join('|')) : null);
+
+/** Exact annular-sector bounds, including extrema between the endpoints. */
+export function sliceBounds(s, cx, cy, k) {
+  const angles = [s.start, s.end];
+  const q = Math.PI / 2;
+  for (let a = Math.ceil(s.start / q) * q; a < s.end; a += q) angles.push(a);
+  const points = angles.flatMap(a => [R0, R1].map(r => [cx + Math.sin(a) * r * k, cy - Math.cos(a) * r * k]));
+  const xs = points.map(p => p[0]), ys = points.map(p => p[1]);
+  const x = Math.min(...xs), y = Math.min(...ys);
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+}
+
+export function faceKeys(media, layout) {
+  if (!media || !layout?.length) return null;
+  return layout.map((_, i) => media.keyAt(i));
+}

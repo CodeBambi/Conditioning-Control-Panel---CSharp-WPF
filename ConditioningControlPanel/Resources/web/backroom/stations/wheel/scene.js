@@ -35,12 +35,12 @@ import { createEmi } from './emi.js';
 import { createRoomEmi } from './room-emi.js';
 import { createRoomReward } from './room-reward.js';
 import { createPrizeSector, prizeColor } from './prize-art.js';
-import { drawFace, faceKey, FACE_MS, R0, R1 } from './slice-art.js';
+import { drawFace, faceKeys, FACE_MS, R0, R1 } from './slice-art.js';
 import { HIGHLIGHT_MS } from '../../shared/hypno/callout.js';
 
 const LENS_DEG = 30, FIT = 1.16, RISE_MS = 620, SINK_MS = 300, DEFAULT_OMEGA = -0.011, HUB_AT_REST_MS = 33;
 const COLORS = ['#F7BDD2', '#FFEBDD', '#F2AFC9', '#FFE7D2'], GOLD = '#F4D896', SNOOZE = '#C48CA7';
-const CHASE = [0xf7bdd2, 0xffebdd, 0xf2afc9, 0xf4d896].map(c => new THREE.Color(c));
+const CHASE = [0xff328f, 0x963cff, 0x29cfff, 0x36ffc2, 0xffc329, 0xff6742].map(c => new THREE.Color(c));
 const asset = p => new URL(p, import.meta.url).href;
 const clamp = x => Math.min(1, Math.max(0, x));
 const thudEase = x => bezier(FEEL.THUD_EASE, x);
@@ -144,7 +144,7 @@ export async function createScene(o) {
     });
     if (stage) {
       disposable.forEach(n => n.removeFromParent());
-      originals.forEach((s, n) => { n.visible = s.visible; n.material = s.material; });
+      originals.forEach((s, n) => { n.visible = s.visible; n.material = s.material; n.scale.copy(s.scale); });
       const rotor = model?.getObjectByName('wheel_rotor'), pointer = model?.getObjectByName('pointer');
       if (rotor) rotor.rotation.copy(originals.get(rotor).rotation);
       if (pointer) pointer.rotation.copy(originals.get(pointer).rotation);
@@ -163,7 +163,7 @@ export async function createScene(o) {
   } catch (e) { dispose(); throw e; }
   model = gltf.scene; const get = n => model.getObjectByName(n) || null;
   if (!stage) scene.add(model);
-  else model.traverse(n => originals.set(n, { visible: n.visible, material: n.material, rotation: n.rotation.clone() }));
+  else model.traverse(n => originals.set(n, { visible: n.visible, material: n.material, rotation: n.rotation.clone(), scale: n.scale.clone() }));
   const missing = REQUIRED.filter(n => !get(n));
   if (missing.length) return { missing, dispose };
   const absent = OPTIONAL.filter(n => !get(n));
@@ -206,6 +206,7 @@ export async function createScene(o) {
   bulbs.sort((a, b) => a.name.localeCompare(b.name));
   const halos = bulbs.map(b => {
     b.material = b.material.clone(); owned.push(b.material);
+    b.scale.multiplyScalar(1.45);
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: halo, color: 0xffffff, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
     s.position.copy(b.position); s.position.z += 0.038; s.scale.setScalar(0.24); b.parent.add(s);
     return s;
@@ -223,9 +224,11 @@ export async function createScene(o) {
     const radius = Math.max(0.02, Math.min(box.max.x - box.min.x, box.max.y - box.min.y) / 2 - tube);
     const c = document.createElement('canvas'); c.width = c.height = 256;
     const tex = canvasTexture(c); owned.push(tex);
+    // Mirror the arms locally; negate the painted angle below to preserve the turn.
+    tex.repeat.x = -1; tex.offset.x = 1;
     const disc = new THREE.Mesh(new THREE.CircleGeometry(radius, 64), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
     disc.name = 'hub_loom'; disc.position.z = box.max.z + 0.0015; rotor.add(disc);
-    hub = { c, tex, disc, radius, mode: null, rot: 0, at: -Infinity };
+    hub = { c, tex, disc, radius, mode: null, rot: 0, direction: 1, at: -Infinity };
   } else {
     // The neon hub spiral (a flowing tube, scenery, not a breather).
     const pts = [];
@@ -252,7 +255,10 @@ export async function createScene(o) {
   function paintHub(t, dtS) {
     if (!hub) return;
     const mode = dress.hub;
-    hub.rot = stepHub(hub.rot, frameSpeed, dtS, plan && plan.w ? plan.w.scale : 1, dress.k);   // always clockwise (law 3), Calm at half
+    if (rotating() && frameSpeed > 0.05) hub.direction = -Math.sign(omega);
+    else if (!rotating()) hub.direction = 1;
+    const advance = stepHub(0, frameSpeed, dtS, plan && plan.w ? plan.w.scale : 1, dress.k);
+    hub.rot += hub.direction * advance;
     // Loom: the disc holds still against the rotor, so the field's own angle is its whole turn on screen.
     hub.disc.rotation.z = mode === 'loom' ? -rotor.rotation.z : 0;
     if (mode === 'star') { if (hub.mode !== 'star') { paintStar(hub.c); hub.tex.needsUpdate = true; } hub.mode = mode; return; }
@@ -260,7 +266,7 @@ export async function createScene(o) {
     hub.mode = mode;
     if (!fresh && !rotating() && t - hub.at < HUB_AT_REST_MS) return;
     hub.at = t;
-    if (o.paintHub && o.paintHub(hub.c, hub.rot, t)) hub.tex.needsUpdate = true;
+    if (o.paintHub && o.paintHub(hub.c, -hub.rot, t)) hub.tex.needsUpdate = true;
   }
 
   // Moire rim: two rings of 60 fine lines just outside the slices, Full only.
@@ -383,11 +389,14 @@ export async function createScene(o) {
     if (!face || !layout) return;
     const media = typeof o.sliceMedia === 'function' ? o.sliceMedia() : null;   // read every paint: suspend frees it
     const still = reduced || !!dress.calm;
-    if (!face.dirty && still && face.painted) return;
+    if (!face.key) face.key = faceKeys(media, layout);
+    if (media) media.tick(t, face.key || []);
+    const state = media?.debug();
+    const ready = state?.ready || 0, frames = state?.frames || 0;
+    if (!face.dirty && still && face.painted && face.ready === ready && face.frames === frames && ready + (state?.failed || 0) === media?.size) return;
     if (!face.dirty && t - face.at < FACE_MS) return;
     face.at = t; face.dirty = false;
-    if (media) media.tick(t);
-    if (!face.key) face.key = faceKey(media, layout);
+    face.ready = ready; face.frames = frames;
     if (drawFace(face.c, layout, media, face.key, prizeColor)) { face.tex.needsUpdate = true; face.painted = true; }
   }
   function hypnoFrame(t, dtMs) {
@@ -482,13 +491,13 @@ export async function createScene(o) {
     const target = rotating() ? 1 : partying ? Math.min(1, 0.35 + heat * 0.18) : 0;
     energy = reduced ? target : THREE.MathUtils.lerp(energy, target, 1 - Math.exp(-dt * 5));
     if (!reduced) lightMotion += dt * (0.65 + energy * 3.2);
-    const prize = gold && partying ? CHASE[3] : null;
+    const prize = gold && partying ? CHASE[4] : null;
     bulbs.forEach((b, i) => {
-      const p = i / 8 + lightMotion * 0.6, j = Math.floor(p), c = CHASE[j % 4].clone().lerp(CHASE[(j + 1) % 4], p - j);
+      const p = i * CHASE.length / bulbs.length + lightMotion * 0.35, j = Math.floor(p), c = CHASE[j % CHASE.length].clone().lerp(CHASE[(j + 1) % CHASE.length], p - j);
       if (prize) c.lerp(prize, 0.75);
       const wave = reduced ? 0.55 : Math.pow(0.5 + 0.5 * Math.cos((i / bulbs.length) * TAU * 3 - lightMotion * 2), 3);
-      b.material.color.copy(c); b.material.emissive.copy(c); b.material.emissiveIntensity = 0.65 + wave * (0.85 + energy * 0.45);
-      halos[i].material.color.copy(c); halos[i].material.opacity = 0.38 + wave * 0.36 + energy * 0.1; halos[i].scale.setScalar(0.21 + wave * 0.065);
+      b.material.color.copy(c); b.material.emissive.copy(c); b.material.emissiveIntensity = 0.55 + wave * (0.55 + energy * 0.25);
+      halos[i].material.color.copy(c); halos[i].material.opacity = 0.38 + wave * 0.36 + energy * 0.1; halos[i].scale.setScalar(0.30 + wave * 0.075);
     });
     neon.clock.value = lightMotion * 2; neon.energy.value = energy;
     if (starMat) starMat.emissiveIntensity = reduced ? 0.45 : partying || rotating() ? (gold && partying ? 1.4 : 0.2) : 0.2 + 0.55 * breath(t);

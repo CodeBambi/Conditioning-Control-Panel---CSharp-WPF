@@ -19,7 +19,7 @@
  * HYPNO v3 (CONTRACT 10.13.F). Fullscreen effects go only through the kit's
  * moments: wheel.turn once when the long last turn starts (then its tunnel level
  * every frame), and one wheel.land.<size> on the landing frame. The Loom hub is
- * painted by the kit's one shared context; the deck deals 4 and only lends a key.
+ * painted by the kit's one shared context; the deck deals eight small sources for the wedges and lends keys for effects.
  * Gates dress the page (spiral off: a brass star) from the first frame and live;
  * suspend and close cancel the moments and free the kit and the deck.
  *
@@ -263,7 +263,7 @@ export async function mount(ctx) {
         if (mine === dealSeq) wordKeys = Array.isArray(rep && rep.words) ? rep.words.map(w => w && w.key).filter(k => typeof k === 'string' && /^s\d{1,2}$/.test(k)) : [];
         return rep;
       }) } : {};
-    createDeck(media, { count: 4, still: dress.calm }).then(d => {
+    createDeck(media, { count: 8, still: dress.calm }).then(d => {
       if (mine !== dealSeq || my !== session || suspended || !alive) { d.dispose(); return null; }
       if (deck) deck.dispose();
       deck = d; return d;

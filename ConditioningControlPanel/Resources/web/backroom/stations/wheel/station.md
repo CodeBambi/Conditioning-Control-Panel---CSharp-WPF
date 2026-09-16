@@ -116,7 +116,7 @@ never names a section 4 id.
 - The size is the kit's `wheelSize(result)`. The landing moment fires in `land()` on the frame the pointer settles
   (Law I), never on the reply; a reopen after spinning and an `already_spun` landing fire nothing.
 - `from` is `scene.project('landed')` as a 60 x 44 CSS px box. The picture is `deck.pickKey('<day>|<sliceId>|<index>')`
-  from a 4-GIF deal (`createDeck(ctx, {count: 4})`), so one result always names the same key.
+  from an 8-GIF deal (`createDeck(ctx, {count: 8})`), so one result always names the same key.
 - **Loom hub**: a CircleGeometry disc on `wheel_rotor`, radius from `hub_lip` (0.166) at its top face, a 256 px
   CanvasTexture painted by `kit.paint('hub', {now, angle})`. The angle accumulates, as the mockup's `hubRot`:
   `angle += (|rotor speed| x 0.9 + 0.35 x timeScale) x dt` (`hypno.stepHub`), so it turns clockwise whichever way the

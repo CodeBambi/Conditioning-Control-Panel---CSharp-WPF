@@ -1,7 +1,7 @@
 /* ============================================================================
  * shared/hypno/media.js - the player's dealt pictures, drawn in the page
  * (CONTRACT 10.13.C and D). Soft Hand deals 13 and dresses each card value in
- * one; Daily Daze and Velvet Vortex deal 4 and only need a stable key to hand
+ * one; Daily Daze deals eight for its wedges, Velvet Vortex four for
  * fx.gif_from.
  *
  * Nothing here chooses a file: the host deals, the page gets keys and urls, and
@@ -9,8 +9,7 @@
  * ccp.assets, ccp.game or this page's own origin.
  *
  * Decoding is the room's (room/gif-decode.js, WebCodecs ImageDecoder). Caps: at
- * most 13 sources, 192 px on the long edge, 12 fps each; sources load one at a
- * time; at most ONE decode starts per tick (a source load or a frame), and only
+ * most 13 sources, 192 px on the long edge, 12 fps each; three source loads may overlap; at most ONE animation decode starts per tick, and only
  * sources drawn since the last tick advance. No decoder, or a file it refuses,
  * draws a still taken from an <img>.
  * ==========================================================================*/
@@ -19,7 +18,7 @@ import { decodedSource } from '../../room/gif-decode.js';
 
 /** Card values in the pure module's rank order, T for ten. Value i wears gifs[i % gifs.length]. */
 export const DECK_VALUES = Object.freeze(['A', '2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K']);
-export const DECK_CAPS = Object.freeze({ sources: 13, maxEdge: 192, maxFps: 12 });
+export const DECK_CAPS = Object.freeze({ sources: 13, maxEdge: 192, maxFps: 12, loads: 3 });
 
 const KEY_RE = /^g\d{1,2}$/;
 
@@ -85,7 +84,7 @@ export async function createDeck(ctx, { count = 13, maxEdge = DECK_CAPS.maxEdge,
   const byKey = new Map();
   for (const g of (reply && Array.isArray(reply.gifs) ? reply.gifs : [])) {
     if (!g || !KEY_RE.test(String(g.key)) || byKey.has(g.key) || entries.length >= DECK_CAPS.sources) continue;
-    const e = { key: g.key, url: drawableUrl(g.url) ? g.url : '', src: null, still: null, state: 'idle', drawn: false };
+    const e = { key: g.key, url: drawableUrl(g.url) ? g.url : '', src: null, still: null, state: 'idle', drawn: false, wanted: false };
     entries.push(e); byKey.set(e.key, e);
   }
   // An empty deal (no host, a lost reply) still has one key, g0. The host resolves a key against its own
@@ -94,12 +93,12 @@ export async function createDeck(ctx, { count = 13, maxEdge = DECK_CAPS.maxEdge,
   const size = keys.length;
   const seed = reply && Number.isFinite(reply.seed) ? reply.seed : 0;
 
-  let isStill = !!still, disposed = false, loading = null, rr = 0;
+  let isStill = !!still, disposed = false, loading = 0, rr = 0;
   const stats = { loads: 0, animated: 0, stills: 0, failed: 0, decodes: 0, ticks: 0 };
   const canDecode = typeof document !== 'undefined';
 
   function load(e) {
-    e.state = 'loading'; stats.loads++;
+    e.state = 'loading'; stats.loads++; loading++;
     const done = (async () => {
       let src = null;
       try { src = await decodedSource(e.url, { maxEdge: edge, maxFps: DECK_CAPS.maxFps }); } catch (err) { src = null; }
@@ -110,11 +109,15 @@ export async function createDeck(ctx, { count = 13, maxEdge = DECK_CAPS.maxEdge,
       e.state = e.still ? 'ready' : 'failed';
       if (e.still) stats.stills++; else stats.failed++;
     })();
-    loading = done.finally(() => { loading = null; });
+    void done.finally(() => { loading--; pump(); });
   }
-  const nextLoad = () => entries.find((e) => e.state === 'idle' && e.url);
+  const nextLoad = () => entries.find(e => e.state === 'idle' && e.url && e.wanted) || entries.find(e => e.state === 'idle' && e.url);
+  function pump() {
+    if (!canDecode || disposed) return;
+    while (loading < DECK_CAPS.loads) { const e = nextLoad(); if (!e) break; load(e); }
+  }
 
-  if (canDecode) { const first = nextLoad(); if (first) load(first); }
+  pump();
 
   return {
     seed, keys, size,
@@ -128,7 +131,7 @@ export async function createDeck(ctx, { count = 13, maxEdge = DECK_CAPS.maxEdge,
     draw(ctx2d, key, x, y, w, h, { alpha = 1 } = {}) {
       const e = byKey.get(key);
       if (disposed || !e || !ctx2d || !(w > 0 && h > 0)) return false;
-      e.drawn = true;
+      e.drawn = true; e.wanted = true;
       const img = e.src ? e.src.canvas : e.still;
       if (!img || !(img.width > 0 && img.height > 0)) return false;
       const s = Math.max(w / img.width, h / img.height), dw = img.width * s, dh = img.height * s;
@@ -140,14 +143,15 @@ export async function createDeck(ctx, { count = 13, maxEdge = DECK_CAPS.maxEdge,
       return true;
     },
     /** The picture's canvas (decoded frames, or the still), for a texture. Null until it has loaded. */
-    image(key) { const e = byKey.get(key); return e ? (e.src ? e.src.canvas : e.still) : null; },
-    /** Once per rendered frame: at most one decode starts, a source load first, else one drawn source's frame. */
-    tick(now) {
+    image(key) { const e = byKey.get(key); if (e) e.wanted = true; return e ? (e.src ? e.src.canvas : e.still) : null; },
+    /** Once per rendered frame: at most one animation decode, independent of network loading. */
+    tick(now, visibleKeys = []) {
       if (disposed) return false;
+      for (const key of visibleKeys) { const e = byKey.get(key); if (e) { e.drawn = true; e.wanted = true; } }
       stats.ticks++;
       const t = Number.isFinite(now) ? now : performance.now();
       let started = false;
-      if (!loading) { const e = nextLoad(); if (e) { load(e); started = true; } }
+      pump();
       if (!started && entries.length) {
         for (let k = 0; k < entries.length && !started; k++) {
           const e = entries[(rr + k) % entries.length];
@@ -167,7 +171,7 @@ export async function createDeck(ctx, { count = 13, maxEdge = DECK_CAPS.maxEdge,
     },
     /** Test seam. */
     debug() {
-      return { ...stats, size, loading: !!loading, ready: entries.filter((e) => e.state === 'ready').length,
+      return { ...stats, size, loading: !!loading, loadingCount: loading, ready: entries.filter((e) => e.state === 'ready').length,
         frames: entries.reduce((s, e) => s + (e.src ? e.src.frames : 0), 0), still: isStill, disposed };
     },
   };
