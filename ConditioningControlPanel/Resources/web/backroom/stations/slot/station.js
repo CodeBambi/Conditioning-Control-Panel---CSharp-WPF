@@ -32,7 +32,7 @@ import { createScene, FACES } from './scene.js';
 import { createMedia, fxSymbols } from './media.js';
 import { createSlotWords, subWords } from './word.js';   // the lone word, the sub pair / trio, the dead-spin settle (callout.js)
 import { PACE } from './pace.js';
-import { recipe, tierOf, meltedBy, ladderSemis, ladderPlan, rollupMs, winTokens, spendTokens, glance, landPose, restPose, pressPose, glanceHoldMs } from './feel.js';
+import { recipe, tierOf, meltedBy, ladderSemis, ladderPlan, spendTokens, glance, landPose, restPose, pressPose, glanceHoldMs } from './feel.js';
 import { anticipation, almost } from './feel.js';   // the playbook's Tier A (CONTRACT 10.15)
 import { ATTRACT, attractOk, emiLandings } from './feel.js';
 // The playbook's Tier B and C (CONTRACT 10.16): B1 the spiral jar, B3 the comp, C1 the EMI pair re-spin.
@@ -41,6 +41,13 @@ import { flowPlan, FLOW, CALLOUTS } from './feel.js';                     // THE
 import { createCallout, GLYPH_HIT, WORD_MS, WORD_GAP_MS } from '../../shared/hypno/callout.js';
 import { createBank } from './bank.js';
 import { createSound } from './sound.js';
+// THE SPINE (CONTRACT 10.22.C). One rung, one plan, one sit-down ledger, for all four stations. The slot
+// keeps deciding its own OUTCOMES and its own cabinet recipe; it stopped deciding its own restraint.
+import { houseTier } from '../../shared/win/tier.js';
+import { freshSit, sitPlan, afterParty } from '../../shared/win/plan.js';
+// THE SPARKLE BURST and THE GLOW (10.22.D): two moves counterfx has exported since the Arcademy shipped and
+// the Back Room has never fired. The plan says WHEN and HOW MUCH; these two calls are the whole of the spend.
+import { sparkBurst, warmGlow } from '../../../arcademy/shell/counterfx.js';
 
 const STATION = 'slot';
 /** CONTRACT 7 (room/loader.js): the root stays see-through, so the room's pan-in is the load screen and the cabinet
@@ -84,8 +91,11 @@ export async function mount(ctx) {
   let pace = 'idle', queued = false, breathEnds = 0, marks = [];   // pace phase: idle | breath | spin | reveal
   // Feel state for one sit-down (lane F1): the readout override while THE BANK flies, the win streak for
   // THE CHIME LADDER, how often each tier has partied (Brake 3), and EMI's current pose (THE MASCOT GLANCE).
-  let sound = null, bank = null, shown = null, owing = false, streak = 0, seen = [0, 0, 0, 0, 0], jackpots = 0, words = null;
-  let pose = 'idle0_0', glanceTimer = 0, gainTimer = 0, playing = null, feelLog = [], bankFrom = 0, bankTo = 0, bankHold = 1600;
+  let sound = null, bank = null, shown = null, owing = false, streak = 0, words = null;
+  // Brake 3's memory is plan.js's `freshSit` ledger now, not a pair of counters here: `seen` per RUNG and the
+  // once-a-sit-down hero, one object, replaced (never mutated) by `afterParty` for every party that played.
+  let sit = freshSit(), landPlan = null;
+  let pose = 'idle0_0', glanceTimer = 0, gainTimer = 0, playing = null, feelLog = [], bankFrom = 0, bankTo = 0, bankHold = 1600, bankGlow = 0;
   // A4 attract: one idle timeout re-armed on input (no polling) and one self-re-arming wink, both cleared on
   // any input, on suspend and on close, so a shut cabinet leaves nothing running.
   let idleTimer = 0, winkTimer = 0, attracting = false;
@@ -333,8 +343,11 @@ export async function mount(ctx) {
   }
   const readoutAt = () => { const b = readout() && readout().getBoundingClientRect(); return b && b.width ? { x: b.left + b.width / 2, y: b.top + b.height / 2 } : null; };
   /** THE BANK forwards (a win) or reversed (a tape or freeze debit). `roll` (playbook A3) is how long the
-   *  readout keeps counting: the tokens are the same either way, the count-up is what scales to the win. */
-  function flyBank(kind, fromValue, toValue, n, roll = 0) {
+   *  readout keeps counting: the tokens are the same either way, the count-up is what scales to the win.
+   *  `glowMs` is plan.glow - THE GLOW the chip takes on the mini-thud, at the END of the count and not at the
+   *  start of the flight (Law X: it shares the frame the value settles on). A spend never glows: Law IX sizes
+   *  a PARTY, and money leaving is not one. */
+  function flyBank(kind, fromValue, toValue, n, roll = 0, glowMs = 0) {
     shown = fromValue;
     const from = kind === 'pay' ? () => scene && (scene.project('payout_spawn') || scene.project('payout_tray')) : readoutAt;
     const to = kind === 'pay' ? readoutAt : () => scene && (scene.project('payout_tray') || scene.project('payout_spawn'));
@@ -342,6 +355,7 @@ export async function mount(ctx) {
     if (!(bank.busy && bank.kind === 'pay' && kind === 'pay')) bankFrom = fromValue;   // a merged pay keeps its first value
     bankTo = toValue;
     bankHold = Math.max(1600, roll + 600);
+    bankGlow = kind === 'pay' ? Math.max(0, Number(glowMs) || 0) : 0;
     const how = bank.start({ kind, n, fromValue, toValue, from, to, rollupMs: roll });
     note('bank', { kind, fromValue, toValue, n, roll, how });
     paintSp();
@@ -426,9 +440,18 @@ export async function mount(ctx) {
     if (el && plan.hits.length) { el.classList.add(GLYPH_HIT); later(FLOW.HIGHLIGHT_MS, () => { if (el) el.classList.remove(GLYPH_HIT); }); }
     const chain = plan.fx.some(f => /^fx.sub_/.test(f.id)) ? subWords(o, media).length : 0;   // a sub chain owns the centre first
     const wordsMs = chain ? WORD_MS + WORD_GAP_MS * (chain - 1) : 0;
-    for (const c of plan.callouts) later(c.at + wordsMs, () => {
+    for (const [i, c] of plan.callouts.entries()) later(c.at + wordsMs, () => {
       if (callout) callout.show(c.key, c.fallback, { tier: c.tier });
       board(t(c.key, c.fallback));   // THE MARQUEE BOARD mirrors the announcer
+      // 10.22.D THE SPARKLE BURST: 7 sparks at tier 3, 9 at the jackpot, from the middle of the callout
+      // layer as the word arrives. ONE burst a moment (Brake 2), so only the FIRST callout of the frame takes
+      // it, and `plan.sparkle` is the whole of the rest of the gate - it is already 0 on a small win, on lite,
+      // on Calm, while melted and under reduced motion. land() runs on the same frame flow() was called on and
+      // this fires FX_DELAY_MS later, so the plan standing here is always this landing's own.
+      if (i === 0 && landPlan && landPlan.sparkle > 0) {
+        const n = sparkBurst(el && $('.slot-callout'), { count: landPlan.sparkle });
+        note('sparkle', { count: n, tier: landPlan.spent });
+      }
       if (flowLast) flowLast.calloutAt = Math.round(performance.now());
       note('callout', { key: c.key, tier: c.tier, at: c.at });
     });
@@ -446,18 +469,33 @@ export async function mount(ctx) {
    *  Melt reads from the tape cursor, never a freeze outcome's own meltLeft (the stored tape's end melt). */
   function land(landed, before) {
     const melt = tape.snapshot().melt, o = (landed.meltLeft || 0) === melt ? landed : { ...landed, meltLeft: melt };
-    const tier = tierOf(o), melted = meltedBy(o), r = recipe(o, { seen: seen[tier], jackpots });
-    const semis = ladderSemis(streak, melted), roll = rollupMs(tier);   // playbook A3: the count-up scales to the win
-    if (tier > 0) { seen[tier]++; if (tier === 4) jackpots++; }
+    const tier = tierOf(o), melted = meltedBy(o), r = recipe(o, { seen: sit.seen[tier], jackpots: sit.heroes });
+    // THE PLAN (CONTRACT 10.22.C). The slot's own tierOf still says what the line is WORTH; houseTier only
+    // normalises it onto the room's rungs, and sitPlan reads Brake 3 off the one ledger. Everything this
+    // beat is allowed to spend - tokens, rollup, ladder, shower, sparks, glow - comes back frozen in `plan`,
+    // and the station may always spend LESS than it, never more. `reduced` and `still` are two flags, not
+    // one: reduced motion is the settled state (no travel at all), Calm strips the decoration and the value
+    // still flies, because a number that just changes is a Law XII break at every motion level.
+    const plan = sitPlan(houseTier({ station: STATION, tier }), sit, { reduced, lite, still: stillFx(), melted });
+    const semis = ladderSemis(streak, melted), roll = plan.partyMs;   // playbook A3: the count-up scales to the win
+    landPlan = plan;   // flow()'s callout frame reads it FX_DELAY_MS from now (THE SPARKLE BURST)
+    // Law IX, once a sit-down: the hero the ledger counts is the REVEAL the cabinet actually played, which is
+    // feel.recipe's (the same pop and turn at every motion level), not plan.reveal - that is the decoration
+    // budget on top of it. A party that spent nothing is not a party and does not wear the rung down.
+    sit = afterParty(sit, r.reveal ? { ...plan, reveal: true } : plan);
     if (tier > 0) { sound.win(r.sound, semis); streak++; } else streak = 0;   // the no-pay cue was the last reel's muted thud
     scene.setMelted(melted); if (melted) sound.melt();
     scene.celebrate(r, o.pay, t('br_slot_screen_win', 'WIN +{n}', { n: fmt(o.pay) }));
-    ctx.revealedWin?.(o.pay,tier,t('br_slot_screen_win','WIN +{n}',{n:fmt(o.pay)}));
+    // 10.22.B: the room is told ONCE, on the frame the player learns it, and it is told the PLAN's shower
+    // tier, never the slot's own rung. 0 means no shower at all (Law IX: a small win is a close-up event and
+    // does not show from across the room), and room/coin-shower.js clamps 1..4, so the call is SKIPPED
+    // rather than made with a 0 - that guard is the station's, the spine cannot make it from here.
+    if (plan.shower > 0) ctx.revealedWin?.(o.pay, plan.shower, t('br_slot_screen_win', 'WIN +{n}', { n: fmt(o.pay) }));
     if (r.tokens) {
-      flyBank('pay', before, tape.snapshot().shownSp, winTokens(tier, lite), roll);
+      flyBank('pay', before, tape.snapshot().shownSp, plan.bank, roll, plan.glow);
       // THE CHIME LADDER climbs while the readout counts. Law VI: reduced motion has no rollup to climb over
-      // and THE BANK has already settled, so the ladder is the landing note alone (no sound without a visual).
-      sound.climb(ladderPlan(tier, reduced ? 0 : roll, melted), semis);
+      // and THE BANK has already settled, so plan.partyMs is 0 and the ladder is the landing note alone.
+      sound.climb(ladderPlan(plan.spent, roll, melted), semis);
       scene.payline(roll, r);                                // A6: the winning row frames for the same window
     }
     glanceTo(landPose(o), glanceHoldMs(melted), restPose(o.meltLeft));
@@ -468,7 +506,8 @@ export async function mount(ctx) {
       : after.free > 0 ? t('br_slot_free_left', 'Free spins {n}', { n: after.free })
       : after.melt ? t('br_slot_screen_melt', 'MELT · {n} SPINS AT HALF', { n: after.melt })
       : t('br_slot_ready', 'Ready'));
-    note('land', { line: o.line, pay: o.pay, tier, party: r.party, sound: r.sound, melted, streak, roll });
+    note('land', { line: o.line, pay: o.pay, tier, spent: plan.spent, why: plan.why, party: r.party,
+                   sound: r.sound, melted, streak, roll, shower: plan.shower, sparkle: plan.sparkle });
   }
 
   /**
@@ -479,9 +518,11 @@ export async function mount(ctx) {
   function jarSpill(p) {
     const s = tape.snapshot();
     fireFx('fx.spiral_full');
-    const r = jarParty({ melted: meltedBy(p.o), calm: lite, winTier: tierOf(p.o), seen: seen[JAR_TIER] });
+    const r = jarParty({ melted: meltedBy(p.o), calm: lite, winTier: tierOf(p.o), seen: sit.seen[JAR_TIER] });
     if (r) {
-      seen[JAR_TIER]++;
+      // Brake 3's ledger is the spine's and there is one of it: the jar's tier 2 party wears down the SAME
+      // rung a tier 2 line does, because the jar borrows spiral3's shape since it IS that event (10.16.A).
+      sit = afterParty(sit, sitPlan(JAR_TIER, sit, { reduced, lite, still: stillFx(), melted: r.melted }));
       // Brake 2: the outcome won a line as well, so the jar's own note is dropped and the win's note, a beat
       // later on its own landing, is the one that sounds. The party is still the jar's, the bigger of the two.
       if (r.sound) sound.win(r.sound, ladderSemis(streak, r.melted));
@@ -611,7 +652,7 @@ export async function mount(ctx) {
   async function open() {
     if (alive) return;
     alive = true; busy = false; suspended = false; lastMelt = null; pace = 'idle'; queued = false; breathEnds = 0;
-    shown = null; streak = 0; seen = [0, 0, 0, 0, 0]; jackpots = 0; pose = 'idle0_0'; playing = null; jarShown = null;
+    shown = null; streak = 0; sit = freshSit(); landPlan = null; pose = 'idle0_0'; playing = null; jarShown = null;
     flowLast = null; unlockAt = 0; tunnelLevel = 0; clearTimeout(hazeTimer); hazeTimer = 0;
     attracting = false; clearTimeout(idleTimer); clearTimeout(winkTimer); idleTimer = winkTimer = 0;
     const my = ++session;
@@ -627,7 +668,11 @@ export async function mount(ctx) {
       onTick: (value, kind, quiet) => { shown = value; paintSp(); if (!quiet) sound.token(false); note('tick', { kind, value }); },
       // `rolling` (playbook A3): the tokens are down but the readout is still counting, so the mini-thud
       // waits for the end of the rollup (Law X). The +N goes up on the landing and stays out the count.
-      onLand: (kind, rolling) => { if (kind === 'spend' && scene) scene.trayThud(); else if (!rolling) { sound.token(true); thudReadout(); }
+      // 10.22.D THE GLOW: a warm cut on the SP chip as the last token lands, 480 ms, in fast and out slow.
+      // It rides the mini-thud's own frame (Law X) and never a small win's - plan.glow is 0 while melted
+      // (Brake 5) and under reduced motion (Law VI), and Calm keeps it, because a warm cut is not travel.
+      onLand: (kind, rolling) => { if (kind === 'spend' && scene) scene.trayThud(); else if (!rolling) { sound.token(true); thudReadout();
+                                     if (bankGlow > 0) { warmGlow(readout()); note('glow', { ms: bankGlow }); } }
                                    gain(bankTo - bankFrom, rolling ? bankHold : 1600); },
       onDone: () => { shown = null; paintSp(); },
     });
@@ -748,7 +793,8 @@ export async function mount(ctx) {
                     hostBack, variant: variant && variant.id, palette: !!(scene && scene.recoloured),
                     spinning: !!(scene && scene.spinning), sceneAlive: !!scene,
                     callout: callout ? callout.debug() : null, flow: flowLast, tunnel: tunnelLevel, haze: !!(scene && scene.hazing),
-                    feel: { log: feelLog, pose, streak, seen, shown, readout: String(shownSp()), hostSp: !!hostSp,
+                    feel: { log: feelLog, pose, streak, seen: sit.seen, heroes: sit.heroes, plan: landPlan,
+                            shown, readout: String(shownSp()), hostSp: !!hostSp,
                             attracting, idleArmed: !!idleTimer, emi: playing ? playing.emi : [],
                             cues: sound ? sound.trace.slice() : [], scene: scene && scene.debug() } }),
   };
