@@ -30,6 +30,7 @@
 import { createTape, stopsFor } from './tape.js';
 import { createScene, FACES } from './scene.js';
 import { createMedia, fxSymbols } from './media.js';
+import { COMBOS, PAY_MS, comboSize, paintCombo } from './paytable.js';
 import { createSlotWords, subWords } from './word.js';   // the lone word, the sub pair / trio, the dead-spin settle (callout.js)
 import { PACE } from './pace.js';
 import { recipe, tierOf, meltedBy, ladderSemis, ladderPlan, spendTokens, glance, landPose, restPose, pressPose, glanceHoldMs } from './feel.js';
@@ -146,10 +147,11 @@ export async function mount(ctx) {
         <div class="slot-freeze">${[0, 1, 2].map(i => `<button type="button" data-col="${i}" aria-pressed="false"></button>`).join('')}</div>
       </div>
       <button class="slot-spin" type="button"><span></span><small></small></button>
-      <details class="slot-odds"><summary>${t('br_slot_odds', 'Odds')}</summary><table></table><p></p></details>
+      <details class="slot-odds"><summary>${t('br_slot_paytable', 'Prizes')}</summary><table></table><p></p></details>
       <div class="slot-card" role="status" hidden><p></p><button class="slot-card-back" type="button">${t('br_slot_back', 'Back')}</button></div>
       <button class="slot-rotate" type="button" hidden><i aria-hidden="true">&#x21bb;</i>${t('br_slot_rotate', 'Turn your phone sideways for a bigger view')}</button>`;
     root.querySelector('.slot-rotate').onclick = () => { rotateSeen = true; try { sessionStorage.setItem(ROTATE_SEEN, '1'); } catch (e) { /* private mode */ } paintRotate(); };
+    root.querySelector('.slot-odds').addEventListener('toggle', payLoop);
     root.querySelector('.slot-back').onclick = back;
     root.querySelector('.slot-card-back').onclick = back;
     if (hostSp) root.dataset.hostSp = '';
@@ -368,24 +370,78 @@ export async function mount(ctx) {
     paintSp();
   }
 
+  /* THE LEGEND (owner, 2026-09-16: "show the prize payout with simple mockups ... and what combinations they
+   * can get and what it pays"). Each row now carries a PICTURE of the row that pays, painted by the reels'
+   * own painter, so a flash cell is the player's own dealt GIF and a spiral cell is the same Loom field the
+   * glass is showing. The words stay (Brake 9: every value is also text) - the picture is added to the label,
+   * never instead of it, and the canvas is aria-hidden so a screen reader reads the row once. */
+  let combos = [];
   function renderOdds() {
     const s = tape.snapshot();
     const table = $('.slot-odds table');
+    combos = [];
     table.replaceChildren(...s.lines.map(l => {
       const tr = document.createElement('tr');
+      const ids = COMBOS[l.id];
+      const art = document.createElement('td');
+      art.className = 'slot-combo';
+      if (ids) {
+        const size = comboSize(ids.length), ratio = Math.min(3, Math.max(1, devicePixelRatio || 1));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(size.w * ratio); canvas.height = Math.round(size.h * ratio);
+        canvas.style.width = `${size.w}px`; canvas.style.height = `${size.h}px`;
+        canvas.setAttribute('aria-hidden', 'true');
+        art.append(canvas);
+        combos.push({ canvas, ids, ratio });
+      }
+      tr.append(art);
       // 10.16.D: the jackpot's published odds are the TOTAL (the direct draw plus the re-spin's share), so the
       // direct-draw row never understates it; the emi2 row says what it actually buys.
       const odds = l.id === 'emi3' && s.jackpotOdds ? s.jackpotOdds
         : l.id === 'emi2' ? `${l.odds || ''} · ${t('br_slot_respin', 'One more look')}` : String(l.odds || '');
-      for (const [tag, text] of [['th', t(`br_slot_line_${l.id}`, LINE_LABELS[l.id] || String(l.id))], ['td', fmt(l.pays)], ['td', odds]]) {
-        const cell = document.createElement(tag); cell.textContent = text; tr.append(cell);
-      }
+      // Brake 9 twice over: the label names the row and the odds sit under it, both as text, both beside the
+      // picture. Four columns did not fit a 330 px sheet - the odds were simply cut off the right edge.
+      const th = document.createElement('th');
+      th.textContent = t(`br_slot_line_${l.id}`, LINE_LABELS[l.id] || String(l.id));
+      if (odds) { const small = document.createElement('small'); small.textContent = odds; th.append(small); }
+      const pay = document.createElement('td');
+      pay.className = 'slot-pay';
+      pay.textContent = l.pays > 0 ? t('br_slot_pay_sp', '{n} SP', { n: fmt(l.pays) }) : '-';
+      tr.append(th, pay);
       return tr;
     }));
+    paintCombos(performance.now());
     const stake = t('br_slot_stake', 'Each spin costs {n} SP. A freeze costs {m} SP.', { n: s.stake, m: s.freezeCost });
     $('.slot-odds p').textContent = s.jarSize > 0
       ? `${stake} ${t('br_slot_jar_odds', 'The jar pays {n} free spins every {m} spirals.', { n: s.jarFree, m: fmt(s.jarSize) })}`
       : stake;
+  }
+
+  /* The legend's own clock. It runs ONLY while the panel is open, at the decoder's 12 Hz and not the frame
+   * rate, and it stops on close, on suspend and under reduced motion (Law VI takes the settled picture, which
+   * for a still deck is one paint). A shut panel costs nothing: nine rows of three cells is real work and
+   * nobody is looking at it. */
+  let payRaf = 0, payAt = -Infinity;
+  const lookNow = () => ({ gif: i => (media ? media.gif(i) : null), word: i => (media ? media.word(i) : null),
+                           reduced, face: scene ? scene.faceImage : null });
+  function paintCombos(now) {
+    if (!el || !alive || !combos.length) return;
+    const look = lookNow();
+    for (const c of combos) paintCombo(c.canvas, c.ids, now, look, c.ratio);
+    payAt = now;
+  }
+  function payFrame(now) {
+    payRaf = 0;
+    if (!el || !alive || suspended || !$('.slot-odds') || !$('.slot-odds').open) return;
+    if (now - payAt >= PAY_MS) paintCombos(now);
+    payRaf = requestAnimationFrame(payFrame);
+  }
+  function payLoop() {
+    if (payRaf) { cancelAnimationFrame(payRaf); payRaf = 0; }
+    const open = !!el && !!$('.slot-odds') && $('.slot-odds').open && !suspended && alive;
+    if (!open) return;
+    paintCombos(performance.now());
+    if (!reduced) payRaf = requestAnimationFrame(payFrame);
   }
 
   function toggleFreeze(col) {
@@ -604,6 +660,10 @@ export async function mount(ctx) {
 
   async function press() {
     if (!alive || suspended || !scene || el.dataset.phase !== 'play') return;
+    // On a phone the open legend is a sheet over the glass, and a pull means "I am playing, not reading".
+    // A desk keeps it: there it sits in its own corner and covers nothing.
+    const panel = $('.slot-odds');
+    if (panel && panel.open && (innerWidth <= 800 || innerHeight <= 500)) panel.open = false;
     endAttract();
     sound.arm();
     // Law VI, Brake 7: one press settles a rollup that is still counting, straight to the tape's value, with
@@ -746,6 +806,8 @@ export async function mount(ctx) {
       if (cur) Promise.resolve(ctx.request('cursor', cur)).catch(() => {});
     }
     removeEventListener('keydown', onKey); removeEventListener('resize', onResize);
+    if (payRaf) cancelAnimationFrame(payRaf);
+    payRaf = 0; combos = [];
     if (typeof unSp === 'function') unSp();
     unSp = null;
     // Law VI: Back skips every ceremony to its settled state, then hands the room its chip back.
@@ -781,6 +843,7 @@ export async function mount(ctx) {
       if (suspended && bank) bank.skip();
       if (suspended && words) words.cancel();   // Law VI: the word, the tunnel and the speech drop at once
       if (suspended && scene) { scene.cancelPull(); scene.skip(); }
+      payLoop();   // the legend's 12 Hz stops with everything else, and comes back with it
       if (el) sync();
     },
     async destroy() {

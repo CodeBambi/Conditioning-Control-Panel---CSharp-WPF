@@ -20,7 +20,7 @@ import { createCoinShower } from '../../room/coin-shower.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
-import { drawSymbol, disposeSpirals } from './symbols.js';
+import { drawSymbol, disposeSpirals, CELL } from './symbols.js';
 import { fitText } from '../../shared/text/wrap.js';
 import { PACE, reelStopMs, reelsMs, respinStopMs, respinMs } from './pace.js';
 import { applyPalette } from './palette.js';
@@ -36,19 +36,23 @@ const FIT_MARGIN = 1.04;        // breathing room around the marquee, reels and 
 const PLAY_CLOSE = 0.93;
 // A phone crops INTO its fit: the owner's reference close-ups cut the shelf and the lever ball at the edges
 // rather than leaving room around them (owner, 2026-09-16, one shot per orientation).
-const LAND_CLOSE = 1.08, PORT_CLOSE = 0.92;
+const LAND_CLOSE = 0.95, PORT_CLOSE = 1.02;
 // 0 aims dead at the reel glass, 1 at the middle of the whole span: half way keeps the glass near the centre
 // and still leaves the lever its room on the right (owner, 2026-09-16: "keep a little space on the right").
 const GLASS_AIM = 0.16;
 // EMI'S SHELF: her perch beside the reel window while the player is seated, answering the lever on the right.
 // Cabinet space, the glb's own units: outboard of the side panel, the top surface level with the reels.
-const SHELF = { x: -0.66, top: 0.99, z: 0.36, w: 0.17, d: 0.16, lip: 0.03 };
+/* THE T moved her (owner, 2026-09-16). The arms now reach x +-0.673 and their underside is at y 0.978, so
+ * the plank goes OUTBOARD of the arm's edge and DOWN into the pocket the overhang makes: she stands beside
+ * the stem, under the left arm, with her head just clear of it. This is the sketch, and it is also why the
+ * reels could take the width - she is no longer competing with them for it. */
+const SHELF = { x: -0.70, top: 0.78, z: 0.36, w: 0.17, d: 0.16, lip: 0.03 };
 /* UPRIGHT the plank comes IN off that line. A tall frame is bought by the width, and the shelf at -0.66 is the
  * widest thing in it: every pixel it reaches outboard is a pixel of reel. Pulled in and forward she still stands
  * beside the glass, on the same plank, and the reels come up by about a fifth (owner, 2026-09-16). -0.52 was a
  * step too far: at that distance she stood ON the cabinet's left panel rather than beside it, so -0.58 is where
  * the plank clears the corner and she reads against the room (owner: "move emi slightly to the left"). */
-const SHELF_TALL = { x: -0.58, z: 0.44 };
+const SHELF_TALL = { x: -0.66, z: 0.44 };
 const PERCH_SCALE = 0.85, PERCH_HOP = 0.11;   // a smaller EMI on a small shelf, and the arc of her jump across
 const PULL_MAX = 0.5, PULL_COMMIT = 0.55;
 const LEAN = 0.22, BREATH_RAD = 0.03;   // Law VIII lean into a press; THE BREATH's reach at rest
@@ -246,30 +250,35 @@ export async function createScene(o) {
     return age < rise ? ease(age / rise) : 1 - clamp((age - rise) / FEEL_ALMOST.SNAP_MS);
   }
   const reelCanvas = [], reelTex = [];
+  // THE CELL IS WIDE NOW (owner, 2026-09-16, the T cabinet): CELL.hh*2 texels run along the drum's
+  // CIRCUMFERENCE (canvas x, one cell per strip step) and CELL.hw*2 across its WIDTH (canvas y). The drum
+  // got 1.71x wider in the glb, so the canvas gets the same 1.75x across and the texels stay square -
+  // widening the drum without widening the canvas would simply have stretched every picture.
+  const CW = CELL.hh * 2, CH = CELL.hw * 2;
   const angle = (k, n) => ((k + 0.5) / n - 0.5) * Math.PI * 2;
   function paint(t) {
     for (let r = 0; r < 3; r++) {
       const n = strips[r].length || 1, c = reelCanvas[r], ctx = c.getContext('2d');
       ctx.clearRect(0, 0, c.width, c.height);
       for (let j = 0; j < strips[r].length; j++) {
-        ctx.save(); ctx.translate((j + 0.5) * 256, 128); ctx.rotate(-Math.PI / 2); ctx.scale(1, -1);
+        ctx.save(); ctx.translate((j + 0.5) * CW, CH / 2); ctx.rotate(-Math.PI / 2); ctx.scale(1, -1);
         // THE GLYPH HIT (shared/hypno/callout.js timings): the landed cell pops 6% inside its own cell and takes a
         // rim, reel order, HIGHLIGHT_GAP_MS apart. Reduced motion takes the lit rim and no pop (Law VI).
         const hit = j === stopsNow[r] ? hitGlow(r, t) : 0;
-        if (hit > 0 && !reduced) { ctx.beginPath(); ctx.rect(-128, -128, 256, 256); ctx.clip(); ctx.scale(1 + 0.06 * hit, 1 + 0.06 * hit); }
+        if (hit > 0 && !reduced) { ctx.beginPath(); ctx.rect(-CELL.hw, -CELL.hh, CH, CW); ctx.clip(); ctx.scale(1 + 0.06 * hit, 1 + 0.06 * hit); }
         // One bad drawable (a broken or tainted GIF) paints the fallback tile, never the whole reel.
         try { ctx.save(); drawSymbol(ctx, strips[r][j], t, look); } catch { ctx.restore(); ctx.save(); drawSymbol(ctx, strips[r][j], t, { reduced: look.reduced, face: look.face }); }
         ctx.restore();
-        const glaze = ctx.createLinearGradient(-128, 0, 128, 0);
+        const glaze = ctx.createLinearGradient(-CELL.hw, 0, CELL.hw, 0);
         glaze.addColorStop(0, '#07040f99'); glaze.addColorStop(0.12, '#ffffff08'); glaze.addColorStop(0.5, '#ffffff00');
         glaze.addColorStop(0.88, '#ffffff08'); glaze.addColorStop(1, '#07040f99');
-        ctx.fillStyle = glaze; ctx.fillRect(-128, -128, 256, 256);
-        ctx.strokeStyle = '#e8bbd526'; ctx.lineWidth = 1; ctx.strokeRect(-116, -116, 232, 232);
-        if (hit > 0) { ctx.strokeStyle = `rgba(255,214,120,${(0.9 * hit).toFixed(3)})`; ctx.lineWidth = 12; ctx.strokeRect(-116, -116, 232, 232); }
+        ctx.fillStyle = glaze; ctx.fillRect(-CELL.hw, -CELL.hh, CH, CW);
+        ctx.strokeStyle = '#e8bbd526'; ctx.lineWidth = 1; ctx.strokeRect(-CELL.hw + 12, -CELL.hh + 12, CH - 24, CW - 24);
+        if (hit > 0) { ctx.strokeStyle = `rgba(255,214,120,${(0.9 * hit).toFixed(3)})`; ctx.lineWidth = 12; ctx.strokeRect(-CELL.hw + 12, -CELL.hh + 12, CH - 24, CW - 24); }
         // A2: the cell one step off the payline ghosts gold. The reel window shows about half of each
         // neighbour (drum r 0.43, 13 cells, window 0.39 tall), so the tell reads without moving a stop.
         const gh = ghost && ghost.r === r && ghost.j === j ? ghostAmt(t) : 0;
-        if (gh > 0) { ctx.fillStyle = `rgba(255,194,58,${(0.62 * gh).toFixed(3)})`; ctx.fillRect(-128, -128, 256, 256); }
+        if (gh > 0) { ctx.fillStyle = `rgba(255,194,58,${(0.62 * gh).toFixed(3)})`; ctx.fillRect(-CELL.hw, -CELL.hh, CH, CW); }
         ctx.restore();
       }
       if (n) reelTex[r].needsUpdate = true;
@@ -280,7 +289,7 @@ export async function createScene(o) {
     strips = [0, 1, 2].map(r => (next && Array.isArray(next[r]) ? next[r] : []));
     for (let r = 0; r < 3; r++) {
       if (reelTex[r]) reelTex[r].dispose();
-      reelCanvas[r] = makeCanvas(Math.max(1, strips[r].length) * 256, 256);
+      reelCanvas[r] = makeCanvas(Math.max(1, strips[r].length) * CW, CH);
       reelTex[r] = canvasTexture(reelCanvas[r]);
       reels[r].material = new THREE.MeshBasicMaterial({ map: reelTex[r] });
     }
@@ -361,18 +370,16 @@ export async function createScene(o) {
       // reels big, the lever and a little room to its right - and EMI ON THE SIDE SHELF, not on her topper.
       // She took the topper here until now because the shelf is outboard and a tall frame has no width to sell;
       // the owner would rather buy it, so the shelf is in the box and `closeSeat` sends her out to it.
-      const reelBox = new THREE.Box3(), glassBox = new THREE.Box3();
-      (glass ? [glass] : reels).forEach(n => glassBox.expandByObject(n));
-      reelBox.copy(glassBox).expandByObject(lever);
-      for (const n of [get('marquee')]) if (n) reelBox.expandByObject(n);
-      withEmi(reelBox, true);
+      // THE T CHANGED WHAT UPRIGHT CAN AFFORD (owner, 2026-09-16). The arms span 1.28 m of glass and the two
+      // attendants take the span to 1.62; a 390 px frame fitting all of that put the whole cabinet - topper
+      // stage, tray and all - on the screen and left the reels smaller than they were before the rebuild. So
+      // upright fits THE GLASS and nothing else, and the shelf and the lever ball are cropped at the edges,
+      // which is the crop the owner's own reference close-ups hold. Sideways still buys them both.
+      const reelBox = new THREE.Box3();
+      (glass ? [glass] : reels).forEach(n => reelBox.expandByObject(n));
       closeSeat = true;
       const close = fit(reelBox, dir);
-      // Fit the whole span, then AIM AT THE GLASS. EMI's shelf reaches further out on the left than the lever
-      // does on the right, so a camera aimed at the middle of the box puts the reels off to one side - which is
-      // the one thing the owner's reference frame does not do. The box buys the distance; the glass buys the aim.
-      const glassMid = glassBox.getCenter(new THREE.Vector3()).lerp(close.look, GLASS_AIM);
-      play.look.set(glassMid.x, close.look.y, glassMid.z);
+      play.look.copy(close.look);
       play.dist = close.dist * PORT_CLOSE;
       play.pos.copy(play.look).addScaledVector(dir, play.dist);
     }
@@ -385,13 +392,17 @@ export async function createScene(o) {
       // the span the owner's reference close-up holds. It is the BANDS that got the camera in, not a smaller box:
       // dropping the lever out of the fit did bring the reels up, but it also swung the box's centre over to
       // EMI's side and put the glass off to the right, because the fit aims at the box, not at the glass.
-      const reelBox = new THREE.Box3();
-      (glass ? [glass] : reels).forEach(n => reelBox.expandByObject(n));
-      reelBox.expandByObject(lever);
+      const reelBox = new THREE.Box3(), glassBox = new THREE.Box3();
+      (glass ? [glass] : reels).forEach(n => glassBox.expandByObject(n));
+      reelBox.copy(glassBox).expandByObject(lever);
       withEmi(reelBox, true);
       closeSeat = true;
       const close = fit(reelBox, dir, null, { x: (w - band.left - band.right) / w, y: (h - band.top - band.bottom) / h });
-      play.look.copy(close.look);
+      // THE T made the aim matter here too (owner, 2026-09-16). The arms are high and the two attendants are
+      // low, so the box's own centre now sits down in the BODY: fitting to it and aiming at it pushed the reels
+      // to the top of the screen and gave the control deck the bottom half. The box still buys the distance;
+      // the glass buys the aim, exactly as upright has done since the reference frame.
+      play.look.copy(glassBox.getCenter(new THREE.Vector3()).lerp(close.look, GLASS_AIM));
       play.dist = close.dist * LAND_CLOSE;
       play.pos.copy(play.look).addScaledVector(dir, play.dist);
     } else if (aspect >= 0.8) {

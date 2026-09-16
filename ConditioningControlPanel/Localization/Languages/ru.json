@@ -5383,6 +5383,8 @@
   "br_bell_wheel_change": "выиграл Keep the Change",
   "br_bell_wheel_spoiled": "получил Spoiled Rotten",
   "br_slot_rotate": "Поверни телефон боком, чтобы видеть крупнее",
+  "br_slot_paytable": "Призы",
+  "br_slot_pay_sp": "{n} SP",
   "br_roulette_rotate": "Поверните телефон вертикально: поле читается лучше",
   "br_slot_marquee_spin": "Крутится",
   "br_callout_small_win": "Малый выигрыш",

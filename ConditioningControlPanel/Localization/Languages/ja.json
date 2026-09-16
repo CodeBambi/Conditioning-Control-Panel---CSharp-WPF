@@ -5383,6 +5383,8 @@
   "br_bell_wheel_change": "でKeep the Changeを獲得",
   "br_bell_wheel_spoiled": "でSpoiled Rottenを獲得",
   "br_slot_rotate": "横向きにすると大きく表示されます",
+  "br_slot_paytable": "配当",
+  "br_slot_pay_sp": "{n} SP",
   "br_roulette_rotate": "スマホを縦にすると、ボードが見やすくなります",
   "br_slot_marquee_spin": "回転中",
   "br_callout_small_win": "スモールウィン",

@@ -5383,6 +5383,8 @@
   "br_bell_wheel_change": "Keep the Change 획득",
   "br_bell_wheel_spoiled": "Spoiled Rotten 획득",
   "br_slot_rotate": "휴대폰을 옆으로 돌리면 더 크게 볼 수 있어요",
+  "br_slot_paytable": "상금",
+  "br_slot_pay_sp": "{n} SP",
   "br_roulette_rotate": "휴대폰을 세로로 돌리면 보드가 더 잘 보여요",
   "br_slot_marquee_spin": "회전 중",
   "br_callout_small_win": "작은 승리",
