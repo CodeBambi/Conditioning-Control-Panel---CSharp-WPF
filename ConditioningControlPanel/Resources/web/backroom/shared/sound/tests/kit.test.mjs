@@ -510,3 +510,63 @@ test('trim: Calm turns the whole room down without touching the master setting',
   assert.equal(k.master, 0.5);
   assert.equal(k.debug().trim, 0.5);
 });
+
+// Sample loading must never move an action's sound to a later frame.
+const flushSamples = () => new Promise(resolve => setImmediate(resolve));
+test('foley plays its fallback immediately, then replaces it after one bounded preload', async () => {
+  const { AC, log } = makeMock(); let calls = 0;
+  const buffer = { duration: 0.5 };
+  const k = createKit({ AudioContext: AC, loadSample: async () => { calls++; return buffer; } });
+  assert.equal(k.play('card-slide'), 0);
+  assert.equal(calls, 0, 'no fetch before the first gesture');
+  k.arm();
+  assert.equal(k.play('cabinet-knock'), score('cabinet-knock').notes.length, 'fallback on the current frame');
+  await flushSamples();
+  assert.equal(calls, 3);
+  k.arm(); await flushSamples(); assert.equal(calls, 3, 'one preload per context');
+  k.stopAll();
+  assert.equal(k.play('cabinet-knock', { at: 0.1, level: 0.5 }), 1, 'sample replaces, not layers over, synth');
+  const source = log.sources.at(-1);
+  assert.equal(source.buffer, buffer); assert.equal(source.startedAt, 0.1);
+  assert.ok(source.playbackRate.value >= 0.98 && source.playbackRate.value <= 1.02);
+  k.stop('cabinet-knock'); assert.equal(k.debug().live, 0);
+  k.dispose();
+});
+test('failed or oversized-duration sample falls back without delayed playback', async () => {
+  const { AC, log } = makeMock();
+  const k = createKit({ AudioContext: AC, loadSample: async name => {
+    if (name === 'card-slide') throw new Error('offline');
+    return { duration: 30 };
+  }});
+  k.arm(); await flushSamples();
+  assert.equal(log.started, 0, 'preloading never starts a voice');
+  for (const name of ['card-slide', 'cabinet-knock', 'chip-place']) {
+    assert.equal(k.play(name), score(name).notes.length);
+  }
+  k.dispose();
+});
+test('sample voices share master mute, suspend and teardown', async () => {
+  const { AC, log } = makeMock();
+  const k = createKit({ AudioContext: AC, loadSample: async () => ({ duration: 0.5 }) });
+  k.arm(); await flushSamples(); k.play('card-slide');
+  const masterGain = log.nodes.find(n => n.kind === 'gain');
+  k.mute(true); assert.equal(masterGain.gain.calls.at(-1)[1], 0);
+  k.mute(false); k.setTrim(0.6);
+  assert.ok(near(masterGain.gain.calls.at(-1)[1], DEFAULT_MASTER * 0.6));
+  k.suspend(true); assert.equal(k.debug().live, 0);
+  assert.equal(k.play('chip-place'), 0);
+  const count = log.started;
+  k.suspend(false); assert.equal(log.started, count, 'one-shots never replay on resume');
+  k.play('chip-place'); assert.equal(k.debug().live, 1);
+  k.dispose(); assert.equal(k.debug().live, 0); assert.equal(log.closes, 1);
+});
+test('late decode cannot populate a replaced audio context', async () => {
+  const { AC } = makeMock(); let release;
+  const pending = new Promise(resolve => { release = resolve; });
+  const k = createKit({ AudioContext: AC, loadSample: () => pending });
+  k.arm(); await flushSamples(); k.dispose();
+  release({ duration: 0.5 }); await flushSamples();
+  k.arm();
+  assert.equal(k.play('chip-place'), score('chip-place').notes.length, 'fresh context starts with fallback');
+  k.dispose();
+});

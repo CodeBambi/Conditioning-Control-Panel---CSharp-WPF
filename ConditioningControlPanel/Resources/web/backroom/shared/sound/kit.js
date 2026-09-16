@@ -1,3 +1,5 @@
+import { FOLEY, SAMPLE_CUES, loadFoleySample } from './foley.js';
+
 /* ============================================================================
  * shared/sound/kit.js - THE ONE KIT. Every sound the Back Room makes.
  *
@@ -8,8 +10,8 @@
  * the schedules can be checked in bare node with no audio at all, and so a
  * station can read what a cue will do before it does it.
  *
- * Everything is synthesised (oscillators, filtered noise, a delay line): the
- * room ships no licensed samples and owns every sound it makes. The race's
+ * The scored palette is synthesised. Three local ElevenLabs foley samples replace
+ * their scored fallback once decoded; failed loads never delay an action. The race's
  * mp3 chimes the stations used to borrow are retired here; the bell family
  * below is the one voice the whole floor shares.
  *
@@ -46,7 +48,7 @@ export const TIERS = Object.freeze({
 });
 export const TIER_ORDER = Object.freeze(['small', 'mid', 'big', 'hero']);
 /** -24 dB under master for the bed, a whisper is quieter still. */
-export const BED_LEVEL = 0.063;
+export const BED_LEVEL = 0.0126;
 export const DEFAULT_MASTER = 0.8;
 /** A cue on this list plays once per window even when two lanes call it on the same frame (the slot's muted
  *  last thud and its dead-spin lane both say `settle`). Milliseconds. */
@@ -56,8 +58,8 @@ export const DEDUPE_MS = Object.freeze({ settle: 120, clicker: 25 });
  *  D: Vintage on the lever; A: Ticker, B: Purr, C: Rattle and bell, D: Hybrid casino on the reels. */
 export const LEVER_VARIANTS = Object.freeze(['A', 'B', 'C', 'D']);
 export const REEL_VARIANTS = Object.freeze(['A', 'B', 'C', 'D']);
-/** The owner's pair: a candy lever over a rattle-and-bell drum. */
-export const DEFAULT_SFX = Object.freeze({ lever: 'B', reel: 'C' });
+/** The owner's pair: a candy lever over a ticker drum. */
+export const DEFAULT_SFX = Object.freeze({ lever: 'B', reel: 'A' });
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
@@ -80,6 +82,7 @@ const bell = (hz, at, dur, level, part) => [
 ];
 
 const SCORES = {
+  ...FOLEY,
   /** A reel's tick train: decelerating clicks with a rising pitch ladder per reel. `ms` is the travel. */
   ticks({ reel = 0, ms = 1800 } = {}) {
     const r = clamp(Math.floor(num(reel, 0)), 0, 4), span = clamp(num(ms, 1800), 120, 12000) / 1000;
@@ -257,7 +260,8 @@ const SCORES = {
         noise(2300, 0.52, 0.03, 0.055 * lv, { q: 5, part: 'spring', dry: true }),
         tone(700, 0.52, 0.04, 0.035 * lv, { part: 'spring', dry: true }));
     } else if (v === 'B') {
-      out.push(noise(320, 0, 0.3, 0.07 * lv, { hzTo: 1500, q: 0.9, attack: 0.45, part: 'whoosh', dry: true }),
+      out.push(noise(1250, 0, 0.022, 0.06 * lv, { q: 3.4, part: 'catch', dry: true }),
+        noise(320, 0, 0.3, 0.07 * lv, { hzTo: 1500, q: 0.9, attack: 0.18, part: 'whoosh', dry: true }),
         tone(250, 0.29, 0.14, 0.2 * lv, { hzTo: 96, wave: 'triangle', lp: 900, part: 'pop' }),
         noise(700, 0.29, 0.05, 0.045 * lv, { type: 'lowpass', part: 'pop', dry: true }),
         ...bell(ROOT_HZ, 0.44, 0.2, 0.07 * lv, 'chime'), ...bell(ROOT_HZ * SEMI(7), 0.53, 0.17, 0.065 * lv, 'chime'));
@@ -353,8 +357,8 @@ const ROLL_LAYER = Object.freeze({
 });
 /** A tick peaks here, clear of the bed at -24 dB without being harsh; the purr and the hum together sit just
  *  over it at full blur and fall away with the drum. */
-export const ROLL_TICK = 0.0585;
-export const ROLL_BED = 0.052;
+export const ROLL_TICK = 0.038;
+export const ROLL_BED = 0.034;
 const TICK_AHEAD = 0.14, TICK_MS = 45;
 const rollKey = reel => 'reel:' + clamp(Math.floor(num(reel, 0)), 0, 4);
 /** THE TICK RATE IS THE REEL SPEED: 38 ms a tick at full blur, 260 ms crawling into the stop. */
@@ -372,7 +376,7 @@ export const wheelGap = speed => 0.054 + 0.286 * (1 - clamp(num(speed, 1), 0, 1)
  * THE KIT. createKit({ AudioContext?, master?, random?, now? }) for a test; the
  * module singleton `kit` below for the room and the stations.
  * -------------------------------------------------------------------------- */
-export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, random = Math.random, trim = 1, now = null } = {}) {
+export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, random = Math.random, trim = 1, now = null, loadSample = loadFoleySample } = {}) {
   let ctx = null, out = null, dry = null, send = null, noiseBuf = null;
   let masterLevel = clamp(num(master, DEFAULT_MASTER), 0, 1), trimLevel = clamp(num(trim, 1), 0, 1), muted = false;
   let suspended = false;
@@ -383,6 +387,8 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
   const wanted = new Set();     // beds to bring back after a suspend
   const lastAt = new Map();     // name -> page time of the last play, for DEDUPE_MS
   const trace = [];
+  const samples = new Map();
+  let sampleContext = null;
   const rand = () => { const v = Number(random()); return Number.isFinite(v) ? clamp(v, 0, 1) : 0.5; };
   const clock = typeof now === 'function' ? now : () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
@@ -445,6 +451,27 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     src.start(t); src.stop(t + dur + 0.02);
     return voice;
   }
+  function warmSamples() {
+    if (!ctx || sampleContext === ctx || typeof loadSample !== 'function') return;
+    const owner = ctx; sampleContext = owner;
+    for (const name of SAMPLE_CUES) {
+      Promise.resolve().then(() => loadSample(name, owner)).then(buffer => {
+        if (ctx === owner && buffer && buffer.duration > 0 && buffer.duration <= 1.5) samples.set(name, buffer);
+      }).catch(() => { /* Optional foley: the scored fallback remains available. */ });
+    }
+  }
+  function renderSample(name, buffer, opts, t0, set) {
+    const src = ctx.createBufferSource(), gain = ctx.createGain();
+    src.buffer = buffer;
+    const rate = 0.98 + rand() * 0.04;
+    src.playbackRate.value = rate;
+    gain.gain.value = 0.65 * clamp(num(opts.level, 1), 0, 1);
+    src.connect(gain); gain.connect(dry);
+    const voice = { src, nodes: [src, gain], set };
+    live.add(voice); set.add(voice); src.onended = () => end(voice);
+    src.start(t0); src.stop(t0 + buffer.duration / rate + 0.02);
+    return 1;
+  }
   function end(voice) {
     live.delete(voice); voice.set.delete(voice);
     for (const n of voice.nodes) { try { n.disconnect(); } catch (e) { /* gone */ } }
@@ -462,7 +489,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     const sh = ctx.createBufferSource(); sh.buffer = noiseBuf; sh.loop = true;
     const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 3; bp.frequency.value = 3000;
     const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.05; lg.gain.value = 1000; lfo.connect(lg); lg.connect(bp.frequency);
-    const sg = ctx.createGain(); sg.gain.value = 0.09; sh.connect(bp); bp.connect(sg); sg.connect(g); sh.start(); lfo.start(); nodes.push(sh, lfo);
+    const sg = ctx.createGain(); sg.gain.value = 0.045; sh.connect(bp); bp.connect(sg); sg.connect(g); sh.start(); lfo.start(); nodes.push(sh, lfo);
     // Two high sines breathing under a 12 s tremolo, barely there.
     const tg = ctx.createGain(); tg.gain.value = 0.05;
     const tr = ctx.createOscillator(), trg = ctx.createGain(); tr.frequency.value = 0.08; trg.gain.value = 0.04; tr.connect(trg); trg.connect(tg.gain); tr.start(); nodes.push(tr);
@@ -662,7 +689,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
 
   const api = {
     /** Wake the context inside a gesture (a press, a pull, a key). True when there is a context to play on. */
-    arm() { const c = graph(); if (!c) return false; if (c.state === 'suspended' && !suspended) c.resume().catch(() => {}); return true; },
+    arm() { const c = graph(); if (!c) return false; warmSamples(); if (c.state === 'suspended' && !suspended) c.resume().catch(() => {}); return true; },
     /**
      * Play cue `name`. One-shots take `at` (seconds ahead) and the cue's own options; a bed loops until stop().
      * Returns the number of notes scheduled (0 when the kit cannot sound: still traced).
@@ -680,6 +707,10 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
       const t0 = ctx.currentTime + Math.max(0, num(opts.at, 0));
       let set = voices.get(name);
       if (!set) { set = new Set(); voices.set(name, set); }
+      if (samples.has(name)) {
+        try { return renderSample(name, samples.get(name), opts, t0, set); }
+        catch (e) { samples.delete(name); } // A bad sample never silences the scored cue.
+      }
       let n = 0;
       for (const nt of s.notes) { try { render(nt, t0, set); n++; } catch (e) { /* a note never breaks a beat */ } }
       return n;
@@ -731,7 +762,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     get context() { return ctx; },
     /** Close the context. A later arm() builds a fresh one (the room may be opened again on the same page). */
     dispose() {
-      wanted.clear();
+      wanted.clear(); samples.clear(); sampleContext = null;
       if (ctx) {
         try { stopRolls(); stopWheel(); killAll(); for (const name of Array.from(beds.keys())) stopBed(name, 0.02); } catch (e) { /* closing */ }
         try { ctx.close().catch(() => {}); } catch (e) { /* already */ }

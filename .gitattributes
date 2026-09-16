@@ -1,3 +1,4 @@
 *.ccpmod filter=lfs diff=lfs merge=lfs -text
 *.mov filter=lfs diff=lfs merge=lfs -text
 *.mp4 filter=lfs diff=lfs merge=lfs -text
+ConditioningControlPanel/Resources/web/backroom/shared/sound/assets/*.mp3 filter=lfs diff=lfs merge=lfs -text
