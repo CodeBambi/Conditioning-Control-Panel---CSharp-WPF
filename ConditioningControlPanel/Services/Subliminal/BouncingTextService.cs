@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -103,12 +103,13 @@ public class BouncingTextService : IDisposable
         _isRunning = true;
 
         // Bounds and glyph metrics are the two facts the engine cannot work out for itself.
-        CalculateScreenBounds(settings.DualMonitorEnabled);
+        // main folded the dualMonitor flag into App.GetGlobalScreens(), so neither call takes it.
+        CalculateScreenBounds();
         _engine.Measure = MeasureText;
         _engine.Start(settings, pool);
 
         // Create windows for each screen
-        CreateWindows(settings.DualMonitorEnabled, settings.BouncingTextOpacity, _engine.Logos.Count, settings.BouncingTextOutline);
+        CreateWindows(settings.BouncingTextOpacity, _engine.Logos.Count, settings.BouncingTextOutline);
 
         // Drive motion off the composition clock (vsync-aligned, one callback per
         // rendered frame) instead of a DispatcherTimer — see _lastRenderTime note.
@@ -131,8 +132,10 @@ public class BouncingTextService : IDisposable
             if (App.Video.IsPlaying) OnVideoStartedPause(null, EventArgs.Empty);
         }
 
-        App.Logger?.Information("BouncingTextService started - Logos: {Count}, Text: {Text}, ColorMode: {Mode}",
-            _engine.Logos.Count, _engine.Logos[0].Text, settings.BouncingTextColorMode);
+        // The mantra is the user's own text on their own screen, but it is still content and
+        // logs get shared: count and length only.
+        App.Logger?.Information("BouncingTextService started - Logos: {Count}, TextChars: {Chars}, ColorMode: {Mode}",
+            _engine.Logos.Count, (_engine.Logos[0].Text ?? "").Length, settings.BouncingTextColorMode);
     }
 
     public void Stop()
@@ -223,7 +226,7 @@ public class BouncingTextService : IDisposable
                 new NumberSubstitution(),
                 pixelsPerDip);
 
-            App.Logger?.Debug("Measured text '{Text}': {W}x{H}", text, formattedText.Width, formattedText.Height);
+            App.Logger?.Debug("Measured text ({Chars} chars): {W}x{H}", (text ?? "").Length, formattedText.Width, formattedText.Height);
             return (formattedText.Width, formattedText.Height);
         }
         catch (Exception ex)
@@ -233,11 +236,13 @@ public class BouncingTextService : IDisposable
         }
     }
 
-    private void CalculateScreenBounds(bool dualMonitor)
+    /// <summary>Bounds to bounce inside: the screens the app-wide "Show content on" picker
+    /// targets (App.GetGlobalScreens), which may be all of them, the Windows primary, or one
+    /// pinned monitor.</summary>
+    private void CalculateScreenBounds()
     {
-        var screens = dualMonitor
-            ? App.GetAllScreensCached()
-            : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+        var screens = App.GetGlobalScreens();
+        if (screens.Length == 0) return;
 
         // Get DPI scale
         var dpiScale = GetDpiScale();
@@ -250,11 +255,9 @@ public class BouncingTextService : IDisposable
             screens.Max(s => s.Bounds.Y + s.Bounds.Height) / dpiScale);
     }
 
-    private void CreateWindows(bool dualMonitor, int opacity, int logoCount, bool outline)
+    private void CreateWindows(int opacity, int logoCount, bool outline)
     {
-        var screens = dualMonitor
-            ? App.GetAllScreensCached()
-            : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+        var screens = App.GetGlobalScreens();
 
         foreach (var screen in screens)
         {

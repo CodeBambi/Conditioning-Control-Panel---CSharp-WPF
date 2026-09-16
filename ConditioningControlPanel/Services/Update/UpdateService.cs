@@ -20,53 +20,50 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.9.1";
+        public const string AppVersion = "6.9.5";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.9.1 - The Spiral
+        public const string CurrentPatchNotes = @"v6.9.5 - The Spiral pt. 4
 
-this is the big one. on September 1st the Descent ceremony ran and the monthly wipe is gone forever. from here on your level, your XP and your hours are yours for good. this is the version that carries you into that world, and i wanted it to feel special. it does :3
+a cleaner home, a quieter first launch, and a copy pass over the whole app.
 
-THE ARCADEMY
-- the campus takes center stage. classes that are secretly little games, a prize counter, your own locker, report cards, the works. wander around, get graded, get conditioned.
-- EMI runs the halls. she deals commentary, hands out hints in Daily Trigger, and cameos in Impulse Control when you least expect her.
-- your Sparks wallet follows you around the whole campus, and it now tells you WHY it refused a purchase instead of just refusing.
-- faster on phones, prettier in portrait, and the flash guard slider finally says which way is gentler.
+HOME
+- the premium rail is now Favorites and Recent. right-click a tile or a side rail row to pin it. every chip wears its feature art.
+- the browser card folds shut, and opens itself when a link needs it. the space it frees holds a rotating billboard.
+- left-click opens a tile, right-click switches it on or off. the app says so, on the dashboard and on the Studio rack, until you have done it a few times.
+- off tiles are grey. the Deeper editor has a tile. Just Drop lives under Studio. the mod manager is in the mod dropdown, the language picker in Settings.
 
-EMI'S DESK
-- EMI got out of the school. summon her onto your desktop: a little ring on the edge of your screen opens into her CRT glass and she just hangs out. reacts to what the app is doing to you. picks up props. lives her life.
-- we wrote her a whole handbook together. Ask EMI anything about the app and she answers, in all 9 languages. it is the new guide and she is very proud of it.
-- new users get a proper first contact from her now instead of silence.
+FIRST LAUNCH, AND FEWER POP-UPS
+- the wizard is two screens, then EMI knocks and you take the short walk or not. it opens in your OS language.
+- launch pop-ups come one at a time. announcements, nudges and toasts wait in an Inbox on the title bar while you are new, in a session or in a dialog.
+- coming back with a cloud backup is one sheet, not three boxes, and your content folder stays where it was.
 
-EVERYWHERE AT ONCE
-- one account, everywhere. desktop, the web at cclabs.app, and now your phone. XP, wallet, presence, profile, it all connects.
-- the CCP Mobile public beta is live! grab the APK here: https://github.com/CodeBambi/CCP-Mobile-Releases/releases/latest
+EMI
+- she has noticed things: a third session in a row, a room you keep coming back to, tabbing away, a broken streak. the companions have voiced lines of their own, and the Cheshire reads you on the way down.
+- the header banner has taglines, CCP trivia and the odd read on your week between announcements. off switch under Settings > Notifications.
 
-THE DESCENT
-- the wipe is gone. nothing clears any more, and levels and hours carry forward from here on.
-- the season recap card only shows if a reset actually happened to you, the countdown is honest and stands down when it is over, and if a stray reset order ever reaches the app after the Descent, the app refuses it. your progress does not roll back because a server hiccuped.
+FIXES AND ASKS
+- a machine with no camera stops drawing blink quests. a never-patron drops a premium quest it cannot finish. streak fixes come back monthly, and the app says so.
+- locked achievements show how far along you are. the daily vat fills on sign-in.
+- a video the descent started ends with the descent. the Loom saves every preset, ""bambi haze"" included.
+- Lockdown: ""Hide the clock"", and a switch so the START button stops counting at you. EMI's chip and mute prompt survive a lockdown.
+- the Deeper library says how long each enhancement runs.
+- the cloud companion ends on a full sentence instead of mid-word. the log keeps the shape of a reply, never the words.
+- the Flash card has a GIF speed slider. lock cards can roll their repeat count or size a card by typing length.
+- the asset browser keeps its height in Reddit and Both. the nav rail spiral chip stops flickering. the For You page retries a blank scrolller answer.
+- a fresh install with no mod is neutral by default. a mod keeps its voice. the mod creator keeps every message field on save.
+- the copy pass: about 400 strings rewritten or moved onto translation. no exclamation marks, no sales pitch, and the help cards agree with the app.
+- freezes: the hang report names what the app was stuck in, and rides along in your next bug report.
 
-NEW MOD: INFECTION CONTROL
-- a sixth mod joins the shelf, created by Miss Jenny. Nurse Amber runs the ward with over 330 freshly voiced lines: barks, mantra takeovers, her own flash voicelines, and her voice all the way down the Rabbit Hole.
-- her own spiral, her own colors, and she comments on nearly everything you do.
-- like the other built-ins the audio arrives as a downloadable pack so the installer stays lean.
+CCLABS.APP
+- the Remix page is free for everyone. the sorting room has a door, deals only loaded cards on a phone, and a pass costs the chain. the spiral calendar learns more about your days.
 
-AND SOME FIXES
-- the updater now upgrades the copy you are actually running, the fade slider actually fades, escape always escapes when it should, muted means muted, tooltips are readable again, ghost mode stops freezing, and the menus behave.
-- full nerd changelog in the pull requests, numbers 380 through 445.
+every tier is on sale from september 11 to 18. code ARCADEMY at checkout. go play :3
 
-6.9.1 HOTFIXES (the day after)
-- the ceremony's two doors fit on screen at high display scaling, and ""not tonight"" stops re-asking for the session.
-- your profile card shows which door you picked, with the +10% on the XP numbers if you cycled.
-- the board notice, the Spiral help card and EMI's barks all agree now: nothing was wiped and nothing resets.
-- bubbles have their own ""stare to pop"" switch on the bubble page.
-- a headset play/pause tap no longer ends a strict lock video.
-- a failed update download gets a proper box and a manual download button, and the exe carries its real version number.
-- flash audio unducks after a stop, reveal in explorer works with spaces, customize and privacy are hidden on other people's cards, OCR text stays out of the logs, and the single-digit age bypass is closed.
-- full nerd changelog in pull requests 451 through 475.";
+full nerd changelog in pull requests 900, 923 through 931, 1024, 1025, 1029, 1036, and 1038 through 1106.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

@@ -1,136 +1,100 @@
 # Contributing to Conditioning Control Panel
 
-Thank you for your interest in contributing! This document provides guidelines for contributing to the project.
+Thanks for helping. This page is the short version of how work lands in this repository. If something here is out of date, the CI workflow in `.github/workflows/build.yml` is the source of truth for the build.
 
-## Development Setup
+## Development setup
 
 ### Prerequisites
-- Windows 10/11 (64-bit)
-- [Visual Studio 2022](https://visualstudio.microsoft.com/) (Community edition is free) 
-  - Or [VS Code](https://code.visualstudio.com/) with C# Dev Kit extension
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- Windows 10 or 11, 64-bit
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - Git
+- Visual Studio 2022 (Community is fine) or VS Code with the C# Dev Kit
 
-### Getting Started
+### Build and run
 
 ```bash
-# Clone the repository
-git clone https://github.com/CodeBambi/Conditioning-Control-Panel.git
-cd Conditioning-Control-Panel
-
-# Restore packages
-dotnet restore
-
-# Build
-dotnet build
-
-# Run
+git clone https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF.git
+cd Conditioning-Control-Panel---CSharp-WPF
+dotnet build ConditioningControlPanel.sln -c Release -p:ValidateExecutableReferencesMatchSelfContained=false
 dotnet run --project ConditioningControlPanel
 ```
 
-### Project Structure
+The `ValidateExecutableReferencesMatchSelfContained=false` flag is required when the .NET 10 SDK is installed alongside 8: the app is self-contained and the test project references it without being self-contained, which SDK 10 otherwise rejects. Build the app project alone (`dotnet build ConditioningControlPanel/ConditioningControlPanel.csproj`) and the flag is not needed.
 
-```
-ConditioningControlPanel/
-├── Models/           # Data models (AppSettings, ProgressionData)
-├── Services/         # Business logic
-│   ├── SettingsService.cs      # Settings management
-│   ├── AudioService.cs         # Audio playback
-│   ├── FlashService.cs         # Image flashing
-│   ├── VideoService.cs         # Video playback
-│   ├── ProgressionService.cs   # XP/leveling
-│   ├── SchedulerService.cs     # Scheduling
-│   └── SecurityHelper.cs       # Security utilities
-├── ViewModels/       # MVVM ViewModels
-├── Views/            # WPF Windows/Controls
-├── Themes/           # XAML styles
-└── Resources/        # Icons, assets
+### Run the tests
+
+```bash
+dotnet test Tests/ConditioningControlPanel.Tests/ConditioningControlPanel.Tests.csproj -c Release -p:ValidateExecutableReferencesMatchSelfContained=false
 ```
 
-## Making Changes
+The suite has about 4,900 tests, including real WPF render tests, and runs headless in roughly a minute. CI runs it on every pull request and every push to `main`; a red run blocks the merge.
 
-### Branch Naming
-- `feature/description` - New features
-- `fix/description` - Bug fixes
-- `docs/description` - Documentation
-- `refactor/description` - Code refactoring
-
-### Commit Messages
-Follow [Conventional Commits](https://www.conventionalcommits.org/):
+### Where things live
 
 ```
-feat: add bubble pop mini-game
-fix: audio ducking not restoring volume
-docs: update README installation steps
-refactor: extract SecurityHelper from SettingsService
+ConditioningControlPanel/          the WPF app
+  App.xaml.cs                      startup, service wiring, crash handlers
+  MainWindow/                      the main window, one partial class per tab
+  Windows/, Dialogs/, Overlays/    secondary windows and screen overlays
+  Services/                        one folder per subsystem (Flash, Video, Audio, Arcademy, Chaos, Descent, Mods ...)
+  Models/                          settings, achievements, sessions, mod manifests
+  Localization/Languages/          the nine UI language files
+  Resources/                       art, audio, and the web games under Resources/web
+  docs/                            design docs, primers, and audit snapshots
+  tools/                           asset generation and indexing scripts
+CCP.Core/                          platform-agnostic engine library (in progress)
+Tests/ConditioningControlPanel.Tests/
+installer.iss, build-installer.bat the Inno Setup release pipeline
 ```
 
-### Pull Request Process
+`ConditioningControlPanel/CLAUDE.md` is the maintainer's working notes on the codebase. It is written for an AI assistant but it is the most current map of the project and worth a read.
 
-1. **Fork** the repository
-2. **Create** a feature branch from `main`
-3. **Make** your changes
-4. **Test** thoroughly
-5. **Submit** a pull request
+## Making changes
 
-### PR Checklist
-- [ ] Code follows existing style
-- [ ] Changes are tested
-- [ ] Documentation updated if needed
-- [ ] No new warnings
-- [ ] PR description explains changes
+### Branch names
+- `feature/description` or `feat/description` for new features
+- `fix/description` for bug fixes
+- `docs/description` for documentation
+- `refactor/description`, `chore/description` as appropriate
 
-## Code Style
+### Commit messages
+[Conventional Commits](https://www.conventionalcommits.org/), with a scope where it helps:
 
-### C# Guidelines
-- Use C# 12 features where appropriate
-- Follow Microsoft's [C# Coding Conventions](https://docs.microsoft.com/en-us/dotnet/csharp/fundamentals/coding-style/coding-conventions)
-- Use meaningful variable/method names
-- Add XML documentation for public APIs
-- Use `async/await` for I/O operations
+```
+feat(arcademy): add the records room
+fix(flash): GIF frames stalled after monitor sleep
+docs: rewrite CONTRIBUTING for the current layout
+```
 
-### XAML Guidelines
-- Use styles from `Themes/CustomStyles.xaml`
-- Keep XAML clean and readable
-- Use data binding (no code-behind logic for UI updates)
+### Pull requests
 
-### Security Guidelines
-- Validate all user inputs
-- Use `SecurityHelper` for path operations
-- Never log sensitive data
-- Handle exceptions gracefully
+1. Fork the repository and branch from `main`.
+2. Keep each PR under about **600 changed lines**. Larger changes go in as a stack of smaller PRs that each build and pass on their own. This is a hard preference of the maintainer, not a suggestion: oversized PRs are sent back to be split.
+3. Every PR needs a passing CI run and a review from the maintainer. `CODEOWNERS` enforces the review; `main` is protected.
+4. Describe what changed and why, and say how you tested it. A screenshot or short clip helps for anything visual.
 
-## Testing
+### PR checklist
+- [ ] Builds with the command above and the test suite passes
+- [ ] No new build warnings beyond the existing CA1416 platform warnings
+- [ ] Follows the surrounding code style
+- [ ] User-facing strings go through localization (add the key to all nine files in `Localization/Languages/`)
+- [ ] Documentation updated if behaviour changed
 
-Currently, the project doesn't have automated tests. Contributions adding tests are welcome!
+## Code style
 
-### Manual Testing
-Before submitting:
-1. Test all affected features
-2. Test with different settings combinations
-3. Verify no regressions in existing functionality
-4. Test edge cases (empty folders, missing files, etc.)
+- C# 12, nullable enabled. Follow Microsoft's [C# coding conventions](https://learn.microsoft.com/dotnet/csharp/fundamentals/coding-style/coding-conventions).
+- `async`/`await` for I/O. Fire-and-forget continuations must check `Application.Current?.Dispatcher` and catch exceptions; see the crash notes in `CLAUDE.md`.
+- Services are static properties on `App` (`App.Flash`, `App.Video`, ...). Add a new one there and initialise it in `App.OnStartup`.
+- Settings live in `Models/AppSettings.cs` with `[JsonProperty]` and auto-save.
+- Never write a literal line break inside a language-file string; use `\n`. All nine files must stay strict JSON.
+- Language files are LF in git. Do not commit a whole-file line-ending change.
 
-## Reporting Issues
+## Reporting bugs
 
-### Bug Reports
-Include:
-- Windows version
-- .NET version
-- Steps to reproduce
-- Expected vs actual behavior
-- Logs from `logs/app.log` (sanitize personal info)
+Bug reports go to the dedicated tracker: **https://github.com/CC-Labs-llc/ccp-bugs/issues**. Include your Windows version, the app version from the title bar, steps to reproduce, and the tail of `%LOCALAPPDATA%\ConditioningControlPanel\logs\crash.log` with anything personal removed.
 
-### Feature Requests
-- Describe the feature
-- Explain the use case
-- Suggest implementation if possible
-
-## Questions?
-
-- Open a [Discussion](../../discussions)
-- Check existing [Issues](../../issues)
+Feature requests and questions are best raised in the [CC Labs Discord](https://discord.gg/YxVAMt4qaZ).
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing you agree that your contributions are licensed under the MIT License.

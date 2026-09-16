@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Remix Room</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#14142B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Remix Room">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%2314142B'/><circle cx='50' cy='50' r='34' fill='none' stroke='%23FF69B4' stroke-width='9'/><circle cx='50' cy='50' r='11' fill='%23FF69B4'/></svg>">
+<link rel="stylesheet" href="remix.css">
+<link rel="stylesheet" href="auto.css">
+<link rel="stylesheet" href="doors.css">
+<link rel="stylesheet" href="pool.css">
+</head>
+<body>
+
+<div id="app" class="app" data-screen="auto">
+
+  <header class="top" id="top">
+    <div class="top-left">
+      <button type="button" class="tbtn tbtn-icon back-auto" id="btn-back-auto" title="Back to Auto" aria-label="Back to Auto">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+      </button>
+      <div class="wordmark">Remix Room</div>
+      <div class="privacy-chip" title="No uploads. No server. Your files stay on this device.">NOTHING LEAVES YOUR BROWSER</div>
+    </div>
+    <div class="top-mid">
+      <div class="seg" id="orient" role="radiogroup" aria-label="Orientation">
+        <button type="button" class="seg-btn" data-orient="landscape" role="radio" aria-checked="true">Landscape</button>
+        <button type="button" class="seg-btn" data-orient="portrait" role="radio" aria-checked="false">Portrait</button>
+        <button type="button" class="seg-btn" data-orient="square" role="radio" aria-checked="false">Square</button>
+      </div>
+      <div class="clock">
+        <button type="button" class="length-chip" id="length-chip" title="Canvas length: tap to change">5.0 s · 15 fps</button>
+        <div class="meter" id="meter" role="meter" aria-label="Estimated gif size" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0"><div class="meter-fill" id="meter-fill"></div></div>
+        <span class="meter-label" id="meter-label">-- / 10 MB</span>
+      </div>
+    </div>
+    <div class="top-right">
+      <button type="button" class="tbtn" id="btn-dice" title="Surprise me: new code, new rolls">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.4" fill="currentColor"/><circle cx="16" cy="8" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="8" cy="16" r="1.4" fill="currentColor"/><circle cx="16" cy="16" r="1.4" fill="currentColor"/></svg>
+        <span class="tbtn-text">Dice</span>
+      </button>
+      <button type="button" class="tbtn" id="btn-undo" title="Undo (Ctrl+Z)" disabled>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>
+        <span class="tbtn-text">Undo</span>
+      </button>
+      <button type="button" class="tbtn tbtn-icon" id="btn-redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg>
+      </button>
+      <button type="button" class="tbtn primary" id="btn-export">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>
+        <span>Export</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="transport" id="transport" aria-label="Transport"></div>
+
+  <main class="work" id="work">
+    <nav class="rail rail-l" id="hud-left" aria-label="Add and effects"></nav>
+    <section class="centre" id="centre">
+      <div class="stage-box" id="stage-box">
+        <div class="stage-fit" id="stage-fit">
+          <canvas id="stage" width="480" height="270" aria-label="Live preview of the remix"></canvas>
+          <div class="stage-overlay" id="stage-overlay"></div>
+        </div>
+      </div>
+      <div class="strip" id="media-strip"></div>
+      <div class="panel-host" id="panel-host"></div>
+    </section>
+    <nav class="rail rail-r" id="hud-right" aria-label="More effects and layout"></nav>
+  </main>
+
+  <footer class="timeline" id="timeline"></footer>
+</div>
+
+<section id="auto" class="auto" aria-label="Remix Room" hidden></section>
+<div id="vibes" class="vibes" hidden></div>
+<div id="export-sheet" class="sheet-host" hidden></div>
+<div id="dropveil" class="dropveil" hidden aria-hidden="true">
+  <div class="dropveil-card">
+    <div class="dropveil-title">drop to add</div>
+    <div class="dropveil-line">gifs, pictures, short videos, or a zip of them.</div>
+  </div>
+</div>
+<div id="toast-host" class="toast-host" aria-live="polite"></div>
+<input type="file" id="file-input" accept="image/gif,image/*,video/*" multiple hidden>
+<input type="file" id="file-input-gif" accept="image/gif" multiple hidden>
+<input type="file" id="file-input-any" multiple hidden>
+
+<script type="module" src="ui/app.js"></script>
+</body>
+</html>

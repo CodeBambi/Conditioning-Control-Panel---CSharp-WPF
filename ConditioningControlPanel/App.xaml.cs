@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
@@ -139,7 +139,7 @@ namespace ConditioningControlPanel
                 Directory.CreateDirectory(UserDataPath);
                 File.WriteAllText(FileOpenHandoffPath, action + "\n" + path);
             }
-            catch { /* best effort — failure just means second instance has no handoff */ }
+            catch (Exception ex) { Diag.Swallowed(ex, "file-open handoff is best effort"); }
         }
 
         private static (string? action, string? path) ConsumeFileOpenHandoff()
@@ -149,7 +149,7 @@ namespace ConditioningControlPanel
                 var p = FileOpenHandoffPath;
                 if (!File.Exists(p)) return (null, null);
                 var lines = File.ReadAllText(p).Split('\n');
-                try { File.Delete(p); } catch { }
+                try { File.Delete(p); } catch (Exception ex) { Diag.Swallowed(ex); }
                 if (lines.Length < 2) return (null, null);
                 var action = lines[0].Trim();
                 var path = ValidateMediaArgPath(lines[1].Trim());
@@ -166,6 +166,9 @@ namespace ConditioningControlPanel
         /// <see cref="CorePaths.UserData"/>; this stays as the name ~580 files and the XAML already
         /// use. Document the behaviour there, not here.
         /// </summary>
+        // CCP_USERDATA_DIR (main's ResolveUserDataPath) lives in CorePaths.ResolveUserData now,
+        // with the same rooted-path check and the same LocalApplicationData fallback, so every
+        // head gets the sandbox hook rather than only this one.
         public static string UserDataPath => CorePaths.UserData;
 
         /// <summary>
@@ -336,6 +339,11 @@ namespace ConditioningControlPanel
             // BugReportService stays head-side in this layer, but its report assembly is portable.
             // The diagnostic writer/heartbeat remains WPF; only its bounded tail crosses the seam.
             BugReportService.DiagnosticTailProvider = VideoDiag.Tail;
+            // The freeze-report trio main added: the ring dump, the newest dump on disk and this
+            // session's log file. All three sinks are WPF-bound, so the head hands them over.
+            BugReportService.FlightRecorderDump = reason => Services.Logging.FlightRecorderSink.DumpIfActive(reason);
+            BugReportService.NewestFlightRecorderDump = Services.Logging.FlightRecorderSink.NewestDump;
+            BugReportService.SessionLogFile = () => Services.Logging.LogPipeline.SessionFilePath;
             // Audio and AI availability, for the views that only need to play a sound or duck,
             // and for the engine code that shapes content by whether an AI provider is usable.
             CoreAudio.PlayOneShotProvider = (path, volume, tag, onStarted, onFinished) => Audio?.PlayOneShot(path, volume, tag, onStarted, onFinished);
@@ -387,7 +395,16 @@ namespace ConditioningControlPanel
             // the card did not, because here it first has to clear the interaction queue and a
             // visible pop quiz. Lazy, like the rest: LockCard is constructed in OnStartup, long
             // after this ctor, and every existing caller already writes App.LockCard?.
-            CoreLockCard.ShowHandler = isTest => LockCard?.ShowLockCard(isTest: isTest);
+            // main labelled this work "LockCard.Tick" in LockCardService.Timer_Tick so the hang
+            // report can tell one stuck DispatcherTimer delegate from another (#1189,
+            // lockCardRunning=True). The timer itself moved to Core and only re-arms; the part that
+            // can actually hang is this hop onto the UI thread, so the label rides here instead of
+            // needing a Core seam for a diagnostic string.
+            CoreLockCard.ShowHandler = isTest =>
+            {
+                using var _op = Services.UiOpTracker.Scope("LockCard.Tick");
+                LockCard?.ShowLockCard(isTest: isTest);
+            };
 
             // The corner-GIF surface seam. CornerGifPlanner decides WHERE a corner GIF goes on
             // every head; only the layered click-through window is ours, and this is the handback
@@ -635,8 +652,6 @@ namespace ConditioningControlPanel
                     return;
                 }
 
-                if (Interlocked.CompareExchange(ref _remoteMediaOfferClaimed, 1, 0) != 0) return;
-
                 // Application.MainWindow is a DependencyProperty and verifies thread access, so
                 // only touch it when we are actually on the UI thread; a null owner is fine.
                 if (owner == null && dispatcher.CheckAccess())
@@ -644,8 +659,31 @@ namespace ConditioningControlPanel
                     try { owner = Current?.MainWindow; } catch { owner = null; }
                 }
 
+                var cardOwner = owner;
                 Logger?.Information("RemoteMedia: empty assets at {Surface} — offering the online source", surface);
-                FeatureIntroPopup.ShowIfFirstTime(RemoteMediaIntroKey, owner);
+
+                // Through the presenter: shown at once when nothing is quiet (exactly as before),
+                // parked as an Inbox row inside the first-launch window. The once-per-launch claim
+                // moved INTO the open action - a card that only ever became a row must not spend
+                // the launch's one offer, or opening the row later would find it already gone.
+                StartupLadder?.PresentOrInbox(new Services.Startup.InboxItem
+                {
+                    Key = "intro:remote-media",
+                    Glyph = "🌐",
+                    Title = "Media without the download",
+                    Summary = "Your folders are empty - she can stream from the online pool instead.",
+                    Open = () =>
+                    {
+                        if (Interlocked.CompareExchange(ref _remoteMediaOfferClaimed, 1, 0) != 0) return;
+                        FeatureIntroPopup.ShowIfFirstTime(RemoteMediaIntroKey, cardOwner);
+                    },
+                });
+
+                if (StartupLadder == null)
+                {
+                    if (Interlocked.CompareExchange(ref _remoteMediaOfferClaimed, 1, 0) != 0) return;
+                    FeatureIntroPopup.ShowIfFirstTime(RemoteMediaIntroKey, cardOwner);
+                }
             }
             catch (Exception ex)
             {
@@ -716,14 +754,14 @@ namespace ConditioningControlPanel
                         dirsToClean.Add(tempDir);
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             // System temp (fallback path)
             try
             {
                 dirsToClean.Add(Path.GetTempPath());
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             int deleted = 0;
             foreach (var dir in dirsToClean)
@@ -733,15 +771,15 @@ namespace ConditioningControlPanel
                     foreach (var file in Directory.GetFiles(dir, "ccp_temp_*"))
                     {
                         try { File.Delete(file); deleted++; }
-                        catch { }
+                        catch (Exception ex) { Diag.Swallowed(ex); }
                     }
                     foreach (var file in Directory.GetFiles(dir, "haptic_video_*"))
                     {
                         try { File.Delete(file); deleted++; }
-                        catch { }
+                        catch (Exception ex) { Diag.Swallowed(ex); }
                     }
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
             }
 
             // Clean up old installer downloads (each version has a different filename so they pile up)
@@ -754,7 +792,7 @@ namespace ConditioningControlPanel
                     deleted++;
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             if (deleted > 0)
                 Logger?.Information("Cleaned up {Count} stale temp files/folders from previous session", deleted);
@@ -763,6 +801,14 @@ namespace ConditioningControlPanel
         // Static service references
         public static ILogger Logger { get; private set; } = null!;
         public static SettingsService Settings { get; private set; } = null!;
+
+        /// <summary>
+        /// The one owner of every startup surface: the modal ladder, the quiet window and the
+        /// Inbox. Created at the top of <see cref="OnStartup"/>, before MainWindow, so anything
+        /// that wants the screen can queue rather than racing for it. See
+        /// <see cref="Services.Startup.StartupPresenter"/> for why that mattered.
+        /// </summary>
+        public static Services.Startup.StartupPresenter? StartupLadder { get; private set; }
 
         // Transient feed of recent AI-driven effect actions, surfaced in the Companion tab's
         // "Live actions" panel. Populated by the upcoming local-LLM effect controller; not persisted.
@@ -821,10 +867,15 @@ namespace ConditioningControlPanel
         private static bool _engineCrashRecovered;
         public static QuestDefinitionService QuestDefinitions { get; private set; } = null!;
         public static QuestService Quests { get; private set; } = null!;
+        /// <summary>Spiral rail: per-day feature use, snapshotted off the lifetime counters
+        /// (see FeatureDayLogService). Null only if its construction failed.</summary>
+        public static FeatureDayLogService? FeatureDayLog { get; private set; }
         /// <summary>Weekly free-tier pass for the Graded Intake (see IntakePassService).</summary>
         public static IntakePassService IntakePass { get; private set; } = null!;
         /// <summary>The ? box's daily free premium feature (see DailyFreeService).</summary>
         public static DailyFreeService? DailyFree { get; private set; }
+        /// <summary>Back Room prize ownership, server snapshots held in memory (see Services/Prizes/OwnershipService).</summary>
+        public static Services.Prizes.OwnershipService? Ownership { get; private set; }
         /// <summary>Eight-hole intake punch card (see IntakePunchCardService).</summary>
         public static IntakePunchCardService IntakePunchCard { get; private set; } = null!;
         public static TutorialService Tutorial { get; private set; } = null!;
@@ -1293,7 +1344,7 @@ namespace ConditioningControlPanel
                             var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
                             if (hwnd != IntPtr.Zero) hwnds.Add(hwnd);
                         }
-                        catch { /* skip malformed window */ }
+                        catch (Exception ex) { Diag.Swallowed(ex, "skip malformed window entry"); }
                     }
 
                     // Bouncing text lives in a full-screen overlay window that
@@ -1543,10 +1594,10 @@ namespace ConditioningControlPanel
             int flashEvery  = EnvInt("CCP_STRESS_FLASH_EVERY", 6);// flash-window churn cadence (in ticks)
             int toggleEvery = EnvInt("CCP_STRESS_TOGGLE_EVERY", 40); // shared-host create/close churn cadence
 
-            try { Logger?.Warning("[STRESS] Hang-hunt stress mode ON — tick={Tick}ms spawn={Spawn} flashEvery={Flash} toggleEvery={Toggle}", tickMs, spawnPer, flashEvery, toggleEvery); } catch { }
+            try { Logger?.Warning("[STRESS] Hang-hunt stress mode ON — tick={Tick}ms spawn={Spawn} flashEvery={Flash} toggleEvery={Toggle}", tickMs, spawnPer, flashEvery, toggleEvery); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // Make sure the bubble engine is actually running so spawns render (bypass the level gate).
-            try { Bubbles?.Start(bypassLevelCheck: true); } catch { }
+            try { Bubbles?.Start(bypassLevelCheck: true); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             long tick = 0;
             var timer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Normal)
@@ -1559,11 +1610,11 @@ namespace ConditioningControlPanel
                 // Bubble spawns — SpawnOnce self-marshals and respects its own cap, so continuous calls
                 // keep create/destroy churn at the cap indefinitely.
                 for (int i = 0; i < spawnPer; i++)
-                    try { Bubbles?.SpawnOnce(); } catch { }
+                    try { Bubbles?.SpawnOnce(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
                 // Flash windows — pool churn (create/show/hide of layered flash surfaces).
                 if (tick % flashEvery == 0)
-                    try { Flash?.TriggerFlashOnce(); } catch { }
+                    try { Flash?.TriggerFlashOnce(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
                 // The prime suspect: flip the shared-host flag so the click-through host window is
                 // created and closed repeatedly — the keep-alive contract warns this deadlocks the
@@ -1575,7 +1626,7 @@ namespace ConditioningControlPanel
                         Settings.Current.BubbleSharedHost = !Settings.Current.BubbleSharedHost;
                         Settings.Current.ChaosBubbleSharedHost = Settings.Current.BubbleSharedHost;
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 }
             };
             timer.Start();
@@ -1626,7 +1677,7 @@ namespace ConditioningControlPanel
             if (e.Args.Length >= 3 && e.Args[0] == "--write-hang-dump" && int.TryParse(e.Args[1], out int hangDumpPid))
             {
                 bool dumpOk = false;
-                try { dumpOk = Services.UiHangWatchdog.TryWriteDumpOfProcess(hangDumpPid, e.Args[2]); } catch { }
+                try { dumpOk = Services.UiHangWatchdog.TryWriteDumpOfProcess(hangDumpPid, e.Args[2]); } catch (Exception ex) { Diag.Swallowed(ex); }
                 Environment.Exit(dumpOk ? 0 : 1);
                 return;
             }
@@ -1650,7 +1701,7 @@ namespace ConditioningControlPanel
                             p.PopupAnimation = System.Windows.Controls.Primitives.PopupAnimation.None;
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 }));
 
             // Show splash screen IMMEDIATELY - before anything else
@@ -1683,7 +1734,7 @@ namespace ConditioningControlPanel
                 // Write the "Open with CCP" handoff BEFORE signaling so a live primary can read it.
                 if (_pendingFileOpenAction != null && _pendingFileOpenPath != null)
                 {
-                    try { WriteFileOpenHandoff(_pendingFileOpenAction, _pendingFileOpenPath); } catch { }
+                    try { WriteFileOpenHandoff(_pendingFileOpenAction, _pendingFileOpenPath); } catch (Exception ex) { Diag.Swallowed(ex); }
                 }
 
                 EventWaitHandle? ackWait = null;
@@ -1704,12 +1755,12 @@ namespace ConditioningControlPanel
                         signal.Set();
                         signal.Dispose();
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
 
                     bool tookOver = false;
                     try { tookOver = _mutex.WaitOne(TimeSpan.FromSeconds(8)); }
                     catch (AbandonedMutexException) { tookOver = true; } // old build died holding it — we own it now
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
 
                     if (!tookOver)
                     {
@@ -1719,25 +1770,25 @@ namespace ConditioningControlPanel
                     }
 
                     _mutexOwned = true;
-                    try { ConsumeFileOpenHandoff(); } catch { }
+                    try { ConsumeFileOpenHandoff(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     // Fall through — the legacy primary is gone; this instance is now the primary.
                 }
                 else
                 {
                     // Clear any stale ack from a prior handshake, poke the primary, then wait for it
                     // to confirm liveness from its UI thread.
-                    try { ackWait.Reset(); } catch { }
+                    try { ackWait.Reset(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     try
                     {
                         var signal = EventWaitHandle.OpenExisting(ShowSignalName);
                         signal.Set();
                         signal.Dispose();
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
 
                     bool acknowledged = false;
-                    try { acknowledged = ackWait.WaitOne(ShowAckTimeoutMs); } catch { }
-                    try { ackWait.Dispose(); } catch { }
+                    try { acknowledged = ackWait.WaitOne(ShowAckTimeoutMs); } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { ackWait.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
                     if (acknowledged)
                     {
@@ -1761,11 +1812,11 @@ namespace ConditioningControlPanel
                     // the mutex, WaitOne throws AbandonedMutexException but we DO acquire it.
                     try { if (_mutex!.WaitOne(TimeSpan.FromSeconds(3))) _mutexOwned = true; }
                     catch (AbandonedMutexException) { _mutexOwned = true; }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
 
                     // We kept the parsed _pendingFileOpen* fields and will fulfill them ourselves, so
                     // drop any on-disk handoff to avoid a spurious re-open on a later signal.
-                    try { ConsumeFileOpenHandoff(); } catch { }
+                    try { ConsumeFileOpenHandoff(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
                     // Fall through — this instance is now the primary.
                 }
@@ -1792,7 +1843,7 @@ namespace ConditioningControlPanel
                             // this thread frozen too, so takeover still catches real zombies.)
                             if (_startupPhase)
                             {
-                                try { _showAckSignal?.Set(); } catch { }
+                                try { _showAckSignal?.Set(); } catch (Exception ex) { Diag.Swallowed(ex); }
                             }
 
                             Dispatcher.BeginInvoke(() =>
@@ -1818,7 +1869,7 @@ namespace ConditioningControlPanel
                                 // waiting second instance so it exits instead of killing us. Sent
                                 // even when mainWin is null (still starting): a responsive
                                 // dispatcher is proof enough that we are not wedged.
-                                try { _showAckSignal?.Set(); } catch { }
+                                try { _showAckSignal?.Set(); } catch (Exception ex) { Diag.Swallowed(ex); }
                             });
                         }
                     }
@@ -1859,15 +1910,13 @@ namespace ConditioningControlPanel
                 try { Directory.CreateDirectory(logPath); } catch { }
             }
 
-            Logger = new LoggerConfiguration()
-                .MinimumLevel.Information() // Security: Changed from Debug to avoid exposing sensitive data in logs
-                .WriteTo.File(Path.Combine(logPath, "app-.log"),
-                    rollingInterval: RollingInterval.Day,
-                    retainedFileCountLimit: 7,
-                    // Force a disk flush each second so the LAST lines survive a hard process death
-                    // (a native OOM kills the process with no managed unwind — see chaos OOM telemetry).
-                    flushToDiskInterval: TimeSpan.FromSeconds(1))
-                .CreateLogger();
+            // Everything about HOW a line is produced - the format, the category column, redaction,
+            // the size cap - now lives in Services/Logging/LogPipeline.cs. The floor is still
+            // Information (the "Security: changed from Debug" decision stands), but it is a switch
+            // rather than a constant, and redaction means Debug no longer implies exposure.
+            // --verbose or CCP_LOG_VERBOSE=1 puts Debug on disk for one run, for support.
+            Logger = Services.Logging.LogPipeline.Build(
+                logPath, Services.Logging.LogPipeline.VerboseRequested(e.Args));
 
             // The STATIC Serilog sink. Around 350 call sites across the app (every EmiDesk file,
             // plus Descent, Haptics, V2Auth, LocalizationManager) `using Serilog;` and write through
@@ -1882,6 +1931,22 @@ namespace ConditioningControlPanel
             // working-set baseline anchors the chaos OOM telemetry.
             Logger.Information("Application starting v{Version} | workingSet {WS}MB",
                 Services.UpdateService.AppVersion, Environment.WorkingSet / (1024 * 1024));
+
+            // "App ready in N ms", measured to the first IDLE dispatcher frame - the moment the
+            // window is actually usable, not the moment OnStartup returns. Startup regressions have
+            // shipped unnoticed because nothing in the log ever said how long startup took. The
+            // line also carries lang/mod, which the session header cannot: the logger is built
+            // here, and Settings does not exist until two hundred lines further down.
+            try
+            {
+                Dispatcher.BeginInvoke(
+                    System.Windows.Threading.DispatcherPriority.ApplicationIdle,
+                    new Action(() => Services.Logging.LogPipeline.LogAppReady()));
+            }
+            catch (Exception exReady)
+            {
+                Logger.Debug("[Startup] ready-timer hook failed: {Msg}", exReady.Message);
+            }
 
             // Rotate crash.log so a bug report only carries crashes from THIS build. The log is
             // append-only, so without this it accumulates months of old crashes and the reporter
@@ -1955,6 +2020,12 @@ namespace ConditioningControlPanel
             // to the logs folder when the dispatcher stops responding for 10s.
             Services.UiHangWatchdog.Start(Dispatcher);
 
+            // ...and name the dispatcher operation that is stuck when it fires. One hook covers
+            // every BeginInvoke/Invoke in the app; the per-operation cost is an array store
+            // (ccp-bugs #1189/#1179/#1159/#984, where "a Send-priority op has run for 137s" is
+            // all we ever learn). Must be installed before any feature posts work.
+            Services.UiOpTracker.Install(Dispatcher);
+
             // Flush-on-write trace for the mandatory-video show/heal path and the panic key
             // (#616/#617/#621/#622/#623). Separate from the Serilog rolling file on purpose: the
             // relaunch a user needs in order to FILE the report scrolls the freeze window out of
@@ -2020,8 +2091,8 @@ namespace ConditioningControlPanel
 
                     try
                     {
-                        MessageBox.Show($"An error occurred:\n\n{args.Exception.Message}\n\nDetails logged to crash log.",
-                            "Error - Please report this", MessageBoxButton.OK, MessageBoxImage.Error);
+                        MessageBox.Show(Loc.GetF("msg_unexpected_error", args.Exception.Message),
+                            Loc.Get("title_unexpected_error"), MessageBoxButton.OK, MessageBoxImage.Error);
                     }
                     catch { /* MessageBox may fail during shutdown */ }
                 }
@@ -2032,6 +2103,18 @@ namespace ConditioningControlPanel
             {
                 var ex = args.ExceptionObject as Exception;
                 LogCrashDetails("DOMAIN", ex);
+
+                // Last chance to close the session file: the runtime is about to tear the process
+                // down and ProcessExit does not run for an unhandled exception, so without this
+                // the log of the run that CRASHED is the one with no end line. Guarded on
+                // IsTerminating, and deliberately NOT done in the dispatcher or task handlers -
+                // both of those mark the exception handled and the app keeps running, where
+                // writing the footer would close the sinks under a live session.
+                if (args.IsTerminating)
+                {
+                    try { Services.Logging.LogPipeline.WriteSessionFooter(); }
+                    catch { /* swallow: nothing useful is left to report it to */ }
+                }
             };
             TaskScheduler.UnobservedTaskException += (s, args) =>
             {
@@ -2057,6 +2140,9 @@ namespace ConditioningControlPanel
             // Create user assets directories in LocalAppData (persists across updates)
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "images"));
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "videos"));
+            // AI "audio" effects play from assets/audio. Without the folder the scan finds
+            // nothing and the command silently no-ops, so scaffold it like the rest (#1120).
+            Directory.CreateDirectory(Path.Combine(UserAssetsPath, "audio"));
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "wallpapers"));
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "mindwipe"));
             Directory.CreateDirectory(Path.Combine(UserDataPath, "Spirals"));
@@ -2071,6 +2157,13 @@ namespace ConditioningControlPanel
 
             // Initialize services
             Settings = new SettingsService();
+
+            // THE STARTUP LADDER. Built here, before a single service that might want to interrupt
+            // and long before MainWindow exists, because MainWindow's constructor is the first
+            // thing that queues on it. Everything that used to decide for itself when it was
+            // allowed to open - the failed-update report, the wizard, What's New, the season
+            // recap, the mod picker, the enhance nudge, the update dialog - now asks this.
+            StartupLadder = new Services.Startup.StartupPresenter(Current?.Dispatcher ?? System.Windows.Threading.Dispatcher.CurrentDispatcher);
 
             // One-shot settings migrations. Must run before anything reads
             // the migrated fields (Flash UI, GazeFocusService, etc.).
@@ -2289,7 +2382,7 @@ namespace ConditioningControlPanel
             catch (Exception exDesk) { Logger?.Warning(exDesk, "[EmiDesk] service construction failed; EMI Desk is unavailable this run"); }
             if (_engineCrashRecovered)
             {
-                try { EmiDesk?.Fire("crashRecovered", null); } catch { }
+                try { EmiDesk?.Fire("crashRecovered", null); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
             QuestDefinitions = new QuestDefinitionService();
             _ = QuestDefinitions.InitializeAsync(); // Fire and forget - will load from cache first
@@ -2299,6 +2392,10 @@ namespace ConditioningControlPanel
                 // When server definitions change, re-check quests (regenerates if definition was removed)
                 Quests?.CheckAndGenerateQuests();
             };
+            // Spiral rail day log. Needs Achievements and Settings (both up by now); reads them on
+            // a 60 s timer and on sync, never hooks a feature. Its loss must not cost the launch.
+            try { FeatureDayLog = new FeatureDayLogService(); }
+            catch (Exception exDayLog) { Logger?.Warning(exDayLog, "[FeatureDayLog] service construction failed; per-day feature use is not recorded this run"); }
             // Intake onboarding. Both are cheap and synchronous (the pass reads AppSettings; the
             // punch card loads one small json), and both must exist before MainWindow paints the
             // Exclusives gate or the Dashboard tile. Neither may touch App.Notifications from its
@@ -2310,6 +2407,10 @@ namespace ConditioningControlPanel
             // endpoint not existing yet - costs nothing but the override.
             DailyFree = new DailyFreeService();
             _ = DailyFree.RefreshAsync();
+            // Prize ownership. Pure constructor: no I/O, no network; it only reads the DEBUG
+            // CCP_PRIZE_GRANTS desk-test override. The static PrizeGrants facade the effect lanes call forwards here.
+            Ownership = new Services.Prizes.OwnershipService();
+            Services.Prizes.PrizeGrants.Attach(Ownership);
             Roadmap = new RoadmapService();
             // Needs Settings, Progression and Quests (all above); Patreon is constructed above too.
             Programs = new Services.Program.ProgramService();
@@ -2348,7 +2449,7 @@ namespace ConditioningControlPanel
             // SlutModePersonality, CompanionPrompt, custom Awareness templates, etc.) cannot
             // bypass these — the wordlist is hardcoded in ModerationGuard and applies to
             // every input that goes to an LLM and every output that comes back. See
-            // AI_AUDIT.md §15 and §13 P1 for the CCBill rationale. Must be initialized
+            // docs/audits/AI_AUDIT.md §15 and §13 P1 for the CCBill rationale. Must be initialized
             // BEFORE the AI services so AiService / LocalAiService can read App.ModerationGuard.
             ModerationSession = new Services.Moderation.ModerationSession();
             ModerationLog = new Services.Moderation.ModerationLog(ModerationSession);
@@ -2396,7 +2497,7 @@ namespace ConditioningControlPanel
             // No-op for cloud users; silent on failure (Ollama may not be running).
             if (Ai is AiServiceStrategy aiStrategy)
             {
-                _ = Task.Run(async () => { try { await aiStrategy.WarmUpLocalAsync(); } catch { } });
+                _ = Task.Run(async () => { try { await aiStrategy.WarmUpLocalAsync(); } catch (Exception ex) { Diag.Swallowed(ex); } });
             }
 
             WindowAwareness = new WindowAwarenessService();
@@ -2504,7 +2605,7 @@ namespace ConditioningControlPanel
                 // pipeline is still there and still works. Detach so the legacy mouth is not left
                 // suppressed by a half-built v2 that can never speak.
                 Awareness = null;
-                try { Services.Awareness.AwarenessV2Routing.Detach(); } catch { }
+                try { Services.Awareness.AwarenessV2Routing.Detach(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 Services.Awareness.AwarenessLive.Ledger = null;
                 Services.Awareness.AwarenessLive.Memory = null;
                 Services.Awareness.AwarenessLive.ResetObserverState = null;
@@ -2527,13 +2628,11 @@ namespace ConditioningControlPanel
             // next happens to sync.
             ProfileSync.AttachXpNudge();
             // Constructing it costs nothing and issues no request: it fetches only when a
-            // surface asks or its own background poll ticks. The poll started here is the
-            // ungated 60s profile read that feeds the cross-device XP adopt
-            // (ProfileSyncService.TryAdoptFromProfilePoll) — the service itself refuses to
-            // fetch while offline or logged out, and its floor coalesces this timer with the
-            // Trainer Card's own gated poll so the two can never double-fetch.
+            // surface asks. The ungated 60s background poll that used to start here was
+            // retired in the Redis bandwidth pass (2026-09-15) - the cross-device XP adopt
+            // it fed now reads level/xp off the heartbeat response instead
+            // (ProfileSyncService.SendHeartbeatAsync -> TryAdoptFromProfilePoll).
             Descent = new Services.Descent.DescentService();
-            Descent.StartBackgroundProfilePoll();
             // Costs one allocation and issues nothing. See the property doc: it cannot act until
             // a server offer arrives.
             DescentMigration = new Services.Descent.DescentMigrationService();
@@ -2556,6 +2655,12 @@ namespace ConditioningControlPanel
             AudioSync = new AudioSyncService(Haptics, Settings.Current.Haptics.AudioSync);
             KeywordTriggers = new KeywordTriggerService();
             KeywordPresets = new KeywordTriggerPresetService();
+
+            // ccp-bugs#1185: repair any installed CUSTOM preset whose source trigger list has
+            // drifted from its live clones before the user can deactivate it. After a deactivate
+            // the clones are gone and the edits are unrecoverable, so this has to run at launch.
+            try { KeywordPresets.SyncInstalledCustomSources(); }
+            catch (Exception ex) { Logger?.Warning("Custom preset source sync failed: {Error}", ex.Message); }
 
             // Drain any preset re-installs queued by SettingsService.MergeBuiltInAwarenessPresets
             // when a built-in preset's version was bumped on this launch. This re-clones the
@@ -2580,12 +2685,12 @@ namespace ConditioningControlPanel
             KeywordHighlight = new KeywordHighlightService();
             RemoteControl = new RemoteControlService();
             // Quest credit: each remote-control command received (Patreon-exclusive quest category).
-            RemoteControl.CommandReceived += (_, _) => { try { Quests?.TrackRemoteCommand(); } catch { } };
+            RemoteControl.CommandReceived += (_, _) => { try { Quests?.TrackRemoteCommand(); } catch (Exception ex) { Diag.Swallowed(ex); } };
             // Quest credit for the GIVING side: each command this user issues to ANOTHER subject
             // as a Controller (take_the_reins_d, free for every tier). Raised by
             // RemoteControlService.ReportCommandIssued - read its remarks for why the giving side
             // is reported in rather than dispatched here.
-            RemoteControl.CommandIssued += (_, e) => { try { Quests?.TrackRemoteCommandIssued(e.TargetUnifiedId); } catch { } };
+            RemoteControl.CommandIssued += (_, e) => { try { Quests?.TrackRemoteCommandIssued(e.TargetUnifiedId); } catch (Exception ex) { Diag.Swallowed(ex); } };
             // (No app-level GoonGameService singleton: the Goon Game's clients build their own
             // facade — the browser client via GoonHostService, the dev cockpit via GoonTestPanel —
             // so an always-constructed idle singleton owned nothing and was never read.)
@@ -2771,7 +2876,7 @@ namespace ConditioningControlPanel
             LockdownDose = new Services.Haptics.LockdownDoseKeeper(Lockdown);
             LockdownDose.Install();
             // Quest credit: each completed lockdown (Patreon-exclusive quest category).
-            Lockdown.LockdownDeactivated += () => { try { Quests?.TrackLockdownCompleted(); } catch { } };
+            Lockdown.LockdownDeactivated += () => { try { Quests?.TrackLockdownCompleted(); } catch (Exception ex) { Diag.Swallowed(ex); } };
 
             // Initialize mantra lab service
             Mantra = new MantraService();
@@ -2890,7 +2995,7 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 Logger?.Error(ex, "Failed to create main window");
-                try { splash?.CloseImmediate(); } catch { }
+                try { splash?.CloseImmediate(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 _splash = null;
                 throw; // Re-throw to let DispatcherUnhandledException show the error
             }
@@ -2958,6 +3063,18 @@ namespace ConditioningControlPanel
                     ? e.Args[idx + 1]
                     : Path.Combine(AppContext.BaseDirectory, "logs", "door-shots");
                 Services.Dev.DoorShooter.Run(mainWindow, outDir);
+            }
+
+            // `--backroom-fx-rig [outDir]`: fire every Back Room fx id at every intensity through the
+            // real dispatcher and services, without the room, grabbing the screen per effect and
+            // logging each ack. See Services/Dev/BackRoomFxRig.cs. Dead code in every normal launch.
+            if (e.Args.Contains("--backroom-fx-rig"))
+            {
+                var fidx = Array.IndexOf(e.Args, "--backroom-fx-rig");
+                var fxDir = fidx >= 0 && fidx + 1 < e.Args.Length && !e.Args[fidx + 1].StartsWith("--")
+                    ? e.Args[fidx + 1]
+                    : Path.Combine(AppContext.BaseDirectory, "logs", "backroom-fx");
+                Services.Dev.BackRoomFxRig.Run(fxDir, e.Args);
             }
 
             // `--shoot-book [outDir]`: summon EMI, open her book, and render every card offscreen -
@@ -3069,6 +3186,87 @@ namespace ConditioningControlPanel
                 else Logger?.Information("--dtrh ignored: {Reason}", dtrhGate.Reason);
             }
 
+            // Racing Thoughts (the kart run on the descent's media), dev shortcut: `--race` opens
+            // the race window straight away. Same door as `--dtrh` - the race is a DtRH sibling
+            // and answers to the descent's tier gate, not one of its own.
+            if (e.Args.Contains("--race"))
+            {
+                var raceGate = Services.TierGate.RequiresLab("Down the Rabbit Hole", "dtrh");
+                if (raceGate.Allowed) Services.Chaos.CaucusHostService.Launch();
+                else Logger?.Information("--race ignored: {Reason}", raceGate.Reason);
+            }
+
+            // `--race-chart <file>`: chart a hypno file from the command line - decode, the energy
+            // pass, the word pass when it is available, then write the chart to the cache and quit.
+            // The rig for eyeballing a chart's numbers without opening the race at all.
+            if (e.Args.Contains("--race-chart"))
+            {
+                var trackArg = Array.IndexOf(e.Args, "--race-chart") + 1;
+                var trackPath = trackArg > 0 && trackArg < e.Args.Length ? e.Args[trackArg] : "";
+                try
+                {
+                    var charting = Stopwatch.StartNew();
+                    var pcm = Services.Race.TrackDecoder.Decode(trackPath, null, CancellationToken.None);
+                    var chart = Services.Race.TrackAnalyzer.Energy(pcm, null, CancellationToken.None);
+                    try
+                    {
+                        var lexicon = Services.Race.TrackLexicon.Build();
+                        var words = Services.Race.TrackWordSpotter.Spot(pcm, lexicon, null, CancellationToken.None);
+                        Services.Race.TrackChartWords.Apply(chart, words, lexicon);
+                    }
+                    catch (Exception wordsEx)
+                    {
+                        Logger?.Information("race-chart: words pass unavailable ({Message})", wordsEx.Message);
+                    }
+                    Services.Race.TrackChartCache.Save(chart);
+                    var reloaded = Services.Race.TrackChartCache.TryLoad(chart.Source.Hash);
+                    var kinds = string.Join(", ", chart.Events.GroupBy(v => v.Kind).OrderBy(g => g.Key).Select(g => g.Key + " " + g.Count()));
+                    Logger?.Information("race-chart: {Name} {Duration:F1}s -> {Path} ({Acts} acts, {Events} events [{Kinds}], reload {Reload}) in {Ms} ms",
+                        chart.Source.Name, chart.Source.DurationSec, Services.Race.TrackChartCache.PathFor(chart.Source.Hash),
+                        chart.Acts.Count, chart.Events.Count, kinds, reloaded?.Events.Count ?? -1, charting.ElapsedMilliseconds);
+                }
+                catch (Exception ex) { Logger?.Error(ex, "race-chart failed for {Path}", trackPath); }
+                Shutdown();
+                return;
+            }
+
+            // `--race-words <file>`: chart one audio file's spoken words and log every event, then
+            // quit. The word pass is the half of the track chart that needs real speech to judge,
+            // and no UI can show it better than a timestamped list can.
+            int wordsArg = Array.IndexOf(e.Args, "--race-words");
+            if (wordsArg >= 0)
+            {
+                if (wordsArg + 1 < e.Args.Length) Services.Race.TrackWordsDev.Run(e.Args[wordsArg + 1]);
+                else Logger?.Information("--race-words needs a file path");
+                Shutdown();
+                return;
+            }
+
+            // Track charts (CHART.md PR c6), dev shortcut: `--race-track <file>` opens the race
+            // and drives the host's own track handlers against that file - pick, play, pause at
+            // 5s, resume at 8s, stop at 12s - logging every track-* post as JSON. Unrestricted
+            // like `--dtrh-m2test`: it is a debugging rig for the audio + analysis path, not a
+            // way into the game (the page it drives is the same one `--race` opens).
+            int raceTrackArg = Array.IndexOf(e.Args, "--race-track");
+            if (raceTrackArg >= 0)
+            {
+                if (raceTrackArg + 1 < e.Args.Length)
+                    Services.Chaos.CaucusHostService.Launch(e.Args[raceTrackArg + 1]);
+                else
+                    Logger?.Information("--race-track ignored: no file path after the arg");
+            }
+
+            // `--race-cloud`: open the race and then the BambiCloud window straight away. The
+            // cloud path starts from a menu verb, and a browser frame cannot be driven by synthetic
+            // clicks, so this is the only way to exercise it end to end. A dev rig like
+            // `--race-track`: it opens the same page `--race` opens and gates nothing.
+            if (e.Args.Contains("--race-cloud"))
+            {
+                var cloudGate = Services.TierGate.RequiresLab("Down the Rabbit Hole", "dtrh");
+                if (cloudGate.Allowed) Services.Chaos.CaucusHostService.Launch(null, openCloud: true);
+                else Logger?.Information("--race-cloud ignored: {Reason}", cloudGate.Reason);
+            }
+
             // Goon Game browser client, dev shortcut: `--goon` opens the web duel window straight
             // away (same shape as `--dtrh`). Needs MainWindow to exist first — the host owns its
             // window natively above main and ducks main out of the way at launch.
@@ -3146,8 +3344,8 @@ namespace ConditioningControlPanel
             {
                 Task.Run(() =>
                 {
-                    try { _ = Speech?.IsAvailable; } catch { }                                   // warm Vosk off-UI
-                    try { if (Settings?.Current?.SpeechWakeWordEnabled == true) _ = WakeWord?.IsAvailable; } catch { } // warm KWS off-UI
+                    try { _ = Speech?.IsAvailable; } catch (Exception ex) { Diag.Swallowed(ex); }                                   // warm Vosk off-UI
+                    try { if (Settings?.Current?.SpeechWakeWordEnabled == true) _ = WakeWord?.IsAvailable; } catch (Exception ex) { Diag.Swallowed(ex); } // warm KWS off-UI
                 }).ContinueWith(_ =>
                 {
                     Dispatcher.BeginInvoke(new Action(() =>
@@ -3202,12 +3400,32 @@ namespace ConditioningControlPanel
             // come from the dispatcher itself so a wedged message loop is detected again.
             Dispatcher.BeginInvoke(new Action(() => _startupPhase = false));
 
-            // Age verification gate (first launch only, deferred to ensure splash is fully closed)
-            if (Settings?.Current?.HasAcceptedAgeVerification != true)
+            // Age verification gate - the LEFTOVER population only.
+            //
+            // A fresh install never reaches this: the 18+ tick is the first-run wizard's Welcome
+            // step, and its Enter button IS the gate (FirstRunWizard.RecordAgeAcceptance writes the
+            // flag, closing without it hands the first run back and shuts down). Firing a
+            // MessageBox in front of that window is the modal-on-modal pile-up the redesign exists
+            // to remove, so the condition is now Welcomed AND not accepted: an old install that
+            // somehow never answered. When Welcomed is false the wizard owns the gate and this
+            // stays out of its way.
+            //
+            // The claim check is what makes "Welcomed" mean the right thing HERE: MainWindow's
+            // constructor ran at line ~2563, and FirstRunWizard.ShouldRunAndClaim already latched
+            // Welcomed = true for this very launch, so the flag alone would read a fresh install as
+            // an old one. FirstRunClaimedThisLaunch is the wizard saying "this launch is mine".
+            if (Settings?.Current?.Welcomed == true
+                && Settings?.Current?.HasAcceptedAgeVerification != true
+                && !FirstRunWizard.FirstRunClaimedThisLaunch)
             {
-                Dispatcher.BeginInvoke(new Action(() =>
+                // On the ladder at priority 5, ahead of the failed-update report (10): it is the
+                // one surface that must be answered before anything else is worth showing, and
+                // as a bare Loaded-priority post it could land on top of whatever the ladder had
+                // already opened. If the ladder never gets to it (five minutes behind the update
+                // dialog), the old direct post runs so the gate is never silently skipped.
+                void AskAgeGate(Window? owner)
                 {
-                    var result = MessageBox.Show(mainWindow,
+                    var result = MessageBox.Show(owner ?? mainWindow,
                         "This application contains adult content intended for users aged 18 and older.\n\n" +
                         "By clicking \"Yes\", you confirm that you are at least 18 years old and that viewing adult content is legal in your jurisdiction.\n\n" +
                         "Do you wish to continue?",
@@ -3224,7 +3442,19 @@ namespace ConditioningControlPanel
 
                     Settings.Current.HasAcceptedAgeVerification = true;
                     Settings.Save();
-                }), System.Windows.Threading.DispatcherPriority.Loaded);
+                }
+
+                if (StartupLadder != null)
+                {
+                    StartupLadder.EnqueueModal("age-gate", 5, AskAgeGate,
+                        onAbandoned: () => Dispatcher.BeginInvoke(new Action(() => AskAgeGate(mainWindow)),
+                            System.Windows.Threading.DispatcherPriority.Normal));
+                }
+                else
+                {
+                    Dispatcher.BeginInvoke(new Action(() => AskAgeGate(mainWindow)),
+                        System.Windows.Threading.DispatcherPriority.Loaded);
+                }
             }
         }
 
@@ -3293,7 +3523,7 @@ namespace ConditioningControlPanel
                         // Process may have exited on its own, or we lack rights to end it.
                         NoteStaleInstanceDecision($"[LIFECYCLE] Takeover could not act on pid {otherId}: {ex.GetType().Name} {ex.Message}");
                     }
-                    finally { try { proc.Dispose(); } catch { } }
+                    finally { try { proc.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); } }
                 }
             }
             catch (Exception ex)
@@ -3324,10 +3554,10 @@ namespace ConditioningControlPanel
                         if (QueryFullProcessImageName(handle, 0, buffer, ref size) && size > 0)
                             return buffer.ToString();
                     }
-                    finally { try { CloseHandle(handle); } catch { } }
+                    finally { try { CloseHandle(handle); } catch (Exception ex) { Diag.Swallowed(ex); } }
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             try { return proc.MainModule?.FileName; }
             catch { return null; }
@@ -3354,7 +3584,7 @@ namespace ConditioningControlPanel
                         _staleInstanceDecisions.Add(message);
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private const int PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
@@ -3430,7 +3660,7 @@ namespace ConditioningControlPanel
                         else if (t.IsCanceled || !t.Result)
                             Logger?.Warning("Achievement '{Name}' did NOT post to Discord (see preceding warning for cause)", achievement.Name);
                     }
-                    catch { /* diagnostics only — never let logging fault the continuation */ }
+                    catch (Exception ex) { Diag.Swallowed(ex, "diagnostics only, must not fault the continuation"); }
                 }, TaskContinuationOptions.ExecuteSynchronously);
             }
             else
@@ -3498,17 +3728,38 @@ namespace ConditioningControlPanel
                             Application.Current.Dispatcher.HasShutdownStarted) return;
 
                         // stackIndex pushes each extra toast a further (Height + 8) upward.
-                        for (int i = 0; i < rewards.Count; i++)
+                        void ShowAll()
                         {
-                            try
+                            for (int i = 0; i < rewards.Count; i++)
                             {
-                                new ItemUnlockedPopup(rewards[i], i).Show();
-                            }
-                            catch (Exception ex)
-                            {
-                                Logger?.Error(ex, "Failed to show item unlocked popup for: {Id}", rewards[i].Id);
+                                try
+                                {
+                                    new ItemUnlockedPopup(rewards[i], i).Show();
+                                }
+                                catch (Exception ex)
+                                {
+                                    Logger?.Error(ex, "Failed to show item unlocked popup for: {Id}", rewards[i].Id);
+                                }
                             }
                         }
+
+                        // A column of toasts is the loudest thing on this list, so inside the
+                        // quiet window the whole column collapses to ONE Inbox row - opening it
+                        // still shows every toast, stacked exactly as it would have been.
+                        var names = string.Join(", ", rewards.ConvertAll(static r => r.Name));
+                        var item = new Services.Startup.InboxItem
+                        {
+                            Key = "wardrobe-unlock:" + achievementId,
+                            Glyph = "👗",
+                            Title = rewards.Count == 1
+                                ? "A new wardrobe item is yours"
+                                : rewards.Count + " new wardrobe items are yours",
+                            Summary = names,
+                            Open = ShowAll,
+                        };
+
+                        if (StartupLadder != null) StartupLadder.PresentOrInbox(item);
+                        else ShowAll();
                     }
                     catch (Exception ex)
                     {
@@ -3582,9 +3833,42 @@ namespace ConditioningControlPanel
             {
                 _authUpgradeGate.Release();
             }
+        }
 
-            static bool NeedsAuthTokenUpgrade() =>
-                string.IsNullOrEmpty(UnifiedUserId) || string.IsNullOrEmpty(Settings?.Current?.AuthToken);
+        private static bool NeedsAuthTokenUpgrade() =>
+            string.IsNullOrEmpty(UnifiedUserId) || string.IsNullOrEmpty(Settings?.Current?.AuthToken);
+
+        /// <summary>
+        /// Split-accounts contract D: after <see cref="Services.MergedAccountRecovery"/> has swapped
+        /// the stored unified id to the canonical and dropped the tombstone's token, this re-runs
+        /// the ordinary provider sign-in (the same <see cref="EnsureAuthTokenAsync"/> path startup
+        /// uses when a provider is signed in but no usable unified session exists). The OAuth doors
+        /// answer with the canonical account and mint its token. Returns true when a token was
+        /// minted; false when no provider credential is available (device-code or email sessions,
+        /// or a lapsed provider token), in which case the caller offers the sign-in prompt.
+        /// </summary>
+        internal static async Task<bool> ReauthenticateAfterMergedSwapAsync()
+        {
+            if (Current is not App app) return false;
+            if (!NeedsAuthTokenUpgrade()) return true;
+
+            if (Patreon?.IsAuthenticated == true)
+            {
+                await app.EnsureAuthTokenAsync("Patreon", () => Patreon.GetAccessToken(),
+                    (v2Auth, accessToken) => v2Auth.AuthenticateWithPatreonAsync(accessToken));
+            }
+            if (NeedsAuthTokenUpgrade() && Discord?.IsAuthenticated == true)
+            {
+                await app.EnsureAuthTokenAsync("Discord", () => Discord.GetAccessToken(),
+                    (v2Auth, accessToken) => v2Auth.AuthenticateWithDiscordAsync(accessToken));
+            }
+            if (NeedsAuthTokenUpgrade() && SubscribeStar?.IsAuthenticated == true)
+            {
+                await app.EnsureAuthTokenAsync("SubscribeStar", () => SubscribeStar.GetAccessToken(),
+                    (v2Auth, accessToken) => v2Auth.AuthenticateWithSubstarAsync(accessToken));
+            }
+
+            return !NeedsAuthTokenUpgrade();
         }
 
         /// <summary>
@@ -3726,6 +4010,11 @@ namespace ConditioningControlPanel
                 var content = new StringContent(body.ToString(), Encoding.UTF8, "application/json");
                 var response = await http.PostAsync("https://codebambi-proxy.vercel.app/v2/auth/restore-session", content);
 
+                // Split-accounts contract D: the restored id is a merge tombstone. The handler
+                // swaps to the canonical and re-runs the provider sign-in (or offers the prompt);
+                // nothing below applies to the old id any more.
+                if (await Services.MergedAccountRecovery.TryHandleAsync(response)) return;
+
                 if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 {
                     Logger?.Warning("Restored session invalid (user not found on server). Clearing UnifiedUserId.");
@@ -3816,9 +4105,41 @@ namespace ConditioningControlPanel
             }
         }
 
+        // ================================================================== welcome back
+        //
+        // A returning user landing on a NEW PC used to be the worst path in the app. The old
+        // CheckCloudSettingsRestoreAsync asked "restore your settings?" in an unowned, task-modal
+        // MessageBox, then answered itself with a second box ("restored") or a third ("failed") -
+        // and it fired on exactly the population that also gets the first-run wizard, What's New
+        // and the season box. Five modal stops before the app.
+        //
+        // It is now one sheet, on the ladder at priority 30, that says all of it: restore, bring
+        // the flavour, what changed, and one muted line if the server rotated the board.
+
+        /// <summary>1 once the sheet has been queued. At most one per launch, by construction.</summary>
+        private static int _welcomeBackClaimed;
+
         /// <summary>
-        /// On fresh install, check if a cloud settings backup exists and offer to restore it.
-        /// Waits for authentication to complete before checking.
+        /// Serialises the two triggers below. Both do a pair of network round trips before they
+        /// can decide anything, so without this the 5 s timer and a ProfileLoaded landing at 5.1 s
+        /// would both peek the backup and both queue a sheet.
+        /// </summary>
+        private static readonly SemaphoreSlim _welcomeBackGate = new(1, 1);
+
+        /// <summary>This launch is the population the sheet is for: fresh settings file, no factory reset.</summary>
+        private static bool _welcomeBackEligible;
+
+        private static bool _welcomeBackHookAttached;
+
+        /// <summary>
+        /// The welcome-back trigger. Fresh settings file plus a cloud identity means a returning
+        /// user on a new machine.
+        ///
+        /// <para><b>Two looks, not one.</b> The 5 s wait below is the one this check always had,
+        /// and on a new PC it usually finds nothing: the user signs in through the wizard, which
+        /// is still open at five seconds, so the identity arrives minutes later. The second look
+        /// rides <c>ProfileSync.ProfileLoaded</c> - the moment the account is actually known - and
+        /// whichever look gets there first spends the launch's one sheet.</para>
         /// </summary>
         private async Task CheckCloudSettingsRestoreAsync()
         {
@@ -3832,93 +4153,396 @@ namespace ConditioningControlPanel
                 // reset is immediately offered its own undo under fresh-install copy.
                 if (ConsumeFactoryResetMarker())
                 {
-                    Logger?.Information("Skipping the cloud settings restore offer — the missing settings file is a factory reset");
+                    Logger?.Information("Skipping the welcome-back sheet - the missing settings file is a factory reset");
                     return;
                 }
+
+                _welcomeBackEligible = true;
+
+                // Armed BEFORE the wait, so a sign-in that completes during it is not missed.
+                HookProfileLoadedForWelcomeBack();
 
                 // Wait for provider auth to complete
                 await Task.Delay(5000);
 
-                // Need a cloud identity to check for backup
-                if (!HasCloudIdentity) return;
-                if (ProfileSync == null) return;
-
-                Logger?.Information("Fresh install detected with cloud identity — checking for settings backup...");
-
-                var backupInfo = await ProfileSync.GetSettingsBackupInfoAsync();
-                if (backupInfo == null)
-                {
-                    Logger?.Information("No cloud settings backup found");
-                    return;
-                }
-
-                Logger?.Information("Cloud settings backup found (v{Version}, {Date})",
-                    backupInfo.AppVersion, backupInfo.BackedUpAt);
-
-                // This prompt fires on exactly the population the FIRST-RUN WIZARD claims, and it is
-                // unowned and task-modal: landing it on top of the wizard disables the wizard's
-                // buttons behind a box that can hide under it, and accepting swaps
-                // App.Settings.Current out from under the flags the wizard already spent. So wait
-                // out the startup ladder (update dialog, What's New, season recap, the wizard) the
-                // same way MainWindow.xaml.cs:537 does - up to 5 minutes, because a mod pack can
-                // take that long to download inside the wizard - and re-check before showing.
-                for (int i = 0; i < 600 && (IsUpdateDialogActive ||
-                                           ConditioningControlPanel.MainWindow.IsStartupDialogShowing); i++)
-                {
-                    await Task.Delay(500);
-                }
-                if (IsUpdateDialogActive || ConditioningControlPanel.MainWindow.IsStartupDialogShowing)
-                {
-                    Logger?.Information("Cloud settings restore offer deferred to the next launch — a startup dialog is still open");
-                    return;
-                }
-
-                // Ask user on UI thread
-                await Current.Dispatcher.InvokeAsync(async () =>
-                {
-                    var dateStr = backupInfo.BackedUpAt?.ToLocalTime().ToString("MMM d, yyyy h:mm tt") ?? "unknown date";
-                    var owner = MainWindowRef ?? Current?.MainWindow;
-                    var body = $"A cloud backup of your settings was found!\n\n" +
-                               $"Backed up: {dateStr}\n" +
-                               $"App version: {backupInfo.AppVersion}\n\n" +
-                               $"Would you like to restore your settings from this backup?";
-                    // Owned when there is a window: an unowned box can end up BEHIND the app.
-                    var result = owner != null
-                        ? System.Windows.MessageBox.Show(owner, body,
-                            "Restore Settings from Cloud",
-                            System.Windows.MessageBoxButton.YesNo,
-                            System.Windows.MessageBoxImage.Question)
-                        : System.Windows.MessageBox.Show(body,
-                            "Restore Settings from Cloud",
-                            System.Windows.MessageBoxButton.YesNo,
-                            System.Windows.MessageBoxImage.Question);
-
-                    if (result != System.Windows.MessageBoxResult.Yes) return;
-
-                    var restored = await ProfileSync.RestoreSettingsFromCloudAsync();
-                    if (restored == null)
-                    {
-                        System.Windows.MessageBox.Show(
-                            "Failed to restore settings from cloud.",
-                            "Restore Failed",
-                            System.Windows.MessageBoxButton.OK,
-                            System.Windows.MessageBoxImage.Warning);
-                        return;
-                    }
-
-                    ApplyRestoredSettings(restored);
-
-                    System.Windows.MessageBox.Show(
-                        "Settings restored from cloud! Some UI changes may require a restart to take full effect.",
-                        "Settings Restored",
-                        System.Windows.MessageBoxButton.OK,
-                        System.Windows.MessageBoxImage.Information);
-                });
+                await TryOfferWelcomeBackAsync("startup");
             }
             catch (Exception ex)
             {
-                Logger?.Warning(ex, "Cloud settings restore check failed");
+                Logger?.Warning(ex, "Welcome-back check failed");
             }
+        }
+
+        /// <summary>
+        /// Second look: the profile actually loading. Fires at most once - the handler unsubscribes
+        /// itself - because every later load is a heartbeat, not an arrival.
+        /// </summary>
+        private void HookProfileLoadedForWelcomeBack()
+        {
+            try
+            {
+                if (_welcomeBackHookAttached || ProfileSync == null) return;
+                _welcomeBackHookAttached = true;
+
+                EventHandler? handler = null;
+                handler = (_, _) =>
+                {
+                    try { if (ProfileSync != null) ProfileSync.ProfileLoaded -= handler; }
+                    catch (Exception ex) { Logger?.Debug("Welcome-back: unhook failed: {Error}", ex.Message); }
+
+                    _ = TryOfferWelcomeBackAsync("profile loaded");
+                };
+                ProfileSync.ProfileLoaded += handler;
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug("Welcome-back: could not watch for the profile load: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Gathers everything the sheet needs, decides whether there is a sheet at all, and queues
+        /// it. The backup is PEEKED here rather than at Let's-go time: the sheet prints the level
+        /// and the flavour that are inside it, and <c>RestoreSettingsFromCloudAsync</c> only
+        /// downloads and deserializes - applying is a separate, explicit step.
+        /// </summary>
+        private async Task TryOfferWelcomeBackAsync(string source)
+        {
+            if (!_welcomeBackEligible) return;
+            if (Volatile.Read(ref _welcomeBackClaimed) != 0) return;
+            if (IsUnattendedRig) return;
+
+            if (!await _welcomeBackGate.WaitAsync(TimeSpan.FromMinutes(2))) return;
+            try
+            {
+                if (Volatile.Read(ref _welcomeBackClaimed) != 0) return;
+
+                // Need a cloud identity to have anyone to welcome back.
+                if (!HasCloudIdentity || ProfileSync == null) return;
+
+                var backupInfo = await ProfileSync.GetSettingsBackupInfoAsync();
+
+                // A backup only counts once it is actually in hand. Metadata that will not
+                // download is a restore row whose toggle cannot be honoured, and offering one is
+                // worse than never mentioning it.
+                Models.AppSettings? backup = null;
+                if (backupInfo != null)
+                {
+                    backup = await ProfileSync.RestoreSettingsFromCloudAsync();
+                    if (backup == null)
+                        Logger?.Warning("Welcome-back: the backup's metadata resolved but its body did not - continuing without a restore row");
+                }
+
+                var backupModId = backup?.ActiveModId;
+                var packId = ModPackCatalog.PackIdForMod(backupModId);
+                var packInstalled = IsFlavourPackInstalled(packId);
+
+                var plan = WelcomeBackDecision.Decide(
+                    settingsFileWasMissing: Settings?.WasSettingsFileMissing == true,
+                    factoryReset: false,                    // consumed and returned above
+                    hasCloudIdentity: HasCloudIdentity,
+                    backupExists: backup != null,
+                    playerLevel: Settings?.Current?.PlayerLevel ?? 0,
+                    backupFlavourPackId: packId,
+                    flavourPackInstalled: packInstalled);
+
+                if (!plan.ShowSheet)
+                {
+                    Logger?.Information("Welcome-back ({Source}): nothing to say (backup={Backup}, level={Level})",
+                        source, backup != null, Settings?.Current?.PlayerLevel ?? 0);
+                    return;
+                }
+
+                if (Interlocked.CompareExchange(ref _welcomeBackClaimed, 1, 0) != 0) return;
+
+                var content = BuildWelcomeBackContent(plan, backup, backupInfo, backupModId);
+
+                Logger?.Information(
+                    "Welcome-back ({Source}): queueing the sheet (restore={Restore}, flavour={Flavour}, season={Season})",
+                    source, plan.ShowRestoreRow, plan.ShowFlavourRow, content.SeasonLine != null);
+
+                // Priority 30: the upgrader's What's New slot. The two are alternatives - a fresh
+                // settings file has no LastSeenVersion, so What's New stamps and says nothing -
+                // and the sheet carries the patch notes itself for exactly that reason.
+                StartupLadder?.EnqueueModal("welcome-back", 30, owner => ShowWelcomeBackSheet(owner, content, backup, plan));
+
+                if (StartupLadder == null)
+                {
+                    await Current.Dispatcher.InvokeAsync(() => ShowWelcomeBackSheet(null, content, backup, plan));
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Welcome-back offer failed");
+            }
+            finally
+            {
+                try { _welcomeBackGate.Release(); } catch { }
+            }
+        }
+
+        /// <summary>Is the backup's flavour already on this disk? Unknown reads as "yes", which
+        /// hides the row - the Mod Manager can always fetch it later.</summary>
+        private static bool IsFlavourPackInstalled(string? packId)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(packId)) return true;
+                var svc = ReleaseContent;
+                if (svc == null) return true;
+                return svc.IsFullInstall || svc.IsInstalled(packId!);
+            }
+            catch { return true; }
+        }
+
+        private WelcomeBackSheetContent BuildWelcomeBackContent(
+            WelcomeBackPlan plan, Models.AppSettings? backup, SettingsBackupInfo? backupInfo, string? backupModId)
+        {
+            var entry = ModPackCatalog.ForMod(backupModId);
+            var modName = entry == null ? null : WelcomeBackModName(entry);
+
+            // "What changed" is only news to someone who has not read it. The backup remembers the
+            // last version this user was shown notes for; matching it means they already have.
+            var version = Services.UpdateService.AppVersion;
+            var notes = string.Equals(backup?.LastSeenVersion, version, StringComparison.OrdinalIgnoreCase)
+                ? ""
+                : Services.UpdateService.CurrentPatchNotes ?? "";
+
+            return new WelcomeBackSheetContent
+            {
+                DisplayName = UserDisplayName ?? "",
+                Level = Settings?.Current?.PlayerLevel ?? 0,
+                BackupModName = modName,
+                BackupTakenAt = backupInfo?.BackedUpAt,
+                Plan = plan,
+                FlavourModName = plan.ShowFlavourRow ? modName : null,
+                FlavourSizeText = plan.ShowFlavourRow && entry != null
+                    ? ModPackCatalog.FormatSize(ModPackCatalog.SizeBytesFor(entry))
+                    : "",
+                VersionLabel = version,
+                PatchNotes = notes,
+                SeasonLine = BuildWelcomeBackSeasonLine(backup),
+                TourAction = string.IsNullOrWhiteSpace(notes) ? null : StartUpgradeTourFromWelcomeBack,
+            };
+        }
+
+        private static string WelcomeBackModName(ModPackEntry entry)
+        {
+            try
+            {
+                var name = Loc.Get(entry.NameLocKey);
+                return string.IsNullOrWhiteSpace(name) || string.Equals(name, entry.NameLocKey, StringComparison.Ordinal)
+                    ? entry.ModId
+                    : name;
+            }
+            catch { return entry.ModId; }
+        }
+
+        /// <summary>
+        /// The sheet's one season sentence, or null. Only the SERVER may say a season ended (the
+        /// wall-clock fallback under CurrentSeasonKey invents one on the 1st for every never-synced
+        /// install), and there has to be a real earlier key to have moved on from.
+        ///
+        /// <para>The backup's key is preferred over this device's. A fresh settings file holds no
+        /// season at all, and the silent adoption on first sync then writes the server's current
+        /// key straight in - so the device key on this population is either empty or equal to the
+        /// current one, and carries no information either way. The backup remembers the season the
+        /// user actually last saw.</para>
+        /// </summary>
+        private static string? BuildWelcomeBackSeasonLine(Models.AppSettings? backup)
+        {
+            try
+            {
+                var current = Services.SeasonRecapService.CurrentSeasonKey;
+                var seen = !string.IsNullOrWhiteSpace(backup?.LastSeasonResetSeen)
+                    ? backup!.LastSeasonResetSeen
+                    : Settings?.Current?.LastSeasonResetSeen;
+
+                if (!WelcomeBackDecision.ShouldShowSeasonLine(
+                        current, seen, Services.SeasonRecapService.IsSeasonKeyServerConfirmed))
+                    return null;
+
+                // The rotation branch of TryPresentSeasonRecap, said once and quietly: a board
+                // rotation touches nothing of the user's, so it is a line, not a dialog.
+                var template = Loc.Get("wb_season_line");
+                if (string.IsNullOrWhiteSpace(template) || template == "wb_season_line")
+                    template = "The monthly leaderboard rotated to season {0} while you were away. Your level, your XP and everything you unlocked carried over.";
+
+                try { return string.Format(template, current); }
+                catch (FormatException) { return template; }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug("Welcome-back: season line skipped: {Error}", ex.Message);
+                return null;
+            }
+        }
+
+        private static void StartUpgradeTourFromWelcomeBack()
+        {
+            // The sheet posts this at Normal priority after ShowDialog unwinds, so the presenter's
+            // finally has already put the flag down. Asserting it anyway is deliberate: a tour
+            // that starts while anything still believes a startup dialog is up puts the spotlight
+            // underneath a modal nobody can see.
+            ConditioningControlPanel.MainWindow.IsStartupDialogShowing = false;
+            try { MainWindowRef?.StartTutorial(Services.TutorialType.UpgradeTour); }
+            catch (Exception ex) { Logger?.Warning(ex, "Welcome-back: could not start the upgrade tour"); }
+        }
+
+        /// <summary>
+        /// Runs the sheet and honours what it was told. Blocking by contract - the ladder measures
+        /// "this surface is done" by this call returning.
+        /// </summary>
+        private void ShowWelcomeBackSheet(Window? owner, WelcomeBackSheetContent content,
+                                          Models.AppSettings? backup, WelcomeBackPlan plan)
+        {
+            bool restore, flavour;
+            try
+            {
+                var sheet = new WelcomeBackSheet(content) { Owner = owner ?? MainWindowRef };
+                sheet.ShowDialog();
+                restore = sheet.RestoreChosen;
+                flavour = sheet.BringFlavourChosen;
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Welcome-back sheet failed to show");
+                return;
+            }
+
+            // Restore first, flavour second, and in that order on purpose: the restore replaces
+            // App.Settings.Current wholesale, so anything written before it (a pending activation
+            // id, a stamped version) would be thrown away with the instance it was written on.
+            if (restore) ApplyWelcomeBackRestore(backup);
+            if (flavour) BringWelcomeBackFlavour(backup?.ActiveModId, plan.FlavourPackId);
+        }
+
+        /// <summary>
+        /// Applies the peeked backup. No follow-up boxes: success is silent (the app repaints
+        /// itself) and failure becomes an Inbox row whose Open tries again.
+        /// </summary>
+        private void ApplyWelcomeBackRestore(Models.AppSettings? backup)
+        {
+            try
+            {
+                if (backup == null) { PostRestoreFailedInboxItem(); return; }
+
+                ApplyRestoredSettings(backup);
+                // The restore takes the higher TotalConditioningMinutes; that history belongs to
+                // the days it happened on, not to today's day-log entry.
+                FeatureDayLog?.Rebaseline("welcome-back restore");
+
+                // The backup remembers an OLDER LastSeenVersion, and ApplyRestoredSettings does not
+                // preserve this one - so without this line the restore re-arms What's New for a
+                // release whose notes the sheet just showed.
+                if (Settings?.Current != null)
+                {
+                    Settings.Current.LastSeenVersion = Services.UpdateService.AppVersion;
+                    Settings.Save();
+                }
+
+                Logger?.Information("Welcome-back: cloud settings restored");
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Welcome-back: the restore failed");
+                PostRestoreFailedInboxItem();
+            }
+        }
+
+        /// <summary>
+        /// The old "Failed to restore settings from cloud." MessageBox, demoted to a row. The
+        /// retry re-downloads rather than reusing the object that just failed - the usual cause is
+        /// a network hiccup, and a second copy costs a few KB.
+        /// </summary>
+        private void PostRestoreFailedInboxItem()
+        {
+            try
+            {
+                var item = new Services.Startup.InboxItem
+                {
+                    Key = "welcome-back:restore-failed",
+                    Glyph = "☁",
+                    Title = WelcomeBackStr("wb_restore_failed_title", "Restore failed"),
+                    Summary = WelcomeBackStr("wb_restore_failed_summary",
+                        "Your cloud settings did not come down. Open this to try again."),
+                    Open = () => _ = RetryWelcomeBackRestoreAsync(),
+                };
+
+                if (StartupLadder != null) StartupLadder.PresentOrInbox(item);
+                else Logger?.Warning("Welcome-back: the restore failed and there is no Inbox to say so");
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug("Welcome-back: could not post the restore-failed row: {Error}", ex.Message);
+            }
+        }
+
+        private async Task RetryWelcomeBackRestoreAsync()
+        {
+            try
+            {
+                var fresh = ProfileSync == null ? null : await ProfileSync.RestoreSettingsFromCloudAsync();
+                if (fresh == null)
+                {
+                    Logger?.Warning("Welcome-back: the restore retry failed too - re-posting the row");
+                    await Current.Dispatcher.InvokeAsync(PostRestoreFailedInboxItem);
+                    return;
+                }
+
+                await Current.Dispatcher.InvokeAsync(() => ApplyWelcomeBackRestore(fresh));
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Welcome-back: the restore retry threw");
+            }
+        }
+
+        /// <summary>
+        /// Brings the backup's mod across. Deliberately the SAME path the wizard's flavour step
+        /// uses - content already here switches at once, content that still has to be fetched is
+        /// recorded with <see cref="PendingModActivation"/> and downloaded, so the switch happens
+        /// when the pack lands even if that is in a later session.
+        /// </summary>
+        private static void BringWelcomeBackFlavour(string? modId, string? packId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(modId)) return;
+
+                if (PendingModActivation.IsContentAvailable(modId!))
+                {
+                    MainWindowRef?.ActivateChosenMod(modId!, PendingModActivation.Trigger.Immediate);
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(packId) || ReleaseContent == null) return;
+
+                PendingModActivation.Record(modId!);
+
+                // CancellationToken.None on purpose: nothing on this sheet's far side should be
+                // able to kill a download the user just asked for. RequestPackAsync de-dupes and
+                // resumes, so the Mod Manager joins this task rather than starting a second one.
+                _ = ReleaseContent.RequestPackAsync(packId!, null, System.Threading.CancellationToken.None);
+
+                Logger?.Information("Welcome-back: fetching {Pack} so {Mod} can take over when it lands", packId, modId);
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Welcome-back: could not bring the flavour across");
+            }
+        }
+
+        private static string WelcomeBackStr(string key, string english)
+        {
+            try
+            {
+                var value = Loc.Get(key);
+                return string.IsNullOrEmpty(value) || string.Equals(value, key, StringComparison.Ordinal)
+                    ? english
+                    : value;
+            }
+            catch { return english; }
         }
 
         /// <summary>
@@ -3976,6 +4600,10 @@ namespace ConditioningControlPanel
             // hardcoded assets prompt - on the next launch of an install that has already had them.
             restored.Welcomed = current.Welcomed;
             restored.FirstRunAssetsPromptShown = current.FirstRunAssetsPromptShown;
+
+            // Machine-local settings the backup never carried (content folder, webhook, last-seen).
+            // Without this the restore reset the content folder to "" with no prompt to pick it again.
+            ConditioningControlPanel.Services.ProfileSyncService.PreserveLocalOnlyFields(current, restored);
 
             // Preserve lifetime stats — take higher value (current may have server-synced data)
             restored.TotalConditioningMinutes = Math.Max(current.TotalConditioningMinutes, restored.TotalConditioningMinutes);
@@ -4047,7 +4675,7 @@ namespace ConditioningControlPanel
                                 {
                                     btn.Tag = "UpdateAvailable";
                                     btn.Content = "UPDATE";
-                                    btn.ToolTip = "Update Available - Click to install!";
+                                    btn.ToolTip = Loc.Get("tooltip_update_available_install");
                                     Logger?.Information("Update button configured successfully");
                                 }
                             }
@@ -4058,39 +4686,17 @@ namespace ConditioningControlPanel
                         }
                     });
 
-                    // Wait for any startup dialogs (What's New) to be dismissed
-                    // Check every 500ms for up to 30 seconds
-                    Logger?.Information("Waiting for startup dialogs to close before showing update popup...");
-                    for (int i = 0; i < 60; i++)
-                    {
-                        if (!ConditioningControlPanel.MainWindow.IsStartupDialogShowing)
-                        {
-                            Logger?.Information("No startup dialog showing, proceeding with update popup");
-                            break;
-                        }
-                        Logger?.Information("Startup dialog still showing, waiting... ({Attempt}/60)", i + 1);
-                        await Task.Delay(500);
-                    }
-
-                    // Additional small delay after dialog closes to let UI settle
-                    await Task.Delay(500);
-
-                    // Now show the update dialog on UI thread
-                    Logger?.Information("Attempting to show update dialog on UI thread...");
-
-                    Application.Current.Dispatcher.Invoke(() =>
+                    // Priority 80: last on the ladder. The button above is already lit, so the
+                    // news is delivered either way and this dialog can afford to wait behind the
+                    // wizard, What's New, the recap and the mod picker. It used to run its own
+                    // 30 s poll over IsStartupDialogShowing and then give up silently - which is
+                    // how an upgrader still reading patch notes lost the update prompt entirely.
+                    Logger?.Information("Queueing the update dialog behind the startup ladder...");
+                    StartupLadder?.EnqueueModal("update-available", 80, owner =>
                     {
                         try
                         {
-                            // Double-check no modal dialog is showing
-                            if (ConditioningControlPanel.MainWindow.IsStartupDialogShowing)
-                            {
-                                Logger?.Warning("Startup dialog still showing after wait, skipping auto-popup");
-                                return;
-                            }
-
-                            Logger?.Information("Inside Dispatcher.Invoke - getting MainWindow");
-                            var mainWindow = Application.Current.MainWindow as MainWindow;
+                            var mainWindow = (owner as MainWindow) ?? MainWindowRef ?? Application.Current.MainWindow as MainWindow;
 
                             if (mainWindow == null)
                             {
@@ -4108,7 +4714,7 @@ namespace ConditioningControlPanel
                         }
                         catch (Exception innerEx)
                         {
-                            Logger?.Error(innerEx, "Exception inside Dispatcher.Invoke for update dialog");
+                            Logger?.Error(innerEx, "Exception showing the update dialog from the startup ladder");
                         }
                     });
                 }
@@ -4124,31 +4730,28 @@ namespace ConditioningControlPanel
         /// Consumes the marker left by the previous run's update attempt and, if the install did
         /// not take, tells the user once and points them at the manual download.
         /// </summary>
-        private static async Task ReportFailedUpdateAttemptAsync()
+        private static Task ReportFailedUpdateAttemptAsync()
         {
             try
             {
                 var outcome = UpdateService.ConsumePendingUpdateOutcome();
-                if (outcome == null || outcome.Succeeded) return;
+                if (outcome == null || outcome.Succeeded) return Task.CompletedTask;
 
-                // Don't stack on top of the What's New / startup dialogs.
-                for (int i = 0; i < 60 && ConditioningControlPanel.MainWindow.IsStartupDialogShowing; i++)
-                {
-                    await Task.Delay(500);
-                }
-
-                Application.Current?.Dispatcher.Invoke(() =>
-                {
+                // Priority 10: first on the ladder, ahead of the wizard and What's New. An install
+                // that did not take is the one piece of startup news that changes what the user
+                // should do next, and it used to hand-roll its own 30 s poll over
+                // IsStartupDialogShowing to avoid stacking. The ladder is that poll now.
+                StartupLadder?.EnqueueModal("failed-update-report", 10, owner =>
                     OfferManualUpdateDownload(
-                        Current?.MainWindow,
+                        owner ?? Current?.MainWindow,
                         Loc.Get("title_update_failed"),
-                        Loc.GetF("msg_update_install_failed", outcome.Version, UpdateService.AppVersion));
-                });
+                        Loc.GetF("msg_update_install_failed", outcome.Version, UpdateService.AppVersion)));
             }
             catch (Exception ex)
             {
                 Logger?.Warning(ex, "Failed to report previous update attempt");
             }
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -4269,7 +4872,7 @@ namespace ConditioningControlPanel
                     var avatarWindow = Current.Windows.OfType<Window>().FirstOrDefault(w => w.GetType().Name == "AvatarTubeWindow");
                     avatarWindow?.Hide();
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
 
                 progressDialog = new UpdateProgressDialog();
                 progressDialog.Topmost = true;
@@ -4293,10 +4896,10 @@ namespace ConditioningControlPanel
                                     dialog.SetProgress(progress);
                                 }
                             }
-                            catch { }
+                            catch (Exception ex) { Diag.Swallowed(ex); }
                         });
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 };
 
                 Update.DownloadProgressChanged += progressHandler;
@@ -4319,11 +4922,8 @@ namespace ConditioningControlPanel
                     // Silent update for Inno Setup installations
                     var result = MessageBox.Show(
                         owner,
-                        "Update downloaded successfully!\n\n" +
-                        "The app will now close and update automatically.\n" +
-                        "It will restart when complete.\n\n" +
-                        "Continue?",
-                        "Ready to Update",
+                        Loc.Get("msg_ready_to_update"),
+                        Loc.Get("title_ready_to_update"),
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Question);
 
@@ -4351,11 +4951,8 @@ namespace ConditioningControlPanel
                     // Fresh install flow - show installer UI
                     var result = MessageBox.Show(
                         owner,
-                        "Installer downloaded successfully.\n\n" +
-                        "The app will now close and the installer will start.\n" +
-                        "Please follow the installer prompts to complete the update.\n\n" +
-                        "Continue?",
-                        "Ready to Install",
+                        Loc.Get("msg_ready_to_install"),
+                        Loc.Get("title_ready_to_install"),
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Question);
 
@@ -4374,7 +4971,7 @@ namespace ConditioningControlPanel
             {
                 Logger?.Error(ex, "Failed to download installer for fresh install");
 
-                try { progressDialog?.Close(); } catch { }
+                try { progressDialog?.Close(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
 
                 // Restore the main window if update failed
                 RestoreHiddenWindows();
@@ -4503,10 +5100,8 @@ namespace ConditioningControlPanel
                         Logger?.Warning("Update check returned no update, but server banner indicated update available. Offering browser fallback.");
                         var result = MessageBox.Show(
                             owner,
-                            "The automatic update check couldn't find the update, but our server indicates a new version is available.\n\n" +
-                            "This can happen with certain installation types. Would you like to open the releases page to download manually?\n\n" +
-                            "After this update, automatic updates should work normally.",
-                            "Update Available",
+                            Loc.Get("msg_update_manual_fallback"),
+                            Loc.Get("dialog_update_available"),
                             MessageBoxButton.YesNo,
                             MessageBoxImage.Information);
 
@@ -4533,8 +5128,8 @@ namespace ConditioningControlPanel
 
                     MessageBox.Show(
                         owner,
-                        $"You're running the latest version ({UpdateService.GetCurrentVersion()}).",
-                        "No Updates",
+                        Loc.GetF("msg_already_on_latest", UpdateService.GetCurrentVersion()),
+                        Loc.Get("title_no_updates"),
                         MessageBoxButton.OK,
                         MessageBoxImage.Information);
                     return false;
@@ -4552,9 +5147,8 @@ namespace ConditioningControlPanel
                 {
                     var result = MessageBox.Show(
                         owner,
-                        $"Update check failed: {ex.Message}\n\n" +
-                        "However, our server indicates a new version is available. Would you like to open the releases page to download manually?",
-                        "Update Check Failed",
+                        Loc.GetF("msg_update_check_failed_fallback", ex.Message),
+                        Loc.Get("title_update_check_failed"),
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Warning);
 
@@ -4568,15 +5162,15 @@ namespace ConditioningControlPanel
                                 UseShellExecute = true
                             });
                         }
-                        catch { }
+                        catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                     }
                     return false;
                 }
 
                 MessageBox.Show(
                     owner,
-                    $"Failed to check for updates: {ex.Message}",
-                    "Update Check Failed",
+                    Loc.GetF("msg_update_check_failed", ex.Message),
+                    Loc.Get("title_update_check_failed"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 return false;
@@ -4751,7 +5345,17 @@ Application State:
 - Dispatcher Shutdown: {(Current?.Dispatcher?.HasShutdownStarted ?? true)}
 ================================================================================
 ";
-                File.AppendAllText(crashLogPath, crashInfo);
+                // Redact BEFORE the text touches the disk. crash.log is the one file users open
+                // by hand and paste into Discord, and it carried the full "C:\Users\<name>" of
+                // every frame in the stack plus whatever ids and paths the exception message
+                // happened to quote. LogScrubber only cleaned that up at bug-report upload time,
+                // which is far too late for a file that is already sitting in the logs folder.
+                File.AppendAllText(crashLogPath, Services.Logging.LogRedactor.Redact(crashInfo));
+
+                // The stack says where it died; the flight recorder says what led there. Dump the
+                // ring next to the crash so the report carries the minutes BEFORE it, which is the
+                // half every freeze/black-video report has been missing.
+                Services.Logging.FlightRecorderSink.DumpIfActive("crash");
             }
             catch
             {
@@ -4904,7 +5508,7 @@ Application State:
                                 migratedCount++;
                                 Logger?.Debug("Migrated spiral: {File} from {Source}", fileName, basePath);
                             }
-                            catch { }
+                            catch (Exception ex) { Diag.Swallowed(ex); }
                         }
                     }
                 }
@@ -5016,7 +5620,7 @@ Application State:
                     foreach (var file in Directory.EnumerateFiles(logDir))
                     {
                         try { Consider(File.GetCreationTimeUtc(file)); }
-                        catch { /* one unreadable log file must not lose the other candidates */ }
+                        catch (Exception ex) { Diag.Swallowed(ex, "one unreadable log file must not lose the others"); }
                     }
                 }
             }
@@ -5030,7 +5634,7 @@ Application State:
 
         /// <summary>
         /// Ensures a configured custom assets folder and its standard subfolders
-        /// (images/videos/wallpapers) exist. The default UserAssetsPath subdirs are
+        /// (images/videos/audio/wallpapers) exist. The default UserAssetsPath subdirs are
         /// created unconditionally at startup, but a custom path is only known after
         /// settings load — and if its folder is missing, EffectiveAssetsPath silently
         /// falls back to the default location, sending imports/extractions to the wrong
@@ -5046,6 +5650,8 @@ Application State:
                 // CreateDirectory creates the parent customPath too if absent.
                 Directory.CreateDirectory(Path.Combine(customPath, "images"));
                 Directory.CreateDirectory(Path.Combine(customPath, "videos"));
+                // Same reason as the default scaffold: AI audio effects read assets/audio (#1120).
+                Directory.CreateDirectory(Path.Combine(customPath, "audio"));
                 Directory.CreateDirectory(Path.Combine(customPath, "wallpapers"));
                 Logger?.Information("Ensured custom assets directories at {Path}", customPath);
             }
@@ -5109,19 +5715,19 @@ Application State:
 
             // EMI Desk (MOMENTS 4.B / 3.8): the wordless flinch. appClosing is a HOLD with no pool
             // and never gets one - she does not get a goodbye speech while the app is going away.
-            try { EmiDesk?.Fire("appClosing", null); } catch { }
+            try { EmiDesk?.Fire("appClosing", null); } catch (Exception ex) { Diag.Swallowed(ex); }
 
-            try { SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged; } catch { }
+            try { SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged; } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // A clean shutdown — even mid-run — is NOT a crash. Clear both dirty-shutdown
             // sentinels so the next launch doesn't false-report an abnormal exit.
-            try { Services.Chaos.ChaosCrashSentinel.Clear(); } catch { }
-            try { Services.EngineCrashSentinel.Clear(); } catch { }
-            try { Services.CornerGifService.ClearSentinelOnCleanExit(); } catch { }
+            try { Services.Chaos.ChaosCrashSentinel.Clear(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { Services.EngineCrashSentinel.Clear(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { Services.CornerGifService.ClearSentinelOnCleanExit(); } catch (Exception ex) { Diag.Swallowed(ex); }
             // A shutdown that takes >13s (video teardown, haptics stop, WebView2 dispose) can trip
             // the watchdog on the way out. That is not the freeze we are hunting — disarm it so the
             // next launch doesn't cry hang over a clean, if slow, exit.
-            try { Services.UiHangWatchdog.ClearSentinelOnCleanExit(); } catch { }
+            try { Services.UiHangWatchdog.ClearSentinelOnCleanExit(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // Haptics FIRST and synchronously (bounded ~2s): a Lovense level has no server-side
             // watchdog, so a toy we don't countermand keeps running after the app is gone. This
@@ -5137,19 +5743,29 @@ Application State:
             try { EmiDesk?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "[EmiDesk] shutdown failed"); }
 
             // DtRH browser game: dispose the WebView2 window/process if it's up.
-            try { Services.Chaos.DtrhHostService.CloseActive(); } catch { }
+            try { Services.Chaos.DtrhHostService.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+
+            // Jackpot Remix: the hidden builder's browser process, if a build ever started it.
+            try { Services.Remix.JackpotRemixBuilder.DisposeDefault(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // The Arcademy: same reason - a WebView2 process outliving the app is a leak, and its
             // meta store has a debounced write that must be flushed before we go. ShutdownFlush, NOT
             // CloseActive: the graceful close waits on a 1200ms DispatcherTimer for the page's
             // exit-done, and that timer can never tick from inside OnExit - so the flush it guards
             // never happened and the last class's grades/streak went with the process.
-            try { Services.Arcademy.ArcademyHostService.ShutdownFlush(); } catch { }
+            try { Services.Arcademy.ArcademyHostService.ShutdownFlush(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            // The Back Room: same posture - the last tape cursor goes out and the window is disposed now.
+            try { Services.BackRoom.BackRoomHostService.ShutdownFlush(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // The Emergency Exit's friction door: a WebView2 process outliving the app is a leak, and
             // Close() is safe from here - it has no state to flush and never touches the lockdown (any
             // verdict was applied the moment it was rolled).
-            try { Services.EmergencyExit.EmergencyExitHostService.Close(); } catch { }
+            try { Services.EmergencyExit.EmergencyExitHostService.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
+
+            // Piece by Piece: same reason, same posture as the friction door above. Close() there
+            // and here is a straight dispose - the board has nothing to flush and no verdict to
+            // protect, so there is no graceful wind-down whose 1200ms timer would never tick.
+            try { Services.PieceByPiece.PieceByPieceHostService.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // If the companion is on its own UI thread (AvatarOwnThread), shut its Dispatcher down so the
             // STA thread's Dispatcher.Run() returns and the thread exits cleanly. Background thread, so it
@@ -5209,13 +5825,13 @@ Application State:
             Compositor?.Dispose(); // after effect services so their layers deactivate first
             // Before the window goes: Dispose runs the crash-safe UndoAll so no haunt is left painted on
             // a control (or, worse, left mid-transform in a saved layout).
-            try { Possession?.Dispose(); } catch { }
+            try { Possession?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             ScreenShake?.Dispose();
-            try { Chaos?.ForceShutdown(); } catch { }
+            try { Chaos?.ForceShutdown(); } catch (Exception ex) { Diag.Swallowed(ex); }
             // Standalone corner-GIF overlays are unowned topmost windows (#709) - close them here
             // as well as from MainWindow.Closing, since a Shutdown() that bypasses the main
             // window's close path would otherwise leave them alive.
-            try { CornerGif?.StopAll(); } catch { }
+            try { CornerGif?.StopAll(); } catch (Exception ex) { Diag.Swallowed(ex); }
             // Each guarded individually (#1071). These were a bare unguarded run of calls, so a
             // throw in ANY of them skipped every line after it - including the achievement flush,
             // which is the last write of the user's progress before OnExit reaches TerminateProcess.
@@ -5227,11 +5843,13 @@ Application State:
             try { BouncingText?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "BouncingText dispose failed"); }
             try { MindWipe?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "MindWipe dispose failed"); }
             try { BrainDrain?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "BrainDrain dispose failed"); }
+            // Before the achievement flush: the day log's last tick reads the counters that flush writes.
+            try { FeatureDayLog?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "FeatureDayLog flush on shutdown failed"); }
             try { Achievements?.Dispose(); } catch (Exception ex) { Logger?.Error(ex, "Achievement progress flush on shutdown FAILED"); }
             // Before WindowAwareness: its Dispose runs Stop(), which also stops the observer — and the
             // observer's own Stop is what closes the open visit and flushes the ledger to disk.
             // Detach first so nothing can route a line into a half-disposed arbiter on the way down.
-            try { Services.Awareness.AwarenessV2Routing.Detach(); } catch { }
+            try { Services.Awareness.AwarenessV2Routing.Detach(); } catch (Exception ex) { Diag.Swallowed(ex); }
             Awareness?.Dispose();
             Services.Awareness.AwarenessLive.ResetObserverState = null;
             Services.Awareness.AwarenessLive.Ledger = null;
@@ -5295,7 +5913,16 @@ Application State:
             SecureAuthTokenStore.ClearMemoryCache();
             SecureApiKeyStore.ClearMemoryCache();
 
-            // Close and flush the logger
+            // Close the session file and write its "== end:" line. This has to happen HERE rather
+            // than only from the pipeline's ProcessExit hook, because OnExit finishes with
+            // TerminateProcess (see the comment at the bottom of this method), which skips
+            // ProcessExit handlers entirely - so every ordinary close was ending with no footer at
+            // all. Idempotent: the ProcessExit hook and the unhandled-exception path can still call
+            // it, and whichever arrives first is the one that writes.
+            Services.Logging.LogPipeline.WriteSessionFooter();
+
+            // Close and flush the logger (WriteSessionFooter has already done this; harmless and
+            // kept so the shutdown reads the same whether or not the pipeline was ever built).
             Log.CloseAndFlush();
 
             // Dispose show-window signal
@@ -5307,7 +5934,7 @@ Application State:
             // Dispose the single-instance ack gate
             var ackSignal = _showAckSignal;
             _showAckSignal = null;
-            try { ackSignal?.Dispose(); } catch { }
+            try { ackSignal?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // Release single instance mutex (only if we own it)
             if (_mutexOwned && _mutex != null)
@@ -5318,8 +5945,7 @@ Application State:
                 }
                 catch (ApplicationException)
                 {
-                    // Mutex was not owned by this thread - ignore
-                }
+                } // swallow: mutex was not owned by this thread
             }
             _mutex?.Dispose();
 

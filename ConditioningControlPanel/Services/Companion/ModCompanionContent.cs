@@ -31,17 +31,55 @@ namespace ConditioningControlPanel.Services.Companion
         /// <summary>Mirrors <c>ModService.ValidateManifest</c>: prompt-section cap.</summary>
         public const int MaxPromptSettingLength = 5000;
 
-        /// <summary>Probe used against the live filesystem.</summary>
+        /// <summary>
+        /// Probe used against the live filesystem.
+        ///
+        /// A FOLDER candidate has to hold at least one media file, not merely exist. The installer's
+        /// [InstallDelete] sweep empties the bundled audio folders by exact file name on an in-place
+        /// upgrade to a modular install, and <c>dirifempty</c> only reclaims a folder the sweep left
+        /// completely bare - one stray file, or a folder Windows kept open at that moment, and the
+        /// husk survives. A husk that wins this ladder shadows rung 3 (the DOWNLOADED content pack)
+        /// forever: the pack lands correctly under the content root and the companion still resolves
+        /// to the empty install-dir folder and stays silent. Same lesson
+        /// <see cref="ReleaseContentService.CountMediaFiles"/> was written for, applied to the rung
+        /// that picks WHICH root wins.
+        ///
+        /// An existing folder we cannot enumerate stays a hit: refusing it would newly silence a
+        /// working install over a transient permissions or antivirus error.
+        /// </summary>
         public static bool Exists(CompanionContentCandidate candidate)
         {
             try
             {
                 if (string.IsNullOrWhiteSpace(candidate.Path)) return false;
-                return candidate.IsDirectory
-                    ? Directory.Exists(candidate.Path)
-                    : File.Exists(candidate.Path);
+                if (!candidate.IsDirectory) return File.Exists(candidate.Path);
+                if (!Directory.Exists(candidate.Path)) return false;
+                return HasMedia(candidate.Path);
             }
             catch { return false; }
+        }
+
+        /// <summary>
+        /// At least one media file anywhere under <paramref name="dir"/>. Stops at the first hit, so
+        /// this stays cheap on the portrait trees. Enumeration failures answer TRUE - see
+        /// <see cref="Exists"/> on why an unreadable folder must not be treated as an empty one.
+        /// </summary>
+        private static bool HasMedia(string dir)
+        {
+            foreach (var option in new[] { SearchOption.AllDirectories, SearchOption.TopDirectoryOnly })
+            {
+                try
+                {
+                    return ReleaseContentService.CountMediaFiles(
+                        Directory.EnumerateFiles(dir, "*", option), 1) > 0;
+                }
+                catch
+                {
+                    // AllDirectories throws mid-walk on one unreadable subfolder; retry shallow before
+                    // giving the folder the benefit of the doubt.
+                }
+            }
+            return true;
         }
 
         private static string InstallRoot
@@ -266,6 +304,16 @@ namespace ConditioningControlPanel.Services.Companion
                     CompanionContentResolver.Describe(events.Source),
                     CompanionContentResolver.Describe(mantras.Source),
                     CompanionContentResolver.Describe(avatars.Source));
+
+                // "baseline" alone cannot tell the INSTALL dir from the downloaded content root, and
+                // that is the whole question when a user reports a silent companion on a modular
+                // install. The scrubber turns these into %APP%\... / %DATA%\..., which answers it.
+                if (voice.Found)
+                    App.Logger?.Information("CompanionContent[{ModId}]: voice lines resolved to {Path}", modId ?? "none", voice.Path);
+                else
+                    App.Logger?.Warning(
+                        "CompanionContent[{ModId}]: NO voice-line folder on any rung - the companion has nothing to speak. " +
+                        "On a modular install this means the audio content pack has not been downloaded.", modId ?? "none");
             }
             catch (Exception ex)
             {

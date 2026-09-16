@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using ConditioningControlPanel.Services.Prizes;
 
 namespace ConditioningControlPanel.Features
 {
@@ -23,17 +24,95 @@ namespace ConditioningControlPanel.Features
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
+            // The picker's rows come from ownership, so build them before the settings load
+            // selects one. GrantsChanged rebuilds them (a purchase, a sync, a logout).
+            PrizeGrants.GrantsChanged += OnGrantsChanged;
+            BuildMotionPicker();
             RebindToCurrentSettings();
             // The hero and side plates are mod art; the rack hosts this control permanently, so a
             // mod switch must repaint them (a popup instance never lived long enough to care).
             ApplyFeatureArt();
             if (App.Mods != null) App.Mods.ModChanged += OnModChanged;
+            RefreshV2Box();
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
+            PrizeGrants.GrantsChanged -= OnGrantsChanged;
             _settingsHook?.Unhook();
             if (App.Mods != null) App.Mods.ModChanged -= OnModChanged;
+        }
+
+        // The Flashes v2 box and its rows: visibility is ownership, never settings (the dashboard
+        // flash card's own v2 pill counts these prizes too - that check lives in
+        // SettingsTabView.RefreshV2Badges). Each row hides on its own grant and the box collapses
+        // once no row is left, so an account with nothing v2 sees the flash options unchanged.
+        // BuildMotionPicker owns RowMotion's visibility; it runs alongside this on every refresh.
+        private void RefreshV2Box()
+        {
+            bool remix = PrizeGrants.IsGranted(PrizeGrants.JackpotRemix);
+            bool motion = PrizeGrants.IsGranted(PrizeGrants.FlashDriftBounce)
+                          || PrizeGrants.IsGranted(PrizeGrants.FlashPendulum);
+            RowJackpotRemix.Visibility = remix ? Visibility.Visible : Visibility.Collapsed;
+            // Rounded corners dresses the picture the motion prizes animate and dragging replaces
+            // the way it moves, so both ride those grants rather than Jackpot Remix.
+            RowRoundedCorners.Visibility = motion ? Visibility.Visible : Visibility.Collapsed;
+            RowDraggable.Visibility = motion ? Visibility.Visible : Visibility.Collapsed;
+            // Shatter dresses the way that same picture leaves, so it rides those grants too.
+            RowShatter.Visibility = motion ? Visibility.Visible : Visibility.Collapsed;
+            BoxFlashV2.Visibility = (remix || motion) ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        // One hook for both ownership-driven pieces of this control: the motion picker's rows
+        // (Flashes v2) and the Jackpot Remix toggle row. Each lane arrived with its own handler
+        // of this name; they are folded together here so the subscription stays single.
+        private void OnGrantsChanged() => Dispatcher.BeginInvoke(new Action(() =>
+        {
+            BuildMotionPicker();
+            RefreshV2Box();
+        }));
+
+        // Rounded corners: every render path reads the setting at spawn, so live flashes finish
+        // out square and the next one is round. No service bounce.
+        private void ChkFlashRoundedCorners_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.FlashRoundedCorners = ChkFlashRoundedCorners.IsChecked ?? false;
+            App.Settings?.Save();
+        }
+
+        // Draggable GIFs: the flash heartbeat re-reads this every tick to decide whether a press
+        // grabs or pops, so the switch takes effect on flashes that are already up. No bounce.
+        private void ChkFlashDraggable_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.FlashDraggable = ChkFlashDraggable.IsChecked ?? false;
+            App.Settings?.Save();
+        }
+
+        // Shatter: read at the dismiss, so the switch takes effect on flashes already on screen.
+        // No service bounce.
+        private void ChkFlashShatter_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.FlashShatterEnabled = ChkFlashShatter.IsChecked ?? false;
+            App.Settings?.Save();
+        }
+
+        private void ChkJackpotRemix_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.JackpotRemixEnabled = ChkJackpotRemix.IsChecked ?? false;
+            App.Settings?.Save();
+            // No service bounce: the director reads the setting on every roll and poll.
         }
 
         /// <inheritdoc/>
@@ -62,6 +141,7 @@ namespace ConditioningControlPanel.Features
                 ChkHydraLinked.IsChecked = s.HydraLinkedTiming;
                 ChkGlow.IsChecked = s.FlashGlowEnabled;
                 ChkSolidMode.IsChecked = s.FlashSolidMode;
+                SelectMotion(s.FlashMotionStyle);
                 ChkFlashGazePop.IsChecked = s.FlashGazePopEnabled;
                 ChkFlashGazeLinger.IsChecked = s.FlashGazeLingerEnabled;
                 SliderFlashLingerMs.Value = s.FlashGazeLingerExtensionMs;
@@ -69,6 +149,10 @@ namespace ConditioningControlPanel.Features
                 ChkFlashAvoidCenter.IsChecked = s.FlashAvoidCenter;
                 SliderCenterExclusion.Value = s.FlashCenterExclusionPercent;
                 TxtCenterExclusion.Text = $"{s.FlashCenterExclusionPercent}%";
+                ChkJackpotRemix.IsChecked = s.JackpotRemixEnabled;
+                ChkFlashRoundedCorners.IsChecked = s.FlashRoundedCorners;
+                ChkFlashDraggable.IsChecked = s.FlashDraggable;
+                ChkFlashShatter.IsChecked = s.FlashShatterEnabled;
             }
             finally { _isLoading = false; }
         }
@@ -85,11 +169,16 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.HydraLinkedTiming) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGlowEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashSolidMode) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashMotionStyle) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashRoundedCorners) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashDraggable) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashShatterEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazePopEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerExtensionMs) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashAvoidCenter) ||
-                e.PropertyName == nameof(Models.AppSettings.FlashCenterExclusionPercent))
+                e.PropertyName == nameof(Models.AppSettings.FlashCenterExclusionPercent) ||
+                e.PropertyName == nameof(Models.AppSettings.JackpotRemixEnabled))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
@@ -255,6 +344,80 @@ namespace ConditioningControlPanel.Features
             App.Settings?.Save();
             // No service bounce needed: each spawn reads the setting, so the next flash uses the
             // new mode. Live flashes finish out on whichever renderer spawned them.
+        }
+
+        // =====================================================================================
+        //  Flashes v2 motion picker (Back Room prizes)
+        // =====================================================================================
+
+        /// <summary>
+        /// Rebuilds the picker from ownership: Still always, each OWNED v2 style wearing the v2
+        /// pill, and Mix once anything v2 is owned. Ownership is PrizeGrants' word, never a
+        /// setting; with nothing owned the whole row stays hidden (a one-choice picker is noise).
+        /// </summary>
+        private void BuildMotionPicker()
+        {
+            var wasLoading = _isLoading;
+            _isLoading = true;
+            try
+            {
+                bool drift = PrizeGrants.IsGranted(PrizeGrants.FlashDriftBounce);
+                bool pendulum = PrizeGrants.IsGranted(PrizeGrants.FlashPendulum);
+                RowMotion.Visibility = (drift || pendulum) ? Visibility.Visible : Visibility.Collapsed;
+                CmbMotion.Items.Clear();
+                AddMotionChoice(Models.FlashMotionStyle.Still, "option_flash_motion_still", v2: false);
+                if (drift) AddMotionChoice(Models.FlashMotionStyle.DriftBounce, "option_flash_motion_drift", v2: true);
+                if (pendulum) AddMotionChoice(Models.FlashMotionStyle.Pendulum, "option_flash_motion_pendulum", v2: true);
+                if (drift || pendulum) AddMotionChoice(Models.FlashMotionStyle.Mix, "option_flash_motion_mix", v2: false);
+                SelectMotion(App.Settings?.Current?.FlashMotionStyle ?? Models.FlashMotionStyle.Still);
+            }
+            catch (Exception ex) { App.Logger?.Debug("FlashFeatureControl.BuildMotionPicker: {E}", ex.Message); }
+            finally { _isLoading = wasLoading; }
+        }
+
+        private void AddMotionChoice(Models.FlashMotionStyle style, string key, bool v2)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            row.Children.Add(new TextBlock
+            {
+                Text = Localization.Loc.Get(key),
+                Foreground = System.Windows.Media.Brushes.Black,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            if (v2) row.Children.Add(FeatureCard.NewV2Badge(new Thickness(8, 0, 0, 0)));
+            CmbMotion.Items.Add(new ComboBoxItem
+            {
+                Content = row,
+                Tag = style,
+                Foreground = System.Windows.Media.Brushes.Black,
+            });
+        }
+
+        /// <summary>
+        /// Selects the row for <paramref name="style"/>. A style this account does not own (a
+        /// synced profile) has no row and shows as Still, which is exactly how it plays.
+        /// </summary>
+        private void SelectMotion(Models.FlashMotionStyle style)
+        {
+            if (CmbMotion.Items.Count == 0) return;
+            ComboBoxItem? match = null;
+            foreach (ComboBoxItem item in CmbMotion.Items)
+            {
+                if (item.Tag is Models.FlashMotionStyle s && s == style) { match = item; break; }
+            }
+            CmbMotion.SelectedItem = match ?? CmbMotion.Items[0];
+        }
+
+        private void CmbMotion_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            if (CmbMotion.SelectedItem is not ComboBoxItem item || item.Tag is not Models.FlashMotionStyle style) return;
+            if (s.FlashMotionStyle == style) return;
+            s.FlashMotionStyle = style;
+            App.Settings?.Save();
+            // No service bounce: every spawn resolves the picker, so the next flash uses it.
         }
 
         // =====================================================================================

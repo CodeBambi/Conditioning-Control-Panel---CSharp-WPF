@@ -120,7 +120,7 @@ namespace ConditioningControlPanel.Services.Deeper
                 // Bark hook: an enhancement was applied to the current page. Identify it by name
                 // (enhancements have no id/slug field — name is the stable human key authors match on).
                 try { App.Bark?.NotifyEnhancementApplied(match.Name); } catch { /* never break playback for a bark */ }
-                App.Logger?.Information("BrowserEnhancementBridge: bound {Name} for {Url}", match.Name, UrlSafety.RedactUrl(url));
+                App.Logger?.Information("BrowserEnhancementBridge: bound {Name} for {Host}", match.Name, Logging.UrlLog.Host(url));
             }
             catch (Exception ex)
             {
@@ -153,15 +153,18 @@ namespace ConditioningControlPanel.Services.Deeper
 
                 var entries = App.EnhancementLibrary?.ScanLibrary();
                 var count = entries?.Count ?? 0;
+                // Hosts, not media sources. A media_source is a full URL into the site the user
+                // was on (or a path on their disk), and three of them were going into every
+                // no-match line.
                 var sample = "";
                 if (entries != null && count > 0)
                 {
-                    var top = entries.Take(3).Select(e => e.MediaSource ?? "(none)");
-                    sample = " | sample media_source: " + string.Join("  ;  ", top);
+                    var top = entries.Take(3).Select(e => Logging.UrlLog.Host(e.MediaSource));
+                    sample = " | sample media_source hosts: " + string.Join("  ;  ", top);
                 }
                 App.Logger?.Information(
-                    "BrowserEnhancementBridge: no match for {Url} ({Count} library entries){Sample}",
-                    UrlSafety.RedactUrl(url), count, sample);
+                    "BrowserEnhancementBridge: no match for {Host} ({Count} library entries){Sample}",
+                    Logging.UrlLog.Host(url), count, sample);
             }
             catch (Exception ex)
             {

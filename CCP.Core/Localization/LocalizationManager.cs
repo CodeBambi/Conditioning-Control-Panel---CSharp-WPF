@@ -128,6 +128,18 @@ namespace ConditioningControlPanel.Localization
         public string this[string key] => Get(key);
 
         /// <summary>
+        /// Every key in the English file that starts with <paramref name="prefix"/>, sorted. English is the
+        /// reference set every language falls back to, so a page asking by prefix (the Back Room's
+        /// <c>br_</c> lexicon) sees each key exactly once whatever the current language.
+        /// </summary>
+        public IReadOnlyList<string> KeysWithPrefix(string prefix)
+        {
+            EnsureFallbackLoaded();
+            return _fallbackStrings.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal))
+                .OrderBy(k => k, StringComparer.Ordinal).ToList();
+        }
+
+        /// <summary>
         /// Get a localized string by key. Falls back to English, then to the key itself.
         ///
         /// Descent vocabulary tokens (<c>{petname}</c>, <c>{collective}</c>) are substituted on the

@@ -392,7 +392,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             var dispatcher = System.Windows.Application.Current?.Dispatcher;
             if (dispatcher == null || dispatcher.HasShutdownStarted) return;
 
-            dispatcher.BeginInvoke(new Action(() =>
+            _ = dispatcher.BeginInvoke(new Action(() =>
             {
                 IsThinking = false;
                 Sync();

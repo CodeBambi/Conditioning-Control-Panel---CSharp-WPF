@@ -1,0 +1,21 @@
+# Conditioning Control Panel - community pages on GitHub Pages.
+#
+# Paths below are origin-relative and therefore carry the project-site prefix.
+# A GitHub Pages project site is served from
+#   https://codebambi.github.io/Conditioning-Control-Panel---CSharp-WPF/
+# so the repo name is part of every crawlable path and must appear in every
+# Disallow rule. A bare "/labs/" would not match anything.
+#
+# IMPORTANT: crawlers only read robots.txt from the ORIGIN ROOT, which for this
+# site is https://codebambi.github.io/robots.txt - served by the user-site repo
+# "codebambi.github.io", not by this one. This file publishes at
+# .../Conditioning-Control-Panel---CSharp-WPF/robots.txt and is therefore
+# advisory documentation rather than an enforced rule. To make it bite, copy the
+# two directive lines below into the user-site repo's robots.txt. The per-page
+# <meta name="robots" content="noindex"> tags under docs/labs/ are what actually
+# keeps these pages out of an index today.
+#
+# The guides, first-run and remote pages are deliberately left crawlable.
+
+User-agent: *
+Disallow: /Conditioning-Control-Panel---CSharp-WPF/labs/

@@ -9,7 +9,9 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.UI;
 
 namespace ConditioningControlPanel
 {
@@ -201,13 +203,60 @@ namespace ConditioningControlPanel
         private bool _navRailExpanded;
         private bool _navRailReady;
 
-        /// <summary>Outstanding <see cref="HoldNavRailOpen"/> claims. While this is above zero the
-        /// rail ignores every collapse trigger - the pointer leaving and the
+        /// <summary>Outstanding <see cref="HoldNavRailOpen(object)"/> claims. While anything is
+        /// holding, the rail ignores every collapse trigger - the pointer leaving and the
         /// click-elsewhere - because the caller is showing the user something IN the rail and a
-        /// rail that shuts underneath a spotlight is worse than no spotlight at all. Counted, not
-        /// a bool: a tutorial step and the palette can be up at once, and the first one to finish
-        /// must not release the other's hold.</summary>
-        private int _navRailHoldCount;
+        /// rail that shuts underneath a spotlight is worse than no spotlight at all. A SET, not a
+        /// counter: a tutorial step and the palette can be up at once and the first one to finish
+        /// must not release the other's hold, but a caller whose release never arrives must not be
+        /// able to pin the rail open for the rest of the session either. See
+        /// <see cref="NavRailHoldLatch"/> for the v6.9.5 bug that bought the set.</summary>
+        private readonly NavRailHoldLatch _navRailHolds = new();
+
+        /// <summary>
+        /// The rail's own context menus (the Favorites pin menu, MainWindow.FavoritesRail.cs),
+        /// registered at attach time so the watchdog can ask each one whether it is REALLY open.
+        ///
+        /// <para>Read straight off <c>ContextMenu.IsOpen</c> and never off bookkeeping of our own:
+        /// a counter incremented on Opened and decremented on Closed is the same shape of promise
+        /// that produced the stuck rail in the first place, and a menu that skipped its Closed
+        /// would then switch the watchdog off forever - the one state the watchdog exists to
+        /// survive.</para>
+        /// </summary>
+        private readonly List<ContextMenu> _navRailPopups = new();
+
+        /// <summary>
+        /// THE SAFETY NET. Nothing in the rail's normal wiring is allowed to be the last word on
+        /// whether it may collapse: every edge (MouseLeave, the click-elsewhere) can be missed,
+        /// and every latch (<see cref="_navRailHolds"/>) depends on somebody remembering to let
+        /// go. This timer re-reads the truth from the OS cursor several times a second while the
+        /// rail is out, and a rail that has been open, unattended and popup-free for
+        /// <see cref="NavRailWatchdogGraceMs"/> is force-collapsed with its latches dropped.
+        ///
+        /// <para>It runs ONLY while the flyout is out (started and stopped from
+        /// <see cref="SetNavRailExpanded"/>), so the shut rail - which is the rail almost always -
+        /// costs nothing at all.</para>
+        /// </summary>
+        private DispatcherTimer? _navRailWatchdog;
+
+        /// <summary>When the cursor was first seen off the flyout, or MinValue while it is on it.
+        /// UTC, because this is a duration and the user's clock can move under it.</summary>
+        private DateTime _navRailPointerAwaySince = DateTime.MinValue;
+
+        /// <summary>Watchdog tick. Four reads a second of a cursor position and a rectangle, and
+        /// only while the rail is open.</summary>
+        private const int NavRailWatchdogTickMs = 250;
+
+        /// <summary>How long the cursor has to be demonstrably off the flyout before the rail is
+        /// declared stuck. Long enough that it can never race a real hover (the pointer travels
+        /// off and back across the rail's edge in tens of milliseconds) and short enough that a
+        /// user who has noticed the rail is covering their dashboard does not have to wait for
+        /// it - the reports describe people clicking around trying to make it go away.</summary>
+        private const int NavRailWatchdogGraceMs = 1500;
+
+        /// <summary>Slack around the flyout's screen rect, so a cursor resting on the 3px accent
+        /// window frame or one device pixel outside a scaled edge does not read as "away".</summary>
+        private const double NavRailWatchdogSlackPx = 24;
 
         /// <summary>Every label in the rail, cached once. Faded rather than collapsed: a
         /// Visibility flip would re-measure the door panels mid-tween and fight the accordion's
@@ -296,7 +345,7 @@ namespace ConditioningControlPanel
                 // pointer is travelling between doors or down into an open accordion.
                 NavSidebar.MouseLeave += (_, __) =>
                 {
-                    if (_navRailHoldCount > 0) return;
+                    if (_navRailHolds.Held) return;
                     SetNavRailExpanded(false);
                 };
 
@@ -306,7 +355,7 @@ namespace ConditioningControlPanel
                 PreviewMouseDown += (_, __) =>
                 {
                     if (NavSidebar.IsMouseOver) return;
-                    if (_navRailHoldCount > 0) return;
+                    if (_navRailHolds.Held) return;
                     SetNavRailExpanded(false);
                 };
 
@@ -316,9 +365,36 @@ namespace ConditioningControlPanel
                 PreviewMouseMove += (_, __) =>
                 {
                     if (!_navRailExpanded) return;
-                    if (_navRailHoldCount > 0) return;
+                    if (_navRailHolds.Held) return;
                     if (NavSidebar.IsMouseOver) return;
                     SetNavRailExpanded(false);
+                };
+
+                // THE SAFETY NET. Everything above is an EDGE or a latch, and v6.9.5 proved both
+                // can fail: an unpaired hold left the rail pinned over the dashboard until the app
+                // was restarted, and every level trigger in this file bails out on a hold before
+                // it reads anything. So one clock re-reads the OS cursor while the flyout is out
+                // and collapses a rail nobody is near, latches and all - see NavRailWatchdogTick.
+                _navRailWatchdog = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+                {
+                    Interval = TimeSpan.FromMilliseconds(NavRailWatchdogTickMs),
+                };
+                _navRailWatchdog.Tick += (_, __) => NavRailWatchdogTick();
+                Closed += (_, __) => _navRailWatchdog?.Stop();
+
+                // Alt-Tab, a modal from another app, the screen locking: the pointer can be
+                // anywhere and this window will get no leave for it. Losing activation is the one
+                // unambiguous "nobody is using the rail" signal there is, so it is the watchdog's
+                // grace window collapsed to zero. A rail popup that is genuinely up survives it -
+                // ForceCollapseNavRail checks.
+                Deactivated += (_, __) => ForceCollapseNavRail("window deactivated");
+
+                // A rail that is not on screen cannot be hovered, so it cannot be holding a hover
+                // state worth keeping. Covers a tab/shell swap that takes the rail out of the
+                // tree while a popup had it pinned.
+                NavSidebar.IsVisibleChanged += (_, __) =>
+                {
+                    if (NavSidebar?.IsVisible == false) ForceCollapseNavRail("rail hidden");
                 };
 
                 _navRailReady = true;
@@ -892,6 +968,155 @@ namespace ConditioningControlPanel
             ApplyNavDoorRows(expand, animate);
             ApplyNavRailDoorState(animate);
             ApplyNavRailAirspace(expand);
+
+            // The watchdog only runs while there is something to watch. Started here rather than
+            // in the hold, because the state it guards against is "expanded and unattended" -
+            // which a missed MouseLeave reaches with no hold in sight.
+            if (_navRailWatchdog != null)
+            {
+                _navRailPointerAwaySince = DateTime.MinValue;
+                if (expand) _navRailWatchdog.Start();
+                else _navRailWatchdog.Stop();
+            }
+        }
+
+        // ============================ the stuck-rail watchdog ============================
+
+        /// <summary>
+        /// Registers one of the rail's own context menus, so the watchdog can tell "a pin menu is
+        /// open over the rail" (leave it alone) from "a pin menu forgot to let go" (collapse).
+        /// Called once per menu, from MainWindow.FavoritesRail.cs.
+        /// </summary>
+        internal void RegisterNavRailPopup(ContextMenu menu)
+        {
+            if (menu != null && !_navRailPopups.Contains(menu)) _navRailPopups.Add(menu);
+        }
+
+        /// <summary>True while one of the rail's registered menus is genuinely on screen. Asked of
+        /// the menu, not of a counter - see <see cref="_navRailPopups"/>.</summary>
+        private bool AnyNavRailPopupOpen()
+        {
+            for (int i = 0; i < _navRailPopups.Count; i++)
+                if (_navRailPopups[i].IsOpen) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Is the cursor outside the flyout, measured in SCREEN pixels from the OS?
+        ///
+        /// <para><b>Why not <c>IsMouseOver</c>.</b> WPF reports <c>IsMouseOver == true</c> for an
+        /// element whose own popup is under the pointer, and a ContextMenu is a logical child of
+        /// the control it hangs off - so while the pin menu is up (and for the frame it closes on)
+        /// NavSidebar claims the pointer is on it no matter where the pointer actually is. That is
+        /// precisely the lie the old <c>ReleaseNavRailOpen</c> believed. The cursor position and
+        /// the rail's screen rect are facts neither capture nor popups can colour.</para>
+        ///
+        /// <para>Measured at the FULL <see cref="NavRailExpandedWidth"/>, not the animated width,
+        /// so a cursor resting inside the flyout during its collapse tween still reads as "on it".
+        /// Returns false - "not away", i.e. do nothing - whenever it cannot tell, because the
+        /// watchdog must never collapse the rail on a measurement it does not have.</para>
+        /// </summary>
+        private bool NavRailPointerIsAway()
+        {
+            if (NavSidebar == null || !NavSidebar.IsVisible) return true;
+            if (WindowState == WindowState.Minimized) return true;
+
+            try
+            {
+                if (NavSidebar.ActualHeight <= 0) return false;
+                var topLeft = NavSidebar.PointToScreen(new Point(0, 0));
+                var bottomRight = NavSidebar.PointToScreen(
+                    new Point(NavRailExpandedWidth, NavSidebar.ActualHeight));
+
+                var rail = new Rect(topLeft, bottomRight);
+                rail.Inflate(NavRailWatchdogSlackPx, NavRailWatchdogSlackPx);
+
+                var cursor = System.Windows.Forms.Control.MousePosition;
+                return !rail.Contains(new Point(cursor.X, cursor.Y));
+            }
+            catch (Exception ex)
+            {
+                // Not connected to a PresentationSource yet, or mid-teardown. Unknown is not away.
+                Diag.Swallowed(ex, "nav rail watchdog could not measure the flyout");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// One watchdog beat: is this rail open, unattended and popup-free, and has it been for
+        /// the whole grace window? The decision itself is
+        /// <see cref="NavRailWatchdogRule.ShouldForceCollapse"/> so it can be tested without a
+        /// window; this method only supplies the four facts and keeps the clock.
+        /// </summary>
+        private void NavRailWatchdogTick()
+        {
+            try
+            {
+                if (!_navRailExpanded || !_navRailReady || NavSidebar == null)
+                {
+                    _navRailWatchdog?.Stop();
+                    _navRailPointerAwaySince = DateTime.MinValue;
+                    return;
+                }
+
+                bool popup = AnyNavRailPopupOpen();
+                bool away = !popup && NavRailPointerIsAway();
+
+                if (!away)
+                {
+                    _navRailPointerAwaySince = DateTime.MinValue;
+                    return;
+                }
+                if (_navRailPointerAwaySince == DateTime.MinValue)
+                {
+                    _navRailPointerAwaySince = DateTime.UtcNow;
+                    return;
+                }
+
+                if (!NavRailWatchdogRule.ShouldForceCollapse(
+                        _navRailReady, _navRailExpanded, popup, away,
+                        DateTime.UtcNow - _navRailPointerAwaySince,
+                        TimeSpan.FromMilliseconds(NavRailWatchdogGraceMs)))
+                    return;
+
+                ForceCollapseNavRail("pointer away");
+            }
+            catch (Exception ex) { App.Logger?.Debug("NavRailWatchdogTick: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Drops every hold and shuts the rail, whatever it thought it was doing. The one path in
+        /// this file that does not ask permission.
+        ///
+        /// <para>A rail popup that is really open is the single veto: the pin menu holds the rail
+        /// precisely so it is not yanked out from under the menu it belongs to, and that hold is
+        /// legitimate for exactly as long as the menu is on screen.</para>
+        ///
+        /// <para>Dropped holds are logged at Warning WITH THE COUNT and nothing else - counts and
+        /// a fixed reason string, no content, per the logging policy - because a hold that had to
+        /// be taken away is a caller that never released, and that line is what makes the next one
+        /// of these findable in a bug report instead of another "it worked after a restart".</para>
+        /// </summary>
+        private void ForceCollapseNavRail(string reason)
+        {
+            try
+            {
+                if (!_navRailReady || NavSidebar == null) return;
+                if (AnyNavRailPopupOpen()) return;
+
+                int dropped = _navRailHolds.Clear();
+                _navRailPointerAwaySince = DateTime.MinValue;
+                if (dropped > 0)
+                {
+                    App.Logger?.Warning(
+                        "[NavRail] dropped {Count} stuck hold(s) ({Reason}); the flyout was pinned open",
+                        dropped, reason);
+                }
+
+                if (_navRailExpanded) SetNavRailExpanded(false);
+                else _navRailWatchdog?.Stop();
+            }
+            catch (Exception ex) { App.Logger?.Debug("ForceCollapseNavRail: {E}", ex.Message); }
         }
 
         // ================================================================================
@@ -1057,7 +1282,7 @@ namespace ConditioningControlPanel
             try
             {
                 if (!_navRailReady || NavSidebar == null) return;
-                if (_navRailHoldCount > 0) return;
+                if (_navRailHolds.Held) return;
 
                 bool over = WindowState != WindowState.Minimized && NavSidebar.IsMouseOver;
                 SetNavRailExpanded(over, animate: false);
@@ -1070,37 +1295,59 @@ namespace ConditioningControlPanel
         /// where they landed (the tutorial's spotlights, the Ctrl+K palette). Without this the
         /// spotlight would point at a 56px icon strip with the target row shut inside it.
         ///
-        /// <para>The hold is a real suspension: while <see cref="_navRailHoldCount"/> is up,
-        /// MouseLeave and the click-elsewhere both bail out instead of collapsing. Every caller
-        /// MUST pair this with <see cref="ReleaseNavRailOpen"/>, or the rail stays open for the
-        /// session.</para>
+        /// <para>The hold is a real suspension: while anything is holding, MouseLeave and the
+        /// click-elsewhere both bail out instead of collapsing. Every caller MUST pair this with
+        /// <see cref="ReleaseNavRailOpen(object)"/> - but since v6.9.5 a caller that does not is
+        /// no longer fatal: the claim is keyed on <paramref name="owner"/>, so repeats collapse
+        /// into one claim, and the watchdog takes back anything still standing over an unattended
+        /// rail.</para>
+        ///
+        /// <param name="owner">Whoever is showing the user something in the rail - the object
+        /// whose lifetime the hold belongs to (today: the ContextMenu). Two claims from the same
+        /// owner are one claim.</param>
         /// </summary>
-        internal void HoldNavRailOpen()
+        internal void HoldNavRailOpen(object owner)
         {
             try
             {
-                _navRailHoldCount++;
+                if (!_navRailHolds.Take(owner)) return;
                 SetNavRailExpanded(true);
             }
             catch (Exception ex) { App.Logger?.Debug("HoldNavRailOpen: {E}", ex.Message); }
         }
 
+        /// <summary>Unkeyed hold, for callers that have no natural owner object (the offscreen
+        /// door shooter). Backed by one shared token, so it is idempotent too.</summary>
+        internal void HoldNavRailOpen() => HoldNavRailOpen(NavRailAnonymousHoldOwner);
+
+        /// <summary>The token behind the unkeyed <see cref="HoldNavRailOpen()"/>.</summary>
+        private static readonly object NavRailAnonymousHoldOwner = new();
+
         /// <summary>
-        /// Drops one <see cref="HoldNavRailOpen"/> claim. The last one out hands the rail back to
-        /// the pointer: a spotlight usually ends with a click on the row it was pointing at, so a
-        /// release with the mouse still ON the rail leaves it open and lets the normal MouseLeave
+        /// Drops <paramref name="owner"/>'s claim. The last one out hands the rail back to the
+        /// pointer: a spotlight usually ends with a click on the row it was pointing at, so a
+        /// release with the cursor still ON the rail leaves it open and lets the normal MouseLeave
         /// shut it. Anywhere else, the hold was the only thing keeping it up - collapse now,
         /// because with the delay timer gone there is nothing else that ever would.
+        ///
+        /// <para><b>The pointer test is the OS cursor, not <c>IsMouseOver</c>.</b> A ContextMenu
+        /// is a logical child of the control it hangs off, so WPF answers <c>IsMouseOver == true</c>
+        /// on NavSidebar for as long as that menu has the pointer - including the frame the menu
+        /// closes on. The pin menu therefore released its hold and then declined to collapse,
+        /// handing the rail to a MouseLeave that WPF had no reason to raise because as far as it
+        /// was concerned the pointer had never left. See <see cref="NavRailPointerIsAway"/>.</para>
         /// </summary>
-        internal void ReleaseNavRailOpen()
+        internal void ReleaseNavRailOpen(object owner)
         {
             try
             {
-                if (_navRailHoldCount > 0) _navRailHoldCount--;
-                if (_navRailHoldCount > 0) return;
-                if (NavSidebar?.IsMouseOver != true) SetNavRailExpanded(false);
+                if (!_navRailHolds.Release(owner)) return;   // not the last claim (or not a holder)
+                if (NavRailPointerIsAway()) SetNavRailExpanded(false);
             }
             catch (Exception ex) { App.Logger?.Debug("ReleaseNavRailOpen: {E}", ex.Message); }
         }
+
+        /// <summary>Unkeyed release, the pair of <see cref="HoldNavRailOpen()"/>.</summary>
+        internal void ReleaseNavRailOpen() => ReleaseNavRailOpen(NavRailAnonymousHoldOwner);
     }
 }

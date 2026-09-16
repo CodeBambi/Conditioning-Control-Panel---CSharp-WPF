@@ -18,19 +18,33 @@ public enum EmiKnockPopulation
     /// <summary>A new install that already took the walk in the wizard. She has nothing to offer them.</summary>
     Walked = 2,
 
-    /// <summary>They ran an older version. The offer is the upgrade tour, not the short walk.</summary>
+    /// <summary>
+    /// They ran an older version. NO LONGER PRODUCED by <see cref="EmiKnockMachine.Population"/>:
+    /// the upgrade tour is offered by What's New / the Welcome-back sheet, which is the surface an
+    /// upgrader is already looking at. The value and its mappings survive so the upgrade moment,
+    /// its pool and its asks stay addressable from that surface and from QA.
+    /// </summary>
     Upgrader = 3
 }
 
 /// <summary>
-/// THE KNOCK: the dock chip flashes ONCE, ever, and then the feature is over.
+/// THE KNOCK: she comes out ONCE, ever, asks one question, and then the feature is over.
 ///
 /// <para>Why it exists. EMI Desk ships switched on and completely silent: the chip is a 40 px ring
 /// at the bottom of a rail full of doors, and nothing in the app ever says that clicking it does
 /// anything. A first-run wizard that someone pressed "explore on my own" through has, by
-/// definition, told them nothing either. So she knocks: three pink pulses, six seconds, and if
-/// they click she introduces herself and offers to walk them round. If they do not click, that was
-/// the whole feature.</para>
+/// definition, told them nothing either. So she knocks.</para>
+///
+/// <para><b>The knock is now the offer, not an invitation to fetch the offer</b> (first-run
+/// redesign, Sep 2026). It used to be three pink pulses and nothing else: if the user happened to
+/// click the chip in those six seconds she introduced herself and offered the walk, and if they
+/// did not - which is almost everybody, because nothing on screen said the ring meant anything -
+/// the offer was spent on a pulse nobody read as a question. So a shrug bought a second flash on a
+/// later launch, and the whole thing still mostly landed as noise.
+/// Now: when <see cref="MayKnock"/> says yes the chip pulses AND she is summoned in the same beat,
+/// opening with <see cref="FreshMoment"/>, whose ask IS the walk offer. Yes runs the walk. No, or
+/// a dismissed desk, is a no - and it is the last word, because there is no second offer to spend.
+/// The pulse survives as the reason she appeared: it points at the chip she came out of.</para>
 ///
 /// <para><b>The whole design is the stopping, not the knocking</b> - the same law
 /// <see cref="EmiNudgeMachine"/> is built on, and this class is deliberately modelled on it line
@@ -39,27 +53,24 @@ public enum EmiKnockPopulation
 /// <list type="number">
 /// <item>the <b>latch</b>: <see cref="EmiState.KnockState"/> reaches
 /// <see cref="Spent"/> the moment they say yes, and nothing here fires again;</item>
-/// <item>the <b>lifetime cap</b>: <see cref="OfferCap"/> knocks across every launch there will
-/// ever be, counted in <see cref="EmiState.KnockOffers"/> - the knock itself, and one shrugged
-/// re-offer on a later launch;</item>
+/// <item>the <b>lifetime cap</b>: <see cref="OfferCap"/> - ONE offer across every launch there
+/// will ever be, counted in <see cref="EmiState.KnockOffers"/>;</item>
 /// <item>the lines file's own <c>limit: {per:"ever", max:1}</c> on the contact moments, which is
 /// the same ceiling written down a second time on the content side;</item>
 /// <item>the <b>tour latch</b>: <see cref="EmiState.ToursDone"/> already holding the tour she
 /// would offer. Offering a walk somebody has taken is the definition of not listening.</item>
 /// </list>
 ///
-/// <para><b>Reading brake 1 against brake 2.</b> The contract calls state 2 "they answered, either
-/// way", which read literally would make the re-offer in brake 2 unreachable. The reading that
-/// makes both brakes real, and the one implemented here: a <b>yes</b> is answered and latches
-/// state 2 immediately (<c>EmiState.NoteKnockAnswered</c>); a <b>no</b> spends one of the two offers and
-/// leaves the state at <see cref="Knocked"/>, so exactly one quieter re-offer may follow on a
-/// later launch, and the cap ends it after that. "Never a third" is the promise, and both counters
-/// enforce it independently.</para>
+/// <para><b>Brake 1 against brake 2, now that the cap is one.</b> A <b>yes</b> latches
+/// <see cref="Spent"/> immediately (<c>EmiState.NoteKnockAnswered</c>) so the answer survives even a
+/// QA counter reset. A <b>no</b> needs no latch of its own: the single offer was already spent, so
+/// brake 2 alone means she is never owed another. The two brakes agree instead of contradicting
+/// each other, which is what the old two-offer reading never quite managed.</para>
 ///
-/// <para><b>The offer is counted at the FLASH, not at the click.</b> A user who never touches the
-/// chip has answered too - by ignoring it - and if the counter waited for a click, the chip would
-/// re-flash on every launch until the end of time. Counting the pulse is what makes "once, ever"
-/// literally true.</para>
+/// <para><b>The offer is counted at the FLASH, not at the answer.</b> A user who closes the app
+/// mid-bubble has been asked, and if the counter waited for a chip press she would come out again
+/// on every launch until the end of time. Counting the moment she appears is what makes "once,
+/// ever" literally true.</para>
 ///
 /// <para><b>This class is pure.</b> No timers, no dispatcher, no <c>App</c>, no clock of its own
 /// beyond an injected one. Everything it needs about the world arrives through
@@ -75,14 +86,12 @@ public sealed class EmiKnockMachine
     /// <summary>Fresh install, walk not yet taken. Moment id AND pool id in <c>desk-lines.json</c>.</summary>
     public const string FreshMoment = "firstContact";
 
-    /// <summary>Same beat, but they ran an older build: the offer is the upgrade tour.</summary>
-    public const string UpgradeMoment = "firstContactUpgrade";
-
     /// <summary>
-    /// The re-offer, on a later launch, after a shrug. A POOL ONLY - it carries no ask (the
-    /// contract's shape column is load-bearing). She mentions it once more and then never again.
+    /// Same beat, but they ran an older build: the offer is the upgrade tour. The knock no longer
+    /// reaches it (see <see cref="EmiKnockPopulation.Upgrader"/>); it is kept as the id of a
+    /// written, shipped moment for the surface that does offer that tour.
     /// </summary>
-    public const string LaterMoment = "firstContactLater";
+    public const string UpgradeMoment = "firstContactUpgrade";
 
     // ---------------------------------------------------------------- the tour names
 
@@ -111,10 +120,15 @@ public sealed class EmiKnockMachine
     // ---------------------------------------------------------------- the dials
 
     /// <summary>
-    /// Hard ceiling on how many times the chip may EVER knock: the knock, plus one shrugged
-    /// re-offer on a later launch. A third is nagging and the machine refuses it.
+    /// Hard ceiling on how many times she may EVER knock: ONE. She comes out, she asks, and
+    /// whatever the answer is, that was the feature. A second ask is nagging and the machine
+    /// refuses it.
+    ///
+    /// <para>It was 2 while the knock was only a pulse and the offer needed a click to reach: a
+    /// shrug bought one quieter re-offer on a later launch. Now the ask arrives with her, so the
+    /// user has genuinely been asked the first time and there is nothing left to re-offer.</para>
     /// </summary>
-    public const int OfferCap = 2;
+    public const int OfferCap = 1;
 
     private readonly Func<DateTime> _now;
 
@@ -138,24 +152,24 @@ public sealed class EmiKnockMachine
     ///
     /// <para>Order matters. The walk is checked first, because somebody who took it in the wizard
     /// is a fresh install by every other measure and she still has nothing to offer them.</para>
+    ///
+    /// <para><b>THE KNOCK IS FOR FRESH INSTALLS ONLY</b> (first-run redesign, Sep 2026). An
+    /// upgrader is already being handed the upgrade tour by What's New / the Welcome-back sheet on
+    /// the very same launch, and a companion who materialises to offer a second tour on top of that
+    /// sheet is the exact pile-up this redesign exists to end. So an older stamp now answers
+    /// <see cref="EmiKnockPopulation.None"/>: not "owed nothing ever", just "not owed it by
+    /// me".</para>
     /// </summary>
     public EmiKnockPopulation Population(IEmiKnockWorld w)
     {
         if (w == null) return EmiKnockPopulation.None;
 
         bool fresh = string.IsNullOrWhiteSpace(w.LastSeenVersion);
+        if (!fresh) return EmiKnockPopulation.None;
 
-        if (fresh)
-        {
-            // Took the walk inside the wizard: a greeting is all she has, and the knock's brake 4
-            // stops the chip flashing at all.
-            return w.TourDone(ShortWalkTour) ? EmiKnockPopulation.Walked : EmiKnockPopulation.Fresh;
-        }
-
-        if (IsOlder(w.LastSeenVersion, w.CurrentVersion))
-            return w.TourDone(UpgradeTour) ? EmiKnockPopulation.Walked : EmiKnockPopulation.Upgrader;
-
-        return EmiKnockPopulation.None;
+        // Took the walk inside the wizard: a greeting is all she has, and the knock's brake 4
+        // stops her coming out at all.
+        return w.TourDone(ShortWalkTour) ? EmiKnockPopulation.Walked : EmiKnockPopulation.Fresh;
     }
 
     /// <summary>The tour this population would be offered, or null when there is nothing to offer.</summary>
@@ -180,7 +194,8 @@ public sealed class EmiKnockMachine
         // Brake 1. They said yes. Latched, and nothing un-latches it but the QA reset.
         if (w.KnockState >= Spent) return false;
 
-        // Brake 2. The knock, plus one shrugged re-offer, and never again.
+        // Brake 2. One offer, ever. Spent at the flash, so this is what makes a no permanent
+        // without needing a latch of its own.
         if (w.KnockOffers >= OfferCap) return false;
 
         // Brake 4. She has nothing to offer this population, or they have already walked it.
@@ -196,9 +211,11 @@ public sealed class EmiKnockMachine
     }
 
     /// <summary>
-    /// The re-offer is a LATER-LAUNCH beat, never a second flash in the same sitting. Without
-    /// this, a dismiss and a re-summon inside one minute would read as two separate launches and
-    /// she would knock twice in five seconds.
+    /// NEVER TWICE IN ONE SITTING. Brake 2 is the real ceiling now that the cap is one, and this
+    /// looks like belt and braces on top of it - it is not. It is the guard that holds when the
+    /// counter does not: a QA replay, a settings file rolled back under a running app, a corrupt
+    /// ledger. Without it any of those would put her back on screen seconds after she was sent
+    /// away, which is the single worst thing this feature can do.
     /// </summary>
     private bool SameLaunchAsLastKnock(IEmiKnockWorld w)
     {
@@ -224,8 +241,15 @@ public sealed class EmiKnockMachine
     /// <para>The brakes above, then the gates from the contract's "Gates the knock must pass"
     /// section: no knock while the first-run wizard is up, while an update dialog is up, while a
     /// session is running, while a tutorial overlay is open, while the window is minimised or
-    /// hidden, while EMI Desk is switched off, or while she is already out (a chip flashing to
-    /// summon somebody who is standing right there is nonsense).</para>
+    /// hidden, while EMI Desk is switched off, or while she is already out (summoning somebody who
+    /// is standing right there is nonsense).</para>
+    ///
+    /// <para><b>The startup quiet window is deliberately NOT a gate.</b> Every other first-run
+    /// surface is held or sent to the Inbox for the first ten minutes; this one offer is the single
+    /// thing allowed through it, because it IS the onboarding the quiet window is protecting. It
+    /// arrives non-modally, in a bubble, from a companion the user can dismiss with one click - and
+    /// gating it on quiet would push the app's only tour offer past the point where anybody is
+    /// still wondering what the app does.</para>
     /// </summary>
     public bool MayKnock(IEmiKnockWorld w)
     {
@@ -248,20 +272,20 @@ public sealed class EmiKnockMachine
     /// <summary>
     /// She has been summoned off the back of a knock: which moment does she open with?
     ///
-    /// <para>The FIRST contact carries the ask (<c>firstContact</c> / <c>firstContactUpgrade</c>);
-    /// the second is the quieter <c>firstContactLater</c>, a pool with no offer attached, because
-    /// somebody who shrugged once does not need the same two chips shown to them again.</para>
+    /// <para>There is only one, and it carries the ask: <see cref="FreshMoment"/>, whose two chips
+    /// are the walk offer itself. Asked by the summon that the knock itself triggered, so it must
+    /// NOT consult <see cref="EmiState.KnockOffers"/> the way it used to - the flash spends the one
+    /// offer a beat before this is read, and a cap check here would answer "nothing to say" to the
+    /// very summon it just caused.</para>
     ///
-    /// <para>Null means she has nothing scripted to say and the ordinary greeting stands.</para>
+    /// <para>Null means she has nothing scripted to say and the ordinary greeting stands - which is
+    /// what a second summon this launch, a summon by an upgrader, or a summon after a yes all
+    /// get.</para>
     /// </summary>
     public string? ContactMoment(IEmiKnockWorld w)
     {
         if (w == null) return null;
         if (w.KnockState >= Spent) return null;
-
-        // The flash has already spent its offer by the time she is summoned, so offer 1 is the
-        // first contact and anything above it is the re-offer.
-        if (w.KnockOffers >= OfferCap) return LaterMoment;
 
         return Population(w) switch
         {
@@ -285,7 +309,10 @@ public sealed class EmiKnockMachine
     // ---------------------------------------------------------------- the arithmetic
 
     /// <summary>
-    /// Is <paramref name="seen"/> strictly older than <paramref name="current"/>? Parsed as a
+    /// Is <paramref name="seen"/> strictly older than <paramref name="current"/>? No longer read by
+    /// <see cref="Population"/> - the knock is fresh-installs-only - but kept as this feature's
+    /// version arithmetic, pinned by its own tests, for the upgrade-tour surface that took the
+    /// upgrader branch over. Parsed as a
     /// version when both parse, because "6.10.0" sorts before "6.9.0" as a string and that is
     /// exactly the kind of bug nobody notices until the tenth minor release. An unparseable stamp
     /// falls back to "different means older", which is what the app's own What's New gate does.

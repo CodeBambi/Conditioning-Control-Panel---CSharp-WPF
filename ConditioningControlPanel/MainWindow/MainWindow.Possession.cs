@@ -228,11 +228,24 @@ namespace ConditioningControlPanel
         /// <para><c>TxtXP</c> is here for a mechanical reason rather than a rule: the BANK odometer
         /// (MainWindow.BankFx.cs, StepBankCounter) rewrites that readout roughly every 70 ms for the
         /// length of a token flight. A text effect that took it would be a silent no-op - overwritten
-        /// before anyone could read it - while still burning a ghost slot and a 45 s target cooldown.</para></summary>
+        /// before anyone could read it - while still burning a ghost slot and a 45 s target cooldown.</para>
+        ///
+        /// <para><c>EmiDockChip</c> is here because it is the ONLY way into EMI that a user can see
+        /// (ccp-bugs #1190). The summon chord is a global hotkey people have to be told about and
+        /// there is no tray entry: grep for callers of <c>EmiDeskService.Toggle</c> and the dock chip
+        /// is the whole list. Blocklisting the UserControl rather than its inner <c>BtnChip</c> is
+        /// what makes it stick - WalkPossession returns at the named element and never descends, so
+        /// the button inside it cannot be enrolled either. Left alone the chip is an ordinary Button
+        /// target, which puts swap on it (it glides into a neighbour's seat and STAYS there for 30 s)
+        /// along with dissolve and melt - and Possession only ever runs during a lockdown, which is
+        /// why the report reads as "EMI is not available in lockdown" rather than as a haunt. She is
+        /// not an exit, so this is reachability rather than a POSSESSION.md hard rule, but a
+        /// companion nobody can reach is a broken feature for the length of the hold.</para></summary>
         private static readonly HashSet<string> PossessionNeverNames = new(StringComparer.Ordinal)
         {
             "TxtLockdownTimer", "TxtLockdownExit", "BtnEmergencyExit", "EERoot",
             "LockdownGate", "TxtPossessionRung", "PossessionPips", "TxtXP",
+            "EmiDockChip",
         };
 
         /// <summary>Labels are the one role that can run to the hundreds on a dense tab, and a deck full
@@ -252,6 +265,25 @@ namespace ConditioningControlPanel
 
         internal IReadOnlyList<PossessionTarget> GetPossessionTargets()
         {
+            // Off the UI thread this walk is not merely slow, it is illegal: the very first thing it
+            // reads is Window.Content, a dependency property, and DependencyObject.GetValue calls
+            // VerifyAccess. Three users hit exactly that as "Possession: target walk failed /
+            // InvalidOperationException: The calling thread cannot access this object" (ccp-bugs
+            // #1160, #1167, #1184). The caller that actually did it is fixed at its own layer
+            // (PossessionEvents marshals its settings reaction now), but this registry is public
+            // surface read from a dozen effects, so it degrades here instead of throwing: hand back
+            // the last good snapshot and leave the rebuild to the next UI-thread read.
+            //
+            // Deliberately NOT a blocking Invoke across to the UI thread: a background caller
+            // waiting on a dispatcher that is at that moment animating a ghost is how a haunt turns
+            // into a hang. The cache is marked dirty so the rebuild happens at the first safe read,
+            // still behind PossessionRebuildFloor.
+            if (!Dispatcher.CheckAccess())
+            {
+                _possessionCacheDirty = true;
+                return _possessionTargetCache ?? (IReadOnlyList<PossessionTarget>)Array.Empty<PossessionTarget>();
+            }
+
             try
             {
                 var now = DateTime.Now;

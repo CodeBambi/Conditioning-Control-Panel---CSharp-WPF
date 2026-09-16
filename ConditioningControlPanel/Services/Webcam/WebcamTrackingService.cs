@@ -1065,6 +1065,19 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public Task<bool> StartAsync() => Task.Run(() => Start());
 
+        /// <summary>
+        /// Runs <see cref="Stop"/> on a worker thread, for the same reason
+        /// <see cref="StartAsync"/> exists. Stop() joins the capture thread with
+        /// 2s + 3s timeouts and then disposes the OpenCV capture and the three
+        /// ONNX sessions; on a wedged driver that is a 5s UI freeze followed by a
+        /// native teardown that can take seconds more (BUG-BRR252E2RM: the panel
+        /// "acts as if the system is under a very heavy load", only closable from
+        /// Task Manager). UI callers should await this rather than calling Stop()
+        /// directly. The shutdown path (Dispose) keeps the synchronous Stop(),
+        /// because the process must not exit while the join is still pending.
+        /// </summary>
+        public Task StopAsync() => Task.Run(() => Stop());
+
         public void Stop()
         {
             Thread? thread;
@@ -1098,10 +1111,10 @@ namespace ConditioningControlPanel.Services
             {
                 if (!thread.Join(TimeSpan.FromSeconds(2)))
                 {
-                    App.Logger?.Warning("WebcamTrackingService: capture thread did not exit within 2s — extending wait");
+                    App.Logger?.Warning("WebcamTrackingService: capture thread did not exit within 2s (thread state {ThreadState}) — extending wait", thread.ThreadState);
                     if (!thread.Join(TimeSpan.FromSeconds(3)))
                     {
-                        App.Logger?.Error("WebcamTrackingService: capture thread did not exit within 5s total — leaving native handles alive to avoid disposal race");
+                        App.Logger?.Error("WebcamTrackingService: capture thread did not exit within 5s total (thread state {ThreadState}) — leaving native handles alive to avoid disposal race. The abandoned loop throttles itself and exits once the driver returns.", thread.ThreadState);
                         lock (_stateLock)
                         {
                             SetState(WebcamTrackingState.Error);
@@ -1329,7 +1342,7 @@ namespace ConditioningControlPanel.Services
                     if (Volatile.Read(ref _openGeneration) != generation)
                     {
                         // The caller has moved on — don't hand over something nobody will dispose.
-                        try { cap.Dispose(); } catch { }
+                        try { cap.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                         return false;
                     }
                     opened = cap;
@@ -1348,7 +1361,7 @@ namespace ConditioningControlPanel.Services
                     stray = opened;
                     opened = null;
                 }
-                if (stray != null) { try { stray.Dispose(); } catch { } }
+                if (stray != null) { try { stray.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); } }
 
                 App.Logger?.Warning(
                     "WebcamTrackingService: camera open timed out after {Seconds}s — driver may be hung or the device is held exclusively by another app",
@@ -1629,7 +1642,7 @@ namespace ConditioningControlPanel.Services
                     _nativeRuntimeMissing = true;
                 }
                 App.Logger?.Warning(ex, "WebcamTrackingService: TryOpenWithBackend({Api}) threw for index {Index}", label, deviceIndex);
-                try { cap?.Dispose(); } catch { }
+                try { cap?.Dispose(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 return null;
             }
         }
@@ -1678,25 +1691,25 @@ namespace ConditioningControlPanel.Services
                 {
                     App.Logger?.Warning(ex, "WebcamTrackingService: failed to load detection models");
                 }
-                try { face?.Dispose(); } catch { }
-                try { mesh?.Dispose(); } catch { }
-                try { iris?.Dispose(); } catch { }
+                try { face?.Dispose(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
+                try { mesh?.Dispose(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
+                try { iris?.Dispose(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 return false;
             }
         }
 
         private void ReleaseCapture()
         {
-            try { _capture?.Release(); } catch { }
-            try { _capture?.Dispose(); } catch { }
+            try { _capture?.Release(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _capture?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _capture = null;
         }
 
         private void ReleaseModels()
         {
-            try { _faceDetector?.Dispose(); } catch { }
-            try { _faceMesh?.Dispose(); } catch { }
-            try { _irisDetector?.Dispose(); } catch { }
+            try { _faceDetector?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _faceMesh?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _irisDetector?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _faceDetector = null;
             _faceMesh = null;
             _irisDetector = null;
@@ -1799,6 +1812,18 @@ namespace ConditioningControlPanel.Services
 
                     if (!capture.Read(frame) || frame.Empty())
                     {
+                        // Read() can sit for seconds on a wedged driver, so a stop
+                        // may have been requested (and even abandoned by Stop()'s
+                        // join) while we were inside it. Back off before looping:
+                        // once Stop() has given up, nothing else throttles this
+                        // thread, and a dead camera fails Read() instantly - that
+                        // is the tight spin that pegs a core and makes the whole
+                        // machine feel loaded (BUG-BRR252E2RM).
+                        if (_stopRequested)
+                        {
+                            Thread.Sleep(100);
+                            break;
+                        }
                         consecutiveReadFails++;
                         if (consecutiveReadFails >= MaxConsecutiveReadFails)
                         {
@@ -1810,6 +1835,12 @@ namespace ConditioningControlPanel.Services
                         continue;
                     }
                     consecutiveReadFails = 0;
+
+                    // Honour a stop request within one frame: skip ~20-30ms of
+                    // inference (and the UI events it raises) for a frame nobody
+                    // is waiting for any more, so Stop()'s join lands inside its
+                    // first timeout instead of leaking the thread.
+                    if (_stopRequested) break;
 
                     // Capture-clock fps watchdog. Ticked HERE — the instant
                     // Read() returned a frame, before any processing and before
@@ -3584,9 +3615,9 @@ namespace ConditioningControlPanel.Services
 
             public void Dispose()
             {
-                try { _session.Dispose(); } catch { }
-                try { _resizeBuffer?.Dispose(); } catch { }
-                try { _paddedBuffer?.Dispose(); } catch { }
+                try { _session.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { _resizeBuffer?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { _paddedBuffer?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 _resizeBuffer = null;
                 _paddedBuffer = null;
             }
@@ -3734,9 +3765,9 @@ namespace ConditioningControlPanel.Services
 
             public void Dispose()
             {
-                try { _session.Dispose(); } catch { }
-                try { _croppedBuffer?.Dispose(); } catch { }
-                try { _resizedBuffer?.Dispose(); } catch { }
+                try { _session.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { _croppedBuffer?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { _resizedBuffer?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 _croppedBuffer = null;
                 _resizedBuffer = null;
             }
@@ -4100,10 +4131,10 @@ namespace ConditioningControlPanel.Services
 
             public void Dispose()
             {
-                try { _session.Dispose(); } catch { }
-                try { _croppedBuffer?.Dispose(); } catch { }
-                try { _resizedBuffer?.Dispose(); } catch { }
-                try { _flippedBuffer?.Dispose(); } catch { }
+                try { _session.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { _croppedBuffer?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { _resizedBuffer?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { _flippedBuffer?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 _croppedBuffer = null;
                 _resizedBuffer = null;
                 _flippedBuffer = null;

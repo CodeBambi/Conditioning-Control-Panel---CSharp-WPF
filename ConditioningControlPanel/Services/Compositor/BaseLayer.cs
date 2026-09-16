@@ -34,15 +34,10 @@ public abstract class BaseLayer : IWpfLayer
     {
         try
         {
-            if (App.Settings?.Current?.DualMonitorEnabled == true) return true;
-            // Cached lookup: Screen.PrimaryScreen re-enumerates all monitors per call on .NET
-            // Core, and this runs per fill layer per monitor per presented frame.
-            foreach (var s in App.GetAllScreensCached())
-            {
-                if (s.Primary)
-                    return screenBoundsPx.X == s.Bounds.X && screenBoundsPx.Y == s.Bounds.Y;
-            }
-            return true; // empty cache (display transition): err toward showing
+            // Follows the app-wide "Show content on" picker: all screens, the Windows primary,
+            // or the single monitor the user pinned content to. Errs toward showing when the
+            // display set cannot be enumerated (display transition).
+            return App.ShouldRenderTargetOnScreen(App.MonitorTargetFollowGlobal, screenBoundsPx);
         }
         catch { return true; }
     }

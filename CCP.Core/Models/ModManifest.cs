@@ -273,6 +273,76 @@ namespace ConditioningControlPanel.Models
 
         [JsonProperty("bubbleCountRetry")]
         public string? BubbleCountRetry { get; set; }
+
+        /// <summary>
+        /// Shown when the attention check PASSED but the troll roll made the user watch the video
+        /// again. Its own field rather than a reuse of <see cref="AttentionCheckFail"/> because it
+        /// is praise, not a scolding.
+        /// </summary>
+        [JsonProperty("attentionCheckTroll")]
+        public string? AttentionCheckTroll { get; set; }
+
+        /// <summary>Fullscreen praise card after a correct gaze-minigame round.</summary>
+        [JsonProperty("gazeCorrect")]
+        public string? GazeCorrect { get; set; }
+
+        /// <summary>
+        /// One themed Pop Quiz trick question. Only used when <see cref="QuizTrickAnswer"/> is set
+        /// too: a question without its answer would pair a mod's wording with someone else's reply.
+        /// </summary>
+        [JsonProperty("quizTrickQuestion")]
+        public string? QuizTrickQuestion { get; set; }
+
+        /// <summary>The answer shown on all four buttons for <see cref="QuizTrickQuestion"/>.</summary>
+        [JsonProperty("quizTrickAnswer")]
+        public string? QuizTrickAnswer { get; set; }
+
+        /// <summary>
+        /// Praise line on a Pop Quiz card, as a sentence ("Good girl."). Also supplies the answer
+        /// chip in the "your favorite word is" question, with any trailing full stop trimmed - a
+        /// chip is a word, not a sentence. Required for any of the three themed quiz slots: a mod's
+        /// question over the neutral praise reads as a bug on the card.
+        /// </summary>
+        [JsonProperty("quizPraise")]
+        public string? QuizPraise { get; set; }
+
+        /// <summary>
+        /// This mod's wording for the Pop Quiz obedience question ("What do good girls do?").
+        /// Used only when <see cref="QuizPraise"/> is set too.
+        /// </summary>
+        [JsonProperty("quizObedienceQuestion")]
+        public string? QuizObedienceQuestion { get; set; }
+
+        /// <summary>
+        /// This mod's wording for the Pop Quiz question about hearing praise
+        /// ("When I hear 'good girl,' I feel..."). Used only when <see cref="QuizPraise"/> is set.
+        /// </summary>
+        [JsonProperty("quizPraiseHeardQuestion")]
+        public string? QuizPraiseHeardQuestion { get; set; }
+
+        /// <summary>
+        /// This mod's default scrolling banner over the Settings marquee. Only ever used for a
+        /// banner the user has NOT written themselves: a blank saved message, or one of the two
+        /// retired house defaults. A user who typed their own banner keeps it in every mod.
+        /// </summary>
+        [JsonProperty("marqueeBanner")]
+        public string? MarqueeBanner { get; set; }
+
+        /// <summary>
+        /// True when any string field on the block is set. Walks the public string properties
+        /// rather than naming them, so a field added later counts without anyone remembering
+        /// to add it here - the Mod Creator uses this to decide whether to keep the block.
+        /// </summary>
+        public static bool HasAnyValue(ModMessages? m)
+        {
+            if (m == null) return false;
+            foreach (var prop in typeof(ModMessages).GetProperties())
+            {
+                if (prop.PropertyType != typeof(string) || !prop.CanRead || prop.GetIndexParameters().Length != 0) continue;
+                if (!string.IsNullOrEmpty(prop.GetValue(m) as string)) return true;
+            }
+            return false;
+        }
     }
 
     public class ModBrowser

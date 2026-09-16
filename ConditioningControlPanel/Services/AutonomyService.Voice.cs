@@ -315,7 +315,7 @@ namespace ConditioningControlPanel.Services
                     }
                     else if (!string.IsNullOrWhiteSpace(heard))
                     {
-                        App.Logger?.Information("AutonomyService: wake word heard ('{Heard}')", heard);
+                        App.Logger?.Information("AutonomyService: wake word heard ({Chars} chars of transcript)", heard.Length);
                         OnWakeWordHeard(heard);
                         // Let the prompt claim the mic before we loop back and re-grab it.
                         await Task.Delay(400, loopCt).ConfigureAwait(false);

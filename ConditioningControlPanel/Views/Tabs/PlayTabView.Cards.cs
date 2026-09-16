@@ -47,6 +47,9 @@ namespace ConditioningControlPanel.Views.Tabs
         private void BtnQuickStartChaos_Click(object sender, RoutedEventArgs e)
             => Owner?.BtnQuickStartChaos_Click(sender, e);
 
+        private void BtnStartRace_Click(object sender, RoutedEventArgs e)
+            => Owner?.BtnStartRace_Click(sender, e);
+
         // ---- TOGETHER --------------------------------------------------------------------
 
         private void BtnStartGoon_Click(object sender, RoutedEventArgs e)
@@ -96,12 +99,6 @@ namespace ConditioningControlPanel.Views.Tabs
         private void BtnPlayLockdown_Click(object sender, RoutedEventArgs e)
             => Owner?.ShowTab("lockdown");
 
-        // ShowTab("justdrop") - never JustDropHostService.LaunchShop(). Same rule as the FYP card
-        // above: ShowTab intercepts the key, owns the withheld refusal, and is the path the
-        // dashboard tease tile and the Ctrl+K palette row already take.
-        private void BtnPlayJustDrop_Click(object sender, RoutedEventArgs e)
-            => Owner?.ShowTab("justdrop");
-
         // ---- MORE ------------------------------------------------------------------------
 
         // Navigates to the ONE Loom entry (Studio rack -> Spiral module), never launches a second
@@ -114,5 +111,15 @@ namespace ConditioningControlPanel.Views.Tabs
         // .Launch owns every gate (T2, then AudioOnlySession, then idempotency).
         private void BtnStartArcademy_Click(object sender, RoutedEventArgs e)
             => Owner?.BtnStartArcademy_Click(sender, e);
+
+        // Piece by Piece is a LAUNCH too, and forwards for the same reason: no tab of its own, and
+        // PieceByPieceHostService.Launch owns both of its gates (idempotency, then T2).
+        private void BtnStartPieceByPiece_Click(object sender, RoutedEventArgs e)
+            => Owner?.BtnStartPieceByPiece_Click(sender, e);
+
+        // The Back Room: a LAUNCH with no gate at all (free for everyone); the host re-focuses a
+        // room that is already open.
+        private void BtnStartBackRoom_Click(object sender, RoutedEventArgs e)
+            => Owner?.BtnStartBackRoom_Click(sender, e);
     }
 }

@@ -38,6 +38,16 @@ namespace ConditioningControlPanel.Services
         // terse (one short line per transition), so 200 lines covers several videos plus a whole
         // freeze window at a few KB — well inside the crash-log-sized fields the server accepts.
         private const int MaxVideoDiagLines = 200;
+        // Flight-recorder attachment. The ring holds Debug detail that has never reached a disk
+        // before, so it is the most valuable thing in the field and also the largest; these caps
+        // keep the whole app-log field inside the server's 200,000-char limit with room to spare.
+        private const int MaxAppLogChars = 120_000;
+        private const int MaxDiagDumpChars = 60_000;
+        // The UI-hang report (hang_*.txt) now carries the UI thread's managed stack, which is the
+        // one thing the #1189/#1179/#1159/#984 freeze family has never had. It is the smallest and
+        // most valuable attachment in the report, so it gets its own (generous) budget.
+        internal const int MaxHangReportChars = 24_000;
+        internal const int MaxAppLogFieldChars = 190_000;
         // Diagnostic-line rescue (#634 + freeze reports). The last-N tail scrolls the [RES]/
         // [WATCHDOG] history out of every report because a relaunch writes far more startup
         // chatter than MaxAppLogLines. Scan a much wider tail and keep only the marker lines so
@@ -45,11 +55,26 @@ namespace ConditioningControlPanel.Services
         internal const int MaxDiagScanLines = 2000;
         internal const int MaxDiagMatches = 40;      // most-recent matches kept
         internal const int MaxDiagSectionChars = 16_000; // GitHub issue-body budget guard
-        // Grep-friendly markers written to the rolling app log. [RES]/[WATCHDOG] come from
+        // Grep-friendly markers written to the session log. [RES]/[WATCHDOG] come from
         // UiHangWatchdog and are the ones that actually appear today; the video markers are
         // kept defensively (VideoDiag writes its own file, already appended in full above).
+        //
+        // TWO spellings each, because the session-file format lifts "[RES]" out of the message text
+        // and renders it as the padded category column ("[Res          ] user=..."). An exact
+        // "[RES]" match would quietly stop finding anything the day that format shipped, and a
+        // returning user still has old app-*.log files in the old spelling, so both are listed.
+        // The trailing space on the column forms is load-bearing: "[Res" alone would also match
+        // "[Reset", which 20 unrelated call sites write.
+        // Video stays old-spelling-only on purpose: as a CATEGORY, "Video" is every VideoService
+        // line, which would crowd the 40 retained matches out with routine playback chatter - and
+        // the video trace is appended in full from its own file anyway.
         internal static readonly string[] DiagMarkers =
-            { "[RES]", "[WATCHDOG]", "[BLUR]", "[VIDEO]", "[VideoDiag]" };
+        {
+            "[RES]", "[Res ",
+            "[WATCHDOG]", "[Watchdog ",
+            "[BLUR]", "[Blur ",
+            "[VIDEO]", "[VideoDiag]"
+        };
 
         // #769: how many report numbers we remember in AppSettings.RecentBugReports.
         // The record format lives in Core (Services/RecentReports.cs) so both heads read and
@@ -65,6 +90,22 @@ namespace ConditioningControlPanel.Services
         /// WPF head; an unseeded service simply has no extra trace to attach.
         /// </summary>
         public static volatile Func<int, string>? DiagnosticTailProvider;
+
+        /// <summary>
+        /// main's freeze-report work (the flight-recorder ring dump, the newest dump on disk, and
+        /// THIS session's log file) all live in WPF-only sinks: FlightRecorderSink reads
+        /// <c>System.Windows.Application.Current</c> and LogPipeline reads <c>App</c>. Core keeps
+        /// the decisions - freeze the ring before reading, prefer the live session file - and the
+        /// head supplies the three capabilities. Unseeded, each one degrades to "no dump" /
+        /// "newest file on disk", which is exactly the pre-main behaviour.
+        /// </summary>
+        public static volatile Action<string>? FlightRecorderDump;
+
+        /// <summary>Newest flight-recorder dump in the given log folder, or null.</summary>
+        public static volatile Func<string, string?>? NewestFlightRecorderDump;
+
+        /// <summary>This session's log file, or null when the pipeline has not opened one.</summary>
+        public static volatile Func<string?>? SessionLogFile;
 
         private readonly HttpClient _httpClient;
 
@@ -159,7 +200,11 @@ namespace ConditioningControlPanel.Services
             var appCounts = ScrubberCounts.Empty;
             if (includeAppLog && !isSuggestion)
             {
-                var appLogRaw = TryReadRecentAppLog(MaxAppLogLines);
+                // Freeze the ring FIRST: whatever the user was doing when they hit "report" is
+                // still in memory at this instant and nowhere else.
+                FlightRecorderDump?.Invoke("bugreport");
+
+                var appLogRaw = Tail(TryReadRecentAppLog(MaxAppLogLines), MaxAppLogChars);
 
                 // #616/#617/#621/#622/#623: the app-log tail alone was useless for the v6.5.0 freeze
                 // reports. A user whose PC had to be hard-reset must relaunch the app to file the
@@ -175,6 +220,14 @@ namespace ConditioningControlPanel.Services
                       "===== video/panic diagnostic trace (video-diag.log) =====" + Environment.NewLine +
                       diagRaw;
 
+                // The flight-recorder dump: the last 4,096 events including Debug, which the file
+                // sink never carried. For a freeze or a black video this is the only part of the
+                // report that says what happened BEFORE the symptom.
+                var ring = Tail(TryReadNewestDiagDump(), MaxDiagDumpChars);
+                if (!string.IsNullOrWhiteSpace(ring))
+                    combined = combined + Environment.NewLine + Environment.NewLine +
+                        "===== flight recorder (diag dump) =====" + Environment.NewLine + ring;
+
                 // #634 + freeze reports: rescue the [RES]/[WATCHDOG] resource+hang timeline from a
                 // much wider window of the rolling app log so it survives even when the 100-line
                 // tail above is all startup chatter. Appended to the same field before scrubbing,
@@ -184,7 +237,21 @@ namespace ConditioningControlPanel.Services
                     combined = combined + Environment.NewLine + Environment.NewLine +
                         "## Diagnostics (sampled)" + Environment.NewLine + diagSampled;
 
+                // The watchdog's own hang report. Until now it only ever reached us as the single
+                // [WATCHDOG] line the sampled-diagnostics scan rescued from the rolling app log -
+                // the file itself, which holds the feature state AND (since 6.9.4) the UI thread's
+                // managed stack, was never attached to anything and never left the user's machine.
+                // It survives the relaunch a hard freeze forces, so it is here rather than in the
+                // scrolled tail.
+                var hangReport = BuildHangReportSection(TryReadNewestHangReport(out var hangAt), hangAt);
+                if (!string.IsNullOrWhiteSpace(hangReport))
+                    combined = combined + Environment.NewLine + Environment.NewLine + hangReport;
+
                 (scrubbedApp, appCounts) = LogScrubber.Scrub(combined);
+
+                // Hard cap below the server's 200,000, applied AFTER scrubbing so the cap can never
+                // decide which text got redacted. Newest wins - the tail is the failure.
+                scrubbedApp = Tail(scrubbedApp, MaxAppLogFieldChars);
             }
 
             var totalCounts = crashCounts.Add(appCounts);
@@ -636,23 +703,199 @@ namespace ConditioningControlPanel.Services
             return section;
         }
 
+        internal const string HangReportHeader = "===== UI-hang report (logs/hang_*.txt) =====";
+
         /// <summary>
-        /// Read the last N lines of today's rolling Serilog file.
-        /// Serilog rolls daily with name `app-YYYYMMDD.log` (RollingInterval.Day).
+        /// Wrap the newest hang report in its delimiter and cap it at <see cref="MaxHangReportChars"/>,
+        /// keeping the NEWEST bytes - the tail is where the stack capture is appended, and the stack
+        /// is the whole reason this section exists. Empty in, empty out (the overwhelming majority
+        /// of reports are not freezes and must not carry an empty header). Pure, so the shape that
+        /// lands in the GitHub issue can be pinned by a test.
+        /// </summary>
+        internal static string BuildHangReportSection(string? hangReportText, DateTime? writtenLocal = null)
+        {
+            if (string.IsNullOrWhiteSpace(hangReportText)) return string.Empty;
+            // The watchdog keeps the four newest reports, so a user whose LAST freeze was weeks ago
+            // and who is now filing an unrelated bug would otherwise hand triage a stale stack with
+            // nothing to date it (the report's own "when" header is what the cap trims away first).
+            var header = writtenLocal is DateTime at
+                ? HangReportHeader + " written " + at.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+                : HangReportHeader;
+            return header + Environment.NewLine + Tail(hangReportText!.Trim(), MaxHangReportChars);
+        }
+
+        /// <summary>
+        /// How fresh a <c>hang_*.txt</c> has to be before the report dialog ticks the activity-log
+        /// box on the user's behalf. Seven days is the span the watchdog's own retention already
+        /// implies (it keeps the four newest files), and it is long enough to cover the usual
+        /// "it froze on Friday, I filed it on Monday" gap without dragging a month-old stack into
+        /// an unrelated report.
+        /// </summary>
+        internal static readonly TimeSpan RecentHangWindow = TimeSpan.FromDays(7);
+
+        /// <summary>
+        /// Should the report dialog open with the activity-log opt-in already ticked?
+        /// <para>Yes only when a freeze was recorded inside <see cref="RecentHangWindow"/> and the
+        /// user is filing a bug rather than a suggestion. Everyone else keeps the unticked default:
+        /// the whole point of the opt-in is that a report carries no log unless there is a reason.</para>
+        /// <para>A timestamp in the future means a clock change, not a freeze that has not happened
+        /// yet, so it is refused rather than trusted. Pure, so the decision can be pinned by a test
+        /// without a dialog, a clock or a disk.</para>
+        /// </summary>
+        internal static bool ShouldPreAttachHangReport(DateTime? hangWrittenLocal, DateTime nowLocal, bool isSuggestion)
+        {
+            if (isSuggestion) return false;
+            if (hangWrittenLocal is not DateTime at) return false;
+            if (at > nowLocal) return false;
+            return nowLocal - at <= RecentHangWindow;
+        }
+
+        /// <summary>
+        /// When the newest <c>hang_*.txt</c> was written, if one is recent enough to ride along with
+        /// the report the user is about to file; <c>null</c> otherwise. Cheap: it reads timestamps,
+        /// not contents. Never throws.
+        /// </summary>
+        public static DateTime? FindRecentHangReport(ReportKind kind)
+        {
+            try
+            {
+                var at = NewestHangReportTime();
+                return ShouldPreAttachHangReport(at, DateTime.Now, kind == ReportKind.Suggestion) ? at : null;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("[BugReport] hang report probe failed: {Msg}", ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>Local write time of the newest <c>hang_*.txt</c>, or <c>null</c> if there is none.</summary>
+        private static DateTime? NewestHangReportTime()
+        {
+            var logDir = Path.Combine(CorePaths.UserData, "logs");
+            if (!Directory.Exists(logDir)) return null;
+
+            DateTime newestAt = DateTime.MinValue;
+            foreach (var file in Directory.GetFiles(logDir, "hang_*.txt"))
+            {
+                var at = File.GetLastWriteTimeUtc(file);
+                if (at > newestAt) newestAt = at;
+            }
+            return newestAt == DateTime.MinValue ? null : newestAt.ToLocalTime();
+        }
+
+        /// <summary>
+        /// Newest <c>hang_*.txt</c> from the logs folder (the watchdog keeps the four most recent).
+        /// Opened share-all because the watchdog may still be appending the stack capture to it.
+        /// Never throws.
+        /// </summary>
+        private static string TryReadNewestHangReport(out DateTime? writtenLocal)
+        {
+            writtenLocal = null;
+            try
+            {
+                var logDir = Path.Combine(CorePaths.UserData, "logs");
+                if (!Directory.Exists(logDir)) return string.Empty;
+
+                string? newest = null;
+                DateTime newestAt = DateTime.MinValue;
+                foreach (var file in Directory.GetFiles(logDir, "hang_*.txt"))
+                {
+                    var at = File.GetLastWriteTimeUtc(file);
+                    if (at <= newestAt) continue;
+                    newestAt = at;
+                    newest = file;
+                }
+                if (newest == null) return string.Empty;
+                writtenLocal = newestAt.ToLocalTime();
+
+                using var fs = new FileStream(newest, FileMode.Open, FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete);
+                using var sr = new StreamReader(fs, Encoding.UTF8);
+                return sr.ReadToEnd();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("[BugReport] hang report read failed: {Msg}", ex.Message);
+                return string.Empty;
+            }
+        }
+
+        /// <summary>Keep the last <paramref name="maxChars"/> characters. Empty in, empty out.</summary>
+        internal static string Tail(string? text, int maxChars)
+        {
+            if (string.IsNullOrEmpty(text)) return string.Empty;
+            return text!.Length <= maxChars ? text! : text!.Substring(text!.Length - maxChars);
+        }
+
+        /// <summary>
+        /// Read the newest flight-recorder dump. Written moments ago by CreateDraft, or by the
+        /// crash/hang triggers if the app died before the user could file anything.
+        /// </summary>
+        private static string TryReadNewestDiagDump()
+        {
+            try
+            {
+                var logDir = Path.Combine(CorePaths.UserData, "logs");
+                var newest = NewestFlightRecorderDump?.Invoke(logDir);
+                if (newest == null) return string.Empty;
+                using var fs = new FileStream(newest, FileMode.Open, FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete);
+                using var sr = new StreamReader(fs, Encoding.UTF8);
+                return sr.ReadToEnd();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("[BugReport] diag dump read failed: {Msg}", ex.Message);
+                return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// The log file this report should carry: THIS session's file if the pipeline has one,
+        /// otherwise the newest on disk (a returning user's old daily <c>app-*.log</c> included).
+        /// Returns null when there is nothing to read.
+        ///
+        /// <para>Preferring the live session file matters for exactly the reports that need it
+        /// most: a user who had to relaunch after a freeze is now filing from a NEW session, and
+        /// "newest file" would hand them the startup chatter of the relaunch. The frozen session's
+        /// file is still on disk under its own name, and the flight-recorder dump above carries the
+        /// failure itself.</para>
+        /// </summary>
+        internal static string? PickLogFile(string logDir)
+        {
+            try
+            {
+                if (!Directory.Exists(logDir)) return null;
+
+                var current = SessionLogFile?.Invoke();
+                if (!string.IsNullOrEmpty(current) && File.Exists(current)) return current;
+
+                var files = Directory.GetFiles(logDir, "session-*.log");
+                if (files.Length == 0) files = Directory.GetFiles(logDir, "app-*.log");
+                if (files.Length == 0) return null;
+                Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+                return files[^1];
+            }
+            catch
+            {
+                return null; // swallow: no log is survivable, a throw from the reporter is not
+            }
+        }
+
+        /// <summary>
+        /// Read the last N lines of this session's log file (see <see cref="PickLogFile"/>).
         /// </summary>
         private static string TryReadRecentAppLog(int maxLines)
         {
             try
             {
                 var logDir = Path.Combine(CorePaths.UserData, "logs");
-                if (!Directory.Exists(logDir)) return string.Empty;
-                var files = Directory.GetFiles(logDir, "app-*.log");
-                if (files.Length == 0) return string.Empty;
-                Array.Sort(files, StringComparer.OrdinalIgnoreCase);
-                var latest = files[^1];
+                var latest = PickLogFile(logDir);
+                if (latest == null) return string.Empty;
 
-                // Tail-read: read the whole file then take the last maxLines lines.
-                // Serilog logs are bounded to 7 days × ~1 log/event, typically small.
+                // Tail-read: read the whole file then take the last maxLines lines. A session
+                // file is one run and capped at 8 MB, so this stays small.
                 using var fs = new FileStream(latest, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
                 using var sr = new StreamReader(fs, Encoding.UTF8);
                 var allLines = new List<string>();

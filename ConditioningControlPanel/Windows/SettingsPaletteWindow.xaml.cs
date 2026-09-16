@@ -260,7 +260,9 @@ namespace ConditioningControlPanel
         //  navigation + highlight
         // =====================================================================================
 
-        private static void Navigate(MainWindow mw, SettingsPaletteEntry entry)
+        /// <summary>Internal since 2026-09-11: the dashboard's favorites chips open a row
+        /// through this same verb, so a chip and a palette hit land identically.</summary>
+        internal static void Navigate(MainWindow mw, SettingsPaletteEntry entry)
         {
             try
             {

@@ -816,6 +816,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                     using var response = await Http.SendAsync(request, CancellationToken.None).ConfigureAwait(false);
                     status = (int)response.StatusCode;
                     responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    MergedAccountRecovery.TryHandle(status, responseBody);   // contract D
                 }
                 catch (Exception ex)
                 {
@@ -1034,7 +1035,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                     if (uri == null) return;
                     var disp = Application.Current?.Dispatcher;
                     if (disp == null || disp.HasShutdownStarted) return;
-                    disp.BeginInvoke(() => { try { PostDiscordEcho(); } catch { } });
+                    _ = disp.BeginInvoke(() => { try { PostDiscordEcho(); } catch { } });
                 });
             }
             catch (Exception ex) { App.Logger?.Debug("GoonHostService.KickOwnAvatarRefresh: {E}", ex.Message); }

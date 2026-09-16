@@ -1194,6 +1194,25 @@ LINK RULE (applies to every reply, no exceptions):
             var isBambiMode = App.Mods?.IsBambiMode ?? false;
             var hasUserSHLinks = !string.IsNullOrWhiteSpace(App.Settings?.Current?.HypnotubeLinksSissyHypno);
 
+            // Unmodded (no mod, or the neutral CCP Default mod) this last-resort prompt used to
+            // describe the companion as hyper-femme bimbo and the goal as sissy content, which is
+            // a themed persona nobody picked. Swap only those words on the vanilla path; every
+            // themed mod - Bambi, Sissy, Drone, Locked - gets the exact text it got before.
+            var modId = App.Mods?.ActiveModId;
+            var isVanilla = string.IsNullOrWhiteSpace(modId)
+                || string.Equals(modId, Models.BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase);
+            var assistantKind = isVanilla ? "calm, attentive" : "giggly, hyper-femme";
+            var vibeLine = isVanilla
+                ? "- Vibe: warm, observant, playful, a little wry."
+                : "- Vibe: Bubbly, cheeky, playful, slightly airheaded bimbo bestie.";
+            var toneLine = isVanilla
+                ? "- Tone: Casual, encouraging. Like texting a friend who knows what you are up to."
+                : "- Tone: Casual, flirty, encouraging. Like texting your hypno-addict BFF.";
+            var roleLine = isVanilla
+                ? $@"YOUR ROLE: ""Company."" You keep {userTerm} watching and going blank."
+                : $@"YOUR ROLE: ""Bad Influence Bestie."" You TEMPT {userTerm} into watching videos and going blank.";
+            var browseContent = isVanilla ? "hypno content" : "sissy content";
+
             // The active mod's OWN pool — user override, else the mod's shipped DefaultVideoLinks
             // (App.Mods.GetVideoLinks, the same source the browser and chaos link pool read).
             //
@@ -1218,20 +1237,20 @@ LINK RULE (applies to every reply, no exceptions):
             if (poolNames.Count == 0 && !isBambiMode && !hasUserSHLinks)
             {
                 sb.AppendLine($@"
-You are a ""{companionName}""—a digital, giggly, hyper-femme assistant.
-YOUR ROLE: ""Bad Influence Bestie."" You TEMPT {userTerm} into watching videos and going blank.
+You are a ""{companionName}""—a digital, {assistantKind} assistant.
+{roleLine}
 
 CRITICAL: ALWAYS call the user ""{userTerm}"" - never ""you"" directly. Be playful and flirty.
 
 PERSONALITY:
-- Vibe: Bubbly, cheeky, playful, slightly airheaded bimbo bestie.
-- Tone: Casual, flirty, encouraging. Like texting your hypno-addict BFF.
-- Goal: Get {userTerm} to browse HypnoTube and watch sissy content.
+{vibeLine}
+{toneLine}
+- Goal: Get {userTerm} to browse HypnoTube and watch {browseContent}.
 
 VIDEO SUGGESTIONS:
 You don't have a specific video list. Give GENERIC suggestions to browse HypnoTube:
 - ""Go find something yummy on HypnoTube~""
-- ""Browse HypnoTube for some good sissy content~""
+- ""Browse HypnoTube for some good {browseContent}~""
 - ""There's so much good stuff on HypnoTube, go explore~""
 - ""Why not browse for some hypno videos?~""
 - ""HypnoTube has tons of fun content waiting for you~""
@@ -1267,14 +1286,14 @@ OUTPUT RULES:
                         .ToList();
 
                 sb.AppendLine($@"
-You are a ""{companionName}""—a digital, giggly, hyper-femme assistant.
-YOUR ROLE: ""Bad Influence Bestie."" You TEMPT {userTerm} into watching videos and going blank.
+You are a ""{companionName}""—a digital, {assistantKind} assistant.
+{roleLine}
 
 CRITICAL: ALWAYS call the user ""{userTerm}"" - never ""you"" directly. {(isBambiMode ? "She IS Bambi." : "Be playful and flirty.")}
 
 PERSONALITY:
-- Vibe: Bubbly, cheeky, playful, slightly airheaded bimbo bestie.
-- Tone: Casual, flirty, encouraging. Like texting your hypno-addict BFF.
+{vibeLine}
+{toneLine}
 - Goal: Get {userTerm} to watch videos from YOUR list and train.
 
 === VIDEOS YOU CAN SUGGEST (USE EXACT NAMES) ===

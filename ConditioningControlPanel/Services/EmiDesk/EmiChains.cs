@@ -237,14 +237,35 @@ public static class EmiChains
     /// Absolute path to a pose PNG next to the exe, or null when the art is missing. The art lives
     /// under <c>Resources/web/arcademy/art/emi/</c> and ships as Content (see the csproj's
     /// <c>Resources\web\**\*</c> glob), so it is beside the binary at runtime.
+    ///
+    /// <para><b>Outfit-aware, and that is not decoration.</b> A garment is TWO sheets - a re-drawn
+    /// body and the <c>over-</c> part that crosses her glass - so painting only the overlay would
+    /// hang a lab coat's collar on a girl still in her school shirt. Hand this the outfit and it
+    /// resolves <c>&lt;outfit&gt;/body-idle.png</c> instead: the same contract <see cref="OverPath"/>
+    /// uses one folder down, and the same one the campus's <c>outfitSrc</c> uses.</para>
+    ///
+    /// <para><b>Per FRAME it falls back rather than blanks.</b> A sheet missing one pose wears the
+    /// standard art for that pose only - a mixed look beats an invisible click target - and one
+    /// Debug line says which frame fell back.</para>
     /// </summary>
-    public static string? BodyPath(string? frame)
+    public static string? BodyPath(string? frame, string? outfit = null)
     {
         try
         {
             var key = FrameKey(frame) ?? "idle";
-            var path = Path.Combine(AppContext.BaseDirectory,
-                "Resources", "web", "arcademy", "art", "emi", BodyFrameFile[key]);
+            var file = BodyFrameFile[key];
+            var root = Path.Combine(AppContext.BaseDirectory, "Resources", "web", "arcademy", "art", "emi");
+
+            var dir = OutfitName(outfit);
+            if (dir != null)
+            {
+                var dressed = Path.Combine(root, dir, file);
+                if (File.Exists(dressed)) return dressed;
+                Log.Debug("[EmiDesk] outfit {Outfit} has no body art for {Pose}; wearing the standard sheet",
+                    dir, key);
+            }
+
+            var path = Path.Combine(root, file);
             return File.Exists(path) ? path : null;
         }
         catch (Exception ex)
@@ -254,25 +275,41 @@ public static class EmiChains
         }
     }
 
+    /// <summary>
+    /// The outfit name when it is one of ours, else null - the one gate every road into the
+    /// wardrobe passes. Junk, an unknown name and anything carrying a path separator all answer
+    /// null, which reads as "the standard art", so nothing downstream can be talked into opening a
+    /// folder the campus never shipped.
+    /// </summary>
+    public static string? OutfitName(string? outfit)
+    {
+        if (string.IsNullOrWhiteSpace(outfit)) return null;
+        var name = outfit.Trim();
+        if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return null;
+        foreach (var o in Outfits)
+            if (string.Equals(o, name, StringComparison.Ordinal)) return o;
+        return null;
+    }
+
     // ------------------------------------------------------- the outfit overlay
 
     /// <summary>
     /// THE WARDROBE SHEETS THAT EXIST AS ART, and the whole of what the desk knows about outfits.
     ///
-    /// <para><b>The desk wears none of them today.</b> Nothing in <c>Services/EmiDesk/</c> or
-    /// <c>Windows/EmiDesk/</c> picks an outfit, prices one, unlocks one or draws one: the desk
-    /// paints the standard ten-pose set and nothing else. These four names are the campus's
-    /// (<c>OUTFITS</c> in <c>Resources/web/arcademy/emi/widget.js</c>), written down here so that
-    /// the day a sheet does reach the desk it resolves through the SAME contract the web already
-    /// uses rather than through a second one invented on the spot. Do not read a wardrobe, a
-    /// picker or a purchase into this list; there is none on this side.</para>
+    /// <para><b>The desk wears the one the Locker armed.</b> These four names are the campus's
+    /// (<c>OUTFITS</c> in <c>Resources/web/arcademy/emi/widget.js</c>) and the desk resolves them
+    /// through the SAME contract the web does rather than a second one invented on this side. There
+    /// is still no picker, no price and no purchase here: the Arcademy's Locker is the only place a
+    /// garment is chosen or owned, it writes the pick to the <c>lockerOutfit</c> meta key, and
+    /// <c>ArcademyHostService.EquippedEmiOutfit</c> is the door the desk reads it back through -
+    /// clamped against the wallet, so an outfit nobody bought is answered null here too.</para>
     ///
-    /// <para><b>The ART, however, is already here.</b> The desk renders out of the campus's own
-    /// <c>Resources/web/arcademy/art/emi/</c> tree, which ships as Content, so all four sheets -
-    /// and the ten <c>swim/over-body-*.png</c> overlay frames - are sitting beside the exe right
-    /// now. <see cref="OverPath"/> finds them, which is why this layer is a real guarantee and not
-    /// a placeholder: hand <c>EmiDeskWindow.SetOutfit</c> the name "swim" and the goggles go up,
-    /// over her face, where they belong.</para>
+    /// <para><b>The ART is already beside the exe.</b> The desk renders out of the campus's own
+    /// <c>Resources/web/arcademy/art/emi/</c> tree, which ships as Content, so all four sheets - ten
+    /// body frames AND ten <c>over-body-*.png</c> frames each - are on disk right now.
+    /// <see cref="BodyPath"/> finds the body, <see cref="OverPath"/> finds the part that rides over
+    /// her face, and between them a name like "swim" is a whole outfit rather than a pair of
+    /// goggles floating on her school shirt.</para>
     /// </summary>
     public static readonly IReadOnlyList<string> Outfits = new[] { "varsity", "labcoat", "cheer", "swim" };
 
@@ -284,10 +321,11 @@ public static class EmiChains
     /// file is the same 859x869 canvas, transparent everywhere except the prop, and it is what THE
     /// SKIN LAW above lays back over her face.
     ///
-    /// <para><b>It is optional and it is silent.</b> Most sheets have no overlay and never will
-    /// (on the web only <c>swim</c> ships one, for the goggles). A missing file is not an error:
-    /// <see cref="OverPath"/> answers null, the layer stays collapsed, and the caller is expected
-    /// to ask ONCE per outfit and cache the verdict for the sitting - never per frame.</para>
+    /// <para><b>It is optional and it is silent.</b> All four sheets in the tree today ship a full
+    /// set of ten overlay frames, but a sheet is allowed to arrive without one and a missing file is
+    /// not an error: <see cref="OverPath"/> answers null, the layer stays collapsed, and the caller
+    /// is expected to ask ONCE per outfit and cache the verdict for the sitting - never per
+    /// frame.</para>
     /// </summary>
     public static string OverFileName(string? frame)
     {
@@ -295,8 +333,9 @@ public static class EmiChains
         return "over-" + BodyFrameFile[key];
     }
 
-    /// <summary>Where a wardrobe sheet lives: one folder down from the standard art.</summary>
-    public static string OutfitDir(string? outfit) => outfit ?? string.Empty;
+    /// <summary>Where a wardrobe sheet lives: one folder down from the standard art, and only for a
+    /// name that is one of ours. Empty string means "the standard art".</summary>
+    public static string OutfitDir(string? outfit) => OutfitName(outfit) ?? string.Empty;
 
     /// <summary>
     /// Absolute path to a garment's OVERLAY frame - the art that rides over her face - or null when
@@ -310,9 +349,8 @@ public static class EmiChains
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(outfit)) return null;
             var dir = OutfitDir(outfit);
-            if (dir.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return null;
+            if (dir.Length == 0) return null;
             var path = Path.Combine(AppContext.BaseDirectory,
                 "Resources", "web", "arcademy", "art", "emi", dir, OverFileName(frame));
             return File.Exists(path) ? path : null;

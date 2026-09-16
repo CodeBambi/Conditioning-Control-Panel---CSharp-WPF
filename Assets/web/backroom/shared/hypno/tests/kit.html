@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Hypno kit - smoke page</title>
+<!-- Test page for kit-check.mjs only. Serve Resources/web as the root and open /backroom/shared/hypno/tests/kit.html.
+     Query: ?gates=off (every gate off) ?calm=1 (Calm) ?nogl=1 (no WebGL: the 2D fallback).
+     #screen stands in for the host's desktop overlays, drawn from what the mock host recorded (Calm halves there,
+     as the host does); #stage stands in for a station view. Neither is product code. -->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #120b1f; color: #efe6ff; font: 13px "Segoe UI", system-ui, sans-serif; }
+  canvas { display: block; }
+  #stage { position: fixed; inset: 0; width: 100vw; height: 100vh; }
+  #screen { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 5; }
+  #cap { position: fixed; left: 12px; bottom: 10px; z-index: 6; font: 12px Consolas, monospace; color: #e8c27a; white-space: pre; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<canvas id="screen"></canvas>
+<div id="cap"></div>
+<script type="module">
+import { LOOM_PRESETS, createLoomKit, createDeck, createMoments, viewportRect, wheelTurnLevel, rouletteRunLevel, strengthK, DECK_VALUES } from '../index.js';
+import { createMockHost } from './mock-host.js';
+import { measureKit, measureGif } from './handedness.js';
+
+const q = new URLSearchParams(location.search);
+if (q.get('nogl') === '1') {
+  const real = HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext = function (type, o) { return /webgl/.test(type) ? null : real.call(this, type, o); };
+}
+const TAU = Math.PI * 2;
+const calm = q.get('calm') === '1';
+const off = q.get('gates') === 'off';
+const rel = (p) => new URL(p, location.href).href;
+const DEAL = ['../../../stations/slot/fallback/gif0.webp', '../../../stations/slot/fallback/gif1.webp', '../../../../dtrh/assets/bubbles/effects/spirals/sp6.gif',
+  '../../../stations/slot/fallback/gif2.webp', '../../../room/assets/ads/dtrh.webp', '../../../stations/slot/fallback/gif3.webp',
+  '../../../room/assets/ads/arcademy.webp', '../../../room/assets/ads/focus-gaze.webp'].map(rel);
+const host = createMockHost({ deal: DEAL, intensity: calm ? 'calm' : 'normal',
+  gates: off ? { flash: false, subliminal: false, spiral: false, brainDrain: false, tunnel: false } : null });
+const ctx = host.attach({ root: document.body });
+const kit = createLoomKit({ still: false, log: (m) => host.logs.push(m) });
+const stage = document.getElementById('stage'), screen = document.getElementById('screen'), cap = document.getElementById('cap');
+const sg = stage.getContext('2d'), xg = screen.getContext('2d');
+let W = 0, H = 0, deck = null, scene = null, t0 = performance.now();
+
+function fit() {
+  W = innerWidth; H = innerHeight;
+  for (const c of [stage, screen]) { if (c.width !== W || c.height !== H) { c.width = W; c.height = H; } }
+}
+
+/* ---------------- boards ---------------- */
+function label(g, text, x, y) { g.fillStyle = '#e8c27a'; g.font = '600 14px Segoe UI, sans-serif'; g.textAlign = 'center'; g.fillText(text, x, y); }
+function rrect(g, x, y, w, h, r) { g.beginPath(); g.roundRect(x, y, w, h, r); }
+
+const boards = {
+  /** The five presets, 13 card backs sharing one render, the hub painted into a 256 texture canvas. */
+  presets(now) {
+    sg.fillStyle = '#120b1f'; sg.fillRect(0, 0, W, H);
+    const names = Object.keys(LOOM_PRESETS), s = 220, gap = (W - names.length * s) / (names.length + 1);
+    names.forEach((n, i) => {
+      const x = gap + i * (s + gap), y = 36;
+      sg.save(); sg.beginPath(); sg.arc(x + s / 2, y + s / 2, s / 2, 0, TAU); sg.clip();
+      kit.draw(sg, n, x, y, s, s, { now });
+      sg.restore();
+      label(sg, n, x + s / 2, y + s + 20);
+    });
+    const before = kit.debug().renders;
+    const cw = 64, ch = 90, gx = (W - 13 * (cw + 12)) / 2;
+    for (let i = 0; i < 13; i++) {
+      const x = gx + i * (cw + 12), y = 330;
+      sg.save(); rrect(sg, x, y, cw, ch, 6); sg.clip();
+      kit.draw(sg, 'backs', x, y, cw, ch, { now, backing: 'small' });
+      sg.restore();
+      rrect(sg, x, y, cw, ch, 6); sg.strokeStyle = '#e8c27a'; sg.lineWidth = 1.5; sg.stroke();
+    }
+    scene.backRenders = kit.debug().renders - before;
+    label(sg, '13 card backs, ' + scene.backRenders + ' render this frame', W / 2, 446);
+    const tex = scene.tex || (scene.tex = Object.assign(document.createElement('canvas'), { width: 256, height: 256 }));
+    kit.paint(tex, 'hub', { angle: (now / 1000) * 0.9 });
+    sg.drawImage(tex, W / 2 - 256 - 20, 470, 200, 200);
+    label(sg, 'paint(hub) 256 texture, angle driven', W / 2 - 256 + 80, 690);
+    sg.save(); sg.beginPath(); sg.arc(W / 2 + 120, 570, 100, 0, TAU); sg.clip();
+    kit.draw(sg, 'whirl', W / 2 + 20, 470, 200, 200, { angle: (now / 1000) * 2.2 * 0.4 });
+    sg.restore();
+    label(sg, 'draw(whirl) angle driven', W / 2 + 120, 690);
+  },
+
+  /** Each preset at angle 0, d, 2d with a fixed tick at 12 o'clock and the measured result. */
+  hand() {
+    sg.fillStyle = '#120b1f'; sg.fillRect(0, 0, W, H);
+    const names = Object.keys(LOOM_PRESETS), s = 128, d = 0.35;
+    names.forEach((n, r) => {
+      const y = 12 + r * (s + 12), m = scene.measured && scene.measured[n];
+      for (let k = 0; k < 3; k++) {
+        const x = 150 + k * (s + 18);
+        sg.save(); sg.beginPath(); sg.arc(x + s / 2, y + s / 2, s / 2, 0, TAU); sg.clip();
+        kit.draw(sg, n, x, y, s, s, { angle: k * d });
+        sg.restore();
+        sg.strokeStyle = '#fff'; sg.lineWidth = 2; sg.beginPath(); sg.moveTo(x + s / 2, y - 2); sg.lineTo(x + s / 2, y + 16); sg.stroke();
+        sg.fillStyle = '#a898c4'; sg.font = '12px Consolas, monospace'; sg.textAlign = 'center'; sg.fillText('angle ' + (k * d).toFixed(2), x + s / 2, y + s + 10);
+      }
+      sg.textAlign = 'left'; sg.fillStyle = '#e8c27a'; sg.font = '600 15px Segoe UI, sans-serif'; sg.fillText(n, 20, y + s / 2);
+      if (m) {
+        sg.font = '13px Consolas, monospace'; sg.fillStyle = m.ok ? '#5fffd0' : '#ff5fa2';
+        sg.fillText(`turn +${m.turnDeg.toFixed(1)} deg for +${(m.delta * 180 / Math.PI).toFixed(1)} (clockwise ${m.turnDeg > 0 ? 'yes' : 'NO'})`, 610, y + s / 2 - 10);
+        sg.fillText(`rim lead ${m.rim.map((v) => (v > 0 ? '+' : '') + v.toFixed(1)).join(' ')} deg (arms lead at the rim ${m.rim.every((v) => v > 0) ? 'yes' : 'NO'})`, 610, y + s / 2 + 12);
+        if (m.layer2) sg.fillText(`layer 2 ${m.layer2.color}: turn ${m.layer2.turn.map((v) => (v > 0 ? '+' : '') + v.toFixed(1)).join(' ')}, rim ${m.layer2.rim.map((v) => (v > 0 ? '+' : '') + v.toFixed(1)).join(' ')} (same way, reads inward ${m.layer2.ok ? 'yes' : 'NO'})`, 610, y + s / 2 + 34);
+      }
+    });
+    label(sg, 'handedness: phase grows with a clockwise angle, the pattern turns clockwise, arms lead at the rim (reads inward)', W / 2, H - 8);
+  },
+
+  /** The 13 values dressed in a 13 deal (8 pictures, so they cycle), rank on top under a pale wash. */
+  deck(now) {
+    sg.fillStyle = '#0b2c34'; sg.fillRect(0, 0, W, H);
+    const cw = 84, ch = 118, gx = (W - 7 * (cw + 16)) / 2;
+    DECK_VALUES.forEach((v, i) => {
+      const x = gx + (i % 7) * (cw + 16) + (i >= 7 ? (cw + 16) / 2 : 0), y = 90 + Math.floor(i / 7) * (ch + 60);
+      rrect(sg, x, y, cw, ch, 8); sg.fillStyle = '#f7f0fb'; sg.fill();
+      const key = deck.keyFor(v);
+      sg.save(); rrect(sg, x + 3, y + 3, cw - 6, ch - 6, 7); sg.clip();
+      if (ctx.gates.flash) deck.draw(sg, key, x + 3, y + 3, cw - 6, ch - 6, { alpha: 0.85 });
+      sg.fillStyle = 'rgba(247,240,251,.3)'; sg.fillRect(x, y, cw, ch);
+      sg.restore();
+      sg.fillStyle = '#22123a'; sg.shadowColor = 'rgba(255,255,255,.95)'; sg.shadowBlur = 5;
+      sg.font = '700 22px Segoe UI, sans-serif'; sg.textAlign = 'center'; sg.fillText(v === 'T' ? '10' : v, x + 20, y + 28);
+      sg.shadowBlur = 0; rrect(sg, x, y, cw, ch, 8); sg.strokeStyle = '#e8c27a'; sg.lineWidth = 1.5; sg.stroke();
+      sg.fillStyle = '#a898c4'; sg.font = '12px Consolas, monospace'; sg.fillText(key, x + cw / 2, y + ch + 16);
+    });
+    deck.tick(now);
+    const d = deck.debug();
+    label(sg, `deck size ${deck.size} of 13 asked, ${d.ready} loaded (${d.animated} animated), ${d.frames} frames, ${d.decodes} frame decodes in ${d.ticks} ticks`, W / 2, 50);
+  },
+
+  /** A station stand-in: a wheel, two cards and a bowl, with a hub, backs and a whirl, plus the page effect names. */
+  table(now) {
+    sg.fillStyle = '#1d1233'; sg.fillRect(0, 0, W, H);
+    const k = strengthK(ctx), R = 150, cx = 260, cy = 330, ang = scene.ang || 0;
+    for (let i = 0; i < 14; i++) {
+      const a0 = ang + i * TAU / 14;
+      sg.beginPath(); sg.moveTo(cx, cy); sg.arc(cx, cy, R, a0, a0 + TAU / 14); sg.closePath();
+      sg.fillStyle = i === 7 ? '#e8c27a' : ['#9b6bff', '#ff5fa2', '#6a3fc0'][i % 3]; sg.fill();
+    }
+    sg.save(); sg.beginPath(); sg.arc(cx, cy, R * 0.26, 0, TAU); sg.clip();
+    if (ctx.gates.spiral) kit.draw(sg, 'hub', cx - R * 0.26, cy - R * 0.26, R * 0.52, R * 0.52, { angle: ang + (now / 1000) * 0.35 });
+    else { sg.fillStyle = '#2a1a3c'; sg.fillRect(cx - R, cy - R, 2 * R, 2 * R); sg.fillStyle = '#e8c27a'; sg.font = '34px Segoe UI'; sg.textAlign = 'center'; sg.fillText('★', cx, cy + 12); }
+    sg.restore();
+    for (let i = 0; i < 2; i++) {
+      const x = 560 + i * 110, y = 250;
+      sg.save(); rrect(sg, x, y, 90, 126, 8); sg.clip();
+      if (i === 0 && ctx.gates.spiral) kit.draw(sg, 'backs', x, y, 90, 126, { now, backing: 'small' });
+      else if (i === 0) { sg.fillStyle = '#2a1745'; sg.fillRect(x, y, 90, 126); }
+      else { sg.fillStyle = '#f7f0fb'; sg.fillRect(x, y, 90, 126); if (ctx.gates.flash) deck.draw(sg, deck.keyFor('A'), x + 3, y + 3, 84, 120, { alpha: 0.85 }); }
+      sg.restore();
+      rrect(sg, x, y, 90, 126, 8); sg.strokeStyle = '#e8c27a'; sg.stroke();
+    }
+    sg.fillStyle = '#22123a'; sg.font = '700 26px Segoe UI'; sg.textAlign = 'center'; sg.fillText('A', 690, 284);
+    const bx = 1010, by = 330;
+    sg.fillStyle = '#2b1a30'; sg.beginPath(); sg.arc(bx, by, 150, 0, TAU); sg.fill();
+    sg.fillStyle = '#1c1230'; sg.beginPath(); sg.arc(bx, by, 75, 0, TAU); sg.fill();
+    if (scene.whirl && ctx.gates.spiral) {
+      sg.save(); sg.beginPath(); sg.arc(bx, by, 73, 0, TAU); sg.clip();
+      kit.draw(sg, 'whirl', bx - 75, by - 75, 150, 150, { angle: (now / 1000) * 0.4 * 2.2, alpha: 0.85 * k });
+      sg.restore();
+    }
+    scene.rects = { slice: viewportRect(stage, cx + Math.cos(ang + 7.5 * TAU / 14) * R * 0.72 - 30, cy + Math.sin(ang + 7.5 * TAU / 14) * R * 0.72 - 22, 60, 44),
+      ace: viewportRect(stage, 670, 250, 90, 126), pocket: viewportRect(stage, bx + 100 - 20, by - 15, 40, 30) };
+    sg.fillStyle = '#efe6ff'; sg.font = '14px Consolas, monospace'; sg.textAlign = 'left';
+    sg.fillText(`page effects: ${scene.page.join(', ') || 'none'}   strengthK ${k}   gates ${JSON.stringify(ctx.gates)}   intensity ${ctx.intensity}`, 20, 40);
+    sg.fillText(`host calls: ${host.summary().join(', ') || 'none'}`, 20, 64);
+    deck.tick(now);
+  },
+};
+
+/* --------- the host stand-in: what the mock host recorded, drawn the way 10.13.B describes ---------- */
+const scr = { seen: 0, flashes: [], gifs: [], spiral: null, tunnel: 0, want: 0, wantAt: -1e9, last: performance.now() };
+const K_HOST = calm ? 0.5 : 1, DUR = calm ? 0.6 : 1;
+function drawScreen(now) {
+  const dt = Math.min(0.05, (now - scr.last) / 1000); scr.last = now;
+  for (; scr.seen < host.calls.length; scr.seen++) {
+    const c = host.calls[scr.seen];
+    if (c.type === 'fx-tunnel') { scr.want = c.applied ? c.level * K_HOST : 0; scr.wantAt = now; continue; }
+    if (c.type === 'fx-release') { if (scr.spiral && scr.spiral.token === c.token) scr.spiral.ending = now; continue; }
+    if (c.type !== 'fx' || !c.ack.fired.length) continue;
+    const a = c.args || {}, key = c.symbols && c.symbols[0];
+    if (c.fxId === 'fx.wash') scr.flashes.push({ t0: now, color: a.color || '#9b6bff', k: (a.strength || 0.7) * K_HOST, key });
+    if (c.fxId === 'fx.gif_from') scr.gifs = [{ t0: now, dur: (a.ms || 3400) * DUR, key, from: a.from || { x: W / 2, y: H / 2, w: 8, h: 8 }, scale: a.scale || 1 }];
+    if (c.fxId === 'fx.loom_spiral') scr.spiral = { t0: now, dur: a.hold ? 20000 : (a.ms || 4200) * DUR, alpha: (a.alpha || 0.85) * K_HOST, preset: a.preset || 'screen', token: c.token };
+  }
+  if (now - scr.wantAt > 1500) scr.want = 0;
+  scr.tunnel += (scr.want - scr.tunnel) * Math.min(1, dt * (scr.want > scr.tunnel ? 1.4 : 2.2));
+  xg.clearRect(0, 0, W, H);
+  const sp = scr.spiral;
+  if (sp) {
+    const age = now - sp.t0;
+    let a = Math.min(1, age / 800);
+    if (sp.ending) a *= 1 - Math.min(1, (now - sp.ending) / 1200); else if (age > sp.dur) a *= 1 - Math.min(1, (age - sp.dur) / 1200);
+    if (a <= 0 && age > 800) scr.spiral = null; else kit.draw(xg, sp.preset, 0, 0, W, H, { now, alpha: a * sp.alpha });
+  }
+  scr.gifs = scr.gifs.filter((g) => now - g.t0 < g.dur);
+  for (const g of scr.gifs) {
+    const age = now - g.t0, p = Math.min(1, age / 700), grow = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+    const fade = age > g.dur - 900 ? Math.max(0, (g.dur - age) / 900) : 1, tw = Math.max(W, H * 4 / 3) * g.scale, th = tw * 3 / 4;
+    const lerp = (x, y) => x + (y - x) * grow;
+    if (g.scale >= 1) { xg.globalAlpha = fade * (0.55 + 0.45 * grow) * (calm ? 0.8 : 1); xg.fillStyle = 'rgba(8,4,14,.55)'; xg.fillRect(0, 0, W, H); }
+    xg.globalAlpha = fade;
+    deck.draw(xg, g.key || deck.keys[0], lerp(g.from.x, (W - tw) / 2), lerp(g.from.y, (H - th) / 2), lerp(g.from.w, tw), lerp(g.from.h, th));
+    xg.globalAlpha = 1;
+  }
+  scr.flashes = scr.flashes.filter((f) => now - f.t0 < 900);
+  for (const f of scr.flashes) {
+    const age = (now - f.t0) / 1000, env = age < 0.08 ? age / 0.08 : Math.exp(-(age - 0.08) * 4.5);
+    xg.globalAlpha = env * 0.42 * f.k; xg.fillStyle = f.color; xg.fillRect(0, 0, W, H);
+    if (f.key) { const h = H * 0.42, w = h * 4 / 3; xg.globalAlpha = Math.min(1, env * 1.3) * 0.85 * f.k; deck.draw(xg, f.key, (W - w) / 2, (H - h) / 2, w, h); }
+    xg.globalAlpha = 1;
+  }
+  if (scr.tunnel > 0.01) {
+    const k = scr.tunnel, R = Math.hypot(W, H) / 2;
+    const gr = xg.createRadialGradient(W / 2, H / 2, R * (1 - 0.72 * k), W / 2, H / 2, R * (1.12 - 0.5 * k));
+    gr.addColorStop(0, 'rgba(6,3,12,0)'); gr.addColorStop(1, `rgba(6,3,12,${0.94 * Math.min(1, k * 1.3)})`);
+    xg.fillStyle = gr; xg.fillRect(0, 0, W, H);
+  }
+}
+
+/* ---------------- scenarios ---------------- */
+let moments = null;
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const api = {
+  host, kit, ctx, get deck() { return deck; }, get scene() { return scene; },
+  async boot() { deck = await createDeck(ctx, { count: 13 }); moments = createMoments(ctx, { station: 'kit' }); return { size: deck.size, keys: [...deck.keys] }; },
+  show(name) { scene = { board: name, page: [] }; return true; },
+  handedness() { const out = {}; for (const n of Object.keys(LOOM_PRESETS)) out[n] = measureKit(kit, n); scene.measured = out; return out; },
+  measureGif: (name) => measureGif(rel('../spirals/' + name + '.gif'), name),
+  async wheel() {
+    api.show('table'); host.clear(); scr.seen = 0;
+    const t = performance.now(); let dim = 0;
+    while (performance.now() - t < 1600) {
+      dim = Math.min(1, dim + 0.05); scene.ang = (scene.ang || 0) + 0.04 * (1 - (performance.now() - t) / 1700);
+      moments.tunnel(wheelTurnLevel(dim)); await wait(16);
+    }
+    moments.tunnel(0);
+    const r = moments.play('wheel.land.jackpot', { color: '#9b6bff', from: scene.rects.slice, gif: deck.pickKey('2026-09-14|jackpot') });
+    scene.page = r.page;
+    return { r, calls: host.fx.map((f) => ({ fxId: f.fxId, symbols: f.symbols, args: f.args, ack: f.ack })), tunnel: host.tunnel.length };
+  },
+  async cards() {
+    api.show('table'); host.clear(); scr.seen = 0;
+    moments.holdScreen(true);
+    const held = moments.play('cards.win', { gif: deck.keyFor('Q') });
+    moments.tunnel(0.6);
+    await wait(300);
+    moments.holdScreen(false);
+    const bloom = moments.play('cards.bloom', { from: scene.rects.ace, gif: deck.keyFor('A') });
+    scene.page = bloom.page;
+    return { held, bloom, calls: host.fx.map((f) => ({ fxId: f.fxId, symbols: f.symbols, args: f.args })), tunnel: host.tunnel.length };
+  },
+  async cardsWin() { const r = moments.play('cards.win', { gif: deck.keyFor('K') }); scene.page = r.page; return r; },
+  async cardsLose() { api.show('table'); host.clear(); scr.seen = 0; const r = moments.play('cards.lose'); scene.page = r.page; return r; },
+  async roulette() {
+    api.show('table'); host.clear(); scr.seen = 0; scene.whirl = true;
+    const run = moments.play('roulette.run'), wake = moments.play('roulette.wake');
+    scene.page = [...run.page, ...wake.page];
+    const t = performance.now();
+    while (performance.now() - t < 1800) { moments.tunnel(rouletteRunLevel(12 - (performance.now() - t) / 200)); await wait(16); }
+    return { run, wake, calls: host.fx.map((f) => ({ fxId: f.fxId, args: f.args, ack: f.ack })), tunnel: host.tunnel.map((x) => x.level) };
+  },
+  async rouletteLand() {
+    const r = moments.play('roulette.land.big', { color: '#ff5fa2', from: scene.rects.pocket, gif: deck.pickKey('spin-7'), wake: true });
+    moments.tunnel(0); scene.whirl = false; scene.page = r.page;
+    return { r, releases: host.release.length };
+  },
+};
+window.K = api;
+
+function frame(now) {
+  fit();
+  if (scene && boards[scene.board]) boards[scene.board](now);
+  if (deck) drawScreen(now);
+  cap.textContent = `kit.webgl ${kit.webgl}  renders ${kit.debug().renders}  ${calm ? 'Calm' : 'Normal'}${off ? '  gates off' : ''}`;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+window.__kitReady = true;
+</script>
+</body>
+</html>

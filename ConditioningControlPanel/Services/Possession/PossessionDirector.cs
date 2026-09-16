@@ -132,8 +132,8 @@ public sealed class PossessionDirector : IDisposable
             // down now rather than leaking a ghost that outlives its room.
             foreach (var g in _live.Where(g => ReferenceEquals(g.Host.Host, host)).ToArray())
                 UndoGhostSync(g);
-            try { _events.Detach(host); } catch { }
-            try { entry.Attribution.ReleaseAll(); } catch { }
+            try { _events.Detach(host); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { entry.Attribution.ReleaseAll(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _hosts.Remove(entry);
         });
     }
@@ -150,7 +150,7 @@ public sealed class PossessionDirector : IDisposable
             foreach (var g in _live.ToArray()) UndoGhostSync(g);
             _live.Clear();
             _liveKeys.Clear();
-            foreach (var h in _hosts) { try { h.Attribution.ReleaseAll(); } catch { } }
+            foreach (var h in _hosts) { try { h.Attribution.ReleaseAll(); } catch (Exception ex) { Diag.Swallowed(ex); } }
         }
         catch (Exception ex) { App.Logger?.Warning("Possession UndoAll failed: {Error}", ex.Message); }
     }
@@ -230,7 +230,7 @@ public sealed class PossessionDirector : IDisposable
                 var previous = CurrentRung;
                 CurrentRung = rung;
                 App.Logger?.Information("Possession rung {From} -> {To} at {Pct:P0}", previous, rung, frac);
-                try { RungChanged?.Invoke(rung); } catch { }
+                try { RungChanged?.Invoke(rung); } catch (Exception ex) { Diag.Swallowed(ex); }
 
                 // Belt for the timer restart: a restart sets the rung, pulses the edge at 0.6 and
                 // spends that rung's bark itself, so a tick landing on the same moment would flare
@@ -241,7 +241,7 @@ public sealed class PossessionDirector : IDisposable
                 // The rung change itself is an event: the whole window flares once so the escalation is
                 // never something the user only notices in hindsight.
                 if (!justRestarted) PulseAll(0.35 + 0.15 * (int)rung);
-                if (_barkedRungs.Add(rung) && !justRestarted) { try { App.Bark?.NotifyPossessionRung((int)rung); } catch { } }
+                if (_barkedRungs.Add(rung) && !justRestarted) { try { App.Bark?.NotifyPossessionRung((int)rung); } catch (Exception ex) { Diag.Swallowed(ex); } }
 
                 if (rung == PossessionRung.ItKnows && _wardenEnabled && Warden?.IsAvailable == true)
                     FireAndForget(RunWardenAsync(ct => Warden!.LeaveAsync(ct), "leave"), "warden leave");
@@ -373,7 +373,7 @@ public sealed class PossessionDirector : IDisposable
 
             App.Logger?.Information("Possession: {Effect} on {Target} at rung {Rung} (live {Live})",
                 effect.Id, target?.Key ?? "(window)", rung, _live.Count);
-            try { EffectStarted?.Invoke(effect.Id, target?.Key, effect.IsBig); } catch { }
+            try { EffectStarted?.Invoke(effect.Id, target?.Key, effect.IsBig); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             if (knock && Warden != null)
                 await RunWardenAsync(ct => Warden.KnockAsync(target!, ct), "knock").ConfigureAwait(true);
@@ -382,7 +382,7 @@ public sealed class PossessionDirector : IDisposable
             {
                 await effect.ApplyAsync(ctx, target, cts.Token).ConfigureAwait(true);
             }
-            catch (OperationCanceledException) { /* exit or UndoAll pulled it */ }
+            catch (OperationCanceledException) { } // swallow: exit or UndoAll pulled it
             catch (Exception ex)
             {
                 App.Logger?.Warning("Possession effect {Effect} failed: {Error}", effect.Id, ex.Message);
@@ -398,7 +398,7 @@ public sealed class PossessionDirector : IDisposable
         catch (Exception ex)
         {
             App.Logger?.Warning("Possession pick failed: {Error}", ex.Message);
-            if (ghost != null) { try { await UndoGhostAsync(ghost, TimeSpan.Zero).ConfigureAwait(true); } catch { } }
+            if (ghost != null) { try { await UndoGhostAsync(ghost, TimeSpan.Zero).ConfigureAwait(true); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); } }
         }
         finally
         {
@@ -544,7 +544,7 @@ public sealed class PossessionDirector : IDisposable
                         _cooldowns[t.Key] = until;
                         _liveKeys.Remove(t.Key);
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 }
                 claimed.Clear();
             };
@@ -552,11 +552,11 @@ public sealed class PossessionDirector : IDisposable
 
             App.Logger?.Information("Possession scene: {Scene} at rung {Rung} (live slots {Slots})",
                 scene.Id, rung, LiveSlots);
-            try { EffectStarted?.Invoke(scene.Id, null, true); } catch { }
+            try { EffectStarted?.Invoke(scene.Id, null, true); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             var ctx = BuildContext(host, rung, remaining, frac, () => adapter);
             try { await adapter.ApplyAsync(ctx, null, cts.Token).ConfigureAwait(true); }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException) { } // swallow: the scene was cancelled
 
             if (adapter.HoldFor > TimeSpan.Zero) FireAndForget(HoldThenUndoAsync(ghost, adapter.HoldFor), "scene hold");
             else await UndoGhostAsync(ghost, TimeSpan.FromMilliseconds(600)).ConfigureAwait(true);
@@ -565,7 +565,7 @@ public sealed class PossessionDirector : IDisposable
         catch (Exception ex)
         {
             App.Logger?.Warning("Possession scene start failed: {Error}", ex.Message);
-            if (ghost != null) { try { await UndoGhostAsync(ghost, TimeSpan.Zero).ConfigureAwait(true); } catch { } }
+            if (ghost != null) { try { await UndoGhostAsync(ghost, TimeSpan.Zero).ConfigureAwait(true); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); } }
             return true;   // the beat was spent either way; do not immediately try a second thing
         }
     }
@@ -637,7 +637,7 @@ public sealed class PossessionDirector : IDisposable
 
             App.Logger?.Information("Possession reactive: {Effect} on {Target} at rung {Rung}",
                 effect.Id, target?.Key ?? "(window)", rung);
-            try { EffectStarted?.Invoke(effect.Id, target?.Key, effect.IsBig); } catch { }
+            try { EffectStarted?.Invoke(effect.Id, target?.Key, effect.IsBig); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             FireAndForget(RunReactiveAsync(ghost, ctx, effect, target, cts), "reactive");
         }
@@ -651,7 +651,7 @@ public sealed class PossessionDirector : IDisposable
         {
             await effect.ApplyAsync(ctx, target, cts.Token).ConfigureAwait(true);
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException) { } // swallow: the effect was cancelled
         catch (Exception ex)
         {
             App.Logger?.Warning("Possession reactive {Effect} failed: {Error}", effect.Id, ex.Message);
@@ -718,7 +718,7 @@ public sealed class PossessionDirector : IDisposable
                     var d = dx * dx + dy * dy;
                     if (d < bestDist) { bestDist = d; best = t; }
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
             }
             return best;
         }
@@ -754,7 +754,7 @@ public sealed class PossessionDirector : IDisposable
                 BarkTimerRestarted(reason, SafeRestartCount());
 
                 _nextDue = DateTime.Now + PossessionDeck.FirstDelay(CurrentRung, _intensity, _rng);
-                try { RungChanged?.Invoke(CurrentRung); } catch { }
+                try { RungChanged?.Invoke(CurrentRung); } catch (Exception ex) { Diag.Swallowed(ex); }
 
                 App.Logger?.Information("Possession: timer restarted ({Reason}), rung reset to {Rung}, next haunt in {Sec:F0}s",
                     reason, CurrentRung, (_nextDue - DateTime.Now).TotalSeconds);
@@ -805,7 +805,7 @@ public sealed class PossessionDirector : IDisposable
             {
                 // A victim that is still possessed keeps its booking; Release() gives it a fresh
                 // cooldown when its ghost finally comes down.
-                try { if (t != null && !t.IsLive) t.CooldownUntil = DateTime.MinValue; } catch { }
+                try { if (t != null && !t.IsLive) t.CooldownUntil = DateTime.MinValue; } catch (Exception ex) { Diag.Swallowed(ex); }
             }
         }
     }
@@ -876,7 +876,7 @@ public sealed class PossessionDirector : IDisposable
                 {
                     if (effect().IsBig) App.Bark?.NotifyPossessionEffect(id, targetName);
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
             },
         };
     }
@@ -940,8 +940,8 @@ public sealed class PossessionDirector : IDisposable
         if (ghost == null || ghost.Released) return false;
         ghost.Released = true;
         _live.Remove(ghost);
-        try { ghost.Cts.Cancel(); } catch { }
-        try { ghost.OnRelease?.Invoke(); } catch { }
+        try { ghost.Cts.Cancel(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ghost.OnRelease?.Invoke(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
         var target = ghost.Target;
         if (target != null)
@@ -985,7 +985,7 @@ public sealed class PossessionDirector : IDisposable
                 return;
             }
 
-            foreach (var h in _hosts) { try { h.Attribution.ReleaseAll(); } catch { } }
+            foreach (var h in _hosts) { try { h.Attribution.ReleaseAll(); } catch (Exception ex) { Diag.Swallowed(ex); } }
 
             if (_wardenEnabled && Warden != null)
                 await RunWardenAsync(ct => Warden.ReturnAsync(ct), "return").ConfigureAwait(true);
@@ -995,7 +995,7 @@ public sealed class PossessionDirector : IDisposable
             if (!ShouldFinishReassembly(generation, _generation, IsHaunting)) return;
 
             CurrentRung = PossessionRung.Settle;
-            try { RungChanged?.Invoke(CurrentRung); } catch { }
+            try { RungChanged?.Invoke(CurrentRung); } catch (Exception ex) { Diag.Swallowed(ex); }
             App.Logger?.Information("Possession: reassembled, room is quiet");
         }
         catch (Exception ex) { App.Logger?.Warning("Possession reassembly failed: {Error}", ex.Message); }
@@ -1028,8 +1028,8 @@ public sealed class PossessionDirector : IDisposable
             var repeat = attempt.Repeat;
             var strength = repeat <= 1 ? 0.5 : 0.8;
             PulseAll(strength);
-            try { TripwireReacted?.Invoke(attempt); } catch { }
-            try { App.Bark?.NotifyPossessionTripwire(attempt.Kind, attempt.Repeat, attempt.Total); } catch { }
+            try { TripwireReacted?.Invoke(attempt); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { App.Bark?.NotifyPossessionTripwire(attempt.Kind, attempt.Repeat, attempt.Total); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             if (repeat >= 2)
             {
@@ -1037,7 +1037,7 @@ public sealed class PossessionDirector : IDisposable
                 {
                     // A blink, not a strobe: one extra flare 120 ms later plus a short shake.
                     FireAndForget(BlinkAsync(), "tripwire blink");
-                    try { App.ScreenShake?.Shake(0.4, 250); } catch { }
+                    try { App.ScreenShake?.Shake(0.4, 250); } catch (Exception ex) { Diag.Swallowed(ex); }
                 }
             }
 
@@ -1062,14 +1062,14 @@ public sealed class PossessionDirector : IDisposable
     public void PulseEdges(double strength)
     {
         if (_disposed || !IsHaunting) return;
-        try { PulseAll(Math.Clamp(strength, 0.0, 1.0)); } catch { }
+        try { PulseAll(Math.Clamp(strength, 0.0, 1.0)); } catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     private void PulseAll(double strength)
     {
         foreach (var h in _hosts)
         {
-            try { h.Attribution.EdgePulse(strength); } catch { }
+            try { h.Attribution.EdgePulse(strength); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
     }
 
@@ -1115,8 +1115,8 @@ public sealed class PossessionDirector : IDisposable
             _lockdown.EscapeAttempted -= OnEscapeAttempted;
             _lockdown.TimerRestarted -= OnTimerRestarted;
         }
-        catch { }
-        try { _events.DetachAll(); } catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
+        try { _events.DetachAll(); } catch (Exception ex) { Diag.Swallowed(ex); }
         IsHaunting = false;
         UndoAll();
     }
@@ -1151,6 +1151,6 @@ public sealed class PossessionDirector : IDisposable
         /// <summary>Extra bookkeeping to unwind when this ghost is released (a scene's claimed victims).</summary>
         public Action? OnRelease { get; set; }
 
-        public void Dispose() { try { Cts.Dispose(); } catch { } }
+        public void Dispose() { try { Cts.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); } }
     }
 }

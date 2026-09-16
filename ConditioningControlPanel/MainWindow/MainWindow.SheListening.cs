@@ -218,14 +218,13 @@ namespace ConditioningControlPanel
 
             RefreshSheListeningTab();          // reload the sub-toggles + status
             RefreshSheListeningDeviceChips();  // arming writes the setting directly - tell Settings > Devices
-            RefreshPremiumRail();              // keep the dashboard Voice dot honest
             UpdateMicPill();                   // privacy pill: wake word is now armed → mic is open
         }
 
         /// <summary>
         /// Fully turn the offline mic OFF and keep it off: clear the continuous input modes (wake word
-        /// + push-to-talk) so nothing re-arms it, cut any in-flight capture, then repaint the dashboard
-        /// dot + She's Listening. Shared by the master Stop button and the title-bar privacy pill so
+        /// + push-to-talk) so nothing re-arms it, cut any in-flight capture, then repaint She's
+        /// Listening. Shared by the master Stop button and the title-bar privacy pill so
         /// both genuinely disarm (not just pause) and the UI stays honest.
         /// </summary>
         internal void DisarmVoiceMic()
@@ -247,7 +246,6 @@ namespace ConditioningControlPanel
 
             if (SheListeningTab != null) RefreshSheListeningTab();
             RefreshSheListeningDeviceChips();  // disarming writes the setting directly - re-seed Settings > Devices
-            RefreshPremiumRail();
             UpdateMicPill();          // privacy pill: mic fully disarmed → pill off
         }
 

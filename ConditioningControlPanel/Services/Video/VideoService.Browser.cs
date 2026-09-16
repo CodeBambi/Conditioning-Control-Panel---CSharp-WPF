@@ -102,10 +102,12 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var screens = App.GetAllScreensCached().ToList();
+                // Global "Show content on" picker, not every screen: one picked monitor means
+                // one browser window, on that monitor.
+                var screens = App.GetGlobalScreens().ToList();
                 if (screens.Count == 0) return false;   // LibVLC path owns the no-screens end
                 var primary = screens.FirstOrDefault(s => s.Primary) ?? screens[0];
-                var secondaries = screens.Where(s => !s.Primary).ToList();
+                var secondaries = screens.Where(s => s.DeviceName != primary.DeviceName).ToList();
                 if (!ShouldFillSecondaryMonitors(screens.Count)) secondaries.Clear();
 
                 _browserPath = path;

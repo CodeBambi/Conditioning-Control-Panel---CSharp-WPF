@@ -81,6 +81,8 @@ let remoteReqInFlight = false;
 let lastRemoteReqAt = 0;
 let remoteDryUntil = 0;     // backoff after an ok-but-empty batch (channels drained)
 let remoteDryStep = 0;      // rung of the escalating dry ladder (reset by any fresh clip)
+let remoteFailStreak = 0;   // consecutive online-status verdicts with ok:false
+let autoFellBackToLibrary = false; // the session-only fallback already fired once
 let remoteExhausted = false; // every channel drained: the feed is recycling on purpose
 let exhaustionNoticed = false; // the on-feed note is a one-per-session courtesy
 // Which niche rows have their sub list open. Page memory only — a disclosure
@@ -132,6 +134,11 @@ const REMOTE_OFFLINE_BACKOFF_MS = 30000; // transport failure: breathe, then ret
 // total, so a flat 30 s retry is just a slow version of the poll loop this replaces.
 // Any batch with fresh ids resets the ladder (a sub that gained posts revives).
 const REMOTE_DRY_LADDER_MS = [30000, 120000, 600000];
+// Consecutive FAILED batches (transport, not exhaustion) after which the feed stops
+// waiting and shows the local library instead. The online feed can be unreachable for a
+// whole session - a blocked resolver, a captive portal, a dead CDN - and a feed that only
+// ever says "tuning in..." is indistinguishable from a broken app.
+const REMOTE_FAIL_FALLBACK = 3;
 const CUSTOM_SUB_CAP = 20;          // mirror of the host's Take(20) - the FEED cap
 const LIBRARY_CAP = 40;             // mirror of AppSettings.RemoteSubLibraryCap - the KEPT cap
 
@@ -861,12 +868,43 @@ function requestSourceChange(src) {
   applySource(src);
 }
 
-function applySource(src) {
-  setting('source', src);
+/**
+ * @param {string} src  'library' | 'mixed' | 'online'
+ * @param {boolean} persist  false = THIS SESSION ONLY: the host is never told, so the
+ *   user's chosen source survives the next launch. Only the automatic fallback below
+ *   uses it - one bad hotel wifi must not quietly rewrite a setting the user picked.
+ */
+function applySource(src, persist = true) {
+  if (persist) {
+    // An explicit choice is also the end of the automatic fallback: the user has just
+    // said what they want, and the streak that overrode them is no longer interesting.
+    autoFellBackToLibrary = false;
+    remoteFailStreak = 0;
+    setting('source', src);
+  } else {
+    settings.source = src;
+  }
   updateOnlineUi();
   if (started) applyConfig();
   updateEmptyState();
   ensureRemoteBuffer();
+}
+
+/**
+ * The online feed is unreachable and there is nothing at all to show: drop to the local
+ * library for this session and say so ON THE FEED - a note, never a modal. Once per
+ * session; a manual source change (or a batch that finally lands) clears it.
+ * @returns {boolean} true when the fallback fired.
+ */
+function maybeFallBackToLibrary() {
+  if (autoFellBackToLibrary || !sourceUsesRemote()) return false;
+  if (remoteFailStreak < REMOTE_FAIL_FALLBACK) return false;
+  if (remoteAssets.length > 0) return false;  // something IS playing; leave it alone
+  autoFellBackToLibrary = true;
+  applySource('library', false);
+  showFeedNote("Couldn't reach the online feed - showing your local files for now. "
+    + 'Switch back any time from the gear menu.', 7000);
+  return true;
 }
 
 // ---------- window opacity / ghost mode ----------
@@ -1016,13 +1054,17 @@ function onEyesClosed() {
 function updateEmptyState() {
   const empty = feed.comps.length === 0;
   $('empty').classList.toggle('hidden', !empty);
-  if (!empty) return;
+  const libBtn = $('btn-use-library');
+  if (!empty) { libBtn.classList.add('hidden'); return; }
   const gifBtn = $('btn-include-gifs');
   if (sourceUsesRemote()) {
     // Online/mixed with nothing yet: this is a loading (or offline) state, not
     // a "your library is empty" state.
     gifBtn.classList.add('hidden');
     $('empty-hint').classList.add('hidden');
+    // ALWAYS offered from here, reachable or not: this screen is where people end up
+    // when the online feed does not work, and the switch back is what they came for.
+    libBtn.classList.remove('hidden');
     if (!onlineOk) {
       $('empty-emoji').textContent = '📡';
       $('empty-copy').innerHTML = "Couldn't reach the online feed.<br>Check your connection - it retries as you scroll.";
@@ -1032,6 +1074,7 @@ function updateEmptyState() {
     }
     return;
   }
+  libBtn.classList.add('hidden');
   $('empty-emoji').textContent = '🎬';
   $('empty-copy').innerHTML = 'An endless feed of 20-40 second clips from your own videos and GIFs.<br>Add some to your assets folder to switch it on.';
   $('empty-hint').classList.remove('hidden');
@@ -1105,6 +1148,8 @@ function wireChrome() {
   document.querySelectorAll('.source-chip').forEach((chip) => {
     chip.addEventListener('click', () => requestSourceChange(chip.dataset.source));
   });
+  // The empty-state escape hatch. Same path as the Library chip, so it persists.
+  $('btn-use-library').addEventListener('click', () => requestSourceChange('library'));
   $('online-ratio').addEventListener('input', () => {
     $('online-ratio-label').textContent = `${$('online-ratio').value}%`;
   });
@@ -1328,6 +1373,12 @@ function onHostMessage(data) {
       // The host flips this off when the panic key gives the mouse back.
       setClickThrough(!!data.on, true);
       break;
+    case 'ghost-unavailable':
+      // The host tried to go ghost and the DWM mirror would not compose (see
+      // FypGhostOverlay.Diagnose) - it has already un-ghosted us, so all that is left is
+      // to say why. A note, not a dialog: the feed is still perfectly usable.
+      showFeedNote('Ghost mode is not available on this display - the feed stays solid.', 6000);
+      break;
     case 'openOptions':
       // The ghost gear button: the host has just un-ghosted us and wants the popover up.
       updateOptionsUi();
@@ -1374,10 +1425,13 @@ function onHostMessage(data) {
       const now = performance.now();
       if (!data.ok) {
         remoteDryUntil = now + REMOTE_OFFLINE_BACKOFF_MS; // transport, not exhaustion
+        remoteFailStreak++;
       } else if (fresh > 0) {
+        remoteFailStreak = 0;
         remoteDryStep = 0; // the well refilled: forget the ladder entirely
         remoteDryUntil = 0;
       } else {
+        remoteFailStreak = 0;
         const rung = Math.min(remoteDryStep, REMOTE_DRY_LADDER_MS.length - 1);
         remoteDryUntil = now + REMOTE_DRY_LADDER_MS[rung];
         remoteDryStep++;
@@ -1386,6 +1440,9 @@ function onHostMessage(data) {
       // second clause covers a host that predates it.
       remoteExhausted = data.dry === true || (!!data.ok && fresh === 0 && remoteAssets.length > 0);
       if (remoteExhausted) noteExhaustion();
+      // The feed cannot reach the internet at all and has nothing to show: stop spinning
+      // and put the local library up instead (applySource does the re-render).
+      if (maybeFallBackToLibrary()) break;
       updateEmptyState();
       updateOnlineUi();
       if (data.ok && fresh > 0) ensureRemoteBuffer();

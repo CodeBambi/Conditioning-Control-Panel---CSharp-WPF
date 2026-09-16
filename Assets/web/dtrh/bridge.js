@@ -41,7 +41,18 @@ export function send(msg) {
   try { webview && webview.postMessage(msg); } catch (e) { /* host gone */ }
 }
 
-export function log(msg) { send({ type: 'log', msg: String(msg).slice(0, 400) }); }
+/**
+ * Serilog passthrough. `level` is optional and defaults to 'debug' (same signature as the
+ * arcademy bridge: `log(msg)` or `log(level, msg)`).
+ *
+ * The default is the QUIET one. The host files 'info' and above; 'debug' still reaches the
+ * flight recorder, so it is dumped with any crash, hang or bug report - it just stops being
+ * written to disk on every run. Say 'warn' for a degraded surface, 'error' for a broken one.
+ */
+export function log(level, msg) {
+  if (msg === undefined) { msg = level; level = 'debug'; }
+  send({ type: 'log', level: String(level), msg: String(msg).slice(0, 400) });
+}
 
 /** Announce boot completion - the host flushes its queued init/manifest on receipt. */
 export function announceReady() { send({ type: 'ready', protocol: PROTOCOL }); }

@@ -1,6 +1,6 @@
 {
   "writer": "w1-firstcontact",
-  "note": "Ask EMI Wave 1: the knock. firstContact / firstContactUpgrade / firstContactLater pools plus the two-chip asks (tour:shortwalk, tour:upgrade). Written against VOICE.md + WAVE1-CONTRACT.md. Onboarding spice cap 1; asks spice 0.",
+  "note": "Ask EMI Wave 1: the knock. firstContact / firstContactUpgrade pools plus the two-chip asks (tour:shortwalk, tour:upgrade). The knock now summons her itself, so the ask IS the first thing she says: each firstContact ask introduces her and ends on the walk. The pool behind it is the fallback for when the walk cannot be offered at all. firstContactLater was retired with the second offer (first-run redesign, Sep 2026). Written against VOICE.md + WAVE1-CONTRACT.md. Onboarding spice cap 1; asks spice 0.",
   "pools": {
     "firstContact": [
       {
@@ -15,7 +15,7 @@
         "spice": 0
       },
       {
-        "t": "that flash was me. one knock. you answered. good eyes.",
+        "t": "that pink flash was me. hi. i'm emi. i live here.",
         "face": "o_o",
         "spice": 0
       },
@@ -26,7 +26,7 @@
         "spice": 0
       },
       {
-        "t": "first one in the room gets to do the tour. that's me.",
+        "t": "first one in the room gets to say hi. that's me.",
         "face": "(´∀`)",
         "spice": 0
       },
@@ -133,66 +133,12 @@
         "face": "(´∀`)",
         "spice": 1
       }
-    ],
-    "firstContactLater": [
-      {
-        "t": "oh. hi again. i wasn't waiting. this is just my spot.",
-        "face": "^_^",
-        "spice": 0
-      },
-      {
-        "t": "back again. the offer's still warm. no pressure. some.",
-        "face": "¬_¬",
-        "spice": 1
-      },
-      {
-        "t": "hi. still emi. still here. the place got no smaller.",
-        "face": "0_0",
-        "spice": 0
-      },
-      {
-        "t": "you said later. its later. i checked twice.",
-        "face": "^_~",
-        "spice": 0,
-        "typo": true
-      },
-      {
-        "t": "no walk, all good. i drew a map instead. it's in my head.",
-        "face": "._.",
-        "spice": 0
-      },
-      {
-        "t": "i'm fine. i did a lap without you. it was quick.",
-        "face": "-_-",
-        "spice": 0
-      },
-      {
-        "t": "everything's still where it was. i checked. for me.",
-        "face": "o_o",
-        "spice": 0
-      },
-      {
-        "t": "totally fine btw. i already forgot the no. mostley.",
-        "face": "-_-",
-        "spice": 0,
-        "typo": true
-      },
-      {
-        "t": "all good here. the corner needed sitting in. i sat.",
-        "face": "^_^",
-        "spice": 0
-      },
-      {
-        "t": "hm. you again. good. the place missed you. i'm the place.",
-        "face": "(´∀`)",
-        "spice": 1
-      }
     ]
   },
   "asks": [
     {
       "moment": "firstContact",
-      "q": "show you around?",
+      "q": "hi. i'm emi. i live here. want the quick lap?",
       "face": "(◕‿◕)",
       "chips": [
         "show me",
@@ -211,7 +157,7 @@
     },
     {
       "moment": "firstContact",
-      "q": "i know a shortcut. come?",
+      "q": "hi!! i'm emi. i know a shortcut. come?",
       "face": "^_~",
       "chips": [
         "ok",
@@ -230,7 +176,7 @@
     },
     {
       "moment": "firstContact",
-      "q": "two minutes. best bits?",
+      "q": "i'm emi. i live in that ring. two minutes, best bits?",
       "face": "0_0",
       "chips": [
         "go on",
@@ -246,6 +192,28 @@
       },
       "effect": "tour:shortwalk",
       "spice": 0
+    },
+    {
+      "moment": "firstContact",
+      "q": "emi. hi. i memorised this place. walk it with me?",
+      "face": "(◕‿◕)",
+      "chips": [
+        "let's go",
+        "not now"
+      ],
+      "yes": {
+        "t": "oh good. seven stops. i'll keep it quick. ish.",
+        "face": "^_^"
+      },
+      "no": {
+        "t": "that's allowed. i'll be in the ring if you want it.",
+        "face": "._."
+      },
+      "spice": 0,
+      "effect": "tour:shortwalk",
+      "when": [
+        "!touring"
+      ]
     },
     {
       "moment": "firstContactUpgrade",

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>The Fall</title>
+    <meta name="robots" content="noindex, nofollow">
+    <!-- iOS Safari has no fullscreen API; "Add to Home Screen" launches The Fall chromeless -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="The Fall">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1FAB0;</text></svg>">
+    <link data-cookie-blocked="third-party" data-fonts-href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap">
+    <link rel="stylesheet" href="assets/cookie-consent.css">
+    <link rel="stylesheet" href="fall-styles.css?v=14">
+
+    <!-- three.js resolved from vendored ESM (no bundler), same map as explore.html -->
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "./assets/vendor/three/three.module.min.js",
+        "three/addons/": "./assets/vendor/three/addons/"
+      }
+    }
+    </script>
+</head>
+<body>
+    <!-- 3D layer -->
+    <canvas id="sf-canvas" aria-hidden="true"></canvas>
+    <div id="sf-hud" class="sf-hud"><!-- score / depth / bubbles injected by scene.js --></div>
+
+    <!-- Loader (covers the page while the engine boots) -->
+    <div id="sf-loader" class="sf-loader">
+        <div class="sf-loader-ring" aria-hidden="true"></div>
+        <p>Opening the hole&#8230;</p>
+    </div>
+
+    <!-- Drop screen: pick media (optional), pick mode, begin -->
+    <div id="sf-drop" class="sf-drop" hidden>
+        <!-- Site header - funnels visitors back to CC Labs -->
+        <header class="sf-nav">
+            <a class="sf-nav-brand" href="https://cclabs.app/">
+                <img loading="lazy" decoding="async" src="images/logo.webp" alt="" class="sf-nav-logo">
+                <span class="sf-nav-name">CC Labs</span>
+            </a>
+            <nav class="sf-nav-links">
+                <a href="https://cclabs.app/">The App</a>
+                <a href="https://cclabs.app/explore.html">Explore</a>
+                <a href="https://cclabs.app/guide.html">Guide</a>
+                <a href="https://discord.gg/YxVAMt4qaZ" target="_blank" rel="noopener" class="sf-nav-discord">Discord</a>
+            </nav>
+        </header>
+
+        <div class="sf-drop-inner">
+            <div class="sf-drop-card">
+                <span class="sf-eyebrow"><span class="sf-eyebrow-dot"></span>A showcase from CC Labs</span>
+                <h1>the fall</h1>
+                <p class="sf-tagline">an endless descent. pop the bubbles. sink deeper.</p>
+                <p class="sf-pitch">A little demo of the tricks that live inside <strong>Conditioning Control Panel</strong> - spirals, subliminals, whispered triggers, and a tunnel that only sinks faster. Point it at a folder of your own pictures and videos, then let go.</p>
+
+                <div id="sf-dropzone" class="sf-dropzone">
+                    <p class="sf-dropzone-line">drag a folder or a .zip of pictures + videos here</p>
+                    <p class="sf-dropzone-or">or</p>
+                    <div class="sf-pick-row">
+                        <button id="sf-pick" class="sf-btn" type="button">choose a folder</button>
+                        <button id="sf-gallery" class="sf-btn" type="button">add from gallery</button>
+                        <button id="sf-zip" class="sf-btn" type="button">upload a .zip</button>
+                    </div>
+                    <input id="sf-dirinput" type="file" webkitdirectory multiple hidden>
+                    <input id="sf-galleryinput" type="file" accept="image/*,video/*" multiple hidden>
+                    <input id="sf-zipinput" type="file" accept=".zip,application/zip" hidden>
+                    <div id="sf-progress" class="sf-progress" hidden>
+                        <div class="sf-progress-track"><span id="sf-progress-fill" class="sf-progress-fill"></span></div>
+                        <p id="sf-progress-label" class="sf-progress-label">reading&#8230;</p>
+                    </div>
+                    <p class="sf-dropzone-hint">on a phone? add straight from your gallery, or drop a .zip.</p>
+                </div>
+                <p id="sf-stats" class="sf-stats" hidden></p>
+
+                <label class="sf-challenge">
+                    <input type="checkbox" id="sf-challenge">
+                    <span>challenge mode - miss 10 bubbles and the fall ends</span>
+                </label>
+
+                <button id="sf-begin" class="sf-btn sf-btn-primary" type="button">begin the fall &#10024;</button>
+                <p class="sf-fineprint">nothing is uploaded - your media never leaves this device and is forgotten when the tab closes.</p>
+
+                <div class="sf-crosslink">
+                    <p>The Fall isn't part of the app - it's just a taste of what Conditioning Control Panel can really do. See the whole thing over on the Explore page.</p>
+                    <a href="https://cclabs.app/explore.html" class="sf-btn sf-btn-ghost">Explore the app &#8594;</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shown when the browser can't run the 3D experience -->
+    <div id="sf-nope" class="sf-nope" hidden>
+        <div class="sf-drop-card">
+            <h1>the fall</h1>
+            <p id="sf-nope-msg">This experience needs WebGL and a reasonably modern browser.<br>
+               Try Chrome or Edge on desktop.</p>
+            <p><a href="https://cclabs.app/explore.html">back to the rabbit hole</a></p>
+        </div>
+    </div>
+
+    <script type="module" src="js/sissy-fall/main.js"></script>
+    <script src="assets/cookie-consent.js" defer></script>
+</body>
+</html>

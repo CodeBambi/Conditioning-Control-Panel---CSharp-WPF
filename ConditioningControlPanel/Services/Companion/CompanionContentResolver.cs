@@ -131,24 +131,30 @@ namespace ConditioningControlPanel.Services.Companion
         ///
         /// That folder is not a neutral fallback: it is BambiSleep's recorded VO, named line by line
         /// ("be a good girl accept your conditioning.mp3"), and <c>FlashService</c> both plays it and
-        /// fires <c>FlashAudioPlaying</c> so the avatar prints that file name in HER speech bubble.
+        /// fires <c>FlashAudioPlaying</c> so the avatar prints that file name in the speech bubble.
         /// Handing it to another character therefore makes that character speak Bambi's lines in
         /// Bambi's voice - which is exactly what a mod that ships bark audio but no
         /// <c>flashes_audio</c> folder (the Infection Control creator mod) did.
         ///
-        /// Only the two mods the library belongs to get it: BambiSleep, and CCP Default (the neutral
-        /// baseline persona, which has always spoken with these clips). Every other mod either ships
+        /// Only the mod the library belongs to gets it: BambiSleep. Every other mod either ships
         /// its own folder - Sissy per-mod, Drone/Locked inside their .ccpmod - or stays silent on
         /// this channel, the same way <see cref="CompanionChannel.EventAudio"/> already leaves a mod
         /// that ships none text-only.
         ///
-        /// An unknown/absent mod id (ModService not up yet) keeps the baseline, so startup order can
-        /// never take the default companion silent.
+        /// CCP Default used to be on this list, which meant a fresh install with no mod picked spoke
+        /// Bambi's lines in Bambi's voice and printed "be a good girl accept your conditioning.mp3"
+        /// in the speech bubble. It is off it now, so the unmodded companion is silent on this
+        /// channel rather than themed. WAVE 4 STOPGAP: this is a hole until a neutral flashes_audio
+        /// baseline is authored (or the 67 non-gendered clips of the current 118 are split out into
+        /// their own folder); the fix belongs in the content tree, not here.
+        ///
+        /// An unknown/absent mod id (ModService not up yet) still keeps the baseline: the folder
+        /// resolvers downstream expect a real directory at that point, and a real install always
+        /// lands on a concrete mod id a moment later.
         /// </summary>
         public static bool OwnsBaselineVoiceLines(string? modId) =>
             string.IsNullOrWhiteSpace(modId)
-            || string.Equals(modId, BuiltInMods.BambiSleepId, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(modId, BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase);
+            || string.Equals(modId, BuiltInMods.BambiSleepId, StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
         /// The ordered candidate list for one channel. Roots that are empty (no content root on a

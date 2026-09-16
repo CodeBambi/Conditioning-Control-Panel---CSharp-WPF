@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
@@ -23,6 +23,8 @@ namespace ConditioningControlPanel.Features
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
+            Services.Prizes.PrizeGrants.GrantsChanged += OnGrantsChanged;
+            RebuildMotionPicker();
             RebindToCurrentSettings();
             // The egg hint names the active persona, and the hero/side plates are mod art; the
             // rack hosts this control permanently, so a mod switch must repaint them (a popup
@@ -38,6 +40,7 @@ namespace ConditioningControlPanel.Features
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
             _settingsHook?.Unhook();
+            Services.Prizes.PrizeGrants.GrantsChanged -= OnGrantsChanged;
             if (App.Mods != null) App.Mods.ModChanged -= OnModChanged;
             Services.BubbleService.AmbientXpBudgetChanged -= OnAmbientXpBudgetChanged;
             if (App.Webcam != null) App.Webcam.OnTrackingStateChanged -= OnWebcamTrackingStateChanged;
@@ -147,9 +150,12 @@ namespace ConditioningControlPanel.Features
                 SliderSpeed.Value = s.BubbleSpeedBoost;
                 TxtSpeed.Text = $"+{s.BubbleSpeedBoost}%";
                 ChkSolidMode.IsChecked = s.BubbleSharedHost;
+                SelectMotion(s.BubbleMotionStyle);
                 ChkBubbleGazePop.IsChecked = s.BubbleGazePopEnabled;
+                ChkBrainDrainBubble.IsChecked = s.BubbleBrainDrainEnabled;
+                ChkMagnetBubble.IsChecked = s.BubbleMagnetEnabled;
 
-                // Easter-egg hint (companion auto-pops a lingering effect bubble) — name the active persona.
+                // Easter-egg hint (companion auto-pops a lingering effect bubble): name the active persona.
                 var persona = App.Mods?.ActiveModId switch
                 {
                     "builtin-bambisleep" => "Bambi",
@@ -157,7 +163,7 @@ namespace ConditioningControlPanel.Features
                     "builtin-locked" => "Circe",
                     _ => "your companion"
                 };
-                TxtTriggerEggHint.Text = $"careful — {persona} loves these…";
+                TxtTriggerEggHint.Text = Localization.Loc.GetF("label_trigger_bubbles_egg_hint", persona);
 
                 ChkTriggers.IsChecked = s.BubbleTriggersEnabled;
                 TriggerOptionsPanel.Visibility = s.BubbleTriggersEnabled
@@ -184,6 +190,7 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.BubblesVolume) ||
                 e.PropertyName == nameof(Models.AppSettings.BubblesSize) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleSpeedBoost) ||
+                e.PropertyName == nameof(Models.AppSettings.BubbleMotionStyle) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleGazePopEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleTriggersEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleTriggerChance) ||
@@ -277,6 +284,113 @@ namespace ConditioningControlPanel.Features
             UpdateGazeHint();
         }
 
+        // ---- Bubbles v2 motion picker (Back Room prizes) ----
+
+        /// <summary>Grants can change off the UI thread (a sync); the rebuild is marshalled.</summary>
+        private void OnGrantsChanged()
+        {
+            try
+            {
+                var disp = Dispatcher;
+                if (disp == null || disp.HasShutdownStarted) return;
+                disp.BeginInvoke(new Action(RebuildMotionPicker));
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Float up always; Rain / Spiral In only when owned (each wearing a v2 pill); Mix once any
+        /// v2 style is owned. With nothing owned the whole row stays collapsed: a one-item picker
+        /// is configuration with no capability behind it.
+        /// </summary>
+        private void RebuildMotionPicker()
+        {
+            bool rain = Services.AmbientBubbleMotion.RainOwned;
+            bool spiral = Services.AmbientBubbleMotion.SpiralInOwned;
+            // The BOX is what collapses now, not the row: Motion and the Brain Drain bubble both
+            // arrive with the v2 prizes, so with none owned there is nothing in here to show.
+            V2Box.Visibility = rain || spiral ? Visibility.Visible : Visibility.Collapsed;
+            V2BoxBadge.Content ??= FeatureCard.NewV2Badge(new Thickness(0));
+            bool wasLoading = _isLoading;
+            _isLoading = true;
+            try
+            {
+                CmbMotion.Items.Clear();
+                CmbMotion.Items.Add(MotionItem(Models.BubbleMotionStyle.FloatUp, "bubble_motion_float_up", v2: false));
+                if (rain) CmbMotion.Items.Add(MotionItem(Models.BubbleMotionStyle.Rain, "bubble_motion_rain", v2: true));
+                if (spiral) CmbMotion.Items.Add(MotionItem(Models.BubbleMotionStyle.SpiralIn, "bubble_motion_spiral_in", v2: true));
+                if (rain || spiral) CmbMotion.Items.Add(MotionItem(Models.BubbleMotionStyle.Mix, "bubble_motion_mix", v2: false));
+                SelectMotion(App.Settings?.Current?.BubbleMotionStyle ?? Models.BubbleMotionStyle.FloatUp);
+            }
+            finally { _isLoading = wasLoading; }
+        }
+
+        private static ComboBoxItem MotionItem(Models.BubbleMotionStyle style, string key, bool v2)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            row.Children.Add(new TextBlock
+            {
+                Text = Localization.Loc.Get(key),
+                Foreground = (System.Windows.Media.Brush?)Application.Current?.TryFindResource("TextLightBrush")
+                             ?? System.Windows.Media.Brushes.White,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            if (v2) row.Children.Add(V2Pill());
+            return new ComboBoxItem { Content = row, Tag = style };
+        }
+
+        /// <summary>The same pill family as FeatureCard's tier badge, in the fancier neon purple.</summary>
+        private static Border V2Pill()
+        {
+            var purple = (System.Windows.Media.Brush?)Application.Current?.TryFindResource("NeonPurpleBrush")
+                         ?? System.Windows.Media.Brushes.MediumPurple;
+            return new Border
+            {
+                Margin = new Thickness(7, 0, 0, 0),
+                Padding = new Thickness(5, 1, 6, 2),
+                CornerRadius = new CornerRadius(7),
+                Background = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromArgb(0xD9, 0x1A, 0x1A, 0x2E)),
+                BorderBrush = purple,
+                BorderThickness = new Thickness(1),
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = new TextBlock
+                {
+                    Text = Localization.Loc.Get("fx_v2_badge"),
+                    Foreground = purple,
+                    FontSize = 9,
+                    FontWeight = FontWeights.Bold,
+                },
+            };
+        }
+
+        /// <summary>Selects the item for <paramref name="style"/>; an unowned (absent) style shows as Float up.</summary>
+        private void SelectMotion(Models.BubbleMotionStyle style)
+        {
+            if (CmbMotion.Items.Count == 0) return;
+            ComboBoxItem? pick = null, floatUp = null;
+            foreach (var item in CmbMotion.Items)
+            {
+                if (item is not ComboBoxItem cbi || cbi.Tag is not Models.BubbleMotionStyle tag) continue;
+                if (tag == style) pick = cbi;
+                if (tag == Models.BubbleMotionStyle.FloatUp) floatUp = cbi;
+            }
+            var target = pick ?? floatUp;
+            if (target != null && !ReferenceEquals(CmbMotion.SelectedItem, target))
+                CmbMotion.SelectedItem = target;
+        }
+
+        private void CmbMotion_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            if (CmbMotion.SelectedItem is not ComboBoxItem { Tag: Models.BubbleMotionStyle style }) return;
+            if (s.BubbleMotionStyle == style) return;
+            s.BubbleMotionStyle = style;
+            App.Settings?.Save();
+        }
+
         private void ChkSolidMode_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
@@ -292,6 +406,34 @@ namespace ConditioningControlPanel.Features
                 App.Bubbles.Stop();
                 App.Bubbles.Start();
             }
+        }
+
+        /// <summary>
+        /// The Brain Drain bubble (Bubbles v2, wave 2). Default ON, so buying the prize is the only
+        /// opt-in; this row is the way back out. It grants nothing on its own - the roll also asks
+        /// PrizeGrants every time (see BrainDrainBubble.RollPool).
+        /// </summary>
+        private void ChkBrainDrainBubble_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.BubbleBrainDrainEnabled = ChkBrainDrainBubble.IsChecked ?? false;
+            App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// The Magnet bubble (Bubbles v2, wave 2). Same shape as the Brain Drain row above: default
+        /// ON, so buying the prize is the only opt-in and this row is the way back out. It grants
+        /// nothing on its own - the roll also asks PrizeGrants every time (see MagnetBubble.RollPool).
+        /// </summary>
+        private void ChkMagnetBubble_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.BubbleMagnetEnabled = ChkMagnetBubble.IsChecked ?? false;
+            App.Settings?.Save();
         }
 
         private void ChkTriggers_Changed(object sender, RoutedEventArgs e)

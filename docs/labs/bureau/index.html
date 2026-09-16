@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<!-- Title is also set from UI_COPY.doc.title at boot; this is the pre-script value. -->
+<title>The Ministry of Sweet Nothings</title>
+<link rel="stylesheet" href="bureau.css">
+</head>
+<body>
+<!-- =========================================================
+     NO USER-FACING COPY LIVES IN THIS FILE.
+     Every readable string is stamped in at boot by applyStaticCopy()
+     in game.js from the tables in story.js:
+       data-copy="ui.<path>"      -> textContent (UI_COPY)
+       data-copy="story.<path>"   -> textContent (STORY)
+       data-copy-html="…"         -> array of lines joined with <br> (escaped)
+       data-copy-title / -aria    -> title / aria-label attributes
+     Elements are left EMPTY on purpose: #boot covers the page until the
+     copy is in. If you find yourself typing English here, put it in
+     story.js instead.
+     ========================================================= -->
+
+<!-- ================= BOOT ================= -->
+<div id="boot"><pre id="bootText"></pre></div>
+
+<!-- ================= GATE SCREENS ================= -->
+<div class="gate" id="gateLogin">
+  <div class="card">
+    <h2 data-copy="ui.gates.login.title"></h2>
+    <p data-copy-html="ui.gates.login.body"></p>
+    <div class="small" data-copy="ui.gates.login.form"></div>
+    <button id="gateLoginClose" data-copy="ui.gates.login.btn"></button>
+  </div>
+</div>
+
+<div class="gate" id="gateIndex">
+  <div class="card">
+    <h2 data-copy="ui.gates.index.title"></h2>
+    <p data-copy-html="ui.gates.index.body"></p>
+    <div class="bar"><i id="gateIndexBar"></i></div>
+    <div class="small" id="gateIndexPct">0%</div>
+  </div>
+</div>
+
+<div class="gate" id="gateNoContent">
+  <div class="card">
+    <h2 data-copy="ui.gates.noContent.title"></h2>
+    <p data-copy-html="ui.gates.noContent.body"></p>
+    <div class="small" data-copy="ui.gates.noContent.form"></div>
+    <button id="gateNoContentClose" data-copy="ui.gates.noContent.btn"></button>
+  </div>
+</div>
+
+<div class="gate" id="gateRequisition">
+  <div class="card">
+    <h2 data-copy="ui.gates.requisition.title"></h2>
+    <p><span data-copy="ui.gates.requisition.before"></span>
+       <b id="reqPackName"></b>
+       <span data-copy="ui.gates.requisition.after"></span></p>
+    <div class="small" data-copy="ui.gates.requisition.form"></div>
+    <button id="reqOpenCatalogue" data-copy="ui.gates.requisition.open"></button>
+    <button id="reqClose" class="ghost" data-copy="ui.gates.requisition.back"></button>
+  </div>
+</div>
+
+<div class="gate" id="gateInstall">
+  <div class="card">
+    <h2 id="installTitle" data-copy="ui.gates.install.title"></h2>
+    <p id="installMsg" data-copy="ui.gates.install.msg"></p>
+    <div class="small" id="installSub" data-copy="ui.gates.install.sub"></div>
+    <button id="installClose" style="display:none" data-copy="ui.gates.install.btn"></button>
+  </div>
+</div>
+
+<!-- Legacy hard-cap gate: the Goodnight Ledger is the curfew now, but the
+     markup and its close handler survive, so it wears the new skin too. -->
+<div class="gate" id="gateClockout">
+  <div class="card">
+    <h2 data-copy="ui.gates.curfew.title"></h2>
+    <p data-copy-html="ui.gates.curfew.body"></p>
+    <p class="small" id="clockoutLine" data-copy="ui.gates.curfew.line"></p>
+    <button id="gateClockoutClose" data-copy="ui.gates.curfew.btn"></button>
+  </div>
+</div>
+
+<!-- Every cell here is re-stamped by renderLedger() from STORY.ledger before
+     the gate is ever shown; the data-copy paths just keep the markup honest. -->
+<div class="gate" id="gateLedger">
+  <div class="card">
+    <div class="ledgerHead">
+      <h2 id="ledgerTitle" data-copy="story.ledger.title"></h2>
+      <div class="small" id="ledgerSub" data-copy="story.ledger.sub"></div>
+    </div>
+    <table class="ledgerTbl">
+      <tbody>
+        <tr><td class="lgLabel" id="lgFiledLbl" data-copy="story.ledger.rowFiled"></td><td class="lgVal" id="lgFiled">0</td></tr>
+        <tr><td class="lgLabel" id="lgSealsLbl" data-copy="story.ledger.rowSeals"></td><td class="lgVal" id="lgSeals">0</td></tr>
+        <tr><td class="lgLabel" id="lgGoldsLbl" data-copy="story.ledger.rowGolds"></td><td class="lgVal" id="lgGolds">0</td></tr>
+        <tr class="lgSubRow"><td class="lgLabel"></td><td class="lgVal" id="lgGrades">S 0 · A 0 · B 0 · C 0</td></tr>
+        <tr><td class="lgLabel" id="lgBestLbl" data-copy="story.ledger.rowBest"></td><td class="lgVal" id="lgBest">—</td></tr>
+        <tr><td class="lgLabel" id="lgXpLbl" data-copy="story.ledger.rowXp"></td><td class="lgVal" id="lgXp">0</td></tr>
+        <tr class="lgSubRow"><td class="lgLabel"></td><td class="lgVal" id="lgXpCap"></td></tr>
+      </tbody>
+    </table>
+    <div class="ledgerPending" id="lgPending"></div>
+    <div class="optBtns">
+      <button id="ledgerReturn" class="ghost" data-copy="story.ledger.close"></button>
+      <button id="ledgerPunch" data-copy="story.ledger.punch"></button>
+    </div>
+  </div>
+</div>
+
+<div class="gate" id="gateOpts">
+  <div class="card">
+    <h2 data-copy="ui.gates.opts.title"></h2>
+    <div class="optSec" data-copy="ui.gates.opts.secAudio"></div>
+    <div class="optRow"><label for="optVol" data-copy="ui.gates.opts.volume"></label><input type="range" id="optVol" min="0" max="100" step="1"><span class="optVal" id="optVolVal">60</span></div>
+    <div class="optRow"><label for="optMute" data-copy="ui.gates.opts.mute"></label><input type="checkbox" id="optMute"></div>
+    <div class="optSec" data-copy="ui.gates.opts.secKeys"></div>
+    <div id="keyRows"></div>
+    <div class="optBtns">
+      <button id="optReset" class="ghost" data-copy="ui.gates.opts.reset"></button>
+      <button id="optsClose" data-copy="ui.gates.opts.close"></button>
+    </div>
+  </div>
+</div>
+
+<div class="gate" id="gateQuests">
+  <div class="card">
+    <button id="gateQuestsClose" class="gateX">✕</button>
+    <div id="gateQuestsBody"></div>
+  </div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app">
+  <div id="topbar">
+    <!-- The Ministry crest, back in neon on navy. Flat and faceless by ruling
+         (props plan section 9 Q1) - no creature, no eyes. -->
+    <svg id="crest" viewBox="0 0 40 40">
+      <circle cx="20" cy="20" r="18" fill="none" stroke="#ff69b4" stroke-width="2"/>
+      <circle cx="20" cy="20" r="13" fill="none" stroke="#ff69b4" stroke-width="1" stroke-dasharray="3 2"/>
+      <path d="M20 9 L23 17 L31 17 L25 22 L27 30 L20 25 L13 30 L15 22 L9 17 L17 17 Z" fill="#ff69b4" opacity=".9"/>
+    </svg>
+    <div id="titleblock">
+      <b data-copy="ui.doc.wordmark"></b>
+      <small id="subtitle" data-copy="ui.doc.subtitle"></small>
+    </div>
+    <div id="spacer"></div>
+    <div id="goldDesk">
+      <span data-copy="ui.top.goldDesk"></span>
+      <button id="goldToggle"></button>
+    </div>
+    <div id="rank"><div class="pin"></div><span id="rankName" data-copy="ui.rank.titles.0"></span></div>
+    <span id="xpChip"><b id="xpVal">0</b> <span data-copy="ui.top.xpSuffix"></span></span>
+    <div id="shift">
+      <label id="shiftLabel" data-copy="ui.top.devotion"></label>
+      <div id="shiftbar"></div>
+      <div id="punchStamp"><b id="punchStampDate"></b><small id="punchStampCap" data-copy="story.clockIn.onDuty"></small></div>
+    </div>
+    <button id="clockOutBtn" data-copy="story.ledger.onDemand" data-copy-title="ui.top.tuckInTitle"></button>
+    <button id="questChip" data-copy-title="ui.top.ordersTitle"><span class="qcIcon">▤</span><span class="qcNum">0/0</span></button>
+    <button id="trayBtn"><span data-copy="ui.top.letterbox"></span><span class="badge" id="trayBadge">!</span></button>
+    <button id="optsBtn" data-copy-title="ui.top.settingsTitle">⚙</button>
+  </div>
+
+  <div id="guideCol">
+    <div id="fieldGuide">
+      <h6 data-copy="ui.guide.title"></h6>
+      <div class="fgLine" data-copy="ui.guide.lineDrag"></div>
+      <div class="fgLine"><kbd id="fgStamps">1 2 3 4</kbd> <span data-copy="ui.guide.lineStamps"></span></div>
+      <div class="fgLine" data-copy="ui.guide.lineVoid"></div>
+      <div class="fgLine"><kbd id="fgFile">SPACE</kbd> <span data-copy="ui.guide.lineFile"></span></div>
+      <div class="fgLine"><kbd id="fgRecall">R</kbd> <span data-copy="ui.guide.lineRecall"></span></div>
+      <h6 data-copy="ui.guide.rulesTitle"></h6>
+      <div class="fgRule" data-copy="ui.guide.rules.0"></div>
+      <div class="fgRule" data-copy="ui.guide.rules.1"></div>
+      <div class="fgRule" data-copy="ui.guide.rules.2"></div>
+      <div class="fgRule" data-copy="ui.guide.rules.3"></div>
+    </div>
+  </div>
+
+  <div id="lockers">
+    <button id="lockersToggle" type="button" data-copy-title="ui.chests.toggleTitle" data-copy-aria="ui.chests.toggleAria">
+      <span class="ltChev">◂</span><span class="ltCap" data-copy="ui.chests.title"></span>
+    </button>
+    <h6 data-copy="ui.chests.title"></h6>
+    <div id="lockerList"><div class="lockerHint" data-copy="ui.chests.contacting"></div></div>
+  </div>
+
+  <div id="desk">
+    <div id="briefingStrip"><span id="briefingText"></span><span class="briefDismiss" data-copy="ui.desk.briefDismiss"></span></div>
+    <div id="dossier">
+      <div class="coffee"></div>
+      <div id="caseNote"></div>
+      <div id="caseHead">
+        <b><span data-copy="ui.desk.caseLabel"></span> <span id="caseNo">#------</span></b>
+        <small id="caseSub" data-copy="ui.desk.caseSubIdle"></small>
+        <span class="stampedTag" id="caseTag" data-copy="ui.desk.tagKeepsake"></span>
+      </div>
+      <div id="scanRow">
+        <div id="zoomRail">
+          <button id="lensBtn" data-copy-title="ui.zoom.lens">🔍</button>
+          <input type="range" id="zoomSlider" min="1" max="4" step="0.05" value="1"
+                 data-copy-title="ui.zoom.slider">
+          <span id="zoomVal">1.0×</span>
+        </div>
+        <div id="scanWrap">
+          <div id="zoomFrame">
+            <img id="scanImg" alt="" draggable="false">
+            <div id="boxLayer"></div>
+          </div>
+          <div id="beam"></div>
+          <div id="scanFx"></div>
+          <div id="loupe"><canvas id="loupeCv"></canvas></div>
+          <div id="rubber"><div id="rubberTxt"></div></div>
+        </div>
+      </div>
+      <div id="hint" data-copy="ui.desk.hintDraw"></div>
+    </div>
+  </div>
+
+  <!-- STAMP RACK — the c0..c3 display labels below are LOCKED label doctrine
+       (author ruling) and are deliberately NOT part of the fiction skin. -->
+  <div id="rack">
+    <h6 data-copy="ui.rack.title"></h6>
+    <button class="stamp sel" style="--sc:var(--c0)" data-c="0"><span class="dot"></span><span>B**BS<small>CLASS 0</small></span></button>
+    <button class="stamp" style="--sc:var(--c1)" data-c="1"><span class="dot"></span><span>PU**Y<small>CLASS 1</small></span></button>
+    <button class="stamp" style="--sc:var(--c2)" data-c="2"><span class="dot"></span><span>A**<small>CLASS 2</small></span></button>
+    <button class="stamp" style="--sc:var(--c3)" data-c="3"><span class="dot"></span><span>FACE<small>CLASS 3</small></span></button>
+    <button id="fileBtn"><span id="fileBtnTxt"></span><small></small></button>
+    <button id="rewindBtn"></button>
+  </div>
+
+  <div id="ordersCol">
+    <div id="clipboard">
+      <div class="clipClip"></div>
+      <div id="clipboardBody"></div>
+    </div>
+  </div>
+
+  <!-- HOW MUCH HONEY CAN SEE — her sight meter (was the raid bar). -->
+  <div id="raidBar">
+    <div class="raidLabel"><b data-copy="ui.sight.title"></b><small data-copy="ui.sight.sub"></small></div>
+    <div class="raidTrack">
+      <div class="raidFill" id="raidFill"></div>
+      <div class="raidTicks">
+        <span class="raidTick" data-m="10" style="left:10%"><i></i><em>10</em></span>
+        <span class="raidTick" data-m="25" style="left:25%"><i></i><em>25</em></span>
+        <span class="raidTick" data-m="50" style="left:50%"><i></i><em>50</em></span>
+        <span class="raidTick" data-m="75" style="left:75%"><i></i><em>75</em></span>
+        <span class="raidTick" data-m="100" style="left:100%"><i></i><em>100</em></span>
+      </div>
+    </div>
+    <div class="raidReadout" id="raidReadout" data-copy="ui.sight.idle"></div>
+  </div>
+
+  <div id="ticker"><span id="tickerText" data-copy="ui.ticker.connecting"></span></div>
+</div>
+
+<!-- ================= GOLD-STAR VALENTINE ================= -->
+<div id="commend">
+  <div id="ticket">
+    <h3 id="ticketHead" data-copy="ui.valentine.head"></h3>
+    <div class="grade" id="ticketGrade">A</div>
+    <div class="row" id="ticketRow1"></div>
+    <div class="row" id="ticketRow2"></div>
+    <div class="xp" id="ticketXp"></div>
+    <button id="ticketClose" data-copy="ui.valentine.pin"></button>
+  </div>
+</div>
+
+<!-- ================= THE DIRECTRICE'S NOTES ================= -->
+<div id="memo">
+  <div class="memoPaper">
+    <div class="memoLetterhead" data-copy="story.memoLetterhead"><small data-copy="ui.notes.letterheadSub"></small></div>
+    <div class="memoSubject" id="memoSubject"></div>
+    <pre id="memoBody"></pre>
+    <button id="memoClose" data-copy="ui.notes.close"></button>
+  </div>
+</div>
+
+<!-- ================= THE LETTERBOX ================= -->
+<div id="drawer">
+  <button id="closeDrawer">✕</button>
+  <h4 data-copy="ui.letterbox.title"></h4>
+  <p class="sub" data-copy="ui.letterbox.sub"></p>
+  <div id="slips"></div>
+  <div id="trayTotal" data-copy="ui.letterbox.none"></div>
+</div>
+
+<!-- ============ SHIFT ORDERS (phone left-edge drawer) ============ -->
+<button id="ordersTab" data-copy-title="ui.top.ordersTitle">
+  <span class="otLabel" data-copy="ui.orders.tabLabel"></span>
+  <span class="otTally">0/0</span>
+</button>
+<div id="ordersDrawer">
+  <button id="ordersDrawerClose">✕</button>
+  <div id="ordersClipboard">
+    <div class="clipClip"></div>
+    <div id="ordersDrawerBody"></div>
+  </div>
+</div>
+
+<div id="dropZone">
+  <div class="dropCard">
+    <div class="dropIcon">📦</div>
+    <b data-copy="ui.drop.title"></b>
+    <span data-copy="ui.drop.sub"></span>
+  </div>
+</div>
+
+<!-- morning-post nudge: handwritten note pointing at the Letterbox (Feature 1) -->
+<div id="postWaiting"></div>
+
+<!-- ================= HONEY — THE VOICE =================
+     The only voiced presence in the building, rendered as TYPE. The
+     typographic surface is canonical: a Keeper with sound off loses
+     nothing (bible §6D-bis rule 4). Deliberately click-through — a voice
+     is not furniture, and nothing here may ever sit on the FILE button.
+     All copy lives in story.js (HONEY); this is chrome only. -->
+<div id="honey" aria-live="polite">
+  <div class="honeyPanel">
+    <!-- the HONEY glyph (§6B): a heart-padlock keyhole. Iconography, NOT a
+         character — no face, no eyes, no poses. Sealed state; the ajar/open
+         states are parked with the sight meter. -->
+    <svg class="honeyMark" viewBox="0 0 24 24" aria-hidden="true">
+      <path class="hmHeart" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+      <circle class="hmKey" cx="12" cy="9.6" r="1.9"/>
+      <path class="hmKey" d="M10.9 11.2h2.2l.75 4.1h-3.7z"/>
+    </svg>
+    <div class="honeyBody">
+      <div class="honeyName">HONEY<i class="honeyBeat"></i><i class="honeyBeat"></i><i class="honeyBeat"></i></div>
+      <p class="honeyLine" id="honeyLine"></p>
+    </div>
+  </div>
+</div>
+
+<div id="demoBanner">
+  <b data-copy="ui.demo.kicker"></b> <span data-copy="ui.demo.line1"></span><br>
+  <span data-copy="ui.demo.line2"></span>
+</div>
+
+<script src="bridge.js"></script>
+<script src="story.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

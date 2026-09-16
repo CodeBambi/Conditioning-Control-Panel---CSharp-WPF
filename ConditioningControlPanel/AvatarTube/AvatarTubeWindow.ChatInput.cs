@@ -509,7 +509,7 @@ namespace ConditioningControlPanel
             ChatHistoryView.Visibility = Visibility.Collapsed;
             SpeechScroller.Visibility = Visibility.Visible;
             SpeechBubble.MaxWidth = 380; // Restore default bubble width.
-            SpeechBubble.Visibility = Visibility.Collapsed;
+            CollapseSpeechBubble();
         }
 
         private void ToggleInputPanel()
@@ -762,6 +762,7 @@ namespace ConditioningControlPanel
 
             TxtUserInput.Text = "";
             ToggleInputPanel();
+            SeasonRecapService.TrackFeature(SeasonFeatureKeys.Companion);
 
             // Which of the send paths below this message takes. Decided ONCE, up front, so the
             // EMIT hook and the actual call can't disagree if the kill switch — or IsAvailable,
@@ -1245,7 +1246,7 @@ namespace ConditioningControlPanel
             var presets = (App.Personality?.GetAllPresets() ?? new List<PersonalityPreset>())
                 .Where(p => p.Id != PersonalityPresets.SlutModeId)
                 .ToList();
-            var activeId = App.Settings?.Current?.ActivePersonalityPresetId ?? PersonalityPresets.BambiSpriteId;
+            var activeId = App.Settings?.Current?.ActivePersonalityPresetId ?? PersonalityPresets.NeutralDefaultId;
 
             foreach (var preset in presets)
             {

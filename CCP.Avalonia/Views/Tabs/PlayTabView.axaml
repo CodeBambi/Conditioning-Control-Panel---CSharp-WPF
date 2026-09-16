@@ -837,7 +837,11 @@
                     </Grid>
                   </Border>
                   <TextBlock Grid.Row="1" Text="{loc:Str jd_door_title}" Theme="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
-                  <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_justdrop}" Theme="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                  <!-- main retired pl6_card_blurb_justdrop with the WPF Play rack card (7f980a85d).
+                       exclusives_tag_justdrop is the surviving, translated blurb for the same
+                       feature, so the card keeps a real localized line in all nine languages.
+                       Whether this card follows main under Studio is a separate UI decision. -->
+                  <TextBlock Grid.Row="2" Text="{loc:Str exclusives_tag_justdrop}" Theme="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
                   <!-- ShowTab("justdrop"), never JustDropHostService.LaunchShop(): ShowTab owns the
                        withheld refusal and is the path the dashboard tile and Ctrl+K row use. -->
                   <Button Grid.Row="3" x:Name="BtnPlayJustDrop" Cursor="Hand"

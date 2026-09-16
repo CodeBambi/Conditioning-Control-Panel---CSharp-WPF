@@ -167,6 +167,8 @@ namespace ConditioningControlPanel.Services
                 _layer.Clear();
 
             StopAudio();
+
+            App.Logger?.Debug("SubliminalService stopped");
         }
 
         /// <summary>
@@ -300,7 +302,10 @@ namespace ConditioningControlPanel.Services
         /// this single flash — used by Deeper effects so the segment width on
         /// the timeline drives how long the text stays on screen.
         /// </summary>
-        public void FlashSubliminalCustom(string text, int? opacity = null, int? overrideDurationMs = null, bool suppressHaptic = false)
+        /// <param name="fadeInMs">The card's fade in, and <paramref name="fadeOutMs"/> its fade out; null = the app's own 50 ms
+        /// each side. THE BACK ROOM's word envelope (in 80 ms, hold 400 ms, out 350 ms) rides these.</param>
+        public void FlashSubliminalCustom(string text, int? opacity = null, int? overrideDurationMs = null, bool suppressHaptic = false,
+            int? fadeInMs = null, int? fadeOutMs = null)
         {
             if (string.IsNullOrWhiteSpace(text)) return;
             text = text.Trim();
@@ -310,7 +315,7 @@ namespace ConditioningControlPanel.Services
             // #1045: tag this point-fired show with the current one-shot generation so
             // StopOneShotSubliminals can cancel it even while the ambient scheduler runs.
             TriggerSubliminalWithHapticPattern(text, opacity, overrideDurationMs, suppressHaptic,
-                Volatile.Read(ref _oneShotGeneration));
+                Volatile.Read(ref _oneShotGeneration), fadeInMs, fadeOutMs);
             App.Progression?.AddXP(10, XPSource.Subliminal);
         }
 
@@ -624,7 +629,8 @@ namespace ConditioningControlPanel.Services
         /// Pattern depends on the trigger text (Cum/Collapse = long, Freeze = short sharp, Sleep = decay, etc.)
         /// Buttplug.io has ~1.3s latency so we trigger haptics earlier for that provider
         /// </summary>
-        private async void TriggerSubliminalWithHapticPattern(string text, int? opacity = null, int? overrideDurationMs = null, bool suppressHaptic = false, int? oneShotGen = null)
+        private async void TriggerSubliminalWithHapticPattern(string text, int? opacity = null, int? overrideDurationMs = null, bool suppressHaptic = false, int? oneShotGen = null,
+            int? fadeInMs = null, int? fadeOutMs = null)
         {
             try
             {
@@ -646,7 +652,7 @@ namespace ConditioningControlPanel.Services
                     await Task.Delay(anticipationMs);
 
                 // Now show on UI thread
-                DispatcherHelper.RunOnUI(() => ShowSubliminalVisuals(text, opacity, overrideDurationMs, oneShotGen));
+                DispatcherHelper.RunOnUI(() => ShowSubliminalVisuals(text, opacity, overrideDurationMs, oneShotGen, fadeInMs, fadeOutMs));
             }
             catch (Exception ex)
             {
@@ -654,7 +660,11 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private void ShowSubliminalVisuals(string text, int? opacity = null, int? overrideDurationMs = null, int? oneShotGen = null)
+        /// <summary>The app's own card envelope: 50 ms each side of the hold.</summary>
+        private const int DefaultFadeMs = 50;
+
+        private void ShowSubliminalVisuals(string text, int? opacity = null, int? overrideDurationMs = null, int? oneShotGen = null,
+            int? fadeInMs = null, int? fadeOutMs = null)
         {
             // #1045: this show belongs to a point-fired subliminal that has since been cancelled.
             // Checked FIRST because the pair below is inert while the ambient scheduler runs.
@@ -679,6 +689,7 @@ namespace ConditioningControlPanel.Services
                 ? Math.Max(100, overrideDurationMs.Value)
                 : Math.Max(100, App.Settings.Current.SubliminalDuration * 17);
             var targetOpacity = (opacity ?? App.Settings.Current.SubliminalOpacity) / 100.0;
+            int fadeIn = Math.Max(1, fadeInMs ?? DefaultFadeMs), fadeOut = Math.Max(1, fadeOutMs ?? DefaultFadeMs);
 
             // Colors from settings
             var bgColor = ParseColor(App.Settings.Current.SubBackgroundColor, Colors.Black);
@@ -687,9 +698,7 @@ namespace ConditioningControlPanel.Services
             var bgTransparent = App.Settings.Current.SubBackgroundTransparent;
 
             // Get all monitors and reuse (or lazily create) the keep-alive window per screen
-            var screens = App.Settings.Current.DualMonitorEnabled
-                ? App.GetAllScreensCached()
-                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+            var screens = App.GetGlobalScreens();
             var stealsFocus = App.Settings.Current.SubliminalStealsFocus;
 
             // Compositor: one layer call covers every target screen (solid-mode and classic
@@ -698,7 +707,7 @@ namespace ConditioningControlPanel.Services
             // a layer failure falls through to the legacy paths so a flash is never lost.
             if (UseCompositor && !stealsFocus &&
                 ShowCompositorSubliminal(screens, text, bgColor, textColor, borderColor,
-                    bgTransparent, targetOpacity, durationMs))
+                    bgTransparent, targetOpacity, durationMs, fadeIn, fadeOut))
             {
                 App.InvalidateCcpWindowRectsCache();
                 return;
@@ -716,7 +725,7 @@ namespace ConditioningControlPanel.Services
                 // flipped, or the host failed to come up), fall through to the classic window
                 // so the subliminal is never silently invisible.
                 if (useHost && ShowHostedSubliminal(screen, text, bgColor, textColor, borderColor,
-                        bgTransparent, targetOpacity, durationMs))
+                        bgTransparent, targetOpacity, durationMs, fadeIn, fadeOut))
                 {
                     continue;
                 }
@@ -727,7 +736,7 @@ namespace ConditioningControlPanel.Services
                 ApplyWindowStyles(win, screen.Bounds, stealsFocus);
                 if (stealsFocus) win.Activate();
                 PositionSubliminalText(win);
-                AnimateSubliminal(win, targetOpacity, durationMs);
+                AnimateSubliminal(win, targetOpacity, durationMs, fadeIn, fadeOut);
             }
 
             // Subliminal cards now record (capture-exclusion dropped), so the awareness OCR
@@ -747,7 +756,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private bool ShowCompositorSubliminal(System.Windows.Forms.Screen?[] screens, string text,
             Color bgColor, Color textColor, Color borderColor, bool bgTransparent,
-            double targetOpacity, int durationMs)
+            double targetOpacity, int durationMs, int fadeInMs, int fadeOutMs)
         {
             try
             {
@@ -771,7 +780,7 @@ namespace ConditioningControlPanel.Services
                     new SkiaSharp.SKColor(bgColor.R, bgColor.G, bgColor.B),
                     new SkiaSharp.SKColor(textColor.R, textColor.G, textColor.B),
                     new SkiaSharp.SKColor(borderColor.R, borderColor.G, borderColor.B),
-                    bgTransparent, targetOpacity, durationMs);
+                    bgTransparent, targetOpacity, durationMs, fadeInMs, fadeOutMs);
                 return true;
             }
             catch (Exception ex)
@@ -789,7 +798,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private bool ShowHostedSubliminal(System.Windows.Forms.Screen screen, string text,
             Color bgColor, Color textColor, Color borderColor, bool bgTransparent,
-            double targetOpacity, int durationMs)
+            double targetOpacity, int durationMs, int fadeInMs, int fadeOutMs)
         {
             HostedCard? card = null;
             try
@@ -884,7 +893,8 @@ namespace ConditioningControlPanel.Services
                 _hostedCards.Add(card);
 
                 // Same envelope as AnimateSubliminal, driving the element's opacity.
-                var fadeMs = TimeSpan.FromMilliseconds(50);
+                var fadeMs = TimeSpan.FromMilliseconds(fadeInMs);
+                var fadeOutSpan = TimeSpan.FromMilliseconds(fadeOutMs);
                 var storyboard = new Storyboard();
                 var fadeIn = new DoubleAnimation(0, targetOpacity, fadeMs);
                 Storyboard.SetTarget(fadeIn, grid);
@@ -897,7 +907,7 @@ namespace ConditioningControlPanel.Services
                 Storyboard.SetTarget(hold, grid);
                 Storyboard.SetTargetProperty(hold, new PropertyPath(UIElement.OpacityProperty));
                 storyboard.Children.Add(hold);
-                var fadeOut = new DoubleAnimation(targetOpacity, 0, fadeMs)
+                var fadeOut = new DoubleAnimation(targetOpacity, 0, fadeOutSpan)
                 {
                     BeginTime = fadeMs + TimeSpan.FromMilliseconds(durationMs)
                 };
@@ -1339,11 +1349,11 @@ namespace ConditioningControlPanel.Services
             };
         }
 
-        private void AnimateSubliminal(Window win, double targetOpacity, int holdMs)
+        private void AnimateSubliminal(Window win, double targetOpacity, int holdMs, int fadeInMs = DefaultFadeMs, int fadeOutMs = DefaultFadeMs)
         {
-            var fadeInDuration = TimeSpan.FromMilliseconds(50);
+            var fadeInDuration = TimeSpan.FromMilliseconds(fadeInMs);
             var holdDuration = TimeSpan.FromMilliseconds(holdMs);
-            var fadeOutDuration = TimeSpan.FromMilliseconds(50);
+            var fadeOutDuration = TimeSpan.FromMilliseconds(fadeOutMs);
 
             var storyboard = new Storyboard();
 

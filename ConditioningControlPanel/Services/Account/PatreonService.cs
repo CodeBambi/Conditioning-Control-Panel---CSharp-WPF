@@ -552,6 +552,7 @@ namespace ConditioningControlPanel.Services
                 // The server uses this token to detect a divergent/mismatched token
                 // and heal it in the response (BUG-7DCJHDP3JZ).
                 using var validateRequest = new HttpRequestMessage(HttpMethod.Get, "/patreon/validate");
+                var prizesFor = App.Settings?.Current?.UnifiedId;
                 validateRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
                 var currentAuthToken = App.Settings?.Current?.AuthToken;
                 if (!string.IsNullOrEmpty(currentAuthToken))
@@ -560,6 +561,10 @@ namespace ConditioningControlPanel.Services
                 }
 
                 var response = await _httpClient.SendAsync(validateRequest);
+
+                // Contract D: the account this token belongs to is a merge tombstone. The swap
+                // re-signs in on the canonical (detached); keep the cached tier meanwhile.
+                if (await MergedAccountRecovery.TryHandleAsync(response)) return CurrentTier;
 
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
                 {
@@ -591,6 +596,8 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Warning("Patreon validation error: {Error}", subscription?.Error);
                     return CurrentTier;
                 }
+
+                ProfileSyncService.ApplyValidatePrizes(prizesFor, subscription.UnifiedId, subscription.Prizes, "Patreon validate");
 
                 // Server healed a divergent auth token — store it immediately so
                 // subsequent authed requests stop 401ing. Only present on mismatch;
@@ -692,7 +699,7 @@ namespace ConditioningControlPanel.Services
                 {
                     // Adopt Discord's display name if Patreon doesn't have one
                     DisplayName = discordDisplayName;
-                    App.Logger?.Information("Adopted display name from Discord: {Name}", DisplayName);
+                    App.Logger?.Information("Adopted display name from Discord ({Chars} chars)", DisplayName.Length);
                 }
 
                 // Cache result for 24 hours (use effective values for whitelisted users)
@@ -828,7 +835,7 @@ namespace ConditioningControlPanel.Services
             var checkResult = await CheckDisplayNameAvailableAsync(trimmedName);
             if (!checkResult.Available)
             {
-                App.Logger?.Warning("Display name '{Name}' is already taken", trimmedName);
+                App.Logger?.Warning("Display name is already taken ({Chars} chars)", trimmedName.Length);
                 return (false, checkResult.Error ?? "This name is already taken. Please choose another.");
             }
 
@@ -845,7 +852,7 @@ namespace ConditioningControlPanel.Services
             // Save to server so it syncs across devices
             await SaveDisplayNameToServerAsync(DisplayName);
 
-            App.Logger?.Information("Display name set to: {DisplayName}", DisplayName);
+            App.Logger?.Information("Display name set ({Chars} chars)", DisplayName?.Length ?? 0);
             NeedsDisplayNameMigration = false;
             return (true, null);
         }
@@ -861,13 +868,13 @@ namespace ConditioningControlPanel.Services
                 return (true, null); // Nothing to migrate
             }
 
-            App.Logger?.Information("Attempting to migrate local display name to server: {Name}", DisplayName);
+            App.Logger?.Information("Attempting to migrate local display name to server ({Chars} chars)", DisplayName?.Length ?? 0);
 
             // Check if the name is available
             var checkResult = await CheckDisplayNameAvailableAsync(DisplayName);
             if (!checkResult.Available)
             {
-                App.Logger?.Warning("Migration failed - name '{Name}' is already taken", DisplayName);
+                App.Logger?.Warning("Migration failed - display name is already taken ({Chars} chars)", DisplayName?.Length ?? 0);
                 // Clear the local name so user can pick a new one
                 DisplayName = null;
                 var cachedState = _tokenStorage.RetrieveCachedState();
@@ -883,7 +890,7 @@ namespace ConditioningControlPanel.Services
             // Name is available - sync to server
             await SaveDisplayNameToServerAsync(DisplayName);
             NeedsDisplayNameMigration = false;
-            App.Logger?.Information("Successfully migrated display name to server: {Name}", DisplayName);
+            App.Logger?.Information("Successfully migrated display name to server");
             return (true, null);
         }
 

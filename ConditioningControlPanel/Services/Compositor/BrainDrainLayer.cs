@@ -396,12 +396,9 @@ public sealed class BrainDrainLayer : BaseLayer
     {
         try
         {
-            var screens = App.GetAllScreensCached(); // Screen.PrimaryScreen re-enumerates per call
-            if (App.Settings?.Current?.DualMonitorEnabled == true)
-                return screens.Select(s => s.Bounds).ToArray();
-            foreach (var s in screens)
-                if (s.Primary) return new[] { s.Bounds };
-            return Array.Empty<System.Drawing.Rectangle>();
+            // Global "Show content on" picker (App.GetGlobalScreens): all screens, the Windows
+            // primary, or the one monitor the user pinned content to.
+            return App.GetGlobalScreens().Select(s => s.Bounds).ToArray();
         }
         catch { return Array.Empty<System.Drawing.Rectangle>(); }
     }

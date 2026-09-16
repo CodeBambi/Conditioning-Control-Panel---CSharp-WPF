@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Remix Motion Pitch</title>
+<style>
+:root{
+  --ground:#14142B; --navy:#1A1A2E; --panel:#252542; --panel2:#2E2E55; --line:#3A3A5E;
+  --ink:#F2EBDD; --ink-dim:#B9B3CE; --ink-faint:#8A84A8; --pink:#FF69B4; --pink-deep:#D4488F;
+  --lav:#B8A6E8; --gold:#F0C24B; --slate:#7A7594; --well:#0E0E1F;
+  --disp:'Bahnschrift Condensed','Arial Narrow','Arial Black',Impact,sans-serif;
+  --body:'Segoe UI Variable Text','Segoe UI',system-ui,-apple-system,sans-serif;
+  --mono:'Cascadia Mono','Consolas','Courier New',monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
+body{padding:14px max(14px,env(safe-area-inset-right)) 48px max(14px,env(safe-area-inset-left))}
+.wrap{max-width:1120px;margin:0 auto}
+h1{font-family:var(--disp);font-weight:700;font-size:clamp(30px,6vw,46px);letter-spacing:.01em;margin:6px 0 2px;line-height:1}
+h1 small{color:var(--pink);font-size:.5em;vertical-align:middle;margin-left:8px;letter-spacing:.08em}
+.lede{color:var(--ink-dim);margin:0 0 14px;max-width:70ch}
+.chipline{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.chip{font-family:var(--mono);font-size:11px;color:var(--ink-dim);border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:var(--navy)}
+.chip b{color:var(--gold);font-weight:600}
+.picks{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px 6px;margin:0 0 22px}
+.picks h2{font-family:var(--disp);font-size:20px;margin:0 0 6px;letter-spacing:.03em;color:var(--lav)}
+.picks ol{margin:0;padding:0 0 0 2px;list-style:none;counter-reset:pk}
+.picks li{display:grid;grid-template-columns:34px 1fr;gap:6px;padding:6px 0;border-top:1px solid rgba(58,58,94,.6);counter-increment:pk}
+.picks li:first-child{border-top:0}
+.picks li::before{content:counter(pk);font-family:var(--disp);font-size:20px;color:var(--pink);line-height:1.1}
+.picks li a{color:var(--ink);text-decoration:none;font-weight:600}
+.picks li span{color:var(--ink-dim);display:block;font-size:14px}
+.grid{display:grid;grid-template-columns:1fr;gap:26px}
+@media(min-width:900px){.grid{grid-template-columns:1fr 1fr}}
+.prop{background:var(--navy);border:1px solid var(--line);border-radius:14px;padding:12px 12px 10px;scroll-margin-top:10px}
+.prop h2{font-family:var(--disp);font-size:26px;margin:0 0 4px;letter-spacing:.02em;display:flex;align-items:baseline;gap:10px}
+.prop h2 .num{color:var(--pink);font-size:18px;font-family:var(--mono);font-weight:400}
+.prop h2 .cost{margin-left:auto;font:11px var(--mono);border-radius:999px;padding:3px 8px;border:1px solid var(--line);color:var(--ink-dim);letter-spacing:.04em}
+.cost.cheap{color:#9EE8A6;border-color:#3f6b48}.cost.mid{color:var(--gold);border-color:#6b5a2a}.cost.dear{color:var(--pink);border-color:#6b3552}
+.pitch{margin:0 0 10px;color:var(--ink-dim)}
+.stage{position:relative;display:flex;justify-content:center;align-items:center;background:var(--well);border-radius:10px;padding:8px;min-height:120px}
+.stage canvas{display:block;background:var(--ground);border-radius:4px;box-shadow:0 0 0 1px var(--line)}
+.play{position:absolute;inset:auto;left:50%;top:50%;transform:translate(-50%,-50%);border:0;border-radius:999px;background:var(--pink);color:var(--ground);font:700 15px var(--disp);letter-spacing:.06em;padding:12px 22px;cursor:pointer;min-height:44px}
+.badge{position:absolute;left:14px;top:14px;font:11px var(--mono);color:var(--ink-dim);background:rgba(14,14,31,.85);padding:3px 7px;border-radius:6px;pointer-events:none}
+.ctl{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;margin:10px 0 8px}
+.seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel)}
+.seg button{appearance:none;border:0;background:transparent;color:var(--ink-dim);font:600 13px var(--body);min-width:34px;min-height:38px;padding:0 9px;cursor:pointer;border-left:1px solid rgba(58,58,94,.7)}
+.seg button:first-child{border-left:0}
+.seg button.on{background:var(--panel2);color:var(--ink);box-shadow:inset 0 -2px 0 var(--pink)}
+.seg.count button{min-width:36px;padding:0 6px}
+.lbl{font:11px var(--mono);color:var(--ink-faint);letter-spacing:.06em;margin-right:-4px}
+.dice{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--gold);border-radius:9px;min-height:38px;padding:0 12px;font:600 13px var(--body);cursor:pointer}
+.dice:active{background:var(--panel2)}
+.line{margin:4px 0 0;font-size:13px;color:var(--ink-dim)}
+.line b{color:var(--lav);font-weight:600;font-family:var(--mono);font-size:11px;letter-spacing:.06em;margin-right:4px}
+.line code{font-family:var(--mono);font-size:12px;color:var(--ink)}
+.rec{margin:30px 0 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px 12px}
+.rec h2{font-family:var(--disp);font-size:24px;margin:0 0 8px;color:var(--gold);letter-spacing:.02em}
+.rec ul{margin:0 0 10px;padding-left:20px;color:var(--ink-dim)}
+.rec li{margin:0 0 7px}.rec li b{color:var(--ink)}
+.rec h3{font-family:var(--disp);font-size:18px;margin:14px 0 6px;color:var(--lav);letter-spacing:.03em}
+.rec p{margin:0 0 8px;color:var(--ink-dim)}
+.costrow{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}
+.costrow span{font:11px var(--mono);border:1px solid var(--line);border-radius:999px;padding:3px 9px;color:var(--ink-dim)}
+.costrow span.cheap{color:#9EE8A6}.costrow span.mid{color:var(--gold)}.costrow span.dear{color:var(--pink)}
+footer{margin-top:26px;color:var(--ink-faint);font:11px var(--mono);text-align:center}
+@media(prefers-reduced-motion:reduce){.play{display:inline-block}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Remix Motion Pitch <small>REMIX ROOM</small></h1>
+  <p class="lede">Twelve ways the room can move your gifs once composing is one button. The coloured cards stand in for gifs; each has its own inner motion so you can tell it is playing. Every demo runs at 15 fps like the export, loops at the canvas length you pick, and starts on its own. Tap a canvas to pause it.</p>
+  <div class="chipline"><span class="chip">480x270 / 270x480</span><span class="chip">15 fps</span><span class="chip">3 / 5 / 8 s</span><span class="chip">1 to 8 gifs</span><span class="chip"><b>dice</b> reseeds</span><span class="chip" id="rmchip" hidden>reduced motion: press play on each</span></div>
+
+  <div class="picks">
+    <h2>PICK LIST</h2>
+    <ol id="picklist"></ol>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="rec">
+    <h2>Recommended set for the press-the-button flow</h2>
+    <ul>
+      <li><b>Ship Stack, Spread and Slide first.</b> They are the three you already pointed at, and they are three different silhouettes (a pile, a grid that grows, a conveyor), so a reroll reads as a new idea rather than a new seed of the same idea.</li>
+      <li><b>Weight the pick by gif count.</b> One gif: Mirror Tunnel or Pinwheel, the only two that carry a single file. Two to four: Stack, Spread, Cover, Swallow. Five to eight: Slide, Ripple, Ring Hop, Ken Burns Wall. Carousel only at 5 s or 8 s.</li>
+      <li><b>Weight the pick by length.</b> A 3 s canvas suits the closed-trip layouts (Spread, Swallow, Ripple, Deal): out and back in 45 frames. The constant-drift ones (Slide, Carousel, Tunnel, Ken Burns) want 5 s or 8 s, or they hurry.</li>
+      <li><b>Reroll = new layout, then new dice.</b> The remix code already seeds everything; add the layout id to what the code carries and the same code reproduces the same reel. A second tap on the dice inside a panel should reseed the layout only, not swap it.</li>
+      <li><b>Default to the cheap ones and let the meter decide.</b> Order the auto-composer's first roll cheap to dear; if the size meter goes gold, reroll within the cheap set before shrinking resolution.</li>
+    </ul>
+    <h3>Export cost</h3>
+    <p>A gif encoder pays for every pixel that changes between frames. When tile edges hold still, only the gif pixels inside them change and the palette stays stable. When rects move, every pixel in the swept area changes and resampling kills pixel repeats, so the file grows.</p>
+    <div class="costrow"><span class="cheap">cheap: Stack</span><span class="cheap">Spread</span><span class="cheap">Ripple</span><span class="cheap">Deal</span><span class="mid">mid: Swallow</span><span class="mid">Ring Hop</span><span class="mid">Cover</span><span class="dear">dear: Slide</span><span class="dear">Carousel</span><span class="dear">Mirror Tunnel</span><span class="dear">Ken Burns Wall</span><span class="dear">Pinwheel</span></div>
+    <h3>Engine note</h3>
+    <p>All twelve are pure functions of (frame, tile count, frame count, orientation, seed) and return rects in canvas fractions, the shape <code>layoutAtFrame</code> returns today, so each is a new layout mode. The slot needs four small additions the compositor can read: <code>alpha</code>, <code>rot</code>, <code>scale</code> and <code>z</code>, plus an optional <code>crop</code> (centre and zoom in source space) for Ken Burns. The grid ones read their rects from the split tree, so docking and swapping keep working under them. The source clock rule stays: a gif loops to fill the canvas, and the loop marker handles a gif whose own loop does not divide the canvas length.</p>
+  </div>
+  <footer>motion pitch, remix room, 2026-09-07. no media, no fetches, no libraries.</footer>
+</div>
+
+<script>
+(function(){
+'use strict';
+/* ----------------------------------------------------------------- tokens */
+var GROUND='#14142B', PINK='#FF69B4', INKDIM='#B9B3CE';
+var DISP="'Bahnschrift Condensed','Arial Narrow','Arial Black',Impact,sans-serif";
+var MONO="'Cascadia Mono','Consolas','Courier New',monospace";
+var FPS=15, FRAME_MS=1000/FPS, GAP=4, VW=480, VH=270;
+var SIZES={land:{W:480,H:270},port:{W:270,H:480}};
+
+/* ------------------------------------------------------------- utilities */
+function hash(s){var h=2166136261>>>0;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return h>>>0;}
+function rng(seed,tag){var a=hash(seed+':'+tag)>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function shuffle(R,arr){for(var i=arr.length-1;i>0;i--){var j=Math.floor(R()*(i+1));var t=arr[i];arr[i]=arr[j];arr[j]=t;}return arr;}
+function clamp(v,a,b){return v<a?a:v>b?b:v;}
+function lerp(a,b,u){return a+(b-a)*u;}
+function easeOut(u){u=clamp(u,0,1);return 1-Math.pow(1-u,3);}
+function easeIn(u){u=clamp(u,0,1);return u*u*u;}
+function easeInOut(u){u=clamp(u,0,1);return u<.5?4*u*u*u:1-Math.pow(-2*u+2,3)/2;}
+function smooth(u){u=clamp(u,0,1);return u*u*(3-2*u);}
+function lerpRect(a,b,u){return{x:lerp(a.x,b.x,u),y:lerp(a.y,b.y,u),w:lerp(a.w,b.w,u),h:lerp(a.h,b.h,u)};}
+function ext(o){for(var i=1;i<arguments.length;i++){var p=arguments[i];for(var k in p)o[k]=p[k];}return o;}
+var FULL={x:0,y:0,w:1,h:1};
+function codeFor(seed){var R=rng(seed,'code'),A='23456789ABCDEFGHJKLMNPQRSTUVWXYZ',s='CCP-';for(var i=0;i<4;i++)s+=A[Math.floor(R()*A.length)];return s;}
+
+/* ------------------------------------------ the split table from layout.js */
+var ROWS={1:[1],2:[2],4:[2,2],5:[2,3],6:[3,3],7:[3,4],8:[4,4]};
+function tableRects(n){
+  if(n===3)return[{x:0,y:0,w:.5,h:1},{x:.5,y:0,w:.5,h:.5},{x:.5,y:.5,w:.5,h:.5}];
+  var rows=ROWS[n],out=[],rh=1/rows.length;
+  for(var r=0;r<rows.length;r++){var cw=1/rows[r];for(var c=0;c<rows[r];c++)out.push({x:c*cw,y:r*rh,w:cw,h:rh});}
+  return out;
+}
+function T(r){var o=ext({},r);o.x=r.y;o.y=r.x;o.w=r.h;o.h=r.w;return o;}
+/* grid rects for n tiles, transposed for portrait, gutter flag on */
+function grid(c,n){return tableRects(n).map(function(r){r=c.land?r:T(r);r.gap=true;return r;});}
+/* virtual 480x270 px -> fraction rect, transposed for portrait */
+function V(c,x,y,w,h,o){var r=ext({x:x/VW,y:y/VH,w:w/VW,h:h/VH},o||{});return c.land?r:T(r);}
+/* fraction rect -> px, gutters cut on internal edges only (layout.js pixelRect) */
+function pixelRect(r,c){
+  var e=1e-4,g=GAP/2,l=r.x<=e?0:g,t=r.y<=e?0:g,rr=r.x+r.w>=1-e?0:g,b=r.y+r.h>=1-e?0:g;
+  return{x:r.x*c.W+l,y:r.y*c.H+t,w:Math.max(1,r.w*c.W-l-rr),h:Math.max(1,r.h*c.H-t-b)};
+}
+/* the rect pushed just off canvas past its nearest edge */
+function exitRect(r){
+  var cx=r.x+r.w/2,cy=r.y+r.h/2,d=[cx,1-cx,cy,1-cy],m=0;
+  for(var i=1;i<4;i++)if(d[i]<d[m])m=i;
+  var o=ext({},r);
+  if(m===0)o.x=-r.w;else if(m===1)o.x=1;else if(m===2)o.y=-r.h;else o.y=1;
+  return o;
+}
+function stageAt(starts,f){var s=0;for(var k=0;k<starts.length;k++)if(f>=starts[k])s=k;return s;}
+/* walk grid rects as a ring: snake the rows if there are 1 or 2 of them, else snake the columns */
+function ring(rects){
+  var byY={},ys=[];
+  rects.forEach(function(r,i){var k=Math.round(r.y*1000);if(!byY[k]){byY[k]=[];ys.push(k);}byY[k].push(i);});
+  ys.sort(function(a,b){return a-b;});
+  var groups,key;
+  if(ys.length<=2){groups=ys.map(function(k){return byY[k].slice().sort(function(a,b){return rects[a].x-rects[b].x;});});}
+  else{
+    var byX={},xs=[];
+    rects.forEach(function(r,i){var k=Math.round(r.x*1000);if(!byX[k]){byX[k]=[];xs.push(k);}byX[k].push(i);});
+    xs.sort(function(a,b){return a-b;});
+    groups=xs.map(function(k){return byX[k].slice().sort(function(a,b){return rects[a].y-rects[b].y;});});
+  }
+  var order=[];
+  groups.forEach(function(g,gi){if(gi%2)g.reverse();order=order.concat(g);});
+  return order.map(function(i){return rects[i];});
+}
+
+/* --------------------------------------------------- placeholder "gifs" */
+var COLS=['#FF69B4','#B8A6E8','#F0C24B','#5FD3C4','#FF8C69','#7FB8FF','#9EE8A6','#C77DFF'];
+var ARS=[1.33,1,1.78,.75,1.33,1,1.78,.75];
+var GIFS=[];
+for(var gi=0;gi<8;gi++)GIFS.push({n:gi+1,col:COLS[gi],sw:Math.round(100*ARS[gi]),sh:100,ang:(25+gi*17)*Math.PI/180,dir:gi%2?-1:1});
+/* draws one source frame in source units; ph is 0..1 through the gif's own loop */
+function drawSource(ctx,g,ph){
+  ctx.fillStyle=g.col;ctx.fillRect(0,0,g.sw,g.sh);
+  ctx.save();ctx.beginPath();ctx.rect(0,0,g.sw,g.sh);ctx.clip();
+  ctx.translate(g.sw/2,g.sh/2);ctx.rotate(g.ang);
+  var P=g.sw*.55,off=g.dir*ph*P,span=Math.hypot(g.sw,g.sh);
+  ctx.fillStyle='rgba(20,20,43,.17)';
+  for(var k=-3;k<=3;k++)ctx.fillRect(k*P+off-P*.18,-span,P*.36,span*2);
+  ctx.fillStyle='rgba(242,235,221,.13)';
+  for(k=-3;k<=3;k++)ctx.fillRect(k*P+off+P*.34,-span,P*.14,span*2);
+  ctx.restore();
+  ctx.fillStyle='rgba(20,20,43,.88)';
+  ctx.font='bold '+Math.round(g.sh*.62)+'px '+DISP;ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(String(g.n),g.sw/2,g.sh/2+g.sh*.03);
+}
+function drawTile(ctx,c,r,frame){
+  var g=GIFS[((r.g|0)%8+8)%8];
+  var px=r.gap?pixelRect(r,c):{x:r.x*c.W,y:r.y*c.H,w:r.w*c.W,h:r.h*c.H};
+  if(px.w<1||px.h<1)return;
+  var a=r.a===undefined?1:r.a;if(a<=0)return;
+  var sc=r.sc||1,w=px.w*sc,h=px.h*sc,cx=px.x+px.w/2,cy=px.y+px.h/2,rad=Math.hypot(w,h)/2;
+  if(cx+rad<0||cx-rad>c.W||cy+rad<0||cy-rad>c.H)return;
+  ctx.save();ctx.globalAlpha=a;ctx.translate(cx,cy);if(r.rot)ctx.rotate(r.rot);
+  if(r.plate){ctx.fillStyle=GROUND;ctx.fillRect(-w/2-3,-h/2-3,w+6,h+6);}
+  ctx.beginPath();ctx.rect(-w/2,-h/2,w,h);ctx.clip();
+  var crop=r.crop||{cx:.5,cy:.5,z:1};
+  var s=Math.max(w/g.sw,h/g.sh)*(crop.z||1),dw=g.sw*s,dh=g.sh*s;
+  ctx.translate(-crop.cx*dw,-crop.cy*dh);ctx.scale(s,s);
+  var S=c.S,ph=(((frame+(r.ph||0))%S)+S)%S/S;
+  drawSource(ctx,g,ph);
+  ctx.restore();
+}
+function drawStamp(ctx,c){
+  var w=72,h=16,x=c.W-6-w,y=c.H-6-h;
+  ctx.save();ctx.globalAlpha=.9;ctx.fillStyle='rgba(14,14,31,.92)';ctx.fillRect(x,y,w,h);
+  ctx.fillStyle=PINK;ctx.font='bold 11px '+DISP;ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText('CCP',x+5,y+h/2+.5);
+  ctx.fillStyle=INKDIM;ctx.font='8px '+MONO;ctx.fillText(c.code,x+28,y+h/2+.5);
+  ctx.restore();
+}
+
+/* ---------------------------------------------------------- proposals
+ * Every rects(c,f) is pure. c = { n, F, S, seed, land, W, H, code }.
+ * Returns [{ g, x,y,w,h, a?, rot?, sc?, z?, crop?, ph?, gap?, plate? }] in canvas fractions.
+ */
+var LAND=5;
+var PROPS=[
+{ id:'slide', name:'Slide', n:6, cost:'dear',
+  pitch:'Rows of your gifs drift past like the shelves in Lost and Found, every other row going the opposite way. Nothing enters and nothing leaves, the strip just keeps coming.',
+  loops:'Each row is its own tiles laid end to end and repeated. Over one loop the row moves by exactly one repeat, so the last frame lands where the first one started. Rows with fewer tiles move slower.',
+  maps:'rectsAt(frame) returns one rect per visible copy, all pointing at the row\'s tile indexes, some partly off canvas. Rows are 1 to 4 by count; portrait turns them into columns. From the seed: which tiles share a row, the direction pattern, each row\'s starting offset.',
+  rects:function(c,f){
+    var u=f/c.F,n=c.n,rows=n<=1?1:n<=2?2:n<=6?3:4,rh=VH/rows,tw=Math.round(rh*1.15);
+    var R=rng(c.seed,'slide'),sign=R()<.5?1:-1,out=[];
+    for(var k=0;k<rows;k++){
+      var tiles=[];for(var i=k;i<n;i+=rows)tiles.push(i);
+      if(!tiles.length)tiles.push(k%n);
+      var L=tiles.length*tw,dir=(k%2?-1:1)*sign,phase=R()*L;
+      var base=((dir*u*L+phase)%L+L)%L;
+      var y=k*rh+(k?2:0),h=rh-(k?2:0)-(k<rows-1?2:0);
+      for(var x0=base-L;x0<VW;x0+=L){
+        for(i=0;i<tiles.length;i++){var x=x0+i*tw;if(x+tw<=0||x>=VW)continue;out.push(V(c,x+2,y,tw-4,h,{g:tiles[i]}));}
+      }
+    }
+    return out;
+  }},
+{ id:'stack', name:'Stack', n:5, cost:'cheap',
+  pitch:'Your gifs drop onto a pile one after another, each at its own spot and tilt. The pile never empties; the next card just lands on top of it.',
+  loops:'Every card has a fixed landing spot. After all n have landed once, the pile is in the same order at the same spots as frame 0, so the loop closes without a cut. A landing is 5 frames: it comes in big and faint and settles.',
+  maps:'rectsAt(frame) returns n rects with rot and z; only the card that is landing carries alpha and scale. The landing beat is F / n. From the seed: every spot and tilt. With one gif it is a single card that keeps re-landing on itself.',
+  rects:function(c,f){
+    var n=c.n,F=c.F,R=rng(c.seed,'stack'),cw=Math.round(VH*.78),ch=Math.round(cw*.75),spots=[],out=[];
+    for(var k=0;k<n;k++)spots.push({x:VW*(.3+.4*R()),y:VH*(.32+.36*R()),rot:(R()*2-1)*.4});
+    var per=F/n,kLast=Math.min(n-1,Math.floor(f/per));
+    for(k=0;k<n;k++){
+      var t=Math.round(k*per),z=((k-kLast-1)%n+n)%n,s=spots[k];
+      if(f>=t&&f<t+LAND){
+        /* the old copy stays at the bottom of the pile while the fresh copy drops onto the top */
+        var p=easeOut((f-t)/LAND);
+        out.push(V(c,s.x-cw/2,s.y-ch/2,cw,ch,{g:k,z:-1,rot:s.rot,plate:true}));
+        out.push(V(c,s.x-cw/2,s.y-24*(1-p)-ch/2,cw,ch,{g:k,z:n,a:p,sc:1.5-.5*p,rot:s.rot,plate:true}));
+      }else{
+        out.push(V(c,s.x-cw/2,s.y-ch/2,cw,ch,{g:k,z:z,rot:s.rot,plate:true}));
+      }
+    }
+    return out;
+  }},
+{ id:'spread', name:'Spread', n:4, cost:'cheap',
+  pitch:'One gif fills the frame, then it splits and the others slide in from the edges until the whole mosaic is up. In the last five frames the first gif swallows the mosaic and you are back at the start.',
+  loops:'The frame is the same one-gif picture at frame 0 and at frame F. The fold at the end moves every rect back to where it came from, so no crossfade is needed and the cut is invisible.',
+  maps:'Grow as it exists today with two changes: newcomers slide in from their nearest edge instead of growing from a point, and a 5 frame fold at the end returns tile 0 to FULL while the others exit the way they came. Same split tree, same stage schedule, same 4 frame ease.',
+  rects:function(c,f){
+    var n=c.n,F=c.F,out=[];
+    if(n===1){return[ext(grid(c,1)[0],{g:0})];}
+    var FOLD=5,foldStart=F-FOLD,step=Math.max(3,Math.min(9,Math.floor((foldStart-8)/(n-1)))),starts=[];
+    for(var k=0;k<n;k++)starts.push(k*step);
+    if(f>=foldStart){
+      var uu=easeInOut((f-foldStart+1)/FOLD),from=grid(c,n);
+      for(var i=0;i<n;i++){var to=i===0?FULL:exitRect(from[i]);out.push(ext(lerpRect(from[i],to,uu),{g:i,z:i===0?n:i,gap:uu<1}));}
+      return out;
+    }
+    var stage=stageAt(starts,f),toR=grid(c,stage+1),fromR=stage>0?grid(c,stage):toR;
+    var u=stage>0?easeOut((f-starts[stage])/4):1;
+    for(i=0;i<=stage;i++){var tr=toR[i],fr=fromR[i]||exitRect(tr);out.push(ext(u>=1?ext({},tr):lerpRect(fr,tr,u),{g:i,z:i,gap:true}));}
+    return out;
+  }},
+{ id:'tunnel', name:'Mirror Tunnel', n:1, S:20, cost:'dear',
+  pitch:'One gif nested inside itself, and the camera keeps pushing in. It is Mirror turned into a zoom that never arrives.',
+  loops:'Every ring is a fixed fraction of the one outside it. Over one loop the tunnel zooms by exactly one ring, so ring k ends where ring k-1 began; the innermost ring fades in as it is born. The stagger between rings is set by the loop math (canvas length against the gif\'s own loop), which is why this card runs a 20 frame inner loop: at 8 s it lands in sync.',
+  maps:'rectsAt(frame) returns about nine rects, all centred, all tile 0, with scale, a slow twist and a frameOffset per ring. With 2 or 3 gifs the rings alternate and the zoom takes 2 or 3 steps per loop. From the seed: the twist. Ignores gifs past the third, like Mirror.',
+  rects:function(c,f){
+    var u=f/c.F,steps=Math.min(3,Math.max(1,c.n)),r=[0,.68,.74,.78][steps],rings=8+steps;
+    var R=rng(c.seed,'tunnel'),th=(R()*2-1)*.22,offStep=(c.S-c.F%c.S)%c.S,out=[];
+    for(var k=0;k<=rings;k++){
+      var s=Math.pow(r,k-steps*u);if(s>2.4)continue;
+      out.push({x:.5-s/2,y:.5-s/2,w:s,h:s,g:k%steps,z:k,a:k>rings-steps?u:1,rot:th*(k-steps*u),ph:Math.floor(k/steps)*offStep});
+    }
+    return out;
+  }},
+{ id:'carousel', name:'Carousel', n:5, cost:'dear',
+  pitch:'Your gifs ride a ring that turns towards you: big and bright at the front, small and dim at the back. Everyone gets a turn in the light.',
+  loops:'The ring makes exactly one full turn per loop, so every gif is back where it started. At 3 s keep it to four gifs or fewer or it hurries.',
+  maps:'rectsAt(frame) returns n rects; alpha, scale and z all come from depth (cos of the angle). Portrait stands the ring on end. From the seed: the starting angle and the direction.',
+  rects:function(c,f){
+    var u=f/c.F,n=c.n,R=rng(c.seed,'carousel'),a0=R()*Math.PI*2,dir=R()<.5?1:-1,out=[];
+    for(var i=0;i<n;i++){
+      var th=a0+dir*2*Math.PI*(i/n+u),d=(Math.cos(th)+1)/2,h=(.36+.46*d)*VH,w=h*1.33;
+      var cx=VW/2+Math.sin(th)*VW*.36,cy=VH/2;
+      out.push(V(c,cx-w/2,cy-h/2,w,h,{g:i,z:d,a:.35+.65*d,plate:true}));
+    }
+    return out;
+  }},
+{ id:'hop', name:'Ring Hop', n:6, cost:'mid',
+  pitch:'Shuffle with a plan: every tile hops one slot around the mosaic each beat, so the whole grid turns like a wheel. After n hops everyone is home.',
+  loops:'n hops per loop and the slot ring has n places, so the last hop lands every tile in its frame 0 slot. Each hop is a 4 frame ease with a small lift; between hops the grid is still.',
+  maps:'The existing table rects walked as a ring (row snake in landscape, column snake in portrait). rectsAt(frame) returns n rects, lerped between two slots during a hop with scale and z for the lift. From the seed: the direction.',
+  rects:function(c,f){
+    var n=c.n,F=c.F,slots=ring(grid(c,n)),out=[];
+    if(n===1)return[ext({},slots[0],{g:0})];
+    var R=rng(c.seed,'hop'),dir=R()<.5?1:-1,per=F/n,j=Math.min(n-1,Math.floor(f/per)),t=Math.round(j*per),u=easeOut((f-t)/4);
+    for(var i=0;i<n;i++){
+      var now=slots[((i+dir*j)%n+n)%n],prev=slots[((i+dir*(j-1))%n+n)%n];
+      var r=u>=1?ext({},now):lerpRect(prev,now,u),lift=u<1?Math.sin(u*Math.PI)*.08:0;
+      out.push(ext(r,{g:i,gap:true,sc:1+lift,z:u<1?1:0}));
+    }
+    return out;
+  }},
+{ id:'swallow', name:'Swallow', n:4, cost:'mid',
+  pitch:'The mosaic sits still, then one tile grows until it covers nearly everything, holds, and shrinks back into its slot. Then another takes its turn.',
+  loops:'Each turn is a closed trip out and back, so the mosaic is untouched at both ends of the loop. Turns per loop are capped by length, so a 3 s canvas gets three turns, not eight.',
+  maps:'rectsAt(frame) returns the table rects, with one tile lerped towards a centred 86 percent rect and given z on top. Grow 3 frames, hold, shrink 3, rest 2. From the seed: which tiles take a turn and in what order.',
+  rects:function(c,f){
+    var n=c.n,F=c.F,base=grid(c,n),Tn=Math.min(n,Math.max(1,Math.floor(F/12)));
+    var R=rng(c.seed,'swallow'),ids=[];for(var i=0;i<n;i++)ids.push(i);
+    var order=shuffle(R,ids).slice(0,Tn),per=F/Tn,j=Math.min(Tn-1,Math.floor(f/per)),t0=Math.round(j*per),t1=Math.round((j+1)*per);
+    var who=order[j],local=f-t0,len=t1-t0,G=3,hold=len-2*G-2,p=0;
+    if(local<G)p=easeOut(local/G);else if(local<G+hold)p=1;else if(local<G+hold+G)p=1-easeIn((local-G-hold)/G);
+    var big={x:.07,y:.07,w:.86,h:.86};
+    return base.map(function(r,i){
+      if(i!==who||p<=0)return ext({},r,{g:i});
+      return ext(lerpRect(r,big,p),{g:i,gap:p<1,z:5,plate:true});
+    });
+  }},
+{ id:'ripple', name:'Ripple', n:8, cost:'cheap',
+  pitch:'A wave rolls across the mosaic from one corner: each tile puffs up as it passes and settles behind it. Then the grid rests until the next loop.',
+  loops:'The wave starts at frame 0 and is done by 55 percent of the loop; the rest is the still mosaic, which is also frame 0. Each bump is 8 frames, out and back.',
+  maps:'Table rects plus scale and a few degrees of rot on the tiles the wave is touching, z on top while they bump. From the seed: the starting corner.',
+  rects:function(c,f){
+    var n=c.n,F=c.F,base=grid(c,n),R=rng(c.seed,'ripple'),corner=Math.floor(R()*4),B=8,span=Math.max(1,Math.round(F*.55)-B);
+    return base.map(function(r,i){
+      var cx=r.x+r.w/2,cy=r.y+r.h/2,dx=(corner&1)?1-cx:cx,dy=(corner&2)?1-cy:cy,d=(dx+dy)/2;
+      var t=Math.round(d*span),p=(f-t)/B,o=ext({},r,{g:i});
+      if(p>0&&p<1){o.sc=1+.16*Math.sin(p*Math.PI);o.z=1;o.rot=((corner&1)?-1:1)*.05*Math.sin(p*Math.PI);}
+      return o;
+    });
+  }},
+{ id:'kenburns', name:'Ken Burns Wall', n:6, cost:'dear',
+  pitch:'Every tile slowly pans and breathes inside its own gif, each on its own path. The grid holds still; the pictures do not.',
+  loops:'Each tile\'s crop window moves round a small ellipse exactly once per loop and its zoom breathes once, so the window is back where it began on the last frame.',
+  maps:'Table rects with a crop per tile: centre and zoom in source space, kept inside the source. rectsAt(frame) is the flat mosaic plus crop. From the seed: each tile\'s zoom, path phase and direction.',
+  rects:function(c,f){
+    var u=f/c.F,n=c.n,base=grid(c,n),R=rng(c.seed,'kb');
+    return base.map(function(r,i){
+      var z=1.25+R()*.4,ph=R()*Math.PI*2,dir=R()<.5?1:-1,zb=.05+R()*.05;
+      var zz=z+zb*Math.sin(2*Math.PI*u+ph*.7),m=(1-1/zz)/2*.9;
+      var cx=.5+m*Math.cos(dir*2*Math.PI*u+ph),cy=.5+m*Math.sin(dir*2*Math.PI*u+ph);
+      return ext({},r,{g:i,crop:{cx:cx,cy:cy,z:zz}});
+    });
+  }},
+{ id:'pinwheel', name:'Pinwheel', n:1, cost:'dear',
+  pitch:'One gif on every spoke, turning around a hub that breathes. The most hypnotic of the set and the one that needs the least media.',
+  loops:'The wheel turns by exactly one spoke per loop and every spoke shows the same gif, so spoke k ends where spoke k+1 began. The hub breathes once per loop.',
+  maps:'rectsAt(frame) returns the spoke rects with rot pointing at the hub, plus the hub rect (the second gif if there is one). Spokes are 3 at minimum, n otherwise, sized so neighbours never overlap. From the seed: start angle and direction.',
+  rects:function(c,f){
+    var u=f/c.F,n=c.n,R=rng(c.seed,'pin'),spokes=Math.max(3,n),a0=R()*Math.PI*2,dir=R()<.5?1:-1;
+    var Rad=VH*Math.min(.38,.28+.0125*spokes),chord=2*Rad*Math.sin(Math.PI/spokes),tw_=Math.min(VH*.36,chord*.9),th_=tw_/1.25,out=[];
+    for(var i=0;i<spokes;i++){
+      var th=a0+dir*2*Math.PI*(i+u)/spokes,cx=VW/2+Math.cos(th)*Rad,cy=VH/2+Math.sin(th)*Rad;
+      var rot=c.land?th+Math.PI/2:-th;
+      out.push(V(c,cx-tw_/2,cy-th_/2,tw_,th_,{g:0,rot:rot,z:1,plate:true}));
+    }
+    var hs=VH*.30*(1+.05*Math.sin(2*Math.PI*u));
+    out.push(V(c,VW/2-hs/2,VH/2-hs/2,hs,hs,{g:n>=2?1:0,z:2,plate:true}));
+    return out;
+  }},
+{ id:'cover', name:'Cover', n:5, cost:'mid',
+  pitch:'The mosaic is the bed, and your first gif rides across it at 80 percent size, edge to edge, once per loop. A hero pass over a wall of extras.',
+  loops:'The hero is fully off canvas at frame 0 and again by 92 percent of the loop, so the loop cuts on the still bed. The pass is a smooth ease, slow at both ends.',
+  maps:'Table rects for tiles 1 to n-1 (flat), plus one moving rect for tile 0 with z on top and a plate. Portrait runs the pass top to bottom. From the seed: the direction.',
+  rects:function(c,f){
+    var u=f/c.F,n=c.n,R=rng(c.seed,'cover'),dir=R()<.5?1:-1,bedN=Math.max(1,n-1);
+    var bed=grid(c,bedN).map(function(r,i){return ext(r,{g:n===1?0:i+1});});
+    var p=smooth((u-.08)/.84),hw=VW*.8,hh=VH*.8,x=dir>0?VW-p*(VW+hw):-hw+p*(VW+hw);
+    bed.push(V(c,x,VH*.1,hw,hh,{g:0,z:5,plate:true}));
+    return bed;
+  }},
+{ id:'deal', name:'Deal', n:5, cost:'cheap',
+  pitch:'A deck sits in the corner. The cards are dealt out into a fan one by one, the fan holds, then they are gathered back in reverse.',
+  loops:'The deck is whole at frame 0 and whole again before the loop ends; gathering in reverse rebuilds the same stack order, so nothing pops. Deal takes the first third, the fan holds, gather takes the last third.',
+  maps:'n rects with rot and z; only the card in flight moves, on a 5 frame arc out and a short ease back. Deck z is n-1-k, flight z is n+k, so a flying card is always over the deck. From the seed: the deck jitter.',
+  rects:function(c,f){
+    var n=c.n,F=c.F,R=rng(c.seed,'deal'),ch=VH*.42,cw=ch*1.33,deck={x:VW*.17,y:VH*.68},jit=[],fan=[],out=[];
+    for(var k=0;k<n;k++)jit.push({dx:(R()*2-1)*3,dy:(R()*2-1)*3,rot:(R()*2-1)*.06});
+    for(k=0;k<n;k++){var t=(k+.5)/n;fan.push({x:VW*(.14+.72*t),y:VH*(.46-.16*Math.sin(t*Math.PI)),rot:(t-.5)*.7});}
+    var DO=5,DI=Math.max(3,Math.min(5,Math.floor(F*.07))),outSpan=Math.round(F*.34),gStart=Math.round(F*.62),gSpan=Math.round(F*.3);
+    for(k=0;k<n;k++){
+      var tOut=Math.round(k*outSpan/n),kk=n-1-k,tIn=gStart+Math.round(kk*gSpan/n);
+      var dk={x:deck.x+jit[k].dx,y:deck.y+jit[k].dy,rot:jit[k].rot},fk=fan[k],x,y,rot,z,p;
+      if(f<tOut){x=dk.x;y=dk.y;rot=dk.rot;z=n-1-k;}
+      else if(f<tOut+DO){p=easeOut((f-tOut)/DO);x=lerp(dk.x,fk.x,p);y=lerp(dk.y,fk.y,p)-30*Math.sin(p*Math.PI);rot=lerp(dk.rot,fk.rot,p);z=n+k;}
+      else if(f<tIn){x=fk.x;y=fk.y;rot=fk.rot;z=n+k;}
+      else if(f<tIn+DI){p=easeIn((f-tIn)/DI);x=lerp(fk.x,dk.x,p);y=lerp(fk.y,dk.y,p)-30*Math.sin(p*Math.PI);rot=lerp(fk.rot,dk.rot,p);z=n+k;}
+      else{x=dk.x;y=dk.y;rot=dk.rot;z=n-1-k;}
+      out.push(V(c,x-cw/2,y-ch/2,cw,ch,{g:k,z:z,rot:rot,plate:true}));
+    }
+    return out;
+  }}
+];
+
+/* ------------------------------------------------------------- renderer */
+function render(d){
+  var ctx=d.ctx,c=d.cfg;
+  ctx.setTransform(d.dpr,0,0,d.dpr,0,0);
+  ctx.fillStyle=GROUND;ctx.fillRect(0,0,c.W,c.H);
+  var rects=d.prop.rects(c,d.frame).map(function(r,i){return{r:r,i:i};});
+  rects.sort(function(a,b){return((a.r.z||0)-(b.r.z||0))||(a.i-b.i);});
+  for(var i=0;i<rects.length;i++)drawTile(ctx,c,rects[i].r,d.frame);
+  drawStamp(ctx,c);
+}
+
+/* ------------------------------------------------------------------ page */
+var RM=false;try{RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;}catch(e){}
+if(RM){document.getElementById('rmchip').hidden=false;}
+var DPR=Math.min(2,window.devicePixelRatio||1);
+var demos=[];
+var picklist=document.getElementById('picklist'),gridEl=document.getElementById('grid');
+
+function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;}
+function seg(label,items,value,onPick,extra){
+  var wrap=el('div','seg'+(extra?' '+extra:''));
+  items.forEach(function(it){
+    var b=el('button','',it.label);b.type='button';if(it.value===value)b.classList.add('on');
+    b.addEventListener('click',function(){
+      var kids=wrap.children;for(var i=0;i<kids.length;i++)kids[i].classList.remove('on');
+      b.classList.add('on');onPick(it.value);
+    });
+    wrap.appendChild(b);
+  });
+  var box=document.createDocumentFragment();
+  if(label)box.appendChild(el('span','lbl',label));
+  box.appendChild(wrap);
+  return box;
+}
+
+PROPS.forEach(function(prop,idx){
+  var num=idx+1;
+  var li=el('li');var a=el('a','',prop.name);a.href='#p-'+prop.id;li.appendChild(a);
+  li.appendChild(el('span','',prop.pitch.split('. ')[0]+'.'));picklist.appendChild(li);
+
+  var sec=el('section','prop');sec.id='p-'+prop.id;
+  var h2=el('h2');h2.appendChild(el('span','num',String(num).replace(/^(\d)$/,'0$1')));h2.appendChild(document.createTextNode(prop.name));
+  h2.appendChild(el('span','cost '+prop.cost,prop.cost));sec.appendChild(h2);
+  sec.appendChild(el('p','pitch',prop.pitch));
+  var stage=el('div','stage');var cv=document.createElement('canvas');stage.appendChild(cv);
+  var badge=el('span','badge','');badge.hidden=true;stage.appendChild(badge);
+  var play=el('button','play','PLAY');play.type='button';play.hidden=!RM;stage.appendChild(play);
+  sec.appendChild(stage);
+
+  var d={prop:prop,cv:cv,ctx:cv.getContext('2d'),dpr:DPR,frame:0,t0:0,playing:!RM,active:false,badge:badge,play:play,
+    n:prop.n,land:true,F:75,seed:'pitch-'+prop.id,cfg:null};
+  demos.push(d);
+
+  var ctl=el('div','ctl');
+  var counts=[];for(var i=1;i<=8;i++)counts.push({label:String(i),value:i});
+  ctl.appendChild(seg('GIFS',counts,d.n,function(v){d.n=v;reconfig(d);},'count'));
+  ctl.appendChild(seg('',[{label:'Landscape',value:true},{label:'Portrait',value:false}],true,function(v){d.land=v;reconfig(d);}));
+  ctl.appendChild(seg('',[{label:'3 s',value:45},{label:'5 s',value:75},{label:'8 s',value:120}],75,function(v){d.F=v;reconfig(d);}));
+  var dice=el('button','dice','Dice');dice.type='button';dice.title='reseed';
+  dice.addEventListener('click',function(){d.seed=Math.random().toString(36).slice(2,8);reconfig(d);});
+  ctl.appendChild(dice);
+  sec.appendChild(ctl);
+
+  var l1=el('p','line');l1.appendChild(el('b','','LOOPS'));l1.appendChild(document.createTextNode(prop.loops));sec.appendChild(l1);
+  var l2=el('p','line');l2.appendChild(el('b','','ENGINE'));l2.appendChild(document.createTextNode(prop.maps));sec.appendChild(l2);
+  gridEl.appendChild(sec);
+
+  play.addEventListener('click',function(ev){ev.stopPropagation();setPlaying(d,true);});
+  cv.addEventListener('click',function(){setPlaying(d,!d.playing);});
+  reconfig(d);
+});
+
+function reconfig(d){
+  var sz=d.land?SIZES.land:SIZES.port;
+  d.cfg={n:d.n,F:d.F,S:d.prop.S||FPS,seed:d.seed,land:d.land,W:sz.W,H:sz.H,code:codeFor(d.seed)};
+  if(d.cv.width!==sz.W*d.dpr||d.cv.height!==sz.H*d.dpr){d.cv.width=sz.W*d.dpr;d.cv.height=sz.H*d.dpr;}
+  d.frame=Math.min(d.frame,d.F-1);
+  d.t0=performance.now()-d.frame*FRAME_MS;
+  fit(d);render(d);
+}
+function fit(d){
+  var box=d.cv.parentNode,avail=box.clientWidth-16;if(avail<80)avail=Math.min(window.innerWidth-60,480);
+  var W=d.cfg.W,H=d.cfg.H,w,h;
+  if(d.land){w=Math.min(avail,720);h=w*H/W;}
+  else{h=Math.min(avail*H/W,window.innerHeight*.72,720);w=h*W/H;}
+  d.cv.style.width=Math.round(w)+'px';d.cv.style.height=Math.round(h)+'px';
+}
+function setPlaying(d,on){
+  d.playing=on;d.play.hidden=on;d.badge.hidden=on;
+  if(!on)d.badge.textContent='paused at frame '+d.frame;
+  if(on){d.t0=performance.now()-d.frame*FRAME_MS;kick();}
+}
+
+/* one clock for the page; a demo only advances while it is on screen */
+var raf=0;
+function tick(now){
+  raf=0;var any=false;
+  for(var i=0;i<demos.length;i++){
+    var d=demos[i];if(!d.active||!d.playing)continue;any=true;
+    var fr=Math.floor((now-d.t0)/FRAME_MS)%d.F;
+    if(fr!==d.frame){d.frame=fr;render(d);}
+  }
+  if(any)raf=requestAnimationFrame(tick);
+}
+function kick(){if(!raf)raf=requestAnimationFrame(tick);}
+
+if('IntersectionObserver' in window){
+  var io=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      var d=null;for(var i=0;i<demos.length;i++)if(demos[i].cv===en.target)d=demos[i];
+      if(!d)return;
+      d.active=en.isIntersecting;
+      if(d.active){d.t0=performance.now()-d.frame*FRAME_MS;kick();}
+    });
+  },{rootMargin:'120px 0px',threshold:0.05});
+  demos.forEach(function(d){io.observe(d.cv);});
+}else{demos.forEach(function(d){d.active=true;});kick();}
+
+var rt=0;
+window.addEventListener('resize',function(){clearTimeout(rt);rt=setTimeout(function(){demos.forEach(fit);},80);});
+document.addEventListener('visibilitychange',function(){if(!document.hidden){demos.forEach(function(d){d.t0=performance.now()-d.frame*FRAME_MS;});kick();}});
+
+/* exposed for a node smoke run: window.__pitch.PROPS etc. */
+window.__pitch={PROPS:PROPS,tableRects:tableRects,ring:ring};
+})();
+</script>
+</body>
+</html>

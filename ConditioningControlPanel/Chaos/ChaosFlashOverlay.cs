@@ -33,6 +33,10 @@ public sealed class ChaosFlashOverlay : Window
     private const double DEFAULT_OPACITY = 0.10;     // faint 10% wash
 
     private static ChaosFlashOverlay? _active;
+    // THE BACK ROOM's gif-full (CONTRACT section 4): a second instance of this same window, so a
+    // fullscreen hero GIF and a glitch wash can share a beat without swapping each other's image.
+    // Same decode path, same keep-alive discipline; it always spans every screen.
+    private static ChaosFlashOverlay? _hero;
     private static readonly Random _rng = new();
 
     /// <summary>Show a random flash-pool image full-screen for <paramref name="durationMs"/>
@@ -77,6 +81,63 @@ public sealed class ChaosFlashOverlay : Window
     /// <summary>Re-stack the live window above a mandatory video (see ChaosWindowZ). UI thread only.</summary>
     public static void RaiseActive() => ChaosWindowZ.RaiseTopmost(_active);
 
+    /// <summary>
+    /// Back Room <c>gif-full</c>: hold one specific LOCAL image over every screen for
+    /// <paramref name="durationMs"/>. <paramref name="still"/> decodes only the first frame
+    /// (MotionLevel Off). The caller resolves the path from its own dealt media; nothing else is
+    /// accepted. <paramref name="shown"/> runs on the UI thread once the hero window has taken the picture (not for a
+    /// remote path, a dead dispatcher or a window that failed to show). Any thread.
+    /// </summary>
+    public static void ShowHero(string path, int durationMs, double opacity, bool still, Action? shown = null)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(path) || Services.FlashService.IsRemotePath(path)) return;
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            disp.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    if (_hero == null) { _hero = new ChaosFlashOverlay(spanAll: true); ((Window)_hero).Show(); }
+                    else if (!_hero.IsVisible) { try { ((Window)_hero).Show(); } catch (Exception ex) { Diag.Swallowed(ex, "hero window re-show"); } }
+                    ChaosWindowZ.RaiseAboveVideo(_hero);
+                    ChaosWindowZ.ForceTopmost(_hero);
+                    _hero.Display(path, durationMs, opacity, still);
+                    shown?.Invoke();
+                }
+                catch (Exception ex) { App.Logger?.Debug("ChaosFlashOverlay.ShowHero: {E}", ex.Message); }
+            }));
+        }
+        catch (Exception ex) { App.Logger?.Debug("ChaosFlashOverlay.ShowHero: {E}", ex.Message); }
+    }
+
+    /// <summary>Take the hero image down now (suspend, close). The window idles hidden rather than
+    /// closing, for the same render-thread reason the washes keep theirs. Any thread.</summary>
+    public static void StopHero()
+    {
+        try
+        {
+            Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+            {
+                var h = _hero;
+                if (h == null) return;
+                try
+                {
+                    h._life.Stop();
+                    h._pending = null;
+                    h.BeginAnimation(OpacityProperty, null);
+                    h.Opacity = 0;
+                    h.ClearImage();
+                    h._hideGrace.Stop();
+                    h._hideGrace.Start();
+                }
+                catch (Exception ex) { Diag.Swallowed(ex, "hero window tearing down"); }
+            }));
+        }
+        catch (Exception ex) { Diag.Swallowed(ex, "no dispatcher"); }
+    }
+
     /// <summary>Close any active overlay immediately (run teardown).</summary>
     public static void CloseActive() { try { _active?.CloseNow(); } catch { } }
 
@@ -86,11 +147,13 @@ public sealed class ChaosFlashOverlay : Window
     // window (DWM re-composition hitch at trigger time). The window now idles visible (Opacity 0,
     // image cleared, click-through) through this grace, hiding only after a truly quiet spell.
     private readonly DispatcherTimer _hideGrace;
-    private (string path, int durationMs, double opacity)? _pending;   // first Display can land before Loaded
+    private (string path, int durationMs, double opacity, bool still)? _pending;   // first Display can land before Loaded
+    private readonly bool _spanAll;   // the Back Room hero ignores the single-screen setting
     private int _displayGen;   // guards the async still-decode against a newer wash / a clear
 
-    private ChaosFlashOverlay()
+    private ChaosFlashOverlay(bool spanAll = false)
     {
+        _spanAll = spanAll;
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
@@ -103,7 +166,10 @@ public sealed class ChaosFlashOverlay : Window
         WindowStartupLocation = WindowStartupLocation.Manual;
         // Single-monitor by default: confine to the primary screen unless the user has multi-
         // monitor on (else this layered flash surface paints on every monitor — see StageBounds).
-        var (sl, st, sw, sh) = ChaosWindowZ.StageBounds();
+        var (sl, st, sw, sh) = spanAll
+            ? (SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,
+               SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight)
+            : ChaosWindowZ.StageBounds();
         Left = sl; Top = st; Width = sw; Height = sh;
         Opacity = 0;
 
@@ -113,7 +179,7 @@ public sealed class ChaosFlashOverlay : Window
         SourceInitialized += (_, _) => { ApplyExStyles(); PlacePhysical(); };
         Loaded += (_, _) =>
         {
-            if (_pending is { } p) { _pending = null; DisplayCore(p.path, p.durationMs, p.opacity); }
+            if (_pending is { } p) { _pending = null; DisplayCore(p.path, p.durationMs, p.opacity, p.still); }
         };
 
         _life = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(DEFAULT_DURATION_MS) };
@@ -137,13 +203,13 @@ public sealed class ChaosFlashOverlay : Window
         };
     }
 
-    private void Display(string path, int durationMs, double opacity)
+    private void Display(string path, int durationMs, double opacity, bool still = false)
     {
-        if (!IsLoaded) { _pending = (path, durationMs, opacity); return; }
-        DisplayCore(path, durationMs, opacity);
+        if (!IsLoaded) { _pending = (path, durationMs, opacity, still); return; }
+        DisplayCore(path, durationMs, opacity, still);
     }
 
-    private void DisplayCore(string path, int durationMs, double opacity)
+    private void DisplayCore(string path, int durationMs, double opacity, bool still = false)
     {
         _hideGrace.Stop();
         _life.Stop();
@@ -158,7 +224,9 @@ public sealed class ChaosFlashOverlay : Window
         // to the still branch, which is also the branch it belongs in.
         bool remote = Services.FlashService.IsRemotePath(path);
 
-        if (!remote && path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
+        // still (Back Room hero at MotionLevel Off) takes the still branch below, which decodes the
+        // first frame only.
+        if (!still && !remote && path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
         {
             // Was XamlAnimatedGif — which decodes at NATIVE resolution with no size cap, so a
             // large GIF looped full-screen for the whole wash held ~100MB+ of resident BGRA
@@ -168,7 +236,7 @@ public sealed class ChaosFlashOverlay : Window
             // wash doesn't need native res; ClearImage's Detach already tears this down.
             Services.AnimatedWebp.AttachAnimation(_img, path, maxDim: 1280, maxFrames: 40);
         }
-        else if (!remote && path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase) && Services.AnimatedWebp.IsAnimated(path))
+        else if (!still && !remote && path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase) && Services.AnimatedWebp.IsAnimated(path))
         {
             // Animated webp — XamlAnimatedGif is GIF-only, so these washed on as stills. Decode
             // is capped well below the still path's 2560: unlike XamlAnimatedGif's one-frame-at-
@@ -215,7 +283,7 @@ public sealed class ChaosFlashOverlay : Window
 
                     var dispatcher = Application.Current?.Dispatcher;
                     if (dispatcher == null || dispatcher.HasShutdownStarted) return;
-                    dispatcher.BeginInvoke(() =>
+                    _ = dispatcher.BeginInvoke(() =>
                     {
                         // A newer wash (or a clear/teardown) may have superseded this decode.
                         try { if (gen == _displayGen) _img.Source = bmp; } catch { }
@@ -245,6 +313,7 @@ public sealed class ChaosFlashOverlay : Window
         try { _life.Stop(); } catch { }
         ClearImage();
         if (ReferenceEquals(_active, this)) _active = null;
+        if (ReferenceEquals(_hero, this)) _hero = null;
         try { Close(); } catch { }
     }
 
@@ -303,7 +372,7 @@ public sealed class ChaosFlashOverlay : Window
             var hwnd = new WindowInteropHelper(this).Handle;
             if (hwnd == IntPtr.Zero) return;
 
-            bool dual = App.Settings?.Current?.DualMonitorEnabled ?? true;
+            bool dual = _spanAll || (App.Settings?.Current?.DualMonitorEnabled ?? true);
             var b = dual
                 ? System.Windows.Forms.SystemInformation.VirtualScreen
                 : System.Windows.Forms.Screen.PrimaryScreen?.Bounds ?? System.Drawing.Rectangle.Empty;

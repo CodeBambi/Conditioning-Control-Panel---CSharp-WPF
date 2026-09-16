@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -29,7 +29,7 @@ namespace ConditioningControlPanel.Services.Arcademy;
 ///   "payDays":{ "yyyy-MM-dd": { "&lt;gameKey&gt;": 2 } },
 ///   "inv":{ "late_slip": { "n":2, "at":"yyyy-MM-dd" } },
 ///   "unlocks":{ "extra":false, "honors":false },
-///   "log":[ { "sku":"late_slip", "cur":"t", "cost":250, "at":"yyyy-MM-dd" } ] }
+///   "log":[ { "sku":"late_slip", "cur":"t", "cost":260, "at":"yyyy-MM-dd" } ] }
 /// </code>
 /// </summary>
 internal static class ArcademyEconomy
@@ -237,6 +237,12 @@ internal static class ArcademyEconomy
     public const string CurTokens = "k";
 
     public const string SkuLateSlip = "late_slip";
+
+    /// <summary>How many Tardy Slips the desk will hold — and therefore the longest absence one
+    /// can cover, because the attendance path spends exactly one per missed night. ONE number, read
+    /// by the catalog row's <c>StackMax</c>, by <see cref="ConsumeLateSlips"/> and by the attendance
+    /// credit, so "the counter sold me three and only two ever spend" can never happen.</summary>
+    public const int SlipStackMax = 2;
     public const string SkuHonorsLever = "honors_lever";
     public const string SkuFreeSwimKey = "free_swim_key";
     public const string SkuDeepEndWideBoard = "de_5x5";
@@ -267,11 +273,19 @@ internal static class ArcademyEconomy
             "prize_confetti_stamp", "Confetti Stamp",
             "prize_confetti_stamp_blurb",
             "Your stamp lands in a little burst of paper now, every single time it lands."),
-        new(SkuLateSlip, CurTickets, 250, "consumable",
-            "prize_late_slip", "Late Slip",
+        // THE TARDY SLIP (owner ruling 2026-09-04). Priced like a MID-TIER OUTFIT: the Locker
+        // hangs three at 180 / 260 / 340, so the middle rung is 260 and the slip sits exactly
+        // there — it costs what the cheer uniform costs, which is a good week of classes.
+        // Held TWO at a time, not three, because two is all the attendance path can ever spend
+        // (RecordAttendance covers at most two consecutive missed nights; a third breaks it).
+        // THE WIRE ID STAYS `late_slip`. It is a key, not a label: every slip already sitting in
+        // a player's `inv`, the server catalog's row, the mobile port and EMI's
+        // `shop.bought:late_slip` pool are all keyed on it. Only the words a player reads moved.
+        new(SkuLateSlip, CurTickets, 260, "consumable",
+            "prize_late_slip", "Tardy Slip",
             "prize_late_slip_blurb",
-            "Slide one across the desk and a single missed day never touches your streak.",
-            StackMax: 3),
+            "Hand one in and the night you missed is filed as excused. The desk will hold two for you.",
+            StackMax: SlipStackMax),
         new(SkuHonorsLever, CurTokens, 1, "unlock",
             "prize_honors_lever", "Honors Lever",
             "prize_honors_lever_blurb",
@@ -524,20 +538,29 @@ internal static class ArcademyEconomy
     }
 
     /// <summary>
-    /// SPEND A LATE SLIP. Called from the attendance path when the gap is exactly one missed day:
-    /// one slip comes off the stack and the streak carries on as though the player had been there.
+    /// SPEND TARDY SLIPS, one per missed night. Called from the attendance path with the number of
+    /// nights the player was away: the slips come off the stack together and the streak carries on
+    /// as though they had been there for every one of them.
+    ///
+    /// <para>ALL OR NOTHING, and that is the whole rule. Two missed nights with one slip in the bag
+    /// spends NOTHING and breaks the streak — half a cover is not a cover, and a slip burnt for a
+    /// streak that broke anyway is the worst trade the counter could make on the player's behalf.
+    /// <paramref name="nights"/> above <see cref="SlipStackMax"/> can never be covered, so a long
+    /// absence cannot be bought off by hoarding.</para>
     /// </summary>
-    /// <returns>True when a slip was actually spent.</returns>
-    public static bool ConsumeLateSlip(JObject w)
+    /// <param name="nights">How many nights were missed (1 or 2; anything else is refused).</param>
+    /// <returns>How many slips were actually spent — 0 when the streak is not covered.</returns>
+    public static int ConsumeLateSlips(JObject w, int nights)
     {
+        if (nights <= 0 || nights > SlipStackMax) return 0;
         var wallet = EnsureShape(w);
         var inv = (JObject)wallet["inv"]!;
-        if (inv[SkuLateSlip] is not JObject row) return false;
+        if (inv[SkuLateSlip] is not JObject row) return 0;
         var n = Math.Max((int?)row["n"] ?? 0, 0);
-        if (n <= 0) return false;
-        if (n == 1) inv.Remove(SkuLateSlip);
-        else row["n"] = n - 1;
-        return true;
+        if (n < nights) return 0;
+        if (n == nights) inv.Remove(SkuLateSlip);
+        else row["n"] = n - nights;
+        return nights;
     }
 
     /// <summary>The outcome of a <c>prize-buy</c>. <c>Reason</c> is one of unknown / poor / owned /
@@ -644,7 +667,8 @@ internal static class ArcademyEconomy
 
     /// <summary>Whole days from <paramref name="from"/> to <paramref name="to"/>, or -1 when either
     /// date is missing or unreadable. Same yyyy-MM-dd invariant shape the rest of the school uses.
-    /// A gap of 1 is an unbroken streak; a gap of 2 is the one a late slip can cover.</summary>
+    /// A gap of 1 is an unbroken streak; a gap of 2 or 3 is one or two missed nights, and that is
+    /// exactly the range a stack of Tardy Slips can cover (see <see cref="ConsumeLateSlips"/>).</summary>
     public static int DayGap(string? from, string? to)
     {
         if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to)) return -1;

@@ -362,6 +362,43 @@ kbd {
   padding:10px 12px; color:var(--ink-dim); overflow-x:auto; max-width:100%;
 }
 
+/* ---- the SLIP (shell/sharecard.js): the night drawn as a paper report card ----
+   The row is its own line under the text share, because the two are different
+   verbs and a player should never mash the wrong one. `position:relative` is
+   load-bearing: the print beat's paper is absolutely placed against this box. */
+.arc-shareimg { position:relative; margin-top:10px; }
+.arc-sharename {
+  display:inline-flex; align-items:center; gap:8px;
+  font-size:13px; color:var(--ink-dim); cursor:pointer; user-select:none;
+}
+.arc-sharename input { accent-color:var(--pink); width:15px; height:15px; cursor:pointer; }
+.arc-sharename:hover { color:var(--ink); }
+
+/* THE PRINT BEAT. A slip slides out from under the button while the canvas
+   draws. It is decoration only - aria-hidden, no text, and the toast is what
+   actually reports the outcome. */
+.arc-shareslip {
+  position:absolute; left:10px; top:calc(100% - 6px);
+  width:64px; height:84px; pointer-events:none; z-index:1;
+  border-radius:2px 2px 4px 4px;
+  background:linear-gradient(180deg, #F2EBDD 0%, #E4DAC6 100%);
+  box-shadow:0 6px 16px rgba(0,0,0,.35);
+  transform-origin:50% 0%;
+  animation:arc-shareprint 900ms cubic-bezier(.25,.9,.3,1) infinite;
+}
+@keyframes arc-shareprint {
+  0%   { transform:translateY(-84px) scaleY(.2); opacity:0; }
+  45%  { transform:translateY(0) scaleY(1); opacity:1; }
+  100% { transform:translateY(0) scaleY(1); opacity:.55; }
+}
+/* Law VI, the reduced-motion collapse: the paper is still minted and still
+   says the same thing, it just arrives instead of sliding. */
+.arc-shareslip.still { animation:arc-sharefade 120ms linear both; }
+@keyframes arc-sharefade { from { opacity:0; } to { opacity:.85; } }
+@media (prefers-reduced-motion: reduce) {
+  .arc-shareslip { animation:arc-sharefade 120ms linear both; }
+}
+
 /* ---- the fullscreen report beat (shell marks <html> arc-report-on) ----
    The stage is the night ground under a desk lamp; the report itself is a
    graded PAPER laid on it. Base .reportcard/.rcell/.grade rules above still
@@ -544,6 +581,18 @@ html.arc-reduced .arc-endcard-actions .arc-retake { animation:none; box-shadow:0
   border-top:1px solid color-mix(in srgb, var(--gold), transparent 72%);
   padding-top:9px; margin-top:2px;
 }
+
+/* THE TARDY SLIP OFFER, under that line. SMALL by construction: the button it
+   must never out-shout is Resume (on the pause card) or Stay in class (on the
+   confirm), both of which are the lit primary above it. No bulbs, no pulse,
+   no fill - a shop sign, read once, at the size of the note it hangs off. */
+.arc-slip-offer {
+  margin-top:7px;
+  font-size:11px; letter-spacing:.05em;
+  padding:4px 10px; min-height:0;
+  opacity:.82;
+}
+.arc-slip-offer:hover, .arc-slip-offer:focus-visible { opacity:1; }
 
 /* ============================ THE TWO CURRENCIES =========================
    The ticket stub and the token, drawn once and worn by THREE surfaces: the
@@ -1920,6 +1969,17 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
 .campus-pin.p3 { fill:var(--lav); }  .campus-pin.p4 { fill:var(--ink-dim); }
 .campus-trophy.gold { fill:var(--gold); } .campus-trophy.lav { fill:var(--lav); }
 .campus-trophy.dim { fill:var(--campus-line-dim); }
+/* THE TROPHY CASE READS AS PRESSABLE (community ask, Sept 2). Its glass and its
+   four lights are drawn in the HALL dressing group, one sibling BELOW the hit
+   area that takes the click, so `g.campus-room:hover`'s brightness can never
+   reach them - the case answers with a pane of its own instead: the hit rect,
+   invisible at rest, warms gold under the pointer. Nothing here moves, so the
+   decoration law and .arc-reduced have nothing to switch off. */
+g.campus-room.facility.trophy .campus-hit { transition:fill .2s ease-out; }
+g.campus-room.facility.trophy:hover .campus-hit,
+g.campus-room.facility.trophy:focus-within .campus-hit {
+  fill:color-mix(in srgb, var(--gold), transparent 88%);
+}
 
 /* fireflies */
 .campus-fly {
@@ -5645,6 +5705,13 @@ html.arc-reduced .emi.arc-seep-frame::after { content:none; }
 .arc-acct-item:hover, .arc-acct-item:focus-visible { background:var(--panel); color:var(--ink); outline:none; }
 .arc-acct-item.is-signout { color:var(--ink-faint); }
 .arc-acct-item.is-card { color:var(--pink); }
+/* THE FRONT GATE row is two lines: the verb, and a quiet line saying where it
+   goes. The hint never carries meaning the label does not already carry. */
+.arc-acct-label { display:block; }
+.arc-acct-hint {
+  display:block; margin-top:2px; font-size:10px; letter-spacing:.04em;
+  color:var(--ink-faint); text-transform:none;
+}
 
 /* On a phone: a thumb-sized chip and a SHEET under the bar. Fixed and edge to
    edge so it never runs off the screen and never lands over the campus's own

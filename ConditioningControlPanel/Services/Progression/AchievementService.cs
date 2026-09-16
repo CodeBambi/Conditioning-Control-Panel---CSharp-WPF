@@ -79,6 +79,45 @@ public class AchievementService : IDisposable
     /// <summary>"window_shopping" — sparkle points spent, lifetime (the Prestige metric).</summary>
     internal const long WindowShoppingPointsSpent = 100;
 
+    // The rest of the countable thresholds, pulled out of the trackers so the gallery meter
+    // (AchievementMeters) reads the number the tracker branches on, not a copy of it.
+
+    /// <summary>"rose_tinted_reality" - 10 cumulative hours of pink filter.</summary>
+    internal const double RoseTintedPinkFilterMinutes = 600;
+
+    /// <summary>"permanent_resident" - 10 cumulative hours in the Deeper player.</summary>
+    internal const double PermanentResidentDeeperMinutes = 600;
+
+    /// <summary>"daily_maintenance" - consecutive launch days.</summary>
+    internal const int DailyMaintenanceConsecutiveDays = 7;
+
+    /// <summary>"retinal_burn" - flash images shown, lifetime.</summary>
+    internal const int RetinalBurnFlashImages = 5000;
+
+    /// <summary>"pop_the_thought" - bubbles popped, lifetime.</summary>
+    internal const int PopTheThoughtBubbles = 1000;
+
+    /// <summary>"mathematicians_nightmare" - correct bubble counts in a row.</summary>
+    internal const int MathematiciansNightmareStreak = 5;
+
+    /// <summary>"mercy_beggar" - attention checks failed, lifetime.</summary>
+    internal const int MercyBeggarFailures = 3;
+
+    /// <summary>
+    /// The level milestones, lowest first. <see cref="CheckLevelAchievements"/> walks this list
+    /// and the gallery meter reads it, so the two cannot disagree.
+    /// </summary>
+    internal static readonly (string Id, int Level)[] LevelMilestones =
+    {
+        ("plastic_initiation", 10),
+        ("dumb_bimbo", 20),
+        ("fully_synthetic", 50),
+        ("docile_cow", 75),
+        ("perfect_plastic_puppet", 100),
+        ("brainwashed_slavedoll", 125),
+        ("platinum_puppet", 150),
+    };
+
 
     public event EventHandler<Achievement>? AchievementUnlocked;
 
@@ -377,7 +416,7 @@ public class AchievementService : IDisposable
                 _isDirty = true;
 
                 // Check Rose-Tinted Reality (10 hours = 600 minutes)
-                if (_progress.TotalPinkFilterMinutes >= 600)
+                if (_progress.TotalPinkFilterMinutes >= RoseTintedPinkFilterMinutes)
                 {
                     TryUnlock("rose_tinted_reality");
                 }
@@ -462,7 +501,7 @@ public class AchievementService : IDisposable
             {
                 _progress.DeeperMinutes += elapsed;
                 _isDirty = true;
-                if (_progress.DeeperMinutes >= 600)
+                if (_progress.DeeperMinutes >= PermanentResidentDeeperMinutes)
                 {
                     TryUnlock("permanent_resident");
                 }
@@ -522,13 +561,10 @@ public class AchievementService : IDisposable
     /// </summary>
     public void CheckLevelAchievements(int level)
     {
-        if (level >= 10) TryUnlock("plastic_initiation");
-        if (level >= 20) TryUnlock("dumb_bimbo");
-        if (level >= 50) TryUnlock("fully_synthetic");
-        if (level >= 75) TryUnlock("docile_cow");
-        if (level >= 100) TryUnlock("perfect_plastic_puppet");
-        if (level >= 125) TryUnlock("brainwashed_slavedoll");
-        if (level >= 150) TryUnlock("platinum_puppet");
+        foreach (var (id, milestone) in LevelMilestones)
+        {
+            if (level >= milestone) TryUnlock(id);
+        }
     }
     
     /// <summary>
@@ -538,7 +574,7 @@ public class AchievementService : IDisposable
     /// </summary>
     public void CheckDailyMaintenance()
     {
-        if (_progress.ConsecutiveDays >= 7)
+        if (_progress.ConsecutiveDays >= DailyMaintenanceConsecutiveDays)
         {
             TryUnlock("daily_maintenance");
         }
@@ -557,7 +593,7 @@ public class AchievementService : IDisposable
         _progress.TotalFlashImages++;
         _isDirty = true;
 
-        if (_progress.TotalFlashImages >= 5000)
+        if (_progress.TotalFlashImages >= RetinalBurnFlashImages)
         {
             TryUnlock("retinal_burn");
         }
@@ -574,7 +610,7 @@ public class AchievementService : IDisposable
         _progress.TotalBubblesPopped++;
         _isDirty = true;
 
-        if (_progress.TotalBubblesPopped >= 1000)
+        if (_progress.TotalBubblesPopped >= PopTheThoughtBubbles)
         {
             TryUnlock("pop_the_thought");
         }
@@ -625,7 +661,7 @@ public class AchievementService : IDisposable
         int after = _progress.TotalBubblesPopped;
         _isDirty = true;
 
-        if (before < 1000 && after >= 1000)
+        if (before < PopTheThoughtBubbles && after >= PopTheThoughtBubbles)
         {
             TryUnlock("pop_the_thought");
         }
@@ -698,7 +734,7 @@ public class AchievementService : IDisposable
                 _progress.BubbleCountBestStreak = _progress.BubbleCountCorrectStreak;
             }
 
-            if (_progress.BubbleCountCorrectStreak >= 5)
+            if (_progress.BubbleCountCorrectStreak >= MathematiciansNightmareStreak)
             {
                 TryUnlock("mathematicians_nightmare");
             }
@@ -783,7 +819,7 @@ public class AchievementService : IDisposable
         _progress.AttentionCheckFailures++;
         _isDirty = true;
         
-        if (_progress.AttentionCheckFailures >= 3)
+        if (_progress.AttentionCheckFailures >= MercyBeggarFailures)
         {
             TryUnlock("mercy_beggar");
         }

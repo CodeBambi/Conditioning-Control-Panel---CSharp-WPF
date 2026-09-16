@@ -23,11 +23,39 @@ namespace ConditioningControlPanel.Services
         /// of the default Bambi ones. When no mod personalities exist, behavior is unchanged.
         /// </summary>
         private static List<PersonalityPreset> GetBuiltInPresetsForActiveMod()
+            => GetBuiltInPresetsForActiveMod(out _);
+
+        /// <summary>
+        /// As above, reporting whether the set came from the active mod. Callers that need a
+        /// "first entry is the intended default" fallback have to know the difference: a mod's
+        /// own list leads with the mod's default persona, while the stock list leads with the
+        /// neutral CCP Default one.
+        /// </summary>
+        private static List<PersonalityPreset> GetBuiltInPresetsForActiveMod(out bool fromMod)
         {
             var modPresets = GetActiveModPersonalities();
-            return (modPresets != null && modPresets.Count > 0)
-                ? modPresets
-                : PersonalityPresets.GetAllBuiltIn();
+            fromMod = modPresets != null && modPresets.Count > 0;
+            return fromMod ? modPresets! : PersonalityPresets.GetAllBuiltIn();
+        }
+
+        /// <summary>
+        /// True when the app is unmodded: no mod active, or the neutral CCP Default mod. This is
+        /// the only context that gets the neutral persona; every themed mod keeps the fallback
+        /// behaviour it had before.
+        /// </summary>
+        private static bool IsNeutralContext()
+        {
+            try
+            {
+                var modId = App.Mods?.ActiveMod?.Id;
+                return string.IsNullOrWhiteSpace(modId)
+                    || string.Equals(modId, BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                // Mod stack not up yet (startup, tests): vanilla is the right answer.
+                return true;
+            }
         }
 
         /// <summary>
@@ -103,11 +131,11 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public PersonalityPreset GetActivePreset()
         {
-            var activeId = App.Settings?.Current?.ActivePersonalityPresetId ?? PersonalityPresets.BambiSpriteId;
+            var activeId = App.Settings?.Current?.ActivePersonalityPresetId ?? PersonalityPresets.NeutralDefaultId;
 
             // Try the active context's built-in set (mod personalities if the active mod
             // defines any, else stock presets).
-            var builtInSet = GetBuiltInPresetsForActiveMod();
+            var builtInSet = GetBuiltInPresetsForActiveMod(out var fromMod);
             var builtIn = builtInSet.FirstOrDefault(p => p.Id == activeId);
             if (builtIn != null) return builtIn;
 
@@ -116,12 +144,19 @@ namespace ConditioningControlPanel.Services
                 .FirstOrDefault(p => p.Id == activeId);
             if (userPreset != null) return userPreset;
 
-            // The stored preset id isn't valid for the active mod (e.g. the default
-            // "bambisprite" while a themed mod is active). Fall back to the active set's
-            // first entry — the mod's intended default personality — so the AI speaks in
-            // the mod's voice instead of the stock Bambi prompt.
-            if (builtInSet.Count > 0) return builtInSet[0];
+            // The stored preset id isn't valid for the active mod (e.g. a leftover mod persona
+            // id after a mod switch).
+            //
+            // Unmodded, that means the neutral CCP Default persona: a fresh install must never
+            // land on a themed one it was not asked for.
+            if (IsNeutralContext()) return PersonalityPresets.GetNeutralDefault();
 
+            // A themed mod that ships its own set leads with its intended default personality,
+            // so the AI speaks in the mod's voice.
+            if (fromMod && builtInSet.Count > 0) return builtInSet[0];
+
+            // A themed mod running on the stock set (BambiSleep, SissyHypno) keeps the voice it
+            // had before this fallback existed.
             return PersonalityPresets.GetBambiSprite();
         }
 
@@ -193,7 +228,10 @@ namespace ConditioningControlPanel.Services
             var source = GetPresetById(sourcePresetId);
             if (source == null)
             {
-                source = PersonalityPresets.GetBambiSprite();
+                // Unknown source id: copy the context default rather than a themed persona.
+                source = IsNeutralContext()
+                    ? PersonalityPresets.GetNeutralDefault()
+                    : PersonalityPresets.GetBambiSprite();
             }
 
             var copy = source.Clone();
@@ -241,10 +279,13 @@ namespace ConditioningControlPanel.Services
             {
                 presets!.Remove(preset);
 
-                // If this was the active preset, switch to default
+                // If this was the active preset, switch to the context default: neutral when
+                // unmodded, the stock themed default under a themed mod.
                 if (App.Settings?.Current?.ActivePersonalityPresetId == presetId)
                 {
-                    App.Settings.Current.ActivePersonalityPresetId = PersonalityPresets.BambiSpriteId;
+                    App.Settings.Current.ActivePersonalityPresetId = IsNeutralContext()
+                        ? PersonalityPresets.NeutralDefaultId
+                        : PersonalityPresets.BambiSpriteId;
                 }
 
                 App.Settings?.Save();
@@ -274,9 +315,12 @@ namespace ConditioningControlPanel.Services
         {
             if (settings == null) return;
 
-            // Only migrate if not already using new system (default is BambiSprite)
-            // If they've already changed to something else, they're using new system
-            if (settings.ActivePersonalityPresetId != PersonalityPresets.BambiSpriteId)
+            // Only migrate if not already using new system (i.e. still on a default).
+            // If they've already changed to something else, they're using new system.
+            // Both defaults count: "bambisprite" is what every install before the neutral
+            // CCP Default preset shipped with, and dropping it here would strand those users.
+            if (settings.ActivePersonalityPresetId != PersonalityPresets.NeutralDefaultId
+                && settings.ActivePersonalityPresetId != PersonalityPresets.BambiSpriteId)
             {
                 return; // Already migrated or using new system
             }

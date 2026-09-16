@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -13,6 +13,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using NAudio.Wave;
 using ConditioningControlPanel.Helpers;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Chaos;
 
 namespace ConditioningControlPanel.Services;
@@ -96,7 +97,7 @@ public class BubbleService : IDisposable
                 if (hwnd != IntPtr.Zero) handles.Add(hwnd);
             }
         }
-        catch { /* a diagnostic/reconciler accessor must never throw */ }
+        catch (Exception ex) { Diag.Swallowed(ex, "diagnostic accessor must never throw"); }
         return handles;
     }
 
@@ -144,6 +145,20 @@ public class BubbleService : IDisposable
     private Func<bool>? _chaosElectrified;      // Electrified Rabbits: spank victims discharge free arcs
     // Cursor sample (physical px) shared by every bubble's shimmer check; written once per anim tick.
     internal static double CursorPxX, CursorPxY;
+    // Bubbles v2 Magnet bubble: the same one-P/Invoke-per-tick sample, but taken on the AMBIENT
+    // path too (the one above is chaos-only) and ONLY while a magnet is actually on screen, so a
+    // user who owns nothing never pays for a GetCursorPos. MagnetCursorIdleSec is how long the
+    // pointer has sat still: past MagnetBubble.CursorStaleSeconds the bubbles stop chasing it.
+    internal static bool MagnetCursorOnScreen;
+    internal static double MagnetCursorIdleSec;
+    // Attraction strength for THIS tick, resolved from MotionFx.Level once in the prologue rather
+    // than per magnet per frame (the animation loop is meant to be cheap and allocation-free).
+    internal static double MagnetStrengthNow;
+    private double _magnetCursorLastX = double.NaN, _magnetCursorLastY = double.NaN;
+    // MinValue, not UtcNow: the FIRST sample must read as stale. Seeding it to "now" meant a
+    // pointer the user had already parked before the first magnet spawned looked freshly moved,
+    // and that magnet chased a motionless cursor for two seconds before giving up.
+    private DateTime _magnetCursorMovedUtc = DateTime.MinValue;
     internal static bool WandShimmerOn;
     // The Pull / The Spanker — sampled once per anim tick (cheap shared reads in AnimateFrame).
     internal static double ChaosCursorPullNow;
@@ -418,7 +433,7 @@ public class BubbleService : IDisposable
             hop.Tick += (_, _) =>
             {
                 hop.Stop();
-                try { if (t.IsAlive) t.Pop(); } catch { }
+                try { if (t.IsAlive) t.Pop(); } catch (Exception ex) { Diag.Swallowed(ex); }
             };
             hop.Start();
         }
@@ -456,7 +471,7 @@ public class BubbleService : IDisposable
             hop.Tick += (_, _) =>
             {
                 hop.Stop();
-                try { if (target.IsAlive) target.Pop(); } catch { }
+                try { if (target.IsAlive) target.Pop(); } catch (Exception ex) { Diag.Swallowed(ex); }
             };
             hop.Start();
         }
@@ -513,6 +528,7 @@ public class BubbleService : IDisposable
         // Wand shimmer / VibePopping / The Pull / The Spanker: sample the cursor + boon knobs once
         // per tick (one P/Invoke); every bubble reads the shared fields instead of asking Win32 itself.
         WandShimmerOn = _chaosActive && (_chaosWandShimmer?.Invoke() ?? false);
+        MagnetStrengthNow = Chaos.MagnetBubble.StrengthFor(MotionFx.Level);
         ChaosCursorPullNow = _chaosActive ? (_chaosCursorPull?.Invoke() ?? 0) : 0;
         ChaosRabbitHomingNow = _chaosActive && (_chaosRabbitHoming?.Invoke() ?? false);
         ChaosSpankerOnNow = _chaosActive && (_chaosSpankerOn?.Invoke() ?? false);
@@ -524,6 +540,7 @@ public class BubbleService : IDisposable
         // (one P/Invoke; ambient bubbles never read these).
         if (_chaosActive && GetCursorPos(out var cur))
         { CursorPxX = cur.X; CursorPxY = cur.Y; }
+        SampleMagnetCursor();
         ChaosMouseHeld = _chaosActive && (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
         if (VibePopOn) VibeMouseHeld = ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000) != 0;
 
@@ -688,7 +705,7 @@ public class BubbleService : IDisposable
             // thread wedged in CWGXBitmapLockState::LockRead) — give the surge a beat to pass.
             await Task.Delay(2500, ct);
         }
-        catch (OperationCanceledException) { /* run ended / shutdown mid-egg */ }
+        catch (OperationCanceledException) { } // swallow: run ended or shutdown mid-egg
         catch (Exception ex) { App.Logger?.Debug("Avatar bubble egg failed: {E}", ex.Message); }
         finally
         {
@@ -696,7 +713,7 @@ public class BubbleService : IDisposable
             // 4) send the companion home (re-attach or restore coords); swallow if we're tearing down
             try { if (avatar != null && Application.Current?.Dispatcher?.HasShutdownStarted != true)
                       await avatar.ReturnFromBubbleAsync(CancellationToken.None); }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
             _avatarEggActive = false;
             _avatarEggCooldownUntil = DateTime.UtcNow + TimeSpan.FromSeconds(AVATAR_EGG_COOLDOWN_SEC);
         }
@@ -706,7 +723,7 @@ public class BubbleService : IDisposable
     /// the claimed bubble can actually be cleared (the claim-pop guard would otherwise strand it).</summary>
     private void CancelAvatarEgg()
     {
-        try { _eggCts?.Cancel(); } catch { }
+        try { _eggCts?.Cancel(); } catch (Exception ex) { Diag.Swallowed(ex); }
         foreach (var b in _bubbles) if (b.ClaimedByAvatar) b.ReleaseAvatarClaim();
         _avatarEggActive = false;
     }
@@ -744,7 +761,7 @@ public class BubbleService : IDisposable
                 return (int)Math.Clamp(r.TotalTime.TotalMilliseconds + 900, 1500, 6000);
             }
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
         return (int)Math.Clamp((text?.Length ?? 0) * 55 + 600, 1500, 4500);
     }
 
@@ -770,7 +787,7 @@ public class BubbleService : IDisposable
         // Update Discord presence back to idle (unless another activity takes over)
         App.DiscordRpc?.SetIdleActivity();
 
-        App.Logger?.Information("BubbleService stopped");
+        App.Logger?.Debug("BubbleService stopped");
     }
 
     /// <summary>Stand up the ambient shared-host overlay + its left-click hook when BubbleSharedHost is
@@ -809,7 +826,7 @@ public class BubbleService : IDisposable
         if (!_ambientHost) return;
         _ambientHost = false;
         Bubble.AmbientHostActive = false;
-        try { _ambientHook?.Dispose(); } catch { }
+        try { _ambientHook?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
         _ambientHook = null;
         ChaosBubbleHostOverlay.CloseActive();
         if (ChaosClickDiscsSnapshot.Length > 0) ChaosClickDiscsSnapshot = Array.Empty<(double, double, double, bool)>();
@@ -990,7 +1007,10 @@ public class BubbleService : IDisposable
         // #1019/#1026: paying 0 with NO signal at all read as "XP is broken". Drawn BEFORE the
         // visuals now so a dry bucket can drop the golden XP flourish — the pop still pops and
         // sounds, it just stops advertising a payout that isn't coming.
-        var earnedXp = 5 * multiplier;
+        // Bubbles v2 Magnet bubble: an early catch is worth double. This is a multiplier ON the
+        // single ambient XP path, not a second one - it goes through the same lucky roll and the
+        // same daily bucket, so a magnet run cannot push past the 300/day ceiling either.
+        var earnedXp = 5 * multiplier * bubble.AmbientXpMultiplier;
         var paidXp = TakeFromAmbientBubbleBucket(earnedXp);
         if (paidXp > 0) App.Progression?.AddXP(paidXp, XPSource.Bubble);
         AmbientXpBudgetChanged?.Invoke();
@@ -1084,8 +1104,16 @@ public class BubbleService : IDisposable
     {
         var s = App.Settings?.Current;
         if (s?.BubbleTriggersEnabled != true) return null;
-        var ids = s.BubbleTriggerVariants;
-        if (ids == null || ids.Count == 0) return null;
+        // Bubbles v2 (wave 2): the Brain Drain bubble joins the pool as one more equally-weighted
+        // id when it is owned AND switched on. It is added here rather than stored in
+        // BubbleTriggerVariants so ownership stays live - a synced profile cannot smuggle it in,
+        // and losing the grant removes it without rewriting the user's chosen variant list.
+        bool v2Owned = AmbientBubbleMotion.AnyV2Owned;
+        var ids = BrainDrainBubble.RollPool(s.BubbleTriggerVariants, v2Owned, s.BubbleBrainDrainEnabled);
+        // Same arrangement for the Magnet bubble: owned AND switched on, added live rather than
+        // stored, so each v2 bubble is one more equally-weighted id in the same roll.
+        ids = MagnetBubble.RollPool(ids, v2Owned, s.BubbleMagnetEnabled);
+        if (ids.Count == 0) return null;
         if (_random.Next(100) >= Math.Clamp(s.BubbleTriggerChance, 0, 100)) return null;
         return BuildTriggerSpec(ids[_random.Next(ids.Count)]);
     }
@@ -1125,6 +1153,42 @@ public class BubbleService : IDisposable
                     TreatLifeMs = 7000,
                 };
             }
+            if (id == BrainDrainBubble.VariantId)
+            {
+                return new EffectBubbleSpec
+                {
+                    VariantId = BrainDrainBubble.VariantId,   // no sprite ships: wears the tinted bubble.png
+                    Payload = new BrainDrainMeltPayload(),
+                    SizePx = 220,
+                    Tint = System.Windows.Media.Color.FromRgb(
+                        BrainDrainBubble.TintR, BrainDrainBubble.TintG, BrainDrainBubble.TintB),
+                    Label = "◍",
+                    IsLive = false,
+                    FuseMs = 0,
+                    Motion = motion ?? ChaosMotion.FloatUp,
+                    TreatLifeMs = 7000,
+                };
+            }
+            if (id == MagnetBubble.VariantId)
+            {
+                return new EffectBubbleSpec
+                {
+                    VariantId = MagnetBubble.VariantId,   // no sprite ships: wears the tinted bubble.png
+                    // Deliberately NO payload: this bubble's whole content is how it moves and what
+                    // the pop is worth, and a null payload also keeps the companion easter egg off it
+                    // (IsAmbientEffectBubble wants a payload) - an avatar pop would collect the
+                    // early-window bonus the user was supposed to earn.
+                    Payload = null,
+                    SizePx = 200,
+                    Tint = System.Windows.Media.Color.FromRgb(
+                        MagnetBubble.TintR, MagnetBubble.TintG, MagnetBubble.TintB),
+                    Label = MagnetBubble.Label,
+                    IsLive = false,
+                    FuseMs = 0,
+                    Motion = motion ?? ChaosMotion.FloatUp,
+                    TreatLifeMs = 7000,
+                };
+            }
             var v = ChaosBubbleVariants.All.FirstOrDefault(x => x.Id == id);
             if (v == null) return null;
             var spec = ChaosBubbleVariants.Build(v, intensity: 0.3, motionOverride: motion, ambient: true);
@@ -1141,10 +1205,19 @@ public class BubbleService : IDisposable
         // Cap concurrent trigger bubbles regardless of render mode: in per-window fallback each is a
         // layered window (pileup starves desktop heap — #448/#431), and even hosted, each pop fires a
         // payload, so an uncapped field spams effects. Past the ceiling, fall back to a plain bubble.
-        if (spec != null && _bubbles.Count(b => b.IsAmbientEffectBubble) >= MAX_TRIGGER_WINDOWS)
+        // The count is the OLD "carries a payload" predicate OR the ambient-TRIGGER flag - a strict
+        // superset, never a swap. The flag alone would have been a regression: _bubbles also holds
+        // chaos bubbles, and a chaos benign treat satisfies IsAmbientEffectBubble but is built with
+        // ambientTrigger:false, so during a chaos run the ceiling would have stopped counting the
+        // chaos field and allowed up to four EXTRA layered windows at the heaviest moment - the
+        // exact desktop-heap starvation the cap exists for (#448/#431). The flag is here only so
+        // the payload-less Magnet bubble counts too.
+        if (spec != null
+            && _bubbles.Count(b => b.IsAmbientTriggerBubble || b.IsAmbientEffectBubble) >= MAX_TRIGGER_WINDOWS)
             spec = null;
         if (spec == null)
-            return new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss, OnDestroy, isClickable);
+            return new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss, OnDestroy, isClickable,
+                              ambientMotion: AmbientBubbleMotion.RollForSpawn(_random));
         // Trigger bubbles ride the shared ambient host like plain bubbles (hook-based pops via the
         // UsesHost/HostHitClickable snapshots). forceWindowMode was a relic of the host being
         // chaos-run-only: the per-pop layered-window Show/Close it forced was the residual "small
@@ -1235,6 +1308,11 @@ public class BubbleService : IDisposable
 
         if (heavy)
         {
+            // Say out loud that the pop reached the payload (#1135). Every REFUSAL below this point
+            // already names itself in the log; without this line there was no way to tell a pop that
+            // was refused from a pop the field never registered at all, which is the whole reason
+            // "my video bubbles do nothing" could not be diagnosed from a user's log.
+            App.Logger?.Information("Bubble: firing {Kind} payload from a pop", payload.Kind);
             // Let the click return first; the payload opens a fullscreen window either way.
             DispatcherHelper.RunOnUI(() => FireAndLogPayload(payload), DispatcherPriority.Background);
             return;
@@ -1246,7 +1324,14 @@ public class BubbleService : IDisposable
     private static void FireAndLogPayload(EffectPayload payload)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        try { payload.Fire(); } catch { }
+        try { payload.Fire(); }
+        catch (Exception ex)
+        {
+            // Was a bare catch{} (#1135). A payload that threw on its way to opening a video left
+            // absolutely no trace anywhere: the bubble popped, nothing happened, nothing was logged.
+            App.Logger?.Warning(ex, "Bubble: {Kind} payload threw on Fire() - the pop produced nothing",
+                payload.Kind);
+        }
         sw.Stop();
         if (sw.ElapsedMilliseconds >= 20)
             App.Logger?.Information("[POPLAG] payload {Kind} Fire() took {Ms}ms",
@@ -1769,7 +1854,7 @@ public class BubbleService : IDisposable
             foreach (var b in _bubbles)
                 if (b.HintKey == key) b.HideHint();
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     /// <summary>Drop every tether + window (field cleared / run over).</summary>
@@ -1842,7 +1927,7 @@ public class BubbleService : IDisposable
                 hop.Tick += (_, _) =>
                 {
                     hop.Stop();
-                    try { if (target.IsAlive) target.Pop(); } catch { }
+                    try { if (target.IsAlive) target.Pop(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 };
                 hop.Start();
             }
@@ -1989,6 +2074,53 @@ public class BubbleService : IDisposable
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool GetCursorPos(out Win32CursorPoint pt);
 
+    /// <summary>
+    /// Bubbles v2 Magnet bubble: one cursor poll a tick, and only while a magnet bubble is alive.
+    ///
+    /// <para>A poll rather than the GlobalMouseHook on purpose - the hook is a global, app-wide
+    /// input hook and a cosmetic bubble drift is nowhere near worth arming one. GetCursorPos also
+    /// answers the question the physics actually asks (where is the pointer right now), which a
+    /// hook only answers as a side effect of the user moving.</para>
+    ///
+    /// <para>"Off all monitors" is read from the Screen list rather than trusted from the call:
+    /// GetCursorPos still returns the last good point when the pointer is over a disconnected or
+    /// mid-transition display, and a magnet homing on a stale corner reads as broken.</para>
+    /// </summary>
+    private void SampleMagnetCursor()
+    {
+        bool anyMagnet = false;
+        for (int i = 0; i < _bubbles.Count; i++)
+            if (_bubbles[i].IsMagnetBubble) { anyMagnet = true; break; }
+        if (!anyMagnet) { MagnetCursorOnScreen = false; return; }
+
+        if (!GetCursorPos(out var mp)) { MagnetCursorOnScreen = false; return; }
+        CursorPxX = mp.X; CursorPxY = mp.Y;   // same shared field the chaos sample writes
+
+        bool onScreen = false;
+        try
+        {
+            // Indexed, not LINQ: this runs inside the 30fps animation loop, which allocates nothing.
+            var screens = System.Windows.Forms.Screen.AllScreens;
+            for (int i = 0; i < screens.Length; i++)
+                if (screens[i].Bounds.Contains(mp.X, mp.Y)) { onScreen = true; break; }
+        }
+        catch (Exception ex) { Diag.Swallowed(ex); }
+        MagnetCursorOnScreen = onScreen;
+
+        if (double.IsNaN(_magnetCursorLastX))
+        {
+            // First sample of the session: remember WHERE the pointer is, but do NOT stamp it as
+            // having just moved - an already-parked pointer has not.
+            _magnetCursorLastX = mp.X; _magnetCursorLastY = mp.Y;
+        }
+        else if (Math.Abs(mp.X - _magnetCursorLastX) > 1 || Math.Abs(mp.Y - _magnetCursorLastY) > 1)
+        {
+            _magnetCursorLastX = mp.X; _magnetCursorLastY = mp.Y;
+            _magnetCursorMovedUtc = DateTime.UtcNow;
+        }
+        MagnetCursorIdleSec = (DateTime.UtcNow - _magnetCursorMovedUtc).TotalSeconds;
+    }
+
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int vKey);
     private const int VK_LBUTTON = 0x01;
@@ -2104,7 +2236,7 @@ public class BubbleService : IDisposable
                 // Direct cleanup without dispatcher - force destroy
                 foreach (var bubble in _bubbles.ToArray())
                 {
-                    try { bubble.ForceDestroy(); } catch { }
+                    try { bubble.ForceDestroy(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 }
                 _bubbles.Clear();
                 return;
@@ -2144,7 +2276,7 @@ public class BubbleService : IDisposable
         Stop();
 
         // Close pooled bubble window shells (static pool holds hidden HWNDs for the process life).
-        try { DispatcherHelper.RunOnUI(Bubble.DrainWindowPool); } catch { }
+        try { DispatcherHelper.RunOnUI(Bubble.DrainWindowPool); } catch (Exception ex) { Diag.Swallowed(ex); }
 
         // Audio devices are no longer pooled here — AudioService owns every one-shot device
         // and disposes it deterministically (#778/#779).
@@ -2240,7 +2372,7 @@ internal class Bubble
         if (w == null) return;
         // Restore the topmost default: a Free Desktop chaos bubble may have set this false, and the
         // pool is shared with ambient bubbles that must always ride on top.
-        try { w.Effect = null; w.Content = null; w.Opacity = 0; w.Topmost = true; w.Hide(); } catch { }
+        try { w.Effect = null; w.Content = null; w.Opacity = 0; w.Topmost = true; w.Hide(); } catch (Exception ex) { Diag.Swallowed(ex); }
         if (_windowPoolCount < WINDOW_POOL_MAX)
         {
             if (!_windowPool.TryGetValue(bucket, out var stack))
@@ -2251,7 +2383,7 @@ internal class Bubble
             stack.Push(w);
             _windowPoolCount++;
         }
-        else { try { w.Close(); } catch { } }
+        else { try { w.Close(); } catch (Exception ex) { Diag.Swallowed(ex); } }
     }
 
     /// <summary>Close every pooled shell (service Dispose / app shutdown) — the pool is static
@@ -2262,7 +2394,7 @@ internal class Bubble
         {
             while (stack.Count > 0)
             {
-                try { stack.Pop()?.Close(); } catch { }
+                try { stack.Pop()?.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
         }
         _windowPool.Clear();
@@ -2458,9 +2590,20 @@ internal class Bubble
     // frame without allocating a new SolidColorBrush per tick (GC pressure at 30fps).
     private SolidColorBrush? _fuseStrokeBrush;
     private double _vx, _vy;                                   // RoamBounce velocity (DIPs/frame)
+    private readonly ChaosMotion _motion;                      // the travel table row this bubble runs (spec's, or the ambient v2 pick)
+    // Bubbles v2 Spiral In (ambient only): ring around the screen centre, radius shrinking to a core.
+    private readonly bool _spiralIn;
+    private double _spiralCx, _spiralCy, _spiralR0, _spiralRadial, _spiralTurns, _spiralDir;
+    private SpiralInPath.State _spiral;
+    private double _spiralFade = 1.0;                          // opacity multiplier over the last stretch of the spiral
     private double _screenBottom, _screenLeft, _screenRight;   // motion bounds (DIPs)
 
     private bool _hasVariantSprite;   // a per-variant sprite replaced the tinted bubble.png
+    private bool _isDrainBubble;      // Bubbles v2 Brain Drain bubble: breathes, glows violet
+    private bool _isMagnetBubble;     // Bubbles v2 Magnet bubble: homes on the cursor, pulses steel blue
+    private double _magnetLifeMs;     // its full treat life, the denominator of the early window
+    private Chaos.MagnetBubble.Velocity _magnetV;   // its free velocity, DIPs per frame
+    private readonly bool _isAmbientTrigger;        // a dashboard trigger bubble (payload or not)
 
     // ---- lifetime-boon extensions (neutral defaults; chaos effect bubbles only) ----
     private readonly int _hitSize;         // Magic Wand / Mesmer Reach: enlarged click target (>= _size)
@@ -2567,7 +2710,7 @@ internal class Bubble
             _bubbleImage.Effect = new DropShadowEffect
             { Color = Color.FromRgb(0xFF, 0x2D, 0x2D), BlurRadius = 30, ShadowDepth = 0, Opacity = 0.95 };
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
         ShowChaosLabel("ENRAGED", Color.FromRgb(0xFF, 0x5A, 0x5A));
     }
     // ---- prism shadow pop ("Look at the bright colors...") ----
@@ -2588,6 +2731,22 @@ internal class Bubble
         && _isAlive && !_isDestroyed && !_isPopping;
     /// <summary>Real wall-clock age in ms (NOT the _timeAlive anim counter).</summary>
     internal double AgeMs => (DateTime.UtcNow - _spawnUtc).TotalMilliseconds;
+    /// <summary>A live dashboard trigger bubble, payload or not. Wider than
+    /// <see cref="IsAmbientEffectBubble"/> on purpose: the Magnet bubble carries no payload and
+    /// still has to count against the concurrent-trigger ceiling.</summary>
+    internal bool IsAmbientTriggerBubble =>
+        _isAmbientTrigger && _isAlive && !_isDestroyed && !_isPopping;
+    /// <summary>Bubbles v2 Magnet bubble: the cursor-homing kind.</summary>
+    internal bool IsMagnetBubble => _isMagnetBubble;
+    /// <summary>
+    /// What THIS pop is worth as a multiple of the ordinary ambient-pop XP. 1 for every bubble in
+    /// the game but the Magnet, which pays double when it is taken inside its early window (and
+    /// never when Motion is Off, where it was only ever a plain float). Read at pop time, so the
+    /// age it measures is the age at the click.
+    /// </summary>
+    internal int AmbientXpMultiplier => _isMagnetBubble
+        ? Chaos.MagnetBubble.XpMultiplier(Chaos.MagnetBubble.IsEarlyPop(AgeMs, _magnetLifeMs), MotionFx.Level)
+        : 1;
     /// <summary>One-shot latch so the egg's 10% roll happens once, at the 4s crossing.</summary>
     internal bool RolledForEgg { get => _rolledForEgg; set => _rolledForEgg = value; }
     /// <summary>True while the companion owns this bubble (life paused, motion frozen, user-pop ignored).</summary>
@@ -2684,6 +2843,13 @@ internal class Bubble
             else if (_isDarter) { glowColor = tint; glowBlur = 26; glowOp = 0.9f; hasGlow = true; }
             else if (_spec.IsGolden) { glowColor = new SkiaSharp.SKColor(0xFF, 0xD7, 0x00); glowBlur = 20; glowOp = 0.55f; hasGlow = true; }
             else if (_spec.IsBrittle) { glowColor = new SkiaSharp.SKColor(0xBF, 0xE6, 0xFF); glowBlur = 22; glowOp = 0.6f; hasGlow = true; }
+            else if (_isDrainBubble && PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier))
+            { glowColor = new SkiaSharp.SKColor(0x8A, 0x3A, 0xD8); glowBlur = 18; glowOp = 0.5f; hasGlow = true; }
+            else if (_isMagnetBubble && PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier))
+            {
+                glowColor = new SkiaSharp.SKColor(Chaos.MagnetBubble.GlowR, Chaos.MagnetBubble.GlowG, Chaos.MagnetBubble.GlowB);
+                glowBlur = 20; glowOp = 0.55f; hasGlow = true;
+            }
             else if (_spec.Spotlight)
             {
                 var tier = PerformanceProfile.CurrentTier;
@@ -2819,7 +2985,8 @@ internal class Bubble
                   Func<Bubble, bool>? canChannelDefuse = null, Action<Bubble, string>? onChannelBroken = null,
                   Action<Bubble>? onTeaseTouched = null, Action<Bubble>? onTeaseDenied = null,
                   Action<Bubble>? onBrittleShattered = null, bool forceWindowMode = false,
-                  bool ambientTrigger = false)
+                  bool ambientTrigger = false,
+                  BubbleMotionStyle ambientMotion = BubbleMotionStyle.FloatUp)
     {
         _random = random;
         _onPop = onPop;
@@ -2849,6 +3016,9 @@ internal class Bubble
         _isTease = spec?.IsTease == true;
         if (_isTease) _teaseLifeRemainingMs = ChaosTuning.TEASE_LIFE_MS;
         _isBrittle = spec?.IsBrittle == true;
+        _isDrainBubble = spec?.VariantId == Chaos.BrainDrainBubble.VariantId;
+        _isAmbientTrigger = ambientTrigger;
+        _isMagnetBubble = spec?.VariantId == Chaos.MagnetBubble.VariantId;
         if (_isBrittle) _brittleArmRemainingMs = ChaosTuning.BRITTLE_ARM_MS;
         // Treats (flash/subliminal/golden) rot: only so long on screen before they dissolve.
         // Hearts don't rot — they drift down once and exit; missing one carries no sting.
@@ -2860,6 +3030,12 @@ internal class Bubble
                    && spec.IsHeart != true && spec.IsDroplet != true && spec.IsEscort != true
                    && spec.IsTease != true && spec.IsBrittle != true;
         if (_isTreat) _treatLifeRemainingMs = spec!.TreatLifeMs > 0 ? spec.TreatLifeMs : TREAT_LIFETIME_MS;
+        // The magnet's early window is measured against the life its rot clock was GIVEN. The two
+        // are different clocks on purpose: _treatLifeRemainingMs burns per frame (and pauses for an
+        // avatar claim or a slow-mo field), while AgeMs is real wall-clock. The window wants the
+        // wall-clock one - "did you take it in the first two and a half seconds" is a question about
+        // the user's reaction, not about how many frames the app managed to draw.
+        if (_isMagnetBubble) _magnetLifeMs = _treatLifeRemainingMs > 0 ? _treatLifeRemainingMs : TREAT_LIFETIME_MS;
         // The two giants read frantic when they breathe at full danger amplitude — calm them 60%.
         if (spec?.VariantId is "video" or "htlink") _dangerWobbleMult = 0.4;
 
@@ -2915,6 +3091,9 @@ internal class Bubble
             int speedBoost = App.Settings?.Current?.BubbleSpeedBoost ?? 0;
             if (speedBoost > 0) _speed *= 1.0 + Math.Clamp(speedBoost, 0, 500) / 100.0;
         }
+        // Bubbles v2: the owned styles honour MotionLevel.Reduced at half speed (FloatUp untouched).
+        if (spec == null && ambientMotion != BubbleMotionStyle.FloatUp)
+            _speed *= AmbientBubbleMotion.SpeedMult(MotionFx.Level);
         _animType = random.Next(4);
         _wobbleOffset = random.NextDouble() * 100;
         _angle = random.Next(360);
@@ -2929,8 +3108,11 @@ internal class Bubble
         _screenTop = area.Y / dpiScale - _size - 50;
         _screenBottom = (area.Y + area.Height) / dpiScale + 50;
 
-        // Position + initial velocity depend on motion (FloatUp is the ambient default).
-        var motion = spec?.Motion ?? ChaosMotion.FloatUp;
+        // Position + initial velocity depend on motion (FloatUp is the ambient default). An
+        // ambient bubble (spec == null) may carry a Bubbles v2 pick: Rain rides the existing
+        // RainDown row; Spiral In is its own path below and never enters the chaos table.
+        var motion = spec?.Motion ?? (ambientMotion == BubbleMotionStyle.Rain ? ChaosMotion.RainDown : ChaosMotion.FloatUp);
+        _motion = motion;
         _startX = (area.X + random.Next(50, Math.Max(100, area.Width - _size - 50))) / dpiScale;
         _posX = _startX;
         switch (motion)
@@ -2957,6 +3139,22 @@ internal class Bubble
             default: // FloatUp
                 _posY = (area.Y + area.Height) / dpiScale;          // start at the bottom
                 break;
+        }
+
+        // Bubbles v2 Spiral In: spawn on a ring around the screen centre (about 42% of the
+        // shorter dimension) at a random angle, either direction; the tick walks it inward.
+        if (spec == null && ambientMotion == BubbleMotionStyle.SpiralIn)
+        {
+            _spiralIn = true;
+            _spiralCx = (area.X + area.Width / 2.0) / dpiScale;
+            _spiralCy = (area.Y + area.Height / 2.0) / dpiScale;
+            _spiralR0 = SpiralInPath.StartRadius(Math.Min(area.Width, area.Height) / dpiScale);
+            _spiralRadial = _speed * SpiralInPath.RadialPerSpeed;
+            _spiralTurns = SpiralInPath.Turns(MotionFx.Level);
+            _spiralDir = random.Next(2) == 0 ? 1 : -1;
+            _spiral = SpiralInPath.Start(_spiralR0, random.NextDouble() * Math.PI * 2);
+            _posX = _startX = _spiralCx + Math.Cos(_spiral.Angle) * _spiral.Radius - _size / 2.0;
+            _posY = _spiralCy + Math.Sin(_spiral.Angle) * _spiral.Radius - _size / 2.0;
         }
 
         // Pinned spawn (Rabbit Caller): materialise centred on the given physical-px point,
@@ -3226,8 +3424,44 @@ internal class Bubble
                         Opacity = 0.85
                     };
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
             }
+        }
+
+        // Bubbles v2 Brain Drain bubble: a soft violet halo, the still half of the "something is
+        // about to go quiet" tell (the breathe above is the moving half). Perf-gated like every
+        // other glow; the compositor path takes the same colour through BuildLayerItem.
+        if (_isDrainBubble && PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier))
+        {
+            try
+            {
+                _bubbleImage.Effect = new DropShadowEffect
+                {
+                    Color = Color.FromRgb(0x8A, 0x3A, 0xD8),
+                    BlurRadius = Math.Min(18, PerformanceProfile.MaxGlowBlurRadius(PerformanceProfile.CurrentTier)),
+                    ShadowDepth = 0,
+                    Opacity = 0.5
+                };
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        // Bubbles v2 Magnet bubble: a steel-blue halo, the still half of its "it has noticed you"
+        // tell (the ring pulse above is the moving half). Perf-gated like every other glow; the
+        // compositor path takes the same colour through BuildLayerItem.
+        if (_isMagnetBubble && PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier))
+        {
+            try
+            {
+                _bubbleImage.Effect = new DropShadowEffect
+                {
+                    Color = Color.FromRgb(Chaos.MagnetBubble.GlowR, Chaos.MagnetBubble.GlowG, Chaos.MagnetBubble.GlowB),
+                    BlurRadius = Math.Min(20, PerformanceProfile.MaxGlowBlurRadius(PerformanceProfile.CurrentTier)),
+                    ShadowDepth = 0,
+                    Opacity = 0.55
+                };
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         // GG make more GG: sweeper rabbits are born spanked — ally-AMBER glow on the sprite itself
@@ -3236,7 +3470,7 @@ internal class Bubble
         {
             _isSpanked = true;
             _spankGrowth = 1.0;
-            try { _bubbleImage.Effect = new DropShadowEffect { Color = Color.FromRgb(0xFF, 0x8A, 0x14), BlurRadius = 36, ShadowDepth = 0, Opacity = 1.0 }; } catch { }
+            try { _bubbleImage.Effect = new DropShadowEffect { Color = Color.FromRgb(0xFF, 0x8A, 0x14), BlurRadius = 36, ShadowDepth = 0, Opacity = 1.0 }; } catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         // Show + alt-tab hide (per-window mode only — the host/layer is already shown). A recycled shell
@@ -3344,7 +3578,7 @@ internal class Bubble
                             Canvas.SetTop(sp.Shape, sp.Y - sp.Size / 2);
                             sp.Shape.Opacity = Math.Max(0, sp.Alpha);
                         }
-                        catch { }
+                        catch (Exception ex) { Diag.Swallowed(ex); }
                     }
 
                     _sparkles[i] = sp;
@@ -3492,7 +3726,7 @@ internal class Bubble
         {
             // Normal travel animation (scaled for 30fps)
             _timeAlive += 0.02;
-            var motion = _spec?.Motion ?? ChaosMotion.FloatUp;
+            var motion = _motion;
             double ts = TimeScale;   // 1 normally; <1 during a darter slow-mo (chaos bubbles only)
 
             // The Chaperone's escort rides its live: position comes from the orbit, not the
@@ -3566,7 +3800,68 @@ internal class Bubble
             }
 
             bool exited = false;
-            switch (motion)
+            // Bubbles v2 Magnet bubble: while it is attracting it flies a FREE velocity rather than
+            // a motion-table row, because the whole point is that it leaves the lane it was born in.
+            // Every decision is in Chaos.MagnetBubble; this is integration and the exit test. When
+            // it is NOT attracting - MotionLevel.Off, cursor off all monitors, cursor parked past
+            // MagnetBubble.CursorStaleSeconds - it falls through to the ordinary motion switch and
+            // is a plain bubble of whatever kind the dashboard's Motion setting makes it.
+            bool magnetSteering = false;
+            if (_isMagnetBubble)
+            {
+                double mStrength = BubbleService.MagnetStrengthNow;
+                double mCurX = BubbleService.CursorPxX / _dpiScale;
+                double mCurY = BubbleService.CursorPxY / _dpiScale;
+                // The cursor has to be live AND on the screen this bubble was born on. A magnet
+                // that chases a pointer sitting on another monitor just runs at the shared edge,
+                // crosses it, and is destroyed unpopped. _screenRight is the largest legal top-left
+                // X, so the sprite size goes back on to get the real right edge.
+                magnetSteering = mStrength > 0 && !_isPopping
+                    && Chaos.MagnetBubble.CanSteer(BubbleService.MagnetCursorOnScreen,
+                                                   BubbleService.MagnetCursorIdleSec,
+                                                   mCurX, mCurY,
+                                                   _screenLeft, _screenRight + _size,
+                                                   _screenTop, _screenBottom);
+                if (magnetSteering)
+                {
+                    _magnetV = Chaos.MagnetBubble.Steer(
+                        _magnetV,
+                        _posX + _size / 2.0, _posY + _size / 2.0,
+                        mCurX, mCurY,
+                        mStrength, ts);
+                    _posX += _magnetV.Vx * ts;
+                    _posY += _magnetV.Vy * ts;
+                    // Keep the Float/Rain wobble's base under the bubble, so the frame the cursor
+                    // goes stale the fallback picks up here instead of snapping back by one offset.
+                    _startX = _posX - offset;
+                    _startY = _posY - offset;
+                    // Steered, it can leave by ANY edge, not just the one its motion row watches.
+                    if (_posY < _screenTop - _size || _posY > _screenBottom + _size
+                        || _posX < _screenLeft - _size || _posX > _screenRight + _size) exited = true;
+                }
+                else
+                {
+                    // Re-seed from the row it is about to fly, so the first steered frame after the
+                    // cursor comes back has a real heading to bend rather than a standing start.
+                    _magnetV = new Chaos.MagnetBubble.Velocity(
+                        0, _motion == ChaosMotion.RainDown ? _speed : -_speed);
+                }
+            }
+            // A steering magnet has already placed itself above; everything else flies its row.
+            if (magnetSteering) { }
+            else if (_spiralIn)
+            {
+                // Spiral In: angle on, radius in, fade over the last band; the core ends it.
+                // Reaching the core is an EXIT like floating off the top (miss, quiet Destroy):
+                // never a pop, so no sound, XP, achievement, haptic or lucky roll. A click
+                // before then pops it normally.
+                _spiral = SpiralInPath.Step(_spiral, _spiralR0, _spiralRadial, _spiralTurns, _spiralDir, ts);
+                _posX = _spiralCx + Math.Cos(_spiral.Angle) * _spiral.Radius - _size / 2.0;
+                _posY = _spiralCy + Math.Sin(_spiral.Angle) * _spiral.Radius - _size / 2.0;
+                _spiralFade = _spiral.Fade;
+                if (_spiral.Done) exited = true;
+            }
+            else switch (motion)
             {
                 case ChaosMotion.RainDown:
                     _posY += _speed * ts;
@@ -3817,7 +4112,7 @@ internal class Bubble
 
             // Blindfold: translucent effect bubbles. Magic Wand capstone: bubbles inside your
             // (enlarged) reach shimmer — cursor was sampled once for the whole tick.
-            double opacity = _fadeAlpha * _baseOpacity;
+            double opacity = _fadeAlpha * _baseOpacity * _spiralFade;
             if (BubbleService.WandShimmerOn && _spec != null && !_isDarter && !_isPopping)
             {
                 double cx = BubbleService.CursorPxX / _dpiScale, cy = BubbleService.CursorPxY / _dpiScale;
@@ -3829,6 +4124,16 @@ internal class Bubble
                     opacity *= 0.85 + 0.13 * Math.Sin(_shimmerPhase);
                 }
             }
+            // Bubbles v2 Brain Drain bubble: a slow, faint breathe so it reads as its own creature
+            // next to the indigo braindrain one. It rides the opacity this frame already computed,
+            // so neither render path gains an element and the compositor gains no work at all.
+            if (_isDrainBubble && !_isPopping)
+                opacity *= Chaos.BrainDrainBubble.PulseAt(_timeAlive);
+            // Bubbles v2 Magnet bubble: its steel-blue halo is a drop shadow on this very
+            // element, so riding the frame's opacity pulses the RING with the body - quicker and
+            // shallower than the drain's breathe, which is how the two tell themselves apart.
+            if (_isMagnetBubble && !_isPopping)
+                opacity *= Chaos.MagnetBubble.RingPulseAt(_timeAlive);
             _fxTarget.Opacity = opacity;
             if (_useLayer)
             {
@@ -3877,7 +4182,7 @@ internal class Bubble
                     Opacity = 0.8
                 };
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         // Spawn sparkle particles if sparkle boost is unlocked
@@ -4052,7 +4357,7 @@ internal class Bubble
             BubbleService.ChaosLastPopXPx = popPx.X;
             BubbleService.ChaosLastPopYPx = popPx.Y;
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
         ShowChaosLabel("SNAP", SnapColor);
         // First-contact verb hints: a completed hold is the lesson (per-variant key). Bound
         // pairs learn on the PAIR clearing (OnBoundHalfResolved) — one half held isn't enough.
@@ -4125,7 +4430,7 @@ internal class Bubble
                 if (ChaosSkiaFxOverlay.Enabled)
                     ChaosSkiaFxOverlay.Burst(popPx, _spec.IsLive ? SnapColor : _spec.Tint, _spec.IsLive ? 1.3 : 1.0);
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
             // Mimic prism: the shadow pop — the copied bubble ghosts out underneath the burst.
             if (_spec.IsPrism && _prismGhost != null)
             {
@@ -4135,7 +4440,7 @@ internal class Bubble
                     _prismGhost.BeginAnimation(UIElement.OpacityProperty,
                         new System.Windows.Media.Animation.DoubleAnimation(0.6, 0, TimeSpan.FromMilliseconds(650)));
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
             }
             // Chaos bubble: a live bubble clicked in time is a DEFUSE (reward, no payload);
             // a darter caught is its own reward path; a benign bubble is a treat.
@@ -4186,7 +4491,7 @@ internal class Bubble
             // steer and hurry it — no compounding back up to comedy size.
             _spankGrowth = Math.Max(1.0, BubbleService.ChaosSpankGrowNow);
             // It changes color: the chase-glow deepens to a hot ally-pink.
-            try { _bubbleImage.Effect = new DropShadowEffect { Color = Color.FromRgb(0xFF, 0x14, 0x93), BlurRadius = 34, ShadowDepth = 0, Opacity = 1.0 }; } catch { }
+            try { _bubbleImage.Effect = new DropShadowEffect { Color = Color.FromRgb(0xFF, 0x14, 0x93), BlurRadius = 34, ShadowDepth = 0, Opacity = 1.0 }; } catch (Exception ex) { Diag.Swallowed(ex); }
             ShowChaosLabel("SPANKED", Color.FromRgb(0xFF, 0x4D, 0xC4));
         }
     }
@@ -4214,7 +4519,7 @@ internal class Bubble
         {
             _isSpanked = true;
             _spankGrowth = 1.0;   // no Spanker swell — the wave only throws it
-            try { _bubbleImage.Effect = new DropShadowEffect { Color = Color.FromRgb(0xFF, 0x14, 0x93), BlurRadius = 34, ShadowDepth = 0, Opacity = 1.0 }; } catch { }
+            try { _bubbleImage.Effect = new DropShadowEffect { Color = Color.FromRgb(0xFF, 0x14, 0x93), BlurRadius = 34, ShadowDepth = 0, Opacity = 1.0 }; } catch (Exception ex) { Diag.Swallowed(ex); }
             ShowChaosLabel("FLUNG", Color.FromRgb(0x7A, 0xE0, 0xFF));
         }
     }
@@ -4235,7 +4540,7 @@ internal class Bubble
             if (ChaosSkiaFxOverlay.Enabled)
                 ChaosSkiaFxOverlay.Burst(px, Color.FromRgb(0xFF, 0x3D, 0x5A), 1.4);   // risk-red detonation
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
         ShowChaosLabel("✖", Color.FromRgb(0xFF, 0x3D, 0x5A));
         _onTeaseTouched?.Invoke(this);
     }
@@ -4255,7 +4560,7 @@ internal class Bubble
             BubbleService.ChaosLastPopXPx = px.X;
             BubbleService.ChaosLastPopYPx = px.Y;
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
         if (_prismGhost != null)
         {
             try
@@ -4264,7 +4569,7 @@ internal class Bubble
                 _prismGhost.BeginAnimation(UIElement.OpacityProperty,
                     new System.Windows.Media.Animation.DoubleAnimation(0.6, 0, TimeSpan.FromMilliseconds(650)));
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
         ShowChaosLabel("SHATTER", Color.FromRgb(0xCF, 0xEC, 0xFF));
         _onBrittleShattered?.Invoke(this);
@@ -4323,7 +4628,7 @@ internal class Bubble
             BubbleService.ChaosLastPopXPx = detPx.X;
             BubbleService.ChaosLastPopYPx = detPx.Y;
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
         ShowChaosEffectLabel();   // the live effect is firing → flash its color-coded word at the bubble
         _onDetonate?.Invoke(this);
         // Pop/burst animation + Destroy handled by AnimateFrame().
@@ -4354,7 +4659,7 @@ internal class Bubble
             double cy = _posY + _size / 2.0;
             ChaosPopText.Show(cx, cy + yOffsetDip, word, color);
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     /// <summary>Builds the chaos-only visual layers (tint, label, fuse ring). No-op for ambient bubbles.</summary>
@@ -4610,7 +4915,7 @@ internal class Bubble
             _hintEl.BeginAnimation(UIElement.OpacityProperty, null);
             _hintEl.Visibility = Visibility.Collapsed;
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
         _hintEl = null;
     }
 
@@ -4665,7 +4970,7 @@ internal class Bubble
                 && _teaseAnimatedAlive < PerformanceProfile.MaxAnimatedTeaseBubbles(PerformanceProfile.CurrentTier))
             {
                 long len = 0;
-                try { len = new FileInfo(path).Length; } catch { }
+                try { len = new FileInfo(path).Length; } catch (Exception ex) { Diag.Swallowed(ex); }
                 animate = len > 0 && len <= ChaosTuning.TEASE_ANIMATED_MAX_BYTES;
             }
             if (animate)
@@ -4707,9 +5012,9 @@ internal class Bubble
                                 if (_teaseStillCache.Count > 12) _teaseStillCache.Clear();
                                 _teaseStillCache[file] = bmp;
                             }
-                            Application.Current?.Dispatcher.BeginInvoke(() => { try { img.Source = bmp; } catch { } });
+                            Application.Current?.Dispatcher.BeginInvoke(() => { try { img.Source = bmp; } catch (Exception ex) { Diag.Swallowed(ex); } });
                         }
-                        catch { }
+                        catch (Exception ex) { Diag.Swallowed(ex); }
                     });
                 }
             }
@@ -4834,24 +5139,24 @@ internal class Bubble
             // leaving it on a recycled pooled window would root this dead bubble forever.
             if (_winClickHandler != null)
             {
-                try { _window.MouseLeftButtonDown -= _winClickHandler; } catch { }
-                try { _window.MouseRightButtonDown -= _winClickHandler; } catch { }
+                try { _window.MouseLeftButtonDown -= _winClickHandler; } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { _window.MouseRightButtonDown -= _winClickHandler; } catch (Exception ex) { Diag.Swallowed(ex); }
                 _winClickHandler = null;
             }
             _grid.Children.Clear();
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
 
         if (_useLayer)
         {
             // Layer mode: drop the draw item (disposes its owned tease frames) — no window, no Canvas child.
-            try { if (_layerItem != null) s_layer?.Remove(_layerItem); } catch { }
+            try { if (_layerItem != null) s_layer?.Remove(_layerItem); } catch (Exception ex) { Diag.Swallowed(ex); }
             _layerItem = null;
         }
         else if (_useHost)
         {
             // Host mode: pull the grid off the shared Canvas — there's no per-bubble window to recycle.
-            try { ChaosBubbleHostOverlay.Remove(_grid); } catch { }
+            try { ChaosBubbleHostOverlay.Remove(_grid); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
         else
         {
@@ -4862,7 +5167,7 @@ internal class Bubble
         }
 
         // Notify service to remove from list (after animation completed)
-        try { _onDestroy?.Invoke(this); } catch { }
+        try { _onDestroy?.Invoke(this); } catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     /// <summary>
@@ -4880,7 +5185,7 @@ internal class Bubble
             if (hwnd == IntPtr.Zero) return;
             SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     /// <summary>
@@ -4902,7 +5207,7 @@ internal class Bubble
             int side = (int)Math.Round(_winDim * _dpiScale);
             SetWindowPos(hwnd, IntPtr.Zero, px, py, side, side, SWP_NOZORDER | SWP_NOACTIVATE);
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     #region Win32
@@ -4967,7 +5272,7 @@ internal class Bubble
             if (hwnd == IntPtr.Zero) return;
             SetWindowLong(hwnd, GWL_EXSTYLE, GetWindowLong(hwnd, GWL_EXSTYLE) | WS_EX_TRANSPARENT);
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     private void HideFromAltTab()
@@ -4987,7 +5292,7 @@ internal class Bubble
                 flags |= WS_EX_TRANSPARENT;
             SetWindowLong(hwnd, GWL_EXSTYLE, flags);
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     private const int GWL_EXSTYLE = -20;

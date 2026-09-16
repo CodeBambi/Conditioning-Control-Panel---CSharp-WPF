@@ -1,0 +1,225 @@
+/* Remix Room - the Auto page (remix/ui/auto.js). Same tokens as remix.css; phone first.
+   The editor's #app is display:none while this page is up, and #stage-box lives in .auto-stage. */
+.app[data-screen="auto"] { display:none; }
+.auto { position:fixed; inset:0; z-index:10; display:flex; flex-direction:column; background:var(--ground); color:var(--ink);
+        padding:var(--sat) var(--sar) var(--sab) var(--sal); overflow:hidden; }
+
+/* ---- top: wordmark + the filmstrip. The strip is centred in the header and the help (?) that help.js
+   drops in after the wordmark stays beside it, where it belongs. ---- */
+.auto-top { position:relative; display:flex; align-items:center; gap:8px; height:52px; padding:0 16px; flex:0 0 auto; }
+.auto-top .wordmark { font-family:var(--disp); font-size:22px; letter-spacing:.06em; text-transform:uppercase; line-height:1; white-space:nowrap; }
+.auto-steps { position:absolute; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:0; }
+.auto-step { min-height:44px; padding:0 8px; border-radius:8px; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-faint); font-family:var(--mono);
+             display:inline-flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; transition:color var(--t); }
+/* a frame of film: sprocket dots top and bottom, the word under it */
+.auto-step .frame { width:26px; height:18px; border-radius:4px; border:1.5px solid var(--line); box-sizing:border-box;
+                    background-image:radial-gradient(circle, var(--ground) 1.2px, transparent 1.4px), radial-gradient(circle, var(--ground) 1.2px, transparent 1.4px);
+                    background-size:6px 4px; background-position:0 -1px, 0 100%; background-repeat:repeat-x;
+                    transition:border-color var(--t), background-color var(--t), box-shadow 300ms var(--ease); }
+.auto-step.done .frame { background-color:var(--pink-deep); border-color:var(--pink-deep); }
+.auto-step.done { color:var(--ink-dim); }
+.auto-step.on { color:var(--pink); }
+.auto-step.on .frame { border-color:var(--pink); box-shadow:0 0 12px rgba(255,105,180,.5); transition-duration:var(--t), var(--t), 180ms; }
+.auto-step:hover:not(:disabled) { color:var(--ink); }
+.auto-step:disabled { opacity:.55; }
+.auto-steps .link { flex:0 0 auto; width:14px; height:1.5px; background:var(--line); margin-bottom:18px; }
+.auto-steps .link b { display:block; height:100%; width:0; background:var(--pink-deep); transition:width 300ms var(--ease); }
+.auto-steps .link.filled b { width:100%; }
+
+/* ---- add ---- */
+.auto-add { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; padding:16px 24px; cursor:pointer; text-align:center;
+            animation:fade 200ms var(--ease); }
+.add-card { display:flex; flex-direction:column; align-items:center; gap:14px; max-width:460px; }
+.add-title { font-family:var(--disp); font-size:44px; line-height:1; letter-spacing:.03em; text-transform:uppercase; }
+.add-line { margin:0; color:var(--ink-dim); font-size:15px; line-height:1.4; }
+.add-btn { flex:0 0 auto; width:min(320px,100%); min-height:56px; font-size:17px; margin-top:8px; }
+.add-btn svg { width:20px; height:20px; }
+/* the phone's system picker is one long scroll and its albums come up empty under a type filter, so the phone gets two more ways in */
+.add-routes { display:none; margin:-8px 0 0; font-size:13px; color:var(--ink-faint); align-items:center; justify-content:center; gap:2px; flex-wrap:wrap; }
+.add-routes .quiet-link { min-height:44px; padding:0 8px; }
+html.is-mobile .add-routes { display:flex; }
+.add-sub { margin:0; color:var(--ink-faint); font-size:13px; line-height:1.5; }
+.add-privacy { margin:0; color:var(--lav); font-size:11px; letter-spacing:.16em; text-transform:uppercase; }
+.quiet-link { color:var(--ink-faint); font-size:13px; text-decoration:underline; text-decoration-color:var(--line); text-underline-offset:3px; min-height:44px; padding:0 10px; }
+.quiet-link:hover { color:var(--ink-dim); text-decoration-color:var(--lav); }
+
+/* ---- roll + caption: the stage and its column ---- */
+.auto-work { flex:1 1 auto; min-height:0; display:flex; flex-direction:row; gap:32px; padding:0 24px 20px; align-items:center; justify-content:center; animation:fade 200ms var(--ease); }
+.auto-stage { position:relative; flex:1 1 auto; min-width:0; min-height:0; align-self:stretch; display:flex; align-items:center; justify-content:center; touch-action:none; user-select:none; -webkit-user-select:none; }
+/* the room drifts: a soft glow behind the stage that takes the colour of the roll */
+.auto-stage::before { content:""; position:absolute; top:50%; left:50%; width:min(140%,900px); aspect-ratio:1; z-index:0; pointer-events:none; opacity:.7;
+                      background:radial-gradient(circle, var(--halo, rgba(255,105,180,.16)) 0%, transparent 62%);
+                      animation:halo 36s ease-in-out infinite alternate; }
+#auto.idle .auto-stage::before { opacity:1; transition:opacity 1200ms var(--ease); }
+@keyframes halo { from { transform:translate(-50%,-50%) scale(1); } to { transform:translate(-52%,-49%) scale(1.06); } }
+#auto .stage-box.auto-box { position:relative; z-index:1; width:100%; height:100%; flex:1 1 auto; min-height:120px; aspect-ratio:auto; max-height:none; }
+#auto .stage-fit { transition:transform 220ms cubic-bezier(.2,1.5,.4,1); }
+#auto .stage-fit.dragging { transition:none; }
+#auto .stage-fit.settle { animation:settle 340ms cubic-bezier(.2,1.5,.4,1); }
+#auto .stage-fit.settle.from-left { animation-name:settle-l; }
+#auto .stage-fit.settle.from-right { animation-name:settle-r; }
+#auto .stage-fit.shiver { animation:shiver 250ms var(--ease); }
+@keyframes settle { 0% { transform:scale(.97); } 60% { transform:scale(1.012); } 100% { transform:none; } }
+@keyframes settle-l { 0% { transform:scale(.97) translateX(-10px); } 60% { transform:scale(1.012); } 100% { transform:none; } }
+@keyframes settle-r { 0% { transform:scale(.97) translateX(10px); } 60% { transform:scale(1.012); } 100% { transform:none; } }
+@keyframes shiver { 0%,100% { transform:translateX(0); } 17%,50%,83% { transform:translateX(-4px); } 33%,66% { transform:translateX(4px); } }
+/* the first drop: bigger and brighter than it should be, then it settles */
+#auto .stage-fit.reveal { animation:reveal 620ms cubic-bezier(.2,1.35,.35,1); }
+@keyframes reveal { 0% { transform:scale(1.08) rotate(-.6deg); filter:brightness(1.6); } 55% { transform:scale(.985) rotate(0); filter:brightness(1.05); } 100% { transform:none; filter:none; } }
+#auto .auto-add.leaving { position:absolute; inset:0; z-index:6; pointer-events:none; animation:leave 160ms var(--ease) forwards; }
+@keyframes leave { to { transform:scale(.96); opacity:0; } }
+/* seven sparks off the stage centre, once, for the drop that earned it */
+#auto .spark { position:absolute; top:50%; left:50%; width:7px; height:7px; border-radius:50%; background:var(--pink); z-index:4; pointer-events:none;
+               animation:spark 480ms ease-out forwards; }
+#auto .spark.gold { background:var(--gold); }
+@keyframes spark { from { transform:translate(0,0) scale(1); opacity:1; } to { transform:translate(var(--dx,0), var(--dy,0)) scale(.3); opacity:0; } }
+/* a tap gets a round answer; a paused stage wears a tag */
+#auto .stage-mark { position:absolute; top:50%; left:50%; margin:-28px 0 0 -28px; width:56px; height:56px; border-radius:50%; background:rgba(20,20,43,.75); color:var(--ink);
+                    display:flex; align-items:center; justify-content:center; z-index:4; pointer-events:none; opacity:0; animation:mark 520ms cubic-bezier(.2,1.5,.4,1) forwards; }
+#auto .stage-mark svg { width:24px; height:24px; }
+@keyframes mark { 0% { transform:scale(1.5); opacity:0; } 25% { transform:scale(1); opacity:.95; } 100% { transform:scale(1); opacity:0; } }
+#auto .stage-paused { position:absolute; left:10px; bottom:10px; z-index:3; height:24px; display:inline-flex; align-items:center; padding:0 9px; border-radius:999px;
+                      background:rgba(20,20,43,.6); font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-faint);
+                      pointer-events:none; transition:opacity 180ms var(--ease); }
+.roll-ghost { position:absolute; inset:0; width:100%; height:100%; z-index:2; pointer-events:none; opacity:1; }
+.roll-ghost.fade { opacity:0; transition:opacity 200ms var(--ease); }
+/* editor furniture the roll has no use for: hits, the canvas tab, the badge. The stamp and the caption handle stay. */
+#auto .tile-hit, #auto .canvas-tab, #auto .stage-badge, #auto .stage-tl, #auto .focus-hint, #auto .empty { display:none !important; }
+#auto .stage-overlay { cursor:pointer; }
+
+.auto-side { flex:0 0 300px; display:flex; flex-direction:column; gap:14px; }
+.side-roll { display:flex; flex-direction:column; gap:14px; }
+.roll-row { display:flex; align-items:center; gap:10px; }
+.roll-arrow { flex:0 0 auto; width:48px; height:56px; border-radius:14px; border:1px solid var(--line); background:var(--panel); color:var(--ink-dim); display:flex; align-items:center; justify-content:center;
+              transition:color var(--t), border-color var(--t), transform var(--t); }
+.roll-arrow:hover:not(:disabled) { color:var(--ink); border-color:var(--lav); }
+.roll-arrow:disabled { opacity:.3; }
+/* the release springs back: press is fast, the return has a hair of overshoot */
+.roll-arrow, .auto-chips .chip, .code-link, .auto-next { transition:transform 220ms cubic-bezier(.2,1.5,.4,1), color var(--t), border-color var(--t), box-shadow 300ms var(--ease); }
+.roll-arrow:active:not(:disabled) { transform:scale(.94); transition-duration:80ms; }
+.auto-chips .chip:active:not(:disabled), .code-link:active, .auto-next:active { transform:scale(.96); transition-duration:80ms; }
+.auto-next:hover { box-shadow:0 0 18px rgba(255,105,180,.5); transform:translateY(-2px); transition-duration:180ms; }
+.roll-pill { position:relative; flex:1 1 auto; min-width:0; height:56px; border-radius:28px; background:var(--pink); color:var(--ground); font-size:17px; font-weight:700; letter-spacing:.02em;
+             display:flex; align-items:center; justify-content:center; gap:10px; box-shadow:0 10px 30px rgba(255,105,180,.3); user-select:none; -webkit-user-select:none; touch-action:none;
+             transition:transform 120ms var(--ease), box-shadow 180ms var(--ease), background var(--t); animation:breath 3.6s ease-in-out infinite; }
+.roll-pill:hover { background:#ff86c6; }
+.roll-pill.pressed, .roll-pill:active { transform:scale(.96); box-shadow:0 4px 14px rgba(255,105,180,.35); background:var(--pink-deep); color:var(--ink); }
+/* one thing on the screen breathes, and it stops the moment anything is celebrating */
+@keyframes breath { 0%,100% { transform:scale(1); } 50% { transform:scale(1.015); } }
+.roll-pill.pressed:not(.beat), .roll-pill.rolling:not(.beat), #auto.celebrating .roll-pill:not(.arrive) { animation-play-state:paused; }
+#auto-pick, .side-caption #cap-done { animation:breath 3.6s ease-in-out infinite; }
+#auto-pick:active, .side-caption #cap-done:active { animation-play-state:paused; }
+/* THE CHARGE-HOLD: the ring fills clockwise over the 450 ms before the hold arms, so the hold is visible */
+.roll-pill::after { content:""; position:absolute; inset:-5px; border-radius:33px; padding:3px; opacity:0; pointer-events:none; transition:opacity 300ms var(--ease);
+                    background:conic-gradient(from -90deg, var(--ink) calc(var(--charge, 0) * 1%), transparent 0);
+                    -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor;
+                    mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite:exclude; }
+.roll-pill.pressed::after { opacity:1; transition-duration:120ms; }
+.roll-pill.rolling { box-shadow:0 0 0 6px rgba(255,105,180,.18), 0 10px 30px rgba(255,105,180,.3); }
+.roll-pill.beat { animation:rollbeat 340ms cubic-bezier(.2,1.5,.4,1); }
+@keyframes rollbeat { 0% { transform:scale(1.05); } 60% { transform:scale(.98); } 100% { transform:scale(1); } }
+.roll-pill.arrive { animation:arrive 340ms cubic-bezier(.2,1.5,.4,1) 140ms both; }
+@keyframes arrive { 0% { transform:scale(1.15); filter:brightness(1.6); } 60% { transform:scale(.96); } 100% { transform:none; filter:none; } }
+/* the whisper: 25 s of nothing and the room mentions the hold, once */
+.roll-whisper { margin:-8px 0 -4px; text-align:center; font-family:var(--body); font-size:12px; color:var(--ink-faint); animation:fade 180ms var(--ease); }
+.roll-dice { display:flex; } .roll-dice svg { width:22px; height:22px; }
+.roll-dice.tumble { animation:tumble 360ms var(--ease); }
+@keyframes tumble { 0% { transform:rotate(0); } 40% { transform:rotate(-22deg) translateY(-3px); } 100% { transform:rotate(360deg); } }
+.auto-chips { display:flex; flex-wrap:wrap; gap:8px; }
+.auto-chips .chip { min-height:44px; display:inline-flex; align-items:center; padding:0 14px; }
+.auto-chips .chip.static { cursor:default; color:var(--ink-faint); }
+.auto-chips .chip.static.hot { color:var(--gold); border-color:var(--gold); }
+.code-chip { font-family:var(--mono); color:var(--ink); border-color:var(--pink); background:rgba(255,105,180,.10); letter-spacing:.06em; perspective:200px; }
+.code-chip.flip .code-text { display:inline-block; animation:flip 320ms var(--ease); }
+@keyframes flip { 0% { transform:rotateX(90deg); opacity:0; } 100% { transform:none; opacity:1; } }
+.code-chip.flip { box-shadow:0 0 18px rgba(255,105,180,.55); transition-duration:180ms; }
+.code-entry .text-field.shiver { animation:shiver 250ms var(--ease); }
+/* have a code? a quiet link under the chips; the field takes its place when it is wanted */
+.code-link { align-self:flex-start; margin:-6px 0 -2px; font-size:12px; }
+.code-entry { display:flex; align-items:center; gap:8px; }
+.code-entry .text-field { flex:1 1 auto; min-width:0; font-family:var(--mono); text-transform:uppercase; letter-spacing:.12em; font-size:16px; }
+.code-entry .btn-big { flex:0 0 auto; min-width:88px; }
+.code-close { flex:0 0 auto; width:44px; min-height:44px; border-radius:12px; color:var(--ink-faint); display:inline-flex; align-items:center; justify-content:center; transition:color var(--t); }
+.code-close:hover { color:var(--ink); }
+.auto-foot { display:flex; flex-direction:column; gap:8px; margin-top:6px; }
+.auto-next { flex:0 0 auto; width:100%; min-height:52px; font-size:16px; }
+.auto-foot .quiet-link { order:2; align-self:center; }
+.caption-it { flex:0 0 auto; width:100%; min-height:44px; font-size:14px; color:var(--ink-dim); }
+.caption-it:hover { color:var(--ink); border-color:var(--lav); }
+
+/* on a phone the open field rides the soft keyboard, the same way the caption sheet does */
+html.is-mobile .code-entry:not([hidden]) { position:fixed; left:0; right:0; bottom:var(--kb, 0px); z-index:20; background:var(--navy); border-top:1px solid var(--pink);
+                                           border-radius:18px 18px 0 0; padding:10px 16px calc(12px + var(--sab)); box-shadow:0 -12px 40px rgba(0,0,0,.4); animation:slideup 200ms var(--ease); }
+html.is-mobile .code-entry .text-field { height:48px; }
+html.is-mobile .code-link { align-self:center; min-height:44px; }
+
+/* ---- caption: the column on a desktop, a sheet over the page on a phone ---- */
+.side-caption { display:flex; flex-direction:column; }
+.cap-sheet { display:flex; flex-direction:column; gap:12px; }
+.cap-head { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+.cap-title { font-family:var(--disp); font-size:22px; letter-spacing:.06em; text-transform:uppercase; line-height:1; }
+.cap-sub { color:var(--ink-faint); font-size:12px; }
+.cap-field { font-size:18px; }
+.cap-sheet .chips.fill .chip { flex:1 1 0; display:inline-flex; align-items:center; justify-content:center; min-height:40px; padding:0 8px; border-radius:10px; }
+.cap-actions { display:flex; gap:8px; margin-top:4px; }
+.cap-actions .btn-big { flex:1 1 0; }
+html.is-mobile .side-caption { position:fixed; left:0; right:0; bottom:var(--kb, 0px); z-index:20; background:var(--navy); border-top:1px solid var(--pink); border-radius:18px 18px 0 0;
+                               padding:8px 16px calc(14px + var(--sab)); box-shadow:0 -12px 40px rgba(0,0,0,.4); animation:slideup 200ms var(--ease); }
+html.is-mobile .cap-sheet .sheet-grab { display:block; margin:0 auto 2px; }
+html.is-mobile .cap-field { height:50px; font-size:20px; }
+
+/* ---- phone: stage on top, the pill under it, chips under that ---- */
+/* the step strip takes its own row on a phone: four words never fit beside the wordmark at 390 */
+html.is-mobile .auto-top { height:auto; padding:6px 12px 0; flex-wrap:wrap; gap:0 12px; }
+html.is-mobile .auto-top .wordmark { font-size:18px; line-height:36px; }
+html.is-mobile .auto-steps { position:static; transform:none; flex:1 0 100%; justify-content:space-between; gap:0; }
+html.is-mobile .auto-step { flex:1 1 0; padding:0 4px; min-height:44px; font-size:9px; letter-spacing:.08em; gap:4px; }
+html.is-mobile .auto-step .frame { width:22px; height:15px; }
+html.is-mobile .auto-steps .link { width:10px; margin-bottom:16px; }
+html.is-mobile .auto-stage::before { opacity:.4; }
+html.is-mobile #auto.idle .auto-stage::before { opacity:.65; }
+html.is-mobile .add-title { font-size:36px; }
+html.is-mobile .auto-work { flex-direction:column; gap:12px; padding:0 16px calc(12px + var(--sab)); align-items:stretch; justify-content:flex-start; overflow:hidden auto; }
+html.is-mobile .auto-pic { flex:0 0 auto; align-self:stretch; }
+html.is-mobile .auto-stage { flex:0 0 auto; align-self:stretch; }
+html.is-mobile #auto .stage-box.auto-box { height:auto; aspect-ratio:16/9; max-height:min(46dvh, 460px); }
+html.is-mobile #auto[data-orient="portrait"] .stage-box.auto-box { aspect-ratio:auto; height:min(46dvh, 460px); }
+html.is-mobile #auto[data-orient="square"] .stage-box.auto-box { aspect-ratio:1/1; max-height:min(46dvh, 460px); }
+html.is-mobile .auto-side { flex:0 0 auto; }
+html.is-mobile .auto-chips .chip { flex:1 1 auto; justify-content:center; padding:0 10px; font-size:13px; }
+html.is-mobile .auto-foot { flex-direction:row; align-items:center; margin-top:0; }
+html.is-mobile .auto-foot .quiet-link { order:0; flex:0 0 auto; }
+html.is-mobile .caption-it { width:auto; flex:0 0 auto; padding:0 14px; }
+html.is-mobile .auto-next { flex:1 1 auto; width:auto; }
+/* a phone on its side: stage left, column right, like the desktop */
+@media (max-height: 500px) and (orientation: landscape) {
+  html.is-mobile .auto-work { flex-direction:row; align-items:center; overflow:hidden; }
+  html.is-mobile .auto-pic { flex:1 1 auto; min-height:0; align-self:stretch; }
+  html.is-mobile .auto-stage { flex:1 1 auto; min-height:0; align-self:stretch; }
+  html.is-mobile #auto .stage-box.auto-box, html.is-mobile #auto[data-orient] .stage-box.auto-box { height:100%; aspect-ratio:auto; max-height:none; }
+  html.is-mobile .auto-side { flex:0 0 260px; }
+}
+@media (max-width: 380px) { html.is-mobile .auto-step { font-size:10px; letter-spacing:.05em; } }
+
+/* narrow windows that are not a phone (a desktop browser squeezed thin): same own-row strip */
+@media (max-width: 640px) {
+  html:not(.is-mobile) .auto-top { height:auto; padding:6px 12px 0; flex-wrap:wrap; gap:0 12px; }
+  html:not(.is-mobile) .auto-steps { position:static; transform:none; flex:1 0 100%; justify-content:space-between; gap:0; }
+  html:not(.is-mobile) .auto-step { flex:1 1 0; padding:0 4px; min-height:44px; font-size:9px; letter-spacing:.08em; gap:4px; }
+  html:not(.is-mobile) .auto-step .frame { width:22px; height:15px; }
+  html:not(.is-mobile) .auto-steps .link { width:10px; margin-bottom:16px; }
+}
+
+/* ---- desktop composition: the picture and its handle sit together, centred, the halo behind them ---- */
+@media (min-width: 641px) {
+  html:not(.is-mobile) #auto[data-orient="portrait"] .auto-pic { flex:0 0 auto; width:clamp(240px, calc((100dvh - 132px) * .5625), 56vw); }
+  html:not(.is-mobile) #auto[data-orient="square"] .auto-pic { flex:0 0 auto; width:clamp(240px, calc(100dvh - 132px), 56vw); }
+}
+
+/* ---- motion off: nothing loops, nothing drifts, every state stays legible ---- */
+@media (prefers-reduced-motion: reduce) {
+  .roll-pill, #auto-pick, .side-caption #cap-done, .auto-stage::before, .roll-pill.beat, .roll-pill.arrive,
+  #auto .stage-fit.reveal, #auto .stage-fit.settle, #auto .stage-fit.shiver, .code-entry .text-field.shiver, #auto .spark { animation:none !important; }
+  #auto .stage-mark { animation:none !important; opacity:.95; }
+  #auto .stage-fit { transition:none !important; }
+}

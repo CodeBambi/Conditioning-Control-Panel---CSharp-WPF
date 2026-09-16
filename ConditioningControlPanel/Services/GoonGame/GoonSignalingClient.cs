@@ -476,6 +476,7 @@ namespace ConditioningControlPanel.Services.GoonGame
 
             using var response = await _httpClient!.SendAsync(request, ct).ConfigureAwait(false);
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            MergedAccountRecovery.TryHandle((int)response.StatusCode, body);   // contract D
             return (response.StatusCode, body);
         }
 

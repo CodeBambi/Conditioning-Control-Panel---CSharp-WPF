@@ -90,7 +90,7 @@ namespace ConditioningControlPanel
                 {
                     DoorHome, DoorStudio, DoorCompanion, DoorPlay, DoorYou, DoorLibrary, DoorWebApp, DoorSettings,
                     BtnSettings,
-                    BtnNavStudio, BtnPresets, BtnNavHaptics,
+                    BtnNavStudio, BtnPresets, BtnNavHaptics, BtnNavJustDrop,
                     BtnCompanion, BtnNavBambiTakeover, BtnNavSheListening, BtnNavAwareness,
                     BtnLab, BtnDeeper, BtnPatreonExclusives, BtnNavGradedIntake, BtnNavLockdown,
                     BtnNavBlinkTrainer, BtnNavRemoteControl, BtnAvailableSubjects,

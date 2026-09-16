@@ -19,6 +19,10 @@ namespace ConditioningControlPanel.Services.Deeper
         // surfaced by the catalogue browser so downloaders can see equipment
         // requirements at a glance. May be empty for files saved by older builds.
         public List<string> AutoTags { get; set; } = new();
+        // Media length in seconds; 0 when nobody knows yet. Filled from the
+        // enhancement file's media_duration, else from MediaDurationCache for
+        // local media, else by the hub's background probe after the list shows.
+        public double DurationSeconds { get; set; }
     }
 
     /// <summary>
@@ -453,22 +457,38 @@ namespace ConditioningControlPanel.Services.Deeper
             try
             {
                 var enhancement = EnhancementSerializer.LoadFromFile(path);
-                return new EnhancementLibraryEntry
-                {
-                    FilePath = path,
-                    Name = enhancement.Metadata?.Name ?? Path.GetFileNameWithoutExtension(path),
-                    Creator = enhancement.Metadata?.Creator ?? "",
-                    MediaType = enhancement.MediaType,
-                    MediaSource = enhancement.MediaSource,
-                    LastModified = File.GetLastWriteTime(path),
-                    AutoTags = enhancement.Metadata?.AutoTags ?? new List<string>()
-                };
+                return BuildEntry(enhancement, path, File.GetLastWriteTime(path));
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("EnhancementLibrary: skipping unreadable file {Path}: {Error}", path, ex.Message);
                 return null;
             }
+        }
+
+        // Projects a loaded enhancement into a list row. The duration comes
+        // from the file when it carries one; otherwise the cache is asked,
+        // and only for local media that exists (a dictionary lookup plus one
+        // stat, so the scan stays instant). Remote media stays at 0 unless
+        // the file says otherwise.
+        internal static EnhancementLibraryEntry BuildEntry(Enhancement enhancement, string path, DateTime lastModified)
+        {
+            var fromFile = enhancement.Metadata?.MediaDurationSeconds ?? 0;
+            double duration = fromFile > 0 && !double.IsNaN(fromFile) ? fromFile : 0;
+            if (duration <= 0 && MediaDurationCache.TryGetCached(enhancement.MediaSource, out var cached))
+                duration = cached;
+
+            return new EnhancementLibraryEntry
+            {
+                FilePath = path,
+                Name = enhancement.Metadata?.Name ?? Path.GetFileNameWithoutExtension(path),
+                Creator = enhancement.Metadata?.Creator ?? "",
+                MediaType = enhancement.MediaType,
+                MediaSource = enhancement.MediaSource,
+                LastModified = lastModified,
+                AutoTags = enhancement.Metadata?.AutoTags ?? new List<string>(),
+                DurationSeconds = duration
+            };
         }
     }
 }

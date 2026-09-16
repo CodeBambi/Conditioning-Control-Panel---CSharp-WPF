@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>ConditioningControlPanel</AssemblyName>
     <RootNamespace>ConditioningControlPanel</RootNamespace>
-    <Version>6.9.1</Version>
+    <Version>6.9.5</Version>
     <Company>CodeBambi</Company>
     <Product>Conditioning Control Panel</Product>
     <Description>A professional visual conditioning application with gamification features.</Description>
@@ -57,7 +57,7 @@
          Page, Resource, None, EmbeddedResource) applies it - verified, a duplicate App.xaml
          planted there is picked up by none of them. This states the exclusion outright so
          the build does not silently depend on that implicit dot-directory rule. -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);.claude\**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);.claude\**;tools\**</DefaultItemExcludes>
 
     <!-- Suppress CA1416 platform compatibility warnings — this is a Windows-only WPF app -->
     <NoWarn>$(NoWarn);CA1416</NoWarn>
@@ -115,6 +115,13 @@
     <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.3" />
     <PackageReference Include="org.k2fsa.sherpa.onnx.runtime.win-x64" Version="1.13.3" />
     
+    <!-- Hang forensics (ccp-bugs #1189/#1179/#1159/#984). ClrMD reads the managed stacks of a
+         PSS snapshot of our OWN process, which is how UiThreadStacks turns "the UI thread has
+         been silent for 90s" into named frames inside hang_*.txt. Pinned exactly: this runs in
+         a wedged process and an unattended minor bump is not worth the risk. 3.1.512801 ships a
+         net6.0 lib (clean on net8.0-windows); the 4.x line only carries net10.0/netstandard2.0. -->
+    <PackageReference Include="Microsoft.Diagnostics.Runtime" Version="3.1.512801" />
+
     <!-- Logging -->
     <PackageReference Include="Serilog" Version="3.1.1" />
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
@@ -261,6 +268,7 @@
     <!-- Weekly Intake Pass card art, one per niche (see Services\Quiz\IntakeNiche.cs).
          These must stay listed explicitly: there is no Resources\**\*.png glob, and a missing
          entry makes the pack:// URI fail at RUNTIME while the build still succeeds. -->
+    <Resource Include="..\Assets\intake\pass_card_default.png" Link="Resources\intake\pass_card_default.png" />
     <Resource Include="..\Assets\intake\pass_card_bambi.png" Link="Resources\intake\pass_card_bambi.png" />
     <Resource Include="..\Assets\intake\pass_card_sissy.png" Link="Resources\intake\pass_card_sissy.png" />
     <Resource Include="..\Assets\intake\pass_card_drone.png" Link="Resources\intake\pass_card_drone.png" />
@@ -392,6 +400,17 @@
     <!-- Nav rail door art (2026-08-11 emoji purge): one emblem per door, referenced by
          MainWindow.xaml pack URIs - a missing file here crashes InitializeComponent. -->
     <Resource Include="..\Assets\nav\*.png" Link="Resources\nav\%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- Home dashboard billboard posters (2026-09-12), one per roster card in
+         Services/DashboardBillboard.cs. 688x384, 16:9, no text: the bottom third of each is
+         dark and calm on purpose so the shade with the eyebrow, title and line sits there.
+         Listed one by one rather than globbed - the roster names these six files and nothing
+         else belongs in the folder. -->
+    <Resource Include="..\Assets\billboard\webapp.png" Link="Resources\billboard\webapp.png" />
+    <Resource Include="..\Assets\billboard\remix.png" Link="Resources\billboard\remix.png" />
+    <Resource Include="..\Assets\billboard\loom.png" Link="Resources\billboard\loom.png" />
+    <Resource Include="..\Assets\billboard\discord.png" Link="Resources\billboard\discord.png" />
+    <Resource Include="..\Assets\billboard\exclusives.png" Link="Resources\billboard\exclusives.png" />
+    <Resource Include="..\Assets\billboard\support.png" Link="Resources\billboard\support.png" />
 
     <!-- Training Programs art: day mood plates and program sigils.
          SINGLE LEVEL on purpose - a Resources\programs\<sub>\ folder would compile fine and then
@@ -477,22 +496,29 @@
        ========================================================================================== -->
   <PropertyGroup>
     <ContentPackSoundsExclude>
-      Resources\sounds\flashes_audio\**\*.mp3;
-      Resources\sounds\flashes_audio\**\*.wav;
-      Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.mp3;
-      Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.wav;
-      Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.ogg;
-      Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.m4a;
-      Resources\sounds\companion_audio\mods\builtin-locked\**\*.mp3;
-      Resources\sounds\companion_audio\mods\builtin-locked\**\*.wav;
-      Resources\sounds\companion_audio\mods\builtin-locked\**\*.ogg;
-      Resources\sounds\companion_audio\mods\builtin-locked\**\*.m4a;
-      Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.mp3;
-      Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.wav;
-      Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.ogg;
-      Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.m4a;
-      Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.png
+      ..\Assets\sounds\flashes_audio\**\*.mp3;
+      ..\Assets\sounds\flashes_audio\**\*.wav;
+      ..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.mp3;
+      ..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.wav;
+      ..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.ogg;
+      ..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.m4a;
+      ..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.mp3;
+      ..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.wav;
+      ..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.ogg;
+      ..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.m4a;
+      ..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.mp3;
+      ..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.wav;
+      ..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.ogg;
+      ..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.m4a;
+      ..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.png
     </ContentPackSoundsExclude>
+    <!-- PATH CONVENTION. The bytes live in the shared repo-root \Assets tree and every include
+         below is "..\Assets\X" with Link="Resources\X", so an Exclude has to be spelled the way
+         the Include is or it matches nothing and the file ships anyway. These relative properties
+         were still spelled Resources\ after the move, which silently un-excluded the content-pack
+         audio, the arcademy/Back Room harnesses and main's new Remix tests from ordinary Content
+         copying (the *Abs twins below only prune the extra post-publish copy). Logical paths are
+         unchanged - only the source-side spelling. -->
     <!-- NOTE: $(MSBuildProjectDirectory), not $(ProjectDir). ProjectDir is defined by
          Microsoft.Common.CurrentVersion.targets, which the SDK imports AFTER this file's body,
          so it evaluates to empty here (it only works inside a <Target>, like the one below). -->
@@ -514,10 +540,10 @@
       $(MSBuildProjectDirectory)\..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.png
     </ContentPackSoundsExcludeAbs>
     <ContentPackWebExclude>
-      Resources\web\intake\assets\vo\**\*.mp3;
-      Resources\web\intake\assets\sfx\**\*.mp3;
-      Resources\web\intake\assets\music\**\*.mp3;
-      Resources\web\dtrh\assets\**\*.mp3
+      ..\Assets\web\intake\assets\vo\**\*.mp3;
+      ..\Assets\web\intake\assets\sfx\**\*.mp3;
+      ..\Assets\web\intake\assets\music\**\*.mp3;
+      ..\Assets\web\dtrh\assets\**\*.mp3
     </ContentPackWebExclude>
     <ContentPackWebExcludeAbs>
       $(MSBuildProjectDirectory)\..\Assets\web\intake\assets\vo\**\*.mp3;
@@ -525,21 +551,40 @@
       $(MSBuildProjectDirectory)\..\Assets\web\intake\assets\music\**\*.mp3;
       $(MSBuildProjectDirectory)\..\Assets\web\dtrh\assets\**\*.mp3
     </ContentPackWebExcludeAbs>
-    <!-- The four arcademy *demo.html browser harnesses. Listed once here and referenced by
+    <!-- The four arcademy *demo.html browser harnesses, plus the games' node smoke
+         checks (games\*\smoke\*.mjs), the Back Room smoke and the hypno kit's test pages
+         (shared\hypno\tests: kit.html, the mock host, the probe station). Listed once here and referenced by
          BOTH the <Content> Exclude below AND the CopyContentAfterPublish WebFiles Exclude,
          which re-globs Resources\web independently - miss the second one and the
          harness pages come straight back into the publish tree (and so the installer). -->
     <ArcademyHarnessExclude>
-      Resources\web\arcademy\annex\demo.html;
-      Resources\web\arcademy\vn\demo.html;
-      Resources\web\arcademy\emi\demo.html;
-      Resources\web\arcademy\shell\recordsroom.demo.html
+      ..\Assets\web\arcademy\annex\demo.html;
+      ..\Assets\web\arcademy\vn\demo.html;
+      ..\Assets\web\arcademy\emi\demo.html;
+      ..\Assets\web\arcademy\shell\recordsroom.demo.html;
+      ..\Assets\web\arcademy\games\**\smoke\**\*;
+      ..\Assets\web\backroom\smoke\**\*;
+      ..\Assets\web\backroom\**\tests\**\*;
+      ..\Assets\web\backroom\shared\hypno\tests\**\*
     </ArcademyHarnessExclude>
+    <!-- Remix engine (Resources\web\remix, vendored from cclabs-site/remix for the Jackpot Remix
+         flash): its node tests ride along so the vendored copy stays checkable, but they are
+         dead weight in the installer. Same two-place rule as the harness pages above. -->
+    <RemixTestExclude>
+      ..\Assets\web\remix\test\**\*
+    </RemixTestExclude>
+    <RemixTestExcludeAbs>
+      $(MSBuildProjectDirectory)\..\Assets\web\remix\test\**\*
+    </RemixTestExcludeAbs>
     <ArcademyHarnessExcludeAbs>
       $(MSBuildProjectDirectory)\..\Assets\web\arcademy\annex\demo.html;
       $(MSBuildProjectDirectory)\..\Assets\web\arcademy\vn\demo.html;
       $(MSBuildProjectDirectory)\..\Assets\web\arcademy\emi\demo.html;
-      $(MSBuildProjectDirectory)\..\Assets\web\arcademy\shell\recordsroom.demo.html
+      $(MSBuildProjectDirectory)\..\Assets\web\arcademy\shell\recordsroom.demo.html;
+      $(MSBuildProjectDirectory)\..\Assets\web\arcademy\games\**\smoke\**\*;
+      $(MSBuildProjectDirectory)\..\Assets\web\backroom\smoke\**\*;
+      $(MSBuildProjectDirectory)\..\Assets\web\backroom\**\tests\**\*;
+      $(MSBuildProjectDirectory)\..\Assets\web\backroom\shared\hypno\tests\**\*
     </ArcademyHarnessExcludeAbs>
   </PropertyGroup>
 
@@ -569,7 +614,10 @@
          the virtual host. Excluded, not deleted: they are how those layers get worked on. -->
     <None Remove="..\Assets\web\**\*" />
     <Content Include="..\Assets\web\**\*" Link="Resources\web\%(RecursiveDir)%(Filename)%(Extension)"
-             Exclude="..\Assets\web\**\CLAUDE.md;..\Assets\web\**\CAPTCHA_*.md;..\Assets\web\**\BUILD_PLAN.md;$(ArcademyHarnessExclude);$(ContentPackWebExclude)">
+             Exclude="..\Assets\web\**\CLAUDE.md;..\Assets\web\**\CAPTCHA_*.md;..\Assets\web\**\BUILD_PLAN.md;..\Assets\web\**\PERFORMANCE.md;
+                      $(ArcademyHarnessExclude);
+                      $(RemixTestExclude);
+                      $(ContentPackWebExclude)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
@@ -581,9 +629,23 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- Header banner line pool (Resources\banner\lines.<lang>.json): read from disk at
+         runtime by BannerPoolService, so it ships next to the exe like the EMI lines above. -->
+    <Content Include="..\Assets\banner\*.json" Link="Resources\banner\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <!-- EMI desk fonts (Resources\emi\fonts\*.ttf): loaded through a FontFamily base URI at
          runtime, not as a WPF Resource, so they ship beside the exe exactly like the lines file. -->
     <Content Include="..\Assets\emi\**\*.ttf" Link="Resources\emi\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+    <!-- Back Room spoken word clips (CONTRACT 10.21): words.json plus whatever clips it names. The
+         folder ships with the manifest and the README only; a clip dropped in is picked up by name. -->
+    <Content Include="..\Assets\Audio\backroom\words\**\*" Link="Resources\Audio\backroom\words\%(RecursiveDir)%(Filename)%(Extension)" Exclude="..\Assets\Audio\**\README.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
@@ -651,12 +713,16 @@
            tree. That is why both live in properties. See docs/CONTENT_PACKS_PLAN.md §6. -->
       <SoundFiles Include="$(ProjectDir)..\Assets\sounds\**\*" Exclude="$(ContentPackSoundsExcludeAbs)" />
       <WebFiles Include="$(ProjectDir)..\Assets\web\**\*"
-                Exclude="$(ProjectDir)..\Assets\web\**\CLAUDE.md;$(ProjectDir)..\Assets\web\**\CAPTCHA_*.md;$(ProjectDir)..\Assets\web\**\BUILD_PLAN.md;$(ContentPackWebExcludeAbs);$(ArcademyHarnessExcludeAbs)" />
+                Exclude="$(ProjectDir)..\Assets\web\**\CLAUDE.md;$(ProjectDir)..\Assets\web\**\CAPTCHA_*.md;$(ProjectDir)..\Assets\web\**\BUILD_PLAN.md;$(ProjectDir)..\Assets\web\**\PERFORMANCE.md;
+                         $(ContentPackWebExcludeAbs);
+                         $(RemixTestExcludeAbs);
+                         $(ArcademyHarnessExcludeAbs)" />
       <SubAudioFiles Include="$(ProjectDir)..\Assets\sub_audio\**\*" />
       <AwarenessPresetFiles Include="$(ProjectDir)..\Assets\AwarenessPresets\**\*" />
       <DeeperDemoFiles Include="$(ProjectDir)..\Assets\DeeperDemos\**\*" />
       <SpiralFiles Include="$(ProjectDir)Spirals\**\*" />
       <TutorialVideoFiles Include="$(ProjectDir)..\Assets\tutorial_videos\**\*" />
+      <BannerPoolFiles Include="$(ProjectDir)..\Assets\banner\*.json" />
     </ItemGroup>
     <Copy SourceFiles="@(SoundFiles)" DestinationFolder="$(PublishDir)Resources\sounds\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(WebFiles)" DestinationFolder="$(PublishDir)Resources\web\%(RecursiveDir)" SkipUnchangedFiles="true" />
@@ -665,6 +731,7 @@
     <Copy SourceFiles="@(DeeperDemoFiles)" DestinationFolder="$(PublishDir)Resources\DeeperDemos\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(SpiralFiles)" DestinationFolder="$(PublishDir)Spirals\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(TutorialVideoFiles)" DestinationFolder="$(PublishDir)Resources\tutorial_videos\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(BannerPoolFiles)" DestinationFolder="$(PublishDir)Resources\banner\" SkipUnchangedFiles="true" />
     <Message Importance="High" Text="Copied content files to publish folder" />
   </Target>
 

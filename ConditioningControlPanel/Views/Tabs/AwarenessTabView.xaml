@@ -1,4 +1,4 @@
-<UserControl x:Class="ConditioningControlPanel.Views.Tabs.AwarenessTabView"
+﻿<UserControl x:Class="ConditioningControlPanel.Views.Tabs.AwarenessTabView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -82,7 +82,7 @@
                             <StackPanel VerticalAlignment="Center">
                                 <TextBlock Text="Awareness Engine" FontSize="17" FontWeight="Bold"
                                            Foreground="{StaticResource TextLightBrush}"/>
-                                <TextBlock Text="She's watching your screen and your typing. React in real time."
+                                <TextBlock Text="{loc:Str awareness_hero_subtitle}"
                                            FontSize="11.5" Foreground="{StaticResource TextMutedBrush}" Margin="0,1,0,0"/>
                             </StackPanel>
                         </StackPanel>
@@ -93,7 +93,7 @@
                                     Style="{StaticResource SmallPinkButton}"
                                     VerticalAlignment="Center" Margin="0,0,14,0"
                                     Click="BtnAwarenessTutorial_Click"
-                                    ToolTip="Walk through the Awareness Engine — sources, cooldowns, presets, and the editor."/>
+                                    ToolTip="{loc:Str awareness_tutorial_tooltip}"/>
                             <Ellipse x:Name="AwarenessStatusDot" x:FieldModifier="internal" Width="8" Height="8"
                                      Fill="#606060" VerticalAlignment="Center" Margin="0,0,8,0"/>
                             <TextBlock x:Name="TxtAwarenessStatus" x:FieldModifier="internal" Text="Off"
@@ -154,7 +154,7 @@
                                     <StackPanel x:Name="AwarenessPulseFeed" x:FieldModifier="internal">
                                         <!-- Empty state shown when no fires yet -->
                                         <TextBlock x:Name="TxtAwarenessPulseEmpty" x:FieldModifier="internal"
-                                                   Text="Nothing yet. Enable the engine and she'll start noticing things."
+                                                   Text="{loc:Str awareness_pulse_empty}"
                                                    Foreground="{DynamicResource TextMutedBrush}" FontSize="12" FontStyle="Italic"
                                                    TextAlignment="Center" Margin="0,18,0,18"/>
                                     </StackPanel>
@@ -172,7 +172,7 @@
                             <Grid Margin="4,0,4,10">
                                 <TextBlock Text="PRESETS" Foreground="{StaticResource TabHueBrush}" FontSize="10" FontWeight="Bold"
                                            VerticalAlignment="Center"/>
-                                <TextBlock Text="One-click packs — click any card to preview or install"
+                                <TextBlock Text="{loc:Str awareness_presets_hint}"
                                            HorizontalAlignment="Right"
                                            Foreground="{DynamicResource TextDimBrush}" FontSize="10" FontStyle="Italic"/>
                             </Grid>

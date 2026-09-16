@@ -195,7 +195,7 @@ namespace ConditioningControlPanel
                     // Seed the parent-geometry cache from the main thread so the attached avatar positions
                     // correctly on first paint (CaptureParentGeom runs sync here — we ARE the parent thread).
                     _avatarTubeWindow?.CaptureParentGeom();
-                    App.Logger?.Information("Avatar Tube Window initialized (own UI thread)");
+                    App.Logger?.Debug("Avatar Tube Window initialized (own UI thread)");
                 }
                 else
                 {
@@ -215,7 +215,7 @@ namespace ConditioningControlPanel
                         _avatarTubeWindow.StartPoseAnimation();
                     }
 
-                    App.Logger?.Information("Avatar Tube Window initialized");
+                    App.Logger?.Debug("Avatar Tube Window initialized");
                 }
             }
             catch (Exception ex)

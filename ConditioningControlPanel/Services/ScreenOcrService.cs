@@ -69,7 +69,7 @@ namespace ConditioningControlPanel.Services
                 _timer?.Dispose();
                 _timer = null;
                 _isRunning = false;
-                App.Logger?.Information("ScreenOcrService stopped");
+                App.Logger?.Debug("ScreenOcrService stopped");
             }
         }
 

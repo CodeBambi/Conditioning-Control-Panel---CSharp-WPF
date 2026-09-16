@@ -1,4 +1,4 @@
-<UserControl x:Class="ConditioningControlPanel.Features.VideoFeatureControl"
+﻿<UserControl x:Class="ConditioningControlPanel.Features.VideoFeatureControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
@@ -89,7 +89,7 @@
                                  exposure is rate x length, so clamping max length to 10s guts a locked
                                  "2 videos per hour" prescription by ~90% without touching the locked rate.
                                  That is the opt-out this lock exists to stop. -->
-                            <Grid Height="36" Background="Transparent" ToolTip="Duration filter: min length &#x2192; max length. Filter videos by length. 0 = no limit.">
+                            <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_duration_filter}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="130"/>
                                     <ColumnDefinition Width="*"/>
@@ -98,7 +98,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="56"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Duration filter" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_duration_filter}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <Slider Grid.Column="1" x:Name="SliderVideoMinDur" Minimum="0" Maximum="600" Value="0"
                                         feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0,8,0"
@@ -219,13 +219,13 @@
 
                             <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
 
-                            <!-- Phase 3 placeholder copy — voice-pass at ship. -->
-                            <Grid Height="34" Background="Transparent" ToolTip="Look at a target for ~1s instead of clicking. Same hit, same reward.">
+                            <!-- Gaze click: copy passed the 6.9.4 voice sweep. -->
+                            <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_stare_to_click}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Stare to click" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_stare_to_click}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <CheckBox Grid.Column="1" x:Name="ChkVideoGazeClick"
                                           Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"

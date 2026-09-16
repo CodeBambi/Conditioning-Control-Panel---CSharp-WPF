@@ -9,12 +9,23 @@
         ResizeMode="NoResize"
         SizeToContent="Height"
         Width="420"
+        Topmost="True"
         WindowStartupLocation="CenterOwner">
 
     <!--
         The summon-time mute question. Deliberately self-contained: every brush is a literal, so it
         cannot take a BAML EndOfStream from a cross-dictionary StaticResource lookup the way the
         Velvet Kit work did. Three answers, no default button: the user has to say which.
+
+        TOPMOST, like every other window in this folder (desk, book, options, ring). Not decoration:
+        the one moment this dialog is certain to appear is a summon while something is already
+        talking, and during a lockdown that something is a strict video window which is itself
+        Topmost and fullscreen. Owner alone only lifts this above MainWindow, and MainWindow is
+        underneath that video - so the modal opened out of sight while its nested message pump held
+        the summon, and EMI never arrived (ccp-bugs #1190). It does not weaken the lockdown: all
+        three answers are about the AVATAR, there is no exit affordance here, Escape means "keep the
+        avatar" rather than "let me out", and the strict video window deliberately does not
+        re-activate itself on Deactivated (VideoService.cs), so nothing fights this for the z-order.
     -->
     <Window.Resources>
         <Style x:Key="EmiPromptButton" TargetType="Button">

@@ -210,6 +210,7 @@ internal static class ArcademySyncService
 
             using var response = await Http.SendAsync(request).ConfigureAwait(false);
             var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            MergedAccountRecovery.TryHandle((int)response.StatusCode, body);   // contract D
             if (!response.IsSuccessStatusCode)
             {
                 App.Logger?.Information("[ArcademySync] pull failed: {Status} {Body}",
@@ -297,6 +298,7 @@ internal static class ArcademySyncService
 
             using var response = await Http.SendAsync(request).ConfigureAwait(false);
             var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            MergedAccountRecovery.TryHandle((int)response.StatusCode, text);   // contract D
 
             if (!response.IsSuccessStatusCode)
             {

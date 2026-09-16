@@ -1,0 +1,115 @@
+/* station.css - Daily Daze wheel station chrome, the slot station's look (stations/slot/station.css) scoped
+   under .wheel-station so the room's own styles never collide. */
+.wheel-station { position: absolute; inset: 0; z-index: 20; overflow: hidden; color: #fce5f3;
+  font-family: Segoe UI, Arial, sans-serif; color-scheme: dark; }
+.wheel-station * { box-sizing: border-box; }
+.wheel-station button, .wheel-station summary { font: inherit; cursor: pointer; }
+.wheel-station button { border: 1px solid #ab79a766; color: #fce5f3; background: #28172fe8; border-radius: 10px;
+  padding: 10px 18px; min-height: 40px; transition: background .15s, transform .1s; }
+.wheel-station button:hover { background: #583056; }
+.wheel-station button:active { transform: scale(.96); }
+.wheel-station button:focus-visible, .wheel-station summary:focus-visible { outline: 2px solid #ff8ed2; outline-offset: 3px; }
+.wheel-station button:disabled { opacity: .5; cursor: default; }
+.wheel-station [hidden] { display: none !important; }
+
+.wheel-dim { position: absolute; inset: 0; backdrop-filter: brightness(.45) blur(3px); -webkit-backdrop-filter: brightness(.45) blur(3px);
+  background: radial-gradient(ellipse at 50% 45%, #bc4e9520, transparent 65%), linear-gradient(0deg, #09051099, transparent 60%);
+  transition: opacity .3s ease-out; }
+.wheel-station[data-phase="leaving"] .wheel-dim { opacity: 0; }
+.wheel-stage { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+
+/* Inside the room (ctx.hostBack) the room's Back and SP chips hold the top corners: stack under them. */
+.wheel-top { position: absolute; top: 14px; left: 14px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  z-index: 4; max-width: min(300px, 40vw); }
+.wheel-station[data-host-back] .wheel-top { top: 58px; left: 12px; }
+.wheel-station[data-host-sp] .wheel-sp { display: none; }
+.wheel-sp, .wheel-jackpot, .wheel-status { background: #201229e8; border: 1px solid #b77da247; padding: 6px 12px; border-radius: 30px; font-size: 12px; }
+.wheel-sp { color: #ffe3f2; font-weight: 600; font-variant-numeric: tabular-nums; }
+.wheel-jackpot { color: #f7d5af; }
+/* MUST HIT (10.16.E): the gold the jackpot slice already has, and nothing else. */
+.wheel-jackpot.is-must-hit { color: #ffcf6b; border-color: #ffcf6b66; }
+.wheel-status { color: #edc7df; border-radius: 12px; line-height: 1.4; font-variant-numeric: tabular-nums; white-space: pre-line; }
+.wheel-emi { position: absolute; top: 14px; right: 14px; z-index: 4; }
+.wheel-station[data-host-back] .wheel-emi { top: 58px; right: 12px; }
+.wheel-face { display: block; width: 52px; height: 47px; image-rendering: pixelated; border: 3px solid #6b507e; border-radius: 10px;
+  box-shadow: 0 3px 20px #0a0412; }
+/* Snooze: EMI dozes. Text, so it survives motion level 0 (Brake 9). */
+.wheel-zzz { position: absolute; right: -4px; top: -16px; font-size: 13px; font-weight: 700; letter-spacing: 1px; color: #cdb8ff;
+  text-shadow: 0 1px 4px #0a0412; }
+.wheel-gain { position: absolute; top: 14px; right: 80px; z-index: 5; padding: 4px 12px; border-radius: 30px; pointer-events: none;
+  background: #2b1638ee; border: 1px solid #ffcf6b66; color: #ffcf6b; font-weight: 600; font-size: 13px; }
+.wheel-station[data-host-back] .wheel-gain { top: 58px; right: 74px; }
+.wheel-tokens { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
+.wheel-token { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; will-change: transform;
+  background: radial-gradient(circle at 35% 30%, #fff6d8, #ffcf6b 45%, #d9689f 100%); box-shadow: 0 0 10px #ffcf6b99; }
+/* Law VIII: a press answers on its frame with a ring (a state, so reduced motion keeps it). */
+.wheel-station .is-ringing, .wheel-station .wheel-back:active { box-shadow: 0 0 0 3px #ff8ed2cc !important; }
+
+.wheel-spin { position: absolute; z-index: 4; right: 22px; bottom: 18px; min-width: 132px; font-weight: 700; color: #26122f !important;
+  background: linear-gradient(135deg, #e59cca, #a562b4) !important; border-color: #efc4de !important;
+  box-shadow: inset 0 1px 0 #fff5, 0 4px 22px #c767b32b, 0 5px 24px #08040b99; }
+.wheel-spin span, .wheel-spin small { display: block; }
+.wheel-spin small { font-size: 10px; font-weight: 500; opacity: .85; font-variant-numeric: tabular-nums; }
+
+.wheel-odds { position: absolute; left: 22px; bottom: 18px; z-index: 4; font-size: 12px; max-width: min(380px, calc(100vw - 190px)); }
+.wheel-odds summary { list-style: none; border: 1px solid #ab79a766; background: #28172fe8; border-radius: 8px; padding: 7px 12px; display: inline-block; }
+.wheel-odds[open] { background: #24142df5; border: 1px solid #ab79a766; border-radius: 12px; padding: 10px; max-height: calc(100vh - 150px); overflow: auto; }
+.wheel-odds table { border-collapse: collapse; margin-top: 8px; width: 100%; }
+.wheel-odds th { text-align: left; font-weight: 500; padding: 2px 10px 2px 0; }
+.wheel-odds td { text-align: right; padding: 2px 0 2px 10px; color: #edc7df; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.wheel-odds p { margin: 8px 0 0; color: #bda2bf; }
+
+.wheel-card { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 6; background: #28172ff2;
+  border: 1px solid #edb1d177; border-radius: 14px; padding: 18px 22px; text-align: center; max-width: min(420px, calc(100vw - 32px)); }
+.wheel-card p { margin: 0 0 12px; }
+.wheel-station[data-host-back] .wheel-card p { margin: 0; }
+.wheel-loading { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 15px 22px;
+  background: #28172fea; border-radius: 12px; z-index: 5; }
+.wheel-station[data-phase="closed"] :is(.wheel-spin, .wheel-odds) { display: none; }
+
+@media (max-width: 800px) {
+  .wheel-top { top: 10px; left: 12px; max-width: 190px; }
+  .wheel-sp, .wheel-jackpot, .wheel-status { font-size: 11px; padding: 5px 10px; }
+  .wheel-emi { top: 10px; right: 12px; }
+  .wheel-face { width: 44px; height: 40px; }
+  .wheel-spin { right: 12px; bottom: 12px; min-width: 104px; }
+  .wheel-odds { left: 12px; bottom: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .wheel-station * { transition: none !important; } }
+
+/* Hypno v3 (CONTRACT 10.13.F): the long last turn's stage edges and caption. Opacity only, set per frame by
+   station.js (0.65 x dim x k); no backdrop-filter. They stay with brainDrain off: the tunnel is the host's. */
+.wheel-edges { position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle at var(--wheel-x, 50%) var(--wheel-y, 50%), #06030c00 26%, #06030c 78%); }
+.wheel-slowly { position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); z-index: 3; pointer-events: none; opacity: 0;
+  padding: 3px 12px; border-radius: 20px; background: #140a1ccc; color: #e8c27a; font: 500 12px Consolas, "DM Mono", ui-monospace, monospace;
+  letter-spacing: .08em; white-space: nowrap; }
+
+/* A small brass service cloche rises on the landed frame. Back remains above it. */
+.daze-delivery{position:absolute;left:50%;bottom:110px;transform:translateX(-50%);width:min(340px,82vw);padding:12px 18px;border:1px solid #d6ac69;border-radius:18px;background:#fff1df;color:#482235;text-align:center;pointer-events:none;z-index:4;box-shadow:0 8px 30px #170c2580}
+.daze-delivery[hidden]{display:none}.daze-delivery p{margin:6px 0;font:600 15px/1.35 Georgia,serif}
+.daze-cloche{height:62px;position:relative;display:grid;place-items:center}.daze-cloche span{font:700 32px Georgia;color:#a63668}
+.daze-cloche b{position:absolute;bottom:0;width:112px;border-bottom:5px solid #b58b48;border-radius:50%}
+.daze-cloche i{position:absolute;z-index:1;bottom:4px;width:104px;height:48px;border-radius:60px 60px 5px 5px;background:linear-gradient(100deg,#8c622e,#f6dca1 48%,#c39653);transform:translateY(-47px);opacity:0;animation:daze-cloche 620ms cubic-bezier(.2,1.5,.4,1) both}
+.daze-delivery[data-kind=double] .daze-cloche i,.daze-delivery[data-kind=nothing] .daze-cloche i,.daze-delivery[data-kind=nothing] .daze-cloche b{display:none}
+.daze-delivery[data-kind=nothing]{background:#f3e9db;box-shadow:none}.daze-delivery.is-still *{animation:none!important}
+@keyframes daze-cloche{from{transform:translateY(0);opacity:1}to{transform:translateY(-47px);opacity:0}}
+@media(max-width:600px){.daze-delivery{bottom:102px;padding:8px 12px}.daze-cloche{height:46px}.daze-delivery p{font-size:13px}}
+
+/* Seated gameplay shares the room canvas; only the controls intercept input. */
+.wheel-station[data-seated]{pointer-events:none}.wheel-station[data-seated] .wheel-dim,.wheel-station[data-seated] .wheel-emi{display:none}
+.wheel-station[data-seated] :is(button,details,.wheel-card){pointer-events:auto}
+.wheel-station[data-seated] .wheel-top{top:112px;max-width:min(320px,70vw)}
+.wheel-station[data-seated] .wheel-odds[open]{max-width:calc(100vw - 24px);max-height:55vh}
+.wheel-station[data-seated] .wheel-odds td{white-space:normal}
+
+/* THE GLYPH HIT (shared/hypno/callout.js): a winning element on the DOM glows and pops 1.06 over HIGHLIGHT_MS (400 ms).
+   The same rule in every game's station.css; the canvas and three.js views draw the same pulse themselves. */
+.br-glyph-hit { animation: br-glyph-hit 400ms cubic-bezier(.2, 1.5, .4, 1) both; }
+@keyframes br-glyph-hit {
+  0% { box-shadow: 0 0 0 0 #5fffd000; transform: scale(1); }
+  50% { box-shadow: 0 0 18px 4px #5fffd0cc; transform: scale(1.06); }
+  100% { box-shadow: 0 0 0 0 #5fffd000; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) { .br-glyph-hit { animation-name: br-glyph-hit-still; } }
+@keyframes br-glyph-hit-still { 0%, 100% { box-shadow: 0 0 0 0 #5fffd000; } 50% { box-shadow: 0 0 18px 4px #5fffd0cc; } }

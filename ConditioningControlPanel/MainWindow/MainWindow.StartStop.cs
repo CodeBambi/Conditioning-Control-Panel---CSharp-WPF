@@ -70,18 +70,19 @@ namespace ConditioningControlPanel
                     var finalXP = Math.Max(0, potentialXP - penalty);
 
                     var penaltyText = penalty > 0
-                        ? $"\n(Pause penalty: -{penalty} XP, would earn: {finalXP} XP)"
+                        ? Loc.GetF("dialog_stop_session_penalty", penalty, finalXP)
                         : "";
 
                     var confirmed = ShowStyledDialog(
-                        "⚠ Stop Session?",
-                        $"You're currently in a session:\n" +
-                        $"{session?.Icon} {session?.Name}\n\n" +
-                        $"Time elapsed: {((int)elapsed.TotalMinutes):D2}:{elapsed.Seconds:D2}\n" +
-                        $"Time remaining: {((int)remaining.TotalMinutes):D2}:{remaining.Seconds:D2}\n\n" +
-                        $"If you stop now, you will lose ALL {potentialXP} XP.{penaltyText}\n\n" +
-                        "Are you sure you want to quit?",
-                        "Yes, stop session", "Keep going");
+                        Loc.Get("dialog_stop_session_title"),
+                        Loc.GetF("dialog_stop_session_body",
+                            session?.Icon ?? "",
+                            session?.Name ?? "",
+                            $"{((int)elapsed.TotalMinutes):D2}:{elapsed.Seconds:D2}",
+                            $"{((int)remaining.TotalMinutes):D2}:{remaining.Seconds:D2}",
+                            potentialXP,
+                            penaltyText),
+                        Loc.Get("btn_stop_session_yes"), Loc.Get("btn_stop_session_no"));
 
                     if (!confirmed) return;
 
@@ -478,6 +479,11 @@ namespace ConditioningControlPanel
 
             // Stop other services
             App.Subliminal.Stop();
+            // Before the overlay service goes down: hand back anything a TAKEOVER pulse borrowed
+            // (#1180). Takeover itself may legitimately outlive the engine (see the block below), but
+            // an in-flight pink/spiral pulse must not - it had boosted the user's opacity and taken
+            // ownership of the overlay service, and its own restore is 30 s away.
+            App.Autonomy?.CancelActivePulses();
             App.Overlay.Stop();
             App.LockCard.Stop();   // scheduler only — the visible card is dropped by ForceCloseAll below
             App.BubbleCount.Stop();
@@ -527,6 +533,11 @@ namespace ConditioningControlPanel
             // topmost, chrome-less, taskbar-less window, so a session that ends behind one leaves
             // the completion dialog modal and invisible - the reporter had to reboot the machine.
             ExitBrowserFullscreenForTeardown();
+            // Same shape, same list: the Deeper player pops its WebView out into a
+            // borderless topmost host for fullscreen video. Left standing it is a
+            // window with no title bar to drag, no resize grip, and nothing in it
+            // once the video is over (Discord report BUG-J9PPPJT274).
+            Views.Deeper.EnhancementPlayerWindow.ForceExitFullscreenAll();
 
             // Stop ramp timer and reset sliders
             StopRampTimer();
@@ -946,7 +957,7 @@ namespace ConditioningControlPanel
                     Children =
                     {
                         new TextBlock { Text = "■", FontSize = 16, Width = 20, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Center },
-                        new TextBlock { Text = "STOP", FontSize = 18, Width = 60, VerticalAlignment = VerticalAlignment.Center }
+                        new TextBlock { Text = Loc.Get("label_stop"), FontSize = 18, Width = 60, VerticalAlignment = VerticalAlignment.Center }
                     }
                 };
 
@@ -967,7 +978,7 @@ namespace ConditioningControlPanel
                     Children =
                     {
                         new TextBlock { Text = "▶", FontSize = 16, Width = 20, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Center },
-                        new TextBlock { Text = "START", FontSize = 18, Width = 60, VerticalAlignment = VerticalAlignment.Center }
+                        new TextBlock { Text = Loc.Get("label_start"), FontSize = 18, Width = 60, VerticalAlignment = VerticalAlignment.Center }
                     }
                 };
 
@@ -998,7 +1009,7 @@ namespace ConditioningControlPanel
                     Children =
                     {
                         new TextBlock { Text = "\U0001F3AE", FontSize = 16, Width = 24, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Center },
-                        new TextBlock { Text = "REMOTE CONNECTED", FontSize = 14, VerticalAlignment = VerticalAlignment.Center }
+                        new TextBlock { Text = Loc.Get("label_remote_connected"), FontSize = 14, VerticalAlignment = VerticalAlignment.Center }
                     }
                 };
             }
@@ -1018,7 +1029,7 @@ namespace ConditioningControlPanel
                         Children =
                         {
                             new TextBlock { Text = "■", FontSize = 16, Width = 20, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Center },
-                            new TextBlock { Text = "STOP", FontSize = 18, Width = 60, VerticalAlignment = VerticalAlignment.Center }
+                            new TextBlock { Text = Loc.Get("label_stop"), FontSize = 18, Width = 60, VerticalAlignment = VerticalAlignment.Center }
                         }
                     };
                 }
@@ -1033,7 +1044,7 @@ namespace ConditioningControlPanel
                         Children =
                         {
                             new TextBlock { Text = "▶", FontSize = 16, Width = 20, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Center },
-                            new TextBlock { Text = "START", FontSize = 18, Width = 60, VerticalAlignment = VerticalAlignment.Center }
+                            new TextBlock { Text = Loc.Get("label_start"), FontSize = 18, Width = 60, VerticalAlignment = VerticalAlignment.Center }
                         }
                     };
                 }

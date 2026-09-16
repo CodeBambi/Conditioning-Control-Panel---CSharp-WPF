@@ -19,6 +19,7 @@ public sealed class GlobalMouseHook : IDisposable
     private const int WM_LBUTTONDOWN = 0x0201;
     private const int WM_LBUTTONUP = 0x0202;
     private const int WM_RBUTTONUP = 0x0205;
+    private const int WM_MOUSEMOVE = 0x0200;
 
     private IntPtr _hookId = IntPtr.Zero;
     private readonly LowLevelMouseProc _proc;
@@ -52,6 +53,22 @@ public sealed class GlobalMouseHook : IDisposable
     /// also land on whatever sits behind the click-through host); a miss returns false and passes
     /// the click through untouched. Same hook-thread contract as <see cref="RightDown"/>.</summary>
     public Func<Point, bool>? LeftDown;
+
+    /// <summary>
+    /// Left button RELEASED at this PHYSICAL-px screen point. Notification only: whether the UP is
+    /// swallowed is already decided by whether its DOWN was (see the swallow flags above), so this
+    /// callback returns nothing and must not try to change that. Used by the draggable flash
+    /// (Flashes v2 wave 2) to finish a drag.
+    /// </summary>
+    public Action<Point>? LeftUp;
+
+    /// <summary>
+    /// Pointer moved to this PHYSICAL-px screen point. Mouse moves are the highest-volume message
+    /// on the hook by far, so this is the ONE callback owners are expected to attach and detach
+    /// around the gesture that needs it rather than leaving wired: while it is null the hook
+    /// returns before it even marshals the message, so an idle drag costs nothing.
+    /// </summary>
+    public Action<Point>? MouseMove;
 
     public GlobalMouseHook()
     {
@@ -107,11 +124,20 @@ public sealed class GlobalMouseHook : IDisposable
                     App.Logger?.Debug("Mouse hook callback: {E}", ex.Message);
                 }
             }
-            else if (wParam == (IntPtr)WM_LBUTTONUP && _swallowNextLeftUp)
+            else if (wParam == (IntPtr)WM_LBUTTONUP)
             {
-                _swallowNextLeftUp = false;
-                CompleteDeferredDisposeIfDrained();
-                return (IntPtr)1;
+                Notify(LeftUp, lParam);
+                if (_swallowNextLeftUp)
+                {
+                    _swallowNextLeftUp = false;
+                    CompleteDeferredDisposeIfDrained();
+                    return (IntPtr)1;
+                }
+            }
+            else if (wParam == (IntPtr)WM_MOUSEMOVE)
+            {
+                // Never swallowed: a drag moves the picture, it does not steal the pointer.
+                Notify(MouseMove, lParam);
             }
             else if (wParam == (IntPtr)WM_RBUTTONUP && _swallowNextRightUp)
             {
@@ -137,6 +163,8 @@ public sealed class GlobalMouseHook : IDisposable
                 _unhookPending = true;
                 RightDown = null;
                 LeftDown = null;
+                LeftUp = null;
+                MouseMove = null;
                 _unhookFailsafe = new System.Threading.Timer(
                     static s => ((GlobalMouseHook)s!).CompleteDeferredDispose(),
                     this, UnhookFailsafeMs, System.Threading.Timeout.Infinite);
@@ -146,6 +174,21 @@ public sealed class GlobalMouseHook : IDisposable
             _isDisposed = true;
         }
         Stop();
+    }
+
+    /// <summary>Marshal the point and hand it to a notification-only callback, if one is attached.</summary>
+    private static void Notify(Action<Point>? cb, IntPtr lParam)
+    {
+        if (cb == null) return;   // the whole cost when nothing is listening
+        try
+        {
+            var info = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+            cb(new Point(info.pt.X, info.pt.Y));
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("Mouse hook notify: {E}", ex.Message);
+        }
     }
 
     /// <summary>Hook message loop: finish a deferred dispose once no swallow remains pending.</summary>

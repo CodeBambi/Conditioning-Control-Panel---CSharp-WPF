@@ -1,0 +1,12 @@
+{
+  "note": "Dev fixtures for the ramp harness. These point at art already bundled with DtRH so the harness adds no binaries of its own. Empty the entries array to test the no-media path: no video card, gifs become pink noise tiles.",
+  "entries": [
+    { "kind": "image", "url": "/dtrh/assets/bubbles/effects/flash.png" },
+    { "kind": "image", "url": "/dtrh/assets/bubbles/effects/pinkfilter.png" },
+    { "kind": "image", "url": "/dtrh/assets/bubbles/effects/braindrain.png" },
+    { "kind": "image", "url": "/dtrh/assets/bubbles/effects/subliminal.png" },
+    { "kind": "gif", "url": "/dtrh/assets/bubbles/effects/spirals/sp6.gif" },
+    { "kind": "gif", "url": "/dtrh/assets/bubbles/effects/spirals/sp7.gif" },
+    { "kind": "video", "url": "/dtrh/assets/bubbles/spiral.webm" }
+  ]
+}

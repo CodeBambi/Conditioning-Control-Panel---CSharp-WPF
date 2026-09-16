@@ -21,6 +21,8 @@ namespace ConditioningControlPanel.Services
         private double _intensity = 50; // 50% default intensity
         
         private string[]? _audioFiles;
+        // "no clips installed" is the shipped default; say it once a session, not once a scan.
+        private static bool _loggedNoAudio;
         private WaveOutEvent? _waveOut;
         private AudioFileReader? _audioReader;
         /// <summary>Bumped by every trigger and by StopCurrentAudio. A build that finishes after a
@@ -160,7 +162,7 @@ namespace ConditioningControlPanel.Services
                 var assetsFolder = EnsureAudioFolder();
                 var legacyFolder = LegacyAudioFolderPath;
 
-                App.Logger?.Information("BrainDrain: Looking for audio files in {Path} (+ legacy {Legacy})",
+                App.Logger?.Debug("BrainDrain: Looking for audio files in {Path} (+ legacy {Legacy})",
                     assetsFolder, legacyFolder);
 
                 // Assets first so its entries claim their file names; the legacy folder then only
@@ -182,8 +184,15 @@ namespace ConditioningControlPanel.Services
 
                 if (_audioFiles.Length == 0)
                 {
-                    App.Logger?.Warning("BrainDrain: No .mp3/.wav/.ogg files found in {Path} or {Legacy}",
-                        assetsFolder, legacyFolder);
+                    // Shipping with no BrainDrain clips is the DEFAULT state, not a fault: this fired at
+                    // Warning on every launch and was the single biggest source of WRN lines in the log.
+                    // Information, and only the first time per session.
+                    if (!_loggedNoAudio)
+                    {
+                        _loggedNoAudio = true;
+                        App.Logger?.Information("BrainDrain: no .mp3/.wav/.ogg files in {Path} or {Legacy} - the feature stays idle",
+                            assetsFolder, legacyFolder);
+                    }
                 }
                 else
                 {
@@ -260,7 +269,7 @@ namespace ConditioningControlPanel.Services
             // Update Discord presence back to idle
             App.DiscordRpc?.SetIdleActivity();
 
-            App.Logger?.Information("BrainDrain stopped");
+            App.Logger?.Debug("BrainDrain stopped");
         }
         
         public void UpdateSettings()

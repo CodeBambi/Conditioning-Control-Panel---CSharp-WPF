@@ -978,21 +978,72 @@ namespace ConditioningControlPanel.Services
                 EventHandler<SessionProgressEventArgs> progress = (_, __) =>
                     Raise("SessionProgress", c => c.Set("session_elapsed_sec", _state.SessionElapsedSeconds));
 
+                // Pause / resume: the "you stopped, and you came back" family. pause_n is the
+                // 1-based pause count this session; paused_sec is how long the resume waited.
+                EventHandler<int> paused = (_, n) =>
+                    Raise("SessionPaused", c => c.Set("pause_n", (double)n));
+                EventHandler<TimeSpan> resumed = (_, gap) =>
+                    Raise("SessionResumed", c => c
+                        .Set("pause_n", (double)_state.PauseCount)
+                        .Set("paused_sec", gap.TotalSeconds));
+
                 engine.SessionStarted += started;
                 engine.SessionStopped += stopped;
                 engine.SessionCompleted += completed;
                 engine.PhaseChanged += phase;
                 engine.ProgressUpdated += progress;
+                engine.SessionPaused += paused;
+                engine.SessionResumed += resumed;
 
                 _engineUnsubscribe.Add(() => engine.SessionStarted -= started);
                 _engineUnsubscribe.Add(() => engine.SessionStopped -= stopped);
                 _engineUnsubscribe.Add(() => engine.SessionCompleted -= completed);
                 _engineUnsubscribe.Add(() => engine.PhaseChanged -= phase);
                 _engineUnsubscribe.Add(() => engine.ProgressUpdated -= progress);
+                _engineUnsubscribe.Add(() => engine.SessionPaused -= paused);
+                _engineUnsubscribe.Add(() => engine.SessionResumed -= resumed);
+
+                AttachMainWindowFocus();
 
                 App.Logger?.Debug("BarkService: attached to SessionEngine");
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "BarkService: AttachSessionEngine failed"); }
+        }
+
+        /// <summary>
+        /// Wire the main window's focus so a session that loses the window and gets it back
+        /// raises <c>SessionRefocused</c> (away_sec, refocus_n). The window exists by the time the
+        /// session engine is attached (it is MainWindow-owned), which is why this hangs off
+        /// <see cref="AttachSessionEngine"/> rather than <see cref="Start"/>. Unsubscribed with the
+        /// engine wiring, so a re-attach never double-subscribes.
+        /// </summary>
+        private void AttachMainWindowFocus()
+        {
+            try
+            {
+                var window = System.Windows.Application.Current?.MainWindow;
+                if (window == null) return;
+
+                EventHandler deactivated = (_, __) =>
+                {
+                    if (_state.SessionRunning) _state.RegisterUnfocus();
+                };
+                EventHandler activated = (_, __) =>
+                {
+                    if (!_state.SessionRunning) return;
+                    var away = _state.RegisterRefocus();
+                    if (away < 0) return;
+                    Raise("SessionRefocused", c => c
+                        .Set("away_sec", away)
+                        .Set("refocus_n", (double)_state.RefocusCount));
+                };
+
+                window.Deactivated += deactivated;
+                window.Activated += activated;
+                _engineUnsubscribe.Add(() => window.Deactivated -= deactivated);
+                _engineUnsubscribe.Add(() => window.Activated -= activated);
+            }
+            catch (Exception ex) { App.Logger?.Debug(ex, "BarkService: main window focus wiring skipped"); }
         }
 
         /// <summary>
@@ -1415,6 +1466,18 @@ namespace ConditioningControlPanel.Services
                 // --- session phase (for deepener conditions on non-phase events) ---
                 case "phase_name": return _state.CurrentPhaseName;
                 case "phase_is_deepener": return _state.CurrentPhaseIsDeepener;
+
+                // --- "I noticed" reads: the real-hit half of a cold read. Every one of these is a
+                // fact the app actually holds; a rule that needs one and finds it at 0 should simply
+                // not match, never guess. ---
+                case "sessions_7d": return (double)(App.Settings?.Current?.SessionsWithinDays(7) ?? 0);
+                case "late_sessions_7d": return (double)(App.Settings?.Current?.LateSessionsWithinDays(7) ?? 0);
+                case "sessions_today": return (double)(App.Settings?.Current?.SessionsToday() ?? 0);
+                case "same_mod_run": return (double)(App.Settings?.Current?.SameModRun ?? 0);
+                case "pauses_this_session": return (double)_state.PauseCount;
+                case "refocus_this_session": return (double)_state.RefocusCount;
+                case "session_planned_min": return _state.SessionPlannedMinutes;
+                case "is_late_hour": { int h = DateTime.Now.Hour; return h >= 23 || h < 4; }
 
                 default:
                     return ctx.Values.TryGetValue(field, out var v) ? v : null;
@@ -1958,27 +2021,27 @@ namespace ConditioningControlPanel.Services
         private void LogDecision(string trigger, BarkRule rule, GateDecision decision)
         {
             var pool = ResolvePool(rule);
-            string preview = decision.VariantIndex >= 0 && decision.VariantIndex < pool.Count
-                ? Truncate(pool[decision.VariantIndex].Text, 48)
-                : "(n/a)";
+            // Length, not the line. The bark text is the companion talking to the user and is
+            // the sort of thing that ends up pasted into a support thread; rule + variant index
+            // identify the line exactly for anyone with the pack in front of them.
+            int lineChars = decision.VariantIndex >= 0 && decision.VariantIndex < pool.Count
+                ? (pool[decision.VariantIndex].Text ?? "").Length
+                : -1;
             string tag = DryRun ? "[BARK dry-run]" : "[BARK]";
 
             if (decision.WouldFire)
             {
                 string verb = DryRun ? "WOULD FIRE" : "FIRE";
                 App.Logger?.Information(
-                    "{Tag} {Verb} trigger={Trigger} rule={Rule} class={Class} mood={Mood} priority={Priority} variant#={Idx} line=\"{Preview}\"",
-                    tag, verb, trigger, rule.Id, rule.Class, rule.Mood, rule.Priority, decision.VariantIndex, preview);
+                    "{Tag} {Verb} trigger={Trigger} rule={Rule} class={Class} mood={Mood} priority={Priority} variant#={Idx} lineChars={Chars}",
+                    tag, verb, trigger, rule.Id, rule.Class, rule.Mood, rule.Priority, decision.VariantIndex, lineChars);
             }
             else
             {
-                App.Logger?.Information(
+                App.Logger?.Debug(
                     "{Tag} blocked trigger={Trigger} rule={Rule} class={Class} priority={Priority} reason={Reason}",
                     tag, trigger, rule.Id, rule.Class, rule.Priority, decision.Reason);
             }
         }
-
-        private static string Truncate(string s, int n) =>
-            string.IsNullOrEmpty(s) ? "" : (s.Length <= n ? s : s.Substring(0, n) + "…");
     }
 }

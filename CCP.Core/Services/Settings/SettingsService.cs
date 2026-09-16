@@ -36,6 +36,9 @@ namespace ConditioningControlPanel.Services
         // never stall the save path indefinitely.
         private static readonly TimeSpan SerializeMarshalTimeout = TimeSpan.FromSeconds(2);
 
+        // Per-instance seam for deterministic lifecycle proofs; production keeps the 500ms default.
+        internal int SaveDebounceDueTimeMilliseconds { get; set; } = 500;
+
         public AppSettings Current { get; private set; }
 
         /// <summary>
@@ -766,7 +769,7 @@ namespace ConditioningControlPanel.Services
                         _suppressCloudBackupPending = false;
                         SaveImmediate(suppress);
                     }
-                }, null, 500, Timeout.Infinite);
+                }, null, SaveDebounceDueTimeMilliseconds, Timeout.Infinite);
             }
         }
 

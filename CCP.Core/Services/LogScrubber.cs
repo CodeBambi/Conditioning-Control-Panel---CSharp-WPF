@@ -22,58 +22,19 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public static class LogScrubber
     {
-        // C:\Users\<name>\...  or  C:/Users/<name>/...
-        // Matches both backslash and forward-slash forms. The username is whatever
-        // appears between Users\ and the next path separator.
-        private static readonly Regex UserPathRegex = new(
-            @"(?i)([A-Z]:[\\/])Users[\\/]([^\\/\r\n""']+)",
-            RegexOptions.Compiled);
-
-        // /home/<name>/... and /Users/<name>/... — the POSIX and macOS home shapes.
-        //
-        // This class only knew the Windows shape while Core ran exclusively inside the WPF
-        // process, so on a Linux head the username went into crash.log verbatim. Found by
-        // actually executing Core on Linux (CCP.LinuxSmoke), not by any compile-time gate:
-        // a Windows path redacted correctly while "/home/alice/..." passed straight through.
-        //
-        // "root" is deliberately kept: it identifies no one and dropping it would obscure that
-        // the app ran elevated, which matters when reading a crash report.
-        //
-        // The leading boundary is a zero-width lookbehind, not a captured group: a consumed
-        // delimiter belongs to one match and is then missing for the next, so the second half
-        // of "/home/alice,/home/bob" would leak. The name class stops short of trailing
-        // punctuation for the same reason, and the "root" guard mirrors that class so that
-        // "root," is still recognised as root. Case-sensitive on purpose — the real shapes are
-        // lowercase "/home/" and capital-U "/Users/"; a lowercase "/users/" is an HTTP route
-        // ("GET /users/alice HTTP/1.1"), not a home directory.
-        private static readonly Regex PosixHomePathRegex = new(
-            @"(?<=^|[\s""'(\[=:,;])(/home/|/Users/)(?!root(?![^/\r\n""'\s,;)\]]))([^/\r\n""'\s,;)\]]+)",
-            RegexOptions.Compiled);
-
-        // Email addresses (RFC-ish — good enough for log scrubbing).
-        private static readonly Regex EmailRegex = new(
-            @"\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-        // OAuth-style tokens in JSON or key=value form: "access_token": "...", refresh_token=..., etc.
-        private static readonly Regex JsonTokenRegex = new(
-            @"(?i)(""?(?:access_token|refresh_token|auth_token|api_key|apikey|authorization|bearer_token|x-auth-token|x-admin-token|client_secret|patreon_token|discord_token)""?\s*[:=]\s*)""?[A-Z0-9._~+/=\-]{8,}""?",
-            RegexOptions.Compiled);
-
-        // Bearer <token>
-        private static readonly Regex BearerRegex = new(
-            @"(?i)\bBearer\s+[A-Z0-9._~+/=\-]{16,}\b",
-            RegexOptions.Compiled);
-
-        // Discord bot tokens (standard format: three dot-separated base64 segments, ~24.6.27+ chars)
-        private static readonly Regex DiscordBotTokenRegex = new(
-            @"\b[MNO][A-Za-z0-9_\-]{23,25}\.[A-Za-z0-9_\-]{6}\.[A-Za-z0-9_\-]{27,}\b",
-            RegexOptions.Compiled);
-
-        // %LOCALAPPDATA%, %APPDATA%, %USERPROFILE% — both literal expansions and variable forms.
-        private static readonly Regex AppDataLiteralRegex = new(
-            @"(?i)%(?:LOCALAPPDATA|APPDATA|USERPROFILE)%",
-            RegexOptions.Compiled);
+        // The path, email and token rules are the SHARED primitives in
+        // Services/Logging/LogRedactor.cs. They used to be declared here, which meant the upload
+        // path (this class) and the write path (the redactor) each carried their own copy of the
+        // same seven regexes - two places for one rule to be fixed in, and the reason a rule fixed
+        // for a bug report could silently stay broken for the log file itself. The aliases keep the
+        // rest of this class, and its output shapes, exactly as they were.
+        private static readonly Regex UserPathRegex = Logging.LogRedactor.UserPathRegex;
+        private static readonly Regex PosixHomePathRegex = Logging.LogRedactor.PosixHomePathRegex;
+        private static readonly Regex EmailRegex = Logging.LogRedactor.EmailRegex;
+        private static readonly Regex JsonTokenRegex = Logging.LogRedactor.JsonTokenRegex;
+        private static readonly Regex BearerRegex = Logging.LogRedactor.BearerRegex;
+        private static readonly Regex DiscordBotTokenRegex = Logging.LogRedactor.DiscordBotTokenRegex;
+        private static readonly Regex AppDataLiteralRegex = Logging.LogRedactor.AppDataLiteralRegex;
 
         // Expanded forms: C:\Users\<name>\AppData\Local\... and ...\AppData\Roaming\...
         // Handled indirectly via UserPathRegex (which captures the username) — we leave

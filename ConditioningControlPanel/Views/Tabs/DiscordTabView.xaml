@@ -559,10 +559,25 @@
                                                    VerticalAlignment="Center" Visibility="Collapsed" Stretch="Uniform"/>
                                         </StackPanel>
 
-                                        <!-- equipped title (Phase 2 cosmetics; an unlocked achievement's name) -->
-                                        <TextBlock x:Name="TxtProfileEquippedTitle" x:FieldModifier="internal"
-                                                   Visibility="Collapsed" Foreground="#FFD700" FontSize="12"
-                                                   FontWeight="SemiBold" Margin="0,6,0,0" TextTrimming="CharacterEllipsis"/>
+                                        <!-- equipped title (Phase 2 cosmetics; an unlocked achievement's name).
+                                             It used to ellipsise: "PERFECT FUCKPUPPET" overran the identity
+                                             column on a narrow window and rendered as "Perfect Fuckpupp..."
+                                             with no tooltip to read the rest. Same cure as the header's rank
+                                             title (MainWindow.xaml, TxtPlayerTitle): a DownOnly Viewbox scales
+                                             an over-long title down inside the column instead of trimming it,
+                                             every shorter title still renders at the full 12px, and the
+                                             self-binding tooltip carries the whole name either way. The
+                                             Viewbox follows the block's own Visibility so an empty title still
+                                             costs the card no height, and ApplyProfileTitle
+                                             (MainWindow.ProfileCosmetics.cs) stays the one writer. -->
+                                        <Viewbox HorizontalAlignment="Left" Margin="0,6,0,0"
+                                                 Stretch="Uniform" StretchDirection="DownOnly"
+                                                 Visibility="{Binding ElementName=TxtProfileEquippedTitle, Path=Visibility}">
+                                            <TextBlock x:Name="TxtProfileEquippedTitle" x:FieldModifier="internal"
+                                                       Visibility="Collapsed" Foreground="#FFD700" FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       ToolTip="{Binding ElementName=TxtProfileEquippedTitle, Path=Text}"/>
+                                        </Viewbox>
 
                                         <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
                                             <Ellipse Width="7" Height="7" Fill="#43B581" VerticalAlignment="Center" Margin="0,1,6,0"/>

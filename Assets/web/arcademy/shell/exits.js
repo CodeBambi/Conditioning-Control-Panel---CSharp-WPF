@@ -175,6 +175,10 @@ export function exitBar(children, opts) {
  * @param {string} o.confirmLabel
  * @param {string} o.cancelLabel
  * @param {string=} o.note            an extra dim line under the buttons
+ * @param {Element=} o.noteAction     ONE small live node under that line (the
+ *                                   Tardy Slip offer). It is never a third
+ *                                   answer to the question and never takes
+ *                                   focus - `stay` still owns that.
  * @param {Function} o.onConfirm
  * @param {Function} o.onCancel
  * @returns {?Object} {root, close()} - null when there was nowhere to mount it
@@ -221,6 +225,7 @@ export function createConfirm(o) {
   actions.appendChild(go);
   card.appendChild(actions);
   if (s.note) card.appendChild(el('p', 'arc-note arc-confirm-note', s.note));
+  if (s.noteAction && s.noteAction.nodeType === 1) card.appendChild(s.noteAction);
 
   root.appendChild(card);
   s.mount.appendChild(root);

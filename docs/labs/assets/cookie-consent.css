@@ -1,0 +1,517 @@
+/*
+ * Cookie consent banner + modal + 18+ age gate for cclabs.app.
+ *
+ * CCP OS neon-arcade skin (2026-08-10): flat hand-mixed palette on CRT black,
+ * monospace UI, 3px chrome with hard offset shadows, no gradients, no blur.
+ * Self-contained - does not rely on any page's :root tokens because it is
+ * loaded on both the arcade pages (inline tokens) and the older guide pages.
+ * Palette source of truth: index.html (--crt-black #140f13, --phosphor
+ * #e84a97, --amber #e9a53d, --teal #35e0c8).
+ *
+ * Loaded by /assets/cookie-consent.js and not required by anything else;
+ * safe to remove together if the consent system is ever taken out.
+ * Class names and z-indexes are load-bearing - do not rename.
+ */
+
+.cc-banner,
+.cc-modal-backdrop {
+  font-family: 'Cascadia Mono', 'Cascadia Code', Consolas, ui-monospace, monospace;
+  color: #f1e8ee;
+  box-sizing: border-box;
+}
+
+.cc-banner *,
+.cc-modal-backdrop *,
+.cc-blocked-placeholder * {
+  box-sizing: border-box;
+}
+
+/* --- Bottom banner ---------------------------------------------------- */
+
+.cc-banner {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 99998;
+  background: #181119;
+  border-top: 3px solid #e84a97;
+  box-shadow: 0 -4px 0 #7e2c59, 0 -8px 40px rgba(0, 0, 0, 0.55);
+  padding: 1.1rem 1.5rem;
+}
+
+.cc-banner-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+@media (min-width: 720px) {
+  .cc-banner-inner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+  }
+}
+
+.cc-banner-text {
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: #a893a6;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+
+.cc-banner-text strong {
+  color: #f1e8ee;
+  font-weight: 700;
+}
+
+.cc-banner-text a {
+  color: #ff7dc0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.cc-banner-text a:hover {
+  color: #f1e8ee;
+}
+
+.cc-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+/* --- Buttons (equal prominence per Italian Garante) ------------------- */
+
+.cc-btn {
+  appearance: none;
+  border: 2px solid #7e2c59;
+  background: #1e1620;
+  color: #f1e8ee;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.62rem 1.15rem;
+  border-radius: 7px;
+  box-shadow: 3px 3px 0 #000;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease,
+    color 120ms ease, transform 100ms ease, box-shadow 120ms ease;
+  min-width: 110px;
+}
+
+.cc-btn:hover {
+  border-color: #e84a97;
+  background: #281c29;
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 #000;
+}
+
+.cc-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 #000;
+}
+
+.cc-btn:focus-visible {
+  outline: 2px solid #35e0c8;
+  outline-offset: 2px;
+}
+
+/* --- Modal (Customize / Cookie preferences) --------------------------- */
+
+.cc-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(10, 7, 10, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.cc-modal {
+  background: #1e1620;
+  border: 3px solid #7e2c59;
+  border-radius: 12px;
+  box-shadow: 8px 8px 0 #000, 0 0 34px rgba(232, 74, 151, 0.28);
+  max-width: 560px;
+  width: 100%;
+  padding: 1.8rem 2rem;
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+}
+
+.cc-modal h2 {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  font-size: 1.35rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.5rem 0;
+  color: #f1e8ee;
+  text-shadow: -2px 0 #e84a97, 2px 0 #35e0c8;
+}
+
+.cc-modal-lede {
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: #a893a6;
+  margin: 0 0 1.4rem 0;
+}
+
+.cc-modal-lede a {
+  color: #ff7dc0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Toggle rows */
+
+.cc-toggle {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-top: 2px solid rgba(126, 44, 89, 0.45);
+}
+
+.cc-toggle:last-of-type {
+  border-bottom: 2px solid rgba(126, 44, 89, 0.45);
+  margin-bottom: 1.4rem;
+}
+
+.cc-toggle-info h3 {
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: lowercase;
+  margin: 0 0 0.3rem 0;
+  color: #35e0c8;
+}
+
+.cc-toggle-info p {
+  font-size: 0.74rem;
+  line-height: 1.55;
+  color: #a893a6;
+  margin: 0;
+}
+
+.cc-toggle-info code {
+  font-family: inherit;
+  font-size: 0.72rem;
+  color: #e9a53d;
+  background: #140f13;
+  border: 1px solid #7e2c59;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.cc-toggle-locked {
+  font-size: 0.68rem;
+  color: #e9a53d;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  padding-top: 4px;
+}
+
+/* Custom switch: square CRT toggle, phosphor when on */
+
+.cc-switch {
+  position: relative;
+  display: inline-block;
+  width: 46px;
+  height: 24px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.cc-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.cc-switch-track {
+  position: absolute;
+  inset: 0;
+  background: #140f13;
+  border: 2px solid #7e2c59;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.cc-switch-track::before {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: #a893a6;
+  border-radius: 3px;
+  top: 3px;
+  left: 3px;
+  transition: transform 140ms ease, background-color 140ms ease;
+}
+
+.cc-switch input:checked + .cc-switch-track {
+  background: #7e2c59;
+  border-color: #e84a97;
+}
+
+.cc-switch input:checked + .cc-switch-track::before {
+  transform: translateX(22px);
+  background: #ff7dc0;
+  box-shadow: 0 0 10px rgba(232, 74, 151, 0.7);
+}
+
+.cc-switch input:focus-visible + .cc-switch-track {
+  outline: 2px solid #35e0c8;
+  outline-offset: 2px;
+}
+
+/* Modal action row */
+
+.cc-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: flex-end;
+}
+
+/* --- Click-to-load placeholder for blocked third-party iframes -------- */
+
+.cc-blocked-placeholder {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  padding: 2rem;
+  background: #140f13;
+  border: 3px solid #7e2c59;
+  text-align: center;
+  font-family: 'Cascadia Mono', 'Cascadia Code', Consolas, ui-monospace, monospace;
+}
+
+.cc-blocked-placeholder-icon {
+  font-size: 2.2rem;
+  opacity: 0.7;
+}
+
+.cc-blocked-placeholder-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  color: #f1e8ee;
+  margin: 0;
+}
+
+.cc-blocked-placeholder-text {
+  font-size: 0.76rem;
+  line-height: 1.55;
+  color: #a893a6;
+  margin: 0;
+  max-width: 380px;
+}
+
+.cc-blocked-placeholder-text code {
+  font-family: inherit;
+  font-size: 0.72rem;
+  color: #e9a53d;
+  background: #1e1620;
+  border: 1px solid #7e2c59;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+/* Phosphor CTA used for "Allow third-party content" inside the placeholder
+ * and "Save preferences" inside the modal. Visually distinct from the
+ * neutral .cc-btn so users know it's the affirmative action. */
+.cc-btn-primary {
+  background: #e84a97;
+  border-color: #f1e8ee;
+  color: #140f13;
+  box-shadow: 3px 3px 0 #7e2c59, 0 0 18px rgba(232, 74, 151, 0.45);
+}
+
+.cc-btn-primary:hover {
+  background: #ff7dc0;
+  border-color: #f1e8ee;
+  box-shadow: 4px 4px 0 #7e2c59, 0 0 26px rgba(232, 74, 151, 0.6);
+}
+
+/* --- Footer "Cookie preferences" link --------------------------------- */
+
+#cc-footer-link {
+  cursor: pointer;
+}
+
+/* Hide elements until JS decides what to render - avoids a flash of the
+ * banner during page load on slow connections. */
+.cc-hidden {
+  display: none !important;
+}
+
+/* --- Age gate (18+ confirmation) -------------------------------------- */
+
+.cc-age-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100000; /* above cookie banner (99998) and modal (99999) */
+  background: rgba(10, 7, 10, 0.96);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  font-family: 'Cascadia Mono', 'Cascadia Code', Consolas, ui-monospace, monospace;
+  color: #f1e8ee;
+  overflow-y: auto;
+}
+
+.cc-age-modal {
+  background: #1e1620;
+  border: 3px solid #e84a97;
+  border-radius: 12px;
+  box-shadow: 8px 8px 0 #000, 0 0 44px rgba(232, 74, 151, 0.35);
+  max-width: 460px;
+  width: 100%;
+  padding: 2.2rem 2rem;
+  text-align: center;
+  position: relative;
+}
+
+/* HUD corner brackets, same language as the arcade pages */
+.cc-age-modal::before,
+.cc-age-modal::after {
+  content: '';
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  pointer-events: none;
+}
+
+.cc-age-modal::before {
+  top: -3px;
+  left: -3px;
+  border-top: 3px solid #e84a97;
+  border-left: 3px solid #e84a97;
+  border-top-left-radius: 12px;
+}
+
+.cc-age-modal::after {
+  bottom: -3px;
+  right: -3px;
+  border-bottom: 3px solid #35e0c8;
+  border-right: 3px solid #35e0c8;
+  border-bottom-right-radius: 12px;
+}
+
+.cc-age-modal h2 {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  font-size: 1.5rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 1rem 0;
+  color: #f1e8ee;
+  text-shadow: -2px 0 #e84a97, 2px 0 #35e0c8, 0 0 22px rgba(232, 74, 151, 0.5);
+}
+
+.cc-age-modal p {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: #a893a6;
+  margin: 0 0 1.6rem 0;
+}
+
+.cc-age-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+@media (min-width: 480px) {
+  .cc-age-actions {
+    flex-direction: row;
+  }
+}
+
+.cc-age-btn {
+  flex: 1;
+  appearance: none;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.9rem 1.5rem;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: transform 100ms ease, background-color 150ms ease,
+    box-shadow 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.cc-age-btn:active {
+  transform: translate(2px, 2px);
+}
+
+.cc-age-btn:focus-visible {
+  outline: 2px solid #35e0c8;
+  outline-offset: 3px;
+}
+
+.cc-age-btn-confirm {
+  background: #e84a97;
+  color: #140f13;
+  border: 2px solid #f1e8ee;
+  box-shadow: 4px 4px 0 #7e2c59, 0 0 22px rgba(232, 74, 151, 0.5);
+}
+
+.cc-age-btn-confirm:hover {
+  background: #ff7dc0;
+  box-shadow: 5px 5px 0 #7e2c59, 0 0 30px rgba(232, 74, 151, 0.65);
+}
+
+.cc-age-btn-leave {
+  background: #181119;
+  color: #a893a6;
+  border: 2px solid #7e2c59;
+  box-shadow: 4px 4px 0 #000;
+}
+
+.cc-age-btn-leave:hover {
+  border-color: #a893a6;
+  color: #f1e8ee;
+}
+
+.cc-age-fineprint {
+  margin-top: 1.6rem;
+  font-size: 0.7rem;
+  line-height: 1.55;
+  color: #6f6274;
+}
+
+.cc-age-fineprint a {
+  color: #ff7dc0 !important;
+}
+
+/* While the age gate is up, prevent the page from scrolling and ensure the
+ * underlying content isn't keyboard-reachable. */
+html.cc-age-pending,
+html.cc-age-pending body {
+  overflow: hidden !important;
+}

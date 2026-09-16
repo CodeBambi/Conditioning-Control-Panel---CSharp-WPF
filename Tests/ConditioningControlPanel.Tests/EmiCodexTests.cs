@@ -80,13 +80,15 @@ public class EmiCodexTests
     }
 
     [Fact]
-    public void The_book_declares_no_art_and_the_conventional_label_key()
+    public void The_book_wears_the_new_features_plate_and_the_conventional_label_key()
     {
         var t = EmiTargets.Find(EmiCodex.TargetId)!;
         Assert.Equal("emi_desk_target_" + EmiCodex.TargetId, t.LabelKey);
-        // No PNG ships in wave 2 - a ThumbPath here would resolve to nothing and paint the hue
-        // tile anyway, but only after a logged miss on every ring composition.
-        Assert.Null(t.ThumbPath);
+        // No book PNG was drawn; a flat hue tile beside illustrated cards read as a broken card
+        // (owner report 2026-09-15), so the book borrows the four-feature sheet. The ring suite
+        // checks the file exists and ships.
+        Assert.Equal("features/4new.png", t.ThumbPath);
+        Assert.False(t.ThumbIsIcon);
     }
 
     /// <summary>The label key is a RING key, and the ring's own suite demands every one of them in

@@ -79,8 +79,7 @@ namespace ConditioningControlPanel.Services.Commands
 
             if (IsAudio(ext))
             {
-                Application.Current.Dispatcher.Invoke(() => App.Audio?.PlaySound(fullPath, 100));
-                return Task.FromResult(true);
+                return Task.FromResult(PlayFile(fullPath));
             }
 
             App.Logger?.Information("MediaCommand: extension {Ext} not recognized as audio/video — falling back to random {Kind}", ext, _kind);
@@ -132,14 +131,30 @@ namespace ConditioningControlPanel.Services.Commands
 
                 var pick = candidates[new Random().Next(candidates.Length)];
                 App.Logger?.Information("MediaCommand: random audio pick {Path}", pick);
-                Application.Current.Dispatcher.Invoke(() => App.Audio?.PlaySound(pick, 100));
-                return true;
+                return PlayFile(pick);
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "MediaCommand: random audio pick threw");
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Hands one audio file to <see cref="AudioService.PlaySound"/> and reports whether it
+        /// actually started. PlaySound returns the clip duration and 0 when it could not play
+        /// (no audio service yet, unreadable file, no output device), so the caller can tell the
+        /// user "nothing played" instead of claiming success (#1120).
+        /// </summary>
+        private static bool PlayFile(string path)
+        {
+            var seconds = Application.Current.Dispatcher.Invoke(() => App.Audio?.PlaySound(path, 100) ?? 0);
+            if (seconds <= 0)
+            {
+                App.Logger?.Warning("MediaCommand: audio {Path} did not start playing", path);
+                return false;
+            }
+            return true;
         }
 
         private static bool IsVideo(string ext)

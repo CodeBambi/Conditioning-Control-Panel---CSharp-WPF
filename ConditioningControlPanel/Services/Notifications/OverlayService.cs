@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing.Imaging;
 using System.IO;
@@ -262,6 +262,13 @@ public class OverlayService : IDisposable
     // "Is showing" checks must cover BOTH render paths - the 500ms sync and pulse gate on these.
     private bool PinkShowing => _pinkFilterWindows.Count > 0 || _pinkLayer?.IsActive == true;
     private bool BrainDrainShowing => _brainDrainBlurWindows.Count > 0 || _brainDrainLayer?.IsActive == true;
+    /// <summary>True while a brain-drain visual is on screen from ANY owner (the user's feature,
+    /// a Deeper band, a timed effect). Public so a caller can decline to fight one - see
+    /// <see cref="Chaos.BrainDrainBubble.ShouldPlayOverlay"/>.</summary>
+    public bool BrainDrainVisualUp => BrainDrainShowing;
+    /// <summary>True while at least one TIMED brain-drain overlay is still in flight. Melt and
+    /// plain blur are one overlay, so a second timed drain must never start over the first.</summary>
+    public bool TimedBrainDrainActive => _timedBrainDrainHolds > 0;
     private bool SpiralShowing => _spiralWindows.Count > 0 || _spiralLayer?.IsShowing == true
         || _spiralLayerDecodePending != null;
     // Off-thread spiral decode state for the layer route: the path being decoded right now
@@ -530,7 +537,7 @@ public class OverlayService : IDisposable
             App.Logger?.Error(ex, "Error during OverlayService Stop");
         }
 
-        App.Logger?.Information("OverlayService stopped");
+        App.Logger?.Debug("OverlayService stopped");
     }
 
     public void RefreshOverlays()
@@ -2293,12 +2300,7 @@ public class OverlayService : IDisposable
     {
         try
         {
-            var all = App.GetAllScreensCached();
-            if (all.Length == 0) return Array.Empty<System.Windows.Forms.Screen>();
-            if (settings.DualMonitorEnabled) return all;
-            foreach (var s in all)
-                if (s.Primary) return new[] { s };
-            return Array.Empty<System.Windows.Forms.Screen>();
+            return App.GetGlobalScreens();
         }
         catch { return Array.Empty<System.Windows.Forms.Screen>(); }
     }

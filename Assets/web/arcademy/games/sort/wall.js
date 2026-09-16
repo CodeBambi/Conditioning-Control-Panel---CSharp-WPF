@@ -20,9 +20,15 @@
  *
  * DECODER BUDGET. A video card lands as a POSTER, never as a second decode: the
  * wall is dozens of tiles and the stack already owns the budget (ceiling 2).
- * `mediaEl` here mints an <img> for everything - a video url gets a still frame
- * or, failing that, its own seeded card back. Never put a live decode on a wall
- * tile (CLAUDE.md trap 36).
+ * `paint()` here mints an <img> for everything else - a video url gets no
+ * element at all and its seeded card back stands in. Never put a live decode on
+ * a wall tile (CLAUDE.md trap 36).
+ *
+ * ...AND AN ANIMATED GIF IS A LIVE DECODE (ccp-bugs #1197). That was the hole in
+ * the budget: a still is cheap, a gif in an <img> is not, and the wall held up
+ * to CAP of them at once. See THE DECODE RAIL below - the newest few tiles keep
+ * a live <img>, everything older is frozen to a canvas, and at most
+ * `DECODE_LANES` urls are ever in flight.
  * ==========================================================================*/
 
 import { hash01 } from '../../core/rng.js';
@@ -47,6 +53,22 @@ export const WALL = Object.freeze({
   CAP: 120,
   /** Column counts the layout will consider. */
   COLS: Object.freeze([6, 7, 8, 9, 10, 11, 12]),
+  /** THE LIVE BUDGET (ccp-bugs #1197). How many tiles keep an ANIMATED <img>.
+   *  Always the newest ones - the eye is on the landing, never on the corner.
+   *  Every older tile is frozen to a canvas still and costs nothing a frame. */
+  LIVE_FACES: 3,
+  /** How many tile urls may be in flight at once. A tier-4 player commits a
+   *  card a second; with no lane count the wall opens a socket and a decode
+   *  for every one of them and the STACK's own media queues behind them,
+   *  which is how a card "doesn't load in at all". */
+  DECODE_LANES: 4,
+  /** A lane is a concurrency claim, not a deadline: a url that has not
+   *  answered in this long hands its lane back. The <img> is left alone and
+   *  still counts if it lands later. */
+  LANE_MS: 4000,
+  /** The side of a frozen tile's canvas backing store, px. A wall tile is
+   *  never wider than ~180 CSS px, so this is one crisp step above it. */
+  STILL_PX: 224,
   /** The full-bleed hold at the bell. */
   BLEED_MS: 3000,
   /** THE KEN-BURNS period band, in seconds. One seeded draw for the collage. */
@@ -122,6 +144,18 @@ function el(tag, cls) {
   } catch (e) { return null; }
 }
 
+/* The lane timer resolves setTimeout off the GLOBAL at call time, the way
+ * index.js's clock does, so a harness with a fake clock drives the wall too
+ * and the shipped file grows no test seam. */
+function laterFn() {
+  const f = globalThis.setTimeout;
+  return typeof f === 'function' ? f : setTimeout;
+}
+function clearLaterFn() {
+  const f = globalThis.clearTimeout;
+  return typeof f === 'function' ? f : clearTimeout;
+}
+
 /**
  * The wall.
  * @param {Object} o
@@ -188,8 +222,196 @@ export function createWall(o = {}) {
   setAttr(root, 'data-bleed', '0');
   setAttr(root, 'data-flood', '0');
 
-  function paint(tile, card) {
-    if (!tile) return;
+  /* ==================================================== THE DECODE RAIL ====
+   * WHY THIS EXISTS (ccp-bugs #1197, "the sort room begins to lag out from too
+   * many gifs playing in the background... the timer starts only updating at
+   * like 1 frame every few seconds and some of the images don't load in").
+   *
+   * The wall used to mint an <img> the moment a card landed and then leave it
+   * there for the rest of the class. At CAP that is 120 live elements, and in
+   * a gif-heavy library every one of them is an ANIMATED gif, which Chromium
+   * keeps decoding for ever, on the MAIN thread, whether or not anyone is
+   * looking at that corner of the mosaic. Past roughly thirty tiles the
+   * decoder owns the frame: the 250ms clock tick lands seconds late (that is
+   * the reported timer, and it is not a clock bug - `paintClock` reads the
+   * wall clock and is simply never called), and a freshly landed tile never
+   * gets a lane, which is the "doesn't load in at all" half. The line that
+   * used to sit right here - "a gif still animates cheaply" - was the bug.
+   *
+   * So the wall now keeps a BUDGET instead of a gallery:
+   *
+   *   1. AT MOST `WALL.LIVE_FACES` TILES HOLD A LIVE <img>, always the newest.
+   *   2. AN OLDER TILE IS FROZEN: its current frame is drawn once into a
+   *      <canvas> that takes the <img>'s place, and the <img> is dropped, so
+   *      the decoder lets go. The tile looks the same and costs nothing a
+   *      frame. `drawImage` into a canvas we never read back is legal on a
+   *      CORS-TAINTED image, so a remote feed freezes exactly like the local
+   *      library does - the taint only ever bit `toDataURL`/`getImageData`,
+   *      and this rail calls neither.
+   *   3. AT MOST `WALL.DECODE_LANES` URLS ARE IN FLIGHT, so a fast player
+   *      cannot open eighty sockets and starve the STACK's own media.
+   *   4. A URL THAT WILL NOT LOAD IS SKIPPED AND COUNTED, never left as a
+   *      half-decoded hole. `skipped` rides `diagnostics()` so the class can
+   *      say how many the wall dropped.
+   *
+   * The tier dial, the recycle, the wrong-card dimming and the thud are
+   * untouched: this changes what a tile COSTS, never what it shows.
+   * ======================================================================= */
+  let skipped = 0;      // urls that answered with an error and lost their tile
+  let frozenN = 0;      // tiles turned into a canvas still
+  let stuck = 0;        // tiles a freeze could not take (kept live, honestly)
+  let paintedN = 0;     // tiles whose media actually landed
+  const liveFaces = []; // records still holding an <img>, oldest first
+  const bySlot = new Map();
+  const gens = [];      // per-slot generation, bumped on every recycle
+  const queue = [];
+  let lanes = 0;
+  let dead = false;
+
+  function genOf(slot) { return gens[slot] || 0; }
+
+  /** Let go of a decoder. `removeAttribute` and not `src=''`: an empty src is
+   *  a request for the document url in some engines. */
+  function killImg(img) {
+    if (!img) return;
+    try { if (typeof img.removeAttribute === 'function') img.removeAttribute('src'); }
+    catch (e) { /* DOM double */ }
+    try { if (typeof img.remove === 'function') img.remove(); }
+    catch (e) { /* noop */ }
+  }
+
+  function freeLane(rec) {
+    if (!rec) return;
+    if (rec.timer) { try { clearLaterFn()(rec.timer); } catch (e) { /* noop */ } rec.timer = 0; }
+    if (rec.lane) { rec.lane = false; lanes = lanes > 0 ? lanes - 1 : 0; pump(); }
+  }
+
+  /** Drop whatever face a slot is holding. Bumps the slot's generation, so an
+   *  in-flight paint for the card that used to live here lands on the floor
+   *  instead of on the card that replaced it. */
+  function clearSlot(slot) {
+    gens[slot] = genOf(slot) + 1;
+    const rec = bySlot.get(slot);
+    if (!rec) return;
+    bySlot.delete(slot);
+    freeLane(rec);
+    const at = liveFaces.indexOf(rec);
+    if (at >= 0) liveFaces.splice(at, 1);
+    killImg(rec.img);
+    rec.img = null;
+    try { if (rec.canvas && typeof rec.canvas.remove === 'function') rec.canvas.remove(); }
+    catch (e) { /* noop */ }
+    rec.canvas = null;
+  }
+
+  /**
+   * THE FREEZE. One `drawImage` and the tile is a still for good.
+   * The canvas is SQUARE and centre-cropped by hand, which is what
+   * `object-fit:cover` was doing for the <img> in a square tile - done in the
+   * draw so the tile does not depend on object-fit applying to a canvas.
+   */
+  function freeze(rec) {
+    if (!rec || !rec.img) return;
+    if (rec.gen !== genOf(rec.slot)) { killImg(rec.img); rec.img = null; return; }
+    const img = rec.img;
+    let canvas = null;
+    try {
+      const side = Math.max(16, Math.round(WALL.STILL_PX));
+      canvas = el('canvas', 'g-sort-wall-face is-still');
+      const ctx = canvas && typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
+      if (!ctx || typeof ctx.drawImage !== 'function') { canvas = null; }
+      else {
+        canvas.width = side;
+        canvas.height = side;
+        const nw = Math.round(Number(img.naturalWidth) || 0);
+        const nh = Math.round(Number(img.naturalHeight) || 0);
+        if (nw > 0 && nh > 0) {
+          const s = Math.min(nw, nh);
+          ctx.drawImage(img, (nw - s) / 2, (nh - s) / 2, s, s, 0, 0, side, side);
+        } else {
+          /* no intrinsic size (an svg, a double) - stretch and move on */
+          ctx.drawImage(img, 0, 0, side, side);
+        }
+      }
+    } catch (e) { canvas = null; }
+    if (!canvas) {
+      /* THE ONE HONEST FAILURE. Nothing to freeze onto, so the tile keeps its
+       * live <img>: a drifting gif is a smaller sin than a hole in the ledger,
+       * and this branch means a decode that broke between load and draw. */
+      stuck += 1;
+      return;
+    }
+    setAttr(canvas, 'aria-hidden', 'true');
+    try { if (rec.tile && rec.tile.appendChild) rec.tile.appendChild(canvas); } catch (e) { /* noop */ }
+    killImg(img);
+    rec.img = null;
+    rec.canvas = canvas;
+    frozenN += 1;
+  }
+
+  /** Hold the live budget: the newest LIVE_FACES keep their <img>, the rest freeze. */
+  function trim() {
+    const cap = Math.max(1, Math.round(WALL.LIVE_FACES));
+    while (liveFaces.length > cap) freeze(liveFaces.shift());
+  }
+
+  function settle(rec, ok) {
+    if (!rec || rec.settled) return;
+    rec.settled = true;
+    freeLane(rec);
+    if (rec.gen !== genOf(rec.slot)) { killImg(rec.img); rec.img = null; return; }
+    if (!ok) {
+      /* SKIP, DO NOT HOLE. A dead url loses its <img> and the tile falls back
+       * to its own drawn back - the same answer the stack gives - and the miss
+       * is counted so the class can report it. */
+      skipped += 1;
+      killImg(rec.img);
+      rec.img = null;
+      if (bySlot.get(rec.slot) === rec) bySlot.delete(rec.slot);
+      return;
+    }
+    paintedN += 1;
+    liveFaces.push(rec);
+    trim();
+  }
+
+  function start(rec) {
+    const img = el('img', 'g-sort-wall-face');
+    if (!img) return;
+    rec.img = img;
+    rec.lane = true;
+    lanes += 1;
+    img.alt = '';
+    setAttr(img, 'draggable', 'false');
+    setAttr(img, 'decoding', 'async');
+    if (typeof img.addEventListener === 'function') {
+      img.addEventListener('load', () => settle(rec, true));
+      img.addEventListener('error', () => settle(rec, false));
+    }
+    try { img.src = rec.url; } catch (e) { settle(rec, false); return; }
+    try { if (rec.tile && rec.tile.appendChild) rec.tile.appendChild(img); } catch (e) { /* noop */ }
+    rec.timer = laterFn()(() => { rec.timer = 0; freeLane(rec); }, Math.max(0, WALL.LANE_MS));
+  }
+
+  /* `pumping` is a re-entrancy guard, not a nicety: a url that throws on
+   * assignment settles inside start(), which frees its lane and pumps again,
+   * and a whole dead queue would otherwise recurse once per row. */
+  let pumping = false;
+  function pump() {
+    if (pumping) return;
+    pumping = true;
+    try {
+      while (!dead && lanes < Math.max(1, WALL.DECODE_LANES) && queue.length) {
+        const rec = queue.shift();
+        if (!rec) continue;
+        if (rec.gen !== genOf(rec.slot)) continue;   // the slot recycled while it waited
+        start(rec);
+      }
+    } finally { pumping = false; }
+  }
+
+  function paint(tile, card, slot) {
+    if (!tile || dead) return;
     /* THE SAME FACE THE STACK SHOWED (0826). `resolve` is the game's own
      * substitute resolution (index.js displaySrcOf): a card whose url is on
      * the blacklist was played as a same-tag substitute, and painting its raw
@@ -199,24 +421,19 @@ export function createWall(o = {}) {
      * an old double) keeps the raw card. */
     const src = resolve(card) || null;
     if (!src || !src.url) return;
-    /* A WALL TILE IS NEVER A LIVE DECODE (trap 36). A loop lands as its own
-     * url in an <img> - a gif still animates cheaply. A VIDEO url gets no <img>
-     * at all (owner 2026-08-24): an mp4 in an <img> paints nothing but still
-     * downloads the whole file, so the drawn card back stands for it instead. */
+    /* A VIDEO URL GETS NO <img> AT ALL (owner 2026-08-24): an mp4 in an <img>
+     * paints nothing but still downloads the whole file, so the drawn card
+     * back stands for it instead. */
     const mime = src.mime;
     if ((mime && /^video\//i.test(String(mime)))
       || /\.(mp4|webm|m4v|mov)(\?|#|$)/i.test(String(src.url))) return;
-    const img = el('img', 'g-sort-wall-face');
-    if (!img) return;
-    img.alt = '';
-    setAttr(img, 'draggable', 'false');
-    setAttr(img, 'decoding', 'async');
-    setAttr(img, 'loading', 'lazy');
-    if (typeof img.addEventListener === 'function') {
-      img.addEventListener('error', () => { try { if (img.parentNode) img.remove(); } catch (e) { /* ignore */ } });
-    }
-    img.src = src.url;
-    tile.appendChild(img);
+    const rec = {
+      slot, gen: genOf(slot), tile, url: String(src.url),
+      img: null, canvas: null, lane: false, settled: false, timer: 0,
+    };
+    bySlot.set(slot, rec);
+    queue.push(rec);
+    pump();
   }
 
   const api = {
@@ -262,6 +479,10 @@ export function createWall(o = {}) {
         tiles[slot] = tile;
         if (grid) grid.appendChild(tile);
       } else {
+        /* THE RECYCLE LETS GO FIRST. `textContent = ''` empties the tile in a
+         * real DOM but says nothing to the rail, so without this the old
+         * record kept a lane and a live <img> the wall could no longer see. */
+        clearSlot(slot);
         try { tile.textContent = ''; } catch (e) { /* noop */ }
       }
       setAttr(tile, 'data-slot', String(slot));
@@ -276,7 +497,7 @@ export function createWall(o = {}) {
         if (!reduced) tile.classList.add('thud');
         if (wrong) tile.classList.add('is-wrong'); else tile.classList.remove('is-wrong');
       }
-      paint(tile, card);
+      paint(tile, card, slot);
       return tile;
     },
 
@@ -324,14 +545,33 @@ export function createWall(o = {}) {
       return bleeding;
     },
 
+    /** Urls the wall gave up on. The class reads it for its own report line. */
+    get skipped() { return skipped; },
+
     diagnostics() {
       return {
         landed, cols, visible, bleeding, flooding, kenBurns, tiles: tiles.length,
         fromRung: fromRungFor(tier), tier,
+        /* the decode rail (ccp-bugs #1197) */
+        live: liveFaces.length, frozen: frozenN, painted: paintedN,
+        skipped, stuck, queued: queue.length, lanes,
+        liveCap: Math.max(1, Math.round(WALL.LIVE_FACES)),
       };
     },
 
     destroy() {
+      dead = true;
+      queue.length = 0;
+      /* EVERY DECODER GOES BACK, not just the ones on screen. A class that
+       * ends mid-flight used to leave its <img> elements attached to a
+       * detached tree with their gifs still spinning until GC noticed. */
+      try {
+        bySlot.forEach((rec) => { freeLane(rec); killImg(rec.img); rec.img = null; });
+      } catch (e) { /* noop */ }
+      bySlot.clear();
+      liveFaces.length = 0;
+      lanes = 0;
+      if (skipped > 0) say('wall: ' + skipped + ' tile url(s) skipped');
       tiles.length = 0;
       try { if (root && root.remove) root.remove(); } catch (e) { say('wall destroy: ' + ((e && e.message) || e)); }
     },

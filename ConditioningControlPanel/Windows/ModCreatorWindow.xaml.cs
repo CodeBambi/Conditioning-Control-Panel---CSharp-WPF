@@ -43,6 +43,17 @@ namespace ConditioningControlPanel
         private TextBox? _txtCompanionName, _txtUserTerm, _txtModeDisplayName, _txtTalkToLabel, _txtTakeoverLabel;
         private TextBox? _txtFreeze, _txtReset, _txtCumCollapse, _txtAutonomyOn;
         private TextBox? _txtAttentionFail, _txtAttentionMercy, _txtBubbleRetry;
+        // The eight Messages fields the 6.9.x releases added. Every one of them has to be on the
+        // form: the save below rebuilds the manifest from the form, so a field the form does not
+        // carry is a field the Mod Creator silently strips from any mod it re-saves.
+        private TextBox? _txtAttentionTroll, _txtGazeCorrect, _txtQuizTrickQuestion, _txtQuizTrickAnswer,
+            _txtQuizPraise, _txtQuizObedienceQuestion, _txtQuizPraiseHeardQuestion, _txtMarqueeBanner;
+        /// <summary>
+        /// The Messages block of the manifest last loaded into the form, kept so a save starts
+        /// from it rather than from a blank object. Any field added to ModMessages after this
+        /// form was last touched survives a round-trip instead of being dropped on the floor.
+        /// </summary>
+        private ModMessages? _loadedMessages;
         private StackPanel? _replacementsPanel;
 
         // Avatar set toggles and custom sets
@@ -1486,6 +1497,46 @@ namespace ConditioningControlPanel
             _txtBubbleRetry = CreateDarkTextBox(multiline: true, height: 50);
             _txtBubbleRetry.Width = 400;
             stack.Children.Add(_txtBubbleRetry);
+
+            stack.Children.Add(CreateFieldLabel("Attention Check Troll (passed, but watch it again)"));
+            _txtAttentionTroll = CreateDarkTextBox(multiline: true, height: 50);
+            _txtAttentionTroll.Width = 400;
+            stack.Children.Add(_txtAttentionTroll);
+
+            stack.Children.Add(CreateFieldLabel("Gaze Correct (praise card after a correct gaze round)"));
+            _txtGazeCorrect = CreateDarkTextBox();
+            _txtGazeCorrect.Width = 400;
+            stack.Children.Add(_txtGazeCorrect);
+
+            stack.Children.Add(CreateFieldLabel("Quiz Praise (a sentence, e.g. \"Good girl.\")"));
+            _txtQuizPraise = CreateDarkTextBox();
+            _txtQuizPraise.Width = 400;
+            stack.Children.Add(_txtQuizPraise);
+
+            stack.Children.Add(CreateFieldLabel("Quiz Obedience Question (needs Quiz Praise)"));
+            _txtQuizObedienceQuestion = CreateDarkTextBox();
+            _txtQuizObedienceQuestion.Width = 400;
+            stack.Children.Add(_txtQuizObedienceQuestion);
+
+            stack.Children.Add(CreateFieldLabel("Quiz Praise-Heard Question (needs Quiz Praise)"));
+            _txtQuizPraiseHeardQuestion = CreateDarkTextBox();
+            _txtQuizPraiseHeardQuestion.Width = 400;
+            stack.Children.Add(_txtQuizPraiseHeardQuestion);
+
+            stack.Children.Add(CreateFieldLabel("Quiz Trick Question (only used with its answer)"));
+            _txtQuizTrickQuestion = CreateDarkTextBox();
+            _txtQuizTrickQuestion.Width = 400;
+            stack.Children.Add(_txtQuizTrickQuestion);
+
+            stack.Children.Add(CreateFieldLabel("Quiz Trick Answer (shown on all four buttons)"));
+            _txtQuizTrickAnswer = CreateDarkTextBox();
+            _txtQuizTrickAnswer.Width = 400;
+            stack.Children.Add(_txtQuizTrickAnswer);
+
+            stack.Children.Add(CreateFieldLabel("Marquee Banner (default scrolling banner for this mod)"));
+            _txtMarqueeBanner = CreateDarkTextBox();
+            _txtMarqueeBanner.Width = 400;
+            stack.Children.Add(_txtMarqueeBanner);
         }
 
         // ─── Phrases Section ────────────────────────────────────
@@ -2128,11 +2179,20 @@ namespace ConditioningControlPanel
             }
 
             // Messages
+            _loadedMessages = manifest.Messages;
             if (manifest.Messages != null)
             {
                 SetTextBoxValue(_txtAttentionFail, manifest.Messages.AttentionCheckFail);
                 SetTextBoxValue(_txtAttentionMercy, manifest.Messages.AttentionCheckMercy);
                 SetTextBoxValue(_txtBubbleRetry, manifest.Messages.BubbleCountRetry);
+                SetTextBoxValue(_txtAttentionTroll, manifest.Messages.AttentionCheckTroll);
+                SetTextBoxValue(_txtGazeCorrect, manifest.Messages.GazeCorrect);
+                SetTextBoxValue(_txtQuizTrickQuestion, manifest.Messages.QuizTrickQuestion);
+                SetTextBoxValue(_txtQuizTrickAnswer, manifest.Messages.QuizTrickAnswer);
+                SetTextBoxValue(_txtQuizPraise, manifest.Messages.QuizPraise);
+                SetTextBoxValue(_txtQuizObedienceQuestion, manifest.Messages.QuizObedienceQuestion);
+                SetTextBoxValue(_txtQuizPraiseHeardQuestion, manifest.Messages.QuizPraiseHeardQuestion);
+                SetTextBoxValue(_txtMarqueeBanner, manifest.Messages.MarqueeBanner);
             }
 
             // Phrases
@@ -2207,6 +2267,24 @@ namespace ConditioningControlPanel
         }
 
         // ─── Build Manifest From Form ────────────────────────────
+        private ModMessages? BuildMessagesFromForm()
+        {
+            static string? Val(string s) => string.IsNullOrEmpty(s) ? null : s;
+            var m = _loadedMessages ?? new ModMessages();
+            m.AttentionCheckFail = Val(GetTextBoxValue(_txtAttentionFail));
+            m.AttentionCheckMercy = Val(GetTextBoxValue(_txtAttentionMercy));
+            m.BubbleCountRetry = Val(GetTextBoxValue(_txtBubbleRetry));
+            m.AttentionCheckTroll = Val(GetTextBoxValue(_txtAttentionTroll));
+            m.GazeCorrect = Val(GetTextBoxValue(_txtGazeCorrect));
+            m.QuizTrickQuestion = Val(GetTextBoxValue(_txtQuizTrickQuestion));
+            m.QuizTrickAnswer = Val(GetTextBoxValue(_txtQuizTrickAnswer));
+            m.QuizPraise = Val(GetTextBoxValue(_txtQuizPraise));
+            m.QuizObedienceQuestion = Val(GetTextBoxValue(_txtQuizObedienceQuestion));
+            m.QuizPraiseHeardQuestion = Val(GetTextBoxValue(_txtQuizPraiseHeardQuestion));
+            m.MarqueeBanner = Val(GetTextBoxValue(_txtMarqueeBanner));
+            return ModMessages.HasAnyValue(m) ? m : null;
+        }
+
         private ModManifest BuildManifestFromForm()
         {
             var name = GetTextBoxValue(_txtModName);
@@ -2317,19 +2395,11 @@ namespace ConditioningControlPanel
                 };
             }
 
-            // Messages
-            var af = GetTextBoxValue(_txtAttentionFail);
-            var am = GetTextBoxValue(_txtAttentionMercy);
-            var br = GetTextBoxValue(_txtBubbleRetry);
-            if (!string.IsNullOrEmpty(af) || !string.IsNullOrEmpty(am) || !string.IsNullOrEmpty(br))
-            {
-                manifest.Messages = new ModMessages
-                {
-                    AttentionCheckFail = string.IsNullOrEmpty(af) ? null : af,
-                    AttentionCheckMercy = string.IsNullOrEmpty(am) ? null : am,
-                    BubbleCountRetry = string.IsNullOrEmpty(br) ? null : br,
-                };
-            }
+            // Messages. Built by mutating the block that was loaded (when there was one), so a
+            // field this form does not know about yet rides through a save untouched; every
+            // field it does know is written from the form, empty meaning "not set". The block is
+            // kept whenever any field is set, no longer only when one of the original three is.
+            manifest.Messages = BuildMessagesFromForm();
 
             // Phrases — include all categories that have content
             var phrases = new Dictionary<string, string[]>();

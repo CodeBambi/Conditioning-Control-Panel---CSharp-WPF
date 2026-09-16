@@ -41,8 +41,8 @@ namespace ConditioningControlPanel.Views.Tabs
         /// (ChkEnableDeeper_Changed, which also drives BtnDeeper's visibility).</summary>
         internal CheckBox ChkEnableDeeper => SectionGeneral.ChkEnableDeeper;
 
-        /// <summary>Populated and re-selected by MainWindow.AccountShell.cs alongside the chrome's
-        /// CmbLanguagePill - owner decision #8 keeps both surfaces, sharing one code path.</summary>
+        /// <summary>Populated and re-selected by MainWindow.AccountShell.cs. The one in-app language
+        /// picker since the chrome pill was demoted 0911; the first-run wizard shares its path.</summary>
         internal ComboBox CmbLanguageSetting => SectionGeneral.CmbLanguageSetting;
     }
 }

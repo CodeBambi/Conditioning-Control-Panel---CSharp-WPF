@@ -393,7 +393,7 @@ public partial class EmiRingWindow : Window
             _closeAnnounced = false;
 
             EmiSfx.RingOpen();
-            Log.Information("[EmiDesk] ring open with {Count} cards, {Native}", _slots.Count, NativeStyle());
+            Log.Debug("[EmiDesk] ring open with {Count} cards, {Native}", _slots.Count, NativeStyle());
         }
         catch (Exception ex)
         {
@@ -786,23 +786,9 @@ public partial class EmiRingWindow : Window
         frame.Children.Add(grid);
         frame.Children.Add(seam);
 
-        // ---- the face of the card: dashboard art, or a flat hue tile ----------
-        var art = LoadThumb(slot.Target);
-        if (art != null)
-        {
-            grid.Children.Add(new Image
-            {
-                Source = art,
-                Stretch = Stretch.UniformToFill,
-                IsHitTestVisible = false,
-                Opacity = slot.Locked ? 0.42 : 0.92,
-            });
-        }
-        else
-        {
-            var tile = new SolidColorBrush(slot.Target.Hue) { Opacity = slot.Locked ? 0.28 : 0.62 };
-            grid.Children.Add(new Rectangle { Fill = tile, IsHitTestVisible = false });
-        }
+        // ---- the face of the card: dashboard art, a medallion plate, or the hue tile
+        // The strip reserve keeps a plate's icon centred above the label, not half under it.
+        EmiCardFace.AddArt(grid, slot.Target, slot.Locked, iconSize: 50, stripReserve: CardLabelLine + 6);
 
         // ---- the name strip ---------------------------------------------------
         var strip = new Border
@@ -968,21 +954,6 @@ public partial class EmiRingWindow : Window
             };
         }
         catch { return null; }
-    }
-
-    private static ImageSource? LoadThumb(EmiTarget t)
-    {
-        if (string.IsNullOrWhiteSpace(t.ThumbPath)) return null;
-        try
-        {
-            // Through the mod resolver so a .ccpmod's own card art wins, exactly like the dashboard.
-            return Services.ModResourceResolver.ResolveImageDecoded(t.ThumbPath, 192);
-        }
-        catch (Exception ex)
-        {
-            Log.Debug(ex, "[EmiDesk] ring art missing for {Target} ({Path})", t.Id, t.ThumbPath);
-            return null;
-        }
     }
 
     // ---------------------------------------------------------------- animation

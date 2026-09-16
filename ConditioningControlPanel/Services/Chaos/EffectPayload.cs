@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 
 namespace ConditioningControlPanel.Services.Chaos;
@@ -158,6 +158,45 @@ public sealed class OverlayPayload : EffectPayload
     }
 }
 
+/// <summary>
+/// Bubbles v2, wave 2: the Brain Drain bubble's pop. Ten seconds of the real Brain Drain
+/// overlay - the melting-glass one at full motion, the plain blur under Reduced/Off - at the
+/// user's own blur strength. Deliberately NOT <see cref="OverlayPayload"/>'s "braindrain" arm,
+/// which is a full-screen wash of a flash image and never touches the drain at all.
+///
+/// Every decision here lives in <see cref="BrainDrainBubble"/>; this is only the wiring.
+/// </summary>
+public sealed class BrainDrainMeltPayload : EffectPayload
+{
+    public override string DisplayName => "braindrain melt";
+    public override EffectBubblePayloadKind Kind => EffectBubblePayloadKind.Overlay;
+
+    public override void Fire()
+    {
+        try
+        {
+            var overlay = App.Overlay;
+            if (overlay == null) return;
+
+            // One drain at a time. The user's own loop wins outright - it has no duration, so a
+            // timed overlay landing on top of it would end by tearing THEIR drain down ten seconds
+            // later. The pop still paid its XP before we got here, so nothing is lost.
+            bool userDrainUp = App.BrainDrain?.IsRunning == true || overlay.BrainDrainVisualUp;
+            if (!BrainDrainBubble.ShouldPlayOverlay(overlay.TimedBrainDrainActive, userDrainUp))
+            {
+                App.Logger?.Information("Bubble: brain drain pop paid XP only - a drain is already up");
+                return;
+            }
+
+            var kind = BrainDrainBubble.OverlayKindFor(MotionFx.Level);
+            overlay.ShowOverlayTimed(kind, BrainDrainBubble.OverlayMs,
+                                     BrainDrainBubble.OverlayOpacity(
+                                         App.Settings?.Current?.BrainDrainBlurStrength ?? 50));
+        }
+        catch (Exception ex) { App.Logger?.Debug("BrainDrainMeltPayload: {E}", ex.Message); }
+    }
+}
+
 /// <summary>Triggers a mandatory video (silent no-op if the video pool is empty).</summary>
 public sealed class VideoPayload : EffectPayload
 {
@@ -166,6 +205,14 @@ public sealed class VideoPayload : EffectPayload
 
     /// <summary>Seconds of video the chaos tape shows — a random slice, ended by the chaos hard cap.</summary>
     public const double SEGMENT_SEC = 15;
+
+    /// <summary>
+    /// Nonzero while a descent run owns this request: the token VideoService hands back from
+    /// ClaimChaosVideoToken, taken by ChaosModeService at detonation so the run can call the video
+    /// back if it ends before the tape reaches the screen (ccp-bugs #1201). Zero for a dashboard
+    /// trigger bubble, which no run owns and nothing may cancel.
+    /// </summary>
+    public int ChaosToken { get; set; }
 
     public override void Fire()
     {
@@ -176,9 +223,26 @@ public sealed class VideoPayload : EffectPayload
             // the full mandatory video start midway (#456/#458).
             if (!Ambient)
                 App.Video?.ArmRandomSegment(SEGMENT_SEC);
-            App.Video?.TriggerVideo(silentIfEmpty: true);
+
+            if (App.Video == null)
+            {
+                // Was a silent null-conditional: the pop simply evaporated (#1135).
+                App.Logger?.Information("VideoPayload: nothing to fire - the video service is not available");
+                return;
+            }
+
+            // userEarned: a human popped this bubble on purpose. It is the one thing that separates
+            // this call from the background scheduler, and the guards inside TriggerVideo that exist
+            // to keep the SCHEDULER out of the user's way read it so they no longer eat a video the
+            // user asked for (#1135).
+            App.Video.TriggerVideo(silentIfEmpty: true, userEarned: true, chaosToken: ChaosToken);
         }
-        catch (Exception ex) { App.Logger?.Debug("VideoPayload: {E}", ex.Message); }
+        catch (Exception ex)
+        {
+            // Information, not Debug: a Debug line is below the default log level, so this was the
+            // second place a popped video bubble could fail leaving nothing behind at all (#1135).
+            App.Logger?.Information(ex, "VideoPayload: firing the video failed - the pop produced nothing");
+        }
     }
 }
 

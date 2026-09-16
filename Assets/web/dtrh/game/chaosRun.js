@@ -3684,7 +3684,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   function onFirstTimeAwarded(id, amount, label) {
     if (!hudUi) return;
-    hudUi.toast(`✨ ${label} — +${amount} ✦ banked`);
+    hudUi.toast(`✨ ${label} — +${amount} ✦ earned`);
     pulse('255,230,150', 0.20);
   }
 

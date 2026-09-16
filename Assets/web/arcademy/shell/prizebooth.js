@@ -170,7 +170,8 @@ export function boothFx() {
   return [
     { kind: 'neon', view: 'wide', rect: FX_SIGN, seed: 0x71CE75, when: '!closed' },
     { kind: 'lamp', view: 'wide', rect: FX_LAMP, when: '!closed' },
-    { kind: 'tilt', view: 'wide', amp: 2 },
+    /* NO TILT (owner ruling 2026-09-15) - see recordsroom.js roomFx() for why.
+     * The booth carried the identical row and went with it. */
   ];
 }
 
@@ -214,7 +215,7 @@ export const HOLD_GLYPH = '▤';
  * underneath for anything that arrives later without its own.
  */
 export const PASSIVE_LINES = Object.freeze({
-  late_slip: ['booth_hold_late_slip', 'It spends itself the night you miss one. Nothing to press.'],
+  late_slip: ['booth_hold_late_slip', 'It files itself the night you miss one. Nothing to press.'],
 });
 
 /** The floor under PASSIVE_LINES. */

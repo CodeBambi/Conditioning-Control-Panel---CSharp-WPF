@@ -226,7 +226,9 @@
   /* ---- substitution ------------------------------------------------------- */
   function fill(text) {
     var mod = (S.init && S.init.mod) || {};
-    var hon = mod.honorific || 'good girl';
+    // Host-supplied when present; the literals only cover an init with no mod block at all.
+    // 'sweetie' matches VocabTokens.VanillaPetName on the C# side.
+    var hon = mod.honorific || 'sweetie';
     var sub = mod.subject || mod.name || 'you';
     return String(text == null ? '' : text).replace(/\{honorific\}/g, hon).replace(/\{subject\}/g, sub);
   }

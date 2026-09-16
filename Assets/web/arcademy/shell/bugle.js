@@ -10,7 +10,9 @@
  *
  * THE TABLE BELOW IS THE PAPER ITSELF: the term's five issues, three pages to
  * an issue, a kicker and a headline on each, and a comics slot on the pages
- * that carry one. The masthead above it is still awaiting its own copy.
+ * that carry one, each one drawn: a plate under art/bugle/, ink on newsprint
+ * with the house pink as its only colour, the caption lettered inside the
+ * frame by the cartoonist. The masthead above it is still awaiting its own copy.
  *
  * THE MASTHEAD FACE is 'Arcademy Display' (styles.css --disp), which is the
  * bundled Graduate woff2 under art/fonts/ - a collegiate slab serif that
@@ -108,8 +110,11 @@ export const MASTHEAD = Object.freeze({
  * The term's issues, oldest first. `pages[].body` accepts a string OR a list of
  * paragraphs; a paper wants paragraphs and one string is the degenerate case of
  * a list, so the renderer takes both and every page here uses lists.
- * `comics` puts the comics box on that page: a caption string draws the one
- * framed panel it describes, and a page without the field renders columns only.
+ * `comics: { art, caption }` puts the comics box on that page: ONE framed
+ * panel showing art/bugle/<art>.webp, the caption already lettered inside the
+ * drawing and doubling as its alt text. A bare caption string is the older
+ * placeholder form (an empty panel, the caption printed beneath) and a page
+ * without the field renders columns only.
  * `halfStar` prints the ornament and sets the sparse column treatment.
  * `when` is the gate the shell answers before an issue exists to any reader.
  * -------------------------------------------------------------------------- */
@@ -146,7 +151,7 @@ export const ISSUES = Object.freeze([
           'On the evening of the twenty-ninth of November the kitchen will lay the Harvest Luncheon in the Main Hall, and I use the word lay as a mason uses it, for this meal has foundations. The bird course alone has been three years in negotiation with my supplier, a man of the old school who will remain nameless because his name is my advantage, and the centrepiece reduction is the same reduction that carried the kitchen through the year of the burst pipe, refined since until the spoon stands upright in it out of respect. Five stars, I say now, calmly and in advance, because I have tasted the rehearsals. The campus is invited in its entirety, and the kitchen asks only that guests arrive hungry and leave their reviews at home. From the kitchen, with what remains of my patience, P. Tartine.',
           'The Bugle notes with PRIDE that the Main Hall will thus stand at the centre of BOTH of the season\'s great occasions, a coincidence of scheduling that speaks, in this editor\'s view, to a campus firing on every cylinder at once.',
         ]),
-        comics: 'A single panel: the Main Hall wearing two evening banners at once, one for the Recital and one for the Luncheon, a small bird reading both, caption \'Plenty of room.\'',
+        comics: Object.freeze({ art: 'g1', caption: 'Plenty of room.' }),
       }),
     ]),
   }),
@@ -173,7 +178,7 @@ export const ISSUES = Object.freeze([
           'Demands have reached this desk, some of them in handwriting I recognise from the weekly menu, that the Bugle unmask its correspondent, and it will not. My father, in his final editorial, wrote shield the writer and print the weather, or words to that effect, and I have never been more his son than this week, for a newspaper that hands over its critics is a newsletter, and the Arcademy deserves a NEWSPAPER.',
           'I will add, because the figures deserve the daylight, that circulation since the review has DOUBLED. Doubled from what is not a question a serious paper answers, but doubled it has, and the lesson for the doubters is the one my father spent his life setting in type: controversy, honestly reported, pays for its own ink, allegedly.',
         ]),
-        comics: 'A single panel: a soup bowl on a witness stand under a lamp, sweating, caption \'The soup declined to comment.\'',
+        comics: Object.freeze({ art: 'g2', caption: 'The soup declined to comment.' }),
       }),
       Object.freeze({
         kicker: 'LETTERS TO THE EDITOR, EDITED FOR LENGTH AND FLAVOUR',
@@ -200,7 +205,7 @@ export const ISSUES = Object.freeze([
           'My father, in his final editorial, wrote that the news is what happens while a man is setting the type, and those words have never rung truer than this week, for reasons the sharp-eyed reader may discover as this number proceeds. Circulation, meanwhile, is up again, comfortably, on a figure that was itself up. The Bugle congratulates the happy institutions and has already reserved its seat, front row, both events, which are now the same event, which is the story of the decade, allegedly.',
           'R. Baxter Jr., Editor, as was my father before me.',
         ]),
-        comics: 'A single panel: two hands shaking warmly while each hides a poster behind its back, caption \'After you.\'',
+        comics: Object.freeze({ art: 'g3', caption: 'After you.' }),
       }),
       Object.freeze({
         kicker: 'THE GROUNDS',
@@ -250,7 +255,7 @@ export const ISSUES = Object.freeze([
           'In our last number this column corrected the time of the Quad\'s first frost from ten minutes to seven to six minutes to seven, on the authority of the tower. The tower now writes that the correction, while gratefully received, misquotes its log, which reads six minutes past, not to, a distinction the tower describes as the whole of the matter. This column accordingly corrects its correction, notes that the original error has now been corrected twice in opposite directions, and takes the only position consistent with this paper\'s traditions, which is that we stand by the original error. My father stood by his errors, his father stood by the errors before those, and a paper that will not stand by its errors will fall for anything.',
           'Separately, the kitchen asks us to state that last number\'s phrase eleven pages was an undercount, the letter having run, we are assured, to fourteen, and the Bugle regrets the flattery.',
         ]),
-        comics: 'A single panel: sixty numbered pages queuing at the Bugle\'s hatch, the first page wearing a rosette, caption \'Parts two to sixty await their turn.\'',
+        comics: Object.freeze({ art: 'g4', caption: 'Parts two to sixty await their turn.' }),
       }),
       Object.freeze({
         kicker: 'REPRINTED WITHOUT PERMISSION, WHICH IS THE SINCEREST KIND',
@@ -296,7 +301,7 @@ export const ISSUES = Object.freeze([
           'And so the Bugle closes its season, up on every figure it has ever published and owing its thanks to a readership it has never needed to see to believe in. My father ended his final editorial, as I never tire of almost quoting, with the words leave them wanting the next number, and the Bugle obeys: the spring will bring the Recital, the second edition of the findings, and, it says here, answers, allegedly.',
           'R. Baxter Jr., Editor, as was my father before me.',
         ]),
-        comics: 'A single panel: a long dining table laid for a grand evening, every chair empty, one plate holding a single half star, caption \'Compliments to the chef.\'',
+        comics: Object.freeze({ art: 'g5', caption: 'Compliments to the chef.' }),
       }),
     ]),
   }),
@@ -339,6 +344,13 @@ function el(tag, cls, text) {
   if (cls) n.className = cls;
   if (text != null) n.textContent = text;
   return n;
+}
+
+/** Where a comic plate lives. Module-relative (the corkboard's posterUrl recipe). */
+function comicUrl(art) {
+  const name = String(art == null ? '' : art);
+  try { return new URL('../art/bugle/' + name + '.webp', import.meta.url).href; }
+  catch (e) { return 'art/bugle/' + name + '.webp'; }
 }
 
 function attr(node, name, value) {
@@ -561,29 +573,49 @@ export function openBugle(issueId, opts) {
     }
     sheet.appendChild(cols);
 
-    /* THE COMICS BOX. `comics: true` draws the three-frame slot (the shape
-     * awaiting an art pass). `comics: '<caption>'` is the season's form: ONE
-     * framed panel, empty but for its printed caption beneath - the panel is
-     * described, never drawn, which is the correct amount of newspaper. */
+    /* THE COMICS BOX. `comics: { art, caption }` is the season's form: ONE
+     * framed panel holding the drawing itself (art/bugle/<art>.webp), the
+     * caption lettered inside the ink so nothing prints beneath it. Should the
+     * plate fail to load, the panel prints the caption in its place - a box
+     * with nothing in it reads as a broken picture (T2, 08-27), a box with
+     * words in it reads as a newspaper. `comics: '<caption>'` (empty panel,
+     * caption beneath) and `comics: true` (the three-frame slot) remain for a
+     * future number that has words before it has ink. */
     if (p.comics) {
       const box = el('figure', 'arc-bugle-comics');
       box.appendChild(el('figcaption', 'arc-bugle-comics-cap',
         t('bugle_comics', 'Comics').toUpperCase()));
       const strip = el('div', 'arc-bugle-strip');
-      attr(strip, 'aria-hidden', 'true');
-      const single = typeof p.comics === 'string';
-      const frames = single ? 1 : 3;
-      for (let i = 0; i < frames; i += 1) {
-        const panel = el('div', 'arc-bugle-panel' + (single ? ' is-wide' : ''));
-        if (!single) panel.appendChild(el('span', 'arc-bugle-panelnum', String(i + 1)));
-        /* The single panel is empty on purpose; without a printed reason a
-         * reader takes it for a picture that failed to load (T2, 08-27). */
-        if (single) panel.appendChild(el('span', 'arc-bugle-panelheld',
-          t('bugle_comics_held', 'Picture held at the printer. Described below.')));
+      const drawn = typeof p.comics === 'object' && typeof p.comics.art === 'string';
+      const single = drawn || typeof p.comics === 'string';
+      if (drawn) {
+        const panel = el('div', 'arc-bugle-panel is-wide is-drawn');
+        const cap = String(p.comics.caption || '');
+        const img = el('img');
+        attr(img, 'alt', cap);
+        attr(img, 'loading', 'lazy');
+        attr(img, 'decoding', 'async');
+        img.onerror = function () {
+          try { panel.removeChild(img); } catch (e) { /* already gone */ }
+          try { panel.classList.remove('is-drawn'); } catch (e) { /* noop */ }
+          panel.appendChild(el('span', 'arc-bugle-panelheld', cap));
+        };
+        img.src = comicUrl(p.comics.art);
+        panel.appendChild(img);
         strip.appendChild(panel);
+      } else {
+        attr(strip, 'aria-hidden', 'true');
+        const frames = single ? 1 : 3;
+        for (let i = 0; i < frames; i += 1) {
+          const panel = el('div', 'arc-bugle-panel' + (single ? ' is-wide' : ''));
+          if (!single) panel.appendChild(el('span', 'arc-bugle-panelnum', String(i + 1)));
+          if (single) panel.appendChild(el('span', 'arc-bugle-panelheld',
+            t('bugle_comics_held', 'Picture held at the printer. Described below.')));
+          strip.appendChild(panel);
+        }
       }
       box.appendChild(strip);
-      box.appendChild(el('p', 'arc-note arc-bugle-comics-note',
+      if (!drawn) box.appendChild(el('p', 'arc-note arc-bugle-comics-note',
         single ? String(p.comics) : 'PLACEHOLDER: the strip goes in here.'));
       sheet.appendChild(box);
     }

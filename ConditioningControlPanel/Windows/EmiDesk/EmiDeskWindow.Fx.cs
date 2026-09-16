@@ -71,7 +71,14 @@ public partial class EmiDeskWindow
             TearDownReactions();
 
             // The window goes up first (the smoke has to be somewhere), but she does not.
+            //
+            // The BeginAnimation(null) pair is not decoration: an animation left holding this
+            // property (CrtOff holds 0.02, a bounce pulse holds 1.0) OUTRANKS a local write, so
+            // without the clear these two lines were silently doing nothing on every summon after
+            // the first. See ResetCrtBase for the rest of that story.
             BodyRoot.Visibility = Visibility.Hidden;
+            CrtScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            CrtScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
             CrtScale.ScaleX = 0.02;
             CrtScale.ScaleY = 0.02;
             Visibility = Visibility.Visible;
@@ -90,6 +97,12 @@ public partial class EmiDeskWindow
                 After(CrtOnMs + 20, () =>
                 {
                     if (_closingForGood) return;
+
+                    // THE PICTURE IS UP, SO THE BASE VALUE GOES BACK TO FULL SIZE. This is the fix
+                    // for "EMI disappears after a while into a small pink pixel" (ccp-bugs #1173,
+                    // #1183) and it is worth spelling out, because nothing about it is visible.
+                    ResetCrtBase(clearAnimations: false);
+
                     _transiting = false;
                     InputLocked = false;
 
@@ -110,8 +123,9 @@ public partial class EmiDeskWindow
                 _transiting = false;
                 InputLocked = false;
                 BodyRoot.Visibility = Visibility.Visible;
-                CrtScale.ScaleX = 1;
-                CrtScale.ScaleY = 1;
+                // ResetCrtBase, not two local writes: "showing her plain" has to beat an animation
+                // that may still be holding the power-off collapse, and a local write cannot.
+                ResetCrtBase(clearAnimations: true);
                 Visibility = Visibility.Visible;
                 RestartIdleBeats();
                 done?.Invoke();
@@ -174,10 +188,7 @@ public partial class EmiDeskWindow
             Hide();
             Visibility = Visibility.Hidden;
             BodyRoot.Visibility = Visibility.Visible;
-            CrtScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-            CrtScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-            CrtScale.ScaleX = 1;
-            CrtScale.ScaleY = 1;
+            ResetCrtBase(clearAnimations: true);
             _transiting = false;
             InputLocked = false;
             SetPose("idle");
@@ -195,6 +206,48 @@ public partial class EmiDeskWindow
     }
 
     // ------------------------------------------------------------------ CRT
+
+    /// <summary>
+    /// Put <c>CrtScale</c>'s BASE VALUE back to full size.
+    ///
+    /// <para>THE BUG THIS EXISTS FOR (ccp-bugs #1173, #1183: "EMI disappears after a while into a
+    /// small pink pixel", "the avatar is gone but I can still see her speech bubbles"). Four
+    /// separate animators write CrtScale: the power-on, the power-off, the bounce/thud pulse
+    /// (AnimateScalePulse) and the rare stretch (EmiDeskWindow.Alive.cs RunStretch). The first
+    /// three end HoldEnd, so what is on screen is the animation's own last keyframe and the base
+    /// value underneath is never read. The stretch ends FillBehavior.Stop, and a Stop animation
+    /// does not settle on its last keyframe: it hands the property back to whatever the BASE value
+    /// is.</para>
+    ///
+    /// <para>RunSummon wrote 0.02 into that base to hide her behind the smoke and never wrote
+    /// anything else, so from the first summon of a sitting the base was two percent. Nobody
+    /// noticed for twenty to forty minutes, which is the stretch's cooldown - then the stretch
+    /// finished, released the property, and the whole body collapsed onto its render-transform
+    /// origin as a couple of pink pixels. Everything outside BodyRoot kept working, which is why
+    /// the bubbles were still there and why she came back the moment a bounce (HoldEnd, ends at 1)
+    /// masked the base again: it reads as intermittent, and it is not.</para>
+    ///
+    /// <para><paramref name="clearAnimations"/> also drops whatever is holding the property, for
+    /// the two callers that need the value they write to be the value on screen. A local write
+    /// alone cannot beat a HoldEnd animation.</para>
+    /// </summary>
+    private void ResetCrtBase(bool clearAnimations)
+    {
+        try
+        {
+            if (clearAnimations)
+            {
+                CrtScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                CrtScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            }
+            CrtScale.ScaleX = 1;
+            CrtScale.ScaleY = 1;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] CRT base reset failed");
+        }
+    }
 
     /// <summary>
     /// The power-on: a dot, a horizontal line, then the picture. Four DISCRETE steps, no easing,

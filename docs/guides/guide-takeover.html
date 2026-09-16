@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>takeover_mode.txt - Conditioning Control Panel</title>
+<meta name="description" content="Takeover Mode hands the wheel to your companion. She picks the moment and the effect, inside limits you set. What it can do, what it can't, and how to stop it.">
+<link rel="icon" href="images/logo.webp">
+<link rel="stylesheet" href="assets/cookie-consent.css">
+<link rel="stylesheet" href="guide-article.css">
+</head>
+<body>
+
+<a class="skip" href="#doc">skip to document</a>
+
+<header>
+  <div class="titlebar">
+    <span class="sysname">CCP community guides</span>
+    <span class="ver">v6.7.4 OK</span>
+    <nav class="menu">
+      <a href="https://cclabs.app/">dashboard</a>
+      <a href="https://cclabs.app/explore.html">explore</a>
+      <a href="../labs/loom/">the loom</a>
+      <a href="https://cclabs.app/tools.html">tools</a>
+      <a href="https://cclabs.app/leaderboard.html">leaderboard</a>
+      <a href="https://app.cclabs.app/catalogue">catalogue</a>
+      <a href="https://app.cclabs.app/">login</a>
+      <a class="dl" href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest">download</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <section class="pagehead wrap">
+    <div class="pagehead-inner">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="https://cclabs.app/">dashboard</a>
+        <span class="sep">/</span>
+        <a href="https://cclabs.app/guide.html">field_manual</a>
+        <span class="sep">/</span>
+        <span class="here">takeover_mode.txt</span>
+      </nav>
+      <div class="kicker">field_manual / companion.dir / heavy machinery</div>
+      <h1>Takeover <span class="pink">Mode</span></h1>
+      <p class="lede">Normally you decide when something happens. With Takeover on, she does. She picks the moment and the effect, inside the limits you set, and you can stop her at any time.</p>
+      <div class="patreon-badge">Patreon Feature</div>
+    </div>
+  </section>
+
+  <article class="doc wrap" id="doc">
+
+    <div class="window toc">
+      <div class="bar">contents.idx - on this page<span class="lights"><i></i><i></i><i></i></span></div>
+      <div class="toc-body">
+        <ul>
+          <li><a href="#overview">Overview</a></li>
+          <li><a href="#requirements">Requirements</a></li>
+          <li><a href="#how-it-works">How It Works</a></li>
+          <li><a href="#available-actions">Available Actions</a></li>
+          <li><a href="#mood-system">Mood System</a></li>
+          <li><a href="#settings">Settings</a></li>
+          <li><a href="#cult-bunny">Perfect Fuckpuppet Companion</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <section id="overview">
+      <h2>Overview</h2>
+      <p>Every other feature in CCP waits for you. Takeover Mode doesn't. Once you arm it, your companion runs her own timer, picks an effect from the list you allowed, and fires it - a flash, a video, a subliminal, a bubble game, or just a comment. She becomes a participant instead of a tool.</p>
+
+      <p>The app calls it Takeover. Internally it's "Autonomy Mode", so you'll see both names in tooltips, logs and older posts. Same thing.</p>
+
+      <div class="feature-highlight">
+        <div class="feature-item">
+          <span>&#127922;</span>
+          <h5>Random Triggers</h5>
+          <p>Acts on her own clock</p>
+        </div>
+        <div class="feature-item">
+          <span>&#128564;</span>
+          <h5>Idle Detection</h5>
+          <p>Notices when you wander off</p>
+        </div>
+        <div class="feature-item">
+          <span>&#127769;</span>
+          <h5>Time-Aware</h5>
+          <p>Gentler by day, bolder at night</p>
+        </div>
+        <div class="feature-item">
+          <span>&#128172;</span>
+          <h5>Announcements</h5>
+          <p>Warns you first (sometimes)</p>
+        </div>
+      </div>
+
+      <div class="warning-box">
+        <h5>&#9888;&#65039; You have to say yes first</h5>
+        <p>The first time you switch Takeover on, the app shows a consent dialog listing what she'll be allowed to do. Nothing runs until you accept it. After that you can stop her any time with the <strong>Stop</strong> button, the Takeover toggle, or the panic key - the panic key also clears whatever is currently on screen.</p>
+      </div>
+
+      <div class="info-box">
+        <h5>It never turns itself back on</h5>
+        <p>Takeover always starts <strong>off</strong> when you launch the app, even if it was running when you closed it. If you actually want it to arm itself on launch, there's an opt-in "resume on startup" setting. It's off by default.</p>
+      </div>
+
+      <div class="info-box danger">
+        <h5>One exception: Lockdown</h5>
+        <p>If <a href="https://cclabs.app/guide-lockdown.html">Lockdown Mode</a> is active and Takeover is already running, you can't stop Takeover until the lockdown timer expires. That is the point of Lockdown. Don't stack the two unless you mean it.</p>
+      </div>
+    </section>
+
+    <section id="requirements">
+      <h2>Requirements</h2>
+      <ul>
+        <li><strong>Patreon subscription</strong> - Takeover is a premium feature and won't start without active Patreon access.</li>
+        <li><strong>Consent</strong> - accept the dialog the first time you enable it. Your answer is remembered.</li>
+        <li><strong>Turn it on, then press Start</strong> - the toggle enables the feature; the green <strong>Start</strong> button actually arms her. Nothing fires until you press it.</li>
+      </ul>
+
+      <div class="info-box">
+        <h5>&#128161; Pairs well with Perfect Fuckpuppet</h5>
+        <p>The Perfect Fuckpuppet companion (unlocks at Level 100) earns 50% extra companion XP every time Takeover fires an action. Built for exactly this play style.</p>
+      </div>
+    </section>
+
+    <section id="how-it-works">
+      <h2>How It Works</h2>
+
+      <h3>What sets her off</h3>
+      <table class="settings-table">
+        <thead>
+          <tr>
+            <th>Trigger</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Random</strong></td>
+            <td>A timer built around your Interval setting, with roughly a third of jitter either way so the beat isn't predictable. On by default.</td>
+          </tr>
+          <tr>
+            <td><strong>Idle</strong></td>
+            <td>Fires after you've left the mouse and keyboard alone for your Idle Timeout. On by default.</td>
+          </tr>
+          <tr>
+            <td><strong>Context</strong></td>
+            <td>Reacts to what you're doing, based on the window you have focused. Needs Window Awareness switched on. Off by default.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>What happens on a trigger</h3>
+      <ol>
+        <li>The timer fires.</li>
+        <li>She checks whether it's a good moment. She'll stand down if the cooldown hasn't elapsed, if a video or lock card is already on screen, or if you're watching something in your browser.</li>
+        <li>She picks an action, weighted by what you've allowed, her current mood, and your Intensity setting.</li>
+        <li>She may announce it first - a teasing line in the speech bubble plus a banner naming the effect, then a two-second pause.</li>
+        <li>The effect fires.</li>
+        <li>Cooldown starts. Nothing else can happen until it's done.</li>
+      </ol>
+
+      <div class="info-box">
+        <h5>She stands off other things</h5>
+        <p>Takeover deliberately waits its turn. It won't interrupt a fullscreen video, a lock card, or a bubble-count game, and it won't stack a video on top of one you started in your browser. If the moment is busy, it reschedules a short retry instead of skipping the whole interval.</p>
+      </div>
+    </section>
+
+    <section id="available-actions">
+      <h2>Available Actions</h2>
+      <p>Every action has its own on/off switch. Untick anything you don't want her reaching for.</p>
+
+      <table class="settings-table">
+        <thead>
+          <tr>
+            <th>Action</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Flash Image</strong></td>
+            <td>On</td>
+            <td>A one-shot flash from your image pool, using your normal flash settings.</td>
+          </tr>
+          <tr>
+            <td><strong>Mandatory Video</strong></td>
+            <td>On</td>
+            <td>Plays a video from your pool. It is an ordinary mandatory video and follows your global Strict Lock setting, so if you have Strict Lock off it stays skippable.</td>
+          </tr>
+          <tr>
+            <td><strong>Subliminal</strong></td>
+            <td>On</td>
+            <td>Flashes a subliminal message from your subliminal pool.</td>
+          </tr>
+          <tr>
+            <td><strong>Comment</strong></td>
+            <td>On</td>
+            <td>She just says something. Uses AI if the companion has it, otherwise a canned line. No banner, no interruption.</td>
+          </tr>
+          <tr>
+            <td><strong>Pink Filter Pulse</strong></td>
+            <td>On</td>
+            <td>Turns the pink screen filter up for 30 seconds, then puts it back. If you move the slider mid-pulse, it respects your change.</td>
+          </tr>
+          <tr>
+            <td><strong>Bouncing Text</strong></td>
+            <td>On</td>
+            <td>Drifting text overlay for 30 seconds.</td>
+          </tr>
+          <tr>
+            <td><strong>Mind Wipe</strong></td>
+            <td>On</td>
+            <td>The Mind Wipe effect. The heaviest thing on this list.</td>
+          </tr>
+          <tr>
+            <td><strong>Lock Card</strong></td>
+            <td>On</td>
+            <td>Shows a lock card you have to type through before you get control back.</td>
+          </tr>
+          <tr>
+            <td><strong>Start Bubbles</strong></td>
+            <td>Off</td>
+            <td>Starts the bubble-popping minigame for 30 seconds.</td>
+          </tr>
+          <tr>
+            <td><strong>Web Video</strong></td>
+            <td>Off</td>
+            <td>Opens a random HypnoTube video fullscreen in the browser. Skipped if any other video is already playing.</td>
+          </tr>
+          <tr>
+            <td><strong>Wallpaper</strong></td>
+            <td>Off</td>
+            <td>Swaps your desktop wallpaper for one from a folder you pick, then restores the original. The original is remembered on disk, so a crash won't leave your desktop stuck.</td>
+          </tr>
+          <tr>
+            <td><strong>Spoken Mantra</strong></td>
+            <td>On, but self-gating</td>
+            <td>She says a mantra out loud and listens for you to repeat it. Only ever offered if you've given microphone consent, the offline speech model is installed, and you aren't already driving the mic with wake-word or push-to-talk.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="info-box warning">
+        <h5>The microphone is a separate yes</h5>
+        <p>Takeover consent does not cover the mic. Anything that listens - spoken mantras, "Hey Bambi", push-to-talk - needs its own microphone consent dialog, and the mic never opens until you've given it. Those voice features live under the <strong>She's Listening</strong> exclusive and work whether or not Takeover is running.</p>
+      </div>
+
+      <div class="info-box">
+        <h5>Removed from the rotation</h5>
+        <p>Brain Drain, Spiral and Bubble Count used to be on this list and are no longer picked automatically - they were too disruptive or too unfinished to hand over. Their toggles still exist in older settings files but Takeover ignores them.</p>
+      </div>
+    </section>
+
+    <section id="mood-system">
+      <h2>Mood System</h2>
+      <p>The clock nudges what she reaches for. Mood doesn't unlock or block anything, it just shifts the odds.</p>
+
+      <table class="settings-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Mood</th>
+            <th>What shifts</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>6 AM - 12 PM</strong></td>
+            <td>Gentle</td>
+            <td>Comments more likely, videos half as likely</td>
+          </tr>
+          <tr>
+            <td><strong>12 PM - 6 PM</strong></td>
+            <td>Attentive</td>
+            <td>No adjustment, straight weights</td>
+          </tr>
+          <tr>
+            <td><strong>6 PM - 10 PM</strong></td>
+            <td>Playful</td>
+            <td>More bubbles, more flashes</td>
+          </tr>
+          <tr>
+            <td><strong>10 PM - 6 AM</strong></td>
+            <td>Mischievous</td>
+            <td>More videos, more subliminals</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="info-box">
+        <h5>&#128161; Time-Aware</h5>
+        <p>Mood always affects <em>what</em> she picks. Switch on <strong>Time-Aware</strong> and it also affects <em>how often</em> she acts, using a per-slot multiplier - quieter in the morning, busier at night. Off by default.</p>
+      </div>
+    </section>
+
+    <section id="settings">
+      <h2>Settings</h2>
+
+      <figure>
+        <img loading="lazy" decoding="async" src="images/screenshots/takeover/system-override.webp" alt="System Override / Autonomy settings panel with Interval, Cooldown, Intensity, Announced sliders and Random / Time-Aware toggles" class="guide-screenshot">
+        <figcaption>The Takeover settings panel (shown in Drone Mode theme) - pacing, intensity, and trigger style.</figcaption>
+      </figure>
+
+      <h3>Core Settings</h3>
+      <table class="settings-table">
+        <thead>
+          <tr>
+            <th>Setting</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Takeover</strong></td>
+            <td>Off</td>
+            <td>The master switch. Off on every launch unless you opt into resume-on-startup.</td>
+          </tr>
+          <tr>
+            <td><strong>Interval</strong></td>
+            <td>60s (30-300s)</td>
+            <td>Average gap between random attempts. The real gap jitters around this by about a third either way.</td>
+          </tr>
+          <tr>
+            <td><strong>Idle</strong> / idle timeout</td>
+            <td>On, 5 min (1-30)</td>
+            <td>How long you have to be away from the keyboard before the idle trigger fires.</td>
+          </tr>
+          <tr>
+            <td><strong>Cooldown</strong></td>
+            <td>30s (10-300s)</td>
+            <td>Hard floor between two actions. Raise it if she feels relentless.</td>
+          </tr>
+          <tr>
+            <td><strong>Intensity</strong></td>
+            <td>5 (1-10)</td>
+            <td>1 is subtle nudges, 10 is relentless. Mostly weights the more disruptive actions up or down.</td>
+          </tr>
+          <tr>
+            <td><strong>Announce</strong></td>
+            <td>50% (0-100)</td>
+            <td>Chance she warns you before acting. At 0% she works silently and the on-screen banner is suppressed too.</td>
+          </tr>
+          <tr>
+            <td><strong>Time-Aware</strong></td>
+            <td>Off</td>
+            <td>Let the time of day change how often she acts, not just what she picks.</td>
+          </tr>
+          <tr>
+            <td><strong>Context trigger</strong></td>
+            <td>Off</td>
+            <td>React to the app or window you have in focus. Requires Window Awareness.</td>
+          </tr>
+          <tr>
+            <td><strong>Countdown bar</strong></td>
+            <td>On</td>
+            <td>The thin pink bar under the avatar that drains toward her next random action.</td>
+          </tr>
+          <tr>
+            <td><strong>Resume on startup</strong></td>
+            <td>Off</td>
+            <td>Arm Takeover automatically when the app launches. Leave it off unless you're sure.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Action Toggles</h3>
+      <p>Every action in the list above has its own switch. Start by turning off anything you'd hate to be surprised by, then loosen up as you get a feel for the pacing.</p>
+    </section>
+
+    <section id="cult-bunny">
+      <h2>Perfect Fuckpuppet Companion</h2>
+      <p>The <strong>Perfect Fuckpuppet</strong> companion unlocks at Level 100 and is built around this feature:</p>
+
+      <div class="feature-highlight">
+        <div class="feature-item">
+          <span>&#128048;</span>
+          <h5>+50% XP Bonus</h5>
+          <p>Whenever Takeover fires an action</p>
+        </div>
+        <div class="feature-item">
+          <span>&#127919;</span>
+          <h5>Passive Play</h5>
+          <p>Rewards hands-off conditioning</p>
+        </div>
+      </div>
+
+      <p>Every other companion rewards something you do. This one rewards getting out of the way: with Perfect Fuckpuppet selected and Takeover running, each autonomous action earns 50% more companion XP. She literally levels faster the less you touch the app.</p>
+    </section>
+
+    <nav class="guide-nav" aria-label="Document navigation">
+      <a href="guide-avatar.html" class="prev">
+        <span class="nav-label">Previous</span>
+        <span class="nav-title">companion_avatar.txt</span>
+      </a>
+      <a href="https://cclabs.app/guide-haptics.html" class="next">
+        <span class="nav-label">Next</span>
+        <span class="nav-title">haptics.txt</span>
+      </a>
+    </nav>
+
+  </article>
+</main>
+
+<footer>
+  <div class="wrap taskbar">
+    <a class="btn88" href="./">guide_index</a>
+    <a href="https://cclabs.app">cclabs.app</a>
+    <a href="https://cclabs.app/subscribe.html">plans</a>
+    <a href="#" id="cc-footer-link">cookie preferences</a>
+    <span class="right">local time: <span id="clock">--:--:--</span>. session: annotated.</span>
+  </div>
+  <div class="wrap legal">Community documentation for the open-source Conditioning Control Panel project. Not the CC Labs S.r.l.s. storefront. Downloads and <a href="https://cclabs.app/subscribe.html">plans</a> live at <a href="https://cclabs.app">cclabs.app</a>.</div>
+</footer>
+
+<script>
+// taskbar clock, same contract as the hub
+(function () {
+  'use strict';
+  var clock = document.getElementById('clock');
+  if (!clock) return;
+  function p(n) { return (n < 10 ? '0' : '') + n; }
+  function tick() {
+    var d = new Date();
+    clock.textContent = p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
+
+<script src="assets/cookie-consent.js" defer></script>
+</body>
+</html>

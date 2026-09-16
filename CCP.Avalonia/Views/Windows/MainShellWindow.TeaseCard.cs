@@ -76,7 +76,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 card.Title = revealed ? "Just Drop" : TeaseCardTitle;
                 // Hover copy is the only other place the tile speaks, so it is teased too. Null
                 // once revealed, which restores the no-tooltip default the tile shipped with.
-                ToolTip.SetTip(card, revealed ? null : Loc.Get("tease_card_tooltip"));
+                // main retired tease_card_tooltip with MainWindow.TeaseCard.cs. tease_popup_title is
+                // the same tease feature's own surviving line ("Something is coming"), translated in
+                // all nine languages, so the hover copy stays localized rather than going raw.
+                ToolTip.SetTip(card, revealed ? null : Loc.Get("tease_popup_title"));
                 card.TierBadge = revealed ? null : TeaseCardBadge;
             }
             catch (Exception ex) { Log.Debug("ApplyTeaseCard: {E}", ex.Message); }

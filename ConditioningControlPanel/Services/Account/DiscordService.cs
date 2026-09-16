@@ -443,6 +443,7 @@ namespace ConditioningControlPanel.Services
                 // rides along without polluting DefaultRequestHeaders; the server
                 // uses it to heal a divergent/mismatched token (BUG-7DCJHDP3JZ).
                 using var validateRequest = new HttpRequestMessage(HttpMethod.Get, "/discord/validate");
+                var prizesFor = App.Settings?.Current?.UnifiedId;
                 validateRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
                 var currentAuthToken = App.Settings?.Current?.AuthToken;
                 if (!string.IsNullOrEmpty(currentAuthToken))
@@ -451,6 +452,10 @@ namespace ConditioningControlPanel.Services
                 }
 
                 var response = await _httpClient.SendAsync(validateRequest);
+
+                // Contract D: the account this token belongs to is a merge tombstone. The swap
+                // re-signs in on the canonical (detached); this validate is moot.
+                if (await MergedAccountRecovery.TryHandleAsync(response)) return;
 
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
                 {
@@ -482,6 +487,8 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Warning("Discord validation error: {Error}", user?.Error);
                     return;
                 }
+
+                ProfileSyncService.ApplyValidatePrizes(prizesFor, user.UnifiedId, user.Prizes, "Discord validate");
 
                 // Server healed a divergent auth token — store immediately. Only
                 // present on mismatch; not cached, so no stale replay (BUG-7DCJHDP3JZ).
@@ -738,12 +745,14 @@ namespace ConditioningControlPanel.Services
 
                 if (response.IsSuccessStatusCode)
                 {
-                    App.Logger?.Information("Achievement shared to community: {Name} - Response: {Response}", achievement.Name, responseText);
+                    App.Logger?.Information("Achievement shared to community: {Achievement} ({Status}, {Bytes} bytes)",
+                        achievement.Id, (int)response.StatusCode, responseText?.Length ?? 0);
                     return true;
                 }
                 else
                 {
-                    App.Logger?.Warning("Achievement share failed: {Status} - {Response}", response.StatusCode, responseText);
+                    App.Logger?.Warning("Achievement share failed: {Status} (body {Bytes} bytes)",
+                        (int)response.StatusCode, responseText?.Length ?? 0);
                     return false;
                 }
             }
@@ -802,12 +811,14 @@ namespace ConditioningControlPanel.Services
 
                 if (response.IsSuccessStatusCode)
                 {
-                    App.Logger?.Information("Level up shared to community: Level {Level} - Response: {Response}", level, responseText);
+                    App.Logger?.Information("Level up shared to community: Level {Level} ({Status}, {Bytes} bytes)",
+                        level, (int)response.StatusCode, responseText?.Length ?? 0);
                     return true;
                 }
                 else
                 {
-                    App.Logger?.Warning("Level up share failed: {Status} - {Response}", response.StatusCode, responseText);
+                    App.Logger?.Warning("Level up share failed: {Status} (body {Bytes} bytes)",
+                        (int)response.StatusCode, responseText?.Length ?? 0);
                     return false;
                 }
             }
@@ -855,7 +866,7 @@ namespace ConditioningControlPanel.Services
                 _tokenStorage.StoreCachedState(cachedState);
             }
 
-            App.Logger?.Information("Custom display name set to: {DisplayName} (claimed: {Claimed})", CustomDisplayName, claimExisting);
+            App.Logger?.Information("Custom display name set ({Chars} chars, claimed: {Claimed})", CustomDisplayName?.Length ?? 0, claimExisting);
             return (true, null, false);
         }
 
@@ -982,7 +993,7 @@ namespace ConditioningControlPanel.Services
                             cachedState.CustomDisplayName = CustomDisplayName;
                             _tokenStorage.StoreCachedState(cachedState);
                         }
-                        App.Logger?.Information("Loaded display name from server: {Name}", CustomDisplayName);
+                        App.Logger?.Information("Loaded display name from server ({Chars} chars)", CustomDisplayName?.Length ?? 0);
                         return;
                     }
                 }
@@ -998,7 +1009,7 @@ namespace ConditioningControlPanel.Services
                         cachedState.CustomDisplayName = CustomDisplayName;
                         _tokenStorage.StoreCachedState(cachedState);
                     }
-                    App.Logger?.Information("Adopted display name from Patreon: {Name}", CustomDisplayName);
+                    App.Logger?.Information("Adopted display name from Patreon ({Chars} chars)", CustomDisplayName?.Length ?? 0);
                 }
             }
             catch (Exception ex)

@@ -91,7 +91,9 @@ namespace ConditioningControlPanel.Services
             _timer = null;
             timer?.Dispose();
 
-            Log.Information("LockCardScheduler stopped");
+            // Debug, not Information: main dropped this line's level in LockCardService.Stop
+            // because a stop is routine (pause, toggle, settings apply) and it was noise.
+            Log.Debug("LockCardScheduler stopped");
         }
 
         /// <summary>A card is due: re-arm for the next one, then ask the head to show it.</summary>

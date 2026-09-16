@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using ConditioningControlPanel.Helpers;
 
@@ -173,7 +173,7 @@ namespace ConditioningControlPanel.Services
                             // as the active LockCard, so re-enqueuing would hold the slot with nothing on
                             // screen until the 5-min stuck backstop, and could bounce indefinitely. Give up
                             // after this single re-defer and release the slot so the queue keeps moving.
-                            App.Logger?.Warning("LockCardService: Deferred lock card still blocked on replay ({Blocker} is open). Dropping after one re-defer. Phrase: {Phrase}", blocker, phraseSnippet);
+                            App.Logger?.Warning("LockCardService: Deferred lock card still blocked on replay ({Blocker} is open). Dropping after one re-defer. Phrase chars: {Chars}", blocker, (phraseSnippet ?? "").Length);
                             // CompleteIfCurrent, not Complete: if the card blocking us is the one
                             // holding the slot, a type-blind Complete would release SOMEONE ELSE's
                             // live claim and dequeue the next interaction over their open window.
@@ -181,7 +181,7 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case BlockedCardAction.Defer:
-                            App.Logger?.Warning("LockCardService: {Blocker} is already open. Deferring this lock card to the interaction queue. Phrase: {Phrase}", blocker, phraseSnippet);
+                            App.Logger?.Warning("LockCardService: {Blocker} is already open. Deferring this lock card to the interaction queue. Phrase chars: {Chars}", blocker, (phraseSnippet ?? "").Length);
                             App.InteractionQueue?.TryStart(
                                 InteractionQueueService.InteractionType.LockCard,
                                 () => ShowLockCard(customPhrase, customRepeats, customStrict, isTest, isDeferredReplay: true),
@@ -189,7 +189,7 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case BlockedCardAction.DropNoQueue:
-                            App.Logger?.Warning("LockCardService: {Blocker} is already open and no interaction queue is available to defer to. Dropping. Phrase: {Phrase}", blocker, phraseSnippet);
+                            App.Logger?.Warning("LockCardService: {Blocker} is already open and no interaction queue is available to defer to. Dropping. Phrase chars: {Chars}", blocker, (phraseSnippet ?? "").Length);
                             break;
                     }
                     return;
@@ -237,14 +237,25 @@ namespace ConditioningControlPanel.Services
                     // rotation slot — and on the UI thread, which is what keeps the scheduler's rotation
                     // state single-threaded.
                     var phrase = customPhrase ?? Scheduler.PickPhrase(enabledPhrases)!;
-                    var repeats = customRepeats >= 0 ? customRepeats : settings.LockCardRepeats;
+                    var repeats = ResolveRepeats(
+                        customRepeats,
+                        phrase,
+                        settings.LockCardRandomRepeats,
+                        settings.LockCardRepeatsMin,
+                        settings.LockCardRepeats,
+                        settings.LockCardTargetLengthEnabled,
+                        settings.LockCardTargetLength,
+                        settings.LockCardTargetLengthVariance,
+                        // main rolled this off the service's own Random; that field moved to
+                        // LockCardScheduler with the rotation, so the roll comes from the shared one.
+                        Random.Shared.NextDouble());
                     var strict = customStrict || settings.LockCardStrict;
                     var voice = settings.LockCardVoiceMode;
 
                     // Show on all monitors with synced input
                     LockCardWindow.ShowOnAllMonitors(phrase, repeats, strict, isTest, voice);
 
-                    App.Logger?.Information("Lock Card shown on all monitors - Phrase: {Phrase}", phrase);
+                    App.Logger?.Information("Lock Card shown on all monitors - Phrase chars: {Chars}", (phrase ?? "").Length);
                 }
                 catch (Exception ex)
                 {
@@ -257,6 +268,85 @@ namespace ConditioningControlPanel.Services
                     App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.LockCard);
                 }
             });
+        }
+
+        /// <summary>
+        /// The hard ceiling on a length-derived repeat count. A one-word phrase against a 600
+        /// character budget would otherwise ask for a hundred repeats, which is not a lock card,
+        /// it is a wall. Only the length mode can reach this cap - the count modes are bounded by
+        /// the sliders at 10.
+        /// </summary>
+        internal const int TargetLengthRepeatCap = 30;
+
+        /// <summary>
+        /// How many times this card must be typed. Pure and static so the three modes are testable
+        /// without a window, a settings file or a dispatcher.
+        ///
+        /// <para>Precedence, highest first:</para>
+        /// <list type="number">
+        /// <item><paramref name="customRepeats"/> when non-negative - an AI, a Goon round or
+        /// MantraLockScreenCommand asked for an exact count and must get it, whatever the user's
+        /// sliders say.</item>
+        /// <item>Length mode (<paramref name="targetLengthEnabled"/>): roll a character budget of
+        /// <paramref name="targetLength"/> +/- <paramref name="variance"/> and repeat the phrase
+        /// until it covers that budget, so a short line and a long one cost the same effort.
+        /// Beats random mode - it already produces a varying count.</item>
+        /// <item>Random mode (<paramref name="randomRepeats"/>): a uniform draw over
+        /// [<paramref name="repeatsMin"/>, <paramref name="repeatsMax"/>].</item>
+        /// <item>Otherwise the flat <paramref name="repeatsMax"/>, which is the pre-6.9.4
+        /// behaviour and what every default reproduces.</item>
+        /// </list>
+        /// </summary>
+        /// <param name="roll">A draw in [0,1). One roll serves whichever mode is live.</param>
+        internal static int ResolveRepeats(
+            int customRepeats,
+            string? phrase,
+            bool randomRepeats,
+            int repeatsMin,
+            int repeatsMax,
+            bool targetLengthEnabled,
+            int targetLength,
+            int variance,
+            double roll)
+        {
+            if (customRepeats >= 0) return customRepeats;
+
+            // Clamp the roll rather than trust it: Random.NextDouble() never returns 1.0, but a
+            // test, a future caller or a different RNG might, and every arithmetic path below
+            // overshoots its top end by exactly one when it does.
+            if (double.IsNaN(roll)) roll = 0;
+            roll = Math.Clamp(roll, 0.0, 0.9999999);
+
+            if (targetLengthEnabled)
+            {
+                // The NORMALISED length, because that is what the user actually has to type: an
+                // ellipsis in the phrase is three keystrokes, a double space is one.
+                var typedLength = LockCardText.Normalize(phrase).Length;
+                if (typedLength > 0)
+                {
+                    var spread = Math.Max(0, variance);
+                    var budget = targetLength + (int)Math.Round((roll * 2.0 - 1.0) * spread);
+                    if (budget < 1) budget = 1;
+
+                    // Ceiling division: the budget is a floor to CLEAR, so a phrase that covers it
+                    // only halfway on the last pass still owes that pass.
+                    var derived = (budget + typedLength - 1) / typedLength;
+                    return Math.Clamp(derived, 1, TargetLengthRepeatCap);
+                }
+                // An empty phrase has no length to divide by. Fall through rather than return 1:
+                // the user still asked for a card, and the count modes below still answer.
+            }
+
+            if (randomRepeats)
+            {
+                var lo = Math.Min(repeatsMin, repeatsMax);
+                var hi = Math.Max(repeatsMin, repeatsMax);
+                if (lo < 1) lo = 1;
+                if (hi < lo) hi = lo;
+                return Math.Min(hi, lo + (int)(roll * (hi - lo + 1)));
+            }
+
+            return repeatsMax;
         }
 
         /// <summary>

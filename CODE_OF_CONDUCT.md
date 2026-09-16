@@ -28,7 +28,7 @@ This Code of Conduct applies within all project spaces, including:
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported by contacting the project maintainer. All complaints will be reviewed and investigated.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the maintainers by direct message on the [CC Labs Discord](https://discord.gg/YxVAMt4qaZ). All complaints will be reviewed and investigated.
 
 ## Attribution
 

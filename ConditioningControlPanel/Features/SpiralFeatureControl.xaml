@@ -1,4 +1,4 @@
-<UserControl x:Class="ConditioningControlPanel.Features.SpiralFeatureControl"
+﻿<UserControl x:Class="ConditioningControlPanel.Features.SpiralFeatureControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
@@ -144,7 +144,7 @@
                 <!-- Actions (kept above the library so they're reachable without scrolling) -->
                 <!-- THE LOOM: weave your own spiral (also craftable inside DtRH) -->
                 <Button x:Name="BtnOpenLoom"
-                        Content="🌀 THE LOOM — weave your own spiral"
+                        Content="🌀 THE LOOM - weave your own spiral"
                         Style="{DynamicResource OutlineButton}"
                         Padding="12,10"
                         Margin="0,0,0,10"
@@ -152,7 +152,7 @@
 
                 <!-- Standalone corner-GIF overlays (independent of sessions) -->
                 <Button x:Name="BtnCornerGifs"
-                        Content="🖼 CORNER GIFs — pin a GIF to a screen corner"
+                        Content="🖼 CORNER GIFs - pin a GIF to a screen corner"
                         Style="{DynamicResource OutlineButton}"
                         Padding="12,10"
                         Margin="0,0,0,10"
@@ -174,7 +174,7 @@
                                 Background="{StaticResource SectionHueStudioBrush}"/>
                         <StackPanel Margin="16,10,16,12">
                             <Grid Margin="0,0,0,10" Background="Transparent"
-                                  ToolTip="Pick the spiral used everywhere. Drop your own .gif / image files in the folder, then Refresh.">
+                                  ToolTip="{loc:Str tooltip_spiral_library}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
@@ -188,7 +188,7 @@
                                            VerticalAlignment="Center"/>
                                 <Button Grid.Column="1"
                                         x:Name="BtnOpenSpiralFolder"
-                                        Content="Open folder"
+                                        Content="{loc:Str btn_spiral_open_folder}"
                                         Style="{DynamicResource OutlineButton}"
                                         Padding="10,5"
                                         Margin="0,0,6,0"
@@ -211,7 +211,7 @@
 
                             <TextBlock x:Name="SpiralEmptyState"
                                        Visibility="Collapsed"
-                                       Text="No spirals in your folder yet — only the built-in spiral is available. Click &quot;Open folder&quot; to add your own."
+                                       Text="{loc:Str label_no_spirals_yet}"
                                        Foreground="{DynamicResource TextMutedBrush}"
                                        FontSize="11"
                                        TextWrapping="Wrap"

@@ -13,6 +13,7 @@ using System.Threading.Tasks;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Descent;
+using ConditioningControlPanel.Services.Prizes;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -405,6 +406,43 @@ namespace ConditioningControlPanel.Services
         /// <param name="serverSeason">`current_season` off the same node, when present.</param>
         public void TryAdoptFromProfilePoll(int serverLevel, double serverTotalXp, string? serverSeason)
         {
+            TryAdoptFromServerProgression(serverLevel, serverTotalXp, serverSeason, "profile poll");
+        }
+
+        /// <summary>
+        /// Pull <c>progression.level/xp/current_season</c> off a heartbeat response body and
+        /// offer them to the clean-ledger adopt. Absent or malformed fields mean no offer -
+        /// never a guess. Older servers send no <c>progression</c> block, which is a no-op.
+        /// </summary>
+        internal void TryAdoptFromHeartbeatBody(string? body)
+        {
+            var parsed = ParseHeartbeatProgression(body);
+            if (parsed is null) return;
+            TryAdoptFromServerProgression(parsed.Value.level, parsed.Value.totalXp, parsed.Value.season, "heartbeat");
+        }
+
+        /// <summary>
+        /// The heartbeat response's <c>progression</c> block as (level, total xp, season), or null
+        /// when the body is empty, not JSON, has no block, or the block's numbers are not numbers.
+        /// Pure; pinned by ProfileSyncHeartbeatProgressionTests.
+        /// </summary>
+        internal static (int level, double totalXp, string? season)? ParseHeartbeatProgression(string? body)
+        {
+            if (string.IsNullOrWhiteSpace(body)) return null;
+            JObject root;
+            try { root = JObject.Parse(body); } catch { return null; }
+            if (root["progression"] is not JObject prog) return null;
+
+            var level = prog["level"]?.Type == JTokenType.Integer ? prog["level"]!.Value<int>() : 0;
+            var xpToken = prog["xp"];
+            if (level <= 0 || xpToken is null || (xpToken.Type != JTokenType.Integer && xpToken.Type != JTokenType.Float)) return null;
+            var season = prog["current_season"]?.Type == JTokenType.String ? prog["current_season"]!.Value<string>() : null;
+
+            return (level, xpToken.Value<double>(), season);
+        }
+
+        private void TryAdoptFromServerProgression(int serverLevel, double serverTotalXp, string? serverSeason, string source)
+        {
             try
             {
                 var settings = App.Settings?.Current;
@@ -422,8 +460,8 @@ namespace ConditioningControlPanel.Services
                 if (serverSeason != null &&
                     !string.Equals(serverSeason, settings.CurrentSeason ?? string.Empty, StringComparison.Ordinal))
                 {
-                    App.Logger?.Debug("Profile-poll adopt: server season {SS} is not the local scope {LS} — skipping",
-                        serverSeason, settings.CurrentSeason ?? "(none)");
+                    App.Logger?.Debug("{Source} adopt: server season {SS} is not the local scope {LS} — skipping",
+                        source, serverSeason, settings.CurrentSeason ?? "(none)");
                     return;
                 }
 
@@ -437,8 +475,8 @@ namespace ConditioningControlPanel.Services
                 if (pollWatermark <= 0) return;                     // clean cannot be proven — stand aside
                 if (localTotalXp > pollWatermark + 0.01)
                 {
-                    App.Logger?.Debug("Profile-poll adopt: local ledger is dirty ({Local} > agreed {Agreed}) — leaving the {Server} XP lead to the sync merge",
-                        (int)localTotalXp, (int)pollWatermark, (int)serverTotalXp);
+                    App.Logger?.Debug("{Source} adopt: local ledger is dirty ({Local} > agreed {Agreed}) — leaving the {Server} XP lead to the sync merge",
+                        source, (int)localTotalXp, (int)pollWatermark, (int)serverTotalXp);
                     return;
                 }
 
@@ -446,19 +484,19 @@ namespace ConditioningControlPanel.Services
                 settings.PlayerXP = App.Progression?.GetCurrentLevelXP(serverLevel, serverTotalXp) ?? 0;
 
                 var clientTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
-                RecordAgreedServerXp(settings, serverTotalXp, clientTotalXp, "profile poll");
+                RecordAgreedServerXp(settings, serverTotalXp, clientTotalXp, source);
                 App.Settings?.Save();
 
-                App.Logger?.Information("Profile-poll adopt: clean ledger, server ahead — Level {LL} ({LX} XP) -> Level {SL} ({SX} XP)",
-                    preLevel, (int)localTotalXp, serverLevel, (int)serverTotalXp);
+                App.Logger?.Information("{Source} adopt: clean ledger, server ahead — Level {LL} ({LX} XP) -> Level {SL} ({SX} XP)",
+                    source, preLevel, (int)localTotalXp, serverLevel, (int)serverTotalXp);
 
                 // Same repaint contract as the launch adopt: the header is imperative, not bound,
                 // and this raise marshals itself to the dispatcher (#879).
-                RaiseProfileLoadedIfProgressionChanged(settings, preLevel, preLevelXp, "profile poll");
+                RaiseProfileLoadedIfProgressionChanged(settings, preLevel, preLevelXp, source);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Profile-poll adopt failed");
+                App.Logger?.Warning(ex, "{Source} adopt failed", source);
             }
         }
 
@@ -480,6 +518,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void StartHeartbeat()
         {
+            // THE VAT'S SIGN-IN POKE, before the idempotency return on purpose: every login
+            // path lands here once the account is usable, and a second arrival (the 401
+            // self-heal, a Discord restore after a Patreon one) may carry a rotated token.
+            // DescentService dedupes against its own floor, so this never doubles a request
+            // on the wire. Mirror of the App.Descent.Reset() call in ClearAccountData.
+            App.Descent?.OnSignedIn();
+
             if (_heartbeatTimer != null) return;
 
             _heartbeatTimer = new DispatcherTimer
@@ -507,6 +552,28 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Contract D: quiesce every timer that could write under the OLD unified id while
+        /// <see cref="MergedAccountRecovery"/> swaps to the canonical. The heartbeat is restarted
+        /// by the post-swap sign-in; the sync nudge re-arms itself on the next
+        /// <see cref="NudgeSyncSoon"/>. Safe from any thread (DispatcherTimer.Stop is marshalled).
+        /// </summary>
+        public void StopTimersForAccountSwap()
+        {
+            StopHeartbeat();
+            try
+            {
+                var nudge = _nudgeTimer;
+                if (nudge == null) return;
+                if (nudge.Dispatcher.CheckAccess()) nudge.Stop();
+                else nudge.Dispatcher.BeginInvoke(new Action(() => nudge.Stop()), DispatcherPriority.Normal);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Sync nudge stop failed during account swap: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
         /// Forget that this session already completed a profile round-trip. Call on logout.
         /// Logout zeroes local progression (ClearProgressionData), so without this the
         /// defaults-push guard in SyncProfileAsync stays disarmed for the rest of the app
@@ -517,6 +584,136 @@ namespace ConditioningControlPanel.Services
         {
             _hasLoadedProfile = false;
             App.Logger?.Debug("Profile sync: loaded-profile flag reset (logout) - defaults guard re-armed");
+            // Prize ownership belongs to the account signing out (backroom CONTRACT 10.17.E).
+            PrizeFeed.Clear();
+        }
+
+        /// <summary>The one prize feed for this process, bound to <c>App.Ownership</c>.</summary>
+        private static readonly PrizesFeed PrizeFeed = new(() => App.Ownership, () => App.UnifiedUserId, PostPrizeWork);
+
+        /// <summary>
+        /// Apply the <c>prizes</c> block of a provider validate response (Patreon, Discord,
+        /// SubscribeStar). <paramref name="requestedFor"/> is the session's unified id when the
+        /// request went out, <paramref name="answeredFor"/> the <c>unified_id</c> the server
+        /// resolved; a block for any other record is ignored.
+        /// </summary>
+        public static void ApplyValidatePrizes(string? requestedFor, string? answeredFor, PrizesBlock? prizes, string source)
+            => PrizeFeed.Apply(requestedFor, answeredFor, prizes, source);
+
+        /// <summary>
+        /// Queue one ownership change on the UI thread, always behind what is already queued.
+        /// OwnershipService raises inline on the UI thread and BeginInvokes from a pool thread,
+        /// so a pool-thread snapshot's Added could otherwise land after a UI-thread logout's
+        /// Removed and leave listeners holding grants nobody owns. One FIFO keeps changes and
+        /// their events in order. No dispatcher (tests, early start) runs it inline.
+        /// </summary>
+        private static void PostPrizeWork(Action work)
+        {
+            void Safe()
+            {
+                try { work(); }
+                catch (Exception ex) { App.Logger?.Debug("[Prizes] ownership update failed: {Error}", ex.Message); }
+            }
+            try
+            {
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher == null) { Safe(); return; }
+                if (dispatcher.HasShutdownStarted) return;
+                dispatcher.BeginInvoke(new Action(Safe));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("[Prizes] could not queue an ownership update: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Back Room prize ownership feed 1 (backroom CONTRACT 10.17.E): hands the server's
+        /// <c>prizes</c> block to <see cref="OwnershipService"/> for the account the request
+        /// was made for, and clears it on logout or when the account in play changes. Grants are
+        /// never persisted and never uploaded; the service itself drops stale revisions and any
+        /// snapshot for an account other than the one signed in. Every change goes through one
+        /// ordered queue, and a late call for an account that is no longer signed in is dropped
+        /// there, so it can neither apply nor clear the current account's grants.
+        /// </summary>
+        internal sealed class PrizesFeed
+        {
+            private readonly Func<OwnershipService?> _ownership;
+            private readonly Func<string?> _currentAccount;
+            private readonly Action<Action> _post;
+            private readonly object _gate = new();
+            private string? _accountId;
+
+            internal PrizesFeed(Func<OwnershipService?> ownership, Func<string?> currentAccount, Action<Action> post)
+            {
+                _ownership = ownership ?? throw new ArgumentNullException(nameof(ownership));
+                _currentAccount = currentAccount ?? throw new ArgumentNullException(nameof(currentAccount));
+                _post = post ?? throw new ArgumentNullException(nameof(post));
+            }
+
+            /// <summary>Record the account a request is about to be made for; a different account than last time clears what is held.</summary>
+            internal void NoteAccount(string? accountId)
+            {
+                if (string.IsNullOrEmpty(accountId)) return;
+                _post(() => NoteAccountNow(accountId));
+            }
+
+            // Runs from the queue. False when accountId is no longer the signed-in account.
+            private bool NoteAccountNow(string accountId)
+            {
+                if (!string.Equals(_currentAccount(), accountId, StringComparison.Ordinal))
+                {
+                    App.Logger?.Debug("[Prizes] late call for an account no longer signed in, ignored");
+                    return false;
+                }
+                bool switched;
+                lock (_gate)
+                {
+                    switched = _accountId != null && !string.Equals(_accountId, accountId, StringComparison.Ordinal);
+                    _accountId = accountId;
+                }
+                if (switched)
+                {
+                    App.Logger?.Information("[Prizes] account changed, clearing held ownership");
+                    _ownership()?.Clear();
+                }
+                return true;
+            }
+
+            /// <summary>
+            /// Apply one response's block. Returns true when a snapshot was queued for the account.
+            /// A missing block leaves the held state alone; a block answered for another record is
+            /// ignored.
+            /// </summary>
+            internal bool Apply(string? requestedFor, string? answeredFor, PrizesBlock? prizes, string source)
+            {
+                if (string.IsNullOrEmpty(requestedFor)) return false;
+                string[]? grants = null;
+                if (prizes?.Grants != null)
+                {
+                    if (string.Equals(requestedFor, answeredFor, StringComparison.Ordinal))
+                        grants = prizes.Grants.ToArray();
+                    else
+                        App.Logger?.Debug("[Prizes] {Source} answered for another account, block ignored", source);
+                }
+                var revision = prizes?.Revision ?? 0;
+                _post(() =>
+                {
+                    if (!NoteAccountNow(requestedFor) || grants == null) return;
+                    var ownership = _ownership();
+                    if (ownership == null) return;
+                    ownership.ApplySnapshot(requestedFor, revision, grants);
+                    App.Logger?.Debug("[Prizes] {Source} snapshot rev {Revision}, {Count} grants", source, revision, grants.Length);
+                });
+                return grants != null;
+            }
+
+            /// <summary>Logout: forget the account and drop every held grant.</summary>
+            internal void Clear() => _post(() =>
+            {
+                lock (_gate) _accountId = null;
+                _ownership()?.Clear();
+            });
         }
 
         /// <summary>
@@ -551,6 +748,27 @@ namespace ConditioningControlPanel.Services
                         Encoding.UTF8, "application/json");
 
                     var v2Response = await _httpClient.SendAsync(v2Request);
+
+                    // Contract D: this id is a merge tombstone. The handler stops this timer,
+                    // swaps to the canonical and re-signs in; nothing else here applies.
+                    if (await MergedAccountRecovery.TryHandleAsync(v2Response)) return;
+
+                    if (v2Response.IsSuccessStatusCode)
+                    {
+                        // THE HEARTBEAT'S SECOND READING (Redis bandwidth pass, 2026-09-15).
+                        // The server hands back level/xp/current_season with every accepted
+                        // heartbeat; this replaces the retired 60s profile poll as the feed
+                        // for the cross-device adopt. Same fields, same rules, same method.
+                        try
+                        {
+                            var body = await v2Response.Content.ReadAsStringAsync();
+                            TryAdoptFromHeartbeatBody(body);
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Debug("Heartbeat progression read skipped: {Error}", ex.Message);
+                        }
+                    }
                     var recovered = await HandleUnauthorizedAsync(v2Response);
                     if (v2Response.StatusCode == HttpStatusCode.Unauthorized && !recovered)
                     {
@@ -1424,10 +1642,16 @@ namespace ConditioningControlPanel.Services
                     achievementProgress?.TotalVideoMinutes ?? 0,
                     achievementProgress?.TotalLockCardsCompleted ?? 0);
 
+                // Spiral rail: bank the last few seconds of feature use into today's day-log
+                // entry before either body below reads it (a local write, no network).
+                App.FeatureDayLog?.Flush();
+
                 // Use V2 sync if user has unified_id (new v5.5 system)
                 var unifiedId = App.Settings?.Current?.UnifiedId;
                 if (!string.IsNullOrEmpty(unifiedId))
                 {
+                    // An account switch drops the previous account's prizes before this request.
+                    PrizeFeed.NoteAccount(unifiedId);
                     raiseSource = "V2 sync";
                     var questProgress = App.Quests?.Progress;
                     var v2SyncData = new
@@ -1467,6 +1691,9 @@ namespace ConditioningControlPanel.Services
                             // Spiral W1: the same days, but with the quest ids that filled them.
                             // Rides beside the dates and gets the same union merge coming back.
                             ["quest_completion_log"] = BuildQuestCompletionLogPayload(questProgress),
+                            // Spiral rail: which features were used on which day. Server-side
+                            // only; nothing comes back down for it (see BuildFeatureDayLogPayload).
+                            ["feature_day_log"] = BuildFeatureDayLogPayload(),
                             ["total_daily_quests_completed"] = questProgress?.TotalDailyQuestsCompleted ?? 0,
                             ["total_weekly_quests_completed"] = questProgress?.TotalWeeklyQuestsCompleted ?? 0,
                             ["total_xp_from_quests"] = questProgress?.TotalXPFromQuests ?? 0,
@@ -1560,6 +1787,13 @@ namespace ConditioningControlPanel.Services
 
                     if (!v2Response.IsSuccessStatusCode)
                     {
+                        // Contract D: merged tombstone. Not a rejection of the DATA, so the
+                        // deferred streak break stays deferred; the swap's own reload re-syncs.
+                        if (await MergedAccountRecovery.TryHandleAsync(v2Response))
+                        {
+                            LastSyncError = "Sync deferred: account merged, re-signing in";
+                            return false;
+                        }
                         // On 429 (cooldown), set LastSyncTime to prevent immediate retry
                         if (v2Response.StatusCode == (System.Net.HttpStatusCode)429)
                         {
@@ -1577,7 +1811,10 @@ namespace ConditioningControlPanel.Services
                         }
                         await HandleUnauthorizedAsync(v2Response);
                         var error = await v2Response.Content.ReadAsStringAsync();
-                        App.Logger?.Warning("V2 Profile sync failed: {Status} - {Error}", v2Response.StatusCode, error);
+                        // Status + size only: the error body echoes fields from the profile we
+                        // just posted, and logs get pasted into Discord support threads.
+                        App.Logger?.Warning("V2 Profile sync failed: {Status} (error body {Bytes} bytes)",
+                            (int)v2Response.StatusCode, error?.Length ?? 0);
                         LastSyncError = $"Sync failed: {v2Response.StatusCode}";
                         // Settle a deferred streak break only on a DEFINITIVE rejection (4xx) —
                         // retrying cannot change those answers. A 5xx is transient like the 429
@@ -1596,12 +1833,23 @@ namespace ConditioningControlPanel.Services
                     PendingCosmeticsClear = false;
 
                     var v2Json = await v2Response.Content.ReadAsStringAsync();
-                    App.Logger?.Information("V2 Profile synced successfully: {Response}", v2Json);
+                    // The response is the user's whole profile (~2.7 KB of JSON, and 11% of every
+                    // log file we ever received). Size here; the fields we actually act on are
+                    // summarised at Debug once the payload is deserialised, just below.
+                    App.Logger?.Information("V2 Profile synced successfully ({Bytes} bytes)", v2Json?.Length ?? 0);
 
                     // Check for server-side flags in V2 sync response
                     try
                     {
                         var v2Result = JsonConvert.DeserializeObject<V2SyncResponse>(v2Json);
+                        App.Logger?.Debug(
+                            "V2 Sync response: ok={Success} sp={SkillPoints} skills={SkillCount} xp={TotalXp} mins={Minutes} cosmetics={HasCosmetics} webXp={HasWebXp}",
+                            v2Result?.Success, v2Result?.SkillPoints, v2Result?.UnlockedSkills?.Count ?? 0,
+                            v2Result?.TotalXpEarned, v2Result?.TotalConditioningMinutes,
+                            v2Result?.Cosmetics != null, v2Result?.WebXp != null);
+                        // Prize ownership first, so a later throw in this block cannot skip it.
+                        // /v2/user/sync answers for the unified_id it was sent.
+                        PrizeFeed.Apply(unifiedId, unifiedId, v2Result?.Prizes, "V2 sync");
                         if (v2Result?.ResetWeeklyQuest == true)
                         {
                             App.Logger?.Information("V2 Sync: Server requested weekly quest reset");
@@ -1643,7 +1891,7 @@ namespace ConditioningControlPanel.Services
                             // always correct.
                             // This also shields the balance from an older server that still zeroes
                             // skill_points at rollover.
-                            var maxPoints = Math.Max(v2Result.SkillPoints.Value, settings.SkillPoints);
+                            var maxPoints = SparklePoints.MergeMax(v2Result.SkillPoints.Value, settings.SkillPoints);
                             if (maxPoints != settings.SkillPoints)
                             {
                                 App.Logger?.Information("V2 Sync: Skill points server={Server}, local={Local} — taking max ({Max})",
@@ -1854,6 +2102,7 @@ namespace ConditioningControlPanel.Services
                         // ConsecutiveDays, daily_quest_streak, completion dates, etc.) was never refreshed
                         // from cloud, so admin restores / cross-device progress stayed invisible until the
                         // V1 fallback ran. Mirror MergeCloudProfile's stats merge for V2.
+                        var liftedLifetime = false;
                         if (v2Result?.User?.Stats != null)
                         {
                             if (MergeV2CloudStatsIntoLocalProgress(v2Result.User.Stats, v2Result.ForceStreakOverride == true))
@@ -1863,6 +2112,10 @@ namespace ConditioningControlPanel.Services
                                 App.Achievements?.Progress?.SyncCurrentStreak();
                                 App.Settings?.Save();
                                 App.Achievements?.Save();
+                                // Same rule as the legacy path: a lifted lifetime counter is
+                                // another device's history, not today's use. The re-baseline
+                                // itself waits until after the minutes merge below.
+                                liftedLifetime = true;
                             }
                         }
 
@@ -1900,7 +2153,16 @@ namespace ConditioningControlPanel.Services
                                 v2Result.TotalConditioningMinutes.Value, settings.TotalConditioningMinutes);
                             settings.TotalConditioningMinutes = v2Result.TotalConditioningMinutes.Value;
                             App.Settings?.Save();
+                            liftedLifetime = true;
                         }
+
+                        // A take-higher merge just lifted lifetime counters to what another device
+                        // banked. That gain is not today's: move the day log's baseline past it.
+                        // AFTER the minutes merge, deliberately: the day log diffs
+                        // TotalConditioningMinutes too, and a re-baseline taken before that lift
+                        // booked another device's whole history onto today (the 1,000-minute days
+                        // in the server archive).
+                        if (liftedLifetime) App.FeatureDayLog?.Rebaseline("v2 cloud merge");
 
                         // Merge companion progress from server (per-companion, higher level wins)
                         if (v2Result?.CompanionProgress != null && v2Result.CompanionProgress.Count > 0)
@@ -2278,6 +2540,7 @@ namespace ConditioningControlPanel.Services
                         ["quest_completion_dates"] = legacyQuestProgress?.DailyQuestCompletionDates?
                             .Select(d => d.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)).ToList() ?? new List<string>(),
                         ["quest_completion_log"] = BuildQuestCompletionLogPayload(legacyQuestProgress),
+                        ["feature_day_log"] = BuildFeatureDayLogPayload(),
                         ["total_daily_quests_completed"] = legacyQuestProgress?.TotalDailyQuestsCompleted ?? 0,
                         ["total_weekly_quests_completed"] = legacyQuestProgress?.TotalWeeklyQuestsCompleted ?? 0,
                         ["total_xp_from_quests"] = legacyQuestProgress?.TotalXPFromQuests ?? 0
@@ -2344,7 +2607,16 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Failed to sync profile to cloud");
+                // The overwhelmingly common instance of this is the exit-time sync: the app is
+                // tearing down while the request is in flight, so the HttpClient is disposed and
+                // the task cancels. That is expected shutdown behaviour, not an error, and its
+                // 16-line TaskCanceledException stack was filed at ERR on every single quit.
+                // Anything else is a real failure and keeps the whole exception.
+                if (IsExpectedCancellation(ex))
+                    App.Logger?.Warning("Profile sync did not finish: {ExType}: {Error}",
+                        ex.GetType().Name, ex.Message);
+                else
+                    App.Logger?.Error(ex, "Failed to sync profile to cloud");
                 LastSyncError = ex.Message;
                 // Mobile streak parity: the cloud is unreachable, so a deferred streak break
                 // gets the pre-parity behavior now instead of waiting out the full timeout.
@@ -2945,7 +3217,7 @@ namespace ConditioningControlPanel.Services
             // Merge skill tree data - take max of server/local (skill points only increase)
             if (cloudProfile.SkillPoints.HasValue)
             {
-                var maxPoints = Math.Max(cloudProfile.SkillPoints.Value, settings.SkillPoints);
+                var maxPoints = SparklePoints.MergeMax(cloudProfile.SkillPoints.Value, settings.SkillPoints);
                 if (maxPoints != settings.SkillPoints)
                 {
                     App.Logger?.Information("Skill tree sync: Skill points server={Server}, local={Local} — taking max ({Max})",
@@ -3049,6 +3321,9 @@ namespace ConditioningControlPanel.Services
             {
                 App.Settings?.Save();
                 achievements?.Save();
+                // A take-higher merge just lifted lifetime counters to what another device
+                // banked. That gain is not today's: move the day log's baseline past it.
+                App.FeatureDayLog?.Rebaseline("legacy cloud merge");
             }
 
             // Handle force_streak_override for legacy path (profile includes the flag)
@@ -3154,6 +3429,29 @@ namespace ConditioningControlPanel.Services
                 .Reverse()
                 .Select(e => new Dictionary<string, string> { ["d"] = e.D, ["q"] = e.Q })
                 .ToList();
+        }
+
+        /// <summary>Newest days the feature day log may carry over the wire (same cap as the quest log).</summary>
+        private const int FeatureDayLogWireCap = 400;
+
+        /// <summary>
+        /// Spiral rail: the outbound stats.feature_day_log. Each day is <c>d</c> plus only the
+        /// counters above zero; days with nothing in them are left out. Like quest_completion_log
+        /// it is NOT a stat: the server lifts it off the payload before the stats merge, and no
+        /// cloud-to-local path here reads it back (the day log is built from the local lifetime
+        /// counters, so there is nothing to pull down).
+        /// </summary>
+        private static List<Dictionary<string, object>> BuildFeatureDayLogPayload()
+        {
+            try
+            {
+                return App.FeatureDayLog?.BuildWirePayload(FeatureDayLogWireCap) ?? new List<Dictionary<string, object>>();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug(ex, "[FeatureDayLog] wire payload failed, sending none");
+                return new List<Dictionary<string, object>>();
+            }
         }
 
         /// <summary>
@@ -3578,6 +3876,8 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response, json))
+                        return (false, Localization.Loc.Get("account_merged_retry_hint"), null, null);
                     await HandleUnauthorizedAsync(response);
                     var errorResult = JsonConvert.DeserializeObject<OopsieErrorResponse>(json);
                     var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
@@ -3594,6 +3894,25 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Error(ex, "Oopsie insurance request failed");
                 return (false, $"Connection failed: {ex.Message}", null, null);
+            }
+        }
+
+        /// <summary>
+        /// Adopt a successful purchase response: the server's balance replaces local (it already
+        /// has the cost taken off), skills are unioned so none are ever lost. The balance goes
+        /// through the AppSettings setter, so it shares the SparklePoints.Cap clamp.
+        /// </summary>
+        internal static void ApplyPurchaseResult(AppSettings settings, int? serverSkillPoints, List<string>? serverSkills)
+        {
+            if (serverSkillPoints.HasValue)
+                settings.SkillPoints = serverSkillPoints.Value;
+            if (serverSkills != null)
+            {
+                // Merge: take union to never lose skills
+                var merged = new HashSet<string>(settings.UnlockedSkills ?? new List<string>());
+                foreach (var skill in serverSkills)
+                    merged.Add(skill);
+                settings.UnlockedSkills = merged.ToList();
             }
         }
 
@@ -3629,6 +3948,9 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response, json))
+                        return (false, Localization.Loc.Get("account_merged_retry_hint"));
+
                     // On 401, attempt auth recovery and retry once — but ONLY if the session was
                     // genuinely recovered. HandleUnauthorizedAsync used to answer true for a failed
                     // recovery too, so this retried the identical POST with the identical dead
@@ -3690,16 +4012,7 @@ namespace ConditioningControlPanel.Services
                 }
 
                 // Apply server's authoritative values
-                if (result.SkillPoints.HasValue)
-                    settings.SkillPoints = result.SkillPoints.Value;
-                if (result.UnlockedSkills != null)
-                {
-                    // Merge: take union to never lose skills
-                    var merged = new HashSet<string>(settings.UnlockedSkills ?? new List<string>());
-                    foreach (var skill in result.UnlockedSkills)
-                        merged.Add(skill);
-                    settings.UnlockedSkills = merged.ToList();
-                }
+                ApplyPurchaseResult(settings, result.SkillPoints, result.UnlockedSkills);
 
                 // Prestige: count the spend locally, then adopt the server total when it's
                 // ahead (it already includes this purchase, so this never double-counts —
@@ -3754,6 +4067,8 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response, json))
+                        return (false, Localization.Loc.Get("account_merged_retry_hint"), null);
                     await HandleUnauthorizedAsync(response);
                     var errorResult = JsonConvert.DeserializeObject<ChangeDisplayNameErrorResponse>(json);
                     var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
@@ -3796,6 +4111,9 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response, json))
+                        return (false, Localization.Loc.Get("account_merged_retry_hint"));
+
                     // On 401, attempt auth recovery and retry once — only when the session was
                     // genuinely recovered (#879 discipline; see ExportDataAsync for why the
                     // recovery alone isn't enough without the retry).
@@ -3853,6 +4171,9 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response, json))
+                        return (false, Localization.Loc.Get("account_merged_retry_hint"), null);
+
                     // On 401, attempt auth recovery and retry once — but ONLY if the session was
                     // genuinely recovered (same discipline as the skill purchase, #879). Without
                     // the retry, a SUCCESSFUL recovery still surfaced "Invalid or missing auth
@@ -3894,6 +4215,22 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Adds the X-Auth-Token header to a V2 API request if an auth token is available.
         /// </summary>
+        /// <summary>
+        /// True when an exception out of a sync/backup call is the app shutting down mid-request
+        /// (or the request timing out) rather than a genuine failure. Those are expected, so they
+        /// are logged as one compact Warning line with no stack: an ERR plus a 16-line
+        /// TaskCanceledException stack on every clean exit is noise that hides real errors.
+        /// </summary>
+        private static bool IsExpectedCancellation(Exception ex)
+        {
+            // TaskCanceledException derives from OperationCanceledException, so one check covers
+            // both. HttpClient wraps a disposed-during-shutdown handler either way round depending
+            // on where the teardown caught it, so look through one level of wrapping too.
+            if (ex is OperationCanceledException || ex is ObjectDisposedException) return true;
+            var inner = ex.InnerException;
+            return inner is OperationCanceledException || inner is ObjectDisposedException;
+        }
+
         private static void AddAuthHeader(HttpRequestMessage request)
         {
             var token = App.Settings?.Current?.AuthToken;
@@ -4011,6 +4348,11 @@ namespace ConditioningControlPanel.Services
                 request.Content = new StringContent(body, Encoding.UTF8, "application/json");
 
                 var response = await _httpClient.SendAsync(request);
+
+                // Contract D: the id we are trying to restore is a merge tombstone. The swap runs
+                // detached (this method executes under _authRecoveryGate), and there is no token
+                // to recover for a tombstone.
+                if (await MergedAccountRecovery.TryHandleAsync(response)) return false;
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -4157,6 +4499,24 @@ namespace ConditioningControlPanel.Services
         };
 
         /// <summary>
+        /// The other half of <see cref="ExcludedBackupProperties"/>. A backup never carries these,
+        /// so a restored settings object arrives with them at their defaults - and until 6.9.4
+        /// both restore paths (the startup welcome-back sheet and the manual button on the
+        /// Settings tab) let those defaults win. The content folder was the visible casualty:
+        /// after a restore <c>CustomAssetsPath</c> read "", the assets prompt had already been
+        /// spent by the first run, and nothing re-asked, so the app quietly fell back to the
+        /// default folder. Identity and progression fields are copied by the callers themselves;
+        /// this is for the machine-local settings that are nobody's progress but still the user's.
+        /// </summary>
+        internal static void PreserveLocalOnlyFields(AppSettings current, AppSettings restored)
+        {
+            if (current == null || restored == null) return;
+            restored.CustomAssetsPath = current.CustomAssetsPath;
+            restored.DiscordWebhookUrl = current.DiscordWebhookUrl;
+            restored.LastSeenUtc = current.LastSeenUtc;
+        }
+
+        /// <summary>
         /// Backup current settings to the cloud. Debounced to 5 minutes unless forced.
         /// </summary>
         public async Task<bool> BackupSettingsAsync(bool force = false)
@@ -4264,6 +4624,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response)) return false;
                     await HandleUnauthorizedAsync(response);
                     var error = await response.Content.ReadAsStringAsync();
                     App.Logger?.Warning("Settings backup failed: {Status} - {Error}", response.StatusCode, error);
@@ -4275,7 +4636,13 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Settings backup failed");
+                // Same shape as the profile sync above: a backup interrupted by shutdown or a
+                // server cooldown is expected, and does not need a stack on disk.
+                if (IsExpectedCancellation(ex))
+                    App.Logger?.Warning("Settings backup did not finish: {ExType}: {Error}",
+                        ex.GetType().Name, ex.Message);
+                else
+                    App.Logger?.Warning(ex, "Settings backup failed");
                 return false;
             }
         }
@@ -4302,6 +4669,7 @@ namespace ConditioningControlPanel.Services
                 var response = await _httpClient.SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response)) return null;
                     await HandleUnauthorizedAsync(response);
                     return null;
                 }
@@ -4348,6 +4716,7 @@ namespace ConditioningControlPanel.Services
                 var response = await _httpClient.SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response)) return null;
                     await HandleUnauthorizedAsync(response);
                     return null;
                 }
@@ -4417,6 +4786,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    if (await MergedAccountRecovery.TryHandleAsync(response)) return -1;
                     App.Logger?.Warning("Easter egg endpoint returned {Status}", response.StatusCode);
                     return -1;
                 }
@@ -4429,6 +4799,59 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Warning(ex, "Easter egg request failed");
                 return -1;
+            }
+        }
+
+        /// <summary>
+        /// Tells the server this account has answered a server announcement, so it is never
+        /// served to this user again - on this PC or any other.
+        ///
+        /// <para>The client's own record is a SINGLE slot (<c>AppSettings.DismissedAnnouncementId</c>)
+        /// living in the settings file, which means it does not exist on a machine the user has
+        /// not used yet. "The Spiral is open" therefore replayed in full on every new install and
+        /// after every settings wipe, months after it was news. Dismissal is a fact about the
+        /// person, not about the PC, so the server keeps it and filters the announcement out at
+        /// the source (GET /config/announcement skips any id in the account's
+        /// <c>dismissed_announcements</c>).</para>
+        ///
+        /// <para>Fire-and-forget on purpose. The local slot is still written first and is the
+        /// offline fallback, so nothing here is load-bearing for the popup that just closed: a
+        /// failure means the announcement may reappear on a DIFFERENT machine, which is exactly
+        /// the pre-existing behaviour. Never throws, and logs at Debug rather than Warning
+        /// because an offline dismissal is ordinary, not a fault.</para>
+        /// </summary>
+        /// <param name="announcementId">The announcement's server id. Ignored when blank.</param>
+        public async Task DismissAnnouncementAsync(string announcementId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(announcementId)) return;
+
+                var unifiedId = App.Settings?.Current?.UnifiedId;
+                if (string.IsNullOrEmpty(unifiedId)) return;   // no cloud account: local slot is all there is
+
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/announcement/dismiss");
+                AddAuthHeader(request);
+                request.Content = new StringContent(
+                    JsonConvert.SerializeObject(new { unified_id = unifiedId, announcement_id = announcementId }),
+                    Encoding.UTF8,
+                    "application/json"
+                );
+
+                var response = await _httpClient.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    if (await MergedAccountRecovery.TryHandleAsync(response)) return;
+                    App.Logger?.Debug("Announcement dismissal not recorded server-side: {Status} (id={Id})",
+                        response.StatusCode, announcementId);
+                    return;
+                }
+
+                App.Logger?.Debug("Announcement {Id} dismissed server-side", announcementId);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Announcement dismissal request failed: {Error}", ex.Message);
             }
         }
 
@@ -4832,6 +5255,10 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("user")]
             public V2SyncUser? User { get; set; }
+
+            /// <summary>Back Room prize ownership (backroom CONTRACT 10.17.D); applied, never stored.</summary>
+            [JsonProperty("prizes")]
+            public PrizesBlock? Prizes { get; set; }
         }
 
         /// <summary>

@@ -202,8 +202,8 @@ namespace ConditioningControlPanel.Services.Haptics
             {
                 // Reachable, but GetToys answered with something we cannot read (error envelope /
                 // foreign firmware). Never treat that as "no toys" - the 20 s poll retries.
-                App.Logger?.Debug("Lovense: GetToys answered unintelligibly at connect: {Body}",
-                                  Truncate(body));
+                App.Logger?.Debug("Lovense: GetToys answered unintelligibly at connect ({Bytes} bytes)",
+                                  body?.Length ?? 0);
             }
             _lastPollUtc = DateTime.UtcNow;
             RaiseDevicesChanged();
@@ -874,7 +874,7 @@ namespace ConditioningControlPanel.Services.Haptics
                     return;
                 }
 
-                App.Logger?.Debug("Lovense: reconnect probe answered unintelligibly: {Body}", Truncate(body));
+                App.Logger?.Debug("Lovense: reconnect probe answered unintelligibly ({Bytes} bytes)", body?.Length ?? 0);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
             catch (Exception ex)

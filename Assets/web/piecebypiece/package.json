@@ -1,0 +1,5 @@
+{
+  "//": "Every .js under this folder is an ES module. Node 24 detects that on its own, but only while no parent package.json says otherwise: a local ConditioningControlPanel/package.json (type: commonjs, puppeteer tooling) would make the smoke tests refuse these imports. Same marker, same reason, as Resources/web/goon. Browsers never read this file.",
+  "type": "module",
+  "private": true
+}

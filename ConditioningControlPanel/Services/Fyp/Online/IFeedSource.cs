@@ -122,6 +122,13 @@ internal sealed class FeedChannelState
     /// <summary>The subreddit didn't resolve at all — never ask again this session.</summary>
     public bool Dead;
 
+    /// <summary>Consecutive null <c>getSubreddit</c> answers on a FIRST page. One null is a bad
+    /// minute, not a missing sub: on 2026-09-06 the API answered null for every request it got
+    /// for over a minute, r/EroticHypnosis and r/BambiSleep included, and those resolved fine
+    /// again straight after. Only a run of them says the sub is not there. Reset by
+    /// <see cref="NoteSuccess"/>.</summary>
+    public int NullStrikes;
+
     // ---- Exhaustion (the dry-channel fix, 2026-08-23) -----------------------------
     // A drained iterator comes back null and the next request restarts the sub from the top
     // under RANDOM sort, so a small community (r/censoredporn: 64 videos, r/BambiSleep: 9)
@@ -215,6 +222,7 @@ internal sealed class FeedChannelState
     public void NoteSuccess()
     {
         Failures = 0;
+        NullStrikes = 0;
         BackoffStep = 0;
         NextTryAtUtc = DateTime.MinValue;
         LastError = null;

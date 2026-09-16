@@ -568,7 +568,7 @@ export function buildMdHowto(o) {
     for (const k of ['k1', 'k2', 'k3', 'k4', 'k5']) el('span', 'g-md-hw-coin ' + k, s);
     const x2 = el('span', 'g-md-hw-x2', s);
     if (x2) x2.textContent = 'x2';
-  }, t('md_howto_stake', 'Right? Bank the pot, or ride it double into a dirtier shuffle.'));
+  }, t('md_howto_stake', 'Right? Keep the pot, or ride it double into a dirtier shuffle.'));
   const go = el('button', 'g-md-hw-go', sheet);
   if (go) {
     go.type = 'button';
