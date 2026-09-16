@@ -10,6 +10,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
+using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Features
@@ -129,10 +130,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             PointerEntered += (_, _) => ApplyHover(true);
             PointerExited += (_, _) => ApplyHover(false);
             PointerReleased += OnPointerReleased;
-            Unloaded += (_, _) => ApplyActiveBreath(false);
-            Loaded += (_, _) => ApplyActiveState(); // re-arm the breath after a detach/re-attach (tab switch)
+            Unloaded += (_, _) =>
+            {
+                ApplyActiveBreath(false);
+                HelpPopover.Clear(_btnHelp);
+            };
+            Loaded += (_, _) =>
+            {
+                ApplyActiveState(); // re-arm the breath after a detach/re-attach (tab switch)
+                RefreshHelpTooltip();
+            };
 
             ApplyLockState();
+            RefreshHelpTooltip();
         }
 
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -213,13 +223,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             var id = HelpSectionId;
             if (string.IsNullOrWhiteSpace(id) || !HelpContentService.HasContent(id))
             {
+                HelpPopover.Clear(_btnHelp);
                 _btnHelp.IsVisible = false;
                 ToolTip.SetTip(_btnHelp, null);
                 return;
             }
-            // ponytail: needs HelpPopover (head-only interactive popover); a plain tooltip with the
-            // section title until it is ported
-            ToolTip.SetTip(_btnHelp, HelpContentService.GetContent(id).Title);
+
+            HelpPopover.Attach(_btnHelp, HelpContentService.GetContent(id));
+            ToolTip.SetTip(_btnHelp, null);
             _btnHelp.IsVisible = true;
         }
 

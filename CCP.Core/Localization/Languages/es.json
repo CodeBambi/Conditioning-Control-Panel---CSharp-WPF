@@ -4937,5 +4937,8 @@
   "label_gaze_interaction": "Interacción con la mirada",
   "label_stare_to_pop": "Mirar para reventar",
   "tooltip_bubble_gaze_pop": "Mira una burbuja durante 1 segundo para reventarla sin hacer clic. Solo afecta a las burbujas; los flashes tienen su propio interruptor en la página de Flashes.",
-  "label_gaze_needs_calibration": "Necesita la cámara encendida y el seguimiento ocular calibrado. Configúralo en Play, Mirada Fija."
+  "label_gaze_needs_calibration": "Necesita la cámara encendida y el seguimiento ocular calibrado. Configúralo en Play, Mirada Fija.",
+  "help_heading_what_it_does": "Qué hace",
+  "help_heading_tips": "Consejos",
+  "help_heading_how_it_works": "Cómo funciona"
 }

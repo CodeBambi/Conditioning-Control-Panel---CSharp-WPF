@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 
-// The consent regression suite drives the real internal shell door under Avalonia's headless
-// platform; keep the production surface internal while granting that dedicated process its test
-// access.
+// Headless integration suites drive real internal controls under Avalonia's headless platform;
+// keep the production surface internal while granting those dedicated processes test access.
 [assembly: InternalsVisibleTo("CCP.Avalonia.Consent.Tests")]
 [assembly: InternalsVisibleTo("CCP.Avalonia.Report.Tests")]
+[assembly: InternalsVisibleTo("CCP.Avalonia.Tests")]
