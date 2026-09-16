@@ -30,18 +30,18 @@ test('readHand accepts publicHand and refuses anything else', () => {
   assert.equal(readHand({ ...open, active: 7 }).active, 0);
 });
 
-test('readState defaults a bare body to an empty table on stakes 1 and 2', () => {
+test('readState defaults a bare body to an empty table on stakes 1 through 3', () => {
   const s = readState({ ok: true, sp: 40, hand: open, legal: ['hit', 'stand', 'fly'], hint: 'stand', floorMs: 8000, rules: { stakes: [1, 2] } });
   assert.deepEqual(s.legal, ['hit', 'stand']);
   assert.equal(s.hint, 'stand'); assert.equal(s.hand.id, 'h_1_x');
   const e = readState({});
-  assert.equal(e.hand, null); assert.deepEqual(e.rules.stakes, [1, 2]); assert.equal(e.floorMs, 5000);
+  assert.equal(e.hand, null); assert.deepEqual(e.rules.stakes, [1, 2, 3]); assert.equal(e.floorMs, 5000);
   assert.deepEqual(legalOf('hit'), []);
 });
 
 test('the bet chip starts on 1 below 30 SP, else the largest stake the balance covers', () => {
   assert.equal(defaultStake(29), 1);
-  assert.equal(defaultStake(30), 2);
+  assert.equal(defaultStake(30), 3);
   assert.equal(defaultStake(0), 1);
   assert.equal(defaultStake(500, [1, 2]), 2);
 });

@@ -109,6 +109,13 @@ for (let run = 0; run < 5; run++) {
   ok(await until("!document.querySelector('.cards-move[data-move=stand]').disabled"), 'decision opens');
   const d = await view(); ok(d?.cards.length === 4 && d.cards.find(c=>c.owner==='d'&&c.slot===1).code === null, 'only server-known cards visible; hole is hidden');
   await shot('deal-' + run + '.png');
+  if (run === 0) {
+    ok(await ev("document.querySelector('.cards-total strong').textContent === '18'"), 'face-up total is shown beside the hand');
+    ok(await ev("document.querySelector('.cards-total').dataset.mood === 'good'"), '18 gets the good-score treatment');
+    ok(d.betChips === 3, 'three-SP bet has exactly three rendered chips');
+    if (!phone) ok(await ev(`(()=>{const r=m=>document.querySelector('[data-move='+m+']').getBoundingClientRect();return r('hit').x>r('stand').x&&r('double').y>r('hit').y&&r('split').y>r('stand').y&&r('hit').height>r('stand').height;})()`), 'desktop action hierarchy matches the table annotations');
+  }
+  if (run === 1) ok(await ev("document.querySelector('.cards-total').dataset.mood === 'medium'"), '11 gets the medium-score treatment');
   if (run === 1) {
     await click('.cards-move[data-move=hit]');
     ok(await until("window.__backroom.scene.scene.getObjectByName('cards_runtime').userData.debug().cards.length===5"), 'hit adds exactly one server card');
@@ -117,9 +124,11 @@ for (let run = 0; run < 5; run++) {
   if (run === 2) {
     await click('.cards-move[data-move=split]');
     ok(await until("window.__backroom.scene.scene.getObjectByName('cards_runtime').userData.debug().hands===2 && !document.querySelector('.cards-move[data-move=double]').disabled"), 'split puts two hands on authored slots');
+    ok((await view()).betChips === 6, 'split shows three chips per hand');
     await shot('split.png');
     await click('.cards-move[data-move=double]');
     ok(await until("window.__backroom.scene.scene.getObjectByName('cards_runtime').userData.debug().active===1 && !document.querySelector('.cards-move[data-move=stand]').disabled"), 'double deals once and moves to hand two');
+    ok((await view()).betChips === 9, 'double adds the extra three chips only to its own hand');
   }
   await click('.cards-move[data-move=stand]');
   ok(await until("window.__backroom.scene.scene.getObjectByName('cards_runtime').userData.debug().cards.every(c=>c.code&&c.landed)"), 'dealer reveals exact reply');

@@ -823,7 +823,7 @@ so a later sync never refunds a stake or erases a win). The client never sends S
 
 **Soft Hand (`/v2/backroom/cards/*`, `proxy/backroom-cards-routes.js`).** Rules = `backroom-cards.js` RULES_V1: 6 decks
 shuffled for every hand, dealer peek, S17, blackjack 2:1, double on any two cards, split once, double after split,
-split aces one card each, six-card Charlie pays 1:1, no surrender, no insurance, stake 1 or 2 SP, one open hand,
+split aces one card each, six-card Charlie pays 1:1, no surrender, no insurance, stake 1, 2 or 3 SP (owner update 2026-09-16), one open hand,
 auto-stand after 24 h.
 
 - Ledger `user.backroom.cards = { v: 1, hand: <engine state, hole card and shoe pointer included> | null, openedAt: ms,
@@ -935,7 +935,7 @@ side by side). A 3D close-up is a later amendment with its own node contract.
 
 | File | What |
 |---|---|
-| `station.js` | `mount(ctx)`; DOM, buttons (Deal; Hit, Stand, Double, Split from `legal`; bet chip 1 or 2, default 1 below 30 SP; hint toggle off by default, remembered in `localStorage` `br_cards_hint`; "Stand up, sit back down" while no hand is open), the request flow, moments |
+| `station.js` | `mount(ctx)`; DOM, buttons (Deal; Hit, Stand, Double, Split from `legal`; bet chips 1 to 3 with +/- controls, default 1 below 30 SP; hint toggle off by default, remembered in `localStorage` `br_cards_hint`; "Stand up, sit back down" while no hand is open), the request flow, moments |
 | `hand.js` | pure: reading `publicHand`, the button set, the same idem on `busy`/`timeout` retries, `stale` adopts the returned hand, Law I |
 | `table.js` | the canvas renderer: lamp, felt, print, cards, shoe, chips, win tunnel, chip vortex, sit fan |
 | `feel.js` | pure: result -> moment id, the highest-card key, timings |
@@ -2165,3 +2165,7 @@ a short drop and a squash under it when a won decoration is finally placed at Ro
 - Calm, Off, reduced motion and suspension settle cosmetic responses. No new effects setting, spin delay, economy change or result weighting is added.
 - `shared/sound/kit.js` remains the only audio context and mixer. `foley.js` supplies physical cues and loads three locally bundled ElevenLabs sound effects (card slide, cabinet knock, chip placement) after the first gesture. Ready samples replace the procedural cue; pending or failed samples use the immediate procedural fallback. No runtime generation or credentials.
 - Foley follows master mute/volume, Calm trim, suspend, stop and disposal. Preloading never plays a cue. A late decode cannot populate a replaced context. The owner's quiet ambience and B/A lever/reel selection are retained.
+
+### Desktop blackjack table controls (owner update 2026-09-16)
+
+The player total sits left of the active hand. Totals 18-21 use a lifted green emphasis, lower totals settle gently, and bust totals shake and sink. Still/Calm keeps the number without motion. The table shows one chip per SP, with a selector for base stakes 1-3; split and doubled hands display their actual committed stake. Controls follow the hand: Stand left, slightly larger Hit right, Split below Stand and Double below Hit. Stakes remain governed by the server-advertised rules. The test preview enables 3 SP; the matching private-server change must ship before account-backed play offers it.

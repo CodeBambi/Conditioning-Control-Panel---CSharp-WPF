@@ -143,6 +143,7 @@ export async function mount(ctx) {
         ${MOVES.map((m) => `<button class="cards-move" type="button" data-move="${m}"></button>`).join('')}
         <button class="cards-deal" type="button"><span></span><small></small></button>
       </div>
+      <div class="cards-total" aria-live="polite" hidden><small></small><strong></strong></div>
       <div class="cards-tokens" aria-hidden="true"></div>
       <div class="cards-card" role="status" hidden><p></p><button class="cards-card-back" type="button"></button></div>
       <div class="cards-loading"></div>`;
@@ -290,7 +291,7 @@ export async function mount(ctx) {
   function apply(s, now) {
     const d = dress(), h = s.hand;
     switch (s.op) {
-      case 'clear': table.clear(); lines = []; break;
+      case 'clear': totalKey = ''; table.clear(); lines = []; break;
       case 'bets': table.setBets(s.list); if (!s.quiet) sound.play('chips', { n: Math.min(6, 1 + (Array.isArray(s.list) ? s.list.length : 0)) }); break;
       case 'card': table.addCard({ ...s, settled: s.quiet }, now); if (!s.quiet) sound.play('card-slide'); break;
       case 'split': table.split(now); break;
@@ -543,7 +544,13 @@ export async function mount(ctx) {
       b.disabled = !c.moves[m] || !cameraReady;
       b.classList.toggle('is-hint', !!(hint && decide && st && st.hint === m && c.moves[m]));
     }
-    for (const b of el.querySelectorAll('.cards-bet button')) { b.disabled = !c.bet; b.setAttribute('aria-pressed', String(Number(b.dataset.stake) === stake)); }
+    for (const b of el.querySelectorAll('.cards-bet button')) {
+      const next = stake + Number(b.dataset.delta);
+      b.disabled = !c.bet || !st.rules.stakes.includes(next) || next < 1 || next > 3 || next > chip.value;
+    }
+    $('.cards-bet-value').textContent = t('br_cards_stake', '{n} SP', { n: open && shownHand ? shownHand.hands[shownHand.active].bet : stake });
+    if (ctx.stage && !open && !queue.length) table.setBets([stake]);
+    syncTableHud();
     $('.cards-sit').disabled = !c.sit;
     const s = status(c);
     if (s !== statusText) { statusText = s; $('.cards-status').textContent = s; }
@@ -573,13 +580,33 @@ export async function mount(ctx) {
 
   function renderStakes() {
     const box = $('.cards-bet');
-    for (const b of box.querySelectorAll('button')) b.remove();
-    for (const s of st.rules.stakes) {
-      const b = document.createElement('button');
-      b.type = 'button'; b.dataset.stake = String(s); b.textContent = t('br_cards_stake', '{n} SP', { n: s });
-      b.onclick = () => { if (!view(performance.now()).bet) return; stake = s; stakePicked = true; };
+    box.querySelectorAll('button,output').forEach(b => b.remove());
+    for (const delta of [-1, 1]) {
+      if (delta === 1) { const value = document.createElement('output'); value.className = 'cards-bet-value'; box.append(value); }
+      const b = document.createElement('button'); b.type = 'button'; b.dataset.delta = delta;
+      b.textContent = delta < 0 ? '-' : '+'; b.setAttribute('aria-label', t('br_cards_bet', 'Bet') + (delta < 0 ? ' -1 SP' : ' +1 SP'));
+      b.onclick = () => { const next = stake + delta; if (!view(performance.now()).bet || !st.rules.stakes.includes(next) || next < 1 || next > 3) return; stake = next; stakePicked = true; };
       box.append(b);
     }
+    if (ctx.stage) el.append(box);
+  }
+
+  let totalKey = '';
+  function syncTableHud() {
+    if (!ctx.stage || !table.hud) return;
+    const hud = table.hud(), total = $('.cards-total'), still = dress().still;
+    el.toggleAttribute('data-still', still);
+    for (const [key,value] of Object.entries({ 'hand-x': hud.x, 'hand-bottom': hud.bottom, 'total-x': hud.hands>1 ? hud.x : hud.left - 65, 'total-y': hud.hands>1 ? hud.top - 40 : hud.y, 'bet-x': hud.betX, 'bet-y': hud.betY + 44 })) el.style.setProperty('--' + key, value + 'px');
+    total.hidden = hud.total == null || phase !== 'play';
+    total.querySelector('small').textContent = hud.hands > 1 ? t('br_cards_hand_short', 'Hand {i}', { i: hud.owner + 1 }) : t('br_cards_you', 'You');
+    total.querySelector('strong').textContent = hud.total == null ? '' : String(hud.total);
+    const mood = hud.total > 21 ? 'bust' : hud.total >= 18 ? 'good' : 'medium';
+    const key = hud.owner + ':' + hud.total;
+    if (key !== totalKey) {
+      totalKey = key; total.dataset.mood = mood; total.getAnimations().forEach(a=>a.cancel());
+      if (!still && !total.hidden) total.animate(mood === 'good' ? [{transform:'translateY(7px) scale(.92)'},{transform:'translateY(-5px) scale(1.12)'},{transform:'none'}] : mood === 'bust' ? [{transform:'translateX(-5px)'},{transform:'translateX(5px)'},{transform:'translateY(6px)'},{transform:'none'}] : [{transform:'translateY(-4px)'},{transform:'none'}], { duration: mood === 'medium' ? 260 : 520, easing:'ease-out' });
+    }
+    if (still) total.getAnimations().forEach(a=>a.cancel());
   }
 
   function onKey(e) {

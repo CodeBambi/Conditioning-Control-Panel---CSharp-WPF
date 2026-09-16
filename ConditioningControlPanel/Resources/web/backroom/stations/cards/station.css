@@ -109,3 +109,34 @@
 }
 @media (prefers-reduced-motion: reduce) { .br-glyph-hit { animation-name: br-glyph-hit-still; } }
 @keyframes br-glyph-hit-still { 0%, 100% { box-shadow: 0 0 0 0 #5fffd000; } 50% { box-shadow: 0 0 18px 4px #5fffd0cc; } }
+
+/* Desktop controls sit beside the rendered hand and follow its projected camera position. */
+.cards-total { position:absolute; z-index:4; text-align:center; pointer-events:none; width:100px; margin:-36px 0 0 -50px; left:var(--total-x,35%); top:var(--total-y,64%); color:#f2d49a; text-shadow:0 2px 5px #001b16; }
+.cards-total small { display:block; font-size:12px; letter-spacing:.08em; }
+.cards-total strong { display:block; font-size:52px; line-height:1.1; font-variant-numeric:tabular-nums; }
+.cards-total[data-mood="good"] { color:#9effdc; text-shadow:0 0 22px #5fffd066,0 2px 5px #001b16; }
+.cards-total[data-mood="bust"] { color:#ff8cad; }
+.cards-bet-value { min-width:48px; text-align:center; font-weight:700; font-variant-numeric:tabular-nums; }
+.cards-in-room > .cards-bet { position:absolute; z-index:4; left:var(--bet-x,72%); top:var(--bet-y,68%); transform:translate(-50%,-50%); padding:5px 8px; border-radius:16px; background:#201229de; }
+.cards-in-room > .cards-bet .cards-bet-label { display:none; }
+.cards-in-room > .cards-bet button { min-width:34px; min-height:34px; padding:4px 8px; font-size:20px; }
+.cards-in-room:not([data-phase="play"]) > .cards-bet { visibility:hidden; }
+@media (min-width:801px) {
+ .cards-in-room .cards-controls { left:clamp(170px,var(--hand-x,50%),calc(100% - 170px)); top:min(calc(var(--hand-bottom,75%) + 10px),calc(100% - 104px)); right:auto; bottom:auto; transform:translateX(-50%); width:268px; max-width:none; display:grid; grid-template-columns:1fr 1fr; gap:9px 26px; align-items:start; }
+ .cards-in-room .cards-move[data-move="hit"] { grid-area:1 / 2; min-height:46px; font-size:19px; }
+ .cards-in-room .cards-move[data-move="stand"] { grid-area:1 / 1; min-height:44px; margin-top:2px; font-size:18px; }
+ .cards-in-room .cards-move[data-move="double"] { grid-area:2 / 2; }
+ .cards-in-room .cards-move[data-move="split"] { grid-area:2 / 1; }
+ .cards-in-room .cards-move:is([data-move="double"],[data-move="split"]) { min-height:30px; min-width:80px; padding:5px 10px; font-size:12px; justify-self:center; }
+ .cards-in-room .cards-deal { grid-column:1 / 3; justify-self:center; }
+}
+@media(max-width:800px) {
+ .cards-total { left:15%; top:55%; width:70px; margin-left:-35px; }
+ .cards-total strong { font-size:32px; }
+ .cards-in-room > .cards-bet { left:auto; top:auto; bottom:110px; right:12px; transform:none; }
+}
+
+@media(max-width:800px) {
+ .cards-in-room > .cards-bet { bottom:73px; }
+ .cards-in-room[data-open] > .cards-bet { display:flex; }
+}
