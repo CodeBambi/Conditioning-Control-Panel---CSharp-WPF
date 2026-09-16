@@ -73,7 +73,10 @@ export function createBowl3D({ stage, wheel, rose }) {
     const tex = new T.CanvasTexture(c); tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = 4;
     glyphTextures.set(id, tex); return tex;
   }
-  const glyphR = Math.max(restRadius * .55, restRadius - lift * 2.4), glyphSize = SEG * glyphR * .8;
+  // Pulled further in off the number tiles: at .8 of a segment sitting at restRadius - 2.4 lifts, the mark's
+  // outer edge ran into the numbers and the two read as one smudge on a phone (owner, 2026-09-16). One more
+  // lift inward and a hair smaller is enough to put daylight between them without leaving the inner slope.
+  const glyphR = Math.max(restRadius * .5, restRadius - lift * 3.9), glyphSize = SEG * glyphR * .76;
   const glyphGeometry = new T.PlaneGeometry(1, 1), caster = new T.Raycaster(), rotorInverse = rotor.matrixWorld.clone().invert();
   const skip = new Set([beam, sparks, trail, hintArc, hintHead, ball]);
   const glyphs = wheel.map((n, i) => {

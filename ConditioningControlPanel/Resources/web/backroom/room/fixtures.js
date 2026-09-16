@@ -32,6 +32,7 @@ import { createWheelFace } from './wheel-face.js';
 import { createRouletteSurfaces } from './roulette-surfaces.js';
 import { SHOWER, payoutAnchor, hostAt } from './payout-anchor.js';
 import { createWinEcho } from './win-echo.js';
+import { createLoomKit } from '../shared/hypno/loom.js';
 
 const BULB = /^(lights_chase_\d|bulb_\d|canopy_bulb_|rim_bulb_)/;
 const CHASE = [0xff168e, 0x852bff, 0x00e6b8, 0xff9d08].map((c) => new T.Color(c));
@@ -178,6 +179,51 @@ function payoutHost(holder, model, row) {
 export async function buildRoom({ scene, loader, stations, base, faces, label, onProgress, motion }) {
   const readMotion = typeof motion === 'function' ? motion : () => ({});
   const echo = createWinEcho();
+  /* THE ROOM'S REEL STRIPS (owner, 2026-09-16: "the slots in the 3d room still show placeholder glyphs").
+   * They did: three font characters in system-ui on a flat field. CONTRACT 10.13.D says every spiral in the
+   * Back Room comes from the Loom, and the seated station was fixed for it; the cabinets standing in the room
+   * were still wearing the stand-in. They now carry real Loom fields, painted ONCE at build and left still.
+   *
+   * Once, and still, on purpose. The room is already at ~250 draw calls and the wall screens share one budget
+   * of 12 decodes a second; repainting nine drums per frame would buy a moving reel on a cabinet nobody is
+   * sitting at by starving the screens that the owner had to have fixed last week. A cabinet at walking
+   * distance is a still picture, and a still picture is also exactly what Calm and reduced motion want.
+   *
+   * THREE canvases, not nine: the strip varies only with the reel index, and the per-cabinet palette recolours
+   * body materials, never these. The 128 px cell is kept from the stand-in - a 256 px cell would be 30 MB of
+   * texture across the room for art seen from across it. */
+  const REEL_CELL = 128, REEL_CELLS = 13, REEL_PRESETS = ['screen', 'whirl', 'wake', 'hub'];
+  let reelKit = null;
+  const reelStrips = new Map();
+  function reelStrip(i) {
+    const cached = reelStrips.get(i);
+    if (cached) return cached;
+    const c = document.createElement('canvas');
+    c.width = REEL_CELLS * REEL_CELL; c.height = REEL_CELL;
+    const x = c.getContext('2d');
+    x.fillStyle = '#291635'; x.fillRect(0, 0, c.width, REEL_CELL);
+    if (reelKit === null) reelKit = createLoomKit({ still: true });
+    const tile = document.createElement('canvas'); tile.width = tile.height = 256;
+    let woven = false;
+    for (let k = 0; k < REEL_CELLS; k++) {
+      const preset = REEL_PRESETS[(k + i) % REEL_PRESETS.length];
+      if (reelKit && reelKit.paint(tile, preset, { now: 0 })) {
+        x.save(); x.translate((k + 0.5) * REEL_CELL, REEL_CELL / 2); x.rotate(-Math.PI / 2); x.scale(1, -1);
+        x.drawImage(tile, -REEL_CELL / 2, -REEL_CELL / 2, REEL_CELL, REEL_CELL); x.restore();
+        woven = true;
+      } else {
+        // No WebGL, no Loom: the stand-in stays as the fallback, demoted, never deleted.
+        x.save(); x.translate((k + 0.5) * REEL_CELL, REEL_CELL / 2); x.rotate(-Math.PI / 2); x.scale(1, -1);
+        x.fillStyle = ['#f3a1d1', '#a695e4', '#ebc883'][k % 3]; x.font = '70px system-ui';
+        x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(['✦', '♡', '◎'][(k + i) % 3], 0, 0); x.restore();
+      }
+    }
+    tile.width = tile.height = 1;
+    if (!woven && reelKit) { reelKit.dispose(); reelKit = null; }
+    reelStrips.set(i, c);
+    return c;
+  }
+
   let clock = 0;   // the room's own accumulated ms: it STOPS while a station holds the screen
   const files = new Map();
   const fetchModel = (file) => {
@@ -289,22 +335,15 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
       o.material = new T.MeshStandardMaterial({ map: t, emissiveMap: t, emissive: 0xffffff, emissiveIntensity: 0.5, roughness: 0.5 });
       labels.set(row.key + '/' + node, { mesh: o, text });
     }
-    if (f.reels) {
+      if (f.reels) {
       for (let i = 1; i <= 3; i++) {
         const reel = model.getObjectByName('reel_' + i);
         if (!reel || !reel.isMesh) continue;
-        const c = document.createElement('canvas');
-        c.width = 13 * 128; c.height = 128;
-        const x = c.getContext('2d');
-        x.fillStyle = '#291635'; x.fillRect(0, 0, c.width, 128);
-        for (let k = 0; k < 13; k++) {
-          x.save(); x.translate((k + 0.5) * 128, 64); x.rotate(-Math.PI / 2); x.scale(1, -1);
-          x.fillStyle = ['#f3a1d1', '#a695e4', '#ebc883'][k % 3]; x.font = '70px system-ui';
-          x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(['✦', '♡', '◎'][(k + i) % 3], 0, 0); x.restore();
-        }
-        const t = new T.CanvasTexture(c);
+        const t = new T.CanvasTexture(reelStrip(i));
         t.colorSpace = T.SRGBColorSpace; t.flipY = false; t.wrapS = T.RepeatWrapping;
         t.offset.x = (i + 0.5) / 13;   // a resting stop, by texture, never by node
+        // Its OWN Texture over the shared canvas: slot-custom-handles.js rolls offset.x per cabinet, so three
+        // cabinets sharing one Texture object would all turn when one of them is pulled.
         reel.material = new T.MeshBasicMaterial({ map: t });
       }
     }
@@ -454,5 +493,11 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     return true;
   }
 
-  return { disposeSurfaces(){for(const surface of [...rouletteSurfaces,...wheelFaces])surface?.dispose();}, shell, ceiling, floor, setFloorStyle: floorStyle.setFloorStyle, getFloorStyle: floorStyle.getFloorStyle, screens, holders, fixtures: set.length, bulbs: bulbs.length, update, auras, hubs, labels, setLabel, emis, marquee, payouts, celebrate, echo };
+  return { disposeSurfaces(){
+    for(const surface of [...rouletteSurfaces,...wheelFaces])surface?.dispose();
+    // The page's one GL context is refcounted; leaving the room without releasing this kit leaks it.
+    if (reelKit) { reelKit.dispose(); reelKit = null; }
+    for (const strip of reelStrips.values()) strip.width = strip.height = 1;
+    reelStrips.clear();
+  }, shell, ceiling, floor, setFloorStyle: floorStyle.setFloorStyle, getFloorStyle: floorStyle.getFloorStyle, screens, holders, fixtures: set.length, bulbs: bulbs.length, update, auras, hubs, labels, setLabel, emis, marquee, payouts, celebrate, echo };
 }

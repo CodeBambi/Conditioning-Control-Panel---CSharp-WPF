@@ -1,6 +1,5 @@
 {
   "app_title": "调教控制面板",
-
   "awareness_consent_accept": "让她睁开眼睛",
   "awareness_consent_control_body": "把任何应用藏起来、让她忘掉某个或全部、暂停一小时，还能亲眼读到她收到的那一行——都在“她能看到什么”卡片里。",
   "awareness_consent_control_head": "一切由你掌控",
@@ -3676,7 +3675,6 @@
   "chat_cooldown_active": "聊天暂停：剩余 {0} 秒",
   "community_prompt_warning_title": "Community prompt advisory",
   "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns.",
-
   "tooltip_dashboard": "主要控制、设置，以及一眼可见的数据。",
   "tooltip_presets_sessions": "保存、载入并分享整套配置和定时的会话计划。",
   "tooltip_daily_weekly_quests": "每日与每周目标，完成给 XP 和奖励。",
@@ -3932,7 +3930,6 @@
   "modmgr_pack_offline": "离线模式已开启，无法下载任何内容。请在设置 > 数据中关闭后再回来。",
   "modmgr_pack_unavailable": "无法连接下载服务器，请稍后再试。",
   "modmgr_badge_needs_download": "⬇ 未下载",
-
   "_comment_intake_pass": "Weekly Intake Pass + punch card (intake onboarding)",
   "intake_pass_banner_headline": "你的每周通行证已就绪",
   "intake_pass_banner_body": "本周的评分测验已向你开放 - 1 次中的第 1 次。准备好了随时开始；每周一都会发放新的通行证。",
@@ -3983,7 +3980,6 @@
   "tooltip_punch_card_hole_punched": "已盖章。这一格是你的了。",
   "tooltip_punch_card_hole_pending": "盖了一半。跑完测验草拟的疗程就能完成它。",
   "tooltip_punch_card_hole_empty": "空的。一次评分测验加上它草拟的疗程就能填满。",
-
   "recap_header_season": "赛季",
   "recap_status_complete": "已完成",
   "recap_default_handle": "你",
@@ -4043,7 +4039,6 @@
   "recap_toast_reddit": "卡片已保存到 {0}。把它附到你的帖子里。",
   "recap_toast_error": "卡片准备失败。请再试一次。",
   "recap_toast_none": "还没有回顾。先过完一个月。",
-
   "dialog_catalogue_submit_asset_body": "提交即表示你确认：\n\n• 这是你自己的作品，或是混音版并已妥善注明原作者\n• 内容不针对未经同意的真实个人\n• 你已阅读目录指南且你的提交符合规定\n\n批准后，任何浏览社区目录的人都能发现它。你的创建者名称和标签将公开显示。",
   "dialog_catalogue_submit_creator_label": "创建者名称",
   "dialog_catalogue_submit_tags_label": "标签",
@@ -4060,7 +4055,6 @@
   "msg_confirm_install_mod_fmt": "要安装 {1} 制作的模组“{0}”吗？\n\n只安装你信任的创作者的模组。",
   "toast_mod_installed_fmt": "模组“{0}”已安装！打开「管理模组」来启用它。",
   "toast_mod_install_failed_fmt": "模组安装失败：{0}",
-
   "btn_export_preset": "导出",
   "btn_share_to_catalogue": "分享",
   "tooltip_share_to_catalogue": "分享到目录",
@@ -4081,7 +4075,6 @@
   "browser_toast_offline_blocked": "离线模式已开启，浏览器保持断开。若要浏览，请在设置中关闭它。",
   "companion_prompt_too_long_notice": "伴侣的提示词对云端 AI 来说太长了，所以她在用更少的上下文回答。请精简知识库链接，或选择更简短的人格。",
   "desc_remote_pairing_url": "无需安装任何应用 - 用手机浏览器打开 cclabs.app/remote 并输入此代码。",
-
   "guide_takeover_title": "运作方式",
   "takeover_status_sub_active": "现在由它主导。随时可以停下。",
   "takeover_status_sub_dormant": "现在没有在看。",
@@ -4105,7 +4098,6 @@
   "guide_takeover_settings_body": "间隔 - 两次动作之间的平均时间。\n冷却 - 任何动作之后必须留出的最小间隔。\n强度 - 效果有多强、多频繁（1 温和，10 猛烈）。\n预告 - 它动手之前先说一句的概率。\n空闲 / 随机 / 按时段 - 哪些时刻可以触发它。",
   "guide_takeover_tip": "提示：X 紧急按键会立刻清除所有正在生效的效果。",
   "guide_takeover_patreon": "接管是 Patreon 的福利，需要有效订阅才能运行。",
-
   "btn_choose_color": "选择",
   "setting_filter_color": "滤镜颜色",
   "tooltip_pink_filter_color": "挑选一个自定义染色，或恢复默认的粉色。",
@@ -4138,7 +4130,6 @@
   "label_sampler_reset_defaults": "恢复默认值",
   "hint_sampler_settings": "只有你填写的字段才会发送到 Endpoint。留空则该参数使用 Endpoint 自己的默认值。",
   "lb_col_peak": "峰值",
-
   "tooltip_refresh_assets": "重新扫描资源文件夹，检测新添加的图片和视频",
   "btn_media_log": "📜 媒体记录",
   "tooltip_media_log": "查看应用最近显示过的图片和视频的回顾",
@@ -4197,7 +4188,6 @@
   "achievement_takeover_graduate_name": "Bambi Time",
   "achievement_takeover_graduate_req": "完成为期二十八天的「The Takeover」训练计划",
   "achievement_takeover_graduate_flavor": "二十八天，每一个触发词都已装好。现在连你自己的键盘都能让你下坠。这本来就是计划。",
-
   "tab_programs": "训练计划",
   "tooltip_programs": "跨多天的进程：每天一次会话和一份简短任务清单。",
   "programs_browse_header": "训练计划",
@@ -4333,7 +4323,6 @@
   "programs_card_all_done": "今天已完成",
   "programs_card_paused": "已暂停",
   "programs_card_lapsed": "需要你做个决定",
-
   "program_enroll_title": "报名之前",
   "program_enroll_arc_header": "整条进程，提前摊开",
   "program_enroll_arc_note": "这里没有任何隐藏。这就是全部章节，以及每一章里会升级什么。",
@@ -4427,7 +4416,6 @@
   "companion_memory_signal_preferred_name": "你怎么称呼自己",
   "companion_memory_signal_favorite_features": "常用功能",
   "companion_memory_signal_last_session_recap": "上次会话",
-
   "_comment_companion_room": "\"Her Room\" companion tab redesign (AI rework Train 1)",
   "companion_attention_detail_fmt": "还剩约 {0} 次聊天 · 午夜重置",
   "companion_attention_detail_line": "还剩约 63 次聊天 · 午夜重置",
@@ -5198,7 +5186,6 @@
   "label_braindrain": "脑力流失",
   "tube_midnight_setting": "Midnight Glass",
   "tube_midnight_setting_hint": "A darker pane on her tube. The Prize Counter sells this one.",
-
   "_comment_arcademy_door": "The Arcademy (Play wall card, Ctrl+K row, failure dialogs)",
   "play_arcademy_title": "The Arcademy",
   "play_arcademy_new": "新",
@@ -5800,7 +5787,7 @@
   "br_callout_double_spin": "双重旋转",
   "br_callout_sinking_down": "沉沦",
   "br_callout_brain_melt": "脑融化",
-  "br_callout_emi_jackpot": "Emi大奖",
+  "br_callout_emi_jackpot": "艾米头奖",
   "br_callout_emi_chase": "Emi追逐",
   "br_callout_overflow": "溢出",
   "br_callout_respin": "再转",
@@ -5908,11 +5895,11 @@
   "br_bell_wheel_change": "获得了Keep the Change",
   "br_bell_wheel_spoiled": "获得了Spoiled Rotten",
   "br_slot_rotate": "把手机横过来，画面更大",
+  "br_roulette_rotate": "把手机竖过来，号码盘更好认",
   "br_slot_marquee_spin": "旋转中",
   "br_callout_small_win": "小奖",
   "br_callout_nice_spin": "漂亮一转",
   "br_callout_big_spin": "大奖一转",
-  "br_callout_emi_jackpot": "艾米头奖",
   "br_callout_double_up": "翻倍",
   "br_callout_gift_drop": "礼物掉落",
   "br_callout_head_empty": "头脑放空",

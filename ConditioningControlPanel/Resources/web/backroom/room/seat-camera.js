@@ -37,7 +37,7 @@ export function seatPose(row, fixture, camera, width, height, cardHands=1, count
   const matCenter=bounds.getCenter(new T.Vector3()), matBounds=bounds.clone();
   const direction=new T.Vector3().fromArray(row.approach).sub(new T.Vector3().fromArray(row.look)); direction.y=0; direction.normalize();
   // A landscape phone is short: the wheel's far side may leave the top, its near rim stays in view.
-  const far=landscape?.7:Infinity;
+  const far=landscape?.42:Infinity;
   for(const p of wide){const d=p.clone().sub(matCenter).dot(direction);if(d<-far)p.addScaledVector(direction,-far-d);bounds.expandByPoint(p);}
   const center=bounds.getCenter(new T.Vector3());
   // PC_TILT leans the roulette PC seat in from the old top-down 3. The table is nearly square and a mouse screen is

@@ -73,6 +73,7 @@ import { createBank } from './bank.js';
 
 export const roomStage = true;
 
+const ROTATE_SEEN = 'br_roulette_rotate_seen';   // the upright nudge, dismissed once a session
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
 const wait = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
 
@@ -110,6 +111,9 @@ export async function mount(ctx) {
 
   let el = null, cv = null, g = null, bowl = null, mat = null, kit = null, deck = null, moments = null;
   let alive = false, suspended = false, session = 0, phase = 'loading', raf = 0, unSp = null, unSettings = null;
+  let rotateSeen = false;
+  try { rotateSeen = sessionStorage.getItem(ROTATE_SEEN) === '1'; } catch (e) { /* private mode */ }
+  const onResize = () => paintRotate();
   let st = null, sp = 0, tape = null, chips = {}, count = 1, why = null, hover = null, cur = null, resume = false;
   let status = '', history = [], feelLog = [], cursorSent = null, pausedAt = 0, pausedMs = 0, size = { w: 0, h: 0, dpr: 1 };
   let cool = createFxCooldowns(), streak = 0;   // the host recipe's cooldowns and the paying spins in a row
@@ -158,8 +162,17 @@ export async function mount(ctx) {
   /** THE THROW is armed exactly when the Spin button is live: bets down (or a tape to watch) and nothing in flight. */
   const armed = () => !!(alive && !suspended && st && phase === 'bet' && stage?.ready !== false && (resume || check().ok));
 
+  const coarse = () => (typeof matchMedia === 'function' && matchMedia('(any-pointer: coarse)').matches) || (navigator.maxTouchPoints || 0) > 0;
+  /** The nudge shows on a touch screen held SIDEWAYS while bets are open, and never again once it is tapped. */
+  function paintRotate() {
+    const n = el && $('.roul-rotate');
+    if (!n) return;
+    n.hidden = rotateSeen || !coarse() || !(innerWidth > innerHeight) || phase !== 'bet';
+  }
+
   function sync() {
     if (!el) return;
+    paintRotate();
     el.dataset.phase = phase;
     el.dataset.still = stillNow() ? '1' : '';
     const c = st ? check() : { ok: false, why: 'empty', stake: 0, cost: 0 };
@@ -236,7 +249,17 @@ export async function mount(ctx) {
       <p class="roul-gain" role="status" hidden></p>
       <div class="roul-tokens" aria-hidden="true"></div>
       <div class="roul-card" role="status" hidden><p></p><button class="roul-card-back" type="button"></button></div>
+      <button class="roul-rotate" type="button" hidden><i aria-hidden="true">&#x21bb;</i>${t('br_roulette_rotate', 'Turn your phone upright: the board reads better')}</button>
       <div class="roul-loading"></div>`;
+    // THE UPRIGHT NUDGE, the slot's sideways one turned around (owner, 2026-09-16: "the roulette on phone is
+    // better vertical"). It is: the board is a wide grid of 37 numbers you have to TAP, and sideways it has to
+    // share the screen with the wheel and a column of controls, so every cell is smaller than the finger aiming
+    // at it. Dismissed once and it stays dismissed for the session, exactly as the slot's does.
+    root.querySelector('.roul-rotate').onclick = () => {
+      rotateSeen = true;
+      try { sessionStorage.setItem(ROTATE_SEEN, '1'); } catch (e) { /* private mode */ }
+      paintRotate();
+    };
     const set = (sel, text) => { root.querySelector(sel).textContent = text; };
     root.querySelector('.roul-stage').setAttribute('aria-label', t('br_roulette_stage', 'Velvet Vortex roulette. Click the mat to place chips.'));
     set('.roul-back span', t('br_roulette_back', 'Back')); set('.roul-card-back', t('br_roulette_back', 'Back'));
@@ -717,6 +740,7 @@ export async function mount(ctx) {
     el = build(); ctx.root.append(el);
     cv = stage ? stage.canvas : $('.roul-stage'); g = stage ? null : cv.getContext('2d'); size = { w: 0, h: 0, dpr: 1 };
     addEventListener('keydown', onKey);
+    addEventListener('resize', onResize);
     cv.addEventListener('pointermove', onPointer); cv.addEventListener('pointerdown', onPointer); cv.addEventListener('contextmenu', onContext);
     for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) cv.addEventListener(ev, onRelease);
     moments = createMoments(ctx, { station: 'roulette' });
@@ -762,6 +786,7 @@ export async function mount(ctx) {
     alive = false;
     const my = ++session;
     cancelAnimationFrame(raf); raf = 0;
+    removeEventListener('resize', onResize);
     removeEventListener('keydown', onKey);
     if (cv) {
       cv.removeEventListener('pointermove', onPointer); cv.removeEventListener('pointerdown', onPointer); cv.removeEventListener('contextmenu', onContext);
