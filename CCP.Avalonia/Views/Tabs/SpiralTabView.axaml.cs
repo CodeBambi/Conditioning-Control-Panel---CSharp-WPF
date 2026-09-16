@@ -13,6 +13,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Avalonia.Views.Controls;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using Serilog;
 
@@ -46,8 +47,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     ///   <item><c>SpiralEmbedView</c> (WebView2, Windows-only) becomes
     ///     <see cref="WebHost"/>, whose <c>Navigated</c>/<c>Failed</c>/<c>Ready</c>/<c>PostState</c>
     ///     have no twin yet — see <see cref="EnsureEmbed"/>.</item>
-    ///   <item><c>MotionFx</c>, <c>DescentRoomSfx</c>, <c>DescentBarkWatcher</c> and
-    ///     <c>HelpPopover</c> are WPF-head services; each is a stub at its call site.</item>
+    ///   <item><c>MotionFx</c>, <c>DescentRoomSfx</c> and <c>DescentBarkWatcher</c> are
+    ///     WPF-head services; each is a stub at its call site. <c>HelpPopover</c> is real on
+    ///     this head and carries the shared Core topic.</item>
     ///   <item><c>DescentFuseCopy</c> is likewise still in the WPF head; its six lines for this
     ///     room are inlined verbatim below.</item>
     /// </list>
@@ -219,6 +221,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private readonly TextBlock _waitingGlow;
         private readonly Canvas _waitingMotes;
         private readonly Button _btnSpiralHelp;
+        private bool _helpAttached;
 
         private readonly DriftField _embers;
         private readonly DriftField _motes;
@@ -311,6 +314,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Park everything: no clocks, no browser, nothing holding a frame.</summary>
         private void Suspend()
         {
+            ApplyHelpChip(false);
             StopFogFx();
             HideSplash(fade: false);
             StopWaitingAmbience();
@@ -450,17 +454,49 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // ============================== the "?" ==============================
 
         /// <summary>
-        /// Show or hide the help chip.
-        ///
-        /// <para>ponytail: needs Controls/HelpPopover + HelpContent (WPF head), wired when the
-        /// popover moves to Core. The original attaches it lazily the first time the chip is
-        /// wanted, with a topic built at attach time out of Loc: icon "◌", title
-        /// <c>help_descent_title</c>, body <c>help_descent_what</c>, three tips
-        /// <c>help_descent_tip_1..3</c> and <c>help_descent_how</c> — so the topic is translated on
-        /// its first day. No Loc call is made here because nothing on this head would display the
-        /// result. The chip itself, its skin and its state gating are real.</para>
+        /// Show or hide the help chip, attaching its popover only when the room state exposes it.
+        /// The attachment is deliberately lazy so a fog visit does not build a topic that cannot
+        /// be opened. Hiding and detaching clear the attachment, which closes an
+        /// open card and lets the next load build fresh localized content.
         /// </summary>
-        private void ApplyHelpChip(bool show) => _btnSpiralHelp.IsVisible = show;
+        private void ApplyHelpChip(bool show)
+        {
+            try
+            {
+                if (!show || !IsVisible)
+                {
+                    HelpPopover.Clear(_btnSpiralHelp);
+                    _helpAttached = false;
+                    _btnSpiralHelp.IsVisible = false;
+                    return;
+                }
+
+                if (!_helpAttached)
+                {
+                    HelpPopover.Attach(_btnSpiralHelp, BuildDescentHelpContent());
+                    _helpAttached = true;
+                }
+
+                _btnSpiralHelp.IsVisible = true;
+            }
+            catch (Exception ex) { Log.Debug("[Spiral] help chip: {E}", ex.Message); }
+        }
+
+        /// <summary>Build the shared topic at attach time so the current language is captured.</summary>
+        private static HelpContent BuildDescentHelpContent() => new()
+        {
+            SectionId = "Descent",
+            Icon = "◌",
+            Title = Loc.Get("help_descent_title"),
+            WhatItDoes = Loc.Get("help_descent_what"),
+            Tips = new List<string>
+            {
+                Loc.Get("help_descent_tip_1"),
+                Loc.Get("help_descent_tip_2"),
+                Loc.Get("help_descent_tip_3"),
+            },
+            HowItWorks = Loc.Get("help_descent_how"),
+        };
 
         // ============================== the fog readout ==============================
 

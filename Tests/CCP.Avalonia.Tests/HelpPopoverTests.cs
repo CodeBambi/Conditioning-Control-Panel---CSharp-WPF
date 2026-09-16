@@ -90,6 +90,10 @@ public sealed class HelpPopoverTests
                 // Deliberate pre-fix receipt: detach the still-open host and then reattach it
                 // without Clear. The panel-hosting implementation throws while the ancestor is
                 // iterating its cached visual children; the native logical parent fix must not.
+                // Move away first so the reattach has a real pointer transition on every headless
+                // runtime, rather than depending on stale hover state at the old coordinate.
+                host.MouseMove(OutsidePopup(popup!, host), RawInputModifiers.None);
+                Dispatcher.UIThread.RunJobs();
                 host.Content = null;
                 Dispatcher.UIThread.RunJobs();
                 host.Content = row;
