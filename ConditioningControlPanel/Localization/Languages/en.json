@@ -5963,7 +5963,7 @@
   "br_slot_line_sub2": "2 subliminals",
   "br_slot_line_spiral2": "2 spirals",
   "br_slot_line_melt": "Melt",
-  "br_slot_jar_count": "{n} / {m}",
+  "br_slot_jar_count": "Spirals {n} / {m}",
   "br_slot_jar_full": "The jar spills: {n} free spins",
   "br_slot_jar_odds": "The jar pays {n} free spins every {m} spirals.",
   "br_slot_comp": "On the house: {n} spins",

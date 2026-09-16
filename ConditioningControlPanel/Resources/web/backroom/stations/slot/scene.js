@@ -20,7 +20,7 @@ import { createCoinShower } from '../../room/coin-shower.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
-import { drawSymbol } from './symbols.js';
+import { drawSymbol, disposeSpirals } from './symbols.js';
 import { fitText } from '../../shared/text/wrap.js';
 import { PACE, reelStopMs, reelsMs, respinStopMs, respinMs } from './pace.js';
 import { applyPalette } from './palette.js';
@@ -134,6 +134,7 @@ export async function createScene(o) {
     canvas.removeEventListener('pointerdown', onDown); canvas.removeEventListener('pointermove', onMove);
     canvas.removeEventListener('pointerup', onUp); canvas.removeEventListener('pointercancel', cancelPull);
     customHandle?.dispose();
+    disposeSpirals();            // the reel spirals' Loom tiles, and the page's field context with them
     scene.traverse(n => {
       if (n.geometry) n.geometry.dispose();
       for (const m of [].concat(n.material || [])) { for (const k of Object.keys(m)) if (m[k] && m[k].isTexture) m[k].dispose(); m.dispose(); }
@@ -170,7 +171,12 @@ export async function createScene(o) {
   const bulbs = [];
   rig.traverse(n => { if (n.isMesh && /^lights_chase_\d+$/.test(n.name)) bulbs.push(n); });
   bulbs.sort((a, b) => a.name.localeCompare(b.name));
+  // Owner, 2026-09-16: the chase bulbs read half the size they should from a seat. Scaled here and not in the
+  // glb (section 9.6 asks nothing of the model), about their own centres, so the rail's spacing is untouched -
+  // the beads simply grow into the gaps between them.
+  const BULB_SCALE = 1.5;
   bulbs.forEach((b, i) => {
+    b.scale.multiplyScalar(BULB_SCALE);
     b.material = new THREE.MeshPhysicalMaterial({ color: PALETTES.idle[i % 5], emissive: PALETTES.idle[i % 5],
       emissiveIntensity: 0.1, roughness: 0.24, metalness: 0.08, clearcoat: 1, clearcoatRoughness: 0.14 });
   });
@@ -275,11 +281,12 @@ export async function createScene(o) {
   // Framing: from cam_seat/cam_target and live bounds, at the rest pose. The marquee is in the play box
   // and EMI's face so the cabinet's name and her glance read above the reels at every aspect (in-room tidy, lane F1).
   let poses = null;
-  /** A phone on its side (station.css, the same query and column): the pills, Freeze and Odds take a 110 px column on
-   *  the left; Spin and the face keep the right corners, so the lever may reach into the free middle of that edge. */
-  const sideband = (w, h) => (h <= 500 && w > h ? { left: 110, right: 12, top: 16, bottom: 16 } : null);
+  /** A phone on its side (station.css, the same query and column): the pills, Freeze and Odds take a 152 px column on
+   *  the left; Spin and the face keep the right corners, so the lever may reach into the free middle of that edge.
+   *  The column was 110 and the status chip wrapped to five lines inside it, which grew down into Freeze I. */
+  const sideband = (w, h) => (h <= 500 && w > h ? { left: 152, right: 12, top: 16, bottom: 16 } : null);
   function frame(aspect, w = 16, h = 9) {
-    let closeSeat = false;   // the desk pose: the one EMI takes her shelf for (a phone keeps her on her topper)
+    let closeSeat = false;   // the seated pose: the one EMI takes her shelf for (the overview keeps her topper)
     const y = rig.position.y; rig.position.y = 0; rig.updateMatrixWorld(true);
     const seat = get('cam_seat').getWorldPosition(new THREE.Vector3()), target = get('cam_target').getWorldPosition(new THREE.Vector3());
     const dir = seat.sub(target); if (dir.lengthSq() < 1e-8) dir.set(0, 0, 1); dir.normalize();
@@ -290,8 +297,23 @@ export async function createScene(o) {
     // EMI's shelf, and EMI standing on it, are the left of the seated frame the way the lever is the right. The
     // perch is used, never wherever she happens to be standing this frame, so the framing never rides her hop.
     // Without a shelf (a glb short of emi_stage) she keeps her topper, and the frame keeps reaching up for it.
-    if (shelf && perch) { playBox.expandByObject(shelf); playBox.union(new THREE.Box3().setFromCenterAndSize(emiHost.localToWorld(perch.clone().setY(perch.y + emiSpan.y / 2)), emiSpan)); }
-    else if (faceMesh) playBox.expandByObject(faceMesh);
+    /** Put EMI in a box, in the pose that frame will hold her in. Neither branch reads where she happens to be
+     *  standing this instant - the shelf is measured at its perch, the topper at her stage - so a resize that
+     *  lands mid-hop still measures the pose she is about to settle into. */
+    const withEmi = (box, onShelf) => {
+      if (onShelf && shelf && perch) {
+        box.expandByObject(shelf);
+        box.union(new THREE.Box3().setFromCenterAndSize(emiHost.localToWorld(perch.clone().setY(perch.y + emiSpan.y / 2)), emiSpan));
+      } else if (stage && emiSpan) {
+        const plinth = new THREE.Box3().setFromObject(stage), mid = plinth.getCenter(new THREE.Vector3());
+        const full = emiSpan.clone().divideScalar(PERCH_SCALE);   // on her topper she is her whole size
+        box.union(plinth);
+        box.union(new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(mid.x, plinth.max.y + full.y / 2, mid.z), full));
+      } else if (emi) box.expandByObject(emi);
+      else if (faceMesh) box.expandByObject(faceMesh);
+      return box;
+    };
+    withEmi(playBox, true);
     const whole = new THREE.Box3().setFromObject(cabinet);
     // `span` is the fraction of the canvas the box may fill on each axis (1 = all of it), the way room/seat-camera.js
     // leaves the station chrome its bands: a smaller span backs the camera off so the box fits inside what is left.
@@ -314,9 +336,13 @@ export async function createScene(o) {
     const play = fit(playBox, dir, target);
     if (aspect < 0.8) {
       // Keep the reels prominent, with the whole working lever inside the phone frame.
+      // EMI comes with them (owner, 2026-09-16: she was off the top of both phone frames). UPRIGHT she keeps
+      // her topper and is measured into the box there: a tall frame has height to spend and no width, and the
+      // shelf is outboard of the side panel - buying it would cost the reels a fifth of their size.
       const reelBox = new THREE.Box3();
       (glass ? [glass] : reels).forEach(n => reelBox.expandByObject(n));
       reelBox.expandByObject(lever);
+      withEmi(reelBox, false);
       const close = fit(reelBox, dir);
       play.look.copy(close.look);
       play.dist = close.dist * 1.06;
@@ -326,9 +352,13 @@ export async function createScene(o) {
     if (band) {
       // The reels fill the height of the band between the side columns; the marquee reads above them or not at all.
       // A view offset (resize) aims the band's centre, not the canvas centre, at the reels: the seat-camera mechanism.
+      // SIDEWAYS is the desk's problem exactly: a short frame cuts her topper off the top. So a phone on its
+      // side takes the shelf too, and she reads level with the reels between the button column and the glass.
       const reelBox = new THREE.Box3();
       (glass ? [glass] : reels).forEach(n => reelBox.expandByObject(n));
       reelBox.expandByObject(lever);
+      withEmi(reelBox, true);
+      closeSeat = true;
       const close = fit(reelBox, dir, null, { x: (w - band.left - band.right) / w, y: (h - band.top - band.bottom) / h });
       play.look.copy(close.look);
       play.dist = close.dist;
@@ -422,7 +452,7 @@ export async function createScene(o) {
    *  as the cabinet sinks. Law VI: reduced motion settles the travel (rise() goes straight to `play`), so k is 0
    *  or 1 there and the arc never runs. */
   function perchAt(t) {
-    if (!perch || !poses || !poses.closeSeat) return 0;   // a phone frames the whole cabinet: she keeps her topper
+    if (!perch || !poses || !poses.closeSeat) return 0;   // no shelf to take: she keeps her topper
     if (phase === 'play') return 1;
     if (tl && tl.kind === 'rise') return ease(clamp((t - tl.start - RISE_MS) / CAMERA_MS));
     if (tl && tl.kind === 'sink') return 1 - ease(clamp((t - tl.start) / SINK_MS));
@@ -470,12 +500,12 @@ export async function createScene(o) {
     return { left, top, width: right - left, height: bottom - top };
   }
 
-  /* B1 THE SPIRAL JAR (playbook Tier B, CONTRACT 10.16.A). There is no glb node for a jar and no model
-   * request is allowed (section 9.6), so it is a DOM tube on live projected bounds, exactly the pattern the
-   * payline frame uses: the payout_tray's middle (the cabinet's own box when the tray is absent), at the
-   * CABINET's left edge in screen space, one reel_window tall. No new material, no geometry, nothing added
-   * to the glb. Brake 9: the count is printed inside it, so the jar survives motion level 0. */
-  const JAR_W = 0.17;          // of its own height: a narrow upright tube
+  /* B1 THE SPIRAL JAR (playbook Tier B, CONTRACT 10.16.A) USED TO STAND HERE, as a DOM tube on live
+   * projected bounds at the cabinet's left edge. It is gone (owner, 2026-09-16: "that bar near emi is
+   * horrible, remove it") - on a phone it stood exactly where EMI's shelf is, and two narrow things beside
+   * one cabinet is one too many. The jar is not gone: the tape counts it, it spills, it pays, and the count
+   * reads in the status line (station.js jarPart), which is all Brake 9 ever asked of it. `screenBox` stays
+   * because the payline frame is projected the same way. */
   function screenBox(node) {
     if (!node) return null;
     const box = new THREE.Box3().setFromObject(node);
@@ -488,21 +518,6 @@ export async function createScene(o) {
     const left = Math.min(...pts.map(q => q[0])), right = Math.max(...pts.map(q => q[0]));
     const top = Math.min(...pts.map(q => q[1])), bottom = Math.max(...pts.map(q => q[1]));
     return right > left && bottom > top ? { left, top, width: right - left, height: bottom - top } : null;
-  }
-  function jarRect() {
-    const cab = screenBox(cabinet);
-    if (!cab) return null;
-    const anchor = screenBox(tray) || cab, win = screenBox(glass);
-    const height = Math.max(24, win ? win.height : cab.height * 0.3), width = Math.max(12, height * JAR_W);
-    const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1, m = 8;
-    const edge = poses && poses.band ? poses.band.left + m : m;   // a phone on its side: right of the left column, never under Freeze
-    // The play camera frames the marquee and the reels, so payout_tray's projected middle sits BELOW the
-    // viewport entirely at 16:9 (measured: y 930 of 720). Brake 9 says the count has to be readable, so the
-    // tray is where the tube wants to stand and the screen is where it has to: held inside the canvas and
-    // never lower than the reel window's own bottom, so it reads as a jar standing beside the reels.
-    const floor = win ? win.top + win.height - height : h - height - m;
-    const top = Math.min(anchor.top + anchor.height / 2 - height / 2, floor, Math.max(m, h - height - m));
-    return { left: Math.min(Math.max(cab.left, edge), Math.max(edge, w - width - m)), top: Math.max(m, top), width, height };
   }
 
   function settleSpin() {
@@ -691,15 +706,6 @@ export async function createScene(o) {
     if (poses && phase === 'play') {
       const wpp = (2 * poses.play.dist * Math.tan(THREE.MathUtils.degToRad(LENS_DEG) / 2)) / (canvas.clientHeight || 1);
       rig.position.x = rigRest.x + poses.play.right.x * px * wpp; rig.position.z = rigRest.z + poses.play.right.z * px * wpp;
-    }
-    if (o.jar) {   // B1: the tube rides the cabinet's live bounds; the station paints the fill and the count
-      const jr = phase === 'play' && o.jar.dataset.on != null ? jarRect() : null;
-      o.jar.hidden = !jr;
-      if (jr) {
-        const js = o.jar.style;
-        js.left = `${jr.left.toFixed(1)}px`; js.top = `${jr.top.toFixed(1)}px`;
-        js.width = `${jr.width.toFixed(1)}px`; js.height = `${jr.height.toFixed(1)}px`;
-      }
     }
     if (o.payline) {   // A6: the winning row is framed for the rollup, then THE GLOW goes out over 480 ms
       const lit = phase === 'play' ? paylineGlow(t - paylineAt, paylineHold, paylinePulseN) : 0;
@@ -942,7 +948,7 @@ export async function createScene(o) {
                tray: !!tray, glow: !!glowMat, emiScale: emi ? emi.scale.x / emiRest.s.x : null,
                payline: { lit: paylineGlow(t - paylineAt, paylineHold, paylinePulseN), hold: paylineHold, pulses: paylinePulseN, rect: paylineRect() },
                window: screenBox(glass), band: poses ? poses.band : null, canvas: { w: canvas.clientWidth, h: canvas.clientHeight },
-               jar: jarRect(), solo: !!(spin && spin.solo), keep: spin ? spin.keep : [],
+               solo: !!(spin && spin.solo), keep: spin ? spin.keep : [],
                attract: !!attract, drifting: !!(attract || attractOut), wiggling: wiggleAt.map(a => wiggleCells(t - a) !== 0),
                hits: [0, 1, 2].map(i => Number(hitGlow(i, t).toFixed(3))), haze: { on: !!hazeOn, opacity: hazeMesh ? Number(hazeMesh.material.opacity.toFixed(3)) : 0 },
                // THE CLOSE SEAT: what the seated frame actually holds, so a re-check can measure it without eyes.

@@ -132,13 +132,12 @@ export async function mount(ctx) {
       <div class="slot-hint" hidden>${t('br_slot_pull', 'Pull down')} &darr;</div>
       <header class="slot-top">
         <button class="slot-back" type="button">&larr; ${t('br_slot_back', 'Back')}</button>
-        <span class="slot-sp"></span><span class="slot-comp" hidden></span><span class="slot-jackpot"></span>
+        <span class="slot-sp"></span><span class="slot-comp" hidden></span><span class="slot-jackpot"></span><span class="slot-spirals" hidden></span>
         <div class="slot-status" aria-live="polite"></div>
       </header>
       <canvas class="slot-face" width="152" height="137" aria-hidden="true"></canvas>
       <span class="slot-gain" hidden></span>
       <div class="slot-payline" aria-hidden="true" hidden></div>
-      <div class="slot-jar" aria-hidden="true" hidden><i></i><span></span></div>
       <div class="slot-tokens" aria-hidden="true"></div>
       <div class="slot-callout" aria-live="polite"></div>
       <div class="slot-controls">
@@ -207,25 +206,26 @@ export async function mount(ctx) {
     if (node && node.textContent !== text) node.textContent = text;
   }
 
-  /** B1 THE SPIRAL JAR (10.16.A). Brake 9: the count is text as well as a fill, so it survives motion level 0.
+  /** B1 THE SPIRAL JAR (10.16.A), as a READING and no longer as a tube.
+   *
+   *  The upright glass stood outboard of the cabinet, which on a phone put it directly beside EMI - owner,
+   *  2026-09-16: "that bar near emi is horrible, remove it". The jar itself is untouched: the tape still
+   *  counts the spirals, still spills, still pays its free spins and still throws its tier 2 party. What is
+   *  gone is the fill. The COUNT stays, in the status line with the rest of the tape's state, which is what
+   *  Brake 9 asked for in the first place (every value is also text) and what Law XII needs to show it move.
    *  `jarShown` is the tick override while the reels are still stopping; null follows the tape (Law I). */
-  function paintJar() {
-    const box = el && $('.slot-jar');
-    if (!box || !tape) return;
+  function jarPart() {
+    if (!tape) return null;
     const s = tape.snapshot(), size = s.jarSize;
-    if (!(size > 0)) { delete box.dataset.on; box.hidden = true; return; }
-    box.dataset.on = '';
+    if (!(size > 0)) return null;
     const v = Math.max(0, Math.min(size, jarShown ?? s.jar));
-    box.querySelector('i').style.height = `${((v / size) * 100).toFixed(2)}%`;
-    const text = t('br_slot_jar_count', '{n} / {m}', { n: fmt(v), m: fmt(size) });
-    if (box.querySelector('span').textContent !== text) box.querySelector('span').textContent = text;
+    return t('br_slot_jar_count', 'Spirals {n} / {m}', { n: fmt(v), m: fmt(size) });
   }
 
   function sync() {
     if (!el || !tape) return;
     const s = tape.snapshot();
     paintSp();
-    paintJar();
     $('.slot-jackpot').textContent = t('br_slot_jackpot', 'Jackpot {n}', { n: fmt(s.jackpot) });
     // 10.16.C: EMI hands the comp over, there is no ceremony. A chip beside the SP readout until it is spent.
     const chip = $('.slot-comp');
@@ -235,6 +235,11 @@ export async function mount(ctx) {
     if (s.comp) parts.push(t('br_slot_comp', 'On the house: {n} spins', { n: s.comp.spins }));
     parts.push(t('br_slot_last_win', 'Last win {n}', { n: fmt(s.lastWin) }), t('br_slot_free_left', 'Free spins {n}', { n: s.free }));
     parts.push(s.melt ? t('br_slot_melt_left', 'Melt: {n} spins at half', { n: s.melt }) : t('br_slot_ready', 'Ready'));
+    // The jar reads as its own short chip, not as another clause in an already long sentence: on a phone on
+    // its side the status chip is a narrow column, and every clause there costs it two wrapped lines.
+    const jarChip = $('.slot-spirals'), jar = jarPart();
+    jarChip.hidden = !jar;
+    if (jar && jarChip.textContent !== jar) jarChip.textContent = jar;
     $('.slot-status').textContent = parts.join('  ·  ');
     const playable = el.dataset.phase === 'play';
     el.dataset.pace = pace;
@@ -533,8 +538,8 @@ export async function mount(ctx) {
       board(t(CALLOUTS.jar.key, CALLOUTS.jar.fallback));
       p.jarWord = true;
       note('callout', { key: CALLOUTS.jar.key, tier: CALLOUTS.jar.tier, at: 'jar' });
-      // The tube's own flash rides the same frame (Law X). Reduced motion takes the settled fill and no flash.
-      const box = el && $('.slot-jar');
+      // The reading's own flash rides the same frame (Law X). Reduced motion takes the settled text, no flash.
+      const box = el && $('.slot-spirals');
       if (box && !reduced && typeof box.animate === 'function') {
         box.animate([{ filter: 'brightness(2.4)' }, { filter: 'brightness(1)' }], { duration: 480, easing: 'ease-out' });
       }
@@ -552,7 +557,7 @@ export async function mount(ctx) {
     const k = p.jar ? p.jar.reels.indexOf(i) : -1;
     if (k >= 0) {
       jarShown = p.jar.values[k];
-      paintJar();
+      sync();                             // the reading ticks with the reel that filled it (Law XII)
       note('jar-tick', { reel: i, value: jarShown });
       if (p.jar.full && k === p.jar.reels.length - 1) jarSpill(p);
     }
@@ -589,7 +594,7 @@ export async function mount(ctx) {
     tape.land(o);
     flow(o, { respinRow: o.kind === 'respin', jarWord: !!(p && p.jarWord) });   // THE FLOW: hit now, word + fx at 400 ms
     land(o, shownBefore);
-    jarShown = null; paintJar();          // Law I: whatever the ticks showed, the tube settles on the tape's count
+    jarShown = null;                      // Law I: whatever the ticks showed, sync() below settles on the tape's count
     scene.reveal(o.pay > 0); mark('reveal'); sync();
     await wait(PACE.REVEAL_MS);
     return my === session && alive;
@@ -681,7 +686,7 @@ export async function mount(ctx) {
       .then(m => (my === session ? media.deal(m) : null)).catch(() => null);
     const [made, state] = await Promise.all([
       createScene({ canvas: $('.slot-stage'), reduced, stillFx, variant: variant && variant.id, palette: variant && variant.palette, hint: $('.slot-hint'),
-                    payline: $('.slot-payline'), jar: $('.slot-jar'),
+                    payline: $('.slot-payline'),
                     canPull: () => (!busy || pace === 'reveal') && !suspended,
                     onLever: () => press(), onFreeze: col => toggleFreeze(col),
                     onReelSpeed: (i, speed) => sound.roll(i, speed),

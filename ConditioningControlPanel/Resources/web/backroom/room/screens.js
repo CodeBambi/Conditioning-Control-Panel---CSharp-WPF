@@ -24,10 +24,16 @@ import * as T from 'three';
 import { labelTexture } from './fixtures.js';
 import { animatedSource } from './gif.js';
 
-export const TURN_S = 18;
+export const TURN_S = 9;
 const SCREEN_ASPECT = 2.12 / 1.22;
 const MAX_PICTURES = 8;
-const MAX_DECODES_PER_FRAME = 1;
+/* Owner, 2026-09-16: "the screens do not change the gif/vid only the ceiling does". They did change - every
+ * 18 s, which is past the length of a look - and they barely played: ONE decode could start per 83 ms across
+ * every screen on the wall, so four pictures on screen at once advanced at three frames a second each. The
+ * per-source clock in gif-decode.js is the real cap (one decode in flight, never above MAX_FPS, only inside
+ * the frustum, nothing at all while a station holds the room), so this budget is a per-FRAME batch now and
+ * not a second global throttle on top of it. The ceiling projector keeps its own faster turn (4.5 s). */
+const MAX_DECODES_PER_FRAME = 4;
 
 function material(first, caption) {
   return new T.ShaderMaterial({
@@ -99,13 +105,13 @@ export async function createScreens(o) {
       if (visible && camera && (a.tick || b.tick) && frustum.intersectsObject(mesh)) { due.add(a); if (blend > 0) due.add(b); }
     });
     const now=performance.now();
-    if(now<nextDecode)return;
+    if(now<nextDecode)return;   // one batch per rendered frame at most; each source still paces itself
     let started = 0;
     const ready=[...due];
     for (let i=0;i<ready.length;i++) {
       const src=ready[(cursor+i)%ready.length];
       if (started >= MAX_DECODES_PER_FRAME) break;
-      if (src.tick && src.tick(now, isStill)) { started++; decodes++; cursor=(cursor+i+1)%ready.length; nextDecode=now+1000/12; }
+      if (src.tick && src.tick(now, isStill)) { started++; decodes++; cursor=(cursor+i+1)%ready.length; nextDecode=now+1000/60; }
     }
   }
 

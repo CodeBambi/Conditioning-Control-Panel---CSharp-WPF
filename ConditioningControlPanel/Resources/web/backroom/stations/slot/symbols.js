@@ -4,6 +4,7 @@
  * <img> or null) and look.word(i) -> text or null. Missing media gets the preview's fallback art. */
 
 import { fitText } from '../../shared/text/wrap.js';
+import { createLoomKit } from '../../shared/hypno/loom.js';
 
 const TILE = ['#ec79b3', '#8160c6', '#c698db', '#53a5b3'];
 export const WORDS = ['DROP', 'RELAX', 'LET GO', 'SINK'];
@@ -12,6 +13,56 @@ export function kindOf(id) {
   const m = /^(gif|sub|spiral)(\d)$/.exec(id || '');
   if (m) return { kind: m[1], n: Number(m[2]) };
   return { kind: id === 'emi' || id === 'melt' ? id : 'unknown', n: 0 };
+}
+
+/* THE REEL SPIRALS ARE LOOM FIELDS (owner, 2026-09-16: the drawn coil below read as a placeholder).
+ * Every spiral the Back Room shows comes from the Loom (CONTRACT 10.13.D), so a reel cell asks for one
+ * too. Cost (loom law 7): each preset is painted into ONE 256 px tile per repaint clock, and every cell
+ * showing that preset draws the same tile - a strip of thirteen spirals costs one GL render, not
+ * thirteen. No WebGL, no document, or a kit that will not paint: the drawn coil stays as the fallback. */
+const SPIRAL_PRESETS = ['screen', 'whirl', 'wake', 'hub'];
+const SPIRAL_TILE = 256;
+let loomKit = null;
+const spiralTiles = new Map();   // preset -> { canvas, at }
+
+function spiralTile(n, t, reduced) {
+  if (typeof document === 'undefined' || !document.createElement) return null;
+  const name = SPIRAL_PRESETS[n % SPIRAL_PRESETS.length];
+  if (!loomKit) loomKit = createLoomKit({ still: !!reduced });
+  loomKit.setStill(!!reduced);
+  let tile = spiralTiles.get(name);
+  if (!tile) {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = SPIRAL_TILE;
+    tile = { canvas, at: NaN };
+    spiralTiles.set(name, tile);
+  }
+  const now = reduced ? 0 : t;
+  const painted = Number.isFinite(tile.at);
+  if (tile.at !== now) {
+    // A paint that will not run keeps the last good tile rather than blinking back to the coil.
+    if (!loomKit.paint(tile.canvas, name, { now })) return painted ? tile.canvas : null;
+    tile.at = now;
+  }
+  return tile.canvas;
+}
+
+/** The drawn coil: kept for a page with no WebGL and no 2D fallback either. */
+function drawnCoil(ctx, n, t, reduced) {
+  ctx.strokeStyle = n % 2 ? '#f49aca' : '#c4a6ef'; ctx.lineWidth = 12; ctx.beginPath();
+  for (let k = 0; k < 200; k++) {
+    const a = k * 0.12 + n * 2.1 + (reduced ? 0 : t / 2400), r = k * 0.48;
+    k ? ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r) : ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  ctx.stroke();
+}
+
+/** Free the page's Loom context and the reel tiles. The slot's scene dispose() calls it. */
+export function disposeSpirals() {
+  if (loomKit) loomKit.dispose();
+  loomKit = null;
+  for (const tile of spiralTiles.values()) tile.canvas.width = tile.canvas.height = 1;
+  spiralTiles.clear();
 }
 
 function fallbackTile(ctx, n, t, reduced) {
@@ -76,12 +127,13 @@ export function drawSymbol(ctx, id, t, look = {}) {
     const img = look.gif && look.gif(n);
     if (img) drawMedia(ctx, img); else fallbackTile(ctx, n, t, look.reduced);
   } else if (kind === 'spiral') {
-    ctx.strokeStyle = n % 2 ? '#f49aca' : '#c4a6ef'; ctx.lineWidth = 12; ctx.beginPath();
-    for (let k = 0; k < 200; k++) {
-      const a = k * 0.12 + n * 2.1 + (look.reduced ? 0 : t / 2400), r = k * 0.48;
-      k ? ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r) : ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
-    }
-    ctx.stroke();
+    const tile = spiralTile(n, t, look.reduced);
+    if (tile) {
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(-112, -112, 224, 224, 12); ctx.clip();
+      ctx.drawImage(tile, -112, -112, 224, 224);
+      ctx.restore();
+    } else drawnCoil(ctx, n, t, look.reduced);
   } else if (kind === 'sub') {
     const text = (look.word && look.word(n)) || WORDS[n % 4];
     drawPhrase(ctx, String(text).toUpperCase());

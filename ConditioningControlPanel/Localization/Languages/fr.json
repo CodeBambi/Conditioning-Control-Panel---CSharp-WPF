@@ -5330,7 +5330,7 @@
   "br_wheel_slice_deep": "Deep",
   "br_wheel_slice_dazzle": "Dazzle",
   "br_wheel_slice_dazed": "Dazed",
-  "br_slot_jar_count": "{n} / {m}",
+  "br_slot_jar_count": "Spirales {n} / {m}",
   "br_slot_jar_full": "Le bocal déborde : {n} tours gratuits",
   "br_slot_jar_odds": "Le bocal offre {n} tours gratuits toutes les {m} spirales.",
   "br_slot_comp": "Offert par la maison : {n} tours",

@@ -3,10 +3,16 @@
 .cards-station { position: absolute; inset: 0; z-index: 20; overflow: hidden; color: #fce5f3; background: #061820;
   font-family: Segoe UI, Arial, sans-serif; color-scheme: dark; }
 .cards-station * { box-sizing: border-box; }
-.cards-station button { font: inherit; cursor: pointer; border: 1px solid #ab79a766; color: #fce5f3; background: #28172fe8;
-  border-radius: 10px; padding: 9px 16px; min-height: 40px; transition: background .15s, transform .1s; }
-.cards-station button:hover:not(:disabled) { background: #583056; }
-.cards-station button:active:not(:disabled) { transform: scale(.96); }
+.cards-station button { border: 1px solid #c58bbd59; border-top-color: #efc0e47a; color: #fce5f3; border-radius: 11px;
+  padding: 9px 16px; min-height: 40px; background: linear-gradient(180deg, #3d2449, #2a1734 54%, #1d0f26);
+  box-shadow: inset 0 1px 0 #ffeafb26, inset 0 -2px 0 #00000057, 0 2px 0 #150b1f, 0 6px 16px #05020a73;
+  text-shadow: 0 1px 2px #0a0512cc; transition: background .15s, box-shadow .12s, transform .08s; }
+.cards-station button:hover:not(:disabled) { background: linear-gradient(180deg, #55305f, #3a1f46 54%, #27142f);
+  border-color: #ffb7e08c; box-shadow: inset 0 1px 0 #fff0fc3d, inset 0 -2px 0 #00000057, 0 2px 0 #150b1f, 0 8px 22px #0b0416a1; }
+.cards-station button:active:not(:disabled) { transform: translateY(2px);
+  background: linear-gradient(180deg, #24132e, #2e1a39 60%, #351f40);
+  box-shadow: inset 0 3px 7px #00000080, inset 0 -1px 0 #ffeafb12, 0 0 0 #150b1f; }
+.cards-station button { font: inherit; cursor: pointer; }
 .cards-station button:focus-visible, .cards-station input:focus-visible { outline: 2px solid #5fffd0; outline-offset: 3px; }
 .cards-station button:disabled { opacity: .45; cursor: default; }
 .cards-station [hidden] { display: none !important; }

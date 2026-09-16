@@ -4,10 +4,15 @@
   font-family: Segoe UI, Arial, sans-serif; color-scheme: dark; }
 .slot-station * { box-sizing: border-box; }
 .slot-station button, .slot-station summary { font: inherit; cursor: pointer; }
-.slot-station button { border: 1px solid #ab79a766; color: #fce5f3; background: #28172fe8; border-radius: 10px;
-  padding: 10px 18px; min-height: 40px; transition: background .15s, transform .1s; }
-.slot-station button:hover { background: #583056; }
-.slot-station button:active { transform: scale(.96); }
+.slot-station button { border: 1px solid #c58bbd59; border-top-color: #efc0e47a; color: #fce5f3; border-radius: 11px;
+  padding: 10px 18px; min-height: 40px; background: linear-gradient(180deg, #3d2449, #2a1734 54%, #1d0f26);
+  box-shadow: inset 0 1px 0 #ffeafb26, inset 0 -2px 0 #00000057, 0 2px 0 #150b1f, 0 6px 16px #05020a73;
+  text-shadow: 0 1px 2px #0a0512cc; transition: background .15s, box-shadow .12s, transform .08s; }
+.slot-station button:hover:not(:disabled) { background: linear-gradient(180deg, #55305f, #3a1f46 54%, #27142f);
+  border-color: #ffb7e08c; box-shadow: inset 0 1px 0 #fff0fc3d, inset 0 -2px 0 #00000057, 0 2px 0 #150b1f, 0 8px 22px #0b0416a1; }
+.slot-station button:active:not(:disabled) { transform: translateY(2px);
+  background: linear-gradient(180deg, #24132e, #2e1a39 60%, #351f40);
+  box-shadow: inset 0 3px 7px #00000080, inset 0 -1px 0 #ffeafb12, 0 0 0 #150b1f; }
 .slot-station button:focus-visible, .slot-station summary:focus-visible { outline: 2px solid #ff8ed2; outline-offset: 3px; }
 .slot-station button:disabled { opacity: .45; cursor: default; }
 .slot-station [hidden] { display: none !important; }
@@ -30,9 +35,13 @@
    room's SP chip is the only SP readout (station.md), so ours hides. */
 .slot-station[data-host-back] .slot-top { top: 58px; left: 12px; }
 .slot-station[data-host-sp] .slot-sp { display: none; }
-.slot-sp, .slot-jackpot, .slot-status { background: #201229e8; border: 1px solid #b77da247; padding: 6px 12px; border-radius: 30px; font-size: 12px; }
+.slot-sp, .slot-jackpot, .slot-spirals, .slot-status { background: #201229e8; border: 1px solid #b77da247; padding: 6px 12px; border-radius: 30px; font-size: 12px; }
 .slot-sp { color: #ffe3f2; font-weight: 600; font-variant-numeric: tabular-nums; }
 .slot-jackpot { color: #f7d5af; }
+/* B1's reading (10.16.A): the spirals this account has banked toward the next spill. A chip, never a badge
+   that pulses - it moves one step at a time and the step is the whole point (Law XII). */
+.slot-spirals { color: #dcb6ff; font-variant-numeric: tabular-nums; }
+.slot-spirals[hidden] { display: none; }
 .slot-status { color: #edc7df; border-radius: 12px; line-height: 1.35; }
 .slot-face { position: absolute; top: 14px; right: 14px; z-index: 4; width: 52px; height: 47px; image-rendering: pixelated;
   border: 3px solid #6b507e; border-radius: 10px; box-shadow: 0 3px 20px #0a0412; }
@@ -47,20 +56,6 @@
    so there is no CSS animation here to run away from the motion setting. */
 .slot-payline { position: absolute; z-index: 2; pointer-events: none; opacity: 0; border-radius: 10px;
   border: 2px solid #ffcf6b; box-shadow: 0 0 20px #ffcf6b7a, inset 0 0 16px #ffcf6b3d; }
-/* B1 THE SPIRAL JAR (CONTRACT 10.16.A): a narrow upright tube beside the cabinet, filling with the spirals
-   this account has already seen. There is no glb node for it and no model request is allowed (9.6), so it is
-   DOM on live projected bounds, the same pattern the payline frame uses; scene.js moves it every frame and
-   station.js paints the fill and the count. The fill eases on a tick (one gesture, one beat, Law X); reduced
-   motion takes the settled fill with no travel at all (Law VI). */
-.slot-jar { position: absolute; z-index: 2; pointer-events: none; overflow: hidden; border-radius: 9px;
-  border: 1px solid #e0b0ff5c; background: #170c24d9; box-shadow: inset 0 0 14px #00000073, 0 2px 12px #07030d66; }
-.slot-jar i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; border-radius: 0 0 8px 8px;
-  background: linear-gradient(180deg, #e7b6ff, #9a6bdd 42%, #5f38a8); box-shadow: 0 0 12px #c48dff66;
-  transition: height 420ms cubic-bezier(.2,1.5,.4,1); }
-/* Brake 9: the count is text as well as a fill, so the jar survives motion level 0. */
-.slot-jar span { position: absolute; left: 0; right: 0; bottom: 4px; text-align: center; font-size: 10px; line-height: 1.2;
-  color: #ffeafd; font-variant-numeric: tabular-nums; text-shadow: 0 1px 3px #0d0616, 0 0 6px #0d0616; }
-.slot-station[data-reduced] .slot-jar i { transition: none; }
 /* 10.16.C: the comp chip sits beside the SP readout until the comp is spent. A label, never a badge that pulses. */
 .slot-comp { background: #241634e8; border: 1px solid #ffcf6b5c; color: #ffcf6b; padding: 5px 11px; border-radius: 30px;
   font-size: 11px; letter-spacing: .4px; }
@@ -78,17 +73,27 @@
   display: flex; justify-content: center; align-items: center; gap: 24px; z-index: 3; pointer-events: none; }
 .slot-controls button { pointer-events: auto; }
 .slot-freeze { display: flex; gap: 12px; flex: 1; justify-content: space-around; }
-.slot-freeze button { font-size: 12px; letter-spacing: 1px; min-width: 125px; background: #301835ed; border-color: #d7a8ca55;
-  box-shadow: inset 0 1px #ffe9f21a, 0 4px 14px #08030c55; }
-.slot-freeze button[aria-pressed="true"] { background: #a45fb4; color: #fff; border-color: #ffd4ee; box-shadow: 0 0 18px #d37ad777; }
+.slot-freeze button { font-size: 12px; letter-spacing: 1px; min-width: 125px; }
+/* Held: the button goes DOWN and stays there, lit from inside. A freeze you can see is held is worth more
+   than a freeze you have to read (Brake 9 still keeps the label). */
+.slot-freeze button[aria-pressed="true"] { color: #fff6fd; border-color: #ffd4ee; transform: translateY(2px);
+  background: linear-gradient(180deg, #8c48a0, #a45fb4 55%, #b877c6);
+  box-shadow: inset 0 3px 8px #2a0c3aa8, inset 0 -1px 0 #ffffff2e, 0 0 22px #d37ad78c; }
+/* The one button the whole station is about: a lit key, domed, sitting proud of the cabinet. */
 .slot-spin { position: absolute; z-index: 4; right: 22px; bottom: 18px; min-width: 120px; font-weight: 700; color: #26122f !important;
-  background: linear-gradient(135deg, #e59cca, #a562b4) !important; border-color: #efc4de !important;
-  box-shadow: inset 0 1px 0 #fff5, 0 4px 22px #c767b32b, 0 5px 24px #08040b99; }
+  background: linear-gradient(180deg, #ffd2ec, #e59cca 42%, #b06ac0 78%, #8e4ea0) !important;
+  border-color: #ffe0f1 !important; border-top-color: #fff !important; text-shadow: 0 1px 0 #ffffff66 !important;
+  box-shadow: inset 0 2px 0 #ffffffb3, inset 0 -3px 0 #6d3a7f8c, 0 3px 0 #592c68, 0 8px 26px #0a0413a6, 0 0 26px #d97cc23d !important; }
+.slot-spin:hover:not(:disabled) { background: linear-gradient(180deg, #ffe0f3, #f0aada 42%, #bb77ca 78%, #9a58ac) !important; }
+.slot-spin:active:not(:disabled) { transform: translateY(3px);
+  box-shadow: inset 0 3px 9px #5c2a6ba6, inset 0 -1px 0 #ffffff59, 0 0 0 #592c68, 0 3px 12px #0a041373 !important; }
 .slot-spin span, .slot-spin small { display: block; }
 .slot-spin small { font-size: 10px; font-weight: 500; opacity: .8; }
 
 .slot-odds { position: absolute; left: 22px; bottom: 18px; z-index: 4; font-size: 12px; max-width: min(360px, calc(100vw - 180px)); }
-.slot-odds summary { list-style: none; border: 1px solid #ab79a766; background: #28172fe8; border-radius: 8px; padding: 7px 12px; display: inline-block; }
+.slot-odds summary { list-style: none; border: 1px solid #c58bbd59; border-top-color: #efc0e47a; border-radius: 10px;
+  padding: 7px 12px; display: inline-block; background: linear-gradient(180deg, #3d2449, #2a1734 54%, #1d0f26);
+  box-shadow: inset 0 1px 0 #ffeafb26, inset 0 -2px 0 #00000057, 0 2px 0 #150b1f, 0 6px 16px #05020a73; }
 .slot-odds[open] { background: #24142df5; border: 1px solid #ab79a766; border-radius: 12px; padding: 10px; }
 .slot-odds table { border-collapse: collapse; margin-top: 8px; width: 100%; }
 .slot-odds th { text-align: left; font-weight: 500; padding: 3px 10px 3px 0; }
@@ -107,7 +112,7 @@
 
 @media (max-width: 800px) {
   .slot-top { top: 10px; left: 12px; max-width: 180px; }
-  .slot-sp, .slot-jackpot, .slot-status { font-size: 11px; padding: 5px 10px; }
+  .slot-sp, .slot-jackpot, .slot-spirals, .slot-status { font-size: 11px; padding: 5px 10px; }
   .slot-face { top: 10px; right: 12px; width: 44px; height: 40px; }
   .slot-controls { bottom: 72px; width: calc(100vw - 24px); gap: 8px; }
   .slot-freeze { gap: 4px; }
@@ -122,13 +127,13 @@
 /* A phone on its side (scene.js `sideband`, the same numbers): the pills, Freeze and Odds stack in a 110 px column on
    the left, Spin and the face keep the right corners, and the reels fill the height of the band between. */
 @media (max-height: 500px) and (orientation: landscape) {
-  .slot-station .slot-controls { left: 12px; right: auto; bottom: 62px; width: 92px; transform: none; }
+  .slot-station .slot-controls { left: 12px; right: auto; bottom: 44px; width: 134px; transform: none; }
   .slot-station .slot-freeze { flex-direction: column; gap: 6px; }
   .slot-station .slot-freeze button { min-width: 0; padding: 7px 8px; font-size: 10px; letter-spacing: .5px; }
   .slot-station .slot-spin { right: 12px; bottom: 12px; min-width: 120px; }
-  .slot-station .slot-odds { left: 12px; bottom: 12px; max-width: min(360px, calc(100vw - 160px)); }
-  .slot-station .slot-top, .slot-station[data-host-back] .slot-top { top: 54px; left: 12px; max-width: 92px; }
-  .slot-station .slot-sp, .slot-station .slot-jackpot, .slot-station .slot-status { font-size: 10px; padding: 4px 8px; }
+  .slot-station .slot-odds { left: 12px; bottom: 12px; max-width: min(360px, calc(100vw - 200px)); }
+  .slot-station .slot-top, .slot-station[data-host-back] .slot-top { top: 54px; left: 12px; max-width: 134px; }
+  .slot-station .slot-sp, .slot-station .slot-jackpot, .slot-station .slot-spirals, .slot-station .slot-status { font-size: 10px; padding: 4px 8px; }
   .slot-station .slot-face { width: 44px; height: 40px; }
   .slot-station[data-host-back] .slot-gain { right: 64px; }
 }

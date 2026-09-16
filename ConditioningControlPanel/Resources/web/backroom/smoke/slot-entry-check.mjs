@@ -238,10 +238,10 @@ n = await nudge();
 ok(n && n.hidden, 'nudge: hidden in landscape');
 const land = await ev('window.__backroom.loader.current.debug().feel.scene');
 report.landscape.landscape = land;
-ok(land && land.band && land.band.left === 110 && land.band.right === 12, 'landscape: the frame uses the side-column band ' + JSON.stringify(land && land.band));
+ok(land && land.band && land.band.left === 152 && land.band.right === 12, 'landscape: the frame uses the side-column band ' + JSON.stringify(land && land.band));
 const win = land && land.window;
 ok(win && win.height >= 390 * 0.5 && win.height <= 390 - 24, `landscape: the reel window fills the height comfortably (${win && Math.round(win.height)} of 390 px)`);
-ok(win && win.left >= 110 - 12 && win.left + win.width <= 844 - 12, `landscape: the reels sit inside the band (${win && Math.round(win.left)}..${win && Math.round(win.left + win.width)})`);
+ok(win && win.left >= 152 - 12 && win.left + win.width <= 844 - 12, `landscape: the reels sit inside the band (${win && Math.round(win.left)}..${win && Math.round(win.left + win.width)})`);
 const wbox = win && { left: win.left, top: win.top, right: win.left + win.width, bottom: win.top + win.height };
 for (const sel of ['.slot-spin', '.slot-controls .slot-freeze', '.slot-odds', '.slot-top', '.slot-face', '#br-back', '.br-sp']) {
   const b = await boxOf(sel);
