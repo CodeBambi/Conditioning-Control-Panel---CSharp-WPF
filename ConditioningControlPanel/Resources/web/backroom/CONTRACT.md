@@ -2010,3 +2010,102 @@ so a bad duration can never stall the beat. `callout.cancel()`, `cancelWords()`,
 **Files.** Page: `shared/hypno/voice.js` (the adapter), `shared/hypno/callout.js` (`voice` option, the chain hold).
 Host: `Services/BackRoom/BackRoomVoice.cs`, `IBackRoomVoice` / `BackRoomVoiceAck` in `BackRoomContracts.cs`,
 `NullBackRoomVoice` in `BackRoomStubs.cs` (what the dev rig and the suite run on).
+
+## 10.22 The reward pass (owner approved 2026-09-16)
+
+Source: `house-book.md` laws IX, X, XII and XIII with Brakes 2, 3, 5, 8 and 9, and the owner's revisit of the
+sentence 10.16.A closes on. The reward vocabulary was fully built and almost entirely spent at ONE fixture: the
+slot has the bank, the ladder, the payline frame and the coin shower; the wheel carries half a copy; the
+roulette and the cards have next to nothing, and at the roulette the SP number simply changes, which is Law XII
+broken outright. `arcademy/shell/counterfx.js` has exported `sparkBurst`, `warmGlow`, `ghostGold` and `countUp`
+since the Arcademy shipped, and the Back Room calls none of them. This section is that pass. Where it disagrees with
+sections 8, 10.13, 10.15 or 10.16 for any station, this wins; 10.16.F (the room mints SP and sells nothing) and
+Law I are untouched by it.
+
+Everything here is still presentation over a settled number. The page never mints, weights or re-draws
+anything; every effect below is a picture of something the tape or the server already decided.
+
+**Amendment to 10.16.A.** That section ends "(The playbook's 'shows from across the room' is not built. Owner
+may revisit.)" The owner has revisited, and it IS built. Strike that sentence. It is replaced by:
+
+> The playbook's "shows from across the room" is built (10.22). Every fixture with a payout node gets the
+> room-side coin shower, sized by the tier the shared spine decides. The jar's fill is still close-up only:
+> what crosses the room is the PAY, never a station's private state.
+
+### 10.22.A The room-side shower is every fixture's, not the slot's
+
+`room/fixtures.js` builds a `payouts` entry behind `if (row.id === 'slot')`. That test goes. Any fixture whose
+model carries a payout node takes a `createCoinShower`, and `room.celebrate(key, amount, tier, text)` finds it
+by row key exactly as it does today. A fixture with no payout node is not an error and is not a fallback: it
+simply has no shower, and its station's close-up party is the whole beat.
+
+`room/coin-shower.js` is unchanged - it already reads tier 1-4 as 7 / 16 / 32 / 64 coins, already refuses an
+amount of 0 or less, and already draws nothing while `still` (Law VI, Brake 8). The spine hands it a tier of 0
+for a small win, and 0 never reaches it: a tier 1 is a close-up event and does not show from across the room
+(Law IX - a small win never gets confetti).
+
+### 10.22.B All four stations announce a paid result
+
+`ctx.revealedWin(amount, tier, text)` (`room/loader.js` -> `scene.celebrate` -> `room.celebrate`) is called by
+the slot alone today. From here, every station calls it ONCE, on the frame a paid result is revealed:
+
+| Station | The frame it announces on | Amount |
+|---|---|---|
+| slot | reel 3's thud, the landed line's own frame (unchanged) | `o.pay` |
+| wheel | the pointer settles, the landed slice's frame | `r.pay` |
+| roulette | the ball comes to rest and the read is settled | `read.pay` |
+| cards | the settle frame, after the hole card has turned | `hand.result.net` |
+
+Rules for all four. Once a result, never per hand, per chip or per line: a split that won three ways announces
+its net once (Brake 2). Never before the reveal - an announcement is the room learning what the player has just
+learnt, so it can never tell the room anything first (Law I). A losing, pushed or snoozed result announces
+nothing at all; the room is not told about a miss. `tier` is the spine's `plan.shower`, not the station's own
+rung. Back, suspend and close fire nothing more: what is already falling is cleared by the room's
+station-close, never by the page (Law VI).
+
+### 10.22.C The spine: `shared/win/`
+
+ONE place decides what a win is worth and what it may spend. Stations keep their own recipes and keep deciding
+their own outcomes; they stop deciding their own restraint.
+
+| File | What it owns |
+|---|---|
+| `shared/win/tier.js` | What a win is WORTH, 0-4. It normalises what a station's recipe already decided, so a tier 3 at the roulette buys the party a tier 3 at the slot buys. It replaces no station `tierOf`. |
+| `shared/win/plan.js` | What a win may SPEND: `winPlan(tier, ctx)` -> a frozen `{ bank, shower, ladder, sparkle, reveal, glow, emi, partyMs }`. |
+| `shared/win/bank.js` | THE BANK (Law XII), one copy of the move `stations/slot/bank.js` and `stations/wheel/bank.js` are two copies of. |
+| `shared/win/ladder.js` | THE CHIME LADDER, lifted out of `stations/slot/feel.js`. |
+
+All four are PURE - no DOM, no three, no audio, no timers - on the rule `stations/slot/feel.js` already lives
+by, and all four are held by `shared/win/tests/`.
+
+**`plan.js` is where the Brake lives.** Law IX and Brakes 2, 3 and 5 are enforced there and NOWHERE else. A
+station that re-derives any of the following is a bug:
+
+- **Law IX** sizes it: tier 1 a chime, tier 2 two notes and a jolt, tier 3 THE THUD, tier 4 THE REVEAL. A
+  small win never gets sparkle, a shower or a reveal. The hero plays once a sit-down; the second jackpot of a
+  sit-down is a very good tier 3.
+- **Brake 2** merges: `mergePlans(a, b)` returns the HIGHER plan, never the sum. Two parties on one frame are
+  one party.
+- **Brake 3** wears it down: the first three wins of a rung get the fanfare, then a rung down, and from the
+  fortieth it is a thud and the tokens. The ledger is `freshSit` / `sitPlan` / `afterParty`, one per sit-down.
+- **Brake 5** quiets it: melted drops the rung to 1, kills the shower, the sparkle, the glow and the reveal,
+  and drops the ladder an octave. The bank still flies - a melted win is quiet, not invisible.
+- **Law VI** settles it: reduced motion returns the settled state, `bank: 0` and `partyMs: 0`, with the cue
+  still playing. Calm is NOT reduced motion: the decoration goes, the value still moves.
+- **Brake 8** respects the device: a lite board flies 4 tokens, never 7, drops the sparks, and keeps every
+  sound.
+
+### 10.22.D Three moves enter service
+
+| Move | Enters at | Spec |
+|---|---|---|
+| **THE SPARKLE BURST** | tier 3 (7 sparks) and tier 4 (9), `plan.sparkle` | `counterfx.sparkBurst(host, { count })`, 5-9 pink and gold sparks under 600 ms. Never under lite, never under Calm, never under reduced motion, one burst a moment. It accompanies a big event and is never the event itself. |
+| **THE GLOW** | every paying tier, `plan.glow` | `counterfx.warmGlow(node)`, warm cut, in fast and out slow, 480 ms. 0 while melted (Brake 5) and under reduced motion. Calm keeps it: a warm cut is not travel. |
+| **THE JACKPOT LADDER** | the rungs themselves, `plan.ladder` and `plan.octave` | `ladder.js`: +1 semitone a step, cap 7, never a step closer than the 6 Hz floor, an octave down while melted. Tier 1 is the landing note alone. The royal rung is tier 4, and it is the rung that returns the flag a recap may stamp. |
+
+`countUp` stays the Arcademy's: in the Back Room the readout is counted by THE BANK's own rollup, which ticks on
+the landings (Law X) instead of on a timer. `ghostGold` is already in service as THE ALMOST (10.15 A2).
+
+**Not built, and staying that way.** No new near-miss weighting, no losses disguised as wins, no second hero in
+a beat, and no ceremony that a station may start without a plan. A station may always spend LESS than its plan;
+it may never spend more.
