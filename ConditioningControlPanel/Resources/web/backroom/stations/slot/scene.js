@@ -130,7 +130,9 @@ export async function createScene(o) {
   const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'default' });
   renderer.setPixelRatio(budget.dpr(canvas.clientWidth, canvas.clientHeight));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.25;
+  // Neutral, not ACES: see room/scene.js. The cabinet is lit hotter than the room (hemisphere 2 plus three
+  // directionals), so more of it sat up in the ACES shoulder and the Candy variants lost the most of anything.
+  renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.8;
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(LENS_DEG, 16 / 9, 0.015, 60);
   scene.add(new THREE.HemisphereLight(0xe3bdf9, 0x40213e, 2));
   for (const [color, intensity, pos] of [[0xffd9ed, 3, [-3, 5, 4]], [0xb69cf4, 2, [3, 2, 2]], [0xff83c9, 3, [1, 4, -3]]]) {

@@ -50,6 +50,16 @@ export function seatPose(row, fixture, camera, width, height, cardHands=1, count
   const rightInset=landscape?200:0;
   let top=phone?(landscape?50:150):height<500?85:row.id==='roulette'?110:120, bottom=phone?(landscape?12:108):row.id==='roulette'?155:row.id==='cards'?170:180;
   if(row.id==='slot'){top=height<500?56:110;bottom=height<500?24:150;}   // no station controls share this view: the band is the chrome's only
+  // THE WHEEL AND THE CARDS ARE STAGED ROWS TOO. The phone band above is gated on the roulette, and the slot took
+  // its own escape on the line before, so these two solved a small screen against the DESK's band: at 844x390 that
+  // is top 85 plus bottom 180, 32 per cent of the height left to fit in, and the seat backs off more than twice as
+  // far as a desk does. The owner read it as "the pov is too far" at the slot; it was true at three tables, and
+  // this is the other two (2026-09-16). The numbers are each station's own chrome, measured, not the roulette's.
+  const small=width<=800||height<=500, shortWays=small&&width>height;
+  if((row.id==='wheel'||row.id==='cards')&&small){
+    top=shortWays?50:118;                                   // the room's HUD row, or the HUD plus the station chips
+    bottom=shortWays?56:(row.id==='cards'?132:108);         // Odds and Spin on the sill; the cards keep their hand
+  }
   const available=Math.max(.3,(height-top-bottom)/height), tan=Math.tan(camera.fov*Math.PI/360);
   const fitX=tan*(width-rightInset)/height*(row.id==='wheel'?.965:phone?.985:.92), fitY=tan*available*(phone?.96:.9);
   let distance=.4, sideways=.4;

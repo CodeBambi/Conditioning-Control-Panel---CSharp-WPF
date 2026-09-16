@@ -47,8 +47,14 @@ export async function createScene(o) {
   const renderer = new T.WebGLRenderer({ canvas, antialias: true, powerPreference: 'default' });
   let dpr = budget.dpr(o.mount.clientWidth, o.mount.clientHeight);
   renderer.setPixelRatio(dpr);
-  renderer.toneMapping = T.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  /* TONE MAPPING. ACES Filmic was taking half the chroma off the four hues this room is built out of - measured
+     through three's own RRTAndODTFit: lavender #b99cff and mint #5fffd0 came out at 0.48 and 0.51 saturation,
+     gold #ffcf6b at 0.64. That is the "not quite vibrant" the owner read (2026-09-16). Neutral holds them at
+     0.88-0.92 for the same perceived lightness. The exposure goes UP with the swap and that is not a brightness
+     grab: ACES prescales internally by exposure/0.6, so 1.05 was really 1.75. */
+  renderer.outputColorSpace = T.SRGBColorSpace;   // the default, said out loud, so a vendor bump cannot wash the room out
+  renderer.toneMapping = T.NeutralToneMapping;
+  renderer.toneMappingExposure = 1.7;
   const scene = new T.Scene();
   scene.background = new T.Color('#1a1125');
   scene.fog = new T.FogExp2('#201229', 0.023);

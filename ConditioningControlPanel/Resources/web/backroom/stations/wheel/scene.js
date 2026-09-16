@@ -33,7 +33,8 @@ import { warpStep, warpedRotation, stepDim, quietMix, quietDone, outlineAlpha, d
 import { createEmi } from './emi.js';
 import { createRoomEmi } from './room-emi.js';
 import { createRoomReward } from './room-reward.js';
-import { createPrizeSector } from './prize-art.js';
+import { createPrizeSector, prizeColor } from './prize-art.js';
+import { drawFace, faceKey, FACE_MS, R0, R1 } from './slice-art.js';
 import { HIGHLIGHT_MS } from '../../shared/hypno/callout.js';
 
 const LENS_DEG = 30, FIT = 1.16, RISE_MS = 620, SINK_MS = 300, DEFAULT_OMEGA = -0.011, HUB_AT_REST_MS = 33;
@@ -111,7 +112,9 @@ export async function createScene(o) {
   let lastDraw = -Infinity;
   const renderer = stage?.renderer || new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'default' });
   if (!stage) renderer.setPixelRatio(budget.dpr(canvas.clientWidth, canvas.clientHeight));
-  if (!stage) { renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; }
+  // Seated, the wheel borrows the room's renderer and inherits its tone mapping. This is the standalone path,
+  // and it matches on purpose: otherwise dev.html and the in-room wheel disagree and the difference gets chased.
+  if (!stage) { renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.6; }
   const scene = stage?.scene || new THREE.Scene(), camera = stage?.camera || new THREE.PerspectiveCamera(LENS_DEG, 16 / 9, 0.05, 30);
   if (!stage) scene.add(new THREE.HemisphereLight(0xfbd7f4, 0x36243e, 1.2));
   if (!stage) for (const [p, c, i] of [[[-3, 4, 5], 0xffd5eb, 2.1], [[3, 2, 3], 0xa5b6ff, 1.4], [[1, 4, -3], 0xff75c1, 2.2]]) {
@@ -279,6 +282,26 @@ export async function createScene(o) {
   // Runtime slices from the server's table.
   let layout = null, sliceGroup = null, ghosts = null, outline = null;
   const shearU = { value: 0 };
+  /** THE PICTURE ON THE WEDGES (slice-art.js): one canvas over the whole ring, one texture, one draw call, and
+   *  the same taffy twist as the enamel under it so the art smears with the slices instead of sliding over them.
+   *  It carries no userData, so every per-frame loop below (the peg ring, the colour wash, the emissive pulse)
+   *  skips it by the guards they already have. */
+  let face = null;
+  function buildFace(group) {
+    const S = budget.mobile ? 512 : 768;
+    const c = document.createElement('canvas'); c.width = c.height = S;
+    const tex = canvasTexture(c);
+    const mat = twist(new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }), shearU);
+    // A DECAL, and it is treated like one. The enamel's front face is at .076 + depth .018 + bevel .003 = .097,
+    // so the first guess of .0955 put the art UNDER the wedge it was painted for and nothing showed. .0975 clears
+    // it and still passes under the brass trim (.098) and the labels (.102), and the polygon offset keeps that
+    // half-millimetre from z-fighting at a grazing angle.
+    Object.assign(mat, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+    const mesh = new THREE.Mesh(new THREE.RingGeometry(R0, R1, 128, 1), mat);
+    mesh.position.z = 0.0975;
+    group.add(mesh);
+    face = { c, tex, at: -Infinity, dirty: true, painted: false, key: null };
+  }
   function setLayout(next) {
     if (sliceGroup) { rotor.remove(sliceGroup); sliceGroup.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material) { if (n.material.map) n.material.map.dispose(); n.material.dispose(); } }); }
     if (ghosts) { ghosts.forEach(g => { rotor.parent.remove(g); g.material.dispose(); }); ghosts[0].geometry.dispose(); ghosts = null; }
@@ -290,6 +313,8 @@ export async function createScene(o) {
       flat.push({ pts, color });
       sliceGroup.add(mesh, label, peg, border);
     }
+    face = null;   // the old canvas and texture went with sliceGroup's teardown above
+    buildFace(sliceGroup);
     rotor.add(sliceGroup);
     under = sliceAt(layout, rotor.rotation.z).index; lit = under;
     // Taffy smear: the whole ring flattened into one vertex-coloured geometry, four ghosts at alpha 0.16 over the slices.
@@ -348,8 +373,22 @@ export async function createScene(o) {
   const rotating = () => !!(drag || coast || plan);
 
   /** The v3 page effects for one frame (CONTRACT 10.13.F): hub, taffy, moire, quiet room, and the dim for the station. */
+  /** The wedge art, on the decoder's own clock (12 Hz). Still (Calm or reduced motion) paints the deck's first
+   *  frame ONCE and then stops entirely: a held wheel is a wheel with a picture printed on it, not a slow one. */
+  function paintFace(t) {
+    if (!face || !layout) return;
+    const media = typeof o.sliceMedia === 'function' ? o.sliceMedia() : null;   // read every paint: suspend frees it
+    const still = reduced || !!dress.calm;
+    if (!face.dirty && still && face.painted) return;
+    if (!face.dirty && t - face.at < FACE_MS) return;
+    face.at = t; face.dirty = false;
+    if (media) media.tick(t);
+    if (!face.key) face.key = faceKey(media, layout);
+    if (drawFace(face.c, layout, media, face.key, prizeColor)) { face.tex.needsUpdate = true; face.painted = true; }
+  }
   function hypnoFrame(t, dtMs) {
     paintHub(t, dtMs / 1000);
+    paintFace(t);
     const turning = rotating() && frameSpeed > 0.05;
     shear = stepShear(shear, dress.taffy && turning ? taffyShear(frameSpeed, dress.k) : 0, dtMs);
     const sign = omega < 0 ? -1 : 1;
@@ -520,10 +559,10 @@ export async function createScene(o) {
     resize, screen, setLayout, dispose,
     revealReward(result, still = reduced) { return rewardView?.reveal(result, still) || false; },
     /** Live dress (hypno.dressOf): the hub mode, Full-only moire and taffy, k. */
-    setDress(d) { dress = { ...dress, ...(d || {}) }; },
+    setDress(d) { dress = { ...dress, ...(d || {}) }; if (face) face.dirty = true; },
     /** Live reduced motion / Calm (a settings frame): the next gesture, landing, rise or sink takes the settled
      *  state. A landing already in flight finishes its path (no jump mid-turn); the stage dim and EMI settle now. */
-    setReduced(on) { reduced = !!on; emi.setReduced(reduced); rewardView?.setStill(reduced); if (reduced) dim = 0; },
+    setReduced(on) { reduced = !!on; emi.setReduced(reduced); rewardView?.setStill(reduced); if (reduced) dim = 0; if (face) face.dirty = true; },
     /** The slice's own colour, for the landing wash. */
     sliceColor(index) {
       const m = sliceGroup && sliceGroup.children.find(n => n.userData && n.userData.base !== undefined && n.userData.index === index);
@@ -591,6 +630,7 @@ export async function createScene(o) {
     debug() {
       return { rotation: rotor.rotation.z, under: layout ? layout[under].id : null, lit: layout ? layout[lit].id : null, landed: landed >= 0 && layout ? layout[landed].id : null,
                coasting: !!coast, planning: !!plan, dragging: !!drag, energy, heat, gold, party: !!party, face: emi.face, mood: emi.mode,
+               face: face ? { painted: face.painted, at: face.at, size: face.c.width, key: face.key } : null,
                pointer: pointer.rotation.z - pointerRest, shiverPx: reduced ? 0 : shiverPx(performance.now() - shiverAt),
                hit: hitIndex >= 0 && layout ? { slice: layout[hitIndex].id, on: performance.now() - hitAt < HIGHLIGHT_MS } : null,
                star: starMat ? starMat.emissiveIntensity : null, calls: renderer.info.render.calls,

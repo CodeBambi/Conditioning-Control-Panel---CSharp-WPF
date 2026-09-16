@@ -251,7 +251,7 @@ export async function mount(ctx) {
     rewardReveal?.setStill(still);
     if (scene) { scene.setReduced(still); scene.setDress(dress); }
     if (kit) kit.setStill(hubHeld());
-    if (deck) deck.setStill(dress.calm);
+    if (deck) deck.setStill(still || dress.calm);   // the deck feeds a visible surface now: OS reduced motion holds it too
     hubPainted = false;
     if (el) el.dataset.hub = dress.hub;
   }
@@ -510,6 +510,8 @@ export async function mount(ctx) {
     const [made, res] = await Promise.all([
       (ctx.stage ? createRoomScene : createScene)({ stage: ctx.stage, canvas: $('.wheel-stage'), hud: $('.wheel-face'), reduced: still, dress, paintHub, onFrame,
         labels: s => sliceText(s, t, fmt),
+        // A GETTER, never the deck itself: dealDeck replaces it after the scene exists, and suspend frees it.
+        sliceMedia: () => deck,
         canSpin: () => !busy && !suspended && !!st && !st.spun,
         onGrab: ok => { sound.arm(); if (!ok) press(); else { glanceTo(pressPose()); playFx('grab'); } },
         onRelease: omega => press(omega),
