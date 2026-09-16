@@ -231,13 +231,13 @@ export async function createCustomizationProps({ root, loader, base }) {
     getState: () => [...enabled],
     endPreview(){placed.forEach((group,i)=>{group.visible=enabled[i];});},
     /** Where the catalogue close-up stands to look at one prop, in room coordinates. */
-    preview(index) {
+    preview(index, { show = enabled[index] } = {}) {
       const group = placed[index], row = PROPS[index];
       if (!group) return null;
-      group.visible = true;
+      group.visible = show;
       bounds.setFromObject(group);
-      // The catalogue may preview an unowned prop without enabling it.
-      group.visible = true;
+      // Locked catalogue samples may be shown without changing ownership or enabled state.
+      group.visible = show;
       bounds.getCenter(center); bounds.getSize(size);
       const distance = Math.max(1.35, size.y * 1.6, size.x * 1.15, size.z * 1.15);
       return {

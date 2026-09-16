@@ -77,7 +77,7 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     }
     if(category!=='statues'||!statueSpots[target]||index< -1||index>2)return false;
     selected.statues[target]=index;statueSpots[target].forEach((g,i)=>{
-      g.visible=i===Math.max(0,index);
+      g.visible=index>=0&&i===index;
       g.traverse(o=>{if(o.isMesh&&o.name.includes('_original_'))o.visible=index!==-1;});
     });return true;
   };
@@ -102,7 +102,7 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     if(category!=='handles'){travel=null;shown=null;}
     if(category==='room'){onPreview({position:[0,2.9,5.5],look:[0,1.7,-3]});return;}
     if(category==='screens'){onPreview(extras.preview(target));return;}
-    if(category==='props'){const view=props.preview(target);if(view)onPreview(view);return;}
+    if(category==='props'){const view=props.preview(target,{show:!owned.has(propIds[target])||props.getState()[target]});if(view)onPreview(view);return;}
     if(category==='floor'||category==='palette'){onPreview({position:[0,4.2,5.5],look:[0,0,0]});return;}
     if(category==='handles'){
       const goal=slotView(target);if(!goal)return;
@@ -114,7 +114,7 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     const distance=Math.max(1.5,size.y*1.6,size.x*1.15);
     onPreview({position:[center.x,center.y+.12,center.z+Math.cos(object.rotation.y)*distance],look:center.toArray(),width:size.x,height:size.y});
   };
-  const panel=createCustomizationPanel({mount,lex,vending,decorations:props.models,select,getState,restore,preview,slotOrder,hasOwnership:id=>owned.has(id),onClose:()=>{props.endPreview();travel=null;shown=null;onPreview(null);}});
+  const panel=createCustomizationPanel({mount,lex,vending,decorations:[...props.models,...sculptures],select,getState,restore,preview,slotOrder,hasOwnership:id=>owned.has(id),onClose:()=>{props.endPreview();travel=null;shown=null;onPreview(null);}});
   const ray=new T.Raycaster(),pointer=new T.Vector2();let down=null;
   // A finger on the room pane while the lever close-up is up: a horizontal swipe pans to the next cabinet
   // (swipe left, the way a carousel reads) or the previous one; the sheet keeps its own pointer events.
