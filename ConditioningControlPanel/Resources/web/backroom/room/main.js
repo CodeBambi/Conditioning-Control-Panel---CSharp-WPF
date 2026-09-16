@@ -29,6 +29,7 @@ import { setWheelFace } from './wheel-face.js';
  * ==========================================================================*/
 
 import * as bridge from '../bridge.js';
+import { prizeState } from '../shared/prize-state.js';
 import { normaliseStations } from './walk.js';
 import { createScene } from './scene.js';
 import { createLoader } from './loader.js';
@@ -186,6 +187,7 @@ async function returnToRoom() {
   if (leaving || visiting) return;
   hud.hideWhileVisiting(false);
   if (scene) scene.release();
+  refreshPrizes();
   refreshBell('station-close');   // the only other time the bell is read (10.16.B)
 }
 
@@ -345,6 +347,13 @@ function media() {
     { reqId, seed: 0, gifs: [], words: [], timeout: true });
 }
 
+async function refreshPrizes() {
+  const reqId = bridge.mintId();
+  const res = await bridge.request({type:'station-request', reqId, station:'counter', op:'state', body:{}},
+    'station-result', m => m.reqId === reqId, BELL_TIMEOUT_MS);
+  if (!leaving && !seated() && res?.ok) scene?.setPrizes(prizeState(res.body));
+}
+
 async function start(init) {
   rewards.reset();
   Object.assign(state, {
@@ -423,6 +432,7 @@ async function start(init) {
     spReadout,
     spChanged,
     chipSettle,
+    prizesChanged: (body, bought) => scene?.setPrizes(prizeState(body), bought),
     rewardLanded: body => applyRewards(body),
     revealedWin: (key,amount,tier,text)=>scene?.celebrate(key,amount,tier,text),
     standUp: () => back('back'),
@@ -461,6 +471,7 @@ async function start(init) {
   paintMotion();
   hud.ready();
   paintMustHit();
+  refreshPrizes();
   refreshBell('room-open');
   // One read on room entry paints the fixture from the same table used when seated.
   if (stations.some(row => row.id === 'wheel' && row.state === 'live') && !seated()) {

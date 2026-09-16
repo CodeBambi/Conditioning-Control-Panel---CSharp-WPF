@@ -89,7 +89,7 @@ export async function createScene(o) {
    * captured: a player turning Calm on mid-echo is answered on the next frame. */
   const motion = () => {
     const m = o.cameraMotion?.() || {};
-    return { still, lite: budget.mobile,
+    return { still, off: !!m.off, lite: budget.mobile,
       reduced: !!m.reduced || matchMedia('(prefers-reduced-motion: reduce)').matches };
   };
   const room = await buildRoom({ scene, loader, stations: o.stations, base: o.base, faces: o.faces, label: o.label, onProgress: o.onProgress, motion });
@@ -503,6 +503,7 @@ export async function createScene(o) {
   screens.deal(() => ambient).catch(() => {});
 
   return {
+    setPrizes: (snapshot, bought) => room.prizes.apply(snapshot, bought),
     prepareVisit(){pendingVisit=true;resetInput();},
     setRewards: snapshot => customization.setOwned(snapshot.owned),
     renderer, camera, scene, buildMs, seat, unseat, pickAt, stage,

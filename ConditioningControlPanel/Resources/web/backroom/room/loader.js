@@ -121,6 +121,7 @@ export function createLoader(room) {
       onSp: (fn) => room.onSp(fn),
       /** The room's SP chip (CONTRACT 7.1): { set(value|null), owe(n | () => n), thud(), target() }. */
       spReadout: room.spReadout,
+      prizesChanged: (body, bought) => { if (!subs.closed && station.id === 'counter') room.prizesChanged?.(body, bought); },
       rewardLanded: body => { if(!subs.closed && current?.subs === subs && station.id === 'wheel') room.rewardLanded?.(body); },
       revealedWin: (amount,tier,text) => { if(!subs.closed) room.revealedWin?.(station.key,amount,tier,text); },
       get reduced() { return s.reduced; },

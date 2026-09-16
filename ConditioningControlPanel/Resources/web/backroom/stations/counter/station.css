@@ -138,3 +138,12 @@
   .counter-blurb, .counter-note { font-size: 14px; line-height: 1.5; }
   .counter-details { font-size: 14px; }
 }
+
+/* A confirmed purchase lifts the mockup, then stamps the shelf card. */
+.counter-sold { display:none; position:absolute; z-index:4; left:50%; top:54%; transform:translate(-50%,-50%) rotate(-9deg);
+  border:3px double #ffd18e; background:#28132ef2; color:#ffe3b6; padding:8px 22px; font-size:22px; font-weight:800; letter-spacing:.13em; pointer-events:none; }
+.counter-card[data-face="owned"] .counter-sold { display:block; }
+.counter-card.is-flip .counter-sold { animation:counter-stamp 900ms ease-out; }
+@keyframes counter-stamp { 0%,55% { opacity:0; transform:translate(-50%,-50%) rotate(-9deg) scale(1.7); } 78% { opacity:1; transform:translate(-50%,-50%) rotate(-9deg) scale(.94); } 100% { opacity:1; transform:translate(-50%,-50%) rotate(-9deg) scale(1); } }
+.counter-station[data-still] .is-flip * { animation:none!important; }
+@media (prefers-reduced-motion:reduce) { .counter-card.is-flip * { animation:none!important; } }

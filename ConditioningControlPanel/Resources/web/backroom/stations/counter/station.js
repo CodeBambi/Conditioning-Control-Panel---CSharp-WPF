@@ -10,6 +10,7 @@
 
 import { createCounter, LEX } from './cards.js';
 import { demoKind, demoFrame } from './demo.js';
+import { prizeState } from '../../shared/prize-state.js';
 import { kit } from '../../shared/sound/kit.js';
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
@@ -66,7 +67,7 @@ export async function mount(ctx) {
 
   function still() {
     const pr = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    return !!ctx.reduced || pr || String(ctx.motion || '').toLowerCase() === 'off' || String(ctx.intensity || '').toLowerCase() === 'calm';
+    return ['off','still','reduced'].includes(String(ctx.motion||'').toLowerCase()) || !!ctx.reduced || pr || String(ctx.intensity || '').toLowerCase() === 'calm';
   }
   function back() { if (typeof ctx.standUp === 'function') ctx.standUp(); else close(); }
   const backButton = (cls) => { const b = h('button', cls, t('br_back', 'Back')); b.type = 'button'; b.onclick = back; b.hidden = hostBack; return b; };
@@ -96,7 +97,8 @@ export async function mount(ctx) {
     img.alt = ''; img.decoding = 'async';
     img.onerror = () => { img.remove(); art.dataset.plate = ''; };
     img.src = new URL(`./art/${row.id}.webp`, import.meta.url).href;
-    art.append(plate, img);
+    const sold = h('span', 'counter-sold', t('br_counter_sold', 'SOLD'));
+    art.append(plate, img, sold);
     const body = h('div', 'counter-body');
     body.append(h('h3', 'counter-name', t(row.nameKey, LEX[row.nameKey] || row.id)), h('p', 'counter-blurb', t(row.blurbKey, LEX[row.blurbKey] || '')));
     const detailKey = `br_prize_${row.id}_details`;
@@ -232,16 +234,20 @@ export async function mount(ctx) {
     grid.hidden = phase === 'closed';
     chipEl.textContent = L('br_counter_price', fmt(counter.sp()));
     if (phase === 'closed') return;
+    const snapshot = counter.state && { ok:true, catalog:counter.state.catalog, prizes:{grants:counter.state.grants} };
+    const unlocked = prizeState(snapshot)?.demo;
     for (const v of counter.view()) {
       let c = cards.get(v.id);
       if (!c) { c = makeCard(v); cards.set(v.id, c); grid.append(c.card); }
+      c.card.hidden = v.id === 'rt_demo' && unlocked;
       c.card.dataset.face = v.face;
       c.price.textContent = L('br_counter_price', fmt(v.priceSp));
       if (c.tryBtn) c.tryBtn.hidden = v.face === 'soon';   // under the dust sheet nothing is tried
       if (still() || suspended) c.card.classList.remove('is-flip');
-      if (v.flip && !flipped.has(v.id)) {
+      if (phase === 'ready' && v.flip && !flipped.has(v.id)) {
         flipped.add(v.id);
         if (demo?.id === v.id) stopDemo();
+        ctx.prizesChanged?.(snapshot, v.id);
         if (!still() && !suspended) c.card.classList.add('is-flip');
       }
       const sig = JSON.stringify([v.face, v.short, v.deliveryKey, v.confirm, v.priceSp]);
@@ -268,6 +274,7 @@ export async function mount(ctx) {
     if (typeof ctx.onSettings === 'function') unSet = ctx.onSettings(() => paint());
     paint();
     await counter.open();
+    if (alive && counter.state) ctx.prizesChanged?.({ok:true, catalog:counter.state.catalog, prizes:{grants:counter.state.grants}});
   }
 
   function close() {

@@ -253,3 +253,14 @@ test('suspending settles prize delivery and Calm or Off purchases start settled'
     st.destroy(); assert.equal(r.root.children.length, 0);
   }
 });
+test('demo unlock removes its listing and notifies the room once; return restores without a celebration', async () => {
+  const r=room({sp:100,on:'*'}), events=[];
+  r.ctx.prizesChanged=(body,id)=>events.push({body,id});
+  const st=await mount(r.ctx); await st.open();
+  const c=card(r.root,'rt_demo'); c.one('counter-buy').click(); c.one('counter-yes').click(); await wait(15);
+  assert.equal(c.hidden,true); assert.equal(events.filter(e=>e.id==='rt_demo').length,1);
+  assert.ok(events.find(e=>e.id)?.body.catalog.find(row=>row.id==='rt_demo').owned);
+  st.close(); events.length=0; await st.open();
+  assert.equal(card(r.root,'rt_demo').hidden,true); assert.equal(events.some(e=>e.id),false);
+  st.destroy();
+});
