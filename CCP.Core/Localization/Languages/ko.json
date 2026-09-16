@@ -4944,5 +4944,8 @@
   "label_gaze_interaction": "시선 조작",
   "label_stare_to_pop": "응시해서 터뜨리기",
   "tooltip_bubble_gaze_pop": "버블을 약 1초간 바라보면 클릭하지 않아도 터집니다. 버블에만 적용되며, 플래시는 플래시 페이지에 별도 스위치가 있습니다.",
-  "label_gaze_needs_calibration": "웹캠 실행과 시선 추적 보정이 필요합니다. Play의 포커스 게이즈에서 설정하세요."
+  "label_gaze_needs_calibration": "웹캠 실행과 시선 추적 보정이 필요합니다. Play의 포커스 게이즈에서 설정하세요.",
+  "help_heading_what_it_does": "하는 일",
+  "help_heading_tips": "팁",
+  "help_heading_how_it_works": "작동 방식"
 }

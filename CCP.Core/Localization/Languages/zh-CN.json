@@ -5402,5 +5402,8 @@
   "label_gaze_interaction": "视线交互",
   "label_stare_to_pop": "注视即可戳破",
   "tooltip_bubble_gaze_pop": "注视泡泡约 1 秒即可戳破，无需点击。仅对泡泡有效；闪图在闪图页面有独立开关。",
-  "label_gaze_needs_calibration": "需要打开摄像头并完成视线追踪校准。请在 Play 的聚焦注视中设置。"
+  "label_gaze_needs_calibration": "需要打开摄像头并完成视线追踪校准。请在 Play 的聚焦注视中设置。",
+  "help_heading_what_it_does": "功能说明",
+  "help_heading_tips": "提示",
+  "help_heading_how_it_works": "工作原理"
 }
