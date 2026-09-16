@@ -97,6 +97,8 @@ public sealed class SpiralHelpPopoverTests
                 view.OnTabShown();
                 Dispatcher.UIThread.RunJobs();
                 Assert.True(button.IsVisible);
+                host.MouseMove(new Point(1, 1), RawInputModifiers.None);
+                Dispatcher.UIThread.RunJobs();
                 Move(host, button);
                 await Task.Delay(150);
                 Dispatcher.UIThread.RunJobs();
