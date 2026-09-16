@@ -46,7 +46,7 @@ export const TIERS = Object.freeze({
 });
 export const TIER_ORDER = Object.freeze(['small', 'mid', 'big', 'hero']);
 /** -24 dB under master for the bed, a whisper is quieter still. */
-export const BED_LEVEL = 0.063;
+export const BED_LEVEL = 0.0126;
 export const DEFAULT_MASTER = 0.8;
 /** A cue on this list plays once per window even when two lanes call it on the same frame (the slot's muted
  *  last thud and its dead-spin lane both say `settle`). Milliseconds. */
@@ -57,7 +57,7 @@ export const DEDUPE_MS = Object.freeze({ settle: 120, clicker: 25 });
 export const LEVER_VARIANTS = Object.freeze(['A', 'B', 'C', 'D']);
 export const REEL_VARIANTS = Object.freeze(['A', 'B', 'C', 'D']);
 /** The owner's pair: a candy lever over a rattle-and-bell drum. */
-export const DEFAULT_SFX = Object.freeze({ lever: 'B', reel: 'C' });
+export const DEFAULT_SFX = Object.freeze({ lever: 'B', reel: 'A' });
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);

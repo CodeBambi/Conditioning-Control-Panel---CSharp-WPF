@@ -29,7 +29,7 @@ kit.dispose();                          // the room settles: the context closes,
 
 | cue | what it is | length | opts |
 |---|---|---|---|
-| `ambience` | bed: a low warm hum (55 Hz pair under a 220 Hz lowpass) and a very slow shimmer, -24 dB under master, loops | until stop | |
+| `ambience` | bed: a low warm hum (55 Hz pair under a 220 Hz lowpass) and a very slow shimmer, -38 dB under master, loops | until stop | |
 | `spiral` | bed: two slow-beating pairs (110/114, 220/224.5 Hz), in 250 ms, out 500 ms | until stop, or `ms` | `ms` |
 | `tick` / `ticks` | a reel's filtered click, rising ladder per reel; `ticks` is the whole decelerating train | 22 ms / travel | `reel` 0..4, `step`, `ms` |
 | `lever` | THE LEVER PULL, one whole gesture: the stroke, the stop at the bottom, the spring back. Four voices (below) | 0.51-0.70 s | `variant` A-D, `level` |
@@ -60,7 +60,7 @@ kit.dispose();                          // the room settles: the context closes,
 ## The lever and the drum
 
 The two loudest gestures in the room come in four voices each, so they can be picked by ear. `LEVER_VARIANTS`
-and `REEL_VARIANTS` are A-D; `DEFAULT_SFX` is the owner's pair, **lever B over reel C**.
+and `REEL_VARIANTS` are A-D; `DEFAULT_SFX` is the owner's pair, **lever B over reel A**.
 
 | lever | what it sounds like |
 |---|---|
@@ -80,8 +80,8 @@ The roll is not scored like the one-shots: it is a live loop per reel, one gain 
 a tick train scheduled a beat ahead on a timer. `tickGap(speed)` is the whole trick: 38 ms a tick at full blur,
 260 ms crawling into the stop. `setRollSpeed` is untraced on purpose, because the reels call it every frame.
 
-Levels: a tick peaks at `ROLL_TICK` 0.09 and the purr and hum together at `ROLL_BED` 0.08, both over the
-ambient bed's 0.063 (-24 dB), both on the same master and trim chain as everything else, and both held by
+Levels: a tick peaks at `ROLL_TICK` 0.038 and the purr and hum together at `ROLL_BED` 0.034, both over the
+ambient bed's 0.0126 (-38 dB), both on the same master and trim chain as everything else, and both held by
 `kit.suspend` and `kit.mute` like every other voice.
 
 ### Picking a pair

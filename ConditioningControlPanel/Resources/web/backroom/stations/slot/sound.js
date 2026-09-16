@@ -20,7 +20,7 @@ const asLever = v => (LEVER_VARIANTS.includes(up(v)) ? up(v) : null);
 const asReel = v => (REEL_VARIANTS.includes(up(v)) ? up(v) : null);
 
 /**
- * Pure: which lever and which drum to play. The kit's defaults (lever B, reel C) first, then the saved pair
+ * Pure: which lever and which drum to play. The kit's defaults (lever B, reel A) first, then the saved pair
  * (`store`, the localStorage value: {"lever":"A","reel":"D"} or the compact "A/D"), then the URL query
  * (?lever=A&reel=D), which wins so a dev page can try a pair without touching what is saved.
  */
