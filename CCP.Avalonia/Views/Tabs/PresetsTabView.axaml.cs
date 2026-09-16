@@ -78,6 +78,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void RefreshLocalizedDetails()
         {
+            RefreshLocalizedRack();
+
             if (_selectedSession is Session selected)
             {
                 SelectSession(selected);
@@ -89,6 +91,109 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtSessionDuration.Text = Loc.Get("label_30_minutes");
             TxtSessionXP.Text = Loc.Get("label_50_xp");
             TxtSessionDifficulty.Text = Loc.Get("label_easy_2");
+        }
+
+        /// <summary>
+        /// Refreshes the code-built catalogue in place. Language changes must not rebuild rows:
+        /// their Session tags, focused row and either ScrollViewer's offset belong to the live view,
+        /// not to a newly loaded catalogue.
+        /// </summary>
+        private void RefreshLocalizedRack()
+        {
+            foreach (var row in SessionRackPanel.Children.OfType<Border>())
+            {
+                if (row.Tag is not Session session || row.Child is not Grid grid) continue;
+
+                foreach (var child in grid.Children)
+                {
+                    switch (Grid.GetColumn(child))
+                    {
+                        case 2 when child is TextBlock title:
+                            title.Text = SessionName(session);
+                            break;
+                        case 3 when child is TextBlock description:
+                        {
+                            var blurb = SessionDescription(session);
+                            description.Text = string.IsNullOrWhiteSpace(blurb)
+                                ? Loc.Get("label_custom_session")
+                                : blurb.Split('\n')[0].Trim();
+                            ToolTip.SetTip(description, blurb);
+                            break;
+                        }
+                        case 4 when child is Border difficulty:
+                            SetPillText(difficulty, session.GetDifficultyText());
+                            break;
+                        case 5 when child is TextBlock duration:
+                            duration.Text = Loc.GetF("rack_duration", session.DurationMinutes);
+                            break;
+                        case 6 when child is TextBlock reward:
+                            reward.Text = Loc.GetF("rack_xp", session.BonusXP);
+                            break;
+                        case 7 when child is StackPanel badges:
+                            if (badges.Children.OfType<Border>().FirstOrDefault() is Border source)
+                                SetPillText(source, Loc.Get(RackSourceKeys(session.Source).labelKey));
+                            break;
+                        case 8 when child is StackPanel actions:
+                            RefreshRowActionTooltips(actions);
+                            break;
+                    }
+                }
+            }
+
+            for (var i = 0; i < RackSourceChips.Children.Count; i++)
+            {
+                if (RackSourceChips.Children[i] is not ToggleButton chip) continue;
+                var key = chip.Tag as string ?? "all";
+                var count = key switch
+                {
+                    "builtin" => _availableSessions.Count(session => session.Source == SessionSource.BuiltIn),
+                    "yours" => _availableSessions.Count(session => session.Source == SessionSource.Custom),
+                    "catalogue" => _availableSessions.Count(session => session.Source == SessionSource.Imported),
+                    _ => _availableSessions.Count
+                };
+                SetTextContent(chip, $"{Loc.Get(key switch
+                {
+                    "builtin" => "rack_source_builtin",
+                    "yours" => "rack_source_yours",
+                    "catalogue" => "rack_source_catalogue",
+                    _ => "rack_source_all"
+                })}  {count}");
+            }
+
+            var difficulties = new[]
+            {
+                SessionDifficulty.Easy,
+                SessionDifficulty.Medium,
+                SessionDifficulty.Hard,
+                SessionDifficulty.Extreme
+            };
+            for (var i = 0; i < Math.Min(difficulties.Length, RackDifficultyChips.Children.Count); i++)
+                if (RackDifficultyChips.Children[i] is ToggleButton dot)
+                    ToolTip.SetTip(dot, Loc.Get($"rack_diff_{difficulties[i].ToString().ToLowerInvariant()}"));
+
+            TxtRackCount.Text = Loc.GetF("rack_count_all", _availableSessions.Count);
+        }
+
+        private static void SetTextContent(ToggleButton control, string text)
+        {
+            if (control.Content is TextBlock block)
+                block.Text = text;
+            else
+                control.Content = new TextBlock { Text = text };
+        }
+
+        private static void SetPillText(Border pill, string text)
+        {
+            if (pill.Child is TextBlock block)
+                block.Text = text;
+        }
+
+        private static void RefreshRowActionTooltips(StackPanel actions)
+        {
+            var keys = new[] { "tooltip_edit_session", "tooltip_export_session" };
+            var buttons = actions.Children.OfType<Button>().ToArray();
+            for (var i = 0; i < Math.Min(keys.Length, buttons.Length); i++)
+                ToolTip.SetTip(buttons[i], Loc.Get(keys[i]));
         }
 
         private IReadOnlyList<Session> _availableSessions =
