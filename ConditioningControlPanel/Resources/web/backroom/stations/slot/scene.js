@@ -45,8 +45,10 @@ const GLASS_AIM = 0.16;
 const SHELF = { x: -0.66, top: 0.99, z: 0.36, w: 0.17, d: 0.16, lip: 0.03 };
 /* UPRIGHT the plank comes IN off that line. A tall frame is bought by the width, and the shelf at -0.66 is the
  * widest thing in it: every pixel it reaches outboard is a pixel of reel. Pulled in and forward she still stands
- * beside the glass, on the same plank, and the reels come up by about a fifth (owner, 2026-09-16). */
-const SHELF_TALL = { x: -0.52, z: 0.44 };
+ * beside the glass, on the same plank, and the reels come up by about a fifth (owner, 2026-09-16). -0.52 was a
+ * step too far: at that distance she stood ON the cabinet's left panel rather than beside it, so -0.58 is where
+ * the plank clears the corner and she reads against the room (owner: "move emi slightly to the left"). */
+const SHELF_TALL = { x: -0.58, z: 0.44 };
 const PERCH_SCALE = 0.85, PERCH_HOP = 0.11;   // a smaller EMI on a small shelf, and the arc of her jump across
 const PULL_MAX = 0.5, PULL_COMMIT = 0.55;
 const LEAN = 0.22, BREATH_RAD = 0.03;   // Law VIII lean into a press; THE BREATH's reach at rest
