@@ -13,6 +13,9 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public class SessionFileService
     {
+        private readonly string? _customSessionsFolderOverride;
+        private readonly string? _builtInSessionsFolderOverride;
+
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
             WriteIndented = true,
@@ -45,14 +48,41 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        public SessionFileService()
+        {
+        }
+
+        /// <summary>
+        /// Creates a service with immutable per-instance storage folders.
+        /// </summary>
+        public SessionFileService(string customSessionsFolder, string builtInSessionsFolder)
+        {
+            _customSessionsFolderOverride = ValidateFolderOverride(customSessionsFolder, nameof(customSessionsFolder));
+            _builtInSessionsFolderOverride = ValidateFolderOverride(builtInSessionsFolder, nameof(builtInSessionsFolder));
+        }
+
+        private string CustomSessionsPath => _customSessionsFolderOverride ?? CustomSessionsFolder;
+        private string BuiltInSessionsPath => _builtInSessionsFolderOverride ?? BuiltInSessionsFolder;
+
+        private static string ValidateFolderOverride(string? folder, string parameterName)
+        {
+            if (folder == null)
+                throw new ArgumentNullException(parameterName);
+
+            if (string.IsNullOrWhiteSpace(folder))
+                throw new ArgumentException("Folder path cannot be empty.", parameterName);
+
+            return Path.GetFullPath(folder);
+        }
+
         /// <summary>
         /// Ensure the custom sessions folder exists
         /// </summary>
         public void EnsureCustomFolderExists()
         {
-            if (!Directory.Exists(CustomSessionsFolder))
+            if (!Directory.Exists(CustomSessionsPath))
             {
-                Directory.CreateDirectory(CustomSessionsFolder);
+                Directory.CreateDirectory(CustomSessionsPath);
             }
         }
 
@@ -182,7 +212,7 @@ namespace ConditioningControlPanel.Services
             EnsureCustomFolderExists();
             var sessions = new List<SessionDefinition>();
 
-            foreach (var file in Directory.GetFiles(CustomSessionsFolder, "*.session.json"))
+            foreach (var file in Directory.GetFiles(CustomSessionsPath, "*.session.json"))
             {
                 var session = ImportSession(file);
                 if (session != null)
@@ -203,10 +233,10 @@ namespace ConditioningControlPanel.Services
         {
             var sessions = new List<SessionDefinition>();
 
-            if (!Directory.Exists(BuiltInSessionsFolder))
+            if (!Directory.Exists(BuiltInSessionsPath))
                 return sessions;
 
-            foreach (var file in Directory.GetFiles(BuiltInSessionsFolder, "*.session.json"))
+            foreach (var file in Directory.GetFiles(BuiltInSessionsPath, "*.session.json"))
             {
                 var session = ImportSession(file);
                 if (session != null)
@@ -237,7 +267,7 @@ namespace ConditioningControlPanel.Services
             else
             {
                 var fileName = SanitizeFileName(session.Id) + ".session.json";
-                filePath = Path.Combine(CustomSessionsFolder, fileName);
+                filePath = Path.Combine(CustomSessionsPath, fileName);
                 session.SourceFilePath = filePath;
             }
 
@@ -254,14 +284,14 @@ namespace ConditioningControlPanel.Services
             EnsureCustomFolderExists();
 
             var fileName = SanitizeFileName(session.Id) + ".session.json";
-            var destPath = Path.Combine(CustomSessionsFolder, fileName);
+            var destPath = Path.Combine(CustomSessionsPath, fileName);
 
             // Handle duplicate filenames
             var counter = 1;
             while (File.Exists(destPath))
             {
                 fileName = $"{SanitizeFileName(session.Id)}_{counter}.session.json";
-                destPath = Path.Combine(CustomSessionsFolder, fileName);
+                destPath = Path.Combine(CustomSessionsPath, fileName);
                 counter++;
             }
 
@@ -282,7 +312,7 @@ namespace ConditioningControlPanel.Services
                 return false;
 
             // Only allow deleting from custom folder for safety
-            if (!filePath.StartsWith(CustomSessionsFolder, StringComparison.OrdinalIgnoreCase))
+            if (!filePath.StartsWith(CustomSessionsPath, StringComparison.OrdinalIgnoreCase))
                 return false;
 
             try
