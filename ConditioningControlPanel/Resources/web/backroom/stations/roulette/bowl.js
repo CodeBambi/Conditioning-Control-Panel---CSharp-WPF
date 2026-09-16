@@ -87,7 +87,8 @@ export function createBowl({ wheel, rose }) {
 
   /**
    * Advance to station time `now` (ms). Returns { phase, speed, landed } where `landed` is true on the ONE frame the
-   * ball drops into its pocket (the landing moment's frame).
+   * ball drops into its pocket (the landing moment's frame). `rotVel` is the rotor's own signed speed, which
+   * THE THROW's loop follows (station.js followThrow).
    */
   function update(now, { still = false } = {}) {
     const dt = s.lastNow == null ? 0 : clamp((now - s.lastNow) / 1000, 0, 0.1);
@@ -117,7 +118,7 @@ export function createBowl({ wheel, rose }) {
       s.trail.unshift({ a: s.rot + s.rel, r: s.r, t: now / 1000, mv: spinning || s.phase === 'settle' });
       if (s.trail.length > 48) s.trail.length = 48;
     }
-    return { phase: s.phase, speed: spinning ? s.speed : 0, landed, tscale: s.tscale };
+    return { phase: s.phase, speed: spinning ? s.speed : 0, landed, tscale: s.tscale, rotVel: s.rotVel };
   }
 
   function driftRing(dpr) {

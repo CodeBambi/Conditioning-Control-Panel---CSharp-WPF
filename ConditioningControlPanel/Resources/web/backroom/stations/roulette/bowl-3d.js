@@ -4,6 +4,7 @@ import { createBallPath } from './ball-path.js';
 import { createBowl } from './bowl.js';
 import { FEEL, SEG, restRel, beamAngle, beamLit, whirlAngle } from './feel.js';
 import { HIGHLIGHT_MS } from '../../shared/hypno/callout.js';
+import { glyphFor, paintGlyph } from './glyphs.js';
 
 // The authored pocket centers define this coordinate system. No model dimensions
 // or pocket order are duplicated here; the server order indexes named pockets.
@@ -50,14 +51,47 @@ export function createBowl3D({ stage, wheel, rose }) {
   const trail=new T.Line(trailGeometry,new T.LineBasicMaterial({color:0x5fffd0,transparent:true,opacity:.2,depthWrite:false}));root.add(trail);
   // THE THROW's hint (flick.js): a curved, half-lit arrow around the rim, on the rotor but counter-turned so it
   // stands still in the room while the wheel moves under it. It breathes on a 1.2 s cycle; still, it just sits there.
+  // The seat reads angles y UP (angleAt) where the canvas bowl reads them y down, so the arrow is MIRRORED here:
+  // it sweeps BACK from its tail to the head, which is the way the rotor's angle SHRINKS, and that reads
+  // CLOCKWISE from the chair. A finger that follows it drags the rotor clockwise too, so arrow and wheel agree.
   const HINT_MS=1200,HINT_A0=-Math.PI*.45,HINT_ARC=Math.PI*1.15;
   const hintR=restRadius*1.45,hintTube=restRadius*.05;
   const hintMaterial=new T.MeshBasicMaterial({color:0x5fffd0,transparent:true,opacity:0,depthWrite:false,side:T.DoubleSide});
-  const hintArc=new T.Mesh(new T.TorusGeometry(hintR,hintTube,6,44,HINT_ARC),hintMaterial);
+  const hintArc=new T.Mesh(new T.TorusGeometry(hintR,hintTube,6,44,HINT_ARC),hintMaterial);hintArc.rotation.z=-HINT_ARC;
   const hintHead=new T.Mesh(new T.CircleGeometry(hintTube*3.6,3),hintMaterial);
-  hintHead.position.set(Math.cos(HINT_ARC)*hintR,Math.sin(HINT_ARC)*hintR,0);hintHead.rotation.z=HINT_ARC+Math.PI/2;
+  hintHead.position.set(Math.cos(HINT_ARC)*hintR,-Math.sin(HINT_ARC)*hintR,0);hintHead.rotation.z=-HINT_ARC-Math.PI/2;
   const hint=new T.Group();hint.name='roulette_flick_hint';hint.add(hintArc,hintHead);
   hint.rotation.x=-Math.PI/2;hint.position.y=track.y+lift*3;hint.renderOrder=4;hint.visible=false;rotor.add(hint);
+  // THE POCKET GLYPHS (glyphs.js, GLYPHS.md): one faded decal per numbered pocket on the rotor's inner slope, just
+  // inside the ball's footprint, keyed by the pocket number. A ray down from above finds the authored surface under
+  // each so the mark lies on the wheel, whatever its profile; a miss falls back to the pocket's own top.
+  const GLYPH_REST = 0.26, GLYPH_PULSE_MS = 500, glyphCold = new T.Color('#fff1e4'), glyphHot = new T.Color('#5fffd0');
+  const glyphTextures = new Map();
+  function glyphTexture(id) {
+    if (glyphTextures.has(id)) return glyphTextures.get(id);
+    const c = document.createElement('canvas'); c.width = c.height = 128; paintGlyph(c.getContext('2d'), id, 128);
+    const tex = new T.CanvasTexture(c); tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = 4;
+    glyphTextures.set(id, tex); return tex;
+  }
+  const glyphR = Math.max(restRadius * .55, restRadius - lift * 2.4), glyphSize = SEG * glyphR * .8;
+  const glyphGeometry = new T.PlaneGeometry(1, 1), caster = new T.Raycaster(), rotorInverse = rotor.matrixWorld.clone().invert();
+  const skip = new Set([beam, sparks, trail, hintArc, hintHead, ball]);
+  const glyphs = wheel.map((n, i) => {
+    const id = glyphFor(n); if (!id) return null;
+    const a = angles[i], radial = new T.Vector3(Math.cos(a), 0, -Math.sin(a));
+    const at = new T.Vector3(Math.cos(a) * glyphR, pocketTops[i] + lift * 4, -Math.sin(a) * glyphR), normal = up.clone();
+    caster.set(rotor.localToWorld(at.clone()), new T.Vector3(0, -1, 0).transformDirection(rotor.matrixWorld));
+    const hit = caster.intersectObject(rotor, true).find((h) => h.face && h.object.isMesh && !skip.has(h.object) && !h.object.name.startsWith('pocket_glyph_'));
+    if (hit) { rotor.worldToLocal(at.copy(hit.point)); normal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld).transformDirection(rotorInverse); }
+    else at.y = pocketTops[i];
+    const material = new T.MeshBasicMaterial({ map: glyphTexture(id), color: glyphCold, transparent: true, opacity: GLYPH_REST, depthWrite: false, side: T.DoubleSide });
+    const mesh = new T.Mesh(glyphGeometry, material); mesh.name = 'pocket_glyph_' + n; mesh.renderOrder = 3;
+    const y = radial.clone().addScaledVector(normal, -radial.dot(normal)).normalize(), x = new T.Vector3().crossVectors(y, normal);
+    mesh.quaternion.setFromRotationMatrix(new T.Matrix4().makeBasis(x, y, normal));
+    mesh.position.copy(at).addScaledVector(normal, lift * .12); mesh.scale.setScalar(glyphSize); rotor.add(mesh);
+    return { n, id, index: i, angle: a, material, mesh };
+  });
+  let glyphLitIndex = -1, glyphLitAt = -Infinity;
   let disposed = false, lastView = {}, activePlan=null, launchAt=0, currentNow=0;
   const trailPoints=[];
   const lit = new Set();
@@ -95,9 +129,21 @@ export function createBowl3D({ stage, wheel, rose }) {
     trail.visible=trailPoints.length>1;trail.material.opacity=.2*k;
     if (hint.visible) {
       const pulse = lastView.still ? .5 : (1 - Math.cos((currentNow % HINT_MS) / HINT_MS * Math.PI * 2)) / 2;
-      hint.rotation.z = HINT_A0 - s.rot;   // the room's angle, not the rotor's
+      hint.rotation.z = -HINT_A0 - s.rot;   // the room's angle, not the rotor's (mirrored: the seat reads y up)
       hint.scale.setScalar(1 + (lastView.still ? 0 : .035 * pulse));
       hintMaterial.opacity = (.3 + .28 * pulse) * k;
+    }
+    // THE POCKET GLYPHS: the beam brushes them a little; the landed one goes hot on the settle frame (the thud frame,
+    // Law X) with a GLYPH_PULSE_MS scale pulse and stays hot while the ball sits there.
+    const seated = s.phase === 'settle' || s.phase === 'rest' ? s.index : -1;
+    if (seated !== glyphLitIndex) { glyphLitIndex = seated; glyphLitAt = currentNow; }
+    const pq = (currentNow - glyphLitAt) / GLYPH_PULSE_MS, glyphPulse = pq >= 0 && pq < 1 ? Math.sin(pq * Math.PI) : 0;
+    for (const g of glyphs) {
+      if (!g) continue;
+      const hot = g.index === glyphLitIndex ? 1 : 0, strength = Math.max(beamLit(g.angle + s.rot, beamA) * .35, hot);
+      g.material.opacity = (GLYPH_REST + (1 - GLYPH_REST) * strength) * k;
+      g.material.color.copy(glyphCold).lerp(glyphHot, strength);
+      g.mesh.scale.setScalar(glyphSize * (1 + (hot ? .3 * glyphPulse : 0)));
     }
     // THE GLYPH HIT: the landed pocket's number lights on its own over HIGHLIGHT_MS from the winning frame (callout.js)
     const hq = (currentNow - s.hitAt) / HIGHLIGHT_MS, hitPulse = hq >= 0 && hq < 1 ? Math.sin(hq * Math.PI) : 0, hitN = s.index >= 0 ? wheel[s.index] : null;
@@ -127,6 +173,8 @@ export function createBowl3D({ stage, wheel, rose }) {
     for(const object of [beam,sparks,trail,hintArc,hintHead]){object.removeFromParent();object.geometry.dispose();}
     for(const object of [beam,sparks,trail]) object.material.dispose();
     hint.removeFromParent(); hintMaterial.dispose();
+    for (const g of glyphs) if (g) { g.mesh.removeFromParent(); g.material.dispose(); }
+    glyphGeometry.dispose(); for (const tex of glyphTextures.values()) tex.dispose(); glyphTextures.clear();
     disc.material = oldDisc; material.dispose(); texture.dispose();
     ink.width = ink.height = 1;
   }
@@ -171,6 +219,7 @@ export function createBowl3D({ stage, wheel, rose }) {
     glow(index, now) { core.glow(index, now); },
     get geo() { return core.geo; }, get phase() { return core.phase; },
     debug() { return { ...core.debug(), view: '3d', lit: [...lit], whirlDrawn: !!lastView.whirlDrawn, hint: hint.visible,
+      glyphs: glyphs.filter(Boolean).map((g) => ({ n: g.n, id: g.id })), glyphLit: glyphLitIndex >= 0 ? wheel[glyphLitIndex] : null,
       clearance: {rimRadius:path.rimRadius,ballRadius:lift,profileEdges:path.edges,margin:path.margin},
       ballWorld: ball.getWorldPosition(new T.Vector3()).toArray(),
       pockets: centers.map(p => rotor.localToWorld(p.clone()).toArray()), disposed }; },
