@@ -7,6 +7,7 @@ using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -60,6 +61,7 @@ public sealed class LanguageSelectorTests
     [Fact]
     public void LanguageSelectorsRestoreAndDesktopExitFlushesPendingState()
     {
+        var previousLanguage = LocalizationManager.Instance.CurrentLanguage;
         var settingsPath = Path.Combine(TestProfile.DirectoryPath, "settings.json");
         var settingsBeforeStartup = SeedProfile(settingsPath);
         var settingsWriteBeforeStartup = File.GetLastWriteTimeUtc(settingsPath);
@@ -110,6 +112,29 @@ public sealed class LanguageSelectorTests
             WaitForDebouncedSave(); // A startup save must not hide behind the first user edit.
             Assert.Equal(settingsBeforeStartup, File.ReadAllText(settingsPath));
             Assert.Equal(settingsWriteBeforeStartup, File.GetLastWriteTimeUtc(settingsPath));
+
+            // This is the real desktop/provider path: the mounted chip writes the actual settings
+            // file, and a newly constructed view restores the validated token without another app
+            // lifetime or a second profile.
+            var sourceChips = presets.FindControl<StackPanel>("RackSourceChips")!
+                .Children.OfType<ToggleButton>().ToArray();
+            var yours = sourceChips.Single(chip => (string)chip.Tag! == "yours");
+            Click(shell, yours);
+            Assert.Equal("yours", CoreSettings.Current.SessionRackSourceFilter);
+            WaitForDebouncedSave();
+            Assert.Equal("yours", new SettingsService().Current.SessionRackSourceFilter);
+
+            var restoredView = new PresetsTabView();
+            var restoredSources = restoredView.FindControl<StackPanel>("RackSourceChips")!
+                .Children.OfType<ToggleButton>().ToArray();
+            Assert.Single(restoredSources, chip => (string)chip.Tag! == "yours" && chip.IsChecked == true);
+            Assert.All(restoredSources.Where(chip => (string)chip.Tag! != "yours"),
+                chip => Assert.False(chip.IsChecked == true));
+
+            // Leave the profile in its original state for the remainder of this lifecycle test.
+            Click(shell, sourceChips.Single(chip => (string)chip.Tag! == "all"));
+            WaitForDebouncedSave();
+            Assert.Equal("all", new SettingsService().Current.SessionRackSourceFilter);
 
             Select(Pill(shell), "fr");
 
@@ -272,6 +297,8 @@ public sealed class LanguageSelectorTests
         {
             try { shell.Close(); } catch { }
             try { Dispatcher.UIThread.RunJobs(); } catch { }
+            LocalizationManager.Instance.SetLanguage(previousLanguage);
+            Dispatcher.UIThread.RunJobs();
             CoreSettings.ServiceProvider = null;
             CoreDispatch.PostProvider = null;
                 CoreDispatch.InvokeProvider = null;
@@ -303,6 +330,17 @@ public sealed class LanguageSelectorTests
         Dispatcher.UIThread.RunJobs();
     }
 
+    private static void Click(TopLevel host, Control target)
+    {
+        var point = target.TranslatePoint(
+            new Point(target.Bounds.Width / 2, target.Bounds.Height / 2), host);
+        Assert.True(point.HasValue, "could not translate control into host");
+        host.MouseMove(point!.Value, RawInputModifiers.None);
+        host.MouseDown(point.Value, MouseButton.Left, RawInputModifiers.None);
+        host.MouseUp(point.Value, MouseButton.Left, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+    }
+
     private static void WaitForDebouncedSave()
     {
         System.Threading.Thread.Sleep(650);
@@ -313,6 +351,7 @@ public sealed class LanguageSelectorTests
     {
         var settings = new SettingsService();
         settings.Current.Language = "ja";
+        settings.Current.SessionRackSourceFilter = "all";
         settings.Current.Welcomed = true;
         settings.SaveImmediate();
         return File.ReadAllText(settingsPath);
