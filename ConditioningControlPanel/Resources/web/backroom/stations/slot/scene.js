@@ -281,10 +281,12 @@ export async function createScene(o) {
   // Framing: from cam_seat/cam_target and live bounds, at the rest pose. The marquee is in the play box
   // and EMI's face so the cabinet's name and her glance read above the reels at every aspect (in-room tidy, lane F1).
   let poses = null;
-  /** A phone on its side (station.css, the same query and column): the pills, Freeze and Odds take a 152 px column on
-   *  the left; Spin and the face keep the right corners, so the lever may reach into the free middle of that edge.
-   *  The column was 110 and the status chip wrapped to five lines inside it, which grew down into Freeze I. */
-  const sideband = (w, h) => (h <= 500 && w > h ? { left: 152, right: 12, top: 16, bottom: 16 } : null);
+  /** A phone on its side (station.css, the same query and the same numbers). The chips and Odds take a column
+   *  on the left, Spin and the face keep the right corners, and Freeze runs along the BOTTOM (owner,
+   *  2026-09-16) rather than stacking down the left, which is why the two side columns are now EQUAL: the
+   *  view offset below is (right - left) / 2, so matching them is what puts the cabinet in the middle of the
+   *  screen instead of shouldering it into whatever space the left column left over. */
+  const sideband = (w, h) => (h <= 500 && w > h ? { left: 142, right: 142, top: 14, bottom: 66 } : null);
   function frame(aspect, w = 16, h = 9) {
     let closeSeat = false;   // the seated pose: the one EMI takes her shelf for (the overview keeps her topper)
     const y = rig.position.y; rig.position.y = 0; rig.updateMatrixWorld(true);

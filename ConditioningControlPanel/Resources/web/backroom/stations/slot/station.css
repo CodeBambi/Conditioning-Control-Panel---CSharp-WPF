@@ -127,12 +127,14 @@
 /* A phone on its side (scene.js `sideband`, the same numbers): the pills, Freeze and Odds stack in a 110 px column on
    the left, Spin and the face keep the right corners, and the reels fill the height of the band between. */
 @media (max-height: 500px) and (orientation: landscape) {
-  .slot-station .slot-controls { left: 12px; right: auto; bottom: 44px; width: 134px; transform: none; }
-  .slot-station .slot-freeze { flex-direction: column; gap: 6px; }
-  .slot-station .slot-freeze button { min-width: 0; padding: 7px 8px; font-size: 10px; letter-spacing: .5px; }
+  /* Freeze runs along the bottom, centred between Odds and Spin: three buttons stacked down the left edge
+     was a column of chrome taller than the cabinet, and it pushed the reels off-centre to make room. */
+  .slot-station .slot-controls { left: 50%; right: auto; bottom: 12px; width: auto; transform: translateX(-50%); }
+  .slot-station .slot-freeze { flex-direction: row; gap: 10px; flex: none; }
+  .slot-station .slot-freeze button { min-width: 104px; padding: 8px 10px; font-size: 11px; letter-spacing: .5px; }
   .slot-station .slot-spin { right: 12px; bottom: 12px; min-width: 120px; }
-  .slot-station .slot-odds { left: 12px; bottom: 12px; max-width: min(360px, calc(100vw - 200px)); }
-  .slot-station .slot-top, .slot-station[data-host-back] .slot-top { top: 54px; left: 12px; max-width: 134px; }
+  .slot-station .slot-odds { left: 12px; bottom: 12px; max-width: min(320px, calc(100vw - 480px)); }
+  .slot-station .slot-top, .slot-station[data-host-back] .slot-top { top: 54px; left: 12px; max-width: 124px; }
   .slot-station .slot-sp, .slot-station .slot-jackpot, .slot-station .slot-spirals, .slot-station .slot-status { font-size: 10px; padding: 4px 8px; }
   .slot-station .slot-face { width: 44px; height: 40px; }
   .slot-station[data-host-back] .slot-gain { right: 64px; }
