@@ -2169,3 +2169,19 @@ a short drop and a squash under it when a won decoration is finally placed at Ro
 ### Desktop blackjack table controls (owner update 2026-09-16)
 
 The player total sits left of the active hand. Totals 18-21 use a lifted green emphasis, lower totals settle gently, and bust totals shake and sink. Still/Calm keeps the number without motion. The table shows one chip per SP, with a selector for base stakes 1-3; split and doubled hands display their actual committed stake. Controls follow the hand: Stand left, slightly larger Hit right, Split below Stand and Double below Hit. Stakes remain governed by the server-advertised rules. The test preview enables 3 SP; the matching private-server change must ship before account-backed play offers it.
+
+
+### Table feel follow-up (2026-09-16)
+
+Blackjack reserves chip space outside six-card player footprints, including split hands.
+One chip remains one SP. Bets add/drop and lift/remove; Double places the extra stake
+before its last card travels. Split stakes follow their own hands. The active hand has
+a restrained rim; finished hands square up. Dealer reveal contact gets a soft landing.
+Settlement uses each server hand result: losses collect toward the dealer, wins return
+the stake with the paid chips, pushes stay. These are presentation only.
+
+Cards and roulette accept a limited drag on empty felt (about 4 degrees sideways,
+2.6 degrees vertically), with eased motion and Center view. Game targets own their
+existing gestures. Off/Calm, suspension, transitions and seat disposal cancel the look.
+Projected hand totals and bets follow the table; blackjack action controls stay steady
+while looking. No extra renderer, network request or server outcome change.

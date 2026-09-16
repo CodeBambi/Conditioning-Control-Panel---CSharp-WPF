@@ -131,8 +131,9 @@
  .cards-in-room .cards-deal { grid-column:1 / 3; justify-self:center; }
 }
 @media(max-width:800px) {
- .cards-total { left:15%; top:55%; width:70px; margin-left:-35px; }
- .cards-total strong { font-size:32px; }
+ .cards-total { left:var(--phone-total-x,50%); top:var(--phone-total-y,50%); width:70px; margin-left:-35px; }
+ .cards-total strong { font-size:28px; }
+ .cards-total small { font-size:10px; }
  .cards-in-room > .cards-bet { left:auto; top:auto; bottom:110px; right:12px; transform:none; }
 }
 

@@ -1,3 +1,4 @@
+import { createSeatLook } from '../../room/seat-look.js';
 /* ============================================================================
  * station.js - Soft Hand, Twenty-One (CONTRACT 7 and 10.13.F). The room calls
  * mount(ctx) once, then open()/close() per visit. Back is live at every frame
@@ -280,6 +281,8 @@ export async function mount(ctx) {
     const steps = planSteps(shownHand, next, { still: dress().still, beats: beats && !quiet });
     const base = performance.now(), fresh = !shownHand || shownHand.id !== next.id;
     const bets = { at: 0, op: 'bets', list: next.hands.map((h) => h.bet) };
+    if (!fresh && next.hands.some((h,i)=>h.doubled && !shownHand.hands[i]?.doubled) && !dress().still)
+      steps.forEach(s=>{s.at+=320;});
     steps.splice(fresh ? 1 : 0, 0, bets);
     // quiet: the hand goes down settled on this frame (no flights, no timings), the steps still in their order
     queue = queue.concat(steps.map((s) => ({ ...s, at: quiet ? base : base + s.at, hand: next, quiet })));
@@ -292,7 +295,7 @@ export async function mount(ctx) {
     const d = dress(), h = s.hand;
     switch (s.op) {
       case 'clear': totalKey = ''; table.clear(); lines = []; break;
-      case 'bets': table.setBets(s.list); if (!s.quiet) sound.play('chips', { n: Math.min(6, 1 + (Array.isArray(s.list) ? s.list.length : 0)) }); break;
+      case 'bets': table.setBets(s.list, now, s.quiet); if (!s.quiet) sound.play('chips', { n: Math.min(6, 1 + (Array.isArray(s.list) ? s.list.length : 0)) }); break;
       case 'card': table.addCard({ ...s, settled: s.quiet }, now); if (!s.quiet) sound.play('card-slide'); break;
       case 'split': table.split(now); break;
       case 'active': table.setActive(s.index); break;
@@ -339,6 +342,8 @@ export async function mount(ctx) {
         moments.holdScreen(false);
         decide = false;
         chip.owe(0);
+        table.settleBets?.(h, now, s.quiet || d.still);
+        table.setActive(-1);
         lines = resultLines(h);
         streak = streakAfter(streak, h);
         if (s.quiet) { log('settled-quiet', { hand: h.id }); break; }
@@ -356,7 +361,7 @@ export async function mount(ctx) {
           const out = moments.play(id, { gif: best && deck ? deck.keyFor(best) : undefined, words });
           holdScreenFor(id, out, at);
           if (out.page.includes('win_tunnel')) table.tunnel(at);
-          if (out.page.includes('chip_vortex') && v) table.vortex(v.dir, v.n, at);
+          if (!table.settleBets && out.page.includes('chip_vortex') && v) table.vortex(v.dir, v.n, at);
           log('moment', { id, tokens: out.tokens.length, page: out.page, held: out.held, net: h.result.net, best, streak, delayed });
         };
         if (paid) {
@@ -598,7 +603,7 @@ export async function mount(ctx) {
     if (!ctx.stage || !table.hud) return;
     const hud = table.hud(), total = $('.cards-total'), still = dress().still;
     el.toggleAttribute('data-still', still);
-    for (const [key,value] of Object.entries({ 'hand-x': hud.x, 'hand-bottom': hud.bottom, 'total-x': hud.hands>1 ? hud.x : hud.left - 65, 'total-y': hud.hands>1 ? hud.top - 40 : hud.y, 'bet-x': hud.betX, 'bet-y': hud.betY + 44 })) el.style.setProperty('--' + key, value + 'px');
+    for (const [key,value] of Object.entries({ 'phone-total-x':hud.x, 'phone-total-y':hud.top-10, 'hand-x': hud.x, 'hand-bottom': hud.bottom, 'total-x': hud.left - (hud.hands>1 ? 48 : 65), 'total-y': hud.y, 'bet-x': hud.betX, 'bet-y': hud.betY + 44 })) { if (!ctx.stage.lookShift || !key.startsWith('hand-')) el.style.setProperty('--' + key, value + 'px'); }
     total.hidden = hud.total == null || phase !== 'play';
     total.querySelector('small').textContent = hud.hands > 1 ? t('br_cards_hand_short', 'Hand {i}', { i: hud.owner + 1 }) : t('br_cards_you', 'You');
     total.querySelector('strong').textContent = hud.total == null ? '' : String(hud.total);
@@ -643,6 +648,11 @@ export async function mount(ctx) {
     callout = createCallout({ mount: el, lex: typeof ctx.lex === 'function' ? ctx.lex : undefined });
     kit = createLoomKit({ still: dress().still, log: say });
     table = ctx.stage ? createTable3D(ctx.stage, { kit: () => kit, onDeal: deal, onCue: (cue) => sound.play(cue) }) : createTable($('.cards-stage'), { kit: () => kit, onCue: (cue) => sound.play(cue) });
+    if (ctx.stage) createSeatLook(ctx.stage, { mount:el, enabled:()=>alive && !suspended && !dress().still,
+      surface:e => {
+        const hits=ctx.stage.pick(e,ctx.stage.scene.children).filter(h=>{for(let n=h.object;n;n=n.parent)if(!n.visible)return false;return true;});
+        return hits[0]?.object.name === 'felt_surface';
+      } });
     if (typeof ctx.onSp === 'function') unSp = ctx.onSp((v) => { if (chip) chip.setServer(v); });
     raf = requestAnimationFrame(frame);
     const deckP = createDeck(ctx, { count: 13, still: dress().still }).catch(() => null);

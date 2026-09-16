@@ -33,5 +33,20 @@ test('3D suspend discards in-flight landing and fan cues, restoring the authored
   draw(130); draw(500); draw(4500); assert.deepEqual(cues, []);
   table.addCard({ owner: 0, slot: 1, code: 'As' }, 5000); draw(5500);
   assert.deepEqual(cues, ['card-land']);
+  for(let slot=2;slot<6;slot++)table.addCard({owner:0,slot,code:'2h',settled:true},6000);
+  table.setBets([6],6000,true);draw(7000);
+  const clear = () => {
+    scene.updateMatrixWorld(true);
+    const meshes=scene.getObjectByName('cards_runtime').children;
+    const chipBoxes=meshes.filter(m=>m.userData.bet && m.userData.bet.removeAt==null).map(m=>new T.Box3().setFromObject(m));
+    const faces=meshes.filter(m=>m.geometry?.type==='PlaneGeometry' && m.renderOrder===2);
+    for(const chip of chipBoxes)for(const face of faces){
+      const b=new T.Box3().setFromObject(face);
+      assert.ok(chip.max.x < b.min.x || chip.min.x > b.max.x || chip.max.z < b.min.z || chip.min.z > b.max.z,'chip footprint clears every card');
+    }
+  };
+  clear();
+  table.split();for(let slot=1;slot<6;slot++)table.addCard({owner:1,slot,code:'2h',settled:true},7000);
+  table.setBets([6,6],7000,true);draw(9000);clear();
   table.dispose(); assert.equal(scene.children.length, 0);
 });

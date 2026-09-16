@@ -1,3 +1,4 @@
+import { createSeatLook } from '../../room/seat-look.js';
 /* ============================================================================
  * station.js - the Velvet Vortex roulette station (CONTRACT 7 and 10.13.F). The
  * room calls mount(ctx) once, then open()/close() per visit. Back is live at
@@ -743,6 +744,12 @@ export async function mount(ctx) {
     addEventListener('resize', onResize);
     cv.addEventListener('pointermove', onPointer); cv.addEventListener('pointerdown', onPointer); cv.addEventListener('contextmenu', onContext);
     for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) cv.addEventListener(ev, onRelease);
+    if (stage) createSeatLook(stage, { mount:el, enabled:()=>alive && !suspended && !stillNow(),
+      surface:e => {
+        if (!mat || !bowl || mat.pick(e)) return false;
+        const p=local(e); if(bowl.wheelHit(p.x,p.y)) return false;
+        return stage.pick(e,[stage.fixture]).some(h=>/felt|table_top|table_surface|betting_mat/.test(h.object.name));
+      } });
     moments = createMoments(ctx, { station: 'roulette' });
     callout = createCallout({ mount: el, lex: typeof ctx.lex === 'function' ? ctx.lex : undefined }); lastCallout = null;
     // THE BANK (Law XII). Law X reads straight off the engine's events: a tick that is not the rollup's tail

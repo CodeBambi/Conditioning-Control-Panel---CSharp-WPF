@@ -62,7 +62,7 @@ const FAKE_HOST = `(() => {
   const listeners = [], emit = (data) => setTimeout(() => listeners.forEach((fn) => fn({ data })), 0);
   const PICS = ${JSON.stringify(PICS)};
   window.__posted = []; window.__emit = emit;
-  const serverP = import('/backroom/stations/cards/mock-server.js').then((m) => { const s = m.createMockServer({ sp: 57, floorMs: 600 }); s.script('Th', '9d', '8c', '8s'); window.__server = s; return s; });
+  const serverP = import('/backroom/stations/cards/mock-server.js').then((m) => { const s = m.createMockServer({ sp: 57, floorMs: 600 }); s.script(${process.argv.includes('--layout-only') ? "'8s','9d','8h','7c','3s','2c','Th','2d'" : "'Th','9d','8c','8s'"}); window.__server = s; return s; });
   window.chrome = window.chrome || {};
   window.chrome.webview = {
     addEventListener(type, fn) { if (type === 'message') listeners.push(fn); },
@@ -98,8 +98,25 @@ await sleep(1500); await shot('sit-fan.png');
 ok(await until("document.querySelector('.cards-station')?.dataset.phase==='play'"), 'sit fan completes');
 ok((await ev('document.querySelectorAll("canvas").length')) === 1, 'only room canvas attached');
 ok((await ev('window.__backroom.scene.debug().pitch')) === pose.pitch, 'sit fan preserves seated pitch');
+// Empty felt owns look-around; no station action or leave request may result.
+const lookStart=await ev(`(()=>{const s=window.__backroom.scene,c=s.renderer.domElement,r=c.getBoundingClientRect();
+  for(let y=r.height*.43;y<r.height*.7;y+=25)for(let x=r.width*.2;x<r.width*.8;x+=25){
+    const e={clientX:x+r.left,clientY:y+r.top};const h=s.pickAt(e,s.scene.children).find(h=>{for(let n=h.object;n;n=n.parent)if(!n.visible)return false;return true;});
+    if(h?.object.name==='felt_surface')return {x:e.clientX,y:e.clientY,rotation:s.camera.rotation.y};
+  }return null;})()`);
+ok(!!lookStart,'empty felt is available for camera dragging');
+if(lookStart){
+  await cdp('Input.dispatchMouseEvent',{type:'mousePressed',x:lookStart.x,y:lookStart.y,button:'left',clickCount:1});
+  await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',x:lookStart.x+90,y:lookStart.y+20,button:'left',buttons:1});
+  await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',x:lookStart.x+90,y:lookStart.y+20,button:'left',clickCount:1});
+  await sleep(500);
+  ok(await ev(`Math.abs(window.__backroom.scene.camera.rotation.y-(${lookStart.rotation}))>.005 && window.__backroom.scene.debug().seated`),'felt drag changes view without leaving the seat');
+  await shot('look.png');await click('.br-seat-center');await sleep(800);
+  ok(await ev(`Math.abs(window.__backroom.scene.camera.rotation.y-(${lookStart.rotation}))<.002`),'Center view restores the composed camera');
+}
+if(process.argv.includes('--look-only'))await done(fails?1:0);
 const rows = [];
-for (let run = 0; run < 5; run++) {
+for (let run = process.argv.includes('--layout-only')?2:0; run < 5; run++) {
   if (run === 3) await ev("window.__server.script('Tc','Ac','9d','Ad','Ah','As','Ac','Ad','Ah')");
   if (run === 4) await ev("window.__server.script('Tc','Ac','9d','Ad','Ah','As','Ac','Ad','6c','Ah','As','Ac','Ad','Ah')");
   if (run === 1) await ev("window.__server.script('5s','9d','6h','7c','3d','2s')");
@@ -126,6 +143,7 @@ for (let run = 0; run < 5; run++) {
     ok(await until("window.__backroom.scene.scene.getObjectByName('cards_runtime').userData.debug().hands===2 && !document.querySelector('.cards-move[data-move=double]').disabled"), 'split puts two hands on authored slots');
     ok((await view()).betChips === 6, 'split shows three chips per hand');
     await shot('split.png');
+    if(process.argv.includes('--layout-only'))await done(fails?1:0);
     await click('.cards-move[data-move=double]');
     ok(await until("window.__backroom.scene.scene.getObjectByName('cards_runtime').userData.debug().active===1 && !document.querySelector('.cards-move[data-move=stand]').disabled"), 'double deals once and moves to hand two');
     ok((await view()).betChips === 9, 'double adds the extra three chips only to its own hand');
