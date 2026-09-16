@@ -2,3 +2,4 @@
 *.mov filter=lfs diff=lfs merge=lfs -text
 *.mp4 filter=lfs diff=lfs merge=lfs -text
 ConditioningControlPanel/Resources/web/backroom/shared/sound/assets/*.mp3 filter=lfs diff=lfs merge=lfs -text
+ConditioningControlPanel/Resources/Audio/backroom/words/*.mp3 filter=lfs diff=lfs merge=lfs -text

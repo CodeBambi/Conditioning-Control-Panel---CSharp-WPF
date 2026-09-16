@@ -9,8 +9,7 @@ for a voice in this order (CONTRACT.md 10.21):
 3. **`tts`** - Windows speech, rendered on the fly.
 4. **`none`** - the page falls back to the browser's `speechSynthesis`.
 
-This folder ships with `words.json` and nothing else. Drop clips in and name them in the manifest and
-every player hears them in place of the synthesised voice; leave it empty and nothing breaks.
+This folder includes nine Circe recordings for the English playtest vocabulary: Drop, Relax, Let go, Sink, Deeper, Empty, Obey, Softer and Blank. Player-provided clips keep priority. Other phrases retain the existing fallback chain.
 
 ## Naming
 
@@ -47,3 +46,9 @@ ElevenLabs pipeline, save each clip under the file name the script printed, then
 
 Keep them SHORT (under a second where the phrase allows) and soft: the beat holds a word for 980 ms and
 a clip longer than that pushes the next word of a chain back.
+
+## Circe recording pass (2026-09-16)
+
+ElevenLabs eleven_v3, configured Circe voice. Each exact phrase was rendered as `[whispers] [slow] phrase...`, stability 0.5, similarity 0.85, style 0.15, speed 0.85, speaker boost off. Delivery was requested as a quiet, measured whisper; human audition remains the quality check.
+
+Processing: silence trimmed with breath margins retained, 8.5 kHz low-pass, loudness target -25 LUFS and -8 dBTP ceiling, 55 ms fade-in and 140 ms fade-out, mono 44.1 kHz MP3 at 96 kbps. Complete phrases retained (about 0.6 to 2.6 seconds), without a hard duration cut. The word chain waits for the reported clip duration. The phone preview uses an additional 0.65 gain through its master volume and acknowledges these clips as preset audio instead of invoking browser speech.
