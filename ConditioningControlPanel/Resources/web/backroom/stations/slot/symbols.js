@@ -3,15 +3,9 @@
  * caller. `look` carries the dealt media: look.gif(i) -> a drawable (an animated <img> or null) and
  * look.word(i) -> text or null. Missing media gets the preview's fallback art.
  *
- * THE CELL IS NOT SQUARE ANY MORE (owner, 2026-09-16, the T cabinet). It was 256 x 256, the dealt clips
- * are 16:9, and a clip fitted into a square box used a quarter of its own reel window with empty glass
- * above and below it. The drum is wider now, so the cell is CELL.hw x CELL.hh - 448 x 256, 1.75:1 - and
- * every piece of art here is laid out against that box instead of against a hard-coded 128. A caller with
- * a different box (the paytable's 36 px legend cells) passes its own.
- *
- * WHAT USES THE WIDTH AND WHAT DOES NOT: a picture and a phrase are the reasons the cell grew, so they
- * take the whole box. EMI and the melt glyph are DRAWINGS at a fixed size - stretching them to 448 would
- * make a cartoon out of a mark - so they stay their own size, centred, with the extra width as margin. */
+ * The T cabinet shows a large near-square central card and shallow neighbouring slivers.
+ * All artwork uses CELL's box; picture media contains its native aspect without stretching.
+ * The prize legend passes its own smaller box. */
 
 import { fitText } from '../../shared/text/wrap.js';
 import { createLoomKit } from '../../shared/hypno/loom.js';
@@ -19,7 +13,8 @@ import { createLoomKit } from '../../shared/hypno/loom.js';
 /** The reel cell's half extents, in the canvas units every painter here works in. hw runs along the DRUM's
  *  width (horizontal on screen), hh along its circumference (vertical). scene.js sizes its reel canvas from
  *  these, so the texel density stays square and the art is never stretched. */
-export const CELL = { hw: 224, hh: 128 };
+// Near-square picture cards fit the tall cabinet windows without stretched media.
+export const CELL = { hw: 112, hh: 128 };
 
 /** CONTAIN a picture of this aspect inside the cell, with a hair of margin. This one function is why the
  *  T pays off: the cell is 1.75:1 now, so a 16:9 clip comes out limited by the cell's HEIGHT and fills
@@ -122,7 +117,11 @@ export function phraseLayout(ctx, text, cell = CELL) {
   const hit = subFits.get(key);
   if (hit) return hit;
   const measure = (str, size) => { ctx.font = subFont(size); return ctx.measureText(str).width; };
-  const max = Math.max(16, Math.round(height / 2.1));
+  const words=String(text).trim().split(/\s+/),longest=Math.max(...words.map(word=>word.length),1);
+  const wordWidth=Math.max(...words.map(word=>measure(word,100)/100),1);
+  // fitText estimates line capacity from average glyph width, so constrain that too.
+  const average=measure(String(text),100)/100/Math.max(String(text).length,1);
+  const max = Math.min(Math.max(16, Math.round(height / 2.1)),Math.floor(width/wordWidth),Math.floor(width/(average*(longest+.05))));
   const fit = fitText(text, { measure, width, height, maxLines: 3,
     minLines: text.length > SUB_WRAP_AT ? 2 : 1, min: Math.min(13, max), max, lineHeight: 1.12 });
   if (subFits.size > 64) subFits.clear();
@@ -139,12 +138,14 @@ function drawPhrase(ctx, text, cell) {
   fit.lines.forEach((l, i) => ctx.fillText(l, 0, top + i * step, cell.hw * 2 * 0.86));
 }
 
-function drawMedia(ctx, img, cell) {
+function drawMedia(ctx, img, cell, cover=false) {
   const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
-  const { w, h } = fitBox((iw || 1) / (ih || 1), cell);
+  const { w, h } = cover?{w:cell.hw*1.88,h:cell.hh*1.88}:fitBox((iw || 1) / (ih || 1), cell);
   ctx.save();
   ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, Math.min(12, h / 8)); ctx.clip();
-  ctx.drawImage(img, -w / 2, -h / 2, w, h);
+  const scale=cover?Math.max(w/(iw||1),h/(ih||1)):1;
+  const dw=cover?(iw||1)*scale:w,dh=cover?(ih||1)*scale:h;
+  ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
   ctx.restore();
 }
 
@@ -153,7 +154,7 @@ export function drawSymbol(ctx, id, t, look = {}, cell = CELL) {
   ctx.fillStyle = '#271632'; ctx.fillRect(-cell.hw, -cell.hh, cell.hw * 2, cell.hh * 2);
   if (kind === 'gif') {
     const img = look.gif && look.gif(n);
-    if (img) drawMedia(ctx, img, cell); else fallbackTile(ctx, n, t, look.reduced, cell);
+    if (img) drawMedia(ctx, img, cell, !!look.cover); else fallbackTile(ctx, n, t, look.reduced, cell);
   } else if (kind === 'spiral') {
     const tile = spiralTile(n, t, look.reduced);
     if (tile) {

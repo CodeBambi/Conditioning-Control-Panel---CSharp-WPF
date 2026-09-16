@@ -176,3 +176,40 @@
   .slot-station[data-host-back] .slot-top { top: 112px; }
   .slot-station[data-host-back] .slot-face { display: none; }
 }
+
+/* Compact shared-cabinet controls. Geometry projects their anchors into the room canvas. */
+.slot-station[data-shared-room] { pointer-events:none; }
+.slot-station[data-shared-room] .slot-stage,
+.slot-station[data-shared-room] .slot-dim,
+.slot-station[data-shared-room] .slot-face,
+.slot-station[data-shared-room] .slot-comp,
+.slot-station[data-shared-room] .slot-rotate { display:none !important; }
+.slot-station[data-shared-room] button,
+.slot-station[data-shared-room] details,
+.slot-station[data-shared-room] summary { pointer-events:auto; }
+.slot-station[data-shared-room] .slot-top {
+  top:8px;bottom:auto;left:6px;right:auto;max-width:none;flex-direction:row;flex-wrap:nowrap;align-items:center;justify-content:center;gap:5px;
+}
+.slot-station[data-shared-room] .slot-top > * { flex:none;min-width:0;min-height:26px;margin:0;padding:4px 8px;white-space:nowrap;font-size:clamp(9px,1.2vw,12px);line-height:16px;border-radius:9px; }
+.slot-station[data-shared-room] .slot-status { flex-basis:auto; }
+.slot-station[data-shared-room] .slot-controls,
+.slot-station[data-shared-room] .slot-freeze { position:absolute;inset:0;margin:0;padding:0;transform:none;pointer-events:none; }
+.slot-station[data-shared-room] .slot-freeze button { position:absolute;min-width:0;min-height:26px;height:26px;padding:3px 6px;transform:translateX(-50%);font-size:10px;letter-spacing:.25px; }
+.slot-station[data-shared-room] .slot-spin { left:50%;right:auto;bottom:auto;top:80%;transform:translateX(-50%);min-width:0;min-height:44px;height:44px;padding:5px 12px; }
+.slot-station[data-shared-room] .slot-spin:active { transform:translate(-50%,2px); }
+.slot-station[data-shared-room] .slot-odds { top:auto;bottom:max(12px,var(--br-sill));right:12px; }
+.slot-station[data-shared-room] .slot-odds[open] { max-height:calc(100dvh - 90px);width:min(410px,calc(100vw - 24px)); }
+.slot-station[data-shared-room] .slot-state-note { position:absolute;bottom:54px;left:12px;max-width:65%;padding:4px 8px;border-radius:8px;background:#201229e8;font-size:11px; }
+html:has(.slot-station[data-shared-room]) #br-back,
+html:has(.slot-station[data-shared-room]) .br-nav > button:first-child,
+html:has(.slot-station[data-shared-room]) .br-bell { display:none; }
+html:has(.slot-station[data-shared-room]) body .br-nav { position:fixed;top:auto;left:auto;right:162px;bottom:max(12px,var(--br-sill));gap:5px; }
+html:has(.slot-station[data-shared-room]) .br-nav .br-pill { font-size:11px;padding:8px 10px; }
+html:has(.slot-station[data-shared-room]) .br-options { top:auto;bottom:calc(100% + 8px); }
+html:has(.slot-station[data-shared-room]) .br-sp { position:fixed;top:auto;right:84px;bottom:max(12px,var(--br-sill));font-size:12px;padding:7px 9px; }
+html:has(.slot-station[data-shared-room]) #__opt-btn { top:auto !important;bottom:54px !important;right:12px !important; }
+@media (max-width:500px) {
+  .slot-station[data-shared-room] .slot-top { gap:3px; }
+  .slot-station[data-shared-room] .slot-top > * { padding:3px 5px;font-size:9px; }
+  .slot-station[data-shared-room] .slot-freeze button { font-size:9px;padding:3px; }
+}

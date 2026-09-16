@@ -54,6 +54,7 @@ const STATION = 'slot';
 /** CONTRACT 7 (room/loader.js): the root stays see-through, so the room's pan-in is the load screen and the cabinet
  *  rises over the room's held frame. There is no loading card: Back is live the whole way (Law VI). */
 export const roomBehind = true;
+export const roomStage = true;
 const ROTATE_SEEN = 'br_slot_rotate_seen';   // the sideways nudge, dismissed once a session
 const LINE_LABELS = {
   emi3: '3 EMI', emi2: '2 EMI', gif3same: '3 of the same GIF', sub3: '3 subliminals', spiral3: '3 spirals',
@@ -127,6 +128,7 @@ export async function mount(ctx) {
   function build() {
     const root = document.createElement('div');
     root.className = 'slot-station'; root.dataset.phase = 'loading';
+    if (ctx.stage) root.dataset.sharedRoom = 'true';
     if (reduced) root.dataset.reduced = '';   // Law VI: the jar takes the settled fill, never a slower one
     root.innerHTML = `
       <div class="slot-dim"></div>
@@ -139,7 +141,7 @@ export async function mount(ctx) {
         <div class="slot-status" aria-live="polite"></div>
       </header>
       <canvas class="slot-face" width="152" height="137" aria-hidden="true"></canvas>
-      <span class="slot-gain" hidden></span>
+      <span class="slot-gain" hidden></span><span class="slot-state-note" hidden></span>
       <div class="slot-payline" aria-hidden="true" hidden></div>
       <div class="slot-tokens" aria-hidden="true"></div>
       <div class="slot-callout" aria-live="polite"></div>
@@ -157,7 +159,7 @@ export async function mount(ctx) {
     if (hostSp) root.dataset.hostSp = '';
     if (hostBack) {
       root.dataset.hostBack = '';
-      root.querySelector('.slot-back').hidden = true;
+      root.querySelector('.slot-back').hidden = !ctx.stage;
       root.querySelector('.slot-card-back').hidden = true;
     }
     root.addEventListener('pointerdown', onPoke, true);   // A4: any pointer press ends attract (the lever included)
@@ -244,7 +246,12 @@ export async function mount(ctx) {
     const jarChip = $('.slot-spirals'), jar = jarPart();
     jarChip.hidden = !jar;
     if (jar && jarChip.textContent !== jar) jarChip.textContent = jar;
-    $('.slot-status').textContent = parts.join('  Â·  ');
+    const status=$('.slot-status');
+    status.textContent=ctx.stage?t('br_slot_last_win','Last win {n}',{n:fmt(s.lastWin)}):parts.join('  ·  ');
+    status.setAttribute('aria-label',parts.join('  ·  '));
+    const extraNote=$('.slot-state-note');
+    extraNote.hidden=!ctx.stage||!(s.comp||s.free||s.melt);
+    extraNote.textContent=[s.comp?t('br_slot_comp','On the house: {n} spins',{n:s.comp.spins}):'',s.free?t('br_slot_free_left','Free spins {n}',{n:s.free}):'',s.melt?t('br_slot_melt_left','Melt: {n} spins at half',{n:s.melt}):''].filter(Boolean).join(' · ');
     const playable = el.dataset.phase === 'play';
     el.dataset.pace = pace;
     el.querySelectorAll('[data-col]').forEach((b, i) => {
@@ -747,8 +754,8 @@ export async function mount(ctx) {
     const dealt = Promise.resolve().then(() => (typeof ctx.media === 'function' ? ctx.media() : null))
       .then(m => (my === session ? media.deal(m) : null)).catch(() => null);
     const [made, state] = await Promise.all([
-      createScene({ canvas: $('.slot-stage'), reduced, stillFx, variant: variant && variant.id, palette: variant && variant.palette, hint: $('.slot-hint'),
-                    payline: $('.slot-payline'),
+      createScene({ stage:ctx.stage, canvas: $('.slot-stage'), reduced, stillFx, variant: variant && variant.id, palette: variant && variant.palette, hint: $('.slot-hint'),
+                    payline: $('.slot-payline'), topRow:$('.slot-top'), spinControl:$('.slot-spin'), freezeLabels:[...el.querySelectorAll('.slot-freeze button')], spinLabel:t('br_slot_spin','Spin'),
                     canPull: () => (!busy || pace === 'reveal') && !suspended,
                     onLever: () => press(), onFreeze: col => toggleFreeze(col),
                     onReelSpeed: (i, speed) => sound.roll(i, speed),

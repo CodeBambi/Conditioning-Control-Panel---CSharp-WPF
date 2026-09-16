@@ -22,6 +22,7 @@ import { createScreens } from './screens.js';
 import { createEmiInteraction, TAP_SLOP } from './emi-interaction.js';
 import { createCasinoDecor } from './casino-decor.js';
 import { cardCounts } from '../stations/cards/layout-3d.js';
+import { slotSeat } from './slot-seat.js';
 import { seatPose, easeSeat, shortAngle } from './seat-camera.js';
 import { createTouchControl } from './touch-control.js';
 import { createCustomization } from './customization.js';
@@ -110,6 +111,14 @@ export async function createScene(o) {
   let raf = 0, last = performance.now(), lastTick = last, nearest = null, drag = null, tap = null, standTap = null, leaveAsked = false;
   let pendingVisit=false, transition=null, viewOffset=0, viewOffsetX=0, arrival=Promise.resolve(true), cardHands=1, counts={d:2,0:2}, composition='';
   const views = new Set();
+  let slotShape=null;
+  function setSlotStretch(factor,xFactor=slotShape?.factorX||1){
+    if(!slotShape)return;
+    slotShape.factor=factor;slotShape.factorX=xFactor;slotShape.holder.scale.y=slotShape.baseY*factor;slotShape.holder.scale.x=slotShape.baseX*xFactor;
+    slotShape.holder.userData.slotStretch=factor;slotShape.holder.userData.slotStretchX=xFactor;
+    if(slotShape.emi){slotShape.emi.scale.y=slotShape.emiY/factor;slotShape.emi.scale.x=slotShape.emiX/xFactor;}
+    slotShape.holder.updateMatrixWorld(true);
+  }
   const ray = new T.Raycaster(), pointer = new T.Vector2();
   const saved = { pos: null, yaw: 0, pitch: 0 };
   const keys = new Set();
@@ -154,14 +163,14 @@ export async function createScene(o) {
     if (overview) topDown();
     else if (seated?.row) {
       const target=gamePose(seated.row);
-      if(transition)transition.to=target;
-      else {pos.splice(0,3,...target.pos);yaw=target.yaw;pitch=target.pitch;viewOffset=target.offset;viewOffsetX=target.offsetX;}
+      if(transition)transition.to={fov:66,stretch:1,stretchX:1,...target};
+      else {if(target.fov){camera.fov=target.fov;camera.updateProjectionMatrix();setSlotStretch(target.stretch||1,target.stretchX||1);}pos.splice(0,3,...target.pos);yaw=target.yaw;pitch=target.pitch;viewOffset=target.offset;viewOffsetX=target.offsetX;}
     }
   }
   window.addEventListener('resize', resize);
 
   /** `keepStick`: a seat keeps the touch stick alive and centred by the player's own finger, so a push back still reads. */
-  function resetInput(keepStick) { keys.clear(); vel.set(0, 0); drag = tap = null; if (!keepStick) { standTap = null; touch.reset(); } touch.setEnabled(canWalk() || canLeave()); }
+  function resetInput(keepStick) { keys.clear(); vel.set(0, 0); drag = tap = null; if (!keepStick) { standTap = null; touch.reset(); } touch.setEnabled(canWalk() || (canLeave() && seated?.row.id !== 'slot')); }
   function leaveSeat() {
     if (!canLeave()) return;
     leaveAsked = true; resetInput();
@@ -311,7 +320,7 @@ export async function createScene(o) {
     if (held || halted || suspended) return;
     raf = requestAnimationFrame(frame);
     const raw = now - last;
-    touch.setEnabled(canWalk() || canLeave());
+    touch.setEnabled(canWalk() || (canLeave() && seated?.row.id !== 'slot'));
     const active = !!transition || !!seated || keys.size > 0 || drag || touch.value.x || touch.value.z || customization.opened;
     const gap = 1000 / (active && !budget.mobile ? 60 : 30);
     if (raw < gap - 1) return;
@@ -345,6 +354,7 @@ export async function createScene(o) {
       pos.splice(0,3,...tr.from.pos.map((v,i)=>v+(tr.to.pos[i]-v)*k));
       yaw=tr.from.yaw+(shortAngle(tr.from.yaw,tr.to.yaw)-tr.from.yaw)*k;
       pitch=tr.from.pitch+(tr.to.pitch-tr.from.pitch)*k; viewOffset=tr.from.offset+(tr.to.offset-tr.from.offset)*k;viewOffsetX=tr.from.offsetX+(tr.to.offsetX-tr.from.offsetX)*k;
+      camera.fov=tr.from.fov+(tr.to.fov-tr.from.fov)*k;setSlotStretch(tr.from.stretch+(tr.to.stretch-tr.from.stretch)*k,tr.from.stretchX+(tr.to.stretchX-tr.from.stretchX)*k);camera.updateProjectionMatrix();
       if(t===1){transition=null;tr.resolve(true);resetInput();}
     }
     if (!overview) {
@@ -407,20 +417,29 @@ export async function createScene(o) {
 
   function gamePose(row) {
     const width=Math.max(1,o.mount.clientWidth),height=Math.max(1,o.mount.clientHeight);
+    if (row.id === 'slot') {
+      const stretch=height>width?Math.min(3,Math.max(1.4,height/width*1.39)):1,stretchX=height>width?1:Math.min(1.8,Math.max(1,width/height/1.35)),previous=slotShape?.factor||1,previousX=slotShape?.factorX||1;
+      setSlotStretch(stretch,stretchX);
+      const target=slotSeat(room.holders.get(row.key),{fov:24},width,height);
+      setSlotStretch(previous,previousX);
+      return {...target,fov:24,stretch,stretchX};
+    }
     return seatPose(row,room.holders.get(row.key),camera,width,height,cardHands,counts)||{pos:row.approach.slice(),...facing(row.approach,row.look),offset:0,offsetX:0};
   }
   function moveCamera(to, duration=2100) {
+    to={fov:66,stretch:1,stretchX:1,...to};
     if(transition){transition.resolve(false);transition=null;}
     const motion=o.cameraMotion?.()||{off:still};
     motion.reduced ||= matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if(motion.off||halted){pos.splice(0,3,...to.pos);yaw=to.yaw;pitch=to.pitch;viewOffset=to.offset;viewOffsetX=to.offsetX;camera.position.fromArray(pos);camera.rotation.set(pitch,yaw,0,'YXZ');camera.updateMatrixWorld();return Promise.resolve(!halted);}
+    if(motion.off||halted){camera.fov=to.fov;camera.updateProjectionMatrix();setSlotStretch(to.stretch,to.stretchX);pos.splice(0,3,...to.pos);yaw=to.yaw;pitch=to.pitch;viewOffset=to.offset;viewOffsetX=to.offsetX;camera.position.fromArray(pos);camera.rotation.set(pitch,yaw,0,'YXZ');camera.updateMatrixWorld();return Promise.resolve(!halted);}
     const rotation=new T.Euler().setFromQuaternion(camera.quaternion,'YXZ');
-    const rendered={pos:camera.position.toArray(),yaw:rotation.y,pitch:rotation.x,offset:viewOffset,offsetX:viewOffsetX};
+    const rendered={fov:camera.fov,stretch:slotShape?.factor||1,stretchX:slotShape?.factorX||1,pos:camera.position.toArray(),yaw:rotation.y,pitch:rotation.x,offset:viewOffset,offsetX:viewOffsetX};
     return new Promise(resolve=>{transition={from:rendered,to,elapsed:0,duration:motion.reduced?duration*1.35:duration,resolve};resetInput();run();});
   }
   function seat(row) {
     if (!row || seated || held || halted || transition) return false;
-    pendingVisit=false;leaveAsked=false;seated={pos:pos.slice(),yaw,pitch,row}; sway=0;cardHands=1;counts={d:2,0:2};composition='';
+    if(row.id==='slot'){const holder=room.holders.get(row.key),emi=holder.getObjectByName('emi_topper');holder.userData.slotPlaying=true;slotShape={holder,emi,baseY:holder.scale.y,baseX:holder.scale.x,emiY:emi?.scale.y||1,emiX:emi?.scale.x||1,factor:1,factorX:1};}
+    pendingVisit=false;leaveAsked=false;seated={pos:pos.slice(),yaw,pitch,row,fov:camera.fov}; sway=0;cardHands=1;counts={d:2,0:2};composition='';
     if(overview){overview=false;decor.setOverview(false);}
     if(room.ceiling)room.ceiling.visible=true;
     interaction.dismiss();customization.dismiss();setNearest(null);resetInput();
@@ -429,9 +448,11 @@ export async function createScene(o) {
   function unseat() {
     if (!seated) return;
     for (const view of [...views]) dropView(view);
-    const previous=seated;seated=null;resetInput();
+    const previous=seated;
+    if(previous.row.id==='slot')room.holders.get(previous.row.key).userData.slotPlaying=false;
+    seated=null;resetInput();
     arrival=moveCamera({...previous,offset:0,offsetX:0});
-    arrival.then(()=>{if(!seated&&room.ceiling)room.ceiling.visible=true;});run();
+    arrival.then(()=>{if(!seated){setSlotStretch(1,1);slotShape=null;if(room.ceiling)room.ceiling.visible=true;}});run();
   }
   function dropView(view) {
     if (!views.delete(view)) return;
@@ -510,7 +531,7 @@ export async function createScene(o) {
     debug() {
       const sorted = frames.slice().sort((a, b) => a - b);
       return {
-        renderBudget: {...budget.debug(), dpr}, position: pos.slice(), yaw, pitch, transitioning:!!transition, viewOffset, viewOffsetX, overview, held: !!held, seated: !!seated, leaveAsked, running: !!raf, still,
+        renderBudget: {...budget.debug(), dpr}, slotStretch:slotShape?.factor||1, fov:camera.fov, position: pos.slice(), yaw, pitch, transitioning:!!transition, viewOffset, viewOffsetX, overview, held: !!held, seated: !!seated, leaveAsked, running: !!raf, still,
         nearest: nearest ? nearest.key : null, fixtures: room.fixtures, bulbs: room.bulbs, screens: room.screens.length,
         pictures: screens.pictures, animation: screens.animation, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
         touch: touch.debug(), decor: decor.debug(), customization: customization.debug(),

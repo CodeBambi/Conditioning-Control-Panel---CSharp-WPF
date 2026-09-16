@@ -294,8 +294,12 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
   const labels = new Map();
   const set = await Promise.all(stations.map(async (row) => {
     const f = row.fixture;
-    const source = await fetchModel(f.file);
-    const model = source.clone(true);   // geometry is shared; the decoded original stays pristine
+    const source = await fetchModel(row.id === 'slot' ? '../../stations/slot/assets/slot.glb' : f.file);
+    const model = source.clone(true);
+    if (row.id === 'slot') {
+      const copies=new Map(), copy=m=>{if(!copies.has(m))copies.set(m,m.clone());return copies.get(m);};
+      model.traverse(n=>{if(n.material)n.material=Array.isArray(n.material)?n.material.map(copy):copy(n.material);});
+    }   // geometry is shared; the decoded original stays pristine
     const holder = new T.Group();
     holder.name = 'station_' + row.key;
     holder.position.fromArray(f.position);
@@ -321,7 +325,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
         }
         o.material = recolored.get(o.material.name);
       }
-      if (BULB.test(o.name)) bulbs.push({ mesh: o, row, rim: o.name.startsWith('rim'), index: bulbs.length });
+      if (row.id !== 'slot' && BULB.test(o.name)) bulbs.push({ mesh: o, row, rim: o.name.startsWith('rim'), index: bulbs.length });
     });
     if (f.faces && atlas) {
       const face = model.getObjectByName('EMI_glass');
@@ -439,7 +443,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     // The fixture's own screen carries the line for the whole echo, not just for as long as coins are
     // falling: the coins are 4 s of decoration, the line is the news, and the news outlives Calm.
     for(const [key,p] of payouts){p.coins.update(dt,still);
-      if(!p.node)continue;
+      if(holders.get(key)?.userData.slotPlaying || !p.node)continue;
       const line=echo.line(key,clock);
       if(line){setLabel(key,p.node,WIN_MARK+' '+line+' '+WIN_MARK);p.showing=true;
         const m=labels.get(key+'/'+p.node)?.mesh.material;if(m)m.emissive.setHSL(still ? .1 :(clock*.00018)%1,.8,.6);}

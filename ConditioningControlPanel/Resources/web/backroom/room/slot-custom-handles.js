@@ -117,7 +117,7 @@ export async function createSlotCustomHandles({holders,loader,base,sources=[],on
   /** Swing the handle on cabinet `index` and roll its drums. `still` (motion off) lands them at once. */
   function pull(index,{still=false}={}){
     if(disposed||!Number.isInteger(index)||index<0||index>2||pulls[index])return false;
-    const rig=rigOf(index);if(!rig)return false;
+    const rig=rigOf(index);if(!rig||rig.userData.slotPlaying)return false;
     const pivot=active[index]?.node||rig.getObjectByName('lever')||null;
     const reels=reelsOf(rig).map(mesh=>({map:mesh.material.map,to:face()}));
     if(!pivot&&!reels.length)return false;
@@ -130,6 +130,7 @@ export async function createSlotCustomHandles({holders,loader,base,sources=[],on
     if(disposed)return;
     pulls.forEach((p,index)=>{
       if(!p)return;
+      if(rigOf(index)?.userData.slotPlaying){rest(p);pulls[index]=null;return;}
       p.t+=still?9:Math.min(Math.max(dt,0),.1);
       if(p.pivot)p.pivot.quaternion.copy(p.rest).multiply(swing.setFromAxisAngle(AXIS,
         p.t<DOWN_S?PULL_MAX*ease(p.t/DOWN_S):p.t<DOWN_S+UP_S?PULL_MAX*(1-ease((p.t-DOWN_S)/UP_S)):0));

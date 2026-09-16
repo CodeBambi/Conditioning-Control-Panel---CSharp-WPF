@@ -20,6 +20,7 @@ import { createCoinShower } from '../../room/coin-shower.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
+import { stripTransform } from './strip-transform.js';
 import { drawSymbol, disposeSpirals, CELL } from './symbols.js';
 import { fitText } from '../../shared/text/wrap.js';
 import { PACE, reelStopMs, reelsMs, respinStopMs, respinMs } from './pace.js';
@@ -102,12 +103,13 @@ const MARQUEE_FLICKER_MS = 260;   // the neon restrike on a change: a brief emis
 const MARQUEE_LIT = 0.45;
 const displayFont = (px) => `600 ${px}px Segoe UI, Arial, sans-serif`;
 
-function paintDisplay(ctx, w, h, marquee, text) {
+function paintDisplay(ctx, w, h, marquee, text, aspect=1) {
   const g = ctx.createLinearGradient(0, 0, w, h);
   g.addColorStop(0, '#180d27'); g.addColorStop(0.5, '#432040'); g.addColorStop(1, '#180d27');
   ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
   ctx.lineWidth = 1.5; ctx.strokeStyle = '#bf85ac'; ctx.strokeRect(9, 9, w - 18, h - 18);
   ctx.strokeStyle = '#744366'; ctx.strokeRect(15, 15, w - 30, h - 30);
+  ctx.save();ctx.translate(w/2,h/2);ctx.scale(1,aspect);ctx.translate(-w/2,-h/2);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const lh = 1.06, measure = (str, size) => { ctx.font = displayFont(size); return ctx.measureText(str).width; };
   const fit = fitText(text, { measure, width: w * 0.82, height: h * (marquee ? 0.78 : 0.74),
@@ -116,7 +118,7 @@ function paintDisplay(ctx, w, h, marquee, text) {
   ctx.shadowColor = '#ff75c8'; ctx.shadowBlur = marquee ? 12 : 4; ctx.fillStyle = '#ffe3f2';
   const step = fit.size * lh, top = h / 2 - (fit.lines.length - 1) * step / 2;
   for (let i = 0; i < fit.lines.length; i++) ctx.fillText(fit.lines[i], w / 2, top + i * step, w * 0.84);
-  ctx.shadowBlur = 0;
+  ctx.shadowBlur = 0;ctx.restore();
 }
 
 /**
@@ -126,21 +128,28 @@ function paintDisplay(ctx, w, h, marquee, text) {
  * @returns {Promise<{missing:string[], dispose:()=>void} | object>}
  */
 export async function createScene(o) {
-  const { canvas, reduced } = o;
+  const { reduced } = o;
+  const shared = o.stage || null, canvas = shared ? shared.canvas : o.canvas;
+  let releaseView = null, rig = null, coinShower = null, retainReels = null;
+  const extras = [], borrowed = new Map(), roomVisibility=new Map();
+  const initialStretch=shared?.fixture.userData.slotStretch||1,initialStretchX=shared?.fixture.userData.slotStretchX||1;
+  if(shared)for(const n of shared.scene.children)if(n!==shared.fixture&&!n.isLight){roomVisibility.set(n,n.visible);n.visible=false;}
+  if (shared) shared.fixture.children[0].traverse(n => borrowed.set(n, { material:n.material, geometry:n.geometry, position:n.position.clone(), rotation:n.rotation.clone(), scale:n.scale.clone(), visible:n.visible }));
   // Law VI: reduced motion, Calm and Motion off all settle the cosmetic travel (station.js stillFx).
   const stillFx = typeof o.stillFx === 'function' ? o.stillFx : () => reduced;
   const budget = createRenderBudget(navigator, devicePixelRatio);
   let lastDraw = -Infinity;
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'default' });
-  renderer.setPixelRatio(budget.dpr(canvas.clientWidth, canvas.clientHeight));
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  // Neutral, not ACES: see room/scene.js. The cabinet is lit hotter than the room (hemisphere 2 plus three
-  // directionals), so more of it sat up in the ACES shoulder and the Candy variants lost the most of anything.
-  renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.8;
-  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(LENS_DEG, 16 / 9, 0.015, 60);
-  scene.add(new THREE.HemisphereLight(0xe3bdf9, 0x40213e, 2));
-  for (const [color, intensity, pos] of [[0xffd9ed, 3, [-3, 5, 4]], [0xb69cf4, 2, [3, 2, 2]], [0xff83c9, 3, [1, 4, -3]]]) {
-    const l = new THREE.DirectionalLight(color, intensity); l.position.set(...pos); scene.add(l);
+  const renderer = shared ? shared.renderer : new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'default' });
+  const scene = shared ? shared.scene : new THREE.Scene();
+  const camera = shared ? shared.camera : new THREE.PerspectiveCamera(LENS_DEG, 16 / 9, 0.015, 60);
+  if (!shared) {
+    renderer.setPixelRatio(budget.dpr(canvas.clientWidth, canvas.clientHeight));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.8;
+    scene.add(new THREE.HemisphereLight(0xe3bdf9, 0x40213e, 2));
+    for (const [color, intensity, pos] of [[0xffd9ed, 3, [-3, 5, 4]], [0xb69cf4, 2, [3, 2, 2]], [0xff83c9, 3, [1, 4, -3]]]) {
+      const l = new THREE.DirectionalLight(color, intensity); l.position.set(...pos); scene.add(l);
+    }
   }
   const owned = [];            // textures and materials made here, freed in dispose()
   let raf = 0, disposed = false, settle = null;
@@ -151,28 +160,53 @@ export async function createScene(o) {
     if (settle) settle();         // a rise, sink or spin cut short by dispose still resolves its promise
     canvas.removeEventListener('pointerdown', onDown); canvas.removeEventListener('pointermove', onMove);
     canvas.removeEventListener('pointerup', onUp); canvas.removeEventListener('pointercancel', cancelPull);
+    retainReels?.();
+    for(const [n,visible] of roomVisibility)n.visible=visible;
     customHandle?.dispose();
     disposeSpirals();            // the reel spirals' Loom tiles, and the page's field context with them
-    scene.traverse(n => {
-      if (n.geometry) n.geometry.dispose();
-      for (const m of [].concat(n.material || [])) { for (const k of Object.keys(m)) if (m[k] && m[k].isTexture) m[k].dispose(); m.dispose(); }
-    });
+    coinShower?.dispose();
+    if (shared) {
+      const oldMaterials = new Set([...borrowed.values()].flatMap(v => [].concat(v.material || [])));
+      const oldGeometry = new Set([...borrowed.values()].map(v => v.geometry));
+      const oldTextures = new Set([...oldMaterials].flatMap(m => Object.values(m).filter(v => v?.isTexture)));
+      const disposeNode = n => {
+        if (n.geometry && !oldGeometry.has(n.geometry)) n.geometry.dispose();
+        for (const m of [].concat(n.material || [])) if (!oldMaterials.has(m)) {
+          for (const t of Object.values(m)) if (t?.isTexture && !oldTextures.has(t)) t.dispose();
+          m.dispose();
+        }
+      };
+      const added = [];
+      rig?.traverse(n => { disposeNode(n); if (!borrowed.has(n)) added.push(n); });
+      for (const n of added) n.removeFromParent();
+      for (const n of extras) { n.traverse(disposeNode); n.removeFromParent(); }
+      for (const [n,v] of borrowed) { n.material=v.material; n.geometry=v.geometry; n.position.copy(v.position); n.rotation.copy(v.rotation); n.scale.copy(v.scale); n.visible=v.visible; }
+      rig?.updateMatrixWorld(true);
+      shared.fixture.userData.slotPlaying = false;
+      releaseView?.();
+    } else {
+      scene.traverse(n => {
+        if (n.geometry) n.geometry.dispose();
+        for (const m of [].concat(n.material || [])) { for (const k of Object.keys(m)) if (m[k]?.isTexture) m[k].dispose(); m.dispose(); }
+      });
+      renderer.dispose(); renderer.forceContextLoss();
+    }
     owned.forEach(x => x.dispose());
-    renderer.dispose(); renderer.forceContextLoss();
   }
 
   let customHandle = null;
   let gltf, atlas = null;
   try {
     [gltf, atlas] = await Promise.all([
-      new GLTFLoader().loadAsync(asset('./assets/slot.glb')),
+      shared ? Promise.resolve({ scene:shared.fixture.children[0] }) : new GLTFLoader().loadAsync(asset('./assets/slot.glb')),
       new THREE.TextureLoader().loadAsync(asset('./assets/emi-faces-slot.png')).catch(() => null),
     ]);
   } catch (e) { dispose(); throw e; }
-  const rig = gltf.scene;
-  const coinShower = createCoinShower(rig);
+  rig = gltf.scene;
+  coinShower = createCoinShower(rig);
   let coinTick = performance.now();
-  scene.add(rig);
+  if (!shared) scene.add(rig);
+  else shared.fixture.userData.slotPlaying = true;
   const recoloured = applyPalette(rig, o.palette);   // a room variant's cabinet colours, before any other swap
   owned.push(...recoloured);
   const get = name => rig.getObjectByName(name) || null;
@@ -181,9 +215,9 @@ export async function createScene(o) {
   const absent = OPTIONAL.filter(n => !get(n));
   if (absent.length) console.warn(`[slot] glb lacks optional nodes, degrading: ${absent.join(', ')}`);
 
-  customHandle = await attachSlotCustomHandle({rig,loader:new GLTFLoader().setMeshoptDecoder(MeshoptDecoder),base:asset('../../room/assets/'),style:slotHandleStyle(o.variant)}).catch(()=>null);
+  if (!shared) customHandle = await attachSlotCustomHandle({rig,loader:new GLTFLoader().setMeshoptDecoder(MeshoptDecoder),base:asset('../../room/assets/'),style:slotHandleStyle(o.variant)}).catch(()=>null);
   const cabinet = get('cabinet'), lever = get('lever'), rigRest = rig.position.clone();
-  const reels = [1, 2, 3].map(i => get(`reel_${i}`)), restX = reels.map(r => r.rotation.x);
+  const reels = [1, 2, 3].map(i => get(`reel_${i}`)), restX = reels.map(() => 0), reelAngles = [0,0,0];
   const freezers = [1, 2, 3].map(i => get(`freeze_${i}`));
   freezers.forEach(f => f && f.material && (f.material = f.material.clone(), f.userData.restY = f.position.y));
   const bulbs = [];
@@ -192,7 +226,7 @@ export async function createScene(o) {
   // Owner, 2026-09-16: the chase bulbs read half the size they should from a seat. Scaled here and not in the
   // glb (section 9.6 asks nothing of the model), about their own centres, so the rail's spacing is untouched -
   // the beads simply grow into the gaps between them.
-  const BULB_SCALE = 1.5;
+  const BULB_SCALE = 1;
   bulbs.forEach((b, i) => {
     b.scale.multiplyScalar(BULB_SCALE);
     b.material = new THREE.MeshPhysicalMaterial({ color: PALETTES.idle[i % 5], emissive: PALETTES.idle[i % 5],
@@ -222,10 +256,18 @@ export async function createScene(o) {
   for (const name of ['screen_jackpot', 'screen_status', 'marquee']) {
     const mesh = get(name);
     if (!mesh || !mesh.isMesh) continue;
-    const c = makeCanvas(1024, 128), t = canvasTexture(c);
+    const c = makeCanvas(name === 'screen_jackpot' ? 512 : 1024, 128), t = canvasTexture(c);
     mesh.material = new THREE.MeshStandardMaterial({ map: t, emissiveMap: t, emissive: 0xffffff, emissiveIntensity: 0.45, roughness: 0.6 });
     owned.push(t);
     screens[name] = { c, t, mesh, text: null };
+  }
+
+  const spinFace=get('spin_button_face');
+  if(shared && spinFace)spinFace.visible=false;
+  if(!shared && spinFace?.isMesh){
+    const c=makeCanvas(512,160),g=c.getContext('2d');
+    g.fillStyle='#f2b5dc';g.fillRect(0,0,512,160);g.fillStyle='#32143e';g.textAlign='center';g.textBaseline='middle';g.font='700 70px Segoe UI, sans-serif';g.fillText(o.spinLabel || 'Spin',256,80,470);
+    const t=canvasTexture(c);owned.push(t);spinFace.material=new THREE.MeshBasicMaterial({map:t});
   }
 
   // THE MARQUEE BOARD: the live message (null = the cabinet name) and the frame it was posted on.
@@ -250,11 +292,9 @@ export async function createScene(o) {
     return age < rise ? ease(age / rise) : 1 - clamp((age - rise) / FEEL_ALMOST.SNAP_MS);
   }
   const reelCanvas = [], reelTex = [];
-  // THE CELL IS WIDE NOW (owner, 2026-09-16, the T cabinet): CELL.hh*2 texels run along the drum's
-  // CIRCUMFERENCE (canvas x, one cell per strip step) and CELL.hw*2 across its WIDTH (canvas y). The drum
-  // got 1.71x wider in the glb, so the canvas gets the same 1.75x across and the texels stay square -
-  // widening the drum without widening the canvas would simply have stretched every picture.
-  const CW = CELL.hh * 2, CH = CELL.hw * 2;
+  // Canvas X follows the strip travel; canvas Y spans the physical reel width.
+  // The authored shallow arc exposes 1.4 cells, with UV travel driven by the same spin angle.
+  let cell={...CELL,hw:CELL.hw*initialStretchX/initialStretch}, CW=cell.hh*2, CH=cell.hw*2;
   const angle = (k, n) => ((k + 0.5) / n - 0.5) * Math.PI * 2;
   function paint(t) {
     for (let r = 0; r < 3; r++) {
@@ -265,20 +305,20 @@ export async function createScene(o) {
         // THE GLYPH HIT (shared/hypno/callout.js timings): the landed cell pops 6% inside its own cell and takes a
         // rim, reel order, HIGHLIGHT_GAP_MS apart. Reduced motion takes the lit rim and no pop (Law VI).
         const hit = j === stopsNow[r] ? hitGlow(r, t) : 0;
-        if (hit > 0 && !reduced) { ctx.beginPath(); ctx.rect(-CELL.hw, -CELL.hh, CH, CW); ctx.clip(); ctx.scale(1 + 0.06 * hit, 1 + 0.06 * hit); }
+        if (hit > 0 && !reduced) { ctx.beginPath(); ctx.rect(-cell.hw, -cell.hh, CH, CW); ctx.clip(); ctx.scale(1 + 0.06 * hit, 1 + 0.06 * hit); }
         // One bad drawable (a broken or tainted GIF) paints the fallback tile, never the whole reel.
-        try { ctx.save(); drawSymbol(ctx, strips[r][j], t, look); } catch { ctx.restore(); ctx.save(); drawSymbol(ctx, strips[r][j], t, { reduced: look.reduced, face: look.face }); }
+        try { ctx.save(); drawSymbol(ctx, strips[r][j], t, {...look,cover:shared&&canvas.clientHeight>canvas.clientWidth},cell); } catch { ctx.restore(); ctx.save(); drawSymbol(ctx, strips[r][j], t, { reduced: look.reduced, face: look.face },cell); }
         ctx.restore();
-        const glaze = ctx.createLinearGradient(-CELL.hw, 0, CELL.hw, 0);
+        const glaze = ctx.createLinearGradient(-cell.hw, 0, cell.hw, 0);
         glaze.addColorStop(0, '#07040f99'); glaze.addColorStop(0.12, '#ffffff08'); glaze.addColorStop(0.5, '#ffffff00');
         glaze.addColorStop(0.88, '#ffffff08'); glaze.addColorStop(1, '#07040f99');
-        ctx.fillStyle = glaze; ctx.fillRect(-CELL.hw, -CELL.hh, CH, CW);
-        ctx.strokeStyle = '#e8bbd526'; ctx.lineWidth = 1; ctx.strokeRect(-CELL.hw + 12, -CELL.hh + 12, CH - 24, CW - 24);
-        if (hit > 0) { ctx.strokeStyle = `rgba(255,214,120,${(0.9 * hit).toFixed(3)})`; ctx.lineWidth = 12; ctx.strokeRect(-CELL.hw + 12, -CELL.hh + 12, CH - 24, CW - 24); }
+        ctx.fillStyle = glaze; ctx.fillRect(-cell.hw, -cell.hh, CH, CW);
+        ctx.strokeStyle = '#e8bbd526'; ctx.lineWidth = 1; ctx.strokeRect(-cell.hw + 12, -cell.hh + 12, CH - 24, CW - 24);
+        if (hit > 0) { ctx.strokeStyle = `rgba(255,214,120,${(0.9 * hit).toFixed(3)})`; ctx.lineWidth = 12; ctx.strokeRect(-cell.hw + 12, -cell.hh + 12, CH - 24, CW - 24); }
         // A2: the cell one step off the payline ghosts gold. The reel window shows about half of each
         // neighbour (drum r 0.43, 13 cells, window 0.39 tall), so the tell reads without moving a stop.
         const gh = ghost && ghost.r === r && ghost.j === j ? ghostAmt(t) : 0;
-        if (gh > 0) { ctx.fillStyle = `rgba(255,194,58,${(0.62 * gh).toFixed(3)})`; ctx.fillRect(-CELL.hw, -CELL.hh, CH, CW); }
+        if (gh > 0) { ctx.fillStyle = `rgba(255,194,58,${(0.62 * gh).toFixed(3)})`; ctx.fillRect(-cell.hw, -cell.hh, CH, CW); }
         ctx.restore();
       }
       if (n) reelTex[r].needsUpdate = true;
@@ -288,17 +328,31 @@ export async function createScene(o) {
   function setStrips(next) {
     strips = [0, 1, 2].map(r => (next && Array.isArray(next[r]) ? next[r] : []));
     for (let r = 0; r < 3; r++) {
-      if (reelTex[r]) reelTex[r].dispose();
+      if (reelTex[r]) { reelTex[r].dispose(); reels[r].material.dispose(); }
       reelCanvas[r] = makeCanvas(Math.max(1, strips[r].length) * CW, CH);
       reelTex[r] = canvasTexture(reelCanvas[r]);
+      reelTex[r].wrapS = THREE.RepeatWrapping;
+      reelTex[r].repeat.x = stripTransform(0, strips[r].length).repeat;
       reels[r].material = new THREE.MeshBasicMaterial({ map: reelTex[r] });
     }
     owned.push(...reelTex);
     paint(performance.now());
   }
   setStrips([]);
+  // Keep the final dealt picture on the very same room mesh after standing up.
+  // The copied canvas owns no media element and replaces only this cabinet's map image.
+  if(shared) retainReels=()=>{
+    for(let i=0;i<3;i++){
+      const original=borrowed.get(reels[i])?.material, map=original?.map, source=reelCanvas[i];
+      if(!map || !source)continue;
+      const copy=makeCanvas(source.width,source.height);copy.getContext('2d').drawImage(source,0,0);
+      map.image=copy;map.wrapS=THREE.RepeatWrapping;
+      const uv=stripTransform(reelAngles[i],strips[i].length);map.repeat.x=uv.repeat;map.offset.x=uv.offset;
+      map.needsUpdate=true;
+    }
+  };
   function setStops(stops) {
-    stops.forEach((k, r) => { stopsNow[r] = k; reels[r].rotation.x = restX[r] + angle(k, strips[r].length || 13); });
+    stops.forEach((k, r) => { stopsNow[r] = k; reelAngles[r] = restX[r] + angle(k, strips[r].length || 13); });
   }
 
   // Framing: from cam_seat/cam_target and live bounds, at the rest pose. The marquee is in the play box
@@ -417,6 +471,14 @@ export async function createScene(o) {
   const aim = (pos, lookAt) => { camera.position.copy(pos); camera.lookAt(lookAt); };
   function resize() {
     const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
+    if (shared) {
+      const stretch=shared.fixture.userData.slotStretch||1,nextWidth=CELL.hw*(shared.fixture.userData.slotStretchX||1)/stretch;
+      if(Math.abs(nextWidth-cell.hw)>.01){cell={...CELL,hw:nextWidth};CW=cell.hh*2;CH=cell.hw*2;setStrips(strips);}
+      const look = get('cam_target').getWorldPosition(new THREE.Vector3());
+      const forward = new THREE.Vector3(0,0,1).transformDirection(rig.matrixWorld);
+      poses = { play:{pos:camera.position.clone(),look,dist:camera.position.distanceTo(look),right:new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),forward)}, band:null, closeSeat:false, drop:0 };
+      return;
+    }
     renderer.setPixelRatio(budget.dpr(w, h));
     renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
     poses = frame(camera.aspect, w, h);
@@ -447,7 +509,7 @@ export async function createScene(o) {
     m.position.copy(centre).addScaledVector(dir, size.z * 0.5 + 0.25);
     m.lookAt(m.position.clone().sub(dir));
     m.renderOrder = -1; m.visible = false;
-    scene.add(m);
+    scene.add(m); extras.push(m);
     return m;
   }
   const cellRad = i => TAU / (strips[i].length || 13);
@@ -459,7 +521,7 @@ export async function createScene(o) {
   const spawn = get('payout_spawn');
   if (spawn) {
     const geo = new THREE.OctahedronGeometry(0.012), mat = new THREE.MeshBasicMaterial({ color: 0xffd7a6 });
-    for (let i = 0; i < 7; i++) { const m = new THREE.Mesh(geo, mat); m.visible = false; scene.add(m); sparks.push(m); }
+    for (let i = 0; i < 7; i++) { const m = new THREE.Mesh(geo, mat); m.visible = false; scene.add(m); extras.push(m); sparks.push(m); }
   }
   const emi = get('emi_topper'), emiRest = emi && { p: emi.position.clone(), s: emi.scale.clone(), r: emi.rotation.clone() };
   const tmp = new THREE.Vector3(), nextColor = new THREE.Color(), GOLD = new THREE.Color(0xffc23a);
@@ -471,7 +533,7 @@ export async function createScene(o) {
    * perch is simply a position in her own space. Nothing is asked of the glb (section 9.6). */
   const stage = get('emi_stage'), emiHost = emi && (emi.parent || rig);
   let shelf = null, perch = null, emiSpan = null;
-  if (emi && stage && emiHost) {
+  if (!shared && emi && stage && emiHost) {
     const span = new THREE.Box3().setFromObject(stage).getSize(new THREE.Vector3());
     emiSpan = new THREE.Box3().setFromObject(emi).getSize(new THREE.Vector3()).multiplyScalar(PERCH_SCALE);
     perch = new THREE.Vector3(SHELF.x, SHELF.top, SHELF.z);
@@ -513,8 +575,9 @@ export async function createScene(o) {
 
   function screen(name, text) {
     const s = screens[name];
-    if (!s || s.text === text) return;
-    s.text = text; paintDisplay(s.c.getContext('2d'), s.c.width, s.c.height, name === 'marquee', text); s.t.needsUpdate = true;
+    const aspect=1;
+    if (!s || (s.text === text&&s.aspect===aspect)) return;
+    s.text = text;s.aspect=aspect; paintDisplay(s.c.getContext('2d'), s.c.width, s.c.height, name === 'marquee', text,aspect); s.t.needsUpdate = true;
   }
   function setFace(name) {
     faceName = FACES[name] !== undefined ? name : 'idle0_0';
@@ -581,6 +644,8 @@ export async function createScene(o) {
   }
 
   function update(t) {
+    const reduced = !!o.reduced || stillFx();
+    for(const n of roomVisibility.keys())n.visible=false;
     coinShower.update((t-coinTick)/1000,stillFx()); coinTick=t;
     if (tl) {
       const dt = t - tl.start;
@@ -629,7 +694,7 @@ export async function createScene(o) {
           x = reduced ? home : target + (1 - thud(k)) * 0.035;
           if (k < 1) all = false;
         } else all = false;
-        reels[i].rotation.x = restX[i] + x;
+        reelAngles[i] = restX[i] + x;
       }
       if (all && dt >= wholeMs) settleSpin();   // a held column never shortens the pace
     } else if (pull) lever.rotation.x = PULL_MAX * pull.amount;
@@ -641,14 +706,14 @@ export async function createScene(o) {
     // Leaving it eases home over SETTLE_MS, never a thud: entering or leaving attract is not a party (Brake 1).
     if (!spin && (attract || attractOut)) {
       const q = attractOut ? clamp((t - attractOut.start) / ATTRACT.SETTLE_MS) : 0;
-      for (let i = 0; i < 3; i++) reels[i].rotation.x = restAngle(i) + (attract ? attractRad(i, t - attract.start) : attractOut.from[i] * (1 - ease(q)));
+      for (let i = 0; i < 3; i++) reelAngles[i] = restAngle(i) + (attract ? attractRad(i, t - attract.start) : attractOut.from[i] * (1 - ease(q)));
       if (attractOut && q >= 1) attractOut = null;
     }
     // A5 THE EMI LAND-WIGGLE: a cell that landed EMI shrugs once after its own reel's thud and comes back to
     // the same stop. It rides after the thud, so no other reel waits on it (Law X). Reduced motion: nothing.
     if (!reduced) for (let i = 0; i < 3; i++) {
       const w = wiggleCells(t - wiggleAt[i]);
-      if (w) reels[i].rotation.x = (spin ? reels[i].rotation.x : restAngle(i)) + w * cellRad(i);
+      if (w) reelAngles[i] = (spin ? reelAngles[i] : restAngle(i)) + w * cellRad(i);
     }
 
     // The payline reveal lifts (a win) or dims (nothing) for REVEAL_MS; THE THUD flashes each reel 2.2 -> 1.
@@ -696,6 +761,7 @@ export async function createScene(o) {
     if (emi) {
       const k = perchAt(t);
       emi.position.copy(emiRest.p); emi.scale.copy(emiRest.s); emi.rotation.copy(emiRest.r);
+      if(shared){emi.scale.y*=initialStretch/(shared.fixture.userData.slotStretch||1);emi.scale.x*=initialStretchX/(shared.fixture.userData.slotStretchX||1);}
       if (k > 0) {
         emi.position.lerp(perch, k);
         if (k < 1 && !reduced) emi.position.y += PERCH_HOP * Math.sin(Math.PI * k);   // the little jump across
@@ -756,8 +822,9 @@ export async function createScene(o) {
     // THE SHIVER: the whole cabinet, +-4 px across the screen, no colour change. Reduced motion plays nothing.
     const px = reduced ? 0 : shiverPx(t - shiverAt);
     if (poses && phase === 'play') {
-      const wpp = (2 * poses.play.dist * Math.tan(THREE.MathUtils.degToRad(LENS_DEG) / 2)) / (canvas.clientHeight || 1);
-      rig.position.x = rigRest.x + poses.play.right.x * px * wpp; rig.position.z = rigRest.z + poses.play.right.z * px * wpp;
+      const wpp = (2 * poses.play.dist * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) / (canvas.clientHeight || 1);
+      const localRight = shared ? poses.play.right.clone().transformDirection(rig.parent.matrixWorld.clone().invert()) : poses.play.right;
+      rig.position.x = rigRest.x + localRight.x * px * wpp; rig.position.z = rigRest.z + localRight.z * px * wpp;
     }
     if (o.payline) {   // A6: the winning row is framed for the rollup, then THE GLOW goes out over 480 ms
       const lit = phase === 'play' ? paylineGlow(t - paylineAt, paylineHold, paylinePulseN) : 0;
@@ -781,6 +848,26 @@ export async function createScene(o) {
       hazeTick = t;
     }
     if (ghost && t - ghost.at >= FEEL_ALMOST.TELL_MS) ghost = null;
+    if(shared) {
+      const windowBox=screenBox(glass);
+      if(windowBox && o.topRow){
+        const width=Math.min(canvas.clientWidth-12,windowBox.width+20);
+        o.topRow.style.left=`${Math.max(6,windowBox.left+windowBox.width/2-width/2)}px`;
+        o.topRow.style.top=`${Math.max(6,windowBox.top-31)}px`;
+        o.topRow.style.width=`${width}px`;
+      }
+      if(o.freezeLabels)for(let i=0;i<3;i++){
+        const b=screenBox(freezers[i]),label=o.freezeLabels[i];
+        if(b && label){label.style.left=`${b.left+b.width/2}px`;label.style.top=`${Math.min(canvas.clientHeight-122,b.top+b.height+1)}px`;label.style.width=`${Math.max(64,Math.min(90,b.width+8))}px`;}
+      }
+      const buttonBox=screenBox(get('spin_button'));
+      if(buttonBox && o.spinControl){
+        o.spinControl.style.left=`${buttonBox.left+buttonBox.width/2}px`;
+        const freezeBottom=Math.max(...(o.freezeLabels||[]).map(n=>parseFloat(n.style.top)||0))+26;
+        o.spinControl.style.top=`${Math.min(canvas.clientHeight-94,Math.max(freezeBottom+8,buttonBox.top+buttonBox.height/2-22))}px`;
+        o.spinControl.style.width=`${Math.max(110,Math.min(180,buttonBox.width+12))}px`;
+      }
+    }
     if (o.hint) {
       o.hint.hidden = phase !== 'play' || !!spin;
       if (!o.hint.hidden) {
@@ -788,8 +875,9 @@ export async function createScene(o) {
         o.hint.style.left = `${(p.x + 1) * canvas.clientWidth / 2}px`; o.hint.style.top = `${(1 - p.y) * canvas.clientHeight / 2 - 12}px`;
       }
     }
+    for (let i=0;i<3;i++) if(reelTex[i]) reelTex[i].offset.x=stripTransform(reelAngles[i],strips[i].length).offset;
     const gap = 1000 / (budget.mobile ? 30 : 60);
-    if (!document.hidden && t - lastDraw >= gap - 1) {
+    if (!shared && !document.hidden && t - lastDraw >= gap - 1) {
       renderer.render(scene, camera); lastDraw = t;
     }
   }
@@ -826,14 +914,16 @@ export async function createScene(o) {
     const r = canvas.getBoundingClientRect();
     pointer.set((e.clientX - r.left) / r.width * 2 - 1, 1 - (e.clientY - r.top) / r.height * 2);
     ray.setFromCamera(pointer, camera);
-    const targets = [lever, ...freezers.filter(Boolean)];
+    const spinButton=get('spin_button');
+    const targets = [lever, spinButton, ...freezers].filter(Boolean);
     let ob = ray.intersectObjects(targets, true)[0]?.object;
     while (ob && !targets.includes(ob)) ob = ob.parent;
     const b = leverRect(), pad = 18;
     if (ob === lever || (!ob && e.clientX >= b.left - pad && e.clientX <= b.right + pad && e.clientY >= b.top - pad && e.clientY <= b.bottom + pad)) {
       e.preventDefault(); pullBack = null; lean = null; pull = { id: e.pointerId, y: e.clientY, amount: 0 };
       canvas.setPointerCapture(e.pointerId); canvas.style.cursor = 'grabbing';
-    } else if (ob) o.onFreeze(freezers.indexOf(ob));
+    } else if (ob === spinButton) { e.preventDefault(); o.onLever(); }
+    else if (ob) o.onFreeze(freezers.indexOf(ob));
   }
   function onMove(e) { if (pull && pull.id === e.pointerId) { e.preventDefault(); pull.amount = clamp((e.clientY - pull.y) / Math.min(120, canvas.clientHeight * 0.18)); } }
   function onUp(e) { if (!pull || pull.id !== e.pointerId) return; const commit = pull.amount >= PULL_COMMIT; cancelPull(); if (commit) o.onLever(); }
@@ -841,10 +931,11 @@ export async function createScene(o) {
   canvas.addEventListener('pointerup', onUp); canvas.addEventListener('pointercancel', cancelPull);
 
   resize();
-  rig.position.y = -poses.drop;
-  aim(poses.arrive.pos, poses.arrive.look);
+  if (!shared) rig.position.y = -poses.drop;
+  if (!shared) aim(poses.arrive.pos, poses.arrive.look);
   setFace('idle0_0');
-  raf = requestAnimationFrame(loop);
+  if (shared) releaseView = shared.register({ update:() => { try { update(performance.now()); } catch(err) { if(look.gif){look={...look,gif:null};setStrips(strips);} else if(!frameFailed)console.error('[slot] shared frame failed',err); frameFailed=true; } } });
+  else raf = requestAnimationFrame(loop);
 
   return {
     missing: [],
@@ -933,6 +1024,7 @@ export async function createScene(o) {
     reveal(win) { revealAt = performance.now(); revealGain = win ? 0.45 : -0.25; },
     /** Rise over the dimmed room, then ease to the seat. Resolves when interactive. */
     rise() {
+      if (shared) { phase='play'; return Promise.resolve(); }
       if (reduced) { rig.position.y = 0; phase = 'play'; aim(poses.play.pos, poses.play.look); return Promise.resolve(); }
       phase = 'rise';
       return new Promise(done => { tl = { kind: 'rise', start: performance.now(), done }; });
@@ -940,6 +1032,7 @@ export async function createScene(o) {
     /** Slide down from wherever it is (Back at every phase). */
     sink() {
       cancelPull(); settleSpin();
+      if (shared) { phase='hidden'; return Promise.resolve(); }
       if (reduced || phase === 'hidden') { tl = null; phase = 'hidden'; return Promise.resolve(); }
       const prev = tl; phase = 'sink';
       return new Promise(done => { tl = { kind: 'sink', start: performance.now(), fromY: rig.position.y, done: () => { done(); if (prev && prev.done) prev.done(); } }; });
@@ -961,7 +1054,7 @@ export async function createScene(o) {
                  resolve, stopped: [false, false, false],
                  teaseMs: Math.max(0, (tease && tease.holdMs) || 0), teaseGold: !!(tease && tease.gold),
                  teaseDim: tease ? tease.dim !== false : true,
-                 from: reels.map((r, i) => r.rotation.x - restX[i]) };
+                 from: reelAngles.map((a, i) => a - restX[i]) };
         pull = null; pullBack = null; lean = null;
       });
     },
@@ -992,7 +1085,7 @@ export async function createScene(o) {
     /** For dev.html and CDP checks only. */
     debug() {
       const t = performance.now();
-      return { lever: lever.rotation.x, heat: heatNow(t), gold: heat.gold, party: party && t < party.end ? party.r.party : null,
+      return { shared:!!shared, responsiveStretch:shared?.fixture.userData.slotStretch||1, fov:camera.fov, hiddenRoomObjects:roomVisibility.size, rigId:rig.uuid, reelIds:reels.map(r=>r.uuid), reelAngles:reelAngles.slice(), reelOffsets:reels.map(r=>r.material?.map?.offset.x), lever: lever.rotation.x, heat: heatNow(t), gold: heat.gold, party: party && t < party.end ? party.r.party : null,
                tier: party && t < party.end ? party.r.tier : 0, face: faceName, shiverPx: reduced ? 0 : shiverPx(t - shiverAt),
                reelBrightness: reels.map(r => r.material && r.material.color ? r.material.color.r : 1), leaning: !!lean,
                tease: teasing, teaseMs: spin ? spin.teaseMs : 0, teaseGold: !!(spin && spin.teaseGold),
