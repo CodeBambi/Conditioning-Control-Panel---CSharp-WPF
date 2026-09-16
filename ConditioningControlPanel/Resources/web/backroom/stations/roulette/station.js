@@ -35,6 +35,18 @@
  * roulette.land.* on the frame the ball drops into the pocket. The SP chip owes
  * the tape's unplayed pays until each lands (Law I).
  *
+ * THE REWARD (CONTRACT 10.22). A paying landing is a party the house sizes, not
+ * a number that changes. On the fx frame THE BANK (bank.js on shared/win/bank.js)
+ * flies 3 to 7 tokens from the PAYING CHIPS on the mat to ctx.spReadout.target(),
+ * the chip ticking on each landing (Law X) and thudding on the last; THE CHIME
+ * LADDER climbs with the streak (shared/win/ladder.js); THE GLOW, THE SPARKLE
+ * BURST and, for a Full Wake once a sit-down, THE REVEAL land on the +N badge;
+ * and ctx.revealedWin tells the room, which drops the coin shower over the
+ * fixture (10.22.B). Every size comes from shared/win/plan.js and NOWHERE else:
+ * Law IX sizes it, Brake 2 merges it, Brake 3 wears it down over a sit-down,
+ * Brake 5 quiets it on a melt pocket, Law VI settles it. The station may always
+ * spend less than its plan; it may never spend more.
+ *
  * THE LANDING FLOW (shared/hypno/callout.js, owner 2026-09-15). On the frame
  * the ball drops (Law I): tunnel 0, the text and the chip thud at 0; on a
  * paying spin the pocket and the paying chips glow to HIGHLIGHT_MS, and at
@@ -48,11 +60,16 @@
 import { createLoomKit, createDeck, createMoments, strengthK, rouletteRunLevel, pocketColor, viewportRect } from '../../shared/hypno/index.js';
 import { createCallout, FX_DELAY_MS } from '../../shared/hypno/callout.js';
 import { kit as sound } from '../../shared/sound/kit.js';
+import { freshSit, sitPlan, afterParty } from '../../shared/win/plan.js';
+import { ladderPlan } from '../../shared/win/ladder.js';
+import { sparkBurst, warmGlow } from '../../../arcademy/shell/counterfx.js';
 import { MAX_CHIPS, MAX_SPINS, addChip, removeChip, chipsOf, chipTotal, checkLayout, adoptTape, owed, shownSp, cursorOf, readOutcome, classify, spinBody, mintId, ROWS } from './tape.js';
-import { FEEL, planRun, seedFor, landMoment, nextLaunchAt, landBeat, nearMisses, fxPlan, fxSymbols, createFxCooldowns, calloutFor } from './feel.js';
+import { FEEL, REWARD, planRun, seedFor, landMoment, nextLaunchAt, landBeat, nearMisses, fxPlan, fxSymbols, createFxCooldowns, calloutFor,
+  rewardTier, winSound, ladderRoot, meltedBy, tokenSpots } from './feel.js';
 import { FLICK, flickStart, flickMove, flickRelease } from './flick.js';
 import { createBowl } from './bowl.js';
 import { createMat } from './mat.js';
+import { createBank } from './bank.js';
 
 export const roomStage = true;
 
@@ -73,6 +90,12 @@ export async function mount(ctx) {
   };
   const prefersReduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const stillNow = () => ctx.motion === 'off' || ctx.motion === 'still' || !!ctx.reduced || prefersReduced || String(ctx.intensity || '').toLowerCase() === 'calm';
+  // THE REWARD keeps the two apart where the page's own effects do not (CONTRACT 10.22): `reduced` is reduced
+  // motion, the settled STATE with no travel at all; `still` is Calm or Motion off, which strips the decoration
+  // and KEEPS the value moving, because a number that just changes is a Law XII break at every motion level.
+  const reducedNow = () => !!ctx.reduced || prefersReduced;
+  // Brake 8. The room sends no lite flag today; the day it does, the bank flies 4 tokens and drops the sparks.
+  const liteNow = () => ctx.lite === true;
   const fullNow = () => ctx.intensity === 'full' && !ctx.reduced && !prefersReduced;
   const kNow = () => (prefersReduced ? 0.5 : strengthK(ctx));
   const gates = () => { const g = ctx.gates || {}; return { flash: g.flash !== false, subliminal: g.subliminal !== false, spiral: g.spiral !== false, brainDrain: g.brainDrain !== false, tunnel: g.tunnel !== false }; };
@@ -90,6 +113,7 @@ export async function mount(ctx) {
   let status = '', history = [], feelLog = [], cursorSent = null, pausedAt = 0, pausedMs = 0, size = { w: 0, h: 0, dpr: 1 };
   let cool = createFxCooldowns(), streak = 0;   // the host recipe's cooldowns and the paying spins in a row
   let callout = null, landTimer = 0, lastCallout = null;   // the landing flow: the callout and the delayed fx frame of a paying spin
+  let bank = null, sit = freshSit(), bankShown = null, tokenI = 0, gainTimer = 0, lastParty = null;   // THE REWARD: the bank, the sit-down ledger (Brake 3), what the chip says mid-flight
   let grab = null, thrown = null, lastThrow = null;   // THE THROW: the live flick, the speed it left for the next launch, the last one's log
   const $ = (sel) => el.querySelector(sel);
   const clock = () => (suspended ? pausedAt : performance.now()) - pausedMs;
@@ -143,7 +167,9 @@ export async function mount(ctx) {
     if (!line) line = resume ? t('br_roulette_resume', 'Your last spins are still on the table. {n} left to watch.', { n: left })
       : t('br_roulette_ready', 'Place your chips, pick the spins, then Spin.');
     if ($('.roul-status').textContent !== line) $('.roul-status').textContent = line;
-    if (!hook) $('.roul-sp').textContent = t('br_roulette_sp', '{n} SP', { n: fmt(shownSp(sp, tape)) });
+    // Law XII: while THE BANK is in the air the readout says what the tokens have delivered so far, not the
+    // Law I rule - the rule already counts a landed pay, and letting it repaint here is the jump the pass fixes.
+    if (!hook) $('.roul-sp').textContent = t('br_roulette_sp', '{n} SP', { n: fmt(bankShown == null ? shownSp(sp, tape) : bankShown) });
     const pips = el.querySelectorAll('.roul-pips i'), used = chipTotal(chips);
     pips.forEach((p, i) => p.classList.toggle('is-used', i < used));
     $('.roul-chips-label').textContent = stage ? t('br_roulette_place_bets', 'Place bets · {n}/{max}', { n: used, max: MAX_CHIPS }) : t('br_roulette_chips', 'Chips {n} of {max}', { n: used, max: MAX_CHIPS });
@@ -206,6 +232,8 @@ export async function mount(ctx) {
         <button class="roul-spin" type="button"><span></span><small></small></button>
       </div>
       <details class="roul-odds"><summary></summary><table></table><p></p><p class="roul-glyphs"></p></details>
+      <p class="roul-gain" role="status" hidden></p>
+      <div class="roul-tokens" aria-hidden="true"></div>
       <div class="roul-card" role="status" hidden><p></p><button class="roul-card-back" type="button"></button></div>
       <div class="roul-loading"></div>`;
     const set = (sel, text) => { root.querySelector(sel).textContent = text; };
@@ -242,7 +270,11 @@ export async function mount(ctx) {
   function ring(sel) { const b = el && $(sel); if (!b) return; b.classList.add('is-ringing'); setTimeout(() => b.classList.remove('is-ringing'), 400); }
 
   /** The kit's cue for a beat, on the same frame as the host recipe (Law X). The landing drops the ball first; a
-   *  miss is THE SETTLE (soft, never a fail), a near miss resolves quietly, a pay is a win by tier that only rises. */
+   *  miss is THE SETTLE (soft, never a fail) and a near miss resolves quietly. A PAY's own voice is not here any
+   *  more: the flat sound.play('win', { tier }) by band this used to hold was one note whatever the win, whatever
+   *  the streak and whatever the sit-down had already spent. THE REWARD (party()) plays it on the same frame, at
+   *  the rung the house allowed, with THE CHIME LADDER climbing over the count behind it. The drop and the chips
+   *  sliding in are still the landing's, and they stay. */
   function cue(name) {
     if (!alive || suspended) return;
     // THE THROW's voice: the wheel has no lever, the throw IS the lever. The press frame gets the spin-up
@@ -254,9 +286,9 @@ export async function mount(ctx) {
     else if (name === 'rattle') { sound.play('rattle'); if (cur && cur.plan) sound.play('riser', { ms: Math.min(2500, Math.max(800, cur.plan.restAt * 1000 - (clock() - cur.launchAt))) }); }
     else if (name === 'near') { sound.play('drop'); sound.play('almost'); }
     else if (name === 'land.miss') { sound.play('drop'); sound.play('settle'); }
-    else if (name === 'land.win') { sound.play('drop'); sound.play('win', { tier: 'mid' }); sound.play('chips', { n: 4, at: 0.2 }); }
-    else if (name === 'land.wake' || name === 'land.straight') { sound.play('drop'); sound.play('win', { tier: 'big' }); sound.play('chips', { n: 6, at: 0.3 }); }
-    else if (name === 'land.full') { sound.play('drop'); sound.play('win', { tier: 'hero' }); sound.play('chips', { n: 8, at: 0.4 }); }
+    else if (name === 'land.win') { sound.play('drop'); sound.play('chips', { n: 4, at: 0.2 }); }
+    else if (name === 'land.wake' || name === 'land.straight') { sound.play('drop'); sound.play('chips', { n: 6, at: 0.3 }); }
+    else if (name === 'land.full') { sound.play('drop'); sound.play('chips', { n: 8, at: 0.4 }); }
   }
   /** The host recipe (feel.FX_RECIPE): a beat fires its section 4 ids through ctx.fx, gated, cooled, never awaited (fx-ack is advisory). */
   function beat(name, { i = null, streak: run = 0, pocket = null } = {}) {
@@ -273,6 +305,129 @@ export async function mount(ctx) {
     }
     note('fx', { beat: name, fired, planned: plan.map((s) => s.fx) });
     return fired;
+  }
+
+  /* ----------------------------------------------------------- THE REWARD */
+  /** THE BANK's source: the middle of a paying chip's cell, in client px, measured fresh every frame.
+   *  TRAP: mat-3d.rectOf already returns CLIENT px (it projects the cell through the camera and adds the
+   *  canvas rect); the canvas mat's rectOf is canvas-local. Only the second one goes through viewportRect.
+   *  A spot with no cell falls back to the landed pocket on the wheel: value still leaves where it was won. */
+  function chipPoint(spot) {
+    const r = spot && mat && typeof mat.rectOf === 'function' ? mat.rectOf(spot) : null;
+    if (!r) return pocketPoint();
+    const b = stage ? r : viewportRect(cv, r.x, r.y, r.w, r.h);
+    return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+  }
+  /** The landed pocket on the wheel, client px. Both bowls hand pocketBox back canvas-local (bowl-3d projects
+   *  and adds no canvas offset), which is why the landing's own moment measures it exactly this way. */
+  function pocketPoint() {
+    if (!bowl || !cur) return null;
+    const box = bowl.pocketBox(cur.read.index), b = viewportRect(cv, box.x, box.y, box.w, box.h);
+    return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+  }
+  /** Where the value is kept: the room's SP chip (ctx.spReadout.target()), or this station's own when it shows one. */
+  function readoutPoint() {
+    const node = hook && typeof hook.target === 'function' ? hook.target() : (el && $('.roul-sp'));
+    const r = node && typeof node.getBoundingClientRect === 'function' ? node.getBoundingClientRect() : null;
+    return r && r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+  }
+  /** What the chip says while THE BANK is in the air; null hands it back to the room's Law I rule (CONTRACT 7.1). */
+  function paintSp(value) {
+    bankShown = value;
+    if (hook && typeof hook.set === 'function') { hook.set(value); return; }   // the room's chip: sync() has no SP to repaint
+    if (el) sync();
+  }
+  /**
+   * Settle THE BANK wherever it is (Law VI). `land` takes the whole settled state, mini-thud included - a new
+   * spin, reduced motion; Back, suspend and close leave quietly.
+   * TRAP: land() PINS the chip the moment the ball drops, 400 ms before the tokens leave. A Back or a suspend
+   * in that window has nothing in the air to skip, so the pin has to be let go by hand or the chip stays a
+   * whole pay short for the rest of the visit. The bank's own done event clears it when there IS a flight.
+   */
+  function settleBank({ land = false } = {}) {
+    if (bank) bank.skip({ land });
+    if (bankShown != null) paintSp(null);
+  }
+  /** Brake 9: the value is also text, and it stands for the WHOLE count - never gone 1.6 s into a 6 s climb. */
+  function gain(n, holdMs) {
+    const g = el && $('.roul-gain');
+    if (!g) return;
+    g.textContent = t('br_roulette_gain', '+{n} SP', { n: fmt(Math.max(0, Math.round(Number(n) || 0))) });
+    g.hidden = false; delete g.dataset.reveal;
+    clearTimeout(gainTimer);
+    gainTimer = setTimeout(() => { const b = el && $('.roul-gain'); if (b) { b.hidden = true; delete b.dataset.reveal; } }, Math.max(0, holdMs));
+  }
+  /** THE REVEAL: huge, over-rotated, one overshoot, 620 ms (house-book 2). The declared hero move, and the only
+   *  thing at this station allowed to be that big. plan.reveal is false under reduced motion, under Calm, while
+   *  melted and for every hero after the first of a sit-down, so this is never asked for twice in a visit: the
+   *  second Full Wake of a sit-down is a very good tier 3 (Law IX). */
+  function reveal(node) {
+    if (!node) return;
+    node.dataset.reveal = '';
+    if (typeof node.animate !== 'function') return;
+    try {
+      node.animate([{ transform: 'translateX(-50%) scale(.34) rotate(-14deg)' },
+        { transform: 'translateX(-50%) scale(1.16) rotate(5deg)', offset: 0.62 },
+        { transform: 'translateX(-50%) scale(1) rotate(0deg)' }],
+      { duration: REWARD.REVEAL_MS, easing: REWARD.REVEAL_EASE });
+    } catch (e) { /* a move never breaks a beat */ }
+  }
+
+  /**
+   * THE REWARD (CONTRACT 10.22), on the landing's own fx frame: the moment, the host beat, the callout, the
+   * tokens, the chime, the glow and the room's shower are ONE gesture on ONE frame (Law X).
+   *
+   * Every size is the plan's. The station asks shared/win for a rung (rewardTier: this table's callout size,
+   * raised by the pay) and shared/win/plan.js hands back what the house allows after Law IX, Brake 3's
+   * sit-down ledger, Brake 5's melt, Brake 8's lite board and Law VI. Nothing below re-derives a restraint;
+   * `plan.spent` sizes everything, never `plan.tier`, which is only the rung the ledger counts.
+   * -> the plan (for the log and the checks), or null on a miss.
+   */
+  function party(r, near) {
+    const tier = rewardTier(r, near);
+    if (tier <= 0) return null;                       // a miss, a near miss: the room is never told about those
+    const melted = meltedBy(r);                       // Brake 5: a landing on a melt pocket IS a focus state
+    const plan = sitPlan(tier, sit, { reduced: reducedNow(), still: stillNow(), lite: liteNow(), melted });
+    sit = afterParty(sit, plan);                      // counts the rung ASKED for, and a hero only when THE REVEAL fired
+    if (plan.spent <= 0) return plan;
+    cur.partyMs = plan.partyMs;                       // the next launch waits the party out (feel.nextLaunchAt)
+
+    // THE BANK (Law XII). plan.bank is 0 only under reduced motion, and the engine then takes the settled
+    // STATE with the cue - never a faster flight (Law VI).
+    const spots = tokenSpots(plan.bank > 0 ? plan.bank : 1, r.hits);
+    tokenI = 0;
+    const flew = bank ? bank.start({ n: spots.length, fromValue: cur.bankFrom, toValue: cur.bankTo,
+      from: (i) => chipPoint(spots[i]), to: readoutPoint, rollupMs: plan.partyMs, reduced: plan.bank === 0 }) : null;
+
+    // THE CHIME LADDER. The landing voice at the spent rung, then the climb across the same count the readout
+    // is doing behind it. A streak raises the root a semitone a spin (ladderRoot, cap 7); Brake 5 drops the
+    // whole thing an octave (plan.octave) and flattens the climb to that one note.
+    const root = ladderRoot(streak, melted);
+    sound.play('win', { tier: winSound(plan.spent), semis: root });
+    const steps = ladderPlan(plan.spent, plan.partyMs, melted).slice(1);
+    if (steps.length) sound.play('ladder', { plan: steps, semis: root });
+
+    // THE GLOW, THE SPARKLE BURST and THE REVEAL, on the +N badge: the one place this station names a pay.
+    // The sparks are the garnish and never the event - they only ever ride a rung the plan already called big.
+    const g = el && $('.roul-gain');
+    gain(r.pay, Math.max(REWARD.GAIN_MS, plan.partyMs + 600));
+    if (g && plan.glow > 0) warmGlow(g);
+    if (g && plan.sparkle > 0) sparkBurst(g, { count: plan.sparkle });
+    if (g && plan.reveal) reveal(g);
+
+    // 10.22.B: the room learns what the player has just learnt, once a result, never on a miss, never first
+    // (Law I). plan.shower is 0 for a small win and under Calm, lite and melt, and room/coin-shower.js clamps
+    // a tier up into 1..4 - so a 0 must SKIP the call, not be handed over. That guard is the station's.
+    if (plan.shower > 0 && typeof ctx.revealedWin === 'function') {
+      try { ctx.revealedWin(r.pay, plan.shower, t('br_roulette_gain', '+{n} SP', { n: fmt(r.pay) })); } catch (e) { /* noop */ }
+    }
+    // Law XIII: the pose the plan chose. The roulette has no EMI of its own over the felt yet, so she is
+    // decided and logged here rather than guessed at the day the room gives this table a face.
+    lastParty = { i: r.i, pay: r.pay, tier: plan.tier, spent: plan.spent, why: plan.why, bank: flew, tokens: plan.bank,
+      shower: plan.shower, ladder: plan.ladder, octave: plan.octave, sparkle: plan.sparkle, glow: plan.glow,
+      reveal: plan.reveal, emi: plan.emi, partyMs: plan.partyMs, melted, streak, at: Math.round(performance.now()) };
+    note('party', lastParty);
+    return plan;
   }
 
   /* ----------------------------------------------------------------- spin */
@@ -329,6 +484,7 @@ export async function mount(ctx) {
     const o = tape.outcomes[i], read = readOutcome(o, tape.bets, { rose: st.rose, wheel: st.wheel });
     if (read.index < 0) { note('skip', { pocket: read.pocket }); tape.played = i + 1; playTape(); return; }
     mat.clearAnims();
+    settleBank({ land: true });   // Law VI: a new spin takes the last one's bank to its settled state, thud included
     // THE THROW's speed is spent on the launch it bought; the spins after it leave on the house's own kick.
     const rotVel0 = Number.isFinite(thrown) ? thrown : FEEL.ROTOR_KICK; thrown = null;
     bowl.kick(rotVel0);
@@ -345,9 +501,15 @@ export async function mount(ctx) {
     sync();
   }
 
-  /** Law VI: whatever a landing still owed the desk (the delayed fx frame, the callout) is dropped now. */
+  /** Law VI: whatever a landing still owed the desk (the delayed fx frame, the callout, THE BANK still in the
+   *  air, the +N) is dropped now. The bank leaves QUIETLY - Back, suspend and close settle the readout on the
+   *  tape's own number and sound nothing; only a new spin takes the whole settled state with its mini-thud. */
   function dropLanding() {
     clearTimeout(landTimer); landTimer = 0;
+    clearTimeout(gainTimer); gainTimer = 0;
+    const g = el && $('.roul-gain');
+    if (g) { g.hidden = true; delete g.dataset.reveal; }
+    settleBank();
     if (callout) callout.cancel();
   }
   /** The moment, the host beat, the paying chips' flight and the callout of a paying spin: one frame, FX_DELAY_MS after the landing. */
@@ -363,8 +525,9 @@ export async function mount(ctx) {
     }
     if (list.length) mat.animate(list, now);
     if (co && callout) { callout.show(co.key, co.fallback, { tier: co.tier }); lastCallout = { key: co.key, tier: co.tier, i: r.i, at: Math.round(performance.now()) }; note('callout', lastCallout); }
+    const plan = party(r, near);   // THE REWARD, on this same frame: the tokens, the chime, the glow, the shower (Law X)
     note('land', { i: r.i, pocket: r.pocket, pay: r.pay, wake: r.wake, straight: r.straight, moment: id, page: m.page, fx: m.tokens.length, beat: hostBeat, near, streak, hostFx,
-      callout: co ? co.key : null, delayed: true });
+      callout: co ? co.key : null, delayed: true, spent: plan ? plan.spent : 0 });
   }
   /** The landing frame: tunnel off, the chips, the text, and Law I lets this spin's pay land. A paying spin glows first
    *  and fires its moment, beat and callout at FX_DELAY_MS (landFx); a miss plays its moment and vortex here. */
@@ -395,8 +558,15 @@ export async function mount(ctx) {
       const m = moments.play(id, { color: pocketColor(r.pocket, st.rose), from: viewportRect(cv, box.x, box.y, box.w, box.h), wake: r.wake });   // releases the run's holds
       note('land', { i: r.i, pocket: r.pocket, pay: r.pay, wake: r.wake, straight: r.straight, moment: id, page: m.page, fx: m.tokens.length, beat: hostBeat, near, streak, hostFx, glyph: glyphFx, callout: null, delayed: false });
     }
+    // Law XII, the law this station was breaking. The pay stops being owed the instant tape.played moves, so
+    // the Law I rule would repaint the chip a whole pay higher on this very frame - the number simply changing
+    // where it stood. The chip is PINNED to what it said before the landing and THE BANK carries it the rest of
+    // the way at the fx frame, ticking on each token (Law X). The chip's mini-thud goes with the last token,
+    // never with a number moving under it.
+    const before = shownSp(sp, tape);
     tape.played = r.i + 1;
-    if (hook) { hook.owe(reader); if (r.pay > 0 && typeof hook.thud === 'function') hook.thud(); }
+    if (r.pay > 0) { cur.bankFrom = before; cur.bankTo = shownSp(sp, tape); paintSp(before); }
+    if (hook) hook.owe(reader);
     const line = resultLine(r);
     history = [...history.slice(-4), `${r.pocket} ${r.pocket === 0 ? '' : spotName(r.color) + ' '}${r.pay > 0 ? '+' + fmt(r.pay) : '+0'}${r.wake ? ' ~' : ''}`.replace(/\s+/g, ' ')];
     status = line + '\n' + t('br_roulette_progress', 'Spin {i} of {n}', { i: r.i + 1, n: tape.outcomes.length });
@@ -462,7 +632,7 @@ export async function mount(ctx) {
       if (u.landed) land(now);
     }
     if (cur && cur.landed && cur.restAt == null && u.phase === 'rest') cur.restAt = now;
-    if (cur && cur.restAt != null && now >= nextLaunchAt(cur.launchAt, cur.restAt, { landMs: cur.landAt, win: cur.win })) {
+    if (cur && cur.restAt != null && now >= nextLaunchAt(cur.launchAt, cur.restAt, { landMs: cur.landAt, win: cur.win, partyMs: cur.partyMs || 0 })) {
       if (tape && tape.played < tape.outcomes.length) launch(tape.played, now);
       else { mat.clearAnims(); endTape(); }
     }
@@ -539,6 +709,9 @@ export async function mount(ctx) {
     if (alive) return;
     alive = true; suspended = false; phase = 'loading'; status = ''; why = null; history = []; feelLog = []; cur = null; resume = false; pausedMs = 0;
     grab = null; thrown = null; lastThrow = null;
+    // Brake 3: one ledger per SIT-DOWN. The first three wins of a rung get the fanfare, then it wears down;
+    // the hero plays once a visit. Standing up and sitting back down is a new sit-down, and that is the rule.
+    sit = freshSit(); bankShown = null; tokenI = 0; lastParty = null;
     const my = ++session;
     el = build(); ctx.root.append(el);
     cv = stage ? stage.canvas : $('.roul-stage'); g = stage ? null : cv.getContext('2d'); size = { w: 0, h: 0, dpr: 1 };
@@ -547,6 +720,14 @@ export async function mount(ctx) {
     for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) cv.addEventListener(ev, onRelease);
     moments = createMoments(ctx, { station: 'roulette' });
     callout = createCallout({ mount: el, lex: typeof ctx.lex === 'function' ? ctx.lex : undefined }); lastCallout = null;
+    // THE BANK (Law XII). Law X reads straight off the engine's events: a tick that is not the rollup's tail
+    // is a token landing, so it gets a bell; the mini-thud waits for `counting: false`, the end of the count.
+    bank = createBank({
+      layer: $('.roul-tokens'),
+      onTick: (value, tail) => { paintSp(value); if (!tail) { sound.play('token', { i: tokenI++ }); note('tick', { value, token: tokenI }); } },
+      onLand: (counting) => { if (counting) return; sound.play('token', { last: true }); if (hook && typeof hook.thud === 'function') hook.thud(); },
+      onDone: () => { paintSp(null); },
+    });
     kit = createLoomKit({ still: stillNow(), log: (m) => note('loom', { m }) });
     createDeck(ctx, { count: 4 }).then((d) => { if (my === session && alive) deck = d; else d.dispose(); }).catch(() => {});
     if (typeof ctx.onSp === 'function') unSp = ctx.onSp((v) => { if (Number.isFinite(Number(v)) && phase !== 'asking') { sp = Number(v); if (el) sync(); } });
@@ -591,11 +772,13 @@ export async function mount(ctx) {
     unSp = null; unSettings = null;
     // Law VI: Back drops every ceremony. What has landed is flushed; a spin still running stays unplayed.
     dropLanding();
+    if (bank) { bank.dispose(); bank = null; }
     if (callout) { callout.dispose(); callout = null; }
     if (moments) { moments.cancel(); moments.dispose(); }
     sound.stop('riser'); sound.stop('wheel');
     cool.reset(); streak = 0; note('fx', { beat: 'skip', fired: [], planned: [] });   // one-shots settle on the host; nothing new fires
     if (tape && tape.played > 0 && cursorSent !== tape.played) flushCursor();
+    bankShown = null;
     if (hook) { hook.owe(owedNow()); if (typeof hook.set === 'function') hook.set(null); }   // a plain number for the room
     if (unStage) { unStage(); unStage = null; }
     if (kit) kit.dispose();
@@ -639,6 +822,8 @@ export async function mount(ctx) {
       tape: tape && { id: tape.id, played: tape.played, n: tape.outcomes.length, bets: tape.bets, outcomes: tape.outcomes },
       cur: cur && { i: cur.i, landed: cur.landed, pocket: cur.read.pocket, wake: cur.read.wake, page: cur.page, win: !!cur.win, landAt: cur.landAt ?? null },
       callout: { last: lastCallout, pending: !!landTimer, ...(callout ? callout.debug() : { shown: [] }) },
+      reward: { last: lastParty, sit: { seen: [...sit.seen], heroes: sit.heroes }, bank: bank ? bank.debug() : null, shown: bankShown,
+        reduced: reducedNow(), lite: liteNow(), gain: el ? { text: $('.roul-gain').textContent, up: !$('.roul-gain').hidden } : null },
       bowl: bowl && bowl.debug(), mat: mat && { ...mat.debug(), rects: Object.fromEntries((st ? st.spots : []).map((s) => [s, mat.rectOf(s)])) },
       kit: kit && kit.debug(), moments: moments && moments.debug(), deck: deck && { keys: deck.keys }, log: feelLog.slice(), rows: ROWS,
       fx: { ...cool.debug(), streak },

@@ -75,6 +75,7 @@ Single-zero roulette for SP (CONTRACT.md sections 2-7 and 10.13, binding spec `h
 | Velvet wake | Full only (the `velvet_wake` page effect), 1.3 s settle |
 | Turret whirl | a wake spin: `kit.draw('whirl')` clipped to the dish at 0.85 x fade x k, `angle = rotor x 2.2`; the arms trail the rotor (`a = base - 1.1 u`); `spiral` gate off: velvet dish and a gold rim glow |
 | Chips | a lost chip spirals into the bowl; a win slides two chips in per winning spot; a `pulled_pair` (wake win) pulls two more out of the whirlpool |
+| THE BANK | `plan.bank` tokens leave the paying chips and arc to the SP chip over 560 ms each, 70 ms apart, the readout ticking per landing (THE REWARD below) |
 | Host (moments) | through `createMoments`: `fx-tunnel`, `fx.haze {hold}` at Full, `fx.loom_spiral {wake, hold, 0.65}`, `fx.wash` in the pocket colour (0.6 or 1), `fx.gif_from {from pocket, ms 3600}` |
 | Host (recipe) | `feel.FX_RECIPE`, fired through `ctx.fx` the way the slot fires section 4 ids (`beat()` in `station.js`), never awaited; on a landing the recipe fires first so the moment's wash and pocket GIF close the frame |
 
@@ -110,6 +111,49 @@ Single-zero roulette for SP (CONTRACT.md sections 2-7 and 10.13, binding spec `h
 - **Suspend** cancels the moments, resets the recipe's cooldowns, pauses the station clock and disposes the Loom kit and the deck (their keys still
   pick); resuming makes a new kit and replays the running spin's holds (the recipe fires nothing on a resume: its one-shots settled).
 
+## THE REWARD (CONTRACT 10.22)
+
+A paying landing is a party the house sizes, not a number that changes. Before this pass the station took only
+`ctx.spReadout.owe()`: a pay made the SP chip redraw where it stood, which is Law XII broken outright, and the
+win voice was one flat `sound.play('win', { tier })` by band whatever the win, the streak or the sit-down.
+
+Every SIZE comes from `shared/win/plan.js` and nowhere else. The station's own half is the bottom of `feel.js`
+(pure, `tests/reward.test.mjs`) and `bank.js` (the elements); `station.js` only plays what the plan bought.
+
+| Piece | Where | Rule here |
+|---|---|---|
+| The rung | `feel.rewardTier(read, near)` | `houseTier({ station: 'roulette', moment: landBeat(read, near), pay })`. The roulette has no numeric recipe: its rung IS its callout size (`CALLOUTS` - small 1, big 3, hero 4), RAISED by the pay (`tier.PAY_STEPS`), which is the only way this table reaches a bare 2. A miss and a near miss are 0; the room is never told about either. |
+| THE BANK | `bank.js` on `shared/win/bank.js` | `plan.bank` tokens (3-7, 4 on lite, 0 under reduced motion) leave the PAYING CHIPS on the mat, dealt round-robin by `feel.tokenSpots` so every chip that paid sends something, and arc to `ctx.spReadout.target()`. The chip ticks on each LANDING (Law X) and thuds on the last, after the count. `plan.partyMs` is the rollup. |
+| THE CHIME LADDER | `shared/win/ladder.js` | `sound.play('win', { tier: winSound(plan.spent), semis: ladderRoot(streak) })`, then `ladderPlan(plan.spent, plan.partyMs)` minus its landing note through `sound.play('ladder')`. A streak raises the root a semitone a spin, capped at 7. |
+| THE GLOW | `counterfx.warmGlow` | every paying rung, 480 ms, on the +N badge. Calm keeps it; a melt pocket and reduced motion do not. |
+| THE SPARKLE BURST | `counterfx.sparkBurst` | `plan.sparkle`: 7 sparks at a 3, 9 at the hero, never under Calm, lite, melt or reduced motion. |
+| THE REVEAL | `.roul-gain[data-reveal]` + a 620 ms `animate()` | `plan.reveal`: the first Full Wake of a sit-down. The second is a very good tier 3 (`why: 'capped'`). |
+| The room | `ctx.revealedWin(pay, plan.shower, '+N SP')` | 10.22.B. Once a result, never on a miss, never before the player knows (Law I). `plan.shower` is 0 for a small win and under Calm, lite and melt, and `room/coin-shower.js` clamps a tier up into 1-4 - so a 0 SKIPS the call. That guard is the station's. |
+| The +N | `.roul-gain`, `br_roulette_gain` | Brake 9: the value is text before it is anything else, and it stands for the whole count. |
+
+- **Brake 3** is `freshSit()` / `sitPlan()` / `afterParty()`, one ledger per SIT-DOWN (reset in `open()`, so standing
+  up and sitting back down is a new one). `seen` is per RUNG, not per station. `afterParty` counts a hero only when
+  THE REVEAL actually fired, so a Full Wake under Calm does not burn the once-a-visit hero.
+- **Brake 5** at this table is THE POCKET GLYPHS: a landing on a `drop` pocket (`feel.meltedBy`, nine of the
+  thirty-seven) fires `fx.melt` on that very frame, so the beat the melt arrives on is a melted beat. The rung
+  drops to 1, the ladder flattens to one note an octave down, the shower, sparkle, glow and reveal all go - and
+  the tokens still fly. A melted win is quiet, never invisible.
+- **Law VI.** `reduced` and `still` are passed to the plan SEPARATELY. `reduced` is reduced motion: the settled
+  state, `bank: 0`, `partyMs: 0`, and `bank.js` hands that straight to the engine, which takes the state and the
+  cue instead of a faster flight. `still` is Calm or Motion off: the decoration goes and the value still moves.
+  Back, suspend and close settle THE BANK QUIETLY (`settleBank()`); only a new spin takes the mini-thud with it.
+- **Law X.** The whole party is ONE frame - `landFx` at `FX_DELAY_MS`, where the moment, the host beat, the chips
+  and the callout already land together. `feel.nextLaunchAt` takes `partyMs` so the next spin waits the party out:
+  a 6 s hero climb is never cut off by a launch, and a `partyMs` of 0 leaves the old hold exactly as it was.
+- **The chip is PINNED on the landing frame.** `tape.played` moves there, so the Law I rule would repaint the chip
+  a whole pay higher 400 ms before a token has left. `land()` holds it at what it said and THE BANK carries it the
+  rest of the way. A Back or a suspend inside that 400 ms window lets the pin go by hand (`settleBank`).
+- **Law XIII.** `plan.emi` is decided and logged (`debug().reward.last.emi`). The roulette has no EMI of its own
+  over the felt yet, so nothing plays it; the pose is right the day the room gives this table a face.
+- **Not spent here.** `mergePlans` (Brake 2 across two parties) is unused: the launch hold means two parties can
+  never share a frame, and THE BANK's own `merge()` covers a pay landing inside a flight. `lite` reads `ctx.lite`,
+  which the room does not send today.
+
 ## Lexicon (`br_roulette_*`, English fallbacks in the page, the same text in `en.json`; `smoke/lexicon.test.mjs` keeps them equal)
 
 `br_roulette_back`, `br_roulette_stage`, `br_roulette_loading`, `br_roulette_closed`, `br_roulette_offline`,
@@ -123,7 +167,8 @@ Single-zero roulette for SP (CONTRACT.md sections 2-7 and 10.13, binding spec `h
 `br_roulette_why_covers_all`, `br_roulette_why_stake_cap`, `br_roulette_why_insufficient`, `br_roulette_why_too_fast`,
 `br_roulette_why_bad_layout`, `br_roulette_why_bad_request`, `br_roulette_odds`, `br_roulette_odds_straight`,
 `br_roulette_odds_row`, `br_roulette_odds_color`, `br_roulette_odds_pays`, `br_roulette_odds_woken`, `br_roulette_odds_note`,
-`br_roulette_glyphs_note` (the four marks, under the Odds panel; the one roulette row carried in all nine locales).
+`br_roulette_glyphs_note` (the four marks, under the Odds panel; the one roulette row carried in all nine locales),
+`br_roulette_gain` (THE REWARD's +N badge, 10.22).
 
 ## Checks
 
