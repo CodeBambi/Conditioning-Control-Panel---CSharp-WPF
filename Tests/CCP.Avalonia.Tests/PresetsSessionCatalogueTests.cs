@@ -114,6 +114,138 @@ public sealed class PresetsSessionCatalogueTests
     }
 
     [Fact]
+    public async Task MountedCatalogueRefreshesRackAndDetailsWithoutReloadingOrLosingFocus()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            var previousLanguage = LocalizationManager.Instance.CurrentLanguage;
+            var root = Path.Combine(Path.GetTempPath(), "ccp-mounted-language-tests-" + Guid.NewGuid().ToString("N"));
+            var builtInFolder = Path.Combine(root, "built-in");
+            var customFolder = Path.Combine(root, "custom");
+            Window? host = null;
+            Window? reattachedHost = null;
+            try
+            {
+                EnsureAvalonia();
+                Directory.CreateDirectory(builtInFolder);
+                Directory.CreateDirectory(customFolder);
+                var service = new SessionFileService(customFolder, builtInFolder);
+                service.ExportSession(Session.MorningDrift,
+                    Path.Combine(builtInFolder, "morning_drift.session.json"));
+                service.ExportSession(new SessionDefinition
+                {
+                    Id = "live_language_custom",
+                    Name = "Raw Custom Name",
+                    Icon = "🧩",
+                    Description = "Raw custom description\nSecond line",
+                    DurationMinutes = 37,
+                    Difficulty = SessionDifficulty.Hard,
+                    BonusXP = 777,
+                    IsAvailable = true
+                }, Path.Combine(customFolder, "live_language_custom.session.json"));
+
+                var manager = new SessionManager(service);
+                manager.LoadAllSessions();
+                var builtIn = Assert.Single(manager.AllSessions, session => session.Id == "morning_drift");
+                var custom = Assert.Single(manager.AllSessions, session => session.Id == "live_language_custom");
+                var view = new PresetsTabView { Width = 1100, Height = 760 };
+                view.UseSessionManager(manager);
+                host = new Window { Width = 1100, Height = 760, Content = view };
+                host.Show();
+                Dispatcher.UIThread.RunJobs();
+                Dispatcher.UIThread.RunJobs();
+
+                var panel = view.FindControl<StackPanel>("SessionRackPanel")!;
+                var builtInRow = Assert.Single(panel.Children.OfType<Border>(), row => row.Tag is Session session && session.Id == builtIn.Id);
+                var customRow = Assert.Single(panel.Children.OfType<Border>(), row => row.Tag is Session session && session.Id == custom.Id);
+                Assert.Same(builtIn, builtInRow.Tag);
+                Assert.Same(custom, customRow.Tag);
+
+                Click(host, builtInRow);
+                builtInRow.Focus();
+                Assert.True(builtInRow.IsFocused);
+                Assert.Equal("Morning Drift", RowText(builtInRow, 2));
+                Assert.Equal("BUILT-IN", SourceText(builtInRow));
+                Assert.Equal("⭐ Easy", PillText(builtInRow, 4));
+                Assert.Equal("30 min", RowText(builtInRow, 5));
+                Assert.Equal("+400 XP", RowText(builtInRow, 6));
+
+                LocalizationManager.Instance.SetLanguage("zh-CN");
+                Dispatcher.UIThread.RunJobs();
+                Dispatcher.UIThread.RunJobs();
+
+                Assert.True(builtInRow.IsFocused);
+                Assert.Same(builtInRow, panel.Children.Single(row => row.Tag is Session session && session.Id == builtIn.Id));
+                Assert.Same(builtIn, builtInRow.Tag);
+                Assert.Equal("晨曦漫游", RowText(builtInRow, 2));
+                Assert.StartsWith("让清晨轻轻带你进入", RowText(builtInRow, 3));
+                Assert.Equal("⭐ 简单", PillText(builtInRow, 4));
+                Assert.Equal("30 分钟", RowText(builtInRow, 5));
+                Assert.Equal("+400 XP", RowText(builtInRow, 6));
+                Assert.Equal("内置", SourceText(builtInRow));
+                Assert.Equal("Raw Custom Name", RowText(customRow, 2));
+                Assert.Equal("Raw custom description", RowText(customRow, 3));
+                Assert.Equal("⭐⭐⭐ 困难", PillText(customRow, 4));
+                Assert.Equal("你的", SourceText(customRow));
+                Assert.Equal(new[] { "全部  2", "内置  1", "你的  1", "目录  0" },
+                    view.FindControl<StackPanel>("RackSourceChips")!.Children.OfType<ToggleButton>()
+                        .Select(chip => ((TextBlock)chip.Content!).Text));
+                Assert.Equal("2 个会话", view.FindControl<TextBlock>("TxtRackCount")!.Text);
+                Assert.Equal(new[] { "简单", "中等", "困难", "极限" },
+                    view.FindControl<StackPanel>("RackDifficultyChips")!.Children.OfType<ToggleButton>()
+                        .Select(dot => ToolTip.GetTip(dot)?.ToString()));
+                AssertDetails(view, builtIn);
+
+                // Detaching removes the event handler. The same row and Session stay alive while
+                // the language changes, then the attach refresh reads the current language once.
+                host.Content = null;
+                Dispatcher.UIThread.RunJobs();
+                LocalizationManager.Instance.SetLanguage("de");
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal("晨曦漫游", RowText(builtInRow, 2));
+
+                reattachedHost = new Window { Width = 1100, Height = 760, Content = view };
+                reattachedHost.Show();
+                Dispatcher.UIThread.RunJobs();
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(builtIn.LocalizedName, RowText(builtInRow, 2));
+                Assert.Equal(custom.Name, RowText(customRow, 2));
+                Assert.Equal(Loc.Get("rack_src_builtin"), SourceText(builtInRow));
+                Assert.Equal(Loc.GetF("rack_duration", builtIn.DurationMinutes), RowText(builtInRow, 5));
+                AssertDetails(view, builtIn);
+
+                builtInRow.Focus();
+                LocalizationManager.Instance.SetLanguage("en");
+                Dispatcher.UIThread.RunJobs();
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(builtInRow.IsFocused);
+                Assert.Same(builtIn, builtInRow.Tag);
+                Assert.Equal("Morning Drift", RowText(builtInRow, 2));
+                Assert.Equal("BUILT-IN", SourceText(builtInRow));
+                Assert.Equal("30 min", RowText(builtInRow, 5));
+                Assert.Equal("2 sessions", view.FindControl<TextBlock>("TxtRackCount")!.Text);
+            }
+            finally
+            {
+                try
+                {
+                    host?.Close();
+                    reattachedHost?.Close();
+                    Dispatcher.UIThread.RunJobs();
+                }
+                finally
+                {
+                    LocalizationManager.Instance.SetLanguage(previousLanguage);
+                    Dispatcher.UIThread.RunJobs();
+                    if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+                }
+            }
+
+            return Task.CompletedTask;
+        });
+    }
+
+    [Fact]
     public async Task MountedExplicitCatalogueUsesCustomRowsAndAvailabilityGate()
     {
         await AvaloniaTestDispatcher.RunAsync(() =>
@@ -288,6 +420,27 @@ public sealed class PresetsSessionCatalogueTests
         Assert.False(view.FindControl<StackPanel>("SessionSpoilerPanel")!.IsVisible);
         Assert.True(view.FindControl<ScrollViewer>("SessionDetailScroller")!.IsVisible);
         Assert.False(view.FindControl<ScrollViewer>("PresetDetailScroller")!.IsVisible);
+    }
+
+    private static string RowText(Border row, int column)
+    {
+        var grid = Assert.IsType<Grid>(row.Child);
+        var text = Assert.IsType<TextBlock>(grid.Children.Single(child => Grid.GetColumn(child) == column));
+        return text.Text!;
+    }
+
+    private static string PillText(Border row, int column)
+    {
+        var grid = Assert.IsType<Grid>(row.Child);
+        var pill = Assert.IsType<Border>(grid.Children.Single(child => Grid.GetColumn(child) == column));
+        return Assert.IsType<TextBlock>(pill.Child).Text!;
+    }
+
+    private static string SourceText(Border row)
+    {
+        var grid = Assert.IsType<Grid>(row.Child);
+        var badges = Assert.IsType<StackPanel>(grid.Children.Single(child => Grid.GetColumn(child) == 7));
+        return Assert.IsType<TextBlock>(Assert.IsType<Border>(badges.Children[0]).Child).Text!;
     }
 
     private static void EnsureAvalonia()
