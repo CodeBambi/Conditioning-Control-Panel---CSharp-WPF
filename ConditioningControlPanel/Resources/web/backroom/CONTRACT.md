@@ -2109,3 +2109,48 @@ the landings (Law X) instead of on a timer. `ghostGold` is already in service as
 **Not built, and staying that way.** No new near-miss weighting, no losses disguised as wins, no second hero in
 a beat, and no ceremony that a station may start without a plan. A station may always spend LESS than its plan;
 it may never spend more.
+
+### 10.22.E The room-side echo, as built (lane BR2-room, 2026-09-16)
+
+10.22.A says a fixture with no payout node "simply has no shower". Every room glb was then read node
+by node, and NOT ONE of them carries a payout node: not `slot.glb`, which is the cabinet the whole
+move was written on, and not `wheel.glb`, `roulette.glb`, `card-table.glb` or `counter.glb` either.
+The slot's shower was never aimed by a node at all - `coin-shower.js` drops coins at a hard-coded
+(0, .276, .45) in the CABINET's own space, which is the Candy Rose tray and nothing else's.
+
+So that sentence is replaced, and the rest of 10.22.A stands:
+
+> An authored payout node (`payout_spawn`, `payout_tray`) is believed first and nothing in the room
+> carries one today. A fixture without one is measured instead: its own bounds give a tray line,
+> centred across the face the player walks up to (the row's `approach`), .72 of the way out toward
+> that face and .155 of the way up. Those two fractions ARE the Candy Rose tray, so the fixture the
+> numbers came from keeps them to the centimetre and every other fixture gets the same tray in its
+> own proportions. `room/payout-anchor.js` owns the arithmetic and a host group carries it; a coin
+> is the same size in the room at every fixture scale. A fixture with no visible geometry at all has
+> no shower, and that is the only case that has none.
+
+Three more things the floor does with a win, all of them sized by `shared/win/plan.js` and none of
+them decided anywhere else (`room/win-echo.js`):
+
+| The floor | When | What restraint takes it |
+|---|---|---|
+| THE LINE on the fixture's own screen | every echo, for `plan.partyMs` + 1800 ms | nothing. It is text and it survives Calm, reduced motion and motion level 0 (Brake 9). It restores whatever the screen said before the win, which is not always the boot label - the wheel carries MUST HIT (10.16.E). |
+| THE AURA leaning gold | `plan.shower > 0` | Calm, reduced motion, melt and Brake 3, exactly as the coins are. |
+| THE BOARD, the Parlour marquee carrying the winner's name and line | `plan.reveal`, so once a visit | the same, plus the hero cap: the second jackpot of a visit is a very good tier 3 and does not take the board. |
+
+The room keeps its OWN Brake 3 ledger, and it is a second scope rather than a second opinion: a
+station's ledger wears its close-up party down over one sit-down, the room's wears the floor's echo
+down over the whole visit. A win is announced with the station's `plan.shower` and the room asks the
+plan again with the ROOM's motion state, so Calm keeps the news and drops the decoration.
+
+The echo is driven by the room's own accumulated clock, which STOPS while a station holds the screen.
+A win taken at a cabinet therefore does not start ageing until the player is back on their feet: the
+walk-back is not a timer, it is the room resuming.
+
+Two more moves enter service with it, both `arcademy/shell/counterfx.js` calls the Back Room had
+never made: THE GLOW on the SP chip when a bank token lands (`room/main.js` `spReadout.thud`, never
+under reduced motion, where the existing lit branch is already the state), and the same warm cut with
+a short drop and a squash under it when a won decoration is finally placed at Room Service
+(`room/prop-landing.js`) - the one reward in the room with no number on it, which used to arrive by
+`visible = true`.
+

@@ -9,6 +9,18 @@
  *   - the floor spins in its shader and the reels scroll their texture, so no
  *     node that carries a quantized mesh is ever moved (see the build script)
  *   - the roulette hub's 960 idle motes move on the GPU, not in a JS loop
+ *
+ * THE REWARD PASS (CONTRACT 10.22.A, lane BR2-room). The coin shower used to be built behind
+ * `if (row.id === 'slot')`: one cabinet in four paid visibly and the other three paid in silence.
+ * That gate is gone. EVERY fixture gets a shower, aimed by room/payout-anchor.js at its own tray
+ * line, and `celebrate()` runs through room/win-echo.js so the floor's half of a win - the coins, the
+ * fixture's own screen, its aura and, for a hero, the Parlour's board - is sized by shared/win/plan.js
+ * and by nothing here. The room decides WHERE a win shows; plan.js decides WHETHER and HOW BIG.
+ *
+ * TRAP: the shower is built at BOOT for every fixture, not lazily on the first win, and it costs one
+ * instanced draw at count 0 per fixture for it. That is deliberate: a material three.js has never
+ * rendered is a material it has not compiled, and building the shower on the winning frame would put
+ * a shader compile on exactly the frame that must not stutter.
  * ==========================================================================*/
 
 import * as T from 'three';
@@ -18,9 +30,16 @@ import { createCoinShower } from './coin-shower.js';
 import { createFloorStyle } from './floor-style.js';
 import { createWheelFace } from './wheel-face.js';
 import { createRouletteSurfaces } from './roulette-surfaces.js';
+import { SHOWER, payoutAnchor, hostAt } from './payout-anchor.js';
+import { createWinEcho } from './win-echo.js';
 
 const BULB = /^(lights_chase_\d|bulb_\d|canopy_bulb_|rim_bulb_)/;
 const CHASE = [0xff168e, 0x852bff, 0x00e6b8, 0xff9d08].map((c) => new T.Color(c));
+/** What an echoing fixture's bulbs lean toward while the win settles, and how far (Law IX sizes it). */
+const WIN_GOLD = new T.Color(0xffcf6b);
+const WIN_LEAN = 0.6;
+/** The mark the fixture's own screen wears the win line between, the one the slot has always used. */
+const WIN_MARK = '✦';
 
 export function labelTexture(text) {
   const c = document.createElement('canvas');
@@ -111,10 +130,55 @@ vec4 mv=modelViewMatrix*vec4(p,1.);gl_Position=projectionMatrix*mv;gl_PointSize=
 }
 
 /**
- * Load and set out the room. `faces` is the EMI face atlas url; `label(row, key)`
- * resolves a registry label key ("@name" = the station's own name).
+ * A fixture's own box, in its holder's space, skipping what the row omitted (an omitted alcove is not
+ * part of the cabinet and must not drag its tray line sideways). The holders are yaw-only, so folding
+ * the world box back through the inverse is exact rather than merely close.
  */
-export async function buildRoom({ scene, loader, stations, base, faces, label, onProgress }) {
+function localBox(holder, model) {
+  const box = new T.Box3(), one = new T.Box3();
+  (function walk(o) {
+    if (o.visible === false) return;
+    if (o.isMesh && o.geometry) {
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      box.union(one.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld));
+    }
+    for (const child of o.children) walk(child);
+  })(model);
+  if (box.isEmpty()) return null;
+  box.applyMatrix4(new T.Matrix4().copy(holder.matrixWorld).invert());
+  return { min: { x: box.min.x, y: box.min.y, z: box.min.z }, max: { x: box.max.x, y: box.max.y, z: box.max.z } };
+}
+
+/**
+ * One fixture's coin shower, hung on a host group that puts the shower's own tray on this fixture's
+ * (10.22.A). An authored payout node is believed first; no room glb carries one today, so the fallback
+ * measures the cabinet. Null only for a fixture with no visible geometry at all.
+ */
+function payoutHost(holder, model, row) {
+  const f = row.fixture;
+  const node = SHOWER.NODES.reduce((found, name) => found || model.getObjectByName(name), null);
+  const anchor = node
+    ? holder.worldToLocal(node.getWorldPosition(new T.Vector3()))
+    : payoutAnchor(localBox(holder, model), holder.worldToLocal(new T.Vector3().fromArray(row.approach)));
+  const host = hostAt(anchor, f.scale, f.heightScale);
+  if (!host) return null;
+  const group = new T.Group();
+  group.name = 'payout_' + row.key;
+  group.position.set(host.position.x, host.position.y, host.position.z);
+  group.scale.set(host.scale.x, host.scale.y, host.scale.z);
+  holder.add(group);
+  return group;
+}
+
+/**
+ * Load and set out the room. `faces` is the EMI face atlas url; `label(row, key)`
+ * resolves a registry label key ("@name" = the station's own name). `motion()` reads the room's live
+ * { still, reduced, lite } for the win echo, which is the only part of this file motion can silence.
+ */
+export async function buildRoom({ scene, loader, stations, base, faces, label, onProgress, motion }) {
+  const readMotion = typeof motion === 'function' ? motion : () => ({});
+  const echo = createWinEcho();
+  let clock = 0;   // the room's own accumulated ms: it STOPS while a station holds the screen
   const files = new Map();
   const fetchModel = (file) => {
     if (!files.has(file)) files.set(file, loader.loadAsync(base + file).then((g) => g.scene));
@@ -177,6 +241,8 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
   const hubs = [];
   const emis = [];
   const payouts = new Map();
+  /** rowKey -> the fixture's own mascot and its own name, so a win can turn a head and sign a board. */
+  const emiByKey = new Map(), names = new Map();
   let marquee = null;
   /** Every fixture label mesh, `rowKey/node` -> { mesh, text }, so one can be repainted later (10.16.E). */
   const labels = new Map();
@@ -245,8 +311,14 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     if (f.hub) { const spiral = model.getObjectByName('center_spiral'); if (spiral) hubs.push(createHub(spiral)); }
     if (row.id === 'counter') { marquee = createPrizeMarquee(label(row, '@name')); model.add(marquee); }
     const emi = createEmiIdle({ model, row, atlas });
-    if (emi) emis.push(emi);
-    if(row.id==='slot') payouts.set(row.key,{coins:createCoinShower(model),rest:labels.get(row.key+'/screen_status')?.text||'',showing:false});
+    if (emi) { emis.push(emi); emiByKey.set(row.key, emi); }
+    names.set(row.key, String(label(row, '@name')));
+    // 10.22.A: every fixture pays visibly, not just the slot. `status` is the fixture's OWN screen -
+    // the label whose registry key is a status line - and it is the win's text channel (Brake 9).
+    const status = Object.keys(f.labels).find(node => /_status$/.test(String(f.labels[node]))) || null;
+    const host = payoutHost(holder, model, row);
+    if (host) payouts.set(row.key, { coins: createCoinShower(host), host, node: status,
+      rest: labels.get(row.key + '/' + status)?.text || '', showing: false });
     if(row.id === 'wheel') wheelFaces.push(createWheelFace(holder));
     if(row.id === 'roulette') rouletteSurfaces.push(createRouletteSurfaces(holder));
     holders.set(row.key, holder);
@@ -300,13 +372,21 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
   const c = new T.Color(), target = new T.Color();
   const sconceColor = new T.Color(0xff79ce);
   function update(dt, t, still) {
+    // The echo's own clock. Clamped like the shower's, so a tab left in the background for a minute
+    // does not age a win away unseen, and STOPPED with the loop while a station holds the screen.
+    clock += Math.min(.05, Math.max(0, dt)) * 1000;
+    const gains = echo.gains(clock, still);
     for (const b of bulbs) {
       const offset = b.row.variant === 'violet' ? .33 : b.row.variant === 'mint' ? .66 : 0;
       const travel = t / (b.row.id === 'wheel' ? 6 : 8) * (b.rim ? -1 : 1) + offset;
       const wave = Math.pow(.5 + .5 * Math.cos((b.phase - travel) * Math.PI * 2), 8);
-      const power = .30 + wave * .65, op = .16 + wave * .36;
+      let power = .30 + wave * .65, op = .16 + wave * .36;
       const phase = (t / 12 + b.phase * .5 + offset) % 4, i = Math.floor(phase);
       c.copy(CHASE[i]).lerp(CHASE[(i + 1) % 4], T.MathUtils.smoothstep(phase % 1, 0, 1));
+      // THE WALK-BACK (10.22.A): a fixture that just paid keeps its aura hot and leans gold for the
+      // length of the echo, so the win is still settling when the player stands up and turns round.
+      const gain = gains.size ? gains.get(b.row.key) || 0 : 0;
+      if (gain > 0) { c.lerp(WIN_GOLD, Math.min(.85, gain * WIN_LEAN)); power *= 1 + gain * .5; op = Math.min(1, op * (1 + gain)); }
       auras.set(b.aura, c, op);
       b.im.setColorAt(b.slot, c.multiplyScalar(power));
     }
@@ -317,11 +397,20 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     auras.commit();
     for (const h of hubs) h.update(dt, still);
     for (const emi of emis) emi.update(dt, still);
-    for(const [key,p] of payouts){p.coins.update(dt,still);const d=p.coins.debug();
-      if(d.active){setLabel(key,'screen_status','✦ '+d.label+' ✦');p.showing=true;
-        const m=labels.get(key+'/screen_status')?.mesh.material;if(m)m.emissive.setHSL(still ? .1 :(d.age*.18)%1,.8,.6);}
-      else if(p.showing){setLabel(key,'screen_status',p.rest);p.showing=false;}
+    // The fixture's own screen carries the line for the whole echo, not just for as long as coins are
+    // falling: the coins are 4 s of decoration, the line is the news, and the news outlives Calm.
+    for(const [key,p] of payouts){p.coins.update(dt,still);
+      if(!p.node)continue;
+      const line=echo.line(key,clock);
+      if(line){setLabel(key,p.node,WIN_MARK+' '+line+' '+WIN_MARK);p.showing=true;
+        const m=labels.get(key+'/'+p.node)?.mesh.material;if(m)m.emissive.setHSL(still ? .1 :(clock*.00018)%1,.8,.6);}
+      else if(p.showing){p.showing=false;
+        // Whatever the screen said before the win says it again - which is not always the boot label:
+        // the wheel's own screen carries MUST HIT while the pot has to fall (10.16.E).
+        if(!setLabel(key,p.node,p.rest)){const m=labels.get(key+'/'+p.node)?.mesh.material;if(m)m.emissive.set(0xffffff);}}
     }
+    // THE FLOOR'S BOARD: a hero anywhere in the room, or the Parlour's own name again.
+    if(marquee)marquee.userData.say?.(echo.marquee(clock));
     floorStyle.update(dt, still);
   }
 
@@ -342,5 +431,28 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     return true;
   }
 
-  return { disposeSurfaces(){for(const surface of [...rouletteSurfaces,...wheelFaces])surface?.dispose();}, shell, ceiling, floor, setFloorStyle: floorStyle.setFloorStyle, getFloorStyle: floorStyle.getFloorStyle, screens, holders, fixtures: set.length, bulbs: bulbs.length, update, auras, hubs, labels, setLabel, emis, marquee, payouts, celebrate(key,amount,tier,text){const p=payouts.get(key);if(!p)return false;if(amount<=0){p.coins.clear();return false;}return p.coins.start(amount,tier,text);} };
+  /**
+   * A station announced a paid result (10.22.B). The room spends what win-echo.js hands back and
+   * decides nothing of its own: the coins (Law IX's own rung), the fixture's screen (Brake 9's text),
+   * its aura for the walk back, the mascot's glance (Law XIII) and, once a visit, the Parlour's board.
+   * `true` when the floor heard it at all - a tier 1, a melted win and a miss all pass silently.
+   */
+  function celebrate(key, amount, tier, text) {
+    const p = payouts.get(key);
+    // A zero or negative amount is a station saying THIS FIXTURE IS NOT SHOWING A WIN - a new spin, a
+    // settle - and what is falling is cleared. A paid result too small to cross the room is NOT that:
+    // it simply passes, and it leaves an earlier win still settling exactly where it was (Brake 2).
+    if (!(Number(amount) > 0)) { p?.coins.clear(); echo.clear(key); return false; }
+    const fired = echo.celebrate({ key, amount, tier, text, name: names.get(key) }, readMotion(), clock);
+    if (!fired) return false;
+    // What the screen said before the win is what it says after it (10.16.E's MUST HIT, most of all).
+    if (p && p.node && !p.showing) p.rest = labels.get(key + '/' + p.node)?.text || p.rest;
+    // Law XIII: the fixture's own mascot looks up. Quiet keeps her at rest, the way every other room
+    // gesture does (emi-interaction's canGesture), and `aura` is exactly that question already asked.
+    if (fired.emi && fired.aura > 0) emiByKey.get(key)?.trigger(fired.emi);
+    if (fired.shower > 0 && p) p.coins.start(amount, fired.shower, fired.line);
+    return true;
+  }
+
+  return { disposeSurfaces(){for(const surface of [...rouletteSurfaces,...wheelFaces])surface?.dispose();}, shell, ceiling, floor, setFloorStyle: floorStyle.setFloorStyle, getFloorStyle: floorStyle.getFloorStyle, screens, holders, fixtures: set.length, bulbs: bulbs.length, update, auras, hubs, labels, setLabel, emis, marquee, payouts, celebrate, echo };
 }

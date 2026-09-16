@@ -34,6 +34,7 @@ import { createScene } from './scene.js';
 import { createLoader } from './loader.js';
 import { createHud } from './hud.js';
 import { createRoomRewards, createDoubleCharm } from './rewards.js';
+import { warmGlow } from '../../arcademy/shell/counterfx.js';
 import { kit } from '../shared/sound/kit.js';
 const rewards = createRoomRewards();
 let doubleCharm = null;
@@ -111,10 +112,21 @@ const spReadout = Object.freeze({
   set(value) { const n = Number(value); chip.shown = value == null || !Number.isFinite(n) ? null : n; paintSpChip(); },
   /** The pays still on the tape: a number, or a reader the room calls on each repaint while the station is open. */
   owe(n) { chip.owed = typeof n === 'function' ? n : (Number(n) || 0); paintSpChip(); },
-  /** THE THUD: a bank token landing on the chip. Reduced motion lights it instead of scaling it. */
+  /**
+   * THE THUD: a bank token landing on the chip. Reduced motion lights it instead of scaling it.
+   *
+   * AND THE GLOW with it (CONTRACT 10.22.D). The scale-and-brighten says a token arrived; the warm
+   * cut says LOOK AT THE NUMBER, which is the whole point of a token arriving, and it is the same
+   * 480 ms cfx-warm the Arcademy's counter has put on its own wallet chip since it shipped. The Back
+   * Room has imported counterfx for its timings and called none of its moves until now.
+   *
+   * Not under reduced motion: `plan.glow` is 0 there and the branch below is already the state.
+   */
   thud() {
     const box = $('.br-sp');
-    if (!box || typeof box.animate !== 'function') return;
+    if (!box) return;
+    if (!state.reduced) warmGlow(box);
+    if (typeof box.animate !== 'function') return;
     if (state.reduced) { box.animate([{ boxShadow: '0 0 0 2px #ffcf6b' }, { boxShadow: '0 0 0 2px #ffcf6b' }], { duration: 520 }); return; }
     box.animate([{ transform: 'scale(1.3)', filter: 'brightness(2.2)' }, { transform: 'scale(.94)', offset: 0.55 }, { transform: 'scale(1)', filter: 'brightness(1)' }],
       { duration: 340, easing: 'cubic-bezier(.2,1.5,.4,1)' });
