@@ -46,7 +46,7 @@ export const TIERS = Object.freeze({
 });
 export const TIER_ORDER = Object.freeze(['small', 'mid', 'big', 'hero']);
 /** -24 dB under master for the bed, a whisper is quieter still. */
-export const BED_LEVEL = 0.063;
+export const BED_LEVEL = 0.0126;
 export const DEFAULT_MASTER = 0.8;
 /** A cue on this list plays once per window even when two lanes call it on the same frame (the slot's muted
  *  last thud and its dead-spin lane both say `settle`). Milliseconds. */
@@ -57,7 +57,7 @@ export const DEDUPE_MS = Object.freeze({ settle: 120, clicker: 25 });
 export const LEVER_VARIANTS = Object.freeze(['A', 'B', 'C', 'D']);
 export const REEL_VARIANTS = Object.freeze(['A', 'B', 'C', 'D']);
 /** The owner's pair: a candy lever over a rattle-and-bell drum. */
-export const DEFAULT_SFX = Object.freeze({ lever: 'B', reel: 'C' });
+export const DEFAULT_SFX = Object.freeze({ lever: 'B', reel: 'A' });
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
@@ -243,7 +243,7 @@ const SCORES = {
    * THE LEVER PULL, the whole gesture in one cue: the stroke down, the stop at the bottom, the spring back.
    * 500-700 ms, and the four voices are four cabinets:
    *   A Iron     ratchet ticks up the stroke, a heavy metallic clank at the bottom, a spring click coming back
-   *   B Candy    a velvety whoosh, a muted pop, two little chimes on the release (the pink cabinet's own)
+   *   B Candy    a catch on the grab, a velvety whoosh, a muted pop, two little chimes on the release
    *   C Toy      plastic click-clack, a knock, a cartoon spring boing: the shortest and the bounciest
    *   D Vintage  one long creaking ratchet, a deep wooden thunk, a "krrr" that hands the beat to the reels
    */
@@ -257,7 +257,8 @@ const SCORES = {
         noise(2300, 0.52, 0.03, 0.055 * lv, { q: 5, part: 'spring', dry: true }),
         tone(700, 0.52, 0.04, 0.035 * lv, { part: 'spring', dry: true }));
     } else if (v === 'B') {
-      out.push(noise(320, 0, 0.3, 0.07 * lv, { hzTo: 1500, q: 0.9, attack: 0.45, part: 'whoosh', dry: true }),
+      out.push(noise(1250, 0, 0.022, 0.06 * lv, { q: 3.4, part: 'catch', dry: true }),   // THE GRAB: B had nothing until the pop at 0.29, so the pull read late
+        noise(320, 0, 0.3, 0.07 * lv, { hzTo: 1500, q: 0.9, attack: 0.18, part: 'whoosh', dry: true }),
         tone(250, 0.29, 0.14, 0.2 * lv, { hzTo: 96, wave: 'triangle', lp: 900, part: 'pop' }),
         noise(700, 0.29, 0.05, 0.045 * lv, { type: 'lowpass', part: 'pop', dry: true }),
         ...bell(ROOT_HZ, 0.44, 0.2, 0.07 * lv, 'chime'), ...bell(ROOT_HZ * SEMI(7), 0.53, 0.17, 0.065 * lv, 'chime'));
@@ -353,8 +354,8 @@ const ROLL_LAYER = Object.freeze({
 });
 /** A tick peaks here, clear of the bed at -24 dB without being harsh; the purr and the hum together sit just
  *  over it at full blur and fall away with the drum. */
-export const ROLL_TICK = 0.0585;
-export const ROLL_BED = 0.052;
+export const ROLL_TICK = 0.038;
+export const ROLL_BED = 0.034;
 const TICK_AHEAD = 0.14, TICK_MS = 45;
 const rollKey = reel => 'reel:' + clamp(Math.floor(num(reel, 0)), 0, 4);
 /** THE TICK RATE IS THE REEL SPEED: 38 ms a tick at full blur, 260 ms crawling into the stop. */
@@ -462,7 +463,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     const sh = ctx.createBufferSource(); sh.buffer = noiseBuf; sh.loop = true;
     const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 3; bp.frequency.value = 3000;
     const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.05; lg.gain.value = 1000; lfo.connect(lg); lg.connect(bp.frequency);
-    const sg = ctx.createGain(); sg.gain.value = 0.09; sh.connect(bp); bp.connect(sg); sg.connect(g); sh.start(); lfo.start(); nodes.push(sh, lfo);
+    const sg = ctx.createGain(); sg.gain.value = 0.045; sh.connect(bp); bp.connect(sg); sg.connect(g); sh.start(); lfo.start(); nodes.push(sh, lfo);
     // Two high sines breathing under a 12 s tremolo, barely there.
     const tg = ctx.createGain(); tg.gain.value = 0.05;
     const tr = ctx.createOscillator(), trg = ctx.createGain(); tr.frequency.value = 0.08; trg.gain.value = 0.04; tr.connect(trg); trg.connect(tg.gain); tr.start(); nodes.push(tr);

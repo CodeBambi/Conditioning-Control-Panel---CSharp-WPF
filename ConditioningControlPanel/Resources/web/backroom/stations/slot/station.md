@@ -215,7 +215,7 @@ text, so there is nothing for a label to add. It is left to the integration pass
 | `?reduced` `?variant=violet\|mint` | as before |
 | `?jar=97` | seeds the stored spiral jar (0 .. size - 1, clamped like `ensureSlot`) |
 | `?comp=1` | mints a welcome-back comp; `?comp=3` mints one of 3 spins |
-| `?lever=A..D` `?reel=A..D` | the lever and the drum voice (shared/sound/README.md); without them, the saved `br.sfx.variant` pair, else lever B over reel C |
+| `?lever=A..D` `?reel=A..D` | the lever and the drum voice (shared/sound/README.md); without them, the saved `br.sfx.variant` pair, else lever B over reel A |
 
 Dev buttons: **next: 2 EMI (re-spin)** scripts `emi, emi, melt` (the chase that does not start the melt),
 **next: 2 EMI, re-spin hits** also forces reel 3 back as EMI, **jar to 99** puts the jar one spiral from

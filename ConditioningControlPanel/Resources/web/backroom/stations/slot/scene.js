@@ -105,7 +105,8 @@ function paintDisplay(ctx, w, h, marquee, text) {
 
 /**
  * @param {{canvas:HTMLCanvasElement, reduced:boolean, stillFx?:()=>boolean, hint?:HTMLElement, palette?:object,
- *          canPull:()=>boolean, onLever:()=>void, onFreeze:(i:number)=>void, onReelStop?:(i:number)=>void,
+ *          canPull:()=>boolean, onLever:(info?:{sounded?:boolean})=>void, onPull?:()=>void,
+ *          onFreeze:(i:number)=>void, onReelStop?:(i:number)=>void,
  *          onReelSpeed?:(i:number, speed:number)=>void}} o
  * @returns {Promise<{missing:string[], dispose:()=>void} | object>}
  */
@@ -777,8 +778,15 @@ export async function createScene(o) {
       canvas.setPointerCapture(e.pointerId); canvas.style.cursor = 'grabbing';
     } else if (ob) o.onFreeze(freezers.indexOf(ob));
   }
-  function onMove(e) { if (pull && pull.id === e.pointerId) { e.preventDefault(); pull.amount = clamp((e.clientY - pull.y) / Math.min(120, canvas.clientHeight * 0.18)); } }
-  function onUp(e) { if (!pull || pull.id !== e.pointerId) return; const commit = pull.amount >= PULL_COMMIT; cancelPull(); if (commit) o.onLever(); }
+  // THE STROKE SOUNDS ON THE WAY DOWN, not when the hand lets go: the cue fires the frame the drag crosses
+  // PULL_COMMIT, which is mid-stroke, so the pull and its sound share a frame however long the hand holds on.
+  function onMove(e) {
+    if (!pull || pull.id !== e.pointerId) return;
+    e.preventDefault();
+    pull.amount = clamp((e.clientY - pull.y) / Math.min(120, canvas.clientHeight * 0.18));
+    if (!pull.sounded && pull.amount >= PULL_COMMIT) { pull.sounded = true; if (o.onPull) o.onPull(); }
+  }
+  function onUp(e) { if (!pull || pull.id !== e.pointerId) return; const commit = pull.amount >= PULL_COMMIT, sounded = !!pull.sounded; cancelPull(); if (commit) o.onLever({ sounded }); }
   canvas.addEventListener('pointerdown', onDown); canvas.addEventListener('pointermove', onMove);
   canvas.addEventListener('pointerup', onUp); canvas.addEventListener('pointercancel', cancelPull);
 
