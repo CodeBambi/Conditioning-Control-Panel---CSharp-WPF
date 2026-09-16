@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -177,5 +178,161 @@ public sealed class SessionFileServicePersistenceTests
         {
             Directory.Delete(directory, recursive: true);
         }
+    }
+
+    [Fact]
+    public void InjectedFolders_PersistManagerLifecycleWithoutTouchingOtherPaths()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ccp-session-tests-" + Guid.NewGuid().ToString("N"));
+        var builtInFolder = Path.Combine(root, "built-in");
+        var customFolder = Path.Combine(root, "custom");
+        var incomingFolder = Path.Combine(root, "incoming");
+        try
+        {
+            Directory.CreateDirectory(builtInFolder);
+            Directory.CreateDirectory(customFolder);
+            Directory.CreateDirectory(incomingFolder);
+            var service = new SessionFileService(customFolder, builtInFolder);
+            var builtInPath = Path.Combine(builtInFolder, "shared.session.json");
+            service.ExportSession(CreateDefinition("shared", "Built-in", "built-in-event"), builtInPath);
+
+            var manager = new SessionManager(service);
+            var added = 0;
+            var reloaded = 0;
+            manager.SessionAdded += _ => added++;
+            manager.SessionsReloaded += () => reloaded++;
+            manager.LoadAllSessions();
+
+            Assert.Equal(1, reloaded);
+            Assert.Contains(manager.BuiltInSessions, session => session.Id == "shared");
+            Assert.True(File.Exists(builtInPath));
+
+            var incomingPath = Path.Combine(incomingFolder, "incoming.session.json");
+            service.ExportSession(CreateDefinition("shared", "Imported", "imported-event"), incomingPath);
+            var imported = manager.ImportSession(incomingPath);
+
+            Assert.True(imported.success, imported.message);
+            Assert.NotNull(imported.session);
+            Assert.Equal("shared_1", imported.session!.Id);
+            Assert.Equal("imported-event", imported.session.TimelineEvents.Single().Id);
+            Assert.NotEqual(incomingPath, imported.session.SourceFilePath);
+            Assert.StartsWith(Path.GetFullPath(customFolder), imported.session.SourceFilePath);
+            Assert.True(File.Exists(imported.session.SourceFilePath));
+            Assert.Equal(1, added);
+
+            var freshManager = new SessionManager(new SessionFileService(customFolder, builtInFolder));
+            freshManager.LoadAllSessions();
+            var reloadedCustom = freshManager.GetSession("shared_1");
+            Assert.NotNull(reloadedCustom);
+            Assert.Equal("imported-event", reloadedCustom!.TimelineEvents.Single().Id);
+
+            var updateRemoved = 0;
+            var updateAdded = 0;
+            freshManager.SessionRemoved += _ => updateRemoved++;
+            freshManager.SessionAdded += _ => updateAdded++;
+            var updated = SessionDefinition.FromSession(reloadedCustom).ToSession();
+            updated.Name = "Updated";
+            freshManager.UpdateCustomSession(updated);
+            Assert.Equal(1, updateRemoved);
+            Assert.Equal(1, updateAdded);
+            Assert.Same(updated, freshManager.GetSession(updated.Id));
+            Assert.Equal("Updated", new SessionFileService(customFolder, builtInFolder)
+                .LoadCustomSessions().Single().Name);
+
+            Assert.True(freshManager.DeleteSession(updated));
+            Assert.False(File.Exists(imported.session.SourceFilePath));
+            Assert.Null(freshManager.GetSession(updated.Id));
+            Assert.DoesNotContain(updated, freshManager.AllSessions);
+            Assert.Equal(2, updateRemoved);
+
+            var builtIn = freshManager.GetSession("shared");
+            Assert.NotNull(builtIn);
+            Assert.False(freshManager.DeleteSession(builtIn!));
+            Assert.True(File.Exists(builtInPath));
+
+            var malformedPath = Path.Combine(incomingFolder, "malformed.session.json");
+            File.WriteAllText(malformedPath, "{ not valid json");
+            var filesBeforeMalformedImport = Directory.GetFiles(customFolder, "*.session.json").Length;
+            var sessionsBeforeMalformedImport = freshManager.AllSessions.Count;
+            var addsBeforeMalformedImport = updateAdded;
+            var malformed = freshManager.ImportSession(malformedPath);
+            Assert.False(malformed.success);
+            Assert.Null(malformed.session);
+            Assert.Equal(filesBeforeMalformedImport, Directory.GetFiles(customFolder, "*.session.json").Length);
+            Assert.Equal(sessionsBeforeMalformedImport, freshManager.AllSessions.Count);
+            Assert.Equal(addsBeforeMalformedImport, updateAdded);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void FolderOverrides_AreIndependentAndDefaultsKeepLegacyValues()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ccp-session-tests-" + Guid.NewGuid().ToString("N"));
+        var builtInA = Path.Combine(root, "built-in-a");
+        var customA = Path.Combine(root, "custom-a");
+        var builtInB = Path.Combine(root, "built-in-b");
+        var customB = Path.Combine(root, "custom-b");
+        try
+        {
+            Directory.CreateDirectory(builtInA);
+            Directory.CreateDirectory(customA);
+            Directory.CreateDirectory(builtInB);
+            Directory.CreateDirectory(customB);
+            var serviceA = new SessionFileService(customA, builtInA);
+            var serviceB = new SessionFileService(customB, builtInB);
+            serviceA.SaveCustomSession(CreateDefinition("only-a", "Only A", "a-event"));
+            serviceB.SaveCustomSession(CreateDefinition("only-b", "Only B", "b-event"));
+            serviceA.ExportSession(CreateDefinition("built-in-a", "Built-in A", "a-built-in-event"),
+                Path.Combine(builtInA, "a.session.json"));
+
+            Assert.Equal("only-a", serviceA.LoadCustomSessions().Single().Id);
+            Assert.Equal("only-b", serviceB.LoadCustomSessions().Single().Id);
+            Assert.Equal("built-in-a", serviceA.LoadBuiltInSessions().Single().Id);
+            Assert.Empty(serviceB.LoadBuiltInSessions());
+            Assert.DoesNotContain(serviceA.LoadCustomSessions(), session => session.Id == "only-b");
+            Assert.DoesNotContain(serviceB.LoadCustomSessions(), session => session.Id == "only-a");
+
+            var expectedCustom = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "ConditioningControlPanel", "CustomSessions");
+            var expectedBuiltIn = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "sessions");
+            Assert.Equal(expectedCustom, SessionFileService.CustomSessionsFolder);
+            Assert.Equal(expectedBuiltIn, SessionFileService.BuiltInSessionsFolder);
+            Assert.Throws<ArgumentNullException>(() => new SessionFileService(null!, builtInA));
+            Assert.Throws<ArgumentException>(() => new SessionFileService(" ", builtInA));
+            Assert.Throws<ArgumentNullException>(() => new SessionFileService(customA, null!));
+            Assert.Throws<ArgumentException>(() => new SessionFileService(customA, " "));
+            Assert.Throws<ArgumentNullException>(() => new SessionManager(null!));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static SessionDefinition CreateDefinition(string id, string name, string eventId)
+    {
+        return new SessionDefinition
+        {
+            Id = id,
+            Name = name,
+            DurationMinutes = 1,
+            TimelineEvents = new()
+            {
+                new TimelineEvent
+                {
+                    Id = eventId,
+                    FeatureId = "test-feature",
+                    Minute = 0,
+                    EventType = TimelineEventType.Start
+                }
+            }
+        };
     }
 }

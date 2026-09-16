@@ -45,9 +45,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public event Action? SessionsReloaded;
 
-        public SessionManager()
+        public SessionManager() : this(new SessionFileService())
         {
-            _fileService = new SessionFileService();
+        }
+
+        public SessionManager(SessionFileService fileService)
+        {
+            _fileService = fileService ?? throw new ArgumentNullException(nameof(fileService));
         }
 
         /// <summary>
