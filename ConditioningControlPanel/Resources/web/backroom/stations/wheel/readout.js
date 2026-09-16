@@ -77,6 +77,15 @@ export function createReadout({ ctx, own, doc = globalThis.document, format = n 
       box.animate([{ transform: 'scale(1.3)', filter: 'brightness(2.2)' }, { transform: 'scale(.94)', offset: 0.55 }, { transform: 'scale(1)', filter: 'brightness(1)' }],
         { duration: 340, easing: 'cubic-bezier(.2,1.5,.4,1)' });
     },
+    /**
+     * THE GLOW's host (CONTRACT 10.22.D): the chip that just changed, so a warm cut says LOOK AT THE NUMBER.
+     * The room's own `.br-sp` box when it has one, this station's chip otherwise, and null on a board with
+     * neither - the caller passes it straight to counterfx.warmGlow, which no-ops on a null node.
+     */
+    glowNode() {
+      const el = hook && typeof hook.target === 'function' ? hook.target() : node();
+      return (el && el.closest && el.closest('.br-sp')) || el || null;
+    },
     /** Where THE BANK's tokens fly to, in client px. */
     target() {
       const el = hook && typeof hook.target === 'function' ? hook.target() : node();

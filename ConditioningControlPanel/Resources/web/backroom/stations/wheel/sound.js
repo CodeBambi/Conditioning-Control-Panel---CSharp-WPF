@@ -5,7 +5,13 @@
  *
  * The floor's rules, as the wheel spends them: a peg is THE CLACK, the long last turn is the riser, the pointer
  * settling is THE THUD (or THE SETTLE on a snooze, soft and never a fail), the party is a win by tier that only
- * rises (chime -> small, two -> mid, thud -> big, reveal -> hero), and EMI's snooze is a sigh. */
+ * rises (chime -> small, two -> mid, thud -> big, reveal -> hero), and EMI's snooze is a sigh.
+ *
+ * THE CHIME LADDER (CONTRACT 10.22.D). The landing cue used to be the whole party: one flat note, whatever
+ * the rung. `climb()` is the slot's move, on the shared plan (shared/win/ladder.js): the notes after the
+ * landing one roll with THE BANK's count-up, a semitone a step, capped at 7, an octave down while melted,
+ * never a step closer than the 6 Hz floor. `hush()` takes back whatever has not sounded yet, so Law VI's
+ * exits silence the rest of the climb instead of playing a faster version of it. */
 
 import { kit } from '../../shared/sound/kit.js';
 
@@ -16,7 +22,7 @@ export function createSound(k = kit) {
   let suspended = false, disposed = false, tokens = 0;
   const trace = [];
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
-  const note = (name, semis, level) => { trace.push({ name, semis, level, at: Math.round(now()) }); if (trace.length > 80) trace.shift(); };
+  const note = (name, semis, level, inMs = 0) => { trace.push({ name, semis, level, at: Math.round(now()), in: Math.round(inMs) }); if (trace.length > 80) trace.shift(); };
   const live = () => !disposed && !suspended;
 
   return {
@@ -40,13 +46,26 @@ export function createSound(k = kit) {
       if (sound === 'snooze') k.play('sigh', { at: 0.18 });   // EMI's yawn
       else if (WIN_TIER[sound]) { k.play('win', { tier: WIN_TIER[sound] }); tokens = 0; }
     },
+    /** THE CHIME LADDER climbing across THE BANK's rollup (10.22.D). `plan` is ladder.js's ladderPlan: step 0
+     *  is the landing note win() has already played, so only the steps after it sound, up from `base`
+     *  (plan.octave: 0, or -12 in a focus state). Scheduled ahead; hush() takes back what has not sounded. */
+    climb(plan, base = 0) {
+      this.hush();
+      const steps = (Array.isArray(plan) ? plan : []).slice(1);
+      if (!steps.length) return;
+      for (const s of steps) note('climb', base + s.semis, LEVEL.chime * 0.8, s.at);
+      if (!live()) return;
+      k.play('ladder', { plan: steps, semis: base });
+    },
+    /** Law VI: a skip silences the rest of the climb; it never plays a faster version of it. */
+    hush() { k.stop('ladder'); },
     /** A token landing (THE BANK), each a rung higher; the last one gets the mini-thud. */
     token(last) {
       note(last ? 'bank-thud' : 'token', last ? 5 : 12, last ? LEVEL.thud * 0.6 : LEVEL.token);
       if (!live()) return;
       if (last) { k.play('token', { last: true }); tokens = 0; } else k.play('token', { i: tokens++ });
     },
-    suspend(on) { suspended = !!on; if (suspended) k.stop('riser'); },
-    dispose() { disposed = true; k.stop('riser'); },
+    suspend(on) { suspended = !!on; if (suspended) { k.stop('riser'); k.stop('ladder'); } },
+    dispose() { disposed = true; k.stop('riser'); k.stop('ladder'); },
   };
 }
