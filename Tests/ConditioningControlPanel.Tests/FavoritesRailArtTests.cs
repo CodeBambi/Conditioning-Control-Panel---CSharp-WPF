@@ -96,18 +96,12 @@ public class FavoritesRailArtTests
     {
         // There is no Resources\**\*.png glob in this project (the csproj says so where the intake
         // cards are listed), so a file present on disk but absent from the csproj resolves to
-        // nothing at runtime and the chip silently falls back. Accept either the folder glob the
-        // features and nav art use or an explicit per-file entry.
-        var csproj = File.ReadAllText(Path.Combine(AppDir(), "ConditioningControlPanel.csproj"));
+        // nothing at runtime and the chip silently falls back. The coverage check accepts the
+        // explicit entry or the shared /Assets Include linked under Resources\.
+        var csproj = Path.Combine(AppDir(), "ConditioningControlPanel.csproj");
         foreach (var path in FavoritesRailArt.ArtPaths())
-        {
-            var win = path.Replace('/', '\\');
-            var dir = win.Contains('\\') ? win.Substring(0, win.LastIndexOf('\\')) : null;
-            var glob = dir == null ? null : $"Resources\\{dir}\\*.png";
-            bool covered = csproj.Contains($"\"Resources\\{win}\"", StringComparison.OrdinalIgnoreCase)
-                           || (glob != null && csproj.Contains(glob, StringComparison.OrdinalIgnoreCase));
-            Assert.True(covered, $"{path} is on disk but no <Resource> item in the csproj covers it");
-        }
+            Assert.True(ResourceCoverage.IsCovered(csproj, path),
+                        $"{path} is on disk but no <Resource> item in the csproj covers it");
     }
 
     // ---------------------------------------------------------------- framing

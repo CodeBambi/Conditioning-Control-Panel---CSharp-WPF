@@ -150,10 +150,11 @@ public class DeeperEditorTileTests
         Assert.True(File.Exists(art), "Assets/features/deeper_editor.png is missing");
 
         // There is no Resources\**\*.png glob in this project, so a file on disk that no
-        // <Resource> item covers resolves to nothing at runtime and the tile paints empty.
-        var csproj = File.ReadAllText(Path.Combine(AppDir(), "ConditioningControlPanel.csproj"));
-        Assert.True(csproj.Contains("Resources\\features\\*.png", StringComparison.OrdinalIgnoreCase)
-                    || csproj.Contains("Resources\\features\\deeper_editor.png", StringComparison.OrdinalIgnoreCase),
+        // <Resource> item covers resolves to nothing at runtime and the tile paints empty. The
+        // source file is a shared /Assets item linked back under Resources\, as Emi's coverage
+        // check normalizes it.
+        var csproj = Path.Combine(AppDir(), "ConditioningControlPanel.csproj");
+        Assert.True(ResourceCoverage.IsCovered(csproj, "features/deeper_editor.png"),
                     "no <Resource> item in the csproj covers the tile's art");
     }
 
