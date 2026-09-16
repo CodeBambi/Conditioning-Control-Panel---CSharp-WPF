@@ -238,14 +238,17 @@ n = await nudge();
 ok(n && n.hidden, 'nudge: hidden in landscape');
 const land = await ev('window.__backroom.loader.current.debug().feel.scene');
 report.landscape.landscape = land;
-ok(land && land.band && land.band.left === 142 && land.band.right === 142, 'landscape: the frame uses the side-column band ' + JSON.stringify(land && land.band));
+ok(land && land.band && land.band.left === 16 && land.band.right === 16, 'landscape: the frame uses the margin band ' + JSON.stringify(land && land.band));
 const win = land && land.window;
-ok(win && win.height >= 390 * 0.5 && win.height <= 390 - 24, `landscape: the reel window fills the height comfortably (${win && Math.round(win.height)} of 390 px)`);
-ok(win && win.left >= 142 - 12 && win.left + win.width <= 844 - 12, `landscape: the reels sit inside the band (${win && Math.round(win.left)}..${win && Math.round(win.left + win.width)})`);
+// The owner's reference close-up (2026-09-16): the glass is the frame, not a picture inside it.
+ok(win && win.height >= 390 * 0.45 && win.height <= 390 - 24, `landscape: the reel window owns the height (${win && Math.round(win.height)} of 390 px)`);
+ok(win && win.width >= 844 * 0.45, `landscape: the reel window owns the width (${win && Math.round(win.width)} of 844 px)`);
 const wbox = win && { left: win.left, top: win.top, right: win.left + win.width, bottom: win.top + win.height };
-for (const sel of ['.slot-spin', '.slot-controls .slot-freeze', '.slot-odds', '.slot-top', '.slot-face', '#br-back', '.br-sp']) {
+// The readings overlay the cabinet on purpose now - they are opaque chips and the camera stopped paying for a
+// column to hold them. What still has to stand clear is the sill: the three buttons under the glass.
+for (const sel of ['.slot-spin', '.slot-controls .slot-freeze', '.slot-odds']) {
   const b = await boxOf(sel);
-  ok(b && !overlap(wbox, b), `landscape: ${sel} is clear of the reels ` + JSON.stringify(b && { l: Math.round(b.left), t: Math.round(b.top), r: Math.round(b.right), b: Math.round(b.bottom) }));
+  ok(b && wbox && b.top >= wbox.bottom - 8, `landscape: ${sel} sits on the sill under the glass ` + JSON.stringify(b && { t: Math.round(b.top), glass: Math.round(wbox.bottom) }));
 }
 const jar = await boxOf('.slot-jar');
 ok(!jar || (!overlap(jar, await boxOf('.slot-controls .slot-freeze')) && !overlap(jar, await boxOf('.slot-top'))), 'landscape: the spiral jar stands clear of the left column ' + JSON.stringify(jar && { l: Math.round(jar.left), t: Math.round(jar.top) }));
@@ -253,7 +256,7 @@ for (const sel of ['.slot-spin', '.slot-controls .slot-freeze', '.slot-odds', '.
   const b = await boxOf(sel);
   ok(b && b.left >= 0 && b.right <= 844 && b.top >= 0 && b.bottom <= 390, `landscape: ${sel} is on screen`);
 }
-ok(!overlap(await boxOf('.slot-controls .slot-freeze'), await boxOf('.slot-spin')) && !overlap(await boxOf('.slot-controls .slot-freeze'), await boxOf('.slot-face')), 'landscape: Freeze, Spin and the face keep their own places');
+ok(!overlap(await boxOf('.slot-controls .slot-freeze'), await boxOf('.slot-spin')) && !overlap(await boxOf('.slot-controls .slot-freeze'), await boxOf('.slot-odds')), 'landscape: Freeze, Spin and Odds keep their own places');
 await shot('landscape-01-playing.png');
 // THE FLOW (shared/hypno/callout.js): a paid landing lights its glyphs, then the word and the host fx fire TOGETHER at
 // 400 ms; the next row is a two-GIF `none`, the GIF tease: one fx.gif_burst { count: 1 }, no word, no SP.

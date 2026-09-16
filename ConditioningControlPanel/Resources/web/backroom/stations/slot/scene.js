@@ -34,9 +34,19 @@ const FIT_MARGIN = 1.04;        // breathing room around the marquee, reels and 
 // lever and EMI's shelf stand well in front of the reel glass, so a straight fit leaves a band of empty room down
 // each side. A desk seat takes this much of that distance off: the reels, and the art on them, read big.
 const PLAY_CLOSE = 0.93;
+// A phone crops INTO its fit: the owner's reference close-ups cut the shelf and the lever ball at the edges
+// rather than leaving room around them (owner, 2026-09-16, one shot per orientation).
+const LAND_CLOSE = 1.08, PORT_CLOSE = 0.92;
+// 0 aims dead at the reel glass, 1 at the middle of the whole span: half way keeps the glass near the centre
+// and still leaves the lever its room on the right (owner, 2026-09-16: "keep a little space on the right").
+const GLASS_AIM = 0.16;
 // EMI'S SHELF: her perch beside the reel window while the player is seated, answering the lever on the right.
 // Cabinet space, the glb's own units: outboard of the side panel, the top surface level with the reels.
 const SHELF = { x: -0.66, top: 0.99, z: 0.36, w: 0.17, d: 0.16, lip: 0.03 };
+/* UPRIGHT the plank comes IN off that line. A tall frame is bought by the width, and the shelf at -0.66 is the
+ * widest thing in it: every pixel it reaches outboard is a pixel of reel. Pulled in and forward she still stands
+ * beside the glass, on the same plank, and the reels come up by about a fifth (owner, 2026-09-16). */
+const SHELF_TALL = { x: -0.52, z: 0.44 };
 const PERCH_SCALE = 0.85, PERCH_HOP = 0.11;   // a smaller EMI on a small shelf, and the arc of her jump across
 const PULL_MAX = 0.5, PULL_COMMIT = 0.55;
 const LEAN = 0.22, BREATH_RAD = 0.03;   // Law VIII lean into a press; THE BREATH's reach at rest
@@ -285,10 +295,16 @@ export async function createScene(o) {
    *  on the left, Spin and the face keep the right corners, and Freeze runs along the BOTTOM (owner,
    *  2026-09-16) rather than stacking down the left, which is why the two side columns are now EQUAL: the
    *  view offset below is (right - left) / 2, so matching them is what puts the cabinet in the middle of the
-   *  screen instead of shouldering it into whatever space the left column left over. */
-  const sideband = (w, h) => (h <= 500 && w > h ? { left: 142, right: 142, top: 14, bottom: 66 } : null);
+   *  screen instead of shouldering it into whatever space the left column left over.
+   *
+   *  THE BANDS ARE MARGINS NOW, NOT COLUMNS (owner, 2026-09-16: "push the pov closer on landscape"). A band is
+   *  screen the fit is forbidden to use, so a 142 px column down each side and a 66 px sill was paying for the
+   *  chrome twice - once in pixels and again in camera distance. The chips are small and opaque and they read
+   *  perfectly well OVER the cabinet, so the only thing still bought is the Freeze sill along the bottom. */
+  const sideband = (w, h) => (h <= 500 && w > h ? { left: 16, right: 16, top: 8, bottom: 54 } : null);
   function frame(aspect, w = 16, h = 9) {
     let closeSeat = false;   // the seated pose: the one EMI takes her shelf for (the overview keeps her topper)
+    standShelf(aspect < 0.8);   // where the plank is has to be settled BEFORE the box that measures it
     const y = rig.position.y; rig.position.y = 0; rig.updateMatrixWorld(true);
     const seat = get('cam_seat').getWorldPosition(new THREE.Vector3()), target = get('cam_target').getWorldPosition(new THREE.Vector3());
     const dir = seat.sub(target); if (dir.lengthSq() < 1e-8) dir.set(0, 0, 1); dir.normalize();
@@ -337,25 +353,34 @@ export async function createScene(o) {
     rig.position.y = y; rig.updateMatrixWorld(true);
     const play = fit(playBox, dir, target);
     if (aspect < 0.8) {
-      // Keep the reels prominent, with the whole working lever inside the phone frame.
-      // EMI comes with them (owner, 2026-09-16: she was off the top of both phone frames). UPRIGHT she keeps
-      // her topper and is measured into the box there: a tall frame has height to spend and no width, and the
-      // shelf is outboard of the side panel - buying it would cost the reels a fifth of their size.
-      const reelBox = new THREE.Box3();
-      (glass ? [glass] : reels).forEach(n => reelBox.expandByObject(n));
-      reelBox.expandByObject(lever);
-      withEmi(reelBox, false);
+      // UPRIGHT, to the owner's own reference frame (2026-09-16): the topper on top, the marquee under it, the
+      // reels big, the lever and a little room to its right - and EMI ON THE SIDE SHELF, not on her topper.
+      // She took the topper here until now because the shelf is outboard and a tall frame has no width to sell;
+      // the owner would rather buy it, so the shelf is in the box and `closeSeat` sends her out to it.
+      const reelBox = new THREE.Box3(), glassBox = new THREE.Box3();
+      (glass ? [glass] : reels).forEach(n => glassBox.expandByObject(n));
+      reelBox.copy(glassBox).expandByObject(lever);
+      for (const n of [get('marquee')]) if (n) reelBox.expandByObject(n);
+      withEmi(reelBox, true);
+      closeSeat = true;
       const close = fit(reelBox, dir);
-      play.look.copy(close.look);
-      play.dist = close.dist * 1.06;
+      // Fit the whole span, then AIM AT THE GLASS. EMI's shelf reaches further out on the left than the lever
+      // does on the right, so a camera aimed at the middle of the box puts the reels off to one side - which is
+      // the one thing the owner's reference frame does not do. The box buys the distance; the glass buys the aim.
+      const glassMid = glassBox.getCenter(new THREE.Vector3()).lerp(close.look, GLASS_AIM);
+      play.look.set(glassMid.x, close.look.y, glassMid.z);
+      play.dist = close.dist * PORT_CLOSE;
       play.pos.copy(play.look).addScaledVector(dir, play.dist);
     }
     const band = sideband(w, h);
     if (band) {
-      // The reels fill the height of the band between the side columns; the marquee reads above them or not at all.
       // A view offset (resize) aims the band's centre, not the canvas centre, at the reels: the seat-camera mechanism.
       // SIDEWAYS is the desk's problem exactly: a short frame cuts her topper off the top. So a phone on its
       // side takes the shelf too, and she reads level with the reels between the button column and the glass.
+      // The box is EMI's shelf, the glass and the lever - her at one edge and the handle at the other, which is
+      // the span the owner's reference close-up holds. It is the BANDS that got the camera in, not a smaller box:
+      // dropping the lever out of the fit did bring the reels up, but it also swung the box's centre over to
+      // EMI's side and put the glass off to the right, because the fit aims at the box, not at the glass.
       const reelBox = new THREE.Box3();
       (glass ? [glass] : reels).forEach(n => reelBox.expandByObject(n));
       reelBox.expandByObject(lever);
@@ -363,7 +388,7 @@ export async function createScene(o) {
       closeSeat = true;
       const close = fit(reelBox, dir, null, { x: (w - band.left - band.right) / w, y: (h - band.top - band.bottom) / h });
       play.look.copy(close.look);
-      play.dist = close.dist;
+      play.dist = close.dist * LAND_CLOSE;
       play.pos.copy(play.look).addScaledVector(dir, play.dist);
     } else if (aspect >= 0.8) {
       // A desk seat: closer than the box fit, so the cabinet fills the frame (PLAY_CLOSE). A phone keeps its own
@@ -449,6 +474,16 @@ export async function createScene(o) {
       shelf.add(lip);
     }
     emiHost.add(shelf);
+  }
+  /** Move the plank between its two stations (wide and tall). The perch is the same vector the hop and the fit
+   *  both read, so moving it moves her, her shelf and the frame that measures them together. */
+  function standShelf(tall) {
+    if (!perch || !shelf) return;
+    const x = tall ? SHELF_TALL.x : SHELF.x, z = tall ? SHELF_TALL.z : SHELF.z;
+    if (perch.x === x && perch.z === z) return;
+    perch.set(x, SHELF.top, z);
+    shelf.position.copy(perch);
+    shelf.updateMatrixWorld(true);
   }
   /** THE HOP: 0 on her topper, 1 on the shelf. She crosses while the camera settles into the seat and climbs back
    *  as the cabinet sinks. Law VI: reduced motion settles the travel (rise() goes straight to `play`), so k is 0

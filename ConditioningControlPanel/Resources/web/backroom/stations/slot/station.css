@@ -124,19 +124,24 @@
 
 @media (any-pointer: coarse) { .slot-hint { display: none; } }
 
-/* A phone on its side (scene.js `sideband`, the same numbers): the pills, Freeze and Odds stack in a 110 px column on
-   the left, Spin and the face keep the right corners, and the reels fill the height of the band between. */
+/* A phone on its side (scene.js `sideband`, the same numbers). The bands are margins now, not columns: the
+   chips are small and opaque and they read over the cabinet, so the camera no longer pays for them. What is
+   left is trimmed to what a close-up can carry (owner, 2026-09-16) - one tight column of readings top left,
+   Freeze along the bottom sill, Odds and Spin in the bottom corners, and EMI's pixel face gone, because she
+   is standing on her shelf in the frame and a portrait of her beside it is the one thing that is not needed. */
 @media (max-height: 500px) and (orientation: landscape) {
-  /* Freeze runs along the bottom, centred between Odds and Spin: three buttons stacked down the left edge
-     was a column of chrome taller than the cabinet, and it pushed the reels off-centre to make room. */
-  .slot-station .slot-controls { left: 50%; right: auto; bottom: 12px; width: auto; transform: translateX(-50%); }
-  .slot-station .slot-freeze { flex-direction: row; gap: 10px; flex: none; }
-  .slot-station .slot-freeze button { min-width: 104px; padding: 8px 10px; font-size: 11px; letter-spacing: .5px; }
-  .slot-station .slot-spin { right: 12px; bottom: 12px; min-width: 120px; }
-  .slot-station .slot-odds { left: 12px; bottom: 12px; max-width: min(320px, calc(100vw - 480px)); }
-  .slot-station .slot-top, .slot-station[data-host-back] .slot-top { top: 54px; left: 12px; max-width: 124px; }
-  .slot-station .slot-sp, .slot-station .slot-jackpot, .slot-station .slot-spirals, .slot-station .slot-status { font-size: 10px; padding: 4px 8px; }
-  .slot-station .slot-face { width: 44px; height: 40px; }
+  .slot-station .slot-controls { left: 50%; right: auto; bottom: 10px; width: auto; transform: translateX(-50%); }
+  .slot-station .slot-freeze { flex-direction: row; gap: 8px; flex: none; }
+  .slot-station .slot-freeze button { min-width: 88px; min-height: 34px; padding: 6px 8px; font-size: 10px; letter-spacing: .4px; }
+  .slot-station .slot-spin { right: 10px; bottom: 10px; min-width: 104px; padding: 7px 12px; min-height: 34px; }
+  .slot-station .slot-odds { left: 10px; bottom: 10px; max-width: min(300px, calc(100vw - 420px)); }
+  .slot-station .slot-odds summary { padding: 6px 10px; }
+  /* The readings drop to the bottom of the left edge: sideways the camera is close enough that the top-left
+     corner is EMI on her shelf, and a chip stack parked over her is the one thing a close-up cannot carry. */
+  .slot-station .slot-top, .slot-station[data-host-back] .slot-top { top: auto; bottom: 48px; left: 10px; max-width: 148px; gap: 4px; }
+  .slot-station .slot-sp, .slot-station .slot-jackpot, .slot-station .slot-spirals, .slot-station .slot-status {
+    font-size: 10px; padding: 3px 8px; background: #201229c4; }
+  .slot-station .slot-face { display: none; }
   .slot-station[data-host-back] .slot-gain { right: 64px; }
 }
 
