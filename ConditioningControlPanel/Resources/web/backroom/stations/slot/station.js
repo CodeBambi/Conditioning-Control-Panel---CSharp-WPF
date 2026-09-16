@@ -554,17 +554,19 @@ export async function mount(ctx) {
     return my === session && alive;
   }
 
-  async function press() {
+  /** `sounded` says the drag already played the lever on its way down (scene.js onMove), so we do not replay it. */
+  async function press(info) {
+    const sounded = !!(info && info.sounded === true);
     if (!alive || suspended || !scene || el.dataset.phase !== 'play') return;
     endAttract();
     sound.arm();
     // Law VI, Brake 7: one press settles a rollup that is still counting, straight to the tape's value, with
     // the mini-thud and the +N it would have ended on. The rest of the climb and the frame's pulse go quiet.
     if (bank && bank.kind === 'pay') { bank.skip({ land: true }); sound.hush(); scene.paylineOut(); note('skip', { rollup: true }); }
-    if (busy) { if (pace === 'reveal') { queued = true; scene.answer(); sound.lever(); note('answer', { queued: true }); } return; }
+    if (busy) { if (pace === 'reveal') { queued = true; scene.answer(); if (!sounded) sound.lever(); note('answer', { queued: true }); } return; }
     const my = session, before = tape.snapshot();
     // Law VIII: the lever leans and EMI glances on this frame, before the tape or the server answers.
-    scene.answer(); sound.lever(); clearTimeout(glanceTimer); setFace(glance(pose, pressPose()));
+    scene.answer(); if (!sounded) sound.lever(); clearTimeout(glanceTimer); setFace(glance(pose, pressPose()));
     note('answer', { pose });
     busy = true; queued = false; card(null); mark('breath'); sync();
     board(t('br_slot_marquee_spin', 'Spinning'));   // THE MARQUEE BOARD: the pull is on the sign before the tape answers
@@ -638,7 +640,8 @@ export async function mount(ctx) {
       createScene({ canvas: $('.slot-stage'), reduced, stillFx, variant: variant && variant.id, palette: variant && variant.palette, hint: $('.slot-hint'),
                     payline: $('.slot-payline'), jar: $('.slot-jar'),
                     canPull: () => (!busy || pace === 'reveal') && !suspended,
-                    onLever: () => press(), onFreeze: col => toggleFreeze(col),
+                    onLever: info => press(info), onPull: () => { sound.arm(); sound.lever(); },
+                    onFreeze: col => toggleFreeze(col),
                     onReelSpeed: (i, speed) => sound.roll(i, speed),
                     onReelStop: i => { const p = playing; sound.thud(i, !!p && i === p.lastReel && !(p.o.pay > 0));
                       // A5: EMI landed on this reel, so the cell wiggles after this thud and she glances. The next

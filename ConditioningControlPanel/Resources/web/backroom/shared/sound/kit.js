@@ -243,7 +243,7 @@ const SCORES = {
    * THE LEVER PULL, the whole gesture in one cue: the stroke down, the stop at the bottom, the spring back.
    * 500-700 ms, and the four voices are four cabinets:
    *   A Iron     ratchet ticks up the stroke, a heavy metallic clank at the bottom, a spring click coming back
-   *   B Candy    a velvety whoosh, a muted pop, two little chimes on the release (the pink cabinet's own)
+   *   B Candy    a catch on the grab, a velvety whoosh, a muted pop, two little chimes on the release
    *   C Toy      plastic click-clack, a knock, a cartoon spring boing: the shortest and the bounciest
    *   D Vintage  one long creaking ratchet, a deep wooden thunk, a "krrr" that hands the beat to the reels
    */
@@ -257,7 +257,8 @@ const SCORES = {
         noise(2300, 0.52, 0.03, 0.055 * lv, { q: 5, part: 'spring', dry: true }),
         tone(700, 0.52, 0.04, 0.035 * lv, { part: 'spring', dry: true }));
     } else if (v === 'B') {
-      out.push(noise(320, 0, 0.3, 0.07 * lv, { hzTo: 1500, q: 0.9, attack: 0.45, part: 'whoosh', dry: true }),
+      out.push(noise(1250, 0, 0.022, 0.06 * lv, { q: 3.4, part: 'catch', dry: true }),   // THE GRAB: B had nothing until the pop at 0.29, so the pull read late
+        noise(320, 0, 0.3, 0.07 * lv, { hzTo: 1500, q: 0.9, attack: 0.18, part: 'whoosh', dry: true }),
         tone(250, 0.29, 0.14, 0.2 * lv, { hzTo: 96, wave: 'triangle', lp: 900, part: 'pop' }),
         noise(700, 0.29, 0.05, 0.045 * lv, { type: 'lowpass', part: 'pop', dry: true }),
         ...bell(ROOT_HZ, 0.44, 0.2, 0.07 * lv, 'chime'), ...bell(ROOT_HZ * SEMI(7), 0.53, 0.17, 0.065 * lv, 'chime'));
