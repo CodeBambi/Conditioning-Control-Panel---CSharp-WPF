@@ -20,6 +20,7 @@
 import { TIMING, fanCard, lampBreath } from './feel.js';
 import { rankLabel, suitOf, totalOf } from './hand.js';
 import { DECK_VALUES } from '../../shared/hypno/media.js';
+import { planSlip, wornCode, slipShake, shakeOffset } from './glitch.js';
 import { HIGHLIGHT_MS, HIGHLIGHT_GAP_MS } from '../../shared/hypno/callout.js';
 
 const TAU = Math.PI * 2;
@@ -56,6 +57,7 @@ export function createTable(canvas, { kit = null } = {}) {
   let fan = null, ripples = [], chips = [], tunnelAt = -1, glow = null, lastNow = 0;
   let hits = [];   // THE GLYPH HIT (callout.js): { id, t0 } per winning card, a mint rim and a 1.06 pop over HIGHLIGHT_MS
   const hitPulse = (c, now) => { const h = hits.find((x) => x.id === c.id); if (!h) return 0; const q = (now - h.t0) / HIGHLIGHT_MS; return q >= 0 && q < 1 ? Math.sin(q * Math.PI) : 0; };
+  let slip = null, slipAt = 0;   // THE SLIP (glitch.js): a costume over one settled code, never written back
   let W = 0, H = 0, D = 1, cache = { key: '', weave: null, print: null };
   const stats = { backs: 0, pictures: 0, fan: 0, frame: 0 };
 
@@ -102,7 +104,7 @@ export function createTable(canvas, { kit = null } = {}) {
     x.stroke(); x.restore();
   }
 
-  function drawCard(code, cw, ch, flipP, o) {
+  function drawCard(code, cw, ch, flipP, o, shake = 0) {
     g.scale(Math.max(Math.abs(Math.cos(Math.PI * flipP)), 0.02), 1);
     rrect(g, -cw / 2, -ch / 2, cw, ch, cw * 0.1);
     if (flipP >= 0.5 && code) {
@@ -120,8 +122,11 @@ export function createTable(canvas, { kit = null } = {}) {
       const suit = suitOf(code);
       g.fillStyle = suit.red ? '#d6246e' : '#22123a'; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.shadowColor = 'rgba(255,255,255,.95)'; g.shadowBlur = pic ? 5 : 0;
-      g.font = `700 ${cw * 0.26}px "Segoe UI", system-ui, sans-serif`; g.fillText(rankLabel(code), -cw * 0.26, -ch * 0.34);
-      g.font = `${cw * 0.2}px "Segoe UI Symbol", "Segoe UI", sans-serif`; g.fillText(suit.glyph, -cw * 0.26, -ch * 0.17);
+      // THE SLIP tears the two corner glyphs apart while the face crosses over; the big pip holds
+      // still so the card never reads as simply shaking.
+      const sx = shake ? shakeOffset(shake, 0, o.now) : 0, sy = shake ? shakeOffset(shake, 1, o.now) : 0;
+      g.font = `700 ${cw * 0.26}px "Segoe UI", system-ui, sans-serif`; g.fillText(rankLabel(code), -cw * 0.26 + sx, -ch * 0.34);
+      g.font = `${cw * 0.2}px "Segoe UI Symbol", "Segoe UI", sans-serif`; g.fillText(suit.glyph, -cw * 0.26 - sy, -ch * 0.17);
       g.font = `${cw * 0.5}px "Segoe UI Symbol", "Segoe UI", sans-serif`; g.fillText(suit.glyph, 0, ch * 0.1);
       g.shadowBlur = 0;
     } else {
@@ -181,7 +186,19 @@ export function createTable(canvas, { kit = null } = {}) {
   }
 
   const api = {
-    clear() { cards = []; hands = 1; active = -1; bets = []; betsShown = true; chips = []; tunnelAt = -1; glow = null; hits = []; },
+    clear() { cards = []; hands = 1; active = -1; bets = []; betsShown = true; chips = []; tunnelAt = -1; glow = null; hits = []; slip = null; slipAt = 0; },
+    /**
+     * THE SLIP: roll this hand's glitch over the cards that are face up right now. `seed` is the
+     * hand's own id, so a hand always slips the same way and the game's rng is never touched.
+     * Cosmetic: nothing here writes a card's code, so the felt total stays the server's.
+     */
+    armSlip(seed, now) {
+      slip = planSlip(seed, cards.filter((c) => c.code && c.faceAt != null).map((c) => ({ id: c.id, code: c.code })));
+      slipAt = now;
+      return slip;
+    },
+    /** The slip this hand drew, or null. For the station's own logging and the tests. */
+    slipped() { return slip; },
     /** `settled`: already on its spot and turned (a quiet adopt, a suspend's flush), no flight. */
     addCard({ owner, slot, code, settled = false }, now) {
       cards.push({ id: ++seq, owner, slot, code: code || null, bornAt: now, faceAt: settled && code ? now - TIMING.flipMs : null, landed: !!settled, x: NaN, y: NaN, rot: 0, lift: 0 });
@@ -275,7 +292,8 @@ export function createTable(canvas, { kit = null } = {}) {
           rrect(g, -L.cw / 2 - 2, -L.ch / 2 - 2, L.cw + 4, L.ch + 4, L.cw * 0.12); g.stroke(); g.restore();
         }
         g.save(); g.translate(c.x, c.y - c.lift * 6); g.rotate(c.rot); if (pulse > 0) g.scale(1 + 0.06 * pulse, 1 + 0.06 * pulse);
-        drawCard(c.code, L.cw, L.ch, flipOf(c, now, still), { ...o, now }); g.restore();
+        drawCard(wornCode(c, c.code, slip, slipAt, now), L.cw, L.ch, flipOf(c, now, still), { ...o, now },
+          slipShake(c, slip, slipAt, now, k, still)); g.restore();
       }
       // totals as the felt shows them (face-up cards only)
       g.font = `600 ${Math.max(12, W * 0.013)}px "Segoe UI", system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';

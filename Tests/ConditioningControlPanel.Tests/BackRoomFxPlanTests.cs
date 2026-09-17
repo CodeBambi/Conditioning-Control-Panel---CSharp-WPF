@@ -205,7 +205,7 @@ public class BackRoomFxPlanTests
         Assert.Equal((0, 2), (words.Step.AtMs, words.Step.Count));
         Assert.Equal(new[] { "Drop", "Sink" }, words.Words);
         var spiral = Step(p, FxPrim.SpiralFull);
-        Assert.Equal((500 + Word, 1500, 0.55), (spiral.AtMs, spiral.DurationMs, spiral.Level));
+        Assert.Equal((500 + Word, 2000, 0.55), (spiral.AtMs, spiral.DurationMs, spiral.Level));
         Assert.Equal(@"C:\woven\screen.gif", p.Steps[1].SpiralPath);
     }
 
@@ -257,14 +257,18 @@ public class BackRoomFxPlanTests
     public void Spirals_BriefAndFull_AtTheirAlphas()
     {
         var brief = Assert.Single(Plan("fx.spiral_brief").Steps).Step;
-        Assert.Equal((FxPrim.SpiralFull, 1500, 0.55), (brief.Prim, brief.DurationMs, brief.Level));
+        Assert.Equal((FxPrim.SpiralFull, 2000, 0.55), (brief.Prim, brief.DurationMs, brief.Level));
         var full = Assert.Single(Plan("fx.spiral_full").Steps).Step;
-        Assert.Equal((FxPrim.SpiralFull, 4000, 0.7), (full.Prim, full.DurationMs, full.Level));
+        Assert.Equal((FxPrim.SpiralFull, 5000, 0.7), (full.Prim, full.DurationMs, full.Level));
 
         var briefFull = Assert.Single(Plan("fx.spiral_brief", BackRoomFxIntensity.Full).Steps).Step;
-        Assert.Equal((1950, 0.55), (briefFull.DurationMs, briefFull.Level));
+        Assert.Equal((2600, 0.55), (briefFull.DurationMs, briefFull.Level));
         var fullCalm = Assert.Single(Plan("fx.spiral_full", BackRoomFxIntensity.Calm).Steps).Step;
-        Assert.Equal((4000, 0.35), (fullCalm.DurationMs, fullCalm.Level));
+        Assert.Equal((5000, 0.35), (fullCalm.DurationMs, fullCalm.Level));
+
+        // The jackpot hero's own spiral is NOT this constant: it runs for JackpotHeroMs so the burst,
+        // the rain, the glitches and the words still land together on its beat. Unmoved on purpose.
+        Assert.Equal(4000, BackRoomFxPlan.JackpotHeroMs);
     }
 
     [Fact]

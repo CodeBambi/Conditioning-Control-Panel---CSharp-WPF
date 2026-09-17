@@ -176,25 +176,26 @@ public class BackRoomOverlayMathTests
     }
 
     [Fact]
-    public void Spiral_FadesIn250_HoldsThenOut500_OrOutFromARelease_NeverPops()
+    public void Spiral_FadesIn600_HoldsThenOut900_OrOutFromARelease_NeverPops()
     {
-        Assert.Equal((250, 500), (BackRoomOverlayMath.SpiralFadeInMs, BackRoomOverlayMath.SpiralFadeOutMs));
-        Assert.Equal(0, BackRoomOverlayMath.SpiralEnvelope(0, 4000, null));
-        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(125, 4000, null), 6);
-        Assert.Equal(1, BackRoomOverlayMath.SpiralEnvelope(250, 4000, null));
-        Assert.Equal(1, BackRoomOverlayMath.SpiralEnvelope(4000, 4000, null));
-        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(4250, 4000, null), 6);
-        Assert.False(BackRoomOverlayMath.SpiralDone(4499, 4000, null));
-        Assert.True(BackRoomOverlayMath.SpiralDone(4500, 4000, null));
-        // The brief spiral (1500 ms) fades the same way.
-        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(1750, 1500, null), 6);
-        Assert.True(BackRoomOverlayMath.SpiralDone(2000, 1500, null));
+        Assert.Equal((600, 900), (BackRoomOverlayMath.SpiralFadeInMs, BackRoomOverlayMath.SpiralFadeOutMs));
+        Assert.Equal(0, BackRoomOverlayMath.SpiralEnvelope(0, 5000, null));
+        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(300, 5000, null), 6);
+        Assert.Equal(1, BackRoomOverlayMath.SpiralEnvelope(600, 5000, null));
+        Assert.Equal(1, BackRoomOverlayMath.SpiralEnvelope(5000, 5000, null));
+        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(5450, 5000, null), 6);
+        Assert.False(BackRoomOverlayMath.SpiralDone(5899, 5000, null));
+        Assert.True(BackRoomOverlayMath.SpiralDone(5900, 5000, null));
+        // The brief spiral (2000 ms) fades the same way.
+        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(2450, 2000, null), 6);
+        Assert.True(BackRoomOverlayMath.SpiralDone(2900, 2000, null));
 
         // A hold released at 2 s, while still at full: out from there, whatever the 20 s cap says.
-        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(2250, 20000, 2000), 6);
-        Assert.True(BackRoomOverlayMath.SpiralDone(2500, 20000, 2000));
+        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(2450, 20000, 2000), 6);
+        Assert.True(BackRoomOverlayMath.SpiralDone(2900, 20000, 2000));
         // Released during the fade in: both curves multiply, as the mockup draws it.
-        Assert.Equal(0.8 * 0.8, BackRoomOverlayMath.SpiralEnvelope(200, 20000, 100), 6);
+        // age 200 of a 600 rise is 1/3; released at 100, so 200 is 100 into a 900 fall, leaving 8/9.
+        Assert.Equal((1.0 / 3.0) * (8.0 / 9.0), BackRoomOverlayMath.SpiralEnvelope(200, 20000, 100), 6);
     }
 
     // ---- tunnel ----------------------------------------------------------------------------------

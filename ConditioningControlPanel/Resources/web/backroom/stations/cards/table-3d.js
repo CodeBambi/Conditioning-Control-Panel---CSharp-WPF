@@ -6,6 +6,7 @@ import { TIMING, fanCard, lampBreath } from './feel.js';
 import { DECK_VALUES } from '../../shared/hypno/media.js';
 import { cardLayout, cardCounts } from './layout-3d.js';
 import { createCardFace } from './card-face.js';
+import { planSlip, wornCode, slipShake, SLIP_MS } from './glitch.js';
 import { HIGHLIGHT_MS, HIGHLIGHT_GAP_MS } from '../../shared/hypno/callout.js';
 
 const clamp = (v) => Math.max(0, Math.min(1, v));
@@ -16,6 +17,7 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
   group.name = 'cards_runtime'; stage.scene.add(group);
   const authored = [], cards = [], fans = [], sparks = [], betChips = [];
   let active = -1, hands = 1, fan = null, disposed = false, now = 0, lastPaint = -Infinity, frameStep=1;
+  let seq = 0, slip = null, slipAt = 0;   // THE SLIP (glitch.js): paint-time only, never written to a code
   const point = (name) => nodes[name].getWorldPosition(new T.Vector3());
   const shoe = point('deck_shoe_mouth');
   const width = Number(nodes.card_slot_p0_0.userData.card_width), height = Number(nodes.card_slot_p0_0.userData.card_height);
@@ -36,7 +38,7 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
   function makeCard(c) {
     const face = createCardFace(), material = new T.MeshBasicMaterial({ map: face.texture, side: T.DoubleSide, transparent: true, toneMapped: false });
     const mesh = new T.Mesh(geometry, material); mesh.quaternion.copy(base); mesh.renderOrder = 2; group.add(mesh);
-    return { ...c, mesh, material, face, landed: !!c.settled, faceAt: c.settled && c.code ? c.bornAt - TIMING.flipMs : null };
+    return { ...c, id: ++seq, mesh, material, face, landed: !!c.settled, faceAt: c.settled && c.code ? c.bornAt - TIMING.flipMs : null };
   }
   function drop(c) { c.mesh.removeFromParent(); c.material.dispose(); c.face.dispose(); if (c.rim) { c.rim.removeFromParent(); c.rim.material.dispose(); c.rim = null; } }
   function rimFor(c) {
@@ -76,7 +78,14 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
     }
   }
   const api = {
-    clear() { cards.splice(0).forEach(drop); hands = 1; active = -1; },
+    clear() { cards.splice(0).forEach(drop); hands = 1; active = -1; slip = null; slipAt = 0; },
+    /** THE SLIP, the 3D table's half of table.js `armSlip`. Same seed, same answer. */
+    armSlip(seed, time) {
+      slip = planSlip(seed, cards.filter((c) => c.code && c.faceAt != null).map((c) => ({ id: c.id, code: c.code })));
+      slipAt = time;
+      return slip;
+    },
+    slipped() { return slip; },
     // Ignore malformed cards without inventing a placement or stopping the station.
     addCard(c, time) { if (!validCardSlot(c.owner, c.slot)) return false; cards.push(makeCard({ ...c, code: c.code || null, bornAt: time })); return true; },
     split() { const c = cards.find((x) => x.owner === 0 && x.slot === 1); if (c) { c.owner = 1; c.slot = 0; } hands = 2; },
@@ -118,7 +127,9 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
       layout=cardLayout(stage.fixture,hands,cardCounts(cards));
       // Freeze any in-flight gesture on a settings transition; never replay it later.
       if (o.still) { for (const c of cards) { c.landed = true; if (c.code) c.faceAt = now - TIMING.flipMs; } if (fan) fan.still = true; }
-      const repaint = now - lastPaint >= 1000 / 15;
+      // A tearing card needs every frame it can get, so the 15 Hz face throttle lifts while a slip runs.
+      const tearing = !!slip && now - slipAt >= 0 && now - slipAt < SLIP_MS;
+      const repaint = tearing || now - lastPaint >= 1000 / 15;
       if (repaint) lastPaint = now;
       lamp.intensity = (o.still ? .35 : lampBreath(now, false)) * o.k * .7;
       for (const c of cards) {
@@ -133,7 +144,8 @@ export function createTable3D(stage, { kit, onDeal } = {}) {
           if (pulse > 0) { c.mesh.scale.multiplyScalar(1 + 0.06 * pulse); rim.position.copy(pos).addScaledVector(normal, -0.002); rim.scale.setScalar(1 + 0.06 * pulse); rim.material.opacity = 0.6 * pulse * o.k; }
         }
         c.material.color.set(c.glow && now - c.glow < TIMING.glowMs ? '#ffb2d0' : '#ffffff');
-        if (repaint) c.face.paint(c.code, flip >= .5, o, typeof kit === 'function' ? kit() : kit);
+        if (repaint) c.face.paint(wornCode(c, c.code, slip, slipAt, now), flip >= .5, o,
+          typeof kit === 'function' ? kit() : kit, slipShake(c, slip, slipAt, now, o.k, o.still));
       }
       if (fan && api.fanDone(now)) { fan = null; fans.splice(0).forEach(drop); }
       if (fan) fans.forEach((c, i) => {

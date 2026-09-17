@@ -85,6 +85,14 @@ namespace ConditioningControlPanel.Services
         internal const double MIN_GIF_FRAME_DELAY_MS = 10.0;
 
         /// <summary>
+        /// Extra DISTINCT candidates an authored burst draws beyond the images it needs, so a file that
+        /// will not decode costs the burst one picture instead of sending it back for a repeating draw.
+        /// A burst is 1..8 images (BackRoomFxPlan.MaxBurstFlashes), so this stays cheap: at most this
+        /// many extra pack decrypts, and only on a burst.
+        /// </summary>
+        internal const int BurstSpareCandidates = 3;
+
+        /// <summary>
         /// The per-frame delay an animated flash should actually play at: the file's own delay
         /// divided by the user's speed multiplier (2x = half the delay = twice as fast), floored at
         /// <see cref="MIN_GIF_FRAME_DELAY_MS"/>. A non-positive or non-finite source delay falls back
@@ -898,7 +906,19 @@ namespace ConditioningControlPanel.Services
                 // Load images, retrying with fresh picks if some are corrupted/unsupported,
                 // until we reach the requested count or run out of candidates.
                 var targetCount = amount ?? settings.SimultaneousImages;
-                var loadedImages = await LoadImagesUntilAsync(targetCount);
+
+                // An AUTHORED burst (the Back Room, CONTRACT section 4 - `look` is what marks one) must
+                // never show the same picture twice inside one burst: five flashes of one GIF read as
+                // broken, not as an effect. The ambient pipeline draws with replacement and dedupes on
+                // PATH, which cannot see that two pack decrypts of the same entry are the same picture -
+                // ContentPackService.GetPackFileTempPath mints a fresh ccp_temp_<guid> path per call, so
+                // pack and curated users got repeats where a plain-folder user never did.
+                // GetChaosImagePaths dedupes on SOURCE identity (pool index for disk and pack entries,
+                // URL for remote), which is the property a burst needs. Spare candidates ride along so
+                // one unreadable file shortens the burst instead of forcing a second, repeating draw.
+                var loadedImages = look == null
+                    ? await LoadImagesUntilAsync(targetCount)
+                    : await LoadImagesUntilAsync(targetCount, GetChaosImagePaths(targetCount + BurstSpareCandidates));
 
                 if (loadedImages.Count == 0)
                 {
@@ -992,11 +1012,15 @@ namespace ConditioningControlPanel.Services
         /// Loads up to <paramref name="targetCount"/> images, retrying with new candidates
         /// when a file is missing, corrupted, or uses an unsupported codec. Images are used
         /// as soon as they decode successfully; slow or broken files do not block the others.
+        /// <para><paramref name="fixedPool"/> is an authored burst's already-drawn, already-distinct
+        /// candidate list (see <see cref="FlashBurstLook"/>). Given one, candidates are taken from it in
+        /// order and it is NEVER topped up, so a burst can come up short but can never repeat a picture.</para>
         /// </summary>
-        private async Task<List<LoadedImageData>> LoadImagesUntilAsync(int targetCount)
+        private async Task<List<LoadedImageData>> LoadImagesUntilAsync(int targetCount, IReadOnlyList<string>? fixedPool = null)
         {
             var loaded = new List<LoadedImageData>(targetCount);
             var attempted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int poolCursor = 0;
             var settings = App.Settings.Current;
             var scale = settings.ImageScale / 100.0;
             int attempts = 0;
@@ -1011,7 +1035,18 @@ namespace ConditioningControlPanel.Services
                 int fetch = Math.Min(Math.Max(need * 3, 3), maxAttempts - attempts - pending.Count);
                 if (fetch > 0)
                 {
-                    var candidates = GetNextImages(fetch);
+                    List<string> candidates;
+                    if (fixedPool != null)
+                    {
+                        int take = Math.Max(0, Math.Min(fetch, fixedPool.Count - poolCursor));
+                        candidates = new List<string>(take);
+                        for (int i = 0; i < take; i++) candidates.Add(fixedPool[poolCursor + i]);
+                        poolCursor += take;
+                    }
+                    else
+                    {
+                        candidates = GetNextImages(fetch);
+                    }
                     if (candidates.Count == 0 && pending.Count == 0) break;
 
                     var newCandidates = candidates.Where(c => attempted.Add(c)).ToList();

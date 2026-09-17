@@ -403,7 +403,7 @@ public class BackRoomFxTests
         Assert.Empty(single.Skipped);
         clock.Advance(10_000);
         Assert.DoesNotContain(sink.Calls, c => c.Call.StartsWith("sub:"));
-        Assert.Contains(sink.Calls, c => c.Call.StartsWith("spiral:screen.gif:1500:0.55:"));
+        Assert.Contains(sink.Calls, c => c.Call.StartsWith("spiral:screen.gif:2000:0.55:"));
     }
 
     [Fact]

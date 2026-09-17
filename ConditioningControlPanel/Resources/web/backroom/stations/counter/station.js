@@ -58,7 +58,7 @@ export async function mount(ctx) {
     document.head.append(cssLink);
   }
 
-  let el = null, grid = null, chipEl = null, closedEl = null, cards = new Map(), alive = false, suspended = false, unSp = null, unSet = null;
+  let el = null, grid = null, chipEl = null, closedEl = null, nudgeEl = null, cards = new Map(), alive = false, suspended = false, unSp = null, unSet = null;
   let demo = null, media = null, dealt = null, demos = 0;   // the running "Try it" preview, the deal asked for it (once per visit)
   const flipped = new Set();
   let chime = createChime();
@@ -80,11 +80,13 @@ export async function mount(ctx) {
     const top = h('header', 'counter-top');
     chipEl = h('span', 'counter-sp');
     top.append(backButton('counter-back'), h('h2', 'counter-title', L('br_counter_title')), chipEl);
+    nudgeEl = h('p', 'counter-nudge', L('br_counter_wheel_nudge'));
+    nudgeEl.hidden = true;
     grid = h('div', 'counter-grid');
     closedEl = h('div', 'counter-closed');
     closedEl.hidden = true;
     closedEl.append(h('p', null, L('br_counter_closed')), backButton('counter-closed-back'));
-    root.append(top, grid, closedEl);
+    root.append(top, nudgeEl, grid, closedEl);
     return root;
   }
 
@@ -233,6 +235,9 @@ export async function mount(ctx) {
     grid.hidden = phase === 'closed';
     chipEl.textContent = L('br_counter_price', fmt(counter.sp()));
     if (phase === 'closed') return;
+    // THE NUDGE: one quiet line under the chip when the buy that just landed leaves them short of the
+    // other power-up. It points at the wheel and nothing else: no button, nothing posted, no station change.
+    nudgeEl.hidden = !counter.nudge;
     for (const v of counter.view()) {
       let c = cards.get(v.id);
       if (!c) { c = makeCard(v); cards.set(v.id, c); grid.append(c.card); }

@@ -126,6 +126,13 @@ export async function mount(ctx) {
   }
   function card(text) { if (!el) return; $('.wheel-card p').textContent = text || ''; $('.wheel-card').hidden = !text; }
   const closedText = () => t('br_wheel_closed', 'The wheel is closed for a moment.');
+  /**
+   * THE BANK (CONTRACT 10.16.H): spins earned at the slot and the roulette, spent here. The wheel is
+   * still daily; a banked spin is what lets a spun player turn it again. `spent` is the one question
+   * the whole station asks: today's spin is gone AND there is nothing banked to spend.
+   */
+  const banked = () => Math.max(0, Math.trunc(Number(st && st.freeSpins) || 0));
+  const spent = () => !!(st && st.spun) && banked() === 0;
 
   /* ------------------------------------------------------------ readouts */
   const clock = () => (st ? countdown(st.nextResetAt, Date.now()) : null);
@@ -145,17 +152,20 @@ export async function mount(ctx) {
   }
   function sync() {
     if (!el || !st) return;
-    const c = clock(), r = st.spun ? readResult(st.result) : null, j = st.jackpot || {};
+    const c = clock(), r = spent() ? readResult(st.result) : null, j = st.jackpot || {};
     $('.wheel-jackpot').textContent = jackpotChip(j, t, fmt);   // MUST HIT in place of the odds (10.16.E)
     $('.wheel-jackpot').classList.toggle('is-must-hit', j.mustHit === true);
     const status = busy ? t('br_wheel_spinning', 'Round it goes...')
       : r ? `${resultLine(r, st.snoozeCarry)}\n${c ? t('br_wheel_next', 'Next spin in {time}.', { time: c.text }) : ''}`
+      : banked() > 0 && st.spun ? t('br_wheel_banked', 'You won a spin at the tables. Drag the rim or press Spin.')
       : t('br_wheel_ready', 'Your free spin is ready. Drag the rim or press Spin.');
     if ($('.wheel-status').textContent !== status) $('.wheel-status').textContent = status;
     const spin = $('.wheel-spin');
     spin.disabled = el.dataset.phase !== 'play' || busy || !!r;
     spin.querySelector('span').textContent = r ? t('br_wheel_come_back', 'Come back') : t('br_wheel_spin', 'Spin');
-    spin.querySelector('small').textContent = r && c ? c.text : t('br_wheel_free', 'Free today');
+    spin.querySelector('small').textContent = r && c ? c.text
+      : banked() > 0 && st.spun ? t('br_wheel_banked_n', '{n} banked', { n: fmt(banked()) })
+      : t('br_wheel_free', 'Free today');
     if (!scene) return;
     scene.screen('title_screen', t('br_wheel_title', 'DAILY DAZE'));
     const now = performance.now();
@@ -350,7 +360,7 @@ export async function mount(ctx) {
     if (!alive || suspended || !scene || el.dataset.phase !== 'play' || busy) return;
     sound.arm();
     const my = session, pressedAt = performance.now();
-    if (st.spun) { glanceTo(pressPose(), landPose(readResult(st.result))); $('.wheel-spin').classList.add('is-ringing'); setTimeout(() => el && $('.wheel-spin').classList.remove('is-ringing'), 400); return; }
+    if (spent()) { glanceTo(pressPose(), landPose(readResult(st.result))); $('.wheel-spin').classList.add('is-ringing'); setTimeout(() => el && $('.wheel-spin').classList.remove('is-ringing'), 400); return; }
     // Law VIII: the wheel turns (or, still, the button rings) and EMI glances on this frame.
     rewardReveal.hide();
     busy = true; scene.coast(omega); scene.setMood('spin'); glanceTo(pressPose());
@@ -397,14 +407,14 @@ export async function mount(ctx) {
     const nextLayout = layoutOf(res.body.slices);
     if (!nextLayout) { card(closedText()); return; }
     st = res.body; layout = nextLayout; scene.setLayout(layout); readout.setServer(st.sp);
-    if (st.spun && st.result) scene.setRotation(restRotation(layout, st.result, readResult(st.result).day) ?? 0, resultIndex(layout, st.result));
-    if (!st.spun) { scene.setRotation(scene.rotation % (Math.PI * 2)); scene.setMood('idle'); setFace('idle0_0'); $('.wheel-zzz').hidden = true; }
+    if (spent() && st.result) scene.setRotation(restRotation(layout, st.result, readResult(st.result).day) ?? 0, resultIndex(layout, st.result));
+    if (!spent()) { scene.setRotation(scene.rotation % (Math.PI * 2)); scene.setMood('idle'); setFace('idle0_0'); $('.wheel-zzz').hidden = true; }
     renderOdds(); sync();
   }
   function everySecond() {
     if (!alive || !st) return;
     const c = clock();
-    if (st.spun && c && c.due && Date.now() > refreshAt) { refreshAt = Date.now() + 30000; setTimeout(() => refresh(session), 1500); }
+    if (spent() && c && c.due && Date.now() > refreshAt) { refreshAt = Date.now() + 30000; setTimeout(() => refresh(session), 1500); }
     sync();
   }
 
@@ -432,7 +442,7 @@ export async function mount(ctx) {
     const [made, res] = await Promise.all([
       (ctx.stage ? createRoomScene : createScene)({ stage: ctx.stage, canvas: $('.wheel-stage'), hud: $('.wheel-face'), reduced: still, dress, paintHub, onFrame,
         labels: s => sliceText(s, t, fmt),
-        canSpin: () => !busy && !suspended && !!st && !st.spun,
+        canSpin: () => !busy && !suspended && !!st && !spent(),
         onGrab: ok => { sound.arm(); if (!ok) press(); else { glanceTo(pressPose()); playFx('grab'); } },
         onRelease: omega => press(omega),
         onTick: semis => sound.tick(semis) }).catch(e => ({ error: e })),
@@ -448,7 +458,7 @@ export async function mount(ctx) {
     if (!layout) return fail(closedText());
     scene = made; scene.setDress(dress); scene.setLayout(layout); readout.setServer(st.sp); readout.settle();
     renderOdds();
-    const stored = st.spun ? readResult(st.result) : null;
+    const stored = spent() ? readResult(st.result) : null;
     if (stored) {   // a reopen shows the day's landing, settled, no party and no second bank
       scene.setRotation(restRotation(layout, st.result, stored.day) ?? 0, resultIndex(layout, st.result));
       setFace(landPose(stored)); if (stored.snoozed) scene.setMood('sleepy');

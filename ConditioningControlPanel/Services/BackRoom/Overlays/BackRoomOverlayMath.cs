@@ -60,8 +60,13 @@ public static class BackRoomOverlayMath
     public const int WashRiseMs = 80;
     public const double WashDecayPerSec = 4.5;
     public const double WashPictureHeight = 0.42;
-    /// <summary>The authored spiral envelope (2026-09-15): in over 250 ms, out over 500 ms. A spiral never pops.</summary>
-    public const int SpiralFadeInMs = 250, SpiralFadeOutMs = 500;
+    /// <summary>
+    /// The authored spiral envelope (2026-09-17, was 250 / 500 from 2026-09-15): in over 600 ms, out over
+    /// 900 ms. A spiral never pops. The fade-in is spent INSIDE the hold, so a longer rise costs visible
+    /// time at full alpha and the authored durations in <c>BackRoomFxPlan</c> grew with it; the fade-out
+    /// runs AFTER the hold, so a spiral's total time on screen is <c>holdMs + SpiralFadeOutMs</c>.
+    /// </summary>
+    public const int SpiralFadeInMs = 600, SpiralFadeOutMs = 900;
 
     // ---- coordinates -----------------------------------------------------------------------------
 

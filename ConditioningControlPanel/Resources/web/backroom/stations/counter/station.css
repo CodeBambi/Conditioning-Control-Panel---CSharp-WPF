@@ -22,6 +22,8 @@
 .counter-sp { background: #201229e8; border: 1px solid #b77da247; padding: 6px 12px; border-radius: 30px; font-size: 12px; font-weight: 600;
   color: #ffe3f2; font-variant-numeric: tabular-nums; }
 
+.counter-nudge { margin: 0 0 10px; padding: 8px 12px; border-left: 2px solid #e8c27a; color: #efe6ff;
+  opacity: .78; font-size: 13px; line-height: 1.35; }
 .counter-grid { flex: 1; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); gap: 14px;
   grid-auto-rows: max-content; padding: 8px 16px 20px; align-content: start; max-width: 1240px; width: 100%; margin: 0 auto; }
 .counter-card { position: relative; display: flex; flex-direction: column; border-radius: 16px; overflow: hidden;

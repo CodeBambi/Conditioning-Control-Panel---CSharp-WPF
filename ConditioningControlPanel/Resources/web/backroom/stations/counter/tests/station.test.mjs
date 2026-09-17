@@ -53,13 +53,13 @@ test('Back is on screen before state answers; Escape stands up; hostBack hides t
 });
 
 test('cards paint every face, the RT note and the delivery line', async () => {
-  const r = room({ sp: 30, on: 'rt_demo,high_roller,flashes_v2', owned: { jackpot_remix: { at: 1, paidSp: 15 } } });
+  const r = room({ sp: 20, on: 'rt_demo,high_roller,flashes_v2', owned: { jackpot_remix: { at: 1, paidSp: 15 } } });
   r.server.linkDiscord(null);
   const st = await mount(r.ctx);
   await st.open();
   const faces = r.root.all('counter-card').map((c) => c.dataset.face);
   assert.deepEqual(faces, ['owned', 'buy', 'discord', 'short', 'soon', 'soon', 'soon', 'soon']);
-  assert.equal(card(r.root, 'flashes_v2').one('counter-buy').textContent, 'Short by 210');
+  assert.equal(card(r.root, 'flashes_v2').one('counter-buy').textContent, 'Short by 10');
   assert.ok(card(r.root, 'flashes_v2').one('counter-buy').disabled);
   assert.ok(card(r.root, 'rt_demo').one('counter-note') && !card(r.root, 'high_roller').one('counter-note'));
   assert.equal(card(r.root, 'bubbles_v2').one('counter-buy'), null, 'soon has no button');

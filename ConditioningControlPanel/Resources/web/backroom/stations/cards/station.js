@@ -227,6 +227,12 @@ export async function mount(ctx) {
         streak = streakAfter(streak, h);
         if (s.quiet) { log('settled-quiet', { hand: h.id }); break; }
         chip.thud();
+        // THE SLIP (glitch.js): about one settled hand in fifty, a card on the felt tears and comes
+        // back as a different one, its picture with it. Armed HERE, after the decision closed, so a
+        // tear can never sit beside a live choice. Cosmetic: nothing writes a code, so `lines`, the
+        // felt total and the pay above all still read what the server settled.
+        const worn = table.armSlip ? table.armSlip(h.id, now) : null;
+        if (worn) { sound.play('card', { kind: 'flip' }); log('slip', { hand: h.id, from: worn.from, to: worn.to }); }
         const id = settleMoment(h, streak), best = bestCard(h);
         if (SETTLE_CUE[id]) sound.play(SETTLE_CUE[id][0], SETTLE_CUE[id][1]);
         const n = (MOMENTS[id] ? MOMENTS[id].host : []).reduce((m, st) => Math.max(m, st.words | 0), 0);
