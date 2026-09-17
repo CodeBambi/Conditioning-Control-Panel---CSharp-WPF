@@ -1,3 +1,4 @@
+import { intro } from './intro.js';
 import { sliceText } from '../stations/wheel/rewards.js';
 import { setWheelFace } from './wheel-face.js';
 /* ============================================================================
@@ -36,10 +37,12 @@ import { createLoader } from './loader.js';
 import { createHud } from './hud.js';
 import { createRoomRewards, createDoubleCharm } from './rewards.js';
 import { kit } from '../shared/sound/kit.js';
+import { getMusic } from '../shared/sound/music.js';
+import { quality } from '../shared/quality.js';
 import { spendFlight, clearSpendFlights } from './spend-flight.js';
 import { createBalanceFeedback } from './balance-feedback.js';
 const rewards = createRoomRewards();
-let doubleCharm = null;
+let doubleCharm = null, music = null;
 function applyRewards(body) { if (leaving) return; if (rewards.apply(body)) { scene?.setRewards(rewards.snapshot()); doubleCharm?.paint(); } }
 
 const PAGE_SETTLE_MS = 300;
@@ -82,6 +85,7 @@ const forcedStill = () => !!state.reduced || state.intensity === 'calm';
 const still = () => forcedStill() || state.userStill;
 
 function paintChrome() {
+  intro.configure(lex, still() || state.motion === 'off' || state.motion === 'still' || state.motion === 'reduced');
   const back = $('#br-back');
   back.textContent = lex('br_back', 'Back');
   back.setAttribute('aria-label', lex('br_back', 'Back'));
@@ -154,6 +158,7 @@ function spChanged() {
 }
 
 function paintMotion() {
+  intro.configure(lex, still() || state.motion === 'off' || state.motion === 'still' || state.motion === 'reduced');
   if(still() || state.motion==='off')clearSpendFlights();
   if (scene) scene.setStill(still());
   if (!hud) return;
@@ -211,6 +216,8 @@ async function back(reason) {
 }
 
 async function settle() {
+  intro.finish(true);
+  music?.dispose();
   if (hud) hud.stop();
   doubleCharm?.dispose(); doubleCharm = null;
   if (scene) scene.halt();
@@ -357,6 +364,17 @@ function media() {
     { reqId, seed: 0, gifs: [], words: [], timeout: true });
 }
 
+/** Room Service uses the same authenticated station relay and balance as the games. */
+async function requestDecorations(op, body = {}) {
+  if (leaving) return { ok: false, reason: 'closed' };
+  const reqId = bridge.mintId();
+  const res = await bridge.request({ type: 'station-request', reqId, station: 'decorations', op,
+    body, ...(body.idem ? { idem: body.idem } : {}) }, 'station-result', m => m.reqId === reqId, BELL_TIMEOUT_MS);
+  if (leaving) return { ok: false, reason: 'closed' };
+  if (res?.body && typeof res.body === 'object' && ('ok' in res.body || 'decorations' in res.body)) return res.body;
+  return { ok: false, reason: res?.reason || 'offline' };
+}
+
 async function refreshPrizes() {
   const reqId = bridge.mintId();
   const res = await bridge.request({type:'station-request', reqId, station:'counter', op:'state', body:{}},
@@ -365,6 +383,7 @@ async function refreshPrizes() {
 }
 
 async function start(init) {
+  if (leaving) return;
   rewards.reset();
   Object.assign(state, {
     sp: Number.isFinite(init.sp) ? init.sp : 0,
@@ -376,6 +395,7 @@ async function start(init) {
     lex: (init.lex && typeof init.lex === 'object') ? init.lex : {},
     open: typeof init.open === 'boolean' ? init.open : null,
   });
+  music = getMusic({ master: 1 });
   bridge.markInitialized();
   balanceFeedback.reset(state.sp);
   paintChrome();
@@ -395,6 +415,7 @@ async function start(init) {
   });
   bridge.on('suspend', (m) => {
     state.suspended = !!m.on;
+    music?.suspend(state.suspended);
     kit.suspend(state.suspended);   // Law VI: every voice and the ambience hold; the ambience comes back on resume
     if (scene) scene.pause(state.suspended);   // a held room stays held either way
     if (loader) loader.suspend(state.suspended);
@@ -402,7 +423,7 @@ async function start(init) {
   });
 
   hud = createHud({
-    root: $('#br-room-ui'), lex, label,
+    root: $('#br-room-ui'), lex, label, music, quality,
     onVisit: (row) => visit(row),
     onGo: (row) => { if (scene) { scene.go(row); hud.overview(false); } },
     onOverview: (on) => { if (scene) { scene.setOverview(on); hud.overview(scene.overview); } },
@@ -463,7 +484,7 @@ async function start(init) {
       media, lex,
       still: still(),
       cameraMotion:()=>({off:state.userStill||state.motion==='off'||state.motion==='still',reduced:state.reduced||state.motion==='reduced'||state.intensity==='calm'}),
-      onProgress: (f) => hud.progress(f),
+      onProgress: (f) => { hud.progress(f); intro.progress(f); },
       onNearest: (row) => hud.nearest(row),
       onVisit: (row) => visit(row),
       // The room asking to stand up (a tap on the floor, a step back): the Back path, so the station settles first.
@@ -473,10 +494,14 @@ async function start(init) {
     });
   } catch (e) {
     bridge.log('error', 'room build failed: ' + ((e && e.stack) || e));
+    intro.finish(true);
     hud.failed(lex('br_station_closed', 'Closed for a moment.'));
     return;
   }
   if (leaving) { scene.halt(); return; }
+  // Loading the shop is independent of the room reveal; unavailable servers leave the furnished room usable.
+  scene.customization.configureShop({ request: requestDecorations, getBalance: () => state.sp,
+    onBalance: sp => { if (!leaving) setSp(sp); } }).catch(e => bridge.log('warn', 'Room Service unavailable: ' + e));
   // M toggles the view inside the scene; keep the HUD in step after it has.
   window.addEventListener('keydown', (e) => { if (e.code === 'KeyM') setTimeout(() => hud.overview(scene.overview), 0); });
   if (state.suspended) scene.pause(true);
@@ -494,6 +519,7 @@ async function start(init) {
       }).catch(() => {});
   }
   document.documentElement.classList.add('br-ready');
+  intro.finish();
   bridge.log('info', 'room up: ' + stations.length + ' fixtures, ' + stations.filter((s) => s.state === 'live').length
     + ' live, built in ' + Math.round(scene.buildMs) + ' ms');
 }
@@ -501,6 +527,6 @@ async function start(init) {
 wireExits();
 paintChrome();
 bridge.once('init', (m) => {
-  start(m).catch((e) => bridge.log('error', 'boot failed: ' + ((e && e.stack) || e)));
+  start(m).catch((e) => { intro.finish(true); bridge.log('error', 'boot failed: ' + ((e && e.stack) || e)); });
 });
 bridge.announceReady();
