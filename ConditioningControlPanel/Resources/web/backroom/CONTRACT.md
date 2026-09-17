@@ -2010,3 +2010,6 @@ so a bad duration can never stall the beat. `callout.cancel()`, `cancelWords()`,
 **Files.** Page: `shared/hypno/voice.js` (the adapter), `shared/hypno/callout.js` (`voice` option, the chain hold).
 Host: `Services/BackRoom/BackRoomVoice.cs`, `IBackRoomVoice` / `BackRoomVoiceAck` in `BackRoomContracts.cs`,
 `NullBackRoomVoice` in `BackRoomStubs.cs` (what the dev rig and the suite run on).
+
+## Casino and racing window transfer (2026-09-17)
+The racing cabinet opens Racing Thoughts in the current window with `game-open {game:"race"}`. The host validates canonical original-track ownership, acknowledges `game-open-result`, and finishes the room close handshake before transferring its browser. Race init sets `settings.returnToCasino`; normal exit returns to `/backroom/index.html?raceReturn=1`. A bounded one-use camera pose survives; no balance or reward state is restored from it. The separate Play entry retains normal exit behavior. Native callbacks are invalidated on transfer, and each run may settle rewards once. Preview uses the same camera contract with a local-ledger-only adapter and full same-origin navigation.

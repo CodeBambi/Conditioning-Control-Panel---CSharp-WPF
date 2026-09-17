@@ -8,6 +8,8 @@ using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json.Linq;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services.Race;
+using ConditioningControlPanel.Services.Chaos;
 
 namespace ConditioningControlPanel.Services.BackRoom;
 
@@ -94,6 +96,9 @@ internal static class BackRoomHostService
     private static Models.AppSettings? _hookedSettings;
     private static bool _replaceHooked;
     private static bool _disposing;
+    private static bool _openingRace;
+    private static bool _racePage;
+    private static int _roomGeneration;
     private static bool _panicSuspended;
     private static bool _minimised;
     private static DateTime _lastPanicPressUtc;
@@ -125,29 +130,7 @@ internal static class BackRoomHostService
             _panicSuspended = _minimised = false;
             _lastPanicPressUtc = DateTime.MinValue;
 
-            var api = new BackRoomApi(null, BackRoomApi.AppIdentity, sp => _bridge?.AdoptSp(sp));
-            _bridge = new BackRoomBridge(new BackRoomBridge.Deps
-            {
-                Post = Post,
-                Relay = api,
-                Fx = Fx,
-                Media = Media,
-                Voice = Voice,
-                BuildInit = BuildInit,
-                CloseWindow = DisposeAll,
-                Schedule = Schedule,
-                NoteEvent = key => App.FeatureDayLog?.Note(key),
-                SetOption = option => OnUi(() =>
-                {
-                    if (App.Settings?.Current is not { } s) return;
-                    ApplyRoomOption(s, option);
-                    App.Settings.Save();
-                }),
-                SetSp = sp => { if (App.Settings?.Current is { } s) s.SkillPoints = sp; },
-                OnUi = OnUi,
-                OffUi = work => System.Threading.Tasks.Task.Run(work),
-                Log = msg => App.Logger?.Debug("BackRoom: {Msg}", msg),
-            });
+            CreateBridge();
 
             var webRoot = Path.Combine(AppContext.BaseDirectory, "Resources", "web");
             var mappings = new List<(string, string, CoreWebView2HostResourceAccessKind)>
@@ -176,7 +159,7 @@ internal static class BackRoomHostService
                 LogTag = "BackRoom",
                 ExtraBrowserArguments = BrowserArguments + DebugBrowserArguments(),
                 OnReady = () => _bridge?.OnReady(),
-                OnMessage = m => _bridge?.Handle(m),
+                OnMessage = OnRoomMessage,
                 OnProcessFailed = kind => { App.Logger?.Warning("BackRoom: process failed ({Kind}), closing", kind); OnUi(DisposeAll); },
             });
             HookSettings(true);
@@ -184,7 +167,7 @@ internal static class BackRoomHostService
             _host.Show();
             if (_host.Window is { } w)
             {
-                w.Closed += (_, _) => _bridge?.CloseNow();
+                w.Closed += (_, _) => { _openingRace = false; if (_bridge != null) _bridge.CloseNow(); else DisposeAll(); };
                 w.StateChanged += (_, _) => OnWindowStateChanged(w);
                 w.Activated += (_, _) => OnWindowActivated();
             }
@@ -197,10 +180,88 @@ internal static class BackRoomHostService
         }
     }
 
+    private static void CreateBridge()
+    {
+            var generation = ++_roomGeneration;
+            BackRoomBridge? bridge = null;
+            var api = new BackRoomApi(null, BackRoomApi.AppIdentity, sp => bridge?.AdoptSp(sp));
+            _bridge = bridge = new BackRoomBridge(new BackRoomBridge.Deps
+            {
+                Post = message => OnUi(() =>
+                {
+                    if (generation == _roomGeneration && !_racePage) _host?.Post(message);
+                }),
+                Relay = api,
+                Fx = Fx,
+                Media = Media,
+                Voice = Voice,
+                BuildInit = BuildInit,
+                CloseWindow = OnRoomClosed,
+                Schedule = Schedule,
+                NoteEvent = key => App.FeatureDayLog?.Note(key),
+                SetOption = option => OnUi(() =>
+                {
+                    if (App.Settings?.Current is not { } s) return;
+                    ApplyRoomOption(s, option);
+                    App.Settings.Save();
+                }),
+                SetSp = sp => { if (generation == _roomGeneration && !_racePage && App.Settings?.Current is { } s) s.SkillPoints = sp; },
+                OnUi = OnUi,
+                OffUi = work => System.Threading.Tasks.Task.Run(work),
+                Log = msg => App.Logger?.Debug("BackRoom: {Msg}", msg),
+            });
+
+    }
+
+    private static void OnRoomMessage(JObject message)
+    {
+        if ((string?)message["type"] != "game-open") { _bridge?.Handle(message); return; }
+        if ((string?)message["game"] != "race" || _openingRace) return;
+        string? refusal = !RacingAccess.CanLaunch ? "locked" : CaucusHostService.IsActive ? "busy" : null;
+        Post(new { type = "game-open-result", game = "race", ok = refusal == null, reason = refusal });
+        if (refusal != null) return;
+        _openingRace = true;
+        _bridge?.RequestClose("race");
+    }
+
+    private static void OnRoomClosed()
+    {
+        if (!_openingRace || _disposing) { DisposeAll(); return; }
+        _openingRace = false;
+        ++_roomGeneration;
+        _bridge = null;
+        HookSettings(false);
+        BackRoomFxServices.Viewport = null;
+        if (_host == null) return;
+        // Revalidate after the room's asynchronous exit, including concurrent launches.
+        if (!RacingAccess.CanLaunch || CaucusHostService.IsActive) { ReturnToRoom(); return; }
+        if (_host.Window != null) _host.Window.Title = "Racing Thoughts";
+        _racePage = true;
+        CaucusHostService.Launch(sharedHost: _host, returnToRoom: ReturnToRoom);
+    }
+
+    private static void ReturnToRoom()
+    {
+        _racePage = false;
+        if (_disposing || _host == null) return;
+        try
+        {
+            CreateBridge();
+            if (_host.Window != null) _host.Window.Title = ProductName;
+            _panicSuspended = _minimised = false;
+            HookSettings(true);
+            BackRoomFxServices.Viewport = ReadViewport;
+            _host.NavigatePage(StartUrl + "?raceReturn=1", () => _bridge?.OnReady(), OnRoomMessage);
+            _host.FocusWeb();
+        }
+        catch (Exception ex) { App.Logger?.Warning(ex, "BackRoom: return failed"); DisposeAll(); }
+    }
+
     /// <summary>Graceful close (the panic stop pass, an entitlement or mod change): the page gets
     /// <c>close</c> and 800 ms. Idempotent.</summary>
     public static void CloseActive(string reason = "panic")
     {
+        _openingRace = false;
         try
         {
             if (_host == null) return;
@@ -214,6 +275,7 @@ internal static class BackRoomHostService
     /// OnExit): send the last cursor and dispose now.</summary>
     public static void ShutdownFlush()
     {
+        _openingRace = false;
         try
         {
             if (_host == null) return;
@@ -232,6 +294,7 @@ internal static class BackRoomHostService
     /// </summary>
     public static void HandlePanicPress()
     {
+        if (_racePage) { CloseActive("panic"); return; }
         if (_host == null || _bridge == null) return;
         var now = DateTime.UtcNow;
         bool second = _panicSuspended && (now - _lastPanicPressUtc) <= PanicDoublePressWindow;
@@ -273,6 +336,7 @@ internal static class BackRoomHostService
         {
             type = "init",
             protocol = BackRoomBridge.Protocol,
+            racingTracks = RacingAccess.OwnedTracks,
             sp = s?.SkillPoints ?? 0,
             reduced = motion != Models.MotionLevel.Full,
             motion = MotionWire(motion),
@@ -390,6 +454,11 @@ internal static class BackRoomHostService
         _disposing = true;
         try
         {
+            _openingRace = false;
+            ++_roomGeneration;
+            _bridge?.CloseNow();
+            if (_racePage) CaucusHostService.DetachFromRoom();
+            _racePage = false;
             HookSettings(false);
             BackRoomFxServices.Viewport = null;
             var host = _host;

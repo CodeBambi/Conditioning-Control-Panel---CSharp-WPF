@@ -1,3 +1,5 @@
+import { prizeState } from '../shared/prize-state.js';
+import { createRacePortal, consumeRoomPose } from './race-portal.js';
 import { sliceText } from '../stations/wheel/rewards.js';
 import { setWheelFace } from './wheel-face.js';
 /* ============================================================================
@@ -67,6 +69,48 @@ const bell = { entries: [], optIn: false, mustHit: false, fetching: false, fetch
 const spListeners = new Set();
 const settingsListeners = new Set();
 let scene = null, loader = null, hud = null, leaving = false, visiting = false;
+
+let racingOwnership = null, raceOpening = false;
+const previewHost = typeof window.__brSettings === 'object' && typeof window.__hostEmit === 'function';
+const racePortal = createRacePortal({
+  hosted: !previewHost, send: bridge.send, on: bridge.on,
+  getPose: () => scene?.navigationPose(), racePath: '/backroom/racing/race.html',
+  beforeNavigate: () => { leaving = true; hud?.stop(); doubleCharm?.dispose(); scene?.halt(); kit.dispose(); window.__fxCancelAll?.(); },
+  onRefused: m => { raceOpening = false; scene?.release(); if (m.reason === 'locked') visit(window.__backroom.stations.find(r => r.id === 'counter')); },
+});
+function applyPrizes(body, bought) {
+  const snapshot = prizeState(body);
+  if (!snapshot) return;
+  racingOwnership = snapshot;
+  scene?.setPrizes(snapshot, bought);
+}
+async function openRace() {
+  if (leaving || visiting || raceOpening || !scene || scene.seated || scene.transitioning || loader?.current) return false;
+  raceOpening = true;
+  if (!previewHost) {
+    // Native access is canonical even when the prize counter is temporarily closed.
+    scene.hold();
+    if (!racePortal.open()) { scene.release(); raceOpening = false; return false; }
+    return true;
+  }
+  try {
+    // Refresh access before leaving; no station can be abandoned with a paid result pending.
+    const reqId = bridge.mintId();
+    const res = await bridge.request({type:'station-request', reqId, station:'counter', op:'state', body:{}},
+      'station-result', m => m.reqId === reqId, BELL_TIMEOUT_MS);
+    if (leaving || visiting || scene.seated || loader?.current) return false;
+    const freshOwnership = res?.ok ? prizeState(res.body) : null;
+    if (freshOwnership) applyPrizes(res.body);
+    if (!freshOwnership?.racing) {
+      raceOpening = false;
+      await visit(window.__backroom.stations.find(r => r.id === 'counter'));
+      return false;
+    }
+    scene.hold();
+    if (!racePortal.open()) { scene.release(); return false; }
+    return true;
+  } finally { if (!racePortal.pending) raceOpening = false; }
+}
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -162,6 +206,8 @@ function setSp(sp) {
 
 async function visit(row) {
   if (leaving || visiting || !scene || !loader || scene.overview || scene.transitioning || scene.seated) return;
+  if(row?.key==='race'){await openRace();return;}
+  if(raceOpening)return;
   if(row?.key==='customization'){scene.customization.open();return;}
   visiting = true;
   scene.prepareVisit();
@@ -174,6 +220,7 @@ async function returnToRoom() {
   if (leaving || visiting) return;
   hud.hideWhileVisiting(false);
   if (scene) scene.release();
+  refreshPrizes();
   refreshBell('station-close');   // the only other time the bell is read (10.16.B)
 }
 
@@ -333,8 +380,16 @@ function media() {
     { reqId, seed: 0, gifs: [], words: [], timeout: true });
 }
 
+async function refreshPrizes() {
+ const reqId=bridge.mintId();
+ const res=await bridge.request({type:'station-request',reqId,station:'counter',op:'state',body:{}},'station-result',m=>m.reqId===reqId,BELL_TIMEOUT_MS);
+ if(!leaving&&!seated()&&res?.ok)applyPrizes(res.body);
+}
+
 async function start(init) {
   rewards.reset();
+  const ownedTracks = Array.isArray(init.racingTracks) ? init.racingTracks.filter(n => Number.isInteger(n) && n >= 0 && n <= 10) : [];
+  if (ownedTracks.length) racingOwnership = { owned: [], tracks: ownedTracks, demo: ownedTracks.includes(0), racing: true };
   Object.assign(state, {
     sp: Number.isFinite(init.sp) ? init.sp : 0,
     reduced: !!init.reduced,
@@ -417,7 +472,7 @@ async function start(init) {
     log: (level, msg) => bridge.log(level, msg),
   });
   // Test seam for the smoke checks (never read by the room itself).
-  window.__backroom = { state, stations, loader, back, lex, visit, bell, refreshBell, rewards, get hud() { return hud; }, get scene() { return scene; } };
+  window.__backroom = { openRace, state, stations, loader, back, lex, visit, bell, refreshBell, rewards, get hud() { return hud; }, get scene() { return scene; } };
 
   try {
     scene = await createScene({
@@ -445,10 +500,14 @@ async function start(init) {
   if (leaving) { scene.halt(); return; }
   // M toggles the view inside the scene; keep the HUD in step after it has.
   window.addEventListener('keydown', (e) => { if (e.code === 'KeyM') setTimeout(() => hud.overview(scene.overview), 0); });
+  if (racingOwnership) scene.setPrizes(racingOwnership);
+  const returnPose = consumeRoomPose();
+  if (returnPose) scene.pose(returnPose.position, returnPose.yaw, returnPose.pitch);
   if (state.suspended) scene.pause(true);
   paintMotion();
   hud.ready();
   paintMustHit();
+  refreshPrizes();
   refreshBell('room-open');
   // One read on room entry paints the fixture from the same table used when seated.
   if (stations.some(row => row.id === 'wheel' && row.state === 'live') && !seated()) {
