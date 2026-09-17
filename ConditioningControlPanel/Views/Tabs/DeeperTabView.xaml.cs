@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -46,6 +46,16 @@ namespace ConditioningControlPanel.Views.Tabs
                 App.Mods.ModChanged += OnModChangedArt;
                 _modArtHooked = true;
             }
+
+            // #1222: "in deeper tab, i can't scroll up/down while hovering pointer over the vids
+            // list, only when it's on either left or right". The library list templates its own
+            // ScrollViewer, but the whole tab is one page ScrollViewer, so the list is measured
+            // with unbounded height and its inner viewer ends up with ScrollableHeight 0 - and
+            // WPF's ScrollViewer marks a wheel notch Handled even when it had nothing to scroll.
+            // Every notch over the rows was being eaten. Attach is idempotent, so a re-parent
+            // that fires Loaded again cannot double-subscribe.
+            Views.Controls.Companion.CompanionWheelRelay.Attach(DeeperLibraryList);
+
             ApplyFeatureArt();
         }
 

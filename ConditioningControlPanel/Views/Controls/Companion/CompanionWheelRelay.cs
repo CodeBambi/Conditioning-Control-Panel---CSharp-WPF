@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -6,7 +6,10 @@ using System.Windows.Media;
 namespace ConditioningControlPanel.Views.Controls.Companion
 {
     /// <summary>
-    /// Keeps the page scrollable over the three bounded lists inside it.
+    /// Keeps a page scrollable over the bounded lists inside it.
+    ///
+    /// <para>Named for where it was first needed. It is not companion-specific: the Deeper tab's
+    /// library list uses it too (#1222), for exactly the reason below.</para>
     ///
     /// <para><b>The problem.</b> "Her Room" is one long <c>PageScroll</c>, and three zones put a
     /// height-capped, internally scrolling list inside it: the fact wall (Z3, 420px), the chat
