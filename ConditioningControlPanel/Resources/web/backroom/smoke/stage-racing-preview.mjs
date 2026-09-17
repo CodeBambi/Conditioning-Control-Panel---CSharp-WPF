@@ -29,6 +29,7 @@ async function rewrite(directory){
 await rewrite(destination);
 const htmlPath=join(destination,'race.html');
 let html=(await readFile(htmlPath,'utf8')).replace('src="./raceBoot.js"','src="./preview-host.js"');
+html=html.replace('<head>', '<head><script src="/__phone-fx.js"></script><script src="/__phone-options.js"></script>');
 html=html.replace('<body>','<body><a id="preview-return" href="/backroom/index.html?raceReturn=1" style="position:fixed;z-index:99;top:16px;right:16px;padding:10px 16px;background:#211421;color:#ffb6d9;border:1px solid #ffb6d9;border-radius:9px;font:14px sans-serif">back to casino</a>');
 await writeFile(htmlPath,html,'utf8');
 await cp(join(here,'racing-preview-host.js'),join(destination,'preview-host.js'));

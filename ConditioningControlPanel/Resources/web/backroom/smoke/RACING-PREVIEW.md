@@ -20,3 +20,5 @@ node ConditioningControlPanel/Resources/web/backroom/smoke/casino-bridge-check.m
 ```
 
 Run these sequentially: both use debugging port 9374. They start their own headless Chrome profile, block external requests, and write screenshots plus results under the ignored tmp-race-juice directory. They do not use the owner's browser. The harness requires a recent Node version with global WebSocket support.
+
+The preview loads the shared `/__phone-fx.js` and `/__phone-options.js` adapters saved in `scripts/backroom-playtest` on the casino stack. Racing receives their image manifest on boot and every media change. The gear opens the same source picker; selections carry back to the room. Selected files are stored only in browser IndexedDB so new documents can create their own valid blob URLs. Previously selected files from an older preview need to be selected once again.

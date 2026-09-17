@@ -45,6 +45,7 @@ try {
  const state=await ev("window.__brServer.handle('counter','state',{})");
  const bought=await ev(`window.__brServer.handle('counter','buy',{prizeId:'rt_bundle_1',catalogVersion:${state.body.catalogVersion}},'race-cabinet-'+crypto.randomUUID())`);
  ok(bought.ok,'real local ledger accepts bundle1 purchase');
+ await ev(`(async()=>{const blob=await (await fetch('/backroom/stations/slot/fallback/gif0.webp')).blob();await window.__brMedia.files([new File([blob],'shared.webp',{type:'image/webp'})]);})()`);
  const postPurchaseSp=await ev('window.__brServer.ledger.sp()');
  const owned=await ev("window.__brServer.handle('counter','state',{})");
  const grants=owned.body.prizes?.grants||[];
@@ -66,9 +67,16 @@ try {
  await ev(`(${raceDoc}).querySelector('.rm-list [data-id=cloud]').click()`);
  const names=await ev(`Array.from((${raceDoc}).querySelectorAll('.rm-level-title')).map(n=>n.textContent)`);
  ok(names.length===3&&!names.includes('Rapid Induction'),'race menu contains only bundle1 levels');
+ ok(await until("window.__brMedia?.get().mode==='local' && window.__brMedia.get().localCount===1"),'selected casino file survives into Racing');
+ await ev("window.__mediaFrames=[];chrome.webview.addEventListener('message',e=>{if(e.data.type==='manifest')window.__mediaFrames.push(e.data)});window.__brOptions.openMedia()");
+ ok(await ev("document.querySelector('#__opt').dataset.open==='1'"),'Racing media controls open');
+ await ev("window.__brMedia.set('bundled')");
+ ok(await until("window.__mediaFrames.some(m=>m.images?.length===4)"),'Racing receives changed media manifest');
+ await ev("document.querySelector('.br-options-back').click()");
  await shot('owned-levels');
  await ev(`(${raceDoc}).querySelector('.rm-cloud [data-id=back]').click();(${raceDoc}).querySelector('.rm-list [data-id=surface]').click()`);
  ok(await until("location.pathname==='/backroom/index.html' && !!window.__backroom?.scene && document.documentElement.classList.contains('br-ready')"),'return control restores casino');await sleep(400);
+ ok(await ev("window.__brMedia.get().mode==='bundled'"),'Racing media choice carries back into casino');
  const after=await ev("(()=>{const d=window.__backroom.scene.debug();return {position:d.position,yaw:d.yaw,pitch:d.pitch}})()");
  ok(JSON.stringify(after)===JSON.stringify(pose),'return restores exact room pose');
  if(mobile){await pointerClick(hit);}else await key('KeyE','e');
