@@ -124,6 +124,8 @@ for (let run = process.argv.includes('--layout-only')?2:0; run < 5; run++) {
   ok(await until("!document.querySelector('.cards-deal').disabled"), 'deal unlocks');
   await click('.cards-deal');
   ok(await until("!document.querySelector('.cards-move[data-move=stand]').disabled"), 'decision opens');
+  if(process.argv.includes('--layout-only'))ok(await ev("document.querySelector('.cards-dealer-total strong').textContent === '9 + ?'"), 'dealer badge shows only the face-up subtotal');
+  ok(await ev("!document.querySelector('.cards-dealer-total').hidden && getComputedStyle(document.querySelector('.cards-dealer-total')).borderTopWidth !== '0px'"), 'dealer subtotal has its framed score plate');
   const d = await view(); ok(d?.cards.length === 4 && d.cards.find(c=>c.owner==='d'&&c.slot===1).code === null, 'only server-known cards visible; hole is hidden');
   await shot('deal-' + run + '.png');
   if (run === 0) {

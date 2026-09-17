@@ -147,3 +147,16 @@
 @keyframes counter-stamp { 0%,55% { opacity:0; transform:translate(-50%,-50%) rotate(-9deg) scale(1.7); } 78% { opacity:1; transform:translate(-50%,-50%) rotate(-9deg) scale(.94); } 100% { opacity:1; transform:translate(-50%,-50%) rotate(-9deg) scale(1); } }
 .counter-station[data-still] .is-flip * { animation:none!important; }
 @media (prefers-reduced-motion:reduce) { .counter-card.is-flip * { animation:none!important; } }
+
+.counter-demo-pic[data-kind="shard"] { aspect-ratio: 4 / 3; border-radius: 0; }
+.counter-demo-pic[data-kind="bubble"] {
+  border: 2px solid #ffc7f4aa;
+  background: radial-gradient(ellipse at 28% 22%, #fff 0 3%, #ffeafa99 4% 9%, transparent 14%),
+    radial-gradient(circle at 65% 70%, #79ffda44, #bd72ee66 58%, #ffacf4cc 96%);
+  box-shadow: inset -3px -5px 9px #ca83e488, inset 2px 2px 6px #fff9, 0 0 12px #ff8ed255;
+}
+
+.counter-demo-caption { position: absolute; bottom: 7px; left: 8px; right: 8px; text-align: center;
+  color: #ffe6fa; font-size: 12px; font-weight: 700; padding: 4px; background: #190b24db; border-radius: 6px; }
+.counter-demo-pic[data-variant="drain"] { filter: hue-rotate(25deg); box-shadow: 0 0 24px #bc75ff; }
+.counter-demo-pic[data-variant="magnet"] { filter: hue-rotate(110deg); }

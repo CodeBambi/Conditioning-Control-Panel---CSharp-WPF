@@ -9,7 +9,7 @@
  * ==========================================================================*/
 
 import { createCounter, LEX } from './cards.js';
-import { demoKind, demoFrame } from './demo.js';
+import { demoKind, demoFrame, demoLabel } from './demo.js';
 import { prizeState } from '../../shared/prize-state.js';
 import { kit } from '../../shared/sound/kit.js';
 
@@ -103,7 +103,7 @@ export async function mount(ctx) {
     body.append(h('h3', 'counter-name', t(row.nameKey, LEX[row.nameKey] || row.id)), h('p', 'counter-blurb', t(row.blurbKey, LEX[row.blurbKey] || '')));
     const detailKey = `br_prize_${row.id}_details`;
     if (LEX[detailKey]) {
-      const details = h('details', 'counter-details');
+      const details = h('details', 'counter-details'); details.open = true;
       details.append(h('summary', null, L('br_counter_details')), h('p', null, L(detailKey)));
       body.append(details);
     }
@@ -132,7 +132,13 @@ export async function mount(ctx) {
   function askMedia() {
     if (media) return;
     media = Promise.resolve().then(() => (typeof ctx.media === 'function' ? ctx.media({ count: 4 }) : null))
-      .then((m) => { if (alive) dealt = m && Array.isArray(m.gifs) ? m.gifs.slice(0, 4) : []; })
+      .then((m) => {
+        if (!alive) return;
+        dealt = m && Array.isArray(m.gifs) ? m.gifs.slice(0, 4) : [];
+        if (typeof Image === 'function') for (const g of dealt) {
+          if (g && allowedUrl(g.url)) { const img = new Image(); img.src = g.url; }
+        }
+      })
       .catch(() => { dealt = []; });
   }
   function stopDemo() {
@@ -151,29 +157,37 @@ export async function mount(ctx) {
     const stage = h('div', 'counter-demo');
     const pics = [];
     for (let i = 0; i < 4; i++) {
-      const p = h('img', 'counter-demo-pic'); p.alt = ''; p.decoding = 'async'; p.dataset.pic = String(i); p.hidden = true;
+      const p = h(kind === 'bubbles' ? 'span' : 'img', 'counter-demo-pic'); p.alt = ''; p.decoding = 'async'; p.dataset.pic = String(i); p.hidden = true;
       pics.push(p); stage.append(p);
     }
+    const caption = h('span', 'counter-demo-caption'); stage.append(caption);
     c.art.append(stage);
     c.art.dataset.demo = kind;
     demos++;
-    demo = { id, kind, art: c.art, stage, pics, t0: nowMs(), raf: 0 };
+    demo = { id, kind, art: c.art, stage, pics, t0: nowMs(), waitingSince: nowMs(), raf: 0 };
     const tick = () => {
       if (!demo) return;
       const gates = ctx.gates || {}, pictures = gates.flash !== false;
+      if (demo.kind !== 'bubbles' && pictures && nowMs() - demo.waitingSince < 3500 &&
+          (!dealt || (typeof Image === 'function' && !demo.pics.some(p => p.complete && p.naturalWidth > 0)))) demo.t0 = nowMs();
       const frame = demoFrame(demo.kind, nowMs() - demo.t0, { still: still() });
       if (!frame.length) { stopDemo(); return; }
+      const label = demoLabel(demo.kind, still() ? 0 : nowMs() - demo.t0);
+      caption.textContent = label ? L('br_counter_demo_' + label) : '';
       demo.pics.forEach((p, i) => {
         const s = frame[i];
         p.hidden = !s;
         if (!s) return;
-        const g = pictures && dealt ? dealt[s.pic % Math.max(1, dealt.length)] : null;
-        const url = g && typeof g.url === 'string' && allowedUrl(g.url) ? g.url : '';
+        const g = demo.kind !== 'bubbles' && pictures && dealt ? dealt[s.pic % Math.max(1, dealt.length)] : null;
+        const url = g && typeof g.url === 'string' && allowedUrl(g.url) ? g.url
+          : pictures && demo.kind !== 'bubbles' ? new URL('../slot/fallback/gif' + (s.pic % 4) + '.webp', import.meta.url).href : '';
         if (url && p.dataset.url !== url) { p.dataset.url = url; p.src = url; }
         if (!url && p.dataset.url) { delete p.dataset.url; p.removeAttribute && p.removeAttribute('src'); }
-        p.dataset.kind = s.kind;
+        p.dataset.kind = s.kind; p.dataset.variant = s.variant || '';
+        stage.dataset.variant = s.variant || '';
         if (s.pivot) p.dataset.pivot = s.pivot; else delete p.dataset.pivot;
         const st = p.style;
+        st.clipPath = s.kind === 'shard' ? ['polygon(0 0,100% 0,50% 50%)','polygon(100% 0,100% 100%,50% 50%)','polygon(100% 100%,0 100%,50% 50%)','polygon(0 100%,0 0,50% 50%)'][s.shard] : '';
         st.left = (s.x * 100).toFixed(2) + '%';
         st.top = (s.y * 100).toFixed(2) + '%';
         st.width = (s.scale * 100).toFixed(2) + '%';
@@ -273,6 +287,7 @@ export async function mount(ctx) {
     if (typeof ctx.onSp === 'function') unSp = ctx.onSp(() => paint());
     if (typeof ctx.onSettings === 'function') unSet = ctx.onSettings(() => paint());
     paint();
+    askMedia();
     await counter.open();
     if (alive && counter.state) ctx.prizesChanged?.({ok:true, catalog:counter.state.catalog, prizes:{grants:counter.state.grants}});
   }

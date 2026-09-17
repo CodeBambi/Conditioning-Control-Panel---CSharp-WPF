@@ -5921,5 +5921,19 @@
   "br_callout_blackjack": "黑杰克",
   "br_callout_dealer_bust": "庄家爆牌",
   "br_callout_hot_hand": "手气火热",
-  "br_callout_sweep": "全胜"
+  "br_callout_sweep": "全胜",
+  "br_slot_on_tape": "剩余{n}次已付费旋转",
+  "br_counter_demo_drift": "Drift & Bounce",
+  "br_counter_demo_pendulum": "钟摆",
+  "br_counter_demo_shatter": "Shatter",
+  "br_counter_demo_rain": "下雨",
+  "br_counter_demo_spiral": "向内螺旋",
+  "br_counter_demo_drain": "Brain Drain bubble",
+  "br_counter_demo_magnet": "Magnet bubble",
+  "br_slot_wheel_bonus": "免费命运之轮奖励旋转！",
+  "br_slot_wheel_chase_rules": "匹配图示列。任意螺旋；?代表任意符号。仅限付费旋转。概率约为{n}分之1。",
+  "br_wheel_bonus_ready": "可用奖励旋转：{n}次。无需等到明天。",
+  "br_wheel_bonus_spin": "奖励旋转",
+  "br_wheel_bonus_count": "奖励旋转：{n}次",
+  "br_wheel_bonus_rules": "奖励旋转使用常规奖品。累积大奖仅限每日旋转。"
 }

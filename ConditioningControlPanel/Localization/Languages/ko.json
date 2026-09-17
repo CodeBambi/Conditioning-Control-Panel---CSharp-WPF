@@ -5409,5 +5409,19 @@
   "br_callout_blackjack": "블랙잭",
   "br_callout_dealer_bust": "딜러 버스트",
   "br_callout_hot_hand": "핫 핸드",
-  "br_callout_sweep": "스윕"
+  "br_callout_sweep": "스윕",
+  "br_slot_on_tape": "선불 스핀 {n}회 남음",
+  "br_counter_demo_drift": "Drift & Bounce",
+  "br_counter_demo_pendulum": "진자",
+  "br_counter_demo_shatter": "Shatter",
+  "br_counter_demo_rain": "비",
+  "br_counter_demo_spiral": "안쪽 나선",
+  "br_counter_demo_drain": "Brain Drain bubble",
+  "br_counter_demo_magnet": "Magnet bubble",
+  "br_slot_wheel_bonus": "행운의 바퀴 무료 보너스 회전!",
+  "br_slot_wheel_chase_rules": "그림의 열을 맞추세요. 나선은 아무 종류나, ?는 아무 기호입니다. 유료 회전만 해당. 약 {n}분의 1 확률.",
+  "br_wheel_bonus_ready": "보너스 회전 {n}회 준비 완료. 하루를 기다릴 필요 없어요.",
+  "br_wheel_bonus_spin": "보너스 회전",
+  "br_wheel_bonus_count": "보너스 회전 {n}회",
+  "br_wheel_bonus_rules": "보너스 회전은 일반 보상을 제공합니다. 누적 잭팟은 일일 회전 전용입니다."
 }

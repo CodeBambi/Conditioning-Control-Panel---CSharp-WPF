@@ -16,7 +16,7 @@ const ease = (p) => 1 - (1 - p) ** 3;
 export function createTable3D(stage, { kit, onDeal, onCue = () => {} } = {}) {
   const nodes = cardsNodes(stage.fixture), group = new T.Group();
   group.name = 'cards_runtime'; stage.scene.add(group);
-  const authored = [], cards = [], fans = [], sparks = [], betChips = [];
+  const authored = [], cards = [], departing = [], fans = [], sparks = [], betChips = [];
   const squared = new Set();
   let active = -1, hands = 1, fan = null, disposed = false, now = 0, lastPaint = -Infinity, frameStep=1;
   const point = (name) => nodes[name].getWorldPosition(new T.Vector3());
@@ -77,7 +77,7 @@ export function createTable3D(stage, { kit, onDeal, onCue = () => {} } = {}) {
   function release() {
     if (disposed) return; disposed = true;
     stage.canvas.removeEventListener('pointerdown', pickShoe);
-    for (const c of [...cards, ...fans]) drop(c);
+    for (const c of [...cards, ...departing, ...fans]) drop(c);
     betChips.forEach((m) => { m.geometry.dispose(); m.material.dispose(); });
     for (const s of sparks) { s.mesh.geometry.dispose(); s.mesh.material.dispose(); }
     stack.forEach(({ m, position, rotation }) => { m.position.copy(position); m.quaternion.copy(rotation); });
@@ -120,11 +120,19 @@ export function createTable3D(stage, { kit, onDeal, onCue = () => {} } = {}) {
     m.quaternion.copy(basis); group.add(m); betChips.push(m); return m;
   }
   const api = {
-    clear() { deckAt = -Infinity; cards.splice(0).forEach(drop); squared.clear(); hands = 1; active = -1; group.userData.bets=null; },
+    clear(time = now, animate = false) {
+      departing.splice(0).forEach(drop);
+      const old = cards.splice(0);
+      if (animate && old.length) {
+        old.forEach((c, i) => { c.exitAt = time + (i % 6) * 14; c.exitFrom = c.mesh.position.clone(); if(c.rim)c.rim.visible=false; departing.push(c); });
+        onCue('card-slide');
+      } else old.forEach(drop);
+      deckAt = -Infinity; squared.clear(); hands = 1; active = -1; group.userData.bets=null; },
     // Ignore malformed cards without inventing a placement or stopping the station.
     addCard(c, time) { if (!validCardSlot(c.owner, c.slot)) return false; if (!c.settled) deckAt = time; cards.push(makeCard({ ...c, code: c.code || null, bornAt: time })); return true; },
     // Never replay a touchdown or fan-square after the app returns from suspension.
     skip(time) {
+      departing.splice(0).forEach(drop);
       for (const c of cards) {
         c.revealContact=false; c.quiet = c.touchdown = c.landed = true; c.landAt = -Infinity;
         if (c.code) c.faceAt = time - TIMING.flipMs;
@@ -189,9 +197,9 @@ export function createTable3D(stage, { kit, onDeal, onCue = () => {} } = {}) {
       const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]);
       return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
     },
-    hud() {
-      const owner = Math.max(0, active), list = cards.filter(c => c.owner === owner);
-      const shown = list.filter(c => c.landed && flipAt(c, now, false) >= .5);
+    hud(forOwner = Math.max(0, active)) {
+      const owner = forOwner, list = cards.filter(c => c.owner === owner);
+      const shown = list.filter(c => c.code && c.landed && flipAt(c, now, false) >= .5);
       const rectangles = (list.length ? list : [{ owner, slot: 0 }, { owner, slot: 1 }]).map(c => {
         const p = target(c).project(stage.camera), r = stage.canvas.getBoundingClientRect();
         return { x: (p.x + 1) * r.width / 2, y: (1 - p.y) * r.height / 2 };
@@ -200,9 +208,10 @@ export function createTable3D(stage, { kit, onDeal, onCue = () => {} } = {}) {
       const first = list.length ? api.cardRect(owner, list[0].slot) : null;
       const top = list.length ? Math.min(...list.map(c=>api.cardRect(owner,c.slot).y)) : r.height*.55;
       const bottom = list.length ? Math.max(...list.map(c => { const r = api.cardRect(owner, c.slot); return r.y + r.h; })) : r.height * .75;
-      return { total: shown.length ? totalOf(shown.map(c => c.code)).total : null, owner, hands,
+      return { total: shown.length ? totalOf(shown.map(c => c.code)).total : null, owner, hands, quiet: shown.every(c=>c.quiet), hidden: shown.length < list.length,
         x: rectangles.reduce((s,p)=>s+p.x,0)/rectangles.length, bottom, top,
-        left: first ? Math.min(...list.map(c=>api.cardRect(owner,c.slot).x)) : r.width*.42,
+        right: list.length ? Math.max(...list.map(c=>{const r=api.cardRect(owner,c.slot);return r.x+r.w;})) : r.width*.58,
+          left: first ? Math.min(...list.map(c=>api.cardRect(owner,c.slot).x)) : r.width*.42,
         y: rectangles.reduce((s,p)=>s+p.y,0)/rectangles.length,
         betX: (anchor.x+1)*r.width/2, betY: (1-anchor.y)*r.height/2 };
     },
@@ -220,6 +229,14 @@ export function createTable3D(stage, { kit, onDeal, onCue = () => {} } = {}) {
     draw(o) {
       if (disposed) return; frameStep=1-Math.exp(-Math.max(0,o.now-now)/90);now = o.now;
       layout=cardLayout(stage.fixture,hands,cardCounts(cards));
+      for (let i=departing.length-1;i>=0;i--) {
+        const c=departing[i], q=o.still?1:clamp((now-c.exitAt)/440);
+        if(q===1){drop(c);departing.splice(i,1);continue;}
+        const slide=ease(q), dir=c.owner==='d'?1:-1;
+        c.mesh.position.copy(c.exitFrom).add(new T.Vector3(dir*layout.width*7*slide,0,-layout.height*.3*slide).applyQuaternion(basis));
+        c.mesh.rotateZ(dir*.012*frameStep); c.material.opacity=1-q*q;
+        c.shadow.position.copy(c.mesh.position).addScaledVector(normal,-.001);c.shadow.material.opacity=.18*(1-q);
+      }
       for(let index=betChips.length-1;index>=0;index--) {
         const m=betChips[index], b=m.userData.bet, {i,j,n}=b;
         if(b.removeAt!=null && (o.still || now-b.removeAt>=220)) { removeChip(m);betChips.splice(index,1);continue; }
@@ -289,7 +306,7 @@ export function createTable3D(stage, { kit, onDeal, onCue = () => {} } = {}) {
         s.mesh.material.opacity = Math.sin(p * Math.PI) * .4 * o.k;
       }
     },
-    debug() { return { kind: 'room3d', cards: cards.map((c) => ({ owner: c.owner, slot: c.slot, code: c.code, landed: c.landed, face: c.faceAt != null })), hands, active, fan: !!fan, fanCards: fans.length, betChips: betChips.length, chips: sparks.filter((s) => s.kind === 'chip').length, frames: now, disposed,
+    debug() { return { kind: 'room3d', departing: departing.length, cards: cards.map((c) => ({ owner: c.owner, slot: c.slot, code: c.code, landed: c.landed, face: c.faceAt != null })), hands, active, fan: !!fan, fanCards: fans.length, betChips: betChips.length, chips: sparks.filter((s) => s.kind === 'chip').length, frames: now, disposed,
       hits: cards.filter((c) => c.hit != null).map((c) => ({ owner: c.owner, slot: c.slot, t0: Math.round(c.hit) })) }; },
     dispose() { off(); release(); },
   };

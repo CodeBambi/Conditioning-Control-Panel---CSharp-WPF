@@ -53,7 +53,7 @@ export function slotXY(L, owner, slot, count, hands = 1) {
 export function createTable(canvas, { kit = null, onCue = () => {} } = {}) {
   const g = canvas.getContext('2d');
   const loom = () => (typeof kit === 'function' ? kit() : kit);
-  let cards = [], seq = 0, hands = 1, active = -1, bets = [], betsShown = true;
+  let departing = [], cards = [], seq = 0, hands = 1, active = -1, bets = [], betsShown = true;
   let fan = null, ripples = [], chips = [], tunnelAt = -1, glow = null, lastNow = 0;
   let deckAt = -Infinity;
   let hits = [];   // THE GLYPH HIT (callout.js): { id, t0 } per winning card, a mint rim and a 1.06 pop over HIGHLIGHT_MS
@@ -183,7 +183,7 @@ export function createTable(canvas, { kit = null, onCue = () => {} } = {}) {
   }
 
   const api = {
-    clear() { cards = []; hands = 1; active = -1; bets = []; betsShown = true; chips = []; tunnelAt = -1; glow = null; hits = []; deckAt = -Infinity; },
+    clear(now = lastNow, animate = false) { departing = animate ? cards.map((c,i)=>({...c,exitAt:now+(i%6)*14})) : []; if(departing.length)onCue('card-slide'); cards = []; hands = 1; active = -1; bets = []; betsShown = true; chips = []; tunnelAt = -1; glow = null; hits = []; deckAt = -Infinity; },
     /** `settled`: already on its spot and turned (a quiet adopt, a suspend's flush), no flight. */
     addCard({ owner, slot, code, settled = false }, now) {
       if (!settled) deckAt = now;
@@ -191,6 +191,7 @@ export function createTable(canvas, { kit = null, onCue = () => {} } = {}) {
     },
     // Suspend keeps the dealt state and discards unfinished presentation, including its sounds.
     skip(now) {
+      departing = [];
       for (const c of cards) {
         c.quiet = c.touchdown = c.landed = true; c.landAt = -Infinity;
         if (c.code) c.faceAt = now - TIMING.flipMs;
@@ -281,6 +282,14 @@ export function createTable(canvas, { kit = null, onCue = () => {} } = {}) {
         g.restore();
       }
 
+      // Old hands leave as one sweep before the next deal begins.
+      departing = still ? [] : departing.filter(c=>now-c.exitAt<440);
+      for(const c of departing) {
+        if(!Number.isFinite(c.x))continue;
+        const q=clamp((now-c.exitAt)/440,0,1), dir=c.owner==='d'?1:-1;
+        g.save();g.globalAlpha=1-q*q;g.translate(c.x+dir*W*.75*ease(q),c.y-L.ch*.25*ease(q));g.rotate(c.rot+dir*q*.15);
+        drawCard(c.code,L.cw,L.ch,c.code?1:0,{...o,now});g.restore();
+      }
       // the hands
       for (const c of cards) move(L, c, now, still, dt);
       for (const c of cards) {
@@ -361,12 +370,12 @@ export function createTable(canvas, { kit = null, onCue = () => {} } = {}) {
 
     /** Test seam. */
     debug() {
-      return { cards: cards.map((c) => ({ owner: c.owner, slot: c.slot, code: c.code, landed: c.landed, face: c.faceAt != null })), hands, active,
+      return { departing: departing.length, cards: cards.map((c) => ({ owner: c.owner, slot: c.slot, code: c.code, landed: c.landed, face: c.faceAt != null })), hands, active,
         fan: !!fan, fanCards: stats.fan, backs: stats.backs, pictures: stats.pictures, chips: chips.length, ripples: ripples.length,
         tunnel: tunnelAt >= 0 && lastNow - tunnelAt < TIMING.tunnelMs, glow: !!(glow && lastNow - glow.t0 < TIMING.glowMs), frames: stats.frame,
         hits: hits.map((h) => { const c = cards.find((x) => x.id === h.id); return { owner: c ? c.owner : null, slot: c ? c.slot : null, t0: Math.round(h.t0) }; }) };
     },
-    dispose() { cards = []; chips = []; ripples = []; fan = null; hits = []; cache = { key: '', weave: null, print: null }; },
+    dispose() { departing = []; cards = []; chips = []; ripples = []; fan = null; hits = []; cache = { key: '', weave: null, print: null }; },
   };
   return api;
 }

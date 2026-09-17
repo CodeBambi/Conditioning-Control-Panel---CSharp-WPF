@@ -5409,5 +5409,19 @@
   "br_callout_blackjack": "Блэкджек",
   "br_callout_dealer_bust": "Перебор у дилера",
   "br_callout_hot_hand": "Горячая рука",
-  "br_callout_sweep": "Чистая победа"
+  "br_callout_sweep": "Чистая победа",
+  "br_slot_on_tape": "Осталось оплаченных вращений: {n}",
+  "br_counter_demo_drift": "Drift & Bounce",
+  "br_counter_demo_pendulum": "Маятник",
+  "br_counter_demo_shatter": "Shatter",
+  "br_counter_demo_rain": "Дождь",
+  "br_counter_demo_spiral": "Спираль к центру",
+  "br_counter_demo_drain": "Brain Drain bubble",
+  "br_counter_demo_magnet": "Magnet bubble",
+  "br_slot_wheel_bonus": "Бесплатное бонусное вращение Колеса Фортуны!",
+  "br_slot_wheel_chase_rules": "Соберите показанные столбцы. Любая спираль; ? = любой символ. Только платные вращения. Примерно 1 из {n}.",
+  "br_wheel_bonus_ready": "Бонусных вращений доступно: {n}. Без ожидания следующего дня.",
+  "br_wheel_bonus_spin": "Бонусное вращение",
+  "br_wheel_bonus_count": "Бонусные вращения: {n}",
+  "br_wheel_bonus_rules": "Бонусные вращения дают обычные награды. Растущий джекпот доступен только в ежедневном вращении."
 }

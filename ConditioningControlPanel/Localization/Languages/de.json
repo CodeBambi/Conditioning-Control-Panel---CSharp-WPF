@@ -5409,5 +5409,19 @@
   "br_callout_blackjack": "Blackjack",
   "br_callout_dealer_bust": "Dealer überkauft",
   "br_callout_hot_hand": "Glückssträhne",
-  "br_callout_sweep": "Abgeräumt"
+  "br_callout_sweep": "Abgeräumt",
+  "br_slot_on_tape": "{n} vorausbezahlte Drehungen übrig",
+  "br_counter_demo_drift": "Drift & Bounce",
+  "br_counter_demo_pendulum": "Pendel",
+  "br_counter_demo_shatter": "Shatter",
+  "br_counter_demo_rain": "Regen",
+  "br_counter_demo_spiral": "Spirale nach innen",
+  "br_counter_demo_drain": "Brain Drain bubble",
+  "br_counter_demo_magnet": "Magnet bubble",
+  "br_slot_wheel_bonus": "Gratis-Bonusdreh am Glücksrad!",
+  "br_slot_wheel_chase_rules": "Triff die abgebildeten Spalten. Jede Spirale; ? = beliebig. Nur bezahlte Drehs. Etwa 1 zu {n}.",
+  "br_wheel_bonus_ready": "Bonusdrehs bereit: {n}. Ohne tägliche Wartezeit.",
+  "br_wheel_bonus_spin": "Bonusdreh",
+  "br_wheel_bonus_count": "Bonusdrehs: {n}",
+  "br_wheel_bonus_rules": "Bonusdrehs haben die normalen Gewinne. Der wachsende Jackpot gilt nur beim täglichen Dreh."
 }

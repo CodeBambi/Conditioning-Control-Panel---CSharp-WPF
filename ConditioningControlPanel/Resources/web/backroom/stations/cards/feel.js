@@ -217,8 +217,8 @@ export function planSteps(shown, next, { still = false, beats = false } = {}) {
   const fresh = !shown || shown.id !== next.id;
 
   if (fresh) {
-    push('clear');
-    t += T.firstMs * g;
+    push('clear', { sweep: !!shown });
+    t += (shown ? Math.max(T.firstMs, 620) : T.firstMs) * g;
     const h = next.hands, two = h.length === 2;
     card(0, 0, h[0].cards[0]); beat(t + shownMs, 'cards.deal', { owner: 0, slot: 0 }); t += T.dealGapMs * g;
     card('d', 0, next.dealer[0]); t += T.dealGapMs * g;

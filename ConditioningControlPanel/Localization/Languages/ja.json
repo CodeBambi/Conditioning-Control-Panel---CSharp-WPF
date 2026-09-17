@@ -5409,5 +5409,19 @@
   "br_callout_blackjack": "ブラックジャック",
   "br_callout_dealer_bust": "ディーラーバスト",
   "br_callout_hot_hand": "ホットハンド",
-  "br_callout_sweep": "スイープ"
+  "br_callout_sweep": "スイープ",
+  "br_slot_on_tape": "支払い済みスピン 残り{n}回",
+  "br_counter_demo_drift": "Drift & Bounce",
+  "br_counter_demo_pendulum": "振り子",
+  "br_counter_demo_shatter": "Shatter",
+  "br_counter_demo_rain": "雨",
+  "br_counter_demo_spiral": "内向きスパイラル",
+  "br_counter_demo_drain": "Brain Drain bubble",
+  "br_counter_demo_magnet": "Magnet bubble",
+  "br_slot_wheel_bonus": "運命の輪の無料ボーナススピン！",
+  "br_slot_wheel_chase_rules": "表示された列を揃えましょう。渦巻きはどれでも、?は任意の絵柄。有料スピンのみ。確率は約{n}分の1。",
+  "br_wheel_bonus_ready": "ボーナススピンが{n}回あります。翌日まで待つ必要はありません。",
+  "br_wheel_bonus_spin": "ボーナススピン",
+  "br_wheel_bonus_count": "ボーナススピン{n}回",
+  "br_wheel_bonus_rules": "ボーナススピンの報酬は通常と同じです。増加するジャックポットは毎日のスピン限定です。"
 }

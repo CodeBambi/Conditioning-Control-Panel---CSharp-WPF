@@ -63,3 +63,12 @@ test('suspend settles existing flights and fan silently, including a quick resum
   draw(5500); assert.deepEqual(cues, ['card-land'], 'a genuinely new deal still sounds');
   table.dispose();
 });
+
+test('previous canvas hand slides out before disposal and Motion Off settles it', () => {
+ const {table,draw,cues}=fixture();
+ table.addCard({owner:0,slot:0,code:'Kh',settled:true},0);draw(10);
+ table.clear(20,true);assert.equal(table.debug().cards.length,0);assert.equal(table.debug().departing,1);
+ draw(220);assert.equal(table.debug().departing,1);draw(600);assert.equal(table.debug().departing,0);
+ table.addCard({owner:0,slot:0,code:'As',settled:true},700);draw(710);table.clear(720,true);draw(730,true);
+ assert.equal(table.debug().departing,0);assert.deepEqual(cues,['card-slide','card-slide']);table.dispose();
+});

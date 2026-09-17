@@ -5858,7 +5858,7 @@
   "br_slot_spin": "Spin",
   "br_slot_cost": "{n} SP",
   "br_slot_free_spin": "Free spin",
-  "br_slot_on_tape": "{n} left on tape",
+  "br_slot_on_tape": "{n} prepaid spins left",
   "br_slot_tape_cost": "{n} SP for {n} spins",
   "br_slot_marquee": "CANDY",
   "br_slot_marquee_spin": "Spinning",
@@ -6122,5 +6122,18 @@
   "br_callout_blackjack": "Blackjack",
   "br_callout_dealer_bust": "Dealer Bust",
   "br_callout_hot_hand": "Hot Hand",
-  "br_callout_sweep": "Sweep"
+  "br_callout_sweep": "Sweep",
+  "br_counter_demo_drift": "Drift & Bounce",
+  "br_counter_demo_pendulum": "Pendulum",
+  "br_counter_demo_shatter": "Shatter",
+  "br_counter_demo_rain": "Rain",
+  "br_counter_demo_spiral": "Spiral In",
+  "br_counter_demo_drain": "Brain Drain bubble",
+  "br_counter_demo_magnet": "Magnet bubble",
+  "br_slot_wheel_bonus": "Free bonus Wheel of Fortune spin!",
+  "br_slot_wheel_chase_rules": "Match the pictured columns. Any spiral; ? = anything. Paid spins only. About 1 in {n}.",
+  "br_wheel_bonus_ready": "Bonus spins ready: {n}. No daily wait.",
+  "br_wheel_bonus_spin": "Bonus spin",
+  "br_wheel_bonus_count": "Bonus spins: {n}",
+  "br_wheel_bonus_rules": "Bonus spins use the standard rewards. The growing jackpot is daily only."
 }

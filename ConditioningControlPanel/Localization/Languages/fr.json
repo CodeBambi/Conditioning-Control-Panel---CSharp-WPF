@@ -5409,5 +5409,19 @@
   "br_callout_blackjack": "Blackjack",
   "br_callout_dealer_bust": "Croupier sauté",
   "br_callout_hot_hand": "Main chaude",
-  "br_callout_sweep": "Rafle"
+  "br_callout_sweep": "Rafle",
+  "br_slot_on_tape": "{n} tours prépayés restants",
+  "br_counter_demo_drift": "Drift & Bounce",
+  "br_counter_demo_pendulum": "Pendule",
+  "br_counter_demo_shatter": "Shatter",
+  "br_counter_demo_rain": "Pluie",
+  "br_counter_demo_spiral": "Spirale vers le centre",
+  "br_counter_demo_drain": "Brain Drain bubble",
+  "br_counter_demo_magnet": "Magnet bubble",
+  "br_slot_wheel_bonus": "Tour bonus gratuit de la Roue de la Fortune !",
+  "br_slot_wheel_chase_rules": "Alignez les colonnes illustrées. Toute spirale ; ? = tout symbole. Tours payés uniquement. Environ 1 sur {n}.",
+  "br_wheel_bonus_ready": "Tours bonus disponibles : {n}. Sans attente quotidienne.",
+  "br_wheel_bonus_spin": "Tour bonus",
+  "br_wheel_bonus_count": "Tours bonus : {n}",
+  "br_wheel_bonus_rules": "Les tours bonus utilisent les récompenses normales. Le jackpot progressif est réservé au tour quotidien."
 }

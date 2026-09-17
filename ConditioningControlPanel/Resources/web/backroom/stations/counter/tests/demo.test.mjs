@@ -41,8 +41,16 @@ test('the three choreographies read as themselves: a mosaic that swaps, a flash 
   const f = demoFrame('flashes', 1000), f2 = demoFrame('flashes', 1400), swing = demoFrame('flashes', 3000);
   assert.equal(f.length, 1); assert.ok(f[0].x !== f2[0].x || f[0].y !== f2[0].y, 'drifting');
   assert.equal(f[0].rot, 0); assert.equal(swing[0].pivot, 'top'); assert.ok(Math.abs(swing[0].rot) > 0, 'swinging from the top');
-  const rain = demoFrame('bubbles', 500), later = demoFrame('bubbles', 900), spiral = demoFrame('bubbles', 4700);
+  const rain = demoFrame('bubbles', 500), later = demoFrame('bubbles', 900), spiral = demoFrame('bubbles', 2900);
   assert.equal(rain.length, 4);
   assert.ok(rain.some((s, i) => later[i].y !== s.y), 'falling');
   assert.ok(spiral.every((s) => Math.hypot(s.x - 0.5, s.y - 0.5) < 0.12 && s.alpha < 1), 'winding in to the centre and fading');
+});
+
+test('flash dismissal separates the same picture into four falling shards', () => {
+  const start = demoFrame('flashes', 3900), end = demoFrame('flashes', 4900);
+  assert.equal(start.length, 4);
+  assert.ok(start.every(s => s.kind === 'shard' && s.pic === 1));
+  assert.deepEqual(start.map(s => s.shard), [0, 1, 2, 3]);
+  assert.ok(end.every((s, i) => s.y > start[i].y && s.alpha < start[i].alpha));
 });

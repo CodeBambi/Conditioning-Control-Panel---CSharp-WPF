@@ -5409,5 +5409,19 @@
   "br_callout_blackjack": "Blackjack",
   "br_callout_dealer_bust": "La banca se pasa",
   "br_callout_hot_hand": "Mano caliente",
-  "br_callout_sweep": "Barrida"
+  "br_callout_sweep": "Barrida",
+  "br_slot_on_tape": "{n} giros pagados restantes",
+  "br_counter_demo_drift": "Drift & Bounce",
+  "br_counter_demo_pendulum": "Péndulo",
+  "br_counter_demo_shatter": "Shatter",
+  "br_counter_demo_rain": "Lluvia",
+  "br_counter_demo_spiral": "Espiral hacia dentro",
+  "br_counter_demo_drain": "Brain Drain bubble",
+  "br_counter_demo_magnet": "Magnet bubble",
+  "br_slot_wheel_bonus": "¡Tirada extra gratis de la Rueda de la Fortuna!",
+  "br_slot_wheel_chase_rules": "Iguala las columnas mostradas. Cualquier espiral; ? = cualquier símbolo. Solo tiradas pagadas. Aproximadamente 1 entre {n}.",
+  "br_wheel_bonus_ready": "Tiradas extra disponibles: {n}. Sin espera diaria.",
+  "br_wheel_bonus_spin": "Tirada extra",
+  "br_wheel_bonus_count": "Tiradas extra: {n}",
+  "br_wheel_bonus_rules": "Las tiradas extra usan los premios normales. El bote creciente es solo para la tirada diaria."
 }

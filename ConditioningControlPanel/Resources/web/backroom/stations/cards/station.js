@@ -144,7 +144,8 @@ export async function mount(ctx) {
         ${MOVES.map((m) => `<button class="cards-move" type="button" data-move="${m}"></button>`).join('')}
         <button class="cards-deal" type="button"><span></span><small></small></button>
       </div>
-      <div class="cards-total" aria-live="polite" hidden><small></small><strong></strong></div>
+      <div class="cards-total" aria-live="polite" hidden><small></small><strong></strong><span class="cards-score-sparks" aria-hidden="true"></span></div>
+      <div class="cards-total cards-dealer-total" aria-live="polite" hidden><small></small><strong></strong><span class="cards-score-sparks" aria-hidden="true"></span></div>
       <div class="cards-tokens" aria-hidden="true"></div>
       <div class="cards-card" role="status" hidden><p></p><button class="cards-card-back" type="button"></button></div>
       <div class="cards-loading"></div>`;
@@ -294,7 +295,7 @@ export async function mount(ctx) {
   function apply(s, now) {
     const d = dress(), h = s.hand;
     switch (s.op) {
-      case 'clear': totalKey = ''; table.clear(); lines = []; break;
+      case 'clear': totalKey = ''; dealerTotalKey = ''; table.clear(now, s.sweep && !s.quiet && !d.still); lines = []; break;
       case 'bets': table.setBets(s.list, now, s.quiet); if (!s.quiet) sound.play('chips', { n: Math.min(6, 1 + (Array.isArray(s.list) ? s.list.length : 0)) }); break;
       case 'card': table.addCard({ ...s, settled: s.quiet }, now); if (!s.quiet) sound.play('card-slide'); break;
       case 'split': table.split(now); break;
@@ -598,22 +599,53 @@ export async function mount(ctx) {
     if (ctx.stage) el.append(box);
   }
 
-  let totalKey = '';
+  let totalKey = '', dealerTotalKey = '';
+  function paintScore(node, hud, label, key, oldKey, still) {
+    node.hidden = hud.total == null || phase !== 'play';
+    node.querySelector('small').textContent = label;
+    node.querySelector('strong').textContent = hud.total == null ? '' : String(hud.total) + (hud.hidden ? ' + ?' : '');
+    const mood = hud.total > 21 ? 'bust' : hud.total === 21 ? 'perfect' : hud.total >= 19 ? 'hot' : hud.total >= 16 ? 'good' : 'medium';
+    node.dataset.mood = mood;
+    if (key !== oldKey) {
+      node.getAnimations().forEach(a=>a.cancel());
+      const sparks=node.querySelector('.cards-score-sparks'); sparks.replaceChildren();
+      if (!still && !node.hidden && !hud.quiet) {
+        node.animate(mood==='bust' ? [{transform:'rotate(-5deg)'},{transform:'rotate(4deg)'},{transform:'translateY(3px)'},{transform:'none'}] : [{transform:'scale(.8)'},{transform:'scale(1.19) rotate(-3deg)'},{transform:'scale(.97) rotate(2deg)'},{transform:'none'}],{duration:480,easing:'ease-out'});
+        // Existing kit owns volume and suspension. No win cue for a total alone.
+        sound.play(mood==='bust' ? 'deck-square' : 'token', {i:Math.max(0,Math.min(8,hud.total-13))});
+        const count=mood==='bust'?0:mood==='perfect'?16:mood==='hot'?10:mood==='good'?6:3;
+        for(let i=0;i<count;i++) {
+          const dot=document.createElement('i'), angle=i/count*Math.PI*2;
+          dot.style.setProperty('--sx',Math.cos(angle)*(38+i%3*9)+'px');
+          dot.style.setProperty('--sy',Math.sin(angle)*(34+i%4*6)+'px');
+          sparks.append(dot); dot.addEventListener('animationend',()=>dot.remove(),{once:true});
+        }
+      }
+    }
+    if(still){node.getAnimations().forEach(a=>a.cancel());node.querySelector('.cards-score-sparks').replaceChildren();}
+  }
   function syncTableHud() {
     if (!ctx.stage || !table.hud) return;
     const hud = table.hud(), total = $('.cards-total'), still = dress().still;
     el.toggleAttribute('data-still', still);
-    for (const [key,value] of Object.entries({ 'phone-total-x':hud.x, 'phone-total-y':hud.top-10, 'hand-x': hud.x, 'hand-bottom': hud.bottom, 'total-x': hud.left - (hud.hands>1 ? 48 : 65), 'total-y': hud.y, 'bet-x': hud.betX, 'bet-y': hud.betY + 44 })) { if (!ctx.stage.lookShift || !key.startsWith('hand-')) el.style.setProperty('--' + key, value + 'px'); }
-    total.hidden = hud.total == null || phase !== 'play';
-    total.querySelector('small').textContent = hud.hands > 1 ? t('br_cards_hand_short', 'Hand {i}', { i: hud.owner + 1 }) : t('br_cards_you', 'You');
-    total.querySelector('strong').textContent = hud.total == null ? '' : String(hud.total);
-    const mood = hud.total > 21 ? 'bust' : hud.total >= 18 ? 'good' : 'medium';
-    const key = hud.owner + ':' + hud.total;
-    if (key !== totalKey) {
-      totalKey = key; total.dataset.mood = mood; total.getAnimations().forEach(a=>a.cancel());
-      if (!still && !total.hidden) total.animate(mood === 'good' ? [{transform:'translateY(7px) scale(.92)'},{transform:'translateY(-5px) scale(1.12)'},{transform:'none'}] : mood === 'bust' ? [{transform:'translateX(-5px)'},{transform:'translateX(5px)'},{transform:'translateY(6px)'},{transform:'none'}] : [{transform:'translateY(-4px)'},{transform:'none'}], { duration: mood === 'medium' ? 260 : 520, easing:'ease-out' });
-    }
-    if (still) total.getAnimations().forEach(a=>a.cancel());
+    for (const [key,value] of Object.entries({ 'phone-total-x':hud.x, 'phone-total-y':hud.top-18, 'hand-x': hud.x, 'hand-bottom': hud.bottom, 'total-x': hud.left - (hud.hands>1 ? 48 : 65), 'total-y': hud.y, 'bet-x': hud.betX, 'bet-y': hud.betY + 44 })) { if (!ctx.stage.lookShift || !key.startsWith('hand-')) el.style.setProperty('--' + key, value + 'px'); }
+    const sideWidth = el.clientWidth <= 800 ? 76 : 126;
+    const standX = Math.max(sideWidth/2+8, hud.left-sideWidth/2-14);
+    const hitX = Math.min(el.clientWidth-sideWidth/2-8, hud.right+sideWidth/2+14);
+    el.style.setProperty('--stand-x', standX+'px');
+    el.style.setProperty('--hit-x', hitX+'px');
+    el.style.setProperty('--action-y', Math.min(el.clientHeight-110,el.clientWidth<=800?hud.bottom+10:hud.y+25)+'px');
+    total.style.left = (el.clientWidth<=800?46:standX)+'px';
+    total.style.top = (el.clientWidth<=800?hud.top-36:hud.y-48)+'px';
+    const key=hud.owner+':'+hud.total;
+    paintScore(total,hud,hud.hands>1?t('br_cards_hand_short','Hand {i}',{i:hud.owner+1}):t('br_cards_you','You'),key,totalKey,still);totalKey=key;
+    const dealer=table.hud('d'), badge=$('.cards-dealer-total'), dealerKey=dealer.total+':'+dealer.hidden;
+    // Dealer subtotal is computed solely from painted face-up cards, never server hand totals.
+    paintScore(badge,dealer,t('br_cards_dealer','Emi'),dealerKey,dealerTotalKey,still);dealerTotalKey=dealerKey;
+    const phone=el.clientWidth<=800;
+    badge.style.left=Math.max(46,Math.min(el.clientWidth-46,phone?dealer.x:dealer.left-57))+'px';
+    badge.style.top=(phone?dealer.bottom+31:dealer.y)+'px';
+
   }
 
   function onKey(e) {

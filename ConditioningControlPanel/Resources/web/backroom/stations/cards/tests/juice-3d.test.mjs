@@ -48,5 +48,17 @@ test('3D suspend discards in-flight landing and fan cues, restoring the authored
   clear();
   table.split();for(let slot=1;slot<6;slot++)table.addCard({owner:1,slot,code:'2h',settled:true},7000);
   table.setBets([6,6],7000,true);draw(9000);clear();
+  table.clear();
+  table.addCard({owner:'d',slot:0,code:'9d',settled:true},10000);
+  table.addCard({owner:'d',slot:1,code:null,settled:true},10000);draw(10000);
+  assert.equal(table.hud('d').total,9);assert.equal(table.hud('d').hidden,true);
+  table.reveal('Kh',10100);draw(10100);
+  assert.equal(table.hud('d').total,9,'a hole card value stays private until its face turns toward the player');
+  draw(10500);assert.equal(table.hud('d').total,19);assert.equal(table.hud('d').hidden,false);
+  table.clear(10600,true);assert.equal(table.debug().cards.length,0);assert.equal(table.debug().departing,2);
+  draw(10800);assert.equal(table.debug().departing,2,'cards remain rendered mid-sweep');
+  draw(11200);assert.equal(table.debug().departing,0,'departing meshes are released after the sweep');
+  table.addCard({owner:0,slot:0,code:'As',settled:true},12000);draw(12000);table.clear(12001,true);
+  table.skip(12010);assert.equal(table.debug().departing,0,'suspend settles the sweep immediately');
   table.dispose(); assert.equal(scene.children.length, 0);
 });

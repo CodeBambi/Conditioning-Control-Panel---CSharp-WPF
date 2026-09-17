@@ -10,6 +10,14 @@
  * ==========================================================================*/
 
 export const LEX = {
+  br_counter_demo_drift: "Drift & Bounce",
+  br_counter_demo_pendulum: "Pendulum",
+  br_counter_demo_shatter: "Shatter",
+  br_counter_demo_rain: "Rain",
+  br_counter_demo_spiral: "Spiral In",
+  br_counter_demo_drain: "Brain Drain bubble",
+  br_counter_demo_magnet: "Magnet bubble",
+
   br_counter_details: "What's included",
   br_prize_jackpot_remix_details: "Enable Jackpot Remix in Flashes. Each scheduled flash has a 1 in 100 chance to use a remix. It plays when a remix is ready; preparation waits for a quiet moment and enough free memory. Requires GIFs and motion on. Counts as one flash and pays no SP.",
   br_prize_flashes_v2_details: "Drift & Bounce moves flashes around the screen; Pendulum swings them from above. Drag a GIF, fling it, or soften its corners. Shatter breaks a dismissed flash into falling fragments. Enable these options in Flashes. Moving, dragging and Shatter need Solid mode off; motion settings still apply.",
