@@ -1,11 +1,13 @@
 import * as T from '../../vendor/three/three.module.min.js';
 
-/** Cosmetic coins, released only after a paid result has been revealed. */
+/** Cosmetic sparkle diamonds, released only after a paid result has been revealed. */
 export function createCoinShower(parent) {
-  const geometry = new T.CylinderGeometry(.028,.028,.007,16);
-  const material = new T.MeshStandardMaterial({color:0xf6b52e,metalness:.7,roughness:.3,transparent:true});
+  const geometry = new T.OctahedronGeometry(.036,0);
+  const material = new T.MeshStandardMaterial({color:0xffffff,metalness:.5,roughness:.22,emissive:0x48243e,emissiveIntensity:.35,transparent:true});
   const coins = new T.InstancedMesh(geometry,material,64); coins.name='payout_coins';coins.count=0;
   coins.frustumCulled=false;parent.add(coins);
+  for(let i=0;i<64;i++)coins.setColorAt(i,new T.Color([0xffd47e,0xff94d5,0xa2ffe2,0xc5a1ff][i%4]));
+  geometry.scale(.7,1.25,.55);
   const pose=new T.Object3D();let age=0,count=0,label='',active=false;
   return {
     start(amount,tier,text='') {

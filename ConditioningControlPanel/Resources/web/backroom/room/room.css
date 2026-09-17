@@ -64,7 +64,7 @@ html.br-visiting .br-room-ui, html.br-visiting.br-seated .br-room-ui { visibilit
 .br-visit[hidden] { display: none; }
 .br-visit:focus-visible, .br-pill:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 2px; }
 
-.br-nav { position: absolute; top: 12px; right: 120px; display: flex; gap: 8px; }
+.br-nav { position: absolute; top: max(12px,var(--br-brow)); right: 230px; display: flex; gap: 8px; }
 .br-pill { font: 600 13px/1 "Segoe UI", system-ui, sans-serif; color: var(--br-ink); cursor: pointer;
   background: linear-gradient(180deg, #3d2449e0, #2a1838db 54%, #1d0f26db);
   border: 1px solid rgba(185, 156, 255, .45); border-top-color: #d9c6ff8c; border-radius: 999px; padding: 9px 15px;
@@ -131,10 +131,25 @@ html.br-reduced .br-bell span.is-in, html.br-still .br-bell span.is-in { animati
   box-shadow: inset 0 3px 8px #00000080, inset 0 -1px 0 #ffeafb14, 0 0 0 #1a0d23; }
 .br-back:focus-visible, .br-card-back:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 2px; }
 /* The SP readout is a plate, not a button: sunken, so it never invites a press it cannot answer. */
-.br-sp { pointer-events: auto; background: linear-gradient(180deg, #0d0815e6, #150d22d9);
-  border: 1px solid rgba(255, 207, 107, .4); border-radius: 999px; padding: 7px 14px; color: var(--br-ink-dim);
-  box-shadow: inset 0 2px 6px #00000080, inset 0 -1px 0 #ffcf6b1f, 0 1px 0 #ffffff0f; }
-.br-sp b { color: var(--br-gold); font-variant-numeric: tabular-nums; margin-left: 4px; }
+.br-sp { position:relative; display:flex; align-items:center; gap:6px; pointer-events:auto;
+  background:linear-gradient(145deg,#49304ff5,#21132ff5 65%); border:1px solid #e9bd72;
+  border-top-color:#fff0c2; border-radius:14px; padding:7px 12px; color:#e8d3f4;
+  box-shadow:inset 0 1px 0 #fff4,0 3px 0 #160b20,0 0 18px #edac4524; margin-right:0; }
+.br-sp::before { content:""; width:15px;height:22px;flex:none;
+  clip-path:polygon(50% 0,100% 42%,50% 100%,0 42%);background:conic-gradient(from 45deg,#fff7d5,#fca6df,#ffcf6b,#fff7d5); }
+.br-sp b { color:#ffe49b;font-size:24px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;text-shadow:0 2px 0 #28111c; }
+#br-sp-label { font-size:11px;font-weight:800;letter-spacing:.08em; }
+.br-sp::after { content:attr(data-delta);position:absolute;top:calc(100% + 6px);right:5px;white-space:nowrap;
+  font-weight:900;font-size:16px;line-height:1.2;text-shadow:0 2px 3px #110818;pointer-events:none; }
+.br-sp[data-flow="in"]::after { color:#8fffe0; }
+.br-sp[data-flow="out"]::after { color:#ffafd6; }
+.br-sp-changing b { animation:br-balance-punch 460ms cubic-bezier(.2,1.5,.4,1); }
+.br-sp-changing::after { animation:br-balance-arrive 460ms ease-out; }
+.br-sp[data-flow="out"] b { color:#ffc0de; }
+@keyframes br-balance-punch { 0%{transform:scale(.88)}45%{transform:scale(1.18)}100%{transform:scale(1)} }
+@keyframes br-balance-arrive { from{opacity:0;transform:translateY(-7px)}to{opacity:1;transform:translateY(0)} }
+.br-sp[data-balance-still="true"] :is(b),.br-sp[data-balance-still="true"]::after { animation:none; }
+@media(prefers-reduced-motion:reduce){.br-sp-changing b,.br-sp-changing::after{animation:none}}
 html.br-leaving .br-sp { opacity: .5; }
 
 /* The station layer: stations and cards sit over the room, under the HUD. */
@@ -178,3 +193,8 @@ html.br-seated .br-hint, html.br-seated .br-crosshair, html.br-seated .br-visit 
   .br-nav > * { pointer-events: auto; }
   .br-bell { top: 98px; right: 12px; max-width: calc(100vw - 24px); }
 }
+
+/* Sparkle Point bursts share the faceted diamond silhouette. */
+#br-stage .cfx-spark, #br-stage .cfx-coin { border-radius:0; clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); }
+
+@media(max-width:600px){.br-sp{padding:7px 9px}.br-sp b{font-size:22px}}

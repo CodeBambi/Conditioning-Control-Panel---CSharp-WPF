@@ -36,6 +36,7 @@ import { createLoader } from './loader.js';
 import { createHud } from './hud.js';
 import { createRoomRewards, createDoubleCharm } from './rewards.js';
 import { kit } from '../shared/sound/kit.js';
+import { createBalanceFeedback } from './balance-feedback.js';
 const rewards = createRoomRewards();
 let doubleCharm = null;
 function applyRewards(body) { if (leaving) return; if (rewards.apply(body)) { scene?.setRewards(rewards.snapshot()); doubleCharm?.paint(); } }
@@ -96,6 +97,7 @@ function paintChrome() {
  * balance frame, a station-result that moved state.sp, a closed station and a reopened one. */
 const chip = { owed: 0, shown: null };
 let chipFrame = 0;
+const balanceFeedback = createBalanceFeedback({ target: () => $('.br-sp'), still: () => still() || state.motion === 'off' });
 function owedNow() {
   let n = chip.owed;
   if (typeof n === 'function') { try { n = n(); } catch (e) { n = 0; } }
@@ -106,6 +108,7 @@ function paintSpChip() {
   const node = $('#br-sp-value');
   const v = String(chip.shown != null ? chip.shown : Math.max(0, state.sp - owedNow()));
   if (node && node.textContent !== v) node.textContent = v;
+  balanceFeedback.update(Number(v));
 }
 const spReadout = Object.freeze({
   /** A number shown as is (a BANK tick), or null to go back to the rule. */
@@ -367,6 +370,7 @@ async function start(init) {
     open: typeof init.open === 'boolean' ? init.open : null,
   });
   bridge.markInitialized();
+  balanceFeedback.reset(state.sp);
   paintChrome();
 
   bridge.on('balance', (m) => setSp(m.sp));

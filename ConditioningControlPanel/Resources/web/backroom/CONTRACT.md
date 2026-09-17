@@ -2185,3 +2185,29 @@ Cards and roulette accept a limited drag on empty felt (about 4 degrees sideways
 existing gestures. Off/Calm, suspension, transitions and seat disposal cancel the look.
 Projected hand totals and bets follow the table; blackjack action controls stay steady
 while looking. No extra renderer, network request or server outcome change.
+
+
+### Slot chase rewards: bonus Daily Daze spins (2026-09-17)
+
+The slot prize sheet shows a server-selected, column-specific combination: one specific GIF,
+one spiral of any style, and one wildcard. A session token is minted once per room page lifetime;
+returning to a slot does not change it. POST slot/chase `{session,cursor?}` registers the target.
+An unfinished prepaid tape pins its original target until consumed. The GIF deal remains stable
+within that page session, and missing pictures use distinct fallback artwork rather than aliases.
+
+`wheelChase {id,symbols,oneIn,bonusSpins}` appears on chase/state/tape replies. Symbols use gif0..3,
+`spiral`, and `*`. Only paid plain outcomes qualify, never freeze, complimentary or free outcomes.
+Every real match carries `wheelBonus:1`. Existing stop weights and SP payouts are unchanged.
+The current exact average is 1 in 44.1558 paid spins, not a guaranteed interval or a progress meter.
+The displayed odds round to 1 in 44. Credits settle atomically with the tape; the slot announces
+one only on its matching landing and never reveals credits from its still-unplayed outcomes.
+
+Wheel state/spin replies carry `bonusSpins`, `canSpin`, `bonusMode`, and authoritative `slices`.
+Daily allowance is consumed first. Further spins spend earned credits with ordinary rewards,
+including decoration/Seeing Double/Head Empty, but exclude the growing jackpot and its daily
+spinner count. Replayed requests reuse their receipt and never consume another credit. The
+last bonus landing persists. UI uses reply slices before landing, including old daily receipts.
+Unsupported chase endpoints leave legacy slot play available without the bonus row.
+
+This increases direct expected SP by about 0.646 per paid spin, or 0.815 with the decoration
+collection complete, before Seeing Double. It is additional return, not a retune back to 102%.

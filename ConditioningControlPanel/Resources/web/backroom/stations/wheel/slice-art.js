@@ -38,7 +38,7 @@ export const R0 = 0.185, R1 = 0.711;
 /** prize-art.js hangs the label plane at r 0.475 and it is 0.38 tall; the band covers it and feathers out. */
 const LABEL_R = 0.475, LABEL_REACH = 0.27;
 const SCRIM = '26, 12, 38';          // the room's own ink, so the band reads as lacquer and not as grey
-const ART_ALPHA = 0.72, SCRIM_ALPHA = 0.5, SHEEN_ALPHA = 0.14;
+const ART_ALPHA = 0.72, SCRIM_ALPHA = 0.5, SHEEN_ALPHA = 0.22;
 
 /** The wedge as a canvas path. Wheel angles run CLOCKWISE FROM THE TOP; canvas arcs run anticlockwise from
  *  the +x axis, so the whole ring is simply turned a quarter: t = a - PI/2, drawn forwards. */
@@ -57,7 +57,7 @@ export function wedgePath(ctx, s, cx, cy, k) {
  * prize-art.js prizeColor. Returns true when a picture actually landed: false means the deck has nothing yet,
  * and the caller keeps the enamel it already has rather than flashing an empty ring.
  */
-export function drawFace(canvas, layout, media, key, colorOf) {
+export function drawFace(canvas, layout, media, key, colorOf, now = 0) {
   const ctx = canvas && canvas.getContext && canvas.getContext('2d');
   if (!ctx || !Array.isArray(layout) || !layout.length) return false;
   const S = canvas.width;
@@ -71,7 +71,9 @@ export function drawFace(canvas, layout, media, key, colorOf) {
   band.addColorStop(0.28, `rgba(${SCRIM}, ${SCRIM_ALPHA})`);
   band.addColorStop(0.72, `rgba(${SCRIM}, ${SCRIM_ALPHA})`);
   band.addColorStop(1, `rgba(${SCRIM}, 0)`);
-  const sheen = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+  // Moving lacquer catches the light even when a dealt image is a still. Labels stay above this pass.
+  const drift = Math.sin(now * 0.00055) * R * 0.7;
+  const sheen = ctx.createLinearGradient(cx - R + drift, cy - R, cx + R + drift, cy + R);
   sheen.addColorStop(0, 'rgba(255, 255, 255, 0)');
   sheen.addColorStop(0.4, `rgba(255, 255, 255, ${SHEEN_ALPHA})`);
   sheen.addColorStop(0.62, `rgba(255, 255, 255, ${SHEEN_ALPHA * 0.25})`);

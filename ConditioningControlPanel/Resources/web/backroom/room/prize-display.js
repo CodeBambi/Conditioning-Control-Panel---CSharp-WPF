@@ -4,8 +4,8 @@ import { prizeFrame } from '../shared/prize-state.js';
 // Borrow approved geometry and textures. Only our signs, stands and material copies are owned here.
 export function createPrizeDisplay({ scene, counter, lex }) {
   const resources = new Set(), stamps = new Map(), props = new Map(), flights = new Map();
-  const rack = new T.Group(); rack.name = 'owned_expansions'; rack.position.set(3.2, 0, -5.7);
-  const cabinet = new T.Group(); cabinet.name = 'unlocked_arcade'; cabinet.position.set(4.1, 0, -5.7);
+  const rack = new T.Group(); rack.name = 'owned_expansions'; rack.position.set(5.25, 0, -7.4);
+  const cabinet = new T.Group(); cabinet.name = 'unlocked_arcade'; cabinet.position.set(4.1, 0, -7.15);
   const finish = new T.MeshStandardMaterial({ color: '#35213f', metalness: .35, roughness: .4 }); resources.add(finish);
   const brass = new T.MeshStandardMaterial({color:'#b78a48',metalness:.7,roughness:.32}); resources.add(brass);
   function box(w, h, d, x, y, z, material = finish) {
@@ -38,7 +38,7 @@ export function createPrizeDisplay({ scene, counter, lex }) {
   }
   const sourceCabinet = counter?.getObjectByName('racing_cabinet');
   if (!sourceCabinet) throw new Error('counter.glb lacks preserved racing_cabinet');
-  cabinet.add(fitted(sourceCabinet, 1.0, 2.05)); sourceCabinet.visible = false;
+  cabinet.add(fitted(sourceCabinet, 1.0, 2.05)); sourceCabinet.visible = true;
   const plate = sign(lex('br_arcade_play_tab', 'Play in CCP: Play tab'), .82, .205); plate.position.set(0, .44, .55); cabinet.add(plate);
   counter.updateMatrixWorld(true);
   for (const id of ['jackpot_remix', 'rt_demo', 'high_roller', 'flashes_v2', 'bubbles_v2', 'rt_bundle_1', 'rt_bundle_2', 'rt_bundle_3']) {
@@ -49,8 +49,8 @@ export function createPrizeDisplay({ scene, counter, lex }) {
     scene.add(stamp); stamps.set(id, stamp);
     const parent = source.parent, pivot = new T.Group(); parent.add(pivot); pivot.attach(source);
     props.set(id, { pivot, source });
-    if (id.startsWith('rt_bundle_')) {
-      const display = fitted(source, .59, .46); display.position.y = .68 + (Number(id.at(-1)) - 1) * .53;
+    if (id === 'rt_demo' || id.startsWith('rt_bundle_')) {
+      const display = fitted(source, .59, .46); display.position.y = id === 'rt_demo' ? .15 : .68 + (Number(id.at(-1)) - 1) * .53;
       display.name = 'owned_' + id; display.visible = false; rack.add(display);
     }
   }
@@ -66,11 +66,11 @@ export function createPrizeDisplay({ scene, counter, lex }) {
     for (const [id, stamp] of stamps) {
       stamp.visible = owned.has(id) && id !== 'rt_demo';
       if (id === 'rt_demo') props.get(id).source.visible = !snapshot.demo;
-      const display = rack.getObjectByName('owned_' + id); if (display) display.visible = owned.has(id);
+      const display = rack.getObjectByName('owned_' + id); if (display) display.visible = id === 'rt_demo' ? snapshot.demo : owned.has(id);
     }
     if (bought && owned.has(bought) && props.has(bought)) flights.set(bought, 0);
     if (snapshot.demo && !demo) reveal = bought ? 0 : null;
-    demo = snapshot.demo; cabinet.visible = rack.visible = demo;
+    demo = snapshot.demo; sourceCabinet.visible = !demo; cabinet.visible = rack.visible = demo;
     if (!demo) reveal = null;
     // A repeated state refresh must not restart the reveal.
     update(0, false);

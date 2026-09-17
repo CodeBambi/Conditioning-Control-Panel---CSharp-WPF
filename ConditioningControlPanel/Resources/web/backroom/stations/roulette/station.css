@@ -154,3 +154,6 @@ html:has(.roul-station[data-seated]) .br-nav > button:first-child { display: non
   .roul-station[data-seated] .roul-spins button { min-width: 30px; }
   .roul-station[data-seated] .roul-spin { min-width: 90px; }
 }
+
+/* SP travels as faceted sparkles, not coins. */
+.roul-token { border-radius:0; border:0; clip-path:polygon(50% 0,85% 30%,100% 50%,50% 100%,0 50%,15% 30%); background:conic-gradient(from 45deg,#fff6da,#fca6e1,#b791ff,#fff6da,#ffda83); color:transparent; filter:drop-shadow(0 0 5px #ffcaec); }

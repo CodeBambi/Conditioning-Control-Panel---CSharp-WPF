@@ -141,3 +141,12 @@ test('slice crop contains the complete curved wedge, including cardinal extrema'
     assert.ok(x>=b.x-1e-6 && x<=b.x+b.w+1e-6 && y>=b.y-1e-6 && y<=b.y+b.h+1e-6);
   }
 });
+
+
+test('moving lacquer changes the face highlight without changing the dealt pictures', () => {
+  const still = recorder(), moving = recorder(), a = deckStub(), b = deckStub();
+  drawFace(canvasWith(still), LAYOUT, a, 'same-picture', COLOR, 0);
+  drawFace(canvasWith(moving), LAYOUT, b, 'same-picture', COLOR, 1700);
+  assert.notDeepEqual(still.calls.find(c => c.name === 'sheen').a, moving.calls.find(c => c.name === 'sheen').a);
+  assert.deepEqual(a.last, b.last, 'the moving light never crops, deals or substitutes the result picture');
+});

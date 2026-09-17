@@ -11,7 +11,7 @@
  *   readout.js  the one SP readout (ctx.spReadout when the room has it)
  *   bank.js / sound.js  THE BANK's tokens and the cues
  *
- * ONE FREE SPIN A DAY. The server draws; the page answers the drag or the
+ * ONE FREE SPIN A DAY, plus earned slot chase credits. The server draws; the page answers the drag or the
  * button inside 100 ms (the wheel starts turning), then retargets the
  * deceleration onto result.sliceIndex whatever the drag strength. A reopen
  * after spinning shows the day's stored landing and a countdown to nextResetAt.
@@ -52,7 +52,7 @@
  * waiting for tomorrow, so nothing unlocks early.
  * ==========================================================================*/
 
-import { layoutOf, landingAngle, resultIndex, readResult, restRotation, countdown } from './wheel.js';
+import { layoutOf, landingAngle, resultIndex, readResult, restRotation, countdown, bonusSpinsOf, canSpinWheel } from './wheel.js';
 import { recipe, tierOf, prizeTier, glance, landPose, pressPose, revealCount, FEEL, landMoment, nearMiss, fxPlan, freshCool, calloutFor } from './feel.js';
 import { houseTier } from '../../shared/win/tier.js';
 import { sitPlan, mergePlans, afterParty, freshSit } from '../../shared/win/plan.js';
@@ -162,22 +162,25 @@ export async function mount(ctx) {
   function sync() {
     if (!el || !st) return;
     const c = clock(), r = st.spun ? readResult(st.result) : null, j = st.jackpot || {};
+    const credits = bonusSpinsOf(st), available = canSpinWheel(st);
+    const bonusReady = t('br_wheel_bonus_ready', 'Bonus spins ready: {n}. No daily wait.', { n: credits });
     $('.wheel-jackpot').textContent = jackpotChip(j, t, fmt);   // MUST HIT in place of the odds (10.16.E)
     $('.wheel-jackpot').classList.toggle('is-must-hit', j.mustHit === true);
     const status = busy ? t('br_wheel_spinning', 'Round it goes...')
+      : credits > 0 && st.spun ? bonusReady
       : r ? `${resultLine(r, st.snoozeCarry)}\n${c ? t('br_wheel_next', 'Next spin in {time}.', { time: c.text }) : ''}`
       : t('br_wheel_ready', 'Your free spin is ready. Drag the rim or press Spin.');
     if ($('.wheel-status').textContent !== status) $('.wheel-status').textContent = status;
     const spin = $('.wheel-spin');
-    spin.disabled = el.dataset.phase !== 'play' || busy || !!r;
-    spin.querySelector('span').textContent = r ? t('br_wheel_come_back', 'Come back') : t('br_wheel_spin', 'Spin');
-    spin.querySelector('small').textContent = r && c ? c.text : t('br_wheel_free', 'Free today');
+    spin.disabled = el.dataset.phase !== 'play' || busy || !available;
+    spin.querySelector('span').textContent = st.spun && credits > 0 ? t('br_wheel_bonus_spin', 'Bonus spin') : !available ? t('br_wheel_come_back', 'Come back') : t('br_wheel_spin', 'Spin');
+    spin.querySelector('small').textContent = st.spun && credits > 0 ? t('br_wheel_bonus_count', 'Bonus spins: {n}', { n: credits }) : !available && c ? c.text : t('br_wheel_free', 'Free today');
     if (!scene) return;
     scene.screen('title_screen', t('br_wheel_title', 'DAILY DAZE'));
     const now = performance.now();
     const rq = (now - revealAt) / FEEL.REVEAL_MS, counting = r && r.jackpotWon && rq >= 0 && rq < 1;   // THE REVEAL counts the pot up
     const want = r ? [rewardText(r, t) || (r.jackpotWon ? t('br_wheel_screen_jackpot', 'JACKPOT +{n}', { n: fmt(counting ? revealCount(r.pay, rq) : r.pay) }) : r.snoozed ? t('br_wheel_screen_snooze', 'SNOOZE +{n} TOMORROW', { n: fmt(st.snoozeCarry) }) : t('br_wheel_screen_win', '+{n} SP', { n: fmt(r.total) })),
-                     c ? t('br_wheel_screen_next', 'NEXT {time}', { time: c.text }) : '']
+                     credits > 0 ? t('br_wheel_bonus_count', 'Bonus spins: {n}', { n: credits }) : c ? t('br_wheel_screen_next', 'NEXT {time}', { time: c.text }) : '']
       : [busy ? t('br_wheel_screen_spinning', 'ROUND IT GOES') : t('br_wheel_screen_ready', 'GIVE IT A SPIN'), t('br_wheel_screen_pot', 'JACKPOT {n}', { n: fmt(j.amount) })];
     if (want.join() !== lines.join()) { lines = want; }
     const which = Math.floor((now - lineAt) / 3200) % 2;   // two lines, one turn every 3.2 s (never a flicker)
@@ -194,6 +197,7 @@ export async function mount(ctx) {
     });
     $('.wheel-odds table').replaceChildren(...rows);
     const j = st.jackpot || {}, notes = [t('br_wheel_odds_note', 'One free spin a day. The slice sizes are the picture; these are the real odds.')];
+    if (st.bonusSpins != null) notes.push(t('br_wheel_bonus_rules', 'Bonus spins use the standard rewards. The growing jackpot is daily only.'));
     if (j.eligible === false) notes.push(t('br_wheel_young', 'The jackpot opens to accounts a few days old.'));
     else if (j.wonToday) notes.push(t('br_wheel_taken', "Today's jackpot is taken. It starts again tomorrow."));
     else if (j.mustHit === true) notes.push(t('br_wheel_must_hit_room', 'The pot has to fall today'));
@@ -425,7 +429,7 @@ export async function mount(ctx) {
     if (!alive || suspended || !scene || el.dataset.phase !== 'play' || busy) return;
     sound.arm();
     const my = session, pressedAt = performance.now();
-    if (st.spun) { glanceTo(pressPose(), landPose(readResult(st.result))); $('.wheel-spin').classList.add('is-ringing'); setTimeout(() => el && $('.wheel-spin').classList.remove('is-ringing'), 400); return; }
+    if (!canSpinWheel(st)) { glanceTo(pressPose(), landPose(readResult(st.result))); $('.wheel-spin').classList.add('is-ringing'); setTimeout(() => el && $('.wheel-spin').classList.remove('is-ringing'), 400); return; }
     // Law VIII: the wheel turns (or, still, the button rings) and EMI glances on this frame.
     rewardReveal.hide();
     busy = true; sound.start(); scene.coast(omega); scene.setMood('spin'); glanceTo(pressPose());
@@ -444,9 +448,12 @@ export async function mount(ctx) {
       note('refused', { reason: a.kind === 'closed' ? 'closed' : a.reason }); sync();
       return;
     }
-    const b = a.body, r = readResult(b.result), idx = resultIndex(layout, b.result);
+    const b = a.body, r = readResult(b.result);
+    const replyLayout = layoutOf(b.slices);
+    if (replyLayout) { layout = replyLayout; scene.setLayout(layout); }
+    const idx = resultIndex(layout, b.result);
     // Nothing on screen may tell the result before the pointer does: the state is adopted on the landing frame.
-    const next = { ...st, spun: true, result: b.result, snoozeCarry: Number(b.snoozeCarry) || 0, nextResetAt: b.nextResetAt || st.nextResetAt, jackpot: b.jackpot || st.jackpot };
+    const next = { ...st, spun: true, bonusSpins: bonusSpinsOf(b), result: b.result, snoozeCarry: Number(b.snoozeCarry) || 0, nextResetAt: b.nextResetAt || st.nextResetAt, jackpot: b.jackpot || st.jackpot };
     const gained = a.kind === 'result' ? Math.max(0, Number(b.sp) - before) : 0;
     readout.owe(gained); readout.setServer(b.sp);                                // Law I: held back until it lands
     if (idx < 0) { await scene.windDown(); } else await scene.land(landingAngle(layout, idx, r.day), idx);
@@ -512,7 +519,7 @@ export async function mount(ctx) {
         labels: s => sliceText(s, t, fmt),
         // A GETTER, never the deck itself: dealDeck replaces it after the scene exists, and suspend frees it.
         sliceMedia: () => deck,
-        canSpin: () => !busy && !suspended && !!st && !st.spun,
+        canSpin: () => !busy && !suspended && canSpinWheel(st),
         onGrab: ok => { sound.arm(); if (!ok) press(); else { glanceTo(pressPose()); playFx('grab'); } },
         onRelease: omega => press(omega),
         onTick: semis => sound.tick(semis) }).catch(e => ({ error: e })),

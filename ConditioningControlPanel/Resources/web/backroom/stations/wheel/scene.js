@@ -23,6 +23,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { createRimGlitter } from './rim-glitter.js';
 import { createRenderBudget } from '../../room/render-budget.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { REQUIRED, OPTIONAL } from './nodes.js';
@@ -110,7 +111,7 @@ export async function createScene(o) {
   const originals = new Map(); let model = null, unregister = null, rewardView = null;
   let reduced = !!o.reduced;
   const budget = createRenderBudget(navigator, devicePixelRatio);
-  let lastDraw = -Infinity;
+  let lastDraw = -Infinity, rimGlitter = null;
   const renderer = stage?.renderer || new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'default' });
   if (!stage) renderer.setPixelRatio(budget.dpr(canvas.clientWidth, canvas.clientHeight));
   // Seated, the wheel borrows the room's renderer and inherits its tone mapping. This is the standalone path,
@@ -133,6 +134,7 @@ export async function createScene(o) {
     cancelDrag();
     cancelAnimationFrame(raf);
     rewardView?.dispose();
+    rimGlitter?.dispose();
     if (settle) settle();
     if (onDown) { canvas.removeEventListener('pointerdown', onDown); canvas.removeEventListener('pointermove', onMove); canvas.removeEventListener('pointerup', onUp); canvas.removeEventListener('pointercancel', onUp); }
     const disposable = [], resources = new Set(), borrowed = new Set();
@@ -171,6 +173,7 @@ export async function createScene(o) {
 
   const rotor = get('wheel_rotor'), pointer = get('pointer'), pointerRest = pointer.rotation.z, modelRest = model.position.clone();
   if (get('room_wheel_face')) get('room_wheel_face').visible = false;
+  if (get('wheel_rim_diamonds')) get('wheel_rim_diamonds').visible = false;
   if (get('layout_sectors')) get('layout_sectors').visible = false;
   model.traverse(n => { if (/^(peg_|glyph_)/.test(n.name)) n.visible = false; });
   for (const n of ['title_letters', 'status_letters', 'hub_spiral']) if (get(n)) get(n).visible = false;
@@ -211,6 +214,7 @@ export async function createScene(o) {
     s.position.copy(b.position); s.position.z += 0.038; s.scale.setScalar(0.24); b.parent.add(s);
     return s;
   });
+  rimGlitter = createRimGlitter(rotor.parent, rotor.position, budget.mobile ? 80 : 144);
   // The Loom hub: a runtime disc on the rotor sized from hub_lip (else hub_spiral), a 256 CanvasTexture the kit paints.
   // It replaces the neon tube, which stays only when neither hub node exists.
   let dress = { ...dressOf(), ...(o.dress || {}) };
@@ -397,7 +401,7 @@ export async function createScene(o) {
     if (!face.dirty && t - face.at < FACE_MS) return;
     face.at = t; face.dirty = false;
     face.ready = ready; face.frames = frames;
-    if (drawFace(face.c, layout, media, face.key, prizeColor)) { face.tex.needsUpdate = true; face.painted = true; }
+    if (drawFace(face.c, layout, media, face.key, prizeColor, still ? 0 : t)) { face.tex.needsUpdate = true; face.painted = true; }
   }
   function hypnoFrame(t, dtMs) {
     paintHub(t, dtMs / 1000);
@@ -499,13 +503,14 @@ export async function createScene(o) {
       b.material.color.copy(c); b.material.emissive.copy(c); b.material.emissiveIntensity = 0.55 + wave * (0.55 + energy * 0.25);
       halos[i].material.color.copy(c); halos[i].material.opacity = 0.38 + wave * 0.36 + energy * 0.1; halos[i].scale.setScalar(0.30 + wave * 0.075);
     });
+    rimGlitter.update(dt, reduced || !!dress.calm, energy, true, canvas.clientHeight || 720);
     neon.clock.value = lightMotion * 2; neon.energy.value = energy;
     if (starMat) starMat.emissiveIntensity = reduced ? 0.45 : partying || rotating() ? (gold && partying ? 1.4 : 0.2) : 0.2 + 0.55 * breath(t);
     sparks.forEach((s, i) => {
       const age = partying && party.sparks ? t - party.start - i * 55 : -1;
-      s.visible = age >= 0 && age < 570 && !!star;
+      s.visible = !reduced && !dress.calm && age >= 0 && age < 570 && !!star;
       if (!s.visible) return;
-      const q = age / 570; star.getWorldPosition(s.position); s.position.y += 0.58 + Math.sin(q * Math.PI) * 0.3; s.position.x += (i - 3) * 0.09 * q; s.position.z += 0.1 + q * 0.2;
+      const q = age / 570; star.getWorldPosition(s.position); model.worldToLocal(s.position); s.position.y += 0.58 + Math.sin(q * Math.PI) * 0.3; s.position.x += (i - 3) * 0.09 * q; s.position.z += 0.1 + q * 0.2;
     });
     if (party && t >= party.end) party = null;
     // THE SHIVER: the whole wheel, +-4 px across the screen. Reduced motion plays nothing.

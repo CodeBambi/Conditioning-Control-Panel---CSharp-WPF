@@ -1,11 +1,14 @@
 import * as T from 'three';
 import { layoutOf } from '../stations/wheel/wheel.js';
 import { createPrizeSector } from '../stations/wheel/prize-art.js';
+import { createRimGlitter } from '../stations/wheel/rim-glitter.js';
 import { sliceText } from '../stations/wheel/rewards.js';
 
 /** The idle room and seated game use the same geometry, colours and printed prizes. */
 export function createWheelFace(holder) {
   const rotor=holder.getObjectByName('wheel_rotor');if(!rotor)return null;
+  const glitter=createRimGlitter(rotor.parent,rotor.position,72);
+  let clock=0;
   const face=new T.Group();face.name='room_wheel_face';rotor.add(face);
   function clear(){
     const nodes=[];face.traverse(n=>{if(n!==face)nodes.push(n);});
@@ -21,7 +24,20 @@ export function createWheelFace(holder) {
     face.userData.sliceCount=layout.length;
   }
   face.userData.setSlices=paint;paint(null);
-  return {dispose(){clear();face.removeFromParent();}};
+  return {
+    update(dt,still){
+      if(!face.visible){glitter.update(0,true);return;}
+      if(!still)clock+=Math.min(.05,Math.max(0,dt));
+      for(const node of face.children){
+        if(node.userData.mid===undefined || !node.material.emissive)continue;
+        const sweep=still?0:Math.pow(.5+.5*Math.cos(node.userData.mid-clock*.8),6);
+        node.material.emissive.copy(node.material.color);
+        node.material.emissiveIntensity=.16+sweep*.48;
+      }
+      glitter.update(dt,still,.12,true,globalThis.innerHeight||720);
+    },
+    dispose(){glitter.dispose();clear();face.removeFromParent();}
+  };
 }
 export function setWheelFace(scene,slices,labels){
   scene?.getObjectByName('room_wheel_face')?.userData.setSlices(slices,labels);

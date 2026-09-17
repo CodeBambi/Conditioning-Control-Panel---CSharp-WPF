@@ -18,10 +18,10 @@ export const RUN_SPEED = 4.8;
 /** Walls (inner faces less the radius) and the architecture no fixture bounds cover. */
 export const WALLS = Object.freeze({ x: 6.65, z: 7.55 });
 export const BLOCKERS = Object.freeze([
-  Object.freeze({ min: [2.57, -6.48], max: [4.85, -4.92] }), // arcade placeholder and owned expansion shelf
+  Object.freeze({ min: [3.4, -7.5], max: [5.75, -6.2] }), // arcade placeholder and owned expansion shelf
   Object.freeze({ min: [6.35, 5.35], max: [7.95, 7.72] }), // customization cabinet
   Object.freeze({ min: [-4.6, -7.4], max: [-3.6, -6.3] }), // northwest sculpture
-  Object.freeze({ min: [3.6, -7.4], max: [4.6, -6.3] }), // northeast sculpture
+  Object.freeze({ min: [5.4, 3.25], max: [6.4, 4.35] }), // east-wall sculpture
   Object.freeze({ min: [3.2, 6.7], max: [4.2, 7.75] }), // entrance sculpture
   Object.freeze({ min: [-3.24, -7.44], max: [3.24, -4.06] }),   // prize counter platform
   Object.freeze({ min: [-6.54, -3.94], max: [-4.46, -0.06] }),  // wheel plinth

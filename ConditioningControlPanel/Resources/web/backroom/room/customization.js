@@ -41,7 +41,7 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     mini.position.set(-(box.min.x+size.x/2)*scale,-box.min.y*scale,-(box.min.z+size.z/2)*scale);
     vending.getObjectByName('bay_'+String(index+1).padStart(2,'0'))?.add(mini);
   });
-  const statueSpots=[[-4.1,.03,-6.85],[4.1,.03,-6.85],[3.7,.03,7.25]].map((position,spot)=>sculptures.map((source,index)=>{
+  const statueSpots=[[-4.1,.03,-6.85],[5.9,.03,3.8],[3.7,.03,7.25]].map((position,spot)=>sculptures.map((source,index)=>{
     const model=source.clone(true);root.add(model);
     model.name='statue_spot_'+spot+'_'+PIECES[index];model.rotation.y=spot===2?Math.PI:0;
     model.position.fromArray(position);model.visible=index===spot;return model;

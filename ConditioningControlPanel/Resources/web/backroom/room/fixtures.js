@@ -468,6 +468,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     const so = 0.5 + 0.07 * Math.sin(t * 0.5);
     for (const i of sconceAuras) auras.set(i, sconceColor, so);
     auras.commit();
+    for (const surface of wheelFaces) surface?.update(dt, still || readMotion().off || readMotion().reduced);
     for (const h of hubs) h.update(dt, still);
     for (const emi of emis) emi.update(dt, still);
     // The fixture's own screen carries the line for the whole echo, not just for as long as coins are
