@@ -11,7 +11,7 @@
  * that times out all mean the default house art with its captions.
  *
  * The preview's file picker is gone: nothing here reads a local file.
- * Pictures turn every 9 s with a 1.6 s cross-fade; a still room holds them.
+ * Pictures turn every 9 s through a brief silent static handoff; a still room holds them.
  *
  * GIF COST CAP: only pictures on a screen inside the camera frustum advance,
  * each at most MAX_FPS (gif.js) into a texture of at most MAX_EDGE px, with at
@@ -23,6 +23,7 @@
 import * as T from 'three';
 import { labelTexture } from './fixtures.js';
 import { animatedSource } from './gif.js';
+import { screenTransition } from './screen-transition.js';
 
 export const TURN_S = 9;
 const SCREEN_ASPECT = 2.12 / 1.22;
@@ -37,14 +38,15 @@ const MAX_DECODES_PER_FRAME = 4;
 
 function material(first, caption) {
   return new T.ShaderMaterial({
-    uniforms: { grid: {value:0}, a: { value: first }, b: { value: first }, ratioA: { value: 1.6 }, ratioB: { value: 1.6 }, mixAmount: { value: 0 },
+    uniforms: { glitch: {value:0}, glitchFrame: {value:0}, grid: {value:0}, a: { value: first }, b: { value: first }, ratioA: { value: 1.6 }, ratioB: { value: 1.6 }, mixAmount: { value: 0 },
       ax: {value:first}, ay: {value:first}, bx: {value:first}, by: {value:first},
       ratioAx: {value:1}, ratioAy: {value:1}, ratioBx: {value:1}, ratioBy: {value:1}, panelsA: {value:1}, panelsB: {value:1},
       titleA: { value: caption }, titleB: { value: caption }, showTitles: { value: 1 }, screen: { value: SCREEN_ASPECT }, cover: { value: 0 } },
     vertexShader: 'varying vec2 v;void main(){v=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
     fragmentShader: `uniform sampler2D a,b,ax,ay,bx,by,titleA,titleB;
-uniform float grid,showTitles,ratioA,ratioB,ratioAx,ratioAy,ratioBx,ratioBy,panelsA,panelsB,mixAmount,screen,cover;varying vec2 v;
-vec4 pic(sampler2D tex,float ratio,vec2 point,float aspect,float fill){vec2 uv=point-.5;if(fill>.5){if(ratio>aspect)uv.x*=aspect/ratio;else uv.y*=ratio/aspect;}else{if(ratio>aspect)uv.y*=ratio/aspect;else uv.x*=aspect/ratio;}uv+=.5;
+uniform float glitch,glitchFrame,grid,showTitles,ratioA,ratioB,ratioAx,ratioAy,ratioBx,ratioBy,panelsA,panelsB,mixAmount,screen,cover;varying vec2 v;
+float noise(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+vec4 pic(sampler2D tex,float ratio,vec2 point,float aspect,float fill){vec2 uv=point-.5;uv.x+=(noise(vec2(floor(point.y*28.),glitchFrame))-.5)*.09*glitch;if(fill>.5){if(ratio>aspect)uv.x*=aspect/ratio;else uv.y*=ratio/aspect;}else{if(ratio>aspect)uv.y*=ratio/aspect;else uv.x*=aspect/ratio;}uv+=.5;
 if(min(uv.x,uv.y)<0.||max(uv.x,uv.y)>1.)return vec4(.022,.012,.033,1.);return texture2D(tex,uv);}
 vec4 mosaic(sampler2D mainTex,sampler2D leftTex,sampler2D rightTex,float r,float rl,float rr,float panels){
 if(panels<1.5)return pic(mainTex,r,v,screen,cover);
@@ -64,7 +66,11 @@ if(tile<4.5)return pic(bx,ratioBx,uv,aspect,1.);
 return pic(by,ratioBy,uv,aspect,1.);}
 void main(){gl_FragColor=grid>.5?tiles():mix(mosaic(a,ax,ay,ratioA,ratioAx,ratioAy,panelsA),mosaic(b,bx,by,ratioB,ratioBx,ratioBy,panelsB),mixAmount);
 if(showTitles>.5&&v.y>.82){vec2 tv=vec2(v.x,(v.y-.82)/.18);gl_FragColor=mix(texture2D(titleA,tv),texture2D(titleB,tv),mixAmount);}
-
+// A low-contrast interference band, never a full-screen white flash.
+float grain=noise(floor(v*vec2(280.,160.))+vec2(glitchFrame,glitchFrame*3.));
+float scan=.5+.5*sin(v.y*460.+glitchFrame);
+vec3 snow=mix(vec3(.055,.035,.08),vec3(.34,.27,.39),grain)*(.8+.2*scan);
+gl_FragColor.rgb=mix(gl_FragColor.rgb,snow,glitch*.76);
 #include <colorspace_fragment>
 }`,
   });
@@ -118,7 +124,9 @@ export async function createScreens(o) {
     o.meshes.forEach((mesh, i) => {
       const u = mesh.material.uniforms;
       const turn=mesh.userData.screenTurn||TURN_S;
-      const n=Math.floor(since/turn),blend=T.MathUtils.smoothstep(since%turn,turn-Math.min(1.6,turn*.2),turn);
+      const state=screenTransition(since,turn,isStill,gallery.length,i);
+      const n=state.index,blend=state.mix;
+      u.glitch.value=state.glitch;u.glitchFrame.value=state.frame;
       const grid=!!mesh.userData.screenGrid;u.grid.value=grid?1:0;
       const a = gallery[(n + i) % gallery.length], b = gallery[(n + i + (grid?3:1)) % gallery.length];
       u.a.value = a.texture; u.b.value = b.texture;
@@ -184,7 +192,7 @@ export async function createScreens(o) {
       disposed = true; window.removeEventListener('br-media-changed', sourceChanged);
       for (const src of new Set([...house, ...gallery])) src.dispose ? src.dispose() : src.texture.dispose();
       captions.forEach(t => t.dispose());
-      // One cross-fade ShaderMaterial per screen, made here, so it is freed here too.
+      // One transition ShaderMaterial per screen, made here, so it is freed here too.
       for (const mesh of o.meshes) if (mesh.material) mesh.material.dispose();
     },
     get pictures() { return custom ? gallery.length : 0; },

@@ -1,3 +1,4 @@
+import { siliconeRebound, SILICONE_SETTLE_MS } from './lever-return.js';
 import * as T from 'three';
 
 const KINDS = ['knight', 'queen', 'rook'];
@@ -16,7 +17,16 @@ function sculpture(model, kind) {
   model.traverse(node => {
     if (!node.isMesh || !node.name.startsWith(kind + '_original_')) return;
     const copy = node.clone(false);
-    copy.matrix.copy(node.matrixWorld); copy.matrix.decompose(copy.position, copy.quaternion, copy.scale);
+    copy.geometry = node.geometry.clone();
+    // GLB attributes may be normalized integers. Deform decoded floating-point coordinates.
+    for (const name of ['position','normal']) {
+      const attribute=copy.geometry.getAttribute(name);if(!attribute)continue;
+      const values=new Float32Array(attribute.count*3);
+      for(let i=0;i<attribute.count;i++){values[i*3]=attribute.getX(i);values[i*3+1]=attribute.getY(i);values[i*3+2]=attribute.getZ(i);}
+      copy.geometry.setAttribute(name,new T.BufferAttribute(values,3));
+    }
+    copy.geometry.applyMatrix4(node.matrixWorld);
+    copy.position.set(0,0,0); copy.quaternion.identity(); copy.scale.set(1,1,1);
     group.add(copy);
   });
   if (!group.children.length) throw new Error('Missing original chess sculpture: ' + kind);
@@ -94,12 +104,30 @@ export async function attachSlotCustomHandle({rig,loader,base,style,source=null}
   const model = source || (await loader.loadAsync(base + 'customization/' + KINDS[style] + '.glb')).scene;
   const handle = sculpture(model,KINDS[style]), slot = socket(rig);
   const box = new T.Box3().setFromObject(handle), size = box.getSize(new T.Vector3());
+  // Keep the lower half fixed; smoothly increase flex toward the sculpture tip.
+  const flexMeshes = handle.children.map(n=>({node:n,rest:n.geometry.attributes.position.array.slice()}));
+  const hinge=box.min.y+size.y*.55, centerZ=(box.min.z+box.max.z)/2;
+  let lastFlex=0;
+  slot.mount.userData.flexTip = angle => {
+    if(angle===lastFlex)return;lastFlex=angle;
+    for(const {node,rest} of flexMeshes){
+      const pos=node.geometry.attributes.position;
+      for(let i=0;i<pos.count;i++){
+        const x=rest[i*3], y=rest[i*3+1], z=rest[i*3+2];
+        const u=Math.max(0,Math.min(1,(y-hinge)/(size.y*.45))), a=angle*u*u*(3-2*u);
+        if(u===0 || angle===0){pos.setXYZ(i,x,y,z);continue;}
+        const dy=y-hinge,dz=z-centerZ;
+        pos.setXYZ(i,x,hinge+dy*Math.cos(a)-dz*Math.sin(a),centerZ+dy*Math.sin(a)+dz*Math.cos(a));
+      }
+      pos.needsUpdate=true;node.geometry.computeVertexNormals();
+    }
+  };
   const factor = Math.min(slot.height / size.y, (slot.width || Infinity) / size.x, (slot.depth || Infinity) / size.z);
   const wrapper = new T.Group(); wrapper.scale.setScalar(factor);
   handle.position.set(-(box.min.x+box.max.x)/2,-box.min.y,-(box.min.z+box.max.z)/2);
   wrapper.add(handle); slot.mount.add(wrapper);
   slot.originals.forEach(([node])=>node.visible=false);
-  return {node:slot.mount,dispose(){slot.originals.forEach(([node,visible])=>node.visible=visible);slot.mount.removeFromParent();slot.restore?.();
+  return {node:slot.mount,dispose(){slot.originals.forEach(([node,visible])=>node.visible=visible);slot.mount.removeFromParent();slot.restore?.();flexMeshes.forEach(({node})=>node.geometry.dispose());
     if(source)return; // Shared sculpture resources belong to the room catalogue.
     const geometries=new Set(),materials=new Set();model.traverse(n=>{if(n.geometry)geometries.add(n.geometry);[].concat(n.material||[]).forEach(m=>materials.add(m));});
     geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}};
@@ -139,21 +167,21 @@ export async function createSlotCustomHandles({holders,loader,base,sources=[],on
     rig.userData.slotHandlePulling=true;
     pulls[index]={t:0,pivot,rest:pivot?pivot.quaternion.clone():null,reels,stopped:[false,false,false]};
     return true;}
-  function rest(p){const flex=p.pivot?.getObjectByName('chess_handle_socket');if(flex){flex.rotation.x=0;flex.rotation.z=0;};if(p.pivot&&p.rest)p.pivot.quaternion.copy(p.rest);}
+  function rest(p){const flex=p.pivot?.getObjectByName('chess_handle_socket');if(flex){flex.userData.flexTip?.(0);};if(p.pivot&&p.rest)p.pivot.quaternion.copy(p.rest);}
   function update(dt=0,still=false){
     if(disposed)return;
     pulls.forEach((p,index)=>{
       if(!p)return;
       if(rigOf(index)?.userData.slotPlaying){rest(p);rigOf(index).userData.slotHandlePulling=false;pulls[index]=null;return;}
       p.t+=still?9:Math.min(Math.max(dt,0),.1);
-      if(!p.returnCue&&p.t>=DOWN_S){p.returnCue=true;if(active[index])onCue('silicone',index);}
-      if(active[index]){const age=p.t-DOWN_S-UP_S;active[index].node.rotation.x=!still&&age>0&&age<.3?.025*Math.sin(age/.3*Math.PI*2)*Math.pow(1-age/.3,2):0;active[index].node.rotation.z=0;}
+      if(!p.returnCue&&p.t>=DOWN_S+UP_S){p.returnCue=true;if(active[index])onCue('silicone',index);}
+      if(active[index]){active[index].node.userData.flexTip?.(still?0:siliconeRebound((p.t-DOWN_S-UP_S)*1000));}
       if(p.pivot)p.pivot.quaternion.copy(p.rest).multiply(swing.setFromAxisAngle(AXIS,
         p.t<DOWN_S?PULL_MAX*ease(p.t/DOWN_S):p.t<DOWN_S+UP_S?PULL_MAX*(1-ease((p.t-DOWN_S)/UP_S)):0));
       p.reels.forEach((r,i)=>{
         if(p.t>=STOP_AT[i]){if(!p.stopped[i]){p.stopped[i]=true;r.map.offset.x=r.to;onCue('stop',index,i);}return;}
         r.map.offset.x=(r.map.offset.x+ROLL*Math.min(Math.max(dt,0),.1))%1;});
-      if(p.t>=Math.max(DOWN_S+UP_S,STOP_AT[2])+.06){rest(p);rigOf(index).userData.slotHandlePulling=false;pulls[index]=null;}});}
+      if(p.t>=Math.max(DOWN_S+UP_S+(active[index]?SILICONE_SETTLE_MS/1000:0),STOP_AT[2])+.06){rest(p);rigOf(index).userData.slotHandlePulling=false;pulls[index]=null;}});}
   await Promise.all(styles.map((style,index)=>set(index,style)));
   return {set,pull,update,pulling:index=>!!pulls[index],getState:()=>styles.slice(),
     dispose(){disposed=true;pulls.forEach((p,i)=>{if(p){rest(p);pulls[i]=null;}});active.forEach(h=>h?.dispose());}};

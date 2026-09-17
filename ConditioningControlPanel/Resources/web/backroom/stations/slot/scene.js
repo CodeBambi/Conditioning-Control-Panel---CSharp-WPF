@@ -1,3 +1,5 @@
+import { siliconeRebound, SILICONE_SETTLE_MS } from '../../room/lever-return.js';
+import { sampleEmiReaction } from '../../room/emi-gestures.js';
 /* ============================================================================
  * scene.js - the slot cabinet in three.js, ported from blender-scripting
  * slot/preview/{app,polish}.js. One WebGL context per createScene(), freed by
@@ -135,7 +137,7 @@ function paintDisplay(ctx, w, h, marquee, text, aspect=1) {
 export async function createScene(o) {
   const { reduced } = o;
   const shared = o.stage || null, canvas = shared ? shared.canvas : o.canvas;
-  let releaseView = null, rig = null, coinShower = null, retainReels = null, apronTicker = null, rimLighting = null;
+  let releaseView = null, rig = null, coinShower = null, retainReels = null, apronTicker = null, rimLighting = null, releaseEmiClick = null;
   const extras = [], borrowed = new Map(), roomVisibility=new Map();
   const initialStretch=shared?.fixture.userData.slotStretch||1,initialStretchX=shared?.fixture.userData.slotStretchX||1;
   if(shared)for(const n of shared.scene.children)if(n!==shared.fixture&&!n.isLight){roomVisibility.set(n,n.visible);n.visible=false;}
@@ -165,7 +167,7 @@ export async function createScene(o) {
     if (settle) settle();         // a rise, sink or spin cut short by dispose still resolves its promise
     canvas.removeEventListener('pointerdown', onDown); canvas.removeEventListener('pointermove', onMove);
     canvas.removeEventListener('pointerup', onUp); canvas.removeEventListener('pointercancel', cancelPull);
-    retainReels?.();
+    retainReels?.(); releaseEmiClick?.();
     for(const [n,visible] of roomVisibility)n.visible=visible;
     customHandle?.dispose();
     disposeSpirals();            // the reel spirals' Loom tiles, and the page's field context with them
@@ -201,7 +203,7 @@ export async function createScene(o) {
     owned.forEach(x => x.dispose());
   }
 
-  let customHandle = null, flexAt=-Infinity, previousLever=0, returning=false;
+  let customHandle = null, returning=false;
   let gltf, atlas = null;
   try {
     [gltf, atlas] = await Promise.all([
@@ -552,6 +554,9 @@ export async function createScene(o) {
   let gazeYaw = 0, gazePitch = 0, gazeAt = 0, gazeReel = -1;
   const gazePoint = new THREE.Vector3();
   const emi = get('emi_topper'), emiRest = emi && { p: emi.position.clone(), s: emi.scale.clone(), r: emi.rotation.clone() };
+  const emiArms = ['shoulderL','shoulderR'].map(name => {const node=emi?.getObjectByName(name); return node?{node,rest:node.rotation.clone()}:null;});
+  let emiClickAt = -Infinity;
+  releaseEmiClick = shared?.onEmiClick?.(()=>{if(!stillFx())emiClickAt=performance.now();});
   const tmp = new THREE.Vector3(), nextColor = new THREE.Color(), GOLD = new THREE.Color(0xffc23a);
 
   /* EMI'S SHELF (owner, 2026-09-15). The close seat cuts her topper off the top of the frame, so while the player
@@ -710,11 +715,12 @@ export async function createScene(o) {
       ? t - spin.start < respinStopMs(PACE, spin.teaseMs)
       : t - spin.start >= reelStopMs(1) && t - spin.start < reelStopMs(2, PACE, spin.teaseMs));
     const partying = !!party && t < party.end, pr = partying ? party.r : null;
+    const sculptureAge = spin ? t - spin.start - 420 : pullBack ? t - pullBack.start - 200 : Infinity;
     if (spin) {
       const s = spin, dt = t - s.start, stillSpin = reduced || !!s.motionSuppressed;
       // The pull carries on from wherever the Law VIII lean (or the drag) left the lever.
       const wholeMs = s.solo ? respinMs(PACE, s.teaseMs) : reelsMs(PACE, s.teaseMs);
-      lever.rotation.x = stillSpin ? (dt < wholeMs ? LEAN : 0) : Math.max(0.4 * Math.sin(Math.PI * clamp(dt / 420)), s.leverFrom * (1 - ease(dt / 420))) + leverRebound(dt - 420);
+      lever.rotation.x = stillSpin ? (dt < wholeMs ? LEAN : 0) : Math.max(0.4 * Math.sin(Math.PI * clamp(dt / 420)), s.leverFrom * (1 - ease(dt / 420))) + (get('chess_handle_socket') ? 0 : leverRebound(dt - 420));
       let all = true;
       for (let i = 0; i < 3; i++) {
         if (s.held === i || s.keep.includes(i)) continue;
@@ -740,7 +746,7 @@ export async function createScene(o) {
       }
       if (all && dt >= wholeMs) settleSpin();   // a held column never shortens the pace
     } else if (pull) lever.rotation.x = PULL_MAX * pull.amount;
-    else if (pullBack) { const dt = t - pullBack.start, q = clamp(dt / 200); lever.rotation.x = reduced ? 0 : pullBack.angle * (1 - ease(q)) + leverRebound(dt - 200); if (dt >= 400 || reduced) pullBack = null; }
+    else if (pullBack) { const dt = t - pullBack.start, q = clamp(dt / 200); lever.rotation.x = reduced ? 0 : pullBack.angle * (1 - ease(q)) + (get('chess_handle_socket') ? 0 : leverRebound(dt - 200)); if (dt >= 200 + (get('chess_handle_socket') ? SILICONE_SETTLE_MS : 200) || reduced) pullBack = null; }
     else if (lean) lever.rotation.x = reduced ? LEAN : lean.from + (LEAN - lean.from) * ease((t - lean.start) / FEEL.LEAN_MS);   // Law VIII
     else lever.rotation.x = reduced || phase !== 'play' || partying ? 0 : BREATH_RAD * breath(t);   // THE BREATH, the only breather
 
@@ -784,12 +790,10 @@ export async function createScene(o) {
     const customHandle=get('chess_handle_socket');
     if(customHandle){
       customHandle.scale.set(1/bulbStretchX,1/bulbStretchY,1);
-      if(lever.rotation.x<previousLever-.001&&previousLever>.12&&!returning){flexAt=t;returning=true;try{wobbleKit.play('silicone');}catch{}}
-      if(lever.rotation.x>previousLever+.001)returning=false;
-      const age=(t-flexAt)/1000,flex=!reduced&&age>=0&&age<.3?.025*Math.sin(age/.3*Math.PI*2)*Math.pow(1-age/.3,2):0;
-      customHandle.rotation.x=flex; customHandle.rotation.z=0;
+      if(lever.rotation.x > .12) returning=true;
+      if(returning && sculptureAge >= 0){returning=false;if(!reduced)try{wobbleKit.play('silicone');}catch{}}
+      customHandle.userData.flexTip?.(stillFx()?0:siliconeRebound(sculptureAge));
     }
-    previousLever=lever.rotation.x;
     const colors = PALETTES[m], period = m === 'spin' ? 420 : chaseMs(partyMood ? Math.max(h, pr.tier) : h);
     const travel = reduced ? 0 : (t - (partyMood ? party.start : moodAt)) / period;
     bulbs.forEach((b, i) => {
@@ -836,15 +840,23 @@ export async function createScene(o) {
       gazeYaw += (aimYaw-gazeYaw)*gazeEase; gazePitch += (aimPitch-gazePitch)*gazeEase;
       emi.rotation.y += gazeYaw; emi.rotation.x += gazePitch;
       const age = t - moodAt, pa = partying ? t - party.start : Infinity;
-      if (!reduced && phase === 'play') {
-        let lean2 = 0, hop = 0, squash = 1, pop = 1, turn = 0;
-        if (spin) lean2 = 0.055 * Math.sin((t - spin.start) / (melted ? 440 : 220));   // Brake 5: EMI slows while melted
+      for(const arm of emiArms)if(arm)arm.node.rotation.copy(arm.rest);
+      if(stillFx())emiClickAt=-Infinity;
+      if (!stillFx() && phase === 'play') {
+        let lean2 = .035*Math.sin(t/820), hop = 0, squash = 1, pop = 1, turn = .10*Math.sin(t/1900);
+        // A small glance and body lean keep the ledge mascot alive between pulls.
+        emi.rotation.x += .022*Math.sin(t/1100);
+        if (spin) { lean2 = 0.085 * Math.sin((t - spin.start) / (melted ? 440 : 220)); emi.rotation.x += .07; }   // Brake 5: EMI slows while melted
         else if (pull) lean2 = -0.09 * pull.amount;
         else if (pr && pr.reveal && pa < FEEL.REVEAL_MS) { const q = pa / FEEL.REVEAL_MS; pop = 0.6 + 0.4 * reveal(q); turn = Math.PI * 2 * reveal(q); }   // THE REVEAL
         else if (pr && pr.jolt && pa < 600) { const q = pa / 600; hop = Math.sin(q * Math.PI) * 0.025; squash = 1 - 0.07 * Math.sin(q * Math.PI * 2); lean2 = 0.06 * Math.sin(q * Math.PI * 2); }
         else if (m === 'melt') { squash = 0.91; lean2 = -0.07; }
         else if (m === 'free' && age < 600) lean2 = 0.08 * Math.sin(age / 600 * Math.PI * 2);
-        emi.position.y += hop; emi.rotation.z += lean2; emi.rotation.y += turn;
+        const click = sampleEmiReaction('greet',(t-emiClickAt)/1000);
+        const armLift = spin ? .45+.10*Math.sin(t/180) : pr?.jolt && pa<1600 ? 1.4*Math.sin(Math.PI*pa/1600) : .10+.06*Math.sin(t/700);
+        if(emiArms[0])emiArms[0].node.rotation.z-=armLift+click.left;
+        if(emiArms[1])emiArms[1].node.rotation.z+=armLift+click.right;
+        emi.position.y += hop; emi.rotation.z += lean2+click.roll; emi.rotation.y += turn+click.yaw;
         emi.scale.multiplyScalar(pop); emi.scale.y *= squash; emi.scale.x /= Math.sqrt(squash);
       }
     }
@@ -873,7 +885,7 @@ export async function createScene(o) {
       sm.mesh.material.emissiveIntensity = MARQUEE_LIT * (1 + 1.6 * flick);
     }
     const payout=coinShower.debug();
-    screen('screen_status',payout.active?'✦ '+payout.label+' ✦':screens.screen_status?.base||'');
+    screen('screen_status',payout.active?'âœ¦ '+payout.label+' âœ¦':screens.screen_status?.base||'');
     if(screens.screen_status) {const m=screens.screen_status.mesh.material;
       if(payout.active)m.emissive.setHSL(reduced ? .1 :(payout.age*.18)%1,.8,.6);else m.emissive.set(0xffffff);}
     sparks.forEach((s, i) => {
