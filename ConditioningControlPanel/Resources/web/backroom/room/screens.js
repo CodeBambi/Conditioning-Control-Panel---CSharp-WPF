@@ -113,7 +113,11 @@ export async function createScreens(o) {
   for (const m of o.meshes) { m.material = material(house[0].texture, captions[0]); m.material.uniforms.screen.value=m.userData.screenAspect||SCREEN_ASPECT;m.material.uniforms.cover.value=m.userData.screenCover?1:0; }
   const frustum = new T.Frustum(), viewProj = new T.Matrix4();
   const due = new Set();
-  let nextDecode = 0, cursor = 0, dealing = false, refreshAt = Infinity, sourceVersion = 0;
+  let dealing = false, refreshAt = Infinity, sourceVersion = 0;
+  // #1371 landed the budget factory, its import and its note, but never built one and left the
+  // call site naming the helper it replaced - so room/screens.js threw ReferenceError every frame
+  // and scene.js stopped drawing after it. The factory owns the clock+cursor this used to hold.
+  const screenBudget = createScreenAnimationBudget();
   const sourceChanged = () => { sourceVersion++; refreshAt = -Infinity; };
   window.addEventListener('br-media-changed', sourceChanged);
   const controller = new AbortController();
@@ -153,7 +157,7 @@ export async function createScreens(o) {
         if(u.panelsA.value>1)due.add(extrasA[0]);if(u.panelsA.value>2)due.add(extrasA[1]);
         if (blend > 0) { due.add(b);if(u.panelsB.value>1)due.add(extrasB[0]);if(u.panelsB.value>2)due.add(extrasB[1]); } }
     });
-    decodes += animateScreens([...due], performance.now(), isStill, quality.performance);
+    decodes += screenBudget([...due], performance.now(), isStill, quality.performance);
   }
 
   /** Ask the feed; swap in the player's pictures when at least one loads. Never throws. */
