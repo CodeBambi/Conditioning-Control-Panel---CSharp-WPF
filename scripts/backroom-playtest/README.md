@@ -47,3 +47,19 @@ clip is unavailable. Playback has an 800 ms load deadline, replaces previous spe
 cancels pending requests on stop and reverses a copy of samples for reversed speech.
 Run `node --test scripts/backroom-playtest/voice.test.mjs` from the repo root.
 The deployed preview is a separate artifact; merging this helper does not deploy it.
+
+## Browser media and options
+
+Copy __phone-fx.js and __phone-options.js to the private playtest staging root.
+Load options before room/main.js so its audio and keyboard hooks precede game handlers.
+The media adapter provides window.__brMedia and the existing effect globals; the host
+continues to own bridge messages, settings, media proxies and the test ledger.
+Neither adapter contains the server engine or account-backed state.
+
+Niches are added one at a time with the r/ field. Each pill toggles participation;
+its remove button deletes it. All disabled and empty collections persist locally.
+Options intercept game shortcuts while open. Desktop WPF settings remain separate.
+
+Validation: browser checks covered typing movement letters, Enter to add, toggle,
+remove, reload persistence, an empty collection, and 390px layout. These files are
+source backups for the local preview; committing them does not publish that preview.
