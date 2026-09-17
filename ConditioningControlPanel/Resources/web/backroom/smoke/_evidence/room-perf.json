@@ -1,0 +1,98 @@
+{
+  "bootMs": 4199,
+  "calls": 337,
+  "triangles": null,
+  "frameMedianMs": 33.399999999999636,
+  "buildMs": 366,
+  "resumeMs": -1,
+  "props": {
+    "props": 6,
+    "batches": 30,
+    "pruned": 32,
+    "triangles": 60428,
+    "on": 6,
+    "landed": 12,
+    "landing": 6,
+    "boxes": [
+      {
+        "name": "prop_monstera",
+        "min": [
+          -2.974,
+          0.02,
+          6.544
+        ],
+        "max": [
+          -1.706,
+          1.156,
+          7.826
+        ]
+      },
+      {
+        "name": "prop_hanging_ivy",
+        "min": [
+          -6.267,
+          2.958,
+          -6.92
+        ],
+        "max": [
+          -5.526,
+          4.313,
+          -6.176
+        ]
+      },
+      {
+        "name": "prop_terrarium",
+        "min": [
+          -4.181,
+          0.025,
+          -5.332
+        ],
+        "max": [
+          -3.319,
+          0.843,
+          -4.468
+        ]
+      },
+      {
+        "name": "prop_gallery_landscape",
+        "min": [
+          -6.945,
+          2.316,
+          3.397
+        ],
+        "max": [
+          -6.712,
+          3.124,
+          4.803
+        ]
+      },
+      {
+        "name": "prop_portrait_pair",
+        "min": [
+          -6.945,
+          2.353,
+          5.133
+        ],
+        "max": [
+          -6.712,
+          3.087,
+          6.467
+        ]
+      },
+      {
+        "name": "prop_deco_billboard",
+        "min": [
+          -1.176,
+          2.668,
+          7.572
+        ],
+        "max": [
+          1.176,
+          3.577,
+          7.805
+        ]
+      }
+    ]
+  },
+  "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5080 (0x00002C02) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+}

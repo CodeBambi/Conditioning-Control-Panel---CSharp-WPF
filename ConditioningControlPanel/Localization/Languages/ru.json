@@ -1,6 +1,8 @@
 {
   "br_counter_sold": "ПРОДАНО",
-  "br_arcade_play_tab": "Играйте в CCP: вкладка «Играть»",
+  "race_access_locked": "Откройте Racing Thoughts, купив демо или любой гоночный набор в Back Room.",
+  "race_access_ready": "Ваша покупка Racing Thoughts готова.",
+  "race_track_locked": "Для этого трека нужен соответствующий набор Racing Thoughts.",
   "app_title": "Панель управления кондиционированием",
   "awareness_consent_accept": "Открыть ей глаза",
   "awareness_consent_control_body": "Спрячь от неё любое приложение, заставь забыть одно или всё, поставь на паузу на час и прочти ту самую строку, которую она получает — всё на карточке «Что она видит».",
@@ -5197,6 +5199,8 @@
   "br_station_slot": "The Slot",
   "br_station_wheel": "Daily Daze",
   "br_station_cards": "Soft Hand",
+  "br_station_race": "Racing Thoughts",
+  "br_arcade_play": "Играть в Racing Thoughts",
   "br_station_counter": "The Prize Parlour",
   "br_station_failed": "This station would not start. Try again in a moment.",
   "br_station_closed": "Closed for a moment.",

@@ -45,6 +45,13 @@ namespace ConditioningControlPanel
         /// never disabled: naming the perk is the point (GoonHostService.cs:888-889).</summary>
         private const double GoonPerkLockedOpacity = 0.42;
 
+        // The race-06/race-07 stack hooked PrizeGrants.GrantsChanged here to repaint a
+        // "your racing purchase is ready" line beside the Racing Thoughts button. Both the hook and
+        // the line went at the 2026-09-18 merge, with the card that carried them: the race has no
+        // purchase door (Services/Race/RacingAccess.cs, PurchaseDoorArmed), so there was no answer
+        // for that label to change to and nothing for a grant to repaint. If the door is ever armed,
+        // this is where the hook belongs, on the same lazy idempotent terms as EnsureIntakePassHooked.
+
         // ---- the painter -----------------------------------------------------------------
 
         /// <summary>

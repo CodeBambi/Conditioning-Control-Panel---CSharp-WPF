@@ -321,6 +321,15 @@ namespace ConditioningControlPanel
         /// check: requiring a fresh sign-in where nothing required one before would be adding a
         /// gate while removing one, and the race banks into the local chaos_meta.json either way.</para>
         ///
+        /// <para>AND NO PURCHASE DOOR EITHER. The race-06/race-07 stack proposed replacing the
+        /// tier check with <c>RacingAccess.CanLaunch</c> and a "buy a racing pack" message box.
+        /// That is the same closed door wearing a different lock, and it was refused at the merge
+        /// on 2026-09-18 because the owner had deleted the tier door the day before and chose open
+        /// testing twice over. The stack's rules survive, whole and tested, disarmed by one
+        /// constant in Services/Race/RacingAccess.cs; the stack's ONE-PAYOUT-PER-RUN rule is a
+        /// different thing entirely (RaceRunLifecycle, which never asks about ownership) and came
+        /// in untouched.</para>
+        ///
         /// <para>This is the ONE button on this card that is not tier 2, and the cosmetic price
         /// was named when the call was made: a free account still sees the card's Lab lockband,
         /// and this button sits under that scrim. It still works - the band is hit-test invisible
@@ -328,7 +337,7 @@ namespace ConditioningControlPanel
         /// in place - it just READS locked. Lifting it above the scrim is a layout change, not a
         /// gate change, so it was deliberately left out rather than smuggled in here.</para>
         ///
-        /// <para>Putting the gate back means putting it back in THREE places, not one: here, and
+        /// <para>Putting a gate back means putting it back in THREE places, not one: here, and
         /// the `--race` and `--race-cloud` args in App.OnStartup. FALL IN and Quick Drop still
         /// demand tier 2 and are untouched.</para>
         /// </summary>

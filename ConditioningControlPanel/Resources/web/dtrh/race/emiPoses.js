@@ -4,9 +4,9 @@
  * race/emi.js owns the moods (the antenna, the bead, the sweat). This owns her
  * BODY on the race's events: the arms, the feet and a root lean / tilt / lift /
  * squash, blended on damped springs (House Book Law XI: overshoot, never a
- * linear tween) and always falling back to `cruise` when a pose's hold runs out.
+ * linear tween), returning to the current driving posture when a reaction ends.
  *
- *   createPoseLayer(model, { }) -> { set(name, opts), update(dt, ctx), dispose, fraught, name }
+ *   createPoseLayer(model, { reducedMotion }) -> { set, setBase, settle, update, dispose, fraught, name }
  *   POSES                        the pure preset table (a node smoke reads it)
  *   PIVOTS                       the four glb pivots a preset is allowed to name
  *   snapshotRest(model)          bank the authored stance before a mixer moves it
@@ -146,14 +146,83 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const reachOf = (v) => clamp(+v > 0 ? +v : 1, 0.5, 2);
 const flip = (k) => (k.endsWith('L') ? k.slice(0, -1) + 'R' : k.slice(0, -1) + 'L');
 
-/** Damped spring toward a target; zeta < 1 overshoots a little, which is the point (Law XI). */
-class Spring {
+/** Bounded spring integration preserves overshoot (Law XI); a suspension gap takes the state. */
+export class AnimationSpring {
   constructor(x = 0) { this.x = x; this.v = 0; }
-  step(target, dt, w, zeta) {
-    this.v += (w * w * (target - this.x) - 2 * zeta * w * this.v) * dt;
-    this.x += this.v * dt;
+  step(target, dt, w, zeta = 0.65) {
+    if (dt > 0.25) { this.x = target; this.v = 0; return this.x; }
+    const n = Math.max(1, Math.ceil(dt * 120)), h = dt / n;
+    for (let i = 0; i < n; i++) {
+      this.v += (w * w * (target - this.x) - 2 * zeta * w * this.v) * h;
+      this.x += this.v * h;
+    }
     return this.x;
   }
+}
+const Spring = AnimationSpring;
+
+/** Cosmetic inertia only: charge, recoil and liquid follow-through never write kart state. */
+export function createRideFeel({ reducedMotion = false } = {}) {
+  const roll = new Spring(), teaX = new Spring(), teaZ = new Spring(), antenna = new Spring();
+  let rippleAge = 10, rippleStrength = 0, spinAge = 10, spinStrength = 0;
+  const state = { roll: 0, teaX: 0, teaZ: 0, antenna: 0, spin: 0, ripples: [
+    { radius: 0, opacity: 0 }, { radius: 0, opacity: 0 },
+  ] };
+  function settle() {
+    for (const s of [roll, teaX, teaZ, antenna]) { s.x = 0; s.v = 0; }
+    rippleAge = spinAge = 10; rippleStrength = spinStrength = 0;
+    state.roll = state.teaX = state.teaZ = state.antenna = state.spin = 0;
+    for (const r of state.ripples) r.opacity = 0;
+  }
+  function react(kind, detail = {}) {
+    if (reducedMotion) return;
+    const side = detail.side < 0 ? -1 : 1;
+    if (kind === 'release') {
+      const strength = clamp((+detail.tier || 1) / 3, 1 / 3, 1);
+      roll.v += side * (0.5 + strength * 0.6);
+      teaZ.v -= side * (0.4 + strength * 0.6);
+      antenna.v -= 2.5 + strength * 2;
+      spinAge = 0; spinStrength = strength;
+      rippleAge = 0; rippleStrength = 0.4 + strength * 0.35;
+    } else if (kind === 'landing') {
+      const strength = clamp(+detail.impact || 0.25, 0.25, 1);
+      teaX.v += 0.45 + strength * 0.65;
+      teaZ.v += detail.clean === false ? side * (0.3 + strength * 0.4) : 0;
+      antenna.v += 2 + strength * 3;
+      rippleAge = 0; rippleStrength = 0.5 + strength * 0.5;
+    }
+    // A burst of contacts cannot accumulate a spring beyond the readable range.
+    roll.v = clamp(roll.v, -1.5, 1.5); teaX.v = clamp(teaX.v, -1.2, 1.2);
+    teaZ.v = clamp(teaZ.v, -1.2, 1.2); antenna.v = clamp(antenna.v, -5, 5);
+  }
+  function update(dt, ctx = {}) {
+    dt = Number.isFinite(dt) ? Math.max(0, dt) : 0;
+    if (reducedMotion || dt > 0.25) { settle(); return state; }
+    const charge = ctx.drift ? clamp(+ctx.driftCharge || 0, 0, 1) : 0;
+    const side = ctx.driftSide < 0 ? -1 : 1;
+    state.roll = clamp(roll.step(-side * charge * 0.025, dt, 14, 0.42), -0.07, 0.07);
+    state.teaX = clamp(teaX.step(0, dt, 10, 0.32), -0.08, 0.08);
+    state.teaZ = clamp(teaZ.step(side * charge * 0.045, dt, 9, 0.38), -0.09, 0.09);
+    state.antenna = clamp(antenna.step(-charge * 0.17, dt, 17, 0.36), -0.4, 0.4);
+    rippleAge += dt; spinAge += dt;
+    state.spin = spinAge < 0.45 ? 4 * spinStrength * (1 - spinAge / 0.45) : 0;
+    for (let i = 0; i < state.ripples.length; i++) {
+      const age = rippleAge - 0.045 - i * 0.11, p = clamp(age / 0.46, 0, 1);
+      const r = state.ripples[i];
+      r.radius = 0.14 + p * 0.30;
+      r.opacity = age > 0 && p < 1 ? Math.sin(Math.PI * p) * rippleStrength * (i ? 0.4 : 0.65) : 0;
+    }
+    return state;
+  }
+  return { react, update, settle, state };
+}
+
+/** Driving posture persists underneath short event reactions. */
+export function drivingPose(ctx = {}) {
+  if (ctx.inverted) return { name: 'tuck', opts: {} };
+  if (ctx.airborne) return { name: 'air', opts: {} };
+  if (ctx.drift) return { name: 'drift', opts: { side: ctx.driftSide, tier: ctx.driftTier } };
+  return { name: 'cruise', opts: {} };
 }
 
 /** One preset plus its options, flattened into the numbers update() blends toward. */
@@ -212,7 +281,7 @@ export function snapshotRest(model) {
  * The layer. `model` is the glb root; a model without the contract pivots simply drives the ones
  * it has and skips the rest, so a half-finished pack degrades a limb at a time.
  */
-export function createPoseLayer(model) {
+export function createPoseLayer(model, { reducedMotion = false } = {}) {
   const find = (n) => (model && model.getObjectByName ? model.getObjectByName(n) || null : null);
   const kept = (model && model.userData && model.userData.poseRest) || null;   // snapshotRest(), if anyone took one
   const piv = {}, rest = {}, sp = {};
@@ -233,28 +302,73 @@ export function createPoseLayer(model) {
   const sLean = new Spring(), sTilt = new Spring(), sLift = new Spring(), sSquash = new Spring(1);
   const sAntX = new Spring(), sAntZ = new Spring();
   let name = 'cruise', target = resolvePose('cruise'), hold = 0, opt = {};
+  let base = null, reacting = false;
+  const poseTarget = (n, opts) => {
+    const t = resolvePose(n, opts);
+    if (reducedMotion) { t.root.lift = 0; t.root.squash = 1; t.breath = false; }
+    return t;
+  };
+  const priority = n => n === 'landing' || n === 'landingKerb' ? 2 : 1;
   const api = { fraught: 0, get name() { return name; } };
 
   /** Set a pose. Unknown names are ignored (false) rather than blanking her stance. */
-  function set(n, opts = {}) {
+  function set(n, opts = {}, internal = false) {
     if (!POSES[n]) return false;
+    if (!internal && reacting && hold > 0 && priority(n) < priority(name)) return false;
     name = n;
     // the shape of the caller, minus the timing: a pose that chains into `next` inherits it, so a
     // count driven at `arms: 0.3` does not snap to a full swing the moment the beat times out
     opt = { side: opts.side, tier: opts.tier, amp: opts.amp, arms: opts.arms };
-    target = resolvePose(n, opts);
+    target = poseTarget(n, opts);
+    reacting = true;
     hold = opts.hold != null ? Math.max(0, +opts.hold || 0) : (POSES[n].hold || 0);
     api.fraught = target.fraught;
     return true;
   }
 
-  function update(dt, ctx) {
+  function restoreBase() {
+    if (base) { set(base.name, { ...base.opts, hold: 0 }, true); reacting = false; }
+    else set('cruise', opt, true);
+  }
+
+  function setBase(n, opts = {}) {
+    if (!POSES[n]) return false;
+    if (base && base.name === n && base.opts.side === opts.side && base.opts.tier === opts.tier) return true;
+    base = { name: n, opts };
+    if (!reacting) restoreBase();
+    return true;
+  }
+
+  function settle(ctx = {}) {
+    restoreBase();
+    hold = 0;
+    paint(0.26, ctx); // Springs take the settled state without replaying travel.
+  }
+
+  function update(dt, ctx = {}) {
     if (!model) return;
-    dt = Math.min(Math.max(+dt || 0, 0), 0.05);
-    if (hold > 0) {
-      hold -= dt;
-      if (hold <= 0) set(POSES[name].next || 'cruise', opt);
+    dt = Number.isFinite(dt) ? Math.max(0, dt) : 0;
+    if (dt > 0.25) { settle(ctx); return; }
+    const n = Math.max(1, Math.ceil(dt * 120)), h = dt / n;
+    // The mood writes the antenna once per frame; substeps must not add it repeatedly.
+    const ax = ant0 ? ant0.rotation.x : 0, az = ant0 ? ant0.rotation.z : 0;
+    for (let i = 0; i < n; i++) {
+      if (hold > 0) {
+        hold -= h;
+        if (hold <= 1e-9) {
+          const next = POSES[name].next || 'cruise';
+          if (next === 'cruise') restoreBase(); else set(next, opt, true);
+        }
+      }
+      if (ant0) { ant0.rotation.x = ax; ant0.rotation.z = az; }
+      paint(h, ctx, (ctx.t || 0) - dt + (i + 1) * h);
     }
+  }
+
+  function paint(dt, ctx, time = (ctx && ctx.t) || 0) {
+    if (!model) return;
+    // Reduced motion keeps a readable pose without its spring travel or idle bob.
+    if (reducedMotion) dt = 0.26;
     const w = target.w, z = target.zeta;
     for (const k of PIVOTS) {
       const o = piv[k];
@@ -271,8 +385,8 @@ export function createPoseLayer(model) {
       o.scale.set(1, k, 1);
       for (const h of hands[ARMS[i]]) h.o.scale.set(h.base[0], h.base[1] / k, h.base[2]);
     }
-    const t = (ctx && ctx.t) || 0;
-    const breath = target.breath ? BREATH_LIFT * Math.sin(t * (Math.PI * 2) / BREATH_SEC) : 0;
+    const t = time;
+    const breath = target.breath && !reducedMotion && opt.amp !== 0 ? BREATH_LIFT * Math.sin(t * (Math.PI * 2) / BREATH_SEC) : 0;
     model.rotation.x = rootRest[0] + sTilt.step(target.root.tilt, dt, w, z);
     model.rotation.z = rootRest[1] + sLean.step(target.root.lean, dt, w, z);
     model.position.y = rootRest[2] + sLift.step(target.root.lift, dt, w, z) + breath;
@@ -301,7 +415,7 @@ export function createPoseLayer(model) {
     if (model) { model.rotation.x = rootRest[0]; model.rotation.z = rootRest[1]; model.position.y = rootRest[2]; model.scale.set(1, 1, 1); }
   }
 
-  api.set = set; api.update = update; api.dispose = dispose;
+  api.set = set; api.setBase = setBase; api.settle = settle; api.update = update; api.dispose = dispose;
   return api;
 }
 

@@ -39,7 +39,7 @@ export function createPrizeDisplay({ scene, counter, lex }) {
   const sourceCabinet = counter?.getObjectByName('racing_cabinet');
   if (!sourceCabinet) throw new Error('counter.glb lacks preserved racing_cabinet');
   cabinet.add(fitted(sourceCabinet, 1.0, 2.05)); sourceCabinet.visible = true;
-  const plate = sign(lex('br_arcade_play_tab', 'Play in CCP: Play tab'), .82, .205); plate.position.set(0, .44, .55); cabinet.add(plate);
+  const plate = sign(lex('br_arcade_play', 'Play Racing Thoughts'), .82, .205); plate.position.set(0, .44, .55); cabinet.add(plate);
   counter.updateMatrixWorld(true);
   for (const id of ['jackpot_remix', 'rt_demo', 'high_roller', 'flashes_v2', 'bubbles_v2', 'rt_bundle_1', 'rt_bundle_2', 'rt_bundle_3']) {
     const source = counter.getObjectByName('shelf_' + id); if (!source) continue;
@@ -84,8 +84,8 @@ export function createPrizeDisplay({ scene, counter, lex }) {
         travel.set(bought,{display,start:rack.worldToLocal(start.clone()),end,elapsed:0});
       }
     }
-    if (snapshot.demo && !demo) reveal = bought ? 0 : null;
-    demo = snapshot.demo; sourceCabinet.visible = !demo; cabinet.visible = rack.visible = demo;
+    if (snapshot.racing && !demo) reveal = bought ? 0 : null;
+    demo = !!snapshot.racing; sourceCabinet.visible = !demo; cabinet.visible = demo; rack.visible = demo;
     if (!demo) reveal = null;
     // A repeated state refresh must not restart the reveal.
     update(0, false);

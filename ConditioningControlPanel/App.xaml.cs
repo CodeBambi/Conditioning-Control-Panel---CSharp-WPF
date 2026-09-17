@@ -2808,6 +2808,12 @@ namespace ConditioningControlPanel
             // no tier door since 2026-09-17 (owner's call - open testing on both surfaces) while
             // the descent above is still tier 2. This arg asks exactly what BtnStartRace_Click
             // asks, which is the only thing that keeps a dev shortcut honest about the product.
+            //
+            // The race-06/race-07 stack arrived a day later proposing a PURCHASE door here
+            // (RacingAccess.CanLaunch) in place of the tier one. Refused at the merge: a purchase
+            // check is the same closed door under a new name, and the owner deleted that door
+            // hours before the stack landed. RacingAccess itself is kept whole and tested, and
+            // disarmed in ONE place - see the PurchaseDoorArmed note in Services/Race/RacingAccess.cs.
             if (e.Args.Contains("--race")) Services.Chaos.CaucusHostService.Launch();
 
             // `--race-chart <file>`: chart a hypno file from the command line - decode, the energy
@@ -2858,9 +2864,8 @@ namespace ConditioningControlPanel
 
             // Track charts (CHART.md PR c6), dev shortcut: `--race-track <file>` opens the race
             // and drives the host's own track handlers against that file - pick, play, pause at
-            // 5s, resume at 8s, stop at 12s - logging every track-* post as JSON. Unrestricted
-            // like `--dtrh-m2test`: it is a debugging rig for the audio + analysis path, not a
-            // way into the game (the page it drives is the same one `--race` opens).
+            // 5s, resume at 8s, stop at 12s - logging every track-* post as JSON. The host
+            // enforces the same racing purchase as every other launch path.
             int raceTrackArg = Array.IndexOf(e.Args, "--race-track");
             if (raceTrackArg >= 0)
             {
@@ -2874,7 +2879,8 @@ namespace ConditioningControlPanel
             // cloud path starts from a menu verb, and a browser frame cannot be driven by synthetic
             // clicks, so this is the only way to exercise it end to end. A dev rig like
             // `--race-track`: it opens the same page `--race` opens, and now really does gate
-            // nothing - the comment said so while the code below still asked for tier 2.
+            // nothing - the comment said so while the code below still asked for tier 2. The
+            // stack's purchase check is refused here for the same reason it is refused above.
             if (e.Args.Contains("--race-cloud")) Services.Chaos.CaucusHostService.Launch(null, openCloud: true);
 
             // Goon Game browser client, dev shortcut: `--goon` opens the web duel window straight

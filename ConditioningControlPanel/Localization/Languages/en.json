@@ -1,6 +1,8 @@
 {
   "br_counter_sold": "SOLD",
-  "br_arcade_play_tab": "Play in CCP: Play tab",
+  "race_access_locked": "Unlock Racing Thoughts with the demo or any racing pack from the Back Room.",
+  "race_access_ready": "Your racing purchase is ready.",
+  "race_track_locked": "This track needs its Racing Thoughts pack.",
   "_comment_intake_pass": "Weekly Intake Pass + punch card (intake onboarding)",
   "awareness_consent_accept": "Open her eyes",
   "awareness_consent_control_body": "Hide any app from her, make her forget one app or all of them, pause her for an hour, and read the exact line she gets — all on the “What she can see” card.",
@@ -5763,6 +5765,8 @@
   "br_station_slot": "The Slot",
   "br_station_wheel": "Daily Daze",
   "br_station_cards": "Soft Hand",
+  "br_station_race": "Racing Thoughts",
+  "br_arcade_play": "Play Racing Thoughts",
   "br_station_counter": "The Prize Parlour",
   "br_station_failed": "This station would not start. Try again in a moment.",
   "br_station_closed": "Closed for a moment.",

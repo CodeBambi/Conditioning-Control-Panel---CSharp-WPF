@@ -397,7 +397,11 @@ eq(JSON.parse(await ev(HOLD)).canvases, 0, 'every pop after a loss is a gif, wit
   const menu = readFileSync(resolve(RACE, 'menu.js'), 'utf8');
   const boot = readFileSync(resolve(DTRH, 'raceBoot.js'), 'utf8');
   const run = readFileSync(resolve(RACE, 'run.js'), 'utf8');
-  ok(/id:\s*'lite',\s*label:\s*'lighter'/.test(menu), 'the options panel has the lighter row');
+  // The label, not the row, moved: race-05 renamed it 'lighter graphics' and gave it a hint
+  // when it rebuilt the options panel. What this line is for is that the row still EXISTS and
+  // still carries id 'lite', so it asks for the label by prefix now. Pinning the exact words a
+  // menu shows is a copy-editing tripwire, and it fired as one.
+  ok(/id:\s*'lite',\s*label:\s*'lighter/.test(menu), 'the options panel has the lighter row');
   ok(/LITES\.includes\(raw\.lite\)/.test(menu) && /lite:\s*'off'/.test(menu), 'it persists with the other options and defaults off');
   ok(/settings\.lite\s*=\s*wantsLite\(opts\)/.test(boot), 'raceBoot reads it into settings.lite');
   ok(/createPixelizer\(\{[^}]*\blite\b/.test(run) && /createLoomSpiralFx\(\{[^}]*\blite\b/.test(run) && /cap:\s*lite\s*\?\s*LITE_BUBBLE_CAP/.test(run), 'run.js hands it to the pixelizer, the spiral canvas and the bubble field');

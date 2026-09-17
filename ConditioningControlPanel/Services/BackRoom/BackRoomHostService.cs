@@ -8,6 +8,8 @@ using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json.Linq;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services.Race;
+using ConditioningControlPanel.Services.Chaos;
 
 namespace ConditioningControlPanel.Services.BackRoom;
 
@@ -191,6 +193,9 @@ internal static class BackRoomHostService
     private static Models.AppSettings? _hookedSettings;
     private static bool _replaceHooked;
     private static bool _disposing;
+    private static bool _openingRace;
+    private static bool _racePage;
+    private static int _roomGeneration;
     private static bool _panicSuspended;
     private static bool _minimised;
     private static DateTime _lastPanicPressUtc;
@@ -222,41 +227,15 @@ internal static class BackRoomHostService
             _panicSuspended = _minimised = false;
             _lastPanicPressUtc = DateTime.MinValue;
 
-            var roomAccount = BackRoomApi.AppIdentity()?.UnifiedId;
-            (string UnifiedId, string Token)? RoomIdentity()
-            {
-                var current = BackRoomApi.AppIdentity();
-                return current?.UnifiedId == roomAccount ? current : null;
-            }
-            BackRoomBridge? roomBridge = null;
-            var api = new BackRoomApi(null, RoomIdentity,
-                sp => roomBridge?.AdoptSp(sp, () => RoomIdentity() != null));
             // Start filling the remote picture pool now. A local-only room makes this a no-op, and for an
             // online one it means the first wall the player sees is the one they asked for: the pool's own
             // bounded wait otherwise lands on the page's boot media-request.
             try { Media.WarmForRoomOpen(); } catch (Exception ex) { Diag.Swallowed(ex, "backroom warm"); }
-            _bridge = roomBridge = new BackRoomBridge(new BackRoomBridge.Deps
-            {
-                Post = Post,
-                Relay = api,
-                Fx = Fx,
-                Media = Media,
-                Voice = Voice,
-                BuildInit = BuildInit,
-                CloseWindow = DisposeAll,
-                Schedule = Schedule,
-                NoteEvent = key => App.FeatureDayLog?.Note(key),
-                SetOption = option => OnUi(() =>
-                {
-                    if (App.Settings?.Current is not { } s) return;
-                    ApplyRoomOption(s, option);
-                    App.Settings.Save();
-                }),
-                SetSp = sp => { if (App.Settings?.Current is { } s) s.SkillPoints = sp; },
-                OnUi = OnUi,
-                OffUi = work => System.Threading.Tasks.Task.Run(work),
-                Log = msg => App.Logger?.Debug("BackRoom: {Msg}", msg),
-            });
+            // The bridge is no longer built inline here: the casino's race handoff tears this one down and
+            // builds a fresh one on the way back (ReturnToRoom), so there has to be exactly one writer of
+            // it. Everything this worktree had inline moved into CreateBridge() unchanged, identity pin
+            // included - see the note there about why the pin is captured per bridge rather than per launch.
+            CreateBridge();
 
             var webRoot = Path.Combine(AppContext.BaseDirectory, "Resources", "web");
             var mappings = new List<(string, string, CoreWebView2HostResourceAccessKind)>
@@ -285,7 +264,7 @@ internal static class BackRoomHostService
                 LogTag = "BackRoom",
                 ExtraBrowserArguments = BrowserArguments + DebugBrowserArguments(),
                 OnReady = () => _bridge?.OnReady(),
-                OnMessage = m => _bridge?.Handle(m),
+                OnMessage = OnRoomMessage,
                 OnProcessFailed = kind => { App.Logger?.Warning("BackRoom: process failed ({Kind}), closing", kind); OnUi(DisposeAll); },
             });
             HookSettings(true);
@@ -293,7 +272,7 @@ internal static class BackRoomHostService
             _host.Show();
             if (_host.Window is { } w)
             {
-                w.Closed += (_, _) => _bridge?.CloseNow();
+                w.Closed += (_, _) => { _openingRace = false; if (_bridge != null) _bridge.CloseNow(); else DisposeAll(); };
                 w.StateChanged += (_, _) => OnWindowStateChanged(w);
                 w.Activated += (_, _) => OnWindowActivated();
             }
@@ -306,10 +285,103 @@ internal static class BackRoomHostService
         }
     }
 
+    private static void CreateBridge()
+    {
+            var generation = ++_roomGeneration;
+            // THE IDENTITY PIN, kept from this worktree's inline bridge rather than lost to the
+            // extraction. The room's relay refuses to speak for anyone but the account that opened
+            // it: if the app's identity changes under a live room (a sign-out, a switch), RoomIdentity()
+            // returns null and the relay goes quiet instead of banking one player's SP into another
+            // player's ledger. The pin is captured per BRIDGE, not per launch, and that is deliberate:
+            // the casino's race handoff rebuilds the bridge in the same window (ReturnToRoom), and
+            // re-reading the identity there is right, because the run that just finished banked
+            // against whoever is signed in now.
+            var roomAccount = BackRoomApi.AppIdentity()?.UnifiedId;
+            (string UnifiedId, string Token)? RoomIdentity()
+            {
+                var current = BackRoomApi.AppIdentity();
+                return current?.UnifiedId == roomAccount ? current : null;
+            }
+            BackRoomBridge? bridge = null;
+            var api = new BackRoomApi(null, RoomIdentity,
+                sp => bridge?.AdoptSp(sp, () => RoomIdentity() != null));
+            _bridge = bridge = new BackRoomBridge(new BackRoomBridge.Deps
+            {
+                Post = message => OnUi(() =>
+                {
+                    if (generation == _roomGeneration && !_racePage) _host?.Post(message);
+                }),
+                Relay = api,
+                Fx = Fx,
+                Media = Media,
+                Voice = Voice,
+                BuildInit = BuildInit,
+                CloseWindow = OnRoomClosed,
+                Schedule = Schedule,
+                NoteEvent = key => App.FeatureDayLog?.Note(key),
+                SetOption = option => OnUi(() =>
+                {
+                    if (App.Settings?.Current is not { } s) return;
+                    ApplyRoomOption(s, option);
+                    App.Settings.Save();
+                }),
+                SetSp = sp => { if (generation == _roomGeneration && !_racePage && App.Settings?.Current is { } s) s.SkillPoints = sp; },
+                OnUi = OnUi,
+                OffUi = work => System.Threading.Tasks.Task.Run(work),
+                Log = msg => App.Logger?.Debug("BackRoom: {Msg}", msg),
+            });
+
+    }
+
+    private static void OnRoomMessage(JObject message)
+    {
+        if ((string?)message["type"] != "game-open") { _bridge?.Handle(message); return; }
+        if ((string?)message["game"] != "race" || _openingRace) return;
+        string? refusal = !RacingAccess.CanLaunch ? "locked" : CaucusHostService.IsActive ? "busy" : null;
+        Post(new { type = "game-open-result", game = "race", ok = refusal == null, reason = refusal });
+        if (refusal != null) return;
+        _openingRace = true;
+        _bridge?.RequestClose("race");
+    }
+
+    private static void OnRoomClosed()
+    {
+        if (!_openingRace || _disposing) { DisposeAll(); return; }
+        _openingRace = false;
+        ++_roomGeneration;
+        _bridge = null;
+        HookSettings(false);
+        BackRoomFxServices.Viewport = null;
+        if (_host == null) return;
+        // Revalidate after the room's asynchronous exit, including concurrent launches.
+        if (!RacingAccess.CanLaunch || CaucusHostService.IsActive) { ReturnToRoom(); return; }
+        if (_host.Window != null) _host.Window.Title = "Racing Thoughts";
+        _racePage = true;
+        CaucusHostService.Launch(sharedHost: _host, returnToRoom: ReturnToRoom);
+    }
+
+    private static void ReturnToRoom()
+    {
+        _racePage = false;
+        if (_disposing || _host == null) return;
+        try
+        {
+            CreateBridge();
+            if (_host.Window != null) _host.Window.Title = ProductName;
+            _panicSuspended = _minimised = false;
+            HookSettings(true);
+            BackRoomFxServices.Viewport = ReadViewport;
+            _host.NavigatePage(StartUrl + "?raceReturn=1", () => _bridge?.OnReady(), OnRoomMessage);
+            _host.FocusWeb();
+        }
+        catch (Exception ex) { App.Logger?.Warning(ex, "BackRoom: return failed"); DisposeAll(); }
+    }
+
     /// <summary>Graceful close (the panic stop pass, an entitlement or mod change): the page gets
     /// <c>close</c> and 800 ms. Idempotent.</summary>
     public static void CloseActive(string reason = "panic")
     {
+        _openingRace = false;
         try
         {
             if (_host == null) return;
@@ -323,6 +395,7 @@ internal static class BackRoomHostService
     /// OnExit): send the last cursor and dispose now.</summary>
     public static void ShutdownFlush()
     {
+        _openingRace = false;
         try
         {
             if (_host == null) return;
@@ -341,6 +414,7 @@ internal static class BackRoomHostService
     /// </summary>
     public static void HandlePanicPress()
     {
+        if (_racePage) { CloseActive("panic"); return; }
         if (_host == null || _bridge == null) return;
         var now = DateTime.UtcNow;
         bool second = _panicSuspended && (now - _lastPanicPressUtc) <= PanicDoublePressWindow;
@@ -382,6 +456,7 @@ internal static class BackRoomHostService
         {
             type = "init",
             protocol = BackRoomBridge.Protocol,
+            racingTracks = RacingAccess.OwnedTracks,
             sp = s?.SkillPoints ?? 0,
             reduced = motion != Models.MotionLevel.Full,
             motion = MotionWire(motion),
@@ -511,6 +586,11 @@ internal static class BackRoomHostService
         _disposing = true;
         try
         {
+            _openingRace = false;
+            ++_roomGeneration;
+            _bridge?.CloseNow();
+            if (_racePage) CaucusHostService.DetachFromRoom();
+            _racePage = false;
             HookSettings(false);
             BackRoomFxServices.Viewport = null;
             var host = _host;

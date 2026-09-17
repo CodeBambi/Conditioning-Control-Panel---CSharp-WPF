@@ -1,6 +1,8 @@
 {
   "br_counter_sold": "売約済み",
-  "br_arcade_play_tab": "CCPの「プレイ」タブで遊ぶ",
+  "race_access_locked": "Back RoomのデモまたはレーシングパックでRacing Thoughtsをアンロックできます。",
+  "race_access_ready": "購入したRacing Thoughtsをプレイできます。",
+  "race_track_locked": "このトラックには対応するRacing Thoughtsパックが必要です。",
   "app_title": "コンディショニングコントロールパネル",
   "awareness_consent_accept": "目を開けさせる",
   "awareness_consent_control_body": "アプリを隠す、特定のアプリや全部を忘れさせる、1 時間だけ止める、そして彼女に渡る行をそのまま読む——すべて「彼女に見えるもの」カードでできます。",
@@ -5197,6 +5199,8 @@
   "br_station_slot": "The Slot",
   "br_station_wheel": "Daily Daze",
   "br_station_cards": "Soft Hand",
+  "br_station_race": "Racing Thoughts",
+  "br_arcade_play": "Racing Thoughts をプレイ",
   "br_station_counter": "The Prize Parlour",
   "br_station_failed": "This station would not start. Try again in a moment.",
   "br_station_closed": "Closed for a moment.",

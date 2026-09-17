@@ -1,6 +1,8 @@
 {
   "br_counter_sold": "판매 완료",
-  "br_arcade_play_tab": "CCP 플레이 탭에서 플레이",
+  "race_access_locked": "Back Room의 데모 또는 레이싱 팩으로 Racing Thoughts를 잠금 해제하세요.",
+  "race_access_ready": "구매한 Racing Thoughts를 플레이할 수 있어요.",
+  "race_track_locked": "이 트랙에는 해당 Racing Thoughts 팩이 필요해요.",
   "app_title": "컨디셔닝 컨트롤 패널",
   "awareness_consent_accept": "눈을 뜨게 하기",
   "awareness_consent_control_body": "앱을 숨기고, 특정 앱이나 전부를 잊게 하고, 한 시간 쉬게 하고, 그녀에게 가는 문장을 그대로 읽어볼 수 있습니다 — 모두 “그녀가 볼 수 있는 것” 카드에서.",
@@ -5197,6 +5199,8 @@
   "br_station_slot": "The Slot",
   "br_station_wheel": "Daily Daze",
   "br_station_cards": "Soft Hand",
+  "br_station_race": "Racing Thoughts",
+  "br_arcade_play": "Racing Thoughts 플레이",
   "br_station_counter": "The Prize Parlour",
   "br_station_failed": "This station would not start. Try again in a moment.",
   "br_station_closed": "Closed for a moment.",

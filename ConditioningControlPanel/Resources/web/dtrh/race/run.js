@@ -80,9 +80,10 @@ import { createCaptions } from './captions.js';
 import { createSubliminal, ECHO_SEC } from './subliminal.js';
 import { createMediaLane } from './mediaLane.js';
 import { createInput } from './input.js';
+import { createPauseGate } from './pauseGate.js';
 import { createPickups, TUNE as PICK } from './pickups.js';
 import { createPixelizer, pixelDefault } from './pixel.js';
-import { saveBest } from './popped.js';
+import { saveBest, readBests, bestFor } from './popped.js';
 import { createSpeedFx } from './speed.js';
 import { vFovForAspect, bindViewportResize } from './viewport.js';
 import { createRaceAudio } from './audio.js';
@@ -159,7 +160,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   const unbindResize = bindViewportResize(resize); resize();
 
   // ---- the parts that outlive a run ----
-  const hud = createRaceHud(hudRoot);
+  const hud = createRaceHud(hudRoot, { reducedMotion });
   // the voice on the glass: the band under the chrome and the trigger plate over it.
   // The band is the SCRIPT and the pops LIGHT it (race/captions.js, mode 'slot'): the phrase the
   // file is on sits there dim, and the word the kart pops rises out of the bubble and slides into
@@ -355,7 +356,15 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   const sync = createCueSync({ aheadSec: CUE_AHEAD_SEC, trace: true });   // the visible half of a cue waits for the word (race/sync.js); the trace is 64 small rows the smokes read
   let W = null;                       // the world: everything that is rebuilt on "again"
   let raf = 0, last = 0, lastBeat = 0, payoutResolve = null;
+  let brakeGeneration = 0;
   let camOverride = null;                // fn(camera, dt, w, camOut) -> false when done (intro.js cameras)
+  const pauses = createPauseGate((on) => {
+    audio.duck(on, 'run-pause');
+    trackPause(on);
+    last = 0; input.flush();
+    if (on) { speedFx.clear(); hud.settleBankTransfer(); }
+    if (on && W && W.kart.settleAnimation) W.kart.settleAnimation();
+  });
   let stage = null;                      // { update(dt), render() } drawn INSTEAD of the world while set (menu, intro)
   // last ~1 s of kart {d,x,h} for the ALMOST on a miss: a fixed ring, no per-frame objects
   const TRAIL_N = 70, trail = [];
@@ -423,8 +432,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
       jackpotBias: 1, sweep: false, tide: 1, spawnT: SPAWN_T0, rainT: RAIN_T0, rush: 0, fovBoost: 0, gates: 0, room: null,
       wasAirborne: false, airH: 0, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', seed: runSeed,
       trackHold: 0, trackHoldFrom: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0, quiet: false, quietAt: -9 });
+    brakeGeneration++; hud.setPaused(false);
+    pauses.update({ brake: false });
+    speedFx.clear();
     trailClear();
-    mix.reset(); PACE.reset(); S.wobble = 0; clearMixChrome(); sync.reset(); wordOf.clear(); lineGot.clear(); lineDone.clear();
+    mix.reset(); PACE.reset(); hud.resetPolish(); S.wobble = 0; clearMixChrome(); sync.reset(); wordOf.clear(); lineGot.clear(); lineDone.clear();
     wordyRows.clear(); lastFlashAt = -1e9; flashStats.pops = 0; flashStats.capped = 0; flashStats.rolls = 0; flashStats.flashes = 0;
     echoWord = ''; echoAt = -1e9; if (subl) subl.clear();   // "again" starts with nothing said and a clear glass
     TH.popped = 0; paintThoughts();   // the same road again is the same total and a fresh count
@@ -501,7 +513,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     if (ghost || rec.p == null || lineDone.has(rec.p)) return;
     const n = lineN.get(rec.p) || 0, got = (lineGot.get(rec.p) || 0) + 1;
     lineGot.set(rec.p, got);
-    if (n > 0 && got >= n) { lineDone.add(rec.p); w.score.chain(); }   // the whole line, read clean: one rung
+    if (n > 0 && got >= n) {
+      lineDone.add(rec.p); w.score.chain();
+      if (captions) captions.complete(rec.t);
+      hud.phraseCaught();
+      sfx('chain_pop', 0.45);
+    }   // the whole line, read clean: one rung
   }
   /** THE PLATE, ON THE POP. The player took the row before the voice reached it, so the word flies
    *  at the camera NOW rather than on a second they already beat. race/sync.js claim() marks the
@@ -569,7 +586,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     // only the picture is withheld, the same way THE MIX withholds a held pop's effect.
     if (p.payload === 'blackout' && (!S.running || S.ended)) return;
     fxFired.set(p.payload, (fxFired.get(p.payload) || 0) + 1);
-    if (p.payload === 'video') { trackPause(true); send({ type: 'fire-payload', kind: 'video', strength, durationMult }); }
+    // Video requests are dark and the host may refuse without replying. Only an
+    // actual host pause (VideoStarted) can hold the run, never this request.
+    if (p.payload === 'video') { send({ type: 'fire-payload', kind: 'video', strength, durationMult }); }
     // `text` is the phrase, and only the kinds that SAY something read it: the bubble's own word if
     // it wore one, else the road's last line inside ECHO_SEC, else '' - which hands the pick back to
     // payloadFx's own pool. The doll (`lock`) speaks for the same reason the subliminal does: the
@@ -663,11 +682,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   function onScore(w, e) {
     switch (e.type) {
       case 'pop': hud.setScore(e.score); hud.setCombo(e.combo, e.mult); hud.toast(`+${e.gain}`, 'pop'); break;
-      case 'combo': hud.setCombo(e.combo, e.mult != null ? e.mult : w.score.state.mult); break;   // a rung off a whole line moves it too
+      case 'combo': hud.setCombo(e.combo, e.mult != null ? e.mult : w.score.state.mult); if (e.lost > 0) hud.streakLost(e.reason); break;   // a rung off a whole line moves it too
       case 'mult': hud.setCombo(w.score.state.combo, e.to); if (e.to > e.from) { hud.toast(`x${e.to}`, 'pop'); sfx('streak_milestone', 0.6); poke('smug', 1.0); } break;
       case 'miss': hud.setCombo(0, e.mult); break;
       case 'almost': hud.setScore(e.score); hud.toast(`almost +${e.gain}`, 'almost'); break;
-      case 'bank': hud.setBank(e.banked); hud.setScore(0); hud.toast(`kept +${e.amount}`, 'bank'); break;
+      case 'bank': hud.bankTransfer(e.banked); break;
       case 'jackpot': hud.setScore(e.score); hud.toast(`jackpot +${e.gain + goldTake}`, 'jackpot'); goldTake = 0; break;
     }
   }
@@ -713,9 +732,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   // ---- the track chart: the file is the clock (CHART.md) ----
   /** Page -> host, and only when there is a host and a track: the audio has to follow the run. */
   function trackSend(type, data) { if (hosted && TR.track) send({ type, ...(data || {}) }); }
-  /** The Brake, a host pause and a video pop all stop the voice; anything that resumes starts it. */
+  /** Only the aggregate pause gate may resume the voice while a run is active. */
   function trackPause(on) {
-    if (!TR.track || S.trackPaused === !!on) return;
+    if (!TR.track || !S.running || S.ended || S.disposed || S.trackPaused === !!on) return;
     S.trackPaused = !!on;
     trackSend('track-pause', { on: !!on });
   }
@@ -839,7 +858,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   function trackFrame(w, ts) {
     const ks = w.kart.state;
     if (S.trackHold > 0 && (ts.t >= S.trackHold || ts.t < S.trackHoldFrom)) { S.trackHold = 0; applyFog(w, 0); w.field.setDensity(1); }   // over, or a seek back to before it (the scheduler re-hands it)
-    if (captions) captions.update(ts.t);   // the phrase is a function of the second, never of the frame
+    if (captions) { captions.update(ts.t); hud.phraseFocus(captions.activeAt(ts.t)); }   // the phrase is a function of the second, never of the frame
     for (const due of TR.due(ks.d, ks.speed)) applyCue(w, due);
     // the sync: rows nudged onto their word off the speed the kart has now, held cues fired on the second
     const held = sync.update(ts.t, ks.d, ks.speed);
@@ -877,9 +896,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   function onKart(w, e) {
     switch (e.type) {
       case 'driftTier': sfx('ui_click', 0.3 + 0.15 * e.tier); w.kart.pose('drift', { side: w.kart.state.steer > 0 ? 1 : -1, tier: e.tier }); break;
-      case 'driftBoost': hud.toast(TURBO[e.tier] || 'turbo', 'pop'); sfx('tunnel_powerup_collect', 0.5 + 0.15 * e.tier); if (e.tier >= 2) shake.shake(0.12 * e.tier, 160); poke(e.tier >= 3 ? 'smug' : 'streamed', 1.0); w.kart.pose('boost'); break;
+      case 'driftBoost': speedFx.beat(e, w.kart.state, w.layout); audio.kartBeat(e); hud.toast(TURBO[e.tier] || 'turbo', 'pop'); if (e.tier >= 2) shake.shake(0.12 * e.tier, 160); poke(e.tier >= 3 ? 'smug' : 'streamed', 1.0); w.kart.pose('boost'); break;
       case 'trick': { const g = w.score.trick(e.points, e.name); hud.toast(`${e.name} +${g}`, 'pop'); sfx('chain_pop', 0.8); poke('smug', 0.6); w.kart.pose('air'); break; }
-      case 'landing': w.kart.pose(e.clean ? 'landing' : 'landingKerb'); if (e.trick) { hud.toast(e.clean ? (e.streak >= 3 ? 'hat trick, clean' : 'clean') : 'kerbed it', e.clean ? 'pop' : 'almost'); if (e.clean) sfx('surface', 0.5); } break;
+      case 'landing': speedFx.beat(e, w.kart.state, w.layout); audio.kartBeat(e); w.kart.pose(e.clean ? 'landing' : 'landingKerb'); if (e.trick) { hud.toast(e.clean ? (e.streak >= 3 ? 'hat trick, clean' : 'clean') : 'kerbed it', e.clean ? 'pop' : 'almost');  } break;
       case 'inverted': w.score.setInverted(e.on); w.kart.pose(e.on ? 'tuck' : 'cruise'); if (e.on) { hud.toast('upside down', 'effect'); poke('shock', 0.8); } break;
       case 'lap': { const r = w.score.lap(e.sec); hud.toast(`lap ${r.text}`, 'item'); if (r.pb && r.prevBest > 0) { hud.toast('pb!', 'jackpot'); sfx('pb_fanfare', 0.9); poke('jackpot', 1.5); w.kart.pose('cheer'); } break; }
       case 'jump': w.kart.pose('air', { hold: e.big ? 0.7 : 0.3 }); if (e.big) { hud.toast('big air', 'pop'); sfx('tunnel_powerup_collect', 0.6); poke('streamed', 0.9); } break;
@@ -903,7 +922,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     // colours the pace from there. Off a chart the clock is the run's own elapsed seconds.
     S.pace = PACE.at(ts ? ts.t : S.elapsed, ts ? ts.act : null, TR.track ? TR.track.chart : null);
     k.pace(Math.min(S.pace.base * S.tide, S.pace.cap), S.pace.cap);   // riptide runs the cruise faster, under the same ceiling
-    k.update(dt, input.read(), lay);
+    k.update(dt, input.read(false), lay);
     w.score.tick(dt);
     w.pickups.update(dt, { d: ks.d, x: ks.x, speed: ks.speed, elapsed: S.elapsed, opening: !!(S.pace && S.pace.opening), mult: w.score.state.mult,
       t: TR.track ? TR.track.t : null, nextEventT });
@@ -980,14 +999,17 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     if (S.disposed) return;
     raf = requestAnimationFrame(frame);
     if (now - lastBeat > HEARTBEAT_MS) { lastBeat = now; send({ type: 'heartbeat', t: now }); }
+    // Actions remain live under Brake. Poll before checking the simulation gate so a
+    // Start press cannot both open Brake and move the kart in the same frame.
+    if (S.running && !S.ended) input.pollActions();
     const dt = last ? clamp((now - last) / 1000, 0, 0.1) : 0;
     last = now;
     // the DOM wall is over the canvas and nothing in the scene can hide it, so it goes away
     // whenever the world is not the thing on screen: the menu, the intro, the Brake, the host's pause
-    if (W) W.wallDom.setHidden(!!stage || S.paused || S.hostPaused || S.ended || !S.running);
+    if (W) W.wallDom.setHidden(!!stage || pauses.paused || S.ended || !S.running);
     if (stage) { try { stage.update(dt); stage.render(); } catch (e) { bridge.log && bridge.log('race stage: ' + (e && e.stack || e)); } return; }
     if (!W) return;
-    if (S.running && !S.paused && !S.hostPaused) {
+    if (S.running && !pauses.paused) {
       try { step(W, dt); } catch (e) { bridge.log && bridge.log('race step: ' + (e && e.stack || e)); }
     } else if (!S.running && !S.ended) {
       // the pre-roll count: the world is parked but she is not. Her pose springs only, no physics.
@@ -1000,13 +1022,14 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   // ---- brake / end / again / exit ----
   async function brake() {
     if (!W || !S.running || S.ended || S.paused) return;
+    const generation = ++brakeGeneration;
     S.paused = true; sfx('ui_click', 0.5);
-    audio.duck(true, 'brake'); trackPause(true);
+    pauses.update({ brake: true });
     const pick = await hud.setPaused(true);
-    if (S.disposed || !S.paused) return;
+    if (S.disposed || !S.paused || generation !== brakeGeneration) return;
     if (pick === 'end') return endRun();
     S.paused = false;
-    audio.duck(false, 'brake'); trackPause(false);
+    pauses.update({ brake: false });
   }
   function waitPayout(ms) {
     return new Promise((res) => { const t = setTimeout(() => { payoutResolve = null; res(null); }, ms); payoutResolve = (m) => { clearTimeout(t); payoutResolve = null; res(m); }; });
@@ -1014,7 +1037,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   async function endRun() {
     if (!W || S.ended) return;
     const w = W;
-    S.ended = true; S.running = false; S.paused = false;
+    S.ended = true; S.running = false; S.paused = false; brakeGeneration++; speedFx.clear();
     try { payloadFx.cancelHeavy(); } catch (e) { /* nothing heavy */ }
     if (captions) captions.clear();   // nothing of the last phrase is left over the end card
     if (subl) subl.clear();           // nor a whisper card mid-rush: the End card owns the screen
@@ -1028,9 +1051,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     // run that reached the END of the chart files a best - a quit is not a score - and the best is
     // beaten on the count alone, so a longer cut of a file never reads as a worse run.
     if (track && TH.total > 0) {
-      Object.assign(summary, { thoughts: TH.popped, thoughtsTotal: TH.total });
+      Object.assign(summary, { thoughts: TH.popped, thoughtsTotal: TH.total, trackFinished: !!TR.ended });
       if (TR.ended) {
         const src = (TR.track && TR.track.chart && TR.track.chart.source) || {};
+        const previous = bestFor(readBests(), { hash: track.hash, cloudId: src.cloudId });
+        summary.previousThoughts = previous && previous.total === TH.total ? previous.popped : null;
         const filed = saveBest(undefined, { hash: track.hash, cloudId: src.cloudId, name: track.name, popped: TH.popped, total: TH.total });
         summary.thoughtsBest = filed.rec ? filed.rec.popped : 0;
         summary.thoughtsRecord = filed.wrote;
@@ -1039,13 +1064,15 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     }
     send({ type: 'run-ended', ...summary, ...(track ? { track } : {}) });
     trackSend('track-stop');
+    pauses.update({ brake: false });
     sfx('surface', 0.8);
     audio.duck(true, 'end');
     setCameraOverride(resultsCamera({ tier: resultTier(st.banked + st.score, S.bestAtStart, summary.personalBest), reducedMotion }));   // she turns to face the card
     const payout = await waitPayout(PAYOUT_WAIT_MS);
     if (S.disposed) return;
     const shown = { ...summary };
-    if (track && track.countable > 0) shown.title = `you took ${track.taken} of ${track.countable} · ${resultTag(track.taken, track.countable)}`;   // a charted run is scored by the words it met
+    if (track && TH.total > 0) shown.title = `${TH.popped.toLocaleString('en-US')} of ${TH.total.toLocaleString('en-US')} thoughts caught`;
+    else if (track && track.countable > 0) shown.title = `you took ${track.taken} of ${track.countable} · ${resultTag(track.taken, track.countable)}`;   // a charted run is scored by the words it met
     if (payout && payout.finalXp != null) shown.title = (shown.title || 'the tea party') + ` · +${Math.round(payout.finalXp)} xp` + (payout.sparksEarned ? ` · ${payout.sparksEarned} sparks` : '');
     const pick = await hud.showEnd(shown, { beside: true });
     if (S.disposed) return;
@@ -1101,7 +1128,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
         setCameraOverride(null);
         teardown();
         resetRunState(settings.seedLock != null ? settings.seedLock >>> 0 : (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
-        S.started = false; S.hostPaused = false;
+        S.started = false;
         if (TR.track) setTrack(TR.track.chart);
         let took = false;
         try { took = onExit() !== false; } catch (e) { if (bridge.log) bridge.log('to menu: ' + e); }
@@ -1121,7 +1148,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   bridge.on('payout-result', (m) => { if (payoutResolve) payoutResolve(m); });
   function cyclePixel() { pixel.cycle(); pixel.retexture(scene); hud.toast(pixel.label(), 'item'); }
   input.onAction((a, shift) => {
-    if (a === 'brake') brake(); else if (a === 'pixel') cyclePixel();
+    if (a === 'brake') {
+      if (S.paused) hud.setPaused(false); else brake();
+    } else if (a === 'pixel') cyclePixel();
     else if (a === 'nudgeUp' || a === 'nudgeDown') nudge((a === 'nudgeUp' ? 1 : -1) * (shift ? NUDGE_BIG_SEC : NUDGE_SEC));
     else if (a === 'export') exportSync();
   });
@@ -1135,7 +1164,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     last = 0;
     let hid = false;
     try { hid = document.hidden === true; } catch (e) { /* no document */ }
-    if (hid && W && S.running && !S.paused && !S.ended && !S.hostPaused) brake();
+    if (hid && W && S.running && !S.paused && !S.ended) brake();
   };
   document.addEventListener('visibilitychange', onVis);
 
@@ -1149,14 +1178,19 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     S.room = W.dresser.applyRoom(W.fx, W.layout.roomAtDepth(0), 0.2);   // the gate 9 m in shows the banner
     W.kart.setMood('calm');
     send({ type: 'run-started', seed: S.seed });
-    if (TR.track) { S.trackPaused = false; trackSend('track-play', { name: TR.track.name }); }
+    if (TR.track) { S.trackPaused = false; trackSend('track-play', { name: TR.track.name }); trackPause(pauses.paused); }
     last = 0;
   }
   /** Host pause (native video playing etc): freezes the frame, no Brake screen. */
-  function setPaused(on) { S.hostPaused = !!on; if (!on) last = 0; audio.duck(!!on, 'host'); trackPause(!!on); }
+  function setPaused(on) {
+    S.hostPaused = !!on;
+    // Native video and the web mini-player both own the host reason. Brake
+    // stays independent, so closing either surface cannot release the other.
+    pauses.update({ host: !!on });
+  }
   function dispose() {
     if (S.disposed) return;
-    S.disposed = true;
+    S.disposed = true; brakeGeneration++;
     if (raf) cancelAnimationFrame(raf);
     unbindResize();
     document.removeEventListener('visibilitychange', onVis);
@@ -1210,7 +1244,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
       geometries: mem.geometries == null ? -1 : mem.geometries, textures: mem.textures == null ? -1 : mem.textures, texMax,
       audio: audio._tracks ? audio._tracks.size : -1, dpr: renderer.getPixelRatio(), block: pixel.block,
       dprCap: st.dprCap == null ? null : st.dprCap, touch: !!st.touch, lite,   // the governor's lid and its ladder (race/pixel.js), and the lighter switch
-      world: !!W, stage: !!stage, running: S.running, bubbles: W ? W.field.liveCount : 0,
+      world: !!W, stage: !!stage, running: S.running, paused: pauses.paused, trackPaused: S.trackPaused, elapsed: S.elapsed, bubbles: W ? W.field.liveCount : 0,
       // the pace envelope and what the kart actually did with it (race/pace.js, race/smoke/pace-check.mjs)
       speed: W ? W.kart.state.speed : 0, boosting: W ? W.kart.state.boostSec > 0 : false, pace: S.pace ? { ...S.pace } : null,
     };

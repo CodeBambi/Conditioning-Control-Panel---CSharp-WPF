@@ -1,6 +1,8 @@
 {
   "br_counter_sold": "VENDU",
-  "br_arcade_play_tab": "Jouer dans CCP : onglet Jouer",
+  "race_access_locked": "Débloquez Racing Thoughts avec la démo ou un pack de course du Back Room.",
+  "race_access_ready": "Votre achat Racing Thoughts est prêt.",
+  "race_track_locked": "Cette piste nécessite son pack Racing Thoughts.",
   "app_title": "Panneau de Contrôle de Conditionnement",
   "awareness_consent_accept": "Ouvrir ses yeux",
   "awareness_consent_control_body": "Cache-lui n’importe quelle application, fais-lui oublier une app ou tout, mets-la en pause une heure et lis la ligne exacte qu’elle reçoit — le tout sur la carte « Ce qu’elle peut voir ».",
@@ -5197,6 +5199,8 @@
   "br_station_slot": "The Slot",
   "br_station_wheel": "Daily Daze",
   "br_station_cards": "Soft Hand",
+  "br_station_race": "Racing Thoughts",
+  "br_arcade_play": "Jouer à Racing Thoughts",
   "br_station_counter": "The Prize Parlour",
   "br_station_failed": "This station would not start. Try again in a moment.",
   "br_station_closed": "Closed for a moment.",

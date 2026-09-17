@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { parseSets, ownedLevels } from '../levels.js';
+const sets = parseSets(JSON.parse(await readFile(new URL('../levels.json', import.meta.url), 'utf8')));
+const all = sets.flatMap(s => s.levels);
+assert.equal(all.length, 11);
+assert.equal(ownedLevels(all, undefined), all, 'web hosts without ownership field retain their catalogue');
+assert.deepEqual(ownedLevels(all, []).map(l=>l.trackNum), [], 'explicit no ownership grants nothing');
+assert.deepEqual(ownedLevels(all, [0]).map(l=>l.trackNum), [0], 'demo owns only demo');
+assert.deepEqual(ownedLevels(all, [1,2,3]).map(l=>l.trackNum), [1,2,3], 'bundle one does not need demo');
+assert.deepEqual(ownedLevels(all, [10]).map(l=>l.trackNum), [10]);
+assert.deepEqual(ownedLevels(all, ['0',11,-1,null]).map(l=>l.trackNum), [], 'invalid grants never coerce into a track');
+assert.deepEqual(ownedLevels([{id:'custom',trackNum:null}], [0]), [], 'missing track metadata is not demo');
+console.log('ownership-check: web compatibility and demo/bundle catalogue filtering passed');
