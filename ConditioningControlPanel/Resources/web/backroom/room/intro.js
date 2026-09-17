@@ -1,5 +1,6 @@
 import { drawFallbackFrame } from '../../arcademy/engine/loom/loomField.js';
 import { LOOM_PRESETS } from '../shared/hypno/loom.js';
+import { playEntry } from './entry.js';
 const node = document.getElementById('br-intro');
 let finished = false;
 let highWater = 0;
@@ -25,6 +26,12 @@ export const intro = {
     if (!node || finished) return;
     this.progress(1); finished = true;
     document.removeEventListener('visibilitychange', visibility);
+    // The normal path hands off to the shutter (room/entry.js): the slats slam over this card and it
+    // is taken away underneath them, so there is no frame where the room is bare and the card is fading
+    // across it. The immediate path is the failure path - boot threw, or the room never built - and a
+    // shutter opening on nothing would be a lie, so that one still just goes.
+    const cover = immediate ? 0 : playEntry(node.dataset.still === 'true');
+    if (cover > 0) { setTimeout(() => node.remove(), cover); return; }
     node.classList.add('br-intro-out');
     if (immediate || matchMedia('(prefers-reduced-motion: reduce)').matches) node.remove();
     else setTimeout(() => node.remove(), 600);

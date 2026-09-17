@@ -171,6 +171,21 @@ public class BackRoomApiTests
         Assert.Empty(sp);
     }
 
+    [Theory]
+    [InlineData("<!DOCTYPE html><html>Cannot POST /v2/backroom/slot/chase</html>")]
+    [InlineData("")]
+    public async Task Unworded404_IsBadOp_NotOffline(string body)
+    {
+        // A route the server does not have will not appear by retrying it. Wording that 'offline' put it
+        // in the page's RETRYABLE set, so the slot's undeployed optional chase route refused the whole
+        // sit-down after four retries and the cabinet read "closed for a moment".
+        var (api, h, sp) = Make();
+        h.Answer = _ => Json(404, body);
+        var r = await api.RelayAsync("slot", "chase", null, null, TestContext.Current.CancellationToken);
+        Assert.Equal((false, 404, "bad_op"), (r.Ok, r.Status, r.Reason));
+        Assert.Empty(sp);
+    }
+
     private static (BackRoomApi Api, FakeHandler H, List<(string Account, long Revision, string[] Grants)> Applied) MakeCounter()
     {
         var h = new FakeHandler();

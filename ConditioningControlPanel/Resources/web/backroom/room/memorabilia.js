@@ -22,7 +22,10 @@ export const MEMORABILIA = [
   { id: 'work', kind: 'poster', title: 'Good work', src: asset('good-work'), position: [-6.82, 2.25, -5.8], yaw: Math.PI / 2, size: [.9, 1.3] },
   { id: 'late', kind: 'poster', title: 'Stay late', src: asset('stay-late'), position: [5.7, 1.95, 7.76], yaw: Math.PI, size: [.85, 1.25] },
   { id: 'attend', kind: 'poster', title: 'Attendance', src: asset('attend'), position: [-2.75, 3.05, 7.76], yaw: Math.PI, size: [.85, 1.25] },
-  { id: 'deep', kind: 'poster', title: 'Dive deep', src: asset('dive-deep'), position: [4.25, 2.6, 7.76], yaw: Math.PI, size: [.9, 1.3] },
+  // 'deep' (Dive deep) used to hang at [4.25, 2.6, 7.76]. That is inside the fan-and-pennant relief
+  // room/casino-decor.js builds at x 4.6 / z 7.86, so the poster sat on top of the banner. Taken down
+  // rather than nudged: the entrance wall already carries five pieces and the relief is the feature.
+  // assets/memorabilia/dive-deep.jpg stays on disk for re-hanging on a clear wall.
   { id: 'listen', kind: 'poster', title: 'Listen well', src: asset('listen-well'), position: [2.85, 2.5, 7.76], yaw: Math.PI, size: [.85, 1.25] },
   ...photos,
   { id: 'lost', kind: 'note', title: 'LOST & FOUND', caption: 'One train of thought.\nLast seen at the Arcademy.', position: [-6.8, 1.75, -.25], yaw: Math.PI / 2, tilt: .06, size: [.52, .4] },

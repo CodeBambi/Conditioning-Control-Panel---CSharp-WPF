@@ -1,0 +1,50 @@
+/* The handoff from the loading card to the room: a slat shutter slams, glitches while it is closed,
+   then rips open on a room that is already drawn. Compositor only - transform, opacity and one
+   blend layer. No canvas, no timers in the render loop, no second WebGL context. */
+.br-entry{position:fixed;inset:0;z-index:31;pointer-events:none;overflow:hidden;contain:strict}
+.br-entry-slat{position:absolute;left:-2%;width:104%;background:linear-gradient(180deg,#120b1d,#241238 45%,#0d0716);transform:scaleY(0);will-change:transform}
+/* Odd slats close from their own edge so the seam travels instead of meeting in one line. */
+.br-entry-slat:nth-child(odd){transform-origin:top}
+.br-entry-slat:nth-child(even){transform-origin:bottom}
+.br-entry-shut .br-entry-slat{animation:br-entry-shut .19s cubic-bezier(.2,.9,.25,1) both}
+.br-entry-open .br-entry-slat{animation:br-entry-open .42s cubic-bezier(.62,.02,.28,1) both}
+@keyframes br-entry-shut{from{transform:scaleY(0)}to{transform:scaleY(1.02)}}
+@keyframes br-entry-open{from{transform:scaleY(1.02)}to{transform:scaleY(0)}}
+
+/* Tear: hard offset bands that jump between a handful of frames, so it reads as a bad signal
+   rather than a smooth wipe. Sits over the slats and dies with them. */
+.br-entry-tear{position:absolute;inset:0;opacity:0;
+  background:repeating-linear-gradient(0deg,#ff4fb033 0 2px,#0000 2px 5px,#3df0ff2b 5px 7px,#0000 7px 14px);
+  mix-blend-mode:screen}
+.br-entry-glitch .br-entry-tear{animation:br-entry-tear .34s steps(1,end) 3 both}
+@keyframes br-entry-tear{
+  0%{opacity:.85;transform:translate3d(-3.5%,0,0) scaleY(1)}
+  18%{opacity:.35;transform:translate3d(2.5%,-1.2%,0) scaleY(1.9)}
+  36%{opacity:.9;transform:translate3d(-1.5%,1.6%,0) scaleY(.6)}
+  58%{opacity:.2;transform:translate3d(4.5%,0,0) scaleY(1.4)}
+  79%{opacity:.7;transform:translate3d(-2.5%,-.8%,0) scaleY(1)}
+  100%{opacity:.1;transform:translate3d(0,0,0) scaleY(1)}}
+
+/* Chroma split on the shutter itself, one channel each way. */
+.br-entry-glitch .br-entry-slats{animation:br-entry-split .17s steps(1,end) 6 both}
+@keyframes br-entry-split{
+  0%{filter:none;transform:translate3d(0,0,0)}
+  25%{filter:hue-rotate(-42deg) saturate(2.4);transform:translate3d(-.9%,0,0)}
+  50%{filter:hue-rotate(38deg) saturate(1.6);transform:translate3d(1.1%,0,0)}
+  75%{filter:brightness(1.5);transform:translate3d(-.4%,.3%,0)}
+  100%{filter:none;transform:translate3d(0,0,0)}}
+.br-entry-slats{position:absolute;inset:0;will-change:filter,transform}
+
+/* The dizzy. Applied to the 3D stage only, so the HUD and the wallet stay put while the world
+   settles. One overshoot, then rest. Scale never dips below what the roll needs to stay covered. */
+.br-stage.br-arrive{animation:br-arrive 1.05s cubic-bezier(.16,.62,.2,1) both;transform-origin:50% 54%;will-change:transform}
+@keyframes br-arrive{
+  0%{transform:scale(1.11) rotate(-1.7deg)}
+  46%{transform:scale(1.035) rotate(.55deg)}
+  72%{transform:scale(1.014) rotate(-.22deg)}
+  88%{transform:scale(1.006) rotate(.08deg)}
+  100%{transform:none}}
+
+@media(prefers-reduced-motion:reduce){
+  .br-entry{display:none}
+  .br-stage.br-arrive{animation:none}}

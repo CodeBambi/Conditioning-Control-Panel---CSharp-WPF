@@ -180,6 +180,28 @@
                 <Setter Property="TextWrapping" Value="Wrap"/>
                 <Setter Property="VerticalAlignment" Value="Top"/>
             </Style>
+            <!-- A numbered step on an explainer card. The pip is a fixed 18px circle so three of
+                 them stack into a straight left margin whatever the step text wraps to. -->
+            <Style x:Key="PlayStepPip" TargetType="Border">
+                <Setter Property="Width" Value="18"/>
+                <Setter Property="Height" Value="18"/>
+                <Setter Property="CornerRadius" Value="9"/>
+                <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="VerticalAlignment" Value="Top"/>
+                <Setter Property="Margin" Value="0,1,9,0"/>
+            </Style>
+            <Style x:Key="PlayStepNumber" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+                <Setter Property="FontSize" Value="10.5"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="HorizontalAlignment" Value="Center"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+            <Style x:Key="PlayStepText" TargetType="TextBlock" BasedOn="{StaticResource PlayCardBlurb}">
+                <Setter Property="Margin" Value="0,0,0,7"/>
+            </Style>
             <!-- NEW / BETA / SOON chip. Mod-tinted, unlike the lock vocabulary below. -->
             <Style x:Key="PlayBadgePill" TargetType="Border">
                 <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
@@ -1379,7 +1401,26 @@
                                 </Grid.RowDefinitions>
                                 <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}"><Border.Background><ImageBrush x:Name="PlayBackRoomHeroBrush" x:FieldModifier="internal" Stretch="UniformToFill"><ImageBrush.ImageSource><BitmapImage UriSource="pack://application:,,,/Resources/features/backroom.png" DecodePixelWidth="640"/></ImageBrush.ImageSource></ImageBrush></Border.Background></Border>
                                 <TextBlock Grid.Row="1" Text="{loc:Str play_backroom_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6" TextWrapping="Wrap"/>
-                                <TextBlock Grid.Row="2" Text="{loc:Str play_backroom_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                <!-- The casino in three steps. It replaced a single blurb: the Back Room is
+                                     the one Play card whose loop is not obvious from its name, and people were
+                                     entering without knowing SP bought anything. Art on top, steps under it. -->
+                                <StackPanel Grid.Row="2" Margin="0,0,0,14">
+                                    <Grid Margin="0,0,0,0">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Style="{StaticResource PlayStepPip}"><TextBlock Text="1" Style="{StaticResource PlayStepNumber}"/></Border>
+                                        <TextBlock Grid.Column="1" Text="{loc:Str play_backroom_step1}" Style="{StaticResource PlayStepText}"/>
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Style="{StaticResource PlayStepPip}"><TextBlock Text="2" Style="{StaticResource PlayStepNumber}"/></Border>
+                                        <TextBlock Grid.Column="1" Text="{loc:Str play_backroom_step2}" Style="{StaticResource PlayStepText}"/>
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Style="{StaticResource PlayStepPip}"><TextBlock Text="3" Style="{StaticResource PlayStepNumber}"/></Border>
+                                        <TextBlock Grid.Column="1" Text="{loc:Str play_backroom_step3}" Style="{StaticResource PlayStepText}"/>
+                                    </Grid>
+                                </StackPanel>
                                 <Button Grid.Row="3" x:Name="BtnPlayBackRoom" x:FieldModifier="internal" Content="{loc:Str play_backroom_cta}" Cursor="Hand" Padding="18,9" Background="{DynamicResource PinkBrush}" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13" ToolTip="{loc:Str play_backroom_tooltip}" Click="BtnStartBackRoom_Click"><Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style></Button.Resources></Button>
                             </Grid>
                         </Border>

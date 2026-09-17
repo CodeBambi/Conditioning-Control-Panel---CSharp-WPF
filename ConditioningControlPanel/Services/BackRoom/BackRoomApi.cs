@@ -208,12 +208,18 @@ public sealed class BackRoomApi : IBackRoomRelay
     /// (CONTRACT section 2.2). A reply the server did not word itself (a gateway HTML page, a JSON
     /// refusal with no reason) is the server being unreachable in all but name, so it is <c>offline</c>;
     /// the HTTP status still rides along for the log.
+    ///
+    /// The one exception is 404. An unworded 404 is the server saying it has no such route - a station
+    /// whose server half is not deployed yet - which is the same thing <c>bad_op</c> already means, and
+    /// it will not become true later by waiting. Wording it <c>offline</c> put it in the page's
+    /// RETRYABLE set, so the slot's optional bonus-chase route burned four retries and ~3.5s and then
+    /// refused the whole sit-down: the cabinet showed "closed for a moment" and no press did anything.
     /// </summary>
     private BackRoomStationResult Read(string station, string op, string sentFor, int status, bool success, string text)
     {
         JObject? o = null;
         try { o = JsonConvert.DeserializeObject(text) as JObject; } catch { }
-        if (o == null) return new BackRoomStationResult(false, status, "offline", null);
+        if (o == null) return new BackRoomStationResult(false, status, status == 404 ? "bad_op" : "offline", null);
 
         // Decoration reads and layout saves cannot overwrite a newer game settlement.
         if ((station != "decorations" || op == "buy") && o["sp"] is JValue { Type: JTokenType.Integer } sp)

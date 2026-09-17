@@ -623,7 +623,7 @@ host: a missing `ctx` member is feature-detected and the effect is skipped, neve
 | Gate off | Plain dress |
 |---|---|
 | `flash` | no `fx.wash` / `fx.gif_from`; card faces show rank and suit with no picture, the sit fan too |
-| `spiral` | no `fx.loom_spiral`; card backs are a brass crosshatch, the wheel hub a brass star, the roulette turret dish stays velvet (a Spiral Wake still shows as text and a gold rim glow) |
+| `spiral` | no `fx.loom_spiral`; card backs are a brass crosshatch, the wheel hub a brass star, the roulette turret dish stays velvet (a Spiral Wake still shows as text and a gold rim glow). **The desktop host now always sends this `true`** - it used to carry `AppSettings.SpiralEnabled`, the panel's fullscreen overlay toggle, which is not the room's dressing and is coin-flipped by Randomize. The plain dress stays specified for a future room-level switch. |
 | `brainDrain` | no `fx-tunnel`, no `fx.haze`; in-station dims (the long last turn's stage edges) stay |
 | `subliminal` | nothing in v3 |
 

@@ -381,7 +381,11 @@ export async function createScene(o) {
   if(shared) retainReels=()=>{
     for(let i=0;i<3;i++){
       const original=borrowed.get(reels[i])?.material, map=original?.map, source=reelCanvas[i];
-      if(!map || !source)continue;
+      // Nothing dealt means nothing to retain. A refused sit-down (setStrips([]) is still in force)
+      // used to hand the ROOM's 1664x128 strip a repeat of 13 and a blank 256x304 image, and since
+      // .image cannot resize an uploaded texture the old spiral pixels stayed on the GPU with 13x the
+      // UV span: the cabinet you stood up from smeared into horizontal bands for the rest of the session.
+      if(!map || !source || !strips[i].length)continue;
       const copy=makeCanvas(source.width,source.height);copy.getContext('2d').drawImage(source,0,0);
       map.image=copy;map.wrapS=THREE.RepeatWrapping;
       const uv=stripTransform(reelAngles[i],strips[i].length);map.repeat.x=uv.repeat;map.offset.x=uv.offset;

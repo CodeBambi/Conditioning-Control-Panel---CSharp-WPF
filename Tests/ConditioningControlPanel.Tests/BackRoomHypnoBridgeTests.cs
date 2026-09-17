@@ -163,10 +163,26 @@ public class BackRoomHypnoBridgeTests
         var s = new AppSettings { FlashEnabled = true, SubliminalEnabled = false, SpiralEnabled = true, BrainDrainEnabled = false, BackRoomMelt = false };
         Assert.Equal("""{"flash":true,"subliminal":false,"spiral":true,"brainDrain":false,"tunnel":true,"melt":false}""",
             JObject.FromObject(BackRoomHostService.GatesWire(s)).ToString(Newtonsoft.Json.Formatting.None));
-        Assert.All(JObject.FromObject(BackRoomHostService.GatesWire(null)).Properties(), p => Assert.False((bool)p.Value));
+        Assert.All(JObject.FromObject(BackRoomHostService.GatesWire(null)).Properties(),
+            p => Assert.Equal(p.Name == "spiral", (bool)p.Value));
         foreach (var name in new[] { "FlashEnabled", "SubliminalEnabled", "SpiralEnabled", "BrainDrainEnabled", "MotionLevel", "BackRoomFxIntensity",
                      "BackRoomTunnel", "BackRoomMelt" })
             Assert.Contains(name, BackRoomHostService.SettingsFrameProperties);
+    }
+
+    /// <summary>
+    /// The room's hypno dressing is not the panel's fullscreen Spiral Overlay. It used to carry
+    /// AppSettings.SpiralEnabled, which RandomizeAndStart coin-flips, so "jump right in" decided at
+    /// random whether the Daily Daze wheel had a Loom spiral in its hub or a brass star. It renders on
+    /// the web playtest because a page with no settings frame reads every gate as true.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SpiralDressing_DoesNotFollowTheFullscreenOverlayToggle(bool overlay)
+    {
+        var gates = JObject.FromObject(BackRoomHostService.GatesWire(new AppSettings { SpiralEnabled = overlay }));
+        Assert.True((bool)gates["spiral"]!);
     }
 
     [Fact]

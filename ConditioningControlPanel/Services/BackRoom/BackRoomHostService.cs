@@ -42,7 +42,14 @@ internal static class BackRoomHostService
     {
         flash = s?.FlashEnabled ?? false,
         subliminal = s?.SubliminalEnabled ?? false,
-        spiral = s?.SpiralEnabled ?? false,
+        // Not AppSettings.SpiralEnabled. That is the panel's FULLSCREEN Spiral Overlay feature, and
+        // MainWindow.StartStop.cs RandomizeAndStart coin-flips it, so "jump right in" was silently
+        // deciding whether the Back Room's wheel hub is a Loom spiral or a brass crosshatch star -
+        // which is what the owner saw as "the wheel has no spiral in the middle on desktop". The web
+        // playtest has no settings frame, so readGates(null) sends every gate true and it looked fine
+        // there. The room's hypno dressing wants its own switch (BackRoomTunnel / BackRoomMelt are the
+        // pattern); until it has one it is simply on.
+        spiral = true,
         brainDrain = s?.BrainDrainEnabled ?? false,
         tunnel = s?.BackRoomTunnel ?? false,
         melt = s?.BackRoomMelt ?? false,

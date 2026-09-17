@@ -11,7 +11,9 @@ test('ancestor visibility and shared slot ownership are respected',()=>{
   parent.userData.slotPlaying=false;parent.userData.slotHandlePulling=true;assert.equal(idleReelEligible(model),false);
 });
 test('actual room reel update skips unseen painting and catches up independent cabinet textures',()=>{
-  const source=readFileSync(new URL('../fixtures.js',import.meta.url),'utf8');
+  // core.autocrlf=true checks this repo out with CRLF on Windows, so an anchor written with a bare
+  // newline never matched: this scrape failed on every Windows dev machine and passed in CI.
+  const source=readFileSync(new URL('../fixtures.js',import.meta.url),'utf8').replace(/\r\n/g,'\n');
   const start=source.indexOf('    if (!still) {\n      const repaint = clock - reelPaintAt');
   assert.ok(start>0);
   const update=source.slice(start,source.indexOf('    const changedBulbs',start));

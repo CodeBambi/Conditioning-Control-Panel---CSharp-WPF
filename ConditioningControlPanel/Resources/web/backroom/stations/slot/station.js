@@ -837,7 +837,9 @@ export async function mount(ctx) {
       card(t('br_slot_model_missing', 'Model missing {n}', { n: made.missing.join(', ') }));
       return;
     }
-    if (!state.ok) { made.dispose(); el.dataset.phase = 'closed'; card(refusalText('closed')); return; }   // 3.4: no state, no fallback table
+    // Say why. This read 'closed' for every refusal, so an 'offline' that was really an undeployed
+    // route spent an afternoon looking like a shut cabinet.
+    if (!state.ok) { made.dispose(); el.dataset.phase = 'closed'; card(refusalText(state.reason || 'closed')); return; }   // 3.4: no state, no fallback table
     scene = made;
     // The tape is back: from here the room reads what it owes live (until close hands it a number).
     if (hostSp) { owing = true; hostSp.owe(() => (tape ? tape.snapshot().owed : 0)); }
