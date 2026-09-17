@@ -1,3 +1,4 @@
+@import url("../../shared/back.css");
 /* station.css - Soft Hand station chrome, the wheel station's look (stations/wheel/station.css) scoped under
    .cards-station so the room's own styles never collide. No backdrop-filter anywhere (CONTRACT 10.13, law 7). */
 .cards-station { position: absolute; inset: 0; z-index: 20; overflow: hidden; color: #fce5f3; background: #061820;
@@ -190,3 +191,9 @@
 }
 
 .cards-stand-stamp { position:absolute;z-index:14;pointer-events:none;border:3px solid #ff8ed8;border-radius:12px;padding:7px 19px;color:#ff8ed8;background:#351342dc;font:900 25px Fredoka, sans-serif;letter-spacing:.12em;box-shadow:0 0 24px #ff68c866,inset 0 0 12px #ff68c844;text-shadow:0 2px 0 #511b50; }
+
+/* Slide the targets themselves so pointer hit testing stays with the visible controls. */
+.cards-in-room .cards-move,.cards-in-room .cards-deal { rotate:var(--hud-right-tilt,0deg); }
+.cards-in-room .cards-move:is([data-move="split"],[data-move="double"]),
+.cards-in-room .cards-total:not(.cards-dealer-total) { rotate:var(--hud-left-tilt,0deg); }
+.cards-hud-trail { position:absolute; z-index:3; width:7px; height:11px; border-radius:2px; box-shadow:0 0 9px currentColor; pointer-events:none; }

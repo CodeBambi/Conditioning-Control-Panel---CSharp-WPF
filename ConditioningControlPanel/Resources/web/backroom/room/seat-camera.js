@@ -30,6 +30,7 @@ export function seatPose(row, fixture, camera, width, height, cardHands=1, count
     top=shortWays?50:118;
     bottom=shortWays?56:(row.id==='cards'?132:108);
   }
+  if(row.id==='wheel'){top=height<500?48:64;bottom=height<500?54:90;}
   const available=Math.max(.3,(height-top-bottom)/height), tan=Math.tan(camera.fov*Math.PI/360);
   const fitX=tan*width/height*(row.id==='wheel'?.965:.92), fitY=tan*available*.9;
   let distance=.4;

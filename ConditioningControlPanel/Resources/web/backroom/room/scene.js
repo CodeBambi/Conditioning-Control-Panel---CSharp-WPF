@@ -210,6 +210,7 @@ export async function createScene(o) {
   canvas.addEventListener('pointerup',e=>{
     // The tap keeps its own record: Safari can drop the capture (lostpointercapture) before the up clears `drag`.
     const start=tap;tap=null;
+    if(e.__brStatueTouch)return;
     if(!canWalk()||start?.id!==e.pointerId||start.moved||Math.hypot(e.clientX-start.startX,e.clientY-start.startY)>TAP_SLOP)return;
     // A mascot stands inside its fixture, often behind its glass: a tap that reaches an NPC is the bark (emi-interaction), never a visit.
     if(interaction.npcAt(e.clientX,e.clientY))return;

@@ -1,3 +1,4 @@
+@import url("../../shared/back.css");
 /* station.css - The Prize Parlour. The other stations' chrome (plum glass, rose borders, gold and mint accents),
    scoped under .counter-station. No backdrop-filter (CONTRACT 10.13, law 7). Still (reduced, Calm) = no tilt, no flip. */
 .counter-station { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; overflow: hidden; color: #fce5f3;
@@ -160,3 +161,8 @@
   color: #ffe6fa; font-size: 12px; font-weight: 700; padding: 4px; background: #190b24db; border-radius: 6px; }
 .counter-demo-pic[data-variant="drain"] { filter: hue-rotate(25deg); box-shadow: 0 0 24px #bc75ff; }
 .counter-demo-pic[data-variant="magnet"] { filter: hue-rotate(110deg); }
+
+/* A hanging catalogue leaves the room visible and the perimeter available to leave. */
+.br-through > .counter-station { inset: 58px clamp(18px, 5vw, 88px) 48px; border: 1px solid #e6adcf80; border-radius: 22px; box-shadow: 0 18px 48px #08031288; background: linear-gradient(155deg,#301536ed,#160d24ed); }
+.br-through > .counter-station[data-host-back] .counter-top { padding: 14px 18px 8px; }
+@media(max-width:600px){.br-through > .counter-station{inset:58px 18px 38px;border-radius:16px}.counter-grid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}}

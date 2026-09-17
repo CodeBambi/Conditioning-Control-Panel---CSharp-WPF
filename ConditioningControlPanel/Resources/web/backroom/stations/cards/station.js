@@ -611,6 +611,24 @@ export async function mount(ctx) {
   }
 
   let totalKey = '', dealerTotalKey = '';
+  const hudPositions = new Map();
+  let hudClock = 0, hudTrailAt = 0;
+  function slideHud(key, target, dt, still) {
+    const old = hudPositions.get(key);
+    const value = old == null || still ? target : old + (target-old) * (1-Math.exp(-dt/95));
+    hudPositions.set(key, value);
+    return value;
+  }
+  function hudTrail(x, y, color, dx) {
+    const dot = document.createElement('i');
+    dot.className='cards-hud-trail';
+    Object.assign(dot.style,{left:x+'px',top:y+'px',background:color});
+    el.append(dot);
+    const anim=dot.animate([{opacity:.7,transform:'scale(1) rotate(45deg)'},
+      {opacity:0,transform:`translate(${-dx*2}px,${12+Math.random()*20}px) scale(.15) rotate(150deg)`}],
+      {duration:450+Math.random()*180,easing:'ease-out'});
+    anim.onfinish=()=>dot.remove();
+  }
   function paintScore(node, hud, label, key, oldKey, still) {
     node.hidden = hud.total == null || phase !== 'play';
     node.querySelector('small').textContent = label;
@@ -639,16 +657,33 @@ export async function mount(ctx) {
     if (!ctx.stage || !table.hud) return;
     const hud = table.hud(), total = $('.cards-total'), still = dress().still;
     el.toggleAttribute('data-still', still);
+    const now=performance.now(), dt=Math.min(50, now-(hudClock||now)); hudClock=now;
     for (const [key,value] of Object.entries({ 'phone-total-x':hud.x, 'phone-total-y':hud.top-18, 'hand-x': hud.x, 'hand-bottom': hud.bottom, 'total-x': hud.left - (hud.hands>1 ? 48 : 65), 'total-y': hud.y, 'bet-x': hud.betX, 'bet-y': hud.betY + 44 })) { if (!ctx.stage.lookShift || !key.startsWith('hand-')) el.style.setProperty('--' + key, value + 'px'); }
     const compact = el.clientWidth <= 800;
     const sideWidth = compact ? 84 : 142;
-    const standX = Math.max(sideWidth/2+8, hud.left-sideWidth/2-14);
-    const hitX = Math.min(el.clientWidth-sideWidth/2-8, hud.right+sideWidth/2+14);
+    const leftTarget = Math.max(sideWidth/2+12, Math.min(hud.left, hud.x-(compact?65:150))-sideWidth/2-(compact?20:28));
+    const previousLeft=hudPositions.get('left');
+    const standX = slideHud('left', leftTarget, dt, still);
+    const rightTarget = Math.min(el.clientWidth-sideWidth/2-12, Math.max(hud.right,hud.x+(compact?65:150))+sideWidth/2+(compact?20:28));
+    const previousRight=hudPositions.get('right');
+    const hitX = slideHud('right', rightTarget, dt, still);
+    const actionY=slideHud('actionY',Math.max(90, Math.min(el.clientHeight-(compact?180:158),hud.y-25)),dt,still);
+    const leftSpeed=standX-(previousLeft??standX), rightSpeed=hitX-(previousRight??hitX);
+    el.style.setProperty('--hud-left-tilt', (still?0:Math.max(-2,Math.min(2,leftSpeed*.4)))+'deg');
+    el.style.setProperty('--hud-right-tilt', (still?0:Math.max(-2,Math.min(2,-rightSpeed*.4)))+'deg');
+    if (!still && now-hudTrailAt>45 && Math.abs(leftSpeed)+Math.abs(rightSpeed)>.15) {
+      hudTrailAt=now;
+      for(let i=0;i<2;i++) {
+        hudTrail(standX+(Math.random()-.5)*sideWidth,actionY+30+i*35,'#ffc775',leftSpeed);
+        hudTrail(hitX+(Math.random()-.5)*sideWidth,actionY+30+i*35,i?'#ff87d2':'#7fffe0',rightSpeed);
+      }
+    }
+    if(still)el.querySelectorAll('.cards-hud-trail').forEach(n=>n.remove());
     el.style.setProperty('--stand-x', standX+'px');
     el.style.setProperty('--hit-x', hitX+'px');
-    el.style.setProperty('--action-y', Math.max(90, Math.min(el.clientHeight-(compact?180:158),hud.y-25))+'px');
+    el.style.setProperty('--action-y', actionY+'px');
     total.style.left = standX+'px';
-    const scoreY = Math.max(110, Math.min(el.clientHeight-180, hud.y-48));
+    const scoreY = slideHud('scoreY',Math.max(110, Math.min(el.clientHeight-180, hud.y-48)),dt,still);
     total.style.top = scoreY+'px';
     el.style.setProperty('--secondary-y', (scoreY+(compact?30:62))+'px');
     // Stake stays below the cards, clear of the shared Hit/Deal target.

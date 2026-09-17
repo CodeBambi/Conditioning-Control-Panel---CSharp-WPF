@@ -24,6 +24,7 @@
  * ==========================================================================*/
 
 import * as T from 'three';
+import { createVenueLights } from './venue-lights.js';
 import { createPrizeDisplay } from './prize-display.js';
 import { createPrizeMarquee } from './prize-marquee.js';
 import { createEmiIdle } from './emi-idle.js';
@@ -374,6 +375,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     return holder;
   }));
 
+  const venueLights=createVenueLights(holders);
   const prizes = createPrizeDisplay({scene, counter: holders.get('counter'), lex: (key, fallback) => { const v = label(stations.find(r => r.id === 'counter'), key); return v && v !== key ? v : fallback; }});
 
   // Number bulbs within each fixture circuit so the bright trail follows its physical order.
@@ -428,6 +430,8 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
   let lampOrigin=new T.Vector3();
   const wheelColors=[0xff328f,0x963cff,0x29cfff,0x36ffc2,0xffc329,0xff6742].map(hex=>new T.Color(hex));
   function update(dt, t, still) {
+    venueLights.update(dt,still || readMotion().off || readMotion().reduced);
+    marquee?.userData.update?.(dt,still || readMotion().off || readMotion().reduced);
     prizes.update(dt, still || readMotion().off || readMotion().reduced);
     // The echo's own clock. Clamped like the shower's, so a tab left in the background for a minute
     // does not age a win away unseen, and STOPPED with the loop while a station holds the screen.
@@ -542,6 +546,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
   }
 
   return { prizes, disposeSurfaces(){
+    venueLights.dispose();
     prizes.dispose();
     for(const surface of [...rouletteSurfaces,...wheelFaces])surface?.dispose();
     // The page's one GL context is refcounted; leaving the room without releasing this kit leaks it.

@@ -312,6 +312,7 @@ const SCORES = {
       tone(ROOT_HZ * 2 * SEMI(pentatonic(r + 2)), 0.02, 0.12, 0.028 * lv, { part: 'chime' })];
   },
   /** A button, a lever, "no more bets": one soft tap. */
+  silicone() { return [0,1,2,3].map(i=>tone(190/(1+i*.17),i*.09,.14,.063*Math.exp(-i*.7),{hzTo:90+i*15,part:'silicone',dry:true})); },
   tap() { return [tone(220, 0, 0.03, 0.06, { part: 'tap', dry: true }), noise(1500, 0, 0.012, 0.03, { part: 'tap', dry: true })]; },
   /** The ball's launch: a short rising whoosh. */
   launch() { return [noise(400, 0, 0.3, 0.06, { hzTo: 1600, q: 0.8, attack: 0.3, part: 'rise' })]; },

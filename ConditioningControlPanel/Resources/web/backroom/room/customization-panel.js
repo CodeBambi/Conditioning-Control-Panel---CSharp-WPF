@@ -11,8 +11,9 @@ export function createCustomizationPanel({mount,vending,decorations=[],lex=(_,f)
   const panel=doc.createElement('section');panel.className='br-custom-panel';panel.hidden=true;panel.tabIndex=-1;panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label',L('title','Room Service'));
   const make=(tag,text,cls,parent=panel)=>{const e=doc.createElement(tag);e.textContent=text;if(cls)e.className=cls;parent.append(e);return e;};
   const button=(parent,text,fn)=>{const e=make('button',text,'',parent);e.type='button';e.onclick=fn;return e;};
-  const header=make('header','','br-custom-header');make('h2',L('title','Room Service'),'',header);
-  const closeButton=button(header,L('close','Close'),()=>close());
+  const header=make('header','','br-custom-header');
+  const closeButton=button(header,lex('br_back','Back')||'Back',()=>close());closeButton.className='br-custom-back';closeButton.title=L('close','Close');
+  make('h2',L('title','Room Service'),'',header);
   const stage=make('div','','br-custom-stage');
   const overview=button(stage,L('all_items','All items'),()=>{chosen=-1;view.focus(-1);paint();preview('room',0,0);});overview.className='br-custom-overview';
   const chooser=make('div','','br-custom-items');chooser.setAttribute('role','group');chooser.setAttribute('aria-label',L('choose_item','Choose an item'));

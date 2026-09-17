@@ -13,6 +13,8 @@ import { demoKind, demoFrame, demoLabel } from './demo.js';
 import { prizeState } from '../../shared/prize-state.js';
 import { kit } from '../../shared/sound/kit.js';
 
+export const roomBehind = true;
+
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
 let cssLink = null;
 const nowMs = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
@@ -283,6 +285,8 @@ export async function mount(ctx) {
     alive = true; suspended = false; cards = new Map(); flipped.clear();
     el = build();
     ctx.root.append(el);
+    ctx.root.addEventListener?.("click", outside);
+    if(!still())el.animate?.([{transform:"translateY(-115%)",opacity:0},{transform:"translateY(0)",opacity:1}],{duration:460,easing:"cubic-bezier(.18,.8,.24,1)"});
     globalThis.addEventListener('keydown', onKey);
     if (typeof ctx.onSp === 'function') unSp = ctx.onSp(() => paint());
     if (typeof ctx.onSettings === 'function') unSet = ctx.onSettings(() => paint());
@@ -292,7 +296,9 @@ export async function mount(ctx) {
     if (alive && counter.state) ctx.prizesChanged?.({ok:true, catalog:counter.state.catalog, prizes:{grants:counter.state.grants}});
   }
 
-  function close() {
+  function outside(e){if(e.target===ctx.root)back();}
+
+  async function close() {
     if (!alive) return Promise.resolve();
     alive = false;
     stopDemo();
@@ -303,7 +309,10 @@ export async function mount(ctx) {
     if (typeof unSet === 'function') unSet();
     unSp = null; unSet = null;
     chime.dispose(); chime = createChime();
-    if (el) el.remove();
+    ctx.root.removeEventListener?.("click", outside);
+    const retiring=el;
+    if(retiring&&!still()&&retiring.animate){retiring.style.pointerEvents="none";await retiring.animate([{transform:"translateY(0)",opacity:1},{transform:"translateY(-115%)",opacity:0}],{duration:300,easing:"ease-in",fill:"forwards"}).finished.catch(()=>{});}
+    if (retiring) retiring.remove();
     el = null; grid = null; chipEl = null; closedEl = null; cards = new Map();
     return Promise.resolve();
   }

@@ -1,3 +1,4 @@
+@import url("../../shared/back.css");
 /* station.css - Daily Daze wheel station chrome, the slot station's look (stations/slot/station.css) scoped
    under .wheel-station so the room's own styles never collide. */
 .wheel-station { position: absolute; inset: 0; z-index: 20; overflow: hidden; color: #fce5f3;

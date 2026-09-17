@@ -455,6 +455,8 @@ export async function createScene(o) {
       camera.position.lerpVectors(tl.kind === 'rise' ? back : play.pos, tl.kind === 'rise' ? play.pos : back, k); camera.lookAt(play.look);
       if (q >= 1) { const done = tl.done; phase = tl.kind === 'rise' ? 'play' : 'hidden'; tl = null; done(); }
     }
+    const attracting=phase==='play'&&!reduced&&!coast&&!plan&&!drag&&landed<0;
+    if(attracting)rotor.rotation.z+=dt*.10;
     if (coast) rotor.rotation.z += coast.omega * dt * 1000;
     slowing = false;
     if (plan && plan.warp) {
@@ -479,7 +481,7 @@ export async function createScene(o) {
       }
       for (const m of sliceGroup.children) {
         if (m.userData.index === undefined || !m.material.emissive) continue;
-        const i = m.userData.index, isLanded = i === landed && !rotating(), goal = isLanded ? 1 : i === lit && rotating() ? 0.68 : 0;
+        const i = m.userData.index, isLanded = i === landed && !rotating(), goal = isLanded ? 1 : i === lit && (rotating() || attracting) ? 0.68 : 0;
         m.userData.h = reduced ? goal : THREE.MathUtils.lerp(m.userData.h, goal, 1 - Math.exp(-dt * (goal > m.userData.h ? 45 : 10)));
         const tq = (t - thudAt) / FEEL.THUD_MS, flash = isLanded && tq >= 0 && tq < 1 ? (reduced ? 1.3 : 1 + 1.2 * (1 - thudEase(tq))) : 1;
         const hq = (t - hitAt) / HIGHLIGHT_MS, hit = i === hitIndex && hq >= 0 && hq < 1 ? 1 + 1.6 * Math.sin(hq * Math.PI) : 1;   // the rim glow, 0..400 ms

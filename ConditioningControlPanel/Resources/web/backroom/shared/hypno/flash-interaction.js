@@ -15,11 +15,12 @@ export function armFlashInteraction(node, { random = Math.random, motion = () =>
   trackFlash(node);
   let grab = null, ended = false;
   node.style.pointerEvents = 'auto'; node.style.touchAction = 'none'; node.style.cursor = 'grab';
-  const animate = (target, frames, duration) => target.animate(frames, {duration, fill:'forwards', easing:'cubic-bezier(.2,.7,.3,1)'});
+  const animate = (target, frames, duration) => target.animate(frames, {duration, fill:'forwards', easing:'ease-in-out'});
   const finish = (kind, vx = 0, vy = 0) => {
     if (ended) return; ended = true; clearTimeout(node.__drop);
     node.style.pointerEvents = 'none'; node.dataset.interaction = kind;
-    if (!motion()) { animate(node,[{opacity:1},{opacity:0}],150); node.__drop=setTimeout(()=>node.remove(),160); return; }
+    const alpha=Number(getComputedStyle(node).opacity)||.65;
+    if (!motion()) { animate(node,[{opacity:alpha},{opacity:0}],150); node.__drop=setTimeout(()=>node.remove(),160); return; }
     if (kind === 'shatter') {
       for(let i=0;i<9;i++) {
         const col=i%3,row=Math.floor(i/3),piece=node.cloneNode(false);
@@ -28,15 +29,15 @@ export function armFlashInteraction(node, { random = Math.random, motion = () =>
         piece.style.transformOrigin=`${(col+.5)*100/3}% ${(row+.5)*100/3}%`;
         node.parentNode.append(piece);trackFlash(piece);
         const dx=(col-1)*90+(random()-.5)*40,dy=(row-1)*70+100;
-        animate(piece,[{transform:'none',opacity:1},{transform:`perspective(600px) translate(${dx}px,${dy}px) rotateX(${(row-1)*65}deg) rotateY(${(col-1)*65}deg) rotate(${(random()-.5)*65}deg)`,opacity:0}],700);
+        animate(piece,[{transform:'none',opacity:alpha},{transform:`perspective(600px) translate(${dx}px,${dy}px) rotateX(${(row-1)*65}deg) rotateY(${(col-1)*65}deg) rotate(${(random()-.5)*65}deg)`,opacity:0}],700);
         setTimeout(()=>piece.remove(),720);
       }
       node.remove(); return;
     }
     const r=node.getBoundingClientRect(),speed=Math.hypot(vx,vy);
     if(speed<.1){vx=r.x+r.width/2<innerWidth/2?-1:1;vy=(random()-.5)*.6;}
-    const length=Math.hypot(vx,vy),distance=Math.max(innerWidth,innerHeight)+Math.max(r.width,r.height);
-    animate(node,[{transform:'none',opacity:1},{transform:`translate(${vx/length*distance}px,${vy/length*distance}px) rotate(${vx<0?-24:24}deg)`,opacity:0}],kind==='fling'?450:650);
+    const length=Math.hypot(vx,vy),distance=Math.max(r.width,r.height)*.65;
+    animate(node,[{transform:'none',opacity:alpha,filter:'blur(0px)'},{transform:`translate(${vx/length*distance}px,${vy/length*distance}px) rotate(${vx<0?-24:24}deg) scale(.88)`,opacity:0,filter:'blur(9px)'}],kind==='fling'?550:650);
     node.__drop=setTimeout(()=>node.remove(),700);
   };
   node.addEventListener('pointerdown',e=>{

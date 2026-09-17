@@ -46,11 +46,18 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     model.name='statue_spot_'+spot+'_'+PIECES[index];model.rotation.y=spot===2?Math.PI:0;
     model.position.fromArray(position);model.visible=index===spot;return model;
   }));
+  const statueFlex=statueSpots.flat().map(model=>{
+    const pivot=new T.Group();model.add(pivot);const meshes=[];model.traverse(n=>{if(n.isMesh&&n.name.includes('_original_'))meshes.push(n);});
+    model.updateMatrixWorld(true);for(const n of meshes)pivot.attach(n);
+    const box=new T.Box3().setFromObject(pivot);const base=model.worldToLocal(new T.Vector3(0,box.min.y,0));
+    pivot.position.y=base.y;for(const n of meshes)n.position.y-=base.y;
+    return {model,pivot,age:9};
+  });
   // The pull-for-fun cues, on the room's one kit: the lever's tap, the drums' roll, a thud per stop.
   let pulled=0;
   const cue=(name,index,reel=0)=>{
     if(name==='pull')pulled++;
-    try{if(!kit.arm())return;if(name==='pull'){kit.play('tap');kit.play('ticks',{reel:0,ms:1100});}else kit.play('thud',{semis:(reel-1)*2});}catch{/* a cue never breaks a pull */}
+    try{if(!kit.arm())return;if(name==='silicone'){kit.play('silicone');}else if(name==='pull'){kit.play('tap');kit.play('ticks',{reel:0,ms:1100});}else kit.play('thud',{semis:(reel-1)*2});}catch{/* a cue never breaks a pull */}
   };
   const handles=await createSlotCustomHandles({holders:room.holders,loader,base,sources:sculptures,onCue:cue});
   const getState=()=>({screens:extras.getState(),props:props.getState(),statues:[...selected.statues],handles:handles.getState(),floor:floorEnabled?room.getFloorStyle().design:-1,palette:room.getFloorStyle().palette});
@@ -131,6 +138,9 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     if(!isActive()||Math.hypot(e.clientX-start.x,e.clientY-start.y)>7||performance.now()-start.t>650)return;
     const rect=canvas.getBoundingClientRect();pointer.set((e.clientX-rect.left)/rect.width*2-1,1-(e.clientY-rect.top)/rect.height*2);
     ray.setFromCamera(pointer,camera);
+    const touched=ray.intersectObjects(scene.children,true).find(h=>{for(let n=h.object;n;n=n.parent)if(!n.visible)return false;return h.object.isMesh&&!h.object.material?.transparent;});
+    const statue=statueFlex.find(s=>{for(let n=touched?.object;n;n=n.parent)if(n===s.model)return true;return false;});
+    if(statue&&touched.distance<5){e.__brStatueTouch=true;statue.age=0;try{kit.arm();kit.play('silicone');}catch{}return;}
     const hit=ray.intersectObject(vending,true)[0];if(!hit||hit.distance>4)return;
     const obstructed=ray.intersectObjects(scene.children,true).some(h=>{
       if(h.distance>=hit.distance-.04)return false;
@@ -143,6 +153,7 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
   return {setOwned(ids){owned=new Set(ids);propIds.forEach((id,index)=>{if(!owned.has(id))props.set(index,false);});panel.refresh();},row,screens:[...extras.screens,...props.screens],select,getState,restore,preview,open:()=>panel.open(),get opened(){return panel.opened;},
     dismiss(){if(!panel.opened)return false;panel.close();return true;},
     update(dt,still){spirals.update(dt,still);panel.update?.(dt,still);handles.update(dt,still);props.update(dt);quiet=!!still;
+      for(const s of statueFlex){s.age+=Math.min(.05,Math.max(0,dt));const a=snaps()||s.age>1.2?0:.065*Math.exp(-s.age*4)*Math.sin(s.age*22);s.pivot.rotation.z=a;s.pivot.rotation.x=a*.35;}
       if(travel){travel.elapsed+=dt;const t=still?1:Math.min(1,travel.elapsed/travel.duration),k=1-Math.pow(1-t,3);
         shown={...travel.to,position:mix(travel.from.position,travel.to.position,k),look:mix(travel.from.look,travel.to.look,k)};onPreview(shown);if(t>=1)travel=null;}},
     /** The close-up: a scissored pass on the room's own renderer, so it opens no second context. */

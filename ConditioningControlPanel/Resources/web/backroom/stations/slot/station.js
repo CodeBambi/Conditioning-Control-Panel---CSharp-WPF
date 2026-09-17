@@ -30,12 +30,14 @@ import { rotateSpiralDeal } from './symbols.js';
 
 import { createTape, stopsFor } from './tape.js';
 import { createScene, FACES } from './scene.js';
-import { createCelebration, echoReels } from './celebration.js';
+import { createCelebration, echoReels, rollEcho } from './celebration.js';
 import { createMedia, fxSymbols } from './media.js';
 import { mintId } from './tape.js';
 // One target and one GIF identity for this app/page lifetime, across cabinet visits.
 let chaseSession;
 let sessionMedia;
+let sourceChanged = false;
+if (typeof window !== 'undefined') window.addEventListener('br-media-changed', () => { sourceChanged = true; });
 function dealtForSession(ctx) {
   if (!sessionMedia) sessionMedia = Promise.resolve().then(() => ctx.media?.()).then(m => {
     if (!m?.gifs?.length) sessionMedia = null;
@@ -534,11 +536,15 @@ export async function mount(ctx) {
     flowLast = { line: o.line, kind: o.kind, landedAt: Math.round(at), hits: plan.hits, callouts: plan.callouts.map(c => c.key),
                  fx: plan.fx.map(f => f.id), unlockMs: plan.unlockMs, calloutAt: null, fxAt: null };
     scene.highlight(plan.hits);
-    celebration?.echo(echoReels(o.symbols, plan.fx));
+    // Cosmetic draw only: results and payouts remain server-authored.
+    const echoMs = rollEcho() ? celebration?.echo(echoReels(o.symbols, plan.fx)) || 0 : 0;
+    const echoDelay = Math.max(0, echoMs - FLOW.FX_DELAY_MS);
+    unlockAt += echoDelay;
+    flowLast.unlockMs += echoDelay;
     if (el && plan.hits.length) { el.classList.add(GLYPH_HIT); later(FLOW.HIGHLIGHT_MS, () => { if (el) el.classList.remove(GLYPH_HIT); }); }
     const chain = plan.fx.some(f => /^fx.sub_/.test(f.id)) ? subWords(o, media).length : 0;   // a sub chain owns the centre first
     const wordsMs = chain ? WORD_MS + WORD_GAP_MS * (chain - 1) : 0;
-    for (const [i, c] of plan.callouts.entries()) later(c.at + wordsMs, () => {
+    for (const [i, c] of plan.callouts.entries()) later(c.at + wordsMs + echoDelay, () => {
       if (callout) callout.show(c.key, c.fallback, { tier: c.tier });
       board(t(c.key, c.fallback));   // THE MARQUEE BOARD mirrors the announcer
       // 10.22.D THE SPARKLE BURST: 7 sparks at tier 3, 9 at the jackpot, from the middle of the callout
@@ -554,11 +560,11 @@ export async function mount(ctx) {
       note('callout', { key: c.key, tier: c.tier, at: c.at });
     });
     const tease = plan.fx.find(f => f.args && f.args.count === 1) || null;   // the GIF tease rides its own entry
-    later(FLOW.FX_DELAY_MS, () => {
+    later(FLOW.FX_DELAY_MS + echoDelay, () => {
       const shown = fire(o, tease);   // word.js: the words on the page, the rest to the host, a dead spin settles
       if (tease) fireFx(tease.id, fxSymbols(tease.id, o, media), tease.args);
       if (flowLast) { flowLast.fxAt = Math.round(performance.now()); flowLast.words = shown ? shown.words : []; }
-      note('fx', { ids: plan.fx.map(f => f.id), at: FLOW.FX_DELAY_MS, words: shown ? shown.words.length : 0, settled: !!(shown && shown.settled) });
+      note('fx', { ids: plan.fx.map(f => f.id), at: FLOW.FX_DELAY_MS + echoDelay, words: shown ? shown.words.length : 0, settled: !!(shown && shown.settled) });
     });
     return plan;
   }
@@ -802,6 +808,8 @@ export async function mount(ctx) {
       onDone: () => { shown = null; paintSp(); },
     });
     if (typeof ctx.onSp === 'function') unSp = ctx.onSp(v => { if (tape) { tape.setServerSp(v); sync(); } });
+    // Explicit source changes take effect on seating, never during an active result.
+    if (sourceChanged) { sessionMedia = null; sourceChanged = false; }
     const dealt = dealtForSession(ctx)
       .then(m => (my === session ? media.deal(m) : null)).catch(() => null);
     const [made, state] = await Promise.all([

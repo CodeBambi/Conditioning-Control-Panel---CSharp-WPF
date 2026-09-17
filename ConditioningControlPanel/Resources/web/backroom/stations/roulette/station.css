@@ -1,3 +1,4 @@
+@import url("../../shared/back.css");
 /* station.css - Velvet Vortex roulette station chrome, the wheel station's look (stations/wheel/station.css)
    scoped under .roul-station so the room's own styles never collide. No backdrop-filter (law 7). */
 .roul-station { position: absolute; inset: 0; z-index: 20; overflow: hidden; color: #efe6ff; background: #0a0614;

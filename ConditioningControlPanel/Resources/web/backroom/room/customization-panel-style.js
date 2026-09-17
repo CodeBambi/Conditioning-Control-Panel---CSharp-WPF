@@ -8,7 +8,7 @@ body:has(.br-custom-panel:not([hidden])) .br-nav{right:calc(50vw + 12px)}
 .br-custom-panel button{background:#30203c;border:1px solid #75536d;border-radius:8px;padding:8px}
 .br-custom-panel button:hover{background:#523257}.br-custom-panel :is(button,summary):focus-visible{outline:2px solid #78f4dc;outline-offset:2px}
 .br-custom-panel button[aria-pressed=true]{background:#713a60;border-color:#edc077;color:#fff0cf}
-.br-custom-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;background:#24122f}
+.br-custom-header{display:flex;align-items:center;justify-content:flex-start;gap:14px;padding:8px 68px 8px 12px;background:#24122f}
 .br-custom-header h2{font:600 20px/1.2 "Segoe UI",system-ui,sans-serif;color:#f3d5a0;margin:0}
 .br-custom-stage{position:relative;flex:1;min-height:100px;overflow:hidden;touch-action:none}
 .br-custom-overview{position:absolute;right:8px;top:8px;z-index:3;background:#21142ed9!important;font-size:11px!important}

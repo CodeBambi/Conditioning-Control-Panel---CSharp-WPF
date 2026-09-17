@@ -95,6 +95,11 @@ export function createHud(o) {
     (on) => { if (typeof o.onBellOpt === 'function') o.onBellOpt(on); });
   paintSwitch(bellOpt.b, false);
   panel.append(el('span', 'br-opt-name', L('br_opt_effects', 'Effects')), segRow, forcedNote, tunnel.row, melt.row, bellOpt.row);
+  if (typeof window.__brOptions?.openMedia === 'function') {
+    const sources = el('button', 'br-pill', 'Pictures and GIFs'); sources.type='button';
+    sources.addEventListener('click', () => { setOptions(false); window.__brOptions.openMedia(); });
+    panel.append(sources);
+  }
   nav.append(panel);   // anchored under the Options pill, whatever the nav's own offset
   o.root.append(veil, hint, cross, nav, bell, list);
   function setOptions(open) { panel.hidden = !open; optBtn.setAttribute('aria-expanded', String(!!open)); }

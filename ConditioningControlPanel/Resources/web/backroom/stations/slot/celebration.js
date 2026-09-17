@@ -1,5 +1,12 @@
 // A single bounded canvas for win glitter, confetti and reel portraits. No extra WebGL context.
-export const ECHO_MS = 400;
+export const ECHO_MS = 600;
+export const ECHO_GAP_MS = 300;
+export function echoDuration(count) { return count ? ECHO_MS + (count - 1) * ECHO_GAP_MS : 0; }
+export function echoSample(q) {
+  const smooth = x => x * x * (3 - 2 * x);
+  return q < 0 || q >= 1 ? 0 : .5 * smooth(Math.min(1, q / .2)) * (1 - smooth(Math.max(0, (q - .4) / .6)));
+}
+export function rollEcho(random = Math.random) { return random() < 1 / 15; }
 export function celebrationCounts(tier, pay, still = false) {
   if (still || !(pay > 0)) return { sparks: 0, confetti: 0 };
   const t = Math.max(1, Math.min(4, Math.floor(tier) || 1));
@@ -55,11 +62,12 @@ export function createCelebration({ mount, still, portrait, point }) {
     }
     echoes = echoes.filter(e => now-e.at < ECHO_MS);
     for (const e of echoes) {
-      const q = Math.min(1,(now-e.at)/ECHO_MS);
+      const q = (now-e.at)/ECHO_MS;
+      if (q < 0) continue;
       for (let trail=4; trail>=0; trail--) {
         const u = Math.max(0,q-trail*.055), zoom = 1 + 5*u*u;
         const x = e.x + (w*.5-e.x)*u*.65, y=e.y+(h*.48-e.y)*u*.65;
-        g.save(); g.globalAlpha = (trail ? .15 : .9)*Math.min(1,(1-q)*5);
+        g.save(); g.globalAlpha = (trail ? .06 : .76)*echoSample(q);
         g.translate(x,y); g.rotate(e.tilt*u); g.scale(zoom,zoom);
         g.drawImage(e.canvas,-e.w/2,-e.h/2,e.w,e.h); g.restore();
       }
@@ -83,12 +91,14 @@ export function createCelebration({ mount, still, portrait, point }) {
       particles=particles.slice(-420); wake();
     },
     echo(indices) {
-      if (disposed || still()) return;
-      const rect=mount.getBoundingClientRect();
+      if (disposed || still()) return 0;
+      const rect=mount.getBoundingClientRect(), now=performance.now();
       echoes=indices.map(i => {
         const p=portrait(i); if (!p) return null;
-        return {...p, x:p.x-rect.left, y:p.y-rect.top, at:performance.now(), tilt:(i-1)*.08};
-      }).filter(Boolean); wake();
+        return {...p, x:p.x-rect.left, y:p.y-rect.top, at:now, tilt:(i-1)*.08};
+      }).filter(Boolean);
+      echoes.forEach((e, i) => { e.at += i * ECHO_GAP_MS; });
+      wake(); return echoDuration(echoes.length);
     },
     clear,
     dispose() { if(disposed)return; disposed=true; clear(); canvas.remove(); },

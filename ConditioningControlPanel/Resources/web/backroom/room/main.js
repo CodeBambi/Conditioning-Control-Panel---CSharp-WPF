@@ -431,7 +431,7 @@ async function start(init) {
     approach:row=>{
       scene.release();const trip=scene.stage(row);if(!trip){scene.hold();return null;}
       hud.hideWhileVisiting(false);hud.seated(true);
-      return {arrived:trip.arrived.then(ok=>{if(ok){scene.hold();hud.hideWhileVisiting(true);}return ok;}),
+      return {arrived:trip.arrived.then(ok=>{if(ok){if(row.id!=="counter")scene.hold();hud.hideWhileVisiting(row.id!=="counter");}return ok;}),
         dispose(){scene.release();trip.dispose();hud.seated(false);}};
     },
     lex,

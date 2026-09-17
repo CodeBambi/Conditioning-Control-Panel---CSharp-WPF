@@ -139,13 +139,15 @@ export async function createSlotCustomHandles({holders,loader,base,sources=[],on
     rig.userData.slotHandlePulling=true;
     pulls[index]={t:0,pivot,rest:pivot?pivot.quaternion.clone():null,reels,stopped:[false,false,false]};
     return true;}
-  function rest(p){if(p.pivot&&p.rest)p.pivot.quaternion.copy(p.rest);}
+  function rest(p){const flex=p.pivot?.getObjectByName('chess_handle_socket');if(flex){flex.rotation.x=0;flex.rotation.z=0;};if(p.pivot&&p.rest)p.pivot.quaternion.copy(p.rest);}
   function update(dt=0,still=false){
     if(disposed)return;
     pulls.forEach((p,index)=>{
       if(!p)return;
       if(rigOf(index)?.userData.slotPlaying){rest(p);rigOf(index).userData.slotHandlePulling=false;pulls[index]=null;return;}
       p.t+=still?9:Math.min(Math.max(dt,0),.1);
+      if(!p.returnCue&&p.t>=DOWN_S){p.returnCue=true;if(active[index])onCue('silicone',index);}
+      if(active[index]){const age=p.t-DOWN_S-UP_S;active[index].node.rotation.x=!still&&age>0&&age<.3?.025*Math.sin(age/.3*Math.PI*2)*Math.pow(1-age/.3,2):0;active[index].node.rotation.z=0;}
       if(p.pivot)p.pivot.quaternion.copy(p.rest).multiply(swing.setFromAxisAngle(AXIS,
         p.t<DOWN_S?PULL_MAX*ease(p.t/DOWN_S):p.t<DOWN_S+UP_S?PULL_MAX*(1-ease((p.t-DOWN_S)/UP_S)):0));
       p.reels.forEach((r,i)=>{

@@ -24,6 +24,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
 import { stripTransform } from './strip-transform.js';
+import { kit as wobbleKit } from '../../shared/sound/kit.js';
 import { settleCells, recoilCells, leverRebound, latchTravel } from './juice.js';
 import { drawSymbol, disposeSpirals, CELL } from './symbols.js';
 import { fitText } from '../../shared/text/wrap.js';
@@ -200,7 +201,7 @@ export async function createScene(o) {
     owned.forEach(x => x.dispose());
   }
 
-  let customHandle = null;
+  let customHandle = null, flexAt=-Infinity, previousLever=0, returning=false;
   let gltf, atlas = null;
   try {
     [gltf, atlas] = await Promise.all([
@@ -781,7 +782,14 @@ export async function createScene(o) {
     const bulbStretchX = shared?.fixture.userData.slotStretchX || 1;
     const bulbStretchY = shared?.fixture.userData.slotStretch || 1;
     const customHandle=get('chess_handle_socket');
-    if(customHandle)customHandle.scale.set(1/bulbStretchX,1/bulbStretchY,1);
+    if(customHandle){
+      customHandle.scale.set(1/bulbStretchX,1/bulbStretchY,1);
+      if(lever.rotation.x<previousLever-.001&&previousLever>.12&&!returning){flexAt=t;returning=true;try{wobbleKit.play('silicone');}catch{}}
+      if(lever.rotation.x>previousLever+.001)returning=false;
+      const age=(t-flexAt)/1000,flex=!reduced&&age>=0&&age<.3?.025*Math.sin(age/.3*Math.PI*2)*Math.pow(1-age/.3,2):0;
+      customHandle.rotation.x=flex; customHandle.rotation.z=0;
+    }
+    previousLever=lever.rotation.x;
     const colors = PALETTES[m], period = m === 'spin' ? 420 : chaseMs(partyMood ? Math.max(h, pr.tier) : h);
     const travel = reduced ? 0 : (t - (partyMood ? party.start : moodAt)) / period;
     bulbs.forEach((b, i) => {

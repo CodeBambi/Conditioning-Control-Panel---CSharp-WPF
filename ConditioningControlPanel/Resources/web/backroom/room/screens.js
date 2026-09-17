@@ -104,12 +104,14 @@ export async function createScreens(o) {
   for (const m of o.meshes) { m.material = material(house[0].texture, captions[0]); m.material.uniforms.screen.value=m.userData.screenAspect||SCREEN_ASPECT;m.material.uniforms.cover.value=m.userData.screenCover?1:0; }
   const frustum = new T.Frustum(), viewProj = new T.Matrix4();
   const due = new Set();
-  let nextDecode = 0, cursor = 0, dealing = false, refreshAt = Infinity;
+  let nextDecode = 0, cursor = 0, dealing = false, refreshAt = Infinity, sourceVersion = 0;
+  const sourceChanged = () => { sourceVersion++; refreshAt = -Infinity; };
+  window.addEventListener('br-media-changed', sourceChanged);
   const free = src => src.dispose ? src.dispose() : src.texture.dispose();
 
   /** @param t ambient seconds  @param camera the room camera  @param isStill hold first frames */
   function update(t, camera, isStill) {
-    if (!isStill && !dealing && t >= refreshAt) { refreshAt = t + 72; void deal(() => t); }
+    if ((!isStill || refreshAt === -Infinity) && !dealing && t >= refreshAt) { refreshAt = t + 72; void deal(() => t); }
     const since = Math.max(0, t - epoch);
     if (camera) frustum.setFromProjectionMatrix(viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     due.clear();
@@ -153,7 +155,7 @@ export async function createScreens(o) {
   /** Ask the feed; swap in the player's pictures when at least one loads. Never throws. */
   async function deal(now) {
     if (disposed || dealing) return 0;
-    dealing = true;
+    dealing = true; const version = sourceVersion;
     try {
     let frame = null;
     try { frame = await o.media(); } catch (e) { frame = null; }
@@ -167,19 +169,19 @@ export async function createScreens(o) {
       return t && t.image && t.image.width > 0 ? still(t) : null;
     })();}}));
     const loaded=results.filter(Boolean);
-    if (disposed) { loaded.forEach(src => src.dispose ? src.dispose() : src.texture.dispose()); return 0; }
+    if (disposed || version !== sourceVersion) { loaded.forEach(src => src.dispose ? src.dispose() : src.texture.dispose()); return 0; }
     if (!loaded.length) { if (urls.length && o.log) o.log('wall pictures: none readable, house art stays'); return 0; }
     const previous = custom ? gallery : [];
     gallery = loaded; custom = true; epoch = now();
     previous.forEach(free);
     return loaded.length;
-    } finally { dealing = false; refreshAt = now() + 72; }
+    } finally { dealing = false; refreshAt = version !== sourceVersion ? -Infinity : now() + 72; }
   }
 
   return {
     update, deal,
     dispose() {
-      disposed = true;
+      disposed = true; window.removeEventListener('br-media-changed', sourceChanged);
       for (const src of new Set([...house, ...gallery])) src.dispose ? src.dispose() : src.texture.dispose();
       captions.forEach(t => t.dispose());
       // One cross-fade ShaderMaterial per screen, made here, so it is freed here too.
