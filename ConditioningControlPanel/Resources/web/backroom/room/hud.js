@@ -95,6 +95,27 @@ export function createHud(o) {
     (on) => { if (typeof o.onBellOpt === 'function') o.onBellOpt(on); });
   paintSwitch(bellOpt.b, false);
   panel.append(el('span', 'br-opt-name', L('br_opt_effects', 'Effects')), segRow, forcedNote, tunnel.row, melt.row, bellOpt.row);
+  let stopQuality = () => {};
+  if (!window.__brOptions && o.music && o.quality) {
+    const musicRow = el('div', 'br-opt-row');
+    const musicLabel = L('br_opt_music', 'Music');
+    const volume = el('input'); volume.type = 'range'; volume.min = '0'; volume.max = '1'; volume.step = '.01';
+    volume.value = String(o.music.volume); volume.style.width = '100px'; volume.setAttribute('aria-label', musicLabel);
+    const amount = el('span', 'br-opt-name', Math.round(o.music.volume * 100) + '%'); amount.style.minWidth = '30px';
+    volume.addEventListener('input', () => { o.music.setVolume(Number(volume.value)); amount.textContent = Math.round(o.music.volume * 100) + '%'; });
+    musicRow.append(el('span', 'br-opt-name', musicLabel), volume, amount);
+    const qualityRow = el('div', 'br-opt-row'), choice = el('select');
+    const qualityLabel = L('br_opt_quality', 'Quality'); choice.setAttribute('aria-label', qualityLabel);
+    choice.style.cssText = 'max-width:140px;min-height:30px;color:#f6ecff;background:#2a1838;border:1px solid #6b4a78;border-radius:6px';
+    for (const [value, key, name] of [['auto', 'br_opt_quality_auto', 'Auto'], ['full', 'br_opt_quality_full', 'Full'], ['performance', 'br_opt_quality_performance', 'Performance']]) {
+      const option = el('option', '', L(key, name)); option.value = value; choice.append(option);
+    }
+    choice.value = o.quality.mode;
+    choice.addEventListener('change', () => o.quality.setMode(choice.value));
+    stopQuality = o.quality.subscribe(() => { choice.value = o.quality.mode; });
+    qualityRow.append(el('span', 'br-opt-name', qualityLabel), choice);
+    panel.append(musicRow, qualityRow);
+  }
   if (typeof window.__brOptions?.openMedia === 'function') {
     const sources = el('button', 'br-pill', 'Pictures and GIFs'); sources.type='button';
     sources.addEventListener('click', () => { setOptions(false); window.__brOptions.openMedia(); });
@@ -209,6 +230,6 @@ export function createHud(o) {
     /** Test seam: what the ticker rotates through right now (never read by the room itself). */
     bellDebug() { return { lines: lines.slice(), at, rotateMs: ROTATE_MS, running: !!spin, text: bellText.textContent, hidden: bell.hidden }; },
     /** The room is leaving: the rotation stops with it. */
-    stop() { if (spin) clearInterval(spin); spin = 0; },
+    stop() { if (spin) clearInterval(spin); spin = 0; stopQuality(); },
   };
 }

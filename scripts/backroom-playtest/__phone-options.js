@@ -19,7 +19,7 @@
  * ==========================================================================*/
 (() => {
   const LS = 'br.opt.v1';
-  const DEFAULTS = { motion: 'full', intensity: 'normal', hud: 'full', volume: 0.8, media: true,
+  const DEFAULTS = { motion: 'full', intensity: 'normal', hud: 'full', volume: 0.8, musicVolume: 0.15, media: true,
     gates: { flash: true, subliminal: true, spiral: true, brainDrain: true, tunnel: true } };
   let opt = { ...DEFAULTS };
   try { opt = { ...DEFAULTS, ...(JSON.parse(localStorage.getItem(LS) || '{}') || {}) }; } catch (e) { /* noop */ }
@@ -32,6 +32,9 @@
    * context the page makes gets a gain node handed to it in destination's place;
    * the real output is downstream. Media elements are covered too, for the fx
    * clips that are not muted. */
+  let music = null;
+  const musicReady = import('/__phone-music.js').then(m => { music = m.getMusic({volume:opt.musicVolume,master:opt.volume}); opt.musicVolume = music.volume; music.setVolume(music.volume,opt.volume); return music; }).catch(() => null);
+  const qualityReady = import('/backroom/shared/quality.js');
   const gains = new Set();
   const Ctor = window.AudioContext || window.webkitAudioContext;
   if (Ctor) {
@@ -44,6 +47,7 @@
         node.connect(ctx.destination);
         gains.add(node);
         Object.defineProperty(ctx, 'destination', { get: () => node, configurable: true });
+        ctx.__brMasterGain = node;
       } catch (e) { /* an old engine keeps the real destination */ }
       return ctx;
     };
@@ -52,8 +56,9 @@
     if (window.webkitAudioContext) window.webkitAudioContext = Patched;
   }
   function applyVolume() {
+    music?.setVolume(opt.musicVolume,opt.volume);
     for (const g of gains) { try { g.gain.value = opt.volume; } catch (e) { gains.delete(g); } }
-    document.querySelectorAll('video,audio').forEach((n) => { if (!n.muted) n.volume = opt.volume; });
+    document.querySelectorAll('video,audio').forEach((n) => { if (!n.muted && !n.dataset.brMusic) n.volume = opt.volume; });
   }
 
   /* ---- HUD -----------------------------------------------------------------
@@ -144,6 +149,8 @@
     const h = document.createElement('h3'); h.textContent = 'Options';
     const back=document.createElement('button');back.type='button';back.className='act-btn br-options-back';back.textContent='← Back to game';back.onclick=()=>sheet.dataset.open='0';sheet.append(back,h);
 
+    const policy=window.__backroomQuality;
+    sheet.append(segRow('Quality', [['auto','Auto'],['full','Full'],['performance','Performance']],policy?.mode || 'auto', v => { qualityReady.then(({quality}) => { quality.setMode(v); paint(); }); }));
     sheet.append(segRow('Motion', [['full', 'Full'], ['reduced', 'Reduced'], ['still', 'Still']], opt.motion, (v) => {
       opt.motion = v; save(); push(); paint();
     }));
@@ -158,7 +165,13 @@
     vol.type = 'range'; vol.min = '0'; vol.max = '1'; vol.step = '0.05'; vol.value = String(opt.volume);
     vol.addEventListener('input', () => { opt.volume = Number(vol.value); applyVolume(); });
     vol.addEventListener('change', save);
-    sheet.append(row('Volume', vol));
+    vol.setAttribute('aria-label','Master volume');
+    sheet.append(row('Master volume', vol));
+    const mv=document.createElement('input');mv.type='range';mv.min='0';mv.max='1';mv.step='.01';mv.value=String(opt.musicVolume);mv.setAttribute('aria-label','Music volume');
+    const ml=document.createElement('span');ml.textContent=Math.round(opt.musicVolume*100)+'%';
+    const mb=document.createElement('div');mb.append(mv,ml);
+    mv.addEventListener('input',()=>{opt.musicVolume=Number(mv.value);ml.textContent=Math.round(opt.musicVolume*100)+'%';music?.setVolume(opt.musicVolume,opt.volume);});
+    mv.addEventListener('change',save);sheet.append(row('Music',mb));
 
     const gatesBox = document.createElement('div'); gatesBox.className = 'gates';
     [['flash', 'Flash'], ['subliminal', 'Subliminal'], ['spiral', 'Spiral'], ['brainDrain', 'Brain drain'], ['tunnel', 'Tunnel']]
