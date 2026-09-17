@@ -1,0 +1,266 @@
+/* Real room and games against local mock servers. CDP taps each mascot before and during play,
+ * verifies its own bleep, caption bounds, unchanged game requests, and phone slot layouts.
+ * EMI_ONLY=cards narrows a rerun. Stops only the Chrome process created here.
+ * node backroom/smoke/emi-seated-check.mjs [evidenceDir]
+ */
+
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, extname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+let fails = 0;
+const ok = (c, what) => { if (!c) { console.error('FAIL ' + what); fails++; } else console.log('  ok  ' + what); };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const HERE = resolve(fileURLToPath(import.meta.url), '..');
+const BACKROOM = resolve(HERE, '..');
+const WEB = resolve(BACKROOM, '..');
+const OUT = resolve(process.argv[2] || join(process.cwd(), '_evidence'));
+await mkdir(OUT, { recursive: true });
+const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+if (!existsSync(CHROME)) { console.error('FAIL no chrome at ' + CHROME); process.exit(1); }
+const PORT = Number(process.env.ROOM_STATIONS_PORT || 8933), DEBUG_PORT = PORT + 500;
+
+const REGISTRY = JSON.parse(readFileSync(join(BACKROOM, 'stations.json'), 'utf8'));
+const LIVE = REGISTRY.filter((s) => s.state === 'live');
+
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
+  '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary', '.mp3': 'audio/mpeg' };
+const server = createServer(async (req, res) => {
+  const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  if (path.includes('..')) { res.writeHead(400); return res.end(); }
+  try { const body = await readFile(join(WEB, path)); res.writeHead(200, { 'content-type': MIME[extname(path).toLowerCase()] || 'application/octet-stream' }); res.end(body); }
+  catch { res.writeHead(404); res.end('no'); }
+});
+await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
+
+// One fake host for the whole room: a mock server per station, created on its first request.
+const FAKE_HOST = `(() => {
+  const listeners = [], emit = (data) => setTimeout(() => listeners.forEach((fn) => fn({ data })), 0);
+  const gates = { flash: true, subliminal: true, spiral: true, brainDrain: true, tunnel: true };
+  const made = {};
+  // The floor bell is not a station (10.16.B): the room reads it, and its mock lives in smoke/.
+  const mock = (id) => made[id] || (made[id] = import(id === 'bell' ? '/backroom/smoke/mock-bell.js' : '/backroom/stations/' + id + '/mock-server.js').then((m) => {
+    const s = id === 'bell' ? m.createBellMock({}) : id === 'cards' ? m.createMockServer({ sp: 57, floorMs: 600 }) : id === 'roulette' ? m.createMockServer({ sp: 57, floorMs: 0 })
+      : id === 'counter' ? m.createMockServer({ sp: 57, on: 'jackpot_remix,rt_demo,high_roller' }) : m.createMockServer({ sp: 57 });
+    if (id === 'wheel') s.script('deep');
+    if (id === 'cards') s.script('Th', '9d', '8c', '8s');
+    if (id === 'roulette') s.script({ pocket: 36 });
+    window.__servers[id] = s; return s; }));
+  window.__hostEmit = emit; window.__posted = []; window.__servers = {};
+  window.chrome = window.chrome || {};
+  window.chrome.webview = {
+    addEventListener(type, fn) { if (type === 'message') listeners.push(fn); },
+    postMessage(m) {
+      window.__posted.push(JSON.parse(JSON.stringify(m)));
+      if (m.type === 'ready') emit({ type: 'init', protocol: 1, sp: 57, reduced: false, motion: 'full', intensity: 'normal', lang: 'en', gates,
+        lex: { br_back: 'Back', br_balance: 'SP' }, stations: ['slot', 'wheel', 'cards', 'roulette', 'counter', 'bell'], open: true });
+      if (m.type === 'station-request') mock(m.station).then((s) => s.handle(m.op, m.body || {}, m.idem))
+        .then((r) => emit({ type: 'station-result', reqId: m.reqId, ok: r.ok, status: r.status, reason: r.reason, body: r.body || {} }));
+      if (m.type === 'media-request') emit({ type: 'media', reqId: m.reqId, seed: 1, words: [],
+        gifs: Array.from({ length: m.count || 4 }, (_, i) => ({ key: 'g' + i, url: '/backroom/stations/slot/fallback/gif' + (i % 4) + '.webp', w: 180, h: 180, src: 'pool' })) });
+      if (m.type === 'fx') emit({ type: 'fx-ack', token: m.token, fired: [m.fxId], skipped: [] });
+    },
+  };
+})();`;
+
+const prof = mkdtempSync(join(tmpdir(), 'backroom-room-stations-'));
+const chrome = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${DEBUG_PORT}`, `--user-data-dir=${prof}`, '--no-first-run',
+  '--no-default-browser-check', '--mute-audio', '--hide-scrollbars', '--window-size=1280,720', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader',
+  '--autoplay-policy=no-user-gesture-required', 'about:blank'], { stdio: 'ignore' });
+async function done(code) { try { chrome.kill(); } catch { /* our own child only */ } server.close(); await sleep(500); try { rmSync(prof, { recursive: true, force: true }); } catch { /* noop */ } process.exit(code); }
+let target = null;
+for (let i = 0; i < 60 && !target; i++) { await sleep(250); try { target = (await (await fetch(`http://127.0.0.1:${DEBUG_PORT}/json/list`)).json()).find((t) => t.type === 'page'); } catch { /* not up */ } }
+if (!target) { console.error('FAIL chrome never answered'); await done(1); }
+const ws = new WebSocket(target.webSocketDebuggerUrl);
+await new Promise((r) => { ws.onopen = r; });
+let msgId = 0;
+const waits = new Map(), errs = [];
+ws.onmessage = (e) => {
+  const m = JSON.parse(e.data);
+  if (m.id && waits.has(m.id)) { waits.get(m.id)(m); waits.delete(m.id); }
+  if (m.method === 'Runtime.exceptionThrown') errs.push(m.params.exceptionDetails?.exception?.description || m.params.exceptionDetails?.text);
+  if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') errs.push('console: ' + m.params.args.map((a) => a.value || a.description).join(' '));
+};
+const cdp = (method, params) => new Promise((res) => { const i = ++msgId; waits.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
+const ev = async (x) => (await cdp('Runtime.evaluate', { expression: x, returnByValue: true, awaitPromise: true })).result?.result?.value;
+await cdp('Runtime.enable'); await cdp('Page.enable');
+await cdp('Page.addScriptToEvaluateOnNewDocument', { source: FAKE_HOST });
+await cdp('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
+const shot = async (name) => { const r = await cdp('Page.captureScreenshot', { format: 'png' }); await writeFile(join(OUT, name), Buffer.from(r.result.data, 'base64')); console.log('  shot  ' + name); };
+const posted = (type) => ev(`window.__posted.filter((m) => m.type === ${JSON.stringify(type)})`);
+async function until(expr, ms = 15000, step = 50) { const t = Date.now(); while (Date.now() - t < ms) { if (await ev(expr)) return true; await sleep(step); } return false; }
+const key = async (code, type = 'keyDown') => cdp('Input.dispatchKeyEvent', { type, code, key: code.slice(3).toLowerCase(), windowsVirtualKeyCode: code.charCodeAt(3) });
+async function click(x, y) {
+  await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+  await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 });
+  await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+}
+const clickSel = (sel) => ev(`(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b || b.disabled) return false; b.click(); return true; })()`);
+const report = { stations: {}, registry: LIVE.map((s) => s.id + (s.variant ? ':' + s.variant : '')) };
+
+/* ---------------------------------------------------------------- 1. the room reads stations.json */
+await cdp('Page.navigate', { url: `http://127.0.0.1:${PORT}/backroom/index.html` });
+ok(await until(`document.documentElement.classList.contains('br-ready')`, 45000, 100), 'the room boots');
+const rows = await ev(`window.__backroom.stations.map((s) => ({ key: s.key, id: s.id, state: s.state, entry: s.entry || null }))`);
+report.rows = rows;
+ok(rows.length === REGISTRY.length, `the room holds all ${REGISTRY.length} stations.json rows`);
+for (const id of ['slot', 'wheel', 'cards', 'roulette', 'counter']) {
+  ok(rows.some((r) => r.id === id && r.state === 'live' && r.entry === `stations/${id}/station.js`), `${id} is live from stations.json with entry stations/${id}/station.js`);
+}
+ok(await ev(`window.__backroom.stations.every((s) => !!window.__backroom.scene.scene.getObjectByName('station_' + s.key))`), 'every row has its fixture set out in the scene');
+/* The ten Room Service props are set out with the fixtures, and a station's own approach point is still
+   clear of every one of them: nothing decorative sits in the way of E. */
+const PROPS = ['customization_vending', 'statue_spot_0_knight', 'statue_spot_1_queen', 'statue_spot_2_rook',
+  'prop_monstera', 'prop_hanging_ivy', 'prop_terrarium', 'prop_gallery_landscape', 'prop_portrait_pair', 'prop_deco_billboard'];
+{
+  const missing = await ev(`${JSON.stringify(PROPS)}.filter((n) => !window.__backroom.scene.scene.getObjectByName(n))`);
+  ok(Array.isArray(missing) && missing.length === 0, 'the ten Room Service props are set out too' + (missing && missing.length ? ': missing ' + missing.join(', ') : ''));
+}
+await sleep(1500);
+await shot('room-00-boot.png');
+
+/* ---------------------------------------------------------------- 2. each station: E, open, a moment, Back */
+async function checkEmi(id, when) {
+  await until('!window.__backroom.scene.transitioning', 5000);
+  const before = await ev(`window.__posted.filter(m=>m.type==='station-request' && m.op!=='state').length`);
+  const at = await ev(`import('/vendor/three/three.module.min.js').then(T=>{const s=window.__backroom.scene;const name=${JSON.stringify(id)}==='slot'?'emi_topper':'emi_idle_'+${JSON.stringify(id)}; const o=${JSON.stringify(id)}==='slot'?s.scene.getObjectByName('station_slot:rose').getObjectByName(name):s.scene.getObjectByName(name); const face=o?.getObjectByName('EMI_glass')||o; if(!face)return null; s.scene.updateMatrixWorld(true); const p=new T.Box3().setFromObject(face).getCenter(new T.Vector3()).project(s.camera);const r=s.renderer.domElement.getBoundingClientRect();return {x:r.left+(p.x+1)*r.width/2,y:r.top+(1-p.y)*r.height/2};})`);
+  if (!at) {ok(false,id+': mascot exists');return;}
+  await ev(`import('/backroom/shared/sound/kit.js').then(m=>{m.kit.trace.length=0})`);
+  await click(at.x,at.y); await sleep(120);
+  ok(await ev(`window.__backroom.scene.debug().emiBubble.id===${JSON.stringify(id)}`), id+': '+when+' mascot reply');
+  ok(await ev(`import('/backroom/shared/sound/kit.js').then(m=>m.kit.trace.some(t=>t.name==='emi-bleep'))`),id+': bleep through shared kit');
+  ok(await ev(`window.__posted.filter(m=>m.type==='station-request' && m.op!=='state').length===${before}`),id+': tap adds no game request');
+  ok(await ev(`window.__backroom.scene.seated`),id+': tap keeps seat');
+  await shot(id+'-emi-'+when+'.png');
+  ok(await ev(`(()=>{const b=document.querySelector('.br-emi-bubble'),r=b.getBoundingClientRect();return !b.hidden&&r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth})()`),id+': reply fits screen');
+  await ev(`window.__backroom.scene.dismissEmi()`);
+}
+const STATIONS = [
+  { key: 'slot:rose', id: 'slot', root: '.slot-station', ready: `document.querySelector('.slot-station') && document.querySelector('.slot-station').dataset.phase === 'play'`,
+    async moment() {
+      ok(await clickSel('.slot-spin'), 'slot: Spin pressed');
+      await sleep(250); await checkEmi('slot', 'busy');
+      ok(await until(`window.__posted.some((m) => m.type === 'station-request' && m.station === 'slot' && m.op === 'tape')`, 8000), 'slot: the press buys a tape through the relay');
+      await sleep(1200); await shot('slot-02-spinning.png');
+      await sleep(3500); await shot('slot-03-landed.png');
+    } },
+  { key: 'wheel', id: 'wheel', root: '.wheel-station', ready: `document.querySelector('.wheel-station[data-phase="play"]')`,
+    async moment() {
+      ok(await clickSel('.wheel-spin'), 'wheel: Spin pressed');
+      await sleep(250); await checkEmi('wheel', 'busy');
+      ok(await until(`window.__posted.some((m) => m.type === 'fx-tunnel' && m.station === 'wheel' && m.level > 0.3)`, 15000), 'wheel: the last turn posts fx-tunnel');
+      await shot('wheel-02-last-turn.png');
+      ok(await until(`window.__posted.some((m) => m.type === 'fx' && m.station === 'wheel')`, 15000), 'wheel: the landing posts its fx');
+      await sleep(700); await shot('wheel-03-landed.png');
+    } },
+  { key: 'cards', id: 'cards', root: '.cards-station', ready: `document.querySelector('.cards-station') && document.querySelector('.cards-station').dataset.phase === 'play'`,
+    async moment() {
+      ok(await clickSel('.cards-deal'), 'cards: Deal pressed');
+      await sleep(250); await checkEmi('cards', 'busy');
+      ok(await until(`!!document.querySelector('.cards-move[data-move=stand]') && !document.querySelector('.cards-move[data-move=stand]').disabled`, 8000), 'cards: a decision is open');
+      const decisionFx = await ev(`window.__posted.filter(m=>m.type==='fx'&&m.station==='cards').length`);
+      await checkEmi('cards', 'decision'); await sleep(350);
+      ok(await ev(`window.__posted.filter(m=>m.type==='fx'&&m.station==='cards').length===${decisionFx}`), 'cards: no new fx while deciding');
+      await shot('cards-02-decision.png');
+      ok(await clickSel('.cards-move[data-move=stand]'), 'cards: Stand pressed');
+      ok(await until(`window.__posted.some((m) => m.type === 'fx' && m.station === 'cards')`, 8000), 'cards: the settled win fires its fx');
+      await sleep(600); await shot('cards-03-settled.png');
+    } },
+  { key: 'roulette', id: 'roulette', root: '.roul-station', ready: `!!document.querySelector('.roul-station[data-phase=bet]')`,
+    async moment() {
+      const at = await ev(`(async () => { const T = await import('three'), s = window.__backroom.scene, plane = s.scene.getObjectByName('roulette_runtime_mat')?.children.find((o) => o.userData.spot === 's36');
+        if (plane) { const v = plane.getWorldPosition(new T.Vector3()).project(s.camera), r = s.renderer.domElement.getBoundingClientRect(); return { x: r.left + (v.x + 1) * r.width / 2, y: r.top + (1 - v.y) * r.height / 2 }; }   // the seated 3D mat
+        const c = document.querySelector('.roul-stage'); const r = c.getBoundingClientRect(); const w = c.clientWidth, h = c.clientHeight;
+        const mw = w * 0.47, mh = h * 0.46, cell = Math.max(14, Math.min(mw / 13, mh / 5.4)), ox = w * 0.5 + (mw - cell * 13) / 2, oy = h * 0.16 + (mh - cell * 5.4) / 2;
+        return { x: r.left + ox + 12 * cell + cell / 2, y: r.top + oy + cell / 2 }; })()`);
+      await click(Math.round(at.x), Math.round(at.y));
+      ok(await until("window.__backroom.scene.scene.getObjectByName('roulette_live_chips')?.count === 1", 1500), 'roulette: the click lands a chip on the 3D mat');
+      ok(await clickSel('.roul-spin'), 'roulette: a chip on 36 and Spin pressed');
+      await sleep(250); await checkEmi('roulette', 'busy');
+      ok(await until(`window.__posted.some((m) => m.type === 'fx-tunnel' && m.station === 'roulette' && m.level > 0)`, 12000), 'roulette: the run posts fx-tunnel');
+      await shot('roulette-02-run.png');
+      ok(await until(`(document.querySelector('.roul-history') || {}).childElementCount >= 1`, 14000), 'roulette: the ball lands');
+      await sleep(400); await shot('roulette-03-landed.png');
+    } },
+  { key: 'counter', id: 'counter', root: '.counter-station', ready: `!!document.querySelector('.counter-station[data-phase=ready] .counter-card')`,
+    async moment() {
+      const card = (id) => `document.querySelector('.counter-card[data-id=${id}]')`;
+      ok(await ev(`${card('rt_bundle_3')}.dataset.face === 'soon' && ${card('jackpot_remix')}.dataset.face === 'buy'`), 'counter: a soon card and a buyable card');
+      ok(await clickSel('.counter-card[data-id=jackpot_remix] .counter-buy'), 'counter: Buy on Jackpot Remix opens the confirm');
+      ok(await until(`!!document.querySelector('.counter-card[data-id=jackpot_remix] .counter-yes')`, 3000), 'counter: Confirm is on the card');
+      await shot('counter-02-confirm.png');
+      ok(await clickSel('.counter-card[data-id=jackpot_remix] .counter-yes'), 'counter: Confirm pressed');
+      ok(await until(`window.__posted.some((m) => m.type === 'station-request' && m.station === 'counter' && m.op === 'buy' && m.body.prizeId === 'jackpot_remix' && m.idem)`, 5000), 'counter: the buy is relayed with an idem');
+      ok(await until(`${card('jackpot_remix')}.dataset.face === 'owned'`, 5000), 'counter: the card flips to Owned');
+      ok(await until(`document.querySelector('#br-sp-value').textContent === '42'`, 3000), 'counter: the room chip reads 57 - 15 = 42');
+      await sleep(500); await shot('counter-03-owned.png');
+    } },
+];
+
+for (const st of STATIONS.filter(s=>s.id!=='counter' && (!process.env.EMI_ONLY || s.id===process.env.EMI_ONLY))) {
+  const r = { key: st.key };
+  report.stations[st.key] = r;
+  const i0 = await ev(`window.__posted.length`);
+  await ev(`window.__backroom.scene.go(window.__backroom.stations.find((s) => s.key === ${JSON.stringify(st.key)}))`);
+  await until("!window.__backroom.scene.transitioning", 5000);
+  await sleep(100);
+  r.nearest = (await ev(`window.__backroom.scene.debug().nearest`));
+  ok(r.nearest === st.key, `${st.key}: standing at its approach makes it nearest`);
+  await key('KeyE'); await key('KeyE', 'keyUp');
+  ok(await until(`!!document.querySelector(${JSON.stringify(st.root)})`, 10000), `${st.key}: E mounts the station from its stations.json entry`);
+  ok(await until(st.ready, 20000, 100), `${st.key}: the station opens to its first playable phase`);
+  const since = () => ev(`window.__posted.slice(${i0})`);
+  let p = await since();
+  ok(p.some((m) => m.type === 'station-open' && m.station === st.id), `${st.key}: station-open ${st.id} posted`);
+  ok(p.some((m) => m.type === 'station-request' && m.station === st.id && m.op === 'state'), `${st.key}: GET state relayed as ${st.id}`);
+  const cur = await ev(`window.__backroom.loader.current`);
+  const dbg = await ev(`(() => { const d = window.__backroom.scene.debug(); return { held: d.held, running: d.running, seated: d.seated }; })()`);
+  ok(cur && cur.id === st.id && cur.kind === 'live', `${st.key}: the loader holds ${st.id} as live`);
+  const staged = await ev(`import('/backroom/' + window.__backroom.stations.find(s => s.key === ${JSON.stringify(st.key)}).entry).then(m => m.roomStage === true)`);
+  ok(staged ? dbg.seated && dbg.running && !dbg.held : dbg.held && !dbg.running, `${st.key}: the room loop follows its declared view mode`);
+  ok(await ev(`!!document.querySelector(${JSON.stringify(st.root)} + '[data-host-back]') || !!document.querySelector('.br-station [data-host-back]')`), `${st.key}: the room owns Back (ctx.hostBack)`);
+  await sleep(400);
+  await shot(`${st.id}-01-open.png`);
+  await checkEmi(st.id, 'ready');
+  await st.moment();
+  if(st.id==='slot') for(const [w,h] of [[390,844],[844,390]]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:false}); await sleep(500);
+    await checkEmi(st.id,'phone-'+w);
+  }
+  await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:720,deviceScaleFactor:1,mobile:false});
+  await ev(`document.querySelector('#br-back').click()`);
+  ok(await until(`!document.querySelector(${JSON.stringify(st.root)}) && !window.__backroom.loader.current`, 3000), `${st.key}: Back unmounts the station`);
+  ok(await until(`(() => { const d = window.__backroom.scene.debug(); return d.running && !d.held && !d.transitioning; })()`, 7000), `${st.key}: the room loop runs again`);
+  p = await since();
+  ok(p.some((m) => m.type === 'station-close' && m.station === st.id), `${st.key}: station-close ${st.id} posted`);
+  ok(!p.some((m) => m.type === 'exit'), `${st.key}: the room itself stays open`);
+  const tun = p.filter((m) => m.type === 'fx-tunnel' && m.station === st.id);
+  r.tunnelPosts = tun.length;
+  ok(tun.length === 0 || tun.at(-1).level === 0, `${st.key}: no tunnel left above 0 after Back (${tun.length} posts)`);
+  r.fx = p.filter((m) => m.type === 'fx').map((m) => m.fxId);
+  r.media = p.filter((m) => m.type === 'media-request').map((m) => m.count);
+  r.ops = p.filter((m) => m.type === 'station-request').map((m) => m.op);
+  await sleep(300);
+  await shot(`${st.id}-04-after-back.png`);
+}
+
+/* ---------------------------------------------------------------- 3. Escape is Back too, then the room view */
+await ev(`window.__backroom.scene.go(window.__backroom.stations.find((s) => s.key === 'roulette'))`);
+await until('!window.__backroom.scene.transitioning', 5000);
+await sleep(250);
+await key('KeyE'); await key('KeyE', 'keyUp');
+ok(await until(`!!document.querySelector('.roul-station')`, 10000), 'roulette reopens');
+await cdp('Input.dispatchKeyEvent', { type: 'keyDown', code: 'Escape', key: 'Escape', windowsVirtualKeyCode: 27 });
+await cdp('Input.dispatchKeyEvent', { type: 'keyUp', code: 'Escape', key: 'Escape', windowsVirtualKeyCode: 27 });
+ok(await until(`!document.querySelector('.roul-station') && !window.__backroom.loader.current`, 3000), 'Escape closes the open station');
+ok((await posted('exit')).length === 0, 'and only the station, the room stays');
+
+report.errors = errs;
+await writeFile(join(OUT, 'room-stations-check.json'), JSON.stringify(report, null, 2));
+ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.join(' | ') : ''));
+console.log(fails ? `\n${fails} FAILED` : '\nall room station checks passed');
+await done(fails ? 1 : 0);
