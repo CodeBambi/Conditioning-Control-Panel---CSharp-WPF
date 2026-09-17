@@ -1,4 +1,4 @@
-<UserControl x:Class="ConditioningControlPanel.Views.Tabs.ProgramsTabView"
+﻿<UserControl x:Class="ConditioningControlPanel.Views.Tabs.ProgramsTabView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -1237,6 +1237,19 @@
                                                             Tag="{Binding TaskId}"
                                                             Style="{StaticResource SecondaryButton}"
                                                             Click="BtnProgramSubmitRitual_Click"/>
+
+                                                    <!-- The mantra door (#1230). Shares row 2 with the
+                                                         ritual picker because the two are mutually
+                                                         exclusive: a task is either a Ritual or an
+                                                         AutoVerified Mantra, never both. -->
+                                                    <Button Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2"
+                                                            MinWidth="120" Margin="0,10,0,0"
+                                                            HorizontalAlignment="Left"
+                                                            Visibility="{Binding OpenVisibility}"
+                                                            Content="{loc:Str btn_program_open_mantras}"
+                                                            Tag="{Binding OpenReps}"
+                                                            Style="{StaticResource SecondaryButton}"
+                                                            Click="BtnProgramOpenMantras_Click"/>
                                                 </Grid>
                                             </Border>
                                             <DataTemplate.Triggers>

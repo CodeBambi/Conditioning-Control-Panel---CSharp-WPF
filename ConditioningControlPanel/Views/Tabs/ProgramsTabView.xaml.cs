@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 
 namespace ConditioningControlPanel.Views.Tabs
@@ -42,6 +42,12 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnProgramSubmitRitual_Click(sender, e);
+        }
+
+        private void BtnProgramOpenMantras_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.BtnProgramOpenMantras_Click(sender, e);
         }
 
         private void BtnProgramRestart_Click(object sender, RoutedEventArgs e)

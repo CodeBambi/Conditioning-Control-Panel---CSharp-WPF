@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Media;
 
 namespace ConditioningControlPanel.Views.Tabs
@@ -190,6 +190,19 @@ namespace ConditioningControlPanel.Views.Tabs
 
         /// <summary>Ritual tasks get the photo picker; auto-verified ones never do.</summary>
         public Visibility SubmitVisibility { get; set; } = Visibility.Collapsed;
+
+        /// <summary>
+        /// The "open the thing this task is asking for" button. Only the Mantra verifier sets it
+        /// today, because the typed mantra game is the one feature a task can require that has no
+        /// other door in the app: the Play page card that used to open it came off in the
+        /// 2026-08-12 relayout (see MainWindow.PlayTab / StartMantraSession), which left Kept days
+        /// 5, 15 and 27 asking for mantras with nothing to click. Every other verifier points at a
+        /// feature the user can already reach, and those keep the how-to line alone.
+        /// </summary>
+        public Visibility OpenVisibility { get; set; } = Visibility.Collapsed;
+
+        /// <summary>Reps to hand <c>StartMantraSession</c> when <see cref="OpenVisibility"/> is shown.</summary>
+        public int OpenReps { get; set; } = 1;
 
         public double RowOpacity { get; set; } = 1.0;
         public Brush TextBrush { get; set; } = Brushes.White;

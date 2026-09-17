@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -570,5 +570,84 @@ public class ProgramsTabRenderTests
         Assert.True(
             type.GetMethod("Window_MouseLeftButtonDown", BindingFlags.NonPublic | BindingFlags.Instance) != null,
             "the enroll dialog cannot be dragged - a chromeless window that lands badly is stuck there");
+    }
+
+    // =====================================================================================
+    //  the mantra door (#1230)
+    // =====================================================================================
+
+    /// <summary>
+    /// A Mantra task card must offer a way into the typed mantra game.
+    ///
+    /// <para>This is the one verifier whose feature has no other entrance: the Play page's Mantras
+    /// card came off in the 2026-08-12 relayout, which left MantraWindow a window nothing opened
+    /// while Kept days 5, 15 and 27 kept asking for mantras and the how-to line kept pointing at
+    /// "the mantra minigame". A user on day 5 had a task, a rep count, and nothing to click.</para>
+    ///
+    /// <para>The card is realized off the real ItemTemplate rather than asserted on the XAML text,
+    /// so deleting the button, collapsing it, or unbinding its reps all fail here.</para>
+    /// </summary>
+    [Fact]
+    public void AMantraTaskCardCarriesTheDoorToTheTypedGame()
+    {
+        OnStaThread(() =>
+        {
+            var tab = new ProgramsTabView();
+            var template = tab.TodayTaskList.ItemTemplate;
+            Assert.True(template != null, "the task list lost its item template");
+
+            var card = new ContentPresenter
+            {
+                ContentTemplate = template,
+                Content = new ProgramTaskItem
+                {
+                    TaskId = "d5_mantras",
+                    Description = "Complete 3 mantras",
+                    OpenVisibility = Visibility.Visible,
+                    OpenReps = 3
+                }
+            };
+            Realize(card, 360, 420);
+
+            var door = Descendants(card).OfType<Button>()
+                .FirstOrDefault(b => b.Visibility == Visibility.Visible && Equals(b.Tag, 3));
+
+            Assert.True(door != null,
+                "a mantra task card has no visible door into the typed game - day 5 of Kept asks " +
+                "for mantras the user cannot reach (#1230)");
+        });
+    }
+
+    /// <summary>
+    /// The door belongs to Mantra tasks only. Every other verifier points at a feature the user can
+    /// already reach from the app, so a button on those cards would be a second, competing entrance
+    /// to something that already has one - and the carrier defaults to collapsed for exactly that
+    /// reason. A regression that showed it unconditionally would be invisible in the Kept screenshot
+    /// this fix was tested against.
+    /// </summary>
+    [Fact]
+    public void AnOrdinaryTaskCardCarriesNoDoor()
+    {
+        OnStaThread(() =>
+        {
+            var tab = new ProgramsTabView();
+            var template = tab.TodayTaskList.ItemTemplate;
+            Assert.True(template != null, "the task list lost its item template");
+
+            var card = new ContentPresenter
+            {
+                ContentTemplate = template,
+                Content = new ProgramTaskItem
+                {
+                    TaskId = "d6_video",
+                    Description = "Watch one video"
+                }
+            };
+            Realize(card, 360, 420);
+
+            Assert.DoesNotContain(
+                Descendants(card).OfType<Button>(),
+                b => b.Visibility == Visibility.Visible);
+        });
     }
 }

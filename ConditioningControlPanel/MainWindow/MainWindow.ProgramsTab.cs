@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -1175,6 +1175,21 @@ namespace ConditioningControlPanel
                     ? Visibility.Visible
                     : Visibility.Collapsed;
 
+                // #1230: "Day 5 of Kept asks for Mantras. I don't see any Mantras in the panel."
+                // He was right - the typed game's only launcher was the Play page's Mantras card,
+                // which came off in the 2026-08-12 relayout, so the how-to line ("type them in the
+                // mantra minigame") pointed at a window nothing opened. The task card is the right
+                // door: it is the surface that asked for them, it knows the rep count, and it is
+                // the only place the requirement is visible. The voice path
+                // (AutonomyService -> CreditExternalMantra) is untouched and still credits for
+                // anyone who would rather say them out loud.
+                item.OpenReps = Math.Max(1, task.TargetValue);
+                item.OpenVisibility = task.Kind == ProgramTaskKind.AutoVerified
+                                      && task.Verifier == Models.QuestCategory.Mantra
+                                      && !complete && !blocked && !paused
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+
                 items.Add(item);
             }
 
@@ -2144,6 +2159,27 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Program ritual submission failed");
+            }
+        }
+
+        /// <summary>
+        /// Mantra task: open the typed mantra game at the rep count the task asked for. This is the
+        /// one <c>StartMantraSession</c> caller the rescue note in MainWindow.PlayTab.cs asked for -
+        /// the helper already knew the window needs a session running before it loads, and re-homing
+        /// the game cost exactly this call. The button is only rendered for an incomplete, unblocked
+        /// Mantra task on an active run (see OpenVisibility), so a missing tag is a bug, not a state.
+        /// </summary>
+        internal void BtnProgramOpenMantras_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is not System.Windows.Controls.Button btn) return;
+                var reps = btn.Tag is int n ? n : 1;
+                StartMantraSession(reps);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Program mantra launch failed");
             }
         }
 
