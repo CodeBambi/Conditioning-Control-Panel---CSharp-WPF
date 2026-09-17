@@ -20,7 +20,7 @@
 
 import * as THREE from 'three';
 import { loadPack, setFace as packSetFace, preparePixel, flattenRig, faceFrames, atlasScale, forceAtlasSampler } from './gltf.js';
-import { createPoseLayer } from './emiPoses.js';
+import { createPoseLayer, drivingPose, createRideFeel, AnimationSpring as Spring } from './emiPoses.js';
 import { SAUCER_R } from './consts.js';
 import { Q } from '../shared/quality.js';
 
@@ -88,16 +88,6 @@ export const MOODS = {
   jackpot:  { antX: 0,    kinkX: 0,    kinkZ: 0.2,  bead: GOLD, scale: 1.3, sway: 1,   wind: 0.6, w: 12, zeta: 0.5 },
 };
 
-/** Damped spring toward a target; zeta < 1 overshoots a little, which is the point. */
-class Spring {
-  constructor(x = 0) { this.x = x; this.v = 0; }
-  step(target, dt, w, zeta = 0.65) {
-    this.v += (w * w * (target - this.x) - 2 * zeta * w * this.v) * dt;
-    this.x += this.v * dt;
-    return this.x;
-  }
-}
-
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
 const _g = new THREE.Vector3(), _c = new THREE.Color();
 
@@ -116,6 +106,13 @@ function makePool(n, geo, mat) {
     spawn(p, v, ttl, size) {
       const it = items[cursor]; cursor = (cursor + 1) % n;
       it.life = it.ttl = ttl; it.size = size; it.p.copy(p); it.v.copy(v);
+    },
+    clear() {
+      for (let i = 0; i < n; i++) {
+        items[i].life = 0;
+        mesh.setMatrixAt(i, _m.compose(_p.set(0, -999, 0), _q, _s.setScalar(0.0001)));
+      }
+      mesh.instanceMatrix.needsUpdate = true;
     },
     update(dt, gravity) {
       for (let i = 0; i < n; i++) {
@@ -193,6 +190,15 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
   const teaMat = new THREE.MeshStandardMaterial({ color: 0xC94A9A, emissive: 0x3c1630, roughness: 0.12, metalness: 0.25, transparent: true, opacity: 0.9 });
   const tea = new THREE.Mesh(new THREE.CircleGeometry(TEA_R + 0.01, 32), teaMat);
   tea.rotation.set(-Math.PI / 2, 0, Math.PI); tea.position.y = TEA_Y; body.add(tea);
+  // Two thin liquid rings stay inside the cup and follow its real surface tilt.
+  const rippleGeo = new THREE.TorusGeometry(1, 0.012, 4, 40);
+  const ripples = [0, 1].map(() => {
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffefc9, transparent: true, opacity: 0, depthWrite: false });
+    const ring = new THREE.Mesh(rippleGeo, mat);
+    ring.position.z = 0.006; ring.visible = false; tea.add(ring);
+    return ring;
+  });
+  const rideFeel = createRideFeel({ reducedMotion });
   const teaTarget = new THREE.Color(0xC94A9A), teaHsl = { h: 0, s: 0, l: 0 };
 
   // ---- EMI: a living pixel CRT seen from behind, gripping the rim ----
@@ -334,7 +340,7 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
     body.remove(emi); disposeTree(emi);
     ballpiv.add(beadLight);
     seat.add(screenLight); screenLight.position.set(0, GLOW_Y, GLOW_Z);
-    poses = createPoseLayer(root);
+    poses = createPoseLayer(root, { reducedMotion });
     if (pixel) preparePixel(root, pixel);
     setFaceFrame(0);
     for (const cb of readyCbs.splice(0)) { try { cb(root); } catch (e) { /* a listener never breaks the rig */ } }
@@ -382,7 +388,14 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
   function onReady(cb) { if (typeof cb !== 'function') return; if (G) cb(G.root); else readyCbs.push(cb); }
   function model() { return G ? G.root : null; }
   /** Race events pose her body (race/emiPoses.js). No model yet, nothing to pose. */
-  function pose(name, opts) { return poses ? poses.set(name, opts || {}) : false; }
+  function pose(name, opts) {
+    if (!poses) return false;
+    // Locomotion comes from kart state, never a timed event that can expire mid-turn.
+    if (['cruise', 'drift', 'air', 'tuck'].includes(name)) return true;
+    return poses.set(name, opts || {});
+  }
+  let lastCtx = null;
+  function settleAnimation() { if (lastCtx) update(0.26, lastCtx); }
 
   function emitFrom(obj, lx, ly, lz, ctx, pool, ttl, size, spread, upSpeed, backSpeed) {
     _p.set(lx, ly, lz); obj.localToWorld(_p);
@@ -391,20 +404,28 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
   }
 
   function update(dt, ctx) {
-    dt = Math.min(dt, 0.05);
+    lastCtx = ctx;
+    dt = Number.isFinite(dt) ? Math.max(0, dt) : 0;
+    const quiet = dt > 0.25, springDt = reducedMotion || quiet ? 0.26 : dt;
+    if (quiet) { dt = 0; sweat.clear(); sparks.clear(); rideFeel.settle(); sweatAcc = sparkAcc = 0; }
+    const feel = rideFeel.update(dt, ctx);
+    if (poses) {
+      const base = drivingPose(ctx);
+      poses.setBase(base.name, base.opts);
+    }
     const t = ctx.t || 0, m = mood;
     // the clamp and the kerbed landing carry their own fraught; the run brain's own value still wins
     // whenever it is higher, so a stack of effects is never talked down by a pose
     const fr = poses ? Math.max(fraught, poses.fraught) : fraught;
     const wind = Math.max(0, Math.min(1, (ctx.speedNorm - 0.55) / 0.45)) * 0.8 + (ctx.airborne ? 0.5 : 0);
-    const antTarget = m.antX - Math.min(1, wind) * m.wind + (fr > 0.4 ? 0.25 * fr : 0);
+    const antTarget = feel.antenna + m.antX - Math.min(1, wind) * m.wind + (fr > 0.4 ? 0.25 * fr : 0);
     const kinkXT = m.kinkX + 1.7 * fr * (m === MOODS.fraught ? 0.3 : 1);
     const hush = ctx.airborne || m.sway === 0 ? 0 : m.sway * (1 - 0.6 * fr);
-    const sway = hush * 0.14 * Math.sin(t * (Math.PI * 2) / BREATH_SEC);
+    const sway = (reducedMotion ? 0 : hush) * 0.14 * Math.sin(t * (Math.PI * 2) / BREATH_SEC);
     // one set of springs, two bodies to hang them on: the glb's authored pivots or the primitive's
-    const antX = sAnt.step(antTarget, dt, m.w, m.zeta);
-    const kinkX = sKinkX.step(kinkXT, dt, m.w, m.zeta), kinkZ = sKinkZ.step(m.kinkZ, dt, m.w, m.zeta);
-    const beadScale = Math.max(0.3, sBead.step(m.scale, dt, m.w, m.zeta));
+    const antX = sAnt.step(antTarget, springDt, m.w, m.zeta);
+    const kinkX = sKinkX.step(kinkXT, springDt, m.w, m.zeta), kinkZ = sKinkZ.step(m.kinkZ, springDt, m.w, m.zeta);
+    const beadScale = Math.max(0.3, sBead.step(m.scale, springDt, m.w, m.zeta));
     const roll = sway - (ctx.steerVel || 0) * 0.06;
     if (G) {
       const r = G.rest;
@@ -419,7 +440,10 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
       kink.rotation.set(kinkX, 0, kinkZ);
       bead.scale.setScalar(beadScale);
     }
-    if (poses) poses.update(dt, ctx);        // the body, on top of the mood the antenna just took
+    // The body goes on top of the mood the antenna just took.
+    if (poses) {
+      if (quiet) poses.settle(ctx); else poses.update(dt, ctx);
+    }
     beadTarget.setHex(m.bead); if (m !== MOODS.jackpot) beadTarget.lerp(_c.setHex(PALE), fr);
     const glow = m === MOODS.jackpot ? 1.4 : 0.9;
     for (const bm of G ? G.ballMats : [beadMat]) {
@@ -427,14 +451,22 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
       bm.emissive.copy(bm.color); bm.emissiveIntensity = glow;
       beadLight.color.copy(bm.color);
     }
-    if (G) for (const gm of G.glassMats) gm.emissiveIntensity = 1.05 + 0.25 * Math.sin(t * 4);
-    else screenMat.opacity = 0.6 + 0.25 * Math.sin(t * 4);
+    if (G) for (const gm of G.glassMats) gm.emissiveIntensity = 1.05 + 0.25 * (reducedMotion ? 0 : Math.sin(t * 4));
+    else screenMat.opacity = 0.6 + 0.25 * (reducedMotion ? 0 : Math.sin(t * 4));
 
     // the tea swirls, bobs and settles lower at speed; its colour follows the room (fog hue) with a
     // floor on saturation and lightness so it always reads as a liquid, never as a hole in the cup
-    tea.rotation.z = Math.PI + Math.sin(t * 1.3) * 0.05;
-    tea.position.y = TEA_Y + 0.006 * Math.sin(t * 2.7) - 0.02 * Math.max(0, ctx.speedNorm - 0.65) / 0.35;
-    tea.scale.set(1 + 0.02 * Math.sin(t * 1.9), 1 + 0.02 * Math.cos(t * 2.3), 1);
+    tea.rotation.x = -Math.PI / 2 + feel.teaX;
+    tea.rotation.y = feel.teaZ;
+    for (let i = 0; i < ripples.length; i++) {
+      const r = feel.ripples[i];
+      ripples[i].visible = r.opacity > 0.002;
+      ripples[i].scale.setScalar(r.radius);
+      ripples[i].material.opacity = r.opacity;
+    }
+    tea.rotation.z = Math.PI + (reducedMotion ? 0 : Math.sin(t * 1.3)) * 0.05;
+    tea.position.y = TEA_Y + 0.006 * (reducedMotion ? 0 : Math.sin(t * 2.7)) - 0.02 * Math.max(0, ctx.speedNorm - 0.65) / 0.35;
+    tea.scale.set(1 + 0.02 * (reducedMotion ? 0 : Math.sin(t * 1.9)), 1 + 0.02 * (reducedMotion ? 0 : Math.cos(t * 2.3)), 1);
     if (scene.fog && scene.fog.color) {
       scene.fog.color.getHSL(teaHsl);
       teaTarget.setHSL(teaHsl.h, Math.max(0.3, teaHsl.s), 0.42);
@@ -443,21 +475,21 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
     }
 
     // landing squash with overshoot (Law XI)
-    const sq = sSquash.step(0, dt, 9, 0.45);
+    const sq = sSquash.step(0, springDt, 9, 0.45);
     root.scale.set(1 + sq * 0.18, 1 - sq * 0.28, 1 + sq * 0.18);
-    saucer.rotation.y += (0.7 + ctx.speedNorm * 2.5) * dt;
+    if (!reducedMotion) saucer.rotation.y += (0.7 + ctx.speedNorm * 2.5 + feel.spin) * dt;
 
     // the steer lean: the cup tips on the dish, the saucer stays flat on the road (see CUP_TIP_MAX
     // above). Turning about the foot and lifting by sin(tip) * CUP_FOOT_R puts the low half of the
     // foot on the dish at every angle, so nothing here can reach the road however hard the turn.
-    const tip = CUP_TIP_MAX * Math.tanh((ctx.lean || 0) / CUP_TIP_MAX);
+    const tip = CUP_TIP_MAX * Math.tanh(((ctx.lean || 0) + feel.roll) / CUP_TIP_MAX);
     const ts = Math.sin(tip), tc = Math.cos(tip);
     body.rotation.z = tip;
     body.position.x = (CUP_PIVOT_Y + CUP_SLIDE) * ts;      // hold the foot, then slide it outward
     body.position.y = CUP_PIVOT_Y * (1 - tc) + Math.abs(ts) * CUP_FOOT_R;
 
     // sweat off the bead and the CRT's top corners; a Bambi-scale anime sweat, not a rain
-    if (!reducedMotion) {
+    if (!reducedMotion && !quiet) {
       const rate = fr > 0.3 || m === MOODS.fraught ? 4 + 6 * Math.max(fr, m === MOODS.fraught ? 0.5 : 0) : 0;
       sweatAcc += dt * rate;
       while (sweatAcc >= 1) {
@@ -497,5 +529,5 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
   loadPack(EMI_GLB).then(mountGlb).catch(() => { /* no pack, no swap: the primitive EMI rides on */ });
   loadPack(PROPS_GLB).then(mountProps).catch(() => { /* no pack, no swap: the JS crockery rides on */ });
 
-  return { group, update, setMood, setFraught, squash, dispose, onReady, model, setFace: setFaceFrame, pose };
+  return { group, update, react: rideFeel.react, settleAnimation, setMood, setFraught, squash, dispose, onReady, model, setFace: setFaceFrame, pose };
 }

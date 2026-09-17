@@ -109,6 +109,7 @@ function makeTierSparks(scene, n) {
   let head = 0;
   return {
     setTier(t) { mat.color.setHex(TIER_COLORS[clamp(t | 0, 0, 3)]); },
+    clear() { life.fill(0); pos.fill(-1e4); pts.visible = false; geo.attributes.position.needsUpdate = true; },
     spawn(p, v, ttl) { const i = head; head = (head + 1) % n; pos.set([p.x, p.y, p.z], i * 3); vel.set([v.x, v.y, v.z], i * 3); life[i] = ttl; },
     update(dt, g) {
       let alive = 0;
@@ -171,6 +172,7 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
   // lying along it costs, so the clearance cap in place() measures air under the saucer, not h
   let ground = 0, ridePitch = 0;
   let camBoost = 0, steerS = 0, hopT = 0, scrubSec = 0, sparkAcc = 0, driftWas = false;
+  let landingImpact = 0;
   let airWas = false, steerWas = 0, trickArmed = false, trickKind = null, trickDir = 1, trickT = 1;
   let jumpArm = 0, jumpPending = false, jumpBoostD = -1, launchT = -1e4;
   let gateLay = null, gateD = 0, lapTimed = false, lapMark = 0;
@@ -273,6 +275,7 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
     if (tier > 0) {
       const sec = DRIFT_BOOST_SEC[tier] || 0;
       applyBoost(sec);
+      rig.react('release', { tier, side: driftSide });
       emit({ type: 'driftBoost', tier, sec });
     }
   }
@@ -346,7 +349,8 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
       state.vh -= GRAVITY * dt;
       state.h += state.vh * dt;
       if (state.h <= ground) {                                         // THUD: land, squash, spring back
-        rig.squash(clamp(-state.vh / 12, 0.25, 1));
+        landingImpact = clamp(-state.vh / 12, 0.25, 1);
+        rig.squash(landingImpact);
         state.h = ground; state.vh = 0; state.airborne = false;
       }
     } else if (state.h !== ground) state.h = ground;                   // riding the wedge up to the lip
@@ -385,7 +389,8 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
       const clean = Math.abs(state.x) < KART_X_MAX - LAND_CLEAN_M, trick = state.trick;
       if (trick && clean) { applyBoost(LAND_BOOST_SEC); state.trickStreak = Math.min(state.trickStreak + 1, TRICK_STREAK_MAX + 1); }
       else state.trickStreak = 0;
-      emit({ type: 'landing', clean, trick, streak: state.trickStreak });
+      rig.react('landing', { impact: landingImpact, clean, side: state.x < 0 ? -1 : 1 });
+      emit({ type: 'landing', clean, trick, streak: state.trickStreak, impact: landingImpact });
       state.trick = null; trickArmed = false;
     }
     airWas = state.airborne; steerWas = inp.steer;
@@ -519,7 +524,9 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
     place(lay, stepHop(dt));
     stepCamera(dt, lay);
     stepTierSparks(dt);
+    ctx.inverted = state.inverted;
     ctx.t = elapsed; ctx.speedNorm = state.speed / KART_MAX_SPEED; ctx.airborne = state.airborne;
+    ctx.driftCharge = state.driftSec / DRIFT_TIER_SEC[DRIFT_TIER_SEC.length - 1];
     ctx.steerVel = vx; ctx.drift = state.drift; ctx.driftSide = driftSide; ctx.lean = lean;
     rig.update(dt, ctx);
   }
@@ -532,8 +539,15 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
   function idle(dt) {
     dt = clamp(+dt || 0, 0, 0.1);
     elapsed += dt;
+    ctx.inverted = false;
     ctx.t = elapsed; ctx.speedNorm = 0; ctx.airborne = false; ctx.steerVel = 0; ctx.drift = false; ctx.lean = lean;
     rig.update(dt, ctx);
+  }
+
+  function settleAnimation() {
+    rig.settleAnimation();
+    sparkAcc = 0;
+    if (tierSparks) tierSparks.clear();
   }
 
   function camera(out) {
@@ -561,7 +575,7 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
     listeners.length = 0;
   }
 
-  return { state, update, idle, applyBoost, applySlow, pace, setMood: rig.setMood, setFraught: rig.setFraught, camera, group,
+  return { state, update, idle, settleAnimation, applyBoost, applySlow, pace, setMood: rig.setMood, setFraught: rig.setFraught, camera, group,
     pulseTarget, setReach, setScale, setSway, onEvent, dispose,
     emiModel: () => rig.model(), emiReady: (cb) => rig.onReady(cb),
     setFace: (i) => rig.setFace(i), pose: (name, opts) => rig.pose(name, opts) };
