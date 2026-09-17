@@ -164,6 +164,19 @@ public sealed class BackRoomWallClipTests : IDisposable
     {
         var materialized = new List<string>();
         var released = new List<string>();
+        // THIS LOCK IS LOAD-BEARING, and it is the only factory in the Back Room tests that needs it.
+        // The stills and the clips are separate WarmSets with separate gates in BackRoomRemotePool -
+        // which is the property WarmPool_FetchesStillsAndClipsAsTwoSeparateSets exists to assert - so
+        // when both fetches are seamed, both fills run at once and these two recorder lists are
+        // written from two threads. List<T>.Add from two threads silently loses an item: this file
+        // shipped green and then failed about one run in three with "expected 3, actual 2", which is a
+        // dropped Add, not a slow fill. The pool's own state was never at risk (every mutation of it
+        // is inside lock (set.Gate)); only the fakes recording what it did were.
+        //
+        // BackRoomMediaSourceTests' factory does NOT need this: it seams the stills fetch and says
+        // nothing about clips, which the constructor resolves to NoBatchAsync, so only one fill ever
+        // runs there.
+        var recorder = new object();
         Task<(List<FypAssetManifest.Entry> Entries, string? Error)> Batch(List<FypAssetManifest.Entry>? entries)
             => Task.FromResult((entries ?? new List<FypAssetManifest.Entry>(), error));
 
@@ -172,12 +185,12 @@ public sealed class BackRoomWallClipTests : IDisposable
             _ => Batch(stills),
             (url, _) =>
             {
-                materialized.Add(url);
+                lock (recorder) materialized.Add(url);
                 var path = Path.Combine(_temp, "ccp_temp_remote_" + Guid.NewGuid().ToString("N") + Path.GetExtension(url));
                 File.WriteAllBytes(path, new byte[] { 1, 2, 3 });
                 return Task.FromResult<string?>(path);
             },
-            p => { released.Add(p); try { File.Delete(p); } catch { } },
+            p => { lock (recorder) released.Add(p); try { File.Delete(p); } catch { } },
             () => _root,
             () => _logger,
             _ => Batch(clips));
@@ -185,7 +198,12 @@ public sealed class BackRoomWallClipTests : IDisposable
     }
 
     /// <summary>The bounded wait returns when the CAP elapses, not when the batch ends (that is its
-    /// whole job), so a test asserting on a whole batch waits for the batch rather than the wait.</summary>
+    /// whole job), so a test asserting on a whole batch waits for the batch rather than the wait.
+    ///
+    /// <para>Three seconds, and it has never been the tight part: it gives up QUIETLY so the caller's
+    /// own assertion reports the real shortfall instead of a timeout with no numbers in it. When a
+    /// count here comes up short, suspect the caller's recorder before this ceiling - see the lock in
+    /// <c>Pool</c>.</para></summary>
     private static async Task Settle(Func<int> count, int want)
     {
         for (int i = 0; i < 300 && count() < want; i++) await Task.Delay(10);

@@ -313,14 +313,29 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Play tab, DtRH card -> "Racing Thoughts": the kart run on the descent's media, hosted
-        /// as its own WebView2 window (CaucusHostService). Same tier-2 door as FALL IN, checked
-        /// here for the same reason: the card's lockband is decoration, the handler is the wall.
+        /// as its own WebView2 window (CaucusHostService).
+        ///
+        /// <para>NO TIER DOOR since 2026-09-17, by the owner's call: the race is in open testing
+        /// on BOTH surfaces, so the app asks no more of it than the web does at /race - an
+        /// account, which signing in already covered. Nothing is added here to replace the tier
+        /// check: requiring a fresh sign-in where nothing required one before would be adding a
+        /// gate while removing one, and the race banks into the local chaos_meta.json either way.</para>
+        ///
+        /// <para>This is the ONE button on this card that is not tier 2, and the cosmetic price
+        /// was named when the call was made: a free account still sees the card's Lab lockband,
+        /// and this button sits under that scrim. It still works - the band is hit-test invisible
+        /// and PlayDoorRenderTests.EveryLockbandStartsCollapsedAndNeverSwallowsTheClick holds that
+        /// in place - it just READS locked. Lifting it above the scrim is a layout change, not a
+        /// gate change, so it was deliberately left out rather than smuggled in here.</para>
+        ///
+        /// <para>Putting the gate back means putting it back in THREE places, not one: here, and
+        /// the `--race` and `--race-cloud` args in App.OnStartup. FALL IN and Quick Drop still
+        /// demand tier 2 and are untouched.</para>
         /// </summary>
         internal void BtnStartRace_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                if (!TierGate.DemandLab("Down the Rabbit Hole", "dtrh")) return;
                 Services.Chaos.CaucusHostService.Launch();
             }
             catch (Exception ex)

@@ -2804,14 +2804,11 @@ namespace ConditioningControlPanel
             }
 
             // Racing Thoughts (the kart run on the descent's media), dev shortcut: `--race` opens
-            // the race window straight away. Same door as `--dtrh` - the race is a DtRH sibling
-            // and answers to the descent's tier gate, not one of its own.
-            if (e.Args.Contains("--race"))
-            {
-                var raceGate = Services.TierGate.RequiresLab("Down the Rabbit Hole", "dtrh");
-                if (raceGate.Allowed) Services.Chaos.CaucusHostService.Launch();
-                else Logger?.Information("--race ignored: {Reason}", raceGate.Reason);
-            }
+            // the race window straight away. NOT the same door as `--dtrh` any more: the race has
+            // no tier door since 2026-09-17 (owner's call - open testing on both surfaces) while
+            // the descent above is still tier 2. This arg asks exactly what BtnStartRace_Click
+            // asks, which is the only thing that keeps a dev shortcut honest about the product.
+            if (e.Args.Contains("--race")) Services.Chaos.CaucusHostService.Launch();
 
             // `--race-chart <file>`: chart a hypno file from the command line - decode, the energy
             // pass, the word pass when it is available, then write the chart to the cache and quit.
@@ -2876,13 +2873,9 @@ namespace ConditioningControlPanel
             // `--race-cloud`: open the race and then the BambiCloud window straight away. The
             // cloud path starts from a menu verb, and a browser frame cannot be driven by synthetic
             // clicks, so this is the only way to exercise it end to end. A dev rig like
-            // `--race-track`: it opens the same page `--race` opens and gates nothing.
-            if (e.Args.Contains("--race-cloud"))
-            {
-                var cloudGate = Services.TierGate.RequiresLab("Down the Rabbit Hole", "dtrh");
-                if (cloudGate.Allowed) Services.Chaos.CaucusHostService.Launch(null, openCloud: true);
-                else Logger?.Information("--race-cloud ignored: {Reason}", cloudGate.Reason);
-            }
+            // `--race-track`: it opens the same page `--race` opens, and now really does gate
+            // nothing - the comment said so while the code below still asked for tier 2.
+            if (e.Args.Contains("--race-cloud")) Services.Chaos.CaucusHostService.Launch(null, openCloud: true);
 
             // Goon Game browser client, dev shortcut: `--goon` opens the web duel window straight
             // away (same shape as `--dtrh`). Needs MainWindow to exist first — the host owns its

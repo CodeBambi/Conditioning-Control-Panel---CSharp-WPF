@@ -538,9 +538,14 @@
                                         </Button.Resources>
                                     </Button>
                                     <!-- Racing Thoughts: the kart run on the same media, a DtRH sibling
-                                         page (dtrh/race.html). Same outline as Quick Drop and the same
-                                         door - BtnStartRace_Click asks the descent's TierGate, so the
-                                         lockband above needs no third exception. -->
+                                         page (dtrh/race.html). Same outline as Quick Drop, NOT the same
+                                         door: BtnStartRace_Click stopped asking the descent's TierGate on
+                                         2026-09-17 (open testing, owner's call), so this is the one control
+                                         on the card a free account may actually use. The lockband above
+                                         therefore DOES want an exception now - it is hit-test invisible so
+                                         the button still works, but it scrims a button that is no longer
+                                         locked. Left as a known cosmetic debt rather than reflowing the
+                                         hero card inside a gate change. -->
                                     <!-- Revealed 2026-09-17 on the owner's word. Collapsed at the 6.9.5 cut and for the
                                          four days after it, which left the game with NO door anywhere in the app: this
                                          button is the only entry point there has ever been. HiddenRoomsTests now fails
