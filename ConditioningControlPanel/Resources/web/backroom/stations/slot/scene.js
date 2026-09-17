@@ -229,8 +229,9 @@ export async function createScene(o) {
   const bulbs = [];
   rig.traverse(n => { if (n.isMesh && /^lights_chase_\d+$/.test(n.name)) bulbs.push(n); });
   bulbs.sort((a, b) => a.name.localeCompare(b.name));
-  const bulbScales = bulbs.map(b => b.scale.clone());
-  // Bulb dimensions and perimeter placement belong to the shared cabinet asset.
+  const bulbScales = bulbs.map(b => b.scale.clone().multiplyScalar(1.3));
+  // Keep the authored perimeter, with 30% larger lamps in the seated view.
+  // Rim lighting measures their world scale, so its existing aura grows with them.
   bulbs.forEach((b, i) => {
     b.material = new THREE.MeshPhysicalMaterial({ color: PALETTES.idle[i % 5], emissive: PALETTES.idle[i % 5],
       emissiveIntensity: .6, roughness: .24, metalness: .08, clearcoat: 1, clearcoatRoughness: .14 });
@@ -1068,6 +1069,16 @@ export async function createScene(o) {
     get hazing() { return !!hazeOn; },
     /** A node's centre in client px (tokens fly from and to these), null when the glb lacks it. `top` takes the
      *  middle of its top edge instead: where a speech bubble wants to stand, EMI's shelf or her topper. */
+    portrait(i) {
+      const box = screenBox(reels[i]);
+      if (!box || !strips[i]) return null;
+      const image = makeCanvas(Math.round(cell.hw*2), Math.round(cell.hh*2));
+      const g = image.getContext('2d'); g.translate(image.width/2,image.height/2);
+      drawSymbol(g, strips[i][stopsNow[i]], performance.now(), {...look, reduced:reduced||stillFx(), faceMood:reelMood, faceAge:performance.now()-reelMoodAt}, cell);
+      const rect = canvas.getBoundingClientRect();
+      return { canvas:image, x:rect.left+box.left+box.width/2, y:rect.top+box.top+box.height/2,
+        w:box.width, h:Math.min(box.height,box.width*image.height/image.width) };
+    },
     project(name, top = false) {
       const n = get(name);
       if (!n) return null;

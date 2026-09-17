@@ -30,6 +30,7 @@ import { rotateSpiralDeal } from './symbols.js';
 
 import { createTape, stopsFor } from './tape.js';
 import { createScene, FACES } from './scene.js';
+import { createCelebration, echoReels } from './celebration.js';
 import { createMedia, fxSymbols } from './media.js';
 import { mintId } from './tape.js';
 // One target and one GIF identity for this app/page lifetime, across cabinet visits.
@@ -120,6 +121,7 @@ export async function mount(ctx) {
   let jarShown = null;
   // THE FLOW: the callout (one per open), the timers it and the fx ride on (cleared on suspend and close, Law VI),
   // when the next press may start after a landing, the host tunnel level A1 pulls, and the haze's idle timer.
+  let celebration = null;
   let callout = null, flowTimers = new Set(), flowLast = null, unlockAt = 0, tunnelLevel = 0, hazeTimer = 0;
   const $ = sel => el.querySelector(sel), wait = ms => new Promise(r => setTimeout(r, Math.max(0, ms)));
   function mark(phase) { pace = phase; marks = [...marks.slice(-79), { phase, at: Math.round(performance.now()) }]; }
@@ -517,6 +519,7 @@ export async function mount(ctx) {
     flowTimers.add(id);
   }
   function clearFlow() {
+    celebration?.clear();
     for (const id of flowTimers) clearTimeout(id);
     flowTimers.clear();
     if (callout) callout.cancel();
@@ -531,6 +534,7 @@ export async function mount(ctx) {
     flowLast = { line: o.line, kind: o.kind, landedAt: Math.round(at), hits: plan.hits, callouts: plan.callouts.map(c => c.key),
                  fx: plan.fx.map(f => f.id), unlockMs: plan.unlockMs, calloutAt: null, fxAt: null };
     scene.highlight(plan.hits);
+    celebration?.echo(echoReels(o.symbols, plan.fx));
     if (el && plan.hits.length) { el.classList.add(GLYPH_HIT); later(FLOW.HIGHLIGHT_MS, () => { if (el) el.classList.remove(GLYPH_HIT); }); }
     const chain = plan.fx.some(f => /^fx.sub_/.test(f.id)) ? subWords(o, media).length : 0;   // a sub chain owns the centre first
     const wordsMs = chain ? WORD_MS + WORD_GAP_MS * (chain - 1) : 0;
@@ -580,6 +584,7 @@ export async function mount(ctx) {
     // still flies, because a number that just changes is a Law XII break at every motion level.
     const plan = sitPlan(houseTier({ station: STATION, tier }), sit, { reduced, lite, still: stillFx(), melted });
     const semis = ladderSemis(streak, melted), roll = plan.partyMs;   // playbook A3: the count-up scales to the win
+    celebration?.burst(tier, melted ? 0 : o.pay);
     landPlan = plan;   // flow()'s callout frame reads it FX_DELAY_MS from now (THE SPARKLE BURST)
     // Law IX, once a sit-down: the hero the ledger counts is the REVEAL the cabinet actually played, which is
     // feel.recipe's (the same pop and turn at every motion level), not plan.reveal - that is the decoration
@@ -828,6 +833,8 @@ export async function mount(ctx) {
     const s = tape.snapshot();
     scene.setStrips(s.strips);
     scene.setStops(s.last && Array.isArray(s.last.stops) ? s.last.stops : stopsFor(s.strips, s.shown));
+    celebration = createCelebration({ mount: el, still: stillFx,
+      portrait: i => scene?.portrait(i), point: () => scene?.project('reel_window') });
     scene.setLook({ gif: i => media.gif(i), word: i => media.word(i) });
     dealt.then(() => { if (my === session && scene) scene.setLook({ gif: i => media.gif(i), word: i => media.word(i) }); });
     renderOdds();
@@ -868,6 +875,7 @@ export async function mount(ctx) {
     endAttract(true);
     clearFlow(); tunnel(0);
     if (callout) callout.dispose();
+    celebration?.dispose(); celebration = null;
     clearTimeout(glanceTimer); clearTimeout(gainTimer);
     if (bank) { bank.skip(); bank.dispose(); }
     // What a reopen will show: the stored tape's unplayed pays (a freeze's own outcomes are not stored).
@@ -916,7 +924,7 @@ export async function mount(ctx) {
                           label: el && $('.slot-spin small') ? $('.slot-spin small').textContent : null },
                     hostBack, variant: variant && variant.id, palette: !!(scene && scene.recoloured),
                     spinning: !!(scene && scene.spinning), sceneAlive: !!scene,
-                    callout: callout ? callout.debug() : null, flow: flowLast, tunnel: tunnelLevel, haze: !!(scene && scene.hazing),
+                    celebration: celebration?.debug(), callout: callout ? callout.debug() : null, flow: flowLast, tunnel: tunnelLevel, haze: !!(scene && scene.hazing),
                     feel: { log: feelLog, pose, streak, seen: sit.seen, heroes: sit.heroes, plan: landPlan,
                             shown, readout: String(shownSp()), hostSp: !!hostSp,
                             attracting, idleArmed: !!idleTimer, emi: playing ? playing.emi : [],
