@@ -193,12 +193,16 @@ export function planRun({ index, seed = 1, calm = false, rotVel0 = FEEL.ROTOR_KI
     if (fits && sim.hits >= 2) break;
   }
   const s = best.sim, shift = (target - s.landIdx) * SEG;
+  // One extra counter-rotation, eased away before the drop. Whole turns leave
+  // the server pocket and the complete fret/rattle choreography unchanged.
+  const dropAt = Math.max(FEEL.DT, s.ph.findIndex(p => p !== 0) * FEEL.DT);
+  const launchArc = i => calm ? 0 : TAU * Math.pow(Math.max(0, 1 - i * FEEL.DT / dropAt), 3);
   const f32 = (a, add = 0) => Float32Array.from(a, (v) => v + add);
   return {
     index: target, calm: !!calm, hits: s.hits,
     landAt: s.landT, restAt: s.restT, duration: s.restT,
     sparks: s.sparks.map((x) => ({ at: x.at, a: x.a + shift })),
-    rot: Float32Array.from(s.rot,(v,i)=>v+excess*(1-Math.exp(-momentumDecay*i*FEEL.DT))/momentumDecay), rel: f32(s.rel, shift), r: f32(s.rr), tscale: f32(s.ts), speed: f32(s.sp), phase: Uint8Array.from(s.ph),
+    rot: Float32Array.from(s.rot,(v,i)=>v+excess*(1-Math.exp(-momentumDecay*i*FEEL.DT))/momentumDecay), rel: Float32Array.from(s.rel,(v,i)=>v+shift+launchArc(i)), r: f32(s.rr), tscale: f32(s.ts), speed: f32(s.sp), phase: Uint8Array.from(s.ph),
   };
 }
 

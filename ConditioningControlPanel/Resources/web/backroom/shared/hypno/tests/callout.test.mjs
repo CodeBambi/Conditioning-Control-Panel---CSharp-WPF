@@ -18,7 +18,10 @@ function fakeDoc() {
       append(...kids) { for (const k of kids) { k.parent = node; node.children.push(k); } },
       remove() { if (node.parent) { node.parent.children = node.parent.children.filter((c) => c !== node); node.parent = null; } },
       setAttribute(k, v) { node.attrs[k] = v; }, getAttribute(k) { return node.attrs[k]; },
-      animate(frames, opts) { const a = { frames, opts, cancelled: false, cancel() { a.cancelled = true; } }; anims.push(a); return a; },
+      animate(frames, opts) {
+        const offsets = frames.map(f => f.offset).filter(v => v !== undefined);
+        assert.ok(offsets.every((v, i) => v >= 0 && v <= 1 && (!i || v >= offsets[i - 1])), 'browser keyframe offsets must be monotonic');
+        const a = { frames, opts, cancelled: false, cancel() { a.cancelled = true; } }; anims.push(a); return a; },
       querySelectorAll(sel) {
         const classes = sel.split(',').map((s) => s.trim().replace(/^\./, ''));
         const out = [];
@@ -149,7 +152,7 @@ test('word: clicker, speech (rate 0.85, pitch 0.8, previous cancelled), word cue
     let words = all(layer, 'br-callout-word');
     assert.equal(words.length, 1, 'the first word is up on the frame of the call');
     assert.equal(words[0].textContent, 'DROP');
-    assert.equal(words[0].style.fontSize, '15vh');
+    assert.equal(words[0].style.fontSize, '30vh');
     assert.match(words[0].style.backgroundImage, /linear-gradient/);
     assert.equal(words[0].anims[0].opts.duration, WORD_MS);
     assert.deepEqual(cues.map((x) => x.cue), ['clicker', 'word']);

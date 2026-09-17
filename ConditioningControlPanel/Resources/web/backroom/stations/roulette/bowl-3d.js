@@ -127,6 +127,11 @@ export function createBowl3D({ stage, wheel, rose }) {
   let glyphLitIndex = -1, glyphLitAt = -Infinity;
   let disposed = false, lastView = {}, activePlan=null, launchAt=0, currentNow=0;
   const trailPoints=[];
+  const dust = new T.InstancedMesh(new T.OctahedronGeometry(lift*.32),
+    new T.MeshBasicMaterial({color:0x65ffe0,transparent:true,opacity:.8,depthWrite:false}),48);
+  dust.name='roulette_ball_diamonds'; dust.instanceMatrix.setUsage(T.DynamicDrawUsage); root.add(dust);
+  const mote=new T.Object3D(), dustColor=new T.Color();
+  let lastTrailAt=-Infinity;
   const lit = new Set();
   function apply() {
     if (disposed) return;
@@ -136,8 +141,8 @@ export function createBowl3D({ stage, wheel, rose }) {
     ball.visible = s.phase !== 'idle';
     if (ball.visible && s.index >= 0) {
       const p = centers[s.index];
-      // Source order runs clockwise; the canvas plan uses increasing indices.
-      const angle = angles[s.index] - (s.rel - restRel(s.index));
+      // Ball and rotor share the same angular convention; the relative run is negative.
+      const angle = angles[s.index] + (s.rel - restRel(s.index));
       const radial = Math.max(0, Math.min(1, (s.radius - FEEL.R_REST) / (FEEL.R_RIM - FEEL.R_REST)));
       const radius = restRadius + (path.rimRadius - restRadius) * radial;
       point.set(Math.cos(angle) * radius, path.height(radius), -Math.sin(angle) * radius);
@@ -151,15 +156,27 @@ export function createBowl3D({ stage, wheel, rose }) {
     if(activePlan && !lastView.still)for(const hit of activePlan.sparks){
       const age=(sec-hit.at)/FEEL.SPARK_S;if(age<0||age>=1)continue;
       const index=((Math.floor(hit.a/SEG)%wheel.length)+wheel.length)%wheel.length;
-      const a=angles[index]+SEG*.5;
+      const a=angles[activePlan.index]+hit.a-restRel(activePlan.index);
       for(const radius of [restRadius*.9,restRadius*1.12])sparkGeometry.attributes.position.setXYZ(sparkCount++,Math.cos(a)*radius,centers[index].y+lift,-Math.sin(a)*radius);
     }
     sparks.visible=sparkCount>0;sparkGeometry.setDrawRange(0,sparkCount);sparkGeometry.attributes.position.needsUpdate=true;sparks.material.opacity=.8*k;
-    if(lastView.full&&!lastView.still&&ball.visible){
+    if(!lastView.still&&ball.visible&&['run','drop','rattle'].includes(s.phase)&&currentNow!==lastTrailAt){
+      lastTrailAt=currentNow;
       trailPoints.unshift(root.worldToLocal(ball.getWorldPosition(new T.Vector3())));trailPoints.length=Math.min(24,trailPoints.length);
       trailPoints.forEach((p,i)=>trailGeometry.attributes.position.setXYZ(i,p.x,p.y,p.z));trailGeometry.setDrawRange(0,trailPoints.length);trailGeometry.attributes.position.needsUpdate=true;
-    }else trailPoints.length=0;
-    trail.visible=trailPoints.length>1;trail.material.opacity=.2*k;
+    }else if(lastView.still||!['run','drop','rattle'].includes(s.phase)) trailPoints.length=0;
+    trail.visible=trailPoints.length>1;trail.material.opacity=.28*k;
+    dust.visible=trail.visible; dust.count=Math.min(48,trailPoints.length*2);
+    for(let i=0;i<dust.count;i++){
+      const age=i/dust.count, p=trailPoints[Math.floor(i/2)];
+      mote.position.copy(p); mote.position.y+=Math.sin(i*2.4+sec*9)*lift*age*2;
+      mote.position.x+=Math.cos(i*2.1)*lift*age*2;
+      mote.rotation.set(sec*4+i,i*2,sec*3); mote.scale.setScalar((1-age)*1.3);
+      mote.updateMatrix();dust.setMatrixAt(i,mote.matrix);
+      dustColor.setHSL(.43+age*.4,1,.65);dust.setColorAt(i,dustColor);
+    }
+    dust.instanceMatrix.needsUpdate=true;if(dust.instanceColor)dust.instanceColor.needsUpdate=true;
+    dust.material.opacity=.8*k;
     if (hint.visible) {
       const pulse = lastView.still ? .5 : (1 - Math.cos((currentNow % HINT_MS) / HINT_MS * Math.PI * 2)) / 2;
       hint.rotation.z = -HINT_A0 - s.rot;   // the room's angle, not the rotor's (mirrored: the seat reads y up)
@@ -203,8 +220,8 @@ export function createBowl3D({ stage, wheel, rose }) {
     if (disposed) return; disposed = true;
     rotor.quaternion.copy(saved.rotor); ball.position.copy(saved.ball); ball.visible = saved.visible;
     surfaces.reset(); if(!existingSurfaces)surfaces.dispose();
-    for(const object of [beam,sparks,trail,hintArc,hintHead]){object.removeFromParent();object.geometry.dispose();}
-    for(const object of [beam,sparks,trail]) object.material.dispose();
+    for(const object of [beam,sparks,trail,dust,hintArc,hintHead]){object.removeFromParent();object.geometry.dispose();}
+    for(const object of [beam,sparks,trail,dust]) object.material.dispose();
     hint.removeFromParent(); hintMaterial.dispose();
     for (const g of glyphs) if (g) { g.mesh.removeFromParent(); g.material.dispose(); }
     glyphGeometry.dispose(); for (const tex of glyphTextures.values()) tex.dispose(); glyphTextures.clear();

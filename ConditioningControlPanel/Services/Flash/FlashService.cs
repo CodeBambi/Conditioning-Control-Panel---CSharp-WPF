@@ -1468,8 +1468,8 @@ namespace ConditioningControlPanel.Services
                     imageData.Peripheral = true;
                     var m = imageData.Monitor;
                     var portrait = m.Height > m.Width;
-                    var maxW = m.Width * (portrait ? .29 : .18);
-                    var maxH = m.Height * (portrait ? .16 : .29);
+                    var maxW = m.Width * (portrait ? .29 : .18) * 1.2;
+                    var maxH = m.Height * (portrait ? .16 : .29) * 1.2;
                     var fit = Math.Min(maxW / imageData.Width, maxH / imageData.Height);
                     var w = Math.Max(1, (int)(imageData.Width * fit));
                     var h = Math.Max(1, (int)(imageData.Height * fit));
@@ -1619,7 +1619,8 @@ namespace ConditioningControlPanel.Services
                 window.CurrentFrameIndex = 0;
                 // The shared host is fully click-through (pops on it would need the global mouse
                 // hook, like bubbles) — solid-mode flashes are gaze-pop/linger only by design.
-                window.IsClickable = settings.FlashClickable && !useHost;
+                window.PreviewV2 = imageData.PreviewV2;
+                window.IsClickable = (settings.FlashClickable || window.PreviewV2) && !useHost;
                 window.Background = System.Windows.Media.Brushes.Black;
                 window.IsFadingOut = false;
                 window.LifetimeCts = windowCts;
@@ -1853,7 +1854,7 @@ namespace ConditioningControlPanel.Services
                     // is rolled at spawn); an original resolves the picker through ownership and
                     // MotionLevel. The classic and solid paths never move.
                     window.MotionStyle = imageData.PreviewV2
-                        ? FlashMotion.Resolve(_random.Next(3) == 0 ? FlashMotionStyle.Still : FlashMotionStyle.Mix,
+                        ? FlashMotion.Resolve(FlashMotionStyle.DriftBounce,
                             true, true, MotionFx.Level, _random)
                         : ResolveMotionStyle(settings, inheritMotion);
                     SpawnLayerVisual(window, imageData, monitor,
@@ -2140,12 +2141,11 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private FlashShatterState? BuildShatter(FlashWindow window, Compositor.FlashLayer.FlashItem item)
         {
-            if (App.Settings?.Current?.FlashShatterEnabled != true) return null;
-            if (!OwnsFlashV2()) return null;
+            if (!window.PreviewV2 && (App.Settings?.Current?.FlashShatterEnabled != true || !OwnsFlashV2())) return null;
 
             var (bx, by, bw, bh) = ShatterBounds(window, item);
             var state = FlashShatter.Create(item.X, item.Y, item.W, item.H, bx, by, bw, bh,
-                MotionFx.Level, _random);
+                MotionFx.Level, _random, ninePieces: window.PreviewV2);
             return state.Shards.Length > 0 ? state : null;
         }
 
@@ -2251,6 +2251,7 @@ namespace ConditioningControlPanel.Services
                     bx, by, bw, bh,
                     MotionFx.Level, _random);
 
+            if (imageData.PreviewV2 && motionState != null) { motionState.Vx *= .35; motionState.Vy *= .35; }
             window.LayerSpawnPending = true;
 
             _ = Task.Run(() =>
@@ -2374,7 +2375,7 @@ namespace ConditioningControlPanel.Services
                 // Wave 2: a left press on a draggable flash takes hold of it instead of popping
                 // it, and the release decides between the pop, a placement and a throw. A right
                 // press still pops on the spot - that is the escape hatch while dragging is on.
-                var startDrag = !right && _layerDragEnabled;
+                var startDrag = !right && (_layerDragEnabled || win.PreviewV2);
                 var grab = px;
                 System.Windows.Application.Current?.Dispatcher?.BeginInvoke(() =>
                 {
@@ -2468,8 +2469,27 @@ namespace ConditioningControlPanel.Services
             // and from its WORK AREA, so a flung flash never vanishes behind the taskbar.
             ApplyWorkAreaBounds(motion, px);
 
-            if (FlashDrag.Release(motion, nowMs, MotionFx.Level) == FlashDragOutcome.Tap
-                && !window.IsFadingOut)
+            var outcome = FlashDrag.Release(motion, nowMs, MotionFx.Level);
+            if (window.PreviewV2 && !window.IsFadingOut)
+            {
+                if (MotionFx.Level == MotionLevel.Off || _random.Next(3) == 0)
+                    OnFlashClicked(window, App.Settings.Current);
+                else
+                {
+                    // Samples are local to this Back Room flash; no saved V2 preference changes.
+                    if (outcome != FlashDragOutcome.Fling)
+                    {
+                        motion.Vx = (px.X < motion.BoundsX + motion.BoundsW / 2 ? -1 : 1) * 1100;
+                        motion.Vy = (_random.NextDouble() - .5) * 500;
+                    }
+                    motion.Drag = drag;
+                    drag.Flinging = true;
+                    motion.BoundsX -= motion.BoundsW; motion.BoundsY -= motion.BoundsH;
+                    motion.BoundsW *= 3; motion.BoundsH *= 3;
+                }
+                return;
+            }
+            if (outcome == FlashDragOutcome.Tap && !window.IsFadingOut)
             {
                 OnFlashClicked(window, App.Settings.Current);
             }
@@ -4966,6 +4986,9 @@ namespace ConditioningControlPanel.Services
         /// plain cut. Presentation only - XP, hydra and the active list are untouched by it.
         /// </summary>
         public bool ShatterOnDismiss { get; set; }
+
+        /// <summary>Back Room-only interaction showcase, independent of saved ownership settings.</summary>
+        public bool PreviewV2 { get; set; }
 
         /// <summary>
         /// The fade alpha the heartbeat animates: window Opacity in per-window mode, the hosted

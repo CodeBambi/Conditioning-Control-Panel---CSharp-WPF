@@ -9,7 +9,7 @@ test('Motion Off keeps every sampled V2 preview still', () => {
   }
 });
 test('motion samples vary while preserving a readable hold and finite transforms', () => {
-  for(const portrait of [false,true]) for(const variant of [1,2]) {
+  for(const portrait of [false,true]) for(const variant of [0,1,2,3,4,5]) {
     const f=flashPreviewFrames({width:200,height:150,variant,portrait,opacity:.6});
     assert.ok(new Set(f.map(x=>x.transform)).size>2);
     assert.ok(f.slice(1,-1).every(x=>x.opacity===.6));

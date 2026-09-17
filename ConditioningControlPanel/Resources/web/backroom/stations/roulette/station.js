@@ -279,6 +279,7 @@ export async function mount(ctx) {
   }
 
   function back() {
+    if (phase === 'asking' || phase === 'playing') return;
     if (el && !hostBack) $('.roul-back').classList.add('is-ringing');   // Law VIII
     if (typeof ctx.standUp === 'function') ctx.standUp(); else close();
   }
@@ -824,6 +825,7 @@ export async function mount(ctx) {
 
   return {
     open, close,
+    canLeave: () => phase !== 'asking' && phase !== 'playing',
     suspend(on) {
       if (!!on === suspended) return;
       if (on) {

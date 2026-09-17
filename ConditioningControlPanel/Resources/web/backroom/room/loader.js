@@ -20,6 +20,7 @@
  * ==========================================================================*/
 
 import * as bridge from '../bridge.js';
+import { flashesBusy } from '../shared/hypno/flash-interaction.js';
 import { createRenderBudget } from './render-budget.js';
 
 /* The same board test the render budget makes, so the room's echo and a station's echo can never disagree
@@ -230,5 +231,5 @@ export function createLoader(room) {
   }
 
   /** `current.debug()` is a test seam (smoke/): the station's own debug(), never read by the room. */
-  return { open, close, suspend, get current() { return current ? { id: current.station.id, kind: current.kind, debug: () => current?.handle?.debug?.() } : null; } };
+  return { open, close, suspend, canLeave: () => current?.station.id !== 'roulette' || (!flashesBusy() && current?.handle?.canLeave?.() !== false), get current() { return current ? { id: current.station.id, kind: current.kind, debug: () => current?.handle?.debug?.() } : null; } };
 }

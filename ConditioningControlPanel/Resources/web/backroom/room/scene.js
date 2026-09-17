@@ -129,7 +129,7 @@ export async function createScene(o) {
   /* LEAVING BY HAND (leave-intent.js). Seated at a station, a tap that lands on the room instead of the
    * station and a step backwards both stand you up the way the Back chip does: o.onLeave runs the room's
    * own Back path, so the station settles first and the camera walks back to where you stood (Law VI). */
-  const canLeave = () => !!seated && !held && !halted && !suspended && !transition && !pendingVisit && !overview && !leaveAsked && !customization.opened;
+  const canLeave = () => o.canLeave?.() !== false && !!seated && !held && !halted && !suspended && !transition && !pendingVisit && !overview && !leaveAsked && !customization.opened;
   const touch = createTouchControl({ mount: o.mount, onReset: () => vel.set(0, 0) });
   const frames = [];
   const stationRows = [...o.stations, customization.row];
@@ -220,10 +220,11 @@ export async function createScene(o) {
   /* THE WAY OUT BY TAP. Seated, the station's own DOM keeps its buttons (room.css: the seat sheet is
    * pointer-events: none but its controls are not), so anything that reaches the canvas is either the
    * station's own meshes - ignored here, the station handles them - or the room, and the room stands you up. */
-  canvas.addEventListener('pointerdown', (e) => { if (e.button === 0 && canLeave()) standTap = { id: e.pointerId, x: e.clientX, y: e.clientY }; });
+  const exitEdge = e => { const r=canvas.getBoundingClientRect(); return seated?.row.id !== 'roulette' || e.clientY >= r.bottom - Math.min(60,r.height*.08); };
+  canvas.addEventListener('pointerdown', (e) => { if (e.button === 0 && canLeave() && exitEdge(e)) standTap = { id: e.pointerId, x: e.clientX, y: e.clientY }; });
   canvas.addEventListener('pointerup', (e) => {
     const start = standTap; standTap = null;
-    if (!start || start.id !== e.pointerId || !canLeave()) return;
+    if (!start || start.id !== e.pointerId || !canLeave() || !exitEdge(e)) return;
     // The same slop as every other tap in the room: a drag on the wheel rim or across the mat is not a click.
     if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > TAP_SLOP) return;
     if ([...views].some((view) => view.coversRoom)) return;   // no room on screen to be tapped

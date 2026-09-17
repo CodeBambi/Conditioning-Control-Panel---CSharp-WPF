@@ -443,7 +443,7 @@ export async function mount(ctx) {
   }
 
   const view = (now) => controls({ phase, hand: st && st.hand, legal: st ? st.legal : [], sp: chip ? chip.server : 0, stake, busy,
-    animating: queue.length > 0, dealReadyAt, screenUntil, now });
+    animating: queue.length > 0, dealReadyAt, screenUntil: screenBusy(now) ? Math.max(screenUntil, now + 1) : screenUntil, now });
 
   /** A fullscreen moment still running: its timed hold, or a tunnel breath that has outlived it. */
   const screenBusy = (now) => now < screenUntil || !!(moments && moments.breathing());
@@ -629,14 +629,20 @@ export async function mount(ctx) {
     const hud = table.hud(), total = $('.cards-total'), still = dress().still;
     el.toggleAttribute('data-still', still);
     for (const [key,value] of Object.entries({ 'phone-total-x':hud.x, 'phone-total-y':hud.top-18, 'hand-x': hud.x, 'hand-bottom': hud.bottom, 'total-x': hud.left - (hud.hands>1 ? 48 : 65), 'total-y': hud.y, 'bet-x': hud.betX, 'bet-y': hud.betY + 44 })) { if (!ctx.stage.lookShift || !key.startsWith('hand-')) el.style.setProperty('--' + key, value + 'px'); }
-    const sideWidth = el.clientWidth <= 800 ? 76 : 126;
+    const compact = el.clientWidth <= 800;
+    const sideWidth = compact ? 84 : 142;
     const standX = Math.max(sideWidth/2+8, hud.left-sideWidth/2-14);
     const hitX = Math.min(el.clientWidth-sideWidth/2-8, hud.right+sideWidth/2+14);
     el.style.setProperty('--stand-x', standX+'px');
     el.style.setProperty('--hit-x', hitX+'px');
-    el.style.setProperty('--action-y', Math.min(el.clientHeight-110,el.clientWidth<=800?hud.bottom+10:hud.y+25)+'px');
-    total.style.left = (el.clientWidth<=800?46:standX)+'px';
-    total.style.top = (el.clientWidth<=800?hud.top-36:hud.y-48)+'px';
+    el.style.setProperty('--action-y', Math.max(90, Math.min(el.clientHeight-(compact?180:158),hud.y-25))+'px');
+    total.style.left = standX+'px';
+    const scoreY = Math.max(110, Math.min(el.clientHeight-180, hud.y-48));
+    total.style.top = scoreY+'px';
+    el.style.setProperty('--secondary-y', (scoreY+(compact?30:62))+'px');
+    // Stake stays below the cards, clear of the shared Hit/Deal target.
+    const bet = el.querySelector(':scope > .cards-bet');
+    if (bet) { bet.style.left = hud.x+'px'; bet.style.top = Math.min(el.clientHeight-40,hud.bottom+42)+'px'; bet.style.bottom = 'auto'; bet.style.right = 'auto'; bet.style.transform = 'translate(-50%,-50%)'; }
     const key=hud.owner+':'+hud.total;
     paintScore(total,hud,hud.hands>1?t('br_cards_hand_short','Hand {i}',{i:hud.owner+1}):t('br_cards_you','You'),key,totalKey,still);totalKey=key;
     const dealer=table.hud('d'), badge=$('.cards-dealer-total'), dealerKey=dealer.total+':'+dealer.hidden;

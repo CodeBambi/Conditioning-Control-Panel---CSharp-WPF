@@ -26,7 +26,7 @@ export function rouletteSeat(row, fixture, camera, width, height) {
   const top = portrait ? 106 : 52, bottom = portrait ? 104 : short ? 64 : 74;
   const bounds = new T.Box3().setFromPoints(points), center = bounds.getCenter(new T.Vector3());
   const direction = new T.Vector3().fromArray(row.approach).sub(new T.Vector3().fromArray(row.look));
-  direction.y=0; direction.normalize(); direction.y=portrait?2.6:.7; direction.normalize();
+  direction.y=0; direction.normalize(); direction.y=portrait?2.6:short?.7:1.05; direction.normalize();
   const right = new T.Vector3().crossVectors(new T.Vector3(0,1,0), direction).normalize();
   const up = new T.Vector3().crossVectors(direction, right).normalize();
   const tan = Math.tan(camera.fov*Math.PI/360), aspect=width/height;

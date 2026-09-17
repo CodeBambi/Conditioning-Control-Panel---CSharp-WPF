@@ -128,7 +128,7 @@ public static class FlashShatter
     /// caller falls through to the plain cut without a second branch.
     /// </summary>
     public static FlashShatterState Create(double x, double y, double w, double h,
-        double bx, double by, double bw, double bh, MotionLevel level, Random rng)
+        double bx, double by, double bw, double bh, MotionLevel level, Random rng, bool ninePieces = false)
     {
         var s = new FlashShatterState
         {
@@ -147,7 +147,7 @@ public static class FlashShatter
         s.DurationSec = reduced ? DurationSec * ReducedDurationScale : DurationSec;
 
         var cols = reduced ? ReducedColumns : FullColumns;
-        var rows = reduced ? ReducedRows : rng.Next(FullRowsMin, FullRowsMax + 1);
+        var rows = reduced ? ReducedRows : ninePieces ? 3 : rng.Next(FullRowsMin, FullRowsMax + 1);
 
         // The cut lines: an even split with the interior ones nudged off it, so two breaks of the
         // same picture never produce the same pieces. The outer edges stay put - a shard that

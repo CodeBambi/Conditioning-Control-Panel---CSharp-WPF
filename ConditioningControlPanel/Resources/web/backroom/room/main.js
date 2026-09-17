@@ -196,7 +196,7 @@ async function returnToRoom() {
 
 /** Back, from anywhere. A station closes first, then the room view; an empty room is left. */
 async function back(reason) {
-  if (leaving) return;
+  if (leaving || loader?.canLeave?.() === false) return;
   if(scene?.customization?.dismiss())return;
   if (loader && (loader.current || visiting)) { await returnToRoom(); return; }
   if (hud && hud.optionsOpen) { hud.closeOptions(); return; }
@@ -461,6 +461,7 @@ async function start(init) {
       onVisit: (row) => visit(row),
       // The room asking to stand up (a tap on the floor, a step back): the Back path, so the station settles first.
       onLeave: () => back('room'),
+      canLeave: () => loader?.canLeave?.() !== false,
       log: (msg) => bridge.log('warn', msg),
     });
   } catch (e) {

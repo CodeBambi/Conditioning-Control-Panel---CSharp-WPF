@@ -1,20 +1,10 @@
-/** Occasional Back Room samples of V2 motion. Never changes global ownership or settings. */
-export function flashPreviewFrames({ width, height, portrait = false, opacity = 1, motion = true, variant = 0 }) {
-  const mode = motion ? Math.abs(Math.floor(variant)) % 3 : 0;
-  const base = 'translate(-50%,-50%)';
-  const dx = portrait ? width * .12 : width * .08, dy = portrait ? height * .06 : height * .16;
-  const pose = (x, y, angle = 0) => `${base} translate(${x}px,${y}px) rotate(${angle}deg)`;
-  const points = mode === 1
-    ? [pose(-dx,-dy), pose(dx,dy), pose(-dx,dy*.5), pose(dx*.5,-dy), base]
-    : mode === 2
-      ? [pose(-dx,0,-8), pose(dx,dy,8), pose(-dx,0,-6), pose(dx,dy,5), base]
-      : [base,base,base,base,base];
-  return [
-    { transform: points[0], opacity: 0, offset: 0 },
-    { transform: points[0], opacity, offset: .08 },
-    { transform: points[1], opacity, offset: .32 },
-    { transform: points[2], opacity, offset: .58 },
-    { transform: points[3], opacity, offset: .84 },
-    { transform: points[4], opacity: 0, offset: 1 },
-  ];
+/** Every Back Room flash drifts slowly; variants change speed and direction. */
+export function flashPreviewFrames({width,height,portrait=false,opacity=1,motion=true,variant=0}) {
+  const mode=Math.abs(Math.floor(variant))%6,base='translate(-50%,-50%)';
+  const pace=.6+mode*.22,sign=mode%2?-1:1;
+  const dx=width*.16*pace*sign,dy=height*(portrait?.08:.12)*pace*(mode%3?-1:1);
+  return [0,.08,.32,.58,.84,1].map((t,i)=>({
+    transform:motion?`${base} translate(${dx*(t-.5)}px,${dy*(t-.5)}px) rotate(${sign*(t-.5)*4}deg)`:base,
+    opacity:i===0||i===5?0:opacity,offset:t
+  }));
 }

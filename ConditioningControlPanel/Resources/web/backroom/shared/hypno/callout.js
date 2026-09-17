@@ -17,7 +17,7 @@
  *                                      hold 200 ms, dissolve 400 ms under a chromatic smear (two offset copies).
  *                                      small ~9vh; big 13vh, gold rim; hero 17vh, rim and a short shake.
  *   .word(text, { chain, reversed, seed })
- *                                      the subliminal word BIG at centre (~15vh), same zoom, house colours
+ *                                      the subliminal word BIG at centre (~30vh), same zoom, house colours
  *                                      (pink to purple, sometimes a two-stop gradient, seeded when `seed` is given).
  *                                      In 80 ms, hold 500 ms, out 400 ms. `chain` (1..2 more words) plays back to
  *                                      back, WORD_GAP_MS between onsets, colours drifting along the chain (a host clip
@@ -69,7 +69,7 @@ export const WORD_MS = WORD_IN_MS + WORD_HOLD_MS + WORD_OUT_MS;   // 980: one wo
 export const WORD_GAP_MS = 500;                                   // onset to onset along a chain
 export const WORD_TUNNEL_MS = 500;                                // the tunnel's way in, and its way out
 export const WORD_TUNNEL_LEVEL = 0.6;
-export const WORD_SIZE_VH = 15;
+export const WORD_SIZE_VH = 30;
 export const WORD_MAX_LINES = 3;                                  // a long phrase wraps, it is never squeezed
 export const WORD_WRAP_AT = 12;                                   // past this many characters it takes 2 lines
 export const WORD_FIT_VW = 0.9;                                   // the block sits inside 90% of the viewport
@@ -144,10 +144,10 @@ export function wordBlock(text, { sizeVh = WORD_SIZE_VH, maxLines = WORD_MAX_LIN
   const px = (size) => size * vh / 100;
   const metric = typeof measure === 'function' ? (t, size) => measure(String(t), px(size))
     : (t, size) => String(t).length * px(size) * GLYPH_W;
-  const fit = fitText(str, { measure: metric, width: vw * WORD_FIT_VW / ZOOM.to, maxLines,
+  const fit = fitText(str, { measure: metric, width: vw * WORD_FIT_VW / ZOOM.to, maxLines: str.trim() && !/\s/.test(str.trim()) ? 1 : maxLines,
     minLines: str.replace(/\s+/g, ' ').trim().length > WORD_WRAP_AT ? 2 : 1,
     min: 4, max: sizeVh, lineHeight: WORD_LINE_H });
-  return { sizeVh: fit.size, lines: fit.lines };
+  return { sizeVh: Math.min(fit.size, 78 / (fit.lines.length * WORD_LINE_H * ZOOM.to)), lines: fit.lines };
 }
 
 /**
@@ -259,14 +259,14 @@ const CSS = `
 @font-face{font-family:"Back Room Rounded";src:url("${ROUND_FONT}") format("woff2");font-weight:300 700;font-display:swap}
 .br-callout{position:absolute;inset:0;z-index:60;pointer-events:none;overflow:hidden}
 .br-callout-text{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.6);opacity:0;font-weight:700;line-height:1;paint-order:stroke fill;-webkit-text-stroke:1px #5d225f;
-  letter-spacing:.02em;text-align:center;white-space:nowrap;max-width:96vw;color:#ffe6f6;text-shadow:0 2px 12px #0d0616,0 0 28px #ff5fa280;
+  letter-spacing:.02em;text-align:center;white-space:nowrap;max-width:96vw;color:#ff73cb;text-shadow:0 2px 12px #0d0616,0 0 28px #ff5fa280;
   will-change:transform,opacity}
-.br-callout-text[data-tier=big]{-webkit-text-stroke:2px #e8c27a;text-shadow:0 2px 12px #0d0616,0 0 26px #e8c27a99}
-.br-callout-text[data-tier=hero]{-webkit-text-stroke:3px #e8c27a;text-shadow:0 2px 14px #0d0616,0 0 36px #e8c27acc,0 0 70px #ff5fa266}
+.br-callout-text[data-tier=big]{color:#62efda;-webkit-text-stroke:2px #e8c27a;text-shadow:0 2px 12px #0d0616,0 0 26px #e8c27a99}
+.br-callout-text[data-tier=hero]{color:#ffc354;-webkit-text-stroke:3px #e8c27a;text-shadow:0 2px 14px #0d0616,0 0 36px #e8c27acc,0 0 70px #ff5fa266}
 .br-callout-text[data-lines]{white-space:pre-line;line-height:1.05}
 .br-callout-text .br-callout-ghost{position:absolute;inset:0;opacity:0;mix-blend-mode:screen;-webkit-text-stroke:0;text-shadow:none}
 .br-callout-text .br-callout-ghost.r{color:#ff3d8f}.br-callout-text .br-callout-ghost.b{color:#5fb0ff}
-.br-callout-word{color:transparent;-webkit-background-clip:text;background-clip:text;text-shadow:none;filter:drop-shadow(0 3px 0 #49164f) drop-shadow(0 0 14px #ec81e780)}
+.br-callout-word{font-weight:700;-webkit-text-stroke:.018em #e958ce;color:transparent;-webkit-background-clip:text;background-clip:text;text-shadow:none;filter:drop-shadow(0 3px 0 #49164f) drop-shadow(0 0 14px #ec81e780)}
 .br-callout-word .br-callout-ghost{color:#ff3d8f;-webkit-background-clip:border-box;background-clip:border-box;-webkit-text-fill-color:#ff3d8f}
 .br-callout-word .br-callout-ghost.b{color:#5fb0ff;-webkit-text-fill-color:#5fb0ff}
 .br-callout-sweep{position:absolute;top:0;bottom:0;left:0;width:34%;opacity:.2;pointer-events:none;
@@ -389,7 +389,7 @@ export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, mom
     }
     track(animate(el, [
       { transform: tf(from), opacity: 0, offset: 0 },
-      { transform: tf(from + (to - from) * 0.12), opacity: 1, offset: Math.min(0.06, tHold * 0.5) },
+      { transform: tf(from + (to - from) * 0.12), opacity: 1, offset: Math.min(0.06, tHold * 0.2) },
       { transform: tf(from+(to-from)*.55) + ' rotate(-3deg) scaleY(1.05)', opacity: 1, offset: tHold*.4 },
       { transform: tf(from+(to-from)*.9) + ' rotate(2deg) scaleY(.98)', opacity: 1, offset: tHold*.72 },
       { transform: tf(to), opacity: 1, offset: tHold },
