@@ -1,5 +1,24 @@
 
 (() => {
+  const performanceMode = () => window.__backroomQuality?.performance === true;
+  const effectTimers = new Set();
+  let effectEpoch = 0;
+  function later(callback, ms) {
+    const epoch = effectEpoch;
+    const timer = setTimeout(() => {
+      effectTimers.delete(timer);
+      if (epoch === effectEpoch) callback();
+    }, Math.max(0, ms));
+    effectTimers.add(timer);
+    return timer;
+  }
+  function cancelLater(timer) { clearTimeout(timer); effectTimers.delete(timer); }
+  function removeEffect(node) {
+    cancelLater(node.__drop);
+    try { node.getAnimations().forEach(animation => animation.cancel()); } catch {}
+    node.remove();
+    if (node.tagName === 'IMG') node.removeAttribute('src');
+  }
   const WORDS = ['DROP', 'RELAX', 'LET GO', 'SINK', 'DEEPER', 'EMPTY', 'OBEY', 'SOFTER', 'BLANK'];
   const SPIRAL = (preset) => `/backroom/shared/hypno/spirals/${preset === 'wake' ? 'wake' : 'screen'}.gif`;
   const FALLBACK = (n) => `/backroom/stations/slot/fallback/gif${(Number.isFinite(n) ? n : 0) % 4}.webp`;
@@ -97,7 +116,7 @@
     if (!reach) return;
     for (let i = 0; i < BURST_WINDOW; i++) {
       const u = media.clips[(burstCursor + BURST_WINDOW + i) % reach];
-      if (u) warm(u, OVERLAY_EDGE);
+      if (u) warm(u, performanceMode() ? RAIN_EDGE : OVERLAY_EDGE);
     }
   }
 
@@ -110,7 +129,7 @@
 
   const srcFor = (key, want) => {
     const n = Number(String(key == null ? '' : key).replace(/^g(?:if)?/, '')) || 0;
-    const edge = want === 'rain' ? RAIN_EDGE : OVERLAY_EDGE;
+    const edge = want === 'rain' || performanceMode() ? RAIN_EDGE : OVERLAY_EDGE;
     if (config.mode === 'local' && media.local.length) return media.local[n % media.local.length];
     if (media.on && media.clips.length) {
       if (want === 'rain') return HOP(media.clips[n % Math.min(RAIN_HEAD, media.clips.length)], edge);
@@ -121,12 +140,21 @@
   };
 
   function mediaNode(cls, key, want) {
+    if (performanceMode()) {
+      const pictures = [...mount().querySelectorAll('img')];
+      // Keep fullscreen beats; replace the oldest peripheral picture first.
+      while (pictures.length >= 4) {
+        const index = pictures.findIndex(node => !node.classList.contains('fxfull'));
+        removeEffect(pictures.splice(index < 0 ? 0 : index, 1)[0]);
+      }
+    }
     const n = add(cls, 'img');
     n.decoding = 'async';
     n.src = srcFor(key, want);
     // A transcode that will not come back (a dead clip, a cold start past the
     // effect's life) leaves a hole; the bundled loop is better than a hole.
     n.addEventListener('error', () => {
+      if (!n.isConnected) return;
       const used = new Set([...document.querySelectorAll('#__fx .fxflash')].filter(e => e !== n).map(e => e.src));
       const fallback = Array.from({length:4}, (_, i) => FALLBACK(i)).find(url => !used.has(new URL(url, location.href).href));
       if (cls === 'fxflash' && !fallback) { n.remove(); return; }
@@ -175,7 +203,7 @@
 
   const add = (cls, tag = 'div') => { const n = document.createElement(tag); n.className = cls; mount().append(n); return n; };
 
-  const drop = (n, ms) => (n.__drop = setTimeout(() => n.remove(), Math.max(0, ms)));
+  const drop = (n, ms) => (n.__drop = later(() => removeEffect(n), ms));
   const anim = (n, frames, ms, easing = 'ease') => {
     try { return n.animate(frames, { duration: Math.max(1, ms), easing, fill: 'forwards' }); } catch (e) { return null; }
   };
@@ -189,7 +217,7 @@
       if (!(live >= DISMISS_FLOOR)) return;      // mid-fade: let the tap through to whatever is under it
       e.preventDefault(); e.stopPropagation();
       n.classList.remove('fxtap');
-      if (n.__drop) clearTimeout(n.__drop);      // the life timer must not race the exit
+      if (n.__drop) cancelLater(n.__drop);      // the life timer must not race the exit
       (window.__fxShatter ? shatter : dissolve)(n);
     });
   }
@@ -208,6 +236,7 @@
   }
 
   function shatter(n) {
+    if (performanceMode()) { dissolve(n); return; }
     stopAnims(n);
     const base = n.style.transform || '', SHARDS = 6;
     const pt = (deg) => (50 + 75 * Math.cos((deg * Math.PI) / 180)) + '% ' + (50 + 75 * Math.sin((deg * Math.PI) / 180)) + '%';
@@ -224,7 +253,7 @@
       ], 420, 'cubic-bezier(.22,.9,.3,1)');
       drop(piece, 440);
     }
-    n.remove();                                  // the original goes at once; the wedges carry the exit
+    removeEffect(n);                          // the original goes at once; the wedges carry the exit
   }
   if (new URLSearchParams(location.search).get('fx') === 'shatter') window.__fxShatter = true;
 
@@ -232,11 +261,12 @@
   const loomReady = import('/backroom/shared/hypno/loom.js');
   const spiralPlayers = new Set(); let spiralCursor=0;
   function spiralFull(ms, alpha, preset, token) {
+    if (performanceMode()) for (const stop of [...spiralPlayers]) stop();
     const d=kDuration(),hold=Math.max(0,ms*d*SPIRAL_STRETCH),a=alpha*kOpacity();
     const canvas=add('fxfull','canvas');canvas.style.opacity='0';
     let kit=null,raf=0,last=-Infinity,closed=false,timer=0;
-    const stop=()=>{if(closed)return;closed=true;clearTimeout(timer);cancelAnimationFrame(raf);kit?.dispose();spiralPlayers.delete(stop);};
-    const end=()=>{if(closed)return;anim(canvas,[{opacity:a},{opacity:0}],500);timer=setTimeout(()=>{stop();canvas.remove();},520);};
+    const stop=()=>{if(closed)return;closed=true;cancelLater(timer);cancelAnimationFrame(raf);kit?.dispose();canvas.remove();spiralPlayers.delete(stop);};
+    const end=()=>{if(closed)return;anim(canvas,[{opacity:a},{opacity:0}],500);timer=later(()=>{stop();canvas.remove();},520);};
     spiralPlayers.add(stop);
     if(token)held.set(token,end);
     loomReady.then(({createLoomKit})=>{
@@ -246,18 +276,18 @@
       let frames=0;
       const draw=now=>{
         if(closed||!canvas.isConnected){stop();return;}
-        if(now-last>=1000/30){
+        if(now-last>=1000/(performanceMode()?20:30)){
           const state=window.__backroom?.state;
           const still=state?.userStill || state?.reduced || state?.motion==='off' || state?.motion==='still' || state?.intensity==='calm' || matchMedia('(prefers-reduced-motion: reduce)').matches;
           kit.setStill(!!still);
-          const ratio=innerWidth/innerHeight,w=ratio>=1?512:Math.round(512*ratio),h=ratio>=1?Math.round(512/ratio):512;
+          const edge=performanceMode()?384:512,ratio=innerWidth/innerHeight,w=ratio>=1?edge:Math.round(edge*ratio),h=ratio>=1?Math.round(edge/ratio):edge;
           if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
           kit.paint(canvas,name,{now});last=now;canvas.dataset.frames=String(++frames);
         }
         raf=requestAnimationFrame(draw);
       };
       draw(performance.now());anim(canvas,[{opacity:0},{opacity:a}],1250,'ease-in-out');
-      if(!token)timer=setTimeout(end,1250+hold);
+      if(!token)timer=later(end,1250+hold);
     }).catch(()=>{stop();canvas.remove();});
   }
 
@@ -285,9 +315,10 @@
       if (!seen.has(url)) { seen.add(url); picks.push({key,url}); }
       if (picks.length >= n) break;
     }
-    const turn = flashTurn++;
-    picks.forEach(({key,url}, i) => setTimeout(async () => {
+    const turn = flashTurn++, epoch = effectEpoch;
+    picks.forEach(({key,url}, i) => later(async () => {
       const preview = await previewMotion;
+      if (epoch !== effectEpoch || document.hidden) return;
       const img = mediaNode('fxflash', key, 'quick'); img.src = url;
       const spot = flashSpot(i + turn * 2);
       Object.assign(img.style, { width:spot.w+'px', height:spot.h+'px', left:spot.x+'px', top:spot.y+'px',
@@ -304,7 +335,7 @@
 
   function gifRain(n, ms, opacity, keys) {
     const d = kDuration(), a = opacity * kOpacity(), span = ms * d;
-    for (let i = 0; i < n; i++) setTimeout(() => {
+    for (let i = 0; i < n; i++) later(() => {
       const img = mediaNode('fxrain', keys[i % Math.max(1, keys.length)], 'rain');
       // A 13-step stride across the width: neighbours in time are far apart in space.
       img.style.left = (2 + ((i * 29) % 84)) + 'vw';
@@ -318,7 +349,7 @@
 
   function glitch(n) {
     const d = kDuration(), a = 0.35 * kOpacity();
-    for (let i = 0; i < n; i++) setTimeout(() => {
+    for (let i = 0; i < n; i++) later(() => {
       const g = add('fxglitch');
       anim(g, [{ opacity: 0 }, { opacity: a, offset: 0.3 }, { opacity: 0 }], 600 * d);
       drop(g, 620 * d);
@@ -327,7 +358,7 @@
 
   function words(n, gapMs, pool) {
     const d = kDuration(), a = kOpacity();
-    for (let i = 0; i < n; i++) setTimeout(() => {
+    for (let i = 0; i < n; i++) later(() => {
       const w = add('fxword'); w.textContent = pool[i % pool.length];
       anim(w, [{ opacity: 0 }, { opacity: a, offset: 80 / 830 }, { opacity: a, offset: 480 / 830 }, { opacity: 0 }], 830 * d);
       drop(w, 850 * d);
@@ -351,13 +382,15 @@
     svg.innerHTML='<defs><filter id="br-melting-glass" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency=".008 .016" numOctaves="2" seed="7" result="flow"/><feDisplacementMap in="SourceGraphic" in2="flow" scale="0" xChannelSelector="R" yChannelSelector="G"/><feGaussianBlur stdDeviation="0"/></filter></defs>';
     document.body.append(svg);
     const noise=svg.querySelector('feTurbulence'),warp=svg.querySelector('feDisplacementMap'),blur=svg.querySelector('feGaussianBlur');
-    const previous=stage.style.filter,start=performance.now(),duration=ms*kDuration();let raf=0,closed=false;
+    const previous=stage.style.filter,start=performance.now(),duration=ms*kDuration();let raf=0,closed=false,last=-Infinity;
     stage.style.filter='url(#br-melting-glass)';
     stopMelt=()=>{if(closed)return;closed=true;cancelAnimationFrame(raf);stage.style.filter=previous;svg.remove();};
     function tick(now){
       const elapsed=now-start,amount=Math.min(1,elapsed/duration)*Math.max(0,1-Math.max(0,elapsed-duration)/650)*kOpacity();
       if(elapsed>=duration+650){stopMelt();return;}
       const state=window.__backroom?.state||{},still=state.userStill||state.reduced||state.motion==='off'||state.motion==='still'||matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if(now-last<1000/(performanceMode()?20:30)){raf=requestAnimationFrame(tick);return;}
+      last=now;noise.setAttribute('numOctaves',performanceMode()?'1':'2');
       const phase=still?0:elapsed*.0003;
       noise.setAttribute('baseFrequency',(.008+Math.sin(phase)*.0015)+' '+(.016+Math.cos(phase*.7)*.003));
       warp.setAttribute('scale',String(still?0:amount*48));blur.setAttribute('stdDeviation',String(amount*5));
@@ -398,7 +431,7 @@
     if (!hazeEl) { hazeEl = add('fxdim'); hazeEl.style.background = 'transparent'; }
     anim(hazeEl, [{ backdropFilter: 'blur(0px)' }, { backdropFilter: `blur(${7 * kOpacity()}px)` }], 700);
     const end = () => { if (!hazeEl) return; const n = hazeEl; hazeEl = null; anim(n, [{ backdropFilter: 'blur(7px)' }, { backdropFilter: 'blur(0px)' }], 700); drop(n, 720); };
-    if (token) held.set(token, end); else setTimeout(end, ms || 4000);
+    if (token) held.set(token, end); else later(end, ms || 4000);
   }
 
   function tunnel(level) {
@@ -412,21 +445,21 @@
   const RECIPES = {
     'fx.jackpot': (keys, pool) => {                       // hero, 4 s
       spiralFull(4000, 0.7, 'screen');
-      setTimeout(() => { flashBurst(8, 1.0, 300, keys); gifRain(19, 4000, 0.9, keys); glitch(3);
-        words(9, 350, pool); setTimeout(() => words(9, 350, pool), 9 * 350);
-        setTimeout(() => gifFull(2000, 0.8, keys), 700); }, 4000 * kDuration() + 1000);
+      later(() => { flashBurst(8, 1.0, 300, keys); gifRain(19, 4000, 0.9, keys); glitch(3);
+        words(9, 350, pool); later(() => words(9, 350, pool), 9 * 350);
+        later(() => gifFull(2000, 0.8, keys), 700); }, 4000 * kDuration() + 1000);
     },
     'fx.gif_storm': (keys) => { flashBurst(5, 1.0, 300, keys); gifRain(14, 3000, 0.9, keys); glitch(1); },
     'fx.sub_cascade': (keys, pool, args) => {
       if (!(args && args.wordsShown)) words(9, 350, pool);   // the page drew them itself
-      setTimeout(() => gifFull(1500, 0.8, keys), (args && args.wordsShown ? 0 : 9 * 350));
+      later(() => gifFull(1500, 0.8, keys), (args && args.wordsShown ? 0 : 9 * 350));
     },
     'fx.spiral_full': () => spiralFull(4000, 0.7, 'screen'),
     'fx.spiral_brief': () => spiralFull(1500, 0.55, 'screen'),
     'fx.gif_burst': (keys, pool, args) => flashBurst(Math.max(1, Math.min(8, (args && args.count) || 5)), 1.0, 300, keys),
     'fx.sub_pair': (keys, pool, args) => {
       if (!(args && args.wordsShown)) words(2, 500, pool);
-      setTimeout(() => spiralFull(1500, 0.55, 'screen'), (args && args.wordsShown) ? 0 : 1000);
+      later(() => spiralFull(1500, 0.55, 'screen'), (args && args.wordsShown) ? 0 : 1000);
     },
     'fx.sub_single': (keys, pool, args) => { if (!(args && args.wordsShown)) words(1, 500, pool); },
     'fx.melt': () => melt(6000),
@@ -440,6 +473,7 @@
 
   window.__renderFx = (m) => {
     try {
+      if (document.hidden) return { fired: [], skipped: [m && m.fxId] };
       mount();
       nextWindow();   // one window per fx, so a recipe's primitives all draw from the same set
       const id = m && m.fxId, keys = Array.isArray(m && m.symbols) && m.symbols.length ? m.symbols : ['g0', 'g1', 'g2', 'g3'];
@@ -453,12 +487,18 @@
   window.__releaseFx = (token) => { const end = held.get(token); if (end) { held.delete(token); end(); } };
   window.__tunnel = (level) => { try { tunnel(level); } catch (e) {  } };
   window.__fxCancelAll = () => {
+    effectEpoch++;
     stopMelt();
     for(const stop of [...spiralPlayers])stop();
     for (const [, end] of held) { try { end(); } catch (e) {  } }
     held.clear(); tunnel(0);
-    if (root) for (const n of Array.from(root.children)) n.remove();
+    for (const timer of effectTimers) clearTimeout(timer);
+    effectTimers.clear();
+    if (root) for (const n of Array.from(root.children)) removeEffect(n);
+    tunnelEl = hazeEl = null;
   };
+  document.addEventListener('visibilitychange', () => { if (document.hidden) window.__fxCancelAll(); });
+  window.addEventListener('pagehide', () => window.__fxCancelAll());
   window.__fxWords = WORDS.slice();
   window.__fxMedia = media;
 
@@ -500,7 +540,7 @@
     for (const u of media.clips.slice(0, RAIN_HEAD)) warm(u, 384);
     // Then the FIRST window only. The boot warm gets smaller, not bigger, because warmAhead below keeps the
     // next window a burst ahead of the player from then on.
-    for (const u of media.clips.slice(0, BURST_WINDOW)) warm(u, OVERLAY_EDGE);
+    for (const u of media.clips.slice(0, BURST_WINDOW)) warm(u, performanceMode() ? RAIN_EDGE : OVERLAY_EDGE);
   }
   window.__brMedia = {
     get: () => ({...config, sources:config.sources.slice(), localCount:media.local.length, loading:media.on && !media.clips.length && !media.stills.length}),
