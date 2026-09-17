@@ -438,12 +438,19 @@ export default {
         kb.appendChild(kr);
       });
       host.appendChild(kb);
-      if (coarse) {
-        commitBtn = el('button', 'btn primary g-dt-commit', t('dt_commit', 'COMMIT ROW'));
-        commitBtn.type = 'button';
-        bindKey(commitBtn, commit);
-        host.appendChild(commitBtn);
-      }
+    }
+
+    /* THE COMMIT KEY LIVES WITH THE BOARD, not with the desk. On a phone the
+     * keyboard owns the bottom edge, and a commit key parked under it fell off
+     * the bottom of the screen - so it hangs directly beneath the slab, where
+     * the row it commits is still in the eye. Touch only; a real keyboard has
+     * ENTER in the deck. */
+    function buildCommit(host) {
+      if (!coarse) return;
+      commitBtn = el('button', 'btn primary g-dt-commit', t('dt_commit', 'COMMIT ROW'));
+      commitBtn.type = 'button';
+      bindKey(commitBtn, commit);
+      host.appendChild(commitBtn);
     }
 
     function specialKey(kind, label) {
@@ -1335,6 +1342,7 @@ export default {
         msgEl = el('p', 'g-dt-msg');
         msgEl.setAttribute('role', 'status');
         zone.appendChild(msgEl);
+        buildCommit(zone);
         wrap.appendChild(zone);
         buildKeyboard(wrap, layout);
         ctx.root.appendChild(wrap);
