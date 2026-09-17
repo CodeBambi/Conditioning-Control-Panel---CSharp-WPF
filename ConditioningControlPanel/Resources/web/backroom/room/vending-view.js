@@ -1,4 +1,5 @@
 import * as T from 'three';
+import { stageRect, ndcIn } from './stage-rect.js';
 
 /* An independent camera on the real cabinet. Shared asset resources belong to the room.
  *
@@ -35,34 +36,40 @@ export function createVendingView({mount,vending,decorations=[],labels=[],onSele
   // Selection stays on the cabinet; the room pane carries the item preview.
   function focus(index){selected=index;outline.visible=index>=0;buttons.forEach((b,i)=>b.setAttribute('aria-pressed',String(page*9+i===index)));}
   function bayAt(event){if(event.target!==mount)return -1;   // the stage's own buttons are not the cabinet
-    const r=mount.getBoundingClientRect();if(!r.width||!r.height)return -1;pointer.set((event.clientX-r.left)/r.width*2-1,-(event.clientY-r.top)/r.height*2+1);ray.setFromCamera(pointer,camera);const hits=ray.intersectObjects(bays.filter(Boolean),true);if(!hits.length)return -1;let n=hits[0].object;while(n&&!bays.includes(n))n=n.parent;const i=bays.indexOf(n);return i>=0&&(page===0||i<propMinis.length)?page*9+i:-1;}
+    // The rectangle the cabinet was DRAWN in, measured now: the mount's own rect is the wrong box the
+    // moment the canvas clips the stage or the drawing buffer and the CSS box disagree (stage-rect.js).
+    const box=stage();if(!box)return -1;const p=ndcIn(box,event.clientX,event.clientY);pointer.set(p.x,p.y);ray.setFromCamera(pointer,camera);const hits=ray.intersectObjects(bays.filter(Boolean),true);if(!hits.length)return -1;let n=hits[0].object;while(n&&!bays.includes(n))n=n.parent;const i=bays.indexOf(n);return i>=0&&(page===0||i<propMinis.length)?page*9+i:-1;}
   function pick(event){const i=bayAt(event);if(i>=0)onSelect(i);}
   /** Right-click on the cabinet: the piece in that bay comes off the room. No browser menu over the stage. */
   function menu(event){event.preventDefault();const i=bayAt(event);if(i>=0)onDismount(i);}
   mount.addEventListener('click',pick);mount.addEventListener('contextmenu',menu);
-  /** The stage rectangle in the room canvas's own CSS pixels, y measured up from its bottom edge. */
-  function rect(canvas){
-    const c=canvas.getBoundingClientRect(),r=mount.getBoundingClientRect();
-    const left=Math.max(r.left,c.left),right=Math.min(r.right,c.right);
-    const top=Math.max(r.top,c.top),bottom=Math.min(r.bottom,c.bottom);
-    const w=Math.floor(right-left),h=Math.floor(bottom-top);
-    if(!(w>4&&h>4))return null;
-    return {x:Math.round(left-c.left),y:Math.round(c.bottom-bottom),w,h};
+  /* The stage rectangle, in the page's pixels for the pick buttons and in the renderer's for the pass.
+   * `surface` is learnt on the first draw because the view is handed the room's renderer there and nowhere
+   * else, but the rect itself is measured on every call and never cached: a remembered rect survives a
+   * phone being turned and a panel relayout, and then the buttons sit a row off the bays they belong to. */
+  let surface=null;
+  function stage(){
+    if(!surface)return null;   // nothing has been drawn yet, so there is no rectangle to pick in
+    const gl=surface.canvas;
+    return stageRect(gl.getBoundingClientRect(),mount.getBoundingClientRect(),gl.width/surface.ratio,gl.height/surface.ratio);
   }
   return {focus,setPage,
     update(dt,still){if(disposed)return;const a=still?1:1-Math.exp(-Math.min(dt,.1)*8);look.lerp(goal,a);zoom+=(goalZoom-zoom)*a;},
     /** One scissored pass on the room's renderer; the room sets its own viewport straight after. */
     draw(renderer){
       if(disposed)return false;
-      const box=rect(renderer.domElement);
+      surface={canvas:renderer.domElement,ratio:renderer.getPixelRatio?.()||1};
+      const box=stage();
       if(!box)return false;
-      camera.aspect=box.w/box.h;camera.updateProjectionMatrix();
+      // The aspect is the box ON SCREEN: the browser stretches the buffer into the canvas's CSS box, so a
+      // projection built on the buffer's own proportions would come out squeezed while the two disagree.
+      camera.aspect=box.dom.w/box.dom.h;camera.updateProjectionMatrix();
       allBounds.getCenter(goal);goal.z=.35;
       goalZoom=Math.max(span.y/(2*Math.tan(T.MathUtils.degToRad(19)))*1.16,span.x/(2*Math.tan(T.MathUtils.degToRad(19))*camera.aspect)*1.14);
       camera.position.copy(look).add(offset.set(.04,.06,zoom));camera.lookAt(look);camera.updateMatrixWorld();
-      buttons.forEach((b,i)=>{if(!bays[i]||b.hidden)return;const bounds=bayBounds[i],points=[];for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y]){points.push(new T.Vector3(x,y,bounds.max.z).project(camera));}const xs=points.map(p=>(p.x+1)*box.w/2),ys=points.map(p=>(1-p.y)*box.h/2);Object.assign(b.style,{left:Math.min(...xs)+'px',top:Math.min(...ys)+'px',width:(Math.max(...xs)-Math.min(...xs))+'px',height:(Math.max(...ys)-Math.min(...ys))+'px'});});
+      buttons.forEach((b,i)=>{if(!bays[i]||b.hidden)return;const bounds=bayBounds[i],points=[];for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y]){points.push(new T.Vector3(x,y,bounds.max.z).project(camera));}const xs=points.map(p=>box.dom.x+(p.x+1)*box.dom.w/2),ys=points.map(p=>box.dom.y+(1-p.y)*box.dom.h/2);Object.assign(b.style,{left:Math.min(...xs)+'px',top:Math.min(...ys)+'px',width:(Math.max(...xs)-Math.min(...xs))+'px',height:(Math.max(...ys)-Math.min(...ys))+'px'});});
       if(selected>=0){outline.box.copy(bayBounds[selected%9]);outline.box.expandByScalar(.015);}
-      renderer.setViewport(box.x,box.y,box.w,box.h);renderer.setScissor(box.x,box.y,box.w,box.h);renderer.setScissorTest(true);
+      renderer.setViewport(box.gl.x,box.gl.y,box.gl.w,box.gl.h);renderer.setScissor(box.gl.x,box.gl.y,box.gl.w,box.gl.h);renderer.setScissorTest(true);
       renderer.render(scene,camera);
       renderer.setScissorTest(false);
       return true;

@@ -167,9 +167,18 @@ export async function createScene(o) {
     canGesture: () => !still });
 
   function topDown() { camera.position.set(0, Math.max(21, 19 / camera.aspect), 0.01); camera.lookAt(0, 0, 0); }
+  /* ONE MEASUREMENT, APPLIED ONCE. `sized` is the measurement this function last put into the renderer.
+   * One turn of a phone raises a burst of events (resize, orientationchange and visualViewport's own
+   * resize all fire for the same rotation) and frame() measures again on every frame, so without the key
+   * a seated camera would be re-posed from under a running transition sixty times a second. Keep the key
+   * on the measurement rather than on a flag: it is what makes calling this often free and safe. */
+  let sized = '';
   function resize() {
     const w = Math.max(1, o.mount.clientWidth || window.innerWidth), h = Math.max(1, o.mount.clientHeight || window.innerHeight);
-    dpr = budget.dpr(w, h); renderer.setPixelRatio(dpr);
+    const ratio = budget.dpr(w, h), key = w + 'x' + h + '@' + ratio;
+    if (key === sized) return;
+    sized = key;
+    dpr = ratio; renderer.setPixelRatio(dpr);
     renderer.setSize(w, h, false);
     for (const hub of room.hubs) hub.setDpr(dpr);
     camera.aspect = w / h;
@@ -182,7 +191,24 @@ export async function createScene(o) {
       else {if(target.fov){camera.fov=target.fov;camera.updateProjectionMatrix();setSlotStretch(target.stretch||1,target.stretchX||1);}pos.splice(0,3,...target.pos);yaw=target.yaw;pitch=target.pitch;viewOffset=target.offset;viewOffsetX=target.offsetX;}
     }
   }
-  window.addEventListener('resize', resize);
+  /* ROTATION ON A PHONE. iOS Safari raises `resize` while the layout is still the PRE-rotation one, so a
+   * single read leaves the drawing buffer landscape-sized after the box on screen has gone portrait. The
+   * room then paints into a sliver of its own buffer and the rest of the canvas stays dark (the owner's
+   * split screenshot, 2026-09-17), and every pointer normalised through the canvas rect lands somewhere
+   * else, which is the same rotation read as dead input. The cure is to measure AGAIN once the layout has
+   * settled: visualViewport is the viewport that actually moved, orientationchange covers where it is
+   * missing, and the deferred read catches the browsers that report the old box at both. frame() measures
+   * every frame too, so a drawing room heals itself within a frame; these listeners are what wake a room
+   * that has stopped drawing, and resize() applies a measurement once so none of them can double-fire. */
+  let settling = 0;
+  function settle() {
+    resize(); run();
+    if (settling) return;
+    settling = setTimeout(() => { settling = 0; resize(); run(); }, 300);
+  }
+  window.addEventListener('resize', settle);
+  window.addEventListener('orientationchange', settle);
+  window.visualViewport?.addEventListener('resize', settle);
 
   /** `keepStick`: a seat keeps the touch stick alive and centred by the player's own finger, so a push back still reads. */
   function resetInput(keepStick) { keys.clear(); vel.set(0, 0); drag = tap = null; if (!keepStick) { standTap = null; touch.reset(); } touch.setEnabled(canWalk() || (canLeave() && seated?.row.id !== 'slot')); }
@@ -402,6 +428,11 @@ export async function createScene(o) {
     for (const view of views) view.update?.(dt, still);
     decor.update(dt, still);
     customization.update(dt, still);
+    /* The stage measured on the frame that uses it: the drawing buffer, the camera aspect and the viewport
+     * below all come off the same numbers, and a phone that has just been turned reports the new box here
+     * a frame or two before any event carries it (settle(), above). resize() applies a measurement once,
+     * so this is two integer reads when nothing has moved. */
+    resize();
     const fullWidth=Math.max(1,o.mount.clientWidth||window.innerWidth);
     const height=Math.max(1,o.mount.clientHeight||window.innerHeight);
     // The room keeps whatever the panel does not cover: the strip beside it, or the band above it once
