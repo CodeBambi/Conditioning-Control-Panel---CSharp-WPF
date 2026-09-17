@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cardValue, rankLabel, suitOf, totalOf, readHand, readState, legalOf, defaultStake, controls, classify, createIntent, mayRetry,
-  moveBody, owedFor, shownSp, readHintPref, writeHintPref, HINT_KEY, RETRY,
+  moveBody, owedFor, shownSp, RETRY,
 } from '../hand.js';
 
 const open = { id: 'h_1_x', step: 0, stake: 1, dealer: ['9d'], hands: [{ cards: ['Th', '4c'], bet: 1, done: false, doubled: false, split: false, total: 14, soft: false }],
@@ -31,9 +31,9 @@ test('readHand accepts publicHand and refuses anything else', () => {
 });
 
 test('readState defaults a bare body to an empty table on stakes 1 through 3', () => {
-  const s = readState({ ok: true, sp: 40, hand: open, legal: ['hit', 'stand', 'fly'], hint: 'stand', floorMs: 8000, rules: { stakes: [1, 2] } });
+  const s = readState({ ok: true, sp: 40, hand: open, legal: ['hit', 'stand', 'fly'], floorMs: 8000, rules: { stakes: [1, 2] } });
   assert.deepEqual(s.legal, ['hit', 'stand']);
-  assert.equal(s.hint, 'stand'); assert.equal(s.hand.id, 'h_1_x');
+  assert.equal(s.hand.id, 'h_1_x');
   const e = readState({});
   assert.equal(e.hand, null); assert.deepEqual(e.rules.stakes, [1, 2, 3]); assert.equal(e.floorMs, 5000);
   assert.deepEqual(legalOf('hit'), []);
@@ -99,11 +99,3 @@ test('LAW I: a settled return is owed until it shows, never beyond what was cred
   assert.equal(shownSp(42, 4), 38); assert.equal(shownSp(2, 4), 0);
 });
 
-test('the hint preference is off by default and survives a throwing storage', () => {
-  const mem = new Map(), store = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, v), removeItem: (k) => mem.delete(k) };
-  assert.equal(readHintPref(store), false);
-  writeHintPref(store, true); assert.equal(mem.get(HINT_KEY), '1'); assert.equal(readHintPref(store), true);
-  writeHintPref(store, false); assert.equal(readHintPref(store), false);
-  const bad = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } };
-  assert.equal(readHintPref(bad), false); assert.doesNotThrow(() => writeHintPref(bad, true)); assert.equal(readHintPref(undefined), false);
-});

@@ -126,8 +126,14 @@ never names a section 4 id.
   and an anticlockwise drag: clockwise, arms leading at the rim, so it reads inward (law 3). Spiral gate off: a brass star painted once. The neon tube only stays for a model with neither node.
 - **The long last turn**: the landing plan's own clock is read at `lerp(0.32, 1, speed / 1.6)` while the planned
   speed is under 1.6 rad/s (0.6 floor under Calm). Same path, same landing angle, same slice (hypno.test). The spin
-  runs about 6-7 s instead of 4. The edges (`.wheel-edges`, a radial gradient centred on the rotor) take opacity
+  runs about 4-5 s instead of 4 (THE SETTLE below trims the tail the warp used to stretch to 6-7 s). The edges
+  (`.wheel-edges`, a radial gradient centred on the rotor) take opacity
   0.65 x dim x k; no backdrop-filter. They stay with the `tunnel` gate off; the tunnel does not.
+- **THE SETTLE**: the landing plan ends at `settleMs(plan)` (wheel.js), the plan-clock time with under 0.5 degrees
+  of travel left, not at `plan.ms`. A quartic ease-out's last stretch moves less than the eye can read and the
+  warped clock stretched it into 1.7-2.9 s of real time, so the thud, the party and the reward all fired a second
+  or two after the wheel looked stopped on its slice. The snap onto the exact landing is under 3 px at the rim and
+  lands under THE THUD's own flash. The landed slice and angle are unchanged.
 - **Quiet room**: slice colours mix toward #2a2238 by `min(0.78, clamp(since x 3) x k x 1.6)`, colour flows back from
   1.1 s by angular distance over 0.8 s, labels of grey slices at 0.75; the landed slice keeps its colour with a mint
   band outline.

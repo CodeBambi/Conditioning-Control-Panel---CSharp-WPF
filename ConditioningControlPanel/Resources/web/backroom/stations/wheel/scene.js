@@ -27,7 +27,7 @@ import { createRimGlitter } from './rim-glitter.js';
 import { createRenderBudget } from '../../room/render-budget.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { REQUIRED, OPTIONAL } from './nodes.js';
-import { TAU, sliceAt, planLanding, rotationAt } from './wheel.js';
+import { TAU, sliceAt, planLanding, rotationAt, settleMs } from './wheel.js';
 import { startRecoil } from './juice.js';
 import { FEEL, tick, breath, shiverPx, bezier } from './feel.js';
 import { warpStep, warpedRotation, stepDim, quietMix, quietDone, outlineAlpha, distance01, mixRgb, QUIET, taffyShear, stepShear,
@@ -464,7 +464,10 @@ export async function createScene(o) {
       // The long last turn: the plan's own clock, read slower under 1.6 rad/s. Same path, same landing, same slice.
       plan.w = warpStep(plan.w, dtMs, plan, { calm: !!dress.calm }); slowing = plan.w.slowing;
       rotor.rotation.z = warpedRotation(plan, plan.w.elapsed);
-      if (plan.w.elapsed >= plan.ms) { const p = plan; plan = null; rotor.rotation.z = p.to; if (p.done) p.done(); }
+      // THE SETTLE (wheel.js settleMs): the landing ends when the picture is still, not when the warped clock
+      // runs out. The clock's last stretch is under 3 px of travel that the warp was spending a second and more
+      // of real time on, with the thud, the party and the reward all queued behind it.
+      if (plan.w.elapsed >= (plan.endMs || plan.ms)) { const p = plan; plan = null; rotor.rotation.z = p.to; if (p.done) p.done(); }
     } else if (plan) {
       rotor.rotation.z = rotationAt(plan, t - plan.start);
       if (t - plan.start >= plan.ms) { const p = plan; plan = null; rotor.rotation.z = p.to; if (p.done) p.done(); }
@@ -603,7 +606,11 @@ export async function createScene(o) {
       const omega = coast ? coast.omega : DEFAULT_OMEGA;
       coast = null;
       if (reduced) { this.setRotation(landing, index); thudAt = performance.now(); return Promise.resolve(); }
-      return new Promise(done => { plan = { ...planLanding({ from: rotor.rotation.z, omega, landing }), start: performance.now(), warp: true, w: null, done: () => { landed = index; thudAt = performance.now(); kickAt = thudAt; kickAmp = 0.2; done(); } }; });
+      return new Promise(done => {
+        const p = planLanding({ from: rotor.rotation.z, omega, landing });
+        plan = { ...p, endMs: settleMs(p), start: performance.now(), warp: true, w: null,
+                 done: () => { landed = index; thudAt = performance.now(); kickAt = thudAt; kickAmp = 0.2; done(); } };
+      });
     },
     /** No result came: the coast winds down where it is, nothing is lit. */
     windDown() {

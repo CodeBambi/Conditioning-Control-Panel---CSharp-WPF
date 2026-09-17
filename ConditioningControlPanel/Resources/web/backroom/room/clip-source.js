@@ -28,10 +28,20 @@ import { MAX_FPS, MAX_EDGE } from './gif-decode.js';
 import { MEDIA_LIMITS } from './media-limits.js';
 
 /** What Scrolller's clip feed actually returns, and all WebView2 needs to decode it. */
-const CLIP_EXT = /\.(webm|mp4|m4v)(?:\?|#|$)/i;
+const CLIP_EXT = /\.(webm|mp4|m4v)$/i;
 
-/** True when this url is a clip rather than a picture. Used by room/gif.js to route. */
-export const isClip = (url) => CLIP_EXT.test(String(url || ''));
+/**
+ * True when this url is a clip rather than a picture. Used by room/gif.js to route.
+ *
+ * The extension is read off the PATH, with the query and the fragment cut away first. That is not
+ * tidiness, it is the whole bug: the web playtest asks for its pictures through the transcoding hop
+ * above, `/api/clip?u=<the clip url, encoded>`, which answers ANIMATED WEBP - and the encoded clip
+ * url in that query still ends in `.mp4`, because encodeURIComponent leaves a dot alone. Matching
+ * the whole string therefore sent every transcoded picture to a <video> element that cannot decode
+ * a WebP, the element errored, clipSource returned null, and room/screens.js fell back to a plain
+ * still texture. That is why the room's pulled GIFs showed one frame and never moved.
+ */
+export const isClip = (url) => CLIP_EXT.test(String(url || '').split(/[?#]/)[0]);
 
 /** A page with no video element (a test stub, a stripped host) simply gets stills. */
 export const canPlayClips = () => {

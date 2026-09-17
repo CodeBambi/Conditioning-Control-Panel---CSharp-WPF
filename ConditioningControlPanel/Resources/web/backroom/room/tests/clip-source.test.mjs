@@ -66,6 +66,12 @@ test('a clip url is recognised, a picture url is left to the GIF decoder', () =>
                      '', null, undefined]) {
     assert.equal(isClip(url), false, String(url));
   }
+  /* The web playtest's transcoding hop answers animated WebP, so it is a PICTURE however the clip it
+   * was built from was named. Routing it to a <video> element is what stopped the wall screens
+   * animating: the element cannot decode a WebP, so every dealt picture fell back to a still. */
+  const hop = '/api/clip?u=' + encodeURIComponent('https://cdn.scrolller.com/a/b.mp4');
+  assert.equal(isClip(hop), false, hop);
+  assert.equal(isClip('/api/clip?u=' + encodeURIComponent('https://cdn.scrolller.com/a/b.webm') + '&e=640'), false);
 });
 
 test('a page with no video element gets stills instead of an exception', async () => {

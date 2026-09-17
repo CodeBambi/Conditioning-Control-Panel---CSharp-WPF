@@ -138,11 +138,18 @@ export function createHud(o) {
   /* ------------------------------------------------- the picture picker (10.13.C)
    * Its own card rather than more rows on the Options one: the niche editor is a text field and a
    * growing pill list, and that does not belong in a card people open to nudge a slider. The pill
-   * that opens it used to be dead on desktop - it was gated on the web playtest's shell, which is
-   * the only thing that ever provided window.__brOptions. */
+   * that opens it used to be dead on desktop - it was gated ON window.__brOptions, which only the
+   * web playtest's shell ever provides, so the desktop never saw it.
+   *
+   * The gate is INVERTED now rather than deleted. The web shell's own options sheet already carries
+   * a media block - it is where this picker's layout came from - and it is the half of that sheet
+   * that actually reaches the web host. An ungated pill would put a SECOND picker on that page whose
+   * presses go nowhere, because the shell answers no mediaSource / mediaSub* option. Same guard the
+   * levels and quality rows above use, for the same reason. */
+  const onWebShell = !!window.__brOptions;
   const mediaBtn = el('button', 'br-pill', L('br_media_title', 'Pictures and GIFs')); mediaBtn.type = 'button';
   mediaBtn.setAttribute('aria-expanded', 'false');
-  panel.append(mediaBtn);
+  if (!onWebShell) panel.append(mediaBtn);
 
   const media = el('div', 'br-options br-media'); media.hidden = true; media.setAttribute('role', 'group');
   media.setAttribute('aria-label', L('br_media_title', 'Pictures and GIFs'));
@@ -170,7 +177,7 @@ export function createHud(o) {
     'Walls and new flashes change now. Game artwork changes on your next visit, so your current hand and prepaid spins are kept.'));
   nicheWrap.append(nicheForm, nicheList);
   media.append(el('span', 'br-opt-name', L('br_media_source', 'Source')), mediaSegRow, mediaNote, nicheWrap, mediaTiming);
-  nav.append(media);
+  if (!onWebShell) nav.append(media);
 
   // The room never trusts this field: the host validates the name again before it stores it. This is
   // only here so a typo is answered in the room instead of silently dropped over the bridge.

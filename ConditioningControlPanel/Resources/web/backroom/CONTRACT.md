@@ -990,7 +990,7 @@ side by side). A 3D close-up is a later amendment with its own node contract.
 
 | File | What |
 |---|---|
-| `station.js` | `mount(ctx)`; DOM, buttons (Deal; Hit, Stand, Double, Split from `legal`; bet chips 1 to 3 with +/- controls, default 1 below 30 SP; hint toggle off by default, remembered in `localStorage` `br_cards_hint`; "Stand up, sit back down" while no hand is open), the request flow, moments |
+| `station.js` | `mount(ctx)`; DOM, buttons (Deal; Hit, Stand, Double, Split from `legal`; bet chips 1 to 3 with +/- controls, default 1 below 30 SP; "Stand up, sit back down" while no hand is open), the request flow, moments |
 | `hand.js` | pure: reading `publicHand`, the button set, the same idem on `busy`/`timeout` retries, `stale` adopts the returned hand, Law I |
 | `table.js` | the canvas renderer: lamp, felt, print, cards, shoe, chips, win tunnel, chip vortex, sit fan |
 | `feel.js` | pure: result -> moment id, the highest-card key, timings |

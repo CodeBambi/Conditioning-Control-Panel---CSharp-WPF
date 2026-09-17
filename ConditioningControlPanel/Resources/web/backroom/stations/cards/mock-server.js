@@ -7,7 +7,8 @@
  *   refusals         closed (403), bad_request, hand_open, no_hand, stale, illegal, insufficient, too_fast, auto_stood, busy
  * Shoes are scripted fixtures: script('As', '9d', 'Kh', '7c', ...) sets the next hand's cards in deal order (player,
  * dealer up, player, dealer hole, then draws); unscripted cards come from a seeded stream. The hint here is a rough
- * stand-in, never the server's strategy table. handle() resolves like the host relay: {ok:true, status, body} or a
+ * stand-in, never the server's strategy table; the page dropped its hint feature and ignores the field, but the real
+ * server still sends it, so the mock keeps it to stay a faithful stand-in. handle() resolves like the host relay: {ok:true, status, body} or a
  * host refusal {ok:false, reason}. */
 
 const CAP = 99999, CHARLIE = 6, DAY_MS = 86400000, IDEM = /^[A-Za-z0-9_-]{16,64}$/;

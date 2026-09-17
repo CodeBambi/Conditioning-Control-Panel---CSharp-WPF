@@ -50,7 +50,7 @@ import { createSeatLook } from '../../room/seat-look.js';
 import { createLoomKit, createDeck, createMoments, strengthK, viewportRect, DECK_VALUES } from '../../shared/hypno/index.js';
 import { createCallout, FX_DELAY_MS } from '../../shared/hypno/callout.js';
 import { readState, readHand, legalOf, controls, classify, createIntent, mayRetry, moveBody, owedFor, shownSp, defaultStake,
-  readHintPref, writeHintPref, isOpen, totalOf, MOVES } from './hand.js';
+  isOpen, totalOf, MOVES } from './hand.js';
 import { planSteps, settleMoment, streakAfter, mayFire, wordKeys, aceSlot, bestCard, vortexOf, resultLines, screenHoldMs, TIMING,
   calloutFor, winningCards, isBloom, WIN_HOLD_MS } from './feel.js';
 import { freshSit, sitPlan, afterParty } from '../../shared/win/plan.js';
@@ -84,14 +84,13 @@ export async function mount(ctx) {
   };
   const prefersReduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const hostBack = ctx.hostBack === true;
-  const storage = (() => { try { return globalThis.localStorage || null; } catch (e) { return null; } })();
   const say = (m) => { try { if (ctx.bridge && typeof ctx.bridge.log === 'function') ctx.bridge.log('warn', '[cards] ' + m); } catch (e) { /* noop */ } };
   loadCss();
 
   const presentation = createPresentationPacer(navigator, quality);
   let el = null, table = null, kit = null, deck = null, moments = null, chip = null, raf = 0, session = 0, alive = false, suspended = false;
   let st = null, shownHand = null, queue = [], busy = false, decide = false, phase = 'loading', note = '', lines = [];
-  let stake = 1, stakePicked = false, hint = readHintPref(storage), dealReadyAt = 0, screenUntil = 0, sitting = 0, firstSit = true;
+  let stake = 1, stakePicked = false, dealReadyAt = 0, screenUntil = 0, sitting = 0, firstSit = true;
   let lastStill = null, unSp = null, feelLog = [], statusText = '', seat = 0, seating = false, dropped = 0;
   let streak = 0, beatAt = {}, wordCursor = 0;   // the table beats: wins in a row, each beat's last frame (cooldowns), the whisper rotation
   let callout = null, lastCallout = null, fxTimers = new Set();   // the winning flow: the callout and the delayed fx frames
@@ -135,11 +134,9 @@ export async function mount(ctx) {
         <button class="cards-back" type="button"></button>
         <span class="cards-sp"></span>
         <div class="cards-status" aria-live="polite"></div>
-        <div class="cards-hint" hidden></div>
       </header>
       <div class="cards-side">
         <div class="cards-bet" role="group"><span class="cards-bet-label"></span></div>
-        <label class="cards-hint-toggle"><input type="checkbox"> <span></span></label>
         <button class="cards-sit" type="button"></button>
         <span class="cards-sitting"></span>
       </div>
@@ -158,7 +155,6 @@ export async function mount(ctx) {
     q('.cards-card-back').textContent = t('br_cards_back', 'Back');
     q('.cards-bet').setAttribute('aria-label', t('br_cards_bet', 'Bet'));
     q('.cards-bet-label').textContent = t('br_cards_bet', 'Bet');
-    q('.cards-hint-toggle span').textContent = t('br_cards_hint_toggle', 'Basic-strategy hint');
     q('.cards-sit').textContent = t('br_cards_sit', 'Stand up, sit back down');
     q('.cards-loading').textContent = t('br_cards_loading', 'Shuffling the deck');
     q('.cards-deal span').textContent = t('br_cards_deal', 'Deal');
@@ -167,9 +163,6 @@ export async function mount(ctx) {
     if (hostBack) { root.dataset.hostBack = ''; q('.cards-back').hidden = true; q('.cards-card-back').hidden = true; }
     q('.cards-deal').onclick = () => deal();
     q('.cards-sit').onclick = () => resit();
-    const box = q('.cards-hint-toggle input');
-    box.checked = hint;
-    box.onchange = () => { hint = box.checked; writeHintPref(storage, hint); };
     return root;
   }
 
@@ -415,7 +408,8 @@ export async function mount(ctx) {
   function adopt(body, { quiet = false, beats = false } = {}) {
     if (Number.isFinite(Number(body.sp))) chip.setServer(body.sp);
     const next = readHand(body.hand);
-    st = { ...st, sp: chip.server, hand: next, legal: legalOf(body.legal), hint: MOVES.includes(body.hint) ? body.hint : null };
+    // The server still carries a basic-strategy `hint` in this body; the page no longer has a hint, so it is ignored.
+    st = { ...st, sp: chip.server, hand: next, legal: legalOf(body.legal) };
     chip.owe(body.ok ? owedFor(body) : 0);   // Law I: a settled return lands on its settle frame
     if (next) enqueue(next, { quiet, beats }); else { table.clear(); shownHand = null; }
   }
@@ -563,7 +557,6 @@ export async function mount(ctx) {
     for (const b of el.querySelectorAll('.cards-move')) {
       const m = b.dataset.move;
       b.disabled = !c.moves[m] || !cameraReady;
-      b.classList.toggle('is-hint', !!(hint && decide && st && st.hint === m && c.moves[m]));
     }
     for (const b of el.querySelectorAll('.cards-bet button')) {
       const next = stake + Number(b.dataset.delta);
@@ -577,10 +570,6 @@ export async function mount(ctx) {
     $('.cards-sit').disabled = !c.sit;
     const s = status(c);
     if (s !== statusText) { statusText = s; $('.cards-status').textContent = s; }
-    const hintEl = $('.cards-hint'), showHint = !!(hint && decide && st && st.hint);
-    const ht = showHint ? t('br_cards_hint_is', 'Hint: {move}.', { move: t('br_cards_' + st.hint, MOVE_LABEL[st.hint]) }) : '';
-    if (hintEl.textContent !== ht) hintEl.textContent = ht;
-    hintEl.hidden = !showHint;
     const sit = sitting ? t('br_cards_sitting', 'Sitting {n}', { n: sitting }) : '';
     if ($('.cards-sitting').textContent !== sit) $('.cards-sitting').textContent = sit;
   }
@@ -812,9 +801,9 @@ export async function mount(ctx) {
     destroy() { close(); document.querySelectorAll('link[data-cards-css]').forEach((l) => l.remove()); },
     /** For dev.html and CDP checks only. */
     debug: () => ({
-      phase, alive, busy, decide, suspended, hostBack, stake, stakePicked, hint, sitting, seating, queue: queue.length, dress: dress(), dropped, streak,
+      phase, alive, busy, decide, suspended, hostBack, stake, stakePicked, sitting, seating, queue: queue.length, dress: dress(), dropped, streak,
       screenLeftMs: Math.max(0, Math.round(screenUntil - performance.now())), dealText: el ? $('.cards-deal small').textContent : null,
-      state: st && { sp: st.sp, legal: st.legal, hint: st.hint, hand: st.hand }, shown: shownHand,
+      state: st && { sp: st.sp, legal: st.legal, hand: st.hand }, shown: shownHand,
       chip: chip && { kind: chip.kind, value: chip.value, server: chip.server, owed: chip.owed },
       // THE REWARD PASS (10.22): the last plan the spine handed out, what is still flying, and the sit-down ledger.
       reward: { plan: lastPlan, sit: { seen: sit.seen.slice(), heroes: sit.heroes },

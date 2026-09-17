@@ -8,7 +8,7 @@ page node contract, so the station draws a **2D canvas table** filling the stati
 | File | What |
 |---|---|
 | `station.js` | `mount(ctx)` -> `{open, close, suspend, destroy}`. DOM, controls, the request flow, the step queue, moments, the SP chip. |
-| `hand.js` | Pure: `readHand` / `readState` (publicHand), `controls` (which buttons are live), `classify` (what a reply means), `createIntent` + `mayRetry` (one idem per press), `owedFor` (Law I), the hint preference. |
+| `hand.js` | Pure: `readHand` / `readState` (publicHand), `controls` (which buttons are live), `classify` (what a reply means), `createIntent` + `mayRetry` (one idem per press), `owedFor` (Law I). |
 | `feel.js` | Pure: `planSteps` (a reply's hand against the felt -> timed steps), `momentOf`, `isBloom`, `bestCard`, `vortexOf`, `resultLines`, `fanCard`, `lampBreath`, `TIMING`. |
 | `table.js` | The canvas: lamp, felt weave, printed arc, shoe, chip spot, hands, and the page effects. |
 | `reward.js` | Pure: what a settled hand is WORTH and what its party may SPEND, over `shared/win/` (`settleTier`, `bloomTier`, `settleCue`, `ladderRoot`, `climbSteps`, `joinParty`, `calloutTier`, `showsRoom`). |
@@ -22,7 +22,8 @@ Shared code comes only through the hypno kit (`shared/hypno/index.js`): `createL
 
 ## Server API (binding, CONTRACT 10.13.E, CCP-Server `backroom-cards-routes.js`)
 
-- `GET state` -> `{ ok, sp, open, hand: publicHand | null, legal, hint, autoStandAt, rules, floorMs }`.
+- `GET state` -> `{ ok, sp, open, hand: publicHand | null, legal, hint, autoStandAt, rules, floorMs }`. The page
+  dropped its basic-strategy hint, so `hint` is ignored wherever the server sends it.
 - `POST deal {idem, stake}`; `POST hit | stand | double | split {idem, handId, step}` -> `{ ok, idem, sp, spBefore, cost,
   returned, capped, hand, legal, hint, autoStood?, autoStandAt }`.
 - Refusals and what the page does (`hand.js` `classify`):
@@ -33,15 +34,14 @@ Shared code comes only through the hypno kit (`shared/hypno/index.js`): `createL
   - `no_hand`, `bad_request`: GET state again. `insufficient`: a line. `closed` (403) and a host `bad_op`: a card, the
     controls close. `offline` and anything else: a line.
 - Host Ops row (H1): `["cards"] = { ("GET","state"), ("POST","deal"), ("POST","hit"), ("POST","stand"), ("POST","double"), ("POST","split") }`.
-- Rules, odds and pays are the server's (RULES_V1). The page never computes a pay, a legal move or a hint; the only
+- Rules, odds and pays are the server's (RULES_V1). The page never computes a pay or a legal move; the only
   arithmetic is the display total of face-up cards while the dealer's hand is being turned.
 
 ## The table
 
 - **Controls.** Bet chip 1 or 2 SP (`rules.stakes`), starting on 1 below 30 SP and on 2 from 30. Deal (Space or Enter).
-  Hit, Stand, Double, Split exactly as `legal` says, shown only while a hand is open. The basic-strategy hint is off by
-  default, remembered in `localStorage` `br_cards_hint`, and shows the server's `hint` as a line and a mint ring on
-  that button. "Stand up, sit back down" while no hand is open; it latches on the press (Deal, the moves and a second
+  Hit, Stand, Double, Split exactly as `legal` says, shown only while a hand is open. "Stand up, sit back down"
+  while no hand is open; it latches on the press (Deal, the moves and a second
   Sit are refused while the 13 pictures are dealt), and each sit owns its deck (the last one is disposed when the new one
   is in; a late deck from an older sit is disposed, never adopted). Moves have no letter keys (the room walks on WASD).
 - **Law VIII.** Every press rings its button on the frame. **Law VI.** Back (the room's, or the station's own
@@ -179,8 +179,6 @@ so host washes and tunnels stay Normal there (as the wheel does). **Gates** are 
 | `br_cards_bet` | Bet |
 | `br_cards_deal` / `br_cards_hit` / `br_cards_stand` / `br_cards_double` / `br_cards_split` | Deal / Hit / Stand / Double / Split |
 | `br_cards_wait` / `br_cards_moment` | {s} s / One moment |
-| `br_cards_hint_toggle` | Basic-strategy hint |
-| `br_cards_hint_is` | Hint: {move}. |
 | `br_cards_sit` | Stand up, sit back down |
 | `br_cards_sitting` | Sitting {n} |
 | `br_cards_loading` | Shuffling the deck |

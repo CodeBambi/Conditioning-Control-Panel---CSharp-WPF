@@ -5914,8 +5914,6 @@
   "br_cards_split": "Split",
   "br_cards_wait": "{s} s",
   "br_cards_moment": "One moment",
-  "br_cards_hint_toggle": "Basic-strategy hint",
-  "br_cards_hint_is": "Hint: {move}.",
   "br_cards_sit": "Stand up, sit back down",
   "br_cards_sitting": "Sitting {n}",
   "br_cards_loading": "Shuffling the deck",
