@@ -7,7 +7,7 @@ export const PHOTO_GROUPS = [
   { id: 'entrance', position: [-1.75, 1.9, 7.76], yaw: Math.PI, photos: ['ccp-601'] },
   { id: 'southwest', position: [-3.95, 1.95, 7.76], yaw: Math.PI, photos: ['ccp-dashboard', 'ccp-feature'] },
   { id: 'cards', position: [6.82, 3.35, -5.4], yaw: -Math.PI / 2, photos: ['ccp-dashboard'] },
-  { id: 'parlour', position: [5.65, 1.7, -7.76], yaw: 0, photos: ['ccp-feature', 'ccp-601'] },
+  { id: 'parlour', position: [6.82, 1.65, -6.8], yaw: -Math.PI / 2, photos: ['ccp-feature', 'ccp-601'] },
   { id: 'slots', position: [-6.82, 3.5, 4.9], yaw: Math.PI / 2, photos: ['ccp-601', 'ccp-dashboard'] },
 ];
 const photos = PHOTO_GROUPS.flatMap((group, g) => group.photos.map((file, i) => {
@@ -21,7 +21,7 @@ export const MEMORABILIA = [
   { id: 'eyes', kind: 'poster', title: 'Eyes front', src: asset('eyes-front'), position: [-6.82, 2.25, -3.8], yaw: Math.PI / 2, size: [.85, 1.25] },
   { id: 'work', kind: 'poster', title: 'Good work', src: asset('good-work'), position: [-6.82, 2.25, -5.8], yaw: Math.PI / 2, size: [.9, 1.3] },
   { id: 'late', kind: 'poster', title: 'Stay late', src: asset('stay-late'), position: [5.7, 1.95, 7.76], yaw: Math.PI, size: [.85, 1.25] },
-  { id: 'attend', kind: 'poster', title: 'Attendance', src: asset('attend'), position: [-4.9, 2.9, 7.76], yaw: Math.PI, size: [.85, 1.25] },
+  { id: 'attend', kind: 'poster', title: 'Attendance', src: asset('attend'), position: [-2.75, 3.05, 7.76], yaw: Math.PI, size: [.85, 1.25] },
   { id: 'deep', kind: 'poster', title: 'Dive deep', src: asset('dive-deep'), position: [4.25, 2.6, 7.76], yaw: Math.PI, size: [.9, 1.3] },
   { id: 'listen', kind: 'poster', title: 'Listen well', src: asset('listen-well'), position: [2.85, 2.5, 7.76], yaw: Math.PI, size: [.85, 1.25] },
   ...photos,

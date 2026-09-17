@@ -17,7 +17,25 @@
   let generation = 0, fetchController;
   const localUrls = new Set();
   let localBytes = 0;
-  const changed = () => window.dispatchEvent(new Event('br-media-changed'));
+  const changed = () => {
+    try { sessionStorage.setItem('br.media.pool.v1',JSON.stringify({config,clips:media.clips,stills:media.stills})); } catch {}
+    window.dispatchEvent(new Event('br-media-changed'));
+  };
+  async function localFiles(value) {
+    const db = await new Promise((resolve,reject)=>{
+      const req=indexedDB.open('br.local-media',1);
+      req.onupgradeneeded=()=>req.result.createObjectStore('files');
+      req.onsuccess=()=>resolve(req.result); req.onerror=()=>reject(req.error);
+    });
+    try { return await new Promise((resolve,reject)=>{
+      const tx=db.transaction('files',value ? 'readwrite':'readonly');
+      const req=value ? tx.objectStore('files').put(value,'selected') : tx.objectStore('files').get('selected');
+      tx.oncomplete=()=>resolve(req.result); tx.onerror=()=>reject(tx.error); tx.onabort=()=>reject(tx.error);
+    }); } finally { db.close(); }
+  }
+  function adoptFiles(files) {
+    media.local=files.map(f=>{localBytes+=f.size;const url=URL.createObjectURL(f);localUrls.add(url);return url;});
+  }
   const storeConfig = () => { try { localStorage.setItem('br.media.v1', JSON.stringify(config)); } catch {} };
   const cleanSources = value => [...new Set(String(value).split(/[\s,;]+/).map(s => s.replace(/^https?:\/\/(?:www\.)?(?:scrolller\.com|reddit\.com)\//i,'').replace(/^r\//i,'').replace(/\/$/, '')).filter(s => /^[a-zA-Z0-9_]{2,40}$/.test(s)))].slice(0,8);
   config.sources = cleanSources(Array.isArray(config.sources) ? config.sources.join(',') : config.sources);
@@ -501,7 +519,7 @@
       if (!accepted.length) throw new Error('Choose GIF, WebP, PNG or JPEG files, up to 20 MB each.');
       // Keep old URLs valid for a pinned hand/reel until page teardown; no files leave this browser.
       if (localUrls.size + accepted.length > 192 || localBytes + accepted.reduce((n,f)=>n+f.size,0) > 160*1024*1024) throw new Error('Local file limit reached. Reload before choosing more files.');
-      media.local = accepted.map(f => { localBytes+=f.size; const ext=f.name.split('.').pop().toLowerCase(); const type={gif:'image/gif',webp:'image/webp',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg'}[ext]; const url=URL.createObjectURL(f.slice(0,f.size,type)); localUrls.add(url); return url; });
+      await localFiles(accepted); adoptFiles(accepted);
       await this.set('local'); return {count:accepted.length, skipped:files.length-accepted.length};
     }
   };
@@ -509,5 +527,14 @@
   window.__fxSetOnline = on => window.__brMedia.set(on ? 'scrolller' : 'bundled');
   if (new URLSearchParams(location.search).get('media') === 'off') {config.mode='bundled'; media.on=false;}
 
-  window.__fxReady = warmMedia();
+  window.__fxReady = (async()=>{
+    if(config.mode==='local') { try { adoptFiles(await localFiles() || []); } catch {} changed(); return; }
+    try {
+      const saved=JSON.parse(sessionStorage.getItem('br.media.pool.v1') || 'null');
+      if(saved && JSON.stringify(saved.config)===JSON.stringify(config) && (saved.clips?.length || saved.stills?.length)) {
+        media.clips=saved.clips; media.stills=saved.stills; media.tried=true; warmCanvas(); changed(); return;
+      }
+    } catch {}
+    await warmMedia();
+  })();
 })();

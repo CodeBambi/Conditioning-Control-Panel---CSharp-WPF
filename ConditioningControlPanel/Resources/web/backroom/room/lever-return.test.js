@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { siliconeRebound, SILICONE_SETTLE_MS, customLeverReturn, releasedLeverAngle, customSpinLeverAngle, customSpinReturnMs } from './lever-return.js';
 test('custom lever makes one small overshoot and a faster tiny correction', () => {
   for (const age of [-420, -1, 0, SILICONE_SETTLE_MS, 500]) assert.equal(siliconeRebound(age), 0);
-  assert.equal(siliconeRebound(27.5), -0.06);
-  assert.equal(siliconeRebound(72.5), 0.006);
-  assert.ok(Math.abs(siliconeRebound(55)) < 1e-12);
-  for(let ms=1;ms<90;ms++) assert.ok(Math.abs(siliconeRebound(ms))<=0.06);
+  assert.equal(siliconeRebound(50), -0.10);
+  assert.equal(siliconeRebound(140), 0.05);
+  assert.ok(Math.abs(siliconeRebound(100)) < 1e-12);
+  for(let ms=1;ms<240;ms++) assert.ok(Math.abs(siliconeRebound(ms))<=0.10);
 });
 
 test('whole custom lever overshoots backward only and rests after 90 ms', () => {
