@@ -211,11 +211,35 @@ namespace ConditioningControlPanel.Services.Deeper
 
         private void StartHoldWatch()
         {
-            // Only UntilSatisfied with real region bounds and a non-passive hold mode needs
-            // to police the playhead; Duration mode just lets the band end normally.
+            // Only UntilSatisfied with a non-passive hold mode holds playback at all; Duration
+            // mode just lets the band end normally.
             if (_completion != SpeakCompletion.UntilSatisfied) return;
             if (_holdMode == SpeakHoldMode.KeepPlaying) return;
-            if (_source == null || !_regionStart.HasValue || !_regionEnd.HasValue) return;
+            if (_source == null) return;
+
+            // #1221: a rule-fired speak has no authored width, so EnhancementEngine hands it a
+            // null region end (`item.Duration > 0 ? ... : null`) - and the old guard returned
+            // right here, which is why "Pause the video" put its cue on screen and then let the
+            // video play straight on. There is no region end to police in that case: the hold IS
+            // the effect, so take it at cue time instead of watching a playhead for a boundary
+            // that does not exist. The prompt's 30s hard deadline still bounds it, and every exit
+            // path (reps met, deadline, band stop, engine teardown) runs ReleaseHold.
+            //
+            // LoopRegion genuinely needs bounds - there is nowhere to seek back to without them -
+            // so it stays a no-op, same as before.
+            if (!_regionStart.HasValue || !_regionEnd.HasValue)
+            {
+                if (_holdMode == SpeakHoldMode.Pause && !_paused)
+                {
+                    try
+                    {
+                        _source.Pause();
+                        _paused = true;
+                    }
+                    catch (Exception ex) { App.Logger?.Debug("SpeakPromptSession.StartHoldWatch: {E}", ex.Message); }
+                }
+                return;
+            }
 
             _holdTimer = new DispatcherTimer(DispatcherPriority.Background)
             {

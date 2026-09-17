@@ -4076,6 +4076,7 @@
   "programs_task_locked": "Needs a pledge - not required today",
   "programs_task_progress": "{0} / {1}",
   "btn_program_submit_photo": "Submit photo",
+  "btn_program_open_mantras": "Open mantras",
   "programs_photo_local_note": "Ritual photos stay on this machine. They are not uploaded, not synced, and never drawn onto a share card.",
   "programs_photo_dialog_title": "Choose a photo",
   "programs_photo_filter": "Images|*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.webp|All files|*.*",
