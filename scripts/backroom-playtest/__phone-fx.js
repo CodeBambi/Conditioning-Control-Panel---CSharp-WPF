@@ -61,7 +61,7 @@
   }
 
   const HOP = (u, edge) => '/api/clip?u=' + encodeURIComponent(u) + (edge === 640 ? '&e=640' : '');
-  
+
   const proxied = (u) => '/api/m?u=' + encodeURIComponent(u);
   const warm = (u, edge) => { try { fetch(HOP(u, edge), { method: 'GET', cache: 'force-cache' }).catch(() => {}); } catch (e) {  } };
   const OVERLAY_EDGE = 640;   // a fullscreen or half-screen overlay is DOM: 384 upscaled reads soft
@@ -73,7 +73,7 @@
   const RAIN_HEAD = 6;           // gif-rain stays on the 384 head: 19 raindrops at 640 is a phone's whole budget
   let burstCursor = 0;
   const reachOf = () => Math.min(MEDIA_REACH, MEDIA_REACH_MAX, media.clips.length);
-  
+
   function warmAhead() {
     const reach = reachOf();
     if (!reach) return;
@@ -82,7 +82,7 @@
       if (u) warm(u, OVERLAY_EDGE);
     }
   }
-  
+
   function nextWindow() {
     const reach = reachOf();
     if (reach > BURST_WINDOW) burstCursor = (burstCursor + BURST_WINDOW) % reach;
@@ -141,10 +141,10 @@
       #__fx .fxfull { inset:0; width:100%; height:100%; object-fit:cover; }
       #__fx .fxwash { inset:0; }
       #__fx .fxrain { width:34vmin; height:34vmin; object-fit:cover; border-radius:10px; box-shadow:0 6px 26px rgba(0,0,0,.5); }
-      
+
       #__fx .fxflash { width:58vmin; height:43vmin; left:50%; top:50%; transform:translate(-50%,-50%);
         object-fit:cover; border-radius:12px; box-shadow:0 10px 48px rgba(0,0,0,.55), 0 0 0 2px rgba(255,214,240,.16); }
-      
+
       #__fx .fxtap { pointer-events:auto; cursor:pointer; touch-action:manipulation; }
       #__fx .fxglitch { inset:0; background:linear-gradient(90deg,#9b6bff,#5fffd0,#ff5fa2); mix-blend-mode:screen; }
       #__fx .fxdim { inset:0; background:#060309; }
@@ -156,7 +156,7 @@
   }
 
   const add = (cls, tag = 'div') => { const n = document.createElement(tag); n.className = cls; mount().append(n); return n; };
-  
+
   const drop = (n, ms) => (n.__drop = setTimeout(() => n.remove(), Math.max(0, ms)));
   const anim = (n, frames, ms, easing = 'ease') => {
     try { return n.animate(frames, { duration: Math.max(1, ms), easing, fill: 'forwards' }); } catch (e) { return null; }
@@ -476,7 +476,7 @@
       return { key: 'g' + i, url: FALLBACK(i), w: 180, h: 180, src: 'pool' };
     });
   };
-  
+
   function warmCanvas() {
     // The 3D rung first: the walls, the ceiling and gif-rain ask for it the moment the room opens.
     for (const u of media.clips.slice(0, RAIN_HEAD)) warm(u, 384);
@@ -508,6 +508,6 @@
   window.addEventListener('pagehide', event => { if(!event.persisted){fetchController?.abort(); localUrls.forEach(url=>URL.revokeObjectURL(url));} });
   window.__fxSetOnline = on => window.__brMedia.set(on ? 'scrolller' : 'bundled');
   if (new URLSearchParams(location.search).get('media') === 'off') {config.mode='bundled'; media.on=false;}
-  
+
   window.__fxReady = warmMedia();
 })();
