@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
@@ -192,20 +193,70 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
     private static string? LocalFile(BackRoomGif? gif)
     {
         if (gif == null) return null;
-        // Since the wall deal may carry Scrolller CLIPS (.webm / .mp4, played by the page's own
-        // room/clip-source.js in WebView2), a dealt url is no longer guaranteed to be a picture.
-        // Today the room's deal is the one deal no fx draws from - fx always names a station and the
-        // bridge keys its deals by station - so this cannot fire. It is here because that is a
-        // coincidence of two other files, and the cost of being wrong is a visibly broken overlay.
+        // Since 2026-09-17 EVERY remote pick is a Scrolller CLIP (.webm / .mp4, played by the page's
+        // own room/clip-source.js in WebView2), on the wall and at every chair, so a station's dealt
+        // url routinely names a video and WPF imaging cannot open one. The overlay takes the deal
+        // ladder's next rung instead of drawing nothing: one of the player's own animated files, then a
+        // bundled loop. It is not the picture the reel showed, and that is the trade the owner chose
+        // over keeping a static poster around for it.
         if (!IsDrawablePicture(gif.Url))
         {
-            App.Logger?.Debug("[BackRoom] dealt item {Key} is not a drawable picture", gif.Key);
-            return null;
+            var standIn = StandInFor(gif.Key, App.Flash?.SnapshotLocalImagePaths(), WebRoot);
+            App.Logger?.Debug("[BackRoom] dealt item {Key} is a clip; the overlay takes a stand-in ({Found})", gif.Key, standIn != null);
+            return standIn;
         }
         var path = TryLocalPath(gif.Url, App.EffectiveAssetsPath, WebRoot);
         if (path != null && File.Exists(path)) return path;
         App.Logger?.Debug("[BackRoom] dealt item {Key} has no local file", gif.Key);
         return null;
+    }
+
+    /// <summary>Header reads a stand-in may spend. A library of still webps must not turn one flash into
+    /// a file open per file; past this the bundled loop is the picture.</summary>
+    private const int StandInProbes = 8;
+
+    /// <summary>
+    /// A picture a WPF overlay CAN open, standing in for a dealt clip it cannot: the same ladder the deal
+    /// itself walks below the clips rung. One of the player's own animated files (<paramref name="library"/>
+    /// is the flash pool's disk half; only <c>.gif</c> / <c>.webp</c> that prove they animate, at most
+    /// <see cref="StandInProbes"/> header reads), else the bundled loop under <paramref name="webRoot"/>.
+    /// Deterministic for a key, so the same reel face flashes the same stand-in for the whole sit-down.
+    /// Null only when there is nothing at all, which the callers already treat as "no picture".
+    /// </summary>
+    internal static string? StandInFor(string? key, IReadOnlyList<string>? library, string? webRoot)
+    {
+        // The key's own digits (g7 -> 7) seed the pick; a keyless item takes 0.
+        int n = 0;
+        foreach (var ch in key ?? string.Empty)
+            if (char.IsDigit(ch)) n = n * 10 + (ch - '0');
+
+        try
+        {
+            var own = (library ?? Array.Empty<string>())
+                .Where(p => !string.IsNullOrWhiteSpace(p) && !FlashService.IsRemotePath(p))
+                .Where(p => Path.GetExtension(p).Equals(".gif", StringComparison.OrdinalIgnoreCase)
+                         || Path.GetExtension(p).Equals(".webp", StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var rng = new Random(unchecked(n * 31 + 7));
+            for (int i = 0, probes = 0; i < own.Count && probes < StandInProbes; i++, probes++)
+            {
+                int j = rng.Next(i, own.Count);
+                (own[i], own[j]) = (own[j], own[i]);
+                if (BackRoomMedia.ProbeAnimated(own[i]).Ok && File.Exists(own[i])) return own[i];
+            }
+        }
+        catch (Exception ex) { Diag.Swallowed(ex, "stand-in library"); }
+
+        try
+        {
+            if (string.IsNullOrEmpty(webRoot)) return null;
+            var loop = Path.Combine(webRoot, "backroom", "stations", "slot", "fallback",
+                $"gif{n % BackRoomMedia.Slots}.webp");
+            return File.Exists(loop) ? loop : null;
+        }
+        catch (Exception ex) { Diag.Swallowed(ex, "stand-in loop"); return null; }
     }
 
     public void Wash(FxRgb color, double peak, BackRoomGif? picture, Action shown)

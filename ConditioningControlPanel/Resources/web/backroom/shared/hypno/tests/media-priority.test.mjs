@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 const source=(await readFile(new URL('../media.js',import.meta.url),'utf8'))
 .replace("import { decodedSource } from '../../room/gif-decode.js';",'const decodedSource=(...args)=>globalThis.deckDecode(...args);')
+.replace("import { clipSource, isClip } from '../../room/clip-source.js';",'const isClip=()=>false;const clipSource=async()=>null;')
 .replace("'../../room/media-limits.js'",JSON.stringify(new URL('../../../room/media-limits.js',import.meta.url).href));
 const {createDeck}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const settle=()=>new Promise(resolve=>setImmediate(resolve));

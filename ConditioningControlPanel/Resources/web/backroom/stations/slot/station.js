@@ -467,7 +467,7 @@ export async function mount(ctx) {
    * for a still deck is one paint). A shut panel costs nothing: nine rows of three cells is real work and
    * nobody is looking at it. */
   let payRaf = 0, payAt = -Infinity;
-  const lookNow = () => ({ gif: i => (media ? media.gif(i) : null), word: i => (media ? media.word(i) : null),
+  const lookNow = () => ({ gif: i => (media ? media.gif(i, stillFx()) : null), word: i => (media ? media.word(i) : null),
                            reduced: stillFx(), face: scene ? scene.faceImage : null });
   function paintCombos(now) {
     if (!el || !alive || !combos.length) return;
@@ -861,8 +861,8 @@ export async function mount(ctx) {
     scene.setStops(s.last && Array.isArray(s.last.stops) ? s.last.stops : stopsFor(s.strips, s.shown));
     celebration = createCelebration({ mount: el, still: stillFx,
       portrait: i => scene?.portrait(i), point: () => scene?.project('reel_window') });
-    scene.setLook({ gif: i => media.gif(i), word: i => media.word(i) });
-    dealt.then(() => { if (my === session && scene) scene.setLook({ gif: i => media.gif(i), word: i => media.word(i) }); });
+    scene.setLook({ gif: i => media.gif(i, stillFx()), word: i => media.word(i) });
+    dealt.then(() => { if (my === session && scene) scene.setLook({ gif: i => media.gif(i, stillFx()), word: i => media.word(i) }); });
     renderOdds();
     setFace(!s.last ? restPose(s.melt) : landPose(s.last));
     el.dataset.phase = 'rise';

@@ -14,9 +14,17 @@
  * At most ONE animation decode starts per tick, and only
  * sources drawn since the last tick advance. No decoder, or a file it refuses,
  * draws a still taken from an <img>.
+ *
+ * A dealt CLIP (webm/mp4: since 2026-09-17 every remote picture is one) is routed
+ * by its extension to room/clip-source.js and played into its canvas on the same
+ * tick, the same shape a decoded GIF has. What keeps thirteen dealt clips from
+ * being thirteen video decoders: the eight-resident cap above, and a clip that
+ * was not drawn this tick is PAUSED (its `clip` flag), so only the faces on the
+ * table decode. `setStill` pauses every clip, as it holds every GIF on frame one.
  * ==========================================================================*/
 
 import { decodedSource } from '../../room/gif-decode.js';
+import { clipSource, isClip } from '../../room/clip-source.js';
 import { refusedMedia, MEDIA_LIMITS } from '../../room/media-limits.js';
 
 /** Card values in the pure module's rank order, T for ten. Value i wears gifs[i % gifs.length]. */
@@ -114,12 +122,20 @@ export async function createDeck(ctx, { count = 13, maxEdge = DECK_CAPS.maxEdge,
     e.state = 'loading'; stats.loads++; loading++;
     const done = (async () => {
       let src = null;
-      try { src = await decodedSource(e.url, { maxEdge: edge, maxFps: DECK_CAPS.maxFps, signal: controller.signal, maxBytes: DECK_CAPS.sourceBytes }); } catch (err) {
+      const clip = isClip(e.url);
+      try {
+        src = clip
+          ? await clipSource(e.url, { maxEdge: edge, signal: controller.signal })
+          : await decodedSource(e.url, { maxEdge: edge, maxFps: DECK_CAPS.maxFps, signal: controller.signal, maxBytes: DECK_CAPS.sourceBytes });
+      } catch (err) {
         if (refusedMedia(err)) { e.state = 'failed'; stats.failed++; return; }
         src = null;
       }
       if (disposed) { if (src) src.dispose(); return; }
       if (src) { e.src = src; e.state = 'ready'; if (src.animated) stats.animated++; else stats.stills++; return; }
+      // A clip that could not play is not a still: an <img> cannot show a video either, so the entry
+      // fails here and the card draws nothing rather than spending a load on a second failure.
+      if (clip) { e.state = 'failed'; stats.failed++; return; }
       e.still = await stillOf(e.url, edge, controller.signal);
       if (disposed) return;
       e.state = e.still ? 'ready' : 'failed';
@@ -195,6 +211,10 @@ export async function createDeck(ctx, { count = 13, maxEdge = DECK_CAPS.maxEdge,
           if (e.src.tick(t, isStill)) { started = true; stats.decodes++; rr = (rr + k + 1) % entries.length; }
         }
       }
+      // A resident clip nobody drew this tick keeps decoding on its own clock unless it is told to
+      // stop: `still` on a clip is a pause, and the next draw resumes it. A GIF is left where it is,
+      // because it costs nothing between ticks and a still-tick would send it back to frame one.
+      for (const e of entries) if (e.src?.clip && !e.drawn && !isStill) e.src.tick(t, true);
       for (const e of entries) e.drawn = false;
       return started;
     },

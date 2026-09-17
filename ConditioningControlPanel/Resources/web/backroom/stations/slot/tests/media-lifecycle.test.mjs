@@ -4,7 +4,9 @@ import { readFile } from 'node:fs/promises';
 const source = (await readFile(new URL('../media.js', import.meta.url), 'utf8'))
   .replace("import { kindOf } from './symbols.js';", "const kindOf = id => ({kind:id.startsWith('gif')?'gif':'sub',n:Number(id.at(-1))});")
   .replace("'../../room/media-limits.js'", JSON.stringify(new URL('../../../room/media-limits.js', import.meta.url).href))
-  .replace("import { decodedSource } from '../../room/gif-decode.js';", 'const decodedSource = (...args) => globalThis.testDecode(...args);');
+  .replace("import { decodedSource } from '../../room/gif-decode.js';", 'const decodedSource = (...args) => globalThis.testDecode(...args);')
+  // Every url here is a picture, so the clip router is stood in for as "never a clip" (media-clip.test.mjs covers it).
+  .replace("import { clipSource, isClip } from '../../room/clip-source.js';", 'const isClip = () => false; const clipSource = async () => null;');
 const { createMedia } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function setup(t, decode) {

@@ -86,21 +86,23 @@ public sealed class BackRoomMediaSourceTests : IDisposable
         return s;
     }
 
-    /// <summary>A pool that is simply "these stills are warm", so a deal test never needs a fetch.</summary>
+    /// <summary>A pool that is simply "these clips are warm", so a deal test never needs a fetch.
+    /// Clip urls end <c>.mp4</c>, which is the only thing that makes one a clip anywhere in this
+    /// feature; the deal rules under test here do not care what a remote pick is.</summary>
     private sealed class FakePool : IBackRoomRemotePool
     {
-        public readonly List<BackRoomRemoteStill> Stills = new();
+        public readonly List<BackRoomRemoteClip> Clips = new();
         public int Warms, Waits, Drains;
         public bool Wanted { get; set; } = true;
         public void EnsureWarm() => Warms++;
         public Task WarmAsync(CancellationToken ct) { Waits++; return Task.CompletedTask; }
-        public IReadOnlyList<BackRoomRemoteStill> Ready() => Stills;
-        public void Drain() { Drains++; Stills.Clear(); }
+        public IReadOnlyList<BackRoomRemoteClip> Ready() => Clips;
+        public void Drain() { Drains++; Clips.Clear(); }
 
         public FakePool With(int n)
         {
             for (int i = 0; i < n; i++)
-                Stills.Add(new BackRoomRemoteStill("scrolller/sub/p" + i, "https://ccp.assets/.temp/still" + i + ".webp", 300, 200));
+                Clips.Add(new BackRoomRemoteClip("scrolller/sub/c" + i, "https://ccp.assets/.temp/clip" + i + ".mp4", 640, 360));
             return this;
         }
     }
@@ -193,7 +195,7 @@ public sealed class BackRoomMediaSourceTests : IDisposable
     }
 
     [Fact]
-    public void Online_DealsWarmStills_MarkedOnline_AndNeverTheAnimatedHint()
+    public void Online_DealsWarmClips_MarkedOnline_AndNeverTheAnimatedHint()
     {
         var pool = new FakePool().With(8);
         var deal = Media(Settings("online", consent: true), pool, new[] { Gif("a.gif") }).Deal("room", 11, 8);
@@ -201,7 +203,8 @@ public sealed class BackRoomMediaSourceTests : IDisposable
         Assert.Equal(8, deal.Gifs.Count);
         Assert.All(deal.Gifs, g => Assert.Equal("online", g.Src));
         Assert.All(deal.Gifs, g => Assert.StartsWith("https://ccp.assets/.temp/", g.Url));
-        // A remote entry is a STILL by design today: claiming it animates would only cost a decode.
+        // The animated-webp hint is for a local .webp the host decodes. A clip is PLAYED by the page,
+        // so claiming it decodes would only cost the host a decode it cannot do.
         Assert.All(deal.Gifs, g => Assert.DoesNotContain("#", g.Url));
         Assert.Equal(8, deal.Gifs.Select(g => g.Url).Distinct().Count());
         Assert.Equal("online", deal.Source);
@@ -240,7 +243,7 @@ public sealed class BackRoomMediaSourceTests : IDisposable
         public bool Wanted => true;
         public void EnsureWarm() => throw new InvalidOperationException("nope");
         public Task WarmAsync(CancellationToken ct) => throw new InvalidOperationException("nope");
-        public IReadOnlyList<BackRoomRemoteStill> Ready() => throw new InvalidOperationException("nope");
+        public IReadOnlyList<BackRoomRemoteClip> Ready() => throw new InvalidOperationException("nope");
         public void Drain() => throw new InvalidOperationException("nope");
     }
 
@@ -323,16 +326,24 @@ public sealed class BackRoomMediaSourceTests : IDisposable
 
     // ---------------------------------------------------------------- the warm pool
 
-    private FypAssetManifest.Entry Entry(string id, string ext = ".webp", int w = 640, int h = 480)
-        => new() { Id = id, Url = "https://cdn.example.com/" + id.Replace('/', '-') + ext, Type = "image", Width = w, Height = h, Origin = "online" };
+    /// <summary>A clip entry, the only class the pool keeps. <c>.mp4</c> and <c>video</c>, because
+    /// <c>RemoteMediaFormats.Validate</c> is the single authority on what a remote entry may be.</summary>
+    private FypAssetManifest.Entry Entry(string id, string ext = ".mp4", int w = 640, int h = 480)
+        => new() { Id = id, Url = "https://cdn.example.com/" + id.Replace('/', '-') + ext, Type = "video", Width = w, Height = h, Origin = "online" };
 
     /// <summary>The real pool, with the fetch and the materialize as seams. A "download" writes a real
-    /// file under the assets temp folder, which is what gives it a ccp.assets url.</summary>
+    /// file under the assets temp folder, which is what gives it a ccp.assets url.
+    ///
+    /// <para>The recorder lists are locked because the pool materializes up to
+    /// <see cref="BackRoomRemotePool.MaterializeConcurrency"/> entries at once: List&lt;T&gt;.Add from
+    /// two threads silently loses an item, and a test would then fail one run in three with
+    /// "expected 2, actual 1" - a dropped Add, not a slow fill.</para></summary>
     private (BackRoomRemotePool Pool, List<string> Materialized, List<string> Released) Pool(
         AppSettings settings, params (List<FypAssetManifest.Entry>? Entries, string? Error)[] batches)
     {
         var materialized = new List<string>();
         var released = new List<string>();
+        var recorder = new object();
         int batch = 0;
         var pool = new BackRoomRemotePool(
             () => settings,
@@ -343,13 +354,13 @@ public sealed class BackRoomMediaSourceTests : IDisposable
             },
             (url, _) =>
             {
-                materialized.Add(url);
+                lock (recorder) materialized.Add(url);
                 // A NEW guid path per call, exactly like RemoteMediaCache: that is the whole trap.
                 var path = Path.Combine(_temp, "ccp_temp_remote_" + Guid.NewGuid().ToString("N") + Path.GetExtension(url));
                 File.WriteAllBytes(path, new byte[] { 1, 2, 3 });
                 return Task.FromResult<string?>(path);
             },
-            p => { released.Add(p); try { File.Delete(p); } catch { } },
+            p => { lock (recorder) released.Add(p); try { File.Delete(p); } catch { } },
             () => _root,
             () => _logger);
         return (pool, materialized, released);
@@ -359,7 +370,7 @@ public sealed class BackRoomMediaSourceTests : IDisposable
     public async Task WarmPool_MaterializesOneEntryIdExactlyOnce()
     {
         // The trap: every MaterializeAsync mints a new guid filename, so materializing one picture
-        // twice gives the page two urls it cannot dedupe and the same still lands on the wall twice.
+        // twice gives the page two urls it cannot dedupe and the same clip lands on the wall twice.
         var (pool, materialized, _) = Pool(Settings("online", consent: true),
             (new List<FypAssetManifest.Entry> { Entry("scrolller/s/a"), Entry("scrolller/s/a"), Entry("scrolller/s/b"), Entry("scrolller/s/a") }, null));
 
@@ -379,32 +390,33 @@ public sealed class BackRoomMediaSourceTests : IDisposable
             (new List<FypAssetManifest.Entry> { Entry("scrolller/s/a", w: 800, h: 600) }, null));
         await pool.WarmAsync(CancellationToken.None);
 
-        var still = Assert.Single(pool.Ready());
-        Assert.StartsWith("https://ccp.assets/.temp/ccp_temp_remote_", still.Url);
-        Assert.Equal((800, 600), (still.W, still.H));
+        var clip = Assert.Single(pool.Ready());
+        Assert.StartsWith("https://ccp.assets/.temp/ccp_temp_remote_", clip.Url);
+        Assert.Equal((800, 600), (clip.W, clip.H));
 
         // And that url survives the whole way into a deal, which is the unlock: a materialized remote
         // file is under EffectiveAssetsPath, so it already has a legal ccp.assets url.
         var deal = Media(Settings("online", consent: true), pool, null).Deal("room", 2, 4);
-        Assert.Equal(still.Url, Assert.Single(deal.Gifs).Url);
+        Assert.Equal(clip.Url, Assert.Single(deal.Gifs).Url);
         Assert.Equal("online", deal.Gifs[0].Src);
     }
 
     [Fact]
-    public async Task WarmPool_DropsAnythingThatIsNotARenderableStill()
+    public async Task WarmPool_DropsAnythingThatIsNotAPlayableClip()
     {
         var (pool, materialized, _) = Pool(Settings("online", consent: true),
             (new List<FypAssetManifest.Entry>
             {
                 Entry("scrolller/s/ok"),
-                new() { Id = "scrolller/s/clip", Url = "https://cdn.example.com/c.mp4", Type = "video", Origin = "online" },
-                new() { Id = "", Url = "https://cdn.example.com/x.webp", Type = "image", Origin = "online" },
-                new() { Id = "scrolller/s/bad", Url = "https://cdn.example.com/x.bmp", Type = "image", Origin = "online" },
+                new() { Id = "scrolller/s/poster", Url = "https://cdn.example.com/p.webp", Type = "image", Origin = "online" },
+                new() { Id = "", Url = "https://cdn.example.com/x.mp4", Type = "video", Origin = "online" },
+                new() { Id = "scrolller/s/bad", Url = "https://cdn.example.com/x.mkv", Type = "video", Origin = "online" },
             }, null));
 
         await pool.WarmAsync(CancellationToken.None);
 
-        // Only the still was ever downloaded: a video reaching the wall (a black picture) is impossible.
+        // Only the clip was ever downloaded. The poster is the class the room discarded (2026-09-17):
+        // a static picture never reaches a surface any more, not even as a fallback.
         Assert.Single(materialized);
         Assert.Equal("scrolller/s/ok", Assert.Single(pool.Ready()).Id);
     }
@@ -426,7 +438,7 @@ public sealed class BackRoomMediaSourceTests : IDisposable
     }
 
     [Fact]
-    public async Task WarmPool_ForgetsAStillWhoseFileWentAway()
+    public async Task WarmPool_ForgetsAClipWhoseFileWentAway()
     {
         // RemoteMediaCache's over-50 rule deletes oldest-first across every consumer, so a file can
         // go out from under a warm url. A dealt url always loads or it is not dealt.

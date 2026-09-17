@@ -10,18 +10,15 @@ using Serilog;
 
 namespace ConditioningControlPanel.Services.BackRoom;
 
-/// <summary>One warm remote still. <see cref="Url"/> is a <c>ccp.assets</c> url over the file the
-/// bytes were written to, so it is the same kind of thing a local pick is and the page cannot tell
-/// them apart. The temp path itself stays inside <see cref="BackRoomRemotePool"/> (PII rule).</summary>
+/// <summary>One warm remote CLIP: a materialized webm/mp4 on a <c>ccp.assets</c> url over the file the
+/// bytes were written to, so it is the same kind of thing a local pick is and the page cannot tell them
+/// apart. The page plays it rather than decodes it (<c>room\clip-source.js</c>, routed on the url's
+/// extension from <c>room\gif.js</c>, <c>stations\slot\media.js</c> and <c>shared\hypno\media.js</c>);
+/// what makes it a clip is the extension in <see cref="Url"/> and nothing else. The temp path itself
+/// stays inside <see cref="BackRoomRemotePool"/> (PII rule).</summary>
 /// <param name="Id">The provider's entry id. The dedupe key: one id is materialized ONCE.</param>
-internal readonly record struct BackRoomRemoteStill(string Id, string Url, int W, int H);
-
-/// <summary>One warm remote CLIP: a materialized webm/mp4 on a <c>ccp.assets</c> url, which the room's
-/// page plays rather than decodes (<c>room\clip-source.js</c>, routed from <c>room\gif.js</c> on the
-/// extension). Same shape as a still on purpose, because everything downstream of the deal treats it
-/// as one dealt picture; what makes it a clip is the extension in <see cref="Url"/> and nothing else.
-/// Only the WALL is ever dealt one - see <see cref="BackRoomMedia.IsWall"/> for why.</summary>
-/// <param name="Id">The provider's entry id, same dedupe key, in its own set.</param>
+/// <param name="W">The provider's size for the post. Aspect only: the file on disk is the small
+/// rendition, and the page paints at its own edge anyway.</param>
 internal readonly record struct BackRoomRemoteClip(string Id, string Url, int W, int H);
 
 /// <summary>The warm remote pool as the deal sees it. A seam so the suite can drive every source
@@ -37,25 +34,19 @@ internal interface IBackRoomRemotePool
     void EnsureWarm();
 
     /// <summary>Start filling and wait, but only up to <see cref="BackRoomRemotePool.WarmWaitMs"/>.
-    /// Returns a completed task whenever every set is already at target, a warm is in flight and
-    /// nothing is empty, or the fetch gap has not elapsed. One cap covers BOTH sets, so the clip set
-    /// existing cannot make a sit-down wait longer than the stills alone already could.</summary>
+    /// Returns a completed task whenever the set is already at target, a warm is in flight, or the
+    /// fetch gap has not elapsed.</summary>
     Task WarmAsync(CancellationToken ct);
 
-    /// <summary>The stills whose bytes are on disk RIGHT NOW. Never a network call.</summary>
-    IReadOnlyList<BackRoomRemoteStill> Ready();
-
-    /// <summary>The clips whose bytes are on disk RIGHT NOW. Never a network call. Defaulted to none
-    /// so a stand-in written before the clip lane keeps compiling and reads as "stills only", which is
-    /// the one direction a pool is allowed to degrade in.</summary>
-    IReadOnlyList<BackRoomRemoteClip> ReadyClips() => Array.Empty<BackRoomRemoteClip>();
+    /// <summary>The clips whose bytes are on disk RIGHT NOW. Never a network call.</summary>
+    IReadOnlyList<BackRoomRemoteClip> Ready();
 
     /// <summary>Room closed: hand every materialized file back.</summary>
     void Drain();
 }
 
 /// <summary>
-/// THE ROOM'S REMOTE MEDIA (CONTRACT section 5, 10.13.C). Two warm pools of Scrolller content that are
+/// THE ROOM'S REMOTE MEDIA (CONTRACT section 5, 10.13.C). One warm pool of Scrolller CLIPS that are
 /// already downloaded AND already written to a real file, so a sit-down is a memory read and a
 /// directory listing, never a GraphQL call: <c>ScrolllerSource</c> is throttled to one request per
 /// 1.1 s process-wide, and a player dropping into a chair cannot be made to wait behind that gate.
@@ -65,29 +56,28 @@ internal interface IBackRoomRemotePool
 /// maps <c>ccp.assets</c> to <c>App.EffectiveAssetsPath</c>. So a materialized file already has a
 /// legal <c>https://ccp.assets/.temp/&lt;file&gt;</c> url: CORS-clean, WebGL-safe, it passes the page's
 /// own <c>allowed()</c> checks, and it still resolves back to a real file for the host's fullscreen
-/// <c>gif_from</c> / <c>wash</c> effects. No proxy, no new host, no new mapping. It also keeps the
-/// source's extension (<c>MaterializeAsync</c> takes it from the url, because consumers sniff the
-/// codec off it), which is precisely what lets the page route a <c>.mp4</c> to the clip player.</para>
+/// effects. No proxy, no new host, no new mapping. It also keeps the source's extension
+/// (<c>MaterializeAsync</c> takes it from the url, because consumers sniff the codec off it), which is
+/// precisely what lets the page route a <c>.mp4</c> to the clip player.</para>
 ///
 /// <para>THE DEDUPE TRAP, which has bitten this codebase before with content-pack decrypts: every
 /// <c>MaterializeAsync</c> call mints a NEW guid filename, so two materializes of one picture are two
 /// urls and the page's url-keyed dedupe (<c>room\screens.js</c>, <c>stations\slot\media.js</c>) cannot
-/// collapse them - the same picture would appear twice on the wall. That is why each set is keyed on
+/// collapse them - the same picture would appear twice on the wall. That is why the set is keyed on
 /// the PROVIDER'S ENTRY ID and materializes each id exactly once, keeping the path for the life of the
 /// pool.</para>
 ///
-/// <para>STILLS AND CLIPS ARE TWO SETS, FETCHED TWICE (2026-09-17). The provider's "GIF" filter means
-/// "animated content" and delivers webm/mp4 renditions with STATIC webp/jpg posters; the posters are
-/// plain VP8 with no ANIM chunk, byte-verified in <c>RemoteMediaFormats</c>. So a still set really is
-/// static, and the ANIMATED half is the clip itself, asked for separately with
-/// <see cref="FeedMediaKind.Video"/> (the coordinator's explicit-kind overload exists for exactly this:
-/// "a surface showing both stills and clips asks twice, not once with Any"). The owner's call was to
-/// play the clip rather than transcode it: WebView2 is Chromium and decodes VP9 and H.264 natively, so
-/// the desktop needs no ffmpeg hop and no installer bytes - one representative clip at the 384 px rung
-/// costs 339 KB played, against 225-400 KB plus 10-20 MB of installer for a WebP transcode and 2.96 MB
-/// for a bundled animated GIF. The page half is <c>room\clip-source.js</c>, which hands back the exact
-/// shape <c>room\gif-decode.js</c> does, so nothing below <c>room\gif.js</c> learned a new kind of
-/// picture. Clips go ONLY to the wall (<see cref="BackRoomMedia.IsWall"/>); the stations keep stills.</para>
+/// <para>CLIPS ONLY, AND THE SMALL RENDITION (2026-09-17, "discard stills"). The pool used to keep two
+/// sets: the provider's static posters for the stations and its webm/mp4 for the wall. The owner's
+/// call was to drop the poster as a media class altogether, so every surface animates. What the
+/// measurement behind that change actually showed is worth keeping: the posters were never the reason
+/// clips took minutes to arrive. A clip cost ~12 s to materialize and they were materialized one at a
+/// time, because the entry's <c>Url</c> is the largest rendition up to 1920 px wide and the room paints
+/// at 384 px. So this pool fetches <see cref="FeedMediaKind.GifClip"/> (the GIF filter's clip half,
+/// never a full-length VIDEO upload), materializes the entry's <c>SmallUrl</c> (the rendition capped at
+/// 640 px, falling back to <c>Url</c> when a post has no smaller one), and keeps
+/// <see cref="MaterializeConcurrency"/> downloads in flight. WebView2 is Chromium and decodes VP9 and
+/// H.264 natively, so there is still no transcode hop and no installer bytes.</para>
 ///
 /// <para>The bright line (<c>IFeedSource.cs</c>): the fetch happens on the user's device, direct from
 /// the provider. Nothing here routes through CC Labs infrastructure.</para>
@@ -95,47 +85,41 @@ internal interface IBackRoomRemotePool
 internal sealed class BackRoomRemotePool : IBackRoomRemotePool
 {
     /// <summary>The room's own tenant in the coordinator registry. Its own rotation state and dwell
-    /// store, so the casino and the flashes cannot fight over one set of channel iterators. ONE tenant
-    /// for both kinds: the rotation and the dwell weights describe the room's channels, not its
-    /// containers, and a second id would deal the same subreddit twice as often.</summary>
+    /// store, so the casino and the flashes cannot fight over one set of channel iterators.</summary>
     internal const string ConsumerId = "backroom";
 
-    /// <summary>Fill to here. Two full wall deals (the wall asks for 8) plus a 13-card deck's worth of
-    /// re-deal, which is as much as one sit-down can consume.</summary>
+    /// <summary>Fill to here: one full wall (<c>room\screens.js</c> caps it at <c>MAX_PICTURES = 8</c>
+    /// and <c>room\main.js</c> asks for 8) plus a station's deal drawn from the same set, with enough
+    /// left that a re-deal reshuffles rather than repeats. The card table asks for 13, the wheel 8,
+    /// the slot and roulette 4; each deal is a seeded draw over the whole set, so 16 gives a 13-card
+    /// deck and an 8-screen wall that only partly overlap.</summary>
     internal const int ReadyTarget = 16;
 
-    /// <summary>Hard ceiling. Deliberately far under <c>RemoteMediaCache</c>'s 50-file temp tracker,
-    /// which deletes OLDEST-FIRST once it is over: a bigger pool and the room's later materializes
-    /// would sweep the room's own earlier wall pictures out from under live urls.</summary>
+    /// <summary>Hard ceiling. <c>RemoteMediaCache.MaxTrackedTempFiles = 50</c> deletes OLDEST-FIRST
+    /// across every consumer once it is over, and the pool's own earlier clips are the oldest files
+    /// there are, so a pool that grew past the tracker would sweep its own live wall urls out from
+    /// under the page (the failure <see cref="Ready"/>'s existence check exists to survive). The only
+    /// other tenant that materializes is the desktop wallpaper (<c>WallpaperService.RemotePoolTarget
+    /// = 4</c>); the flash pool, the For You feed and the video service never touch disk. 24 + 4 is
+    /// 28 of 50, which is more headroom than the room left itself when it kept 34.</summary>
     internal const int ReadyMax = 24;
 
-    /// <summary>Clips fill to here: exactly ONE FULL WALL. <c>room\screens.js</c> caps the wall at
-    /// <c>MAX_PICTURES = 8</c> and <c>room\main.js</c> asks for <c>count: 8</c>, so eight is the most
-    /// that can be on screen at once and a ninth warm clip buys nothing that a re-deal cannot get by
-    /// reshuffling the same eight. Sized for the wall, NOT copied from the stills' 16: the stills also
-    /// feed the card table's 13-per-sit-down, and clips never go near a station.</summary>
-    internal const int ClipReadyTarget = 8;
+    /// <summary>Downloads in flight at once during one batch. Four, because the batch is bandwidth-
+    /// bound (a clip is a few hundred KB, a still was a few tens), a single CDN is on the other end and
+    /// the wallpaper shares the pipe, and a browser's own per-host politeness is six. More lanes would
+    /// only fight each other for the same link; one lane was the 12-seconds-a-clip the room had.</summary>
+    internal const int MaterializeConcurrency = 4;
 
-    /// <summary>Hard ceiling, only two over the target rather than the stills' half-again, because a
-    /// clip costs more than a still in both places that matter. On DISK it competes for
-    /// <c>RemoteMediaCache.MaxTrackedTempFiles = 50</c>, which is shared with the flash pool and the
-    /// For You feed and deletes oldest-first once over: 24 stills + 10 clips = 34 leaves those two room
-    /// to materialize without the room sweeping its own live wall urls out from under the page (the
-    /// failure <see cref="Ready"/>'s existence check exists to survive). At PLAY TIME it costs a video
-    /// decoder, not a texture upload, so slack past a full wall is for rotating faces on a re-deal and
-    /// nothing else.</summary>
-    internal const int ClipReadyMax = 10;
-
-    /// <summary>Minimum gap between batch fetches, per set. The source is already throttled ~1 req/1.1 s
+    /// <summary>Minimum gap between batch fetches. The source is already throttled ~1 req/1.1 s
     /// process-wide; this stops a room that re-deals often from queueing behind that gate faster than
     /// it drains.</summary>
     internal const int WarmGapSeconds = 8;
 
-    /// <summary>The MOST a deal will ever wait on a warm, across every set, and only when one is empty.
-    /// The page gives the host 6000 ms for a <c>media</c> reply (<c>room\main.js</c>), so this leaves
-    /// room to spare; the batches carry on filling in the background past the cap, the WAIT is what
-    /// stops. A cold clip batch is the second GraphQL call of the pair and can easily land after the
-    /// cap, which is not a bug: the wall shows stills for one deal and clips on the next.</summary>
+    /// <summary>The MOST a deal will ever wait on a warm, and only when the set is empty. The page
+    /// gives the host 6000 ms for a <c>media</c> reply (<c>room\main.js</c>), so this leaves room to
+    /// spare; the batch carries on filling in the background past the cap, the WAIT is what stops.
+    /// A cold batch can land after the cap, which is not a bug: that deal is the player's own files
+    /// (or the bundled loops) and the next one is clips.</summary>
     internal const int WarmWaitMs = 2000;
 
     /// <summary>The app's live pool. A property rather than a field so nothing forces this type's
@@ -144,54 +128,31 @@ internal sealed class BackRoomRemotePool : IBackRoomRemotePool
     internal static BackRoomRemotePool Shared => _shared ??= new BackRoomRemotePool();
 
     private readonly Func<Models.AppSettings?> _settings;
+    private readonly Func<CancellationToken, Task<(List<FypAssetManifest.Entry> Entries, string? Error)>> _fetch;
     private readonly Func<string, CancellationToken, Task<string?>> _materialize;
     private readonly Action<string> _release;
     private readonly Func<string?> _assetsRoot;
     private readonly Func<ILogger?> _log;
 
-    /// <summary>What a warm set holds per entry. The path is in here rather than in the deal's view of
+    /// <summary>What the warm set holds per entry. The path is in here rather than in the deal's view of
     /// it, which is how "no path ever leaves this class" is kept while still being able to re-check
     /// that the file exists and to hand it back on <see cref="Drain"/>.</summary>
     private readonly record struct Warm(string Id, string Url, int W, int H, string Path);
 
-    /// <summary>
-    /// ONE WARM SET. Everything that makes stills and clips the same machine - the entry-id dedupe, the
-    /// materialize, the existence re-check, the counts-only log - lives once, in
-    /// <see cref="BackRoomRemotePool.WarmBatchAsync"/>; the three things that differ are fields here:
-    /// the media kind the entries are validated against, the two sizes, and the batch fetch.
-    /// Its own lock and its own in-flight task, so a clip batch grinding through 339 KB downloads never
-    /// holds up the stills a station is asking for.
-    /// </summary>
-    private sealed class WarmSet
-    {
-        internal WarmSet(FeedMediaKind kind, int target, int max, string noun,
-            Func<CancellationToken, Task<(List<FypAssetManifest.Entry> Entries, string? Error)>> fetch)
-        {
-            Kind = kind; Target = target; Max = max; Noun = noun; Fetch = fetch;
-        }
-
-        /// <summary>The kind <c>RemoteMediaFormats.Validate</c> is asked for. The single authority on
-        /// what a remote entry may be: <c>Video</c> is <c>.mp4</c>/<c>.webm</c> and nothing else,
-        /// <c>Image</c> is the static set, so a clip cannot reach a reel texture and a poster cannot
-        /// reach the clip player.</summary>
-        internal readonly FeedMediaKind Kind;
-        internal readonly int Target;
-        internal readonly int Max;
-        /// <summary>What one entry is called in the log line. A constant word, so it carries nothing.</summary>
-        internal readonly string Noun;
-        internal readonly Func<CancellationToken, Task<(List<FypAssetManifest.Entry> Entries, string? Error)>> Fetch;
-
-        internal readonly object Gate = new();
-        /// <summary>Entry id -> what the deal gets, plus the file behind it. THE dedupe key.</summary>
-        internal readonly Dictionary<string, Warm> ById = new(StringComparer.Ordinal);
-        /// <summary>Insertion order, so the oldest entry is the one a full set refuses to grow past.</summary>
-        internal readonly List<string> Order = new();
-        internal Task? Warming;
-        internal DateTime LastWarmUtc = DateTime.MinValue;
-    }
-
-    private readonly WarmSet _stills;
-    private readonly WarmSet _clips;
+    private readonly object _gate = new();
+    /// <summary>Entry id -> what the deal gets, plus the file behind it. THE dedupe key.</summary>
+    private readonly Dictionary<string, Warm> _byId = new(StringComparer.Ordinal);
+    /// <summary>Insertion order, so the oldest entry is the one a full set refuses to grow past.</summary>
+    private readonly List<string> _order = new();
+    /// <summary>Downloads started and not yet added or released. Counted against the ceiling so four
+    /// lanes cannot overshoot it by three files that then have to be thrown away.</summary>
+    private int _inFlight;
+    /// <summary>The ids those downloads are for. With one lane a repeated id in a batch was "known" by
+    /// the time the loop reached it; with four, the first copy is still on the wire, and without this
+    /// set the second copy is downloaded too and thrown away on landing.</summary>
+    private readonly HashSet<string> _inFlightIds = new(StringComparer.Ordinal);
+    private Task? _warming;
+    private DateTime _lastWarmUtc = DateTime.MinValue;
 
     /// <summary>The app's live sources.</summary>
     internal BackRoomRemotePool()
@@ -199,35 +160,22 @@ internal sealed class BackRoomRemotePool : IBackRoomRemotePool
     {
     }
 
-    /// <summary>Seams for tests: the settings, the batch fetches, the materialize and its release, the
-    /// assets root and the log. A null seam wires to the real stack, with ONE deliberate exception
-    /// spelled out on <paramref name="clipFetch"/>.</summary>
-    /// <param name="fetch">The stills batch.</param>
-    /// <param name="clipFetch">The clips batch. When it is null AND <paramref name="fetch"/> was
-    /// seamed, this set fetches NOTHING rather than reaching for the real coordinator: a test that
-    /// seams the stills fetch and says nothing about clips means "stills only", and the alternative is
-    /// a live GraphQL call from the suite. A pool with no seams at all still wires both to the app.</param>
+    /// <summary>Seams for tests: the settings, the batch fetch, the materialize and its release, the
+    /// assets root and the log. A null seam wires to the real stack.</summary>
     internal BackRoomRemotePool(
         Func<Models.AppSettings?>? settings,
         Func<CancellationToken, Task<(List<FypAssetManifest.Entry> Entries, string? Error)>>? fetch,
         Func<string, CancellationToken, Task<string?>>? materialize,
         Action<string>? release,
         Func<string?>? assetsRoot,
-        Func<ILogger?>? log,
-        Func<CancellationToken, Task<(List<FypAssetManifest.Entry> Entries, string? Error)>>? clipFetch = null)
+        Func<ILogger?>? log)
     {
         _settings = settings ?? (() => App.Settings?.Current);
+        _fetch = fetch ?? DefaultFetchAsync;
         _materialize = materialize ?? RemoteMediaCache.MaterializeAsync;
         _release = release ?? RemoteMediaCache.ReleaseTempFile;
         _assetsRoot = assetsRoot ?? (() => App.EffectiveAssetsPath);
         _log = log ?? (() => App.Logger);
-
-        // Image, not GifStill: the fetch asks the provider's GIF filter (which is where the posters
-        // are), the VALIDATE asks what the bytes have to be, and those are two different questions.
-        _stills = new WarmSet(FeedMediaKind.Image, ReadyTarget, ReadyMax, "still",
-            fetch ?? DefaultStillFetchAsync);
-        _clips = new WarmSet(FeedMediaKind.Video, ClipReadyTarget, ClipReadyMax, "clip",
-            clipFetch ?? (fetch == null ? DefaultClipFetchAsync : NoBatchAsync));
     }
 
     /// <summary>
@@ -253,26 +201,12 @@ internal sealed class BackRoomRemotePool : IBackRoomRemotePool
         return FypOnlineCoordinator.ResolveChannels(s?.FypOnlineNiches, s?.FypOnlineCustomSubs);
     }
 
-    /// <summary>The room's coordinator. One tenant, asked twice for two kinds; the kind it REGISTERS
-    /// with is the stills' one because that is what the first caller has always been.</summary>
-    private FypOnlineCoordinator Coordinator()
-        => FypOnlineCoordinator.For(ConsumerId, () => RoomChannels(_settings()), FeedMediaKind.GifStill);
-
-    /// <summary>GifStill, not Image and not Any: the same kind the flash pool asks for, so this
-    /// surface only ever receives renderable stills and a video entry reaching a reel texture (a black
-    /// symbol) stays impossible.</summary>
-    private Task<(List<FypAssetManifest.Entry> Entries, string? Error)> DefaultStillFetchAsync(CancellationToken ct)
-        => Coordinator().FetchBatchAsync(FeedMediaKind.GifStill, ct);
-
-    /// <summary>Video: the webm/mp4 rendition of the same "GIF" posts the stills are posters for. The
-    /// explicit-kind overload on the same tenant, which is what it is documented for.</summary>
-    private Task<(List<FypAssetManifest.Entry> Entries, string? Error)> DefaultClipFetchAsync(CancellationToken ct)
-        => Coordinator().FetchBatchAsync(FeedMediaKind.Video, ct);
-
-    /// <summary>A set with nothing behind it. Reads as "the provider had nothing", which every caller
-    /// already degrades through.</summary>
-    private static Task<(List<FypAssetManifest.Entry> Entries, string? Error)> NoBatchAsync(CancellationToken ct)
-        => Task.FromResult((new List<FypAssetManifest.Entry>(), (string?)null));
+    /// <summary>The room's coordinator: one tenant, one kind. <see cref="FeedMediaKind.GifClip"/> is
+    /// the GIF filter only, so a gif-only sub with an empty VIDEO page can no longer exhaust the
+    /// channel, and the flashes' own GifStill tenant is untouched because this is a different one.</summary>
+    private Task<(List<FypAssetManifest.Entry> Entries, string? Error)> DefaultFetchAsync(CancellationToken ct)
+        => FypOnlineCoordinator.For(ConsumerId, () => RoomChannels(_settings()), FeedMediaKind.GifClip)
+            .FetchBatchAsync(FeedMediaKind.GifClip, ct);
 
     public bool Wanted
     {
@@ -289,34 +223,27 @@ internal sealed class BackRoomRemotePool : IBackRoomRemotePool
     {
         // Fire and forget by design, and safe to be: the warm body touches no UI state and swallows
         // everything, so there is no exception to escape into UnobservedTaskException.
-        _ = StartWarm(_stills);
-        _ = StartWarm(_clips);
+        _ = StartWarm();
     }
 
     public Task WarmAsync(CancellationToken ct)
     {
-        // Stills first, so the kind every surface can use is the one that gets the earlier slot behind
-        // the provider's 1.1 s gate; the clip batch follows it and may well land after the wait cap.
-        var stills = StartWarm(_stills);
-        var clips = StartWarm(_clips);
-        if (stills == null && clips == null) return Task.CompletedTask;
-        var both = stills == null ? clips! : clips == null ? stills : Task.WhenAll(stills, clips);
-        // ONE cap for both: adding the clip set must not be able to make a sit-down wait longer.
-        return WaitBounded(both, ct);
+        var warm = StartWarm();
+        return warm == null ? Task.CompletedTask : WaitBounded(warm, ct);
     }
 
-    /// <summary>The one gate, per set. Returns the warm in flight, a new one, or null when that set
-    /// does not need topping up right now.</summary>
-    private Task? StartWarm(WarmSet set)
+    /// <summary>The one gate. Returns the warm in flight, a new one, or null when the set does not
+    /// need topping up right now.</summary>
+    private Task? StartWarm()
     {
         if (!Wanted) return null;
-        lock (set.Gate)
+        lock (_gate)
         {
-            if (set.Warming != null) return set.Warming;
-            if (set.Order.Count >= set.Target) return null;
-            if ((DateTime.UtcNow - set.LastWarmUtc).TotalSeconds < WarmGapSeconds) return null;
-            set.LastWarmUtc = DateTime.UtcNow;
-            return set.Warming = Task.Run(() => WarmBatchAsync(set));
+            if (_warming != null) return _warming;
+            if (_order.Count >= ReadyTarget) return null;
+            if ((DateTime.UtcNow - _lastWarmUtc).TotalSeconds < WarmGapSeconds) return null;
+            _lastWarmUtc = DateTime.UtcNow;
+            return _warming = Task.Run(WarmBatchAsync);
         }
     }
 
@@ -332,14 +259,25 @@ internal sealed class BackRoomRemotePool : IBackRoomRemotePool
         try { await delay.ConfigureAwait(false); } catch (OperationCanceledException) { }
     }
 
-    /// <summary>One coordinator batch -> entries validated against the set's kind -> bytes in a real
-    /// file -> ccp.assets urls in that set. Never throws, never touches the UI, logs counts only.</summary>
-    private async Task WarmBatchAsync(WarmSet set)
+    /// <summary>The url one entry is downloaded from: the card-sized rendition when the post has one
+    /// with a playable extension, else the post's best. The page paints a clip at 384 px or less, so
+    /// the 1920 px rendition the entry's <c>Url</c> names is bytes nobody sees.</summary>
+    internal static string DownloadUrl(FypAssetManifest.Entry entry)
+        => !string.IsNullOrEmpty(entry.SmallUrl) && RemoteMediaFormats.IsRemoteVideo(entry.SmallUrl)
+            ? entry.SmallUrl!
+            : entry.Url;
+
+    /// <summary>One coordinator batch -> entries validated as clips -> bytes in a real file, up to
+    /// <see cref="MaterializeConcurrency"/> at a time -> ccp.assets urls in the set. Never throws,
+    /// never touches the UI, logs counts only.</summary>
+    private async Task WarmBatchAsync()
     {
         int warmed = 0, dropped = 0;
+        var lanes = new List<Task>();
+        using var lane = new SemaphoreSlim(MaterializeConcurrency);
         try
         {
-            var (entries, error) = await set.Fetch(CancellationToken.None).ConfigureAwait(false);
+            var (entries, error) = await _fetch(CancellationToken.None).ConfigureAwait(false);
             if (error != null)
             {
                 // Transport failure. The coordinator is already backing the channel off; all the room
@@ -352,45 +290,38 @@ internal sealed class BackRoomRemotePool : IBackRoomRemotePool
             foreach (var entry in entries ?? new List<FypAssetManifest.Entry>())
             {
                 bool full, known;
-                lock (set.Gate)
+                lock (_gate)
                 {
-                    full = set.Order.Count >= set.Max;
-                    known = entry != null && !string.IsNullOrEmpty(entry.Id) && set.ById.ContainsKey(entry.Id);
+                    // In-flight downloads count against the ceiling, so four lanes cannot carry the
+                    // set three files past it and then release them.
+                    full = _order.Count + _inFlight >= ReadyMax;
+                    known = entry != null && !string.IsNullOrEmpty(entry.Id)
+                        && (_byId.ContainsKey(entry.Id) || _inFlightIds.Contains(entry.Id));
                 }
                 if (full) break;
                 if (known) continue;   // the trap: one entry id is materialized exactly once
                 if (entry == null || string.IsNullOrEmpty(entry.Id)) { dropped++; continue; }
 
-                if (!RemoteMediaFormats.Validate(entry, set.Kind, out _)) { dropped++; continue; }
+                if (!RemoteMediaFormats.Validate(entry, FeedMediaKind.GifClip, out _)) { dropped++; continue; }
 
-                // Download AND write the file now, on this background thread, so the deal later is a
-                // pure lookup. A failure here just means this one entry never joins the set.
-                var path = await _materialize(entry.Url, CancellationToken.None).ConfigureAwait(false);
-                if (string.IsNullOrEmpty(path)) { dropped++; continue; }
-
-                var url = AssetsUrlFor(path!);
-                if (url == null)
+                // Download AND write the file now, off the UI thread, so the deal later is a pure
+                // lookup. The lane is taken here, on the loop, so the loop itself paces the batch:
+                // it cannot run ahead and queue thirty downloads behind four lanes.
+                await lane.WaitAsync().ConfigureAwait(false);
+                lock (_gate) { _inFlight++; _inFlightIds.Add(entry.Id); }
+                lanes.Add(Task.Run(async () =>
                 {
-                    // GetMediaTempPath falls back to the SYSTEM temp when the assets folder is
-                    // unusable, and nothing outside the assets root has a ccp.assets url the page
-                    // would load. Hand the file straight back rather than hold one the room cannot show.
-                    Release(path!);
-                    dropped++;
-                    continue;
-                }
-
-                bool added;
-                lock (set.Gate)
-                {
-                    added = !set.ById.ContainsKey(entry.Id);
-                    if (added)
+                    try
                     {
-                        set.ById[entry.Id] = new Warm(entry.Id, url, entry.Width ?? 0, entry.Height ?? 0, path!);
-                        set.Order.Add(entry.Id);
+                        if (await MaterializeOneAsync(entry).ConfigureAwait(false)) Interlocked.Increment(ref warmed);
+                        else Interlocked.Increment(ref dropped);
                     }
-                }
-                if (added) warmed++;
-                else Release(path!);   // raced with another warm on the same id
+                    finally
+                    {
+                        lock (_gate) { _inFlight--; _inFlightIds.Remove(entry.Id); }
+                        lane.Release();
+                    }
+                }));
             }
         }
         catch (OperationCanceledException) { }
@@ -401,44 +332,79 @@ internal sealed class BackRoomRemotePool : IBackRoomRemotePool
         }
         finally
         {
+            // Every lane finishes before the batch is declared over, or a late add would land in a
+            // set the next warm believes is idle. A lane never throws; its failures are counted.
+            try { await Task.WhenAll(lanes).ConfigureAwait(false); } catch { /* counted inside the lane */ }
             int ready;
-            lock (set.Gate) { set.Warming = null; ready = set.Order.Count; }
-            // Counts and the set's own noun, never a path and never a url (PII rule). A host, when one
-            // is ever worth naming here, goes through Logging.UrlLog.Host and nothing else.
+            lock (_gate) { _warming = null; ready = _order.Count; }
+            // Counts only, never a path and never a url (PII rule). A host, when one is ever worth
+            // naming here, goes through Logging.UrlLog.Host and nothing else.
             if (warmed > 0 || dropped > 0)
-                _log()?.Information("BackRoomRemotePool: warmed {Warmed} {Kind}(s), dropped {Dropped}, {Ready} ready",
-                    warmed, set.Noun, dropped, ready);
+                _log()?.Information("BackRoomRemotePool: warmed {Warmed} clip(s), dropped {Dropped}, {Ready} ready",
+                    warmed, dropped, ready);
         }
     }
 
-    public IReadOnlyList<BackRoomRemoteStill> Ready()
-        => ReadyWarm(_stills).Select(w => new BackRoomRemoteStill(w.Id, w.Url, w.W, w.H)).ToList();
-
-    public IReadOnlyList<BackRoomRemoteClip> ReadyClips()
-        => ReadyWarm(_clips).Select(w => new BackRoomRemoteClip(w.Id, w.Url, w.W, w.H)).ToList();
-
-    /// <summary>What is on disk in one set, in insertion order, forgetting anything that is not.</summary>
-    private List<Warm> ReadyWarm(WarmSet set)
+    /// <summary>One lane: download, land, add. True when the clip joined the set. A failure here just
+    /// means this one entry never joins; nothing escapes to the batch.</summary>
+    private async Task<bool> MaterializeOneAsync(FypAssetManifest.Entry entry)
     {
-        var live = new List<Warm>();
-        List<string>? lost = null;
-        lock (set.Gate)
+        string? path;
+        try { path = await _materialize(DownloadUrl(entry), CancellationToken.None).ConfigureAwait(false); }
+        catch (Exception ex)
         {
-            foreach (var id in set.Order)
+            _log()?.Debug("BackRoomRemotePool: materialize failed ({Type})", ex.GetType().Name);
+            return false;
+        }
+        if (string.IsNullOrEmpty(path)) return false;
+
+        var url = AssetsUrlFor(path!);
+        if (url == null)
+        {
+            // GetMediaTempPath falls back to the SYSTEM temp when the assets folder is unusable, and
+            // nothing outside the assets root has a ccp.assets url the page would load. Hand the file
+            // straight back rather than hold one the room cannot show.
+            Release(path!);
+            return false;
+        }
+
+        bool added;
+        lock (_gate)
+        {
+            // Re-checked under the gate: another lane may have landed the same id, or filled the set,
+            // while this download was on the wire.
+            added = !_byId.ContainsKey(entry.Id) && _order.Count < ReadyMax;
+            if (added)
             {
-                if (!set.ById.TryGetValue(id, out var warm)) continue;
+                _byId[entry.Id] = new Warm(entry.Id, url, entry.Width ?? 0, entry.Height ?? 0, path!);
+                _order.Add(entry.Id);
+            }
+        }
+        if (!added) Release(path!);
+        return added;
+    }
+
+    public IReadOnlyList<BackRoomRemoteClip> Ready()
+    {
+        var live = new List<BackRoomRemoteClip>();
+        List<string>? lost = null;
+        lock (_gate)
+        {
+            foreach (var id in _order)
+            {
+                if (!_byId.TryGetValue(id, out var warm)) continue;
                 // The bytes have to still be there. RemoteMediaCache's over-50 rule deletes oldest
                 // first across every consumer, so a file CAN go out from under a warm url; dropping
                 // it here (and forgetting the id, so a later warm may re-deal it) is what keeps the
                 // promise that a dealt url always loads.
-                if (Exists(warm.Path)) { live.Add(warm); continue; }
+                if (Exists(warm.Path)) { live.Add(new BackRoomRemoteClip(warm.Id, warm.Url, warm.W, warm.H)); continue; }
                 (lost ??= new List<string>()).Add(id);
             }
             if (lost != null)
                 foreach (var id in lost)
                 {
-                    set.ById.Remove(id);
-                    set.Order.Remove(id);
+                    _byId.Remove(id);
+                    _order.Remove(id);
                 }
         }
         return live;
@@ -446,15 +412,14 @@ internal sealed class BackRoomRemotePool : IBackRoomRemotePool
 
     public void Drain()
     {
-        var paths = new List<string>();
-        foreach (var set in new[] { _stills, _clips })
-            lock (set.Gate)
-            {
-                paths.AddRange(set.ById.Values.Select(w => w.Path));
-                set.ById.Clear();
-                set.Order.Clear();
-                set.LastWarmUtc = DateTime.MinValue;
-            }
+        List<string> paths;
+        lock (_gate)
+        {
+            paths = _byId.Values.Select(w => w.Path).ToList();
+            _byId.Clear();
+            _order.Clear();
+            _lastWarmUtc = DateTime.MinValue;
+        }
         foreach (var p in paths) Release(p);
         if (paths.Count > 0) _log()?.Debug("BackRoomRemotePool: released {Count} warm file(s)", paths.Count);
     }
