@@ -203,7 +203,38 @@ internal sealed class ChaosWebViewHost : IDisposable
     public Window? Window => _window;
     public WebView2? WebView => _web;
 
-    public ChaosWebViewHost(Options opts) => _opts = opts;
+    private Action? _pageReady;
+    private Action<JObject>? _pageMessage;
+    private string? _pageUrl;
+
+    public ChaosWebViewHost(Options opts)
+    {
+        _opts = opts;
+        _pageReady = opts.OnReady;
+        _pageMessage = opts.OnMessage;
+    }
+
+    internal static bool SameDocument(string source, string target)
+        => Uri.TryCreate(source, UriKind.Absolute, out var a)
+        && Uri.TryCreate(target, UriKind.Absolute, out var b)
+        && a.Scheme == b.Scheme && a.Authority == b.Authority && a.AbsolutePath == b.AbsolutePath;
+
+    // Transfer page ownership without replacing the window or browser profile.
+    public void NavigatePage(string url, Action ready, Action<JObject> message,
+        IReadOnlyList<(string Host, string Folder, CoreWebView2HostResourceAccessKind Access)>? mappings = null)
+    {
+        var core = _web?.CoreWebView2 ?? throw new InvalidOperationException("Host is not ready");
+        if (!IsAllowedNavigationHost(url, _opts.PrimaryHost)) throw new ArgumentException("Invalid page host", nameof(url));
+        if (mappings != null)
+            foreach (var (host, folder, access) in mappings)
+                if (Directory.Exists(folder)) core.SetVirtualHostNameToFolderMapping(host, folder, access);
+        IsReady = false;
+        _pending.Clear();
+        _pageUrl = url;
+        _pageReady = ready;
+        _pageMessage = message;
+        core.Navigate(url);
+    }
 
     /// <summary>Build + show the fullscreen window on the primary screen and start loading the page.</summary>
     public void Show()
@@ -1366,6 +1397,7 @@ internal sealed class ChaosWebViewHost : IDisposable
     {
         try
         {
+            if (_pageUrl != null && !SameDocument(e.Source, _pageUrl)) return;
             var json = e.WebMessageAsJson;
             if (string.IsNullOrEmpty(json)) return;
             var o = JObject.Parse(json);
@@ -1375,7 +1407,7 @@ internal sealed class ChaosWebViewHost : IDisposable
                 case "ready":
                     IsReady = true;
                     FlushPending();
-                    try { _opts.OnReady?.Invoke(); } catch { }
+                    try { _pageReady?.Invoke(); } catch { }
                     break;
                 case HostEscapeMessageType:
                     // Host chrome, not page business: consumed here rather than forwarded, so a
@@ -1394,7 +1426,7 @@ internal sealed class ChaosWebViewHost : IDisposable
                         "{Tag}[page]: {Msg}", _opts.LogTag, (string?)o["msg"]);
                     break;
                 default:
-                    _opts.OnMessage?.Invoke(o);
+                    _pageMessage?.Invoke(o);
                     break;
             }
         }

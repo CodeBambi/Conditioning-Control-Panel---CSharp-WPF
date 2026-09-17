@@ -9,6 +9,8 @@ using System.Windows;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models.Race;
 using ConditioningControlPanel.Services.Race;
+using ConditioningControlPanel.Services.Prizes;
+using ConditioningControlPanel.Localization;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json.Linq;
 using ConditioningControlPanel.Models;
@@ -45,12 +47,13 @@ internal static class CaucusHostService
     private static DispatcherTimer? _heartbeatWatch;
     private static DateTime _lastHeartbeatUtc;
     private static bool _pinged;
-    private static bool _runActive;
+    private static readonly RaceRunLifecycle RunLifecycle = new();
     private static bool _exiting;
     // THE LOOM: one DtrhLoomStore.Changed subscription per open page, dropped on teardown.
     private static bool _loomHooked;
     private static bool _disposing;
     private static bool _videoHooked;
+    private static int[] _ownedTracks = Array.Empty<int>();
 
     // ---- track charts (CHART.md, PR c6) ----
     private static TrackPlayer? _player;
@@ -64,6 +67,8 @@ internal static class CaucusHostService
     private static DateTime _lastProgressUtc = DateTime.MinValue;
     /// <summary>Bumped per pick so a superseded worker knows to keep quiet.</summary>
     private static int _analysisGen;
+    private static int _sessionGeneration;
+    private static readonly AsyncLocal<int?> AnalysisMessageGeneration = new();
     /// <summary>Set by the `--race-track` dev arg: the file to drive the track handlers against.</summary>
     private static string? _devTrackPath;
     /// <summary>While the dev arg is active every track-* post is logged as JSON.</summary>
@@ -89,11 +94,19 @@ internal static class CaucusHostService
     /// <summary>Open the race window (idempotent - refocuses if already open).</summary>
     /// <param name="devTrackPath">The `--race-track` dev arg's file, or null in a normal launch.</param>
     /// <param name="openCloud">The `--race-cloud` dev arg: open the BambiCloud window on its own.</param>
-    public static void Launch(string? devTrackPath = null, bool openCloud = false)
+    private static Action? _returnToRoom;
+
+    internal static void DetachFromRoom() { _returnToRoom = null; _host = null; DisposeAll(); }
+
+    public static void Launch(string? devTrackPath = null, bool openCloud = false,
+        ChaosWebViewHost? sharedHost = null, Action? returnToRoom = null)
     {
-        if (_host != null) { _host.FocusWeb(); if (openCloud) OpenCloudWindow(); return; }
+        if (!RacingAccess.CanLaunch) { App.Logger?.Information("RaceHost: launch refused, no racing purchase"); returnToRoom?.Invoke(); return; }
+        if (_host != null) { if (sharedHost != null) { returnToRoom?.Invoke(); return; } _host.FocusWeb(); if (openCloud) OpenCloudWindow(); return; }
         try
         {
+            ++_sessionGeneration;
+            _returnToRoom = returnToRoom;
             _devTrackPath = devTrackPath;
             // Both dev args log every track-* post as JSON: that log IS the verification, and the
             // cloud path has no other way to show the page what it was sent.
@@ -107,8 +120,10 @@ internal static class CaucusHostService
             try { _ = App.ReleaseContent?.RequestPackAsync(ReleaseContentService.PackAudioWeb); }
             catch (Exception ex) { App.Logger?.Debug("RaceHost: audio-web request failed: {E}", ex.Message); }
 
+            _ownedTracks = RacingAccess.OwnedTracks;
+            PrizeGrants.GrantsChanged += OnRaceGrantsChanged;
             _exiting = false;
-            _runActive = false;
+            RunLifecycle.Reset();
             _pinged = false;
             // Real banking, never the cloned test state: the race pays Sparks into the same
             // chaos_meta.json the descent banks into.
@@ -135,6 +150,13 @@ internal static class CaucusHostService
             if (modDtrh != null)
                 mappings.Add(("ccp.mod", modDtrh, CoreWebView2HostResourceAccessKind.Allow));
 
+            if (sharedHost != null)
+            {
+                _host = sharedHost;
+                _host.NavigatePage("https://ccp.game/dtrh/race.html", OnPageReady, OnPageMessage, mappings);
+            }
+            else
+            {
             _host = new ChaosWebViewHost(new ChaosWebViewHost.Options
             {
                 StartUrl = "https://ccp.game/dtrh/race.html",
@@ -162,6 +184,7 @@ internal static class CaucusHostService
             // Windowed: the user can close it with the title-bar X. Tear down so the heartbeat
             // watchdog cannot read the resulting silence as a wedged page.
             if (_host.Window != null) _host.Window.Closed += (_, _) => DisposeAll();
+            }
             HookVideoEvents(true);
             StartHeartbeatWatch();
             _host.FocusWeb();
@@ -223,6 +246,8 @@ internal static class CaucusHostService
                     // opens in, so only the desktop host offers it; a host without one simply
                     // leaves the key off.
                     cloud = true,
+                    racingTracks = RacingAccess.OwnedTracks,
+                    returnToCasino = _returnToRoom != null,
                 },
                 modId = SafeActiveModId(),
                 // Creator mods: the mod's own DTRH content as ccp.mod URLs; null = no mod
@@ -279,7 +304,7 @@ internal static class CaucusHostService
                 FirePayload(o);
                 break;
             case "run-started":
-                _runActive = true;
+                if (!RunLifecycle.TryStart()) break;
                 SeasonRecapService.TrackFeature(SeasonFeatureKeys.Race);
                 App.Logger?.Information("RaceHost: run started (seed={Seed})", (string?)o["seed"]);
                 break;
@@ -368,7 +393,7 @@ internal static class CaucusHostService
     /// the same ceiling both games share, so the divide keeps a race lap worth a descent lap.</summary>
     private static void OnRunEnded(JObject o)
     {
-        _runActive = false;
+        if (!RunLifecycle.TryEnd()) return;
         // The file is the clock, so the end of the run is the end of the audio either way.
         StopTrack();
         try
@@ -430,13 +455,22 @@ internal static class CaucusHostService
 
     // ============================ window plumbing ============================
 
+    private static void QueueSession(Action action)
+    {
+        int session = _sessionGeneration;
+        Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            if (session == _sessionGeneration && _host != null) action();
+        });
+    }
+
     /// <summary>Page-driven fullscreen: borderless-toggle our own window and echo the resulting
     /// state back so the page's dock button + Esc ladder stay in sync.</summary>
     private static void ApplyHostFullscreen(bool on)
     {
         var disp = Application.Current?.Dispatcher;
         if (disp == null || disp.HasShutdownStarted) return;
-        disp.BeginInvoke(() =>
+        QueueSession(() =>
         {
             try
             {
@@ -453,7 +487,7 @@ internal static class CaucusHostService
     {
         var disp = Application.Current?.Dispatcher;
         if (disp == null) return;
-        disp.BeginInvoke(() =>
+        QueueSession(() =>
         {
             try
             {
@@ -473,7 +507,7 @@ internal static class CaucusHostService
         App.Logger?.Warning("RaceHost: page boot-error: {Msg}", msg);
         var disp = Application.Current?.Dispatcher;
         if (disp == null) { DisposeAll(); return; }
-        disp.BeginInvoke(DisposeAll);
+        QueueSession(DisposeAll);
     }
 
     /// <summary>A mandatory video (fired by fire-payload) covers the page: tell it to pause so
@@ -506,14 +540,14 @@ internal static class CaucusHostService
         PostPause(false);
         var disp = Application.Current?.Dispatcher;
         if (disp == null || _host == null) return;
-        disp.BeginInvoke(() => _host?.FocusWeb());   // the video window had Win32 focus; reclaim keyboard
+        QueueSession(() => _host?.FocusWeb());   // the video window had Win32 focus; reclaim keyboard
     }
 
     private static void PostPause(bool on)
     {
         var disp = Application.Current?.Dispatcher;
         if (disp == null || _host == null) return;
-        disp.BeginInvoke(() => _host?.Post(new { type = "pause", on }));
+        QueueSession(() => _host?.Post(new { type = "pause", on }));
     }
 
     // ============================ watchdogs ============================
@@ -532,7 +566,7 @@ internal static class CaucusHostService
             // page cannot false-trip.
             if (_host == null || !_host.IsReady || _exiting) return;
             double silent = (DateTime.UtcNow - _lastHeartbeatUtc).TotalSeconds;
-            double limit = _runActive ? 10 : 20;
+            double limit = RunLifecycle.IsActive ? 10 : 20;
             if (silent <= limit) return;
             if (!_pinged)
             {
@@ -614,10 +648,15 @@ internal static class CaucusHostService
 
     private static void DisposeAll()
     {
+        PrizeGrants.GrantsChanged -= OnRaceGrantsChanged;
+        _cloudTrackRefused = false;
+        RefusedCloudTrack.Clear();
         if (_disposing) return;
         _disposing = true;
         try
         {
+            ++_sessionGeneration;
+            ++_analysisGen;
             CancelExitWatchdog();
             StopHeartbeatWatch();
             HookVideoEvents(false);
@@ -633,13 +672,16 @@ internal static class CaucusHostService
             _devTrackPath = null;
             _devTrackLog = false;
             try { _meta?.FlushSave(); } catch { }
-            _runActive = false;
+            RunLifecycle.Reset();
             if (_loomHooked) { try { DtrhLoomStore.Changed -= OnLoomChanged; } catch { } _loomHooked = false; }
-            try { _host?.Dispose(); } catch { }
+            var returnToRoom = _returnToRoom;
+            _returnToRoom = null;
+            if (returnToRoom == null) { try { _host?.Dispose(); } catch { } }
             _host = null;
             _meta = null;
             _exiting = false;
             App.Logger?.Information("CaucusHostService: closed");
+            returnToRoom?.Invoke();
         }
         finally { _disposing = false; }
     }
@@ -654,6 +696,10 @@ internal static class CaucusHostService
     /// then marshalled onto the UI thread because the analysis runs on a worker.</summary>
     private static void PostTrack(object msg, string? logAs = null)
     {
+        int session = _sessionGeneration;
+        int? analysis = AnalysisMessageGeneration.Value;
+        bool Current() => session == _sessionGeneration && (analysis == null || analysis == _analysisGen);
+        if (!Current()) return;
         if (_devTrackLog)
         {
             try
@@ -665,8 +711,8 @@ internal static class CaucusHostService
         }
         var disp = Application.Current?.Dispatcher;
         if (disp == null || disp.HasShutdownStarted) return;
-        if (disp.CheckAccess()) { try { _host?.Post(msg); } catch { } }
-        else disp.BeginInvoke(() => { try { _host?.Post(msg); } catch { } });
+        if (disp.CheckAccess()) { try { if (Current()) _host?.Post(msg); } catch { } }
+        else QueueSession(() => { try { if (Current()) _host?.Post(msg); } catch { } });
     }
 
     /// <summary>track-progress, throttled to five posts a second so a fast pass cannot flood the
@@ -697,7 +743,7 @@ internal static class CaucusHostService
     {
         var disp = Application.Current?.Dispatcher;
         if (disp == null || disp.HasShutdownStarted) return;
-        disp.BeginInvoke(() =>
+        QueueSession(() =>
         {
             try
             {
@@ -802,6 +848,8 @@ internal static class CaucusHostService
     private static void AnalyzeTrack(string path, string name, int gen, CancellationToken ct, CancellationTokenSource cts,
         string? displayName = null, string? cloudId = null)
     {
+        var priorGeneration = AnalysisMessageGeneration.Value;
+        AnalysisMessageGeneration.Value = gen;
         try
         {
             ct.ThrowIfCancellationRequested();
@@ -844,6 +892,7 @@ internal static class CaucusHostService
         }
         finally
         {
+            AnalysisMessageGeneration.Value = priorGeneration;
             if (ReferenceEquals(_analysisCts, cts)) _analysisCts = null;
             try { cts.Dispose(); } catch { }
         }
@@ -868,6 +917,7 @@ internal static class CaucusHostService
     /// element is already running (that is what started the run) and is left alone.</summary>
     private static void TrackPlay()
     {
+        if (_cloudTrackRefused && _clock is CloudTrackClock) return;
         var c = _clock;
         if (c == null) return;
         c.Start();
@@ -880,6 +930,7 @@ internal static class CaucusHostService
     /// bargain their own pause button makes when it pauses the race.</summary>
     private static void TrackPause(bool on)
     {
+        if (!on && _cloudTrackRefused && _clock is CloudTrackClock) return;
         var c = _clock;
         if (c == null) return;
         c.SetPaused(on);
@@ -969,11 +1020,12 @@ internal static class CaucusHostService
 
     private static void DevAfter(double sec, Action act)
     {
+        int session = _sessionGeneration;
         var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(sec) };
         t.Tick += (_, _) =>
         {
             t.Stop();
-            try { act(); }
+            try { if (session == _sessionGeneration) act(); }
             catch (Exception ex) { App.Logger?.Warning("RaceHost dev step: {E}", ex.Message); }
         };
         t.Start();
@@ -996,11 +1048,33 @@ internal static class CaucusHostService
     /// <summary>cloud-open: a level tapped on the menu. Opens the window on that track's page, or
     /// brings it back if the player closed it (closing hides it, so their playlist survives). A
     /// null or off-site url falls back to the site's front door.</summary>
+    private static bool _cloudTrackRefused;
+    private static readonly CloudTrackRetry RefusedCloudTrack = new();
+    private static void RefuseCloudTrack()
+    {
+        _cloudTrackRefused = true;
+        _cloudSwapping = false;
+        StopTrack();
+        SetCloudPaused(true);
+        if (RunLifecycle.IsActive) PostTrack(new { type = "track-ended" });
+        PostTrack(new { type = "track-error", message = Loc.Get("race_track_locked") });
+    }
+
+    private static void OnRaceGrantsChanged()
+    {
+        var owned = RacingAccess.OwnedTracks;
+        if (!RacingAccess.CanLaunch || _ownedTracks.Except(owned).Any()) { CloseActive(); return; }
+        if (_ownedTracks.SequenceEqual(owned)) return;
+        _ownedTracks = owned;
+        _host?.Post(new { type = "race-ownership", tracks = owned });
+    }
+
     private static void OpenCloudWindow(string? url = null)
     {
+        if (!RacingAccess.CanOpenCloud(url)) { RefuseCloudTrack(); return; }
         var disp = Application.Current?.Dispatcher;
         if (disp == null || disp.HasShutdownStarted) return;
-        disp.BeginInvoke(() =>
+        QueueSession(() =>
         {
             try
             {
@@ -1039,7 +1113,7 @@ internal static class CaucusHostService
                     OnCloudTrack(o);
                     break;
                 case "cloud-clock":
-                    if (_cloudClock == null || !ReferenceEquals(_clock, _cloudClock)) break;
+                    if (_cloudTrackRefused || _cloudClock == null || !ReferenceEquals(_clock, _cloudClock)) break;
                     _cloudClock.Update((double?)o["t"] ?? 0, (bool?)o["playing"] ?? false, (double?)o["durationSec"] ?? 0);
                     break;
                 case "cloud-play":
@@ -1069,13 +1143,16 @@ internal static class CaucusHostService
         string title = ((string?)o["title"] ?? "").Trim();
         double dur = (double?)o["durationSec"] ?? 0;
         if (string.IsNullOrWhiteSpace(src)) return;
+        if (!RacingAccess.CanOpenCloud(src)) { RefusedCloudTrack.Remember(o); RefuseCloudTrack(); return; }
 
         // A new track while a run is live is the next lap: end this one the way the file running
         // out does. The run-ended that answers must not take the new clock away, hence the flag.
-        bool live = _runActive && _clock is CloudTrackClock;
+        bool live = RunLifecycle.IsActive && _clock is CloudTrackClock;
         CancelAnalysis(postCancelled: false);
         try { _player?.Stop(); } catch (Exception ex) { App.Logger?.Debug("RaceHost.cloud stop local: {E}", ex.Message); }
 
+        _cloudTrackRefused = false;
+        RefusedCloudTrack.Clear();
         _trackName = string.IsNullOrWhiteSpace(title) ? "bambicloud" : title;
         _lastProgressUtc = DateTime.MinValue;
         _cloudClock ??= new CloudTrackClock(SetCloudPaused);
@@ -1098,9 +1175,13 @@ internal static class CaucusHostService
     /// the run: the audio is the clock, so the run begins when the audio does.</summary>
     private static void OnCloudPlay()
     {
+        // Their watcher announces each source once. After a purchase, the next real
+        // Play retries that denied source; the purchase itself never starts audio.
+        if (RefusedCloudTrack.TakeIfAllowed(RacingAccess.CanOpenCloud) is { } retry) OnCloudTrack(retry);
+        if (_cloudTrackRefused || !RacingAccess.CanLaunch) { SetCloudPaused(true); return; }
         if (_cloudClock == null || !ReferenceEquals(_clock, _cloudClock)) return;
         _cloudClock.Update(_cloudClock.PositionSec, true, _cloudClock.DurationSec);
-        if (!_runActive) PostTrack(new { type = "cloud-run" });
+        if (!RunLifecycle.IsActive) PostTrack(new { type = "cloud-run" });
         StartTrackClock();
         PostClock();
     }
@@ -1122,7 +1203,7 @@ internal static class CaucusHostService
         var disp = Application.Current?.Dispatcher;
         if (disp == null || disp.HasShutdownStarted) return;
         if (disp.CheckAccess()) _cloud?.PostToPage(new { type = "cloud-set-paused", on });
-        else disp.BeginInvoke(() => _cloud?.PostToPage(new { type = "cloud-set-paused", on }));
+        else QueueSession(() => _cloud?.PostToPage(new { type = "cloud-set-paused", on }));
     }
 
     // ---- charting what they are playing ----
@@ -1157,6 +1238,7 @@ internal static class CaucusHostService
 
     private static async Task ChartCloudTrackAsync(string src, string name, int gen, CancellationToken ct, CancellationTokenSource cts)
     {
+        AnalysisMessageGeneration.Value = gen;
         string? temp = null;
         try
         {

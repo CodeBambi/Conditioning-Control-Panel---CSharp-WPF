@@ -45,6 +45,9 @@ namespace ConditioningControlPanel
         /// never disabled: naming the perk is the point (GoonHostService.cs:888-889).</summary>
         private const double GoonPerkLockedOpacity = 0.42;
 
+        private bool _raceOwnershipHooked;
+        private void OnRaceOwnershipChanged() => Dispatcher.BeginInvoke(new Action(RefreshPlayCards));
+
         // ---- the painter -----------------------------------------------------------------
 
         /// <summary>
@@ -64,6 +67,13 @@ namespace ConditioningControlPanel
         {
             var tab = PlayTab;
             if (tab == null) return;
+            if (!_raceOwnershipHooked)
+            {
+                _raceOwnershipHooked = true;
+                Services.Prizes.PrizeGrants.GrantsChanged += OnRaceOwnershipChanged;
+                Closed += (_, _) => Services.Prizes.PrizeGrants.GrantsChanged -= OnRaceOwnershipChanged;
+            }
+            tab.TxtRaceAccess.Text = Loc.Get(Services.Race.RacingAccess.CanLaunch ? "race_access_ready" : "race_access_locked");
 
             // The intake half of this method reads IntakePassService; hook its change event on the
             // same lazy, idempotent terms the page's gate does, so a pass spent elsewhere repaints

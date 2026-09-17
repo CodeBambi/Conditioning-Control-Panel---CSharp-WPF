@@ -312,15 +312,18 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Play tab, DtRH card -> "Racing Thoughts": the kart run on the descent's media, hosted
-        /// as its own WebView2 window (CaucusHostService). Same tier-2 door as FALL IN, checked
-        /// here for the same reason: the card's lockband is decoration, the handler is the wall.
+        /// Play tab, "Racing Thoughts": its own purchased-game entry, hosted
+        /// as its own WebView2 window (CaucusHostService). Any Racing Thoughts purchase opens it.
         /// </summary>
         internal void BtnStartRace_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                if (!TierGate.DemandLab("Down the Rabbit Hole", "dtrh")) return;
+                if (!Services.Race.RacingAccess.CanLaunch)
+                {
+                    MessageBox.Show(Loc.Get("race_access_locked"), "Racing Thoughts", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
                 Services.Chaos.CaucusHostService.Launch();
             }
             catch (Exception ex)

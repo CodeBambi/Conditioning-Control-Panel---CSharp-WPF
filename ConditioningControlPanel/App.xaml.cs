@@ -2804,13 +2804,12 @@ namespace ConditioningControlPanel
             }
 
             // Racing Thoughts (the kart run on the descent's media), dev shortcut: `--race` opens
-            // the race window straight away. Same door as `--dtrh` - the race is a DtRH sibling
-            // and answers to the descent's tier gate, not one of its own.
+            // the race window straight away. Any racing purchase opens it, independent of tier.
             if (e.Args.Contains("--race"))
             {
-                var raceGate = Services.TierGate.RequiresLab("Down the Rabbit Hole", "dtrh");
-                if (raceGate.Allowed) Services.Chaos.CaucusHostService.Launch();
-                else Logger?.Information("--race ignored: {Reason}", raceGate.Reason);
+                var raceAllowed = Services.Race.RacingAccess.CanLaunch;
+                if (raceAllowed) Services.Chaos.CaucusHostService.Launch();
+                else Logger?.Information("--race ignored: no racing purchase");
             }
 
             // `--race-chart <file>`: chart a hypno file from the command line - decode, the energy
@@ -2861,9 +2860,8 @@ namespace ConditioningControlPanel
 
             // Track charts (CHART.md PR c6), dev shortcut: `--race-track <file>` opens the race
             // and drives the host's own track handlers against that file - pick, play, pause at
-            // 5s, resume at 8s, stop at 12s - logging every track-* post as JSON. Unrestricted
-            // like `--dtrh-m2test`: it is a debugging rig for the audio + analysis path, not a
-            // way into the game (the page it drives is the same one `--race` opens).
+            // 5s, resume at 8s, stop at 12s - logging every track-* post as JSON. The host
+            // enforces the same racing purchase as every other launch path.
             int raceTrackArg = Array.IndexOf(e.Args, "--race-track");
             if (raceTrackArg >= 0)
             {
@@ -2876,12 +2874,12 @@ namespace ConditioningControlPanel
             // `--race-cloud`: open the race and then the BambiCloud window straight away. The
             // cloud path starts from a menu verb, and a browser frame cannot be driven by synthetic
             // clicks, so this is the only way to exercise it end to end. A dev rig like
-            // `--race-track`: it opens the same page `--race` opens and gates nothing.
+            // `--race-track`: it opens the same page and requires the same racing purchase.
             if (e.Args.Contains("--race-cloud"))
             {
-                var cloudGate = Services.TierGate.RequiresLab("Down the Rabbit Hole", "dtrh");
-                if (cloudGate.Allowed) Services.Chaos.CaucusHostService.Launch(null, openCloud: true);
-                else Logger?.Information("--race-cloud ignored: {Reason}", cloudGate.Reason);
+                var cloudAllowed = Services.Race.RacingAccess.CanLaunch;
+                if (cloudAllowed) Services.Chaos.CaucusHostService.Launch(null, openCloud: true);
+                else Logger?.Information("--race-cloud ignored: no racing purchase");
             }
 
             // Goon Game browser client, dev shortcut: `--goon` opens the web duel window straight

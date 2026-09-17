@@ -515,22 +515,6 @@
                                             </Style>
                                         </Button.Resources>
                                     </Button>
-                                    <!-- Racing Thoughts: the kart run on the same media, a DtRH sibling
-                                         page (dtrh/race.html). Same outline as Quick Drop and the same
-                                         door - BtnStartRace_Click asks the descent's TierGate, so the
-                                         lockband above needs no third exception. -->
-                                    <!-- HIDDEN for 6.9.5: not ready for release. The handler and the race dev arg stay wired. -->
-                                    <Button x:Name="BtnPlayRace" Content="☕ Racing Thoughts" Cursor="Hand" Visibility="Collapsed"
-                                            Background="Transparent" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" FontSize="12"
-                                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="14,6" Margin="0,8,0,0"
-                                            HorizontalAlignment="Right" ToolTip="the tea party on wheels. beta"
-                                            Click="BtnStartRace_Click">
-                                        <Button.Resources>
-                                            <Style TargetType="Border">
-                                                <Setter Property="CornerRadius" Value="9"/>
-                                            </Style>
-                                        </Button.Resources>
-                                    </Button>
                                     <!-- Pure XAML two-way bindings, portable verbatim: no handler,
                                          no shim, nothing for the move to break.
                                          They ARE named, though: the T2 lockband above is
@@ -569,6 +553,20 @@
                             </Border>
                         </Grid>
                     </Grid>
+                </Border>
+
+                <!-- A purchased game has its own door, outside the descent's tier lockband. -->
+                <Border Style="{StaticResource PlayCard}" Margin="0,0,0,14" Padding="18,14">
+                    <DockPanel LastChildFill="True">
+                        <Button x:Name="BtnPlayRace" Content="Racing Thoughts" DockPanel.Dock="Right"
+                                Margin="18,0,0,0" Padding="18,9" Cursor="Hand"
+                                Background="Transparent" Foreground="{DynamicResource PinkBrush}"
+                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                                Click="BtnStartRace_Click"/>
+                        <TextBlock x:Name="TxtRaceAccess" x:FieldModifier="internal"
+                                   Text="{loc:Str race_access_locked}" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" Foreground="{DynamicResource TextLightBrush}"/>
+                    </DockPanel>
                 </Border>
 
                 <!-- ===================== ZONE: TOGETHER =====================
