@@ -1062,3 +1062,18 @@
 }
 #race-root .rh-shutter.is-flat .rh-shutter-b { display: none; }
 #race-root .rh-shutter.is-flat.is-closed .rh-shutter-p { opacity: 1; }
+
+/* Phrase rewards use the existing caption band, without moving the road. */
+.race-hud .rc-cap.is-complete .rc-cap-line {
+  text-shadow: 0 0 12px rgba(255, 214, 234, .8);
+  border-bottom: 2px solid #ffd6ea;
+}
+.race-hud .rh-toast--phrase { color: #ffd6ea; font-weight: 800; }
+.race-hud .rh-toast--guidance { max-width: min(80vw, 340px); font-size: .85rem; }
+.race-hud .rh-phrase-guide {
+  position: absolute; bottom: 18%; left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: min(76vw, 400px); box-sizing: border-box;
+  padding: 8px 12px; border-radius: 12px; background: rgba(26,26,46,.88);
+  color: #ffd6ea; font-size: .85rem; text-align: center; pointer-events: none;
+}
+.race-hud .rh-phrase-guide[hidden] { display: none; }

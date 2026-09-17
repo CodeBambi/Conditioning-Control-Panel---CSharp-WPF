@@ -33,7 +33,7 @@
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -236,6 +236,35 @@ await sleep(3500);                                   // the payout wait, then th
   eq(rows.thoughts, `${RUN.toLocaleString('en-US')} of ${TOTAL.toLocaleString('en-US')}`, 'reading the run against the whole file');
   ok(!!rows.taken, 'and the older `taken` row, which counts a whole line as one thing, is still beside it: ' + rows.taken);
 }
+// The recap leads with the same raw word count as the live HUD.
+ok((await text('.rh-screen.is-on .rh-card h2')).includes(`${RUN.toLocaleString('en-US')} of ${TOTAL.toLocaleString('en-US')} thoughts caught`), 'recap headline uses thoughts, not the mixed event count');
+eq(await text('.rh-screen.is-on .rh-card p'), 'a finished run. your next one has a target.', 'first finish does not invent an improvement');
+// Exercise presentation with a previous record, a tie, a lower result, and an early exit.
+const polish = await ev(`(async () => {
+  const { createRaceHud } = await import('/dtrh/race/hud.js');
+  const root = document.createElement('div'); document.body.appendChild(root);
+  const hud = createRaceHud(root);
+  const base = { thoughts: 25, thoughtsTotal: 40, trackFinished: true, previousThoughts: 20 };
+  const notes = [];
+  for (const patch of [{}, {thoughts:20}, {thoughts:15}, {trackFinished:false}, {previousThoughts:null}]) {
+    hud.showEnd({...base, ...patch}); notes.push(root.querySelector('.rh-screen.is-on .rh-card p').textContent);
+  }
+  hud.resetPolish(); hud.phraseFocus(true); hud.toast('+10', 'pop');
+  const quiet = root.querySelectorAll('.rh-toast').length === 0;
+  hud.phraseCaught(); hud.toast('+20', 'pop');
+  const phrase = root.querySelector('.rh-toast').textContent;
+  const learned = localStorage.getItem('race.phrase-learned');
+  hud.resetPolish(); hud.streakLost('miss'); hud.streakLost('timeout');
+  const streak = root.querySelectorAll('.rh-toast').length;
+  hud.dispose(); root.remove(); return { notes, quiet, phrase, learned, streak };
+})()`);
+eq(JSON.stringify(polish.notes), JSON.stringify(['5 more than your previous best.', 'matched your best.', '5 thoughts to your best.', 'run ended early · your track best stays.', 'a finished run. your next one has a target.']), 'recap comparisons distinguish improvement, tie, lower, incomplete, and no comparable best');
+ok(polish.quiet && polish.phrase === 'whole phrase caught · combo +1', 'speech suppresses routine chatter and phrase reward keeps priority');
+eq(polish.learned, '1', 'phrase guidance is learned on success');
+eq(polish.streak, 1, 'repeated misses do not flood the screen');
+const shot = await cdp('Page.captureScreenshot', {format:'png'});
+writeFileSync(join(tmpdir(), 'race-polish-recap.png'), Buffer.from(shot.result.data, 'base64'));
+
 const LINE = `popped ${RUN} / ${TOTAL} thoughts`;
 
 /* ============================================================================
