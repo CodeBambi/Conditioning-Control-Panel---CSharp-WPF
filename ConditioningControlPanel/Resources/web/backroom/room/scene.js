@@ -106,7 +106,8 @@ export async function createScene(o) {
   const canLeave = () => !!seated && !held && !halted && !suspended && !transition && !pendingVisit && !overview && !leaveAsked && !customization.opened;
   const touch = createTouchControl({ mount: o.mount, onReset: () => vel.set(0, 0) });
   const frames = [];
-  const stationRows = [...o.stations, customization.row];
+  const racingRow = { id: 'race', key: 'race', name: 'Racing Thoughts', labelKey: 'br_station_race', state: 'live', approach: [4.1, 1.65, -5.7], look: [4.1, 1.2, -7.15] };
+  const stationRows = [...o.stations, customization.row, racingRow];
   const previewTarget = new T.Vector3();
   const roofFloor=room.ceiling?new T.Box3().setFromObject(room.ceiling).min.y:Infinity;
   const roofMaterials=[];let roofAlpha=1;
@@ -212,8 +213,8 @@ export async function createScene(o) {
    * world box projected, plus a finger's margin) holds the point, the nearest to the camera when boxes overlap.
    * The vending machine is the Room Service row (customization.js). Boxes are cached: fixtures do not move. */
   const TAP_MARGIN = 24, bounds = new Map(), corner = new T.Vector3();
-  function fixtureOf(row) { return row.key === 'customization' ? scene.getObjectByName('customization_vending') : room.holders.get(row.key); }
-  function rowOf(node) { for (let n = node; n; n = n.parent) { const row = stationRows.find(r => fixtureOf(r) === n); if (row) return row; } return null; }
+  function fixtureOf(row) { if (row.key === 'race') return room.prizes.cabinet; return row.key === 'customization' ? scene.getObjectByName('customization_vending') : room.holders.get(row.key); }
+  function rowOf(node) { for (let n = node; n; n = n.parent) if (n.name === 'racing_cabinet' || n === room.prizes.cabinet) return racingRow; for (let n = node; n; n = n.parent) { const row = stationRows.find(r => fixtureOf(r) === n); if (row) return row; } return null; }
   function worldBox(node) {
     let box = bounds.get(node);
     if (box) return box;
@@ -343,7 +344,7 @@ export async function createScene(o) {
       walkPhase += vel.length() * dt * 3.1;
       camera.position.set(pos[0], pos[1] + Math.sin(walkPhase * 2) * 0.004 * sway, pos[2]);
       camera.rotation.set(pitch + Math.sin(walkPhase * 2) * 0.0008 * sway, yaw, Math.sin(walkPhase) * 0.0014 * sway, 'YXZ');
-      setNearest(customization.opened || seated || transition ?null:nearestStation(pos,stationRows));
+      setNearest(customization.opened || seated || transition ?null:nearestStation(pos,stationRows.filter(row => row.key !== 'race' || room.prizes.cabinet.visible)));
     }
     if (!still) ambient += dt;
     room.update(dt, ambient, still);
@@ -465,6 +466,7 @@ export async function createScene(o) {
   screens.deal(() => ambient).catch(() => {});
 
   return {
+    setPrizes: (snapshot, bought) => room.prizes.apply(snapshot, bought),
     prepareVisit(){pendingVisit=true;resetInput();},
     setRewards: snapshot => customization.setOwned(snapshot.owned),
     renderer, camera, scene, buildMs, seat, unseat, pickAt, stage,
@@ -485,6 +487,7 @@ export async function createScene(o) {
     dismissEmi() { if(customization.dismiss())return true; const open = !!interaction.debug().id; interaction.dismiss(); return open; },
     celebrate: (key,amount,tier,text)=>room.celebrate(key,amount,tier,text),
     customization, setOverview, go, visit,
+    navigationPose() { return { position: pos.slice(), yaw, pitch }; },
     pose(p, y = 0, tilt = 0) { pos.splice(0, 3, ...p); yaw = y; pitch = tilt; },
     get transitioning() { return !!transition; },
     get nearest() { return nearest; },

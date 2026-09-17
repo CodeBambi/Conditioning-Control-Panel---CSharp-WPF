@@ -1,3 +1,4 @@
+import { createPrizeDisplay } from './prize-display.js';
 /* ============================================================================
  * backroom/room/fixtures.js - the shell and the five fixtures, set out once.
  *
@@ -297,9 +298,11 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
   const sconceAuras = sconces.map((s) => auras.add(s.getWorldPosition(tmp), 0.85));
   scene.add(auras.points);
 
+  const prizes = createPrizeDisplay({scene, counter: holders.get('counter'), lex: (key, fallback) => { const value = label(stations.find(row => row.id === 'counter'), key); return value && value !== key ? value : fallback; }});
   const c = new T.Color(), target = new T.Color();
   const sconceColor = new T.Color(0xff79ce);
   function update(dt, t, still) {
+    prizes.update(dt, still);
     for (const b of bulbs) {
       const offset = b.row.variant === 'violet' ? .33 : b.row.variant === 'mint' ? .66 : 0;
       const travel = t / (b.row.id === 'wheel' ? 6 : 8) * (b.rim ? -1 : 1) + offset;
@@ -342,5 +345,5 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     return true;
   }
 
-  return { disposeSurfaces(){for(const surface of [...rouletteSurfaces,...wheelFaces])surface?.dispose();}, shell, ceiling, floor, setFloorStyle: floorStyle.setFloorStyle, getFloorStyle: floorStyle.getFloorStyle, screens, holders, fixtures: set.length, bulbs: bulbs.length, update, auras, hubs, labels, setLabel, emis, marquee, payouts, celebrate(key,amount,tier,text){const p=payouts.get(key);if(!p)return false;if(amount<=0){p.coins.clear();return false;}return p.coins.start(amount,tier,text);} };
+  return { prizes, disposeSurfaces(){prizes.dispose();for(const surface of [...rouletteSurfaces,...wheelFaces])surface?.dispose();}, shell, ceiling, floor, setFloorStyle: floorStyle.setFloorStyle, getFloorStyle: floorStyle.getFloorStyle, screens, holders, fixtures: set.length, bulbs: bulbs.length, update, auras, hubs, labels, setLabel, emis, marquee, payouts, celebrate(key,amount,tier,text){const p=payouts.get(key);if(!p)return false;if(amount<=0){p.coins.clear();return false;}return p.coins.start(amount,tier,text);} };
 }
