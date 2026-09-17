@@ -63,7 +63,7 @@ request never rejects: a missing reply resolves as `{ok:false, reason:'timeout'}
 | `exit-done` | | Page has settled (cursor flushed, overlays released). |
 | `station-open` | `station` | Station took the screen. Host logs day-log event `e_backroom_<station>`. |
 | `station-close` | `station` | Station gave the screen back. |
-| `media-request` | `reqId, station, count?` | Deal media for a sit-down (`count` 1..13, default 4, 10.13.C). Reply `media`. |
+| `media-request` | `reqId, station, count?, source?` | Deal media for a sit-down (`count` 1..13, default 4; `source` may narrow but never widen, 10.13.C / section 5). Reply `media`. |
 | `station-request` | `reqId, station, op, idem?, body` | Relay to the server (section 3). Reply `station-result`. |
 | `fx` | `token, fxId, station, symbols?, args?` | Fire an effect (section 4, `args` 10.13.B). Reply `fx-ack`. |
 | `fx-tunnel` | `station, level` | Continuous tunnel vision level 0..1, at most 10 a second, no reply (10.13.B). |
@@ -304,20 +304,57 @@ Rules the host enforces, not the page:
 ## 5. Media feed
 
 ```json
-{ "type": "media", "reqId": "...", "seed": 918273,
+{ "type": "media-request", "reqId": "...", "station": "room", "count": 8, "source": "online" }
+
+{ "type": "media", "reqId": "...", "seed": 918273, "source": "online",
   "gifs":  [ { "key": "g0", "url": "https://ccp.assets/<folder>/<file>.gif", "w": 480, "h": 270, "src": "pool" },
+             { "key": "g1", "url": "https://ccp.assets/.temp/ccp_temp_remote_<guid>.webm", "w": 338, "h": 450, "src": "online" },
              { "key": "g3", "url": "https://ccp.game/backroom/stations/slot/fallback/gif3.webp", "src": "fallback" } ],
   "words": [ { "key": "s0", "text": "Drop", "src": "preset" }, { "key": "s1", "text": "...", "src": "pool" } ] }
 ```
 
-- 4 GIFs from `App.Flash.GetChaosImagePaths` filtered to local animated files (`IsRemotePath` false),
-  deduped by FULL PATH (trap 147), shuffled with `seed`; shortfall filled from built-in fallback art.
+**Where the pictures come from (the source).** `AppSettings.BackRoomMediaSource` is the room's OWN
+choice, separate from the app-wide `MediaSource`: `auto` (follow the app, the default) | `local` |
+`online` | `mixed` | `bundled`. `BackRoomHostService.EffectiveMediaSource` is the one resolver, and it
+is also where `online` / `mixed` collapse to `local` without `HasRemoteMediaConsent` - the deal never
+decides that for itself. `media-request.source` may NARROW the resolved source; it can never widen it
+past consent. The `media` reply echoes `source` as what the deal actually resolved to, so the room's
+picker can tell the player what they GOT rather than what they asked for.
+
+- `local` deals from `App.Flash.SnapshotLocalImagePaths` filtered to local animated files
+  (`IsRemotePath` false), deduped by FULL PATH (trap 147), shuffled with `seed`; shortfall filled from
+  built-in fallback art. `bundled` deals that fallback art ON PURPOSE, even with a full library.
+- `online` and `mixed` deal from a warm pool the host fills from the player's Scrolller niches
+  (`BackRoomMediaSubs` minus `BackRoomMediaSubsOff`, capped at `BackRoomMediaSubCap`; an empty list
+  follows the app's own picker). `mixed` rolls `RemoteMediaRatio` per pick. The fetch is the same
+  `Services/Fyp/Online` stack the flashes use, on the user's device, direct from the provider: nothing
+  routes through CC Labs infrastructure (`IFeedSource`). Degrades one way only - no warm pictures
+  falls back to stills, then `local`, then `bundled`. A wall showing a still is fine; a wall showing
+  nothing is a bug.
+- Remote entries are materialized to a real file first (`RemoteMediaCache.MaterializeAsync`), which
+  lands under `App.GetMediaTempPath()` - that is `{EffectiveAssetsPath}\.temp`, INSIDE the `ccp.assets`
+  mapping. So a remote picture is an ordinary `ccp.assets` url: CORS-clean for WebGL, allowed by the
+  page's own `allowed()` check, and still resolvable back to a file for the host's fullscreen
+  `gif_from` / `gif_full` / `wash`. Materialize ONCE PER PROVIDER ENTRY ID and keep the path: every
+  call mints a new guid, and the page's url-keyed dedupe cannot collapse two paths for one picture.
+- `src` is `pool` (the player's own files), `online` (Scrolller) or `fallback` (built-in art).
+  `room/screens.js` hangs anything that is not `fallback`.
+- **Clips are for the WALLS, stills for the STATIONS.** Scrolller's clip feed is webm/mp4 and its
+  picture feed is static, byte-verified (`RemoteMediaFormats`): a remote STILL never animates. The
+  desktop host is WebView2, i.e. Chromium, so it plays a clip natively and needs no transcode hop -
+  `room/clip-source.js` paints it into a canvas on the room's own `tick()` clock and hands back the
+  same source shape a decoded GIF does. Only `station: "room"` gets clips. The card table deals up to
+  13 media per sit-down and the slot paints into three WebGL reel textures; thirteen decoding videos
+  is not a trade worth making, and `stations/slot/media.js` decodes through `decodedSource` with an
+  `<img>` still fallback, neither of which takes a webm.
 - Up to 4 words from the active `SubliminalPool` (mode/mod variant as the app uses), shortfall filled
   from presets `Drop, Relax, Let Go, Sink` in that order. Preset text is a lexicon key (Law VII).
 - Symbol id -> media: `gif0..gif3` = `gifs[0..3]`, `sub0..sub3` = `words[0..3]` (a 13-GIF deal: 10.13.C). Dealt once per sit-down
   and kept until the player stands up, so a reel cell never changes face mid-tape.
-- URLs point only at `ccp.assets` (the user's folders, mapped read-only) or `ccp.game`. Keys, never
-  paths or URLs, go back to the host in `fx.symbols`. Nothing in `media` is ever sent to the server.
+- URLs point only at `ccp.assets` (the user's folders and its `.temp` materializations, mapped
+  read-only) or `ccp.game`. Keys, never paths or URLs, go back to the host in `fx.symbols`. Nothing in
+  `media` is ever sent to the server. The host logs COUNTS only: never a path, never a url, and a
+  remote host only through `Logging.UrlLog.Host`.
 
 ## 6. Slot station and the glb contract
 
@@ -731,7 +768,16 @@ ack promise carrying the token synchronously (`p.token`); `ctx.fxRelease(token)`
   rank order) wear `gifs[i % gifs.length]`: fewer than 13 GIFs cycle. A re-deal changes the mapping.
 - **Wheel and roulette** ask `count: 4` and give `fx.gif_from` the key `deck.pickKey(<result string>)`, so the picture
   is stable for a result.
-- H1: `IBackRoomMedia.Deal(station, seed, count = 4)`; `BackRoomBridge` reads `count`;
+- **A source change re-deals mid-sit-down, at three different speeds (2026-09-17).** The page dispatches a
+  plain `br-media-changed` window event when a `settings` frame reports a different EFFECTIVE source - only the
+  effective one, so flipping between two settings that resolve to the same pool does not throw away a dealt
+  wall. `room/screens.js` bumps its source version and re-deals at once; overlays follow because the next fx
+  resolves against the new pool; a SEATED station only sets a flag and re-deals on the next sit-down
+  (`stations/slot/station.js`), because a reel cell must not change face mid-tape. The room says so:
+  `br_media_timing` tells the player that walls and new flashes change now, game artwork changes on the next
+  visit, and the current hand and prepaid spins are kept.
+- H1: `IBackRoomMedia.Deal(station, seed, count = 4)` and `DealAsync` (remote is inherently async; `Deal` serves
+  whatever is already warm and never waits); `BackRoomBridge` reads `count` and the optional `source`;
   `BackRoomFxPlan.ResolveSymbols` accepts one or two digit indexes (`g0`..`g12`, `gif0`..`gif12`); `MaxSymbolKeys`
   stays 8.
 
@@ -739,6 +785,15 @@ ack promise carrying the token synchronously (`p.token`); `ctx.fxRelease(token)`
 
 Plain ES modules with no three.js import (three stations upload the kit's canvases themselves). `index.js` re-exports
 every name below. Imports: `../../../arcademy/engine/loom/loomField.js` and `../../room/gif-decode.js`.
+
+**Amended 2026-09-17: `room/clip-source.js` is a second three-free picture module, alongside `gif-decode.js`.**
+It plays a webm/mp4 into a canvas and returns the identical source shape, so `room/gif.js` wraps either one in the
+same `CanvasTexture` and nothing downstream learns a new kind of picture. It paints on `tick()` rather than being a
+three.js `VideoTexture` deliberately: this section's rule is that the room's clock owns when a picture costs
+anything, and a `VideoTexture` would upload every frame the video decoded whether the room wanted it or not. The
+same two ceilings apply as to a decoded GIF (`MAX_EDGE`, the pixel budget, `MEDIA_LIMITS.loadMs`), and `still`
+PAUSES the video rather than merely not drawing it - an off-screen video that keeps decoding is exactly the
+offscreen work the render budget exists to stop.
 
 ```js
 // loom.js - one shared Loom GL context per page, over the real loomField.js
@@ -1107,13 +1162,38 @@ Effects (Calm / Normal / Full, the existing `AppSettings.BackRoomFxIntensity`, s
 the card before anything else in the room. Lexicon keys `br_opt_title`, `br_opt_effects`, `br_opt_calm`,
 `br_opt_normal`, `br_opt_full`, `br_opt_calm_forced`, `br_opt_tunnel`, `br_opt_melt`, `br_opt_on`, `br_opt_off`.
 
-- Page -> host (section 2.1): `{ "type": "room-option", "key": "tunnel" | "melt", "value": true | false }` or
-  `{ "type": "room-option", "key": "intensity", "value": "calm" | "normal" | "full" }`. No reply. Any other shape (a
-  string `"false"`, a number, another key) is dropped; nothing is written once the room is closing. The host writes
+- Page -> host (section 2.1): `{ "type": "room-option", "key": "tunnel" | "melt", "value": true | false }`,
+  `{ "key": "intensity", "value": "calm" | "normal" | "full" }`,
+  `{ "key": "mediaSource", "value": "auto" | "local" | "online" | "mixed" | "bundled" }`,
+  `{ "key": "subVolume" | "sfxVolume" | "musicVolume", "value": 0..100 }` (an integer; a fraction and the
+  string `"50"` are both dropped), or
+  `{ "key": "mediaSubAdd" | "mediaSubRemove" | "mediaSubToggle", "value": "<niche>" }` where the niche matches
+  `^[A-Za-z0-9_]{2,40}$`. No reply. Any other shape (a string `"false"`, a number where a string belongs, a
+  level out of range, another key) is dropped; nothing is written once the room is closing. The host writes
   the setting and saves.
+- **One niche per press, never a list.** The host owns the selection and the page reads it back off the next
+  frame, so the two cannot disagree about what is selected. A list on this wire would make the page the owner
+  and the host a stenographer. The cap is enforced host-side as well as in the room: a page is not a
+  gatekeeper. Names are one community whatever their case. A niche switched off KEEPS its place in the list so
+  it can be switched back on; a niche removed loses its disabled flag too, or the name would sit in the
+  disabled list forever, shown by nothing and cleared by nothing.
 - Host -> page (section 2.2): `init` and `settings` gain `intensityChoice` (`calm` | `normal` | `full`, the player's
   own choice), because `intensity` reads `calm` whenever MotionLevel is below Full. The page shows a press at once
   and the next `settings` frame has the last word.
+- `init` and `settings` also gain `media` (`{source, effective, subs[], off[], cap, consented, ratio}`) and
+  `audio` (`{sub, sfx, music}`, each 0..1 - the page hands them straight to the kit's bus setters and the
+  music element). `effective` is the resolved source, so the page never has to know the app's own setting,
+  and `consented` false means the picker paints the online rows DISABLED rather than hiding them: the player
+  needs to see why Scrolller is not on offer.
+- The Options card also carries the room's three levels - **Subliminal**, **Game sounds**, **Music and
+  room** (`br_opt_vol_sub`, `br_opt_vol_sfx`, `br_opt_vol_music`) - plus Quality, and a pill that opens the
+  picture picker (`br_media_*`). Dragging a level previews it; releasing it commits, so one drag is one
+  settings write and not eighty. A `settings` frame repaints a level unless the player is holding it.
+- The three buses live in `shared/sound/kit.js` under the existing master: subliminal is the whisper bed and
+  `breath`, the bed bus is `ambience` and `spiral`, and SFX is everything else including both rolls. A
+  load-time guard refuses a cue that names no bus. **Music and room** drives the soundtrack directly and the
+  bed bus normalised against the soundtrack's own 0.15 default, because the beds already sit 24 dB under
+  everything: one number scaling both would leave the ambience inaudible at the default.
 
 ## 10.15 Playbook Tier A amendment (2026-09-14)
 
@@ -1972,6 +2052,15 @@ active list never hears the presets. A dealt word may be a whole trigger phrase:
 truncated.
 
 **The voice.** Each word is spoken by the HOST, which owns a real chain and the app's chosen audio output device:
+
+**Its level is the ROOM's, not the app's (amended 2026-09-17).** This used to be
+`MasterVolume x SubAudioVolume`, and it was the only piece of Back Room audio that read the app's settings at
+all: everything else in the room is Web Audio inside WebView2 and never saw them. So a session preset moving
+`MasterVolume` turned the casino's whisper down and left every lever, reel, win and the soundtrack exactly where
+they were - the wrong half of the mix. It now reads `AppSettings.BackRoomSubVolume`, the room's own subliminal
+level (10.14), on the same 1.5 power curve, so the whisper's character at a given level is unchanged and 0 is
+still a deliberate mute. The output DEVICE is still the app's: the picker's choice is about hardware, not mix.
+Where this paragraph disagrees with anything above about volume, this one wins.
 
 | `source` | What plays |
 |---|---|

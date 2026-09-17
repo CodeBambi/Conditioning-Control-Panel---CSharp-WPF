@@ -95,15 +95,33 @@ export function createHud(o) {
     (on) => { if (typeof o.onBellOpt === 'function') o.onBellOpt(on); });
   paintSwitch(bellOpt.b, false);
   panel.append(el('span', 'br-opt-name', L('br_opt_effects', 'Effects')), segRow, forcedNote, tunnel.row, melt.row, bellOpt.row);
+  // THREE LEVELS (10.14). The room used to have one Music slider and nothing else, which meant the
+  // only way to turn the whisper down was the app's own SubAudioVolume - and that moved the whisper
+  // while leaving every lever, reel and win exactly where it was. The room owns its own mix now.
+  // o.levels is main.js's adapter over the kit's buses and the music element; the host persists it.
+  const levelRows = [];
   let stopQuality = () => {};
-  if (!window.__brOptions && o.music && o.quality) {
-    const musicRow = el('div', 'br-opt-row');
-    const musicLabel = L('br_opt_music', 'Music');
-    const volume = el('input'); volume.type = 'range'; volume.min = '0'; volume.max = '1'; volume.step = '.01';
-    volume.value = String(o.music.volume); volume.style.width = '100px'; volume.setAttribute('aria-label', musicLabel);
-    const amount = el('span', 'br-opt-name', Math.round(o.music.volume * 100) + '%'); amount.style.minWidth = '30px';
-    volume.addEventListener('input', () => { o.music.setVolume(Number(volume.value)); amount.textContent = Math.round(o.music.volume * 100) + '%'; });
-    musicRow.append(el('span', 'br-opt-name', musicLabel), volume, amount);
+  if (!window.__brOptions && o.levels) {
+    for (const [key, fallback] of [['sub', 'Subliminal'], ['sfx', 'Game sounds'], ['music', 'Music and room']]) {
+      const row = el('div', 'br-opt-row');
+      const name = L('br_opt_vol_' + key, fallback);
+      const slider = el('input'); slider.type = 'range'; slider.min = '0'; slider.max = '1'; slider.step = '.01';
+      slider.value = String(o.levels[key]); slider.style.width = '100px'; slider.setAttribute('aria-label', name);
+      slider.dataset.level = key;
+      const amount = el('span', 'br-opt-name', Math.round(o.levels[key] * 100) + '%'); amount.style.minWidth = '30px';
+      // input paints and sounds; change is where it goes to the host, so dragging does not post 80 times.
+      slider.addEventListener('input', () => {
+        const v = Number(slider.value);
+        amount.textContent = Math.round(v * 100) + '%';
+        o.levels.preview(key, v);
+      });
+      slider.addEventListener('change', () => o.levels.commit(key, Number(slider.value)));
+      row.append(el('span', 'br-opt-name', name), slider, amount);
+      levelRows.push({ key, slider, amount });
+      panel.append(row);
+    }
+  }
+  if (!window.__brOptions && o.quality) {
     const qualityRow = el('div', 'br-opt-row'), choice = el('select');
     const qualityLabel = L('br_opt_quality', 'Quality'); choice.setAttribute('aria-label', qualityLabel);
     choice.style.cssText = 'max-width:140px;min-height:30px;color:#f6ecff;background:#2a1838;border:1px solid #6b4a78;border-radius:6px';
@@ -114,13 +132,120 @@ export function createHud(o) {
     choice.addEventListener('change', () => o.quality.setMode(choice.value));
     stopQuality = o.quality.subscribe(() => { choice.value = o.quality.mode; });
     qualityRow.append(el('span', 'br-opt-name', qualityLabel), choice);
-    panel.append(musicRow, qualityRow);
+    panel.append(qualityRow);
   }
-  if (typeof window.__brOptions?.openMedia === 'function') {
-    const sources = el('button', 'br-pill', 'Pictures and GIFs'); sources.type='button';
-    sources.addEventListener('click', () => { setOptions(false); window.__brOptions.openMedia(); });
-    panel.append(sources);
+
+  /* ------------------------------------------------- the picture picker (10.13.C)
+   * Its own card rather than more rows on the Options one: the niche editor is a text field and a
+   * growing pill list, and that does not belong in a card people open to nudge a slider. The pill
+   * that opens it used to be dead on desktop - it was gated on the web playtest's shell, which is
+   * the only thing that ever provided window.__brOptions. */
+  const mediaBtn = el('button', 'br-pill', L('br_media_title', 'Pictures and GIFs')); mediaBtn.type = 'button';
+  mediaBtn.setAttribute('aria-expanded', 'false');
+  panel.append(mediaBtn);
+
+  const media = el('div', 'br-options br-media'); media.hidden = true; media.setAttribute('role', 'group');
+  media.setAttribute('aria-label', L('br_media_title', 'Pictures and GIFs'));
+  const MEDIA_SOURCES = [['auto', 'Auto'], ['local', 'My files'], ['online', 'Scrolller'],
+                         ['mixed', 'Both'], ['bundled', 'Built-in']];
+  const mediaSegs = MEDIA_SOURCES.map(([v, name]) => {
+    const b = el('button', 'br-seg', L('br_media_' + v, name)); b.type = 'button';
+    b.dataset.value = v;
+    b.addEventListener('click', () => o.onOption('mediaSource', v));
+    return b;
+  });
+  const mediaSegRow = el('div', 'br-seg-row'); mediaSegRow.append(...mediaSegs);
+  const mediaNote = el('p', 'br-opt-note'); mediaNote.setAttribute('role', 'status');
+  const nicheWrap = el('div', 'br-niches');
+  const nicheForm = el('form', 'br-niche-entry');
+  const nicheField = el('input'); nicheField.type = 'text'; nicheField.className = 'br-niche-field';
+  nicheField.placeholder = L('br_media_placeholder', 'Community name');
+  nicheField.setAttribute('aria-label', L('br_media_add', 'Add a niche'));
+  nicheField.autocomplete = 'off'; nicheField.spellcheck = false;
+  const nicheAdd = el('button', 'br-seg', L('br_media_add_btn', 'Add')); nicheAdd.type = 'submit';
+  nicheForm.append(el('span', 'br-niche-prefix', 'r/'), nicheField, nicheAdd);
+  const nicheList = el('div', 'br-niche-list');
+  nicheList.setAttribute('aria-label', L('br_media_niches', 'Your niches'));
+  const mediaTiming = el('p', 'br-opt-note', L('br_media_timing',
+    'Walls and new flashes change now. Game artwork changes on your next visit, so your current hand and prepaid spins are kept.'));
+  nicheWrap.append(nicheForm, nicheList);
+  media.append(el('span', 'br-opt-name', L('br_media_source', 'Source')), mediaSegRow, mediaNote, nicheWrap, mediaTiming);
+  nav.append(media);
+
+  // The room never trusts this field: the host validates the name again before it stores it. This is
+  // only here so a typo is answered in the room instead of silently dropped over the bridge.
+  const NICHE_OK = /^[A-Za-z0-9_]{2,40}$/;
+  const cleanNiche = (raw) => String(raw || '')
+    .trim()
+    .replace(/^https?:\/\/(?:www\.)?(?:old\.)?(?:reddit\.com|scrolller\.com)\//i, '')
+    .replace(/^r\//i, '')
+    .replace(/\/.*$/, '')
+    .trim();
+  let mediaState = { source: 'auto', effective: 'local', subs: [], off: [], cap: 8, consented: false };
+  let mediaMessage = '';
+
+  function setMedia(open) {
+    media.hidden = !open;
+    mediaBtn.setAttribute('aria-expanded', String(!!open));
+    if (open) { setOptions(false); paintMedia(); }
   }
+  mediaBtn.addEventListener('click', () => setMedia(media.hidden));
+  nicheForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = cleanNiche(nicheField.value);
+    if (!NICHE_OK.test(name)) { mediaMessage = L('br_media_bad', 'Enter one community name.'); paintMedia(); return; }
+    if (mediaState.subs.some((s) => s.toLowerCase() === name.toLowerCase())) {
+      mediaMessage = L('br_media_dupe', 'That niche is already added.'); paintMedia(); return;
+    }
+    if (mediaState.subs.length >= mediaState.cap) {
+      mediaMessage = L('br_media_cap', 'You can keep up to {n} niches. Remove one to add another.')
+        .replace('{n}', String(mediaState.cap));
+      paintMedia(); return;
+    }
+    mediaMessage = '';
+    nicheField.value = '';
+    o.onOption('mediaSubAdd', name);
+  });
+  // A text field inside the room must not walk it. The room's keys are read on the document.
+  for (const type of ['keydown', 'keyup', 'keypress']) {
+    nicheField.addEventListener(type, (e) => e.stopPropagation());
+  }
+
+  function paintMedia() {
+    for (const b of mediaSegs) {
+      b.setAttribute('aria-pressed', String(b.dataset.value === mediaState.source));
+      // Scrolller and Both need consent, which lives in Assets. Show them refused, not missing.
+      const needsOnline = b.dataset.value === 'online' || b.dataset.value === 'mixed';
+      b.disabled = needsOnline && !mediaState.consented;
+    }
+    const online = mediaState.effective === 'online' || mediaState.effective === 'mixed';
+    nicheWrap.hidden = !online;
+    mediaTiming.hidden = false;
+    if (mediaMessage) mediaNote.textContent = mediaMessage;
+    else if (!mediaState.consented && (mediaState.source === 'online' || mediaState.source === 'mixed'))
+      mediaNote.textContent = L('br_media_no_consent', 'Turn on online media in Assets to use Scrolller here.');
+    else mediaNote.textContent = L('br_media_note_' + mediaState.effective, {
+      local: 'Your assets folder, minus anything you deselected in Assets.',
+      online: 'Tap a niche to turn it on or off.',
+      mixed: 'Your files and Scrolller together, blended by the mix you set in Assets.',
+      bundled: "The room's built-in art. No online feed needed.",
+    }[mediaState.effective] || '');
+    nicheList.textContent = '';
+    for (const name of mediaState.subs) {
+      const off = mediaState.off.some((s) => s.toLowerCase() === name.toLowerCase());
+      const pill = el('span', 'br-niche-pill');
+      const toggle = el('button', 'br-seg', 'r/' + name); toggle.type = 'button';
+      toggle.setAttribute('aria-pressed', String(!off));
+      toggle.addEventListener('click', () => { mediaMessage = ''; o.onOption('mediaSubToggle', name); });
+      const remove = el('button', 'br-niche-remove', '\u00d7'); remove.type = 'button';
+      remove.setAttribute('aria-label', L('br_media_remove', 'Remove {n}').replace('{n}', 'r/' + name));
+      remove.addEventListener('click', () => { mediaMessage = ''; o.onOption('mediaSubRemove', name); });
+      pill.append(toggle, remove);
+      nicheList.append(pill);
+    }
+  }
+  paintMedia();
+
   nav.append(panel);   // anchored under the Options pill, whatever the nav's own offset
   o.root.append(veil, hint, cross, nav, bell, list);
   function setOptions(open) { panel.hidden = !open; optBtn.setAttribute('aria-expanded', String(!!open)); }
@@ -197,11 +322,19 @@ export function createHud(o) {
       forcedNote.hidden = !v.forcedCalm;
       paintSwitch(tunnel.b, v.tunnel);
       paintSwitch(melt.b, v.melt);
+      // The host's frame has the last word on all three of these, exactly like the switches above.
+      if (v.media) { mediaState = { ...mediaState, ...v.media }; mediaMessage = ''; paintMedia(); }
+      if (v.levels) for (const row of levelRows) {
+        const level = v.levels[row.key];
+        if (!Number.isFinite(level) || document.activeElement === row.slider) continue;
+        row.slider.value = String(level);
+        row.amount.textContent = Math.round(level * 100) + '%';
+      }
     },
     /** The floor bell opt-in row (10.16.B): the server's answer, an optimistic tick put back when it refuses. */
     bellOptIn(checked) { paintSwitch(bellOpt.b, checked); },
     get optionsOpen() { return !panel.hidden; },
-    closeOptions() { setOptions(false); },
+    closeOptions() { setOptions(false); setMedia(false); },
     seated(on) {
       document.documentElement.classList.toggle('br-seated', !!on);
       viewBtn.disabled = !!on;

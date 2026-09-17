@@ -207,6 +207,11 @@ function createCues(log) {
     } catch (e) { ac = null; }
     return ac;
   }
+  /* A DELIBERATE, DOCUMENTED BYPASS. These three cues are the last-resort voice for a page where kit.js itself
+   * failed to import, so there is no master and no bus for them to sit under: this graph runs straight to the
+   * destination at fixed levels. It cannot honour setMaster, setTrim, mute, setSub, setSfx or setBed - a room
+   * that had turned the subliminal bus down would still hear this 'word'. Three cues on a broken load are not
+   * a second mixer, and teaching them the buses means duplicating them, so it stays a bypass on purpose. */
   function inline(cue, opts) {
     const c = graph();
     if (!c) return;

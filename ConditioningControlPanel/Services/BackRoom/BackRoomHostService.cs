@@ -69,6 +69,13 @@ internal static class BackRoomHostService
             case BackRoomBridge.OptionTunnel: s.BackRoomTunnel = option.On; break;
             case BackRoomBridge.OptionMelt: s.BackRoomMelt = option.On; break;
             case BackRoomBridge.OptionIntensity when option.Intensity is { } i: s.BackRoomFxIntensity = i; break;
+            case BackRoomBridge.OptionMediaSource when option.Text is { } src: s.BackRoomMediaSource = src; break;
+            case BackRoomBridge.OptionSubVolume when option.Level is { } sub: s.BackRoomSubVolume = sub; break;
+            case BackRoomBridge.OptionSfxVolume when option.Level is { } sfx: s.BackRoomSfxVolume = sfx; break;
+            case BackRoomBridge.OptionMusicVolume when option.Level is { } mus: s.BackRoomMusicVolume = mus; break;
+            case BackRoomBridge.OptionSubAdd when option.Text is { } add: AddNiche(s, add); break;
+            case BackRoomBridge.OptionSubRemove when option.Text is { } drop: RemoveNiche(s, drop); break;
+            case BackRoomBridge.OptionSubToggle when option.Text is { } flip: ToggleNiche(s, flip); break;
             default: return;
         }
     }
@@ -80,6 +87,89 @@ internal static class BackRoomHostService
         nameof(Models.AppSettings.FlashEnabled), nameof(Models.AppSettings.SubliminalEnabled),
         nameof(Models.AppSettings.SpiralEnabled), nameof(Models.AppSettings.BrainDrainEnabled),
         nameof(Models.AppSettings.BackRoomTunnel), nameof(Models.AppSettings.BackRoomMelt),
+        // The room's picture source and its three levels, so a room that is already open repaints its own
+        // Options when something else changes them. MediaSource and RemoteMediaRatio are the APP's, and they
+        // are here because BackRoomMediaSource defaults to "auto" and follows them: changing the source in
+        // the Assets tab has to reach the room.
+        nameof(Models.AppSettings.BackRoomMediaSource), nameof(Models.AppSettings.BackRoomMediaSubs),
+        nameof(Models.AppSettings.BackRoomMediaSubsOff),
+        nameof(Models.AppSettings.BackRoomSubVolume), nameof(Models.AppSettings.BackRoomSfxVolume),
+        nameof(Models.AppSettings.BackRoomMusicVolume),
+        nameof(Models.AppSettings.MediaSource), nameof(Models.AppSettings.RemoteMediaRatio),
+    };
+
+    /* ---------------------------------------------------------------- the room's niche list (10.13.C)
+     * The host is the only writer. The page presses once per niche and reads the answer back off the
+     * next settings frame, so the two can never disagree about what is selected. Case-insensitive
+     * throughout, because r/EroticHypnosis and r/erotichypnosis are one community, and the cap is
+     * enforced here as well as in the room: a page is not a gatekeeper.
+     *
+     * A removed niche loses its disabled flag too. A niche switched off KEEPS its place in the list,
+     * which is the owner's ruling on this control: a saved disabled niche stays visible so it can be
+     * switched back on, and the editor is never a comma-separated field. */
+    private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+    private static void AddNiche(Models.AppSettings s, string name)
+    {
+        var subs = new List<string>(s.BackRoomMediaSubs);
+        if (subs.Exists(x => Same(x, name)) || subs.Count >= Models.AppSettings.BackRoomMediaSubCap) return;
+        subs.Add(name);
+        s.BackRoomMediaSubs = subs;
+    }
+
+    private static void RemoveNiche(Models.AppSettings s, string name)
+    {
+        var subs = new List<string>(s.BackRoomMediaSubs);
+        if (subs.RemoveAll(x => Same(x, name)) == 0) return;
+        s.BackRoomMediaSubs = subs;
+        var off = new List<string>(s.BackRoomMediaSubsOff);
+        if (off.RemoveAll(x => Same(x, name)) > 0) s.BackRoomMediaSubsOff = off;
+    }
+
+    private static void ToggleNiche(Models.AppSettings s, string name)
+    {
+        // Only a niche that is actually in the list can be switched off: otherwise a stale press would
+        // park a name in the disabled list that nothing ever shows or clears.
+        if (!s.BackRoomMediaSubs.Exists(x => Same(x, name))) return;
+        var off = new List<string>(s.BackRoomMediaSubsOff);
+        if (off.RemoveAll(x => Same(x, name)) == 0) off.Add(name);
+        s.BackRoomMediaSubsOff = off;
+    }
+
+    /// <summary><c>init.media</c> / <c>settings.media</c>: what the room's picture picker shows. <c>effective</c>
+    /// is what the deal will actually do once "auto" is resolved against the app, so the page never has to know
+    /// the app's own setting. <c>consented</c> false means the online rows paint disabled rather than vanish:
+    /// the player needs to see why Scrolller is not on offer.</summary>
+    internal static object MediaWire(Models.AppSettings? s) => new
+    {
+        source = s?.BackRoomMediaSource ?? "auto",
+        effective = EffectiveMediaSource(s),
+        subs = (s?.BackRoomMediaSubs ?? new List<string>()).ToArray(),
+        off = (s?.BackRoomMediaSubsOff ?? new List<string>()).ToArray(),
+        cap = Models.AppSettings.BackRoomMediaSubCap,
+        consented = s?.HasRemoteMediaConsent ?? false,
+        ratio = s?.RemoteMediaRatio ?? 30,
+    };
+
+    /// <summary>
+    /// "auto" resolved: follow the app-wide <c>MediaSource</c>. Anything that would deal remote media without
+    /// consent collapses to <c>local</c> here rather than at the deal, so one place decides it.
+    /// </summary>
+    internal static string EffectiveMediaSource(Models.AppSettings? s)
+    {
+        var chosen = s?.BackRoomMediaSource ?? "auto";
+        var resolved = chosen == "auto" ? (s?.MediaSource ?? "local") : chosen;
+        if (resolved is "online" or "mixed" && !(s?.HasRemoteMediaConsent ?? false)) return "local";
+        return resolved;
+    }
+
+    /// <summary><c>init.audio</c> / <c>settings.audio</c>: the room's own three levels as 0..1, which is what the
+    /// kit's bus setters and the music element take. Not the app's volumes (10.21).</summary>
+    internal static object AudioWire(Models.AppSettings? s) => new
+    {
+        sub = (s?.BackRoomSubVolume ?? 100) / 100.0,
+        sfx = (s?.BackRoomSfxVolume ?? 100) / 100.0,
+        music = (s?.BackRoomMusicVolume ?? 15) / 100.0,
     };
 
     /// <summary>DEBUG only: <c>CCP_BACKROOM_CDP_PORT</c> opens a remote debugging port on the room's
@@ -141,6 +231,10 @@ internal static class BackRoomHostService
             BackRoomBridge? roomBridge = null;
             var api = new BackRoomApi(null, RoomIdentity,
                 sp => roomBridge?.AdoptSp(sp, () => RoomIdentity() != null));
+            // Start filling the remote picture pool now. A local-only room makes this a no-op, and for an
+            // online one it means the first wall the player sees is the one they asked for: the pool's own
+            // bounded wait otherwise lands on the page's boot media-request.
+            try { Media.WarmForRoomOpen(); } catch (Exception ex) { Diag.Swallowed(ex, "backroom warm"); }
             _bridge = roomBridge = new BackRoomBridge(new BackRoomBridge.Deps
             {
                 Post = Post,
@@ -293,7 +387,7 @@ internal static class BackRoomHostService
             motion = MotionWire(motion),
             intensity = IntensityWire(s, motion),
             lang = LocalizationManager.Instance.CurrentLanguage,
-            gates = GatesWire(s),
+            gates = GatesWire(s), media = MediaWire(s), audio = AudioWire(s),
             intensityChoice = IntensityChoiceWire(s),
             lex = Lex(LocalizationManager.Instance.KeysWithPrefix(LexPrefix), Loc.Get),
             stations = BackRoomApi.Ops.Keys.ToArray(),
@@ -311,6 +405,7 @@ internal static class BackRoomHostService
         {
             type = "settings", motion = MotionWire(motion), intensity = IntensityWire(s, motion),
             reduced = motion != Models.MotionLevel.Full, gates = GatesWire(s), intensityChoice = IntensityChoiceWire(s),
+            media = MediaWire(s), audio = AudioWire(s),
         };
     }
 
@@ -397,6 +492,17 @@ internal static class BackRoomHostService
         if (_bridge == null || sender is not Models.AppSettings s) return;
         if (e.PropertyName == nameof(Models.AppSettings.SkillPoints)) _bridge.OnSpChanged(s.SkillPoints, "earn");
         if (e.PropertyName != null && SettingsFrameProperties.Contains(e.PropertyName)) _bridge.PushSettings(SettingsMessage());
+        // The pool is keyed to a niche selection, so a selection change makes everything in it stale. The
+        // frame above already tells the page to re-deal; this makes sure the re-deal gets new pictures
+        // rather than the old ones over again.
+        if (e.PropertyName is nameof(Models.AppSettings.BackRoomMediaSubs)
+            or nameof(Models.AppSettings.BackRoomMediaSubsOff)
+            or nameof(Models.AppSettings.BackRoomMediaSource)
+            or nameof(Models.AppSettings.MediaSource))
+        {
+            try { Media.ReleaseWarmPool(); Media.WarmForRoomOpen(); }
+            catch (Exception ex) { Diag.Swallowed(ex, "backroom repool"); }
+        }
     }
 
     private static void DisposeAll()
@@ -411,6 +517,9 @@ internal static class BackRoomHostService
             _host = null;
             _bridge = null;
             try { host?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            // The pool's materialized pictures are temp files under the assets folder. Let them go with
+            // the room: otherwise up to a poolful survive until RemoteMediaCache's next startup sweep.
+            try { Media.ReleaseWarmPool(); } catch (Exception ex) { Diag.Swallowed(ex, "backroom pool release"); }
             _panicSuspended = _minimised = false;
             App.Logger?.Information("BackRoomHostService: closed");
         }

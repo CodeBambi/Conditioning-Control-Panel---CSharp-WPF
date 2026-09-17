@@ -38,7 +38,9 @@ public sealed class NullBackRoomMedia : IBackRoomMedia
             .Select(i => new BackRoomGif("g" + i, $"https://ccp.game/backroom/stations/slot/fallback/gif{i}.webp", 0, 0, "fallback"))
             .ToList();
         var words = Presets.Select((p, i) => new BackRoomWord("s" + i, Word(p.Key, p.Fallback), "preset")).ToList();
-        return new BackRoomMediaDeal(seed, gifs, words);
+        // "bundled" and not "local": this deal IS the four built-in loops, and the page shows the
+        // player what they actually got (10.13.C).
+        return new BackRoomMediaDeal(seed, gifs, words, "bundled");
     }
 
     private string Word(string key, string fallback)

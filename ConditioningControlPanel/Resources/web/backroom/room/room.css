@@ -102,6 +102,37 @@ html.br-overview .br-hint { visibility: hidden; }
 
 /* The room view puts the Options card away with the rest of the walking chrome. */
 html.br-overview .br-options { visibility: hidden; }
+/* THE PICTURE PICKER (10.13.C). Its own card, wider than the Options one because it holds a text
+   field and a list that grows: a niche pill has to fit "r/" plus a name without wrapping mid-word.
+   The seg row wraps, so five sources and eight niches both stack instead of overflowing. */
+.br-media { width: 288px; }
+.br-media .br-seg-row { flex-wrap: wrap; }
+.br-media .br-seg { flex: 0 1 auto; }
+.br-niches { display: flex; flex-direction: column; gap: 8px; }
+.br-niches[hidden] { display: none; }
+.br-niche-entry { display: flex; align-items: center; gap: 6px; }
+.br-niche-prefix { color: var(--br-ink-dim); font: 600 13px/1 "Segoe UI", system-ui, sans-serif; }
+/* 13px and not smaller: this is the one place in the room someone types, and a cramped field reads
+   as broken. flex + min-width 0 so a long name scrolls inside the field instead of pushing Add out. */
+.br-niche-field { flex: 1; min-width: 0; padding: 7px 9px; border-radius: 8px; color: var(--br-ink);
+  background: #281635; border: 1px solid rgba(185, 156, 255, .45);
+  font: 13px/1 "Segoe UI", system-ui, sans-serif; }
+.br-niche-field:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 1px; }
+.br-niche-entry .br-seg { flex: 0 0 auto; padding: 7px 12px; }
+.br-niche-list { display: flex; flex-wrap: wrap; gap: 6px; }
+/* One pill, two controls: the name toggles the niche, the cross forgets it. They share a border so
+   it reads as a single object rather than two chips that happen to sit together. */
+.br-niche-pill { display: inline-flex; border-radius: 999px; overflow: hidden;
+  border: 1px solid rgba(185, 156, 255, .35); }
+.br-niche-pill .br-seg { border: 0; border-radius: 0; box-shadow: none; }
+.br-niche-remove { font: 600 15px/1 "Segoe UI", system-ui, sans-serif; color: var(--br-ink-dim);
+  cursor: pointer; min-width: 26px; padding: 0 6px; background: #2a1733; border: 0;
+  border-left: 1px solid rgba(185, 156, 255, .35); }
+.br-niche-remove:hover { color: var(--br-ink); }
+.br-niche-remove:focus-visible { outline: 2px solid var(--br-gold); outline-offset: -2px; }
+/* A disabled source is refused, not absent: Scrolller needs consent, which lives in the Assets tab. */
+.br-media .br-seg:disabled { opacity: .45; cursor: default; }
+html.br-overview .br-media { visibility: hidden; }
 
 /* THE FLOOR BELL (CONTRACT 10.16.B). One line of text under the nav pills. It is
  * somebody else's party (Brake 1): one colour, no background flash, no sound. */

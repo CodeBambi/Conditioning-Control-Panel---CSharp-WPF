@@ -67,7 +67,11 @@ const readGates = (g) => {
 const INTENSITIES = ['calm', 'normal', 'full'];
 const readChoice = (v, fallback) => (INTENSITIES.includes(v) ? v : fallback);
 
-const state = { sp: 0, reduced: false, motion: 'full', intensity: 'normal', intensityChoice: 'normal', gates: readGates(null), lex: {}, open: null, suspended: false, userStill: false };
+const state = { sp: 0, reduced: false, motion: 'full', intensity: 'normal', intensityChoice: 'normal', gates: readGates(null), lex: {}, open: null, suspended: false, userStill: false,
+  // The room's own picture source and mix, both owned by the host. These defaults only hold for the
+  // few frames before init lands, and they are the quiet ones on purpose.
+  media: { source: 'auto', effective: 'local', subs: [], off: [], cap: 8, consented: false },
+  levels: { sub: 1, sfx: 1, music: 0.15 } };
 /** The floor bell: what the last `bell/state` said. Never a timer, never a poll. */
 const bell = { entries: [], optIn: false, mustHit: false, fetching: false, fetches: 0 };
 const spListeners = new Set();
@@ -163,7 +167,8 @@ function paintMotion() {
   if (scene) scene.setStill(still());
   if (!hud) return;
   hud.motion(still(), forcedStill());
-  hud.options({ intensityChoice: state.intensityChoice, forcedCalm: !!state.reduced, tunnel: state.gates.tunnel, melt: state.gates.melt });
+  hud.options({ intensityChoice: state.intensityChoice, forcedCalm: !!state.reduced, tunnel: state.gates.tunnel,
+                melt: state.gates.melt, media: state.media, levels: state.levels });
 }
 
 /** The room's Options (10.14): tell the host and show the press at once; the host's settings frame has the last word. */
@@ -173,9 +178,82 @@ function setOption(key, value) {
     state.intensityChoice = value;
   } else if (key === 'tunnel' || key === 'melt') {
     state.gates = readGates({ ...state.gates, [key]: !!value });
+  } else if (key === 'mediaSource') {
+    // Optimistic, like the switches: paint the press now, let the settings frame correct it. The host
+    // resolves 'auto' and refuses online without consent, so `effective` can come back as something
+    // else entirely and the picker will say so.
+    state.media = { ...state.media, source: String(value) };
+  } else if (key === 'mediaSubAdd' || key === 'mediaSubRemove' || key === 'mediaSubToggle') {
+    // No optimism here: the host validates the name and owns the list, and a wrong guess would show
+    // a niche that is not really there. The frame comes straight back.
+  } else if (key === 'subVolume' || key === 'sfxVolume' || key === 'musicVolume') {
+    // Already applied by levels.preview(); this is the persist.
   } else return;
   bridge.send({ type: 'room-option', key, value });
   paintMotion();
+}
+
+/* ------------------------------------------------------------------ the room's own three levels
+ * The kit carries the buses (subliminal / sfx / bed); the soundtrack is its own element; the spoken
+ * word is the host's, on the app's output device. This is the one place that knows all three, so the
+ * HUD gets a flat {sub, sfx, music} and does not have to.
+ *
+ * `music` drives two things that want different curves. The soundtrack sits at .15 because the mp3s
+ * are loud; the ambience and spiral beds already sit at BED_LEVEL, 24 dB under everything. Scaling
+ * both by the same number would leave the beds inaudible at the default. So the beds take the slider
+ * normalised against that default: at .15 the mix is exactly what the room has always played, below
+ * it everything fades together, above it the soundtrack keeps climbing and the beds stay put. */
+const MUSIC_BASE = 0.15;
+const bedFactor = (v) => Math.max(0, Math.min(1, v / MUSIC_BASE));
+
+function applyLevel(key, v) {
+  const level = Math.max(0, Math.min(1, Number(v) || 0));
+  if (key === 'sub') kit.setSub?.(level);
+  else if (key === 'sfx') kit.setSfx?.(level);
+  else if (key === 'music') { music?.setVolume(level); kit.setBed?.(bedFactor(level)); }
+}
+
+function applyLevels() {
+  for (const key of ['sub', 'sfx', 'music']) applyLevel(key, state.levels[key]);
+}
+
+const LEVEL_OPTION = { sub: 'subVolume', sfx: 'sfxVolume', music: 'musicVolume' };
+const levels = {
+  get sub() { return state.levels.sub; },
+  get sfx() { return state.levels.sfx; },
+  get music() { return state.levels.music; },
+  /** Dragging: hear it immediately, tell nobody. */
+  preview(key, v) { if (LEVEL_OPTION[key]) { state.levels[key] = v; applyLevel(key, v); } },
+  /** Let go: now it is a setting. 0..100 on the wire, because that is how the host stores it. */
+  commit(key, v) {
+    if (!LEVEL_OPTION[key]) return;
+    this.preview(key, v);
+    setOption(LEVEL_OPTION[key], Math.round(Math.max(0, Math.min(1, v)) * 100));
+  },
+};
+
+/** init.audio / settings.audio: three 0..1 numbers, anything else left as it was. */
+function readLevels(a) {
+  const out = { ...state.levels };
+  for (const key of ['sub', 'sfx', 'music']) {
+    const v = a?.[key];
+    if (Number.isFinite(v)) out[key] = Math.max(0, Math.min(1, v));
+  }
+  return out;
+}
+
+/** init.media / settings.media, shape-checked; an absent field keeps what the room had. */
+function readMedia(m) {
+  if (!m || typeof m !== 'object') return state.media;
+  const names = (v) => (Array.isArray(v) ? v.filter((s) => typeof s === 'string') : state.media.subs);
+  return {
+    source: typeof m.source === 'string' ? m.source : state.media.source,
+    effective: typeof m.effective === 'string' ? m.effective : state.media.effective,
+    subs: names(m.subs),
+    off: Array.isArray(m.off) ? m.off.filter((s) => typeof s === 'string') : state.media.off,
+    cap: Number.isFinite(m.cap) ? m.cap : state.media.cap,
+    consented: typeof m.consented === 'boolean' ? m.consented : state.media.consented,
+  };
 }
 
 function setSp(sp) {
@@ -395,7 +473,10 @@ async function start(init) {
     lex: (init.lex && typeof init.lex === 'object') ? init.lex : {},
     open: typeof init.open === 'boolean' ? init.open : null,
   });
+  state.levels = readLevels(init.audio);
+  state.media = readMedia(init.media);
   music = getMusic({ master: 1 });
+  applyLevels();   // the host's stored levels win over whatever the music element remembered locally
   bridge.markInitialized();
   balanceFeedback.reset(state.sp);
   paintChrome();
@@ -407,9 +488,22 @@ async function start(init) {
     state.reduced = !!m.reduced;
     if (m.gates && typeof m.gates === 'object') state.gates = readGates(m.gates);
     state.intensityChoice = readChoice(m.intensityChoice, state.intensityChoice);
+    if (m.audio) { state.levels = readLevels(m.audio); applyLevels(); }
+    // THE LIVE SOURCE SWITCH (10.13.C). room/screens.js and stations/slot/station.js have listened for
+    // this event since the phone build; on desktop nothing ever fired it, so the picker could not have
+    // worked even once it existed. Only a change in the EFFECTIVE source counts: flipping between two
+    // settings that resolve to the same pool must not throw away a dealt wall.
+    if (m.media) {
+      const was = state.media.effective;
+      state.media = readMedia(m.media);
+      if (state.media.effective !== was) {
+        try { window.dispatchEvent(new Event('br-media-changed')); }
+        catch (e) { bridge.log('warn', 'media change event threw: ' + e); }
+      }
+    }
     paintChrome();
     paintMotion();
-    kit.setTrim(state.intensity === 'calm' ? 0.6 : 1);   // a quieter floor under Calm; no volume setting of its own
+    kit.setTrim(state.intensity === 'calm' ? 0.6 : 1);   // a quieter floor under Calm, over the three buses
     const frame = { motion: state.userStill ? 'off' : state.motion, intensity: state.intensity, reduced: state.reduced, gates: state.gates };
     for (const fn of Array.from(settingsListeners)) { try { fn(frame); } catch (e) { bridge.log('warn', 'onSettings threw: ' + e); } }
   });
@@ -423,7 +517,7 @@ async function start(init) {
   });
 
   hud = createHud({
-    root: $('#br-room-ui'), lex, label, music, quality,
+    root: $('#br-room-ui'), lex, label, music, quality, levels,
     onVisit: (row) => visit(row),
     onGo: (row) => { if (scene) { scene.go(row); hud.overview(false); } },
     onOverview: (on) => { if (scene) { scene.setOverview(on); hud.overview(scene.overview); } },

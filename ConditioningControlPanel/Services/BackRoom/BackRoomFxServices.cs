@@ -174,9 +174,34 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
         return BackRoomOverlayMath.MapFrom(from, vp, BackRoomOverlayScreens.All());
     }
 
+    /// <summary>
+    /// Extensions a WPF overlay can actually open. Every caller below hands the path to WPF imaging
+    /// (<c>ChaosFlashOverlay</c>, <c>BackRoomGifFromOverlay</c>, <c>BackRoomWashOverlay</c>), which
+    /// cannot decode a video container at all: an mp4 there is a broken overlay, not a still frame.
+    /// </summary>
+    private static readonly string[] DrawableExtensions =
+        { ".gif", ".webp", ".png", ".jpg", ".jpeg", ".jfif", ".bmp", ".tif", ".tiff" };
+
+    /// <summary>True when a dealt url names something a WPF overlay can decode. Test seam.</summary>
+    internal static bool IsDrawablePicture(string? url)
+    {
+        var ext = Path.GetExtension(url ?? string.Empty);
+        return Array.FindIndex(DrawableExtensions, e => string.Equals(e, ext, StringComparison.OrdinalIgnoreCase)) >= 0;
+    }
+
     private static string? LocalFile(BackRoomGif? gif)
     {
         if (gif == null) return null;
+        // Since the wall deal may carry Scrolller CLIPS (.webm / .mp4, played by the page's own
+        // room/clip-source.js in WebView2), a dealt url is no longer guaranteed to be a picture.
+        // Today the room's deal is the one deal no fx draws from - fx always names a station and the
+        // bridge keys its deals by station - so this cannot fire. It is here because that is a
+        // coincidence of two other files, and the cost of being wrong is a visibly broken overlay.
+        if (!IsDrawablePicture(gif.Url))
+        {
+            App.Logger?.Debug("[BackRoom] dealt item {Key} is not a drawable picture", gif.Key);
+            return null;
+        }
         var path = TryLocalPath(gif.Url, App.EffectiveAssetsPath, WebRoot);
         if (path != null && File.Exists(path)) return path;
         App.Logger?.Debug("[BackRoom] dealt item {Key} has no local file", gif.Key);
