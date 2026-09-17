@@ -232,6 +232,8 @@ for (const st of STATIONS.filter(s=>s.id!=='counter' && (!process.env.EMI_ONLY |
     await checkEmi(st.id,'phone-'+w);
   }
   await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:720,deviceScaleFactor:1,mobile:false});
+  // Reward ceremonies own the station exit until their finish frame.
+  ok(await until(`window.__backroom.loader.canLeave?.() !== false`, 18000), `${st.key}: reward exit guard clears`);
   await ev(`document.querySelector('#br-back').click()`);
   ok(await until(`!document.querySelector(${JSON.stringify(st.root)}) && !window.__backroom.loader.current`, 3000), `${st.key}: Back unmounts the station`);
   ok(await until(`(() => { const d = window.__backroom.scene.debug(); return d.running && !d.held && !d.transitioning; })()`, 7000), `${st.key}: the room loop runs again`);
