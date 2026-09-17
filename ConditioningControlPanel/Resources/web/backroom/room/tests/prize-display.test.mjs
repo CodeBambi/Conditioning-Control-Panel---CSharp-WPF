@@ -36,3 +36,14 @@ test('cleanup never disposes the borrowed prize meshes or source materials',()=>
  assert.equal(counter.getObjectByName('shelf_flashes_v2').parent.position.y,0);
  display.dispose();display.dispose();assert.equal(disposed,0);
 });
+
+test('purchased expansion travels to its shelf, sparkles expire, and motion off settles both',()=>{
+ const {display,scene}=setup();display.apply({owned:['rt_bundle_1'],demo:true},'rt_bundle_1');
+ const model=display.rack.getObjectByName('owned_rt_bundle_1'),start=model.position.clone();
+ assert.equal(scene.getObjectByName('prize_sparkles').count,64);
+ display.update(.5,false);assert.ok(model.position.distanceTo(start)>.1);
+ display.update(0,true);assert.equal(model.position.y,.68);assert.equal(model.rotation.y,0);
+ assert.equal(scene.getObjectByName('prize_sparkles').count,0);
+ display.apply({owned:['rt_bundle_1'],demo:true});assert.equal(scene.getObjectByName('prize_sparkles').count,0,'state refresh cannot replay particles');
+ display.dispose();assert.equal(scene.getObjectByName('prize_sparkles'),undefined);
+});

@@ -3,7 +3,7 @@ import { prizeFrame } from '../shared/prize-state.js';
 
 // Borrow approved geometry and textures. Only our signs, stands and material copies are owned here.
 export function createPrizeDisplay({ scene, counter, lex }) {
-  const resources = new Set(), stamps = new Map(), props = new Map(), flights = new Map();
+  const resources = new Set(), travel = new Map(), stamps = new Map(), props = new Map(), flights = new Map();
   const rack = new T.Group(); rack.name = 'owned_expansions'; rack.position.set(5.25, 0, -7.4);
   const cabinet = new T.Group(); cabinet.name = 'unlocked_arcade'; cabinet.position.set(4.1, 0, -7.15);
   const finish = new T.MeshStandardMaterial({ color: '#35213f', metalness: .35, roughness: .4 }); resources.add(finish);
@@ -59,6 +59,11 @@ export function createPrizeDisplay({ scene, counter, lex }) {
     const copy = m.clone(); resources.add(copy); materials.push({ m: copy, opacity: m.opacity, transparent: m.transparent, depthWrite: m.depthWrite }); return copy;
   }); n.material = Array.isArray(n.material) ? list : list[0]; });
   scene.add(cabinet, rack); cabinet.visible = rack.visible = false;
+  const glintGeometry = new T.OctahedronGeometry(.025), glintMaterial = new T.MeshBasicMaterial({color:'#ffd18e',transparent:true,depthWrite:false});
+  resources.add(glintGeometry); resources.add(glintMaterial);
+  const glints = new T.InstancedMesh(glintGeometry,glintMaterial,64), dummy = new T.Object3D();
+  glints.name='prize_sparkles'; glints.count=0; glints.frustumCulled=false; glints.raycast=()=>{}; scene.add(glints);
+  let party = null;
   let demo = false, reveal = null;
   function apply(snapshot, bought = null) {
     if (!snapshot) return;
@@ -68,7 +73,17 @@ export function createPrizeDisplay({ scene, counter, lex }) {
       if (id === 'rt_demo') props.get(id).source.visible = !snapshot.demo;
       const display = rack.getObjectByName('owned_' + id); if (display) display.visible = id === 'rt_demo' ? snapshot.demo : owned.has(id);
     }
-    if (bought && owned.has(bought) && props.has(bought)) flights.set(bought, 0);
+    if (bought && owned.has(bought) && props.has(bought)) {
+      flights.set(bought, 0);
+      scene.updateMatrixWorld(true);
+      const start = new T.Box3().setFromObject(props.get(bought).source).getCenter(new T.Vector3());
+      party = {start, elapsed:0};
+      const display = rack.getObjectByName('owned_' + bought);
+      if (display) {
+        const end=display.position.clone();
+        travel.set(bought,{display,start:rack.worldToLocal(start.clone()),end,elapsed:0});
+      }
+    }
     if (snapshot.demo && !demo) reveal = bought ? 0 : null;
     demo = snapshot.demo; sourceCabinet.visible = !demo; cabinet.visible = rack.visible = demo;
     if (!demo) reveal = null;
@@ -76,6 +91,26 @@ export function createPrizeDisplay({ scene, counter, lex }) {
     update(0, false);
   }
   function update(dt, still) {
+    for (const [id, flight] of travel) {
+      flight.elapsed += dt;
+      const p=still?1:Math.min(1,flight.elapsed/1.25), ease=p*p*(3-2*p);
+      flight.display.position.lerpVectors(flight.start,flight.end,ease);
+      flight.display.position.y += Math.sin(p*Math.PI)*.45;
+      flight.display.rotation.y = Math.sin(p*Math.PI)*.55;
+      if(p===1) {flight.display.position.copy(flight.end);flight.display.rotation.y=0;travel.delete(id);}
+    }
+    if(party) {
+      party.elapsed += dt;
+      const p=still?1:Math.min(1,party.elapsed/1.3);
+      glints.count=p===1?0:64; glintMaterial.opacity=(1-p)*.85;
+      for(let i=0;i<glints.count;i++) {
+        const angle=i*2.399963, spread=(.1+p*.8)*( .4+(i%7)/10);
+        dummy.position.copy(party.start).add(new T.Vector3(Math.cos(angle)*spread, .15+p*.65-p*p*.65+Math.sin(i*3.1)*spread, Math.sin(angle)*spread));
+        dummy.rotation.set(p*5+i,p*4,i);dummy.scale.setScalar((1-p)*(.7+(i%4)*.25));dummy.updateMatrix();glints.setMatrixAt(i,dummy.matrix);
+      }
+      glints.instanceMatrix.needsUpdate=true;
+      if(p===1)party=null;
+    }
     for (const [id, elapsed] of flights) {
       const next = elapsed + dt, f = prizeFrame(next, still), prop = props.get(id), stamp = stamps.get(id);
       prop.pivot.position.y = f.lift; prop.pivot.rotation.y = f.turn;
@@ -95,6 +130,6 @@ export function createPrizeDisplay({ scene, counter, lex }) {
   }
   return { apply, update, cabinet, rack,
     dispose() { for (const s of stamps.values()) s.removeFromParent(); rack.removeFromParent(); cabinet.removeFromParent();
-      for (const r of resources) r.dispose(); resources.clear(); flights.clear(); },
+      for (const r of resources) r.dispose(); resources.clear(); flights.clear(); travel.clear(); glints.removeFromParent(); party=null; },
   };
 }
