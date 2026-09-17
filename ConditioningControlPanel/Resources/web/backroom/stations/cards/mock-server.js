@@ -11,7 +11,7 @@
  * host refusal {ok:false, reason}. */
 
 const CAP = 99999, CHARLIE = 6, DAY_MS = 86400000, IDEM = /^[A-Za-z0-9_-]{16,64}$/;
-export const MOCK_RULES = Object.freeze({ v: 1, decks: 6, dealerHitsSoft17: false, blackjackPays: 2, charlie: CHARLIE, stakes: [1, 2],
+export const MOCK_RULES = Object.freeze({ v: 1, decks: 6, dealerHitsSoft17: false, blackjackPays: 2, charlie: CHARLIE, stakes: [1, 2, 3],
   doubleAfterSplit: true, splitAcesOneCard: true, maxHands: 2 });
 
 function mulberry32(a) {
@@ -105,7 +105,7 @@ export function createMockServer({ sp = 57, now = () => Date.now(), open = true,
   }
   function deal(body) {
     const idem = body && IDEM.test(body.idem || '') ? body.idem : null;
-    if (!idem || ![1, 2].includes(body.stake)) return { ok: false, reason: 'bad_request' };
+    if (!idem || ![1, 2, 3].includes(body.stake)) return { ok: false, reason: 'bad_request' };
     if (receipts.has(idem)) return clone(receipts.get(idem));
     const spBefore = user.sp;
     let returned = 0, capped = false, autoStood = null;

@@ -22,7 +22,7 @@ The optimizer preserves these populated groups and their `prize_id` extras:
 - `shelf_rt_bundle_2`
 - `shelf_rt_bundle_3`
 
-These are visual asset identifiers. They are not a purchase API or an entitlement contract. The station stays `soon` until the prize system is implemented.
+These are visual asset identifiers. They are not a purchase API or an entitlement contract. The counter uses server-owned catalogue rows and grants; visual identifiers never grant access.
 
 The optimized counter has 118,962 triangles and 82 mesh primitives, down from 420 source primitives. Its GLB is about 1.65 MiB. Transparent materials can require extra render passes in the room; primitive count is not total scene draw calls.
 
@@ -39,8 +39,7 @@ Room motion uses smooth traveling bulb trails and four independent EMI idle
 controllers. NPCs blink, wobble, look around, wave and perform station-specific
 gestures. The optimizer preserves authored shoulder and antenna groups; neutral
 wrapper hinges animate these groups without altering quantized mesh transforms.
-The counter has a cosmetic dusting routine. Prize purchase and handover wiring
-remain unimplemented. Motion off, Calm and reduced motion settle NPCs
+The counter has a cosmetic dusting routine. Confirmed purchases animate the card and queue the corresponding shelf stamp for the room return. Motion off, Calm and reduced motion settle NPCs
 and freeze the ambient clock. Entering a game pauses the room entirely.
 
 Dusting uses a shoulder arc at a fixed height over the serving tray, with a longer
@@ -48,3 +47,14 @@ hand-attached duster. Coins in the slot payout basin are cosmetic (7/16/32/64
 by revealed win tier); the lower tag celebrates the same revealed amount. The
 room receives only the latest revealed result and plays its matching cabinet
 celebration after returning from the station. No-pay clears an older queued win.
+
+## Purchase displays (2026-09-16)
+
+Preserve `racing_cabinet` in both optimizer grouping rules. It moves to the right
+of the counter on demo ownership, fades into place after a new unlock, and is a
+visual placeholder. Play Racing Thoughts and unlocked levels in CCP's Play tab.
+`room/prize-display.js` displays the approved owned expansion groups on an adjacent
+shelf. Counter mockups retain SOLD signs; the demo listing and mockup disappear.
+Entry state restores these displays silently; only successful purchases animate.
+Motion off, reduced motion and Calm settle the final pose. Room entry and return
+read counter state once; no ownership polling or local ownership persistence.

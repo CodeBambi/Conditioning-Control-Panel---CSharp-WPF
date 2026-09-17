@@ -710,6 +710,18 @@ await shot('wall-picture-from-feed.png');
   await boot(1280, 720);
 }
 
+// A renderer smoke uses an owned, in-memory shop fixture. Production never grants these locally.
+async function configureDecorationFixture(){
+  await ev(`(async()=>{
+    const owned=['monstera','ivy','terrarium','gallery','portraits','billboard','screens4','screens6','mega','lever_knight','lever_queen','lever_rook','floor_ribbon','floor_bloom','palette_lagoon','palette_sunset'];
+    let revision=0,layout={screens:[false,false,false],props:Array(6).fill(false),statues:[0,1,2],handles:[-1,-1,-1],floor:0,palette:0};
+    await window.__backroom.scene.customization.configureShop({request:async(op,args)=>{
+      if(op==='layout'){layout=structuredClone(args.layout);revision++;}
+      return {ok:true,open:true,sp:1000,catalogVersion:1,catalog:[],decorations:{owned,layout,revision}};
+    }});
+  })()`);
+}
+
 // 2k. Room Service: the catalogue panel opens no second WebGL context, every item toggles, and the
 // room keeps drawing behind it (CONTRACT 7 and 10.13.7: the close-up is a scissored pass, not a context).
 {
@@ -717,6 +729,7 @@ await shot('wall-picture-from-feed.png');
   const errsBefore = errs.length;
   const before = await canvases();
   ok(before === 1, `the walking room owns one canvas (${before})`);
+  await configureDecorationFixture();
   await ev(`window.__backroom.scene.customization.open()`);
   await sleep(400);
   ok(await ev(`!document.querySelector('.br-custom-panel').hidden`), 'Room Service opens its panel');
@@ -737,7 +750,7 @@ await shot('wall-picture-from-feed.png');
     const pick=await ev(`window.__backroom.scene.customization.debug().view.picks[${i%9}]`);
     for(const type of ['mousePressed','mouseReleased'])await cdp('Input.dispatchMouseEvent',{type,x:pick.x,y:pick.y,button:'left',clickCount:1});
     await sleep(120);
-    await ev(`(document.querySelector('.br-custom-hud > .br-custom-actions button') || {}).click?.()`);
+    await ev(`document.querySelector('.br-custom-hud > .br-custom-remove')?.click()`);
     await sleep(220);
     const d = await dbg();
     seen.push({ i, focus: d.customization.view.selected, calls: d.calls, triangles: d.triangles, chosen: JSON.stringify(d.customization.selected) });
@@ -745,7 +758,7 @@ await shot('wall-picture-from-feed.png');
   ok(seen.every((s) => s.focus === s.i),
     'every actual cabinet item selects its own preview');
   ok(seen.every((s) => s.calls > 0 && s.triangles > 0), `the room still submits work under every toggle (${seen.map((s) => s.calls).join(', ')} calls)`);
-  ok(new Set(seen.map((s) => s.chosen)).size >= 4, 'and the toggles change the room state, not just the panel');
+  ok(new Set(seen.map((s) => s.chosen)).size >= 4, 'explicit Use/Remove actions persist the fixture room layout');
   ok(seen.slice(9).every((s) => JSON.parse(s.chosen).props.length === 6), 'the six decoration props each report their own switch');
   ok(await canvases() === 1, 'still one canvas after the whole catalogue has been toggled');
   await shot('room-service-panel.png');
@@ -767,6 +780,7 @@ await shot('wall-picture-from-feed.png');
 {
   await boot(400, 800);
   const errsBefore = errs.length;
+  await configureDecorationFixture();
   await ev(`window.__backroom.scene.customization.open()`);
   await sleep(500);
   ok(await ev(`!document.querySelector('.br-custom-panel').hidden`), 'Room Service opens on a 400x800 viewport');

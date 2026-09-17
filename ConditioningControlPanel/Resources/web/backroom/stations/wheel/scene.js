@@ -23,22 +23,25 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { createRimGlitter } from './rim-glitter.js';
 import { createRenderBudget } from '../../room/render-budget.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { REQUIRED, OPTIONAL } from './nodes.js';
 import { TAU, sliceAt, planLanding, rotationAt } from './wheel.js';
+import { startRecoil } from './juice.js';
 import { FEEL, tick, breath, shiverPx, bezier } from './feel.js';
 import { warpStep, warpedRotation, stepDim, quietMix, quietDone, outlineAlpha, distance01, mixRgb, QUIET, taffyShear, stepShear,
          trailOffset, sliceU, ghostRotations, TAFFY, stepHub, moireRotations, moireSegments, MOIRE, dressOf } from './hypno.js';
 import { createEmi } from './emi.js';
 import { createRoomEmi } from './room-emi.js';
 import { createRoomReward } from './room-reward.js';
-import { createPrizeSector } from './prize-art.js';
+import { createPrizeSector, prizeColor } from './prize-art.js';
+import { drawFace, faceKeys, FACE_MS, R0, R1 } from './slice-art.js';
 import { HIGHLIGHT_MS } from '../../shared/hypno/callout.js';
 
 const LENS_DEG = 30, FIT = 1.16, RISE_MS = 620, SINK_MS = 300, DEFAULT_OMEGA = -0.011, HUB_AT_REST_MS = 33;
 const COLORS = ['#F7BDD2', '#FFEBDD', '#F2AFC9', '#FFE7D2'], GOLD = '#F4D896', SNOOZE = '#C48CA7';
-const CHASE = [0xf7bdd2, 0xffebdd, 0xf2afc9, 0xf4d896].map(c => new THREE.Color(c));
+const CHASE = [0xff328f, 0x963cff, 0x29cfff, 0x36ffc2, 0xffc329, 0xff6742].map(c => new THREE.Color(c));
 const asset = p => new URL(p, import.meta.url).href;
 const clamp = x => Math.min(1, Math.max(0, x));
 const thudEase = x => bezier(FEEL.THUD_EASE, x);
@@ -108,10 +111,12 @@ export async function createScene(o) {
   const originals = new Map(); let model = null, unregister = null, rewardView = null;
   let reduced = !!o.reduced;
   const budget = createRenderBudget(navigator, devicePixelRatio);
-  let lastDraw = -Infinity;
+  let lastDraw = -Infinity, rimGlitter = null;
   const renderer = stage?.renderer || new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'default' });
   if (!stage) renderer.setPixelRatio(budget.dpr(canvas.clientWidth, canvas.clientHeight));
-  if (!stage) { renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; }
+  // Seated, the wheel borrows the room's renderer and inherits its tone mapping. This is the standalone path,
+  // and it matches on purpose: otherwise dev.html and the in-room wheel disagree and the difference gets chased.
+  if (!stage) { renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.6; }
   const scene = stage?.scene || new THREE.Scene(), camera = stage?.camera || new THREE.PerspectiveCamera(LENS_DEG, 16 / 9, 0.05, 30);
   if (!stage) scene.add(new THREE.HemisphereLight(0xfbd7f4, 0x36243e, 1.2));
   if (!stage) for (const [p, c, i] of [[[-3, 4, 5], 0xffd5eb, 2.1], [[3, 2, 3], 0xa5b6ff, 1.4], [[1, 4, -3], 0xff75c1, 2.2]]) {
@@ -129,6 +134,7 @@ export async function createScene(o) {
     cancelDrag();
     cancelAnimationFrame(raf);
     rewardView?.dispose();
+    rimGlitter?.dispose();
     if (settle) settle();
     if (onDown) { canvas.removeEventListener('pointerdown', onDown); canvas.removeEventListener('pointermove', onMove); canvas.removeEventListener('pointerup', onUp); canvas.removeEventListener('pointercancel', onUp); }
     const disposable = [], resources = new Set(), borrowed = new Set();
@@ -140,10 +146,11 @@ export async function createScene(o) {
     });
     if (stage) {
       disposable.forEach(n => n.removeFromParent());
-      originals.forEach((s, n) => { n.visible = s.visible; n.material = s.material; });
+      originals.forEach((s, n) => { n.visible = s.visible; n.material = s.material; n.scale.copy(s.scale); });
       const rotor = model?.getObjectByName('wheel_rotor'), pointer = model?.getObjectByName('pointer');
       if (rotor) rotor.rotation.copy(originals.get(rotor).rotation);
       if (pointer) pointer.rotation.copy(originals.get(pointer).rotation);
+      if (originals.has(model)) model.rotation.copy(originals.get(model).rotation);
       unregister?.();
     }
     owned.forEach(x => resources.add(x));
@@ -158,7 +165,7 @@ export async function createScene(o) {
   } catch (e) { dispose(); throw e; }
   model = gltf.scene; const get = n => model.getObjectByName(n) || null;
   if (!stage) scene.add(model);
-  else model.traverse(n => originals.set(n, { visible: n.visible, material: n.material, rotation: n.rotation.clone() }));
+  else model.traverse(n => originals.set(n, { visible: n.visible, material: n.material, rotation: n.rotation.clone(), scale: n.scale.clone() }));
   const missing = REQUIRED.filter(n => !get(n));
   if (missing.length) return { missing, dispose };
   const absent = OPTIONAL.filter(n => !get(n));
@@ -166,6 +173,7 @@ export async function createScene(o) {
 
   const rotor = get('wheel_rotor'), pointer = get('pointer'), pointerRest = pointer.rotation.z, modelRest = model.position.clone();
   if (get('room_wheel_face')) get('room_wheel_face').visible = false;
+  if (get('wheel_rim_diamonds')) get('wheel_rim_diamonds').visible = false;
   if (get('layout_sectors')) get('layout_sectors').visible = false;
   model.traverse(n => { if (/^(peg_|glyph_)/.test(n.name)) n.visible = false; });
   for (const n of ['title_letters', 'status_letters', 'hub_spiral']) if (get(n)) get(n).visible = false;
@@ -173,6 +181,7 @@ export async function createScene(o) {
   if (atlas) Object.assign(atlas, { flipY: false, colorSpace: THREE.SRGBColorSpace, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, generateMipmaps: false });
   owned.push(...(atlas ? [atlas] : []));
   emi = stage ? createRoomEmi(stage.emi, o.hud) : createEmi({ root: model, faceMesh: get('EMI_glass'), atlas, hud: o.hud, reduced });
+  emi.setReduced(reduced);
 
   const screens = {};
   for (const [name, w] of [['title_screen', 1024], ['status_screen', 1024]]) {
@@ -201,10 +210,12 @@ export async function createScene(o) {
   bulbs.sort((a, b) => a.name.localeCompare(b.name));
   const halos = bulbs.map(b => {
     b.material = b.material.clone(); owned.push(b.material);
+    b.scale.multiplyScalar(1.45);
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: halo, color: 0xffffff, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
     s.position.copy(b.position); s.position.z += 0.038; s.scale.setScalar(0.24); b.parent.add(s);
     return s;
   });
+  rimGlitter = createRimGlitter(rotor.parent, rotor.position, budget.mobile ? 80 : 144);
   // The Loom hub: a runtime disc on the rotor sized from hub_lip (else hub_spiral), a 256 CanvasTexture the kit paints.
   // It replaces the neon tube, which stays only when neither hub node exists.
   let dress = { ...dressOf(), ...(o.dress || {}) };
@@ -218,9 +229,11 @@ export async function createScene(o) {
     const radius = Math.max(0.02, Math.min(box.max.x - box.min.x, box.max.y - box.min.y) / 2 - tube);
     const c = document.createElement('canvas'); c.width = c.height = 256;
     const tex = canvasTexture(c); owned.push(tex);
+    // Mirror the arms locally; negate the painted angle below to preserve the turn.
+    tex.repeat.x = -1; tex.offset.x = 1;
     const disc = new THREE.Mesh(new THREE.CircleGeometry(radius, 64), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
     disc.name = 'hub_loom'; disc.position.z = box.max.z + 0.0015; rotor.add(disc);
-    hub = { c, tex, disc, radius, mode: null, rot: 0, at: -Infinity };
+    hub = { c, tex, disc, radius, mode: null, rot: 0, direction: 1, at: -Infinity };
   } else {
     // The neon hub spiral (a flowing tube, scenery, not a breather).
     const pts = [];
@@ -247,7 +260,10 @@ export async function createScene(o) {
   function paintHub(t, dtS) {
     if (!hub) return;
     const mode = dress.hub;
-    hub.rot = stepHub(hub.rot, frameSpeed, dtS, plan && plan.w ? plan.w.scale : 1, dress.k);   // always clockwise (law 3), Calm at half
+    if (rotating() && frameSpeed > 0.05) hub.direction = -Math.sign(omega);
+    else if (!rotating()) hub.direction = 1;
+    const advance = stepHub(0, frameSpeed, dtS, plan && plan.w ? plan.w.scale : 1, dress.k);
+    hub.rot += hub.direction * advance;
     // Loom: the disc holds still against the rotor, so the field's own angle is its whole turn on screen.
     hub.disc.rotation.z = mode === 'loom' ? -rotor.rotation.z : 0;
     if (mode === 'star') { if (hub.mode !== 'star') { paintStar(hub.c); hub.tex.needsUpdate = true; } hub.mode = mode; return; }
@@ -255,7 +271,7 @@ export async function createScene(o) {
     hub.mode = mode;
     if (!fresh && !rotating() && t - hub.at < HUB_AT_REST_MS) return;
     hub.at = t;
-    if (o.paintHub && o.paintHub(hub.c, hub.rot, t)) hub.tex.needsUpdate = true;
+    if (o.paintHub && o.paintHub(hub.c, -hub.rot, t)) hub.tex.needsUpdate = true;
   }
 
   // Moire rim: two rings of 60 fine lines just outside the slices, Full only.
@@ -279,6 +295,26 @@ export async function createScene(o) {
   // Runtime slices from the server's table.
   let layout = null, sliceGroup = null, ghosts = null, outline = null;
   const shearU = { value: 0 };
+  /** THE PICTURE ON THE WEDGES (slice-art.js): one canvas over the whole ring, one texture, one draw call, and
+   *  the same taffy twist as the enamel under it so the art smears with the slices instead of sliding over them.
+   *  It carries no userData, so every per-frame loop below (the peg ring, the colour wash, the emissive pulse)
+   *  skips it by the guards they already have. */
+  let face = null;
+  function buildFace(group) {
+    const S = budget.mobile ? 512 : 768;
+    const c = document.createElement('canvas'); c.width = c.height = S;
+    const tex = canvasTexture(c);
+    const mat = twist(new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }), shearU);
+    // A DECAL, and it is treated like one. The enamel's front face is at .076 + depth .018 + bevel .003 = .097,
+    // so the first guess of .0955 put the art UNDER the wedge it was painted for and nothing showed. .0975 clears
+    // it and still passes under the brass trim (.098) and the labels (.102), and the polygon offset keeps that
+    // half-millimetre from z-fighting at a grazing angle.
+    Object.assign(mat, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+    const mesh = new THREE.Mesh(new THREE.RingGeometry(R0, R1, 128, 1), mat);
+    mesh.position.z = 0.0975;
+    group.add(mesh);
+    face = { c, tex, at: -Infinity, dirty: true, painted: false, key: null };
+  }
   function setLayout(next) {
     if (sliceGroup) { rotor.remove(sliceGroup); sliceGroup.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material) { if (n.material.map) n.material.map.dispose(); n.material.dispose(); } }); }
     if (ghosts) { ghosts.forEach(g => { rotor.parent.remove(g); g.material.dispose(); }); ghosts[0].geometry.dispose(); ghosts = null; }
@@ -290,6 +326,8 @@ export async function createScene(o) {
       flat.push({ pts, color });
       sliceGroup.add(mesh, label, peg, border);
     }
+    face = null;   // the old canvas and texture went with sliceGroup's teardown above
+    buildFace(sliceGroup);
     rotor.add(sliceGroup);
     under = sliceAt(layout, rotor.rotation.z).index; lit = under;
     // Taffy smear: the whole ring flattened into one vertex-coloured geometry, four ghosts at alpha 0.16 over the slices.
@@ -340,6 +378,8 @@ export async function createScene(o) {
 
   // Motion state.
   let phase = 'hidden', tl = null, coast = null, plan = null, under = 0, lit = 0, crossAt = -Infinity, ladder = null;
+  let recoilAt = -Infinity, recoilDirection = 1;
+  const modelTilt = model.rotation.z;
   let landed = -1, thudAt = -Infinity, kickAt = -Infinity, kickSign = 1, kickAmp = 0, shiverAt = -Infinity;
   let hitAt = -Infinity, hitIndex = -1;   // THE GLYPH HIT: the landed slice's emissive pulse over HIGHLIGHT_MS (callout.js)
   let party = null, heat = 0, gold = false, energy = 0, lightMotion = 0, prev = performance.now();
@@ -348,8 +388,25 @@ export async function createScene(o) {
   const rotating = () => !!(drag || coast || plan);
 
   /** The v3 page effects for one frame (CONTRACT 10.13.F): hub, taffy, moire, quiet room, and the dim for the station. */
+  /** The wedge art, on the decoder's own clock (12 Hz). Still (Calm or reduced motion) paints the deck's first
+   *  frame ONCE and then stops entirely: a held wheel is a wheel with a picture printed on it, not a slow one. */
+  function paintFace(t) {
+    if (!face || !layout) return;
+    const media = typeof o.sliceMedia === 'function' ? o.sliceMedia() : null;   // read every paint: suspend frees it
+    const still = reduced || !!dress.calm;
+    if (!face.key) face.key = faceKeys(media, layout);
+    if (media) media.tick(t, face.key || []);
+    const state = media?.debug();
+    const ready = state?.ready || 0, frames = state?.frames || 0;
+    if (!face.dirty && still && face.painted && face.ready === ready && face.frames === frames && ready + (state?.failed || 0) === media?.size) return;
+    if (!face.dirty && t - face.at < FACE_MS) return;
+    face.at = t; face.dirty = false;
+    face.ready = ready; face.frames = frames;
+    if (drawFace(face.c, layout, media, face.key, prizeColor, still ? 0 : t)) { face.tex.needsUpdate = true; face.painted = true; }
+  }
   function hypnoFrame(t, dtMs) {
     paintHub(t, dtMs / 1000);
+    paintFace(t);
     const turning = rotating() && frameSpeed > 0.05;
     shear = stepShear(shear, dress.taffy && turning ? taffyShear(frameSpeed, dress.k) : 0, dtMs);
     const sign = omega < 0 ? -1 : 1;
@@ -399,6 +456,8 @@ export async function createScene(o) {
       camera.position.lerpVectors(tl.kind === 'rise' ? back : play.pos, tl.kind === 'rise' ? play.pos : back, k); camera.lookAt(play.look);
       if (q >= 1) { const done = tl.done; phase = tl.kind === 'rise' ? 'play' : 'hidden'; tl = null; done(); }
     }
+    const attracting=phase==='play'&&!reduced&&!coast&&!plan&&!drag&&landed<0;
+    if(attracting)rotor.rotation.z+=dt*.10;
     if (coast) rotor.rotation.z += coast.omega * dt * 1000;
     slowing = false;
     if (plan && plan.warp) {
@@ -423,13 +482,14 @@ export async function createScene(o) {
       }
       for (const m of sliceGroup.children) {
         if (m.userData.index === undefined || !m.material.emissive) continue;
-        const i = m.userData.index, isLanded = i === landed && !rotating(), goal = isLanded ? 1 : i === lit && rotating() ? 0.68 : 0;
+        const i = m.userData.index, isLanded = i === landed && !rotating(), goal = isLanded ? 1 : i === lit && (rotating() || attracting) ? 0.68 : 0;
         m.userData.h = reduced ? goal : THREE.MathUtils.lerp(m.userData.h, goal, 1 - Math.exp(-dt * (goal > m.userData.h ? 45 : 10)));
         const tq = (t - thudAt) / FEEL.THUD_MS, flash = isLanded && tq >= 0 && tq < 1 ? (reduced ? 1.3 : 1 + 1.2 * (1 - thudEase(tq))) : 1;
         const hq = (t - hitAt) / HIGHLIGHT_MS, hit = i === hitIndex && hq >= 0 && hq < 1 ? 1 + 1.6 * Math.sin(hq * Math.PI) : 1;   // the rim glow, 0..400 ms
         m.material.emissiveIntensity = m.userData.h * flash * hit;
       }
     }
+    model.rotation.z = modelTilt + startRecoil(t - recoilAt, recoilDirection, reduced || dress.calm);
     // Pointer: a damped kick per played tick, a knock on the landing (THE THUD). Reduced: at rest.
     pointer.rotation.z = pointerRest;
     if (!reduced) { const q = (t - kickAt) / 1000; if (q >= 0 && q < 0.6) pointer.rotation.z += kickSign * kickAmp * Math.exp(-18 * q) * Math.sin(q * 35); }
@@ -438,21 +498,22 @@ export async function createScene(o) {
     const target = rotating() ? 1 : partying ? Math.min(1, 0.35 + heat * 0.18) : 0;
     energy = reduced ? target : THREE.MathUtils.lerp(energy, target, 1 - Math.exp(-dt * 5));
     if (!reduced) lightMotion += dt * (0.65 + energy * 3.2);
-    const prize = gold && partying ? CHASE[3] : null;
+    const prize = gold && partying ? CHASE[4] : null;
     bulbs.forEach((b, i) => {
-      const p = i / 8 + lightMotion * 0.6, j = Math.floor(p), c = CHASE[j % 4].clone().lerp(CHASE[(j + 1) % 4], p - j);
+      const p = i * CHASE.length / bulbs.length + lightMotion * 0.35, j = Math.floor(p), c = CHASE[j % CHASE.length].clone().lerp(CHASE[(j + 1) % CHASE.length], p - j);
       if (prize) c.lerp(prize, 0.75);
       const wave = reduced ? 0.55 : Math.pow(0.5 + 0.5 * Math.cos((i / bulbs.length) * TAU * 3 - lightMotion * 2), 3);
-      b.material.color.copy(c); b.material.emissive.copy(c); b.material.emissiveIntensity = 0.65 + wave * (0.85 + energy * 0.45);
-      halos[i].material.color.copy(c); halos[i].material.opacity = 0.38 + wave * 0.36 + energy * 0.1; halos[i].scale.setScalar(0.21 + wave * 0.065);
+      b.material.color.copy(c); b.material.emissive.copy(c); b.material.emissiveIntensity = 0.55 + wave * (0.55 + energy * 0.25);
+      halos[i].material.color.copy(c); halos[i].material.opacity = 0.38 + wave * 0.36 + energy * 0.1; halos[i].scale.setScalar(0.30 + wave * 0.075);
     });
+    rimGlitter.update(dt, reduced || !!dress.calm, energy, true, canvas.clientHeight || 720);
     neon.clock.value = lightMotion * 2; neon.energy.value = energy;
     if (starMat) starMat.emissiveIntensity = reduced ? 0.45 : partying || rotating() ? (gold && partying ? 1.4 : 0.2) : 0.2 + 0.55 * breath(t);
     sparks.forEach((s, i) => {
       const age = partying && party.sparks ? t - party.start - i * 55 : -1;
-      s.visible = age >= 0 && age < 570 && !!star;
+      s.visible = !reduced && !dress.calm && age >= 0 && age < 570 && !!star;
       if (!s.visible) return;
-      const q = age / 570; star.getWorldPosition(s.position); s.position.y += 0.58 + Math.sin(q * Math.PI) * 0.3; s.position.x += (i - 3) * 0.09 * q; s.position.z += 0.1 + q * 0.2;
+      const q = age / 570; star.getWorldPosition(s.position); model.worldToLocal(s.position); s.position.y += 0.58 + Math.sin(q * Math.PI) * 0.3; s.position.x += (i - 3) * 0.09 * q; s.position.z += 0.1 + q * 0.2;
     });
     if (party && t >= party.end) party = null;
     // THE SHIVER: the whole wheel, +-4 px across the screen. Reduced motion plays nothing.
@@ -520,10 +581,10 @@ export async function createScene(o) {
     resize, screen, setLayout, dispose,
     revealReward(result, still = reduced) { return rewardView?.reveal(result, still) || false; },
     /** Live dress (hypno.dressOf): the hub mode, Full-only moire and taffy, k. */
-    setDress(d) { dress = { ...dress, ...(d || {}) }; },
+    setDress(d) { dress = { ...dress, ...(d || {}) }; if (face) face.dirty = true; },
     /** Live reduced motion / Calm (a settings frame): the next gesture, landing, rise or sink takes the settled
      *  state. A landing already in flight finishes its path (no jump mid-turn); the stage dim and EMI settle now. */
-    setReduced(on) { reduced = !!on; emi.setReduced(reduced); rewardView?.setStill(reduced); if (reduced) dim = 0; },
+    setReduced(on) { reduced = !!on; emi.setReduced(reduced); rewardView?.setStill(reduced); if (reduced) dim = 0; if (face) face.dirty = true; },
     /** The slice's own colour, for the landing wash. */
     sliceColor(index) {
       const m = sliceGroup && sliceGroup.children.find(n => n.userData && n.userData.base !== undefined && n.userData.index === index);
@@ -536,7 +597,7 @@ export async function createScene(o) {
     /** Put the rotor at `r` with no travel (a replay, a reduced landing). */
     setRotation(r, landedIndex = -1) { coast = null; plan = null; rotor.rotation.z = r; lastRot = r; landed = landedIndex; quietAt = -Infinity; if (layout) { under = sliceAt(layout, r).index; lit = under; } },
     /** Law VIII: the wheel starts turning this frame, before the server answers. */
-    coast(omega = DEFAULT_OMEGA) { if (reduced) return; landed = -1; quietAt = -Infinity; ladder = null; plan = null; coast = { omega }; },
+    coast(omega = DEFAULT_OMEGA) { if (reduced) return; landed = -1; quietAt = -Infinity; ladder = null; plan = null; coast = { omega }; recoilAt = performance.now(); recoilDirection = Math.sign(omega); },
     /** Retarget the coast (or a rest) onto `landing`; resolves when the pointer settles. Reduced: at once. */
     land(landing, index) {
       const omega = coast ? coast.omega : DEFAULT_OMEGA;
@@ -565,6 +626,7 @@ export async function createScene(o) {
       cancelDrag();
       rewardView?.skip();
       if (plan) { const p = plan; plan = null; rotor.rotation.z = p.to; if (p.done) p.done(); }
+      recoilAt = -Infinity; model.rotation.z = modelTilt;
       coast = null; party = null; shiverAt = thudAt = kickAt = hitAt = -Infinity; energy = 0; dim = 0; shear = 0; emi.skip();
     },
     /** A point in client px: 'landed' is the landed slice's printed face, else a node's centre. */
@@ -591,6 +653,7 @@ export async function createScene(o) {
     debug() {
       return { rotation: rotor.rotation.z, under: layout ? layout[under].id : null, lit: layout ? layout[lit].id : null, landed: landed >= 0 && layout ? layout[landed].id : null,
                coasting: !!coast, planning: !!plan, dragging: !!drag, energy, heat, gold, party: !!party, face: emi.face, mood: emi.mode,
+               face: face ? { painted: face.painted, at: face.at, size: face.c.width, key: face.key } : null,
                pointer: pointer.rotation.z - pointerRest, shiverPx: reduced ? 0 : shiverPx(performance.now() - shiverAt),
                hit: hitIndex >= 0 && layout ? { slice: layout[hitIndex].id, on: performance.now() - hitAt < HIGHLIGHT_MS } : null,
                star: starMat ? starMat.emissiveIntensity : null, calls: renderer.info.render.calls,

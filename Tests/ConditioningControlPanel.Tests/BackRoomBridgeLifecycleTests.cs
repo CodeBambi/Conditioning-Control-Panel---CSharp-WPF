@@ -146,4 +146,24 @@ public class BackRoomBridgeLifecycleTests
         var s = Assert.Single(rig.Of("suspend"));
         Assert.Equal((true, "minimise"), ((bool)s["on"]!, (string?)s["reason"]));
     }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void QueuedBalance_RechecksAccountAndBridgeLifetime(bool close)
+    {
+        Action? queued = null;
+        bool current = true;
+        int writes = 0;
+        var rig = new Rig();
+        var bridge = new BackRoomBridge(new BackRoomBridge.Deps {
+            Post = _ => { }, Relay = rig.Relay, BuildInit = () => new { },
+            CloseWindow = () => { }, Schedule = rig.Clock.Schedule,
+            OnUi = action => queued = action, SetSp = _ => writes++
+        });
+        bridge.AdoptSp(42, () => current);
+        Assert.NotNull(queued);
+        if (close) bridge.CloseNow(); else current = false;
+        queued!();
+        Assert.Equal(0, writes);
+    }
 }

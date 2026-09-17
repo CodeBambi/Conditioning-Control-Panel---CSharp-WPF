@@ -1,5 +1,17 @@
+/* room-reward.js - THE PRIZE MOMENT on the room renderer: the actual prop model, cloned camera-facing.
+ *
+ * The lid used to lift on a linear 0.62 s ramp, which is the one move in the room that reads as a loading bar.
+ * It now lifts on THE REVEAL's curve (CONTRACT 10.22, feel.FEEL.REVEAL_EASE): 620 ms, one overshoot past the
+ * open position and back, the same curve the flat cloche and the jackpot count-up ride. Law VI: `still`
+ * (reduced motion or Calm) takes the lid OPEN at once - the settled state, never a faster version of the lift.
+ * Decoration clones borrow every source resource; nothing here mints a prize (Law I). */
+
 import * as T from 'three';
+import { FEEL, bezier } from './feel.js';
 const MODELS={monstera:'prop_monstera',ivy:'prop_hanging_ivy',terrarium:'prop_terrarium',gallery:'prop_gallery_landscape',portraits:'prop_portrait_pair',billboard:'prop_deco_billboard'};
+/** THE REVEAL's eased progress `ms` into the lift, 0..1 (and briefly past 1: the overshoot). */
+const revealQ=ms=>bezier(FEEL.REVEAL_EASE,Math.min(1,ms/FEEL.REVEAL_MS));
+
 /** A camera-facing reward on the room renderer. Decoration clones borrow every source resource. */
 export function createRoomReward(stage, loom) {
   const group=new T.Group();group.name='wheel_reward';group.visible=false;stage.scene.add(group);
@@ -29,8 +41,9 @@ export function createRoomReward(stage, loom) {
   function update(now){if(!group.visible)return;const age=(now-started)/1000;
     group.position.copy(stage.camera.position).add(new T.Vector3(0,-.025,-.7).applyQuaternion(stage.camera.quaternion));group.quaternion.copy(stage.camera.quaternion);
     const height=2*.7*Math.tan(stage.camera.fov*Math.PI/360),width=height*stage.camera.aspect;group.scale.setScalar(Math.min(width/.65,height/.8));
-    if(lid)lid.position.y=-.085+.24*(still?1:Math.min(1,age/.62));
-    eyes.forEach((eye,i)=>{eye.position.x=(i?1:-1)*(.065+(still?0:.035*Math.max(0,1-age/.62)));});
+    const q=still?1:revealQ(age*1000);
+    if(lid)lid.position.y=-.085+.24*q;
+    eyes.forEach((eye,i)=>{eye.position.x=(i?1:-1)*(.065+.035*Math.max(0,1-q));});
     if(age>4)group.visible=false;
   }
   return {reveal,update,setStill(on){if(on){still=true;update(performance.now());}},skip(){group.visible=false;},dispose(){clear();group.removeFromParent();}};

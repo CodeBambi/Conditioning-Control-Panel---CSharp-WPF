@@ -15,9 +15,9 @@
  *                                      text has dissolved (CALLOUT_MS). A show while one is up replaces it.
  *                                      DRAWN: centred over the station, 60% -> 130% toward the viewer over 1 s,
  *                                      hold 200 ms, dissolve 400 ms under a chromatic smear (two offset copies).
- *                                      small ~7vh; big 10vh, gold rim; hero 14vh, rim and a short shake.
+ *                                      small ~9vh; big 13vh, gold rim; hero 17vh, rim and a short shake.
  *   .word(text, { chain, reversed, seed })
- *                                      the subliminal word BIG at centre (~12vh), same zoom, house colours
+ *                                      the subliminal word BIG at centre (~30vh), same zoom, house colours
  *                                      (pink to purple, sometimes a two-stop gradient, seeded when `seed` is given).
  *                                      In 80 ms, hold 500 ms, out 400 ms. `chain` (1..2 more words) plays back to
  *                                      back, WORD_GAP_MS between onsets, colours drifting along the chain (a host clip
@@ -69,7 +69,7 @@ export const WORD_MS = WORD_IN_MS + WORD_HOLD_MS + WORD_OUT_MS;   // 980: one wo
 export const WORD_GAP_MS = 500;                                   // onset to onset along a chain
 export const WORD_TUNNEL_MS = 500;                                // the tunnel's way in, and its way out
 export const WORD_TUNNEL_LEVEL = 0.6;
-export const WORD_SIZE_VH = 12;
+export const WORD_SIZE_VH = 30;
 export const WORD_MAX_LINES = 3;                                  // a long phrase wraps, it is never squeezed
 export const WORD_WRAP_AT = 12;                                   // past this many characters it takes 2 lines
 export const WORD_FIT_VW = 0.9;                                   // the block sits inside 90% of the viewport
@@ -79,10 +79,11 @@ export const REVERSE_ODDS = 100;                                  // 1 in 100 pe
 export const MAX_WORD_HOLD_MS = 3000;                             // the longest a host clip may hold the next word back
 export const SETTLE_MS = 600;
 export const BARK_MS = 2400;
-export const TIER_VH = Object.freeze({ small: 7, big: 10, hero: 14 });
+export const TIER_VH = Object.freeze({ small: 9, big: 13, hero: 17 });
 const TUNNEL_STEP_MS = 50;
 const SPEECH = Object.freeze({ rate: 0.85, pitch: 0.8, reversedRate: 0.7 });
-const FONT_STACK = '"Bahnschrift Condensed", "Bahnschrift SemiBold Condensed", "Arial Narrow", "Roboto Condensed", Impact, "Segoe UI", Arial, sans-serif';
+const FONT_STACK = '"Back Room Rounded", "Arial Rounded MT Bold", "Segoe UI", sans-serif';
+const ROUND_FONT = new URL('../text/fonts/fredoka-latin.woff2', import.meta.url).href;
 
 /** EMI's dead-spin barks: playful, never mocking. Rotates in order, so eight spins hear eight lines. */
 export const DEAD_BARKS = Object.freeze([
@@ -143,10 +144,10 @@ export function wordBlock(text, { sizeVh = WORD_SIZE_VH, maxLines = WORD_MAX_LIN
   const px = (size) => size * vh / 100;
   const metric = typeof measure === 'function' ? (t, size) => measure(String(t), px(size))
     : (t, size) => String(t).length * px(size) * GLYPH_W;
-  const fit = fitText(str, { measure: metric, width: vw * WORD_FIT_VW / ZOOM.to, maxLines,
+  const fit = fitText(str, { measure: metric, width: vw * WORD_FIT_VW / ZOOM.to, maxLines: str.trim() && !/\s/.test(str.trim()) ? 1 : maxLines,
     minLines: str.replace(/\s+/g, ' ').trim().length > WORD_WRAP_AT ? 2 : 1,
     min: 4, max: sizeVh, lineHeight: WORD_LINE_H });
-  return { sizeVh: fit.size, lines: fit.lines };
+  return { sizeVh: Math.min(fit.size, 78 / (fit.lines.length * WORD_LINE_H * ZOOM.to)), lines: fit.lines };
 }
 
 /**
@@ -255,16 +256,17 @@ function hush() { try { const S = globalThis.speechSynthesis; if (S && typeof S.
 
 /* ------------------------------------------------------------------ the DOM */
 const CSS = `
+@font-face{font-family:"Back Room Rounded";src:url("${ROUND_FONT}") format("woff2");font-weight:300 700;font-display:swap}
 .br-callout{position:absolute;inset:0;z-index:60;pointer-events:none;overflow:hidden}
-.br-callout-text{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.6);opacity:0;font-weight:800;line-height:1;
-  letter-spacing:.02em;text-align:center;white-space:nowrap;max-width:96vw;color:#ffe6f6;text-shadow:0 2px 12px #0d0616,0 0 28px #ff5fa280;
+.br-callout-text{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.6);opacity:0;font-weight:700;line-height:1;paint-order:stroke fill;-webkit-text-stroke:1px #5d225f;
+  letter-spacing:.02em;text-align:center;white-space:nowrap;max-width:96vw;color:#ff73cb;text-shadow:0 2px 12px #0d0616,0 0 28px #ff5fa280;
   will-change:transform,opacity}
-.br-callout-text[data-tier=big]{-webkit-text-stroke:2px #e8c27a;text-shadow:0 2px 12px #0d0616,0 0 26px #e8c27a99}
-.br-callout-text[data-tier=hero]{-webkit-text-stroke:3px #e8c27a;text-shadow:0 2px 14px #0d0616,0 0 36px #e8c27acc,0 0 70px #ff5fa266}
+.br-callout-text[data-tier=big]{color:#62efda;-webkit-text-stroke:2px #e8c27a;text-shadow:0 2px 12px #0d0616,0 0 26px #e8c27a99}
+.br-callout-text[data-tier=hero]{color:#ffc354;-webkit-text-stroke:3px #e8c27a;text-shadow:0 2px 14px #0d0616,0 0 36px #e8c27acc,0 0 70px #ff5fa266}
 .br-callout-text[data-lines]{white-space:pre-line;line-height:1.05}
 .br-callout-text .br-callout-ghost{position:absolute;inset:0;opacity:0;mix-blend-mode:screen;-webkit-text-stroke:0;text-shadow:none}
 .br-callout-text .br-callout-ghost.r{color:#ff3d8f}.br-callout-text .br-callout-ghost.b{color:#5fb0ff}
-.br-callout-word{color:transparent;-webkit-background-clip:text;background-clip:text;text-shadow:none;filter:drop-shadow(0 2px 10px #0d0616)}
+.br-callout-word{font-weight:700;-webkit-text-stroke:.018em #e958ce;color:transparent;-webkit-background-clip:text;background-clip:text;text-shadow:none;filter:drop-shadow(0 3px 0 #49164f) drop-shadow(0 0 14px #ec81e780)}
 .br-callout-word .br-callout-ghost{color:#ff3d8f;-webkit-background-clip:border-box;background-clip:border-box;-webkit-text-fill-color:#ff3d8f}
 .br-callout-word .br-callout-ghost.b{color:#5fb0ff;-webkit-text-fill-color:#5fb0ff}
 .br-callout-sweep{position:absolute;top:0;bottom:0;left:0;width:34%;opacity:.2;pointer-events:none;
@@ -294,7 +296,7 @@ function stopAnim(a) { if (a) { try { a.cancel(); } catch (e) { /* noop */ } } }
  * @param {Object} [o.ctx]         the station ctx: fxTunnel, gates, reduced, intensity
  * @param {Object} [o.moments]     a createMoments(ctx) to share; else one is made from ctx here
  * @param {Object} [o.emi]         { react(kind) } | { trigger(kind) }, optional anchor() -> { x, y } viewport px
- * @param {string} [o.font]        the cabinet's display font stack; else a bold condensed system stack
+ * @param {string} [o.font]        the cabinet's display font stack; else the bundled rounded display stack
  * @param {number} [o.seed]        default seed for .word() when a call gives none
  * @param {Object} [o.cues]        { play(cue, opts) } to use instead of the kit adapter (tests)
  * @param {Object|null} [o.voice]  the host voice (voice.js). Omitted = the real one; null forces speechSynthesis (tests)
@@ -302,10 +304,12 @@ function stopAnim(a) { if (a) { try { a.cancel(); } catch (e) { /* noop */ } } }
 export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, moments = null, emi = null, font = '', seed, cues = null, voice } = {}) {
   const shown = [], words = [], tunnelLog = [], cueLog = [], barks = [], speechLog = [], voiceLog = [];
   const doc = mount && mount.ownerDocument ? mount.ownerDocument : (typeof document !== 'undefined' ? document : null);
-  const reduced = () => !!(ctx && ctx.reduced) || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const reduced = () => !!(ctx && (ctx.reduced || ctx.motion === 'off' || ctx.motion === 'still' || ctx.userStill)) || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
   const own = !moments && ctx && typeof ctx.fxTunnel === 'function' ? createMoments(ctx, { station: 'callout' }) : null;
   const tunnelPath = moments || own;
   const sound = cues && typeof cues.play === 'function' ? { play(c, o) { cueLog.push({ cue: c, ...o, at: nowMs() }); cues.play(c, o); } } : createCues(cueLog);
+  ensureStyle(doc);
+  try { doc?.fonts?.load('700 48px \"Back Room Rounded\"')?.catch(() => {}); } catch {}
   const timers = new Set(), anims = new Set();
   let layer = null, textEl = null, wordEls = [], tunnelTimer = 0, tunnelPosted = 0, barkAt = 0, disposed = false;
   // The host voice when there is a host; null (or an explicit null) leaves every word on speechSynthesis.
@@ -322,7 +326,7 @@ export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, mom
       try { const c = doc && doc.createElement ? doc.createElement('canvas') : null; metricCtx = c && c.getContext ? c.getContext('2d') : null; } catch (e) { metricCtx = null; }
     }
     if (!metricCtx || typeof metricCtx.measureText !== 'function') return null;
-    try { metricCtx.font = `800 ${px}px ${fontStack()}`; return metricCtx.measureText(str).width; } catch (e) { return null; }
+    try { metricCtx.font = `700 ${px}px ${fontStack()}`; return metricCtx.measureText(str).width; } catch (e) { return null; }
   }
   const wordMeasure = (str, px) => { const w = textWidth(str, px); return w === null ? String(str).length * px * 0.5 : w; };
 
@@ -385,8 +389,11 @@ export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, mom
     }
     track(animate(el, [
       { transform: tf(from), opacity: 0, offset: 0 },
-      { transform: tf(from + (to - from) * 0.12), opacity: 1, offset: Math.min(0.06, tHold * 0.5) },
+      { transform: tf(from + (to - from) * 0.12), opacity: 1, offset: Math.min(0.06, tHold * 0.2) },
+      { transform: tf(from+(to-from)*.55) + ' rotate(-3deg) scaleY(1.05)', opacity: 1, offset: tHold*.4 },
+      { transform: tf(from+(to-from)*.9) + ' rotate(2deg) scaleY(.98)', opacity: 1, offset: tHold*.72 },
       { transform: tf(to), opacity: 1, offset: tHold },
+      { transform: tf(to * .97) + ' scaleY(1.02)', opacity: 1, offset: tHold + (tOut-tHold)*.5 },
       { transform: tf(to), opacity: 1, offset: tOut },
       { transform: tf(to * 1.06), opacity: 0, offset: 1 },
     ], { duration: total, fill: 'forwards', easing: 'cubic-bezier(.2,.7,.2,1)' }));
@@ -502,7 +509,8 @@ export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, mom
       const text = lex(key, fallback) || fallback;
       shown.push({ key, text, tier: t, at: typeof performance !== 'undefined' ? performance.now() : Date.now(), schedule: { ...ZOOM, sizeVh: TIER_VH[t] } });
       dropText();
-      textEl = makeText(text, TIER_VH[t], '');
+      const block = wordBlock(text, { sizeVh: TIER_VH[t], measure: wordMeasure });
+      textEl = makeText(text, block.sizeVh, '', block.lines);
       if (textEl) { textEl.setAttribute('data-tier', t); zoomIn(textEl, ZOOM); if (t === 'hero') shake(); }
       const mine = textEl;
       return { done: new Promise((r) => after(CALLOUT_MS, () => { if (textEl === mine) dropText(); r(); })) };

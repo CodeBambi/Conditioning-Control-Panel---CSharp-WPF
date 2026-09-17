@@ -1,13 +1,19 @@
+@import url("../../shared/back.css");
 /* station.css - Daily Daze wheel station chrome, the slot station's look (stations/slot/station.css) scoped
    under .wheel-station so the room's own styles never collide. */
 .wheel-station { position: absolute; inset: 0; z-index: 20; overflow: hidden; color: #fce5f3;
   font-family: Segoe UI, Arial, sans-serif; color-scheme: dark; }
 .wheel-station * { box-sizing: border-box; }
 .wheel-station button, .wheel-station summary { font: inherit; cursor: pointer; }
-.wheel-station button { border: 1px solid #ab79a766; color: #fce5f3; background: #28172fe8; border-radius: 10px;
-  padding: 10px 18px; min-height: 40px; transition: background .15s, transform .1s; }
-.wheel-station button:hover { background: #583056; }
-.wheel-station button:active { transform: scale(.96); }
+.wheel-station button { border: 1px solid #c58bbd59; border-top-color: #efc0e47a; color: #fce5f3; border-radius: 11px;
+  padding: 10px 18px; min-height: 40px; background: linear-gradient(180deg, #3d2449, #2a1734 54%, #1d0f26);
+  box-shadow: inset 0 1px 0 #ffeafb26, inset 0 -2px 0 #00000057, 0 2px 0 #150b1f, 0 6px 16px #05020a73;
+  text-shadow: 0 1px 2px #0a0512cc; transition: background .15s, box-shadow .12s, transform .08s; }
+.wheel-station button:hover:not(:disabled) { background: linear-gradient(180deg, #55305f, #3a1f46 54%, #27142f);
+  border-color: #ffb7e08c; box-shadow: inset 0 1px 0 #fff0fc3d, inset 0 -2px 0 #00000057, 0 2px 0 #150b1f, 0 8px 22px #0b0416a1; }
+.wheel-station button:active:not(:disabled) { transform: translateY(2px);
+  background: linear-gradient(180deg, #24132e, #2e1a39 60%, #351f40);
+  box-shadow: inset 0 3px 7px #00000080, inset 0 -1px 0 #ffeafb12, 0 0 0 #150b1f; }
 .wheel-station button:focus-visible, .wheel-station summary:focus-visible { outline: 2px solid #ff8ed2; outline-offset: 3px; }
 .wheel-station button:disabled { opacity: .5; cursor: default; }
 .wheel-station [hidden] { display: none !important; }
@@ -45,15 +51,17 @@
 /* Law VIII: a press answers on its frame with a ring (a state, so reduced motion keeps it). */
 .wheel-station .is-ringing, .wheel-station .wheel-back:active { box-shadow: 0 0 0 3px #ff8ed2cc !important; }
 
-.wheel-spin { position: absolute; z-index: 4; right: 22px; bottom: 18px; min-width: 132px; font-weight: 700; color: #26122f !important;
+.wheel-spin { position: absolute; z-index: 4; right: 22px; bottom: max(18px, var(--br-sill, 0px)); min-width: 132px; font-weight: 700; color: #26122f !important;
   background: linear-gradient(135deg, #e59cca, #a562b4) !important; border-color: #efc4de !important;
   box-shadow: inset 0 1px 0 #fff5, 0 4px 22px #c767b32b, 0 5px 24px #08040b99; }
 .wheel-spin span, .wheel-spin small { display: block; }
 .wheel-spin small { font-size: 10px; font-weight: 500; opacity: .85; font-variant-numeric: tabular-nums; }
 
-.wheel-odds { position: absolute; left: 22px; bottom: 18px; z-index: 4; font-size: 12px; max-width: min(380px, calc(100vw - 190px)); }
+.wheel-odds { position: absolute; left: 22px; bottom: max(18px, var(--br-sill, 0px)); z-index: 4; font-size: 12px; max-width: min(380px, calc(100vw - 190px)); }
 .wheel-odds summary { list-style: none; border: 1px solid #ab79a766; background: #28172fe8; border-radius: 8px; padding: 7px 12px; display: inline-block; }
-.wheel-odds[open] { background: #24142df5; border: 1px solid #ab79a766; border-radius: 12px; padding: 10px; max-height: calc(100vh - 150px); overflow: auto; }
+/* dvh, not vh: see roulette/station.css. The vh line is the fallback and has to come first. */
+.wheel-odds[open] { background: #24142df5; border: 1px solid #ab79a766; border-radius: 12px; padding: 10px; overflow: auto;
+  max-height: calc(100vh - 150px); max-height: calc(100dvh - 150px); }
 .wheel-odds table { border-collapse: collapse; margin-top: 8px; width: 100%; }
 .wheel-odds th { text-align: left; font-weight: 500; padding: 2px 10px 2px 0; }
 .wheel-odds td { text-align: right; padding: 2px 0 2px 10px; color: #edc7df; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -72,8 +80,8 @@
   .wheel-sp, .wheel-jackpot, .wheel-status { font-size: 11px; padding: 5px 10px; }
   .wheel-emi { top: 10px; right: 12px; }
   .wheel-face { width: 44px; height: 40px; }
-  .wheel-spin { right: 12px; bottom: 12px; min-width: 104px; }
-  .wheel-odds { left: 12px; bottom: 12px; }
+  .wheel-spin { right: 12px; bottom: max(12px, var(--br-sill, 0px)); min-width: 104px; }
+  .wheel-odds { left: 12px; bottom: max(12px, var(--br-sill, 0px)); }
 }
 @media (prefers-reduced-motion: reduce) { .wheel-station * { transition: none !important; } }
 
@@ -90,7 +98,7 @@
 .daze-delivery[hidden]{display:none}.daze-delivery p{margin:6px 0;font:600 15px/1.35 Georgia,serif}
 .daze-cloche{height:62px;position:relative;display:grid;place-items:center}.daze-cloche span{font:700 32px Georgia;color:#a63668}
 .daze-cloche b{position:absolute;bottom:0;width:112px;border-bottom:5px solid #b58b48;border-radius:50%}
-.daze-cloche i{position:absolute;z-index:1;bottom:4px;width:104px;height:48px;border-radius:60px 60px 5px 5px;background:linear-gradient(100deg,#8c622e,#f6dca1 48%,#c39653);transform:translateY(-47px);opacity:0;animation:daze-cloche 620ms cubic-bezier(.2,1.5,.4,1) both}
+.daze-cloche i{position:absolute;z-index:1;bottom:4px;width:104px;height:48px;border-radius:60px 60px 5px 5px;background:linear-gradient(100deg,#8c622e,#f6dca1 48%,#c39653);transform:translateY(-47px);opacity:0;animation:daze-cloche 620ms cubic-bezier(.2,1.35,.35,1) both}
 .daze-delivery[data-kind=double] .daze-cloche i,.daze-delivery[data-kind=nothing] .daze-cloche i,.daze-delivery[data-kind=nothing] .daze-cloche b{display:none}
 .daze-delivery[data-kind=nothing]{background:#f3e9db;box-shadow:none}.daze-delivery.is-still *{animation:none!important}
 @keyframes daze-cloche{from{transform:translateY(0);opacity:1}to{transform:translateY(-47px);opacity:0}}
@@ -113,3 +121,6 @@
 }
 @media (prefers-reduced-motion: reduce) { .br-glyph-hit { animation-name: br-glyph-hit-still; } }
 @keyframes br-glyph-hit-still { 0%, 100% { box-shadow: 0 0 0 0 #5fffd000; } 50% { box-shadow: 0 0 18px 4px #5fffd0cc; } }
+
+/* SP travels as faceted sparkles, not coins. */
+.wheel-token { border-radius:0; border:0; clip-path:polygon(50% 0,85% 30%,100% 50%,50% 100%,0 50%,15% 30%); background:conic-gradient(from 45deg,#fff6da,#fca6e1,#b791ff,#fff6da,#ffda83); color:transparent; filter:drop-shadow(0 0 5px #ffcaec); }

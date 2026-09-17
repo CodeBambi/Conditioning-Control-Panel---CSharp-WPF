@@ -57,6 +57,11 @@ const layer = (arms, turns, duty, style, direction, colors, bandMode = 'hard') =
 
 /** The mockup's presets (hypno-spins-v3.html, Loom.P), in the app's schema v2. */
 export const LOOM_PRESETS = deepFreeze({
+  candy: normalizeParams2({layer:layer(2,1,.62,'golden',1,['#ff81dc','#ffd66a']),bg:{kind:'solid',color:'#301142'},speed:2}),
+  pinwheel: normalizeParams2({layer:layer(12,.4,.4,'ribbon',1,['#50dcff','#ef70ff']),bg:{kind:'solid',color:'#100c35'},speed:3}),
+  ribbon: normalizeParams2({layer:layer(3,4,.28,'ribbon',1,['#ff617b','#ffc154']),bg:{kind:'solid',color:'#271036'},speed:2}),
+  mint: normalizeParams2({layer:layer(1,2,.7,'log',1,['#6dffe0','#fff0bf']),bg:{kind:'solid',color:'#122a43'},speed:3}),
+  star: normalizeParams2({layer:layer(8,1,.55,'golden',1,['#c195ff','#ffe6fc']),bg:{kind:'solid',color:'#24143d'},speed:2}),
   backs: normalizeParams2({ layer: layer(4, 2, 0.5, 'log', 1, ['#ff69b4', '#8a5cff']), bg: { kind: 'solid', color: '#14060f' }, glow: 0.25, speed: 2 }),
   hub: normalizeParams2({ layer: layer(3, 1.5, 0.55, 'golden', 1, ['#e8c27a', '#ff5fa2', '#9b6bff']), bg: { kind: 'solid', color: '#1a0f2b' }, glow: 0.35, speed: 3 }),
   whirl: normalizeParams2({ layer: layer(2, 2.5, 0.45, 'ribbon', 1, ['#5fffd0', '#9b6bff']), bg: { kind: 'solid', color: '#1c1230' }, glow: 0.4,

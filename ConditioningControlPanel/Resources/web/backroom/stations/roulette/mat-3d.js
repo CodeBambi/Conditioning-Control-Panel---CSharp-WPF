@@ -1,5 +1,6 @@
 import * as T from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { chipLanding, traceProgress } from './juice.js';
 import { HIGHLIGHT_MS } from '../../shared/hypno/callout.js';
 
 // All positions, dimensions and chip sizes are authored extras on bet_hit_<spot>. While seated the
@@ -59,6 +60,9 @@ export function createMat3D({ stage, spots, label }) {
   const chipsMesh=new T.InstancedMesh(chipGeometry,[chipMaterial,chipTop,chipMaterial],12);chipsMesh.name='roulette_live_chips';chipsMesh.count=0;chipsMesh.frustumCulled=false;group.add(chipsMesh);
   const dummy=new T.Object3D(),end=root.worldToLocal(root.getObjectByName('roulette_rotor').getWorldPosition(new T.Vector3())),corner=new T.Vector3();
   let disposed=false,anims=[],lastChips={};
+  const traceOrigin=end.clone(),arrivals=new Map();let traceAt=-Infinity,traceSpot=null;
+  const traceGeometry=new T.SphereGeometry(radius*.28,8,6),traceMaterial=new T.MeshBasicMaterial({color:0x5fffd0});
+  const trace=new T.Mesh(traceGeometry,traceMaterial);trace.visible=false;group.add(trace);resources.push(traceGeometry,traceMaterial);
   // THE GLYPH HIT (callout.js): the paying chips pop 1.06 and a mint halo pulses under each stack over HIGHLIGHT_MS.
   let glowSpots=new Set(),glowAt=-Infinity;
   const haloGeometry=new T.RingGeometry(radius*1.1,radius*1.7,32),haloMaterial=new T.MeshBasicMaterial({color:0x5fffd0,transparent:true,opacity:0,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide});
@@ -90,9 +94,12 @@ export function createMat3D({ stage, spots, label }) {
   }
   function draw(_,view){
     if(disposed)return;lastChips=view.chips;
-    if(view.still)anims=[];
+    if(view.still){anims=[];arrivals.clear();traceAt=-Infinity;}
+    const tq=traceProgress(view.now-traceAt,view.still),destination=cells.get(traceSpot)?.position;
+    trace.visible=tq!==null&&!!destination;
+    if(trace.visible){trace.position.copy(traceOrigin).lerp(destination,tq);trace.position.y+=radius*(1+2*Math.sin(tq*Math.PI));}
     let count=0,haloCount=0;
-    function put(position,pop=1){if(count>=12)return;dummy.position.copy(position);dummy.scale.setScalar(pop);dummy.updateMatrix();chipsMesh.setMatrixAt(count++,dummy.matrix);}
+    function put(position,pop=1,tilt=0){if(count>=12)return;dummy.position.copy(position);dummy.rotation.set(tilt,0,tilt*.4);dummy.scale.setScalar(pop);dummy.updateMatrix();chipsMesh.setMatrixAt(count++,dummy.matrix);}
     for(const [spot,amount] of Object.entries(view.chips)){
       const cell=cells.get(spot);if(!cell)continue;
       const pulse=haloPulse(spot,view.now),pop=1+.06*pulse;
@@ -100,7 +107,11 @@ export function createMat3D({ stage, spots, label }) {
         const halo=halos[haloCount]||(halos[haloCount]=(()=>{const m=new T.Mesh(haloGeometry,haloMaterial.clone());m.rotation.x=-Math.PI/2;m.renderOrder=3;group.add(m);resources.push(m.material);return m;})());
         halo.visible=true;halo.position.copy(cell.position).setY(cell.position.y+.002);halo.material.opacity=.6*pulse*view.k;halo.scale.setScalar(pop);haloCount++;
       }
-      for(let i=0;i<amount;i++)put(cell.position.clone().add(new T.Vector3(0,radius*(.15+i*.32)*pop,0)),pop);
+      for(let i=0;i<amount;i++){
+        const arrival=arrivals.get(spot),motion=chipLanding(arrival!=null&&i===amount-1?view.now-arrival:-1,view.still);
+        const hop=view.still?0:.65*pulse*view.k;
+        put(cell.position.clone().add(new T.Vector3(0,radius*((.15+i*.32)*pop+motion.lift*view.k+hop),0)),pop,motion.tilt*view.k);
+      }
     }
     for(let i=haloCount;i<halos.length;i++)halos[i].visible=false;
     anims=anims.filter(a=>view.now-a.at<1100);
@@ -115,7 +126,9 @@ export function createMat3D({ stage, spots, label }) {
     chipsMesh.count=count;chipsMesh.instanceMatrix.needsUpdate=true;
   }
   function dispose(){if(disposed)return;disposed=true;group.removeFromParent();for(const resource of resources)resource.dispose();canvas.width=canvas.height=1;if(glyphs)glyphs.visible=glyphsVisible;anims=[];}
-  return {layout(){},hit(){return null;},pick,rectOf,draw,dispose,animate(list,now){anims=anims.concat(list.map(a=>({...a,at:now})));},clearAnims(){anims=[];},
+  return {layout(){},hit(){return null;},pick,rectOf,draw,dispose,animate(list,now){anims=anims.concat(list.map(a=>({...a,at:now})));},clearAnims(){anims=[];arrivals.clear();traceAt=-Infinity;trace.visible=false;},
+    place(spot,now){arrivals.set(spot,now);},
+    trace(pocket,now){traceSpot='s'+pocket;traceAt=now;const ball=root.getObjectByName('roulette_ball');if(ball)traceOrigin.copy(root.worldToLocal(ball.getWorldPosition(new T.Vector3())));},
     /** A paying landing: the chips on `spots` glow from station time `now`. */
     glow(spots,now){glowSpots=new Set(Array.isArray(spots)?spots:[]);glowAt=now;},
     /** 'mat' while bets are open, 'table' once the ball runs: seat-camera.js frames a phone from it. */

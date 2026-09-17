@@ -149,7 +149,7 @@ public class BackRoomFxTests
     }
 
     [Fact]
-    public void Gate_HeroesChain_AndAnythingWaitingOverFourSecondsIsBusy()
+    public void Gate_HeroesChain_AndAnythingWaitingOverFiveSecondsIsBusy()
     {
         long now = 0;
         var gate = new FxHeroGate(() => now);
@@ -170,18 +170,18 @@ public class BackRoomFxTests
         var ack = Fire(fx, "fx.jackpot");
         Assert.Equal(new[] { "spiral-full", "flash-burst", "gif-rain", "glitch-bubbles", "sub-burst9", "sub-burst9", "gif-full" }, ack.Fired);
         clock.Advance(20_000);
-        Assert.Equal((0L, "spiral:screen.gif:4000:0.7:False:False"), sink.Calls[0]);   // the screen weave at the authored alpha
-        Assert.Contains((4000L, "flash:8:1:300"), sink.Calls);                              // medium, full opacity, 300 ms apart
-        Assert.Contains((4000L, "rain:19:4000:0.9"), sink.Calls);
-        Assert.Contains((4000L, "glitch:600:0.35"), sink.Calls);
-        Assert.Contains((5200L, "glitch:600:0.35"), sink.Calls);
-        Assert.Contains(sink.Calls, c => c.At == 4000 && c.Call.StartsWith("giffull:") && c.Call.EndsWith(":2000:0.8"));
+        Assert.Equal((0L, "spiral:screen.gif:5000:0.7:False:False"), sink.Calls[0]);   // the screen weave at the authored alpha
+        Assert.Contains((5000L, "flash:8:1:300"), sink.Calls);                              // medium, full opacity, 300 ms apart
+        Assert.Contains((5000L, "rain:19:4000:0.9"), sink.Calls);
+        Assert.Contains((5000L, "glitch:600:0.35"), sink.Calls);
+        Assert.Contains((6200L, "glitch:600:0.35"), sink.Calls);
+        Assert.Contains(sink.Calls, c => c.At == 5000 && c.Call.StartsWith("giffull:") && c.Call.EndsWith(":2000:0.8"));
         var words = sink.Calls.Where(c => c.Call.StartsWith("sub:")).ToList();
         Assert.Equal(18, words.Count);
         Assert.All(words, w => Assert.EndsWith(":1", w.Call));                              // full opacity
-        Assert.Equal(4000L, words[0].At);
-        Assert.Equal(4000L + 8 * 350, words[8].At);                                          // the first burst, 350 apart
-        Assert.Equal(4000L + 9 * 350, words[9].At);                                          // the second continues the beat
+        Assert.Equal(5000L, words[0].At);
+        Assert.Equal(5000L + 8 * 350, words[8].At);                                          // the first burst, 350 apart
+        Assert.Equal(5000L + 9 * 350, words[9].At);                                          // the second continues the beat
     }
 
     [Fact]
@@ -190,10 +190,10 @@ public class BackRoomFxTests
         var (fx, clock, sink) = Make(BackRoomFxIntensity.Calm);
         Assert.Equal(7, Fire(fx, "fx.jackpot").Fired.Count);
         clock.Advance(20_000);
-        Assert.Equal((0L, "spiral:screen.gif:4000:0.35:False:False"), sink.Calls[0]);
-        Assert.Contains((4000L, "flash:8:0.5:300"), sink.Calls);
-        Assert.Contains((4000L, "rain:19:4000:0.45"), sink.Calls);
-        Assert.Contains((4000L, "glitch:600:0.175"), sink.Calls);
+        Assert.Equal((0L, "spiral:screen.gif:5000:0.35:False:False"), sink.Calls[0]);
+        Assert.Contains((5000L, "flash:8:0.5:300"), sink.Calls);
+        Assert.Contains((5000L, "rain:19:4000:0.45"), sink.Calls);
+        Assert.Contains((5000L, "glitch:600:0.175"), sink.Calls);
         Assert.Equal(18, sink.Calls.Count(c => c.Call.StartsWith("sub:") && c.Call.EndsWith(":0.5")));
     }
 
@@ -205,12 +205,12 @@ public class BackRoomFxTests
         var (fx, clock, sink) = Make(motion: m);
         Assert.Equal(7, Fire(fx, "fx.jackpot").Fired.Count);
         clock.Advance(20_000);
-        Assert.Equal((0L, "spiral:screen.gif:4000:0.7:False:True"), sink.Calls[0]);   // the slow variant, never a still
-        Assert.Contains((4000L, "flash:8:1:334"), sink.Calls);
+        Assert.Equal((0L, "spiral:screen.gif:5000:0.7:False:True"), sink.Calls[0]);   // the slow variant, never a still
+        Assert.Contains((5000L, "flash:8:1:334"), sink.Calls);
         var images = sink.Calls.Where(c => c.Call == "flashimg:").Select(c => c.At).OrderBy(t => t).ToList();
         Assert.Equal(8, images.Count);
         for (int i = 1; i < images.Count; i++) Assert.True(images[i] - images[i - 1] >= 1000 / 3, "flash onsets over 3 Hz under reduced motion");
-        Assert.Contains((4000L, "rain:19:4000:0.9"), sink.Calls);   // everything else plays as authored
+        Assert.Contains((5000L, "rain:19:4000:0.9"), sink.Calls);   // everything else plays as authored
         Assert.Equal(18, sink.Calls.Count(c => c.Call.StartsWith("sub:")));
     }
 
@@ -223,7 +223,7 @@ public class BackRoomFxTests
         var ack = Fire(fx, "fx.melt");
         Assert.Equal(new[] { "brain-drain-melt" }, ack.Fired);
         clock.Advance(10_000);
-        Assert.Contains((4000L, "drain:6000:0.8:True"), sink.Calls);
+        Assert.Contains((5000L, "drain:6000:0.8:True"), sink.Calls);
     }
 
     [Fact]
@@ -403,7 +403,7 @@ public class BackRoomFxTests
         Assert.Empty(single.Skipped);
         clock.Advance(10_000);
         Assert.DoesNotContain(sink.Calls, c => c.Call.StartsWith("sub:"));
-        Assert.Contains(sink.Calls, c => c.Call.StartsWith("spiral:screen.gif:1500:0.55:"));
+        Assert.Contains(sink.Calls, c => c.Call.StartsWith("spiral:screen.gif:2500:0.55:"));
     }
 
     [Fact]

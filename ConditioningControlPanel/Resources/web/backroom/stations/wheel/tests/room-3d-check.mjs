@@ -6,7 +6,7 @@
  *
  * What it proves that wheel-check.mjs (dev.html) cannot: E at the wheel mounts and opens the station through the
  * loader's ctx, the room owns Back and the SP chip (ctx.spReadout), init.gates and a live settings frame dress the
- * page, the moments leave the page as real bridge messages (media-request count 4, fx with args, fx-tunnel), and Back
+ * page, the moments leave the page as real bridge messages (media-request count 8, fx with args, fx-tunnel), and Back
  * closes it with the tunnel at 0. Port WHEEL_ROOM_PORT (default 8896, debug +500). The only process it stops is
  * the Chrome it started, by its own handle.
  * ==========================================================================*/

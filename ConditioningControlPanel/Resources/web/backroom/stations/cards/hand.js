@@ -75,7 +75,7 @@ export const legalOf = (legal) => (Array.isArray(legal) ? MOVES.filter((m) => le
 export function readState(body) {
   const b = body && typeof body === 'object' ? body : {};
   const rules = b.rules && typeof b.rules === 'object' ? b.rules : {};
-  const stakes = Array.isArray(rules.stakes) && rules.stakes.length ? rules.stakes.map((s) => int(s)).filter((s) => s > 0) : [1, 2];
+  const stakes = Array.isArray(rules.stakes) && rules.stakes.length ? rules.stakes.map((s) => int(s)).filter((s) => s > 0) : [1, 2, 3];
   return {
     sp: Math.max(0, int(b.sp)),
     open: b.open !== false,
@@ -83,7 +83,7 @@ export function readState(body) {
     legal: legalOf(b.legal),
     hint: MOVES.includes(b.hint) ? b.hint : null,
     autoStandAt: typeof b.autoStandAt === 'string' ? b.autoStandAt : null,
-    rules: { ...rules, stakes: stakes.length ? stakes : [1, 2] },
+    rules: { ...rules, stakes: stakes.length ? stakes : [1, 2, 3] },
     floorMs: Math.max(0, int(b.floorMs, 5000)),
   };
 }
@@ -91,7 +91,7 @@ export function readState(body) {
 export const isOpen = (hand) => !!hand && !hand.done;
 
 /** The bet chip a sit-down starts on: the smallest stake below LOW_SP, else the largest the balance covers. */
-export function defaultStake(sp, stakes = [1, 2]) {
+export function defaultStake(sp, stakes = [1, 2, 3]) {
   const s = stakes.slice().sort((a, b) => a - b);
   if (!s.length) return 1;
   if (!(Number(sp) >= LOW_SP)) return s[0];

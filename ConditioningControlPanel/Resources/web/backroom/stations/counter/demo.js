@@ -20,8 +20,8 @@ export const DEMO = Object.freeze({
   ms: 5200,          // one preview, then the art comes back
   stillMs: 1800,     // Calm and reduced motion: the settled picture, held, then gone
   sprites: 4,        // one per dealt picture (the counter deals 4)
-  bubbleR: 0.11,     // bubble radius, a fraction of the box height
-  flashW: 0.34,      // the flash card, a fraction of the box width
+  bubbleR: 0.14,     // bubble radius, a fraction of the box height
+  flashW: 0.56,      // the flash card, a fraction of the box width
 });
 
 const KINDS = Object.freeze({ jackpot_remix: 'remix', flashes_v2: 'flashes', bubbles_v2: 'bubbles' });
@@ -52,6 +52,15 @@ function flashes(ms, still) {
     const x = w / 2 + tri(0.2 + vx * t, 1 - w), y = h / 2 + tri(0.1 + vy * t, 1 - h);
     return [{ x, y, scale: w, rot: 0, alpha: 1, pic: 0, kind: 'flash' }];
   }
+  if (ms >= 3900) {
+    const p = clamp01((ms - 3900) / 1300);
+    return Array.from({length: 4}, (_, i) => ({
+      x: .5 + (i % 2 ? 1 : -1) * p * .26,
+      y: .48 + p * p * .5 - (i < 2 ? .15 : 0) * p,
+      scale: w, rot: (i % 2 ? 1 : -1) * p * 65,
+      alpha: 1 - p, pic: 1, kind: 'shard', shard: i,
+    }));
+  }
   const t = (ms - 2600) / 1000, decay = Math.exp(-t * 0.35);
   return [{ x: 0.5, y: 0.5, scale: w, rot: 28 * Math.cos(t * 3.2) * decay, alpha: 1, pic: 1, kind: 'flash', pivot: 'top' }];
 }
@@ -60,13 +69,20 @@ function flashes(ms, still) {
 function bubbles(ms, still) {
   const n = DEMO.sprites, r = DEMO.bubbleR;
   if (still) return Array.from({ length: n }, (_, i) => ({ x: 0.2 + i * 0.2, y: 0.5, scale: r * 2, rot: 0, alpha: 1, pic: i, kind: 'bubble' }));
-  if (ms < 2400) {
+  if (ms < 1500) {
     return Array.from({ length: n }, (_, i) => {
       const t = ((ms + i * 380) % 1900) / 1900;
       return { x: 0.16 + i * 0.22 + 0.03 * Math.sin(ms / 260 + i), y: -r + (1 + 2 * r) * t, scale: r * 2, rot: 0, alpha: 1, pic: i, kind: 'bubble' };
     });
   }
-  const p = clamp01((ms - 2400) / 2400);
+  if (ms >= 3000) {
+    const magnet = ms >= 4100, p = clamp01((ms - (magnet ? 4100 : 3000)) / 1100);
+    return [{ x: magnet ? .2 + .55 * ease(p) : .5, y: magnet ? .65 - .25 * ease(p) : .48,
+      scale: .34 * (!magnet && p > .65 ? 1 + (p - .65) * 2 : 1), rot: 0,
+      alpha: !magnet && p > .65 ? 1 - (p - .65) / .35 : 1,
+      pic: 0, kind: 'bubble', variant: magnet ? 'magnet' : 'drain' }];
+  }
+  const p = clamp01((ms - 1500) / 1500);
   return Array.from({ length: n }, (_, i) => {
     const a0 = (i / n) * Math.PI * 2, turns = 2.5 * p, radius = 0.42 * (1 - p);
     return { x: 0.5 + radius * Math.cos(a0 + turns * Math.PI * 2), y: 0.5 + radius * 0.8 * Math.sin(a0 + turns * Math.PI * 2),
@@ -89,3 +105,9 @@ export function demoFrame(kind, ms, { still = false } = {}) {
 
 /** How long a preview runs. */
 export const demoLengthMs = (still = false) => (still ? DEMO.stillMs : DEMO.ms);
+
+export function demoLabel(kind, ms) {
+  if (kind === 'flashes') return ms < 2600 ? 'drift' : ms < 3900 ? 'pendulum' : 'shatter';
+  if (kind === 'bubbles') return ms < 1500 ? 'rain' : ms < 3000 ? 'spiral' : ms < 4100 ? 'drain' : 'magnet';
+  return null;
+}

@@ -21,7 +21,9 @@
  * ==========================================================================*/
 
 import { FX_DELAY_MS, CALLOUT_MS } from '../../shared/hypno/callout.js';
-import { glyphFx } from './glyphs.js';
+import { houseTier } from '../../shared/win/tier.js';
+import { ladderSemis } from '../../shared/win/ladder.js';
+import { glyphFx, glyphFor } from './glyphs.js';
 
 const TAU = Math.PI * 2;
 export const POCKETS = 37;
@@ -74,9 +76,15 @@ export function litNumbers(wheel, rot, beamA) {
 }
 /** The whirlpool's Loom angle: the rotor's clockwise angle x 2.2. */
 export const whirlAngle = (rot) => rot * FEEL.WHIRL_MUL;
-/** When the next spin of a tape may launch. A paying landing (`landMs`, `win`) holds WIN_HOLD_MS from the landing frame. */
-export const nextLaunchAt = (launchMs, restMs, { landMs = null, win = false } = {}) => Math.max(launchMs + FEEL.SPIN_MS, restMs + FEEL.MIN_HOLD_MS,
-  win && Number.isFinite(landMs) ? landMs + FEEL.WIN_HOLD_MS : -Infinity);
+/**
+ * When the next spin of a tape may launch. A paying landing (`landMs`, `win`) holds WIN_HOLD_MS from the
+ * landing frame. `partyMs` is THE REWARD's own hold (plan.partyMs, CONTRACT 10.22): a party owns the station
+ * until it is finished, so the 6 s hero climb is never cut off by the next launch (Law X, one gesture one
+ * beat). It is measured from the fx frame, FX_DELAY_MS after the landing, and 0 leaves the old hold exactly
+ * as it was.
+ */
+export const nextLaunchAt = (launchMs, restMs, { landMs = null, win = false, partyMs = 0 } = {}) => Math.max(launchMs + FEEL.SPIN_MS, restMs + FEEL.MIN_HOLD_MS,
+  win && Number.isFinite(landMs) ? landMs + Math.max(FEEL.WIN_HOLD_MS, FX_DELAY_MS + Math.max(0, Number(partyMs) || 0)) : -Infinity);
 
 function mulberry32(a) {
   return () => {
@@ -169,9 +177,15 @@ function simulate(rnd, { calm, rotVel0 }) {
  */
 export function planRun({ index, seed = 1, calm = false, rotVel0 = FEEL.ROTOR_KICK } = {}) {
   const target = ((Math.trunc(Number(index)) % POCKETS) + POCKETS) % POCKETS;
+  // The ball's validated rattle uses the original rotor-speed range. A stronger throw
+  // adds decaying whole-wheel momentum to the picture, carrying ball and wheel together,
+  // so the relative landing and its timing remain exactly the server-directed plan.
+  const launchVelocity=Number.isFinite(rotVel0)?rotVel0:FEEL.ROTOR_KICK;
+  const simulatedVelocity=clamp(launchVelocity,-2,2), excess=launchVelocity-simulatedVelocity;
+  const momentumDecay=.7;
   let best = null;
   for (let k = 0; k < 24; k++) {
-    const sim = simulate(mulberry32((seed >>> 0) + k * 977), { calm, rotVel0 });
+    const sim = simulate(mulberry32((seed >>> 0) + k * 977), { calm, rotVel0:simulatedVelocity });
     if (sim.landIdx < 0) continue;
     const fits = sim.restT <= FEEL.RUN_BUDGET_S;
     const score = (fits ? 0 : 100) + (sim.hits >= 2 ? 0 : sim.hits === 1 ? 10 : 50) + sim.restT;
@@ -179,12 +193,16 @@ export function planRun({ index, seed = 1, calm = false, rotVel0 = FEEL.ROTOR_KI
     if (fits && sim.hits >= 2) break;
   }
   const s = best.sim, shift = (target - s.landIdx) * SEG;
+  // One extra counter-rotation, eased away before the drop. Whole turns leave
+  // the server pocket and the complete fret/rattle choreography unchanged.
+  const dropAt = Math.max(FEEL.DT, s.ph.findIndex(p => p !== 0) * FEEL.DT);
+  const launchArc = i => calm ? 0 : TAU * Math.pow(Math.max(0, 1 - i * FEEL.DT / dropAt), 3);
   const f32 = (a, add = 0) => Float32Array.from(a, (v) => v + add);
   return {
     index: target, calm: !!calm, hits: s.hits,
     landAt: s.landT, restAt: s.restT, duration: s.restT,
     sparks: s.sparks.map((x) => ({ at: x.at, a: x.a + shift })),
-    rot: f32(s.rot), rel: f32(s.rel, shift), r: f32(s.rr), tscale: f32(s.ts), speed: f32(s.sp), phase: Uint8Array.from(s.ph),
+    rot: Float32Array.from(s.rot,(v,i)=>v+excess*(1-Math.exp(-momentumDecay*i*FEEL.DT))/momentumDecay), rel: Float32Array.from(s.rel,(v,i)=>v+shift+launchArc(i)), r: f32(s.rr), tscale: f32(s.ts), speed: f32(s.sp), phase: Uint8Array.from(s.ph),
   };
 }
 
@@ -366,4 +384,72 @@ export function createFxCooldowns() {
     reset() { last = new Map(); spinKey = null; spent = new Set(); },
     debug() { return { last: Object.fromEntries(last), spin: spinKey, spent: [...spent] }; },
   };
+}
+
+/* ---------------------------------------------------------------------------------------------
+ * THE REWARD (CONTRACT 10.22), PURE. What a landing is WORTH and what it may SPEND, so the wiring in
+ * station.js only has to play it. Law IX, X, XII and XIII with Brakes 2, 3, 5, 8 and 9 live in
+ * shared/win/ and NOWHERE else: nothing here re-derives a restraint, it only says what the roulette's
+ * own vocabulary calls the rung, the voice, the pitch and the chips a win leaves from.
+ *
+ * WHY THIS SECTION EXISTS. station.js took only ctx.spReadout.owe(), so a pay made the SP number simply
+ * redraw - Law XII broken outright, the one thing the reward pass was called for. THE BANK now flies from
+ * the paying chips to the chip that keeps them, and the rung it flies at is decided here.
+ *
+ * Law I: every function below reads a SETTLED read (tape.readOutcome) and nothing else. No pocket, pay or
+ * rung is known here one frame before the ball is in the server's pocket.
+ * ------------------------------------------------------------------------------------------ */
+
+export const REWARD = Object.freeze({
+  REVEAL_MS: 620,                                    // THE REVEAL, the declared hero move; nothing else here is over 620 ms
+  REVEAL_EASE: 'cubic-bezier(.2,1.35,.35,1)',        // house-book 2, the same curve the wheel's pot uses
+  GAIN_MS: 1600,                                     // how long +N SP stands when no count is running behind it (Brake 9)
+  /** plan.spent -> the kit's win voice (shared/sound/kit.js). Rung 0 never sounds a win at all. */
+  WIN_SOUND: Object.freeze(['settle', 'small', 'mid', 'big', 'hero']),
+});
+
+/**
+ * The rung a settled read is worth, 0..4, through the house's one entry point. The roulette has no numeric
+ * recipe of its own: its rung IS its callout size (CALLOUTS above - small 1, big 3, hero 4), RAISED by the
+ * pay (tier.PAY_STEPS), which is the only way this station reaches a bare 2. `near` is nearMisses(), so a
+ * miss beside a covered number stays the 0 it is - a near miss is never a small win (10.22, "no losses
+ * disguised as wins").
+ */
+export function rewardTier(read, near = []) {
+  if (!read || !(Number(read.pay) > 0)) return 0;
+  return houseTier({ station: 'roulette', moment: landBeat(read, near), pay: Number(read.pay) });
+}
+
+/** The kit's win voice for a SPENT rung (plan.spent, never plan.tier - the brakes have already shrunk it). */
+export function winSound(spent) {
+  const t = Math.max(0, Math.min(4, Math.floor(Number(spent) || 0)));
+  return REWARD.WIN_SOUND[t];
+}
+
+/**
+ * THE CHIME LADDER's root for a streak. `streak` is the paying spins in a row INCLUDING this one (station.js
+ * counts it on the landing frame), so the first pay is the root note and every pay after it is a semitone up,
+ * capped at 7 by ladderSemis. Brake 5 drops the whole ladder an octave while melted, which is exactly
+ * plan.octave: the station never adds the octave twice.
+ */
+export const ladderRoot = (streak, melted = false) => ladderSemis(Math.max(0, (Math.trunc(Number(streak)) || 0) - 1), melted);
+
+/**
+ * Brake 5 at the roulette: is this landing a focus state? The pocket glyphs (GLYPHS.md) give the station its
+ * own answer - a landing on a `drop` pocket fires fx.melt on that very frame, so the beat the melt arrives on
+ * is a melted beat. The party drops to a chime an octave down and the tokens still fly: a melted win is quiet,
+ * never invisible. Nothing else at this station is a trance, so nothing else reads as melted.
+ */
+export const meltedBy = (read) => !!read && glyphFor(read.pocket) === 'drop';
+
+/**
+ * Law XII: value leaves WHERE IT WAS WON. `n` tokens dealt round-robin over the paying spots, so every chip
+ * that paid sends something and the handful leaves the mat spread out instead of stacked on one cell.
+ * -> an array of `n` spot ids; a null entry means "no cell to leave from" and the caller falls back to the
+ * landed pocket on the wheel.
+ */
+export function tokenSpots(n, hits) {
+  const count = Math.max(0, Math.trunc(Number(n)) || 0);
+  const list = Array.isArray(hits) ? hits.filter((s) => typeof s === 'string' && s) : [];
+  return Array.from({ length: count }, (_, i) => (list.length ? list[i % list.length] : null));
 }

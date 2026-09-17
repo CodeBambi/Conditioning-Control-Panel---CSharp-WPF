@@ -208,6 +208,13 @@ namespace ConditioningControlPanel.Models
                 TitleLocKey = "tab_lockdown_mode", TaglineLocKey = "exclusives_tag_lockdown",
                 ArtResource = "Resources/lockdown_icon.png",
             },
+            new()
+            {
+                Key = "backroom", Emoji = "🎰", Tier = 0,
+                TitleLocKey = "play_backroom_title", TaglineLocKey = "play_backroom_blurb",
+                ArtResource = "Resources/features/backroom.png",
+                Gate = () => ExclusiveGateState.Unlocked,
+            },
         };
     }
 }

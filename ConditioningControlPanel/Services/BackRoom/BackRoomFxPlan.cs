@@ -199,7 +199,9 @@ public static class BackRoomFxPlan
         _ => "unknown",
     };
 
-    private static FxRecipe R(params FxStep[] steps) => new(0, steps);
+    private static FxRecipe R(params FxStep[] steps) => new(0, steps.Select(s =>
+        (s.Prim is FxPrim.SpiralFull or FxPrim.SpiralLoom) && s.Look?.Hold != true
+            ? s with { DurationMs = Math.Min(HoldCapMs, s.DurationMs + 1000) } : s).ToArray());
 
     /// <summary>
     /// The table (CONTRACT section 4, authored 2026-09-15). "+" is the same start, "then" is after the
@@ -223,7 +225,7 @@ public static class BackRoomFxPlan
         {
             case "fx.jackpot":
             {
-                int t = D(JackpotHeroMs);
+                int t = D(JackpotHeroMs) + 1000;
                 return new FxRecipe(t, new[]
                 {
                     S(FxPrim.SpiralFull, 0, ms: t, level: SpiralFullAlpha),

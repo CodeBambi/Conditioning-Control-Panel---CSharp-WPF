@@ -1368,40 +1368,51 @@
                         </Grid>
                     </Border>
                 </Grid>
-                <!-- THE BACK ROOM: the Sparkle Points room (Services\BackRoom\BackRoomHostService).
-                     The Arcademy's strip, minus everything that gates: free for every account, so no
-                     tier badge, no lockband and no code-driven visibility. -->
-                <Grid x:Name="SlotBackRoom" x:FieldModifier="internal" Margin="0,0,0,10">
-                    <Border Style="{StaticResource PlayCard}" Padding="0" MinHeight="118">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="22,20,20,20">
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <Border Style="{StaticResource PlayTitleGlyphPlate}">
-                                        <Image Width="18" Height="18" Source="{Binding Source='🎰', Converter={StaticResource EmojiToImageSource}}"/>
-                                    </Border>
-                                    <TextBlock Text="{loc:Str play_backroom_title}" Style="{StaticResource PlayCardTitle}"/>
-                                </StackPanel>
-                                <TextBlock Text="{loc:Str play_backroom_blurb}"
-                                           Style="{StaticResource PlayCardBlurb}" MaxWidth="560" HorizontalAlignment="Left"/>
-                            </StackPanel>
-                            <Button Grid.Column="1" x:Name="BtnPlayBackRoom" x:FieldModifier="internal"
-                                    Content="{loc:Str play_backroom_cta}" Cursor="Hand"
-                                    VerticalAlignment="Center" Margin="0,0,24,0" Padding="24,10"
-                                    Background="{DynamicResource PinkBrush}" Foreground="White"
-                                    BorderThickness="0" FontWeight="Bold" FontSize="14"
-                                    ToolTip="{loc:Str play_backroom_tooltip}"
-                                    Click="BtnStartBackRoom_Click">
-                                <Button.Resources>
-                                    <Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style>
-                                </Button.Resources>
-                            </Button>
-                        </Grid>
-                    </Border>
-                </Grid>
+                <!-- Casino entry and two reserved seats. Reserved cards do not launch. -->
+                <UniformGrid Columns="3" Margin="-9,0,-9,10">
+                    <Grid x:Name="SlotBackRoom" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <Grid MinHeight="290">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}"><Border.Background><ImageBrush x:Name="PlayBackRoomHeroBrush" x:FieldModifier="internal" Stretch="UniformToFill"><ImageBrush.ImageSource><BitmapImage UriSource="pack://application:,,,/Resources/features/backroom.png" DecodePixelWidth="640"/></ImageBrush.ImageSource></ImageBrush></Border.Background></Border>
+                                <TextBlock Grid.Row="1" Text="{loc:Str play_backroom_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6" TextWrapping="Wrap"/>
+                                <TextBlock Grid.Row="2" Text="{loc:Str play_backroom_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                <Button Grid.Row="3" x:Name="BtnPlayBackRoom" x:FieldModifier="internal" Content="{loc:Str play_backroom_cta}" Cursor="Hand" Padding="18,9" Background="{DynamicResource PinkBrush}" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13" ToolTip="{loc:Str play_backroom_tooltip}" Click="BtnStartBackRoom_Click"><Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style></Button.Resources></Button>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <Grid x:Name="SlotRacingReserved" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <Grid MinHeight="290">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}"><Image Width="64" Height="64" Opacity="0.65" Source="{Binding Source='🏁', Converter={StaticResource EmojiToImageSource}}"/></Border>
+                                <TextBlock Grid.Row="1" Text="{loc:Str play_racing_reserved_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6" TextWrapping="Wrap"/>
+                                <TextBlock Grid.Row="2" Text="{loc:Str play_racing_reserved_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                <Border Grid.Row="3" Style="{StaticResource PlayStatusPill}" Padding="18,9"><TextBlock Text="{loc:Str exclusives_badge_soon}" Foreground="{DynamicResource TextMutedBrush}" FontWeight="Bold" HorizontalAlignment="Center"/></Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <Grid x:Name="SlotFutureReserved" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <Grid MinHeight="290">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}"><TextBlock Text="?" FontSize="64" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                                <TextBlock Grid.Row="1" Text="{loc:Str play_future_reserved_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6" TextWrapping="Wrap"/>
+                                <TextBlock Grid.Row="2" Text="{loc:Str play_future_reserved_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                <Border Grid.Row="3" Style="{StaticResource PlayStatusPill}" Padding="18,9"><TextBlock Text="{loc:Str exclusives_badge_soon}" Foreground="{DynamicResource TextMutedBrush}" FontWeight="Bold" HorizontalAlignment="Center"/></Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </UniformGrid>
                 <!-- PIECE BY PIECE: the 3D chess board (Services\PieceByPiece\
                      PieceByPieceHostService). A STRIP built to the Arcademy's pattern directly
                      above, for the same reason it is one: there is no Resources/features art for

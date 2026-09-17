@@ -1,4 +1,5 @@
 import * as T from 'three';
+import { sampleLanding } from './prop-landing.js';
 
 /* ============================================================================
  * backroom/room/customization-props.js - the six Room Service props that had no
@@ -118,6 +119,9 @@ export async function createCustomizationProps({ root, loader, base }) {
   const brass = new T.MeshStandardMaterial({ color: 0xba8654, metalness: 0.72, roughness: 0.32 });
   const geometries = new Set(), orphaned = new Set(), screens = [], placed = [], enabled = PROPS.map(() => false);
   let triangles = 0, batches = 0, pruned = 0;
+  /** THE LANDING (10.22.D): one live arrival per prop, and the emissives it is borrowing while it lands. */
+  const landings = PROPS.map(() => null), lit = PROPS.map(() => []);
+  let landed = 0;
 
   const models = await Promise.all(PROPS.map((row) => loader.loadAsync(base + 'customization/' + row.file + '.glb')));
   PROPS.forEach((row, i) => {
@@ -146,6 +150,7 @@ export async function createCustomizationProps({ root, loader, base }) {
       rod.position.y = top + length / 2;
       group.add(rod); batches++;
     }
+    const fedFrom = screens.length;
     for (const [name, aspect] of row.screens || []) {
       const surface = model.getObjectByName(name);
       if (!surface || !surface.isMesh) continue;
@@ -163,27 +168,76 @@ export async function createCustomizationProps({ root, loader, base }) {
     group.traverse((node) => { node.updateMatrix(); node.matrixAutoUpdate = false; });
     root.add(group);
     placed.push(group);
+    // THE GLOW's own surfaces, taken once: this prop's OWN materials with an emissive to lend. The
+    // brass is shared between every plinth and hanger in the room and is left out on purpose, and a
+    // media plane belongs to the screen feed from the moment screens.js adopts it.
+    const fed = new Set(screens.slice(fedFrom));
+    const seen = new Set();
+    group.traverse((node) => {
+      if (!node.isMesh || fed.has(node)) return;
+      for (const m of (Array.isArray(node.material) ? node.material : [node.material])) {
+        if (!m || m === brass || !m.emissive || seen.has(m)) continue;
+        seen.add(m);
+        lit[i].push({ m, colour: m.emissive.clone(), power: Number.isFinite(m.emissiveIntensity) ? m.emissiveIntensity : 1 });
+      }
+    });
   });
 
   const bounds = new T.Box3(), center = new T.Vector3(), size = new T.Vector3();
+  const GOLD = new T.Color(0xffcf6b);
+
+  /** Put a prop back exactly where it was authored and give its emissives back. */
+  function settle(index) {
+    const group = placed[index], row = PROPS[index];
+    landings[index] = null;
+    group.position.fromArray(row.position);
+    group.scale.set(1, 1, 1);
+    group.updateMatrix();
+    for (const s of lit[index]) { s.m.emissive.copy(s.colour); s.m.emissiveIntensity = s.power; }
+  }
+
   return {
     models: placed.map(group => group.children[0]),
     screens,
-    /** @param {number} index  @param {boolean} on */
-    set(index, on) {
+    /**
+     * @param {number} index  @param {boolean} on
+     * @param {Object} [feel]  room/prop-landing.js's placeFeel, when this is a PLACEMENT rather than a
+     *   restore. A won decoration going up lands with a thud and a glow (10.22.D); the room reading its
+     *   own saved state back on entry hands nothing and the prop is simply there.
+     */
+    set(index, on, feel) {
       if (!Number.isInteger(index) || index < 0 || index >= placed.length || typeof on !== 'boolean') return false;
-      enabled[index] = on; placed[index].visible = on; return true;
+      enabled[index] = on; placed[index].visible = on;
+      settle(index);
+      if (on && feel && feel.ms > 0) { landings[index] = { feel, age: 0 }; landed++; }
+      return true;
+    },
+    /** Drive the arrivals. Seconds, like every other room update; `still` is already in the feel. */
+    update(dt) {
+      const step = Math.min(50, Math.max(0, (Number(dt) || 0) * 1000));
+      for (let i = 0; i < landings.length; i++) {
+        const land = landings[i];
+        if (!land) continue;
+        land.age += step;
+        const at = sampleLanding(land.age, land.feel);
+        if (at.done) { settle(i); continue; }
+        const group = placed[i];
+        group.position.y = PROPS[i].position[1] + at.lift;
+        group.scale.set(at.scaleXZ, at.scaleY, at.scaleXZ);
+        group.updateMatrix();
+        for (const s of lit[i]) { s.m.emissive.copy(s.colour).lerp(GOLD, at.glow); s.m.emissiveIntensity = s.power + at.glow * 0.8; }
+      }
     },
     getState: () => [...enabled],
     endPreview(){placed.forEach((group,i)=>{group.visible=enabled[i];});},
     /** Where the catalogue close-up stands to look at one prop, in room coordinates. */
-    preview(index) {
+    preview(index, { show = enabled[index] } = {}) {
       const group = placed[index], row = PROPS[index];
       if (!group) return null;
-      group.visible = true;
+      group.visible = show;
       bounds.setFromObject(group);
-      // The catalogue may preview an unowned prop without enabling it.
-      group.visible = true;
+      // Locked catalogue samples may be shown without changing ownership or enabled state.
+      group.visible = show;
       bounds.getCenter(center); bounds.getSize(size);
       const distance = Math.max(1.35, size.y * 1.6, size.x * 1.15, size.z * 1.15);
       return {
@@ -194,6 +248,7 @@ export async function createCustomizationProps({ root, loader, base }) {
     /** Test seam (scene.js debug): plain numbers, so the smoke can check the spots against the fixtures. */
     debug: () => ({
       props: placed.length, batches, pruned, triangles: Math.round(triangles), on: enabled.filter(Boolean).length,
+      landed, landing: landings.filter(Boolean).length,
       boxes: placed.map((group) => {
         bounds.setFromObject(group);
         return { name: group.name, min: bounds.min.toArray().map(round), max: bounds.max.toArray().map(round) };
@@ -203,6 +258,8 @@ export async function createCustomizationProps({ root, loader, base }) {
        and a group already removed from it is invisible to that sweep. The baked batch geometries and
        the GLB materials only exist here, so they are only freed here. */
     dispose() {
+      // A prop mid-landing is holding somebody else's emissive. Hand it back before anything is freed.
+      for (let i = 0; i < landings.length; i++) if (landings[i]) settle(i);
       const fed = new Set(screens);
       const materials = new Set([brass, ...orphaned]);
       for (const group of placed) {

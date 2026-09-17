@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -34,7 +34,7 @@ namespace ConditioningControlPanel.Services
     /// its images staggered <paramref name="StaggerMs"/> apart (the ambient default is 300 ms). Null = the
     /// user's own settings, as every other one-shot.
     /// </summary>
-    public readonly record struct FlashBurstLook(double Opacity, int StaggerMs);
+    public readonly record struct FlashBurstLook(double Opacity, int StaggerMs, bool Peripheral = false, bool PreviewV2 = false);
 
     /// <summary>
     /// Handles flash image display with full GIF animation support.
@@ -1463,6 +1463,21 @@ namespace ConditioningControlPanel.Services
             for (int i = 0; i < images.Count; i++)
             {
                 var imageData = images[i];
+                if (look?.Peripheral == true)
+                {
+                    imageData.Peripheral = true;
+                    var m = imageData.Monitor;
+                    var portrait = m.Height > m.Width;
+                    var maxW = m.Width * (portrait ? .29 : .18) * 1.2;
+                    var maxH = m.Height * (portrait ? .16 : .29) * 1.2;
+                    var fit = Math.Min(maxW / imageData.Width, maxH / imageData.Height);
+                    var w = Math.Max(1, (int)(imageData.Width * fit));
+                    var h = Math.Max(1, (int)(imageData.Height * fit));
+                    var (x, y) = PickPeripheralPoint(m, w, h);
+                    imageData.Geometry = new ImageGeometry { X = x, Y = y, Width = w, Height = h };
+                    imageData.PreviewV2 = look?.PreviewV2 == true;
+                    inheritMotion = FlashMotionStyle.Still;
+                }
                 var delayMs = imageData.IsRemix ? 0 : isMultiplication ? i * 100 : i * staggerMs;
                 
                 if (delayMs == 0)
@@ -1564,7 +1579,7 @@ namespace ConditioningControlPanel.Services
                     // MUST go through PickSpawnPoint, not a raw re-randomize: this loop used to
                     // bypass the geometry rules entirely, so with #770's avoid-center on, any
                     // overlapping flash would land right back on the crosshair.
-                    (finalX, finalY) = PickSpawnPoint(monitor, geom.Width, geom.Height);
+                    (finalX, finalY) = imageData.Peripheral ? PickPeripheralPoint(monitor, geom.Width, geom.Height) : PickSpawnPoint(monitor, geom.Width, geom.Height);
                 }
 
                 // Render path decided at the top of this method (mode-aware cap):
@@ -1604,7 +1619,8 @@ namespace ConditioningControlPanel.Services
                 window.CurrentFrameIndex = 0;
                 // The shared host is fully click-through (pops on it would need the global mouse
                 // hook, like bubbles) — solid-mode flashes are gaze-pop/linger only by design.
-                window.IsClickable = settings.FlashClickable && !useHost;
+                window.PreviewV2 = imageData.PreviewV2;
+                window.IsClickable = (settings.FlashClickable || window.PreviewV2) && !useHost;
                 window.Background = System.Windows.Media.Brushes.Black;
                 window.IsFadingOut = false;
                 window.LifetimeCts = windowCts;
@@ -1837,7 +1853,10 @@ namespace ConditioningControlPanel.Services
                     // Flashes v2: a hydra child inherits the parent's kind (its own start state
                     // is rolled at spawn); an original resolves the picker through ownership and
                     // MotionLevel. The classic and solid paths never move.
-                    window.MotionStyle = ResolveMotionStyle(settings, inheritMotion);
+                    window.MotionStyle = imageData.PreviewV2
+                        ? FlashMotion.Resolve(FlashMotionStyle.DriftBounce,
+                            true, true, MotionFx.Level, _random)
+                        : ResolveMotionStyle(settings, inheritMotion);
                     SpawnLayerVisual(window, imageData, monitor,
                         layerGlowColor, layerGlowRadius, layerGlowOpacity, isLucky, window.MotionStyle,
                         roundedWpf && ownsFlashV2);
@@ -2122,12 +2141,11 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private FlashShatterState? BuildShatter(FlashWindow window, Compositor.FlashLayer.FlashItem item)
         {
-            if (App.Settings?.Current?.FlashShatterEnabled != true) return null;
-            if (!OwnsFlashV2()) return null;
+            if (!window.PreviewV2 && (App.Settings?.Current?.FlashShatterEnabled != true || !OwnsFlashV2())) return null;
 
             var (bx, by, bw, bh) = ShatterBounds(window, item);
             var state = FlashShatter.Create(item.X, item.Y, item.W, item.H, bx, by, bw, bh,
-                MotionFx.Level, _random);
+                MotionFx.Level, _random, ninePieces: window.PreviewV2);
             return state.Shards.Length > 0 ? state : null;
         }
 
@@ -2221,11 +2239,19 @@ namespace ConditioningControlPanel.Services
             // Flashes v2: roll the motion here on the UI thread (MotionFx.Level, _random) before the
             // off-thread conversion. The spawn monitor converts to world px like the window rect;
             // a pendulum re-homes under the monitor's top centre and the rope is clamped on screen.
+            // Authored previews stay in a peripheral lane instead of crossing the active game.
+            double bx = monitor.X * dpi, by = monitor.Y * dpi, bw = monitor.Width * dpi, bh = monitor.Height * dpi;
+            if (imageData.PreviewV2)
+            {
+                if (bh > bw) { var bottom = y + h / 2 > by + bh / 2; bh *= .34; if (bottom) by += monitor.Height * dpi - bh; }
+                else { var right = x + w / 2 > bx + bw / 2; bw *= .34; if (right) bx += monitor.Width * dpi - bw; }
+            }
             FlashMotionState? motionState = motion == FlashMotionStyle.Still ? null
                 : FlashMotion.Create(motion, x, y, w, h,
-                    monitor.X * dpi, monitor.Y * dpi, monitor.Width * dpi, monitor.Height * dpi,
+                    bx, by, bw, bh,
                     MotionFx.Level, _random);
 
+            if (imageData.PreviewV2 && motionState != null) { motionState.Vx *= .35; motionState.Vy *= .35; }
             window.LayerSpawnPending = true;
 
             _ = Task.Run(() =>
@@ -2349,7 +2375,7 @@ namespace ConditioningControlPanel.Services
                 // Wave 2: a left press on a draggable flash takes hold of it instead of popping
                 // it, and the release decides between the pop, a placement and a throw. A right
                 // press still pops on the spot - that is the escape hatch while dragging is on.
-                var startDrag = !right && _layerDragEnabled;
+                var startDrag = !right && (_layerDragEnabled || win.PreviewV2);
                 var grab = px;
                 System.Windows.Application.Current?.Dispatcher?.BeginInvoke(() =>
                 {
@@ -2443,8 +2469,27 @@ namespace ConditioningControlPanel.Services
             // and from its WORK AREA, so a flung flash never vanishes behind the taskbar.
             ApplyWorkAreaBounds(motion, px);
 
-            if (FlashDrag.Release(motion, nowMs, MotionFx.Level) == FlashDragOutcome.Tap
-                && !window.IsFadingOut)
+            var outcome = FlashDrag.Release(motion, nowMs, MotionFx.Level);
+            if (window.PreviewV2 && !window.IsFadingOut)
+            {
+                if (MotionFx.Level == MotionLevel.Off || _random.Next(3) == 0)
+                    OnFlashClicked(window, App.Settings.Current);
+                else
+                {
+                    // Samples are local to this Back Room flash; no saved V2 preference changes.
+                    if (outcome != FlashDragOutcome.Fling)
+                    {
+                        motion.Vx = (px.X < motion.BoundsX + motion.BoundsW / 2 ? -1 : 1) * 1100;
+                        motion.Vy = (_random.NextDouble() - .5) * 500;
+                    }
+                    motion.Drag = drag;
+                    drag.Flinging = true;
+                    motion.BoundsX -= motion.BoundsW; motion.BoundsY -= motion.BoundsH;
+                    motion.BoundsW *= 3; motion.BoundsH *= 3;
+                }
+                return;
+            }
+            if (outcome == FlashDragOutcome.Tap && !window.IsFadingOut)
             {
                 OnFlashClicked(window, App.Settings.Current);
             }
@@ -3061,6 +3106,17 @@ namespace ConditioningControlPanel.Services
         /// Keep targets away from screen edges so they're fully visible and clickable.
         /// </summary>
         internal const int SpawnEdgePadding = 50;
+
+        // Back Room bursts use perimeter bands without changing global flash preferences.
+        private (int X, int Y) PickPeripheralPoint(MonitorInfo monitor, int w, int h)
+        {
+            bool far = _random.Next(2) == 1;
+            if (monitor.Height > monitor.Width)
+                return (monitor.X + _random.Next(0, Math.Max(1, monitor.Width - w)),
+                    monitor.Y + Math.Clamp((int)(monitor.Height * (far ? .77 : .23)) - h / 2, 0, Math.Max(0, monitor.Height - h)));
+            return (monitor.X + Math.Clamp((int)(monitor.Width * (far ? .79 : .21)) - w / 2, 0, Math.Max(0, monitor.Width - w)),
+                monitor.Y + _random.Next(0, Math.Max(1, monitor.Height - h)));
+        }
 
         /// <summary>
         /// Picks a top-left spawn point (in virtual-desktop DIPs) for a <paramref name="w"/>x<paramref name="h"/>
@@ -4931,6 +4987,9 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public bool ShatterOnDismiss { get; set; }
 
+        /// <summary>Back Room-only interaction showcase, independent of saved ownership settings.</summary>
+        public bool PreviewV2 { get; set; }
+
         /// <summary>
         /// The fade alpha the heartbeat animates: window Opacity in per-window mode, the hosted
         /// root's Opacity in solid mode, the layer item's in compositor mode (an unshown
@@ -5098,6 +5157,8 @@ namespace ConditioningControlPanel.Services
         public bool IsRemix { get; set; }
         /// <summary>A remix copy on a second monitor: shown, but pays no XP and counts nothing.</summary>
         public bool RemixMirror { get; set; }
+        public bool Peripheral { get; set; }
+        public bool PreviewV2 { get; set; }
     }
 
     internal class ImageGeometry

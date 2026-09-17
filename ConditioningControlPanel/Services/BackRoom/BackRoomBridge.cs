@@ -115,10 +115,11 @@ public sealed class BackRoomBridge
 
     /// <summary>A server reply carried <c>sp</c>: that is the true balance, adopted now and never
     /// echoed back to the page that asked for it.</summary>
-    public void AdoptSp(int sp)
+    public void AdoptSp(int sp, Func<bool>? canAdopt = null)
     {
         void Write()
         {
+            if (IsClosed || canAdopt?.Invoke() == false) return;
             _adopting = true;
             try { _d.SetSp?.Invoke(sp); }
             finally { _adopting = false; }

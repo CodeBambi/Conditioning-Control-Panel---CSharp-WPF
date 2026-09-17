@@ -11,7 +11,7 @@
  * that times out all mean the default house art with its captions.
  *
  * The preview's file picker is gone: nothing here reads a local file.
- * Pictures turn every 18 s with a 1.6 s cross-fade; a still room holds them.
+ * Pictures turn every 9 s through a brief silent static handoff; a still room holds them.
  *
  * GIF COST CAP: only pictures on a screen inside the camera frustum advance,
  * each at most MAX_FPS (gif.js) into a texture of at most MAX_EDGE px, with at
@@ -23,22 +23,57 @@
 import * as T from 'three';
 import { labelTexture } from './fixtures.js';
 import { animatedSource } from './gif.js';
+import { refusedMedia } from './media-limits.js';
+import { quality } from '../shared/quality.js';
+import { createScreenAnimationBudget } from './screen-animation-budget.js';
+import { screenTransition } from './screen-transition.js';
 
-export const TURN_S = 18;
+export const TURN_S = 9;
 const SCREEN_ASPECT = 2.12 / 1.22;
 const MAX_PICTURES = 8;
-const MAX_DECODES_PER_FRAME = 1;
+/* Owner, 2026-09-16: "the screens do not change the gif/vid only the ceiling does". They did change - every
+ * 18 s, which is past the length of a look - and they barely played: ONE decode could start per 83 ms across
+ * every screen on the wall, so four pictures on screen at once advanced at three frames a second each. The
+ * per-source clock in gif-decode.js is the real cap (one decode in flight, never above MAX_FPS, only inside
+ * the frustum, nothing at all while a station holds the room), so this budget is a per-FRAME batch now and
+ * not a second global throttle on top of it. The ceiling projector keeps its own faster turn (4.5 s). */
+// Full keeps source clocks; Performance starts at most four decodes per 1/6 s.
 
 function material(first, caption) {
   return new T.ShaderMaterial({
-    uniforms: { a: { value: first }, b: { value: first }, ratioA: { value: 1.6 }, ratioB: { value: 1.6 }, mixAmount: { value: 0 },
+    uniforms: { glitch: {value:0}, glitchFrame: {value:0}, grid: {value:0}, a: { value: first }, b: { value: first }, ratioA: { value: 1.6 }, ratioB: { value: 1.6 }, mixAmount: { value: 0 },
+      ax: {value:first}, ay: {value:first}, bx: {value:first}, by: {value:first},
+      ratioAx: {value:1}, ratioAy: {value:1}, ratioBx: {value:1}, ratioBy: {value:1}, panelsA: {value:1}, panelsB: {value:1},
       titleA: { value: caption }, titleB: { value: caption }, showTitles: { value: 1 }, screen: { value: SCREEN_ASPECT }, cover: { value: 0 } },
     vertexShader: 'varying vec2 v;void main(){v=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-    fragmentShader: `uniform sampler2D a,b,titleA,titleB;uniform float showTitles,ratioA,ratioB,mixAmount,screen,cover;varying vec2 v;
-vec4 pic(sampler2D tex,float ratio){vec2 uv=v-.5;if(cover>.5){if(ratio>screen)uv.x*=screen/ratio;else uv.y*=ratio/screen;}else{if(ratio>screen)uv.y*=ratio/screen;else uv.x*=screen/ratio;}uv+=.5;
+    fragmentShader: `uniform sampler2D a,b,ax,ay,bx,by,titleA,titleB;
+uniform float glitch,glitchFrame,grid,showTitles,ratioA,ratioB,ratioAx,ratioAy,ratioBx,ratioBy,panelsA,panelsB,mixAmount,screen,cover;varying vec2 v;
+float noise(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+vec4 pic(sampler2D tex,float ratio,vec2 point,float aspect,float fill){vec2 uv=point-.5;uv.x+=(noise(vec2(floor(point.y*28.),glitchFrame))-.5)*.09*glitch;if(fill>.5){if(ratio>aspect)uv.x*=aspect/ratio;else uv.y*=ratio/aspect;}else{if(ratio>aspect)uv.y*=ratio/aspect;else uv.x*=aspect/ratio;}uv+=.5;
 if(min(uv.x,uv.y)<0.||max(uv.x,uv.y)>1.)return vec4(.022,.012,.033,1.);return texture2D(tex,uv);}
-void main(){gl_FragColor=mix(pic(a,ratioA),pic(b,ratioB),mixAmount);
+vec4 mosaic(sampler2D mainTex,sampler2D leftTex,sampler2D rightTex,float r,float rl,float rr,float panels){
+if(panels<1.5)return pic(mainTex,r,v,screen,cover);
+float col=min(panels-1.,floor(v.x*panels));vec2 uv=vec2(fract(v.x*panels),v.y);
+if(uv.x<.006||uv.x>.994)return vec4(.035,.012,.05,1.);
+if(col<.5)return pic(leftTex,rl,uv,screen/panels,1.);
+if(col<1.5)return pic(mainTex,r,uv,screen/panels,1.);
+return pic(rightTex,rr,uv,screen/panels,1.);}
+vec4 tiles(){
+vec2 uv=fract(v*vec2(3.,2.));float tile=floor(v.x*3.)+3.*floor(v.y*2.);float aspect=screen*2./3.;
+if(uv.x<.004||uv.y<.004)return vec4(.035,.012,.05,1.);
+if(tile<.5)return pic(a,ratioA,uv,aspect,1.);
+if(tile<1.5)return pic(ax,ratioAx,uv,aspect,1.);
+if(tile<2.5)return pic(ay,ratioAy,uv,aspect,1.);
+if(tile<3.5)return pic(b,ratioB,uv,aspect,1.);
+if(tile<4.5)return pic(bx,ratioBx,uv,aspect,1.);
+return pic(by,ratioBy,uv,aspect,1.);}
+void main(){gl_FragColor=grid>.5?tiles():mix(mosaic(a,ax,ay,ratioA,ratioAx,ratioAy,panelsA),mosaic(b,bx,by,ratioB,ratioBx,ratioBy,panelsB),mixAmount);
 if(showTitles>.5&&v.y>.82){vec2 tv=vec2(v.x,(v.y-.82)/.18);gl_FragColor=mix(texture2D(titleA,tv),texture2D(titleB,tv),mixAmount);}
+// A low-contrast interference band, never a full-screen white flash.
+float grain=noise(floor(v*vec2(280.,160.))+vec2(glitchFrame,glitchFrame*3.));
+float scan=.5+.5*sin(v.y*460.+glitchFrame);
+vec3 snow=mix(vec3(.055,.035,.08),vec3(.34,.27,.39),grain)*(.8+.2*scan);
+gl_FragColor.rgb=mix(gl_FragColor.rgb,snow,glitch*.76);
 #include <colorspace_fragment>
 }`,
   });
@@ -78,64 +113,84 @@ export async function createScreens(o) {
   for (const m of o.meshes) { m.material = material(house[0].texture, captions[0]); m.material.uniforms.screen.value=m.userData.screenAspect||SCREEN_ASPECT;m.material.uniforms.cover.value=m.userData.screenCover?1:0; }
   const frustum = new T.Frustum(), viewProj = new T.Matrix4();
   const due = new Set();
-  let nextDecode = 0, cursor = 0;
+  let nextDecode = 0, cursor = 0, dealing = false, refreshAt = Infinity, sourceVersion = 0;
+  const sourceChanged = () => { sourceVersion++; refreshAt = -Infinity; };
+  window.addEventListener('br-media-changed', sourceChanged);
+  const controller = new AbortController();
+  const free = src => src.dispose ? src.dispose() : src.texture.dispose();
 
   /** @param t ambient seconds  @param camera the room camera  @param isStill hold first frames */
   function update(t, camera, isStill) {
+    if ((!isStill || refreshAt === -Infinity) && !dealing && t >= refreshAt) { refreshAt = t + 72; void deal(() => t); }
     const since = Math.max(0, t - epoch);
     if (camera) frustum.setFromProjectionMatrix(viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     due.clear();
     o.meshes.forEach((mesh, i) => {
       const u = mesh.material.uniforms;
       const turn=mesh.userData.screenTurn||TURN_S;
-      const n=Math.floor(since/turn),blend=T.MathUtils.smoothstep(since%turn,turn-Math.min(1.6,turn*.2),turn);
-      const a = gallery[(n + i) % gallery.length], b = gallery[(n + i + 1) % gallery.length];
+      const state=screenTransition(since,turn,isStill,gallery.length,i);
+      const n=state.index,blend=state.mix;
+      u.glitch.value=state.glitch;u.glitchFrame.value=state.frame;
+      const grid=!!mesh.userData.screenGrid;u.grid.value=grid?1:0;
+      const a = gallery[(n + i) % gallery.length], b = gallery[(n + i + (grid?3:1)) % gallery.length];
       u.a.value = a.texture; u.b.value = b.texture;
       u.ratioA.value = a.texture.image.width / a.texture.image.height; u.ratioB.value = b.texture.image.width / b.texture.image.height;
+      const ratio = src => src.texture.image.width / src.texture.image.height;
+      const panels = src => custom && !mesh.userData.screenCover && ratio(src) < u.screen.value * .8
+        ? Math.min(gallery.length, 3, Math.max(2, Math.round(u.screen.value / ratio(src)))) : 1;
+      const extrasA = [gallery[(n+i+1)%gallery.length],gallery[(n+i+2)%gallery.length]];
+      const extrasB = [gallery[(n+i+(grid?4:2))%gallery.length],gallery[(n+i+(grid?5:3))%gallery.length]];
+      u.panelsA.value=panels(a);u.panelsB.value=panels(b);
+      for(const [name,src] of [['ax',extrasA[0]],['ay',extrasA[1]],['bx',extrasB[0]],['by',extrasB[1]]]) {
+        u[name].value=src.texture;u['ratio'+name[0].toUpperCase()+name[1]].value=ratio(src);
+      }
       u.mixAmount.value = blend;
       u.showTitles.value = custom || mesh.userData.screenNoTitles ? 0 : 1;
       u.titleA.value = captions[(n + i) % captions.length]; u.titleB.value = captions[(n + i + 1) % captions.length];
       let visible=true;for(let p=mesh;p;p=p.parent)if(!p.visible)visible=false;
-      if (visible && camera && (a.tick || b.tick) && frustum.intersectsObject(mesh)) { due.add(a); if (blend > 0) due.add(b); }
+      if (visible && camera && (a.tick || b.tick) && frustum.intersectsObject(mesh)) { due.add(a);
+        if(grid){[...extrasA,b,...extrasB].forEach(src=>due.add(src));}
+        if(u.panelsA.value>1)due.add(extrasA[0]);if(u.panelsA.value>2)due.add(extrasA[1]);
+        if (blend > 0) { due.add(b);if(u.panelsB.value>1)due.add(extrasB[0]);if(u.panelsB.value>2)due.add(extrasB[1]); } }
     });
-    const now=performance.now();
-    if(now<nextDecode)return;
-    let started = 0;
-    const ready=[...due];
-    for (let i=0;i<ready.length;i++) {
-      const src=ready[(cursor+i)%ready.length];
-      if (started >= MAX_DECODES_PER_FRAME) break;
-      if (src.tick && src.tick(now, isStill)) { started++; decodes++; cursor=(cursor+i+1)%ready.length; nextDecode=now+1000/12; }
-    }
+    decodes += animateScreens([...due], performance.now(), isStill, quality.performance);
   }
 
   /** Ask the feed; swap in the player's pictures when at least one loads. Never throws. */
   async function deal(now) {
+    if (disposed || dealing) return 0;
+    dealing = true; const version = sourceVersion;
+    try {
     let frame = null;
     try { frame = await o.media(); } catch (e) { frame = null; }
     const gifs = frame && Array.isArray(frame.gifs) ? frame.gifs : [];
-    const urls = [...new Set(gifs.filter((g) => g && g.src !== 'fallback' && allowed(g.url)).slice(0, MAX_PICTURES).map((g) => g.url))];
+    const urls = [...new Set(gifs.filter((g) => g && g.src !== 'fallback' && allowed(g.url)).map((g) => g.url))].slice(0, MAX_PICTURES);
     const results=new Array(urls.length);let next=0;
     await Promise.all([0,1].map(async()=>{while(next<urls.length&&!disposed){const index=next++,u=urls[index];results[index]=await (async()=>{
-      const playing = await animatedSource(u);
+      let playing;
+      try { playing = await animatedSource(u, { signal: controller.signal }); }
+      catch(error) { if (refusedMedia(error)) return null; playing = null; }
       if (playing) return playing;
       const t = await loader.loadAsync(u).then(prep).catch(() => null);
       return t && t.image && t.image.width > 0 ? still(t) : null;
     })();}}));
     const loaded=results.filter(Boolean);
-    if (disposed) { loaded.forEach(src => src.dispose ? src.dispose() : src.texture.dispose()); return 0; }
+    if (disposed || version !== sourceVersion) { loaded.forEach(src => src.dispose ? src.dispose() : src.texture.dispose()); return 0; }
     if (!loaded.length) { if (urls.length && o.log) o.log('wall pictures: none readable, house art stays'); return 0; }
+    const previous = custom ? gallery : [];
     gallery = loaded; custom = true; epoch = now();
+    previous.forEach(free);
     return loaded.length;
+    } finally { dealing = false; refreshAt = version !== sourceVersion ? -Infinity : now() + 72; }
   }
 
   return {
     update, deal,
     dispose() {
-      disposed = true;
+      disposed = true; controller.abort(); window.removeEventListener('br-media-changed', sourceChanged);
       for (const src of new Set([...house, ...gallery])) src.dispose ? src.dispose() : src.texture.dispose();
       captions.forEach(t => t.dispose());
-      // One cross-fade ShaderMaterial per screen, made here, so it is freed here too.
+      // One transition ShaderMaterial per screen, made here, so it is freed here too.
       for (const mesh of o.meshes) if (mesh.material) mesh.material.dispose();
     },
     get pictures() { return custom ? gallery.length : 0; },

@@ -125,8 +125,16 @@ internal static class BackRoomHostService
             _panicSuspended = _minimised = false;
             _lastPanicPressUtc = DateTime.MinValue;
 
-            var api = new BackRoomApi(null, BackRoomApi.AppIdentity, sp => _bridge?.AdoptSp(sp));
-            _bridge = new BackRoomBridge(new BackRoomBridge.Deps
+            var roomAccount = BackRoomApi.AppIdentity()?.UnifiedId;
+            (string UnifiedId, string Token)? RoomIdentity()
+            {
+                var current = BackRoomApi.AppIdentity();
+                return current?.UnifiedId == roomAccount ? current : null;
+            }
+            BackRoomBridge? roomBridge = null;
+            var api = new BackRoomApi(null, RoomIdentity,
+                sp => roomBridge?.AdoptSp(sp, () => RoomIdentity() != null));
+            _bridge = roomBridge = new BackRoomBridge(new BackRoomBridge.Deps
             {
                 Post = Post,
                 Relay = api,

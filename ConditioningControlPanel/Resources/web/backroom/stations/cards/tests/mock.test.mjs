@@ -11,7 +11,7 @@ test('state carries the 10.13.E fields', async () => {
   const m = createMockServer({ sp: 40 });
   const s = (await m.handle('state')).body;
   for (const k of ['ok', 'sp', 'open', 'hand', 'legal', 'hint', 'autoStandAt', 'rules', 'floorMs']) assert.ok(k in s, k);
-  assert.deepEqual(readState(s).rules.stakes, [1, 2]);
+  assert.deepEqual(readState(s).rules.stakes, [1, 2, 3]);
 });
 
 test('a scripted deal opens a hand, a stand settles it against the dealer', async () => {
@@ -69,7 +69,7 @@ test('receipts replay byte for byte; faults, the door and auto-stand', async () 
   const auto = await post(m, 'hit', { handId: a.hand.id, step: 1 });
   assert.equal(auto.reason, 'auto_stood'); assert.equal(auto.hand.done, true);
   assert.equal((await post(m, 'stand', { handId: a.hand.id, step: 1 })).reason, 'no_hand');
-  assert.equal((await post(m, 'deal', { stake: 3 })).reason, 'bad_request');
+  assert.equal((await post(m, 'deal', { stake: 4 })).reason, 'bad_request');
   m.setOpen(false);
   assert.equal((await m.handle('state')).status, 403);
 });

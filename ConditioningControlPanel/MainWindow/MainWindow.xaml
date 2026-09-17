@@ -1477,9 +1477,11 @@
                      switcher. Phase 1 moved navigation into the rail, so the header is now
                      just identity (elastic) + the right-hand chrome cluster (Auto). -->
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
+                <controls:SparkleWallet x:Name="HeaderSparkleWallet" Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center"/>
 
                 <!-- Title + Player Title + App Name + Version -->
                 <!-- #860: a Grid, not a StackPanel, so this cluster can give width back.
@@ -1492,7 +1494,7 @@
                      own row) can claim the leftover width between the version text and the
                      right-hand chrome. Nothing spreads: columns 0-4 are still Auto/capped, and
                      the banner is the only thing that grows. -->
-                <Grid Grid.Column="0" VerticalAlignment="Center">
+                <Grid Grid.Column="1" VerticalAlignment="Center">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*" MaxWidth="200"/>
@@ -1824,7 +1826,7 @@
                      this strip 0911: Settings > General owns the picker now.
                      Bug Report lives in the title bar (BtnTitleBarBugReport) - the copy that
                      used to sit here was a duplicate and was removed for the bubble. -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <ComboBox x:Name="CmbPresets" Width="160" Margin="0,0,10,0" Visibility="Collapsed"
                               SelectionChanged="CmbPresets_SelectionChanged"
                               ToolTip="{loc:Str tooltip_select_a_preset_configuration}">

@@ -6,7 +6,7 @@
  *
  * What it proves that wheel-check.mjs (dev.html) cannot: E at the wheel mounts and opens the station through the
  * loader's ctx, the room owns Back and the SP chip (ctx.spReadout), init.gates and a live settings frame dress the
- * page, the moments leave the page as real bridge messages (media-request count 4, fx with args, fx-tunnel), and Back
+ * page, the moments leave the page as real bridge messages (media-request count 8, fx with args, fx-tunnel), and Back
  * closes it with the tunnel at 0. Port WHEEL_ROOM_PORT (default 8894, debug +500). The only process it stops is
  * the Chrome it started, by its own handle.
  * ==========================================================================*/
@@ -99,7 +99,7 @@ await sleep(250);
 await key('KeyE'); await key('KeyE', 'keyUp');
 ok(await until(`document.querySelector('.br-station[data-station="wheel"] .wheel-station[data-phase="play"]')`, 20000), 'E at the wheel mounts and opens the station through the loader');
 ok((await posted('station-open')).some(m => m.station === 'wheel'), 'station-open wheel posted');
-ok((await posted('media-request')).some(m => m.station === 'wheel' && m.count === 4), 'the sit-down deal asks count 4');
+ok((await posted('media-request')).some(m => m.station === 'wheel' && m.count === 8), 'the sit-down deal asks count 8');
 ok(await ev(`document.querySelector('.wheel-station').hasAttribute('data-host-back') && document.querySelector('.wheel-back').hidden`), 'the room owns Back (ctx.hostBack)');
 ok(await ev(`document.querySelector('.wheel-station').dataset.hub === 'loom'`), 'init.gates spiral on: the Loom hub');
 await sleep(400);

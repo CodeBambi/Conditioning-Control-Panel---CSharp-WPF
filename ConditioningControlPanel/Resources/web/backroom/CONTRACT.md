@@ -823,7 +823,7 @@ so a later sync never refunds a stake or erases a win). The client never sends S
 
 **Soft Hand (`/v2/backroom/cards/*`, `proxy/backroom-cards-routes.js`).** Rules = `backroom-cards.js` RULES_V1: 6 decks
 shuffled for every hand, dealer peek, S17, blackjack 2:1, double on any two cards, split once, double after split,
-split aces one card each, six-card Charlie pays 1:1, no surrender, no insurance, stake 1 or 2 SP, one open hand,
+split aces one card each, six-card Charlie pays 1:1, no surrender, no insurance, stake 1, 2 or 3 SP (owner update 2026-09-16), one open hand,
 auto-stand after 24 h.
 
 - Ledger `user.backroom.cards = { v: 1, hand: <engine state, hole card and shoe pointer included> | null, openedAt: ms,
@@ -935,7 +935,7 @@ side by side). A 3D close-up is a later amendment with its own node contract.
 
 | File | What |
 |---|---|
-| `station.js` | `mount(ctx)`; DOM, buttons (Deal; Hit, Stand, Double, Split from `legal`; bet chip 1 or 2, default 1 below 30 SP; hint toggle off by default, remembered in `localStorage` `br_cards_hint`; "Stand up, sit back down" while no hand is open), the request flow, moments |
+| `station.js` | `mount(ctx)`; DOM, buttons (Deal; Hit, Stand, Double, Split from `legal`; bet chips 1 to 3 with +/- controls, default 1 below 30 SP; hint toggle off by default, remembered in `localStorage` `br_cards_hint`; "Stand up, sit back down" while no hand is open), the request flow, moments |
 | `hand.js` | pure: reading `publicHand`, the button set, the same idem on `busy`/`timeout` retries, `stale` adopts the returned hand, Law I |
 | `table.js` | the canvas renderer: lamp, felt, print, cards, shoe, chips, win tunnel, chip vortex, sit fan |
 | `feel.js` | pure: result -> moment id, the highest-card key, timings |
@@ -2010,3 +2010,216 @@ so a bad duration can never stall the beat. `callout.cancel()`, `cancelWords()`,
 **Files.** Page: `shared/hypno/voice.js` (the adapter), `shared/hypno/callout.js` (`voice` option, the chain hold).
 Host: `Services/BackRoom/BackRoomVoice.cs`, `IBackRoomVoice` / `BackRoomVoiceAck` in `BackRoomContracts.cs`,
 `NullBackRoomVoice` in `BackRoomStubs.cs` (what the dev rig and the suite run on).
+
+## 10.22 The reward pass (owner approved 2026-09-16)
+
+Source: `house-book.md` laws IX, X, XII and XIII with Brakes 2, 3, 5, 8 and 9, and the owner's revisit of the
+sentence 10.16.A closes on. The reward vocabulary was fully built and almost entirely spent at ONE fixture: the
+slot has the bank, the ladder, the payline frame and the coin shower; the wheel carries half a copy; the
+roulette and the cards have next to nothing, and at the roulette the SP number simply changes, which is Law XII
+broken outright. `arcademy/shell/counterfx.js` has exported `sparkBurst`, `warmGlow`, `ghostGold` and `countUp`
+since the Arcademy shipped, and the Back Room calls none of them. This section is that pass. Where it disagrees with
+sections 8, 10.13, 10.15 or 10.16 for any station, this wins; 10.16.F (the room mints SP and sells nothing) and
+Law I are untouched by it.
+
+Everything here is still presentation over a settled number. The page never mints, weights or re-draws
+anything; every effect below is a picture of something the tape or the server already decided.
+
+**Amendment to 10.16.A.** That section ends "(The playbook's 'shows from across the room' is not built. Owner
+may revisit.)" The owner has revisited, and it IS built. Strike that sentence. It is replaced by:
+
+> The playbook's "shows from across the room" is built (10.22). Every fixture with a payout node gets the
+> room-side coin shower, sized by the tier the shared spine decides. The jar's fill is still close-up only:
+> what crosses the room is the PAY, never a station's private state.
+
+### 10.22.A The room-side shower is every fixture's, not the slot's
+
+`room/fixtures.js` builds a `payouts` entry behind `if (row.id === 'slot')`. That test goes. Any fixture whose
+model carries a payout node takes a `createCoinShower`, and `room.celebrate(key, amount, tier, text)` finds it
+by row key exactly as it does today. A fixture with no payout node is not an error and is not a fallback: it
+simply has no shower, and its station's close-up party is the whole beat.
+
+`room/coin-shower.js` is unchanged - it already reads tier 1-4 as 7 / 16 / 32 / 64 coins, already refuses an
+amount of 0 or less, and already draws nothing while `still` (Law VI, Brake 8). The spine hands it a tier of 0
+for a small win, and 0 never reaches it: a tier 1 is a close-up event and does not show from across the room
+(Law IX - a small win never gets confetti).
+
+### 10.22.B All four stations announce a paid result
+
+`ctx.revealedWin(amount, tier, text)` (`room/loader.js` -> `scene.celebrate` -> `room.celebrate`) is called by
+the slot alone today. From here, every station calls it ONCE, on the frame a paid result is revealed:
+
+| Station | The frame it announces on | Amount |
+|---|---|---|
+| slot | reel 3's thud, the landed line's own frame (unchanged) | `o.pay` |
+| wheel | the pointer settles, the landed slice's frame | `r.pay` |
+| roulette | the ball comes to rest and the read is settled | `read.pay` |
+| cards | the settle frame, after the hole card has turned | `hand.result.net` |
+
+Rules for all four. Once a result, never per hand, per chip or per line: a split that won three ways announces
+its net once (Brake 2). Never before the reveal - an announcement is the room learning what the player has just
+learnt, so it can never tell the room anything first (Law I). A losing, pushed or snoozed result announces
+nothing at all; the room is not told about a miss. `tier` is the spine's `plan.shower`, not the station's own
+rung. Back, suspend and close fire nothing more: what is already falling is cleared by the room's
+station-close, never by the page (Law VI).
+
+### 10.22.C The spine: `shared/win/`
+
+ONE place decides what a win is worth and what it may spend. Stations keep their own recipes and keep deciding
+their own outcomes; they stop deciding their own restraint.
+
+| File | What it owns |
+|---|---|
+| `shared/win/tier.js` | What a win is WORTH, 0-4. It normalises what a station's recipe already decided, so a tier 3 at the roulette buys the party a tier 3 at the slot buys. It replaces no station `tierOf`. |
+| `shared/win/plan.js` | What a win may SPEND: `winPlan(tier, ctx)` -> a frozen `{ bank, shower, ladder, sparkle, reveal, glow, emi, partyMs }`. |
+| `shared/win/bank.js` | THE BANK (Law XII), one copy of the move `stations/slot/bank.js` and `stations/wheel/bank.js` are two copies of. |
+| `shared/win/ladder.js` | THE CHIME LADDER, lifted out of `stations/slot/feel.js`. |
+
+All four are PURE - no DOM, no three, no audio, no timers - on the rule `stations/slot/feel.js` already lives
+by, and all four are held by `shared/win/tests/`.
+
+**`plan.js` is where the Brake lives.** Law IX and Brakes 2, 3 and 5 are enforced there and NOWHERE else. A
+station that re-derives any of the following is a bug:
+
+- **Law IX** sizes it: tier 1 a chime, tier 2 two notes and a jolt, tier 3 THE THUD, tier 4 THE REVEAL. A
+  small win never gets sparkle, a shower or a reveal. The hero plays once a sit-down; the second jackpot of a
+  sit-down is a very good tier 3.
+- **Brake 2** merges: `mergePlans(a, b)` returns the HIGHER plan, never the sum. Two parties on one frame are
+  one party.
+- **Brake 3** wears it down: the first three wins of a rung get the fanfare, then a rung down, and from the
+  fortieth it is a thud and the tokens. The ledger is `freshSit` / `sitPlan` / `afterParty`, one per sit-down.
+- **Brake 5** quiets it: melted drops the rung to 1, kills the shower, the sparkle, the glow and the reveal,
+  and drops the ladder an octave. The bank still flies - a melted win is quiet, not invisible.
+- **Law VI** settles it: reduced motion returns the settled state, `bank: 0` and `partyMs: 0`, with the cue
+  still playing. Calm is NOT reduced motion: the decoration goes, the value still moves.
+- **Brake 8** respects the device: a lite board flies 4 tokens, never 7, drops the sparks, and keeps every
+  sound.
+
+### 10.22.D Three moves enter service
+
+| Move | Enters at | Spec |
+|---|---|---|
+| **THE SPARKLE BURST** | tier 3 (7 sparks) and tier 4 (9), `plan.sparkle` | `counterfx.sparkBurst(host, { count })`, 5-9 pink and gold sparks under 600 ms. Never under lite, never under Calm, never under reduced motion, one burst a moment. It accompanies a big event and is never the event itself. |
+| **THE GLOW** | every paying tier, `plan.glow` | `counterfx.warmGlow(node)`, warm cut, in fast and out slow, 480 ms. 0 while melted (Brake 5) and under reduced motion. Calm keeps it: a warm cut is not travel. |
+| **THE JACKPOT LADDER** | the rungs themselves, `plan.ladder` and `plan.octave` | `ladder.js`: +1 semitone a step, cap 7, never a step closer than the 6 Hz floor, an octave down while melted. Tier 1 is the landing note alone. The royal rung is tier 4, and it is the rung that returns the flag a recap may stamp. |
+
+`countUp` stays the Arcademy's: in the Back Room the readout is counted by THE BANK's own rollup, which ticks on
+the landings (Law X) instead of on a timer. `ghostGold` is already in service as THE ALMOST (10.15 A2).
+
+**Not built, and staying that way.** No new near-miss weighting, no losses disguised as wins, no second hero in
+a beat, and no ceremony that a station may start without a plan. A station may always spend LESS than its plan;
+it may never spend more.
+
+### 10.22.E The room-side echo, as built (lane BR2-room, 2026-09-16)
+
+10.22.A says a fixture with no payout node "simply has no shower". Every room glb was then read node
+by node, and NOT ONE of them carries a payout node: not `slot.glb`, which is the cabinet the whole
+move was written on, and not `wheel.glb`, `roulette.glb`, `card-table.glb` or `counter.glb` either.
+The slot's shower was never aimed by a node at all - `coin-shower.js` drops coins at a hard-coded
+(0, .276, .45) in the CABINET's own space, which is the Candy Rose tray and nothing else's.
+
+So that sentence is replaced, and the rest of 10.22.A stands:
+
+> An authored payout node (`payout_spawn`, `payout_tray`) is believed first and nothing in the room
+> carries one today. A fixture without one is measured instead: its own bounds give a tray line,
+> centred across the face the player walks up to (the row's `approach`), .72 of the way out toward
+> that face and .155 of the way up. Those two fractions ARE the Candy Rose tray, so the fixture the
+> numbers came from keeps them to the centimetre and every other fixture gets the same tray in its
+> own proportions. `room/payout-anchor.js` owns the arithmetic and a host group carries it; a coin
+> is the same size in the room at every fixture scale. A fixture with no visible geometry at all has
+> no shower, and that is the only case that has none.
+
+Three more things the floor does with a win, all of them sized by `shared/win/plan.js` and none of
+them decided anywhere else (`room/win-echo.js`):
+
+| The floor | When | What restraint takes it |
+|---|---|---|
+| THE LINE on the fixture's own screen | every echo, for `plan.partyMs` + 1800 ms | nothing. It is text and it survives Calm, reduced motion and motion level 0 (Brake 9). It restores whatever the screen said before the win, which is not always the boot label - the wheel carries MUST HIT (10.16.E). |
+| THE AURA leaning gold | `plan.shower > 0` | Calm, reduced motion, melt and Brake 3, exactly as the coins are. |
+| THE BOARD, the Parlour marquee carrying the winner's name and line | `plan.reveal`, so once a visit | the same, plus the hero cap: the second jackpot of a visit is a very good tier 3 and does not take the board. |
+
+The room keeps its OWN Brake 3 ledger, and it is a second scope rather than a second opinion: a
+station's ledger wears its close-up party down over one sit-down, the room's wears the floor's echo
+down over the whole visit. A win is announced with the station's `plan.shower` and the room asks the
+plan again with the ROOM's motion state, so Calm keeps the news and drops the decoration.
+
+The echo is driven by the room's own accumulated clock, which STOPS while a station holds the screen.
+A win taken at a cabinet therefore does not start ageing until the player is back on their feet: the
+walk-back is not a timer, it is the room resuming.
+
+Two more moves enter service with it, both `arcademy/shell/counterfx.js` calls the Back Room had
+never made: THE GLOW on the SP chip when a bank token lands (`room/main.js` `spReadout.thud`, never
+under reduced motion, where the existing lit branch is already the state), and the same warm cut with
+a short drop and a squash under it when a won decoration is finally placed at Room Service
+(`room/prop-landing.js`) - the one reward in the room with no number on it, which used to arrive by
+`visible = true`.
+
+
+
+### Physical feedback pass (2026-09-16)
+
+- Reel startup recoil and damped settle bounce scroll the shared cabinet's shallow reel UVs. They do not rotate the shallow meshes or move any result/stop deadline. The lever rebounds and a new melt result gives one cabinet shiver.
+- Cards use authored deck transforms, varied felt landings and weighted flips. Card landing cues occur on rendered touchdown, never when a suspended queue is flushed.
+- Wheel peg clicks follow pointer crossings; the cabinet takes a short starting recoil. Roulette chips drop and settle at the bet location, and each result briefly traces from pocket to board without implying a win.
+- Counter ownership applies as soon as the server confirms; a prize-art drop into a tray is presentation only. Back, failure handling and idempotency are unchanged.
+- Calm, Off, reduced motion and suspension settle cosmetic responses. No new effects setting, spin delay, economy change or result weighting is added.
+- `shared/sound/kit.js` remains the only audio context and mixer. `foley.js` supplies physical cues and loads three locally bundled ElevenLabs sound effects (card slide, cabinet knock, chip placement) after the first gesture. Ready samples replace the procedural cue; pending or failed samples use the immediate procedural fallback. No runtime generation or credentials.
+- Foley follows master mute/volume, Calm trim, suspend, stop and disposal. Preloading never plays a cue. A late decode cannot populate a replaced context. The owner's quiet ambience and B/A lever/reel selection are retained.
+
+### Desktop blackjack table controls (owner update 2026-09-16)
+
+The player total sits left of the active hand. Totals 18-21 use a lifted green emphasis, lower totals settle gently, and bust totals shake and sink. Still/Calm keeps the number without motion. The table shows one chip per SP, with a selector for base stakes 1-3; split and doubled hands display their actual committed stake. Controls follow the hand: Stand left, slightly larger Hit right, Split below Stand and Double below Hit. Stakes remain governed by the server-advertised rules. The test preview enables 3 SP; the matching private-server change must ship before account-backed play offers it.
+
+
+### Table feel follow-up (2026-09-16)
+
+Blackjack reserves chip space outside six-card player footprints, including split hands.
+One chip remains one SP. Bets add/drop and lift/remove; Double places the extra stake
+before its last card travels. Split stakes follow their own hands. The active hand has
+a restrained rim; finished hands square up. Dealer reveal contact gets a soft landing.
+Settlement uses each server hand result: losses collect toward the dealer, wins return
+the stake with the paid chips, pushes stay. These are presentation only.
+
+Cards and roulette accept a limited drag on empty felt (about 4 degrees sideways,
+2.6 degrees vertically), with eased motion and Center view. Game targets own their
+existing gestures. Off/Calm, suspension, transitions and seat disposal cancel the look.
+Projected hand totals and bets follow the table; blackjack action controls stay steady
+while looking. No extra renderer, network request or server outcome change.
+
+
+### Slot chase rewards: bonus Daily Daze spins (2026-09-17)
+
+The slot prize sheet shows a server-selected, column-specific combination: one specific GIF,
+one spiral of any style, and one wildcard. A session token is minted once per room page lifetime;
+returning to a slot does not change it. POST slot/chase `{session,cursor?}` registers the target.
+An unfinished prepaid tape pins its original target until consumed. The GIF deal remains stable
+within that page session, and missing pictures use distinct fallback artwork rather than aliases.
+
+`wheelChase {id,symbols,oneIn,bonusSpins}` appears on chase/state/tape replies. Symbols use gif0..3,
+`spiral`, and `*`. Only paid plain outcomes qualify, never freeze, complimentary or free outcomes.
+Every real match carries `wheelBonus:1`. Existing stop weights and SP payouts are unchanged.
+The current exact average is 1 in 44.1558 paid spins, not a guaranteed interval or a progress meter.
+The displayed odds round to 1 in 44. Credits settle atomically with the tape; the slot announces
+one only on its matching landing and never reveals credits from its still-unplayed outcomes.
+
+Wheel state/spin replies carry `bonusSpins`, `canSpin`, `bonusMode`, and authoritative `slices`.
+Daily allowance is consumed first. Further spins spend earned credits with ordinary rewards,
+including decoration/Seeing Double/Head Empty, but exclude the growing jackpot and its daily
+spinner count. Replayed requests reuse their receipt and never consume another credit. The
+last bonus landing persists. UI uses reply slices before landing, including old daily receipts.
+Unsupported chase endpoints leave legacy slot play available without the bonus row.
+
+This increases direct expected SP by about 0.646 per paid spin, or 0.815 with the decoration
+collection complete, before Seeing Double. It is additional return, not a retune back to 102%.
+
+### Back Room text and flash previews (2026-09-17)
+
+Announcer and word callouts use bundled Fredoka with rounded system fallbacks, larger fitted text, squash/wobble entry and a soft breathing hold. Motion Off and reduced motion retain the quiet fade. All four station announcers read live motion settings.
+
+Authored Back Room flash bursts may sample Still, Drift and Bounce, or Pendulum without owning Flashes v2. This room-only presentation does not grant a prize, change ambient settings, or bypass global motion controls. Desktop compositor previews stay within peripheral lanes; classic flash windows remain still. The browser stand-in uses the shared bounded preview keyframes. Shatter remains the existing interactive prize effect, not part of this automatic motion sample.
+
+### Interactive flash showcase (2026-09-17)
+
+Back Room flashes accept a drag and release without V2 ownership. A third of releases sample shatter; the rest slide or fling according to gesture speed. Full-motion shatter uses nine picture tiles. This replaces the earlier preview-only restriction on shatter, but it still requires user interaction and never runs on expiry. Motion Off uses a quiet dismissal. Desktop uses the existing compositor drag and shatter engines; classic windows retain their normal dismissal. Ambient preferences and prize grants are unchanged. Shared subliminal text targets 30vh with a thicker pink stroke, fitting down only where the viewport requires it.
+
+Roulette exit exception requested 2026-09-17: block station exit while requesting/playing a spin or while interactive browser flashes remain, including a 500 ms double-click grace after removal. Background tap-to-exit is restricted to the bottom 8 percent (maximum 60 px); explicit Back works once the guard clears. This supersedes unconditional Back during roulette play. Desktop landscape uses a higher camera angle; compact phone framing stays intact. All Back Room flash previews are 20 percent larger and drift at varied slow speeds when motion is enabled.

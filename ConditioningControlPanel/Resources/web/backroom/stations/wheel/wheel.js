@@ -122,3 +122,10 @@ export function shownSp(serverSp, owed = 0, flying = null) {
   const floor = Math.max(0, server - Math.max(0, Math.trunc(Number(owed) || 0)));
   return flying == null || !Number.isFinite(Number(flying)) ? floor : Math.min(server, Math.max(0, Math.trunc(Number(flying))));
 }
+
+/** Daily allowance and earned credits are independent. Legacy servers have no credits. */
+export function bonusSpinsOf(state) {
+  const n = Number(state?.bonusSpins);
+  return Number.isSafeInteger(n) && n > 0 ? n : 0;
+}
+export function canSpinWheel(state) { return !!state && (!state.spun || bonusSpinsOf(state) > 0); }

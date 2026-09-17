@@ -1,7 +1,7 @@
 /* ============================================================================
  * shared/hypno/media.js - the player's dealt pictures, drawn in the page
  * (CONTRACT 10.13.C and D). Soft Hand deals 13 and dresses each card value in
- * one; Daily Daze and Velvet Vortex deal 4 and only need a stable key to hand
+ * one; Daily Daze deals eight for its wedges, Velvet Vortex four for
  * fx.gif_from.
  *
  * Nothing here chooses a file: the host deals, the page gets keys and urls, and
@@ -9,17 +9,19 @@
  * ccp.assets, ccp.game or this page's own origin.
  *
  * Decoding is the room's (room/gif-decode.js, WebCodecs ImageDecoder). Caps: at
- * most 13 sources, 192 px on the long edge, 12 fps each; sources load one at a
- * time; at most ONE decode starts per tick (a source load or a frame), and only
+ * most 13 dealt keys, eight resident sources (4 MiB compressed each), 192 px on the long edge,
+ * 12 fps each; three visible source loads may overlap. Unseen values warm one at a time.
+ * At most ONE animation decode starts per tick, and only
  * sources drawn since the last tick advance. No decoder, or a file it refuses,
  * draws a still taken from an <img>.
  * ==========================================================================*/
 
 import { decodedSource } from '../../room/gif-decode.js';
+import { refusedMedia, MEDIA_LIMITS } from '../../room/media-limits.js';
 
 /** Card values in the pure module's rank order, T for ten. Value i wears gifs[i % gifs.length]. */
 export const DECK_VALUES = Object.freeze(['A', '2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K']);
-export const DECK_CAPS = Object.freeze({ sources: 13, maxEdge: 192, maxFps: 12 });
+export const DECK_CAPS = Object.freeze({ sources: 13, maxEdge: 192, maxFps: 12, loads: 3, cached: 8, sourceBytes: 4*1024*1024 });
 
 const KEY_RE = /^g\d{1,2}$/;
 
@@ -50,23 +52,31 @@ export function drawableUrl(url) {
 }
 
 /** A still from an <img>, drawn once into a canvas no larger than maxEdge (so it never animates on its own). */
-function stillOf(url, maxEdge) {
+function stillOf(url, maxEdge, signal) {
   return new Promise((resolve) => {
-    if (typeof Image === 'undefined') { resolve(null); return; }
+    if (signal.aborted || typeof Image === 'undefined') { resolve(null); return; }
     const img = new Image();
+    let timer;
+    const finish = value => {
+      clearTimeout(timer); signal.removeEventListener('abort', cancel);
+      img.onload = img.onerror = null; img.removeAttribute('src'); resolve(value);
+    };
+    const cancel = () => finish(null);
+    signal.addEventListener('abort', cancel, {once:true});
+    timer = setTimeout(cancel, MEDIA_LIMITS.loadMs);
     img.decoding = 'async';
     // ccp.assets is another origin: without CORS mode the still canvas is tainted, and image() is for a
     // texture, where the WebGL upload throws (same rule as stations/slot/media.js). Set before src.
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       const iw = img.naturalWidth, ih = img.naturalHeight;
-      if (!(iw > 0 && ih > 0)) { resolve(null); return; }
+      if (!(iw > 0 && ih > 0) || iw * ih > MEDIA_LIMITS.pixels) { finish(null); return; }
       const k = Math.min(1, maxEdge / Math.max(iw, ih));
       const c = document.createElement('canvas');
       c.width = Math.max(1, Math.round(iw * k)); c.height = Math.max(1, Math.round(ih * k));
-      try { c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); resolve(c); } catch (e) { resolve(null); }
+      try { c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); finish(c); } catch (e) { finish(null); }
     };
-    img.onerror = () => resolve(null);
+    img.onerror = cancel;
     img.src = url;
   });
 }
@@ -85,7 +95,7 @@ export async function createDeck(ctx, { count = 13, maxEdge = DECK_CAPS.maxEdge,
   const byKey = new Map();
   for (const g of (reply && Array.isArray(reply.gifs) ? reply.gifs : [])) {
     if (!g || !KEY_RE.test(String(g.key)) || byKey.has(g.key) || entries.length >= DECK_CAPS.sources) continue;
-    const e = { key: g.key, url: drawableUrl(g.url) ? g.url : '', src: null, still: null, state: 'idle', drawn: false };
+    const e = { key: g.key, url: drawableUrl(g.url) ? g.url : '', src: null, still: null, state: 'idle', drawn: false, wanted: false, lastUsed: -Infinity };
     entries.push(e); byKey.set(e.key, e);
   }
   // An empty deal (no host, a lost reply) still has one key, g0. The host resolves a key against its own
@@ -94,27 +104,56 @@ export async function createDeck(ctx, { count = 13, maxEdge = DECK_CAPS.maxEdge,
   const size = keys.length;
   const seed = reply && Number.isFinite(reply.seed) ? reply.seed : 0;
 
-  let isStill = !!still, disposed = false, loading = null, rr = 0;
+  let isStill = !!still, disposed = false, loading = 0, rr = 0;
   const stats = { loads: 0, animated: 0, stills: 0, failed: 0, decodes: 0, ticks: 0 };
   const canDecode = typeof document !== 'undefined';
+  const controller = new AbortController();
+  let prefetch = null;
 
   function load(e) {
-    e.state = 'loading'; stats.loads++;
+    e.state = 'loading'; stats.loads++; loading++;
     const done = (async () => {
       let src = null;
-      try { src = await decodedSource(e.url, { maxEdge: edge, maxFps: DECK_CAPS.maxFps }); } catch (err) { src = null; }
+      try { src = await decodedSource(e.url, { maxEdge: edge, maxFps: DECK_CAPS.maxFps, signal: controller.signal, maxBytes: DECK_CAPS.sourceBytes }); } catch (err) {
+        if (refusedMedia(err)) { e.state = 'failed'; stats.failed++; return; }
+        src = null;
+      }
       if (disposed) { if (src) src.dispose(); return; }
       if (src) { e.src = src; e.state = 'ready'; if (src.animated) stats.animated++; else stats.stills++; return; }
-      e.still = await stillOf(e.url, edge);
+      e.still = await stillOf(e.url, edge, controller.signal);
       if (disposed) return;
       e.state = e.still ? 'ready' : 'failed';
       if (e.still) stats.stills++; else stats.failed++;
     })();
-    loading = done.finally(() => { loading = null; });
+    void done.finally(() => { loading--; pump(); });
   }
-  const nextLoad = () => entries.find((e) => e.state === 'idle' && e.url);
+  const resident = () => entries.filter(e => e.state === 'loading' || e.state === 'ready');
+  // Face textures repaint slower than deck ticks. Protect recently painted ranks across that gap.
+  function makeRoom() {
+    if (resident().length < DECK_CAPS.cached) return true;
+    const victim = entries.filter(e => e.state === 'ready' && e.lastUsed < performance.now() - 1000).sort((a,b)=>a.lastUsed-b.lastUsed)[0];
+    if (!victim) return false;
+    victim.src?.dispose(); victim.src = null; victim.still = null; victim.state = 'idle'; victim.wanted = false;
+    return true;
+  }
+  const nextLoad = () => entries.find(e => e.state === 'idle' && e.url && e.wanted);
+  function schedulePrefetch() {
+    if (prefetch !== null || disposed || !canDecode || document.hidden || loading || resident().length >= DECK_CAPS.cached || !entries.some(e => e.state === 'idle' && e.url)) return;
+    // Give the first visible hand a head start. Unseen values warm one at a time.
+    prefetch = setTimeout(() => {
+      prefetch = null;
+      if (disposed || document.hidden) return;
+      const e = nextLoad() || entries.find(e => e.state === 'idle' && e.url);
+      if (e && loading < DECK_CAPS.loads && resident().length < DECK_CAPS.cached) load(e);
+    }, 750);
+  }
+  function pump() {
+    if (!canDecode || disposed || document.hidden) return;
+    while (loading < DECK_CAPS.loads) { const e = nextLoad(); if (!e || !makeRoom()) break; load(e); }
+    schedulePrefetch();
+  }
 
-  if (canDecode) { const first = nextLoad(); if (first) load(first); }
+  schedulePrefetch();
 
   return {
     seed, keys, size,
@@ -128,7 +167,7 @@ export async function createDeck(ctx, { count = 13, maxEdge = DECK_CAPS.maxEdge,
     draw(ctx2d, key, x, y, w, h, { alpha = 1 } = {}) {
       const e = byKey.get(key);
       if (disposed || !e || !ctx2d || !(w > 0 && h > 0)) return false;
-      e.drawn = true;
+      e.drawn = true; e.wanted = true; e.lastUsed = performance.now(); pump();
       const img = e.src ? e.src.canvas : e.still;
       if (!img || !(img.width > 0 && img.height > 0)) return false;
       const s = Math.max(w / img.width, h / img.height), dw = img.width * s, dh = img.height * s;
@@ -140,14 +179,15 @@ export async function createDeck(ctx, { count = 13, maxEdge = DECK_CAPS.maxEdge,
       return true;
     },
     /** The picture's canvas (decoded frames, or the still), for a texture. Null until it has loaded. */
-    image(key) { const e = byKey.get(key); return e ? (e.src ? e.src.canvas : e.still) : null; },
-    /** Once per rendered frame: at most one decode starts, a source load first, else one drawn source's frame. */
-    tick(now) {
+    image(key) { const e = byKey.get(key); if (e && !disposed) { e.wanted = true; e.lastUsed = performance.now(); pump(); } return e ? (e.src ? e.src.canvas : e.still) : null; },
+    /** Once per rendered frame: at most one animation decode, independent of network loading. */
+    tick(now, visibleKeys = []) {
       if (disposed) return false;
+      for (const key of visibleKeys) { const e = byKey.get(key); if (e) { e.drawn = true; e.wanted = true; e.lastUsed = performance.now(); } }
       stats.ticks++;
       const t = Number.isFinite(now) ? now : performance.now();
       let started = false;
-      if (!loading) { const e = nextLoad(); if (e) { load(e); started = true; } }
+      pump();
       if (!started && entries.length) {
         for (let k = 0; k < entries.length && !started; k++) {
           const e = entries[(rr + k) % entries.length];
@@ -162,12 +202,12 @@ export async function createDeck(ctx, { count = 13, maxEdge = DECK_CAPS.maxEdge,
     setStill(on) { isStill = !!on; },
     dispose() {
       if (disposed) return;
-      disposed = true;
+      disposed = true; controller.abort(); clearTimeout(prefetch); prefetch = null;
       for (const e of entries) { if (e.src) { try { e.src.dispose(); } catch (err) { /* noop */ } } e.src = null; e.still = null; }
     },
     /** Test seam. */
     debug() {
-      return { ...stats, size, loading: !!loading, ready: entries.filter((e) => e.state === 'ready').length,
+      return { ...stats, size, retainedBytes: entries.reduce((n,e)=>n+(e.src?.byteLength||0),0), cached: resident().length, loading: !!loading, loadingCount: loading, ready: entries.filter((e) => e.state === 'ready').length,
         frames: entries.reduce((s, e) => s + (e.src ? e.src.frames : 0), 0), still: isStill, disposed };
     },
   };

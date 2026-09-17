@@ -2,6 +2,7 @@
 // GIF uses the existing MIT omggif reader. WebP follows the RIFF ANMF container:
 // https://developers.google.com/speed/webp/docs/riff_container
 // Keep one compositing canvas and one frame bitmap, never an unbounded filmstrip.
+import { MediaLimitError } from './media-limits.js';
 import { GifReader } from '../../dtrh/vendor/omggif/omggif.module.js';
 const text = (b, p, n = 4) => String.fromCharCode(...b.subarray(p, p + n));
 const u24 = (b, p) => b[p] | b[p + 1] << 8 | b[p + 2] << 16;
@@ -31,7 +32,7 @@ export function webpFrames(data) {
 }
 
 export async function compatibilityDecoder(data, type) {
-  if (data.byteLength > 32 * 1024 * 1024) return null;
+  if (data.byteLength > 32 * 1024 * 1024) throw new MediaLimitError('Image transfer exceeds media budget');
   let gif = null, frames, width, height, background = 'rgba(0,0,0,0)';
   if (type === 'image/gif') {
     gif = new GifReader(new Uint8Array(data)); width = gif.width; height = gif.height;
@@ -39,8 +40,8 @@ export async function compatibilityDecoder(data, type) {
   } else if (type === 'image/webp' && typeof createImageBitmap === 'function') {
     ({ width, height, background, frames } = webpFrames(data));
   } else return null;
-  if (!frames.length || !width || !height || width * height > 4 * 1024 * 1024 || frames.length > 2000) return null;
-  if (frames.some(f => f.x + f.width > width || f.y + f.height > height)) return null;
+  if (!frames.length || !width || !height || width * height > 4 * 1024 * 1024 || frames.length > 2000) throw new MediaLimitError('Animation exceeds media budget');
+  if (frames.some(f => f.x + f.width > width || f.y + f.height > height)) throw new MediaLimitError('Animation frame exceeds image bounds');
   const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
   const g = canvas.getContext('2d', { willReadFrequently: !!gif });
   let last = -1, restore = null, closed = false;

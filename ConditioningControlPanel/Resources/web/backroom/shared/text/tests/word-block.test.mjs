@@ -11,11 +11,12 @@ const PHONE = { w: 390, h: 844 };
 const DESK = { w: 1920, h: 1080 };
 const joined = (lines) => lines.join(' ').replace(/\s+/g, ' ').trim();
 
-test('a short word keeps the full size and one line', () => {
+test('a short word stays intact and scales down only to fit', () => {
   for (const view of [PHONE, DESK]) {
     const b = wordBlock('DROP', { view });
     assert.deepEqual(b.lines, ['DROP']);
-    assert.equal(b.sizeVh, WORD_SIZE_VH);
+    assert.ok(b.sizeVh <= WORD_SIZE_VH);
+    assert.ok(b.sizeVh * view.h / 100 * 2 * ZOOM.to <= view.w * WORD_FIT_VW + 1e-6);
   }
 });
 
@@ -51,7 +52,8 @@ test('empty and null give one empty line and never throw', () => {
   assert.deepEqual(wordBlock(null, { view: DESK }).lines, ['']);
 });
 
-test('a phrase at the wrap threshold still reads on one line', () => {
+test('a short phrase can use two larger lines', () => {
   const b = wordBlock('GOOD GIRL', { view: DESK });
-  assert.deepEqual(b.lines, ['GOOD GIRL']);
+  assert.deepEqual(b.lines, ['GOOD', 'GIRL']);
+  assert.ok(b.sizeVh * b.lines.length * 1.05 * ZOOM.to <= 78);
 });

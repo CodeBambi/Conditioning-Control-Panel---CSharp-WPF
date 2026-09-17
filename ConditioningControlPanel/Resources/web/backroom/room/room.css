@@ -1,3 +1,4 @@
+@import url("../shared/back.css");
 /* backroom/room/room.css - the room shell over the 3D view. Plum and neon. */
 
 :root {
@@ -8,6 +9,15 @@
   --br-pink: #ff6fb5;
   --br-gold: #ffcf6b;
   --br-lav: #b99cff;
+  /* THE PHONE'S OWN EDGES. Only the thumbstick knew about these; every station's bottom bar was pinned on plain
+     pixels, and the roulette's seated bar at 8 px sat entirely inside an iPhone's home-indicator zone. Every
+     bottom bar in the room now reads max(its own gap, --br-sill), and env() is 0px where there is no notch, so
+     nothing moves on a desk. The fallback in each var() keeps a station's standalone dev page working, where
+     this block is not loaded at all. */
+  --br-sill: env(safe-area-inset-bottom, 0px);
+  --br-brow: env(safe-area-inset-top, 0px);
+  --br-edge-l: env(safe-area-inset-left, 0px);
+  --br-edge-r: env(safe-area-inset-right, 0px);
   color-scheme: dark;
 }
 
@@ -34,23 +44,36 @@ html.br-visiting .br-room-ui, html.br-visiting.br-seated .br-room-ui { visibilit
 .br-loading-bar { width: 180px; height: 3px; border-radius: 3px; background: rgba(255, 255, 255, .12); overflow: hidden; }
 .br-loading-bar i { display: block; height: 100%; width: 0; background: var(--br-pink); transition: width 200ms ease-out; }
 
-.br-hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); pointer-events: none;
+.br-hint { position: absolute; left: 50%; bottom: max(14px, var(--br-sill, 0px)); transform: translateX(-50%); pointer-events: none;
   color: var(--br-ink-dim); font-size: 12px; white-space: nowrap; }
 .br-crosshair { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%;
   background: rgba(255, 224, 240, .6); box-shadow: 0 0 5px #120914; pointer-events: none; }
 .br-crosshair[hidden] { display: none; }
 
+/* THE ROOM'S CHROME (owner, 2026-09-16: "they are plain and shallow"). Every chip and button in the Back Room
+   is lit from the top, shaded at the bottom, and has a body under it that it travels into on a press. Same
+   palette, same sizes; what changed is that they now read as things you push. */
 .br-visit { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); min-width: 210px;
   font: 600 15px/1 "Segoe UI", system-ui, sans-serif; color: var(--br-ink); cursor: pointer;
-  background: linear-gradient(135deg, rgba(162, 92, 143, .92), rgba(84, 53, 101, .93)); border: 1px solid #dda9d4;
-  border-radius: 12px; padding: 14px 24px; }
+  background: linear-gradient(180deg, #bd7aa5f2, #a25c8fed 46%, #6b4179ee 82%, #543565ee);
+  border: 1px solid #dda9d4; border-top-color: #ffe0f4; border-radius: 13px; padding: 14px 24px;
+  text-shadow: 0 1px 2px #1a0a20a6; transition: background .15s, box-shadow .12s, transform .08s;
+  box-shadow: inset 0 2px 0 #ffffff59, inset 0 -3px 0 #2c113680, 0 3px 0 #2a1533, 0 9px 26px #05020ab3; }
+.br-visit:hover { background: linear-gradient(180deg, #cd8ab4f2, #b46b9fed 46%, #7a4c88ee 82%, #613d73ee); }
+.br-visit:active { transform: translateX(-50%) translateY(3px);
+  box-shadow: inset 0 3px 9px #2c113699, inset 0 -1px 0 #ffffff4d, 0 0 0 #2a1533, 0 3px 12px #05020a80; }
 .br-visit[hidden] { display: none; }
 .br-visit:focus-visible, .br-pill:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 2px; }
 
-.br-nav { position: absolute; top: 12px; right: 120px; display: flex; gap: 8px; }
+.br-nav { position: absolute; top: max(12px,var(--br-brow)); right: 230px; display: flex; gap: 8px; }
 .br-pill { font: 600 13px/1 "Segoe UI", system-ui, sans-serif; color: var(--br-ink); cursor: pointer;
-  background: rgba(42, 24, 56, .86); border: 1px solid rgba(185, 156, 255, .45); border-radius: 999px; padding: 9px 15px; }
-.br-pill:hover { border-color: var(--br-gold); }
+  background: linear-gradient(180deg, #3d2449e0, #2a1838db 54%, #1d0f26db);
+  border: 1px solid rgba(185, 156, 255, .45); border-top-color: #d9c6ff8c; border-radius: 999px; padding: 9px 15px;
+  text-shadow: 0 1px 2px #0a0512a6; transition: background .15s, box-shadow .12s, transform .08s;
+  box-shadow: inset 0 1px 0 #ffeafb26, inset 0 -2px 0 #00000057, 0 2px 0 #150b1f, 0 6px 16px #05020a73; }
+.br-pill:hover { border-color: var(--br-gold); background: linear-gradient(180deg, #553060e0, #3a1f46db 54%, #27142fdb); }
+.br-pill:active:not(:disabled) { transform: translateY(2px);
+  box-shadow: inset 0 3px 7px #00000080, inset 0 -1px 0 #ffeafb12, 0 0 0 #150b1f; }
 .br-pill:disabled { opacity: .6; cursor: default; }
 /* The room's Options (10.14): a small plum card hanging from the nav, right edge under the Options pill (the last pill). */
 .br-options { position: absolute; top: calc(100% + 8px); right: 0; width: 230px; padding: 12px 14px; border-radius: 12px;
@@ -60,9 +83,16 @@ html.br-visiting .br-room-ui, html.br-visiting.br-seated .br-room-ui { visibilit
 .br-opt-note { margin: -2px 0 0; color: var(--br-ink-dim); font-size: 11px; }
 .br-seg-row { display: flex; gap: 4px; }
 .br-seg, .br-switch { font: 600 12px/1 "Segoe UI", system-ui, sans-serif; color: var(--br-ink); cursor: pointer;
-  background: rgba(42, 24, 56, .9); border: 1px solid rgba(185, 156, 255, .35); border-radius: 999px; padding: 7px 10px; }
+  background: linear-gradient(180deg, #3d2449e6, #2a1838e0 54%, #1d0f26e0);
+  border: 1px solid rgba(185, 156, 255, .35); border-top-color: #d9c6ff73; border-radius: 999px; padding: 7px 10px;
+  transition: background .15s, box-shadow .12s, transform .08s;
+  box-shadow: inset 0 1px 0 #ffeafb1f, inset 0 -2px 0 #0000004d, 0 2px 0 #150b1f; }
 .br-seg { flex: 1; }
-.br-seg[aria-pressed="true"], .br-switch[aria-pressed="true"] { border-color: var(--br-gold); color: var(--br-gold); }
+/* Chosen: the chip is pressed IN, not merely tinted, so the setting reads at a glance on a phone. */
+.br-seg[aria-pressed="true"], .br-switch[aria-pressed="true"] { border-color: var(--br-gold); color: var(--br-gold);
+  background: linear-gradient(180deg, #1b1022, #2b1a33 60%, #35213d);
+  box-shadow: inset 0 3px 7px #00000080, inset 0 -1px 0 #ffcf6b2e, 0 0 0 #150b1f, 0 0 14px #ffcf6b29; }
+.br-seg:active:not(:disabled), .br-switch:active:not(:disabled) { transform: translateY(2px); }
 .br-seg:focus-visible, .br-switch:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 2px; }
 .br-opt-row { display: flex; align-items: center; justify-content: space-between; }
 .br-switch { min-width: 52px; }
@@ -88,17 +118,39 @@ html.br-reduced .br-bell span.is-in, html.br-still .br-bell span.is-in { animati
 @media (prefers-reduced-motion: reduce) { .br-bell span.is-in { animation: none; } }
 
 /* HUD: Back is always on top of everything, stations included (Law VI). */
-.br-hud { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; justify-content: space-between;
+.br-hud { position: fixed; top: max(12px, var(--br-brow, 0px)); left: max(12px, var(--br-edge-l, 0px));
+  right: max(12px, var(--br-edge-r, 0px)); display: flex; justify-content: space-between;
   align-items: center; z-index: 30; pointer-events: none; }
 .br-back, .br-card-back { pointer-events: auto; font: 600 14px/1 "Segoe UI", system-ui, sans-serif; color: var(--br-ink);
-  background: rgba(42, 24, 56, .88); border: 1px solid rgba(255, 111, 181, .55); border-radius: 999px;
-  padding: 9px 18px; cursor: pointer; transition: transform 120ms cubic-bezier(.2, 1.5, .4, 1); }
-.br-back:hover, .br-card-back:hover { border-color: var(--br-gold); }
-.br-back:active, .br-card-back:active { transform: scale(.96); }
+  background: linear-gradient(180deg, #4a2a51e6, #2f1b3de0 54%, #20112ae0);
+  border: 1px solid rgba(255, 111, 181, .55); border-top-color: #ffb6dc9e; border-radius: 999px;
+  padding: 9px 18px; cursor: pointer; text-shadow: 0 1px 2px #0a0512a6;
+  transition: background .15s, box-shadow .12s, transform 120ms cubic-bezier(.2, 1.5, .4, 1);
+  box-shadow: inset 0 1px 0 #ffeafb2e, inset 0 -2px 0 #0000005e, 0 2px 0 #1a0d23, 0 6px 18px #05020a80; }
+.br-back:hover, .br-card-back:hover { border-color: var(--br-gold); background: linear-gradient(180deg, #5d3663e6, #3c2249e0 54%, #2a1634e0); }
+.br-back:active, .br-card-back:active { transform: translateY(2px);
+  box-shadow: inset 0 3px 8px #00000080, inset 0 -1px 0 #ffeafb14, 0 0 0 #1a0d23; }
 .br-back:focus-visible, .br-card-back:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 2px; }
-.br-sp { pointer-events: auto; background: rgba(18, 12, 28, .8); border: 1px solid rgba(255, 207, 107, .4);
-  border-radius: 999px; padding: 7px 14px; color: var(--br-ink-dim); }
-.br-sp b { color: var(--br-gold); font-variant-numeric: tabular-nums; margin-left: 4px; }
+/* The SP readout is a plate, not a button: sunken, so it never invites a press it cannot answer. */
+.br-sp { position:relative; display:flex; align-items:center; gap:6px; pointer-events:auto;
+  background:linear-gradient(145deg,#49304ff5,#21132ff5 65%); border:1px solid #e9bd72;
+  border-top-color:#fff0c2; border-radius:14px; padding:7px 12px; color:#e8d3f4;
+  box-shadow:inset 0 1px 0 #fff4,0 3px 0 #160b20,0 0 18px #edac4524; margin-right:0; }
+.br-sp::before { content:""; width:15px;height:22px;flex:none;
+  clip-path:polygon(50% 0,100% 42%,50% 100%,0 42%);background:conic-gradient(from 45deg,#fff7d5,#fca6df,#ffcf6b,#fff7d5); }
+.br-sp b { color:#ffe49b;font-size:24px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;text-shadow:0 2px 0 #28111c; }
+#br-sp-label { font-size:11px;font-weight:800;letter-spacing:.08em; }
+.br-sp::after { content:attr(data-delta);position:absolute;top:calc(100% + 6px);right:5px;white-space:nowrap;
+  font-weight:900;font-size:16px;line-height:1.2;text-shadow:0 2px 3px #110818;pointer-events:none; }
+.br-sp[data-flow="in"]::after { color:#8fffe0; }
+.br-sp[data-flow="out"]::after { color:#ffafd6; }
+.br-sp-changing b { animation:br-balance-punch 460ms cubic-bezier(.2,1.5,.4,1); }
+.br-sp-changing::after { animation:br-balance-arrive 460ms ease-out; }
+.br-sp[data-flow="out"] b { color:#ffc0de; }
+@keyframes br-balance-punch { 0%{transform:scale(.88)}45%{transform:scale(1.18)}100%{transform:scale(1)} }
+@keyframes br-balance-arrive { from{opacity:0;transform:translateY(-7px)}to{opacity:1;transform:translateY(0)} }
+.br-sp[data-balance-still="true"] :is(b),.br-sp[data-balance-still="true"]::after { animation:none; }
+@media(prefers-reduced-motion:reduce){.br-sp-changing b,.br-sp-changing::after{animation:none}}
 html.br-leaving .br-sp { opacity: .5; }
 
 /* The station layer: stations and cards sit over the room, under the HUD. */
@@ -142,3 +194,8 @@ html.br-seated .br-hint, html.br-seated .br-crosshair, html.br-seated .br-visit 
   .br-nav > * { pointer-events: auto; }
   .br-bell { top: 98px; right: 12px; max-width: calc(100vw - 24px); }
 }
+
+/* Sparkle Point bursts share the faceted diamond silhouette. */
+#br-stage .cfx-spark, #br-stage .cfx-coin { border-radius:0; clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); }
+
+@media(max-width:600px){.br-sp{padding:7px 9px}.br-sp b{font-size:22px}}

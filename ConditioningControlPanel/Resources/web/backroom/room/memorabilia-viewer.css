@@ -1,0 +1,44 @@
+.memorabilia-viewer {
+  position: fixed; inset: 0; width: 100%; height: 100%; max-width: none;
+  max-height: none; box-sizing: border-box; margin: 0; border: 0;
+  padding: max(70px, env(safe-area-inset-top)) 22px max(24px, env(safe-area-inset-bottom));
+  background: rgba(12, 7, 18, .88); color: #31231f; overflow: auto;
+  overscroll-behavior: contain; font-family: inherit;
+}
+.memorabilia-viewer[open] { display: flex; align-items: center; justify-content: center; }
+.memorabilia-viewer::backdrop { background: transparent; }
+.memorabilia-back {
+  position: fixed; top: max(16px, env(safe-area-inset-top)); right: max(18px, env(safe-area-inset-right));
+  min-height: 44px; min-width: 76px; padding: 9px 18px; border-radius: 24px;
+  border: 1px solid #d6b7bc; background: #2d1e32; color: #fff2ef;
+  font: inherit; cursor: pointer; z-index: 1;
+}
+.memorabilia-back:focus-visible { outline: 3px solid #ffd586; outline-offset: 3px; }
+.memorabilia-paper {
+  margin: auto; display: flex; flex-direction: column; align-items: center;
+  gap: 8px; max-width: min(1040px, 100%); box-sizing: border-box;
+  padding: 15px; background: #f7efdc; box-shadow: 0 20px 70px #000b;
+  text-align: center; flex-shrink: 0;
+}
+.memorabilia-paper img {
+  display: block; object-fit: contain; max-width: 100%; width: auto;
+  max-height: calc(100dvh - 190px); height: auto; min-height: 0;
+}
+.memorabilia-paper [hidden] { display: none; }
+.memorabilia-paper strong { font-size: clamp(15px, 2.3vw, 21px); font-weight: 650; }
+.memorabilia-paper figcaption { max-width: 50ch; font-size: 14px; line-height: 1.4; }
+.memorabilia-paper[data-kind="polaroid"] { padding: 7px 7px 20px; }
+.memorabilia-paper[data-kind="poster"] { padding: 0; background: transparent; border: 0; }
+.memorabilia-paper[data-kind="plaque"] {
+  padding: clamp(24px, 6vw, 70px); border: 6px ridge #b48a50; border-radius: 5px;
+  background: linear-gradient(120deg, #bd9257, #f4d49a 48%, #b08750); color: #302013;
+}
+.memorabilia-paper[data-kind="note"] { padding: 35px; background: #f2e2b5; }
+@media (max-height: 480px) {
+  .memorabilia-viewer { padding-top: 64px; padding-bottom: 12px; }
+  .memorabilia-paper { gap: 4px; }
+  .memorabilia-paper img { max-height: calc(100dvh - 145px); }
+  .memorabilia-paper figcaption { font-size: 12px; }
+}
+
+.memorabilia-paper figcaption { white-space: pre-line; }

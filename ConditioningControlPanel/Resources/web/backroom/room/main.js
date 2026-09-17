@@ -1,3 +1,4 @@
+import { intro } from './intro.js';
 import { sliceText } from '../stations/wheel/rewards.js';
 import { setWheelFace } from './wheel-face.js';
 /* ============================================================================
@@ -29,14 +30,19 @@ import { setWheelFace } from './wheel-face.js';
  * ==========================================================================*/
 
 import * as bridge from '../bridge.js';
+import { prizeState } from '../shared/prize-state.js';
 import { normaliseStations } from './walk.js';
 import { createScene } from './scene.js';
 import { createLoader } from './loader.js';
 import { createHud } from './hud.js';
 import { createRoomRewards, createDoubleCharm } from './rewards.js';
 import { kit } from '../shared/sound/kit.js';
+import { getMusic } from '../shared/sound/music.js';
+import { quality } from '../shared/quality.js';
+import { spendFlight, clearSpendFlights } from './spend-flight.js';
+import { createBalanceFeedback } from './balance-feedback.js';
 const rewards = createRoomRewards();
-let doubleCharm = null;
+let doubleCharm = null, music = null;
 function applyRewards(body) { if (leaving) return; if (rewards.apply(body)) { scene?.setRewards(rewards.snapshot()); doubleCharm?.paint(); } }
 
 const PAGE_SETTLE_MS = 300;
@@ -79,6 +85,7 @@ const forcedStill = () => !!state.reduced || state.intensity === 'calm';
 const still = () => forcedStill() || state.userStill;
 
 function paintChrome() {
+  intro.configure(lex, still() || state.motion === 'off' || state.motion === 'still' || state.motion === 'reduced');
   const back = $('#br-back');
   back.textContent = lex('br_back', 'Back');
   back.setAttribute('aria-label', lex('br_back', 'Back'));
@@ -95,6 +102,7 @@ function paintChrome() {
  * balance frame, a station-result that moved state.sp, a closed station and a reopened one. */
 const chip = { owed: 0, shown: null };
 let chipFrame = 0;
+const balanceFeedback = createBalanceFeedback({ target: () => $('.br-sp'), still: () => still() || state.motion === 'off' });
 function owedNow() {
   let n = chip.owed;
   if (typeof n === 'function') { try { n = n(); } catch (e) { n = 0; } }
@@ -105,13 +113,26 @@ function paintSpChip() {
   const node = $('#br-sp-value');
   const v = String(chip.shown != null ? chip.shown : Math.max(0, state.sp - owedNow()));
   if (node && node.textContent !== v) node.textContent = v;
+  balanceFeedback.update(Number(v));
 }
 const spReadout = Object.freeze({
   /** A number shown as is (a BANK tick), or null to go back to the rule. */
   set(value) { const n = Number(value); chip.shown = value == null || !Number.isFinite(n) ? null : n; paintSpChip(); },
   /** The pays still on the tape: a number, or a reader the room calls on each repaint while the station is open. */
   owe(n) { chip.owed = typeof n === 'function' ? n : (Number(n) || 0); paintSpChip(); },
-  /** THE THUD: a bank token landing on the chip. Reduced motion lights it instead of scaling it. */
+  /**
+   * THE THUD: a bank token landing on the chip. Reduced motion lights it instead of scaling it.
+   *
+   * THE GLOW IS NOT HERE, and the integration pass took it back out (CONTRACT 10.22.D). The room lane
+   * put a warmGlow on this chip; all four stations already fire their own, gated on `plan.glow`, and
+   * three of them fire it on THIS VERY NODE (`spReadout.target()` is `.br-sp`). Doing it here as well
+   * is both a double call on one frame and a law leak, because .thud() is NOT a win channel:
+   * stations/cards/station.js thuds on a LOSS, stations/counter/cards.js thuds on a PRIZE PURCHASE,
+   * and Brake 5 puts `plan.glow` at 0 for a melted win that still thuds. A warm gold cut on any of
+   * those says LOOK, YOU WON to a player who did not. The plan decides the glow; the chip does not.
+   * The roulette is the one station that glows its own +N badge instead, which is its answer to
+   * 10.22.D and not an omission.
+   */
   thud() {
     const box = $('.br-sp');
     if (!box || typeof box.animate !== 'function') return;
@@ -121,9 +142,11 @@ const spReadout = Object.freeze({
   },
   /** The chip's box, where THE BANK's tokens fly to and from. */
   target() { return $('.br-sp'); },
+  spend(amount, target) { spendFlight({from:$('.br-sp'), to:target, amount, still:still() || state.motion==='off'}); },
 });
 /** A station is gone: a reader freezes to its last answer and any flight value is dropped. */
 function chipSettle() {
+  clearSpendFlights();
   chip.owed = owedNow();
   chip.shown = null;
   paintSpChip();
@@ -135,6 +158,8 @@ function spChanged() {
 }
 
 function paintMotion() {
+  intro.configure(lex, still() || state.motion === 'off' || state.motion === 'still' || state.motion === 'reduced');
+  if(still() || state.motion==='off')clearSpendFlights();
   if (scene) scene.setStill(still());
   if (!hud) return;
   hud.motion(still(), forcedStill());
@@ -174,12 +199,15 @@ async function returnToRoom() {
   if (leaving || visiting) return;
   hud.hideWhileVisiting(false);
   if (scene) scene.release();
+  refreshPrizes();
   refreshBell('station-close');   // the only other time the bell is read (10.16.B)
 }
 
 /** Back, from anywhere. A station closes first, then the room view; an empty room is left. */
 async function back(reason) {
   if (leaving) return;
+  if (scene?.documents.close()) return;
+  if (loader?.canLeave?.() === false) return;
   if(scene?.customization?.dismiss())return;
   if (loader && (loader.current || visiting)) { await returnToRoom(); return; }
   if (hud && hud.optionsOpen) { hud.closeOptions(); return; }
@@ -188,6 +216,8 @@ async function back(reason) {
 }
 
 async function settle() {
+  intro.finish(true);
+  music?.dispose();
   if (hud) hud.stop();
   doubleCharm?.dispose(); doubleCharm = null;
   if (scene) scene.halt();
@@ -243,6 +273,7 @@ function wireExits() {
   wireAmbience();
   $('#br-back').addEventListener('click', () => back('back'));
   window.addEventListener('keydown', (e) => {
+    if (scene?.documents.opened) return;
     if (e.key !== 'Escape') return;
     e.preventDefault();
     if (scene?.dismissEmi()) return;
@@ -329,11 +360,30 @@ async function setBellOptIn(on) {
 /** The wall pictures' deal, under its own station id so it never replaces a sit-down deal. */
 function media() {
   const reqId = bridge.mintId();
-  return bridge.request({ type: 'media-request', reqId, station: 'room' }, 'media', (m) => m.reqId === reqId, 6000,
+  return bridge.request({ type: 'media-request', reqId, station: 'room', count: 8 }, 'media', (m) => m.reqId === reqId, 6000,
     { reqId, seed: 0, gifs: [], words: [], timeout: true });
 }
 
+/** Room Service uses the same authenticated station relay and balance as the games. */
+async function requestDecorations(op, body = {}) {
+  if (leaving) return { ok: false, reason: 'closed' };
+  const reqId = bridge.mintId();
+  const res = await bridge.request({ type: 'station-request', reqId, station: 'decorations', op,
+    body, ...(body.idem ? { idem: body.idem } : {}) }, 'station-result', m => m.reqId === reqId, BELL_TIMEOUT_MS);
+  if (leaving) return { ok: false, reason: 'closed' };
+  if (res?.body && typeof res.body === 'object' && ('ok' in res.body || 'decorations' in res.body)) return res.body;
+  return { ok: false, reason: res?.reason || 'offline' };
+}
+
+async function refreshPrizes() {
+  const reqId = bridge.mintId();
+  const res = await bridge.request({type:'station-request', reqId, station:'counter', op:'state', body:{}},
+    'station-result', m => m.reqId === reqId, BELL_TIMEOUT_MS);
+  if (!leaving && !seated() && res?.ok) scene?.setPrizes(prizeState(res.body));
+}
+
 async function start(init) {
+  if (leaving) return;
   rewards.reset();
   Object.assign(state, {
     sp: Number.isFinite(init.sp) ? init.sp : 0,
@@ -345,7 +395,9 @@ async function start(init) {
     lex: (init.lex && typeof init.lex === 'object') ? init.lex : {},
     open: typeof init.open === 'boolean' ? init.open : null,
   });
+  music = getMusic({ master: 1 });
   bridge.markInitialized();
+  balanceFeedback.reset(state.sp);
   paintChrome();
 
   bridge.on('balance', (m) => setSp(m.sp));
@@ -363,6 +415,7 @@ async function start(init) {
   });
   bridge.on('suspend', (m) => {
     state.suspended = !!m.on;
+    music?.suspend(state.suspended);
     kit.suspend(state.suspended);   // Law VI: every voice and the ambience hold; the ambience comes back on resume
     if (scene) scene.pause(state.suspended);   // a held room stays held either way
     if (loader) loader.suspend(state.suspended);
@@ -370,7 +423,7 @@ async function start(init) {
   });
 
   hud = createHud({
-    root: $('#br-room-ui'), lex, label,
+    root: $('#br-room-ui'), lex, label, music, quality,
     onVisit: (row) => visit(row),
     onGo: (row) => { if (scene) { scene.go(row); hud.overview(false); } },
     onOverview: (on) => { if (scene) { scene.setOverview(on); hud.overview(scene.overview); } },
@@ -402,7 +455,7 @@ async function start(init) {
     approach:row=>{
       scene.release();const trip=scene.stage(row);if(!trip){scene.hold();return null;}
       hud.hideWhileVisiting(false);hud.seated(true);
-      return {arrived:trip.arrived.then(ok=>{if(ok){scene.hold();hud.hideWhileVisiting(true);}return ok;}),
+      return {arrived:trip.arrived.then(ok=>{if(ok){if(row.id!=="counter")scene.hold();hud.hideWhileVisiting(row.id!=="counter");}return ok;}),
         dispose(){scene.release();trip.dispose();hud.seated(false);}};
     },
     lex,
@@ -411,6 +464,7 @@ async function start(init) {
     spReadout,
     spChanged,
     chipSettle,
+    prizesChanged: (body, bought) => scene?.setPrizes(prizeState(body), bought),
     rewardLanded: body => applyRewards(body),
     revealedWin: (key,amount,tier,text)=>scene?.celebrate(key,amount,tier,text),
     standUp: () => back('back'),
@@ -430,25 +484,31 @@ async function start(init) {
       media, lex,
       still: still(),
       cameraMotion:()=>({off:state.userStill||state.motion==='off'||state.motion==='still',reduced:state.reduced||state.motion==='reduced'||state.intensity==='calm'}),
-      onProgress: (f) => hud.progress(f),
+      onProgress: (f) => { hud.progress(f); intro.progress(f); },
       onNearest: (row) => hud.nearest(row),
       onVisit: (row) => visit(row),
       // The room asking to stand up (a tap on the floor, a step back): the Back path, so the station settles first.
       onLeave: () => back('room'),
+      canLeave: () => loader?.canLeave?.() !== false,
       log: (msg) => bridge.log('warn', msg),
     });
   } catch (e) {
     bridge.log('error', 'room build failed: ' + ((e && e.stack) || e));
+    intro.finish(true);
     hud.failed(lex('br_station_closed', 'Closed for a moment.'));
     return;
   }
   if (leaving) { scene.halt(); return; }
+  // Loading the shop is independent of the room reveal; unavailable servers leave the furnished room usable.
+  scene.customization.configureShop({ request: requestDecorations, getBalance: () => state.sp,
+    onBalance: sp => { if (!leaving) setSp(sp); } }).catch(e => bridge.log('warn', 'Room Service unavailable: ' + e));
   // M toggles the view inside the scene; keep the HUD in step after it has.
   window.addEventListener('keydown', (e) => { if (e.code === 'KeyM') setTimeout(() => hud.overview(scene.overview), 0); });
   if (state.suspended) scene.pause(true);
   paintMotion();
   hud.ready();
   paintMustHit();
+  refreshPrizes();
   refreshBell('room-open');
   // One read on room entry paints the fixture from the same table used when seated.
   if (stations.some(row => row.id === 'wheel' && row.state === 'live') && !seated()) {
@@ -459,6 +519,7 @@ async function start(init) {
       }).catch(() => {});
   }
   document.documentElement.classList.add('br-ready');
+  intro.finish();
   bridge.log('info', 'room up: ' + stations.length + ' fixtures, ' + stations.filter((s) => s.state === 'live').length
     + ' live, built in ' + Math.round(scene.buildMs) + ' ms');
 }
@@ -466,6 +527,6 @@ async function start(init) {
 wireExits();
 paintChrome();
 bridge.once('init', (m) => {
-  start(m).catch((e) => bridge.log('error', 'boot failed: ' + ((e && e.stack) || e)));
+  start(m).catch((e) => { intro.finish(true); bridge.log('error', 'boot failed: ' + ((e && e.stack) || e)); });
 });
 bridge.announceReady();

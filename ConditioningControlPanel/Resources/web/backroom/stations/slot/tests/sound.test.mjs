@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { pickVariant, VARIANT_KEY } from '../sound.js';
 import { DEFAULT_SFX } from '../../../shared/sound/kit.js';
 
-test('the default pair is the owner\'s: a candy lever over a rattle-and-bell drum', () => {
+test('the default pair is the owner\'s: a candy lever over a ticker drum', () => {
   assert.deepEqual(pickVariant({}), { lever: 'B', reel: 'A' });
   assert.deepEqual(pickVariant({}), { ...DEFAULT_SFX });
   assert.equal(VARIANT_KEY, 'br.sfx.variant');

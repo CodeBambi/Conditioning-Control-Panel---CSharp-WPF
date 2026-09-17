@@ -1,3 +1,5 @@
+import { FOLEY, SAMPLE_CUES, loadFoleySample } from './foley.js';
+
 /* ============================================================================
  * shared/sound/kit.js - THE ONE KIT. Every sound the Back Room makes.
  *
@@ -8,8 +10,8 @@
  * the schedules can be checked in bare node with no audio at all, and so a
  * station can read what a cue will do before it does it.
  *
- * Everything is synthesised (oscillators, filtered noise, a delay line): the
- * room ships no licensed samples and owns every sound it makes. The race's
+ * The scored palette is synthesised. Three local ElevenLabs foley samples replace
+ * their scored fallback once decoded; failed loads never delay an action. The race's
  * mp3 chimes the stations used to borrow are retired here; the bell family
  * below is the one voice the whole floor shares.
  *
@@ -56,7 +58,7 @@ export const DEDUPE_MS = Object.freeze({ settle: 120, clicker: 25 });
  *  D: Vintage on the lever; A: Ticker, B: Purr, C: Rattle and bell, D: Hybrid casino on the reels. */
 export const LEVER_VARIANTS = Object.freeze(['A', 'B', 'C', 'D']);
 export const REEL_VARIANTS = Object.freeze(['A', 'B', 'C', 'D']);
-/** The owner's pair: a candy lever over a rattle-and-bell drum. */
+/** The owner's pair: a candy lever over a ticker drum. */
 export const DEFAULT_SFX = Object.freeze({ lever: 'B', reel: 'A' });
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -80,6 +82,14 @@ const bell = (hz, at, dur, level, part) => [
 ];
 
 const SCORES = {
+  ...FOLEY,
+  /** A tiny electronic answer, voiced through the same master gain as the games. */
+  'emi-bleep'({ variant = 0 } = {}) {
+    const patterns = [[0, 7, 4], [4, 0, 9, 7], [7, 12, 4]];
+    const notes = patterns[Math.abs(Math.floor(num(variant, 0))) % patterns.length];
+    return notes.map((step, i) => tone(660 * SEMI(step), i * .085, .065, .07,
+      { wave: 'triangle', attack: .12, lp: 2400, part: 'emi', dry: true }));
+  },
   /** A reel's tick train: decelerating clicks with a rising pitch ladder per reel. `ms` is the travel. */
   ticks({ reel = 0, ms = 1800 } = {}) {
     const r = clamp(Math.floor(num(reel, 0)), 0, 4), span = clamp(num(ms, 1800), 120, 12000) / 1000;
@@ -235,6 +245,10 @@ const SCORES = {
     return [tone(120 * SEMI(s), 0, 0.32, lv, { hzTo: 38, lp: muted ? 700 : 0, part: 'thud' }), noise(1200, 0, 0.05, lv * 0.2, { type: 'lowpass', part: 'thud', dry: true })];
   },
   /** THE BANK's token landing: a small bell that rises with the count (`i` of `n`), the last one a mini-thud. */
+  cash() {
+    return [noise(1800,0,.055,.11,{part:'cash',dry:true}), noise(2300,.065,.045,.09,{part:'cash',dry:true}),
+      ...bell(1318,.11,.38,.18,'cash'), ...bell(1760,.15,.42,.13,'cash')];
+  },
   token({ i = 0, last = false } = {}) {
     if (last) return SCORES.thud({ semis: 5, level: 0.6 });
     return bell(ROOT_HZ * 2 * SEMI(pentatonic(clamp(Math.floor(num(i, 0)), 0, 14))), 0, 0.18, 0.1, 'arp');
@@ -305,6 +319,7 @@ const SCORES = {
       tone(ROOT_HZ * 2 * SEMI(pentatonic(r + 2)), 0.02, 0.12, 0.028 * lv, { part: 'chime' })];
   },
   /** A button, a lever, "no more bets": one soft tap. */
+  silicone() { return [0,1,2,3].map(i=>tone(190/(1+i*.17),i*.09,.14,.063*Math.exp(-i*.7),{hzTo:90+i*15,part:'silicone',dry:true})); },
   tap() { return [tone(220, 0, 0.03, 0.06, { part: 'tap', dry: true }), noise(1500, 0, 0.012, 0.03, { part: 'tap', dry: true })]; },
   /** The ball's launch: a short rising whoosh. */
   launch() { return [noise(400, 0, 0.3, 0.06, { hzTo: 1600, q: 0.8, attack: 0.3, part: 'rise' })]; },
@@ -373,7 +388,7 @@ export const wheelGap = speed => 0.054 + 0.286 * (1 - clamp(num(speed, 1), 0, 1)
  * THE KIT. createKit({ AudioContext?, master?, random?, now? }) for a test; the
  * module singleton `kit` below for the room and the stations.
  * -------------------------------------------------------------------------- */
-export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, random = Math.random, trim = 1, now = null } = {}) {
+export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, random = Math.random, trim = 1, now = null, loadSample = loadFoleySample } = {}) {
   let ctx = null, out = null, dry = null, send = null, noiseBuf = null;
   let masterLevel = clamp(num(master, DEFAULT_MASTER), 0, 1), trimLevel = clamp(num(trim, 1), 0, 1), muted = false;
   let suspended = false;
@@ -384,6 +399,8 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
   const wanted = new Set();     // beds to bring back after a suspend
   const lastAt = new Map();     // name -> page time of the last play, for DEDUPE_MS
   const trace = [];
+  const samples = new Map();
+  let sampleContext = null;
   const rand = () => { const v = Number(random()); return Number.isFinite(v) ? clamp(v, 0, 1) : 0.5; };
   const clock = typeof now === 'function' ? now : () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
@@ -445,6 +462,27 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     src.onended = () => end(voice);
     src.start(t); src.stop(t + dur + 0.02);
     return voice;
+  }
+  function warmSamples() {
+    if (!ctx || sampleContext === ctx || typeof loadSample !== 'function') return;
+    const owner = ctx; sampleContext = owner;
+    for (const name of SAMPLE_CUES) {
+      Promise.resolve().then(() => loadSample(name, owner)).then(buffer => {
+        if (ctx === owner && buffer && buffer.duration > 0 && buffer.duration <= 1.5) samples.set(name, buffer);
+      }).catch(() => { /* Optional foley: the scored fallback remains available. */ });
+    }
+  }
+  function renderSample(name, buffer, opts, t0, set) {
+    const src = ctx.createBufferSource(), gain = ctx.createGain();
+    src.buffer = buffer;
+    const rate = 0.98 + rand() * 0.04;
+    src.playbackRate.value = rate;
+    gain.gain.value = 0.65 * clamp(num(opts.level, 1), 0, 1);
+    src.connect(gain); gain.connect(dry);
+    const voice = { src, nodes: [src, gain], set };
+    live.add(voice); set.add(voice); src.onended = () => end(voice);
+    src.start(t0); src.stop(t0 + buffer.duration / rate + 0.02);
+    return 1;
   }
   function end(voice) {
     live.delete(voice); voice.set.delete(voice);
@@ -663,7 +701,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
 
   const api = {
     /** Wake the context inside a gesture (a press, a pull, a key). True when there is a context to play on. */
-    arm() { const c = graph(); if (!c) return false; if (c.state === 'suspended' && !suspended) c.resume().catch(() => {}); return true; },
+    arm() { const c = graph(); if (!c) return false; warmSamples(); if (c.state === 'suspended' && !suspended) c.resume().catch(() => {}); return true; },
     /**
      * Play cue `name`. One-shots take `at` (seconds ahead) and the cue's own options; a bed loops until stop().
      * Returns the number of notes scheduled (0 when the kit cannot sound: still traced).
@@ -681,6 +719,10 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
       const t0 = ctx.currentTime + Math.max(0, num(opts.at, 0));
       let set = voices.get(name);
       if (!set) { set = new Set(); voices.set(name, set); }
+      if (samples.has(name)) {
+        try { return renderSample(name, samples.get(name), opts, t0, set); }
+        catch (e) { samples.delete(name); } // A bad sample never silences the scored cue.
+      }
       let n = 0;
       for (const nt of s.notes) { try { render(nt, t0, set); n++; } catch (e) { /* a note never breaks a beat */ } }
       return n;
@@ -732,7 +774,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     get context() { return ctx; },
     /** Close the context. A later arm() builds a fresh one (the room may be opened again on the same page). */
     dispose() {
-      wanted.clear();
+      wanted.clear(); samples.clear(); sampleContext = null;
       if (ctx) {
         try { stopRolls(); stopWheel(); killAll(); for (const name of Array.from(beds.keys())) stopBed(name, 0.02); } catch (e) { /* closing */ }
         try { ctx.close().catch(() => {}); } catch (e) { /* already */ }

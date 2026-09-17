@@ -848,7 +848,9 @@ public class SkillTreeService : IDisposable
         if (settings == null) return;
 
         var pointsAwarded = levelsGained * PointsPerLevel;
+        var previousPoints = settings.SkillPoints;
         settings.SkillPoints += pointsAwarded;
+        var creditedBalance = settings.SkillPoints;
 
         // Track total skill points earned (for stats)
         App.Achievements?.TrackSkillPointsEarned(pointsAwarded);
@@ -860,6 +862,7 @@ public class SkillTreeService : IDisposable
             newLevel, pointsAwarded, settings.SkillPoints);
 
         App.Settings?.Save();
+        SparklePointRewards.PublishCredit(previousPoints, creditedBalance, SparklePointSource.LevelUp);
     }
 
     #endregion

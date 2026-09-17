@@ -1,17 +1,31 @@
+@import url("../../shared/back.css");
 /* station.css - Soft Hand station chrome, the wheel station's look (stations/wheel/station.css) scoped under
    .cards-station so the room's own styles never collide. No backdrop-filter anywhere (CONTRACT 10.13, law 7). */
 .cards-station { position: absolute; inset: 0; z-index: 20; overflow: hidden; color: #fce5f3; background: #061820;
   font-family: Segoe UI, Arial, sans-serif; color-scheme: dark; }
 .cards-station * { box-sizing: border-box; }
-.cards-station button { font: inherit; cursor: pointer; border: 1px solid #ab79a766; color: #fce5f3; background: #28172fe8;
-  border-radius: 10px; padding: 9px 16px; min-height: 40px; transition: background .15s, transform .1s; }
-.cards-station button:hover:not(:disabled) { background: #583056; }
-.cards-station button:active:not(:disabled) { transform: scale(.96); }
+.cards-station button { border: 1px solid #c58bbd59; border-top-color: #efc0e47a; color: #fce5f3; border-radius: 11px;
+  padding: 9px 16px; min-height: 40px; background: linear-gradient(180deg, #3d2449, #2a1734 54%, #1d0f26);
+  box-shadow: inset 0 1px 0 #ffeafb26, inset 0 -2px 0 #00000057, 0 2px 0 #150b1f, 0 6px 16px #05020a73;
+  text-shadow: 0 1px 2px #0a0512cc; transition: background .15s, box-shadow .12s, transform .08s; }
+.cards-station button:hover:not(:disabled) { background: linear-gradient(180deg, #55305f, #3a1f46 54%, #27142f);
+  border-color: #ffb7e08c; box-shadow: inset 0 1px 0 #fff0fc3d, inset 0 -2px 0 #00000057, 0 2px 0 #150b1f, 0 8px 22px #0b0416a1; }
+.cards-station button:active:not(:disabled) { translate: 0 2px;
+  background: linear-gradient(180deg, #24132e, #2e1a39 60%, #351f40);
+  box-shadow: inset 0 3px 7px #00000080, inset 0 -1px 0 #ffeafb12, 0 0 0 #150b1f; }
+.cards-station button { font: inherit; cursor: pointer; }
 .cards-station button:focus-visible, .cards-station input:focus-visible { outline: 2px solid #5fffd0; outline-offset: 3px; }
 .cards-station button:disabled { opacity: .45; cursor: default; }
 .cards-station [hidden] { display: none !important; }
 
 .cards-stage { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* THE BANK (Law XII, lane BR2-rw-cards): the pay leaves the pot and flies to the room's SP chip. The layer sits
+   over the felt and under the callout, and never takes a press. THE SPARKLE BURST (counterfx) is fired into it
+   too, so the sparks are centred on the table and die there. */
+.cards-tokens { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
+.cards-token { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; will-change: transform;
+  background: radial-gradient(circle at 35% 30%, #fff6d8, #e8c27a 45%, #ff5fa2 100%); box-shadow: 0 0 10px #e8c27a99; }
 
 /* Inside the room (ctx.hostBack) the room's Back and SP chips hold the top corners: stack under them. */
 .cards-top { position: absolute; top: 14px; left: 14px; z-index: 4; display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
@@ -24,7 +38,7 @@
 .cards-status:empty { display: none; }
 .cards-hint { color: #5fffd0; border-color: #5fffd055; }
 
-.cards-side { position: absolute; left: 22px; bottom: 18px; z-index: 4; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.cards-side { position: absolute; left: 22px; bottom: max(18px, var(--br-sill, 0px)); z-index: 4; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .cards-bet { display: flex; align-items: center; gap: 6px; }
 .cards-bet-label { font-size: 12px; color: #e8c27a; margin-right: 2px; }
 .cards-bet button { min-width: 58px; padding: 7px 12px; min-height: 36px; }
@@ -33,7 +47,7 @@
 .cards-sit { font-size: 13px; background: transparent !important; }
 .cards-sitting { font: 11px Consolas, monospace; color: #e8c27a99; }
 
-.cards-controls { position: absolute; right: 22px; bottom: 18px; z-index: 4; display: flex; flex-wrap: wrap; justify-content: flex-end;
+.cards-controls { position: absolute; right: 22px; bottom: max(18px, var(--br-sill, 0px)); z-index: 4; display: flex; flex-wrap: wrap; justify-content: flex-end;
   gap: 8px; max-width: min(460px, calc(100vw - 300px)); }
 .cards-move { min-width: 84px; font-weight: 600; }
 .cards-move.is-hint { border-color: #5fffd0; box-shadow: 0 0 0 2px #5fffd066; }
@@ -59,8 +73,8 @@
 @media (max-width: 800px) {
   .cards-top { top: 10px; left: 12px; max-width: 220px; }
   .cards-sp, .cards-status, .cards-hint { font-size: 11px; padding: 5px 10px; }
-  .cards-side { left: 12px; bottom: 12px; }
-  .cards-controls { right: 12px; bottom: 12px; max-width: calc(100vw - 200px); }
+  .cards-side { left: 12px; bottom: max(12px, var(--br-sill, 0px)); }
+  .cards-controls { right: 12px; bottom: max(12px, var(--br-sill, 0px)); max-width: calc(100vw - 200px); }
   .cards-move { min-width: 64px; }
 }
 @media (prefers-reduced-motion: reduce) { .cards-station * { transition: none !important; } }
@@ -72,7 +86,7 @@
 .cards-in-room .cards-top { top: 90px; }
 @media (max-width: 600px) {
   .cards-in-room .cards-side { bottom: 72px; left: 10px; right: 10px; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 10px; }
-  .cards-in-room .cards-controls { bottom: 12px; left: 10px; right: 10px; max-width: none; }
+  .cards-in-room .cards-controls { bottom: max(12px, var(--br-sill, 0px)); left: 10px; right: 10px; max-width: none; }
   .cards-in-room .cards-move { min-width: 70px; padding: 8px; }
 }
 .cards-station.cards-in-room .cards-top { top: 105px; max-width: calc(100vw - 24px); }
@@ -96,3 +110,90 @@
 }
 @media (prefers-reduced-motion: reduce) { .br-glyph-hit { animation-name: br-glyph-hit-still; } }
 @keyframes br-glyph-hit-still { 0%, 100% { box-shadow: 0 0 0 0 #5fffd000; } 50% { box-shadow: 0 0 18px 4px #5fffd0cc; } }
+
+/* Desktop controls sit beside the rendered hand and follow its projected camera position. */
+.cards-total { position:absolute; z-index:4; text-align:center; pointer-events:none; width:100px; margin:-36px 0 0 -50px; left:var(--total-x,35%); top:var(--total-y,64%); color:#f2d49a; text-shadow:0 2px 5px #001b16; }
+.cards-total small { display:block; font-size:12px; letter-spacing:.08em; }
+.cards-total strong { display:block; font-size:52px; line-height:1.1; font-variant-numeric:tabular-nums; }
+.cards-total[data-mood="good"] { color:#9effdc; text-shadow:0 0 22px #5fffd066,0 2px 5px #001b16; }
+.cards-total[data-mood="bust"] { color:#ff8cad; }
+.cards-bet-value { min-width:48px; text-align:center; font-weight:700; font-variant-numeric:tabular-nums; }
+.cards-in-room > .cards-bet { position:absolute; z-index:4; left:var(--bet-x,72%); top:var(--bet-y,68%); transform:translate(-50%,-50%); padding:5px 8px; border-radius:16px; background:#201229de; }
+.cards-in-room > .cards-bet .cards-bet-label { display:none; }
+.cards-in-room > .cards-bet button { min-width:34px; min-height:34px; padding:4px 8px; font-size:20px; }
+.cards-in-room:not([data-phase="play"]) > .cards-bet { visibility:hidden; }
+@media (min-width:801px) {
+ .cards-in-room .cards-controls { left:clamp(170px,var(--hand-x,50%),calc(100% - 170px)); top:min(calc(var(--hand-bottom,75%) + 10px),calc(100% - 104px)); right:auto; bottom:auto; transform:translateX(-50%); width:268px; max-width:none; display:grid; grid-template-columns:1fr 1fr; gap:9px 26px; align-items:start; }
+ .cards-in-room .cards-move[data-move="hit"] { grid-area:1 / 2; min-height:46px; font-size:19px; }
+ .cards-in-room .cards-move[data-move="stand"] { grid-area:1 / 1; min-height:44px; margin-top:2px; font-size:18px; }
+ .cards-in-room .cards-move[data-move="double"] { grid-area:2 / 2; }
+ .cards-in-room .cards-move[data-move="split"] { grid-area:2 / 1; }
+ .cards-in-room .cards-move:is([data-move="double"],[data-move="split"]) { min-height:30px; min-width:80px; padding:5px 10px; font-size:12px; justify-self:center; }
+ .cards-in-room .cards-deal { grid-column:1 / 3; justify-self:center; }
+}
+@media(max-width:800px) {
+ .cards-total { left:var(--phone-total-x,50%); top:var(--phone-total-y,50%); width:70px; margin-left:-35px; }
+ .cards-total strong { font-size:28px; }
+ .cards-total small { font-size:10px; }
+ .cards-in-room > .cards-bet { left:auto; top:auto; bottom:110px; right:12px; transform:none; }
+}
+
+@media(max-width:800px) {
+ .cards-in-room > .cards-bet { bottom:73px; }
+ .cards-in-room[data-open] > .cards-bet { display:flex; }
+}
+
+/* Felt-side score plates: intensity rises toward 21, bust drains to grey. */
+.cards-total { box-sizing:border-box; width:90px; margin-left:-45px; border:2px solid currentColor; border-radius:14px; padding:5px 6px; background:linear-gradient(145deg,#273a38ee,#111b27f2); box-shadow:0 3px 0 #09131b,0 0 13px #e8c27a33,inset 0 1px 0 #ffffff44; }
+.cards-total strong { font-size:39px; -webkit-text-stroke:.4px currentColor; text-shadow:0 3px 0 #102523,0 0 12px currentColor; }
+.cards-total[data-mood="good"] { color:#9effdc; }
+.cards-total[data-mood="hot"] { color:#ffc369; box-shadow:0 3px 0 #3d2240,0 0 24px #ffa83c66; }
+.cards-total[data-mood="perfect"] { color:#ffb9ed; background:linear-gradient(145deg,#68327aee,#211732f2); box-shadow:0 3px 0 #47254f,0 0 30px #ff5fbe88; }
+.cards-total[data-mood="bust"] { color:#a2a8b1; background:#242730ed; box-shadow:0 3px 0 #101118; }
+.cards-total[data-mood="bust"] strong { text-shadow:0 2px 0 #131720; }
+.cards-total:is([data-mood="hot"],[data-mood="perfect"]) strong { animation:cards-score-wobble 1.5s ease-in-out infinite; }
+.cards-total[data-mood="perfect"] strong { animation-duration:.85s; }
+.cards-score-sparks { position:absolute; left:50%; top:50%; }
+.cards-score-sparks i { position:absolute; width:5px; height:5px; border-radius:1px; background:currentColor; box-shadow:0 0 7px currentColor; animation:cards-score-spark 650ms ease-out forwards; }
+.cards-dealer-total { width:92px; margin-left:-46px; }
+.cards-dealer-total strong { font-size:29px; white-space:nowrap; }
+@keyframes cards-score-wobble { 0%,100% { transform:rotate(-2deg) scale(1); } 50% { transform:rotate(2deg) scale(1.06); } }
+@keyframes cards-score-spark { from { transform:translate(0,0) rotate(0);opacity:1; } to { transform:translate(var(--sx),var(--sy)) rotate(150deg);opacity:0; } }
+[data-still] .cards-total strong,[data-still] .cards-score-sparks i { animation:none!important; }
+@media(prefers-reduced-motion:reduce) { .cards-total strong,.cards-score-sparks i { animation:none!important; } }
+@media(max-width:800px) { .cards-total { width:72px; margin-left:-36px; padding:3px; border-radius:10px; } .cards-total strong { font-size:24px; } .cards-dealer-total strong { font-size:21px; } }
+
+/* Hit and Deal share one target; Stand sits below, optional moves beneath the score. */
+.cards-in-room .cards-controls { display:contents!important; }
+.cards-in-room .cards-controls > button { position:absolute; z-index:5; transform:translateX(-50%); }
+.cards-in-room .cards-move:is([data-move="stand"],[data-move="hit"]) { top:var(--action-y); width:142px; min-height:64px; margin:0; font-size:22px; font-weight:800; border:2px solid #ffdeeb; text-transform:uppercase; }
+.cards-in-room .cards-move[data-move="stand"] { left:var(--hit-x); top:calc(var(--action-y) + 74px); background:linear-gradient(#fa87cb,#a53386)!important; box-shadow:inset 0 2px 0 #fff8,0 5px 0 #56224b,0 0 24px #ff6fb955; }
+.cards-in-room .cards-move[data-move="hit"] { left:var(--hit-x); min-height:64px; color:#073e36; text-shadow:0 1px #fff8; background:linear-gradient(#a5ffe2,#38c6a6)!important; border-color:#baffed; box-shadow:inset 0 2px 0 #fff8,0 5px 0 #135d50,0 0 24px #54ffcb55; }
+ .cards-in-room .cards-deal { left:var(--hit-x); top:var(--action-y); width:142px; min-width:0; min-height:64px; margin:0; font-size:22px; font-weight:800; }
+.cards-in-room .cards-move:is([data-move="split"],[data-move="double"]) { left:var(--stand-x); top:var(--secondary-y); width:110px; min-height:38px; margin:0; font-size:14px; }
+.cards-in-room .cards-move[data-move="double"] { top:calc(var(--secondary-y) + 46px); }
+.cards-in-room .cards-total:not(.cards-dealer-total) { width:110px; margin-left:-55px; border-width:3px; box-shadow:0 5px 0 #101c26,0 0 24px currentColor,inset 0 2px 0 #fff8; }
+.cards-in-room .cards-total:not(.cards-dealer-total) strong { font-size:52px; font-weight:900; -webkit-text-stroke:1px currentColor; text-shadow:0 4px #153e37,0 0 16px currentColor; }
+@media(max-width:800px) {
+ .cards-in-room .cards-move:is([data-move="stand"],[data-move="hit"]) { width:84px; min-height:50px; font-size:17px; padding:8px 3px; }
+ .cards-in-room .cards-total:not(.cards-dealer-total) { width:72px; margin-left:-36px; }
+ .cards-in-room .cards-total:not(.cards-dealer-total) strong { font-size:34px; }
+}
+
+/* SP travels as faceted sparkles, not coins. */
+.cards-token { border-radius:0; border:0; clip-path:polygon(50% 0,85% 30%,100% 50%,50% 100%,0 50%,15% 30%); background:conic-gradient(from 45deg,#fff6da,#fca6e1,#b791ff,#fff6da,#ffda83); color:transparent; filter:drop-shadow(0 0 5px #ffcaec); }
+
+@media(max-width:800px) {
+ .cards-in-room .cards-deal { width:84px; min-height:50px; font-size:17px; padding:6px 3px; }
+ .cards-in-room .cards-move[data-move="stand"] { top:calc(var(--action-y) + 60px); }
+ .cards-in-room .cards-move:is([data-move="split"],[data-move="double"]) { width:76px; min-width:0; min-height:36px; padding:5px 3px; font-size:12px; }
+ .cards-in-room .cards-move[data-move="double"] { top:calc(var(--secondary-y) + 44px); }
+}
+
+.cards-stand-stamp { position:absolute;z-index:14;pointer-events:none;border:3px solid #ff8ed8;border-radius:12px;padding:7px 19px;color:#ff8ed8;background:#351342dc;font:900 25px Fredoka, sans-serif;letter-spacing:.12em;box-shadow:0 0 24px #ff68c866,inset 0 0 12px #ff68c844;text-shadow:0 2px 0 #511b50; }
+
+/* Slide the targets themselves so pointer hit testing stays with the visible controls. */
+.cards-in-room .cards-move,.cards-in-room .cards-deal { rotate:var(--hud-right-tilt,0deg); }
+.cards-in-room .cards-move:is([data-move="split"],[data-move="double"]),
+.cards-in-room .cards-total:not(.cards-dealer-total) { rotate:var(--hud-left-tilt,0deg); }
+.cards-hud-trail { position:absolute; z-index:3; width:7px; height:11px; border-radius:2px; box-shadow:0 0 9px currentColor; pointer-events:none; }

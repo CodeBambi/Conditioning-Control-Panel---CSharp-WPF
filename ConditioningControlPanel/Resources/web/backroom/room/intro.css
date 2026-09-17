@@ -1,0 +1,18 @@
+/* One painted Loom field, compositor rotation only. */
+.br-intro{position:fixed;inset:0;z-index:28;display:grid;place-items:center;overflow:hidden;background:radial-gradient(ellipse at 50% 42%,#32172e 0,#140d20 42%,#08070e 78%);color:#fff0d6;transition:opacity .55s ease;}
+.br-intro::before{content:"";position:absolute;inset:18px;border:1px solid #e8c27a26;border-radius:18px;pointer-events:none}
+.br-intro-card{text-align:center;padding:40px 24px;width:min(420px,90vw);box-sizing:border-box}
+.br-intro-seal{position:relative;width:clamp(150px,32vh,260px);aspect-ratio:1;margin:0 auto 34px;border:1px solid #e8c27a88;border-radius:50%;padding:12px;box-shadow:0 0 65px #ff5fa21c,inset 0 0 24px #e8c27a12}
+.br-intro-seal::before{content:"";position:absolute;inset:5px;border:1px dashed #e8c27a55;border-radius:50%}
+.br-intro canvas{display:block;width:100%;height:100%;border-radius:50%;animation:br-intro-turn 16s linear infinite}
+.br-intro-gem{position:absolute;inset:50% auto auto 50%;transform:translate(-50%,-50%);font-size:28px;color:#fff0d6;text-shadow:0 0 16px #ffc678;pointer-events:none}
+.br-intro h1{font:400 clamp(28px,6vw,42px)/1.15 Georgia,serif;letter-spacing:.09em;margin:0 0 16px}
+.br-intro p{font:13px/1.5 system-ui,sans-serif;color:#d6b9cb;letter-spacing:.08em;margin:0 0 26px}
+.br-intro-track{height:2px;width:160px;margin:auto;background:#e8c27a20;overflow:hidden}
+.br-intro-track i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ff5fa2,#e8c27a);transition:width .25s ease}
+.br-intro-out{opacity:0;pointer-events:none}
+html:has(.br-intro:not(.br-intro-out)) .br-sp{visibility:hidden}
+.br-intro-still canvas,html.br-reduced .br-intro canvas,html.br-suspended .br-intro canvas{animation-play-state:paused}
+@keyframes br-intro-turn{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.br-intro canvas{animation:none}.br-intro,.br-intro-track i{transition:none}}
+@media(max-height:480px){.br-intro-card{padding:16px}.br-intro-seal{width:110px;margin-bottom:16px}.br-intro h1{font-size:26px}.br-intro p{margin-bottom:14px}}

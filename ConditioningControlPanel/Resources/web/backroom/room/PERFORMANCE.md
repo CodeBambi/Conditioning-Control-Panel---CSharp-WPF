@@ -1,6 +1,6 @@
 # Back Room rendering and hosting budget
 
-Measured locally at 1440 x 900, same entrance pose, September 2026. This is a browser workload comparison, not a minimum-spec FPS claim.
+Historical measurements from the earlier room build at 1440 x 900, same entrance pose, September 2026. These are not measurements of the September 17 shared-station preview and do not establish minimum-spec FPS.
 
 | Measurement | Before | After |
 | --- | ---: | ---: |
@@ -15,16 +15,17 @@ The cold total includes JS and art from the local no-cache test server, before H
 ## Device limits
 
 - Room and the catalogue close-up: 30 FPS at rest, on one renderer (the close-up is a scissored second pass on the room's context, not a context of its own). Desktop movement/look may draw up to 60 FPS; phones stay at 30. Slot and wheel presentation is capped at 60/30 without changing settlement timelines.
-- Room, slot and wheel: at most 1.5 million pixels on desktop, 900,000 on phones/low-memory devices. DPR is capped at 1.25/1. Only the room samples its own frame times, so only the room's resolution falls, gradually, to 60% after sustained slow frames; the slot and the wheel keep the resolution they opened with. UI text stays at native resolution. Anti-aliasing remains enabled.
-- Hidden room tabs stop their animation loop. Opening a game holds the room. Resuming resets input and clocks.
+- Room, slot and wheel: at most 1.5 million pixels on desktop, 900,000 on phones/low-memory devices. DPR is capped at 1.25/1. The room samples frame times and gradually lowers resolution to 60% after sustained slow frames. Shared seated views use that renderer; standalone station renderers retain their opening resolution. UI text stays at native resolution. Anti-aliasing remains enabled.
+- Hidden room tabs stop their animation loop. Shared seated games keep the room running on the same renderer; only an exclusive held view stops it. Resuming resets input and clocks.
 - Two minor cartridge transmission materials use their opaque reflective finish, avoiding a second whole-room refraction pass.
-- All wall and ceiling screens share media sources. GIFs are at most 384 px and there is one global budget of 12 new frame decodes per second, shared fairly among visible sources. Still images are capped at 512 px. At most two media files initialize concurrently. Exiting closes decoders.
+- All wall and ceiling screens share media sources. Output canvases are at most 384 px, with each source capped at 12 frames per second and up to four decode starts per rendered frame across visible sources. This is not a global 12-decode-per-second limit. Original images are decoded before output downscaling. DOM effect images are outside this budget. Still images are capped at 512 px. At most two media files initialize concurrently. Exiting closes decoders.
 - Sculpture lever previews share the already loaded catalogue geometry/materials. Swapping all three requires zero further asset requests.
-- The six decoration props (three plants, three wall frames) are baked to one mesh per material when they are placed, so the ivy's 85 authored mesh nodes cost six draw calls, not eighty-five. All six together: 30 draw calls and 60,428 triangles. The entry pose at 1280 x 720 measures 277 draw calls with every prop on. Their two media frames feed from the same wall-picture sources and the same global 12-decode budget as the room's own screens; nothing new is fetched for them. Switching them off from the panel removes their draws. There is no new resolution scaler: the room's own frame-time sampler (render-budget.js) is what drops resolution on a slow device.
+- The coin shower is every fixture's from the reward pass (CONTRACT 10.22.A), not the three slot cabinets' alone, so seven idle instanced meshes stand where three used to: four more draw calls at instance count 0 until a fixture pays. They are built at boot rather than on the winning frame on purpose - a material three.js has never rendered is a material it has not compiled, and that compile belongs anywhere but the frame a jackpot lands on. The shower itself is one instanced draw of at most 64 coins for four seconds, and it draws nothing at all while the room is still.
+- The six decoration props (three plants, three wall frames) are baked to one mesh per material when they are placed, so the ivy's 85 authored mesh nodes cost six draw calls, not eighty-five. All six together: 30 draw calls and 60,428 triangles. The entry pose at 1280 x 720 measures 277 draw calls with every prop on. Their two media frames feed from the same wall-picture sources and the same per-frame decode-start budget as the room's own screens; nothing new is fetched for them. Switching them off from the panel removes their draws. There is no new resolution scaler: the room's own frame-time sampler (render-budget.js) is what drops resolution on a slow device.
 
 ## Website hosting boundary
 
-No website configuration or deployment is included. The room is currently a local preview. For web publication:
+The room has a hosted playtest. The following publication recommendations are not a claim about its current response headers:
 
 1. Serve room JS, GLBs, textures and media directly as static CDN files. Do not route asset downloads through an authenticated server function. Keep authoritative SP/game endpoints separate.
 2. For the current stable asset filenames, emit ETag and `Cache-Control: public, max-age=0, must-revalidate`. A repeat visit can reuse unchanged browser bytes following a 304. Do not use year-long immutable caching on these mutable filenames.
@@ -38,3 +39,34 @@ Animations make no server calls. Room media is dealt once; the floor bell reads 
 Build-only compression tool: `../smoke/asset-build/compress-customization.mjs`. Install its pinned dependencies in that folder and pass separate original/output directories; every .glb in the original directory is rebuilt. Do not simplify the shipped outputs again. It preserves named interaction/lever nodes; the runtime uses the existing Meshopt decoder. Pass `--no-simplify` for a model whose flat media planes have to keep their exact UVs: the three gallery frames were packed that way, the three plants with the standard decimating pipeline. The flag applies to the whole run, so the frames and the plants have to be rebuilt from separate input directories.
 
 Regression checks: room/slot Node suites plus `smoke/room-check.mjs`. Validate all three compressed sculptures on both room and active-slot pivots after rebuilding. A 390 x 844 browser check passes, but physical low-end Android/iPhone thermal, memory and touch-navigation testing remains necessary before claiming phone support.
+
+## September 17 candidate optimization pass
+
+Auto / Full / Performance is a presentation policy independent of Motion and Calm.
+Auto starts conservatively on device hints, reduces work after a five-second
+window with sustained misses, and recovers only after longer stability outside a
+seat. Hidden-tab gaps reset sampling. Full retains the original pixel safety caps.
+
+Performance caps room/cards presentation at 30 fps. Wall sources share four animation
+advances per batch, at most six batches per second, with fair rotation. Browser
+reward media caps overlap at four, Loom uses 384 px / 20 fps, and flowing SVG melt uses
+one noise octave with 20 fps parameter updates. This is not a measured phone FPS gain.
+
+Settled slot strips retain unchanged pixels and only paint visible neighbours.
+Static content no longer uploads every 100 ms. Any changed CanvasTexture still
+uploads the whole strip; partial GPU uploads remain a possible future rewrite.
+Off-camera cosmetic room reel/bulb work is skipped without skipping event clocks.
+
+Media transfer is streamed with 32 MiB/source, 4M pixel and 2,000 frame limits and a 10 s
+load deadline. Header dimensions are checked before native decoding. Still fallback
+reuses validated bytes and releases its blob URL. Card decks load visible ranks
+first and retain at most eight 4 MiB sources, with unseen cache eviction. The 32 MiB
+card bound counts compressed source bytes, not total browser/GPU memory; wall/slot
+sources have separate budgets. Oversized or unsupported images use built-in art.
+
+Soundtrack uses one streaming media element with a gain control, starts after a
+user gesture, and pauses while suspended/hidden. It never decodes all five songs
+into PCM buffers or preloads the playlist. Default music level is 15 percent of master.
+
+The candidate has automated coverage; physical device, thermal, touch and visual
+acceptance remain the owner's testing step. See the task handoff for exact results.
