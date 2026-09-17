@@ -16,8 +16,15 @@ export function createMemorabiliaViewer({ onOpen = () => {}, onClose = () => {},
   const picture = document.createElement('img');
   picture.draggable = false;
   const title = document.createElement('strong');
+  // The tier sign, or the words that stand in for one on the single card sold by weekly pass.
+  const badge = document.createElement('img');
+  badge.className = 'memorabilia-badge';
+  badge.draggable = false;
+  badge.alt = '';
+  const chip = document.createElement('span');
+  chip.className = 'memorabilia-chip';
   const caption = document.createElement('figcaption');
-  paper.append(picture, title, caption);
+  paper.append(picture, title, badge, chip, caption);
   dialog.append(back, paper);
   document.body.append(dialog);
   let previousFocus = null;
@@ -62,6 +69,12 @@ export function createMemorabiliaViewer({ onOpen = () => {}, onClose = () => {},
       dialog.setAttribute('aria-label', item.title || backLabel);
       title.textContent = item.title || '';
       title.hidden = !item.title;
+      badge.hidden = !item.badge;
+      // The sign costs the photograph its own height, so the paper says it is carrying one.
+      if (item.badge) paper.dataset.priced = '1'; else delete paper.dataset.priced;
+      if (item.badge) badge.src = item.badge; else badge.removeAttribute('src');
+      chip.textContent = item.chip || '';
+      chip.hidden = !item.chip;
       caption.textContent = item.caption || '';
       caption.hidden = !item.caption;
       picture.hidden = !item.src;
