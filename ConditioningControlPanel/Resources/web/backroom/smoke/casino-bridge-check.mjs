@@ -86,6 +86,7 @@ try {
  await sleep(3500);await shot('running-race');
  const clickVisible=async expression=>{
   const button=await ev(`(()=>{const b=${expression};if(!b)return null;const r=b.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2,visible:r.width>0&&r.height>0&&getComputedStyle(b).visibility!=='hidden'&&document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)===b}})()`);
+  if(!button?.visible) console.log('BLOCKER',await ev(`(()=>{const b=${expression};const r=b?.getBoundingClientRect();return {rect:r?.toJSON(),hit:r?document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)?.outerHTML:null}})()`));
   ok(button?.visible,'return step is visible and unobstructed');
   await pointerClick(button);
  };

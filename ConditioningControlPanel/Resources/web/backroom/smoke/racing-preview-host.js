@@ -1,7 +1,7 @@
 // Local casino preview adapter. Uses only this browser's existing test ledger.
 import { handle } from '/__phone-server.js';
 const optionsStyle=document.createElement('style');
-optionsStyle.textContent='#__opt-btn{right:76px}';document.head.append(optionsStyle);
+optionsStyle.textContent='#__opt-btn{right:76px!important}';document.head.append(optionsStyle);
 const back = '/backroom/index.html?raceReturn=1';
 const listeners = new Set();
 function publishMedia() {
