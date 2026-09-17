@@ -393,6 +393,7 @@ namespace ConditioningControlPanel
             // BEFORE OnXPChanged tweens the counter it means to withhold. It also takes XPAwarded,
             // the delta-and-provenance event that XPChanged deliberately is not.
             InitializeBankFx();
+            InitializeSparkleWallet();
             App.Progression.XPChanged += OnXPChanged;
             App.Progression.LevelUp += OnLevelUp;
 
@@ -2715,6 +2716,7 @@ namespace ConditioningControlPanel
                     // Its art plate overrides PlayCardArtPlate's 138 to 168, so it frames against
                     // the tall variant - a 138-shaped window would be re-cropped ~18% narrower.
                     ("features/remote_control.png",     PlayTab?.PlayRemoteHeroBrush,   768, ModArtFramingRegistry.SurfacePlayCardTall),
+                    ("features/backroom.png",           PlayTab?.PlayBackRoomHeroBrush, 640, ModArtFramingRegistry.SurfacePlayCard),
                     ("features/fyp.png",                PlayTab?.PlayFypHeroBrush,      512, ModArtFramingRegistry.SurfacePlayCard),
                     ("lockdown_icon.png",               PlayTab?.PlayLockdownHeroBrush, 1024, ModArtFramingRegistry.SurfacePlayCard),
                     // The page hero and the Loom strip. Both brushes were named and left mutable
