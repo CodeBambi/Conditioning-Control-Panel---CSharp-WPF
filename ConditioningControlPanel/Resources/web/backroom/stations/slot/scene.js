@@ -1,4 +1,4 @@
-import { siliconeRebound, SILICONE_SETTLE_MS } from '../../room/lever-return.js';
+import { siliconeRebound, SILICONE_SETTLE_MS, customLeverReturn } from '../../room/lever-return.js';
 import { sampleEmiReaction } from '../../room/emi-gestures.js';
 /* ============================================================================
  * scene.js - the slot cabinet in three.js, ported from blender-scripting
@@ -720,7 +720,7 @@ export async function createScene(o) {
       const s = spin, dt = t - s.start, stillSpin = reduced || !!s.motionSuppressed;
       // The pull carries on from wherever the Law VIII lean (or the drag) left the lever.
       const wholeMs = s.solo ? respinMs(PACE, s.teaseMs) : reelsMs(PACE, s.teaseMs);
-      lever.rotation.x = stillSpin ? (dt < wholeMs ? LEAN : 0) : Math.max(0.4 * Math.sin(Math.PI * clamp(dt / 420)), s.leverFrom * (1 - ease(dt / 420))) + (get('chess_handle_socket') ? 0 : leverRebound(dt - 420));
+      lever.rotation.x = stillSpin ? (dt < wholeMs ? LEAN : 0) : Math.max(0.4 * Math.sin(Math.PI * clamp(dt / 420)), s.leverFrom * (1 - ease(dt / 420))) + (get('chess_handle_socket') ? customLeverReturn(dt - 420) : leverRebound(dt - 420));
       let all = true;
       for (let i = 0; i < 3; i++) {
         if (s.held === i || s.keep.includes(i)) continue;
@@ -746,7 +746,7 @@ export async function createScene(o) {
       }
       if (all && dt >= wholeMs) settleSpin();   // a held column never shortens the pace
     } else if (pull) lever.rotation.x = PULL_MAX * pull.amount;
-    else if (pullBack) { const dt = t - pullBack.start, q = clamp(dt / 200); lever.rotation.x = reduced ? 0 : pullBack.angle * (1 - ease(q)) + (get('chess_handle_socket') ? 0 : leverRebound(dt - 200)); if (dt >= 200 + (get('chess_handle_socket') ? SILICONE_SETTLE_MS : 200) || reduced) pullBack = null; }
+    else if (pullBack) { const dt = t - pullBack.start, q = clamp(dt / 200); lever.rotation.x = reduced ? 0 : pullBack.angle * (1 - ease(q)) + (get('chess_handle_socket') ? customLeverReturn(dt - 200) : leverRebound(dt - 200)); if (dt >= 200 + (get('chess_handle_socket') ? SILICONE_SETTLE_MS : 200) || reduced) pullBack = null; }
     else if (lean) lever.rotation.x = reduced ? LEAN : lean.from + (LEAN - lean.from) * ease((t - lean.start) / FEEL.LEAN_MS);   // Law VIII
     else lever.rotation.x = reduced || phase !== 'play' || partying ? 0 : BREATH_RAD * breath(t);   // THE BREATH, the only breather
 
