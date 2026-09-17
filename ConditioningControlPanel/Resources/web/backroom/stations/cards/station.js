@@ -677,7 +677,7 @@ export async function mount(ctx) {
       onDone: () => { if (chip) chip.show(null); },   // the room's Law I rule takes the chip back
     });
     moments = createMoments(ctx, { station: 'cards' });
-    callout = createCallout({ mount: el, lex: typeof ctx.lex === 'function' ? ctx.lex : undefined });
+    callout = createCallout({ ctx, mount: el, lex: typeof ctx.lex === 'function' ? ctx.lex : undefined });
     kit = createLoomKit({ still: dress().still, log: say });
     table = ctx.stage ? createTable3D(ctx.stage, { kit: () => kit, onDeal: deal, onCue: (cue) => sound.play(cue) }) : createTable($('.cards-stage'), { kit: () => kit, onCue: (cue) => sound.play(cue) });
     if (ctx.stage) createSeatLook(ctx.stage, { mount:el, enabled:()=>alive && !suspended && !dress().still,

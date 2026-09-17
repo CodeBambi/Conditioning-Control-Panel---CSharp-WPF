@@ -782,7 +782,7 @@ export async function mount(ctx) {
     visualDealSpins = 0; rotateSpiralDeal();
     media = createMedia($('.slot-media'), ctx.lex);
     sound = createSound();
-    callout = createCallout({ mount: $('.slot-callout'), lex: t });   // one per open; the layer sits above the reels
+    callout = createCallout({ ctx, mount: $('.slot-callout'), lex: t });   // one per open; the layer sits above the reels
     bank = createBank({
       layer: $('.slot-tokens'), reduced,
       onTick: (value, kind, quiet) => { shown = value; paintSp(); if (!quiet) sound.token(false); note('tick', { kind, value }); },

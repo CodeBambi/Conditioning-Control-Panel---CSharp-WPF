@@ -63,7 +63,7 @@ test('show draws the text centred with the zoom schedule: 60% -> 130% over 1 s, 
     assert.equal(text.textContent, 'Double Spin');
     assert.equal(text.style.fontSize, TIER_VH.big + 'vh');
     assert.equal(text.getAttribute('data-tier'), 'big');
-    assert.ok(/Condensed|Narrow|Impact/.test(text.style.fontFamily), 'a bold condensed stack when the cabinet names no font');
+    assert.ok(/Rounded/.test(text.style.fontFamily), 'a rounded stack when the cabinet names no font');
     const zoom = text.anims[0];
     assert.equal(zoom.opts.duration, CALLOUT_MS);
     assert.equal(ZOOM.zoomMs + ZOOM.holdMs + ZOOM.outMs, CALLOUT_MS);
@@ -84,7 +84,7 @@ test('show draws the text centred with the zoom schedule: 60% -> 130% over 1 s, 
   } finally { mock.timers.reset(); }
 });
 
-test('tiers: small ~7vh, hero 14vh with the layer shake; a show while one is up replaces it', () => {
+test('tiers: small ~9vh, hero 17vh with the layer shake; a show while one is up replaces it', () => {
   const { mount, c } = harness();
   c.show('a', 'Small');
   const layer = layerOf(mount);
@@ -93,7 +93,7 @@ test('tiers: small ~7vh, hero 14vh with the layer shake; a show while one is up 
   c.show('b', 'JACKPOT', { tier: 'hero' });
   const texts = all(layer, 'br-callout-text');
   assert.equal(texts.length, 1, 'the small one is replaced');
-  assert.equal(texts[0].style.fontSize, '14vh');
+  assert.equal(texts[0].style.fontSize, '17vh');
   assert.equal(layer.anims.length, 1, 'the hero shakes the layer');
   assert.equal(layer.anims[0].opts.duration, 320);
   assert.deepEqual(c.debug().shown.map((s) => s.tier), ['small', 'hero']);
@@ -149,7 +149,7 @@ test('word: clicker, speech (rate 0.85, pitch 0.8, previous cancelled), word cue
     let words = all(layer, 'br-callout-word');
     assert.equal(words.length, 1, 'the first word is up on the frame of the call');
     assert.equal(words[0].textContent, 'DROP');
-    assert.equal(words[0].style.fontSize, '12vh');
+    assert.equal(words[0].style.fontSize, '15vh');
     assert.match(words[0].style.backgroundImage, /linear-gradient/);
     assert.equal(words[0].anims[0].opts.duration, WORD_MS);
     assert.deepEqual(cues.map((x) => x.cue), ['clicker', 'word']);

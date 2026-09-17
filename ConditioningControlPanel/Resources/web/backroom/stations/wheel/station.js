@@ -500,7 +500,7 @@ export async function mount(ctx) {
     readMotion(); dress = dressOf(hypnoCtx());
     el = build(); ctx.root.append(el); rewardReveal = createRewardReveal(el, t); el.dataset.hub = dress.hub;
     moments = createMoments(ctx, { station: 'wheel' });
-    callout = createCallout({ mount: el, lex: typeof ctx.lex === 'function' ? ctx.lex : undefined });
+    callout = createCallout({ ctx, mount: el, lex: typeof ctx.lex === 'function' ? ctx.lex : undefined });
     if (typeof ctx.onSettings === 'function') unSettings = ctx.onSettings(() => { if (alive) applyDress(); });
     addEventListener('keydown', onKey); addEventListener('resize', onResize);
     readout = createReadout({ ctx, own: $('.wheel-sp'), format: n => t('br_wheel_sp', '{n} SP', { n: fmt(n) }) });

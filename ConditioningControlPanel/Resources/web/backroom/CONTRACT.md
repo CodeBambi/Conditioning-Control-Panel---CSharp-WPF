@@ -2211,3 +2211,9 @@ Unsupported chase endpoints leave legacy slot play available without the bonus r
 
 This increases direct expected SP by about 0.646 per paid spin, or 0.815 with the decoration
 collection complete, before Seeing Double. It is additional return, not a retune back to 102%.
+
+### Back Room text and flash previews (2026-09-17)
+
+Announcer and word callouts use bundled Fredoka with rounded system fallbacks, larger fitted text, squash/wobble entry and a soft breathing hold. Motion Off and reduced motion retain the quiet fade. All four station announcers read live motion settings.
+
+Authored Back Room flash bursts may sample Still, Drift and Bounce, or Pendulum without owning Flashes v2. This room-only presentation does not grant a prize, change ambient settings, or bypass global motion controls. Desktop compositor previews stay within peripheral lanes; classic flash windows remain still. The browser stand-in uses the shared bounded preview keyframes. Shatter remains the existing interactive prize effect, not part of this automatic motion sample.

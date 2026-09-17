@@ -34,7 +34,7 @@ namespace ConditioningControlPanel.Services
     /// its images staggered <paramref name="StaggerMs"/> apart (the ambient default is 300 ms). Null = the
     /// user's own settings, as every other one-shot.
     /// </summary>
-    public readonly record struct FlashBurstLook(double Opacity, int StaggerMs, bool Peripheral = false);
+    public readonly record struct FlashBurstLook(double Opacity, int StaggerMs, bool Peripheral = false, bool PreviewV2 = false);
 
     /// <summary>
     /// Handles flash image display with full GIF animation support.
@@ -1475,6 +1475,7 @@ namespace ConditioningControlPanel.Services
                     var h = Math.Max(1, (int)(imageData.Height * fit));
                     var (x, y) = PickPeripheralPoint(m, w, h);
                     imageData.Geometry = new ImageGeometry { X = x, Y = y, Width = w, Height = h };
+                    imageData.PreviewV2 = look?.PreviewV2 == true;
                     inheritMotion = FlashMotionStyle.Still;
                 }
                 var delayMs = imageData.IsRemix ? 0 : isMultiplication ? i * 100 : i * staggerMs;
@@ -1851,7 +1852,10 @@ namespace ConditioningControlPanel.Services
                     // Flashes v2: a hydra child inherits the parent's kind (its own start state
                     // is rolled at spawn); an original resolves the picker through ownership and
                     // MotionLevel. The classic and solid paths never move.
-                    window.MotionStyle = ResolveMotionStyle(settings, inheritMotion);
+                    window.MotionStyle = imageData.PreviewV2
+                        ? FlashMotion.Resolve(_random.Next(3) == 0 ? FlashMotionStyle.Still : FlashMotionStyle.Mix,
+                            true, true, MotionFx.Level, _random)
+                        : ResolveMotionStyle(settings, inheritMotion);
                     SpawnLayerVisual(window, imageData, monitor,
                         layerGlowColor, layerGlowRadius, layerGlowOpacity, isLucky, window.MotionStyle,
                         roundedWpf && ownsFlashV2);
@@ -2235,9 +2239,16 @@ namespace ConditioningControlPanel.Services
             // Flashes v2: roll the motion here on the UI thread (MotionFx.Level, _random) before the
             // off-thread conversion. The spawn monitor converts to world px like the window rect;
             // a pendulum re-homes under the monitor's top centre and the rope is clamped on screen.
+            // Authored previews stay in a peripheral lane instead of crossing the active game.
+            double bx = monitor.X * dpi, by = monitor.Y * dpi, bw = monitor.Width * dpi, bh = monitor.Height * dpi;
+            if (imageData.PreviewV2)
+            {
+                if (bh > bw) { var bottom = y + h / 2 > by + bh / 2; bh *= .34; if (bottom) by += monitor.Height * dpi - bh; }
+                else { var right = x + w / 2 > bx + bw / 2; bw *= .34; if (right) bx += monitor.Width * dpi - bw; }
+            }
             FlashMotionState? motionState = motion == FlashMotionStyle.Still ? null
                 : FlashMotion.Create(motion, x, y, w, h,
-                    monitor.X * dpi, monitor.Y * dpi, monitor.Width * dpi, monitor.Height * dpi,
+                    bx, by, bw, bh,
                     MotionFx.Level, _random);
 
             window.LayerSpawnPending = true;
@@ -5124,6 +5135,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>A remix copy on a second monitor: shown, but pays no XP and counts nothing.</summary>
         public bool RemixMirror { get; set; }
         public bool Peripheral { get; set; }
+        public bool PreviewV2 { get; set; }
     }
 
     internal class ImageGeometry

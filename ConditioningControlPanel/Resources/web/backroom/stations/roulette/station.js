@@ -751,7 +751,7 @@ export async function mount(ctx) {
         return stage.pick(e,[stage.fixture]).some(h=>/felt|table_top|table_surface|betting_mat/.test(h.object.name));
       } });
     moments = createMoments(ctx, { station: 'roulette' });
-    callout = createCallout({ mount: el, lex: typeof ctx.lex === 'function' ? ctx.lex : undefined }); lastCallout = null;
+    callout = createCallout({ ctx, mount: el, lex: typeof ctx.lex === 'function' ? ctx.lex : undefined }); lastCallout = null;
     // THE BANK (Law XII). Law X reads straight off the engine's events: a tick that is not the rollup's tail
     // is a token landing, so it gets a bell; the mini-thud waits for `counting: false`, the end of the count.
     bank = createBank({
