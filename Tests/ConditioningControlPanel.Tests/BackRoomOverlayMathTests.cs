@@ -178,10 +178,10 @@ public class BackRoomOverlayMathTests
     [Fact]
     public void Spiral_FadesIn250_HoldsThenOut500_OrOutFromARelease_NeverPops()
     {
-        Assert.Equal((250, 500), (BackRoomOverlayMath.SpiralFadeInMs, BackRoomOverlayMath.SpiralFadeOutMs));
+        Assert.Equal((1250, 500), (BackRoomOverlayMath.SpiralFadeInMs, BackRoomOverlayMath.SpiralFadeOutMs));
         Assert.Equal(0, BackRoomOverlayMath.SpiralEnvelope(0, 4000, null));
-        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(125, 4000, null), 6);
-        Assert.Equal(1, BackRoomOverlayMath.SpiralEnvelope(250, 4000, null));
+        Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(625, 4000, null), 6);
+        Assert.Equal(1, BackRoomOverlayMath.SpiralEnvelope(1250, 4000, null));
         Assert.Equal(1, BackRoomOverlayMath.SpiralEnvelope(4000, 4000, null));
         Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(4250, 4000, null), 6);
         Assert.False(BackRoomOverlayMath.SpiralDone(4499, 4000, null));
@@ -194,7 +194,7 @@ public class BackRoomOverlayMathTests
         Assert.Equal(0.5, BackRoomOverlayMath.SpiralEnvelope(2250, 20000, 2000), 6);
         Assert.True(BackRoomOverlayMath.SpiralDone(2500, 20000, 2000));
         // Released during the fade in: both curves multiply, as the mockup draws it.
-        Assert.Equal(0.8 * 0.8, BackRoomOverlayMath.SpiralEnvelope(200, 20000, 100), 6);
+        Assert.Equal((.16 * .16 * (3 - 2 * .16)) * .8, BackRoomOverlayMath.SpiralEnvelope(200, 20000, 100), 6);
     }
 
     // ---- tunnel ----------------------------------------------------------------------------------

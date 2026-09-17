@@ -60,8 +60,8 @@ public static class BackRoomOverlayMath
     public const int WashRiseMs = 80;
     public const double WashDecayPerSec = 4.5;
     public const double WashPictureHeight = 0.42;
-    /// <summary>The authored spiral envelope (2026-09-15): in over 250 ms, out over 500 ms. A spiral never pops.</summary>
-    public const int SpiralFadeInMs = 250, SpiralFadeOutMs = 500;
+    /// <summary>The authored spiral envelope (2026-09-15): in over 1250 ms, out over 500 ms. A spiral never pops.</summary>
+    public const int SpiralFadeInMs = 1250, SpiralFadeOutMs = 500;
 
     // ---- coordinates -----------------------------------------------------------------------------
 
@@ -191,12 +191,13 @@ public static class BackRoomOverlayMath
 
     // ---- spiral-loom -----------------------------------------------------------------------------
 
-    /// <summary>0..1 before the step's alpha: in over 250 ms, out over 500 ms from the hold's end or
+    /// <summary>0..1 before the step's alpha: in over 1250 ms, out over 500 ms from the hold's end or
     /// from a release, whichever comes first.</summary>
     public static double SpiralEnvelope(double ageMs, int holdMs, double? releasedAtAgeMs)
     {
         if (ageMs < 0) return 0;
         double a = Math.Min(1, ageMs / SpiralFadeInMs);
+        a = a * a * (3 - 2 * a);
         double outFrom = releasedAtAgeMs is { } r ? Math.Min(r, holdMs) : holdMs;
         if (ageMs > outFrom) a *= 1 - Math.Min(1, (ageMs - outFrom) / SpiralFadeOutMs);
         return Math.Max(0, a);
