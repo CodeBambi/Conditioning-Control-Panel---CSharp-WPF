@@ -18,8 +18,8 @@ const smooth = t => { t = Math.max(0, Math.min(1, t)); return t*t*(3-2*t); };
 // One continuous release: pulled angle -> behind rest -> exact rest.
 export function releasedLeverAngle(ms, from) {
   if (ms <= 0) return from;
-  if (ms < 220) return from + (-0.09 - from) * smooth(ms / 220);
-  if (ms < LEVER_RETURN_MS) return -0.09 * (1 - smooth((ms - 220) / 70));
+  if (ms < 220) return from + (-0.14 - from) * smooth(ms / 220);
+  if (ms < LEVER_RETURN_MS) return -0.14 * (1 - smooth((ms - 220) / 70));
   return 0;
 }
 export function customSpinLeverAngle(ms, from) {

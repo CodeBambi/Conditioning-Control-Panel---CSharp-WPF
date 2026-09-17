@@ -22,7 +22,7 @@ test('release never reverses before passing behind rest, then settles before tip
       const angle=customSpinLeverAngle(ms,from);
       assert.ok(angle<=previous+1e-12); previous=angle;
     }
-    assert.ok(Math.abs(previous+0.09)<1e-12);
+    assert.ok(Math.abs(previous+0.14)<1e-12);
     for(let ms=221;ms<=290;ms++) {
       const angle=releasedLeverAngle(ms,from);
       assert.ok(angle>=previous && angle<=0); previous=angle;
