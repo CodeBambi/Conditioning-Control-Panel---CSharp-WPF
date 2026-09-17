@@ -46,7 +46,7 @@
  *
  * THE LANDING FLOW (shared/hypno/callout.js, owner 2026-09-15). On the frame the
  * pointer settles (Law I): the thud and the party at 0, the landed slice's rim
- * pulses to HIGHLIGHT_MS, and at FX_DELAY_MS the kit's moment, the desktop row
+ * pulses to HIGHLIGHT_MS, and at WHEEL_FX_DELAY_MS the kit's moment, the desktop row
  * and the callout (feel.calloutFor) fire together. The tunnel level of the last
  * turn is not delayed. A Snooze gets no callout; the spin button is already
  * waiting for tomorrow, so nothing unlocks early.
@@ -60,7 +60,7 @@ import { ladderPlan } from '../../shared/win/ladder.js';
 import { sparkBurst, warmGlow } from '../../../arcademy/shell/counterfx.js';
 import { dressOf, edgeAlpha, captionAlpha, hubStill } from './hypno.js';
 import { createLoomKit, createDeck, createMoments, wheelSize, strengthK, wheelTurnLevel, boxAround } from '../../shared/hypno/index.js';
-import { createCallout, FX_DELAY_MS } from '../../shared/hypno/callout.js';
+import { createCallout } from '../../shared/hypno/callout.js';
 import { createScene } from './scene.js';
 import { createRoomScene } from './room-scene.js';
 export const roomStage = true;
@@ -70,6 +70,8 @@ import { createSound } from './sound.js';
 import { rewardText, sliceText, rewardOdds, createRewardReveal } from './rewards.js';
 
 const fmt = n => Number(n || 0).toLocaleString('en-US');
+// Start the win effects promptly after the rotor lands.
+const WHEEL_FX_DELAY_MS = 100;
 const wait = ms => new Promise(r => setTimeout(r, Math.max(0, ms)));
 const mintId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
 
@@ -365,7 +367,7 @@ export async function mount(ctx) {
       if (plan.sparkle > 0 && !cloche) sparkBurst($('.wheel-tokens'), { count: plan.sparkle });
     }
     if (fresh) {
-      // THE LANDING FLOW (callout.js): the slice glows from this frame; at FX_DELAY_MS the kit's moment, the desktop
+      // THE LANDING FLOW (callout.js): the slice glows from this frame; at WHEEL_FX_DELAY_MS the kit's moment, the desktop
       // row (THE ALMOST with it) and the callout fire together. A Snooze glows nothing and names nothing.
       const seed = `${r.day}|${r.sliceId}|${idx}`, co = calloutFor(r), my = session;
       if (co && idx >= 0) scene.hit(idx);
@@ -377,7 +379,7 @@ export async function mount(ctx) {
         playFx(landMoment(r), seed);
         if (nearMiss(layout, idx, r)) playFx('nearMiss', seed);
         if (co && callout) { callout.show(co.key, co.fallback, { tier: co.tier }); lastCallout = { key: co.key, tier: co.tier, at: Math.round(performance.now()) }; note('callout', lastCallout); }
-      }, FX_DELAY_MS);
+      }, WHEEL_FX_DELAY_MS);
     }
     // THE ANNOUNCEMENT (10.22.B): the room learns what the player has just learnt, once, on the revealed
     // frame, and never about a miss - a snooze, a Head Empty and a gift that paid nothing say nothing at all.

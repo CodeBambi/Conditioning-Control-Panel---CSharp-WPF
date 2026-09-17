@@ -181,6 +181,7 @@ export async function createScene(o) {
   if (atlas) Object.assign(atlas, { flipY: false, colorSpace: THREE.SRGBColorSpace, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, generateMipmaps: false });
   owned.push(...(atlas ? [atlas] : []));
   emi = stage ? createRoomEmi(stage.emi, o.hud) : createEmi({ root: model, faceMesh: get('EMI_glass'), atlas, hud: o.hud, reduced });
+  emi.setReduced(reduced);
 
   const screens = {};
   for (const [name, w] of [['title_screen', 1024], ['status_screen', 1024]]) {

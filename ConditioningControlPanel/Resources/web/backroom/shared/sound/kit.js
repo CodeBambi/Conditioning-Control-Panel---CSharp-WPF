@@ -83,6 +83,13 @@ const bell = (hz, at, dur, level, part) => [
 
 const SCORES = {
   ...FOLEY,
+  /** A tiny electronic answer, voiced through the same master gain as the games. */
+  'emi-bleep'({ variant = 0 } = {}) {
+    const patterns = [[0, 7, 4], [4, 0, 9, 7], [7, 12, 4]];
+    const notes = patterns[Math.abs(Math.floor(num(variant, 0))) % patterns.length];
+    return notes.map((step, i) => tone(660 * SEMI(step), i * .085, .065, .07,
+      { wave: 'triangle', attack: .12, lp: 2400, part: 'emi', dry: true }));
+  },
   /** A reel's tick train: decelerating clicks with a rising pitch ladder per reel. `ms` is the travel. */
   ticks({ reel = 0, ms = 1800 } = {}) {
     const r = clamp(Math.floor(num(reel, 0)), 0, 4), span = clamp(num(ms, 1800), 120, 12000) / 1000;

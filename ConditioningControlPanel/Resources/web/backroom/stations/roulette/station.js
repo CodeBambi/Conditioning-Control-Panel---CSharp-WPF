@@ -517,6 +517,7 @@ export async function mount(ctx) {
     bowl.kick(rotVel0);
     const plan = planRun({ index: read.index, seed: seedFor(tape.id, i), calm: stillNow(), rotVel0 });
     bowl.launch(plan, now, { wake: read.wake });
+    if(!stillNow())stage?.emi?.trigger('anticipation', {interrupt:true});
     const run = moments.play('roulette.run');
     const wake = read.wake ? moments.play('roulette.wake', { wake: true }) : null;
     cur = { i, read, plan, launchAt: now, landed: false, rattled: false, hitSound: 0, restAt: null, page: [...run.page, ...(wake ? wake.page : [])] };
@@ -560,6 +561,8 @@ export async function mount(ctx) {
    *  and fires its moment, beat and callout at FX_DELAY_MS (landFx); a miss plays its moment and vortex here. */
   function land(now) {
     const r = cur.read;
+    const emiNet = r.pay - tape.bets.reduce((sum, bet) => sum + bet.amt, 0);
+    if(!stillNow())stage?.emi?.trigger(emiNet>0?'cheer':emiNet===0?'bow':'shrug', {interrupt:true});
     cur.landed = true; cur.landAt = now; cur.win = r.pay > 0;
     moments.tunnel(0);
     const glyphFx = beat('glyph', { i: r.i, pocket: r.pocket });   // THE POCKET GLYPH: the mark lights and its effect fires on the thud frame (Law X), win or lose

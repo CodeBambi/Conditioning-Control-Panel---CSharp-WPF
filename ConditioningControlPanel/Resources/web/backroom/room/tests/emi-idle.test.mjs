@@ -71,3 +71,15 @@ test('real shoulder children articulate without changing authored mesh transform
 });
 
 test('attention is bounded and settles with motion off without moving authored nodes',()=>{const f=fixture('roulette');const local=f.root.matrix.clone();f.controller.attend(100,.8);for(let i=0;i<30;i++)f.controller.update(1/60);assert.ok(Math.abs(f.controller.debug().pose[1])<.7);f.controller.update(.016,true);assert.deepEqual(f.controller.debug().pose,[0,0,0]);f.model.updateMatrixWorld(true);nearMatrix(f.root.matrix,local);f.controller.settle();f.controller.dispose();});
+test('game result interrupts a click smoothly and Motion Off drops the result',()=>{
+ const f=fixture('cards');
+ f.controller.trigger('greet');for(let i=0;i<30;i++)f.controller.update(1/60);
+ const before=f.controller.debug().pose;
+ assert.equal(f.controller.trigger('cheer'),false);
+ assert.equal(f.controller.trigger('cheer',{interrupt:true}),true);
+ f.controller.update(1/60);
+ assert.equal(f.controller.debug().action,'cheer');
+ f.controller.debug().pose.forEach((v,i)=>assert.ok(Math.abs(v-before[i])<.08));
+ f.controller.update(.01,true);assert.equal(f.controller.debug().action,'idle');
+ assert.deepEqual(f.controller.debug().pose,[0,0,0]);f.controller.dispose();
+});

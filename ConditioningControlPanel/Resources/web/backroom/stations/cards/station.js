@@ -300,8 +300,8 @@ export async function mount(ctx) {
       case 'card': table.addCard({ ...s, settled: s.quiet }, now); if (!s.quiet) sound.play('card-slide'); break;
       case 'split': table.split(now); break;
       case 'active': table.setActive(s.index); break;
-      case 'reveal': table.reveal(s.code, now, s.quiet); if (!s.quiet) sound.play('card-flip'); break;
-      case 'ready': decide = true; table.setActive(h.active); break;
+      case 'reveal': if(!s.quiet && !d.still)ctx.stage?.emi?.trigger('curious', {interrupt:true}); table.reveal(s.code, now, s.quiet); if (!s.quiet) sound.play('card-flip'); break;
+      case 'ready': if(!s.quiet && !d.still)ctx.stage?.emi?.trigger('present', {interrupt:true}); decide = true; table.setActive(h.active); break;
       case 'bloom': {
         if (s.quiet) break;
         // The blackjack's frame: both cards glow now; the bloom, its picture, its swell and "Blackjack" follow at FX_DELAY_MS.
@@ -348,6 +348,7 @@ export async function mount(ctx) {
         lines = resultLines(h);
         streak = streakAfter(streak, h);
         if (s.quiet) { log('settled-quiet', { hand: h.id }); break; }
+        if(!d.still)ctx.stage?.emi?.trigger(net>0?'cheer':net<0?'shrug':'bow', {interrupt:true});
         const id = settleMoment(h, streak), best = bestCard(h);
         // THE PLAN: the rung this result is worth, what the brakes leave of it, and the party already running
         // (Brake 2). Every restraint lives in shared/win/plan.js; nothing below re-decides any of it.

@@ -42,10 +42,10 @@ export function createEmiIdle({ model, row, atlas }) {
   const phase = PHASES[row.id];
   function expression(index) { faceIndex = index; if (texture) texture.offset.set((index*152+.5)/1672,.5/137); }
   function rest() { for(const h of [body,left,right,antenna])h?.reset(); tool?.show(0); expression(3); }
-  function trigger(kind='greet') {
+  function trigger(kind='greet', { interrupt=false } = {}) {
     if(disposed || !EMI_REACTIONS[kind] || (kind==='dust' && row.id!=='counter'))return false;
     // Let the current gesture settle instead of snapping between interrupted poses.
-    if(action)return false; action=kind;age=0;return true;
+    if(action && !interrupt)return false; action=kind;age=0;return true;
   }
   function update(dt, still=false) {
     if(disposed)return;

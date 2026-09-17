@@ -200,7 +200,9 @@ async function returnToRoom() {
 
 /** Back, from anywhere. A station closes first, then the room view; an empty room is left. */
 async function back(reason) {
-  if (leaving || loader?.canLeave?.() === false) return;
+  if (leaving) return;
+  if (scene?.documents.close()) return;
+  if (loader?.canLeave?.() === false) return;
   if(scene?.customization?.dismiss())return;
   if (loader && (loader.current || visiting)) { await returnToRoom(); return; }
   if (hud && hud.optionsOpen) { hud.closeOptions(); return; }
@@ -264,6 +266,7 @@ function wireExits() {
   wireAmbience();
   $('#br-back').addEventListener('click', () => back('back'));
   window.addEventListener('keydown', (e) => {
+    if (scene?.documents.opened) return;
     if (e.key !== 'Escape') return;
     e.preventDefault();
     if (scene?.dismissEmi()) return;
