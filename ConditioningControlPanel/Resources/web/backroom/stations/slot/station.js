@@ -45,6 +45,19 @@ function dealtForSession(ctx) {
   }).catch(() => { sessionMedia = null; return null; });
   return sessionMedia;
 }
+/* A deal the page could not load ONE picture out of used to be permanent: sessionMedia is cached for the
+ * page's whole life as soon as the host answers with gifs, so every reel kept its built-in art until the
+ * room was closed and reopened. The failures actually seen are transient (a warm remote file swept out from
+ * under its url while the pool refilled), so forget the cache and let the three-spin refresh in beat() ask
+ * the host for fresh urls. Capped, because a source with nothing loadable behind it at all must not have
+ * the room asking again every third spin for the rest of the night. */
+const BLANK_REDEALS = 2;
+let blankDeals = 0;
+function forgetBlankDeal(kit, dealt) {
+  if (!kit || kit.animated || !dealt?.gifs?.length || blankDeals >= BLANK_REDEALS) return;
+  blankDeals++;
+  sessionMedia = null;
+}
 import { COMBOS, PAY_MS, comboSize, paintCombo } from './paytable.js';
 import { createSlotWords, subWords } from './word.js';   // the lone word, the sub pair / trio, the dead-spin settle (callout.js)
 import { PACE } from './pace.js';
@@ -684,7 +697,7 @@ export async function mount(ctx) {
       try {
         const next = await dealtForSession(ctx);
         if (my !== session) return false;
-        if (next?.gifs?.length) await media.deal(next);
+        if (next?.gifs?.length) { await media.deal(next); forgetBlankDeal(media, next); }
         if (my !== session) return false;
         rotateSpiralDeal();
       } catch { /* Keep the current artwork if the host cannot deal. */ }
@@ -793,7 +806,7 @@ export async function mount(ctx) {
     addEventListener('keydown', onKey); addEventListener('resize', onResize);
     tape = createTape({ request: (op, body, idem) => ctx.request(op, body, idem), onMelt: sendMelt, chaseSession: chaseSession ||= mintId() });
     visualDealSpins = 0; rotateSpiralDeal();
-    media = createMedia($('.slot-media'), ctx.lex);
+    media = createMedia($('.slot-media'), ctx.lex, (level, msg) => ctx.log?.(level, msg));
     sound = createSound();
     callout = createCallout({ ctx, mount: $('.slot-callout'), lex: t });   // one per open; the layer sits above the reels
     bank = createBank({
@@ -813,7 +826,7 @@ export async function mount(ctx) {
     // Explicit source changes take effect on seating, never during an active result.
     if (sourceChanged) { sessionMedia = null; sourceChanged = false; }
     const dealt = dealtForSession(ctx)
-      .then(m => (my === session ? media.deal(m) : null)).catch(() => null);
+      .then(m => (my === session ? media.deal(m).then(() => forgetBlankDeal(media, m)) : null)).catch(() => null);
     const [made, state] = await Promise.all([
       createScene({ stage:ctx.stage, canvas: $('.slot-stage'), reduced, stillFx, variant: variant && variant.id, palette: variant && variant.palette, hint: $('.slot-hint'),
                     payline: $('.slot-payline'), topRow:$('.slot-top'), spinControl:$('.slot-spin'), freezeLabels:[...el.querySelectorAll('.slot-freeze button')], spinLabel:t('br_slot_spin','Spin'),

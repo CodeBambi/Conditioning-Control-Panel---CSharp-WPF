@@ -3,11 +3,13 @@
  * explicit decoded canvases because drawImage(<img>) captures the default image.
  * Hidden <img> elements supply a still only when decoding is unavailable. Only ccp.assets / ccp.game (or this page's own origin, for dev.html) URLs
  * are loaded; anything else, or a load failure, falls back to the built-in art in symbols.js.
- * Keys, never URLs, leave this file. */
+ * Keys, never URLs, leave this file, and that includes the `log` seam: it is room/main.js's bridge.log, and
+ * console.warn does NOT reach the app log (only the bridge's 'log' envelope does), so anything worth reading
+ * back off a session log has to go through it. */
 
 import { kindOf } from './symbols.js';
 import { decodedSource } from '../../room/gif-decode.js';
-import { refusedMedia } from '../../room/media-limits.js';
+import { overBudget } from '../../room/media-limits.js';
 
 const LOAD_MS = 2500;
 
@@ -18,19 +20,23 @@ function allowed(url) {
   } catch { return false; }
 }
 
-/** False when drawing the image would taint a canvas (served without CORS), checked once per img. */
-function readable(img) {
+/** The dealt key, for a log line. Keys, never urls, leave this file (see the header). */
+function keyOf(item, i) { return item && typeof item.key === 'string' && item.key ? item.key : 'gif' + i; }
+
+/** False when drawing the image would taint a canvas (served without CORS), checked once per img, so the
+ *  warning is written once per dealt picture rather than once per painted frame. */
+function readable(img, log) {
   if (img.dataset.readable) return img.dataset.readable === '1';
   let ok = true;
   try {
     const c = document.createElement('canvas'); c.width = c.height = 1;
     const g = c.getContext('2d'); g.drawImage(img, 0, 0, 1, 1); g.getImageData(0, 0, 1, 1);
-  } catch { ok = false; console.warn('[slot] dealt GIF is not CORS-readable, using fallback art'); }
+  } catch { ok = false; log('warn', 'slot media is not CORS-readable, using built-in art'); }
   img.dataset.readable = ok ? '1' : '0';
   return ok;
 }
 
-export function createMedia(holder, lex = (k, f) => f) {
+export function createMedia(holder, lex = (k, f) => f, log = () => {}) {
   let gifs = [], words = [], imgs = [], sources = [], epoch = 0;
 
   const pendingImages = new Set();
@@ -59,7 +65,22 @@ export function createMedia(holder, lex = (k, f) => f) {
         if (!item?.url || !allowed(item.url)) return;
         let source;
         try { source = await decodedSource(item.url, { maxEdge: 256, maxFps: 12, signal: controller.signal }); }
-        catch(error) { if (refusedMedia(error)) return; source = null; }
+        catch(error) {
+          // decodedSource funnels EVERY failure into MediaLimitError or AbortError, so "it refused" on its
+          // own says nothing about why, and this used to return on all three, which left the reel on
+          // built-in art AND skipped the <img> fallback below - dead code, and an all-faces-fallback reel
+          // for the rest of the page's life, because station.js caches one deal per page.
+          // An abort is this deal being replaced or the seat being left, and is not worth a word.
+          // A budget breach is a real refusal: we declined to spend the pixels, so we must not turn round
+          // and hand the same file to the browser's decoder instead.
+          // Anything else is a transfer that did not arrive - most plausibly a warm remote file that
+          // RemoteMediaCache swept out from under its url (oldest-first, once 50 temp files are tracked)
+          // while the pool refilled - and that deserves the second, independent attempt below.
+          if (error?.name === 'AbortError') return;
+          if (overBudget(error)) { log('warn', 'slot media ' + keyOf(item, i) + ' refused: ' + error.message); return; }
+          log('warn', 'slot media ' + keyOf(item, i) + ' did not decode (' + error.message + '), trying the browser image pipeline');
+          source = null;
+        }
         if (dealEpoch !== epoch) { source?.dispose(); return; }
         if (source) { sources[i] = source; return; }
         // Start the browser image pipeline only if explicit decoding failed.
@@ -94,7 +115,7 @@ export function createMedia(holder, lex = (k, f) => f) {
       const source = sources.length ? sources[i] : null;
       if (source) { source.tick(performance.now(), false); return source.canvas; }
       const img = imgs.length ? imgs[i] : null;
-      return img && img.complete && img.naturalWidth > 0 && readable(img) ? img : null;
+      return img && img.complete && img.naturalWidth > 0 && readable(img, log) ? img : null;
     },
     word(i) {
       const w = words[i];

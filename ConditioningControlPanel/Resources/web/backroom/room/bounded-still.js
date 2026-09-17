@@ -3,10 +3,10 @@ import {checkDimensions,MediaLimitError} from './media-limits.js';
 export function boundedStill(data,type,maxEdge,signal) {
   return new Promise((resolve,reject)=>{
     if(signal.aborted){reject(new DOMException('Media load cancelled','AbortError'));return;}
-    if(typeof Image==='undefined'){reject(new MediaLimitError('Still decoder unavailable'));return;}
+    if(typeof Image==='undefined'){reject(new MediaLimitError('Still decoder unavailable','transfer'));return;}
     const img=new Image(),url=URL.createObjectURL(new Blob([data],{type}));
     const clean=()=>{img.onload=img.onerror=null;img.removeAttribute('src');URL.revokeObjectURL(url);signal.removeEventListener('abort',abort);};
-    const fail=error=>{clean();reject(error?.name==='AbortError'||error?.name==='MediaLimitError'?error:new MediaLimitError('Still decoding failed'));};
+    const fail=error=>{clean();reject(error?.name==='AbortError'||error?.name==='MediaLimitError'?error:new MediaLimitError('Still decoding failed','transfer'));};
     const abort=()=>fail(new DOMException('Media load cancelled','AbortError'));
     signal.addEventListener('abort',abort,{once:true});
     img.onload=()=>{
@@ -18,7 +18,7 @@ export function boundedStill(data,type,maxEdge,signal) {
         resolve({canvas,byteLength:0,animated:false,frames:0,index:0,tick:()=>false,dispose(){canvas.width=canvas.height=1;}});
       } catch(error){fail(error);}
     };
-    img.onerror=()=>fail(new MediaLimitError('Still decoding failed'));
+    img.onerror=()=>fail(new MediaLimitError('Still decoding failed','transfer'));
     img.decoding='async';img.src=url;
   });
 }

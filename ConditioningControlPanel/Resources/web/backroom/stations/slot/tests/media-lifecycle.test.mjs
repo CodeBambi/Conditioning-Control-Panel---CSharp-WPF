@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 const source = (await readFile(new URL('../media.js', import.meta.url), 'utf8'))
   .replace("import { kindOf } from './symbols.js';", "const kindOf = id => ({kind:id.startsWith('gif')?'gif':'sub',n:Number(id.at(-1))});")
-  .replace("import { refusedMedia } from '../../room/media-limits.js';", "const refusedMedia = error => ['AbortError','MediaLimitError'].includes(error?.name);")
+  .replace("'../../room/media-limits.js'", JSON.stringify(new URL('../../../room/media-limits.js', import.meta.url).href))
   .replace("import { decodedSource } from '../../room/gif-decode.js';", 'const decodedSource = (...args) => globalThis.testDecode(...args);');
 const { createMedia } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
 const flush = () => new Promise(resolve => setImmediate(resolve));

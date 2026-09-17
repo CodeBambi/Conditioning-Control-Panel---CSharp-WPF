@@ -1,7 +1,15 @@
 // Bounds apply before native decoding as well as the compatibility path.
 export const MEDIA_LIMITS = Object.freeze({ bytes:32*1024*1024, pixels:4*1024*1024, frames:2000, loadMs:10000 });
-export class MediaLimitError extends Error { constructor(message) { super(message); this.name='MediaLimitError'; } }
+// `reason` tells a caller WHICH kind of refusal this is, because the two need opposite handling and the
+// message string is not a contract. 'budget' means we declined to spend the pixels, bytes or frames, so no
+// caller may go and decode the same file another way. 'transfer' means the file did not arrive or we could
+// not read its header - nothing was measured and nothing was declined, so a second, independent attempt
+// (a plain <img>, the browser's own pipeline) is legitimate and is often the thing that succeeds. The
+// default is 'budget' so an untagged throw keeps the conservative behaviour.
+export class MediaLimitError extends Error { constructor(message, reason = 'budget') { super(message); this.name='MediaLimitError'; this.reason = reason; } }
 export const refusedMedia = error => error?.name === 'MediaLimitError' || error?.name === 'AbortError';
+/** A refusal that spent our budget allowance, as opposed to one where the bytes never arrived. */
+export const overBudget = error => error?.name === 'MediaLimitError' && error.reason !== 'transfer';
 export function checkDimensions(width,height) {
   if (!(width>0 && height>0) || width*height>MEDIA_LIMITS.pixels) throw new MediaLimitError('Image dimensions exceed media budget');
 }
@@ -41,7 +49,7 @@ export async function boundedImageBytes(response, signal, maxBytes = MEDIA_LIMIT
   if(Number(response.headers.get('content-length'))>maxBytes) {
     await response.body?.cancel();throw new MediaLimitError('Image transfer exceeds media budget');
   }
-  if(!response.body?.getReader) throw new MediaLimitError('Image stream unavailable');
+  if(!response.body?.getReader) throw new MediaLimitError('Image stream unavailable','transfer');
   const reader=response.body.getReader(),chunks=[];let size=0;
   const abort=()=>{void reader.cancel().catch(()=>{});};
   signal?.addEventListener('abort',abort,{once:true});

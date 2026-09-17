@@ -48,13 +48,13 @@ export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS,
   const timer = setTimeout(abort, MEDIA_LIMITS.loadMs);
   try {
     const res = await whileLoading(fetch(url, { mode: 'cors', credentials: 'omit', signal: controller.signal }), controller.signal);
-    if (!res.ok) throw new MediaLimitError('Media transfer failed');
+    if (!res.ok) throw new MediaLimitError('Media transfer failed','transfer');
     const ext = (new URL(url, location.href).pathname.split('.').pop() || '').toLowerCase();
     type = (res.headers.get('content-type') || '').split(';')[0].trim() || EXT[ext] || '';
-    if (!type.startsWith('image/')) throw new MediaLimitError('Not an image');
+    if (!type.startsWith('image/')) throw new MediaLimitError('Not an image','transfer');
     data = await boundedImageBytes(res, controller.signal, maxBytes);
     const dimensions = imageDimensions(data, type);
-    if (!dimensions) throw new MediaLimitError('Unsupported image header');
+    if (!dimensions) throw new MediaLimitError('Unsupported image header','transfer');   // our sniffer's gap, not the file's fault: the browser may still decode it
     checkDimensions(...dimensions); validated = true;
     controller.signal.throwIfAborted();
     decoder = canAnimate() && await whileLoading(ImageDecoder.isTypeSupported(type), controller.signal)
@@ -117,7 +117,7 @@ export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS,
     if (controller.signal.aborted) throw new DOMException('Media load cancelled', 'AbortError');
     if (refusedMedia(e)) throw e;
     if (data && validated) return await boundedStill(data, type, maxEdge, controller.signal);
-    throw new MediaLimitError('Media transfer failed');
+    throw new MediaLimitError('Media transfer failed','transfer');
   } finally {
     clearTimeout(timer); signal?.removeEventListener('abort', abort);
   }
