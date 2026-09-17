@@ -1,4 +1,4 @@
-import { siliconeRebound, SILICONE_SETTLE_MS, customLeverReturn } from './lever-return.js';
+import { siliconeRebound, SILICONE_SETTLE_MS, customLeverReturn, LEVER_RETURN_MS, releasedLeverAngle } from './lever-return.js';
 import * as T from 'three';
 
 const KINDS = ['knight', 'queen', 'rook'];
@@ -174,10 +174,10 @@ export async function createSlotCustomHandles({holders,loader,base,sources=[],on
       if(!p)return;
       if(rigOf(index)?.userData.slotPlaying){rest(p);rigOf(index).userData.slotHandlePulling=false;pulls[index]=null;return;}
       p.t+=still?9:Math.min(Math.max(dt,0),.1);
-      if(!p.returnCue&&p.t>=DOWN_S+UP_S){p.returnCue=true;if(active[index])onCue('silicone',index);}
-      if(active[index]){active[index].node.userData.flexTip?.(still?0:siliconeRebound((p.t-DOWN_S-UP_S)*1000));}
+      if(!p.returnCue&&p.t>=DOWN_S+LEVER_RETURN_MS/1000){p.returnCue=true;if(active[index])onCue('silicone',index);}
+      if(active[index]){active[index].node.userData.flexTip?.(still?0:siliconeRebound((p.t-DOWN_S)*1000-LEVER_RETURN_MS));}
       if(p.pivot)p.pivot.quaternion.copy(p.rest).multiply(swing.setFromAxisAngle(AXIS,
-        p.t<DOWN_S?PULL_MAX*ease(p.t/DOWN_S):p.t<DOWN_S+UP_S?PULL_MAX*(1-ease((p.t-DOWN_S)/UP_S)):active[index]?customLeverReturn((p.t-DOWN_S-UP_S)*1000):0));
+        p.t<DOWN_S?PULL_MAX*ease(p.t/DOWN_S):active[index]?releasedLeverAngle((p.t-DOWN_S)*1000,PULL_MAX):p.t<DOWN_S+UP_S?PULL_MAX*(1-ease((p.t-DOWN_S)/UP_S)):active[index]?customLeverReturn((p.t-DOWN_S)*1000-LEVER_RETURN_MS):0));
       p.reels.forEach((r,i)=>{
         if(p.t>=STOP_AT[i]){if(!p.stopped[i]){p.stopped[i]=true;r.map.offset.x=r.to;onCue('stop',index,i);}return;}
         r.map.offset.x=(r.map.offset.x+ROLL*Math.min(Math.max(dt,0),.1))%1;});

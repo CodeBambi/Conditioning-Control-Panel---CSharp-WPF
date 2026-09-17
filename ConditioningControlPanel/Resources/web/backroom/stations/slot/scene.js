@@ -1,4 +1,4 @@
-import { siliconeRebound, SILICONE_SETTLE_MS, customLeverReturn } from '../../room/lever-return.js';
+import { siliconeRebound, SILICONE_SETTLE_MS, customLeverReturn, LEVER_RETURN_MS, releasedLeverAngle, customSpinLeverAngle, customSpinReturnMs } from '../../room/lever-return.js';
 import { sampleEmiReaction } from '../../room/emi-gestures.js';
 /* ============================================================================
  * scene.js - the slot cabinet in three.js, ported from blender-scripting
@@ -715,12 +715,12 @@ export async function createScene(o) {
       ? t - spin.start < respinStopMs(PACE, spin.teaseMs)
       : t - spin.start >= reelStopMs(1) && t - spin.start < reelStopMs(2, PACE, spin.teaseMs));
     const partying = !!party && t < party.end, pr = partying ? party.r : null;
-    const sculptureAge = spin ? t - spin.start - 420 : pullBack ? t - pullBack.start - 200 : Infinity;
+    const sculptureAge = spin ? t - spin.start - customSpinReturnMs(spin.leverFrom) : pullBack ? t - pullBack.start - LEVER_RETURN_MS : Infinity;
     if (spin) {
       const s = spin, dt = t - s.start, stillSpin = reduced || !!s.motionSuppressed;
       // The pull carries on from wherever the Law VIII lean (or the drag) left the lever.
       const wholeMs = s.solo ? respinMs(PACE, s.teaseMs) : reelsMs(PACE, s.teaseMs);
-      lever.rotation.x = stillSpin ? (dt < wholeMs ? LEAN : 0) : Math.max(0.4 * Math.sin(Math.PI * clamp(dt / 420)), s.leverFrom * (1 - ease(dt / 420))) + (get('chess_handle_socket') ? customLeverReturn(dt - 420) : leverRebound(dt - 420));
+      lever.rotation.x = stillSpin ? (dt < wholeMs ? LEAN : 0) : get('chess_handle_socket') ? customSpinLeverAngle(dt, s.leverFrom) : Math.max(0.4 * Math.sin(Math.PI * clamp(dt / 420)), s.leverFrom * (1 - ease(dt / 420))) + (get('chess_handle_socket') ? customLeverReturn(dt - 420) : leverRebound(dt - 420));
       let all = true;
       for (let i = 0; i < 3; i++) {
         if (s.held === i || s.keep.includes(i)) continue;
@@ -746,9 +746,9 @@ export async function createScene(o) {
       }
       if (all && dt >= wholeMs) settleSpin();   // a held column never shortens the pace
     } else if (pull) lever.rotation.x = PULL_MAX * pull.amount;
-    else if (pullBack) { const dt = t - pullBack.start, q = clamp(dt / 200); lever.rotation.x = reduced ? 0 : pullBack.angle * (1 - ease(q)) + (get('chess_handle_socket') ? customLeverReturn(dt - 200) : leverRebound(dt - 200)); if (dt >= 200 + (get('chess_handle_socket') ? SILICONE_SETTLE_MS : 200) || reduced) pullBack = null; }
+    else if (pullBack) { const dt = t - pullBack.start, q = clamp(dt / 200); lever.rotation.x = reduced ? 0 : get('chess_handle_socket') ? releasedLeverAngle(dt, pullBack.angle) : pullBack.angle * (1 - ease(q)) + (get('chess_handle_socket') ? customLeverReturn(dt - 200) : leverRebound(dt - 200)); if (dt >= (get('chess_handle_socket') ? LEVER_RETURN_MS + SILICONE_SETTLE_MS : 400) || reduced) pullBack = null; }
     else if (lean) lever.rotation.x = reduced ? LEAN : lean.from + (LEAN - lean.from) * ease((t - lean.start) / FEEL.LEAN_MS);   // Law VIII
-    else lever.rotation.x = reduced || phase !== 'play' || partying ? 0 : BREATH_RAD * breath(t);   // THE BREATH, the only breather
+    else lever.rotation.x = reduced || phase !== 'play' || partying || get('chess_handle_socket') ? 0 : BREATH_RAD * breath(t);   // THE BREATH, the only breather
 
     // A4 THE DRIFT while attracting: the drums roll slowly and the payline lands nothing (the stops never move).
     // Leaving it eases home over SETTLE_MS, never a thud: entering or leaving attract is not a party (Brake 1).
