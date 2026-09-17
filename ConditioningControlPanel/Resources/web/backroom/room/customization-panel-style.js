@@ -19,8 +19,9 @@ body:has(.br-custom-panel:not([hidden])) .br-nav{right:calc(50vw + 12px)}
 .br-custom-more{font-size:12px}.br-custom-more summary{padding:5px 0;color:#d6c0df}
 .br-custom-more[open]{position:absolute;bottom:100%;left:10px;right:10px;z-index:6;padding:10px;background:#24122ff5;border:1px solid #bd936c;border-radius:12px;box-shadow:0 -8px 25px #0008}
 .br-custom-footer{order:3;padding:4px 12px;background:#160d24;text-align:right}.br-custom-footer button{padding:3px;border:0;background:transparent;font-size:11px;color:#b8a4bf}
-.br-custom-remove{display:block;width:100%;margin-top:7px;font-size:13px}
+.br-custom-buy,.br-custom-remove{display:block;width:100%;margin-top:7px;font-size:13px}
 .br-custom-note{font-size:12px;color:#e1c8dc;margin:4px 0}.br-custom-prompt{margin:0;color:#d8c3e1}
+.br-custom-panel button:disabled{opacity:.5;cursor:default}.br-custom-buy{border-color:#edc077!important;background:#503048!important}
 .br-custom-palettes button:nth-child(1){border-bottom:3px solid #ef26aa}.br-custom-palettes button:nth-child(2){border-bottom:3px solid #13bea5}.br-custom-palettes button:nth-child(3){border-bottom:3px solid #f47939}
 /* The lever arrows sit on the room pane, the part of the screen the sheet leaves free. */
 .br-custom-arrows{position:fixed;left:0;top:0;right:50vw;bottom:0;z-index:29;pointer-events:none;font:13px/1.35 "Segoe UI",system-ui,sans-serif;color:#f7e5ef}
