@@ -47,6 +47,7 @@ public class BackRoomApiTests
     [InlineData("slot", "state", "GET")]
     [InlineData("slot", "tape", "POST")]
     [InlineData("slot", "cursor", "POST")]
+    [InlineData("slot", "chase", "POST")]
     [InlineData("wheel", "state", "GET")]
     [InlineData("wheel", "spin", "POST")]
     [InlineData("counter", "state", "GET")]

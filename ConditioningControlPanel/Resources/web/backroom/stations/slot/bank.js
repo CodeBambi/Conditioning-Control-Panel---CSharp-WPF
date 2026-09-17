@@ -108,6 +108,7 @@ export function createBank({ layer, reduced, onTick, onLand, onDone }) {
       const els = Array.from({ length: n }, () => {
         const el = document.createElement('i');
         el.className = `slot-token slot-token-${kind}`;
+        el.textContent = '✦';
         el.style.opacity = '0';
         layer.append(el);
         return el;

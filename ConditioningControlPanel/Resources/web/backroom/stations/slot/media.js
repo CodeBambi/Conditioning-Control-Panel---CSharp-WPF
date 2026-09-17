@@ -1,6 +1,5 @@
 /* media.js - the sit-down deal (CONTRACT.md section 5) as the reel painter sees it.
- * gif0..gif3 = gifs[i % gifs.length] (CONTRACT 10.14: a deal of fewer than 4 of the player's own GIFs cycles them;
- * fallback art only with none), sub0..sub3 = words[0..3], kept until the player stands up. GIFs load as
+ * gif0..gif3 = gifs[i] (missing or duplicate sources use distinct built-in art), sub0..sub3 = words[0..3], kept until the player stands up. GIFs load as
  * explicit decoded canvases because drawImage(<img>) captures the default image.
  * Hidden <img> elements supply a still only when decoding is unavailable. Only ccp.assets / ccp.game (or this page's own origin, for dev.html) URLs
  * are loaded; anything else, or a load failure, falls back to the built-in art in symbols.js.
@@ -45,6 +44,9 @@ export function createMedia(holder, lex = (k, f) => f) {
       clear();
       const dealEpoch = epoch;
       gifs = Array.isArray(media && media.gifs) ? media.gifs.slice(0, 4) : [];
+      // A chase names a specific symbol. Repeated/missing media uses that symbol's distinct fallback.
+      const seenUrls = new Set();
+      gifs = gifs.map(item => { if (!item?.url || seenUrls.has(item.url)) return null; seenUrls.add(item.url); return item; });
       words = Array.isArray(media && media.words) ? media.words.slice(0, 4) : [];
       imgs = gifs.map(g => {
         if (!g || typeof g.url !== 'string' || !allowed(g.url)) return null;
@@ -69,11 +71,11 @@ export function createMedia(holder, lex = (k, f) => f) {
       }));
       return Promise.race([Promise.all([...waits, ...decoded]), new Promise(done => setTimeout(done, LOAD_MS))]);
     },
-    /** A drawable for gif{i} (cycled over the deal), or null when missing or broken (the painter draws fallback art). */
+    /** A drawable for gif{i} (stable symbol identity), or null when missing or broken (the painter draws fallback art). */
     gif(i) {
-      const source = sources.length ? sources[i % gifs.length] : null;
+      const source = sources.length ? sources[i] : null;
       if (source) { source.tick(performance.now(), false); return source.canvas; }
-      const img = imgs.length ? imgs[i % imgs.length] : null;
+      const img = imgs.length ? imgs[i] : null;
       return img && img.complete && img.naturalWidth > 0 && readable(img) ? img : null;
     },
     word(i) {
@@ -84,7 +86,7 @@ export function createMedia(holder, lex = (k, f) => f) {
     /** Symbol id -> the dealt key (g0, s1...), or null for symbols with no media behind them. */
     keyFor(id) {
       const { kind, n } = kindOf(id);
-      const item = kind === 'gif' ? (gifs.length ? gifs[n % gifs.length] : null) : kind === 'sub' ? words[n] : null;
+      const item = kind === 'gif' ? (gifs[n] || null) : kind === 'sub' ? words[n] : null;
       return item && typeof item.key === 'string' ? item.key : null;
     },
     get animated() { return imgs.some(Boolean); },

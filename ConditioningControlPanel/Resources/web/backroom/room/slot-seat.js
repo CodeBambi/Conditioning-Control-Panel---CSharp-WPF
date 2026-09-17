@@ -26,7 +26,7 @@ export function slotSeat(fixture, camera, width, height) {
   while(!envelope(far).fits)far*=2;
   for(let i=0;i<30;i++){const mid=(near+far)/2;if(envelope(mid).fits)far=mid;else near=mid;}
   const fit=envelope(far);
-  center.addScaledVector(right,(fit.left+fit.right)/2).addScaledVector(up,(fit.bottom+fit.top)/2);
+  center.addScaledVector(right,(fit.left+fit.right)/2-far*slopeX*.012).addScaledVector(up,(fit.bottom+fit.top)/2);
   const position=center.clone().addScaledVector(direction,far);
   const view=new T.PerspectiveCamera();view.rotation.order='YXZ';view.position.copy(position);view.lookAt(center);
   return {pos:position.toArray(),yaw:view.rotation.y,pitch:view.rotation.x,offset:(bottom-top)/(2*height),offsetX:0};

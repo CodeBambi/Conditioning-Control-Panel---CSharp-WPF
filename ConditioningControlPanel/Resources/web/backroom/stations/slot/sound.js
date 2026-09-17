@@ -56,11 +56,12 @@ export function createSound(k = kit, over = null) {
   function note(name, semis, level, inMs = 0) { trace.push({ name, semis, level, at: Math.round(now()), in: Math.round(inMs) }); if (trace.length > 60) trace.shift(); }
   const live = () => !disposed && !suspended;
   /** Every voice this station may have scheduled ahead, the drums included. */
-  const quiet = () => { k.stop('riser'); k.stop('ladder'); k.stop('breath'); k.stop('reel'); k.stop('freeze-latch'); k.stop('cabinet-knock'); rolling.clear(); sent.clear(); };
+  const quiet = () => { k.stop('cash'); k.stop('riser'); k.stop('ladder'); k.stop('breath'); k.stop('reel'); k.stop('freeze-latch'); k.stop('cabinet-knock'); rolling.clear(); sent.clear(); };
 
   const api = {
     /** Wake the kit inside a gesture (a press or a pull). */
     arm() { if (live()) k.arm(); },
+    cash() { if (live()) { note('cash',0,.18); k.play('cash'); } },
     /**
      * THE LEVER PULL, the whole gesture, on the frame the lever starts to move (Law VIII: it leans before the
      * tape or the server answers, and it sounds on that same frame).

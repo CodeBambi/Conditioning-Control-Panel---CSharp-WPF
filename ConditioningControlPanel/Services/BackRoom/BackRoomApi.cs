@@ -78,7 +78,7 @@ public sealed class BackRoomApi : IBackRoomRelay
     public static readonly IReadOnlyDictionary<string, (string Method, string Path)[]> Ops =
         new Dictionary<string, (string Method, string Path)[]>(StringComparer.Ordinal)
         {
-            ["slot"] = new[] { ("GET", "state"), ("POST", "tape"), ("POST", "cursor") },
+            ["slot"] = new[] { ("GET", "state"), ("POST", "tape"), ("POST", "cursor"), ("POST", "chase") },
             ["wheel"] = new[] { ("GET", "state"), ("POST", "spin") },
             // 10.13.E: Soft Hand and Velvet Vortex.
             ["cards"] = new[] { ("GET", "state"), ("POST", "deal"), ("POST", "hit"), ("POST", "stand"), ("POST", "double"), ("POST", "split") },

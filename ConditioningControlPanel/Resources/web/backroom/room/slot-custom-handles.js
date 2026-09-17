@@ -30,13 +30,13 @@ function socket(rig) {
     const mount = new T.Group(); mount.name = 'chess_handle_socket';
     anchor.add(mount);
     // Widen the existing side axle to clear the cabinet with a full-size sculpture.
-    const extension=new T.Mesh(new T.CylinderGeometry(.022,.022,.10,12),new T.MeshStandardMaterial({color:0xbd8b50,metalness:.7,roughness:.3}));
-    extension.rotation.z=-Math.PI/2;extension.position.set(.05,-.025,0);anchor.add(extension);
-    mount.position.x=.10;
+    const extension=new T.Mesh(new T.CylinderGeometry(.022,.022,.025,12),new T.MeshStandardMaterial({color:0xbd8b50,metalness:.7,roughness:.3}));
+    extension.rotation.z=-Math.PI/2;extension.position.set(.0125,-.025,0);anchor.add(extension);
+    mount.position.x=.025;
     let h=rig;while(h&&!h.userData.slotStretch)h=h.parent;
     if(h)mount.scale.set(1/(h.userData.slotStretchX||1),1/(h.userData.slotStretch||1),1);
     const originals=['wand_head','wand_grip','wand_switch'].map(n=>rig.getObjectByName(n)).filter(Boolean).map(n=>[n,n.visible]);
-    return { mount, originals, height: .34, width: .16, depth: .18, restore(){extension.removeFromParent();extension.geometry.dispose();extension.material.dispose();} };
+    return { mount, originals, height: .51, width: .24, depth: .27, restore(){extension.removeFromParent();extension.geometry.dispose();extension.material.dispose();} };
   }
   const lever = rig.getObjectByName('lever'), assembly = rig.getObjectByName('wand_assembly');
   if (!lever || !assembly) return roomSocket(rig);

@@ -238,6 +238,10 @@ const SCORES = {
     return [tone(120 * SEMI(s), 0, 0.32, lv, { hzTo: 38, lp: muted ? 700 : 0, part: 'thud' }), noise(1200, 0, 0.05, lv * 0.2, { type: 'lowpass', part: 'thud', dry: true })];
   },
   /** THE BANK's token landing: a small bell that rises with the count (`i` of `n`), the last one a mini-thud. */
+  cash() {
+    return [noise(1800,0,.055,.11,{part:'cash',dry:true}), noise(2300,.065,.045,.09,{part:'cash',dry:true}),
+      ...bell(1318,.11,.38,.18,'cash'), ...bell(1760,.15,.42,.13,'cash')];
+  },
   token({ i = 0, last = false } = {}) {
     if (last) return SCORES.thud({ semis: 5, level: 0.6 });
     return bell(ROOT_HZ * 2 * SEMI(pentatonic(clamp(Math.floor(num(i, 0)), 0, 14))), 0, 0.18, 0.1, 'arp');

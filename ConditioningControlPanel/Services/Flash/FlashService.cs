@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -34,7 +34,7 @@ namespace ConditioningControlPanel.Services
     /// its images staggered <paramref name="StaggerMs"/> apart (the ambient default is 300 ms). Null = the
     /// user's own settings, as every other one-shot.
     /// </summary>
-    public readonly record struct FlashBurstLook(double Opacity, int StaggerMs);
+    public readonly record struct FlashBurstLook(double Opacity, int StaggerMs, bool Peripheral = false);
 
     /// <summary>
     /// Handles flash image display with full GIF animation support.
@@ -1463,6 +1463,20 @@ namespace ConditioningControlPanel.Services
             for (int i = 0; i < images.Count; i++)
             {
                 var imageData = images[i];
+                if (look?.Peripheral == true)
+                {
+                    imageData.Peripheral = true;
+                    var m = imageData.Monitor;
+                    var portrait = m.Height > m.Width;
+                    var maxW = m.Width * (portrait ? .29 : .18);
+                    var maxH = m.Height * (portrait ? .16 : .29);
+                    var fit = Math.Min(maxW / imageData.Width, maxH / imageData.Height);
+                    var w = Math.Max(1, (int)(imageData.Width * fit));
+                    var h = Math.Max(1, (int)(imageData.Height * fit));
+                    var (x, y) = PickPeripheralPoint(m, w, h);
+                    imageData.Geometry = new ImageGeometry { X = x, Y = y, Width = w, Height = h };
+                    inheritMotion = FlashMotionStyle.Still;
+                }
                 var delayMs = imageData.IsRemix ? 0 : isMultiplication ? i * 100 : i * staggerMs;
                 
                 if (delayMs == 0)
@@ -1564,7 +1578,7 @@ namespace ConditioningControlPanel.Services
                     // MUST go through PickSpawnPoint, not a raw re-randomize: this loop used to
                     // bypass the geometry rules entirely, so with #770's avoid-center on, any
                     // overlapping flash would land right back on the crosshair.
-                    (finalX, finalY) = PickSpawnPoint(monitor, geom.Width, geom.Height);
+                    (finalX, finalY) = imageData.Peripheral ? PickPeripheralPoint(monitor, geom.Width, geom.Height) : PickSpawnPoint(monitor, geom.Width, geom.Height);
                 }
 
                 // Render path decided at the top of this method (mode-aware cap):
@@ -3061,6 +3075,17 @@ namespace ConditioningControlPanel.Services
         /// Keep targets away from screen edges so they're fully visible and clickable.
         /// </summary>
         internal const int SpawnEdgePadding = 50;
+
+        // Back Room bursts use perimeter bands without changing global flash preferences.
+        private (int X, int Y) PickPeripheralPoint(MonitorInfo monitor, int w, int h)
+        {
+            bool far = _random.Next(2) == 1;
+            if (monitor.Height > monitor.Width)
+                return (monitor.X + _random.Next(0, Math.Max(1, monitor.Width - w)),
+                    monitor.Y + Math.Clamp((int)(monitor.Height * (far ? .77 : .23)) - h / 2, 0, Math.Max(0, monitor.Height - h)));
+            return (monitor.X + Math.Clamp((int)(monitor.Width * (far ? .79 : .21)) - w / 2, 0, Math.Max(0, monitor.Width - w)),
+                monitor.Y + _random.Next(0, Math.Max(1, monitor.Height - h)));
+        }
 
         /// <summary>
         /// Picks a top-left spawn point (in virtual-desktop DIPs) for a <paramref name="w"/>x<paramref name="h"/>
@@ -5098,6 +5123,7 @@ namespace ConditioningControlPanel.Services
         public bool IsRemix { get; set; }
         /// <summary>A remix copy on a second monitor: shown, but pays no XP and counts nothing.</summary>
         public bool RemixMirror { get; set; }
+        public bool Peripheral { get; set; }
     }
 
     internal class ImageGeometry

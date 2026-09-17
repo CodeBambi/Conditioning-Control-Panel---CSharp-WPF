@@ -129,7 +129,7 @@ public sealed class BackRoomFxServices : IBackRoomFxSink
         _flashAt = Now;
         // Medium images at the authored opacity, staggered at the authored gap (334 ms under reduced motion: the
         // 3 Hz cap), whatever the user's own Flash sliders say.
-        App.Flash?.TriggerFlashOnce(amount, duration, BackRoomFxPlan.FlashSize, true, new FlashBurstLook(opacity, gapMs));
+        App.Flash?.TriggerFlashOnce(amount, duration, BackRoomFxPlan.FlashSize, true, new FlashBurstLook(opacity, gapMs, Peripheral: true));
     }
 
     public void GifRain(int count, int durationMs, double opacity)

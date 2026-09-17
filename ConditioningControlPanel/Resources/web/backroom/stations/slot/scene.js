@@ -318,6 +318,7 @@ export async function createScene(o) {
   // The authored shallow arc exposes 1.4 cells, with UV travel driven by the same spin angle.
   let cell={...CELL,hw:CELL.hw*initialStretchX/initialStretch}, CW=cell.hh*2, CH=cell.hw*2;
   const angle = (k, n) => ((k + 0.5) / n - 0.5) * Math.PI * 2;
+  let reelMood = 'idle', reelMoodAt = 0;
   function paint(t) {
     for (let r = 0; r < 3; r++) {
       const n = strips[r].length || 1, c = reelCanvas[r], ctx = c.getContext('2d');
@@ -329,7 +330,7 @@ export async function createScene(o) {
         const hit = j === stopsNow[r] ? hitGlow(r, t) : 0;
         if (hit > 0 && !reduced && !stillFx()) { ctx.beginPath(); ctx.rect(-cell.hw, -cell.hh, CH, CW); ctx.clip(); ctx.scale(1 + 0.06 * hit, 1 + 0.06 * hit); }
         // One bad drawable (a broken or tainted GIF) paints the fallback tile, never the whole reel.
-        try { ctx.save(); drawSymbol(ctx, strips[r][j], t, {...look,cover:shared&&canvas.clientHeight>canvas.clientWidth},cell); } catch { ctx.restore(); ctx.save(); drawSymbol(ctx, strips[r][j], t, { reduced: look.reduced, face: look.face },cell); }
+        try { ctx.save(); drawSymbol(ctx, strips[r][j], t, {...look,reduced:reduced||stillFx(),faceMood:reelMood,faceAge:t-reelMoodAt},cell); } catch { ctx.restore(); ctx.save(); drawSymbol(ctx, strips[r][j], t, { reduced: look.reduced, face: look.face },cell); }
         ctx.restore();
         const glaze = ctx.createLinearGradient(-cell.hw, 0, cell.hw, 0);
         glaze.addColorStop(0, '#07040f99'); glaze.addColorStop(0.12, '#ffffff08'); glaze.addColorStop(0.5, '#ffffff00');
@@ -1019,6 +1020,7 @@ export async function createScene(o) {
     /** One cabinet celebration per landed outcome (feel.recipe). Brake 2: a lesser party inside a running one merges. */
     celebrate(r, amount = 0, label = '') {
       coinShower.start(amount,r.tier,label);
+      if (r.gold) { reelMood = 'jackpot'; reelMoodAt = performance.now(); }
       const t = performance.now();
       heatTo(Math.max(r.heat, party && t < party.end ? heat.to : 0), r.gold || (party && t < party.end && heat.gold));
       if (r.shiver) shiverAt = t;
@@ -1042,7 +1044,7 @@ export async function createScene(o) {
     /** Law VI: a press or a new spin takes the frame straight to its settled end, never a faster pulse. */
     paylineOut() { if (paylineAt > -Infinity) paylineHold = Math.max(0, Math.min(paylineHold, performance.now() - paylineAt)); },
     /** Law VI: Back and suspend skip every ceremony to its settled state. */
-    skip() { settleMechanical(); meltShakeAt = -Infinity; apronTicker?.message(null); marqueeMsg = null; party = null; shiverAt = trayAt = -Infinity; stopAt.fill(-Infinity); revealAt = -Infinity; lean = null; ghost = null; teasing = false; heat = { ...heat, from: heat.to, at: -Infinity }; paylineAt = -Infinity; if (o.payline) o.payline.hidden = true; hitAt.fill(-Infinity); hitDirty = true; hazeOn = null; hazeOut = null; },
+    skip() { reelMood = 'idle'; settleMechanical(); meltShakeAt = -Infinity; apronTicker?.message(null); marqueeMsg = null; party = null; shiverAt = trayAt = -Infinity; stopAt.fill(-Infinity); revealAt = -Infinity; lean = null; ghost = null; teasing = false; heat = { ...heat, from: heat.to, at: -Infinity }; paylineAt = -Infinity; if (o.payline) o.payline.hidden = true; hitAt.fill(-Infinity); hitDirty = true; hazeOn = null; hazeOut = null; },
     /** THE GLYPH HIT (feel.highlightPlan): the landed cells on `plan` ([{ reel, at }]) glow from this frame, reel
      *  order, each `at` ms in, all out by HIGHLIGHT_MS. Nothing moves a stop; it lights what the tape landed. */
     highlight(plan) {
@@ -1098,6 +1100,7 @@ export async function createScene(o) {
      *  and thuds late; reduced motion and Calm keep the hold, they only drop the light change. */
     spin(stops, held = null, tease = null) {
       coinShower.clear();
+      reelMood = 'idle';
       settleSpin();
       ghost = null;
       wiggleAt.fill(-Infinity);
@@ -1116,6 +1119,7 @@ export async function createScene(o) {
     /** A2 THE ALMOST, from feel.almost: the off-by-one cell the server's own strip put next to the line
      *  ghosts gold and snaps back, once. Nothing is weighted, nudged or re-drawn; this shows what landed. */
     almost(near) {
+      if (near) { reelMood = 'near'; reelMoodAt = performance.now(); }
       if (!near || !(near.cell >= 0)) return;
       ghost = { r: near.reel === undefined ? 2 : near.reel, j: near.cell, at: performance.now() };
     },

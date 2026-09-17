@@ -104,23 +104,46 @@
   background: linear-gradient(180deg, #3d2449, #2a1734 54%, #1d0f26);
   box-shadow: inset 0 1px 0 #ffeafb26, inset 0 -2px 0 #00000057, 0 2px 0 #150b1f, 0 6px 16px #05020a73; }
 .slot-odds summary::-webkit-details-marker { display: none; }
-.slot-odds[open] { background: #24142dfa; border: 1px solid #ab79a766; border-radius: 12px; padding: 10px;
-  width: min(342px, calc(100vw - 24px)); max-height: min(560px, calc(100dvh - 104px)); overflow-y: auto; overflow-x: hidden;
-  box-shadow: 0 18px 44px #05020aa8; }
-@supports not (height: 100dvh) { .slot-odds[open] { max-height: min(560px, calc(100vh - 104px)); } }
-.slot-odds[open] summary { float: none; display: inline-flex; }
+/* A framed prize card: a persistent close control, bold combinations and gold payouts.
+   The sheet alone scrolls, so short screens can reach the costs without hiding its header. */
+.slot-odds[open] { background: linear-gradient(135deg,#38203ffb,#1c1029fc 60%); border: 1px solid #dfae73a6;
+  border-radius: 16px; padding: 0 14px 14px; width: min(460px, calc(100vw - 24px));
+  max-height: min(720px, calc(100dvh - 104px)); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-color: #bc77aa #20132c;
+  box-shadow: inset 0 0 0 3px #7d4a7433, 0 18px 48px #05020acc, 0 0 24px #e282bc26; }
+@supports not (height: 100dvh) { .slot-odds[open] { max-height: min(720px, calc(100vh - 104px)); } }
+.slot-odds[open] summary { position: sticky; top: 0; z-index: 1; float: none; display: flex;
+  justify-content: space-between; gap: 16px; margin: 0 -14px; padding: 14px 18px;
+  border: 0; border-bottom: 1px solid #edb7dd66; border-radius: 15px 15px 0 0;
+  background: linear-gradient(110deg,#632e64,#311b3f 75%); color: #ffe3a3;
+  font-family: "Arial Black", "Segoe UI", sans-serif; font-size: 21px; font-weight: 900;
+  letter-spacing: 1.4px; text-transform: uppercase; text-shadow: 0 2px 0 #210e2d, 0 0 14px #efad7c55;
+  box-shadow: 0 4px 12px #10081880; }
+.slot-odds[open] summary::after { content: "×"; font: 500 26px/1 "Segoe UI",sans-serif; color: #f8d9ef; }
 .slot-odds table { border-collapse: collapse; margin-top: 8px; width: 100%; table-layout: fixed; }
-.slot-odds th { text-align: left; font-weight: 500; padding: 4px 6px 4px 0; line-height: 1.2; overflow-wrap: anywhere; }
-.slot-odds th small { display: block; color: #a98cbb; font-size: 10px; font-weight: 400; letter-spacing: .2px; }
-.slot-odds td { text-align: right; padding: 4px 0 4px 8px; color: #edc7df; white-space: nowrap; }
-.slot-odds td.slot-pay { width: 58px; color: #ffcf6b; font-weight: 600; font-variant-numeric: tabular-nums; }
-.slot-odds p { margin: 8px 0 0; color: #bda2bf; }
-/* The picture of the row that pays. It leads the row, at the reels' own aspect, and it is the only cell that
-   is allowed to set the row's height - everything else is text beside it. */
-.slot-odds tr { border-top: 1px solid #ffffff0f; }
-.slot-odds tr:first-child { border-top: 0; }
-.slot-odds td.slot-combo { width: 160px; padding: 4px 8px 4px 0; text-align: left; }
-.slot-odds td.slot-combo canvas { display: block; }
+.slot-odds th { text-align: left; font-weight: 800; font-size: 15px; padding: 10px 5px; line-height: 1.2;
+  color: #fff0fa; overflow-wrap: anywhere; text-shadow: 0 2px 0 #13091b; }
+.slot-odds th small { display: block; margin-top: 5px; color: #cbb6db; font-size: 11px; line-height: 1.4;
+  font-weight: 400; letter-spacing: .1px; text-shadow: none; }
+.slot-odds td { text-align: right; padding: 10px 0 10px 8px; color: #edc7df; white-space: nowrap; }
+.slot-odds td.slot-pay { width: 82px; color: #ffdb87; font-weight: 900; font-size: 18px;
+  font-variant-numeric: tabular-nums; text-shadow: 0 2px 0 #5e2c18, 0 0 12px #ffc96840; }
+.slot-odds p { margin: 10px 0 0; padding: 12px; border: 1px solid #c890bc40; border-radius: 10px;
+  background: #130a1d99; color: #e0cbe4; font-size: 12px; line-height: 1.55; }
+.slot-odds tr { border-top: 1px solid #ffffff13; }
+.slot-odds tr:first-child { border-top: 0; background: linear-gradient(90deg,#ecc15a16,transparent); }
+.slot-odds tr:first-child .slot-pay { font-size: 21px; color: #ffe9a8; }
+.slot-odds td.slot-combo { width: 150px; padding: 8px 6px 8px 0; text-align: left; }
+.slot-odds td.slot-combo canvas { display: block; max-width: 100%; height: auto !important; }
+@media (max-width: 480px) {
+  .slot-odds table, .slot-odds tbody { display: block; }
+  .slot-odds tr { display: grid; grid-template-columns: minmax(100px, 42%) minmax(0,1fr); column-gap: 10px;
+    padding: 9px 0; align-items: center; }
+  .slot-odds td.slot-combo { grid-row: 1 / 3; width: 100%; padding: 0; }
+  .slot-odds th { padding: 0; font-size: 14px; }
+  .slot-odds th small { margin-top: 3px; }
+  .slot-odds td.slot-pay { grid-column: 2; width: auto; text-align: left; padding: 5px 0 0; font-size: 18px; }
+}
 
 .slot-card { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 6; background: #28172ff2;
   border: 1px solid #edb1d177; border-radius: 14px; padding: 18px 22px; text-align: center; max-width: min(420px, calc(100vw - 32px)); }
@@ -142,7 +165,7 @@
   .slot-spin { right: 12px; bottom: max(12px, var(--br-sill, 0px)); min-width: 96px; }
   .slot-station .slot-odds { top: 10px; right: 12px; }
   .slot-station[data-host-back] .slot-odds { top: 58px; }
-  .slot-station .slot-odds[open] { max-height: min(560px, calc(100dvh - 32px)); }
+  .slot-station .slot-odds[open] { max-height: calc(100dvh - 80px); }
 }
 @media (prefers-reduced-motion: reduce) { .slot-station * { transition: none !important; } }
 
@@ -161,7 +184,7 @@
   .slot-station .slot-odds { top: 8px; right: 10px; }
   .slot-station[data-host-back] .slot-odds { top: 54px; }
   .slot-station .slot-odds summary { padding: 6px 12px; }
-  .slot-station .slot-odds[open] { max-height: calc(100dvh - 22px); }
+  .slot-station .slot-odds[open] { max-height: calc(100dvh - 76px); }
   /* The readings drop to the bottom of the left edge: sideways the camera is close enough that the top-left
      corner is EMI on her shelf, and a chip stack parked over her is the one thing a close-up cannot carry. */
   .slot-station .slot-top, .slot-station[data-host-back] .slot-top { top: auto; bottom: 48px; left: 10px; max-width: 148px; gap: 4px; }
@@ -197,17 +220,17 @@
 .slot-station[data-shared-room] .slot-freeze button { position:absolute;min-width:0;min-height:26px;height:26px;padding:3px 6px;transform:translateX(-50%);font-size:10px;letter-spacing:.25px; }
 .slot-station[data-shared-room] .slot-spin { left:50%;right:auto;bottom:auto;top:80%;transform:translateX(-50%);min-width:0;min-height:44px;height:44px;padding:5px 12px; }
 .slot-station[data-shared-room] .slot-spin:active { transform:translate(-50%,2px); }
-.slot-station[data-shared-room] .slot-odds { top:auto;bottom:max(12px,var(--br-sill));right:12px; }
-.slot-station[data-shared-room] .slot-odds[open] { max-height:calc(100dvh - 90px);width:min(410px,calc(100vw - 24px)); }
+.slot-station[data-shared-room] .slot-odds { top:max(12px,var(--br-brow));bottom:auto;right:12px; }
+.slot-station[data-shared-room] .slot-odds[open] { top:calc(max(12px,var(--br-brow,0px)) + 52px);bottom:auto;max-height:calc(100dvh - 84px - var(--br-brow,0px));width:min(460px,calc(100vw - 24px)); }
 .slot-station[data-shared-room] .slot-state-note { position:absolute;bottom:54px;left:12px;max-width:65%;padding:4px 8px;border-radius:8px;background:#201229e8;font-size:11px; }
 html:has(.slot-station[data-shared-room]) #br-back,
 html:has(.slot-station[data-shared-room]) .br-nav > button:first-child,
 html:has(.slot-station[data-shared-room]) .br-bell { display:none; }
-html:has(.slot-station[data-shared-room]) body .br-nav { position:fixed;top:auto;left:auto;right:162px;bottom:max(12px,var(--br-sill));gap:5px; }
+html:has(.slot-station[data-shared-room]) body .br-nav { position:fixed;top:max(12px,var(--br-brow));left:12px;right:auto;bottom:auto;gap:5px; }
 html:has(.slot-station[data-shared-room]) .br-nav .br-pill { font-size:11px;padding:8px 10px; }
-html:has(.slot-station[data-shared-room]) .br-options { top:auto;bottom:calc(100% + 8px); }
-html:has(.slot-station[data-shared-room]) .br-sp { position:fixed;top:auto;right:84px;bottom:max(12px,var(--br-sill));font-size:12px;padding:7px 9px; }
-html:has(.slot-station[data-shared-room]) #__opt-btn { top:auto !important;bottom:54px !important;right:12px !important; }
+html:has(.slot-station[data-shared-room]) .br-options { top:calc(100% + 8px);bottom:auto;left:0;right:auto; }
+html:has(.slot-station[data-shared-room]) .br-sp { position:fixed;top:max(8px,var(--br-brow));right:96px;bottom:auto;margin:0; }
+html:has(.slot-station[data-shared-room]) #__opt-btn { top:58px !important;bottom:auto !important;left:12px !important;right:auto !important; }
 @media (max-width:500px) {
   .slot-station[data-shared-room] .slot-top { gap:3px; }
   .slot-station[data-shared-room] .slot-top > * { padding:3px 5px;font-size:9px; }
@@ -221,3 +244,34 @@ html:has(.slot-station[data-shared-room]) #__opt-btn { top:auto !important;botto
   .slot-station[data-shared-room] .slot-freeze button { min-height:22px;height:22px;padding:1px 6px; }
   .slot-station[data-shared-room] .slot-top > * { min-height:20px;height:20px;padding:1px 5px;font-size:9px;line-height:16px; }
 }
+
+/* Readable currency in transit: gold winnings, rose spending, both tied to SP. */
+.slot-token { left:-14px; top:-14px; width:28px; height:28px; display:grid; place-items:center;
+  font:900 24px/1 sans-serif; color:#fff6c6; font-style:normal; border:1px solid #ffe7a4;
+  box-shadow:0 0 9px #ffcf6b, 0 0 20px #ffcf6b88; }
+.slot-token-spend { color:#ffe6f4; border-color:#f9bada; box-shadow:0 0 8px #de91c8; }
+.slot-station[data-host-back] .slot-gain { top:auto; bottom:52px; right:18px; left:auto;
+  font-size:17px; font-weight:800; border-width:2px; background:#24112fee; }
+
+/* SP travels as faceted sparkles, not coins. */
+.slot-token { border-radius:0; border:0; clip-path:polygon(50% 0,85% 30%,100% 50%,50% 100%,0 50%,15% 30%); background:conic-gradient(from 45deg,#fff6da,#fca6e1,#b791ff,#fff6da,#ffda83); color:transparent; filter:drop-shadow(0 0 5px #ffcaec); }
+
+@media(max-width:600px){
+ html:has(.slot-station[data-shared-room]) body .br-nav { top:max(8px,var(--br-brow));left:8px;gap:3px; }
+ html:has(.slot-station[data-shared-room]) .br-nav .br-pill { font-size:10px;padding:9px 7px; }
+ html:has(.slot-station[data-shared-room]) .br-sp { right:84px;padding:6px 7px;gap:4px; }
+ html:has(.slot-station[data-shared-room]) .br-sp b { font-size:20px; }
+ html:has(.slot-station[data-shared-room]) .br-sp::before { width:10px;height:17px; }
+ html:has(.slot-station[data-shared-room]) .br-sp #br-sp-label { font-size:9px; }
+}
+
+html:has(.slot-station[data-shared-room] .slot-odds[open]) #__opt-btn { visibility:hidden; }
+
+/* The bonus is its own prize, never a replacement for the SP result. */
+.slot-wheel-bonus { position:absolute; z-index:24; bottom:16%; left:50%; transform:translateX(-50%); width:max-content; max-width:85%; padding:10px 20px; border:2px solid #ffdc88; border-radius:14px; background:#291032ee; color:#fff0b7; font-size:clamp(14px,2vw,23px); font-weight:900; text-align:center; box-shadow:0 0 24px #ffb34280; pointer-events:none; }
+.slot-wheel-bonus[hidden] { display:none; }
+.slot-wheel-bonus.is-awarded { animation:slot-bonus-arrive .45s cubic-bezier(.2,1.5,.4,1); }
+.slot-station[data-reduced] .slot-wheel-bonus { animation:none; }
+.slot-odds .slot-wheel-prize { background:linear-gradient(100deg,#743c713f,#efb44624); }
+.slot-odds .slot-wheel-prize th { color:#ffe29b; }
+@keyframes slot-bonus-arrive { from { opacity:0; transform:translate(-50%,12px) scale(.85); } to { opacity:1; transform:translate(-50%,0) scale(1); } }

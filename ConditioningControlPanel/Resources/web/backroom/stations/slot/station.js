@@ -31,6 +31,17 @@ import { rotateSpiralDeal } from './symbols.js';
 import { createTape, stopsFor } from './tape.js';
 import { createScene, FACES } from './scene.js';
 import { createMedia, fxSymbols } from './media.js';
+import { mintId } from './tape.js';
+// One target and one GIF identity for this app/page lifetime, across cabinet visits.
+let chaseSession;
+let sessionMedia;
+function dealtForSession(ctx) {
+  if (!sessionMedia) sessionMedia = Promise.resolve().then(() => ctx.media?.()).then(m => {
+    if (!m?.gifs?.length) sessionMedia = null;
+    return m;
+  }).catch(() => { sessionMedia = null; return null; });
+  return sessionMedia;
+}
 import { COMBOS, PAY_MS, comboSize, paintCombo } from './paytable.js';
 import { createSlotWords, subWords } from './word.js';   // the lone word, the sub pair / trio, the dead-spin settle (callout.js)
 import { PACE } from './pace.js';
@@ -146,6 +157,7 @@ export async function mount(ctx) {
       <div class="slot-payline" aria-hidden="true" hidden></div>
       <div class="slot-tokens" aria-hidden="true"></div>
       <div class="slot-callout" aria-live="polite"></div>
+      <div class="slot-wheel-bonus" role="status" hidden></div>
       <div class="slot-controls">
         <div class="slot-freeze">${[0, 1, 2].map(i => `<button type="button" data-col="${i}" aria-pressed="false"></button>`).join('')}</div>
       </div>
@@ -233,6 +245,7 @@ export async function mount(ctx) {
     if (!el || !tape) return;
     const s = tape.snapshot();
     paintSp();
+    if ((s.wheelChase?.id || null) !== renderedChase) renderOdds();
     $('.slot-jackpot').textContent = t('br_slot_jackpot', 'Jackpot {n}', { n: fmt(s.jackpot) });
     // 10.16.C: EMI hands the comp over, there is no ceremony. A chip beside the SP readout until it is spent.
     const chip = $('.slot-comp');
@@ -267,7 +280,7 @@ export async function mount(ctx) {
     spin.querySelector('small').textContent =
       s.hold !== null ? t('br_slot_cost', '{n} SP', { n: s.freezeCost })
       : FREE_KINDS.has(s.nextKind) ? t('br_slot_free_spin', 'Free spin')
-      : s.onTape ? t('br_slot_on_tape', '{n} left on tape', { n: s.onTape })
+      : s.onTape ? t('br_slot_on_tape', '{n} prepaid spins left', { n: s.onTape })
       // 10.16.C: the next buy is the comp, at 0 SP. Every press after that is a normal paid tape.
       : s.comp ? t('br_slot_comp_cost', 'Free')
       : s.tapeCount >= 1 ? t('br_slot_tape_cost', '{n} SP for {n} spins', { n: s.tapeCount })
@@ -366,11 +379,13 @@ export async function mount(ctx) {
    *  a PARTY, and money leaving is not one. */
   function flyBank(kind, fromValue, toValue, n, roll = 0, glowMs = 0) {
     shown = fromValue;
-    const from = kind === 'pay' ? () => scene && (scene.project('payout_spawn') || scene.project('payout_tray')) : readoutAt;
-    const to = kind === 'pay' ? readoutAt : () => scene && (scene.project('payout_tray') || scene.project('payout_spawn'));
+    const keyAt = () => { const b = $('.slot-spin')?.getBoundingClientRect(); return b && { x: b.left + b.width / 2, y: b.top }; };
+    const from = kind === 'pay' ? keyAt : readoutAt;
+    const to = kind === 'pay' ? readoutAt : keyAt;
     if (kind === 'pay' && scene) scene.trayThud();
     if (!(bank.busy && bank.kind === 'pay' && kind === 'pay')) bankFrom = fromValue;   // a merged pay keeps its first value
     bankTo = toValue;
+    gain(toValue - bankFrom, Math.max(2400, roll + 900));
     bankHold = Math.max(1600, roll + 600);
     bankGlow = kind === 'pay' ? Math.max(0, Number(glowMs) || 0) : 0;
     const how = bank.start({ kind, n, fromValue, toValue, from, to, rollupMs: roll });
@@ -383,14 +398,19 @@ export async function mount(ctx) {
    * own painter, so a flash cell is the player's own dealt GIF and a spiral cell is the same Loom field the
    * glass is showing. The words stay (Brake 9: every value is also text) - the picture is added to the label,
    * never instead of it, and the canvas is aria-hidden so a screen reader reads the row once. */
-  let combos = [];
+  let combos = [], renderedChase = null;
   function renderOdds() {
     const s = tape.snapshot();
     const table = $('.slot-odds table');
     combos = [];
-    table.replaceChildren(...s.lines.map(l => {
+    renderedChase = s.wheelChase?.id || null;
+    const chase = s.wheelChase;
+    const rows = chase ? [{ id: 'wheel_bonus', symbols: chase.symbols, odds: t('br_slot_wheel_chase_rules',
+      'Match the pictured columns. Any spiral; ? = anything. Paid spins only. About 1 in {n}.', { n: fmt(Math.round(chase.oneIn)) }) }, ...s.lines] : s.lines;
+    table.replaceChildren(...rows.map(l => {
       const tr = document.createElement('tr');
-      const ids = COMBOS[l.id];
+      const ids = l.symbols?.map(id => id === '*' ? 'any' : id === 'spiral' ? 'spiral0' : id) || COMBOS[l.id];
+      if (l.id === 'wheel_bonus') tr.className = 'slot-wheel-prize';
       const art = document.createElement('td');
       art.className = 'slot-combo';
       if (ids) {
@@ -410,11 +430,11 @@ export async function mount(ctx) {
       // Brake 9 twice over: the label names the row and the odds sit under it, both as text, both beside the
       // picture. Four columns did not fit a 330 px sheet - the odds were simply cut off the right edge.
       const th = document.createElement('th');
-      th.textContent = t(`br_slot_line_${l.id}`, LINE_LABELS[l.id] || String(l.id));
+      th.textContent = l.id === 'wheel_bonus' ? t('br_slot_wheel_bonus', 'Free bonus Wheel of Fortune spin!') : t(`br_slot_line_${l.id}`, LINE_LABELS[l.id] || String(l.id));
       if (odds) { const small = document.createElement('small'); small.textContent = odds; th.append(small); }
       const pay = document.createElement('td');
       pay.className = 'slot-pay';
-      pay.textContent = l.pays > 0 ? t('br_slot_pay_sp', '{n} SP', { n: fmt(l.pays) }) : '-';
+      pay.textContent = l.id === 'wheel_bonus' ? '+1' : l.pays > 0 ? t('br_slot_pay_sp', '{n} SP', { n: fmt(l.pays) }) : '-';
       tr.append(th, pay);
       return tr;
     }));
@@ -542,6 +562,14 @@ export async function mount(ctx) {
   /** The landing beat (Law X): the party the Brake allows, the ladder, the tokens and EMI, all on one frame.
    *  Melt reads from the tape cursor, never a freeze outcome's own meltLeft (the stored tape's end melt). */
   function land(landed, before) {
+    if (landed.wheelBonus > 0) {
+      const bonus = $('.slot-wheel-bonus');
+      bonus.textContent = t('br_slot_wheel_bonus', 'Free bonus Wheel of Fortune spin!');
+      bonus.hidden = false;
+      bonus.classList.remove('is-awarded'); void bonus.offsetWidth; bonus.classList.add('is-awarded');
+      sound.token(true);
+      later(5200, () => { bonus.hidden = true; });
+    }
     const melt = tape.snapshot().melt, o = (landed.meltLeft || 0) === melt ? landed : { ...landed, meltLeft: melt };
     const tier = tierOf(o), melted = meltedBy(o), r = recipe(o, { seen: sit.seen[tier], jackpots: sit.heroes });
     // THE PLAN (CONTRACT 10.22.C). The slot's own tierOf still says what the line is WORTH; houseTier only
@@ -643,7 +671,7 @@ export async function mount(ctx) {
     // Refresh between ordinary spins, never midway through a result or free re-spin.
     if (r.held == null && !playsWithoutPress(r.outcome.kind) && ++visualDealSpins % 3 === 0) {
       try {
-        const next = await ctx.media?.();
+        const next = await dealtForSession(ctx);
         if (my !== session) return false;
         if (next?.gifs?.length) await media.deal(next);
         if (my !== session) return false;
@@ -651,6 +679,7 @@ export async function mount(ctx) {
       } catch { /* Keep the current artwork if the host cannot deal. */ }
     }
     const o = r.outcome, after = tape.snapshot();
+    if (!before.onTape && before.hold === null && after.shownSp < before.shownSp) sound.cash();
     if (after.shownSp < before.shownSp) flyBank('spend', before.shownSp, after.shownSp, spendTokens(before.shownSp - after.shownSp, lite));
     scene.setMelted(before.melt > 0);
     // C1 (10.16.D): the re-spin holds reels 1 and 2 as EMI and brings reel 3 back for the FULL 1,400 ms gold
@@ -749,7 +778,7 @@ export async function mount(ctx) {
     el = build();
     ctx.root.append(el);
     addEventListener('keydown', onKey); addEventListener('resize', onResize);
-    tape = createTape({ request: (op, body, idem) => ctx.request(op, body, idem), onMelt: sendMelt });
+    tape = createTape({ request: (op, body, idem) => ctx.request(op, body, idem), onMelt: sendMelt, chaseSession: chaseSession ||= mintId() });
     visualDealSpins = 0; rotateSpiralDeal();
     media = createMedia($('.slot-media'), ctx.lex);
     sound = createSound();
@@ -764,11 +793,11 @@ export async function mount(ctx) {
       // (Brake 5) and under reduced motion (Law VI), and Calm keeps it, because a warm cut is not travel.
       onLand: (kind, rolling) => { if (kind === 'spend' && scene) scene.trayThud(); else if (!rolling) { sound.token(true); thudReadout();
                                      if (bankGlow > 0) { warmGlow(readout()); note('glow', { ms: bankGlow }); } }
-                                   gain(bankTo - bankFrom, rolling ? bankHold : 1600); },
+                                   gain(bankTo - bankFrom, rolling ? bankHold : 2400); },
       onDone: () => { shown = null; paintSp(); },
     });
     if (typeof ctx.onSp === 'function') unSp = ctx.onSp(v => { if (tape) { tape.setServerSp(v); sync(); } });
-    const dealt = Promise.resolve().then(() => (typeof ctx.media === 'function' ? ctx.media() : null))
+    const dealt = dealtForSession(ctx)
       .then(m => (my === session ? media.deal(m) : null)).catch(() => null);
     const [made, state] = await Promise.all([
       createScene({ stage:ctx.stage, canvas: $('.slot-stage'), reduced, stillFx, variant: variant && variant.id, palette: variant && variant.palette, hint: $('.slot-hint'),

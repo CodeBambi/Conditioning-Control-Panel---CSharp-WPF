@@ -140,15 +140,34 @@ function drawPhrase(ctx, text, cell) {
   fit.lines.forEach((l, i) => ctx.fillText(l, 0, top + i * step, cell.hw * 2 * 0.86));
 }
 
-function drawMedia(ctx, img, cell, cover=false) {
-  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
-  const { w, h } = cover?{w:cell.hw*1.88,h:cell.hh*1.88}:fitBox((iw || 1) / (ih || 1), cell);
+// One decoded frame supplies both layers. Contain the subject over a blurred cover fill.
+function drawMedia(ctx, img, cell) {
+  const iw = img.naturalWidth || img.width || 1, ih = img.naturalHeight || img.height || 1;
+  const w = cell.hw * 1.88, h = cell.hh * 1.88, box = fitBox(iw / ih, cell);
   ctx.save();
   ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, Math.min(12, h / 8)); ctx.clip();
-  const scale=cover?Math.max(w/(iw||1),h/(ih||1)):1;
-  const dw=cover?(iw||1)*scale:w,dh=cover?(ih||1)*scale:h;
-  ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+  if (Math.abs(box.w - w) > 1 || Math.abs(box.h - h) > 1) {
+    const scale = Math.max(w / iw, h / ih) * 1.14;
+    ctx.filter = 'blur(9px) brightness(.65)';
+    ctx.drawImage(img, -iw * scale / 2, -ih * scale / 2, iw * scale, ih * scale);
+    ctx.filter = 'none';
+  }
+  ctx.drawImage(img, -box.w / 2, -box.h / 2, box.w, box.h);
   ctx.restore();
+}
+
+// Atlas expressions: neutral, smile, cute, squint, stars, hearts and jackpot.
+export function reelFace(t, { reduced = false, faceMood = 'idle', faceAge = 0 } = {}) {
+  if (reduced) return { frame: faceMood === 'jackpot' ? 10 : faceMood === 'near' ? 2 : 3, lift: 0 };
+  if (faceMood === 'near' && faceAge < 1700) {
+    return { frame: [3, 2, 2, 3][Math.min(3, Math.floor(faceAge / 425))], lift: 0 };
+  }
+  if (faceMood === 'jackpot' && faceAge < 6000) {
+    return { frame: [10, 5, 10, 7][Math.floor(faceAge / 380) % 4], lift: Math.sin(faceAge / 150) * 3 };
+  }
+  const cycle = Math.floor(t / 4200) % 3, at = t % 4200;
+  const frames = [[3, 2, 3], [3, 0, 3], [3, 1, 3]][cycle];
+  return { frame: at < 3200 ? 3 : frames[Math.min(2, Math.floor((at - 3200) / 334))], lift: Math.sin(t / 900) * 1.5 };
 }
 
 export function drawSymbol(ctx, id, t, look = {}, cell = CELL) {
@@ -173,7 +192,8 @@ export function drawSymbol(ctx, id, t, look = {}, cell = CELL) {
     drawPhrase(ctx, String(text).toUpperCase(), cell);
   } else if (kind === 'emi') {
     ctx.fillStyle = '#534467'; ctx.beginPath(); ctx.roundRect(-95, -87, 190, 170, 22); ctx.fill();
-    if (look.face) ctx.drawImage(look.face, 3 * 152, 0, 152, 137, -77, -68, 154, 136);
+    const face = reelFace(t, look);
+    if (look.face) ctx.drawImage(look.face, face.frame * 152, 0, 152, 137, -77, -68 + face.lift, 154, 136);
     ctx.fillStyle = '#f094c4'; ctx.beginPath(); ctx.arc(0, -108, 12, 0, 7); ctx.fill();
   } else if (kind === 'melt') {
     ctx.fillStyle = '#b48acb'; ctx.beginPath(); ctx.roundRect(-75, -68, 150, 75, 16); ctx.fill();
