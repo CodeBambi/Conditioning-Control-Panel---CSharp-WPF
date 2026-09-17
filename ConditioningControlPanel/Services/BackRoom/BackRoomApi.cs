@@ -37,7 +37,7 @@ public interface IBackRoomRelay
 /// server) is sent once more with the same <c>idem</c>, which the server's receipt table turns
 /// into a byte-identical replay if the first one did land after all. Nothing else is retried.</para>
 ///
-/// <para>Any <c>sp</c> in a reply is adopted through <c>adoptSp</c> the moment it arrives: the
+/// <para>Settlement <c>sp</c> in a reply is adopted through <c>adoptSp</c> the moment it arrives: the
 /// server settles the whole tape up front (Law I), so the true balance is always the reply's.</para>
 ///
 /// <para>A <c>counter</c> reply that carries a <c>prizes</c> block (state, a buy, the <c>owned</c>
@@ -88,6 +88,7 @@ public sealed class BackRoomApi : IBackRoomRelay
             ["bell"] = new[] { ("GET", "state"), ("POST", "opt") },
             // 10.17.C: the Prize Parlour.
             ["counter"] = new[] { ("GET", "state"), ("POST", "buy") },
+            ["decorations"] = new[] { ("GET", "state"), ("POST", "buy"), ("POST", "layout") },
         };
 
     private static readonly HttpClient SharedHttp = new() { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
@@ -99,7 +100,7 @@ public sealed class BackRoomApi : IBackRoomRelay
 
     /// <param name="http">Null = the shared client. Tests pass one over a fake handler.</param>
     /// <param name="identity">Null result = no account (or offline): every request refuses <c>offline</c>.</param>
-    /// <param name="adoptSp">Receives every <c>body.sp</c> the server answers with.</param>
+    /// <param name="adoptSp">Receives settlement balances; decoration state and layout replies are excluded.</param>
     /// <param name="applyPrizes">Receives (account sent for, revision, grants) from a counter reply.
     /// Null = <c>App.Ownership.ApplySnapshot</c>.</param>
     public BackRoomApi(HttpClient? http, Func<(string UnifiedId, string Token)?> identity, Action<int>? adoptSp,
@@ -152,11 +153,13 @@ public sealed class BackRoomApi : IBackRoomRelay
         {
             try
             {
+                if (_identity()?.UnifiedId != id.Value.UnifiedId) return BackRoomStationResult.Refuse("closed");
                 using var req = BuildRequest(method, path, id.Value, idem, body);
                 using var res = await _http.SendAsync(req, budget.Token).ConfigureAwait(false);
                 var text = await res.Content.ReadAsStringAsync(budget.Token).ConfigureAwait(false);
+                if (_identity()?.UnifiedId != id.Value.UnifiedId) return BackRoomStationResult.Refuse("closed");
                 MergedAccountRecovery.TryHandle((int)res.StatusCode, text);   // contract D
-                return Read(station, id.Value.UnifiedId, (int)res.StatusCode, res.IsSuccessStatusCode, text);
+                return Read(station, op, id.Value.UnifiedId, (int)res.StatusCode, res.IsSuccessStatusCode, text);
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
@@ -206,13 +209,14 @@ public sealed class BackRoomApi : IBackRoomRelay
     /// refusal with no reason) is the server being unreachable in all but name, so it is <c>offline</c>;
     /// the HTTP status still rides along for the log.
     /// </summary>
-    private BackRoomStationResult Read(string station, string sentFor, int status, bool success, string text)
+    private BackRoomStationResult Read(string station, string op, string sentFor, int status, bool success, string text)
     {
         JObject? o = null;
         try { o = JsonConvert.DeserializeObject(text) as JObject; } catch { }
         if (o == null) return new BackRoomStationResult(false, status, "offline", null);
 
-        if (o["sp"] is JValue { Type: JTokenType.Integer } sp)
+        // Decoration reads and layout saves cannot overwrite a newer game settlement.
+        if ((station != "decorations" || op == "buy") && o["sp"] is JValue { Type: JTokenType.Integer } sp)
         {
             try { _adoptSp?.Invoke(sp.Value<int>()); }
             catch (Exception ex) { App.Logger?.Debug("BackRoom adopt sp failed: {E}", ex.Message); }
