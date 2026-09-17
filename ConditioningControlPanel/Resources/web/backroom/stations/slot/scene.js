@@ -25,10 +25,11 @@ import { createCoinShower } from '../../room/coin-shower.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
+import { reelCellVisible, reelPaintStamp } from './reel-paint.js';
 import { stripTransform } from './strip-transform.js';
 import { kit as wobbleKit } from '../../shared/sound/kit.js';
 import { settleCells, recoilCells, leverRebound, latchTravel } from './juice.js';
-import { drawSymbol, disposeSpirals, CELL } from './symbols.js';
+import { drawSymbol, disposeSpirals, kindOf, CELL } from './symbols.js';
 import { fitText } from '../../shared/text/wrap.js';
 import { PACE, reelStopMs, reelsMs, respinStopMs, respinMs } from './pace.js';
 import { applyPalette } from './palette.js';
@@ -323,15 +324,23 @@ export async function createScene(o) {
   let cell={...CELL,hw:CELL.hw*initialStretchX/initialStretch}, CW=cell.hh*2, CH=cell.hw*2;
   const angle = (k, n) => ((k + 0.5) / n - 0.5) * Math.PI * 2;
   let reelMood = 'idle', reelMoodAt = 0;
-  function paint(t) {
+  const paintedCells = [[], [], []];
+  function paint(t, force = false) {
     for (let r = 0; r < 3; r++) {
       const n = strips[r].length || 1, c = reelCanvas[r], ctx = c.getContext('2d');
-      ctx.clearRect(0, 0, c.width, c.height);
+      let dirty = false;
       for (let j = 0; j < strips[r].length; j++) {
-        ctx.save(); ctx.translate((j + 0.5) * CW, CH / 2); ctx.rotate(-Math.PI / 2); ctx.scale(1, -1);
+        const hit = j === stopsNow[r] ? hitGlow(r, t) : 0;
+        const gh = ghost && ghost.r === r && ghost.j === j ? ghostAmt(t) : 0;
+        const kind = kindOf(strips[r][j]).kind;
+        const stamp = reelPaintStamp(kind, t, reduced || stillFx(), hit, gh, reelMood);
+        // Keep static pixels; only the payline and nearby slivers need live art at rest.
+        if (!force && (!reelCellVisible(j, n, reelAngles[r], !!spin) || paintedCells[r][j] === stamp)) continue;
+        dirty = true; paintedCells[r][j] = stamp;
+        ctx.clearRect(j * CW, 0, CW, CH);
+        ctx.save(); ctx.beginPath(); ctx.rect(j * CW, 0, CW, CH); ctx.clip(); ctx.translate((j + 0.5) * CW, CH / 2); ctx.rotate(-Math.PI / 2); ctx.scale(1, -1);
         // THE GLYPH HIT (shared/hypno/callout.js timings): the landed cell pops 6% inside its own cell and takes a
         // rim, reel order, HIGHLIGHT_GAP_MS apart. Reduced motion takes the lit rim and no pop (Law VI).
-        const hit = j === stopsNow[r] ? hitGlow(r, t) : 0;
         if (hit > 0 && !reduced && !stillFx()) { ctx.beginPath(); ctx.rect(-cell.hw, -cell.hh, CH, CW); ctx.clip(); ctx.scale(1 + 0.06 * hit, 1 + 0.06 * hit); }
         // One bad drawable (a broken or tainted GIF) paints the fallback tile, never the whole reel.
         try { ctx.save(); drawSymbol(ctx, strips[r][j], t, {...look,reduced:reduced||stillFx(),faceMood:reelMood,faceAge:t-reelMoodAt},cell); } catch { ctx.restore(); ctx.save(); drawSymbol(ctx, strips[r][j], t, { reduced: look.reduced, face: look.face },cell); }
@@ -344,11 +353,10 @@ export async function createScene(o) {
         if (hit > 0) { ctx.strokeStyle = `rgba(255,214,120,${(0.9 * hit).toFixed(3)})`; ctx.lineWidth = 12; ctx.strokeRect(-cell.hw + 12, -cell.hh + 12, CH - 24, CW - 24); }
         // A2: the cell one step off the payline ghosts gold. The reel window shows about half of each
         // neighbour (drum r 0.43, 13 cells, window 0.39 tall), so the tell reads without moving a stop.
-        const gh = ghost && ghost.r === r && ghost.j === j ? ghostAmt(t) : 0;
         if (gh > 0) { ctx.fillStyle = `rgba(255,194,58,${(0.62 * gh).toFixed(3)})`; ctx.fillRect(-cell.hw, -cell.hh, CH, CW); }
         ctx.restore();
       }
-      if (n) reelTex[r].needsUpdate = true;
+      if (dirty) reelTex[r].needsUpdate = true;
     }
     lastPaint = t;
   }
@@ -356,6 +364,7 @@ export async function createScene(o) {
     strips = [0, 1, 2].map(r => (next && Array.isArray(next[r]) ? next[r] : []));
     for (let r = 0; r < 3; r++) {
       if (reelTex[r]) { reelTex[r].dispose(); reels[r].material.dispose(); }
+      paintedCells[r] = [];
       reelCanvas[r] = makeCanvas(Math.max(1, strips[r].length) * CW, CH);
       reelTex[r] = canvasTexture(reelCanvas[r]);
       reelTex[r].wrapS = THREE.RepeatWrapping;
@@ -363,7 +372,7 @@ export async function createScene(o) {
       reels[r].material = new THREE.MeshBasicMaterial({ map: reelTex[r] });
     }
     owned.push(...reelTex);
-    paint(performance.now());
+    paint(performance.now(), true);
   }
   setStrips([]);
   // Keep the final dealt picture on the very same room mesh after standing up.
@@ -1045,7 +1054,7 @@ export async function createScene(o) {
     },
     get marqueeLine() { return marqueeMsg; },
     meltShake() { meltShakeAt = performance.now(); },
-    setLook(next) { look = { ...next, reduced, face: atlas && atlas.image }; paint(performance.now()); },
+    setLook(next) { look = { ...next, reduced, face: atlas && atlas.image }; paint(performance.now(), true); },
     /** A freeze lit or cleared: the button dips either way (Law VIII). */
     setHold(col) { if (col !== hold) { const c = col !== null ? col : hold; if (c !== null) pulse[c] = performance.now(); } hold = col; },
     /** Law VIII: the lever leans into a press at once, before the tape or the server answers. */

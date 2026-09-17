@@ -23,6 +23,9 @@
 import * as T from 'three';
 import { labelTexture } from './fixtures.js';
 import { animatedSource } from './gif.js';
+import { refusedMedia } from './media-limits.js';
+import { quality } from '../shared/quality.js';
+import { createScreenAnimationBudget } from './screen-animation-budget.js';
 import { screenTransition } from './screen-transition.js';
 
 export const TURN_S = 9;
@@ -34,7 +37,7 @@ const MAX_PICTURES = 8;
  * per-source clock in gif-decode.js is the real cap (one decode in flight, never above MAX_FPS, only inside
  * the frustum, nothing at all while a station holds the room), so this budget is a per-FRAME batch now and
  * not a second global throttle on top of it. The ceiling projector keeps its own faster turn (4.5 s). */
-const MAX_DECODES_PER_FRAME = 4;
+// Full keeps source clocks; Performance starts at most four decodes per 1/6 s.
 
 function material(first, caption) {
   return new T.ShaderMaterial({
@@ -113,6 +116,7 @@ export async function createScreens(o) {
   let nextDecode = 0, cursor = 0, dealing = false, refreshAt = Infinity, sourceVersion = 0;
   const sourceChanged = () => { sourceVersion++; refreshAt = -Infinity; };
   window.addEventListener('br-media-changed', sourceChanged);
+  const controller = new AbortController();
   const free = src => src.dispose ? src.dispose() : src.texture.dispose();
 
   /** @param t ambient seconds  @param camera the room camera  @param isStill hold first frames */
@@ -149,15 +153,7 @@ export async function createScreens(o) {
         if(u.panelsA.value>1)due.add(extrasA[0]);if(u.panelsA.value>2)due.add(extrasA[1]);
         if (blend > 0) { due.add(b);if(u.panelsB.value>1)due.add(extrasB[0]);if(u.panelsB.value>2)due.add(extrasB[1]); } }
     });
-    const now=performance.now();
-    if(now<nextDecode)return;   // one batch per rendered frame at most; each source still paces itself
-    let started = 0;
-    const ready=[...due];
-    for (let i=0;i<ready.length;i++) {
-      const src=ready[(cursor+i)%ready.length];
-      if (started >= MAX_DECODES_PER_FRAME) break;
-      if (src.tick && src.tick(now, isStill)) { started++; decodes++; cursor=(cursor+i+1)%ready.length; nextDecode=now+1000/60; }
-    }
+    decodes += animateScreens([...due], performance.now(), isStill, quality.performance);
   }
 
   /** Ask the feed; swap in the player's pictures when at least one loads. Never throws. */
@@ -171,7 +167,9 @@ export async function createScreens(o) {
     const urls = [...new Set(gifs.filter((g) => g && g.src !== 'fallback' && allowed(g.url)).map((g) => g.url))].slice(0, MAX_PICTURES);
     const results=new Array(urls.length);let next=0;
     await Promise.all([0,1].map(async()=>{while(next<urls.length&&!disposed){const index=next++,u=urls[index];results[index]=await (async()=>{
-      const playing = await animatedSource(u);
+      let playing;
+      try { playing = await animatedSource(u, { signal: controller.signal }); }
+      catch(error) { if (refusedMedia(error)) return null; playing = null; }
       if (playing) return playing;
       const t = await loader.loadAsync(u).then(prep).catch(() => null);
       return t && t.image && t.image.width > 0 ? still(t) : null;
@@ -189,7 +187,7 @@ export async function createScreens(o) {
   return {
     update, deal,
     dispose() {
-      disposed = true; window.removeEventListener('br-media-changed', sourceChanged);
+      disposed = true; controller.abort(); window.removeEventListener('br-media-changed', sourceChanged);
       for (const src of new Set([...house, ...gallery])) src.dispose ? src.dispose() : src.texture.dispose();
       captions.forEach(t => t.dispose());
       // One transition ShaderMaterial per screen, made here, so it is freed here too.

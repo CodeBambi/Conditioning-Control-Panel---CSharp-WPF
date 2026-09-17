@@ -1,3 +1,5 @@
+import { quality } from '../../shared/quality.js';
+import { createPresentationPacer } from './presentation-pacer.js';
 import { createSeatLook } from '../../room/seat-look.js';
 /* ============================================================================
  * station.js - Soft Hand, Twenty-One (CONTRACT 7 and 10.13.F). The room calls
@@ -86,6 +88,7 @@ export async function mount(ctx) {
   const say = (m) => { try { if (ctx.bridge && typeof ctx.bridge.log === 'function') ctx.bridge.log('warn', '[cards] ' + m); } catch (e) { /* noop */ } };
   loadCss();
 
+  const presentation = createPresentationPacer(navigator, quality);
   let el = null, table = null, kit = null, deck = null, moments = null, chip = null, raf = 0, session = 0, alive = false, suspended = false;
   let st = null, shownHand = null, queue = [], busy = false, decide = false, phase = 'loading', note = '', lines = [];
   let stake = 1, stakePicked = false, hint = readHintPref(storage), dealReadyAt = 0, screenUntil = 0, sitting = 0, firstSit = true;
@@ -589,12 +592,13 @@ export async function mount(ctx) {
     if (d.still !== lastStill) { kit.setStill(d.still); if (deck) deck.setStill(d.still); lastStill = d.still; }
     while (queue.length && queue[0].at <= now) apply(queue.shift(), now);
     if (moments.breathing()) screenUntil = Math.max(screenUntil, now + TIMING.edgesTailMs);   // a late breath keeps the hold
-    if (deck) deck.tick(now);
-    table.draw({ now, k: d.k, still: d.still, full: d.full, gates: d.gates, deck, decide,
+    const paint = presentation.due(now);
+    if (paint && deck) deck.tick(now);
+    if (paint) table.draw({ now, k: d.k, still: d.still, full: d.full, gates: d.gates, deck, decide,
       print: t('br_cards_print', 'BLACKJACK PAYS 2 TO 1 · DEALER STANDS ON ALL 17s · SIX CARDS WIN'),
       dealerName: t('br_cards_dealer', 'Emi'), youName: t('br_cards_you', 'You'), handName: (i) => t('br_cards_hand_short', 'Hand {i}', { i: i + 1 }) });
     if (phase === 'sit' && !seating && table.fanDone(now)) afterSit();
-    sync(now);
+    if (paint) sync(now);
     raf = requestAnimationFrame(frame);
   }
 
@@ -714,6 +718,7 @@ export async function mount(ctx) {
   /* ------------------------------------------------------------ lifecycle */
   async function open() {
     if (alive) return;
+    presentation.reset();
     alive = true; suspended = false; busy = false; decide = false; queue = []; shownHand = null; note = ''; lines = []; feelLog = [];
     sitting = 0; seating = false; firstSit = true; stakePicked = false; dealReadyAt = 0; screenUntil = 0; dropped = 0; phase = 'loading'; statusText = ''; lastStill = null;
     streak = 0; beatAt = {}; wordCursor = 0; lastCallout = null;
@@ -789,6 +794,7 @@ export async function mount(ctx) {
     suspend(on) {
       if (!alive || suspended === !!on) return;
       suspended = !!on;
+      presentation.reset();
       if (suspended) {
         dropTimers();
         flush();

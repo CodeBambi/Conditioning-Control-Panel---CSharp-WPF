@@ -15,6 +15,7 @@
 
 import * as T from 'three';
 import { createRenderBudget } from './render-budget.js';
+import { quality } from '../shared/quality.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { buildRoom } from './fixtures.js';
@@ -92,7 +93,7 @@ export async function createScene(o) {
    * captured: a player turning Calm on mid-echo is answered on the next frame. */
   const motion = () => {
     const m = o.cameraMotion?.() || {};
-    return { still, off: !!m.off, lite: budget.mobile,
+    return { still, off: !!m.off, lite: quality.performance,
       reduced: !!m.reduced || matchMedia('(prefers-reduced-motion: reduce)').matches };
   };
   const room = await buildRoom({ scene, loader, stations: o.stations, base: o.base, faces: o.faces, label: o.label, onProgress: o.onProgress, motion });
@@ -346,10 +347,11 @@ export async function createScene(o) {
     const raw = now - last;
     touch.setEnabled(canWalk() || (canLeave() && seated?.row.id !== 'slot'));
     const active = !!transition || !!seated || keys.size > 0 || drag || touch.value.x || touch.value.z || customization.opened;
-    const gap = 1000 / (active && !budget.mobile ? 60 : 30);
+    const gap = 1000 / (active && !budget.mobile && !quality.performance ? 60 : 30);
     if (raw < gap - 1) return;
     last = raw < gap ? now : now - (raw % gap);
     if (document.hidden) return;
+    quality.sample(now - lastTick, gap, !seated && !transition);
     if (budget.sample(now - lastTick, gap)) resize();
     const dt = Math.min(0.1, Math.max(0, (now - lastTick) / 1000));
     const frameElapsed = now - lastTick;
@@ -395,7 +397,8 @@ export async function createScene(o) {
       setNearest(customization.opened || seated || transition ?null:nearestStation(pos,stationRows));
     }
     if (!still) ambient += dt;
-    room.update(dt, ambient, still);
+    camera.updateMatrixWorld();
+    room.update(dt, ambient, still, camera);
     for (const view of views) view.update?.(dt, still);
     decor.update(dt, still);
     customization.update(dt, still);
@@ -520,7 +523,7 @@ export async function createScene(o) {
   }
   const stop = () => { if (raf) cancelAnimationFrame(raf); raf = 0; };
 
-  const visibility = () => { resetInput(); if(document.hidden) stop(); else run(); };
+  const visibility = () => { quality.resetSamples(); resetInput(); if(document.hidden) stop(); else run(); };
   document.addEventListener('visibilitychange', visibility);
   resize();
   run();

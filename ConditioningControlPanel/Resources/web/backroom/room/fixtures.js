@@ -24,6 +24,7 @@
  * ==========================================================================*/
 
 import * as T from 'three';
+import { visibleInTree, idleReelEligible } from './fixture-visibility.js';
 import { createVenueLights } from './venue-lights.js';
 import { createPrizeDisplay } from './prize-display.js';
 import { createPrizeMarquee } from './prize-marquee.js';
@@ -187,12 +188,13 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
   const roomTiles = new Map();
   const idleReels = []; let reelPaintAt = -Infinity;
   let reelKit = null;
-  const reelStrips = new Map();
+  const reelStrips = new Map(), reelVersions = new Map();
+  const reelFrustum = new T.Frustum(), reelView = new T.Matrix4();
   function reelStrip(i, now = 0, animate = false) {
     const cached = reelStrips.get(i);
     if (cached && !animate) return cached;
     const c = cached || document.createElement('canvas');
-    c.width = REEL_CELLS * REEL_CELL; c.height = REEL_CELL;
+    if (!cached) { c.width = REEL_CELLS * REEL_CELL; c.height = REEL_CELL; }
     const x = c.getContext('2d');
     x.fillStyle = '#291635'; x.fillRect(0, 0, c.width, REEL_CELL);
     if (reelKit === null) reelKit = createLoomKit({ still: false });
@@ -215,6 +217,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     }
     if (!woven && reelKit) { reelKit.dispose(); reelKit = null; }
     reelStrips.set(i, c);
+    reelVersions.set(i, (reelVersions.get(i) || 0) + 1);
     return c;
   }
 
@@ -429,7 +432,8 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
   const lampPositions=sconces.map(s=>s.getWorldPosition(new T.Vector3()));
   let lampOrigin=new T.Vector3();
   const wheelColors=[0xff328f,0x963cff,0x29cfff,0x36ffc2,0xffc329,0xff6742].map(hex=>new T.Color(hex));
-  function update(dt, t, still) {
+  function update(dt, t, still, camera = null) {
+    if (camera) reelFrustum.setFromProjectionMatrix(reelView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     venueLights.update(dt,still || readMotion().off || readMotion().reduced);
     marquee?.userData.update?.(dt,still || readMotion().off || readMotion().reduced);
     prizes.update(dt, still || readMotion().off || readMotion().reduced);
@@ -438,20 +442,31 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     clock += Math.min(.05, Math.max(0, dt)) * 1000;
     const gains = echo.gains(clock, still);
     if (!still) {
-      const repaint = clock - reelPaintAt >= 125;
-      if (repaint) { for(let i=1;i<=3;i++) reelStrip(i,clock,true); reelPaintAt=clock; }
+      const repaint = clock - reelPaintAt >= 125, visible = [];
       for (const r of idleReels) {
-        let parent=r.model, busy=false;
-        while(parent){if(parent.userData.slotPlaying||parent.userData.slotHandlePulling){busy=true;break;}parent=parent.parent;}
-        if (busy) continue;
-        const map=r.reel.material?.map;
+        if (!idleReelEligible(r.model)) continue;
+        const map = r.reel.material?.map;
         if (!map) continue;
-        map.offset.x=(map.offset.x+Math.min(.05,Math.max(0,dt))*.013)%1;
-        // A departed game's retained pictures keep their own texture until the room next boots.
-        if(repaint && map.image===reelStrips.get(r.index)) map.needsUpdate=true;
+        // Cheap offsets keep their elapsed motion even when art is off camera.
+        map.offset.x = (map.offset.x + Math.min(.05, Math.max(0, dt)) * .013) % 1;
+        if (visibleInTree(r.reel) && (!camera || reelFrustum.intersectsObject(r.reel))) visible.push(r);
+      }
+      if (repaint) {
+        const indices = new Set(visible.filter(r => r.reel.material.map.image === reelStrips.get(r.index)).map(r => r.index));
+        for (const index of indices) reelStrip(index, clock, true);
+        reelPaintAt = clock;
+      }
+      for (const r of visible) {
+        const map = r.reel.material.map, version = reelVersions.get(r.index);
+        // Each cabinet owns a texture over a shared canvas. Returning cabinets catch up once.
+        if (map.image === reelStrips.get(r.index) && r.paintVersion !== version) {
+          map.needsUpdate = true; r.paintVersion = version;
+        }
       }
     }
+    const changedBulbs = new Set();
     for (const b of bulbs) {
+      if (!visibleInTree(holders.get(b.row.key))) continue;
       const offset = b.row.variant === 'violet' ? .33 : b.row.variant === 'mint' ? .66 : 0;
       const travel = t / (b.row.id === 'wheel' ? 6 : 8) * (b.rim ? -1 : 1) + offset;
       const wave = Math.pow(.5 + .5 * Math.cos((b.phase - travel) * Math.PI * 2), 8);
@@ -469,8 +484,9 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
       if (gain > 0) { c.lerp(WIN_GOLD, Math.min(.85, gain * WIN_LEAN)); power *= 1 + gain * .5; op = Math.min(1, op * (1 + gain)); }
       auras.set(b.aura, c, op);
       b.im.setColorAt(b.slot, c.multiplyScalar(power));
+      changedBulbs.add(b.im);
     }
-    for (const im of instanced) if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    for (const im of changedBulbs) if (im.instanceColor) im.instanceColor.needsUpdate = true;
     if (sconceMaterial) sconceMaterial.emissiveIntensity = 1.7 + 0.2 * Math.sin(t * 0.5);
     const so = 0.5 + 0.07 * Math.sin(t * 0.5);
     const quiet=still || readMotion().off || readMotion().reduced;
