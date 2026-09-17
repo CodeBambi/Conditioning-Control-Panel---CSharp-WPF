@@ -14,9 +14,9 @@ import { decodedSource, canAnimate, MAX_FPS, MAX_EDGE } from './gif-decode.js';
 export { canAnimate, MAX_FPS, MAX_EDGE };
 
 /** Decode `url` into a playable texture source, or null when this page cannot (caller uses a still). */
-export async function animatedSource(url) {
+export async function animatedSource(url, { signal } = {}) {
   let texture = null;
-  const src = await decodedSource(url, { onFrame: () => { if (texture) texture.needsUpdate = true; } });
+  const src = await decodedSource(url, { signal, onFrame: () => { if (texture) texture.needsUpdate = true; } });
   if (!src) return null;
   texture = new T.CanvasTexture(src.canvas);
   texture.colorSpace = T.SRGBColorSpace; texture.flipY = false;
