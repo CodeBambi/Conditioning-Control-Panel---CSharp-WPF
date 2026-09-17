@@ -108,6 +108,21 @@ html.br-overview .br-options { visibility: hidden; }
 .br-media { width: 288px; }
 .br-media .br-seg-row { flex-wrap: wrap; }
 .br-media .br-seg { flex: 0 1 auto; }
+/* The card's own title row and its way out. The cross is 44px so it is a thumb target and not a
+   pixel hunt: this card's toggle lives inside the Options card, so on a phone this is the only
+   thing on screen that dismisses it. */
+.br-media-head { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin: -2px -4px 0 0; }
+.br-media-close { min-width: 44px; min-height: 44px; padding: 0; cursor: pointer;
+  font: 400 26px/1 "Segoe UI", system-ui, sans-serif; color: var(--br-ink-dim);
+  background: none; border: 0; border-radius: 10px; }
+.br-media-close:hover { color: var(--br-ink); }
+.br-media-close:focus-visible { outline: 2px solid var(--br-gold); outline-offset: -2px; }
+/* The presets read as a suggestion, not as the selection: no pressed state, and they leave the row
+   the moment they are added, so the row below is always "yours" and this one is always "more". */
+.br-niche-presets { display: flex; flex-direction: column; gap: 6px; }
+.br-niche-presets[hidden] { display: none; }
+.br-niche-preset { flex: 0 0 auto; padding: 6px 10px; font-size: 11px; }
 .br-niches { display: flex; flex-direction: column; gap: 8px; }
 .br-niches[hidden] { display: none; }
 .br-niche-entry { display: flex; align-items: center; gap: 6px; }

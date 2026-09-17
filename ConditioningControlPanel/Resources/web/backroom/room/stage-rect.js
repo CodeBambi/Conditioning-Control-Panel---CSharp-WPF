@@ -35,6 +35,21 @@ export function stageRect(canvasRect, mountRect, bufferWidth, bufferHeight, min 
   };
 }
 
+/** The page rectangle of a viewport the renderer was handed. setViewport measures in the renderer's own
+ * CSS pixels with y up from the buffer's bottom edge, which is the space the room's partial passes are
+ * described in (scene.js, customization-panel.js previewBox), while a pointer event arrives in page pixels
+ * with y down from the top of the page. A caller that wants to normalise a finger into such a pass has to
+ * turn one space into the other first. `rendererWidth` and `rendererHeight` are the size the viewport was
+ * measured against, so a canvas whose CSS box has changed since then scales rather than drifts.
+ */
+export function viewportPageRect(canvasRect, viewport, rendererWidth, rendererHeight) {
+  const cw = canvasRect.right - canvasRect.left, ch = canvasRect.bottom - canvasRect.top;
+  const sx = rendererWidth > 0 ? cw / rendererWidth : 1, sy = rendererHeight > 0 ? ch / rendererHeight : 1;
+  const left = canvasRect.left + viewport.x * sx, top = canvasRect.bottom - (viewport.y + viewport.h) * sy;
+  const width = viewport.w * sx, height = viewport.h * sy;
+  return { left, top, right: left + width, bottom: top + height, width, height };
+}
+
 /** A pointer event inside such a box as normalised device coordinates: -1..1, y up, the form a ray wants. */
 export function ndcIn(box, clientX, clientY) {
   return { x: (clientX - box.page.x) / box.page.w * 2 - 1, y: -((clientY - box.page.y) / box.page.h) * 2 + 1 };

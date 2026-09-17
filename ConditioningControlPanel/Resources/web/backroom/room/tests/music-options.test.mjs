@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHud } from '../hud.js';
+import { createHud, MEDIA_PRESETS } from '../hud.js';
 
 function mount({ phone = false, levels, media } = {}) {
   const previousDocument = globalThis.document, previousWindow = globalThis.window, nodes = [];
@@ -108,8 +108,9 @@ test('Scrolller is shown refused, not hidden, when online media has no consent',
 test('niches render as individually toggleable and removable pills, disabled ones kept', () => {
   const r = mount({ media: MEDIA });
   try {
+    // The preset row's buttons are named "r/..." as well, so this asks for the player's OWN list.
     const toggles = r.nodes.filter(n => typeof n.textContent === 'string' && n.textContent.startsWith('r/')
-      && n.tagName === 'button');
+      && n.tagName === 'button' && !String(n.className || '').includes('br-niche-preset'));
     assert.deepEqual(toggles.map(n => n.textContent), ['r/hypno', 'r/bimbofication']);
     assert.equal(toggles[0].attributes['aria-pressed'], 'true');
     assert.equal(toggles[1].attributes['aria-pressed'], 'false', 'a disabled niche stays visible and reads off');
@@ -155,6 +156,69 @@ test('the niche editor is hidden unless the effective source actually reads Scro
     assert.equal(wrap.hidden, true);
     r.hud.options({ intensityChoice: 'normal', tunnel: true, melt: true, media: MEDIA });
     assert.equal(wrap.hidden, false);
+    r.hud.stop();
+  } finally { r.restore(); }
+});
+
+test('the picker can always be dismissed, and closing Options cannot orphan it', () => {
+  const r = mount({ media: MEDIA });
+  try {
+    const pill = r.nodes.find(n => n.textContent === 'Pictures and GIFs' && n.tagName === 'button');
+    const card = r.nodes.find(n => n.attributes['aria-label'] === 'Pictures and GIFs' && n.tagName === 'div');
+    const close = r.byLabel('Close pictures and GIFs');
+
+    pill.events.click();
+    assert.equal(card.hidden, false);
+    assert.equal(pill.attributes['aria-expanded'], 'true');
+    // Back and Escape both run through this, so the room is not left while the picker is up.
+    assert.equal(r.hud.optionsOpen, true);
+
+    close.events.click();
+    assert.equal(card.hidden, true);
+    assert.equal(pill.attributes['aria-expanded'], 'false');
+
+    // The bug: the toggle lives in the Options card, so closing Options used to strand this one.
+    pill.events.click();
+    assert.equal(card.hidden, false);
+    r.hud.closeOptions();
+    assert.equal(card.hidden, true, 'closing Options takes the picker with it');
+    assert.equal(r.hud.optionsOpen, false);
+
+    pill.events.click();
+    r.hud.hideWhileVisiting(true);
+    assert.equal(card.hidden, true, 'and so does sitting down at a station');
+    r.hud.stop();
+  } finally { r.restore(); }
+});
+
+test('preset niches are offered, add through the same press, and stop at the cap', () => {
+  const r = mount({ media: { ...MEDIA, subs: [], off: [] } });
+  try {
+    // The mock never detaches a node, so each repaint appends a fresh row: read from a mark.
+    const presets = (mark) => r.nodes.slice(mark).filter(n => n.tagName === 'button'
+      && String(n.className || '').split(' ').includes('br-niche-preset'));
+    const repaint = (media) => {
+      const mark = r.nodes.length;
+      r.hud.options({ intensityChoice: 'normal', tunnel: true, melt: true, media });
+      return presets(mark);
+    };
+
+    const first = repaint({ ...MEDIA, subs: [], off: [] });
+    assert.ok(first.length > 0, 'an empty picker is not an empty screen');
+    assert.deepEqual(first.map(n => n.textContent), MEDIA_PRESETS.map(n => 'r/' + n));
+
+    first[0].events.click();
+    assert.deepEqual(r.seen.option.at(-1), ['mediaSubAdd', MEDIA_PRESETS[0]]);
+
+    // Once the host's frame carries it back, the preset is no longer on offer to add twice.
+    const after = repaint({ ...MEDIA, subs: [MEDIA_PRESETS[0].toLowerCase()], off: [] });
+    assert.ok(!after.some(n => n.textContent === 'r/' + MEDIA_PRESETS[0]));
+    assert.equal(after.length, MEDIA_PRESETS.length - 1);
+
+    const before = r.seen.option.length;
+    const full = repaint({ ...MEDIA, subs: ['a', 'b'], off: [], cap: 2 });
+    full[0].events.click();
+    assert.equal(r.seen.option.length, before, 'a full list refuses rather than evicting a chosen niche');
     r.hud.stop();
   } finally { r.restore(); }
 });

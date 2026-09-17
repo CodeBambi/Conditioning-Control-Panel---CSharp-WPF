@@ -31,6 +31,7 @@ import { seatPose, easeSeat, shortAngle } from './seat-camera.js';
 import { createTouchControl } from './touch-control.js';
 import { createCustomization } from './customization.js';
 import { isBackKey, isBackwardMove, isStationHit } from './leave-intent.js';
+import { stageRect, ndcIn, viewportPageRect } from './stage-rect.js';
 import { START, WALK_SPEED, RUN_SPEED, step, worldDelta, nearestStation, facing } from './walk.js';
 
 const KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
@@ -104,6 +105,9 @@ export async function createScene(o) {
     onClose() { held = null; resetInput(); if (!halted) run(); }
   });
   let customization, catalogueView=null;
+  /* The viewport the last frame rendered the room into, kept for the picks: null while the room owns the
+   * whole canvas, which is every frame but the ones with the Room Service panel up. */
+  let pass = null;
   customization = await createCustomization({scene,loader,room,onPreview:view=>{catalogueView=view;},base:o.base,mount:o.mount,lex:o.lex,canvas,camera,isActive:()=>!pendingVisit&&!transition&&!seated&&!held&&!halted&&!suspended&&!overview&&!customization?.opened});
   const screens = await createScreens({ meshes: [...room.screens,...customization.screens], ads: o.ads, media: o.media, log: say });
   // Subtle cartridge refraction otherwise renders the entire room a second time.
@@ -438,6 +442,7 @@ export async function createScene(o) {
     // The room keeps whatever the panel does not cover: the strip beside it, or the band above it once
     // the panel is a full-width sheet (the phone layout, customization-panel-style.js).
     const box=customization.opened?customization.previewBox(fullWidth,height):{x:0,y:0,w:fullWidth,h:height};
+    pass=customization.opened?{box,w:fullWidth,h:height}:null;   // what pickAt() has to normalise against
     if(camera.aspect!==box.w/box.h){camera.aspect=box.w/box.h;camera.updateProjectionMatrix();}
     if(catalogueView&&customization.opened){
       const target=previewTarget.fromArray(catalogueView.look);
@@ -517,11 +522,30 @@ export async function createScene(o) {
     if (!views.delete(view)) return;
     try { view.dispose?.(); } catch (e) { say('stage dispose failed: ' + e); }
   }
+  /* THE BOX THE ROOM WAS DRAWN IN. A pick normalises against the viewport the last frame actually rendered
+   * into, not against the canvas. The two are the same rectangle almost always, but with the Room Service
+   * panel up the room keeps only the strip beside the panel or the band above the phone sheet (frame(),
+   * previewBox), and a pointer measured against the full canvas rect then comes out up to half a screen
+   * from the finger. Anyone reverting this to canvas.getBoundingClientRect() will see nothing break: every
+   * caller of pickAt() today is gated on canWalk() or canLeave(), and both are false while the panel is
+   * open. It is the first pick that runs with the panel up that pays, and it will look like a broken room
+   * rather than a broken rectangle. The three spaces are stage-rect.js.
+   */
+  function pickBox() {
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    /* The room owns the whole canvas: the canvas rect itself, the exact arithmetic the room always used.
+     * The panel's own state decides it, not just the remembered pass, because the loop can be stopped
+     * (hold(), pause()) after the panel closed and before another frame refreshed the viewport. */
+    if (!pass || !customization.opened) return { page: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } };
+    return stageRect(rect, viewportPageRect(rect, pass.box, pass.w, pass.h), rect.width, rect.height);
+  }
   function pickAt(event, objects) {
     if (transition || halted || suspended || !Array.isArray(objects) || !objects.length) return [];
-    const box = canvas.getBoundingClientRect();
-    if (!box.width || !box.height) return [];
-    pointer.set((event.clientX - box.left) / box.width * 2 - 1, 1 - (event.clientY - box.top) / box.height * 2);
+    const box = pickBox();
+    if (!box) return [];
+    const ndc = ndcIn(box, event.clientX, event.clientY);
+    pointer.set(ndc.x, ndc.y);
     scene.updateMatrixWorld(true); camera.updateMatrixWorld();
     ray.setFromCamera(pointer, camera);
     return ray.intersectObjects(objects, true);

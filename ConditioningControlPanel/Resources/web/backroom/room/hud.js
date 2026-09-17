@@ -35,6 +35,43 @@
 
 import { bellLines, ROTATE_MS } from './bell.js';
 
+/* THE PRESET NICHES (10.13.C). A player who has never typed a Scrolller community name faced an
+ * empty picker and a free-text field, which is a dead end: the room deals nothing and there is
+ * nothing on screen to tell them what a valid name even looks like. These are the starting points
+ * they can tap instead.
+ *
+ * They live in the PAGE, not the C# host, on purpose. A preset is not a new kind of setting: it is
+ * a name the player would otherwise have typed into the same field, and it reaches storage through
+ * the same `mediaSubAdd` press the field uses. So the host stays the only writer of
+ * AppSettings.BackRoomMediaSubs and the cap is still enforced where it always was.
+ *
+ * Every name is a sub FypOnlineCoordinator.Catalog already ships, so it was existence-checked
+ * against the live provider along with the rest of that taxonomy. The bias is towards communities
+ * that carry clips and GIFs rather than stills, because fetching GIFs is what the owner asked these
+ * for: HypnoGoneWild and nsfwanimegifs are the two heaviest of those, and the rest are the house
+ * register (EroticHypnosis, sissyhypno, bimbofication, BambiSleep). Dronification belongs to the
+ * house vocabulary as a MOD, not as a Scrolller community, so it is deliberately not offered. */
+export const MEDIA_PRESETS = Object.freeze(['EroticHypnosis', 'HypnoGoneWild', 'sissyhypno',
+                                            'bimbofication', 'BambiSleep', 'nsfwanimegifs']);
+
+/**
+ * What the preset row should offer, and how many niches still fit. Pure, so the cap rule is
+ * testable away from the DOM: a preset the player already has is not offered a second time (the add
+ * would come back as a duplicate), and a full list reports `room: 0` so the row can say so instead
+ * of pressing a ninth name - which the host silently drops, and which would read as if a preset had
+ * evicted a niche the player chose themselves.
+ * @param {string[]} subs the niches already in the list
+ * @param {number} cap the most niches the host will keep
+ */
+export function presetOffer(subs, cap, presets = MEDIA_PRESETS) {
+  const list = Array.isArray(subs) ? subs : [];
+  const have = new Set(list.map((s) => String(s).toLowerCase()));
+  return {
+    names: presets.filter((p) => !have.has(p.toLowerCase())),
+    room: Math.max(0, (Number.isFinite(cap) ? cap : 0) - list.length),
+  };
+}
+
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
 
 /**
@@ -153,6 +190,17 @@ export function createHud(o) {
 
   const media = el('div', 'br-options br-media'); media.hidden = true; media.setAttribute('role', 'group');
   media.setAttribute('aria-label', L('br_media_title', 'Pictures and GIFs'));
+  /* THE PICKER'S OWN WAY OUT. The pill that toggles this card sits INSIDE the Options card (it is a
+   * setting, and that is where settings are), while the card itself hangs off the nav so it can be
+   * as wide as it needs. That split is why the card needs a close control of its own: with only the
+   * pill, closing Options took the toggle off the screen and left this card standing with no
+   * affordance at all - which is exactly what the owner hit. Do not move the pill out here to
+   * "simplify" it; a fourth always-visible nav pill is not what the nav is for. The cross is the
+   * same glyph the niche pills use to forget a niche, at touch size. */
+  const mediaHead = el('div', 'br-media-head');
+  const mediaClose = el('button', 'br-media-close', '\u00d7'); mediaClose.type = 'button';
+  mediaClose.setAttribute('aria-label', L('br_media_close', 'Close pictures and GIFs'));
+  mediaHead.append(el('span', 'br-opt-name', L('br_media_title', 'Pictures and GIFs')), mediaClose);
   const MEDIA_SOURCES = [['auto', 'Auto'], ['local', 'My files'], ['online', 'Scrolller'],
                          ['mixed', 'Both'], ['bundled', 'Built-in']];
   const mediaSegs = MEDIA_SOURCES.map(([v, name]) => {
@@ -173,10 +221,16 @@ export function createHud(o) {
   nicheForm.append(el('span', 'br-niche-prefix', 'r/'), nicheField, nicheAdd);
   const nicheList = el('div', 'br-niche-list');
   nicheList.setAttribute('aria-label', L('br_media_niches', 'Your niches'));
+  // The presets sit between the field and the list: the field is the thing they replace, and the
+  // list below is where a tapped preset lands, so the eye follows the press downwards.
+  const presetWrap = el('div', 'br-niche-presets');
+  const presetList = el('div', 'br-niche-list');
+  presetList.setAttribute('aria-label', L('br_media_presets', 'Niches to try'));
+  presetWrap.append(el('span', 'br-opt-note', L('br_media_presets', 'Niches to try')), presetList);
   const mediaTiming = el('p', 'br-opt-note', L('br_media_timing',
     'Walls and new flashes change now. Game artwork changes on your next visit, so your current hand and prepaid spins are kept.'));
-  nicheWrap.append(nicheForm, nicheList);
-  media.append(el('span', 'br-opt-name', L('br_media_source', 'Source')), mediaSegRow, mediaNote, nicheWrap, mediaTiming);
+  nicheWrap.append(nicheForm, presetWrap, nicheList);
+  media.append(mediaHead, el('span', 'br-opt-name', L('br_media_source', 'Source')), mediaSegRow, mediaNote, nicheWrap, mediaTiming);
   if (!onWebShell) nav.append(media);
 
   // The room never trusts this field: the host validates the name again before it stores it. This is
@@ -191,12 +245,26 @@ export function createHud(o) {
   let mediaState = { source: 'auto', effective: 'local', subs: [], off: [], cap: 8, consented: false };
   let mediaMessage = '';
 
-  function setMedia(open) {
-    media.hidden = !open;
-    mediaBtn.setAttribute('aria-expanded', String(!!open));
-    if (open) { setOptions(false); paintMedia(); }
+  /* ONE CARD AT A TIME, ONE WRITER. Options and the picker hang from the same corner of the nav and
+   * would overlap, so at most one is ever open - and both hidden flags move here, together. That is
+   * the second half of the orphaned-picker fix: there is no longer any order of presses that can
+   * leave the picker open with its toggle off the screen, because closing Options closes it too. */
+  function showCard(which) {
+    panel.hidden = which !== 'options';
+    media.hidden = which !== 'media';
+    optBtn.setAttribute('aria-expanded', String(which === 'options'));
+    mediaBtn.setAttribute('aria-expanded', String(which === 'media'));
+    if (which === 'media') paintMedia();
   }
+  function setMedia(open) { showCard(open ? 'media' : null); }
   mediaBtn.addEventListener('click', () => setMedia(media.hidden));
+  mediaClose.addEventListener('click', () => {
+    setMedia(false);
+    // Options comes back with the pill the player pressed to get here, so the focus ring has
+    // somewhere to land and a keyboard is not dumped back at the top of the document.
+    setOptions(true);
+    mediaBtn.focus?.({ preventScroll: true });
+  });
   nicheForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const name = cleanNiche(nicheField.value);
@@ -233,7 +301,7 @@ export function createHud(o) {
       mediaNote.textContent = L('br_media_no_consent', 'Turn on online media in Assets to use Scrolller here.');
     else mediaNote.textContent = L('br_media_note_' + mediaState.effective, {
       local: 'Your assets folder, minus anything you deselected in Assets.',
-      online: 'Tap a niche to turn it on or off.',
+      online: 'Tap a niche to turn it on or off. Scrolller GIFs and clips play animated here.',
       mixed: 'Your files and Scrolller together, blended by the mix you set in Assets.',
       bundled: "The room's built-in art. No online feed needed.",
     }[mediaState.effective] || '');
@@ -250,16 +318,39 @@ export function createHud(o) {
       pill.append(toggle, remove);
       nicheList.append(pill);
     }
+    // The presets are rebuilt with the list so an added name leaves the row the moment the host's
+    // frame comes back, and so each button closes over a fresh `room` rather than a stale count.
+    const offer = presetOffer(mediaState.subs, mediaState.cap);
+    presetWrap.hidden = offer.names.length === 0;
+    presetList.textContent = '';
+    for (const name of offer.names) {
+      const add = el('button', 'br-seg br-niche-preset', 'r/' + name); add.type = 'button';
+      add.setAttribute('aria-label', L('br_media_preset_add', 'Add {n}').replace('{n}', 'r/' + name));
+      add.addEventListener('click', () => {
+        // A full list says so rather than pressing a ninth name the host would drop on the floor.
+        if (!offer.room) {
+          mediaMessage = L('br_media_cap', 'You can keep up to {n} niches. Remove one to add another.')
+            .replace('{n}', String(mediaState.cap));
+          paintMedia(); return;
+        }
+        mediaMessage = '';
+        o.onOption('mediaSubAdd', name);
+      });
+      presetList.append(add);
+    }
   }
   paintMedia();
 
   nav.append(panel);   // anchored under the Options pill, whatever the nav's own offset
   o.root.append(veil, hint, cross, nav, bell, list);
-  function setOptions(open) { panel.hidden = !open; optBtn.setAttribute('aria-expanded', String(!!open)); }
+  function setOptions(open) { showCard(open ? 'options' : null); }
   optBtn.addEventListener('click', () => setOptions(panel.hidden));
-  // A press anywhere outside the card (and outside its pill, which toggles it) closes it.
+  // A press anywhere outside the open card (and outside the Options pill, which toggles between
+  // them) closes it. The picker gets the same treatment as Options: it is the same kind of card.
   document.addEventListener('pointerdown', (e) => {
-    if (!panel.hidden && !panel.contains(e.target) && !optBtn.contains(e.target)) setOptions(false);
+    if (optBtn.contains(e.target)) return;
+    if (!panel.hidden && !panel.contains(e.target)) setOptions(false);
+    else if (!media.hidden && !media.contains(e.target)) setMedia(false);
   }, true);
 
   let overview = false;
@@ -340,8 +431,10 @@ export function createHud(o) {
     },
     /** The floor bell opt-in row (10.16.B): the server's answer, an optimistic tick put back when it refuses. */
     bellOptIn(checked) { paintSwitch(bellOpt.b, checked); },
-    get optionsOpen() { return !panel.hidden; },
-    closeOptions() { setOptions(false); setMedia(false); },
+    /** Either card counts: this is what main.js's back() reads, so Escape and Back dismiss the
+     * picture picker before they leave the room, exactly as they already did for Options. */
+    get optionsOpen() { return !panel.hidden || !media.hidden; },
+    closeOptions() { setOptions(false); },
     seated(on) {
       document.documentElement.classList.toggle('br-seated', !!on);
       viewBtn.disabled = !!on;

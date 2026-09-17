@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { stageRect, ndcIn } from '../stage-rect.js';
+import { stageRect, ndcIn, viewportPageRect } from '../stage-rect.js';
 
 const rect=(x,y,w,h)=>({left:x,top:y,right:x+w,bottom:y+h,width:w,height:h});
 /* A bay's corner as the close-up places it and as a finger reads it back: vending-view.js projects the bay
@@ -54,4 +54,50 @@ test('a stage too small or a canvas with no box has no rectangle to draw in',()=
 test('a buffer reported as zero falls back to the canvas box instead of collapsing the viewport',()=>{
   const box=stageRect(rect(0,0,1000,800),rect(0,0,400,300),0,0);
   assert.deepEqual(box.gl,{x:0,y:500,w:400,h:300});
+});
+
+/* The room's own picks (scene.js pickAt): the room renders into customization.previewBox while the Room
+ * Service panel is up, so a finger has to be normalised into that pass and not into the canvas. */
+const full = (w, h) => ({ page: { x: 0, y: 0, w, h } });
+
+test('a full-canvas viewport is the canvas rect itself, so the room pick stays the arithmetic it was',()=>{
+  const canvas=rect(0,0,1000,800);
+  const r=viewportPageRect(canvas,{x:0,y:0,w:1000,h:800},1000,800);
+  assert.deepEqual([r.left,r.top,r.right,r.bottom],[0,0,1000,800]);
+  const box=stageRect(canvas,r,1000,800);
+  assert.deepEqual(box.page,{x:0,y:0,w:1000,h:800});
+  // Bit for bit what pickAt() computed by hand from canvas.getBoundingClientRect().
+  assert.deepEqual(ndcIn(box,731,219),{x:(731-0)/1000*2-1,y:1-(219-0)/800*2});
+});
+
+test('a panel docked down one edge leaves the room a strip, and a pick in the strip is centred in it',()=>{
+  const canvas=rect(0,0,1000,800);
+  // previewBox with the sheet at x=420: the strip left of it, y up from the canvas bottom.
+  const box=stageRect(canvas,viewportPageRect(canvas,{x:0,y:0,w:420,h:800},1000,800),1000,800);
+  assert.deepEqual(box.page,{x:0,y:0,w:420,h:800});
+  const mid=ndcIn(box,210,400);
+  assert.ok(Math.abs(mid.x)<1e-9&&Math.abs(mid.y)<1e-9,'the middle of the pane is the middle of the room');
+  assert.ok(Math.abs(ndcIn(full(1000,800),210,400).x+0.58)<1e-9,'the full canvas rect is the bug: -0.58');
+});
+
+test('the phone sheet leaves a band above it, and a pointer in the band reads its own point',()=>{
+  const canvas=rect(0,60,420,760);       // a phone canvas that does not start at the top of the page
+  // previewBox for a sheet whose top edge is 300px down the mount: the band is the top 300 viewport pixels.
+  const pageRect=viewportPageRect(canvas,{x:0,y:760-300,w:420,h:300},420,760);
+  assert.deepEqual([pageRect.left,pageRect.top,pageRect.width,pageRect.height],[0,60,420,300]);
+  const box=stageRect(canvas,pageRect,420,760);
+  assert.deepEqual(box.page,{x:0,y:60,w:420,h:300});
+  const back=roundTrip(box,-0.5,-0.9);
+  assert.ok(Math.abs(back.x+0.5)<1e-9&&Math.abs(back.y+0.9)<1e-9,'a tap projected into the band reads back');
+  // The same finger, normalised against the canvas rect the way pickAt() used to: near the room's floor
+  // reads as most of the way up its wall, which is the offset a room-pane tap would have had.
+  const buggy=ndcIn({page:{x:0,y:60,w:420,h:760}},105,345);
+  assert.ok(Math.abs(buggy.y-back.y)>1,'the full canvas rect is the bug');
+});
+
+test('a viewport measured before the canvas box changed scales instead of drifting',()=>{
+  // The canvas has since gone half as wide in CSS pixels; the pass was measured at the old renderer size.
+  const canvas=rect(0,0,500,400);
+  const r=viewportPageRect(canvas,{x:0,y:0,w:420,h:800},1000,800);
+  assert.deepEqual([r.left,r.top,r.width,r.height],[0,0,210,400]);
 });
