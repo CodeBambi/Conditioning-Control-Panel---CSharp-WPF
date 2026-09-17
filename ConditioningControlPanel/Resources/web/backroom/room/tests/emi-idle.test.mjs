@@ -69,3 +69,5 @@ test('real shoulder children articulate without changing authored mesh transform
  actor.update(.01,true);model.updateMatrixWorld(true);assert.ok(hand.getWorldPosition(new T.Vector3()).distanceTo(initial)<1e-10);
  assert.deepEqual(actor.debug().arms,[0,0]);actor.dispose();
 });
+
+test('attention is bounded and settles with motion off without moving authored nodes',()=>{const f=fixture('roulette');const local=f.root.matrix.clone();f.controller.attend(100,.8);for(let i=0;i<30;i++)f.controller.update(1/60);assert.ok(Math.abs(f.controller.debug().pose[1])<.7);f.controller.update(.016,true);assert.deepEqual(f.controller.debug().pose,[0,0,0]);f.model.updateMatrixWorld(true);nearMatrix(f.root.matrix,local);f.controller.settle();f.controller.dispose();});

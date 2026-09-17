@@ -36,6 +36,7 @@ import { createLoader } from './loader.js';
 import { createHud } from './hud.js';
 import { createRoomRewards, createDoubleCharm } from './rewards.js';
 import { kit } from '../shared/sound/kit.js';
+import { spendFlight, clearSpendFlights } from './spend-flight.js';
 import { createBalanceFeedback } from './balance-feedback.js';
 const rewards = createRoomRewards();
 let doubleCharm = null;
@@ -137,9 +138,11 @@ const spReadout = Object.freeze({
   },
   /** The chip's box, where THE BANK's tokens fly to and from. */
   target() { return $('.br-sp'); },
+  spend(amount, target) { spendFlight({from:$('.br-sp'), to:target, amount, still:still() || state.motion==='off'}); },
 });
 /** A station is gone: a reader freezes to its last answer and any flight value is dropped. */
 function chipSettle() {
+  clearSpendFlights();
   chip.owed = owedNow();
   chip.shown = null;
   paintSpChip();
@@ -151,6 +154,7 @@ function spChanged() {
 }
 
 function paintMotion() {
+  if(still() || state.motion==='off')clearSpendFlights();
   if (scene) scene.setStill(still());
   if (!hud) return;
   hud.motion(still(), forcedStill());

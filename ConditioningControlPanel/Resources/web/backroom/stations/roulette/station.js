@@ -480,6 +480,7 @@ export async function mount(ctx) {
         sp = Number(a.body.sp) || 0; tape = adoptTape(a.body.tape); cursorSent = null;
         if (!tape) { phase = 'bet'; status = ''; why = whyText('bad_request'); sync(); return; }
         chips = chipsOf(tape.bets);
+        hook?.spend?.(c.cost, $('.roul-spin'));
         if (hook) hook.owe(reader);
         playTape();
         return;
@@ -518,7 +519,7 @@ export async function mount(ctx) {
     bowl.launch(plan, now, { wake: read.wake });
     const run = moments.play('roulette.run');
     const wake = read.wake ? moments.play('roulette.wake', { wake: true }) : null;
-    cur = { i, read, plan, launchAt: now, landed: false, rattled: false, restAt: null, page: [...run.page, ...(wake ? wake.page : [])] };
+    cur = { i, read, plan, launchAt: now, landed: false, rattled: false, hitSound: 0, restAt: null, page: [...run.page, ...(wake ? wake.page : [])] };
     beat('launch', { i });                 // every spin alike (Law I)
     if (read.wake) beat('wake', { i });    // the wake is on screen as text from this frame
     status = (read.wake ? t('br_roulette_waking', 'No more bets... the bowl is waking.') : t('br_roulette_no_more', 'No more bets...'))
@@ -655,6 +656,8 @@ export async function mount(ctx) {
     if (cur && !cur.landed) {
       if (u.speed > 0) moments.tunnel(rouletteRunLevel(u.speed));
       if (!cur.rattled && u.phase === 'rattle') { cur.rattled = true; beat('rattle', { i: cur.i }); }   // the first fret clip, once a spin
+      const hitCount=cur.plan.sparks.filter(hit=>hit.at*1000<=now-cur.launchAt).length;
+      if(hitCount>cur.hitSound){cur.hitSound=hitCount;if(!still)sound.play('chip-place');}
       if (u.landed) land(now);
     }
     if (cur && cur.landed && cur.restAt == null && u.phase === 'rest') cur.restAt = now;

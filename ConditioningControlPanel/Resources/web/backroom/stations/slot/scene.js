@@ -548,6 +548,8 @@ export async function createScene(o) {
     const geo = new THREE.OctahedronGeometry(0.012), mat = new THREE.MeshBasicMaterial({ color: 0xffd7a6 });
     for (let i = 0; i < 7; i++) { const m = new THREE.Mesh(geo, mat); m.visible = false; scene.add(m); extras.push(m); sparks.push(m); }
   }
+  let gazeYaw = 0, gazePitch = 0, gazeAt = 0, gazeReel = -1;
+  const gazePoint = new THREE.Vector3();
   const emi = get('emi_topper'), emiRest = emi && { p: emi.position.clone(), s: emi.scale.clone(), r: emi.rotation.clone() };
   const tmp = new THREE.Vector3(), nextColor = new THREE.Color(), GOLD = new THREE.Color(0xffc23a);
 
@@ -812,6 +814,19 @@ export async function createScene(o) {
         if (k < 1 && !reduced) emi.position.y += PERCH_HOP * Math.sin(Math.PI * k);   // the little jump across
         emi.scale.multiplyScalar(1 - (1 - PERCH_SCALE) * k);
       }
+      // Follow the next reel to stop, then the final moving reel. Settle before the reaction.
+      gazeReel = !reduced && spin ? [0,1,2].find(i => spin.held !== i && !spin.keep.includes(i) && !spin.stopped[i]) ?? -1 : -1;
+      let aimYaw = 0, aimPitch = 0;
+      if (gazeReel >= 0) {
+        reels[gazeReel].getWorldPosition(gazePoint); emiHost.worldToLocal(gazePoint);
+        const dx = gazePoint.x - emi.position.x, dy = gazePoint.y - emi.position.y;
+        aimYaw = THREE.MathUtils.clamp(dx * .45, -.22, .22);
+        aimPitch = -THREE.MathUtils.clamp(dy * .15, -.1, .1);
+      }
+      const gazeEase = reduced || partying ? 1 : 1 - Math.exp(-Math.min(100,t-gazeAt)/120);
+      gazeAt = t;
+      gazeYaw += (aimYaw-gazeYaw)*gazeEase; gazePitch += (aimPitch-gazePitch)*gazeEase;
+      emi.rotation.y += gazeYaw; emi.rotation.x += gazePitch;
       const age = t - moodAt, pa = partying ? t - party.start : Infinity;
       if (!reduced && phase === 'play') {
         let lean2 = 0, hop = 0, squash = 1, pop = 1, turn = 0;
@@ -1156,7 +1171,7 @@ export async function createScene(o) {
     debug() {
       const t = performance.now();
       return { meltShakeAgeMs: performance.now()-meltShakeAt, crown: crownDisplay?.debug(), shared:!!shared, responsiveStretch:shared?.fixture.userData.slotStretch||1, fov:camera.fov, hiddenRoomObjects:roomVisibility.size, rigId:rig.uuid, reelIds:reels.map(r=>r.uuid), reelAngles:reelAngles.slice(), reelOffsets:reels.map(r=>r.material?.map?.offset.x), lever: lever.rotation.x, heat: heatNow(t), gold: heat.gold, party: party && t < party.end ? party.r.party : null,
-               tier: party && t < party.end ? party.r.tier : 0, face: faceName, shiverPx: reduced ? 0 : shiverPx(t - shiverAt),
+               tier: party && t < party.end ? party.r.tier : 0, face: faceName, gaze: { reel:gazeReel, yaw:gazeYaw, pitch:gazePitch }, shiverPx: reduced ? 0 : shiverPx(t - shiverAt),
                reelBrightness: reels.map(r => r.material && r.material.color ? r.material.color.r : 1), leaning: !!lean,
                tease: teasing, teaseMs: spin ? spin.teaseMs : 0, teaseGold: !!(spin && spin.teaseGold),
                almost: ghost ? { cell: ghost.j, reel: ghost.r, amt: Number(ghostAmt(t).toFixed(3)) } : null,

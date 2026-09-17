@@ -423,6 +423,9 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
 
   const c = new T.Color(), target = new T.Color();
   const sconceColor = new T.Color(0xff79ce);
+  let lampRippleAt=-Infinity;
+  const lampPositions=sconces.map(s=>s.getWorldPosition(new T.Vector3()));
+  let lampOrigin=new T.Vector3();
   const wheelColors=[0xff328f,0x963cff,0x29cfff,0x36ffc2,0xffc329,0xff6742].map(hex=>new T.Color(hex));
   function update(dt, t, still) {
     prizes.update(dt, still || readMotion().off || readMotion().reduced);
@@ -466,7 +469,16 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     for (const im of instanced) if (im.instanceColor) im.instanceColor.needsUpdate = true;
     if (sconceMaterial) sconceMaterial.emissiveIntensity = 1.7 + 0.2 * Math.sin(t * 0.5);
     const so = 0.5 + 0.07 * Math.sin(t * 0.5);
-    for (const i of sconceAuras) auras.set(i, sconceColor, so);
+    const quiet=still || readMotion().off || readMotion().reduced;
+    let lampPeak=0;
+    for (let n=0;n<sconceAuras.length;n++) {
+      const age=(clock-lampRippleAt-lampPositions[n].distanceTo(lampOrigin)*75)/1100;
+      const pulse=!quiet && age>0 && age<1 ? Math.sin(age*Math.PI)**2 : 0;
+      lampPeak=Math.max(lampPeak,pulse);
+      c.copy(sconceColor).lerp(WIN_GOLD,pulse*.8);
+      auras.set(sconceAuras[n],c,Math.min(1,so+pulse*.45));
+    }
+    if(sconceMaterial)sconceMaterial.emissiveIntensity+=lampPeak*.9;
     auras.commit();
     for (const surface of wheelFaces) surface?.update(dt, still || readMotion().off || readMotion().reduced);
     for (const h of hubs) h.update(dt, still);
@@ -519,6 +531,7 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     if (!(Number(amount) > 0)) { p?.coins.clear(); echo.clear(key); return false; }
     const fired = echo.celebrate({ key, amount, tier, text, name: names.get(key) }, readMotion(), clock);
     if (!fired) return false;
+    if(fired.aura>0 && clock-lampRippleAt>1800){lampRippleAt=clock;holders.get(key)?.getWorldPosition(lampOrigin);}
     // What the screen said before the win is what it says after it (10.16.E's MUST HIT, most of all).
     if (p && p.node && !p.showing) p.rest = labels.get(key + '/' + p.node)?.text || p.rest;
     // Law XIII: the fixture's own mascot looks up. Quiet keeps her at rest, the way every other room

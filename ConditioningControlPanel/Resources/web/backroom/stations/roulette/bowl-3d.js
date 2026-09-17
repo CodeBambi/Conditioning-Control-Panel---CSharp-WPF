@@ -124,6 +124,12 @@ export function createBowl3D({ stage, wheel, rose }) {
     mesh.position.copy(at).addScaledVector(normal, lift * .12); mesh.scale.setScalar(glyphSize); rotor.add(mesh);
     return { n, id, index: i, angle: a, material, mesh };
   });
+  const landingRing=new T.Mesh(new T.RingGeometry(lift*1.5,lift*2.5,32),new T.MeshBasicMaterial({color:0xffc75d,transparent:true,opacity:0,depthWrite:false,side:T.DoubleSide}));
+  landingRing.name='roulette_landing_ring';landingRing.rotation.x=-Math.PI/2;rotor.add(landingRing);
+  const numberCanvas=document.createElement('canvas');numberCanvas.width=numberCanvas.height=128;
+  const numberTexture=new T.CanvasTexture(numberCanvas);numberTexture.colorSpace=T.SRGBColorSpace;
+  const numberSprite=new T.Sprite(new T.SpriteMaterial({map:numberTexture,transparent:true,depthTest:false}));numberSprite.name='roulette_winning_number';numberSprite.renderOrder=8;rotor.add(numberSprite);
+  let numberShown=null;
   let glyphLitIndex = -1, glyphLitAt = -Infinity;
   let disposed = false, lastView = {}, activePlan=null, launchAt=0, currentNow=0;
   const trailPoints=[];
@@ -149,6 +155,7 @@ export function createBowl3D({ stage, wheel, rose }) {
       if (s.phase === 'rest') point.copy(p).setY(pocketTops[s.index]+lift+path.margin);
       rotor.localToWorld(point); ball.parent.worldToLocal(point); ball.position.copy(point);
     }
+    stage.emi?.attend?.(ball.visible ? Math.cos(s.rot+s.rel)*.9 : 0, ball.visible ? .65 : 0);
     const beamA = beamAngle(s.beamT), k = lastView.k ?? 1;
     beam.rotation.z=beamA-s.rot;beam.material.opacity=.2*k;
     const sec=(currentNow-launchAt)/1000;
@@ -195,6 +202,15 @@ export function createBowl3D({ stage, wheel, rose }) {
       g.material.color.copy(glyphCold).lerp(glyphHot, strength);
       g.mesh.scale.setScalar(glyphSize * (1 + (hot ? .3 * glyphPulse : 0)));
     }
+    landingRing.visible=seated>=0 && pq>=0 && pq<1 && !lastView.still;
+    if(landingRing.visible){landingRing.position.copy(centers[seated]);landingRing.position.y=pocketTops[seated]+lift*.3;landingRing.scale.setScalar(1+pq*3);landingRing.material.opacity=(1-pq)*.85*k;}
+    const numberAge=currentNow-s.hitAt;
+    numberSprite.visible=numberAge>=180 && numberAge<1100 && seated>=0 && !lastView.still;
+    if(numberSprite.visible){
+      const value=wheel[seated];
+      if(numberShown!==value){const c=numberCanvas.getContext('2d');c.clearRect(0,0,128,128);c.font='900 86px Fredoka, sans-serif';c.textAlign='center';c.textBaseline='middle';c.lineWidth=9;c.strokeStyle='#4b174f';c.strokeText(String(value),64,67);c.fillStyle='#ffd778';c.fillText(String(value),64,67);numberTexture.needsUpdate=true;numberShown=value;}
+      const q=Math.min(1,(numberAge-180)/920);numberSprite.position.copy(centers[seated]);numberSprite.position.y=pocketTops[seated]+lift*(4+q*3);numberSprite.scale.setScalar(lift*7*(1+.15*Math.sin(q*Math.PI)));numberSprite.material.opacity=Math.min(1,q*8)*(1-Math.max(0,(q-.7)/.3))*k;
+    }
     // THE GLYPH HIT: the landed pocket's number lights on its own over HIGHLIGHT_MS from the winning frame (callout.js)
     const hq = (currentNow - s.hitAt) / HIGHLIGHT_MS, hitPulse = hq >= 0 && hq < 1 ? Math.sin(hq * Math.PI) : 0, hitN = s.index >= 0 ? wheel[s.index] : null;
     for (const n of numberColors) {
@@ -218,6 +234,7 @@ export function createBowl3D({ stage, wheel, rose }) {
   }
   function dispose() {
     if (disposed) return; disposed = true;
+    stage.emi?.attend?.(null,null);landingRing.removeFromParent();landingRing.geometry.dispose();landingRing.material.dispose();numberSprite.removeFromParent();numberSprite.material.dispose();numberTexture.dispose();
     rotor.quaternion.copy(saved.rotor); ball.position.copy(saved.ball); ball.visible = saved.visible;
     surfaces.reset(); if(!existingSurfaces)surfaces.dispose();
     for(const object of [beam,sparks,trail,dust,hintArc,hintHead]){object.removeFromParent();object.geometry.dispose();}

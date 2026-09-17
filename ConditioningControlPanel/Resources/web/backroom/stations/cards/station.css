@@ -188,3 +188,5 @@
  .cards-in-room .cards-move:is([data-move="split"],[data-move="double"]) { width:76px; min-width:0; min-height:36px; padding:5px 3px; font-size:12px; }
  .cards-in-room .cards-move[data-move="double"] { top:calc(var(--secondary-y) + 44px); }
 }
+
+.cards-stand-stamp { position:absolute;z-index:14;pointer-events:none;border:3px solid #ff8ed8;border-radius:12px;padding:7px 19px;color:#ff8ed8;background:#351342dc;font:900 25px Fredoka, sans-serif;letter-spacing:.12em;box-shadow:0 0 24px #ff68c866,inset 0 0 12px #ff68c844;text-shadow:0 2px 0 #511b50; }

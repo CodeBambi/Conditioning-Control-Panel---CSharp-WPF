@@ -420,6 +420,8 @@ export async function mount(ctx) {
     note = '';
     if (c.kind === 'gone') return;
     if (c.kind === 'ok') {
+      if (!c.body.autoStood && ['deal','double','split'].includes(op)) ctx.spReadout?.spend?.(c.body.cost, $('.cards-bet'));
+      if (!c.body.autoStood && op === 'stand' && !dress().still) standStamp();
       if (op === 'deal') dealReadyAt = performance.now() + st.floorMs;
       if (c.body.autoStood) note = t('br_cards_auto_stood', 'Your last hand was stood for you after a day away.');
       adopt(c.body, { beats: !!op && !c.body.autoStood });
@@ -464,6 +466,15 @@ export async function mount(ctx) {
     if (my !== session) return;
     await reply(r, my, 'deal');   // busy until the reply is on the table (a no_hand re-read included)
     if (my === session) busy = false;
+  }
+
+  function standStamp() {
+    const hud=table.hud?.(); if(!hud)return;
+    const stamp=document.createElement('b');stamp.className='cards-stand-stamp';
+    stamp.textContent=t('br_cards_stand',MOVE_LABEL.stand).toUpperCase();
+    stamp.style.left=hud.x+'px';stamp.style.top=(hud.y-62)+'px';el.append(stamp);
+    stamp.animate([{transform:'translate(-50%,-50%) scale(1.7) rotate(-12deg)',opacity:0},{transform:'translate(-50%,-50%) scale(.94) rotate(-7deg)',opacity:1,offset:.22},{transform:'translate(-50%,-50%) scale(1) rotate(-7deg)',opacity:1,offset:.7},{transform:'translate(-50%,-65%) scale(1)',opacity:0}],{duration:800,easing:'ease-out'}).onfinish=()=>stamp.remove();
+    sound.play('deck-square');
   }
 
   async function move(m) {
@@ -643,6 +654,7 @@ export async function mount(ctx) {
     // Stake stays below the cards, clear of the shared Hit/Deal target.
     const bet = el.querySelector(':scope > .cards-bet');
     if (bet) { bet.style.left = hud.x+'px'; bet.style.top = Math.min(el.clientHeight-40,hud.bottom+42)+'px'; bet.style.bottom = 'auto'; bet.style.right = 'auto'; bet.style.transform = 'translate(-50%,-50%)'; }
+    ctx.stage?.emi?.attend?.((hud.x/el.clientWidth-.5)*2, .65);
     const key=hud.owner+':'+hud.total;
     paintScore(total,hud,hud.hands>1?t('br_cards_hand_short','Hand {i}',{i:hud.owner+1}):t('br_cards_you','You'),key,totalKey,still);totalKey=key;
     const dealer=table.hud('d'), badge=$('.cards-dealer-total'), dealerKey=dealer.total+':'+dealer.hidden;
@@ -729,6 +741,7 @@ export async function mount(ctx) {
     if (kit) kit.dispose();
     if (deck) deck.dispose();
     if (chip) chip.handOver();
+    ctx.stage?.emi?.attend?.(null,null);
     if (table) table.dispose();
     if (el) el.remove();
     el = null; table = null; kit = null; deck = null; moments = null; chip = null; bank = null; party = null; queue = []; shownHand = null; busy = false; decide = false;

@@ -38,6 +38,7 @@ export function createEmiIdle({ model, row, atlas }) {
     face.material.map = texture; face.material.emissiveMap = texture; face.material.needsUpdate = true;
   }
   let elapsed = 0, disposed = false, faceIndex = 3, action = null, age = 0, faceOverride = null;
+  let attention=null;
   const phase = PHASES[row.id];
   function expression(index) { faceIndex = index; if (texture) texture.offset.set((index*152+.5)/1672,.5/137); }
   function rest() { for(const h of [body,left,right,antenna])h?.reset(); tool?.show(0); expression(3); }
@@ -56,7 +57,7 @@ export function createEmiIdle({ model, row, atlas }) {
     const t=elapsed+phase, gesture=action?sampleEmiReaction(action,age):sampleEmiGesture(row.id,t);
     tool?.show(gesture.tool);
     const blend=1-Math.exp(-step*10), ease=(h,x,y,z)=>{if(h) {h.pivot.rotation.x+=(x-h.pivot.rotation.x)*blend;h.pivot.rotation.y+=(y-h.pivot.rotation.y)*blend;h.pivot.rotation.z+=(z-h.pivot.rotation.z)*blend;}};
-    ease(body,.014*Math.sin(t*1.25)+gesture.pitch,.055*Math.sin(t*.43)+gesture.yaw,.018*Math.sin(t*.71)+gesture.roll);
+    ease(body,.014*Math.sin(t*1.25)+gesture.pitch+(attention?.y||0)*.10,.055*Math.sin(t*.43)+gesture.yaw+(attention?.x||0)*.22,.018*Math.sin(t*.71)+gesture.roll);
     ease(left,gesture.reach,0,-gesture.left-.025*Math.sin(t*.85));
     ease(right,gesture.reach,gesture.sweep,gesture.right+.025*Math.sin(t*.85));
     if (tool && gesture.dust > 0) {
@@ -76,8 +77,9 @@ export function createEmiIdle({ model, row, atlas }) {
   }
   rest();
   return { id:row.id, root, pivot, interactionRoot:pivot, update, trigger,
+    attend(x,y) { attention=Number.isFinite(x)&&Number.isFinite(y)?{x:Math.max(-1,Math.min(1,x)),y:Math.max(-1,Math.min(1,y))}:null; },
     setExpression(index) { faceOverride = index; expression(index ?? 3); },
-    settle() { action=null; age=0; rest(); },
+    settle() { attention=null; action=null; age=0; rest(); },
     debug:()=>({id:row.id,phase:elapsed,pose:[pivot.rotation.x,pivot.rotation.y,pivot.rotation.z],blink:faceIndex===2,action:action||'idle',age,articulated:!!(left&&right),arms:[left?.pivot.rotation.z||0,right?.pivot.rotation.z||0]}),
     dispose() {
       if(disposed)return;disposed=true;rest();tool?.dispose();
