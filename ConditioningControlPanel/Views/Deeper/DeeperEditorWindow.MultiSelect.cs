@@ -580,25 +580,139 @@ namespace ConditioningControlPanel.Views.Deeper
         internal void PushUndoSnapshot()
         {
             if (_suppressUndoSnapshot) return;
+            // An explicit snapshot supersedes any inspector session capture.
+            _inspectorPendingSnapshot = null;
             try
             {
-                var json = JsonConvert.SerializeObject(_enhancement, EnhancementSerializer.JsonReadSettingsForClone());
-                _undo.Push(json);
-                while (_undo.Count > UndoCap)
-                {
-                    // Stack lacks Dequeue — copy, drop the oldest (bottom), rebuild.
-                    var arr = _undo.ToArray(); // top first
-                    _undo.Clear();
-                    int keep = Math.Min(arr.Length, UndoCap);
-                    for (int i = keep - 1; i >= 0; i--) _undo.Push(arr[i]);
-                    break;
-                }
-                _redo.Clear();
+                PushUndoJson(JsonConvert.SerializeObject(_enhancement, EnhancementSerializer.JsonReadSettingsForClone()));
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("DeeperEditor: PushUndoSnapshot error: {Error}", ex.Message);
             }
+        }
+
+        private void PushUndoJson(string json)
+        {
+            _undo.Push(json);
+            while (_undo.Count > UndoCap)
+            {
+                // Stack lacks Dequeue: copy, drop the oldest (bottom), rebuild.
+                var arr = _undo.ToArray(); // top first
+                _undo.Clear();
+                int keep = Math.Min(arr.Length, UndoCap);
+                for (int i = keep - 1; i >= 0; i--) _undo.Push(arr[i]);
+                break;
+            }
+            _redo.Clear();
+        }
+
+        // -- Inspector edit sessions -------------------------------------------
+        // Inspector fields mutate the model on every keystroke / slider tick, so
+        // snapshotting inside each handler would push one entry per character.
+        // Instead the sidebar's PreviewMouseDown / PreviewKeyDown capture the
+        // pre-edit state ONCE per focus session (a serialisation, no push), and
+        // the first MarkDirty that follows commits it. A click always starts a
+        // new session (a slider grab or checkbox is a discrete action); typing
+        // keeps the session until focus moves or the inspector is repopulated.
+        private string? _inspectorPendingSnapshot;
+        private bool _inspectorSessionSnapshotted;
+
+        internal void ArmInspectorSnapshot(bool newSession)
+        {
+            if (_suppressUndoSnapshot) return;
+            if (newSession) _inspectorSessionSnapshotted = false;
+            if (_inspectorSessionSnapshotted || _inspectorPendingSnapshot != null) return;
+            try
+            {
+                _inspectorPendingSnapshot = JsonConvert.SerializeObject(_enhancement, EnhancementSerializer.JsonReadSettingsForClone());
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("DeeperEditor: ArmInspectorSnapshot error: {Error}", ex.Message);
+            }
+        }
+
+        internal void ResetInspectorSession()
+        {
+            _inspectorSessionSnapshotted = false;
+            _inspectorPendingSnapshot = null;
+        }
+
+        private void CommitPendingInspectorSnapshot()
+        {
+            if (_inspectorPendingSnapshot == null || _suppressUndoSnapshot) return;
+            PushUndoJson(_inspectorPendingSnapshot);
+            _inspectorPendingSnapshot = null;
+            _inspectorSessionSnapshotted = true;
+        }
+
+        // -- Keyboard nudge / jump --------------------------------------------
+
+        private double ClampStart(double start, double length)
+        {
+            var max = _totalSeconds > 0 ? Math.Max(0, _totalSeconds - length) : double.MaxValue;
+            return Math.Max(0, Math.Min(max, start));
+        }
+
+        /// <summary>Left / Right arrow: shift the selection by <paramref name="delta"/> seconds.</summary>
+        internal void NudgeSelection(double delta)
+        {
+            EnsurePrimaryInSelectionSet();
+            var rule = _selectionSet.Count == 0 ? _selectedRule : null;
+            if (_selectionSet.Count == 0 && rule == null) return;
+            PushUndoSnapshot();
+            if (rule != null)
+            {
+                if (rule.Trigger is TimeReachedTrigger tr) tr.Time = ClampStart(tr.Time + delta, 0);
+                var band = _enhancement.Regions.FirstOrDefault(r => r != null && r.Id == rule.RegionConstraint);
+                if (band != null) ShiftItem(band, delta);
+            }
+            foreach (var sel in _selectionSet) ShiftItem(sel, delta);
+            MarkDirty();
+            UpdateSelectedSidePanel();
+            RefreshSelectionVisuals();
+            RebuildRuleVisuals();
+            ScheduleValidation();
+        }
+
+        private void ShiftItem(object item, double delta)
+        {
+            switch (item)
+            {
+                case Region r:
+                    var len = Math.Max(0, r.End - r.Start);
+                    r.Start = ClampStart(r.Start + delta, len);
+                    r.End = r.Start + len;
+                    break;
+                case HapticEvent ev:
+                    ev.Start = ClampStart(ev.Start + delta, ev.Duration);
+                    break;
+                case TimelineItem ti:
+                    ti.Start = ClampStart(ti.Start + delta, Math.Max(0, ti.Duration));
+                    break;
+            }
+        }
+
+        /// <summary>[ / ]: move the playhead to the previous / next item start.</summary>
+        internal void JumpToAdjacentItemStart(bool forward)
+        {
+            if (_totalSeconds <= 0) return;
+            var starts = new List<double>();
+            foreach (var r in _enhancement.Regions) if (r != null) starts.Add(r.Start);
+            foreach (var t in _enhancement.HapticTracks)
+                if (t?.Events != null) foreach (var ev in t.Events) if (ev != null) starts.Add(ev.Start);
+            foreach (var ti in _enhancement.TimelineItems)
+                if (ti != null && ti.Kind == TimelineItemKind.Effect) starts.Add(ti.Start);
+            foreach (var rule in _enhancement.Rules)
+                if (rule?.Trigger is TimeReachedTrigger tr) starts.Add(tr.Time);
+            const double eps = 0.01;
+            var candidates = forward
+                ? starts.Where(s => s > _currentSeconds + eps)
+                : starts.Where(s => s < _currentSeconds - eps);
+            if (!candidates.Any()) return;
+            var target = forward ? candidates.Min() : candidates.Max();
+            SeekToFraction(target / _totalSeconds);
         }
 
         internal void Undo()
@@ -609,6 +723,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 var current = JsonConvert.SerializeObject(_enhancement, EnhancementSerializer.JsonReadSettingsForClone());
                 _redo.Push(current);
                 var snapshot = _undo.Pop();
+                ResetInspectorSession();
                 ApplyHistorySnapshot(snapshot);
             }
             catch (Exception ex)
@@ -625,6 +740,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 var current = JsonConvert.SerializeObject(_enhancement, EnhancementSerializer.JsonReadSettingsForClone());
                 _undo.Push(current);
                 var snapshot = _redo.Pop();
+                ResetInspectorSession();
                 ApplyHistorySnapshot(snapshot);
             }
             catch (Exception ex)

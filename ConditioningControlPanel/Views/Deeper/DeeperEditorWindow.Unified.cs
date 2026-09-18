@@ -557,6 +557,7 @@ namespace ConditioningControlPanel.Views.Deeper
         private void UpdateSelectedSidePanelForEffect()
         {
             HideAllEditors();
+            ResetInspectorSession();
             if (_selectedEffect == null)
             {
                 if (SelectedPlaceholder != null) SelectedPlaceholder.Visibility = Visibility.Visible;

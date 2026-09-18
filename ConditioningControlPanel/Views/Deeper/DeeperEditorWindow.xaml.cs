@@ -160,6 +160,14 @@ namespace ConditioningControlPanel.Views.Deeper
             WindowChromeHelper.RestoreOwnerOnClose(this);
             Loaded += DeeperEditorWindow_Loaded;
             KeyDown += DeeperEditorWindow_KeyDown;
+            PreviewKeyDown += DeeperEditorWindow_PreviewKeyDown;
+
+            // Inspector undo sessions (see ArmInspectorSnapshot): a click starts a
+            // new session, a keystroke joins the current one, a focus move ends it.
+            SidebarRoot.PreviewMouseDown += (_, _) => ArmInspectorSnapshot(newSession: true);
+            SidebarRoot.PreviewKeyDown += (_, _) => ArmInspectorSnapshot(newSession: false);
+            SidebarRoot.AddHandler(Keyboard.GotKeyboardFocusEvent,
+                new KeyboardFocusChangedEventHandler((_, _) => _inspectorSessionSnapshotted = false), true);
 
             _validationTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(220) };
             _validationTimer.Tick += (_, _) => { _validationTimer.Stop(); RefreshValidation(); };
@@ -1957,6 +1965,7 @@ namespace ConditioningControlPanel.Views.Deeper
 
             // Always reset the unified-editor groups; the unified path repopulates if needed.
             HideAllEditors();
+            ResetInspectorSession();
 
             if (_selectedEffect != null)
             {
@@ -4264,6 +4273,7 @@ namespace ConditioningControlPanel.Views.Deeper
         private void MarkDirty()
         {
             if (_suppressDirty) return;
+            CommitPendingInspectorSnapshot();
             _isDirty = true;
             TxtDirty.Visibility = Visibility.Visible;
             // Mission 1 sidebar restructure: the items overview list is gone;
@@ -4931,10 +4941,31 @@ namespace ConditioningControlPanel.Views.Deeper
 
         // -- Window lifecycle --------------------------------------------------
 
+        // WebView2 keeps keystrokes for itself once clicked; its accelerator keys
+        // surface on the WPF side only as tunnelling preview events. Route the
+        // editor shortcuts through the same handler when focus is in the browser.
+        private void DeeperEditorWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (!IsFocusInsideBrowserPreview()) return;
+            DeeperEditorWindow_KeyDown(sender, e);
+        }
+
+        private bool IsFocusInsideBrowserPreview()
+        {
+            if (BrowserPreview == null) return false;
+            if (BrowserPreview.IsKeyboardFocusWithin || BrowserPreview.IsFocused) return true;
+            return Keyboard.FocusedElement is Visual v
+                && (ReferenceEquals(v, BrowserPreview) || BrowserPreview.IsAncestorOf(v));
+        }
+
         private void DeeperEditorWindow_KeyDown(object sender, KeyEventArgs e)
         {
             // Don't hijack typing inside text fields.
             var inTextBox = Keyboard.FocusedElement is System.Windows.Controls.TextBox;
+            // Arrow-driven controls (slider, combo, the Items list) keep their arrows.
+            var arrowsOwned = inTextBox || Keyboard.FocusedElement is Slider or ComboBox or ListBox or ListBoxItem;
+            bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+            bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
 
             if (e.Key == Key.Space && !inTextBox)
             {
@@ -4966,6 +4997,30 @@ namespace ConditioningControlPanel.Views.Deeper
             else if (e.Key == Key.Escape && !inTextBox && HasAnySelection)
             {
                 SelectNothing();
+                e.Handled = true;
+            }
+            // Left / Right: nudge the selection by 0.1 s (Shift = 1 s), or seek
+            // the playhead by the same step when nothing is selected.
+            else if ((e.Key == Key.Left || e.Key == Key.Right) && !arrowsOwned)
+            {
+                var step = (shift ? 1.0 : 0.1) * (e.Key == Key.Left ? -1 : 1);
+                if (HasAnySelection) NudgeSelection(step);
+                else if (_totalSeconds > 0) SeekToFraction((_currentSeconds + step) / _totalSeconds);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.End && !arrowsOwned)
+            {
+                SeekToFraction(1);
+                e.Handled = true;
+            }
+            else if ((e.Key == Key.OemOpenBrackets || e.Key == Key.OemCloseBrackets) && !inTextBox)
+            {
+                JumpToAdjacentItemStart(forward: e.Key == Key.OemCloseBrackets);
+                e.Handled = true;
+            }
+            else if ((e.Key == Key.D0 || e.Key == Key.NumPad0) && ctrl)
+            {
+                SetZoom(1.0);
                 e.Handled = true;
             }
             // Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) — undo / redo. Editor-wide; the
