@@ -2,8 +2,10 @@
  * backroom/room/scene.js - the walkable room: one renderer, one camera, the
  * walk, the room view and the render loop.
  *
- * W/S or up/down walk (Shift runs), A/D or left/right strafe, drag looks, E visits the nearest station,
- * M toggles the room view. Collision and proximity are walk.js (pure).
+ * WASD walks (Shift runs). The mouse looks under pointer lock: a click on the canvas while walking captures it,
+ * Esc frees it, the next click takes it again; click-drag stays as the fallback where the lock is refused. The
+ * arrow keys turn and tilt at a steady rate. E visits the nearest station, whose fixture glows gold while it is
+ * the one E would take. Collision and proximity are walk.js (pure).
  *
  * THE VISIT: `hold()` saves the pose and STOPS the loop (no rAF at all); the
  * WebGL context is kept, so `release()` puts you back on the exact spot and
@@ -36,6 +38,15 @@ import { stageRect, ndcIn, viewportPageRect } from './stage-rect.js';
 import { START, WALK_SPEED, RUN_SPEED, step, worldDelta, nearestStation, facing } from './walk.js';
 
 const KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
+/** Mouse look under pointer lock: radians per pixel of mouse movement. */
+const LOOK_SENSITIVITY = 0.0022;
+/** Arrow-key look: radians per second, left/right turn and up/down tilt. */
+const KEY_YAW_RATE = 1.8, KEY_PITCH_RATE = 1.2;
+const PITCH_MIN = -1.12, PITCH_MAX = 1.2;
+/** A second refused lock in a row means the host has none (or forbids it): stay on click-drag and taps from then on. */
+const LOCK_REFUSALS = 2;
+/** The glow on the fixture E would visit (desk tester, 2026-09-18: nothing said what could be played). */
+const GLOW = new T.Color('#ffcf6b');
 
 /**
  * @param {Object} o
@@ -113,14 +124,14 @@ export async function createScene(o) {
   // The first-visit card's two pages, framed on the counter's apron; a tap reopens the card (onCard).
   const placards = createWelcomePlacards({ scene, lex: o.lex });
   const documents = createMemorabiliaViewer({ backLabel: o.lex('br_back', 'Back'),
-    onOpen() { held = { pos: pos.slice(), yaw, pitch }; resetInput(); interaction.dismiss(); stop(); setNearest(null); },
+    onOpen() { held = { pos: pos.slice(), yaw, pitch }; freeLook(); resetInput(); interaction.dismiss(); stop(); setNearest(null); },
     onClose() { held = null; resetInput(); if (!halted) run(); }
   });
   let customization, catalogueView=null;
   /* The viewport the last frame rendered the room into, kept for the picks: null while the room owns the
    * whole canvas, which is every frame but the ones with the Room Service panel up. */
   let pass = null;
-  customization = await createCustomization({scene,loader,room,onPreview:view=>{catalogueView=view;},base:o.base,mount:o.mount,lex:o.lex,canvas,camera,isActive:()=>!pendingVisit&&!transition&&!seated&&!held&&!halted&&!suspended&&!overview&&!customization?.opened});
+  customization = await createCustomization({scene,loader,room,onPreview:view=>{catalogueView=view;},base:o.base,mount:o.mount,lex:o.lex,canvas,camera,isActive:()=>!pendingVisit&&!transition&&!seated&&!held&&!halted&&!suspended&&!customization?.opened});
   const screens = await createScreens({ meshes: [...room.screens,...customization.screens], ads: o.ads, media: o.media, log: say });
   // Subtle cartridge refraction otherwise renders the entire room a second time.
   scene.traverse(node => { for (const m of [].concat(node.material || [])) {
@@ -132,7 +143,10 @@ export async function createScene(o) {
   // ---- state ----
   const pos = START.slice();
   let yaw = 0, pitch = 0, sway = 0, walkPhase = 0, ambient = 0;
-  let still = !!o.still, overview = false, held = null, seated = null, halted = false, suspended = false;
+  let still = !!o.still, held = null, seated = null, halted = false, suspended = false;
+  // The mouse under pointer lock: `locked` follows pointerlockchange, `unlockedAt` is when it was last let go (main.js
+  // reads it so the Esc that freed the mouse is not also the Esc that leaves the room), `lockRefused` after LOCK_REFUSALS.
+  let locked = false, unlockedAt = -Infinity, lockErrors = 0, lockRefused = false;
   let raf = 0, last = performance.now(), lastTick = last, nearest = null, drag = null, tap = null, standTap = null, leaveAsked = false;
   let pendingVisit=false, transition=null, viewOffset=0, viewOffsetX=0, arrival=Promise.resolve(true), cardHands=1, counts={d:2,0:2}, composition='';
   const views = new Set();
@@ -147,14 +161,13 @@ export async function createScene(o) {
     slotShape.holder.updateMatrixWorld(true);
   }
   const ray = new T.Raycaster(), pointer = new T.Vector2();
-  const saved = { pos: null, yaw: 0, pitch: 0 };
   const keys = new Set();
   const vel = new T.Vector2(), want = new T.Vector2();
-  const canWalk = () => !pendingVisit && !transition && !seated && !held && !halted && !suspended && !overview && !customization.opened && !document.hidden;
+  const canWalk = () => !pendingVisit && !transition && !seated && !held && !halted && !suspended && !customization.opened && !document.hidden;
   /* LEAVING BY HAND (leave-intent.js). Seated at a station, a tap that lands on the room instead of the
    * station and a step backwards both stand you up the way the Back chip does: o.onLeave runs the room's
    * own Back path, so the station settles first and the camera walks back to where you stood (Law VI). */
-  const canLeave = () => o.canLeave?.() !== false && !!seated && !held && !halted && !suspended && !transition && !pendingVisit && !overview && !leaveAsked && !customization.opened;
+  const canLeave = () => o.canLeave?.() !== false && !!seated && !held && !halted && !suspended && !transition && !pendingVisit && !leaveAsked && !customization.opened;
   const touch = createTouchControl({ mount: o.mount, onReset: () => vel.set(0, 0) });
   const frames = [];
   const racingRow = { id: 'race', key: 'race', name: 'Racing Thoughts', labelKey: 'br_station_race', state: 'live', approach: [4.1, 1.65, -5.7], look: [4.1, 1.2, -7.15] };
@@ -163,7 +176,7 @@ export async function createScene(o) {
   const roofFloor=room.ceiling?new T.Box3().setFromObject(room.ceiling).min.y:Infinity;
   const roofMaterials=[];let roofAlpha=1;
   function fadeRoof(){
-    if(!room.ceiling||overview)return;
+    if(!room.ceiling)return;
     const alpha=1-T.MathUtils.clamp((camera.position.y-roofFloor+.9)/.7,0,1);
     if(alpha===roofAlpha)return;roofAlpha=alpha;
     if(!roofMaterials.length)room.ceiling.traverse(n=>{if(n.material){const original=n.material;const copies=[].concat(original).map(m=>m.clone());roofMaterials.push({node:n,original,copies});}});
@@ -179,11 +192,10 @@ export async function createScene(o) {
     fixture: room.holders.get(row.key), phase: index * 2.7, onClick: kind => emiClicks.get(row.key)?.(kind)
   })).filter(Boolean);
   const interaction = createEmiInteraction({ canvas, camera, scene, emis: [...room.emis, ...slotEmis], mount: o.mount, label: o.lex,
-    isActive: () => !pendingVisit && !transition && !held && !halted && !suspended && !overview && !customization.opened,
+    isActive: () => !pendingVisit && !transition && !held && !halted && !suspended && !customization.opened,
     // Law VI: a still room keeps every NPC at rest, so a click gets the bark without the gesture.
     canGesture: () => !still });
 
-  function topDown() { camera.position.set(0, Math.max(21, 19 / camera.aspect), 0.01); camera.lookAt(0, 0, 0); }
   /* ONE MEASUREMENT, APPLIED ONCE. `sized` is the measurement this function last put into the renderer.
    * One turn of a phone raises a burst of events (resize, orientationchange and visualViewport's own
    * resize all fire for the same rotation) and frame() measures again on every frame, so without the key
@@ -201,8 +213,7 @@ export async function createScene(o) {
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     room.auras.resize(h * dpr, camera.fov);
-    if (overview) topDown();
-    else if (seated?.row) {
+    if (seated?.row) {
       const target=gamePose(seated.row);
       if(transition)transition.to={fov:66,stretch:1,stretchX:1,...target};
       else {if(target.fov){camera.fov=target.fov;camera.updateProjectionMatrix();setSlotStretch(target.stretch||1,target.stretchX||1);}pos.splice(0,3,...target.pos);yaw=target.yaw;pitch=target.pitch;viewOffset=target.offset;viewOffsetX=target.offsetX;}
@@ -242,8 +253,7 @@ export async function createScene(o) {
     if (pendingVisit || transition || seated || held || halted || suspended || customization.opened) return;
     if (KEYS.has(e.code)) { e.preventDefault(); keys.add(e.code); }
     if (e.repeat) return;
-    if (e.code === 'KeyE' && !overview && nearest) { e.preventDefault(); visit(nearest); }
-    if (e.code === 'KeyM') { e.preventDefault(); setOverview(!overview); }
+    if (e.code === 'KeyE' && nearest) { e.preventDefault(); visit(nearest); }
   });
   window.addEventListener('keyup', (e) => keys.delete(e.code));
   document.addEventListener('focusin', e => { if(e.target?.closest?.('input,textarea,select,[contenteditable]')) resetInput(); });
@@ -255,16 +265,45 @@ export async function createScene(o) {
     if (drag && (drag.id === e.pointerId || (canvas.hasPointerCapture && !canvas.hasPointerCapture(drag.id)))) drag = null;
     if (drag) return;
     drag = tap = { id: e.pointerId, x: e.clientX, y: e.clientY, startX:e.clientX, startY:e.clientY, moved:false };
+    /* A MOUSE CLICK TAKES THE MOUSE (desk tester, 2026-09-18: click-drag to look "is terrible"). The capturing click is
+     * not a tap: it only takes the pointer, so a click to get the mouse back after Esc cannot also walk you into whatever
+     * the crosshair happened to rest on. Fingers and pens never lock; a refused lock leaves click-drag and taps as they were. */
+    if (e.pointerType === 'mouse' && !locked && !lockRefused && typeof canvas.requestPointerLock === 'function') {
+      tap = null;
+      try {
+        const p = canvas.requestPointerLock();
+        if (p && typeof p.catch === 'function') p.catch(() => lockFailed());
+      } catch (err) { lockFailed(); }
+    }
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
   });
+  function lockFailed() { if (++lockErrors >= LOCK_REFUSALS) lockRefused = true; }
+  function freeLook() { if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch (err) { /* noop */ } } }
+  document.addEventListener('pointerlockchange', () => {
+    const now = document.pointerLockElement === canvas;
+    if (locked && !now) unlockedAt = performance.now();
+    if (now) lockErrors = 0;
+    locked = now;
+    canvas.classList.toggle('is-locked', locked);
+  });
+  document.addEventListener('pointerlockerror', () => { lockFailed(); say('pointer lock refused'); });
+  /** Where a click lands: the pointer, or the crosshair while the mouse is captured (its position is frozen then). */
+  function clickPoint(e) {
+    if (!locked) return { x: e.clientX, y: e.clientY };
+    const r = canvas.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+  function turn(dyaw, dpitch) { yaw -= dyaw; pitch = T.MathUtils.clamp(pitch - dpitch, PITCH_MIN, PITCH_MAX); }
   canvas.addEventListener('pointermove', (e) => {
-    if (!drag || drag.id !== e.pointerId || overview || seated || held || customization.opened) return;
+    if (seated || held || customization.opened) return;
+    // Invert camera (o.invertLook, the room's Options switch): the mouse moves the world instead of the camera, both axes.
+    const dir = o.invertLook?.() ? -1 : 1;
+    // Captured: the movement is the look, no button held. The client position is frozen under a lock, so a tap stays a tap.
+    if (locked) { if (canWalk()) turn(e.movementX * LOOK_SENSITIVITY * dir, e.movementY * LOOK_SENSITIVITY * dir); return; }
+    if (!drag || drag.id !== e.pointerId) return;
     drag.moved ||= Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)>TAP_SLOP;
     if(!drag.moved)return;
-    // Invert camera (o.invertLook, the room's Options switch): the drag moves the world instead of the camera, both axes.
-    const dir = o.invertLook?.() ? -1 : 1;
-    yaw -= (e.clientX - drag.x) * 0.003 * dir;
-    pitch = T.MathUtils.clamp(pitch - (e.clientY - drag.y) * 0.003 * dir, -1.12, 1.2);
+    turn((e.clientX - drag.x) * 0.003 * dir, (e.clientY - drag.y) * 0.003 * dir);
     drag.x = e.clientX; drag.y = e.clientY;
   });
   canvas.addEventListener('pointerup',e=>{
@@ -280,7 +319,8 @@ export async function createScene(o) {
     if (surface?.object.userData.document) { drag = null; documents.open(surface.object.userData.document); return; }
     if (surface?.object.userData.welcomePage != null) { drag = null; try { o.onCard?.(surface.object.userData.welcomePage); } catch (err) { say('onCard threw: ' + ((err && err.message) || err)); } return; }
     // A mascot stands inside its fixture, often behind its glass: a tap that reaches an NPC is the bark (emi-interaction), never a visit.
-    if(interaction.npcAt(e.clientX,e.clientY))return;
+    const at=clickPoint(e);
+    if(interaction.npcAt(at.x,at.y))return;
     // The arcade cabinet before the stations: it stands beside the counter, and the counter's screen box (below, with its
     // finger's margin) would otherwise claim a tap that the exact ray already put on the cabinet.
     const arcade=arcadeAt(e);
@@ -335,7 +375,8 @@ export async function createScene(o) {
     }
     const rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return null;
-    const px = e.clientX - rect.left, py = e.clientY - rect.top;
+    const at = clickPoint(e);
+    const px = at.x - rect.left, py = at.y - rect.top;
     camera.updateMatrixWorld();
     let best = null, bestDistance = Infinity;
     for (const row of stationRows) {
@@ -369,33 +410,60 @@ export async function createScene(o) {
   function setNearest(row) {
     if (row === nearest) return;
     nearest = row;
+    glowTarget(row);
     try { if (o.onNearest) o.onNearest(row); } catch (e) { say('onNearest threw: ' + e); }
+  }
+
+  /* THE FIXTURE E WOULD TAKE GLOWS. Its meshes get a gold emissive pulse on CLONED materials, so a material three
+   * cabinets share (the slots) lights one cabinet only, and the original goes back the moment the player steps away.
+   * Screens, NPCs and the instanced batches are left alone: other code owns their materials. No post-processing. */
+  const glows = new Map();   // fixture node -> [{ node, original, copies }]
+  const glowSkip = new Set([...room.screens, ...customization.screens]);
+  let glow = null;
+  function glowSet(node) {
+    let list = glows.get(node);
+    if (list) return list;
+    list = [];
+    node.traverse((m) => {
+      if (!m.isMesh || m.isInstancedMesh || glowSkip.has(m) || !m.material) return;
+      for (let n = m; n && n !== node; n = n.parent) if (/^emi/.test(n.name || '')) return;
+      const original = m.material, mats = [].concat(original);
+      if (!mats.every((x) => x && x.emissive)) return;
+      const copies = mats.map((x) => { const c = x.clone(); c.userData.brGlow = { emissive: x.emissive.clone(), intensity: x.emissiveIntensity }; return c; });
+      list.push({ node: m, original, copies: Array.isArray(original) ? copies : copies[0] });
+    });
+    glows.set(node, list);
+    return list;
+  }
+  function glowTarget(row) {
+    if (glow) { for (const g of glow) if (g.node.material === g.copies) g.node.material = g.original; glow = null; }
+    const node = row ? fixtureOf(row) : null;
+    if (!node) return;
+    glow = glowSet(node);
+    for (const g of glow) g.node.material = g.copies;
+  }
+  function glowPulse() {
+    if (!glow) return;
+    const k = still ? 0.55 : 0.45 + 0.25 * Math.sin(ambient * 5);
+    for (const g of glow) for (const m of [].concat(g.copies)) {
+      const base = m.userData.brGlow;
+      m.emissive.copy(base.emissive).lerp(GLOW, k);
+      m.emissiveIntensity = Math.max(base.intensity, 0.7);
+    }
   }
 
   function visit(row) {
     if (!row || transition || seated || held || halted) return;
-    if(row.key==='customization'){resetInput();customization.open();touch.setEnabled(false);return;}
+    if(row.key==='customization'){freeLook();resetInput();customization.open();touch.setEnabled(false);return;}
     try { o.onVisit(row); } catch (e) { say('onVisit threw: ' + ((e && e.message) || e)); }
   }
 
-  function setOverview(on) {
-    if (transition || seated || held || halted || !!on === overview) return;
-    resetInput();
-    customization.dismiss();
-    overview = !!on; touch.setEnabled(canWalk());
-    decor.setOverview(overview);
-    interaction.dismiss();
-    if (room.ceiling) room.ceiling.visible = !overview;
-    if (overview) { saved.pos = pos.slice(); saved.yaw = yaw; saved.pitch = pitch; topDown(); setNearest(null); }
-    else if (saved.pos) { pos.splice(0, 3, ...saved.pos); yaw = saved.yaw; pitch = saved.pitch; }
-  }
-
-  /** Stand at a station's approach point, facing it. */
+  /** Walk the camera to a station's approach point, facing it (the Stations list). Resolves true once there, false when
+   * something interrupted the trip: main.js visits on true, so the list is a way INTO a game, not a map. */
   function go(row) {
-    if (!row || held || seated || pendingVisit) return;
-    if (overview) { overview=false;decor.setOverview(false); if (room.ceiling) room.ceiling.visible = roofAlpha > .001; }
-    resetInput();setNearest(null);
-    moveCamera({pos:row.approach.slice(),...facing(row.approach,row.look),offset:0,offsetX:0});
+    if (!row || held || seated || pendingVisit || halted) return Promise.resolve(false);
+    freeLook(); resetInput(); setNearest(null);
+    return moveCamera({pos:row.approach.slice(),...facing(row.approach,row.look),offset:0,offsetX:0});
   }
 
   function frame(now) {
@@ -404,7 +472,7 @@ export async function createScene(o) {
     raf = requestAnimationFrame(frame);
     const raw = now - last;
     touch.setEnabled(canWalk() || (canLeave() && seated?.row.id !== 'slot'));
-    const active = !!transition || !!seated || keys.size > 0 || drag || touch.value.x || touch.value.z || customization.opened;
+    const active = !!transition || !!seated || keys.size > 0 || drag || locked || touch.value.x || touch.value.z || customization.opened;
     const gap = 1000 / (active && !budget.mobile && !quality.performance ? 60 : 30);
     if (raw < gap - 1) return;
     last = raw < gap ? now : now - (raw % gap);
@@ -441,9 +509,15 @@ export async function createScene(o) {
       camera.fov=tr.from.fov+(tr.to.fov-tr.from.fov)*k;setSlotStretch(tr.from.stretch+(tr.to.stretch-tr.from.stretch)*k,tr.from.stretchX+(tr.to.stretchX-tr.from.stretchX)*k);camera.updateProjectionMatrix();
       if(t===1){transition=null;tr.resolve(true);resetInput();}
     }
-    if (!overview) {
-      const x = touch.value.x + (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
-      let z = touch.value.z + (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
+    {
+      // The arrow keys look (a steady turn, never a strafe); WASD walks. Q/E stay free: E is the visit.
+      if (!seated && !transition) {
+        const turnX = (keys.has('ArrowRight') ? 1 : 0) - (keys.has('ArrowLeft') ? 1 : 0);
+        const turnY = (keys.has('ArrowDown') ? 1 : 0) - (keys.has('ArrowUp') ? 1 : 0);
+        if (turnX || turnY) turn(turnX * KEY_YAW_RATE * dt, turnY * KEY_PITCH_RATE * dt);
+      }
+      const x = touch.value.x + (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
+      let z = touch.value.z + (keys.has('KeyS') ? 1 : 0) - (keys.has('KeyW') ? 1 : 0);
       const speed = keys.has('ShiftLeft') || keys.has('ShiftRight') ? RUN_SPEED : WALK_SPEED;
       vel.lerp(want.set(x, z).clampLength(0, 1).multiplyScalar(speed), 1 - Math.exp(-dt * 12));
       const [dx, dz] = worldDelta(yaw, vel.x * dt, vel.y * dt);
@@ -457,6 +531,7 @@ export async function createScene(o) {
     if (!still) ambient += dt;
     camera.updateMatrixWorld();
     room.update(dt, ambient, still, camera);
+    glowPulse();
     for (const view of views) view.update?.(dt, still);
     decor.update(dt, still);
     customization.update(dt, still);
@@ -486,7 +561,7 @@ export async function createScene(o) {
     camera.updateMatrixWorld();fadeRoof();
     for (const emi of slotEmis) emi.update(dt, still);
     interaction.update(dt, still);
-    screens.update(ambient, overview ? null : camera, still);
+    screens.update(ambient, camera, still);
     // The catalogue close-up shares this context (CONTRACT 7): its own scissored pass, drawn first so
     // renderer.info still reports the room's own frame.
     customization.draw(renderer);
@@ -531,8 +606,7 @@ export async function createScene(o) {
   function seat(row) {
     if (!row || seated || held || halted || transition) return false;
     if(row.id==='slot'){const holder=room.holders.get(row.key),emi=holder.getObjectByName('emi_topper');slotEmis.find(e=>e.fixture===holder)?.settle();holder.userData.slotPlaying=true;slotShape={holder,emi,baseY:holder.scale.y,baseX:holder.scale.x,emiY:emi?.scale.y||1,emiX:emi?.scale.x||1,factor:1,factorX:1};}
-    pendingVisit=false;leaveAsked=false;seated={pos:pos.slice(),yaw,pitch,row,fov:camera.fov}; sway=0;cardHands=1;counts={d:2,0:2};composition='';
-    if(overview){overview=false;decor.setOverview(false);}
+    freeLook();pendingVisit=false;leaveAsked=false;seated={pos:pos.slice(),yaw,pitch,row,fov:camera.fov}; sway=0;cardHands=1;counts={d:2,0:2};composition='';
     if(room.ceiling)room.ceiling.visible=true;
     interaction.dismiss();customization.dismiss();setNearest(null);resetInput();
     arrival=moveCamera(gamePose(row));run();return true;
@@ -572,7 +646,8 @@ export async function createScene(o) {
     if (transition || halted || suspended || !Array.isArray(objects) || !objects.length) return [];
     const box = pickBox();
     if (!box) return [];
-    const ndc = ndcIn(box, event.clientX, event.clientY);
+    const at = clickPoint(event);
+    const ndc = ndcIn(box, at.x, at.y);
     pointer.set(ndc.x, ndc.y);
     scene.updateMatrixWorld(true); camera.updateMatrixWorld();
     ray.setFromCamera(pointer, camera);
@@ -623,11 +698,11 @@ export async function createScene(o) {
   return {
     setPrizes: (snapshot, bought) => room.prizes.apply(snapshot, bought),
     documents,
-    prepareVisit(){pendingVisit=true;resetInput();},
+    prepareVisit(){pendingVisit=true;freeLook();resetInput();},
     setRewards: snapshot => customization.setOwned(snapshot.owned),
     renderer, camera, scene, buildMs, seat, unseat, pickAt, stage,
     /** A station is taking the screen: keep the pose, stop drawing, keep the context. */
-    hold() { if (held) return; held = { pos: pos.slice(), yaw, pitch }; resetInput(); interaction.dismiss(); customization.dismiss(); stop(); setNearest(null); },
+    hold() { if (held) return; held = { pos: pos.slice(), yaw, pitch }; freeLook(); resetInput(); interaction.dismiss(); customization.dismiss(); stop(); setNearest(null); },
     /** Back from a station: the exact spot and facing, on the next frame. */
     release() {
       pendingVisit=false;
@@ -635,26 +710,30 @@ export async function createScene(o) {
       pos.splice(0, 3, ...held.pos); yaw = held.yaw; pitch = held.pitch;
       held = null; resetInput(); run();
     },
-    pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); interaction.dismiss(); customization.dismiss(); } else run(); },
-    halt() { halted = true; clearInterval(watchdog); documents.dispose(); memorabilia.dispose(); placards.dispose(); if(transition){transition.resolve(false);transition=null;} for (const view of [...views]) dropView(view); stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); for(const r of roofMaterials){r.node.material=r.original;for(const m of r.copies)m.dispose();} room.disposeSurfaces(); resetInput(); touch.dispose(); interaction.dispose(); for(const e of [...room.emis,...slotEmis])e.dispose(); customization.dispose(); decor.dispose(); room.echo.clear(); for(const p of room.payouts.values()){p.coins.dispose();p.host?.removeFromParent();} },
+    pause(on) { suspended = !!on; if (suspended) { freeLook(); stop(); resetInput(); interaction.dismiss(); customization.dismiss(); } else run(); },
+    halt() { halted = true; freeLook(); glowTarget(null); for (const list of glows.values()) for (const g of list) for (const m of [].concat(g.copies)) m.dispose(); glows.clear(); clearInterval(watchdog); documents.dispose(); memorabilia.dispose(); placards.dispose(); if(transition){transition.resolve(false);transition=null;} for (const view of [...views]) dropView(view); stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); for(const r of roofMaterials){r.node.material=r.original;for(const m of r.copies)m.dispose();} room.disposeSurfaces(); resetInput(); touch.dispose(); interaction.dispose(); for(const e of [...room.emis,...slotEmis])e.dispose(); customization.dispose(); decor.dispose(); room.echo.clear(); for(const p of room.payouts.values()){p.coins.dispose();p.host?.removeFromParent();} },
     setStill(on) { still = !!on; },
     /** Repaint one fixture label, e.g. the wheel's screen for MUST HIT (10.16.E). */
     setLabel(rowKey, node, text) { return room.setLabel(rowKey, node, text); },
     dismissEmi() { if(customization.dismiss())return true; const open = !!interaction.debug().id; interaction.dismiss(); return open; },
     celebrate: (key,amount,tier,text)=>room.celebrate(key,amount,tier,text),
-    customization, setOverview, go, visit,
+    customization, go, visit,
+    /** Let the mouse go (a panel, card or station is taking the screen). Nothing takes it back but the next click. */
+    freeLook,
+    /** The Esc that frees the mouse is not the Esc that leaves the room: true while locked or for half a second after. */
+    lookJustFreed() { return locked || performance.now() - unlockedAt < 500; },
     navigationPose() { return { position: pos.slice(), yaw, pitch }; },
     pose(p, y = 0, tilt = 0) { pos.splice(0, 3, ...p); yaw = y; pitch = tilt; },
     get transitioning() { return !!transition; },
     get nearest() { return nearest; },
-    get overview() { return overview; },
+    get lookLocked() { return locked; },
     get seated() { return !!seated; },
     get held() { return !!held; },
     /** Test seam: plain numbers only. */
     debug() {
       const sorted = frames.slice().sort((a, b) => a - b);
       return {
-        renderBudget: {...budget.debug(), dpr}, slotStretch:slotShape?.factor||1, fov:camera.fov, position: pos.slice(), yaw, pitch, transitioning:!!transition, viewOffset, viewOffsetX, overview, held: !!held, seated: !!seated, leaveAsked, running: !!raf, halted, suspended, contextLost, hidden: document.hidden, still,
+        renderBudget: {...budget.debug(), dpr}, slotStretch:slotShape?.factor||1, fov:camera.fov, position: pos.slice(), yaw, pitch, transitioning:!!transition, viewOffset, viewOffsetX, locked, lockRefused, glowing: glow ? glow.length : 0, held: !!held, seated: !!seated, leaveAsked, running: !!raf, halted, suspended, contextLost, hidden: document.hidden, still,
         nearest: nearest ? nearest.key : null, fixtures: room.fixtures, bulbs: room.bulbs, screens: room.screens.length,
         pictures: screens.pictures, animation: screens.animation, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
         touch: touch.debug(), decor: decor.debug(), customization: customization.debug(),

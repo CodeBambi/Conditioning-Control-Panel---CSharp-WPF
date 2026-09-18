@@ -1,14 +1,14 @@
 /* ============================================================================
  * backroom/room/hud.js - the room's own chrome over the 3D view: the loading
- * veil, the walk hint, the Room view button and list, the
- * Motion button and the room's Options (CONTRACT 10.14: effects intensity, tunnel
+ * veil, the walk hint, the Play prompt over the crosshair, the Stations button
+ * and its quick-jump list (M), the Motion button and the room's Options (CONTRACT 10.14: effects intensity, tunnel
  * vision, melt). Back and the SP chip stay in index.html (Law VI: they exist
  * before any of this loads).
  *
  * THE FLOOR BELL (CONTRACT 10.16.B). One line under the nav pills, role=status,
  * rotating through the entries every 8,000 ms, newest first, wrapping. No sound
  * at any intensity (Brake 1: it is somebody else's party). Hidden while a
- * station holds the screen (`br-visiting`) and in the room view (`br-overview`),
+ * station holds the screen (`br-visiting`),
  * Reduced motion and Calm keep the rotation (it
  * is text, not motion) and cross-fade in 0 ms instead of 200 ms. Its opt-in is
  * one more switch row inside the 10.14 Options panel, after Melt: it is the
@@ -17,7 +17,7 @@
  *
  * LEXICON KEYS this file shows, for the integration pass into en.json (Law VII;
  * every one has an English fallback here):
- *   br_loading, br_walk_hint, br_visit, br_back, br_room_view, br_room_walk,
+ *   br_loading, br_look_hint, br_visit, br_prompt_play, br_back, br_room_stations,
  *   br_motion_still, br_motion_on
  *   br_opt_title ("Options"), br_opt_effects, br_opt_calm, br_opt_normal,
  *   br_opt_full, br_opt_calm_forced, br_opt_tunnel, br_opt_melt,
@@ -87,11 +87,19 @@ export function createHud(o) {
   bar.appendChild(fill);
   veil.append(el('span', 'br-spark', '✦'), veilText, bar);
 
-  const hint = el('div', 'br-hint', L('br_walk_hint', 'W/S or up/down to walk, A/D or left/right to move sideways, drag to look, E to visit'));
+  const hint = el('div', 'br-hint', L('br_look_hint', 'Click to look, WASD to walk, arrows to turn, E to play, Esc to free the mouse'));
   const cross = el('div', 'br-crosshair'); cross.setAttribute('aria-hidden', 'true');
+  /* THE PLAY PROMPT (desk tester, 2026-09-18: "the only way to tell is to walk up and press E"). nearest() used to put
+   * the station's name in the hint's tooltip, which nobody sees until a mouse rests on a 12 px line at the foot of the
+   * screen. It is a card of its own now, just under the crosshair, with the key drawn as a key; the phone sheet hides the
+   * key (touch-control.css) and keeps the name, since a tap on the fixture is the phone's E. */
+  const prompt = el('div', 'br-prompt'); prompt.hidden = true; prompt.setAttribute('role', 'status');
+  const promptKey = el('kbd', 'br-key', 'E'); const promptText = el('span');
+  prompt.append(promptKey, promptText);
 
   const nav = el('nav', 'br-nav');
-  const viewBtn = el('button', 'br-pill'); viewBtn.type = 'button';
+  const viewBtn = el('button', 'br-pill', L('br_room_stations', 'Stations')); viewBtn.type = 'button';
+  viewBtn.setAttribute('aria-expanded', 'false');
   const motionBtn = el('button', 'br-pill'); motionBtn.type = 'button';
   const optBtn = el('button', 'br-pill', L('br_opt_title', 'Options')); optBtn.type = 'button';
   optBtn.setAttribute('aria-expanded', 'false');
@@ -343,19 +351,27 @@ export function createHud(o) {
   paintMedia();
 
   nav.append(panel);   // anchored under the Options pill, whatever the nav's own offset
-  o.root.append(veil, hint, cross, nav, bell, list);
+  o.root.append(veil, hint, cross, prompt, nav, bell, list);
   function setOptions(open) { showCard(open ? 'options' : null); }
   optBtn.addEventListener('click', () => setOptions(panel.hidden));
   // A press anywhere outside the open card (and outside the Options pill, which toggles between
   // them) closes it. The picker gets the same treatment as Options: it is the same kind of card.
   document.addEventListener('pointerdown', (e) => {
+    if (!list.hidden && !list.contains(e.target) && !viewBtn.contains(e.target)) setStations(false);
     if (optBtn.contains(e.target)) return;
     if (!panel.hidden && !panel.contains(e.target)) setOptions(false);
     else if (!media.hidden && !media.contains(e.target)) setMedia(false);
   }, true);
 
-  let overview = false;
-  viewBtn.addEventListener('click', () => o.onOverview(!overview));
+  /* THE STATIONS LIST (desk tester, 2026-09-18: "a single mostly empty square room doesn't need a map"). The top-down
+   * room view is gone; the same pill and the M key open the list of stations, and a press walks you to that one and
+   * sits you down (main.js onGo). One card at a time: opening the list closes Options and the picker. */
+  function setStations(open) {
+    list.hidden = !open;
+    viewBtn.setAttribute('aria-expanded', String(!!open));
+    if (open) showCard(null);
+  }
+  viewBtn.addEventListener('click', () => setStations(list.hidden));
   motionBtn.addEventListener('click', () => o.onMotion());
   // Focus: main.js drops it from every HUD button on pointerup and eats Space/Enter on them while walking.
 
@@ -384,31 +400,28 @@ export function createHud(o) {
     }, ROTATE_MS);
   }
 
-  function paintView() {
-    viewBtn.textContent = overview ? L('br_room_walk', 'Back to walking') : L('br_room_view', 'Room view');
-    viewBtn.setAttribute('aria-pressed', String(overview));
-    list.hidden = !overview;
-    cross.hidden = overview;
-    document.documentElement.classList.toggle('br-overview', overview);
-  }
-
   return {
     progress(f) { fill.style.width = Math.round(Math.max(0, Math.min(1, f)) * 100) + '%'; },
-    ready() { veil.hidden = true; document.documentElement.classList.add('br-walking'); paintView(); },
+    ready() { veil.hidden = true; document.documentElement.classList.add('br-walking'); },
     failed(text) { veilText.textContent = text; bar.hidden = true; },
     stations(rows) {
       list.textContent = '';
       for (const row of rows) {
         const b = el('button', 'br-pill', o.label(row)); b.type = 'button';
         b.dataset.station = row.key;
-        b.addEventListener('click', () => o.onGo(row));
+        b.addEventListener('click', () => { setStations(false); o.onGo(row); });
         list.appendChild(b);
       }
     },
     nearest(row) {
       hint.title = row ? L('br_visit', 'Visit {0}').replace('{0}', o.label(row)) : '';
+      prompt.hidden = !row;
+      if (row) promptText.textContent = L('br_prompt_play', 'Play {0}').replace('{0}', o.label(row));
     },
-    overview(on) { overview = !!on; paintView(); },
+    /** The Stations list: the pill, M and Back/Escape all go through here. */
+    get stationsOpen() { return !list.hidden; },
+    toggleStations() { setStations(list.hidden); },
+    closeStations() { setStations(false); },
     motion(still, forced) {
       motionBtn.textContent = still ? L('br_motion_still', 'Motion still') : L('br_motion_on', 'Motion on');
       motionBtn.setAttribute('aria-pressed', String(still));
@@ -442,7 +455,7 @@ export function createHud(o) {
       viewBtn.disabled = !!on;
     },
     hideWhileVisiting(on) {
-      if (on) setOptions(false);
+      if (on) { setOptions(false); setStations(false); }
       document.documentElement.classList.toggle('br-visiting', !!on);
     },
     /* ------------------------------------------------------- the floor bell */
