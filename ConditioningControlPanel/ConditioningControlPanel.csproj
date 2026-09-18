@@ -588,7 +588,8 @@
       $(MSBuildProjectDirectory)\Resources\web\arcademy\games\**\smoke\**\*;
       $(MSBuildProjectDirectory)\Resources\web\backroom\smoke\**\*;
       $(MSBuildProjectDirectory)\Resources\web\backroom\**\tests\**\*;
-      $(MSBuildProjectDirectory)\Resources\web\backroom\shared\hypno\tests\**\*
+      $(MSBuildProjectDirectory)\Resources\web\backroom\shared\hypno\tests\**\*;
+      $(MSBuildProjectDirectory)\Resources\web\backroom\stations\breakout\**\*
     </ArcademyHarnessExcludeAbs>
   </PropertyGroup>
 
