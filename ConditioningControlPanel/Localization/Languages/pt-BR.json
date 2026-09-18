@@ -5477,5 +5477,8 @@
   "br_custom_unowned": "Adquira este item antes de usá-lo.",
   "br_custom_shop_unavailable": "A loja está indisponível. Você ainda pode ver as prévias.",
   "br_custom_buy_sp": "Comprar por {n} SP",
-  "deeper_player_video_nav_failed_fmt": "Video failed to load ({0})."
+  "deeper_player_video_nav_failed_fmt": "Video failed to load ({0}).",
+  "deeper_player_window_title_fmt": "Deeper Player - {0}",
+  "deeper_player_webcam_banner_text": "This enhancement has gaze / blink / attention triggers. They only fire while the webcam is on.",
+  "deeper_player_webcam_banner_enable": "Enable webcam"
 }
