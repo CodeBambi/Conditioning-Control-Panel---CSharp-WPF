@@ -419,9 +419,7 @@ public partial class LauncherWindow : Window
     private void OpenPanelTab(string tab)
     {
         LauncherSfx.Click();
-        LauncherHost.OpenPanel();
-        try { App.MainWindowRef?.ShowTab(tab); }
-        catch (Exception ex) { Log.Debug(ex, "[Launcher] ShowTab {Tab} failed", tab); }
+        LauncherHost.OpenPanelTab(tab);
     }
 
     private void WhatsNew_Click(object sender, RoutedEventArgs e)

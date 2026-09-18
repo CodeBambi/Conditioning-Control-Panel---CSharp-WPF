@@ -128,10 +128,43 @@ public class LauncherBootTests
     public void Catalogue_has_the_games_the_owner_listed_and_none_of_the_panel_features()
     {
         var ids = LauncherCatalogue.Games.Select(g => g.Id).ToHashSet();
-        foreach (var must in new[] { "backroom", "race", "dtrh", "arcademy", "goon", "piecebypiece" })
+        foreach (var must in new[] { "backroom", "race", "dtrh", "arcademy", "goon", "piecebypiece", "intake" })
             Assert.Contains(must, ids);
-        foreach (var never in new[] { "intake", "remote", "companion", "sessions", "loom", "fyp" })
+        foreach (var never in new[] { "remote", "companion", "sessions", "loom", "fyp" })
             Assert.DoesNotContain(never, ids);
+    }
+
+    [Fact]
+    public void Intake_tile_is_last_available_always_revealed_and_never_a_window()
+    {
+        var intake = LauncherCatalogue.Find("intake");
+        Assert.NotNull(intake);
+        Assert.Equal("intake", LauncherCatalogue.Games[^1].Id);
+        Assert.True(intake!.Available);
+        Assert.Null(intake.IsRevealed);
+        Assert.True(intake.Revealed);
+        Assert.False(intake.Active);
+        Assert.Equal("features/lab_quiz_hero.png", intake.ArtPath);
+    }
+
+    [Fact]
+    public void Race_tile_has_a_reveal_probe_and_stays_available()
+    {
+        var race = LauncherCatalogue.Find("race");
+        Assert.NotNull(race);
+        Assert.NotNull(race!.IsRevealed);
+        Assert.True(race.Available);
+    }
+
+    [Fact]
+    public void Mystery_decision_is_pure_null_reveals_false_hides_throw_hides()
+    {
+        static LauncherEntry Entry(Func<bool>? revealed) => new("x", "t", "b", null, "?", default,
+            () => true, () => false, () => { }, () => false, revealed);
+        Assert.True(Entry(null).Revealed);
+        Assert.True(Entry(() => true).Revealed);
+        Assert.False(Entry(() => false).Revealed);
+        Assert.False(Entry(() => throw new InvalidOperationException("probe")).Revealed);
     }
 
     [Fact]

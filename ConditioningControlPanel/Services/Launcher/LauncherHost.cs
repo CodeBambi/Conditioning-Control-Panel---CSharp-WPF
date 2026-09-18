@@ -33,6 +33,7 @@ public static partial class LauncherHost
     private static DispatcherTimer? _returnPoll;
     private static LauncherEntry? _awaiting;
     private static int _hideDelayMs;
+    private static bool _panelRequested;
 
     /// <summary>
     /// How long the launcher stays on screen after Play or the CTA so its exit beat (the burst,
@@ -174,9 +175,22 @@ public static partial class LauncherHost
     /// </summary>
     public static void OpenPanel(int? hideDelayMs = null)
     {
+        _panelRequested = true;
         int delay = PendingHideDelay(hideDelayMs);
         if (delay > 0 && IsShown) { After(FadeLeadMs(delay), OpenPanelNow); return; }
         OpenPanelNow();
+    }
+
+    /// <summary>
+    /// A tile that lives in the panel (the Graded Intake). Hides the launcher through
+    /// <see cref="OpenPanel"/>, so an armed exit beat still plays, and puts the panel on
+    /// <paramref name="tab"/>. Catalogue lambdas have no window in hand, hence static.
+    /// </summary>
+    public static void OpenPanelTab(string tab)
+    {
+        OpenPanel();
+        try { App.MainWindowRef?.ShowTab(tab); }
+        catch (Exception ex) { Log.Debug(ex, "[Launcher] ShowTab {Tab} failed", tab); }
     }
 
     /// <summary>The launcher fades and hides, then the panel comes up and fades in.</summary>
@@ -282,7 +296,13 @@ public static partial class LauncherHost
             return false;
         }
 
+        _panelRequested = false;
         if (!LauncherCatalogue.TryLaunch(entry.Id)) return false;
+
+        // A tile that lives in the panel opened it through OpenPanel during Launch. The panel
+        // owns the hide (and the beat) and there is no window to wait on, so the poll stays off:
+        // it would otherwise see "not active" on its first tick and bring the launcher back.
+        if (_panelRequested) return true;
 
         // A host that failed to boot reports inactive at once. Check on the next pump, not now,
         // because every host creates its window synchronously inside Launch.

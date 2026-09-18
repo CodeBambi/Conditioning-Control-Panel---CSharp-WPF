@@ -351,12 +351,12 @@ namespace ConditioningControlPanel
             try
             {
                 // Fall back to the pre-pass behaviour if the service somehow never came up:
-                // premium keeps its unlocked page, and everyone else gets the closed door.
+                // tier 2 keeps its unlocked page, and everyone else gets the closed door.
                 // "Spent" rather than "NeedsLogin" for the fallback deliberately - it matches
                 // IntakePassService's own fail-closed default, so a broken service never shows
                 // a signed-in user a sign-in prompt they can't act on.
                 var state = App.IntakePass?.State
-                            ?? (App.Patreon?.HasPremiumAccess == true
+                            ?? (App.Patreon?.HasLabAccess == true
                                 ? Services.IntakePassState.Premium
                                 : Services.IntakePassState.Spent);
 

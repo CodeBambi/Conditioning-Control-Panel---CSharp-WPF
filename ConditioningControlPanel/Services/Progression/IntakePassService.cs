@@ -10,7 +10,7 @@ namespace ConditioningControlPanel.Services;
 /// </summary>
 public enum IntakePassState
 {
-    /// <summary>Patron. The pass system does not apply - unlimited runs, no week, no door.</summary>
+    /// <summary>Tier 2 patron. The pass system does not apply - unlimited runs, no week, no door.</summary>
     Premium,
     /// <summary>Free and signed out. The pass is per-account, so there is nothing to hand out yet.</summary>
     NeedsLogin,
@@ -23,10 +23,11 @@ public enum IntakePassState
 /// <summary>
 /// The weekly free-tier pass for the Graded Intake.
 ///
-/// The intake is a premium Exclusive, but it is also the best onboarding the app has: a run
-/// drafts a personalised session, and that session is the first genuinely tailored thing a
-/// new user ever sees. So free accounts get ONE run per week - enough to show the feature
-/// off and to keep a reason to come back - while retakes stay a reason to subscribe.
+/// The intake is an Exclusive whose unlimited run is tier 2 (Sep 18 2026 owner decision; it
+/// was tier 1 before), but it is also the best onboarding the app has: a run drafts a
+/// personalised session, and that session is the first genuinely tailored thing a new user
+/// ever sees. So everyone below tier 2 gets ONE run per week - enough to show the feature off
+/// and to keep a reason to come back - while retakes stay a reason to subscribe.
 ///
 /// Design notes worth keeping:
 ///
@@ -89,7 +90,9 @@ public class IntakePassService : IDisposable
 
     // ============================ state ============================
 
-    private static bool IsPremium => App.Patreon?.HasPremiumAccess == true;
+    /// <summary>Unlimited runs are tier 2 (PatreonService.HasLabAccess), not tier 1. The
+    /// Exclusives gate and the Lab tab fallback read the same tier.</summary>
+    private static bool IsPremium => App.Patreon?.HasLabAccess == true;
 
     /// <summary>True when the spend stamp sits in the future by more than
     /// <see cref="FutureSkewTolerance"/> - i.e. the machine clock moved backwards after a run.
@@ -199,8 +202,8 @@ public class IntakePassService : IDisposable
     // PassStateChanged from them makes every listener - the Dashboard tile, the Exclusives gate -
     // repaint off the corrected answer.
     //
-    // Both providers are hooked because HasPremiumAccess OR's SubscribeStar in (see
-    // PatreonService.HasPremiumAccess): a SubscribeStar-only patron never moves PatreonService's
+    // Both providers are hooked because HasLabAccess OR's SubscribeStar in (see
+    // PatreonService.HasLabAccess): a SubscribeStar-only patron never moves PatreonService's
     // tier, so listening to Patreon alone would leave them looking free forever.
 
     /// <summary>True once the pass has been spent by THIS process. Bounds the late-premium

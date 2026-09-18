@@ -30,6 +30,10 @@ namespace ConditioningControlPanel.Services.Launcher;
 /// <param name="Launch">Starts the game. Idempotent on every host: a live window is re-focused.</param>
 /// <param name="IsActive">True while the game's window exists. The launcher polls it to know
 /// when to come back.</param>
+/// <param name="IsRevealed">Null means the tile always shows its face. False draws the mystery
+/// card in its place: no title, no art, a "?" and a Play button that goes to the Back Room, where
+/// the reveal is bought. The entry stays Available so <c>--game</c> and a shortcut still reach
+/// <see cref="Launch"/>, which owns its own refusal.</param>
 public sealed record LauncherEntry(
     string Id,
     string TitleKey,
@@ -40,7 +44,8 @@ public sealed record LauncherEntry(
     Func<bool> IsAvailable,
     Func<bool> IsLocked,
     Action Launch,
-    Func<bool> IsActive)
+    Func<bool> IsActive,
+    Func<bool>? IsRevealed = null)
 {
     public string Title
     {
@@ -86,16 +91,30 @@ public sealed record LauncherEntry(
             catch (Exception ex) { Log.Debug(ex, "[Launcher] active probe threw for {Id}", Id); return false; }
         }
     }
+
+    /// <summary><see cref="IsRevealed"/> wrapped: null is revealed, a probe that throws is not.
+    /// The mystery card is the safe face; the real tile would launch straight into a refusal.</summary>
+    public bool Revealed
+    {
+        get
+        {
+            if (IsRevealed == null) return true;
+            try { return IsRevealed(); }
+            catch (Exception ex) { Log.Debug(ex, "[Launcher] reveal probe threw for {Id}", Id); return false; }
+        }
+    }
 }
 
 /// <summary>
 /// The games the launcher can start. Pure: <see cref="Games"/> only captures lambdas, it never runs
 /// them, so tests can walk the list without opening a window or evaluating a tier gate.
 ///
-/// What is NOT here, on purpose: Intake, Remote, Companion and sessions. Those are panel features
-/// (Sep 18 2026 owner decision: the split is games vs CCP, not 2D vs 3D). Breakout is a station
-/// inside the Back Room with no deep link yet, so it rides the Back Room tile until the room grows
-/// a <c>?station=</c> parameter.
+/// What is NOT here, on purpose: Remote, Companion and sessions. Those are panel features
+/// (Sep 18 2026 owner decision: the split is games vs CCP, not 2D vs 3D). The Graded Intake is
+/// the one panel tab with a tile, because it is the best first thing a new account can do; its
+/// Launch opens the panel on the tab instead of a window. Breakout is a station inside the Back
+/// Room with no deep link yet, so it rides the Back Room tile until the room grows a
+/// <c>?station=</c> parameter.
 /// </summary>
 public static class LauncherCatalogue
 {
@@ -188,10 +207,10 @@ public static class LauncherCatalogue
         var list = new List<LauncherEntry>();
 
         void G(string id, string? art, string glyph, Color hue, Func<bool> available, Func<bool> locked,
-               Action launch, Func<bool> active)
+               Action launch, Func<bool> active, Func<bool>? revealed = null)
         {
             list.Add(new LauncherEntry(id, "launcher_game_" + id + "_title", "launcher_game_" + id + "_blurb",
-                art, glyph, hue, available, locked, launch, active));
+                art, glyph, hue, available, locked, launch, active, revealed));
         }
 
         // Order is the order on the launcher: the newest, loudest room first, the quiet ones last.
@@ -201,10 +220,13 @@ public static class LauncherCatalogue
             () => BackRoom.BackRoomHostService.Launch(),
             () => BackRoom.BackRoomHostService.IsActive);
 
-        // Racing Thoughts: the race page of the descent. Open testing since 2026-09-17, no door.
+        // Racing Thoughts: a Back Room unlock since 2026-09-18. Without a track the tile is the
+        // mystery card pointing at the counter; the entry stays Available so a shortcut still
+        // reaches Launch, where CaucusHostService refuses on the same door (RacingAccess).
         G("race", "features/race.png", "☕", Tile(0xFF, 0xB3, 0x6B), Always, Never,
             () => Chaos.CaucusHostService.Launch(),
-            () => Chaos.CaucusHostService.IsActive);
+            () => Chaos.CaucusHostService.IsActive,
+            revealed: () => Race.RacingAccess.CanLaunch);
 
         // Down the Rabbit Hole: Lab tier. The Play handler gates it; Launch does not, so the tile
         // asks the gate itself and lets DemandLab paint the refusal.
@@ -237,6 +259,15 @@ public static class LauncherCatalogue
             () => !LabOk("launcher_game_piecebypiece_title", null),
             () => PieceByPiece.PieceByPieceHostService.Launch(),
             () => PieceByPiece.PieceByPieceHostService.IsActive);
+
+        // Graded Intake: a panel tab, not a window, so Launch opens the panel on it and IsActive
+        // never reports a window (the launcher does not wait for the panel). Locked when the
+        // weekly free pass is spent and the account is below tier 2; the click still opens the
+        // tab, whose gate explains the pass, so the tile is never a dead end.
+        G("intake", "features/lab_quiz_hero.png", "❓", Tile(0x8E, 0x7C, 0xF2), Always,
+            () => !(App.IntakePass?.CanStartIntake ?? false),
+            () => LauncherHost.OpenPanelTab("gradedintake"),
+            Never);
 
         return list;
     }
