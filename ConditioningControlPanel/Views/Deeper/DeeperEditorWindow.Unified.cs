@@ -131,6 +131,10 @@ namespace ConditioningControlPanel.Views.Deeper
                     _ctxItem = ti;
                     return true;
                 case EnhancementRule rule:
+                    // A plain right-click on a pin replaces any multi-selection, the
+                    // same as the region/haptic/effect cases above, so the menu acts
+                    // on the pin and not on a stale set.
+                    if ((Keyboard.Modifiers & ModifierKeys.Control) == 0) _selectionSet.Clear();
                     SelectRule(rule);
                     _ctxItem = rule;
                     return true;
