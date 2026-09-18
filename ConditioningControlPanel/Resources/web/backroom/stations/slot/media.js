@@ -3,12 +3,16 @@
  * explicit decoded canvases because drawImage(<img>) captures the default image.
  * Hidden <img> elements supply a still only when decoding is unavailable. Only ccp.assets / ccp.game (or this page's own origin, for dev.html) URLs
  * are loaded; anything else, or a load failure, falls back to the built-in art in symbols.js.
+ * A dealt CLIP (webm/mp4: since 2026-09-17 every remote picture is one) is routed by its extension to room/clip-source.js and PLAYED into its
+ * canvas on the reel's own tick, the same shape a decoded GIF has, so the painter never learns a new kind of picture. A clip that cannot play
+ * takes the built-in art at once: an <img> cannot show a video either, so the second attempt below is only ever for a picture.
  * Keys, never URLs, leave this file, and that includes the `log` seam: it is room/main.js's bridge.log, and
  * console.warn does NOT reach the app log (only the bridge's 'log' envelope does), so anything worth reading
  * back off a session log has to go through it. */
 
 import { kindOf } from './symbols.js';
 import { decodedSource } from '../../room/gif-decode.js';
+import { clipSource, isClip } from '../../room/clip-source.js';
 import { overBudget } from '../../room/media-limits.js';
 
 const LOAD_MS = 2500;
@@ -34,6 +38,17 @@ function readable(img, log) {
   } catch { ok = false; log('warn', 'slot media is not CORS-readable, using built-in art'); }
   img.dataset.readable = ok ? '1' : '0';
   return ok;
+}
+
+/** The same question for a clip's canvas, asked ONCE when the clip opens rather than per painted frame. A <video>
+ *  served without CORS taints the canvas clip-source.js paints it into, and the taint surfaces later as a thrown
+ *  WebGL upload on the reel texture, so it is caught here where the answer is "built-in art" and not a broken reel. */
+function readableCanvas(canvas, log) {
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 1;
+    const g = c.getContext('2d'); g.drawImage(canvas, 0, 0, 1, 1); g.getImageData(0, 0, 1, 1);
+    return true;
+  } catch { log('warn', 'slot clip is not CORS-readable, using built-in art'); return false; }
 }
 
 export function createMedia(holder, lex = (k, f) => f, log = () => {}) {
@@ -63,6 +78,18 @@ export function createMedia(holder, lex = (k, f) => f, log = () => {}) {
       words = Array.isArray(media && media.words) ? media.words.slice(0, 4) : [];
       const decoded = gifs.map(async (item, i) => {
         if (!item?.url || !allowed(item.url)) return;
+        if (isClip(item.url)) {
+          // A clip is played, not decoded. clipSource never throws: null is "this page cannot play it"
+          // (no video element, a codec WebView2 lacks, a load that timed out), and there is no second
+          // pipeline for a video, so null is the built-in art. Silent when it is only this deal being
+          // replaced; a word in the log otherwise, because a reel on fallback art is worth reading back.
+          const clip = await clipSource(item.url, { maxEdge: 256, signal: controller.signal });
+          if (dealEpoch !== epoch) { clip?.dispose(); return; }
+          if (!clip) { if (!controller.signal.aborted) log('warn', 'slot media ' + keyOf(item, i) + ' clip could not play, using built-in art'); return; }
+          if (!readableCanvas(clip.canvas, log)) { clip.dispose(); return; }
+          sources[i] = clip;
+          return;
+        }
         let source;
         try { source = await decodedSource(item.url, { maxEdge: 256, maxFps: 12, signal: controller.signal }); }
         catch(error) {
@@ -110,10 +137,13 @@ export function createMedia(holder, lex = (k, f) => f, log = () => {}) {
       return Promise.race([Promise.all(decoded), new Promise(done => { timer = setTimeout(done, LOAD_MS); })])
         .finally(() => clearTimeout(timer));
     },
-    /** A drawable for gif{i} (stable symbol identity), or null when missing or broken (the painter draws fallback art). */
-    gif(i) {
+    /** A drawable for gif{i} (stable symbol identity), or null when missing or broken (the painter draws fallback art).
+     *  `still` (reduced motion, Calm, Motion off: the station's stillFx) holds the picture on one frame - a decoded GIF
+     *  returns to its first, a clip PAUSES - so discarding stills as a fetched class never took away the reel's ability
+     *  to paint one when the player asked for stillness. */
+    gif(i, still = false) {
       const source = sources.length ? sources[i] : null;
-      if (source) { source.tick(performance.now(), false); return source.canvas; }
+      if (source) { source.tick(performance.now(), !!still); return source.canvas; }
       const img = imgs.length ? imgs[i] : null;
       return img && img.complete && img.naturalWidth > 0 && readable(img, log) ? img : null;
     },

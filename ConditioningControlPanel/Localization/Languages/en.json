@@ -6194,5 +6194,22 @@
   "br_custom_already_owned": "Already owned.",
   "br_custom_unowned": "Own this item before using it.",
   "br_custom_shop_unavailable": "The shop is unavailable. You can still preview.",
-  "br_custom_buy_sp": "Buy for {n} SP"
+  "br_custom_buy_sp": "Buy for {n} SP",
+  "br_photo_fyp_title": "For You",
+  "br_photo_fyp_note": "it watches what you linger on.\nyou will not find the bottom.",
+  "br_photo_remote_title": "Remote Control",
+  "br_photo_remote_note": "the dials go to someone else.\nthey pick when you get them back.",
+  "br_photo_takeover_title": "Takeover",
+  "br_photo_takeover_note": "she takes the wheel.\nyou will not notice her taking it.",
+  "br_photo_intake_title": "Graded Intake",
+  "br_photo_intake_note": "one evaluation a week.\nthe grade follows you around.",
+  "br_photo_justdrop_title": "Just Drop",
+  "br_photo_justdrop_note": "you order the session.\nit is built to your weak spots.",
+  "br_photo_haptics_title": "Haptics",
+  "br_photo_haptics_note": "every toy on one pulse.\nthe room picks the rhythm.",
+  "br_photo_blink_title": "Blink Trainer",
+  "br_photo_blink_note": "the webcam counts your blinks.\nhold them open and get paid.",
+  "br_photo_awareness_title": "Awareness",
+  "br_photo_awareness_note": "she watches where you look.\nlook away and she says so.",
+  "br_photo_chip_pass": "WEEKLY PASS READY"
 }

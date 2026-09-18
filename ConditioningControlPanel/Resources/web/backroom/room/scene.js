@@ -39,7 +39,8 @@ const KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'A
 /**
  * @param {Object} o
  *   mount, stations, base, faces, ads, label(row,key), media(), still (bool),
- *   onNearest(row|null), onVisit(row), onProgress(0..1), log(msg)
+ *   onNearest(row|null), onVisit(row), onProgress(0..1), log(msg),
+ *   arcade (bool: the unlocked cabinet is a door), onArcade(game)
  */
 export async function createScene(o) {
   const say = typeof o.log === 'function' ? o.log : () => {};
@@ -97,9 +98,11 @@ export async function createScene(o) {
     return { still, off: !!m.off, lite: quality.performance,
       reduced: !!m.reduced || matchMedia('(prefers-reduced-motion: reduce)').matches };
   };
-  const room = await buildRoom({ scene, loader, stations: o.stations, base: o.base, faces: o.faces, label: o.label, onProgress: o.onProgress, motion });
+  const room = await buildRoom({ scene, loader, stations: o.stations, base: o.base, faces: o.faces, label: o.label, onProgress: o.onProgress, motion, arcade: !!o.arcade });
   const decor = createCasinoDecor({ scene });
-  const memorabilia = createMemorabilia({ scene });
+  // The eight polaroids advertise vault cards, so their words are lexicon keys like the rest of
+  // the room's chrome (LAW VII). The wall cannot reach the room's lookup on its own.
+  const memorabilia = createMemorabilia({ scene, lex: o.lex });
   const documents = createMemorabiliaViewer({ backLabel: o.lex('br_back', 'Back'),
     onOpen() { held = { pos: pos.slice(), yaw, pitch }; resetInput(); interaction.dismiss(); stop(); setNearest(null); },
     onClose() { held = null; resetInput(); if (!halted) run(); }
@@ -266,6 +269,10 @@ export async function createScene(o) {
     if (surface?.object.userData.document) { drag = null; documents.open(surface.object.userData.document); return; }
     // A mascot stands inside its fixture, often behind its glass: a tap that reaches an NPC is the bark (emi-interaction), never a visit.
     if(interaction.npcAt(e.clientX,e.clientY))return;
+    // The arcade cabinet before the stations: it stands beside the counter, and the counter's screen box (below, with its
+    // finger's margin) would otherwise claim a tap that the exact ray already put on the cabinet.
+    const arcade=arcadeAt(e);
+    if(arcade){drag=null;try{o.onArcade?.(arcade);}catch(err){say('onArcade threw: '+((err&&err.message)||err));}return;}
     const row=stationAt(e);
     if(row){drag=null;visit(row);}
   });
@@ -337,6 +344,14 @@ export async function createScene(o) {
       if (distance < bestDistance) { best = row; bestDistance = distance; }
     }
     return best;
+  }
+
+  /* THE ARCADE CABINET (prize-display.js). The unlocked cabinet is a small prop, not a fixture: the exact ray only, no
+   * screen-box guess, and only while it is on the floor (demo owned) and tagged as a door (a hosted room). */
+  function arcadeAt(e) {
+    const cabinet = room.prizes?.cabinet;
+    if (!cabinet || !cabinet.visible || !cabinet.userData.arcade) return null;
+    return pickAt(e, [cabinet]).length ? cabinet.userData.arcade : null;
   }
 
   function setNearest(row) {

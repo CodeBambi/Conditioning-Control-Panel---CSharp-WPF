@@ -69,6 +69,7 @@ request never rejects: a missing reply resolves as `{ok:false, reason:'timeout'}
 | `fx-tunnel` | `station, level` | Continuous tunnel vision level 0..1, at most 10 a second, no reply (10.13.B). |
 | `fx-release` | `token, station` | Fade out what that `fx` token still holds on screen, no reply (10.13.B). |
 | `melt` | `station, left` | Current melted spins left, sent whenever it changes. |
+| `arcade-open` | `game:'race'` | The player tapped the unlocked arcade cabinet (2026-09-18). The host opens that game as a guest surface IN THE ROOM'S WINDOW (its own WebView2 over the room's, `ChaosWebViewHost.Options.MountIn`), hides the room's page and sends `suspend {on:true, reason:'arcade'}`. Answered with exactly one `arcade`. Unhosted, the page never sends it. |
 
 ### 2.2 Host -> page
 
@@ -80,8 +81,9 @@ request never rejects: a missing reply resolves as `{ok:false, reason:'timeout'}
 | `station-result` | `reqId, ok, status, reason?, body` | Server answer, or a host refusal (`offline`, `closed`, `bad_op`). |
 | `fx-ack` | `token, fired[], skipped[]` | What actually played. `skipped` entries: `{prim, why:'busy'\|'unknown'}` (the authored show, 2026-09-15: no setting skips a primitive; `toggle`/`motion`/`calm` are gone). |
 | `settings` | `motion, intensity, reduced, gates` | A setting changed while open (`gates` 10.13.A). |
-| `suspend` | `on, reason:'panic'\|'focus'\|'minimise'` | Stop audio and fx now; `on:false` resumes. |
+| `suspend` | `on, reason:'panic'\|'focus'\|'minimise'\|'arcade'` | Stop audio and fx now; `on:false` resumes. `arcade`: a game is riding on top of the room in the same window. |
 | `close` | `reason:'app-exit'\|'panic'` | Host wants the window gone. Page answers `exit-done` within 300 ms; host force-closes at 800 ms. |
+| `arcade` | `game, on, reason?` | One per `arcade-open`: `on:true` the game took the window, `on:false` it did not (`bad_game`, `closed`, `no_host`, `busy` = already open in its own window and focused instead, `failed`). A second `on:false` follows when the game gives the window back; the page releases the hold it took on the tap on the first `on:false` it sees for that game (`room/arcade.js`). The game's own bridge (the race: `dtrh/race/CONTRACT.md` protocol v1, `CaucusHostService`) is untouched and pays out as it does from the Play tab; the room's SP is never involved. |
 
 Key snippet (page side, the only way a station talks to the server):
 
@@ -328,9 +330,9 @@ picker can tell the player what they GOT rather than what they asked for.
   (`BackRoomMediaSubs` minus `BackRoomMediaSubsOff`, capped at `BackRoomMediaSubCap`; an empty list
   follows the app's own picker). `mixed` rolls `RemoteMediaRatio` per pick. The fetch is the same
   `Services/Fyp/Online` stack the flashes use, on the user's device, direct from the provider: nothing
-  routes through CC Labs infrastructure (`IFeedSource`). Degrades one way only - no warm pictures
-  falls back to stills, then `local`, then `bundled`. A wall showing a still is fine; a wall showing
-  nothing is a bug.
+  routes through CC Labs infrastructure (`IFeedSource`). Degrades one way only - no warm clips falls
+  back to `local`, then `bundled`. A wall showing the player's own GIF is fine, a wall showing the
+  bundled loop is fine; a wall showing nothing is a bug.
 - Remote entries are materialized to a real file first (`RemoteMediaCache.MaterializeAsync`), which
   lands under `App.GetMediaTempPath()` - that is `{EffectiveAssetsPath}\.temp`, INSIDE the `ccp.assets`
   mapping. So a remote picture is an ordinary `ccp.assets` url: CORS-clean for WebGL, allowed by the
@@ -339,14 +341,22 @@ picker can tell the player what they GOT rather than what they asked for.
   call mints a new guid, and the page's url-keyed dedupe cannot collapse two paths for one picture.
 - `src` is `pool` (the player's own files), `online` (Scrolller) or `fallback` (built-in art).
   `room/screens.js` hangs anything that is not `fallback`.
-- **Clips are for the WALLS, stills for the STATIONS.** Scrolller's clip feed is webm/mp4 and its
-  picture feed is static, byte-verified (`RemoteMediaFormats`): a remote STILL never animates. The
-  desktop host is WebView2, i.e. Chromium, so it plays a clip natively and needs no transcode hop -
-  `room/clip-source.js` paints it into a canvas on the room's own `tick()` clock and hands back the
-  same source shape a decoded GIF does. Only `station: "room"` gets clips. The card table deals up to
-  13 media per sit-down and the slot paints into three WebGL reel textures; thirteen decoding videos
-  is not a trade worth making, and `stations/slot/media.js` decodes through `decodedSource` with an
-  `<img>` still fallback, neither of which takes a webm.
+- **Every remote picture is a CLIP, on every surface (2026-09-17, "discard stills").** Scrolller's
+  picture feed is static, byte-verified (`RemoteMediaFormats`), and a static picture is no longer a
+  class of media the room deals: the pool fetches only `FeedMediaKind.GifClip` (the GIF filter's
+  webm/mp4 half, never the VIDEO filter), materializes the post's SMALL rendition (`Entry.SmallUrl`,
+  capped at 640 px, because no surface paints past 384 px), and keeps four downloads in flight
+  (`BackRoomRemotePool.MaterializeConcurrency`). The desktop host is WebView2, i.e. Chromium, so it
+  plays a clip natively and needs no transcode hop - `room/clip-source.js` paints it into a canvas on
+  the room's own `tick()` clock and hands back the same source shape a decoded GIF does, and every
+  media module routes on the url's extension: `room/gif.js` (walls), `stations/slot/media.js` (reels),
+  `shared/hypno/media.js` (cards, wheel, roulette). What keeps a 13-card deal from being thirteen
+  video decoders is on the page: the deck keeps eight sources resident and PAUSES a clip it did not
+  draw this tick; the reels pause theirs under reduced motion. `still` (reduced motion, Calm, Motion
+  off) still holds a single frame everywhere - discarding stills as a FETCHED class never removed the
+  room's ability to PAINT one. A host overlay that needs a FILE (`gif_from` / `gif_full` / `wash`)
+  cannot open a video, so for a dealt clip it takes the ladder's next rung itself: one of the player's
+  own animated files, then a bundled loop (`BackRoomFxServices.StandInFor`).
 - Up to 4 words from the active `SubliminalPool` (mode/mod variant as the app uses), shortfall filled
   from presets `Drop, Relax, Let Go, Sink` in that order. Preset text is a lexicon key (Law VII).
 - Symbol id -> media: `gif0..gif3` = `gifs[0..3]`, `sub0..sub3` = `words[0..3]` (a 13-GIF deal: 10.13.C). Dealt once per sit-down
@@ -793,7 +803,9 @@ three.js `VideoTexture` deliberately: this section's rule is that the room's clo
 anything, and a `VideoTexture` would upload every frame the video decoded whether the room wanted it or not. The
 same two ceilings apply as to a decoded GIF (`MAX_EDGE`, the pixel budget, `MEDIA_LIMITS.loadMs`), and `still`
 PAUSES the video rather than merely not drawing it - an off-screen video that keeps decoding is exactly the
-offscreen work the render budget exists to stop.
+offscreen work the render budget exists to stop. Since every remote picture is a clip (section 5), the kit's
+`createDeck` routes on the extension too, takes `maxEdge` so a card's clip canvas stays at 192 px, and uses the
+source's `clip` flag to pause any resident clip it did not draw this tick.
 
 ```js
 // loom.js - one shared Loom GL context per page, over the real loomField.js

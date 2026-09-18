@@ -81,7 +81,7 @@ internal static class RemoteMediaFormats
             return false;
         }
 
-        if (kind == FeedMediaKind.Video && !isVideo) { reason = "caller wanted video, entry is a still"; return false; }
+        if ((kind is FeedMediaKind.Video or FeedMediaKind.GifClip) && !isVideo) { reason = "caller wanted video, entry is a still"; return false; }
         if (kind == FeedMediaKind.Image && !isImage) { reason = "caller wanted a still, entry is video"; return false; }
 
         if (isVideo && !IsRemoteVideo(entry.Url)) { reason = "video url has no playable extension"; return false; }

@@ -42,3 +42,9 @@
 }
 
 .memorabilia-paper figcaption { white-space: pre-line; }
+
+/* The tier sign reads as a sign, not as a second photograph: narrow, centred, never taller
+   than the line of text beside it would be. */
+.memorabilia-paper img.memorabilia-badge { display: block; width: min(210px, 42%); max-height: none; height: auto; }
+.memorabilia-paper[data-priced] img:not(.memorabilia-badge) { max-height: calc(100dvh - 330px); }
+.memorabilia-chip { font-size: 12px; letter-spacing: .09em; color: #8a6a2a; font-weight: 700; }

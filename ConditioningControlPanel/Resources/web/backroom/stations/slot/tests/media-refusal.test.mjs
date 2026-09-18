@@ -14,6 +14,8 @@ import { MediaLimitError, refusedMedia, overBudget } from '../../../room/media-l
 const source = (await readFile(new URL('../media.js', import.meta.url), 'utf8'))
   .replace("import { kindOf } from './symbols.js';", "const kindOf = id => ({kind:id.startsWith('gif')?'gif':'sub',n:Number(id.at(-1))});")
   .replace("import { decodedSource } from '../../room/gif-decode.js';", 'const decodedSource = (...args) => globalThis.testDecode(...args);')
+  // Every url here is a .webp, so the clip router is stood in for as "never a clip" (media-clip.test.mjs covers it).
+  .replace("import { clipSource, isClip } from '../../room/clip-source.js';", 'const isClip = () => false; const clipSource = async () => null;')
   // A data: url cannot resolve a relative import, so media-limits.js is pointed at its file url and stays REAL.
   .replace("'../../room/media-limits.js'", JSON.stringify(new URL('../../../room/media-limits.js', import.meta.url).href));
 const { createMedia } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));

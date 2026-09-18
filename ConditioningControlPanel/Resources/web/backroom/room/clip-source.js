@@ -1,5 +1,12 @@
 /* ============================================================================
- * backroom/room/clip-source.js - a Scrolller clip as a wall picture.
+ * backroom/room/clip-source.js - a Scrolller clip as a picture, on any surface.
+ *
+ * Since 2026-09-17 ("discard stills") every remote picture the host deals is a
+ * clip, so every media module routes here on the url's extension: room/gif.js
+ * for the wall, stations/slot/media.js for the reels, shared/hypno/media.js for
+ * the card table, the wheel and roulette. `maxEdge` lets each of them keep the
+ * canvas at its own paint size (256 px reels, 192 px cards) rather than the
+ * wall's MAX_EDGE.
  *
  * WHY THIS EXISTS. Scrolller's "GIF" feed is webm and mp4; its "PICTURE" feed is
  * static. The web playtest solves that with a Vercel function that spawns ffmpeg
@@ -53,9 +60,10 @@ export const canPlayClips = () => {
  * Open `url` as a playable source, or null when this page cannot play it (the caller then uses a
  * still, exactly as it does for a GIF it could not decode).
  * `onFrame` (optional) runs after each frame lands in the canvas, the first one excluded.
- * @returns {Promise<{canvas, byteLength, animated, frames, index, tick(now, still), dispose()} | null>}
+ * `maxEdge` (optional) caps the long side of the canvas; the wall's MAX_EDGE by default.
+ * @returns {Promise<{canvas, byteLength, animated, clip, frames, index, tick(now, still), dispose()} | null>}
  */
-export async function clipSource(url, { signal, onFrame } = {}) {
+export async function clipSource(url, { signal, onFrame, maxEdge = MAX_EDGE } = {}) {
   if (!isClip(url) || !canPlayClips()) return null;
 
   const video = document.createElement('video');
@@ -100,8 +108,9 @@ export async function clipSource(url, { signal, onFrame } = {}) {
 
   const vw = video.videoWidth, vh = video.videoHeight;
   if (!vw || !vh) { stop(); return null; }
-  // The same two ceilings a decoded GIF gets: MAX_EDGE on the long side, and the pixel budget.
-  const scale = Math.min(1, MAX_EDGE / Math.max(vw, vh));
+  // The same two ceilings a decoded GIF gets: the caller's edge on the long side, and the pixel budget.
+  const edge = Math.max(1, Math.min(MAX_EDGE, Number(maxEdge) || MAX_EDGE));
+  const scale = Math.min(1, edge / Math.max(vw, vh));
   let w = Math.max(1, Math.round(vw * scale)), h = Math.max(1, Math.round(vh * scale));
   if (w * h > MEDIA_LIMITS.pixels) {
     const shrink = Math.sqrt(MEDIA_LIMITS.pixels / (w * h));
@@ -129,6 +138,11 @@ export async function clipSource(url, { signal, onFrame } = {}) {
   return {
     canvas, byteLength: 0,   // the host streams it off disk; there is no decoded buffer to count
     animated: true,
+    // The one field a decoded GIF does not carry. A consumer holding several sources at once (the
+    // card table's deck) uses it to PAUSE a clip it is not drawing this frame, because a video keeps
+    // decoding between ticks whether or not anyone paints it; a GIF costs nothing between ticks and
+    // has no need of it.
+    clip: true,
     // A clip has no frame list to walk. `frames` is how many times the room has taken a picture of
     // it, which is what the room's budget counts, and `index` keeps the source's shape honest.
     get frames() { return painted; },

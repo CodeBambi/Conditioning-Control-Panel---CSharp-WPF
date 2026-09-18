@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.BackRoom;
@@ -41,6 +42,44 @@ public class BackRoomFxServicesTests
     [InlineData(null, false)]
     public void OnlyAPictureIsHandedToAWpfOverlay(string? url, bool drawable)
         => Assert.Equal(drawable, BackRoomFxServices.IsDrawablePicture(url));
+
+    /// <summary>
+    /// Since 2026-09-17 every remote pick is a clip, at the chairs too, so the guard above fires on
+    /// every online sit-down. The overlay must not go dark for it: it takes the deal ladder's next rung,
+    /// one of the player's own animated files, then the bundled loop, and the pick is stable for a key.
+    /// </summary>
+    [Fact]
+    public void AClipGetsAStandIn_ThePlayersOwnLoopFirst_ThenTheBundledOne_StableForAKey()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ccp-standin-" + Guid.NewGuid().ToString("N"));
+        var web = Path.Combine(root, "web");
+        var loops = Path.Combine(web, "backroom", "stations", "slot", "fallback");
+        Directory.CreateDirectory(loops);
+        try
+        {
+            for (int k = 0; k < 4; k++) File.WriteAllBytes(Path.Combine(loops, $"gif{k}.webp"), new byte[] { 1 });
+
+            // A real animated GIF header and a still png in the library: only the GIF qualifies.
+            var gif = Path.Combine(root, "own.gif");
+            var b = new byte[32]; "GIF89a"u8.CopyTo(b); b[6] = 64; b[8] = 48; File.WriteAllBytes(gif, b);
+            var png = Path.Combine(root, "still.png"); File.WriteAllBytes(png, new byte[] { 0x89, 0x50, 0x4E, 0x47 });
+            var stillWebp = Path.Combine(root, "still.webp"); File.WriteAllBytes(stillWebp, new byte[32]);
+
+            Assert.Equal(gif, BackRoomFxServices.StandInFor("g2", new[] { png, stillWebp, gif, "https://cdn.example.com/x.gif" }, web));
+            Assert.Equal(gif, BackRoomFxServices.StandInFor("g2", new[] { png, stillWebp, gif }, web));
+
+            // No animating file of the player's own: the bundled loop, by the key's digit, and stable.
+            Assert.Equal(Path.Combine(loops, "gif2.webp"), BackRoomFxServices.StandInFor("g2", new[] { png, stillWebp }, web));
+            Assert.Equal(Path.Combine(loops, "gif2.webp"), BackRoomFxServices.StandInFor("g2", null, web));
+            Assert.Equal(Path.Combine(loops, "gif1.webp"), BackRoomFxServices.StandInFor("g13", null, web));   // 13 % 4
+            Assert.Equal(Path.Combine(loops, "gif0.webp"), BackRoomFxServices.StandInFor(null, null, web));
+
+            // Nothing anywhere is null, which every caller already treats as "no picture".
+            Assert.Null(BackRoomFxServices.StandInFor("g0", null, Path.Combine(root, "missing")));
+            Assert.Null(BackRoomFxServices.StandInFor("g0", null, null));
+        }
+        finally { try { Directory.Delete(root, true); } catch { } }
+    }
 
     [Fact]
     public void AssetsUrl_MapsIntoTheAssetsFolder_Unescaped()

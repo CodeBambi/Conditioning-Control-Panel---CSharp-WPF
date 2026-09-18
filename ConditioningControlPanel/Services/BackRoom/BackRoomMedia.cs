@@ -20,10 +20,9 @@ namespace ConditioningControlPanel.Services.BackRoom;
 /// <list type="bullet">
 /// <item><c>local</c>: the DISK half of the flash pool (<see cref="FlashService.SnapshotLocalImagePaths"/>),
 /// so the user's current assets folder and deselections apply exactly as they do to flashes;</item>
-/// <item><c>online</c>: the warm remote pool (<see cref="BackRoomRemotePool"/>) - clips for the wall,
-/// stills for a station. No clips warm degrades to stills, a dry pool to <c>local</c>, and a dry library
-/// to <c>bundled</c> - a provider being down must look like "no remote content", never like an empty
-/// wall;</item>
+/// <item><c>online</c>: the warm remote pool (<see cref="BackRoomRemotePool"/>) - clips, for every
+/// surface. A cold pool degrades to <c>local</c>, and a dry library to <c>bundled</c> - a provider
+/// being down must look like "no remote content", never like an empty wall;</item>
 /// <item><c>mixed</c>: both, blended per pick against <c>AppSettings.RemoteMediaRatio</c> the way
 /// <c>FlashService.ShouldDrawRemote</c> rolls it;</item>
 /// <item><c>bundled</c>: the four built-in loops ON PURPOSE, chosen rather than fallen back to;</item>
@@ -35,14 +34,19 @@ namespace ConditioningControlPanel.Services.BackRoom;
 /// seed. Only files under the assets root survive, because only those have a <c>ccp.assets</c> url -
 /// which is also, and not by accident, why a materialized remote still has one too.</para>
 ///
-/// <para>REMOTE PICKS ARE CLIPS ON THE WALL AND STILLS EVERYWHERE ELSE (2026-09-17, the seam the
-/// previous note pointed at). The provider's posters really are static, byte-verified in
-/// <c>RemoteMediaFormats</c>, so the animated half of a remote post is the webm/mp4 itself. WebView2 is
-/// Chromium and plays one natively - <c>room\clip-source.js</c>, reached from <c>room\gif.js</c> on the
-/// url's extension, hands back the same shape a decoded GIF does - so the wall gets moving pictures
-/// with no transcode and no new installer bytes. ONLY the wall: see <see cref="RemotePicks"/> for the
-/// three reasons a chair stays on stills, and <see cref="BackRoomRemotePool"/> for the two warm sets
-/// behind both.</para>
+/// <para>EVERY REMOTE PICK IS A CLIP (2026-09-17, "discard stills"). The provider's posters really are
+/// static, byte-verified in <c>RemoteMediaFormats</c>, so the animated half of a remote post is the
+/// webm/mp4 itself, and the owner's call was that a static picture is not a class of media the room
+/// deals at all. WebView2 is Chromium and plays a clip natively - <c>room\clip-source.js</c>, reached on
+/// the url's extension from <c>room\gif.js</c> (the wall), <c>stations\slot\media.js</c> (the reels) and
+/// <c>shared\hypno\media.js</c> (cards, wheel, roulette), hands back the same shape a decoded GIF does -
+/// so every surface gets moving pictures with no transcode and no new installer bytes. The ONE thing a
+/// station and the wall are still dealt differently is nothing: <see cref="StationRoom"/> survives only
+/// because the wire names the room's deal, and <see cref="RemotePicks"/> is the same draw for both.
+/// The three things that used to keep a chair on stills are answered on the page: the card table's
+/// deck caps resident sources at eight and pauses a clip it is not drawing, the reels pause theirs under
+/// reduced motion, and a host effect that needs a FILE for a WPF overlay still gets a file, because a
+/// materialized clip is one.</para>
 ///
 /// <para>Does file I/O (a 30-byte header read per local candidate, bounded by
 /// <see cref="ProbeBudgetFor"/>): call <see cref="DealAsync"/>, or call <see cref="Deal"/> off the UI
@@ -66,19 +70,16 @@ internal sealed class BackRoomMedia : IBackRoomMedia
 
     /// <summary><c>BackRoomGif.Src</c> values. <c>online</c> is the third one (the room used to know
     /// only its own folders); the page's wall filter keys off <c>fallback</c> and nothing else, so a
-    /// remote still reads as the real picture it is - and so does a remote CLIP, which the page tells
-    /// apart by the url's extension rather than by a fourth <c>Src</c> the wire would have to learn.</summary>
+    /// remote CLIP reads as the real picture it is, and the page tells it from a local GIF by the url's
+    /// extension rather than by a fourth <c>Src</c> the wire would have to learn.</summary>
     internal const string SrcPool = "pool", SrcOnline = "online", SrcFallback = "fallback";
 
     /// <summary>The wall-screen deal's station id. <c>media-request.station</c> is <c>room</c> for the
     /// room's own screens and a station label otherwise ("one <c>media-request</c> with
-    /// <c>station: "room"</c> at boot", CONTRACT section 5's wall-screens bullet). It is the one thing
-    /// the room and a chair are dealt differently, so it is a named constant, not a literal.</summary>
+    /// <c>station: "room"</c> at boot", CONTRACT section 5's wall-screens bullet). Since 2026-09-17 the
+    /// deal itself no longer branches on it (the wall and a chair are dealt from one clip set); it is
+    /// kept as the named wire word for the log line and the suite.</summary>
     internal const string StationRoom = "room";
-
-    /// <summary>Is this deal the WALL's? Ordinal and exact, because the bridge passes the page's own
-    /// station id straight through and a station that calls itself "Room" is not the room.</summary>
-    internal static bool IsWall(string? station) => string.Equals(station, StationRoom, StringComparison.Ordinal);
 
     /// <summary><c>max(48, count x 4)</c>: a 13-GIF deal may read up to 52 headers.</summary>
     internal static int ProbeBudgetFor(int count) => Math.Max(ProbeBudget, count * 4);
@@ -214,10 +215,12 @@ internal sealed class BackRoomMedia : IBackRoomMedia
 
         // Counts only. The station id comes from the page, so it is only echoed when it looks like one.
         var label = station != null && StationLabel.IsMatch(station) ? station : "?";
+        // "online (N clip)" is kept in this shape on purpose: every online pick is a clip now, but the
+        // pair is what a session log is grepped for ("dealt slot ... (N clip)").
         _log()?.Information(
-            "BackRoomMedia: dealt {Station} from {Source}: {PoolGifs} pool + {OnlineGifs} online ({ClipGifs} clip) + {FallbackGifs} fallback gifs from {Candidates} candidates and {WarmStills} warm stills + {WarmClips} warm clips, {PoolWords} pool + {PresetWords} preset words",
+            "BackRoomMedia: dealt {Station} from {Source}: {PoolGifs} pool + {OnlineGifs} online ({ClipGifs} clip) + {FallbackGifs} fallback gifs from {Candidates} candidates and {WarmClips} warm clips, {PoolWords} pool + {PresetWords} preset words",
             label, source, gifs.Count(g => g.Src == SrcPool), gifs.Count(g => g.Src == SrcOnline), tally.Clips,
-            gifs.Count(g => g.Src == SrcFallback), tally.Candidates, tally.WarmStills, tally.WarmClips,
+            gifs.Count(g => g.Src == SrcFallback), tally.Candidates, tally.WarmClips,
             words.Count(w => w.Src == "pool"), words.Count(w => w.Src == "preset"));
 
         return new BackRoomMediaDeal(seed, gifs, words, source);
@@ -230,8 +233,8 @@ internal sealed class BackRoomMedia : IBackRoomMedia
     private readonly record struct Pick(string Url, int W, int H, string Src, bool Clip = false);
 
     /// <summary>What one deal touched, for the log line. Counts only, never a path and never a url
-    /// (PII rule). <see cref="Clips"/> is only ever non-zero for the wall.</summary>
-    private readonly record struct DealTally(int Candidates, int WarmStills, int WarmClips, int Clips);
+    /// (PII rule).</summary>
+    private readonly record struct DealTally(int Candidates, int WarmClips, int Clips);
 
     private List<BackRoomGif> DealGifs(string source, string station, int seed, int count, out DealTally tally)
     {
@@ -239,19 +242,20 @@ internal sealed class BackRoomMedia : IBackRoomMedia
 
         if (source == SourceBundled) return Bundled();
 
-        int warmStills = 0, warmClips = 0;
+        int warmClips = 0;
         var remote = source is SourceOnline or SourceMixed
-            ? RemotePicks(station, seed, count, out warmStills, out warmClips)
+            ? RemotePicks(seed, count, out warmClips)
             : new List<Pick>();
 
         // The local half is only paid for when the source can use it: "online" must not read 48 file
         // headers to throw them away.
         //
-        // THE LADDER, AND IT ONLY EVER GOES ONE WAY (10.13.C): clips -> stills -> the player's own
-        // folders -> the built-in loops. A rung is taken only when everything above it came back with
-        // nothing, and the bottom rung is Bundled() rather than an empty deal, because a wall showing a
-        // still is fine and a wall showing nothing is a bug. The clips -> stills rung is inside
-        // RemotePicks, where both are just remote picks.
+        // THE LADDER, AND IT ONLY EVER GOES ONE WAY (10.13.C): clips -> the player's own folders -> the
+        // built-in loops. A rung is taken only when everything above it came back with nothing, and the
+        // bottom rung is Bundled() rather than an empty deal, because a wall showing the player's own
+        // GIF is fine, a wall showing the bundled loop is fine, and a wall showing nothing is a bug.
+        // There is no stills rung any more (2026-09-17): a cold clip pool goes straight to the folders,
+        // which is the window the pool's small rendition and four download lanes exist to shorten.
         int localCandidates = 0;
         List<Pick> picks;
         if (source == SourceMixed)
@@ -268,7 +272,7 @@ internal sealed class BackRoomMedia : IBackRoomMedia
             picks = LocalPicks(seed, count, out localCandidates);
         }
 
-        tally = new DealTally(localCandidates, warmStills, warmClips, picks.Take(count).Count(p => p.Clip));
+        tally = new DealTally(localCandidates, warmClips, picks.Take(count).Count(p => p.Clip));
         if (picks.Count == 0) return Bundled();
         // 10.13.C: real pictures are never padded with fallback art (a deck cycles what it has).
         return picks.Take(count).Select((p, i) => new BackRoomGif("g" + i, p.Url, p.W, p.H, p.Src)).ToList();
@@ -340,35 +344,22 @@ internal sealed class BackRoomMedia : IBackRoomMedia
     }
 
     /// <summary>
-    /// The warm pool's remote picks for this station, shuffled with the seed so a replayed sit-down
-    /// deals the same wall. Reads only what is already on disk - no fetch, no wait. No
-    /// <c>AnimatedImageHint</c> either: that hint tells the host a local <c>.webp</c> animates, and
-    /// neither a remote still (which does not) nor a clip (which the page PLAYS rather than decodes)
-    /// has any use for it.
+    /// The warm pool's remote picks, shuffled with the seed so a replayed sit-down deals the same wall.
+    /// Reads only what is already on disk - no fetch, no wait. No <c>AnimatedImageHint</c> either: that
+    /// hint tells the host a local <c>.webp</c> animates, and a clip (which the page PLAYS rather than
+    /// decodes) has no use for it.
     ///
-    /// <para>CLIPS GO ON THE WALLS, STILLS GO TO THE STATIONS, and every part of that is load-bearing:
-    /// <list type="bullet">
-    /// <item>the card table deals <see cref="MaxCount"/> = 13 pictures per sit-down (10.13.C) and the
-    /// slot paints its dealt art into three WebGL reel textures. Thirteen video decoders at once is
-    /// reckless; the wall is capped at EIGHT pictures on screen (<c>MAX_PICTURES</c> in
-    /// <c>room\screens.js</c>, which is also the <c>count</c> it asks for), few and large, which is
-    /// where a moving picture is worth paying for;</item>
-    /// <item><c>stations\slot\media.js</c> decodes through <c>gif-decode.js</c>'s <c>decodedSource</c>
-    /// and falls back to a hidden <c>&lt;img&gt;</c>. Neither takes a webm, so a clip dealt to a chair
-    /// would silently come out as fallback art - the split is not a preference, the wall
-    /// (<c>room\gif.js</c> -> <c>room\clip-source.js</c>) is the only surface a clip renders on;</item>
-    /// <item>fx resolves dealt urls back to FILES for the host's WPF overlays
-    /// (<c>BackRoomFxServices.LocalFile</c> -> <c>ChaosFlashOverlay.ShowHero</c>), and WPF imaging
-    /// cannot open an mp4. An <c>fx</c> message always carries a station id (<c>room\loader.js</c>), so
-    /// the room's deal is the one deal no host effect ever draws a picture from - which is precisely the
-    /// deal clips are confined to.</item>
-    /// </list>
-    /// The wall takes clips FIRST and tops up with stills, so eight screens still fill when only three
-    /// clips are warm (the first rung of the ladder, taken picture by picture).</para>
+    /// <para>ONE DRAW FOR EVERY SURFACE (2026-09-17). The wall and a chair used to be dealt from two
+    /// sets, clips and posters, because the station pages could not play a webm and thirteen video
+    /// decoders looked reckless. Both were answered on the page rather than here: every media module
+    /// routes on the extension now, and the surfaces that hold many pictures cap and pause them
+    /// (<c>shared\hypno\media.js</c> keeps eight resident and pauses a clip it is not drawing). What
+    /// stays true is that a host effect resolves a dealt url back to a FILE for a WPF overlay
+    /// (<c>BackRoomFxServices.LocalFile</c>), and a materialized clip is a file; what that overlay can do
+    /// with an mp4 is the overlay's business and was never this class's promise.</para>
     /// </summary>
-    private List<Pick> RemotePicks(string station, int seed, int count, out int warmStills, out int warmClips)
+    private List<Pick> RemotePicks(int seed, int count, out int warmClips)
     {
-        warmStills = 0;
         warmClips = 0;
         var dealt = new List<Pick>(count);
         try
@@ -376,24 +367,13 @@ internal sealed class BackRoomMedia : IBackRoomMedia
             var pool = _remote();
             if (pool == null) return dealt;
 
-            if (IsWall(station))
-            {
-                var clips = pool.ReadyClips();
-                warmClips = clips?.Count ?? 0;
-                // Its own stream, so how many clips happen to be warm cannot move which STILLS this
-                // deal or any station's deal gets.
-                if (warmClips > 0)
-                    Draw(clips!.Select(c => (c.Url, c.W, c.H)).ToList(),
-                        new Random(unchecked(seed * 23 + 5)), count, clip: true, dealt);
-            }
-
-            var stills = pool.Ready();
-            warmStills = stills?.Count ?? 0;
+            var clips = pool.Ready();
+            warmClips = clips?.Count ?? 0;
             // Its own stream, keyed off the seed like the word pick, so how many local headers were
-            // read cannot move which stills the wall gets.
-            if (warmStills > 0)
-                Draw(stills!.Select(s => (s.Url, s.W, s.H)).ToList(),
-                    new Random(unchecked(seed * 17 + 3)), count, clip: false, dealt);
+            // read cannot move which clips a surface gets.
+            if (warmClips > 0)
+                Draw(clips!.Select(c => (c.Url, c.W, c.H)).ToList(),
+                    new Random(unchecked(seed * 23 + 5)), count, clip: true, dealt);
         }
         catch (Exception ex)
         {

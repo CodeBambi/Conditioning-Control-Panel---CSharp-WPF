@@ -175,7 +175,7 @@ const row = (k) => `window.__backroom.stations.find((s) => s.key === ${JSON.stri
 try {
   await boot(1280, 800);
   ok(await ev(`!!window.__backroom?.scene`), 'room boots');
-  ok(await ev(`window.__backroom.scene.scene.getObjectByName('room_memorabilia').children.length===17`), 'eight photos, six posters, two notices and plaque present');
+  ok(await ev(`window.__backroom.scene.scene.getObjectByName('room_memorabilia').children.length===16`), 'eight photos, five posters, two notices and plaque present');
   await ev(`window.__backroom.scene.pose([-1.75,1.94,5.2],Math.PI,0)`);
   await sleep(600); await shot('memorabilia-entrance.png');
   ok(await ev(`import('./room/memorabilia.js').then(m=>m.PHOTO_GROUPS.map(g=>g.photos.length).join(',')==='1,2,1,2,2')`),'photo groups are 1,2,1,2,2');
@@ -208,7 +208,7 @@ try {
     await ev(`document.querySelector('.memorabilia-viewer').click()`);
     ok(!(await ev(`window.__backroom.scene.documents.opened`)),'outside click closes '+w);
   }
-  for(const id of ['eyes','work','late','attend','deep','listen','photo-0-0','photo-1-0','photo-1-1','photo-2-0','photo-3-0','photo-3-1','photo-4-0','photo-4-1','lost','meeting','plaque']) {
+  for(const id of ['eyes','work','late','attend','listen','photo-0-0','photo-1-0','photo-1-1','photo-2-0','photo-3-0','photo-3-1','photo-4-0','photo-4-1','lost','meeting','plaque']) {
     await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});
     await ev(`(()=>{const s=window.__backroom.scene,o=s.scene.getObjectByName('memorabilia_${id}'),a=o.rotation.y,p=o.position;s.pose([p.x+Math.sin(a)*2.5,p.y,p.z+Math.cos(a)*2.5],a,0);})()`);
     await sleep(250); await shot('memorabilia-wall-'+id+'.png');
