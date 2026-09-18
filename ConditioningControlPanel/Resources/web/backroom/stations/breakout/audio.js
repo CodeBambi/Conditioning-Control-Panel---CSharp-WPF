@@ -235,12 +235,14 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
         tone(hz, 0.28, 0.12, { lp: cut, pan, wet: true }), tone(hz * 2.76, 0.11, 0.028, { lp: cut, pan }),
         noise(6000, 0.012, 0.045, { q: 0.8, pan })];
       case 'gif': return [
-        tone(hz, 0.5, 0.11, { hzTo: hz * 0.72, attack: 0.03, lp: cut, pan, wet: true }),
-        tone(hz * 1.006, 0.45, 0.06, { hzTo: hz * 0.72, wave: 'triangle', attack: 0.04, lp: Math.min(cut, 2400), pan, wet: true }),
-        noise(2400, 0.3, 0.035, { hzTo: 900, q: 1.2, attack: 0.15, pan, wet: true })];
+        // Half the gif bounce (owner, 2026-09-18: too loud next to the bricks).
+        tone(hz, 0.5, 0.055, { hzTo: hz * 0.72, attack: 0.03, lp: cut, pan, wet: true }),
+        tone(hz * 1.006, 0.45, 0.03, { hzTo: hz * 0.72, wave: 'triangle', attack: 0.04, lp: Math.min(cut, 2400), pan, wet: true }),
+        noise(2400, 0.3, 0.018, { hzTo: 900, q: 1.2, attack: 0.15, pan, wet: true })];
       case 'spiral': return [
-        noise(700, 0.42, 0.07, { hzTo: 5200, q: 2.2, attack: 0.35, pan, wet: true }),
-        tone(hz * 2, 0.36, 0.045, { hzTo: hz * 3, attack: 0.3, lp: cut, pan, wet: true })];
+        // The spiral's pull, halved in level and in how high the sweep climbs (owner, 2026-09-18).
+        noise(700, 0.42, 0.035, { hzTo: 2600, q: 2.2, attack: 0.35, pan, wet: true }),
+        tone(hz * 2, 0.36, 0.022, { hzTo: hz * 1.5, attack: 0.3, lp: cut, pan, wet: true })];
       default: return [];
     }
   }

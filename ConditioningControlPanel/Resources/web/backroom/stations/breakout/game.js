@@ -26,6 +26,8 @@ export const BRICK = { cols: 10, rows: 6, w: 42, h: 18, gap: 4, top: 80 };
 export const PADDLE = { baseW: 90, h: 14 };
 export const BALL_R = 8;
 export const MAX_BALLS = 3;
+/* The Loom fields a well can wear (shared/hypno/loom.js presets); each well draws one at spawn. */
+export const WELL_PRESETS = ['candy', 'pinwheel', 'ribbon', 'mint', 'star', 'hub', 'whirl', 'wake'];
 export const DEFAULT_WORDS = ['DROP', 'RELAX', 'LET GO', 'SINK'];
 export const ROW_COLORS = ['#ff5fa2', '#ff8ac4', '#c86bff', '#7fd6ff', '#ffd166', '#7bffb0'];
 const STEP = 1 / 120;
@@ -285,7 +287,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     emit('burst', { x, y, gif: p.gif, kind, color: p.color });
   }
   function spawnCollider(x, y, gif) {
-    const r = 28, a = rng() * TAU;
+    const r = 46, a = rng() * TAU;
     g.colliders.push({ x, y, r, vx: Math.cos(a) * 18, vy: Math.sin(a) * 18, hits: 0, pulse: 0, alpha: 0, fading: false, gif, age: 0 });
   }
   function updateColliders(dt) {
@@ -301,11 +303,13 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   }
   function spawnWell(x, y, gif) {
     // `gif` is the dealt picture the renderer winds into the whirlwind (an int, like a collider's). `born` never pauses (the bubble inflate).
-    g.well = { x, y, r: 70, pull: 110, age: 0, born: 0, ttl: 6, rot: 0, used: false, fade: 1, captured: null, gif };
+    g.well = { x, y, r: 70, pull: 110, age: 0, born: 0, ttl: 6, rot: 0, used: false, fade: 1, captured: null, gif,
+      // Its own Loom look: a preset, a spin factor and a hue, so no two wells read the same.
+      preset: WELL_PRESETS[Math.floor(rng() * WELL_PRESETS.length)], spin: 0.75 + rng() * 0.5, hue: Math.floor(rng() * 360) };
   }
   function updateWell(dt) {
     const s = g.well; if (!s) return;
-    s.rot += dt * (s.captured ? 4.4 : 1.6);          // the swirl tightens while it holds a ball
+    s.rot += dt * (s.captured ? 4.4 : 1.6) * (s.spin || 1);          // the swirl tightens while it holds a ball
     s.born += dt;
     if (s.captured) return;
     s.age += dt;

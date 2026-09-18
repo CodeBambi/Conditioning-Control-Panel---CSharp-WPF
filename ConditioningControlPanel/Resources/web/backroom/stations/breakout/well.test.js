@@ -2,7 +2,7 @@
    still captures, orbits and releases the ball. Nothing visual (the whirlwind itself is render-well.js). */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame } from './game.js';
+import { createGame, WELL_PRESETS } from './game.js';
 
 const MEDIA_COUNT = 8;                                   // createMedia caps residents at 8; the sim deals indices into that
 const seeded = (seed = 7) => () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
@@ -29,6 +29,8 @@ test('a well spawns with a picture index inside the dealt count', () => {
     assert.equal(Number.isInteger(w.gif), true, 'gif is an int, the renderer looks it up in the deal');
     assert.ok(w.gif >= 0 && w.gif < MEDIA_COUNT, `gif ${w.gif} out of range`);
     assert.equal(w.r, 70); assert.equal(w.pull, 110); assert.equal(w.captured, null);
+    assert.ok(WELL_PRESETS.includes(w.preset), `preset ${w.preset} is one of the Loom's`);
+    assert.ok(w.spin >= 0.75 && w.spin <= 1.25 && w.hue >= 0 && w.hue < 360, 'its own spin and hue');
   }
 });
 

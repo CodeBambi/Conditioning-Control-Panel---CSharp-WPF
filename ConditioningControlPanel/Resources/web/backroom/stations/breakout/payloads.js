@@ -103,7 +103,9 @@ export function createMedia({ ctx, still = false, count = 8 } = {}) {
     mark(i, x, y) { const k = idx(i); if (k < 0) return; const s = sources[k]; if (!s.at) s.at = { x, y }; else { s.at.x = x; s.at.y = y; } },
     setFocus(x, y, r = 140) { focus = (Number.isFinite(x) && Number.isFinite(y)) ? { x, y, r: Math.max(0, r) } : null; },
     clearMarks() { for (const s of sources) s.at = null; },
-    tick(now) { for (const s of sources) { if (!near(s)) continue; try { s.src.tick(now, still); } catch (e) { /* a closed decoder */ } } },
+    /** Source i advances on the next tick() wherever the focus is: the bubbles and the pops always move. */
+    pin(i) { const k = idx(i); if (k >= 0) sources[k].pin = true; },
+    tick(now) { for (const s of sources) { const go = s.pin || near(s); s.pin = false; if (!go) continue; try { s.src.tick(now, still); } catch (e) { /* a closed decoder */ } } },
     /** Up to n dealt word texts, for the word trail and the mantra wall. */
     trailWords(n = 12) { return words.slice(0, Math.max(0, n | 0)).map(w => w.text); },
     dispose() { disposed = true; controller.abort(); for (const s of sources) { try { s.src.dispose(); } catch (e) { /* noop */ } } sources.length = 0; },

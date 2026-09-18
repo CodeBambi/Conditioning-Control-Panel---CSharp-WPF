@@ -257,8 +257,9 @@ export async function mount(ctx) {
   function focusMedia(s) {
     if (typeof media.mark === 'function') {
       for (const br of s.bricks) if (br.alive && typeof br.gif === 'number' && br.gif >= 0) media.mark(br.gif, br.x + br.w / 2, br.y + br.h / 2);
-      for (const c of s.colliders || []) if (typeof c.gif === 'number' && c.gif >= 0) media.mark(c.gif, c.x, c.y);
-      for (const p of s.pops || []) if (typeof p.gif === 'number' && p.gif >= 0) media.mark(p.gif, p.x, p.y);
+      const pin = typeof media.pin === 'function' ? media.pin : () => {};
+      for (const c of s.colliders || []) if (typeof c.gif === 'number' && c.gif >= 0) { media.mark(c.gif, c.x, c.y); pin(c.gif); }
+      for (const p of s.pops || []) if (typeof p.gif === 'number' && p.gif >= 0) { media.mark(p.gif, p.x, p.y); pin(p.gif); }
     }
     if (typeof media.setFocus !== 'function') return;
     const ball = s.balls.find(b => !b.lost) || s.balls[0];

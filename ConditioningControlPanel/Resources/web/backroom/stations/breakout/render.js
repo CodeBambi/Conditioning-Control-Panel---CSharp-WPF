@@ -228,7 +228,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       g.restore();
     }
   }
-  /** The whirlwind: a dealt picture cut into wedges and wound into a spiral (render-well.js), inside the bubble. */
+  /** The whirlwind: one of the Loom's fields wound inside the bubble (render-well.js), its preset, spin and hue the well's own. */
   function drawWell(s, mix, dt, extras) {
     const well = s.well; if (!well) return;
     const m = (extras && extras.media) || media;
@@ -251,8 +251,13 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       g.fillStyle = col(VIOLET, mix); g.fill(); g.shadowBlur = 0;
       if (frame) {
         g.clip();
-        const fw = frame.width || frame.naturalWidth || 1, fh = frame.height || frame.naturalHeight || 1, k = Math.max(2 * r / fw, 2 * r / fh);
+        // The picture fills a smaller circle and fades into the bubble's body before the rim, so it floats with room round it.
+        const inner = r * 0.86;
+        const fw = frame.width || frame.naturalWidth || 1, fh = frame.height || frame.naturalHeight || 1, k = Math.max(2 * inner / fw, 2 * inner / fh);
         g.drawImage(frame, c.x - fw * k / 2, c.y - fh * k / 2, fw * k, fh * k);
+        const fade = g.createRadialGradient(c.x, c.y, r * 0.52, c.x, c.y, r * 0.9);
+        fade.addColorStop(0, col(VIOLET, mix, 0)); fade.addColorStop(1, col(VIOLET, mix, 1));
+        g.fillStyle = fade; g.fillRect(c.x - r, c.y - r, 2 * r, 2 * r);
       }
       g.restore();
       if (!drawBubble(c.x, c.y, r, a)) { g.strokeStyle = col(PINK, mix, 0.9 * a); g.lineWidth = 2 + c.pulse * 3; g.beginPath(); g.arc(c.x, c.y, r, 0, 7); g.stroke(); }
@@ -484,7 +489,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   }
 
   const r = { resize, draw, onEvent, onGameEvent: onEvent, toField,
-    dispose() { P.clear(); shockwaves.length = drifters.length = 0; debris.clear(); stamps.clear(); wellFx.reset(); off = null; },
+    dispose() { P.clear(); shockwaves.length = drifters.length = 0; debris.clear(); stamps.clear(); wellFx.reset(); wellFx.dispose(); off = null; },
     particleCount: () => P.count() };
   return r;
 }
