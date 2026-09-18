@@ -22,30 +22,23 @@
             <Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="50"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                 <Viewbox Width="48" Height="46" IsHitTestVisible="False">
-                    <!-- EMI stays planted. Only the shoulder hinge moves. -->
-                    <Canvas Width="90" Height="86">
-                        <Path Data="M29,57 L21,66 18,72" Stroke="#D99ECB" StrokeThickness="8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                        <Ellipse Canvas.Left="11" Canvas.Top="68" Width="12" Height="10" Fill="#FFE3F4"/>
-                        <Canvas x:Name="WaveArm" Width="90" Height="86">
-                            <Canvas.RenderTransform><RotateTransform x:Name="ArmTurn" CenterX="60" CenterY="56"/></Canvas.RenderTransform>
-                            <Path Data="M60,56 L70,48 73,39" Stroke="#D99ECB" StrokeThickness="8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                            <Ellipse Canvas.Left="68" Canvas.Top="28" Width="12" Height="15" Fill="#FFE3F4"/>
-                        </Canvas>
-                        <Path Data="M31,54 L58,54 65,76 Q45,83 25,76 Z" Fill="#41264F" Stroke="#CE94C9" StrokeThickness="2"/>
-                        <Path Data="M32,54 L45,72 58,54 Z" Fill="#FFF0F8"/>
-                        <Path Data="M36,57 L45,61 54,57 54,67 45,63 36,67 Z" Fill="#FF7CBB"/>
-                        <Ellipse Canvas.Left="43" Canvas.Top="68" Width="4" Height="4" Fill="#FFD580"/>
-                        <Path Data="M30,17 L23,7 M57,17 L65,7" Stroke="#D59BCF" StrokeThickness="3" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                        <Ellipse Canvas.Left="19" Canvas.Top="2" Width="8" Height="8" Fill="#FF8ACB"/>
-                        <Ellipse Canvas.Left="61" Canvas.Top="2" Width="8" Height="8" Fill="#FFD580"/>
-                        <Border Canvas.Left="17" Canvas.Top="14" Width="55" Height="43" CornerRadius="13"
-                                Background="#C990CE" BorderBrush="#FBE0F6" BorderThickness="2">
-                            <Border Margin="5" CornerRadius="8" Background="#181022" BorderBrush="#7A477F" BorderThickness="1">
-                                <emi:EmiFace x:Name="MascotFace" Margin="4,3"/>
-                            </Border>
-                        </Border>
-                        <Path Data="M28,78 L26,83 37,83 M54,78 L55,83 66,83" Stroke="#B281B7" StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                    </Canvas>
+                    <!-- The croupier EMI from the Back Room's prize counter (gold casing, visor, bow tie,
+                         feather duster), as a pixel sprite split into two layers over a 954x995 canvas:
+                         the body and the waving arm. EMI stays planted, only the arm layer turns, about
+                         its shoulder (the RenderTransformOrigin). Her glass is blank in the sprite so the
+                         EmiFace renderer draws the face, exactly as the desk and the Arcademy do. -->
+                    <Grid Width="954" Height="995">
+                        <Image Source="pack://application:,,,/Resources/emi/wallet_croupier_body.png"
+                               Stretch="Fill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <Image x:Name="WaveArm" Source="pack://application:,,,/Resources/emi/wallet_croupier_arm.png"
+                               Stretch="Fill" RenderOptions.BitmapScalingMode="HighQuality"
+                               RenderTransformOrigin="0.848,0.676">
+                            <Image.RenderTransform><RotateTransform x:Name="ArmTurn"/></Image.RenderTransform>
+                        </Image>
+                        <!-- The glass rect, measured off the sprite (302,279 425x385) and inset 18px. -->
+                        <emi:EmiFace x:Name="MascotFace" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                     Margin="320,297,0,0" Width="389" Height="349"/>
+                    </Grid>
                 </Viewbox>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="3,0,0,0">
                     <TextBlock x:Name="WalletLabel" TextTrimming="CharacterEllipsis" Foreground="#D9BCD9" FontSize="10"/>
