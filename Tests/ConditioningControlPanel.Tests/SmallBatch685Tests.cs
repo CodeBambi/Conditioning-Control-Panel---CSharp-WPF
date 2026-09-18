@@ -318,7 +318,7 @@ public class InheritedBambiTriggerPruneTests
         {
             "OBEY", "DROP", "FOCUS", "BREATHE", "RELAX", "DEEPER", "TRANCE",
             "KNEEL", "EMPTY", "STAY", "SINK", "EDGE", "BEG", "HOLD IT", "COLLAPSE",
-            "GOOD BOY", "COMPLY"
+            "GOOD PET", "COMPLY"
         };
         var result = Prune(saved, out var removed);
 

@@ -65,6 +65,29 @@ function toGame(url) {
   return PAGE_ORIGIN + s.slice(CONTENT_ORIGIN.length);
 }
 
+/* TEMPORARY (Circe neutral hotfix overlay). These clips were re-rendered after
+ * the audio-web pack shipped, and a pack a user already holds never refreshes
+ * on its own, so the installer carries them IN-BOX as well (csproj
+ * $(CirceNeutralInBoxOverride)). Content-first would keep playing the stale pack
+ * copy, so for exactly these paths the page origin goes first, which is the
+ * same install-dir-wins rule ContentLocator applies on the C# side. The usual
+ * single retry still falls back to ccp.content. Remove with the csproj block. */
+const INBOX_FIRST = new Set([
+  '/intake/assets/vo/q_crc_h3_betaplace.mp3',
+  '/intake/assets/vo/q_crc_h3_ci_betacomfort.mp3',
+  '/intake/assets/vo/q_crc_h3_mantra_beta.mp3',
+  '/intake/assets/vo/q_crc_h3_yn_betaadmit.mp3',
+  '/intake/assets/vo/sure_circe_16.mp3',
+]);
+
+/** True when `url` (page-origin or root-relative) names an INBOX_FIRST clip. */
+function inBoxFirst(url) {
+  let s = String(url || '');
+  if (PAGE_ORIGIN && s.startsWith(PAGE_ORIGIN + '/')) s = s.slice(PAGE_ORIGIN.length);
+  else if (!s.startsWith('/') || s.startsWith('//')) return false;
+  return INBOX_FIRST.has(s.split(/[?#]/)[0]);
+}
+
 /**
  * The URL to try FIRST for one runtime-fetched audio file. Feed it whatever the
  * existing builders produce; it only moves onto the content host when the host
@@ -72,6 +95,7 @@ function toGame(url) {
  */
 export function audioUrl(url) {
   if (!contentReady()) return url;
+  if (inBoxFirst(url)) return url;
   return toContent(url) || url;
 }
 
