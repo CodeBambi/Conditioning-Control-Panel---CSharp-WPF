@@ -93,6 +93,12 @@ namespace ConditioningControlPanel
         // before signaling, which the listener reads and replays on the dispatcher.
         private static string? _pendingFileOpenAction;
         private static string? _pendingFileOpenPath;
+
+        /// <summary>
+        /// Which surface this process booted with (panel, launcher, or a game), decided once the
+        /// panel exists. Panel until then, so every reader before that point sees the classic app.
+        /// </summary>
+        public static Services.Launcher.BootDecision Boot { get; private set; } = Services.Launcher.BootDecision.PanelFirst;
         private static string FileOpenHandoffPath => Path.Combine(UserDataPath, "fileopen.pending");
 
         private static readonly HashSet<string> FileOpenAllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -152,6 +158,12 @@ namespace ConditioningControlPanel
                 try { File.Delete(p); } catch (Exception ex) { Diag.Swallowed(ex); }
                 if (lines.Length < 2) return (null, null);
                 var action = lines[0].Trim();
+                // A launcher surface handoff carries "panel" / "launcher" / "game:<id>", not a file.
+                if (action == Services.Launcher.LauncherHandoff.Action)
+                {
+                    var surface = lines[1].Trim();
+                    return surface.Length == 0 ? (null, null) : (action, surface);
+                }
                 var path = ValidateMediaArgPath(lines[1].Trim());
                 if (path == null) return (null, null);
                 if (action != "play" && action != "edit") return (null, null);
@@ -1372,6 +1384,12 @@ namespace ConditioningControlPanel
                 {
                     try { WriteFileOpenHandoff(_pendingFileOpenAction, _pendingFileOpenPath); } catch (Exception ex) { Diag.Swallowed(ex); }
                 }
+                else if (Services.Launcher.LauncherHandoff.Encode(e.Args) is string surfaceHandoff)
+                {
+                    // A game / launcher / panel shortcut clicked while the app is already up: the
+                    // primary routes to that surface instead of just raising the panel.
+                    try { WriteFileOpenHandoff(Services.Launcher.LauncherHandoff.Action, surfaceHandoff); } catch (Exception ex) { Diag.Swallowed(ex); }
+                }
 
                 EventWaitHandle? ackWait = null;
                 try { ackWait = EventWaitHandle.OpenExisting(ShowAckSignalName); } catch { ackWait = null; }
@@ -1491,13 +1509,20 @@ namespace ConditioningControlPanel
                                 var mainWin = MainWindowRef ?? (MainWindow as MainWindow);
                                 if (mainWin != null)
                                 {
-                                    try { mainWin.ShowFromTray(); }
-                                    catch (Exception ex) { Logger?.Warning(ex, "ShowFromTray failed"); }
                                     var (action, path) = ConsumeFileOpenHandoff();
-                                    if (action != null && path != null)
+                                    if (action == Services.Launcher.LauncherHandoff.Action && path != null)
                                     {
-                                        try { mainWin.HandlePendingFileOpen(action, path); }
-                                        catch (Exception ex) { Logger?.Warning(ex, "HandlePendingFileOpen failed"); }
+                                        RouteSurfaceHandoff(path);
+                                    }
+                                    else
+                                    {
+                                        try { mainWin.ShowFromTray(); }
+                                        catch (Exception ex) { Logger?.Warning(ex, "ShowFromTray failed"); }
+                                        if (action != null && path != null)
+                                        {
+                                            try { mainWin.HandlePendingFileOpen(action, path); }
+                                            catch (Exception ex) { Logger?.Warning(ex, "HandlePendingFileOpen failed"); }
+                                        }
                                     }
                                 }
 
@@ -2623,6 +2648,25 @@ namespace ConditioningControlPanel
             // — popups, feature controls, etc. Expose a stable static reference.
             MainWindowRef = mainWindow;
 
+            // Boot surface. Decided here and not earlier because the first-run wizard rides the
+            // panel's constructor: ShouldRunAndClaim latched Welcomed = true a moment ago, so the
+            // claim flag is what still says "fresh install" on this launch. Acted on after the
+            // splash fades (see RouteBootSurface below); --startup and --panel decide Panel.
+            try
+            {
+                Boot = Services.Launcher.LauncherBoot.Decide(
+                    e.Args,
+                    welcomed: Settings.Current.Welcomed && !FirstRunWizard.FirstRunClaimedThisLaunch,
+                    ageAccepted: Settings.Current.HasAcceptedAgeVerification,
+                    skipToPanel: Settings.Current.LauncherSkipToPanel);
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "[Launcher] boot decision failed; booting the panel");
+                Boot = Services.Launcher.BootDecision.PanelFirst;
+            }
+            Logger?.Information("[Launcher] boot surface {Surface} game {GameId}", Boot.Surface, Boot.GameId);
+
             // HANG HUNT: `--stress` drives the layered-window subsystems (bubbles, flash, shared-host
             // create/close) at max rate to provoke the recurring render-thread deadlock quickly, so the
             // external watcher (hang-hunt.ps1) can auto-capture a stack the moment the UI thread wedges.
@@ -3014,7 +3058,11 @@ namespace ConditioningControlPanel
 
             // First dispatcher pump = startup is over: from here on, single-instance acks must
             // come from the dispatcher itself so a wedged message loop is detected again.
-            Dispatcher.BeginInvoke(new Action(() => _startupPhase = false));
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _startupPhase = false;
+                if (Boot.Surface != Services.Launcher.BootSurface.Panel) RouteBootSurface(mainWindow);
+            }));
 
             // Age verification gate - the LEFTOVER population only.
             //
@@ -3219,6 +3267,64 @@ namespace ConditioningControlPanel
         // app was foregrounded recently). Pulsing Topmost true→false is the
         // documented workaround — it bypasses the lock without leaving the
         // window stuck on top.
+        /// <summary>
+        /// Boot into the launcher or a game: tuck the freshly shown panel into the tray (no
+        /// balloon, nobody has seen it yet) and bring the decided surface up. Any failure leaves
+        /// the panel where it is, which is the classic app.
+        /// </summary>
+        private static void RouteBootSurface(MainWindow mainWindow)
+        {
+            try
+            {
+                mainWindow.HideForLauncher(quiet: true);
+                if (Boot.Surface == Services.Launcher.BootSurface.Game && Boot.GameId != null)
+                {
+                    if (!Services.Launcher.LauncherHost.LaunchGame(Boot.GameId))
+                        Services.Launcher.LauncherHost.Show();
+                }
+                else
+                {
+                    Services.Launcher.LauncherHost.Show();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error(ex, "[Launcher] boot routing failed; leaving the panel up");
+                try { if (!mainWindow.IsVisible) mainWindow.ShowFromTray(); }
+                catch (Exception ex2) { Logger?.Debug("ShowFromTray after failed boot routing: {Error}", ex2.Message); }
+            }
+        }
+
+        /// <summary>A second instance asked for a surface (see <see cref="Services.Launcher.LauncherHandoff"/>).</summary>
+        private static void RouteSurfaceHandoff(string payload)
+        {
+            try
+            {
+                var (kind, id) = Services.Launcher.LauncherHandoff.Decode(payload);
+                Logger?.Information("[Launcher] second instance asked for {Kind} {Id}", kind, id);
+                switch (kind)
+                {
+                    case Services.Launcher.LauncherHandoff.PanelKind:
+                        Services.Launcher.LauncherHost.OpenPanel();
+                        break;
+                    case Services.Launcher.LauncherHandoff.GameKind:
+                        if (id == null || !Services.Launcher.LauncherHost.LaunchGame(id))
+                            Services.Launcher.LauncherHost.Show();
+                        break;
+                    default:
+                        if (MainWindowRef is { IsVisible: true })
+                            Services.Launcher.LauncherHost.BackToLauncher(); // Lockdown vetoes on its own
+                        else
+                            Services.Launcher.LauncherHost.Show();
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "[Launcher] surface handoff failed");
+            }
+        }
+
         private static void ForceWindowToFront(Window window)
         {
             try

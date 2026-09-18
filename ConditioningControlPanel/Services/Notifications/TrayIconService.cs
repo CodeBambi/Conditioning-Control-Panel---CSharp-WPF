@@ -143,14 +143,16 @@ namespace ConditioningControlPanel.Services;
         }
     }
 
-    public void MinimizeToTray()
+    /// <param name="balloon">False to skip the one-time "minimized to tray" balloon. The launcher
+    /// tucks the panel away at boot before the user has seen it, and a balloon there is noise.</param>
+    public void MinimizeToTray(bool balloon = true)
     {
         _mainWindow.Hide();
         Show();
 
         // Only show the balloon tip notification on first minimize
         // This prevents annoying repeated notifications (which can stay visible indefinitely on some systems)
-        if (!_hasShownFirstMinimizeNotification)
+        if (balloon && !_hasShownFirstMinimizeNotification)
         {
             _hasShownFirstMinimizeNotification = true;
             _notifyIcon?.ShowBalloonTip(2000, Loc.Get("app_title"),
