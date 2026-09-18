@@ -2726,6 +2726,16 @@ namespace ConditioningControlPanel.Models
             set { _autoStartEngine = value; OnPropertyChanged(); }
         }
 
+        // The launcher's "open the panel directly next time" box. Off: a bare launch shows the
+        // CC Labs launcher with the panel tucked in the tray. On: the classic boot. --panel,
+        // --launcher and --game override it either way (Services/Launcher/LauncherBoot.cs).
+        private bool _launcherSkipToPanel = false;
+        public bool LauncherSkipToPanel
+        {
+            get => _launcherSkipToPanel;
+            set { _launcherSkipToPanel = value; OnPropertyChanged(); }
+        }
+
         private bool _panicKeyEnabled = true; // ESC to stop
         public bool PanicKeyEnabled
         {
