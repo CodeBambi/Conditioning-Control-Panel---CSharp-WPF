@@ -53,6 +53,7 @@ public partial class LauncherWindow : Window
         IsVisibleChanged += OnIsVisibleChanged;
         Loaded += (_, _) => OnLoadedOnce();
         Closed += OnClosedCleanup;
+        LauncherHost.FadeOut = FadeOutThen;
 
         var lockdown = App.Lockdown;
         if (lockdown != null)
@@ -84,6 +85,7 @@ public partial class LauncherWindow : Window
     {
         try
         {
+            FadeIn();
             BuildTiles();
             RefreshAccount();
             RefreshStatus();
@@ -106,6 +108,7 @@ public partial class LauncherWindow : Window
     private void OnHidden()
     {
         _statusTimer.Stop();
+        RestoreRootOpacity();
         try { FxOnHidden(); } catch (Exception ex) { Log.Debug(ex, "[Launcher] FxOnHidden threw"); }
     }
 
@@ -123,6 +126,8 @@ public partial class LauncherWindow : Window
 
     private void OnClosedCleanup(object? sender, EventArgs e)
     {
+        LauncherHost.FadeOut = null;
+        _fadeGuard?.Stop();
         _statusTimer.Stop();
         _shortcutTextTimer.Stop();
         UnhookEngine();
