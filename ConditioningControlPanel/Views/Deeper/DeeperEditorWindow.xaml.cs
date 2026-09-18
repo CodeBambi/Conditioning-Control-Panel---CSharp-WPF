@@ -169,6 +169,15 @@ namespace ConditioningControlPanel.Views.Deeper
             SidebarRoot.AddHandler(Keyboard.GotKeyboardFocusEvent,
                 new KeyboardFocusChangedEventHandler((_, _) => _inspectorSessionSnapshotted = false), true);
 
+            _stripMessageTimer = new DispatcherTimer();
+            _stripMessageTimer.Tick += (_, _) =>
+            {
+                _stripMessageTimer.Stop();
+                TxtValidationSummary.BeginAnimation(OpacityProperty, null);
+                TxtValidationSummary.Opacity = 1;
+                RefreshValidation();
+            };
+
             _validationTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(220) };
             _validationTimer.Tick += (_, _) => { _validationTimer.Stop(); RefreshValidation(); };
 
@@ -1539,6 +1548,7 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void TimelineCanvas_MouseMove(object sender, MouseEventArgs e)
         {
+            UpdateHoverTimeTip(e);
             if (_dragMode == DragMode.RubberBand)
             {
                 UpdateRubberBand(e.GetPosition(TimelineCanvas));
@@ -1776,6 +1786,27 @@ namespace ConditioningControlPanel.Views.Deeper
                 TxtRuleBandEnd.Text = _draggedRegion.End.ToString("0.##", CultureInfo.InvariantCulture);
             }
             finally { _suppressRuleSync = false; }
+        }
+
+        // Small m:ss.ff readout that trails the cursor over the timeline so the
+        // user can aim a drop without reading the ruler.
+        private void UpdateHoverTimeTip(MouseEventArgs e)
+        {
+            if (HoverTimeTip == null || TxtHoverTime == null) return;
+            if (_totalSeconds <= 0) { HoverTimeTip.Visibility = Visibility.Collapsed; return; }
+            var pt = e.GetPosition(TimelineCanvas);
+            TxtHoverTime.Text = FormatHoverTime(MouseToSeconds(e));
+            HoverTimeTip.Visibility = Visibility.Visible;
+            double x = pt.X + 12;
+            double tipW = HoverTimeTip.ActualWidth;
+            if (tipW > 0 && x + tipW > TimelineCanvas.ActualWidth) x = pt.X - tipW - 4;
+            Canvas.SetLeft(HoverTimeTip, Math.Max(0, x));
+            Canvas.SetTop(HoverTimeTip, RulerStripHeight + 2);
+        }
+
+        private void TimelineCanvas_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (HoverTimeTip != null) HoverTimeTip.Visibility = Visibility.Collapsed;
         }
 
         private void ApplyScrubFromMouse(MouseEventArgs e)
@@ -2720,24 +2751,18 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 if (App.Haptics == null || !App.Haptics.IsConnected)
                 {
-                    TxtValidationSummary.Text = Loc.Get("deeper_editor_haptic_test_no_device");
-                    TxtValidationSummary.Foreground = (System.Windows.Media.Brush)FindResource("PinkSoftBrush");
+                    ShowStripMessage(Loc.Get("deeper_editor_haptic_test_no_device"), "PinkSoftBrush", 4000);
                     return;
                 }
                 // The preview waives the master toggle, but the Pattern routing row is the user's
                 // own dial — a disabled row silently swallows the envelope, so say so instead.
                 if (!App.Haptics.Settings.V2.Rule(HapticLayer.Pattern).Enabled)
                 {
-                    TxtValidationSummary.Text = Loc.Get("deeper_editor_haptic_test_row_off");
-                    TxtValidationSummary.Foreground = (System.Windows.Media.Brush)FindResource("PinkSoftBrush");
+                    ShowStripMessage(Loc.Get("deeper_editor_haptic_test_row_off"), "PinkSoftBrush", 4000);
                     return;
                 }
                 var ok = await App.Haptics.PreviewSyncPatternAsync(samples, durationMs, _selectedHaptic.Target);
-                if (!ok)
-                {
-                    TxtValidationSummary.Text = Loc.Get("deeper_editor_haptic_test_premium");
-                    TxtValidationSummary.Foreground = (System.Windows.Media.Brush)FindResource("PinkSoftBrush");
-                }
+                if (!ok) ShowStripMessage(Loc.Get("deeper_editor_haptic_test_premium"), "PinkSoftBrush", 4000);
             }
             catch (Exception ex)
             {
@@ -2818,9 +2843,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     sb.Append("  ").AppendLine(desc);
                 sb.AppendLine();
             }
-            MessageBox.Show(this, sb.ToString().TrimEnd(),
-                Loc.Get("deeper_editor_help_browse_triggers"),
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            ShowHelpPopup(sender as FrameworkElement, Loc.Get("deeper_editor_help_browse_triggers"), sb.ToString().TrimEnd());
         }
 
         private void BtnActionHelp_Click(object sender, RoutedEventArgs e)
@@ -2834,16 +2857,24 @@ namespace ConditioningControlPanel.Views.Deeper
                     sb.Append("  ").AppendLine(desc);
                 sb.AppendLine();
             }
-            MessageBox.Show(this, sb.ToString().TrimEnd(),
-                Loc.Get("deeper_editor_help_browse_actions"),
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            ShowHelpPopup(sender as FrameworkElement, Loc.Get("deeper_editor_help_browse_actions"), sb.ToString().TrimEnd());
         }
 
         private void BtnRegionHelp_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show(this, Loc.Get("deeper_editor_help_region_body"),
-                Loc.Get("deeper_editor_help_region"),
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            ShowHelpPopup(sender as FrameworkElement, Loc.Get("deeper_editor_help_region"), Loc.Get("deeper_editor_help_region_body"));
+        }
+
+        // Help is read-only reference text, so it opens as a dismiss-on-click-away
+        // Popup beside the button instead of a modal MessageBox.
+        private void ShowHelpPopup(FrameworkElement? anchor, string title, string body)
+        {
+            if (EditorHelpPopup == null) return;
+            TxtEditorHelpTitle.Text = title;
+            TxtEditorHelpBody.Text = body;
+            EditorHelpPopup.PlacementTarget = anchor ?? this;
+            EditorHelpPopup.IsOpen = false;
+            EditorHelpPopup.IsOpen = true;
         }
 
         // Mission 1 commit 5 — BtnAddRule_Click deleted. No XAML referenced
@@ -4129,10 +4160,7 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 if (App.DeeperPlayer == null || App.DeeperHost == null)
                 {
-                    MessageBox.Show(this,
-                        Loc.Get("deeper_editor_preview_not_initialized"),
-                        Loc.Get("deeper_editor_preview_title"),
-                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    App.Notifications?.Show(Loc.Get("deeper_editor_preview_not_initialized"), NotificationType.Warning);
                     return;
                 }
                 // Heal band-style rules whose trigger.RegionId is empty but whose
@@ -4274,7 +4302,11 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             if (_suppressDirty) return;
             CommitPendingInspectorSnapshot();
-            _isDirty = true;
+            if (!_isDirty)
+            {
+                _isDirty = true;
+                ApplyWindowTitle();
+            }
             TxtDirty.Visibility = Visibility.Visible;
             // Mission 1 sidebar restructure: the items overview list is gone;
             // the selection summary strip is fed from the SelectXxx setters
@@ -4306,6 +4338,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 TxtValidationSummary.Foreground = (System.Windows.Media.Brush)FindResource("TextLightBrush");
                 TxtValidationSummary.Cursor = null;
                 TxtValidationSummary.TextDecorations = null;
+                TxtValidationSummary.ToolTip = Loc.Get("deeper_editor_tt_validation");
                 if (ValidationDetailsPopup != null) ValidationDetailsPopup.IsOpen = false;
             }
             else
@@ -4326,6 +4359,28 @@ namespace ConditioningControlPanel.Views.Deeper
                 // edit), refresh its contents in place rather than closing it.
                 if (ValidationDetailsPopup?.IsOpen == true) PopulateValidationPopup();
             }
+        }
+
+        // Transient text on the validation strip ("Saved", haptic-test notes):
+        // shown for <paramref name="ms"/> then faded back to the validation state.
+        private DispatcherTimer? _stripMessageTimer;
+        private void ShowStripMessage(string text, string brushKey, int ms)
+        {
+            if (TxtValidationSummary == null || _stripMessageTimer == null) return;
+            _stripMessageTimer.Stop();
+            TxtValidationSummary.BeginAnimation(OpacityProperty, null);
+            TxtValidationSummary.Opacity = 1;
+            TxtValidationSummary.Text = text;
+            TxtValidationSummary.Foreground = (System.Windows.Media.Brush)FindResource(brushKey);
+            TxtValidationSummary.Cursor = null;
+            TxtValidationSummary.TextDecorations = null;
+            var fade = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(400))
+            {
+                BeginTime = TimeSpan.FromMilliseconds(Math.Max(0, ms - 400))
+            };
+            TxtValidationSummary.BeginAnimation(OpacityProperty, fade);
+            _stripMessageTimer.Interval = TimeSpan.FromMilliseconds(ms);
+            _stripMessageTimer.Start();
         }
 
         private void TxtValidationSummary_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -4439,6 +4494,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 _isDirty = false;
                 TxtDirty.Visibility = Visibility.Collapsed;
                 UpdateTitle();
+                ShowStripMessage(Loc.Get("deeper_editor_saved_inline"), "DeeperAccentBrush", 2000);
 
                 // Notify the interactive tutorial bus so the HT walkthrough can advance
                 // to its follow-up card and surface the saved path.
@@ -4545,10 +4601,9 @@ namespace ConditioningControlPanel.Views.Deeper
             var result = EnhancementMediaBundler.Export(_enhancement, sourcePath, destPath);
             if (result.Success)
             {
-                MessageBox.Show(this,
+                App.Notifications?.Show(
                     string.Format(Loc.Get("deeper_editor_export_success_fmt"), result.OutputPath),
-                    Loc.Get("deeper_editor_export_dialog_title"),
-                    MessageBoxButton.OK, MessageBoxImage.Information);
+                    NotificationType.Success, TimeSpan.FromSeconds(8));
             }
             else
             {
@@ -4563,15 +4618,22 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void UpdateTitle()
         {
-            var name = string.IsNullOrEmpty(_enhancement.Metadata.Name)
-                ? Loc.Get("deeper_editor_untitled") : _enhancement.Metadata.Name;
-            TxtTitle.Text = name;
-            Title = $"Deeper — {name}";
+            TxtTitle.Text = ProjectDisplayName();
+            ApplyWindowTitle();
             // Linked-files strip shows the file path; keep it in sync.
             RefreshLinkedFilesUi();
             // Metadata drawer subtitle ("Metadata · {name}") shown when collapsed.
             UpdateMetadataDrawerSubtitle();
         }
+
+        private string ProjectDisplayName()
+            => string.IsNullOrEmpty(_enhancement.Metadata.Name)
+                ? Loc.Get("deeper_editor_untitled") : _enhancement.Metadata.Name;
+
+        // OS window title carries the unsaved marker so the taskbar / Alt+Tab
+        // preview shows it without the editor being in front.
+        private void ApplyWindowTitle()
+            => Title = $"Deeper - {ProjectDisplayName()}{(_isDirty ? "*" : "")}";
 
         // -- Linked Files strip ----------------------------------------------
 
@@ -4930,14 +4992,7 @@ namespace ConditioningControlPanel.Views.Deeper
             return ext is ".mp4" or ".webm" or ".mkv" or ".mov" or ".avi" or ".m4v";
         }
 
-        private static string FormatTime(double seconds)
-        {
-            if (seconds < 0 || double.IsNaN(seconds)) seconds = 0;
-            var ts = TimeSpan.FromSeconds(seconds);
-            return ts.TotalHours >= 1
-                ? $"{(int)ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}"
-                : $"{ts.Minutes}:{ts.Seconds:D2}";
-        }
+        private static string FormatTime(double seconds) => FormatTransportTime(seconds);
 
         // -- Window lifecycle --------------------------------------------------
 

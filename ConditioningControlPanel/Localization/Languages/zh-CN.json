@@ -5993,5 +5993,6 @@
   "deeper_editor_ctx_item_copy": "Copy",
   "deeper_editor_ctx_item_cut": "Cut",
   "deeper_editor_ctx_item_delete": "Delete",
-  "deeper_editor_ctx_item_jump": "Jump to start"
+  "deeper_editor_ctx_item_jump": "Jump to start",
+  "deeper_editor_saved_inline": "Saved"
 }

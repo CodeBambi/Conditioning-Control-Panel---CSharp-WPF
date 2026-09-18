@@ -204,8 +204,30 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (w < 320) w = 320;
                 if (w > 520) w = 520;
                 SidebarColumn.Width = new GridLength(w, GridUnitType.Pixel);
+
+                // Timeline row height (preview / timeline splitter), min 120 px.
+                if (TimelineRow != null)
+                {
+                    int h = App.Settings?.Current?.DeeperEditorTimelineHeight ?? 160;
+                    if (h < 120) h = 120;
+                    if (h > 600) h = 600;
+                    TimelineRow.Height = new GridLength(h, GridUnitType.Pixel);
+                }
             }
             catch { }
+        }
+
+        private void TimelineSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+        {
+            try
+            {
+                if (TimelineRow == null || App.Settings == null) return;
+                int h = (int)Math.Round(TimelineRow.ActualHeight);
+                if (h < 120) h = 120;
+                App.Settings.Current.DeeperEditorTimelineHeight = h;
+                App.Settings.Save();
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void SidebarSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
