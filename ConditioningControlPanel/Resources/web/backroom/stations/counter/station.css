@@ -26,6 +26,9 @@
 .counter-title { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: .04em; color: #ffd6ee;
   text-shadow: 0 0 12px #ff8ed288, 0 0 28px #c767b355; }
 .counter-station:not([data-host-back]) .counter-title { flex: 1; text-align: center; }
+.counter-how { padding: 6px 12px; border-radius: 30px; font-size: 12px; font-weight: 600; cursor: pointer; color: #cdb8ff;
+  background: #201229e8; border: 1px solid #cdb8ff55; }
+.counter-how:hover { color: #ffe3f2; border-color: #cdb8ffaa; }
 .counter-sp { background: #201229e8; border: 1px solid #b77da247; padding: 6px 12px; border-radius: 30px; font-size: 12px; font-weight: 600;
   color: #ffe3f2; font-variant-numeric: tabular-nums; }
 

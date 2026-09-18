@@ -35,6 +35,7 @@ export const LEX = {
   br_counter_link_discord: 'Link Discord first',
   br_counter_price: '{0} SP',
   br_counter_try: 'Try it',
+  br_counter_how: 'How it works',
   br_counter_wheel_nudge: 'Short for the next one? The wheel spins free once a day.',
   br_counter_delivery_pending: 'The role is on its way to Discord.',
   br_counter_delivery_granted: 'The role is on your Discord account.',

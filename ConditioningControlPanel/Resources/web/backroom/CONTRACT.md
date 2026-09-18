@@ -78,6 +78,7 @@ request never rejects: a missing reply resolves as `{ok:false, reason:'timeout'}
 | `init` | `protocol, sp, reduced, motion, intensity, gates, lang, lex, stations[], open` | Boot state. `open` = server door flag. `gates` 10.13.A. |
 | `balance` | `sp, why:'server'\|'earn'\|'sync'` | Authoritative SP changed outside a station result. |
 | `media` | `reqId, gifs[4], words[4], seed` | Sit-down media (section 5). |
+| `media-warm` | `station` | The remote batch behind a short `media` deal for `station` has landed (2026-09-18). The page dispatches `br-media-changed`; `room/screens.js` re-deals at once, a seated station on its next sit-down. At most one per deal. |
 | `station-result` | `reqId, ok, status, reason?, body` | Server answer, or a host refusal (`offline`, `closed`, `bad_op`). |
 | `fx-ack` | `token, fired[], skipped[]` | What actually played. `skipped` entries: `{prim, why:'busy'\|'unknown'}` (the authored show, 2026-09-15: no setting skips a primitive; `toggle`/`motion`/`calm` are gone). |
 | `settings` | `motion, intensity, reduced, gates` | A setting changed while open (`gates` 10.13.A). |
@@ -1184,6 +1185,16 @@ Dismissing posts `room-option {welcomeSeen:true}`; the host writes `AppSettings.
 `welcomeSeen` on `init`, so the card follows the account and never the browser profile (the room keeps no
 localStorage). An older host that sends no field reads as never seen. Lexicon keys `br_welcome_title`,
 `br_welcome_sub`, `br_welcome_step{1,2,3}_lead`, `br_welcome_step{1,2,3}`, `br_welcome_step{1,2}_touch`, `br_welcome_go`.
+
+The card has a second page (2026-09-18), "Pictures and sparkles", under the same hero: three rows saying that the room
+shows pictures and GIFs from the source picked in Options > Pictures and GIFs (own files, Scrolller with the player's own
+niches, both, or the built-in art), that Sparkle Points are earned in the app (one per level up, one per 100 bubbles
+popped) and that the tables pay them back over time, and that the Prize Parlour trades them for prizes. Page 1 carries
+Next, page 2 Back and "Let me in"; page dots and ArrowRight / ArrowLeft turn the pages; Escape, Enter, Space and the
+veil still close it from either page. The Prize Parlour keeps its cards as they are: its header chip "How it works"
+(`br_counter_how`) calls `reopenWelcome()`, which lays the same card back over the room at page 1 with the options
+main.js registered once through `installWelcome()`; that copy writes no `welcomeSeen`. Lexicon keys `br_welcome_p2_title`,
+`br_welcome_p2_sub`, `br_welcome_{media,sp,prizes}_lead`, `br_welcome_{media,sp,prizes}`, `br_welcome_next`, `br_welcome_prev`.
 
 - Page -> host (section 2.1): `{ "type": "room-option", "key": "tunnel" | "melt" | "invertLook" | "welcomeSeen", "value": true | false }`
   (`invertLook` = Invert camera, 2026-09-18: a drag moves the world instead of the camera, both axes, the seated look

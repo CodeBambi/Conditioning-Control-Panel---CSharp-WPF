@@ -1,5 +1,5 @@
 import { intro } from './intro.js';
-import { createWelcome, shouldShow } from './welcome.js';
+import { createWelcome, shouldShow, installWelcome, dismissWelcome } from './welcome.js';
 import { createRacePortal, consumeRoomPose } from './race-portal.js';
 import { sliceText } from '../stations/wheel/rewards.js';
 import { setWheelFace } from './wheel-face.js';
@@ -79,7 +79,6 @@ const bell = { entries: [], optIn: false, mustHit: false, fetching: false, fetch
 const spListeners = new Set();
 const settingsListeners = new Set();
 let scene = null, loader = null, hud = null, leaving = false, visiting = false;
-let welcome = null;   // the first-visit card (welcome.js), null once dismissed or when the host says it was seen
 
 let racingOwnership = null, raceOpening = false;
 const previewHost = typeof window.__brSettings === 'object' && typeof window.__hostEmit === 'function';
@@ -409,7 +408,7 @@ function wireExits() {
     if (scene?.documents.opened) return;
     if (e.key !== 'Escape') return;
     // The first-visit card is the top rung: Escape closes it and nothing else in the room hears the press.
-    if (welcome?.dismiss()) { e.preventDefault(); return; }
+    if (dismissWelcome()) { e.preventDefault(); return; }
     e.preventDefault();
     if (scene?.dismissEmi()) return;
     back('key');
@@ -571,6 +570,13 @@ async function start(init) {
     const frame = { motion: state.userStill ? 'off' : state.motion, intensity: state.intensity, reduced: state.reduced, gates: state.gates };
     for (const fn of Array.from(settingsListeners)) { try { fn(frame); } catch (e) { bridge.log('warn', 'onSettings threw: ' + e); } }
   });
+  // THE COLD-OPEN SWAP (2026-09-18). The host posts this once the remote batch behind a short deal has
+  // landed; the web shim dispatches the same event when its own warm ends. screens.js re-deals at once,
+  // a seated station on its next sit-down - the same two speeds a source switch has.
+  bridge.on('media-warm', () => {
+    try { window.dispatchEvent(new Event('br-media-changed')); }
+    catch (e) { bridge.log('warn', 'media warm event threw: ' + e); }
+  });
   bridge.on('suspend', (m) => {
     state.suspended = !!m.on;
     music?.suspend(state.suspended);
@@ -671,7 +677,9 @@ async function start(init) {
   hud.ready();
   // The first-visit card, over the room the moment the veil lifts. The host remembers the dismissal
   // (room-option welcomeSeen -> AppSettings.BackRoomWelcomeSeen -> init.welcomeSeen), so it shows once per account.
-  if (shouldShow(state)) welcome = createWelcome({ layer: $('#br-layer'), lex, onDone: () => { welcome = null; setOption('welcomeSeen', true); } });
+  // The Prize Parlour's "How it works" re-opens the same card later (reopenWelcome), so it is registered once here.
+  installWelcome({ layer: $('#br-layer'), lex });
+  if (shouldShow(state)) createWelcome({ layer: $('#br-layer'), lex, onDone: () => setOption('welcomeSeen', true) });
   paintMustHit();
   refreshPrizes();
   refreshBell('room-open');

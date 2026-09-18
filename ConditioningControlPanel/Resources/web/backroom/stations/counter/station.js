@@ -12,6 +12,7 @@ import { createCounter, LEX } from './cards.js';
 import { demoKind, demoFrame, demoLabel } from './demo.js';
 import { prizeState } from '../../shared/prize-state.js';
 import { kit } from '../../shared/sound/kit.js';
+import { reopenWelcome } from '../../room/welcome.js';
 
 export const roomBehind = true;
 
@@ -81,7 +82,10 @@ export async function mount(ctx) {
     if (hook) root.dataset.hostSp = '';
     const top = h('header', 'counter-top');
     chipEl = h('span', 'counter-sp');
-    top.append(backButton('counter-back'), h('h2', 'counter-title', L('br_counter_title')), chipEl);
+    // Not a third card: a chip that lays the first-visit card back over the room, page 1, arrow to page 2.
+    const how = h('button', 'counter-how', L('br_counter_how')); how.type = 'button';
+    how.onclick = () => reopenWelcome(0);
+    top.append(backButton('counter-back'), h('h2', 'counter-title', L('br_counter_title')), how, chipEl);
     grid = h('div', 'counter-grid');
     closedEl = h('div', 'counter-closed');
     closedEl.hidden = true;

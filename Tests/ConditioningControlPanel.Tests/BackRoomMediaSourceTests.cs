@@ -375,6 +375,8 @@ public sealed class BackRoomMediaSourceTests : IDisposable
             (new List<FypAssetManifest.Entry> { Entry("scrolller/s/a"), Entry("scrolller/s/a"), Entry("scrolller/s/b"), Entry("scrolller/s/a") }, null));
 
         await pool.WarmAsync(CancellationToken.None);
+        // WarmAsync returns on the FIRST landed clip now (2026-09-18); the batch is awaited explicitly.
+        await (pool.WarmInFlight() ?? Task.CompletedTask);
 
         Assert.Equal(2, materialized.Count);
         var ready = pool.Ready();
@@ -389,6 +391,8 @@ public sealed class BackRoomMediaSourceTests : IDisposable
         var (pool, _, _) = Pool(Settings("online", consent: true),
             (new List<FypAssetManifest.Entry> { Entry("scrolller/s/a", w: 800, h: 600) }, null));
         await pool.WarmAsync(CancellationToken.None);
+        // WarmAsync returns on the FIRST landed clip now (2026-09-18); the batch is awaited explicitly.
+        await (pool.WarmInFlight() ?? Task.CompletedTask);
 
         var clip = Assert.Single(pool.Ready());
         Assert.StartsWith("https://ccp.assets/.temp/ccp_temp_remote_", clip.Url);
@@ -414,6 +418,8 @@ public sealed class BackRoomMediaSourceTests : IDisposable
             }, null));
 
         await pool.WarmAsync(CancellationToken.None);
+        // WarmAsync returns on the FIRST landed clip now (2026-09-18); the batch is awaited explicitly.
+        await (pool.WarmInFlight() ?? Task.CompletedTask);
 
         // Only the clip was ever downloaded. The poster is the class the room discarded (2026-09-17):
         // a static picture never reaches a surface any more, not even as a fallback.
@@ -428,6 +434,8 @@ public sealed class BackRoomMediaSourceTests : IDisposable
         var (pool, materialized, _) = Pool(s, (null, "offline"));
 
         await pool.WarmAsync(CancellationToken.None);
+        // WarmAsync returns on the FIRST landed clip now (2026-09-18); the batch is awaited explicitly.
+        await (pool.WarmInFlight() ?? Task.CompletedTask);
 
         Assert.Empty(materialized);
         Assert.Empty(pool.Ready());
@@ -445,6 +453,8 @@ public sealed class BackRoomMediaSourceTests : IDisposable
         var (pool, _, _) = Pool(Settings("online", consent: true),
             (new List<FypAssetManifest.Entry> { Entry("scrolller/s/a"), Entry("scrolller/s/b") }, null));
         await pool.WarmAsync(CancellationToken.None);
+        // WarmAsync returns on the FIRST landed clip now (2026-09-18); the batch is awaited explicitly.
+        await (pool.WarmInFlight() ?? Task.CompletedTask);
         Assert.Equal(2, pool.Ready().Count);
 
         foreach (var f in Directory.GetFiles(_temp).Take(1)) File.Delete(f);
@@ -462,6 +472,8 @@ public sealed class BackRoomMediaSourceTests : IDisposable
             Assert.False(pool.Wanted);
             pool.EnsureWarm();
             await pool.WarmAsync(CancellationToken.None);
+        // WarmAsync returns on the FIRST landed clip now (2026-09-18); the batch is awaited explicitly.
+        await (pool.WarmInFlight() ?? Task.CompletedTask);
             Assert.Empty(materialized);
         }
 
@@ -480,6 +492,8 @@ public sealed class BackRoomMediaSourceTests : IDisposable
             (new List<FypAssetManifest.Entry> { Entry("scrolller/s/a") }, null));
 
         await pool.WarmAsync(CancellationToken.None);
+        // WarmAsync returns on the FIRST landed clip now (2026-09-18); the batch is awaited explicitly.
+        await (pool.WarmInFlight() ?? Task.CompletedTask);
         await pool.WarmAsync(CancellationToken.None);   // inside WarmGapSeconds: no second batch
         Assert.Single(materialized);
 
@@ -495,6 +509,8 @@ public sealed class BackRoomMediaSourceTests : IDisposable
         var (pool, _, _) = Pool(Settings("online", consent: true),
             (new List<FypAssetManifest.Entry> { Entry("scrolller/s/a") }, null));
         await pool.WarmAsync(CancellationToken.None);
+        // WarmAsync returns on the FIRST landed clip now (2026-09-18); the batch is awaited explicitly.
+        await (pool.WarmInFlight() ?? Task.CompletedTask);
         Media(Settings("online", consent: true), pool, new[] { Gif("x.gif") }).Deal("slot", 1);
 
         var log = LogText();
@@ -512,6 +528,8 @@ public sealed class BackRoomMediaSourceTests : IDisposable
         var (pool, _, _) = Pool(Settings("online", consent: true),
             (new List<FypAssetManifest.Entry> { Entry("scrolller/s/a") }, null));
         await pool.WarmAsync(CancellationToken.None);
+        // WarmAsync returns on the FIRST landed clip now (2026-09-18); the batch is awaited explicitly.
+        await (pool.WarmInFlight() ?? Task.CompletedTask);
 
         var json = JsonConvert.SerializeObject(
             await Media(Settings("online", consent: true), pool, null).DealAsync("room", 5, 4));
