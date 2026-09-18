@@ -13,10 +13,12 @@ using Serilog;
 namespace ConditioningControlPanel.Launcher;
 
 /// <summary>
-/// "Game media", opened by the launcher's gear. Set the pictures once and every room follows:
-/// the three source chips and the niche chips edit the SAME app-wide settings the panel's
-/// Assets tab edits (MainWindow.Assets.cs, the remote media picker), with the same one-time
-/// consent ask, and every change also points the Back Room back at "follow the app".
+/// "Media and sound", opened by the launcher's gear. Set the pictures once and every room
+/// follows: the three source chips and the niche chips edit the SAME app-wide settings the
+/// panel's Assets tab edits (MainWindow.Assets.cs, the remote media picker), with the same
+/// one-time consent ask, and every change also points the Back Room back at "follow the app".
+/// The niche chips stay live under "My library" so the list can be set before going online.
+/// Below them, the app-wide master volume, written through the panel so its slider agrees.
 ///
 /// <para>Applies on change; Done only closes. The settings side is
 /// <see cref="LauncherMediaSettings.Apply"/>, which is where the rules live and are tested.</para>
@@ -89,8 +91,9 @@ public partial class LauncherMediaDialog : Window
             var selected = new HashSet<string>(s.FypOnlineNiches ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
             foreach (var chip in _nicheChips)
                 chip.IsChecked = chip.Tag is string id && selected.Contains(id);
-            NicheBlock.IsEnabled = source != LauncherMediaSettings.SourceLocal;
-            NicheBlock.Opacity = NicheBlock.IsEnabled ? 1 : 0.45;
+
+            MasterSlider.Value = s.MasterVolume;
+            MasterLabel.Text = $"{s.MasterVolume}%";
         }
         finally { _syncing = false; }
     }
@@ -170,6 +173,28 @@ public partial class LauncherMediaDialog : Window
         }
         catch (Exception ex) { Log.Debug("[Launcher] game media ratio change failed: {E}", ex.Message); }
     }
+
+    private void MasterSlider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_syncing) return;
+        try
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            int level = LauncherMediaSettings.ApplyMasterVolume(s, (int)Math.Round(e.NewValue));
+            MasterLabel.Text = $"{level}%";
+
+            // The panel mirrors it into its own Settings slider and saves (debounced); without a
+            // panel there is only the file.
+            var mw = App.MainWindowRef;
+            if (mw != null) mw.SetMasterVolume(level);
+            else App.Settings?.Save();
+        }
+        catch (Exception ex) { Log.Debug("[Launcher] master volume change failed: {E}", ex.Message); }
+    }
+
+    /// <summary>The thumb let go: one soft cue at the new level, so the slider can be set by ear.</summary>
+    private void MasterSlider_Released(object sender, MouseButtonEventArgs e) => LauncherSfx.Hover();
 
     private List<string> SelectedNiches()
     {

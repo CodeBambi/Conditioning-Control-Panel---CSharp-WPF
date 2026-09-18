@@ -29,6 +29,32 @@ public class LauncherMediaSettingsTests
         return s;
     }
 
+    [Theory]
+    [InlineData(70, 70)]
+    [InlineData(-5, 0)]
+    [InlineData(140, 100)]
+    public void ApplyMasterVolume_clamps_to_the_slider_range(int asked, int stored)
+    {
+        var s = Fresh();
+
+        int result = LauncherMediaSettings.ApplyMasterVolume(s, asked);
+
+        Assert.Equal(stored, result);
+        Assert.Equal(stored, s.MasterVolume);
+    }
+
+    [Fact]
+    public void ApplyMasterVolume_touches_nothing_else()
+    {
+        var s = Fresh();
+
+        LauncherMediaSettings.ApplyMasterVolume(s, 40);
+
+        Assert.Equal("local", s.MediaSource);
+        Assert.Equal(new[] { "hypno" }, s.FypOnlineNiches);
+        Assert.Equal("bundled", s.BackRoomMediaSource);
+    }
+
     [Fact]
     public void Apply_writes_the_app_wide_fields()
     {

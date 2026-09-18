@@ -523,11 +523,11 @@
             </Grid>
         </Border>
 
-        <!-- The window's edge: one hairline of the accent at 40 percent, drawn last so it sits
-             over everything including the veil. MainWindow draws the same edge at 3px
-             (GlassWindowEdge); the launcher keeps it thin. Outside ContentRoot so the shake never
-             moves it; above the backdrop layers so their negative margins never cover it. -->
-        <Border x:Name="WindowEdge" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                Opacity="0.4" IsHitTestVisible="False"/>
+        <!-- The window's edge: the accent at 3px and 60 percent, drawn last so it sits over
+             everything including the veil. Same weight as MainWindow's GlassWindowEdge; the
+             owner found a hairline too slim. Outside ContentRoot so the shake never moves it;
+             above the backdrop layers so their negative margins never cover it. -->
+        <Border x:Name="WindowEdge" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="3"
+                Opacity="0.6" IsHitTestVisible="False"/>
     </Grid>
 </Window>
