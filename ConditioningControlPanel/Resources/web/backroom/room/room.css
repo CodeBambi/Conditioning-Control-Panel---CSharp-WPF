@@ -21,7 +21,8 @@
   color-scheme: dark;
 }
 
-html, body { margin: 0; height: 100%; background: var(--br-ground); color: var(--br-ink); overflow: hidden;
+/* touch-action manipulation: iOS Safari stops double-tap zoom (a tester was stuck zoomed in, 2026-09-18); pinch is off via the viewport meta. */
+html, body { margin: 0; height: 100%; background: var(--br-ground); color: var(--br-ink); overflow: hidden; touch-action: manipulation;
   font: 14px/1.35 "Segoe UI", system-ui, sans-serif; user-select: none; }
 
 .br-stage { position: fixed; inset: 0; }
@@ -183,7 +184,10 @@ body:has(#br-intro) .br-back { display: none; }
 .br-sp { position:relative; display:flex; align-items:center; gap:6px; pointer-events:auto;
   background:linear-gradient(145deg,#49304ff5,#21132ff5 65%); border:1px solid #e9bd72;
   border-top-color:#fff0c2; border-radius:14px; padding:7px 12px; color:#e8d3f4;
-  box-shadow:inset 0 1px 0 #fff4,0 3px 0 #160b20,0 0 18px #edac4524; margin-right:0; }
+  box-shadow:inset 0 1px 0 #fff4,0 3px 0 #160b20,0 0 18px #edac4524; margin-right:0;
+  /* margin-left auto: the chip keeps the right corner when Back is not drawn (the site shim hides #br-back), so a
+     station's own Back can take the left one; with Back drawn, space-between already put it here. */
+  margin-left:auto; }
 .br-sp::before { content:""; width:15px;height:22px;flex:none;
   clip-path:polygon(50% 0,100% 42%,50% 100%,0 42%);background:conic-gradient(from 45deg,#fff7d5,#fca6df,#ffcf6b,#fff7d5); }
 .br-sp b { color:#ffe49b;font-size:24px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;text-shadow:0 2px 0 #28111c; }

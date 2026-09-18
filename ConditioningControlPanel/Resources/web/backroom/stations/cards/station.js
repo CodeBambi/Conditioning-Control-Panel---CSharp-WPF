@@ -168,7 +168,13 @@ export async function mount(ctx) {
     q('.cards-deal span').textContent = t('br_cards_deal', 'Deal');
     for (const b of root.querySelectorAll('.cards-move')) { b.textContent = t('br_cards_' + b.dataset.move, MOVE_LABEL[b.dataset.move]); b.onclick = () => move(b.dataset.move); }
     q('.cards-back').onclick = back; q('.cards-card-back').onclick = back;
-    if (hostBack) { root.dataset.hostBack = ''; q('.cards-back').hidden = true; q('.cards-card-back').hidden = true; }
+    if (hostBack) {
+      root.dataset.hostBack = '';
+      // Seated in the room (ctx.stage) the station keeps its own Back in the room's corner, the way the slot does.
+      q('.cards-back').hidden = !ctx.stage;
+      if (ctx.stage) root.dataset.ownBack = '';
+      q('.cards-card-back').hidden = true;
+    }
     q('.cards-deal').onclick = () => deal();
     q('.cards-sit').onclick = () => resit();
     return root;
@@ -191,7 +197,7 @@ export async function mount(ctx) {
     paint();
     return {
       kind: hook ? 'hook' : 'own',
-      get server() { return server; }, get owed() { return owed; }, get value() { return flying != null ? flying : shownSp(server, owed); },
+      get server() { return server; }, get owed() { return owed; }, get flying() { return flying; }, get value() { return flying != null ? flying : shownSp(server, owed); },
       setServer(v) { if (Number.isFinite(Number(v))) { server = Number(v); paint(); } },
       owe(n) { owed = Math.max(0, Math.trunc(Number(n) || 0)); paint(); },
       /** THE BANK is flying: the chip says exactly this until the last token is down (`show(null)` releases it
@@ -364,7 +370,7 @@ export async function mount(ctx) {
         // (Brake 2). Every restraint lives in shared/win/plan.js; nothing below re-decides any of it.
         const joined = joinParty(party, sitPlan(settleTier(h, streak), sit, partyCtx(melted)), now);
         const plan = joined.plan, co = calloutFor(id, { bloomed: isBloom(h) });
-        spendParty(plan, { id, ceremony: joined.ceremony, amount: net, text: co ? t(co.key, co.fallback) : '' });
+        spendParty(plan, { id, ceremony: joined.ceremony, amount: net, text: co && net > 0 ? t(co.key, co.fallback) : '' });
         const n = (MOMENTS[id] ? MOMENTS[id].host : []).reduce((m, st) => Math.max(m, st.words | 0), 0);
         const words = n > 0 ? wordKeys(n, wordCursor) : undefined;
         if (n > 0) wordCursor += n;
@@ -385,7 +391,7 @@ export async function mount(ctx) {
           flyPay(plan, before, chip.server, now);
           // A sub chain owns the centre first (the slot's rule): the announcer follows the last word out.
           later(FX_DELAY_MS, (at) => { const out = play(at, FX_DELAY_MS); if (out && out.wordsMs > 0) later(out.wordsMs, () => showCallout(co, plan)); else showCallout(co, plan); });
-        } else { chip.thud(); play(now, 0); }   // a loss keeps its breath of tunnel on this frame; a push shows nothing
+        } else { chip.thud(); play(now, 0); showCallout(co, plan); }   // a loss keeps its breath of tunnel on this frame; a loss and a push name themselves at once
         break;
       }
       default: break;
@@ -596,6 +602,11 @@ export async function mount(ctx) {
     const now = performance.now(), d = dress();
     if (d.still !== lastStill) { kit.setStill(d.still); if (deck) deck.setStill(d.still); lastStill = d.still; }
     while (queue.length && queue[0].at <= now) apply(queue.shift(), now);
+    // Law I safety (tester, 2026-09-18: the chip read 0 after a win until the player stood up): a flight value pinned
+    // at the settle (`before`, 0 when the stake was the whole balance) may only live while THE BANK is moving. With
+    // no run left to hand the number back, the chip goes back to the rule (server minus owed) on this frame, and
+    // the bet gate (chip.value) reads the same number the room shows.
+    if (chip && chip.flying != null && !(bank && bank.busy)) chip.show(null);
     if (moments.breathing()) screenUntil = Math.max(screenUntil, now + TIMING.edgesTailMs);   // a late breath keeps the hold
     const paint = presentation.due(now);
     if (paint && deck) deck.tick(now);

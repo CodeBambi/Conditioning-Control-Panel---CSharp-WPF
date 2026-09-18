@@ -187,14 +187,14 @@ export async function mount(ctx) {
     const left = tape ? tape.outcomes.length - tape.played : 0;
     let line = status;
     if (!line) line = resume ? t('br_roulette_resume', 'Your last spins are still on the table. {n} left to watch.', { n: left })
-      : t('br_roulette_ready', 'Place your chips, pick the spins, then Spin.');
+      : t('br_roulette_ready', 'Chips are 1 SP each, up to 3 a spin. Pick how many spins, then Spin.');
     if ($('.roul-status').textContent !== line) $('.roul-status').textContent = line;
     // Law XII: while THE BANK is in the air the readout says what the tokens have delivered so far, not the
     // Law I rule - the rule already counts a landed pay, and letting it repaint here is the jump the pass fixes.
     if (!hook) $('.roul-sp').textContent = t('br_roulette_sp', '{n} SP', { n: fmt(bankShown == null ? shownSp(sp, tape) : bankShown) });
     const pips = el.querySelectorAll('.roul-pips i'), used = chipTotal(chips);
     pips.forEach((p, i) => p.classList.toggle('is-used', i < used));
-    $('.roul-chips-label').textContent = stage ? t('br_roulette_place_bets', 'Place bets · {n}/{max}', { n: used, max: MAX_CHIPS }) : t('br_roulette_chips', 'Chips {n} of {max}', { n: used, max: MAX_CHIPS });
+    $('.roul-chips-label').textContent = stage ? t('br_roulette_place_bets', 'Chips {n} / {max}', { n: used, max: MAX_CHIPS }) : t('br_roulette_chips', 'Chips {n} of {max}', { n: used, max: MAX_CHIPS });
     $('.roul-chips-label').dataset.chips = String(used);
     const locked = phase !== 'bet' || resume || stage?.ready === false;
     $('.roul-clear').disabled = locked || used === 0;
@@ -271,13 +271,21 @@ export async function mount(ctx) {
     const set = (sel, text) => { root.querySelector(sel).textContent = text; };
     root.querySelector('.roul-stage').setAttribute('aria-label', t('br_roulette_stage', 'Velvet Vortex roulette. Click the mat to place chips.'));
     set('.roul-back span', t('br_roulette_back', 'Back')); set('.roul-card-back', t('br_roulette_back', 'Back'));
-    set('.roul-clear', t('br_roulette_clear', 'Clear')); set('.roul-spins-label', t('br_roulette_spins', 'Spins'));
+    set('.roul-clear', t('br_roulette_clear', 'Clear')); set('.roul-spins-label', t('br_roulette_spins', 'Spins ×'));
     set('.roul-odds summary', t('br_roulette_odds', 'Odds')); set('.roul-loading', t('br_roulette_loading', 'Brushing the velvet'));
     root.querySelector('.roul-history').setAttribute('aria-label', t('br_roulette_history', 'Last spins'));
-    root.querySelector('.roul-spins').setAttribute('aria-label', t('br_roulette_spins', 'Spins'));
+    root.querySelector('.roul-spins').setAttribute('aria-label', t('br_roulette_spins', 'Spins ×'));
+    // The tester read 1-5 as a chip size: each button is HOW MANY SPINS of this layout, so it says so to a reader and on hover.
+    root.querySelectorAll('.roul-spins button').forEach((b) => { const s = t('br_roulette_spins_n', 'Spins: {n}', { n: b.dataset.n }); b.setAttribute('aria-label', s); b.title = s; });
     root.querySelector('.roul-back').onclick = back;
     root.querySelector('.roul-card-back').onclick = back;
-    if (hostBack) { root.dataset.hostBack = ''; root.querySelector('.roul-back').hidden = true; root.querySelector('.roul-card-back').hidden = true; }
+    if (hostBack) {
+      root.dataset.hostBack = '';
+      // Seated in the room (ctx.stage) the station keeps its own Back in the room's corner, the way the slot does.
+      root.querySelector('.roul-back').hidden = !ctx.stage;
+      if (ctx.stage) root.dataset.ownBack = '';
+      root.querySelector('.roul-card-back').hidden = true;
+    }
     if (hook) root.dataset.hostSp = '';
     root.querySelector('.roul-spin').onclick = () => press();
     root.querySelector('.roul-clear').onclick = () => { if (phase === 'bet' && !resume) { chips = {}; why = null; sync(); } };

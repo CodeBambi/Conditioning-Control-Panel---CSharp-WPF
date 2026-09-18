@@ -66,6 +66,8 @@ test('the roulette and the cards: the rungs are their own callout sizes, small /
     assert.equal(MOMENT_TIER.roulette[beat], size[callout.tier], `roulette ${beat}`);
   }
   for (const [id, callout] of Object.entries(CARD_CALLOUTS)) {
+    // A loss and a push name themselves (small) but pay nothing: no rung, the same as before their callout.
+    if (id === 'cards.lose' || id === 'cards.push') { assert.equal(MOMENT_TIER.cards[id], 0, `cards ${id}`); continue; }
     assert.equal(MOMENT_TIER.cards[id], size[callout.tier], `cards ${id}`);
   }
   assert.equal(landBeat({ pay: 0 }), 'land.miss');
