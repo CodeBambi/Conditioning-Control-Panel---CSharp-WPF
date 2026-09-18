@@ -106,6 +106,58 @@
             </Setter>
         </Style>
 
+        <!-- A tile's Play: outline at rest, and on hover the tile's own colour floods in behind
+             white text. The tile sets Background (the fill), BorderBrush and Foreground. -->
+        <Style x:Key="LauncherPlay" TargetType="Button">
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border x:Name="Fill" Background="{TemplateBinding Background}" CornerRadius="10" Opacity="0"/>
+                            <Border x:Name="Rim" BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10"/>
+                            <ContentPresenter x:Name="Cp" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Cp" Property="TextElement.Foreground" Value="White"/>
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Fill" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.14"/>
+                                            <DoubleAnimation Storyboard.TargetName="Rim" Storyboard.TargetProperty="Opacity" To="0.35" Duration="0:0:0.14"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Fill" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.22"/>
+                                            <DoubleAnimation Storyboard.TargetName="Rim" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.22"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="LauncherStatNumber" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="/Fonts/#Fredoka, Segoe UI"/>
+            <Setter Property="FontSize" Value="30"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+
         <Style x:Key="LauncherEyebrow" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
             <Setter Property="FontSize" Value="11"/>
@@ -311,6 +363,11 @@
                             <RowDefinition Height="*"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
+                        <!-- The emblem, barely there, tucked into the card's lower corner. -->
+                        <Image Grid.RowSpan="3" Source="pack://application:,,,/Resources/logo2.png" Opacity="0.06"
+                               Width="250" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                               Margin="0,0,-14,-12" IsHitTestVisible="False"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
                         <StackPanel>
                             <TextBlock x:Name="PanelEyebrow" Text="{loc:Str launcher_section_panel}" Style="{StaticResource LauncherEyebrow}"/>
                             <TextBlock Text="{loc:Str launcher_panel_title}" Margin="0,10,0,0" TextWrapping="Wrap"
@@ -326,6 +383,31 @@
                                 <Button x:Name="StopLink" Content="{loc:Str launcher_panel_stop}" Style="{StaticResource LauncherLink}"
                                         Margin="6,0,0,0" Visibility="Collapsed" Click="StopLink_Click"/>
                             </StackPanel>
+                        </StackPanel>
+                        <!-- Three live numbers and a slim XP bar: what the panel is worth to you
+                             today, read from the same settings the panel's own chips use. -->
+                        <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="0,18,0,18">
+                            <UniformGrid Columns="3">
+                                <StackPanel>
+                                    <TextBlock x:Name="StatLevel" Text="1" Style="{StaticResource LauncherStatNumber}"/>
+                                    <TextBlock Text="{loc:Str launcher_stat_level}" Style="{StaticResource LauncherEyebrow}" Margin="1,2,0,0"/>
+                                </StackPanel>
+                                <StackPanel Margin="12,0,0,0">
+                                    <TextBlock x:Name="StatSparkles" Text="0" Style="{StaticResource LauncherStatNumber}"/>
+                                    <TextBlock Text="{loc:Str launcher_stat_sparkles}" Style="{StaticResource LauncherEyebrow}" Margin="1,2,0,0"/>
+                                </StackPanel>
+                                <StackPanel Margin="12,0,0,0">
+                                    <TextBlock x:Name="StatTime" Text="0m" Style="{StaticResource LauncherStatNumber}"/>
+                                    <TextBlock Text="{loc:Str launcher_stat_time}" Style="{StaticResource LauncherEyebrow}" Margin="1,2,0,0"/>
+                                </StackPanel>
+                            </UniformGrid>
+                            <Border x:Name="XpTrack" Height="6" CornerRadius="3" Margin="0,22,0,0"
+                                    Background="{DynamicResource GlassBorderBrush}">
+                                <Border x:Name="XpFill" Width="0" HorizontalAlignment="Left" CornerRadius="3"
+                                        Background="{DynamicResource AccentGradientBrush}"/>
+                            </Border>
+                            <TextBlock x:Name="XpCaption" Text="" Margin="0,8,0,0" FontSize="11" HorizontalAlignment="Right"
+                                       Foreground="{DynamicResource TextMutedBrush}"/>
                         </StackPanel>
                         <StackPanel Grid.Row="2">
                             <Button x:Name="PanelCta" Content="{loc:Str launcher_panel_launch}" Style="{StaticResource LauncherCta}"

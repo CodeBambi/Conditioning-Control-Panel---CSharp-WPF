@@ -6089,5 +6089,10 @@
   "launcher_game_goon_title": "[ZH-CN] Goon Game",
   "launcher_game_goon_blurb": "[ZH-CN] Hold on as long as you can.",
   "launcher_game_piecebypiece_title": "[ZH-CN] Piece by Piece",
-  "launcher_game_piecebypiece_blurb": "[ZH-CN] Chess, with stakes."
+  "launcher_game_piecebypiece_blurb": "[ZH-CN] Chess, with stakes.",
+  "launcher_stat_level": "等级",
+  "launcher_stat_sparkles": "闪耀点数",
+  "launcher_stat_time": "恍惚时长",
+  "launcher_stat_xp": "{0} / {1} XP",
+  "launcher_prime_pill": "Prime"
 }
