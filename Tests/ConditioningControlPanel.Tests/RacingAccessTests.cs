@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using ConditioningControlPanel.Services.Race;
 using Newtonsoft.Json.Linq;
 using Xunit;
@@ -55,6 +56,28 @@ public class RacingAccessTests
         Assert.True(RacingAccess.AllowsCloud(personal, Catalog, Owns("rt.original.00")));
         Assert.False(RacingAccess.AllowsCloud(personal, Catalog, Owns()));
         Assert.False(RacingAccess.AllowsCloud(personal, null, Owns("rt.original.00")));
+    }
+
+    /// <summary>2026-09-18 owner decision: Racing Thoughts is a Back Room unlock. The door is
+    /// armed in exactly one place; this pins it so a merge cannot quietly reopen it.</summary>
+    [Fact]
+    public void PurchaseDoorIsArmed()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "ConditioningControlPanel.csproj")))
+            dir = dir.Parent;
+        Assert.NotNull(dir);
+        var source = File.ReadAllText(Path.Combine(dir!.FullName, "ConditioningControlPanel", "Services", "Race", "RacingAccess.cs"));
+        Assert.Contains("private const bool PurchaseDoorArmed = true;", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NoTrackNoLaunchAnyTrackLaunches()
+    {
+        Assert.False(RacingAccess.AllowsLaunch(Owns()));
+        Assert.False(RacingAccess.AllowsLaunch(Owns("fx.jackpot_remix")));
+        Assert.True(RacingAccess.AllowsLaunch(Owns("rt.original.00")));
+        Assert.True(RacingAccess.AllowsLaunch(Owns("rt.original.07")));
     }
 
     [Fact]

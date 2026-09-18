@@ -2859,11 +2859,10 @@ namespace ConditioningControlPanel
             // the descent above is still tier 2. This arg asks exactly what BtnStartRace_Click
             // asks, which is the only thing that keeps a dev shortcut honest about the product.
             //
-            // The race-06/race-07 stack arrived a day later proposing a PURCHASE door here
-            // (RacingAccess.CanLaunch) in place of the tier one. Refused at the merge: a purchase
-            // check is the same closed door under a new name, and the owner deleted that door
-            // hours before the stack landed. RacingAccess itself is kept whole and tested, and
-            // disarmed in ONE place - see the PurchaseDoorArmed note in Services/Race/RacingAccess.cs.
+            // The race-06/race-07 stack arrived a day later with a PURCHASE door (RacingAccess.CanLaunch)
+            // in place of the tier one, disarmed at the merge and then armed later on 2026-09-18
+            // when the owner made the race a Back Room unlock. CaucusHostService.Launch asks that
+            // door, so this arg inherits it - see PurchaseDoorArmed in Services/Race/RacingAccess.cs.
             if (e.Args.Contains("--race")) Services.Chaos.CaucusHostService.Launch();
 
             // `--race-chart <file>`: chart a hypno file from the command line - decode, the energy

@@ -21,6 +21,11 @@ namespace ConditioningControlPanel.Launcher;
 /// that fills with the same colour. The pointer tilts the tile a little and slides the art the
 /// other way, so the card reads as a thing with depth rather than a rectangle.
 ///
+/// <para>An entry that is not <see cref="LauncherEntry.Revealed"/> gets the same card with a
+/// different face: a "?" plate, "???" for a title, a hint for a blurb, and a Play button that
+/// goes to the Back Room where the reveal is bought. No shortcut button, nothing that names
+/// the game. Same size, same hover, so the reveal later swaps the picture and nothing else.</para>
+///
 /// <para>Rails: the glow is a single DropShadowEffect per tile, only when the performance tier
 /// allows glow and never past its blur cap; every tween is gated on
 /// <see cref="MotionFx.AllowTransitions"/>, uses <c>BeginAnimation</c>, and sits inside a
@@ -45,9 +50,10 @@ public partial class LauncherWindow
     private Border CreateTile(LauncherEntry entry)
     {
         // Signed out, every tile asks for an account first; the tier lock only shows once there
-        // is an account to hold a tier.
+        // is an account to hold a tier, and never on a mystery card.
         bool needsAccount = entry.NeedsAccount;
-        bool locked = !needsAccount && entry.Locked;
+        bool revealed = entry.Revealed;
+        bool locked = !needsAccount && revealed && entry.Locked;
         var hue = entry.Hue;
         var tilt = new RotateTransform();
 
@@ -93,12 +99,16 @@ public partial class LauncherWindow
         var artSlide = new TranslateTransform();
         var artHost = new Grid { RenderTransform = artSlide, Margin = new Thickness(-TileArtParallaxPx) };
         ImageSource? art = null;
-        if (entry.ArtPath != null)
+        if (revealed && entry.ArtPath != null)
         {
             try { art = ModResourceResolver.ResolveImageDecoded(entry.ArtPath, 640); }
             catch (Exception ex) { Log.Debug(ex, "[Launcher] art {Path} failed", entry.ArtPath); }
         }
-        if (art != null)
+        if (!revealed)
+        {
+            BuildMysteryPlate(artHost, hue);
+        }
+        else if (art != null)
         {
             var image = new Image { Source = art, Stretch = Stretch.UniformToFill };
             RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
@@ -145,7 +155,7 @@ public partial class LauncherWindow
             LauncherSfx.Click();
             ShowShortcutResult(LauncherShortcuts.TryCreateDesktopShortcut(entry.Id));
         };
-        plate.Children.Add(shortcutBtn);
+        if (revealed) plate.Children.Add(shortcutBtn);
         body.Children.Add(plate);
 
         // --- title, blurb, play ---
@@ -155,24 +165,27 @@ public partial class LauncherWindow
         var titleBrush = new SolidColorBrush(textLight);
         text.Children.Add(new TextBlock
         {
-            Text = entry.Title, FontSize = 19, FontWeight = FontWeights.SemiBold,
+            Text = revealed ? entry.Title : Loc.Get("launcher_mystery_title"),
+            FontSize = 19, FontWeight = FontWeights.SemiBold,
             FontFamily = new FontFamily("/Fonts/#Fredoka, Segoe UI"),
             Foreground = titleBrush, TextTrimming = TextTrimming.CharacterEllipsis,
         });
         text.Children.Add(new TextBlock
         {
-            Text = entry.Blurb, FontSize = 14, Margin = new Thickness(0, 4, 0, 0), TextWrapping = TextWrapping.Wrap,
+            Text = revealed ? entry.Blurb : Loc.Get("launcher_mystery_blurb"),
+            FontSize = 14, Margin = new Thickness(0, 4, 0, 0), TextWrapping = TextWrapping.Wrap,
             Foreground = (Brush)FindResource("TextSecondaryBrush"), MinHeight = 20,
         });
-        var play = BuildPlayButton(entry, locked, needsAccount);
+        var play = BuildPlayButton(entry, locked, needsAccount, revealed ? null : "launcher_mystery_play");
         play.PreviewMouseLeftButtonDown += Press_Down;
         play.PreviewMouseLeftButtonUp += Press_Up;
         play.Click += (_, _) =>
         {
             if (locked || needsAccount) LauncherSfx.Denied(); else LauncherSfx.Click();
             FxOnPlay(tile, entry);
+            // The mystery card's Play goes to the counter, not to the game it hides.
             if (needsAccount) OpenSignIn();
-            else LauncherHost.LaunchGame(entry.Id);
+            else LauncherHost.LaunchGame(revealed ? entry.Id : "backroom");
         };
         if (needsAccount)
         {
@@ -208,8 +221,9 @@ public partial class LauncherWindow
     // ------------------------------------------------------------------ pieces
 
     /// <summary>Outline at rest, a hue fill on hover: the template does the crossfade, the
-    /// tile hands it the colours.</summary>
-    private Button BuildPlayButton(LauncherEntry entry, bool locked, bool needsAccount)
+    /// tile hands it the colours. <paramref name="labelKey"/> overrides the Play/Locked label;
+    /// a signed-out tile always reads Sign in.</summary>
+    private Button BuildPlayButton(LauncherEntry entry, bool locked, bool needsAccount, string? labelKey = null)
     {
         var hue = entry.Hue;
         var label = new StackPanel { Orientation = Orientation.Horizontal };
@@ -221,7 +235,7 @@ public partial class LauncherWindow
             });
         label.Children.Add(new TextBlock
         {
-            Text = Loc.Get(needsAccount ? "launcher_sign_in" : locked ? "launcher_locked" : "launcher_play"),
+            Text = Loc.Get(needsAccount ? "launcher_sign_in" : labelKey ?? (locked ? "launcher_locked" : "launcher_play")),
             VerticalAlignment = VerticalAlignment.Center,
         });
         var fill = needsAccount
@@ -312,6 +326,30 @@ public partial class LauncherWindow
         if (GlowAllowed)
             glyph.Effect = new DropShadowEffect { Color = Colors.White, ShadowDepth = 0, BlurRadius = GlowRadius, Opacity = 0.6 };
         host.Children.Add(glyph);
+    }
+
+    /// <summary>
+    /// The face of a tile that has not been revealed: the hue pulled down to dusk and a large
+    /// "?" wearing the glyph plate's glow. Nothing on it names the game behind it.
+    /// </summary>
+    private void BuildMysteryPlate(Grid host, Color hue)
+    {
+        host.Background = new RadialGradientBrush(Darken(hue, 0.55), Darken(hue, 0.22))
+        {
+            GradientOrigin = new Point(0.5, 0.35), Center = new Point(0.5, 0.35),
+            RadiusX = 0.85, RadiusY = 0.95,
+        };
+        var mark = new TextBlock
+        {
+            Text = "?", FontSize = 96, FontWeight = FontWeights.Bold,
+            FontFamily = new FontFamily("/Fonts/#Fredoka, Segoe UI"),
+            Foreground = new SolidColorBrush(Lighten(hue, 0.55)), Opacity = 0.95,
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 12),
+        };
+        if (GlowAllowed)
+            mark.Effect = new DropShadowEffect { Color = hue, ShadowDepth = 0, BlurRadius = GlowRadius, Opacity = 0.7 };
+        host.Children.Add(mark);
     }
 
     // ------------------------------------------------------------------ hover
