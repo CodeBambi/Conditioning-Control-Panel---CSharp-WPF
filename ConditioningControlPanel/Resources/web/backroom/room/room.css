@@ -245,3 +245,15 @@ html.br-seated .br-hint, html.br-seated .br-crosshair, html.br-seated .br-visit 
 #br-stage .cfx-spark, #br-stage .cfx-coin { border-radius:0; clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); }
 
 @media(max-width:600px){.br-sp{padding:7px 9px}.br-sp b{font-size:22px}}
+
+/* A phone held sideways (owner 2026-09-18): the HUD sat on the cabinet's crown. Smaller, tighter, in the corners. */
+@media (max-height: 480px) {
+  .br-hud { top: max(6px, var(--br-brow, 0px)); left: max(6px, var(--br-edge-l, 0px)); right: max(6px, var(--br-edge-r, 0px)); }
+  .br-nav { top: max(6px, var(--br-brow, 0px)); gap: 5px; }
+  .br-pill { font-size: 11px; padding: 6px 10px; }
+  .br-sp { padding: 4px 9px; gap: 4px; border-radius: 11px; }
+  .br-sp::before { width: 11px; height: 16px; }
+  .br-sp b { font-size: 17px; }
+  #br-sp-label { font-size: 9px; }
+  .br-map-list { bottom: 8px; gap: 5px; }
+}

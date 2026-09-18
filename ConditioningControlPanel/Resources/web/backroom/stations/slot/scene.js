@@ -999,8 +999,17 @@ export async function createScene(o) {
 
   // Lever drag and freeze taps (preview gesture: release past 55% of the pull spins once).
   const ray = new THREE.Raycaster(), pointer = new THREE.Vector2();
+  /** The lever and whatever is mounted as its handle. The custom sculptures (room/slot-custom-handles.js) hang off
+   *  `handle_socket` on the room cabinet, which is not under `lever`, so a pick that only knew the lever node missed
+   *  the top of a chess piece: the owner could pull the base and not the head (phone, 2026-09-18). */
+  function leverParts() {
+    const parts = [lever];
+    for (const name of ['chess_handle_socket', 'handle_socket']) { const n = get(name); if (n && !parts.some(p => p === n || n.parent === p)) parts.push(n); }
+    return parts.filter(Boolean);
+  }
   function leverRect() {
-    const box = new THREE.Box3().setFromObject(lever), r = canvas.getBoundingClientRect(), pts = [];
+    const box = new THREE.Box3(); for (const part of leverParts()) box.expandByObject(part);
+    const r = canvas.getBoundingClientRect(), pts = [];
     for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
       const p = new THREE.Vector3(x, y, z).project(camera); pts.push([r.left + (p.x + 1) * r.width / 2, r.top + (1 - p.y) * r.height / 2]);
     }
@@ -1018,9 +1027,10 @@ export async function createScene(o) {
     pointer.set((e.clientX - r.left) / r.width * 2 - 1, 1 - (e.clientY - r.top) / r.height * 2);
     ray.setFromCamera(pointer, camera);
     const spinButton=get('spin_button');
-    const targets = [lever, spinButton, ...freezers].filter(Boolean);
+    const parts = leverParts(), targets = [...parts, spinButton, ...freezers].filter(Boolean);
     let ob = ray.intersectObjects(targets, true)[0]?.object;
     while (ob && !targets.includes(ob)) ob = ob.parent;
+    if (parts.includes(ob)) ob = lever;
     const b = leverRect(), pad = 18;
     if (ob === lever || (!ob && e.clientX >= b.left - pad && e.clientX <= b.right + pad && e.clientY >= b.top - pad && e.clientY <= b.bottom + pad)) {
       e.preventDefault(); pullBack = null; lean = null; pull = { id: e.pointerId, y: e.clientY, amount: 0 };
