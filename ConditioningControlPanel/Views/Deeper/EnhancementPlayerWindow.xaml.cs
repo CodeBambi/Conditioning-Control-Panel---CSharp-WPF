@@ -2785,8 +2785,9 @@ namespace ConditioningControlPanel.Views.Deeper
         // -- Hold-Esc escape hatch -----------------------------------------------
         // People get stranded in blink/gaze loops. Holding Esc for 3 s anywhere
         // in the player (window, fullscreen host, or the page via the relay)
-        // stops playback and unbinds the engine. A tap still does the old thing
-        // (leave fullscreen, else close). Both are off under a strict lock.
+        // stops playback and unbinds the engine. A tap leaves fullscreen, or
+        // closes the window only when nothing is playing. Both are off under a
+        // strict lock.
 
         private const double EscHoldSeconds = 3.0;
         private DispatcherTimer? _escHoldTimer;
@@ -2843,6 +2844,9 @@ namespace ConditioningControlPanel.Views.Deeper
             if (_escConsumed) { _escConsumed = false; return; }
             if (IsUnderStrictLock()) return;
             if (_isVideoFullscreen || _videoFullscreenWindow != null) return;
+            // A stray tap must never end a session: only an idle player closes on Esc.
+            bool anythingRunning = _host.IsRunning || _player.IsPlaying || (_videoSource?.IsPlaying ?? false);
+            if (anythingRunning) return;
             Close();
         }
 
