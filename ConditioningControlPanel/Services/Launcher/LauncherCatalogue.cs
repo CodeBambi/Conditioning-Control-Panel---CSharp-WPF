@@ -198,7 +198,7 @@ public static class LauncherCatalogue
 
         // Goon Game: free to join. The launcher has already tucked the panel away, so the game
         // must not duck it a second time.
-        G("goon", "features/goon_game.png", "●", Tile(0x76, 0xC8, 0x93), Always, Never,
+        G("goon", "features/goon_game_tile.png", "●", Tile(0x76, 0xC8, 0x93), Always, Never,
             () => GoonGame.GoonHostService.Launch(duckMainWindow: false),
             () => GoonGame.GoonHostService.IsActive);
 
