@@ -47,6 +47,22 @@ public static partial class LauncherHost
 
     public static int ClampHideDelay(int ms) => Math.Clamp(ms, 0, MaxHideDelayMs);
 
+    /// <summary>How long the launcher takes to fade to nothing before it hides, in ms.</summary>
+    public const int FadeOutMs = 220;
+
+    /// <summary>
+    /// The window's fade-out, registered by the window itself. Called with the step that hides
+    /// and moves on; returns false when it cannot animate right now (reduced motion, not on
+    /// screen), and then the host hides at once. Null when no window is up.
+    /// </summary>
+    public static Func<Action, bool>? FadeOut { get; set; }
+
+    /// <summary>
+    /// The fade is the tail of an exit beat, never added after it: with a 450 ms beat and a 220 ms
+    /// fade, the fade starts at 230. A beat shorter than the fade starts fading at once.
+    /// </summary>
+    public static int FadeLeadMs(int delayMs) => Math.Max(0, ClampHideDelay(delayMs) - FadeOutMs);
+
     private static DateTime _beatArmedUntil = DateTime.MinValue;
 
     /// <summary>
@@ -110,10 +126,39 @@ public static partial class LauncherHost
         }
     }
 
+    /// <summary>Hides at once, no animation. The exit path and the close button use this.</summary>
     public static void Hide()
     {
         try { _window?.Hide(); }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] Hide failed"); }
+    }
+
+    /// <summary>
+    /// Fade the launcher out, then hide it and run <paramref name="then"/>. Falls back to an
+    /// immediate hide when no fade is registered or the window declines. <paramref name="stillWanted"/>
+    /// is asked again at the end of the fade; a hide that stopped being wanted in the meantime (the
+    /// game died and the launcher is coming back) stands down.
+    /// </summary>
+    internal static void FadeThenHide(Action? then = null, Func<bool>? stillWanted = null)
+    {
+        bool done = false;
+        void Finish()
+        {
+            if (done) return;
+            done = true;
+            if (stillWanted != null && !stillWanted()) return;
+            Hide();
+            try { then?.Invoke(); }
+            catch (Exception ex) { Log.Error(ex, "[Launcher] step after hide failed"); }
+        }
+
+        var fade = FadeOut;
+        if (fade != null)
+        {
+            try { if (fade(Finish)) return; }
+            catch (Exception ex) { Log.Debug(ex, "[Launcher] fade-out hook threw; hiding at once"); }
+        }
+        Finish();
     }
 
     /// <summary>
@@ -124,17 +169,19 @@ public static partial class LauncherHost
     public static void OpenPanel(int? hideDelayMs = null)
     {
         int delay = PendingHideDelay(hideDelayMs);
-        if (delay > 0 && IsShown) { After(delay, OpenPanelNow); return; }
+        if (delay > 0 && IsShown) { After(FadeLeadMs(delay), OpenPanelNow); return; }
         OpenPanelNow();
     }
 
-    private static void OpenPanelNow()
+    /// <summary>The launcher fades and hides, then the panel comes up and fades in.</summary>
+    private static void OpenPanelNow() => FadeThenHide(ShowPanel);
+
+    private static void ShowPanel()
     {
-        Hide();
         var mw = App.MainWindowRef;
         if (mw == null) { Log.Warning("[Launcher] OpenPanel with no main window"); return; }
-        try { mw.ShowFromTray(); }
-        catch (Exception ex) { Log.Error(ex, "[Launcher] ShowFromTray failed"); }
+        try { mw.ShowFromLauncher(); }
+        catch (Exception ex) { Log.Error(ex, "[Launcher] ShowFromLauncher failed"); }
         ReleaseStartupLadder();
     }
 
@@ -181,10 +228,22 @@ public static partial class LauncherHost
             return false;
         }
         var mw = App.MainWindowRef;
-        try { mw?.HideForLauncher(); }
-        catch (Exception ex) { Log.Error(ex, "[Launcher] HideForLauncher failed"); }
-        Show();
+        if (mw == null) { Show(); return true; }
+        // The panel fades to nothing, tucks into the tray, and the launcher fades up in its place.
+        try { mw.FadeOutForLauncher(() => { HidePanel(mw); Show(); }); }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[Launcher] FadeOutForLauncher failed; hiding at once");
+            HidePanel(mw);
+            Show();
+        }
         return true;
+    }
+
+    private static void HidePanel(MainWindow mw)
+    {
+        try { mw.HideForLauncher(); }
+        catch (Exception ex) { Log.Error(ex, "[Launcher] HideForLauncher failed"); }
     }
 
     /// <summary>
@@ -210,13 +269,15 @@ public static partial class LauncherHost
         // because every host creates its window synchronously inside Launch.
         _awaiting = entry;
         int delay = PendingHideDelay(hideDelayMs);
+        bool StillWaiting() => ReferenceEquals(_awaiting, entry);
         if (delay > 0)
         {
-            // The exit beat plays over the game's first frames. A host that died in the meantime
-            // has already cleared the wait (and shown the launcher), so the late hide stands down.
-            After(delay, () => { if (ReferenceEquals(_awaiting, entry)) Hide(); });
+            // The exit beat plays over the game's first frames, the fade being its tail. A host
+            // that died in the meantime has already cleared the wait (and shown the launcher), so
+            // the late hide stands down.
+            After(FadeLeadMs(delay), () => { if (StillWaiting()) FadeThenHide(stillWanted: StillWaiting); });
         }
-        else Hide();
+        else FadeThenHide(stillWanted: StillWaiting);
         StartReturnPoll();
         return true;
     }

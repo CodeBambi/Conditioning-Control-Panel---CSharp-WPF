@@ -481,5 +481,12 @@
                            TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
             </Grid>
         </Border>
+
+        <!-- The window's edge: one hairline of the accent at 40 percent, drawn last so it sits
+             over everything including the veil. MainWindow draws the same edge at 3px
+             (GlassWindowEdge); the launcher keeps it thin. Outside ContentRoot so the shake never
+             moves it; above the backdrop layers so their negative margins never cover it. -->
+        <Border x:Name="WindowEdge" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                Opacity="0.4" IsHitTestVisible="False"/>
     </Grid>
 </Window>
