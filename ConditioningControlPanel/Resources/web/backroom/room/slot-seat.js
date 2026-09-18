@@ -13,7 +13,11 @@ export function slotSeat(fixture, camera, width, height) {
   const right=new T.Vector3().crossVectors(new T.Vector3(0,1,0),direction).normalize();
   const up=new T.Vector3().crossVectors(direction,right).normalize();
   const center=bounds.getCenter(new T.Vector3());
-  const portrait=height>width, top=6, bottom=portrait?56:40;
+  // A phone held sideways (owner 2026-09-18): the cabinet sat a touch high and left, with empty room under
+  // and beside it. A smaller bottom band lets the fit drop and grow, and a small negative view offset in x
+  // slides the picture right; the desk and the upright phone keep their numbers.
+  const portrait=height>width, sideways=!portrait&&height<=480, top=6, bottom=portrait?56:(sideways?26:40);
+  const offsetX=sideways?-.014:0;
   const spanY=Math.max(.5,(height-top-bottom)/height), spanX=.985;
   const tan=Math.tan(camera.fov*Math.PI/360), slopeX=tan*width/height*spanX,slopeY=tan*spanY;
   const projected=points.map(corner=>{const p=corner.clone().sub(center);return {x:p.dot(right),y:p.dot(up),z:p.dot(direction)};});
@@ -29,5 +33,5 @@ export function slotSeat(fixture, camera, width, height) {
   center.addScaledVector(right,(fit.left+fit.right)/2-far*slopeX*.012).addScaledVector(up,(fit.bottom+fit.top)/2);
   const position=center.clone().addScaledVector(direction,far);
   const view=new T.PerspectiveCamera();view.rotation.order='YXZ';view.position.copy(position);view.lookAt(center);
-  return {pos:position.toArray(),yaw:view.rotation.y,pitch:view.rotation.x,offset:(bottom-top)/(2*height),offsetX:0};
+  return {pos:position.toArray(),yaw:view.rotation.y,pitch:view.rotation.x,offset:(bottom-top)/(2*height),offsetX};
 }
