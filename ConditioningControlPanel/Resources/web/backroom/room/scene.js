@@ -48,7 +48,12 @@ export async function createScene(o) {
   canvas.className = 'br-canvas';
   canvas.setAttribute('aria-label', 'The Back Room');
   o.mount.appendChild(canvas);
-  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); say('room webgl context lost'); });
+  // A lost context is the one way this canvas goes still while the HUD around it keeps working. preventDefault
+  // asks the browser for a restore; three.js re-initialises on the restored event, and the loop is run() again
+  // because the browser hands frames to nobody while a context is gone.
+  let contextLost = false;
+  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); contextLost = true; say('room webgl context lost'); });
+  canvas.addEventListener('webglcontextrestored', () => { contextLost = false; say('room webgl context restored'); run(); });
 
   const budget = createRenderBudget(navigator, window.devicePixelRatio || 1);
   const renderer = new T.WebGLRenderer({ canvas, antialias: true, powerPreference: 'default' });
@@ -598,6 +603,14 @@ export async function createScene(o) {
   document.addEventListener('visibilitychange', visibility);
   resize();
   run();
+  // THE WATCHDOG. frame() drops the loop whenever held, halted or suspended, and every path that clears those
+  // is supposed to run() again. A path that forgets leaves a room that draws nothing while its HUD works. Rather
+  // than trust every future path, look once a second and restart a loop that nothing is holding.
+  const watchdog = setInterval(() => {
+    if (raf || held || halted || suspended || document.hidden || contextLost) return;
+    say('room loop was stopped with nothing holding it; restarted');
+    run();
+  }, 1000);
   screens.deal(() => ambient).catch(() => {});
 
   return {
@@ -616,7 +629,7 @@ export async function createScene(o) {
       held = null; resetInput(); run();
     },
     pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); interaction.dismiss(); customization.dismiss(); } else run(); },
-    halt() { halted = true; documents.dispose(); memorabilia.dispose(); if(transition){transition.resolve(false);transition=null;} for (const view of [...views]) dropView(view); stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); for(const r of roofMaterials){r.node.material=r.original;for(const m of r.copies)m.dispose();} room.disposeSurfaces(); resetInput(); touch.dispose(); interaction.dispose(); for(const e of [...room.emis,...slotEmis])e.dispose(); customization.dispose(); decor.dispose(); room.echo.clear(); for(const p of room.payouts.values()){p.coins.dispose();p.host?.removeFromParent();} },
+    halt() { halted = true; clearInterval(watchdog); documents.dispose(); memorabilia.dispose(); if(transition){transition.resolve(false);transition=null;} for (const view of [...views]) dropView(view); stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); for(const r of roofMaterials){r.node.material=r.original;for(const m of r.copies)m.dispose();} room.disposeSurfaces(); resetInput(); touch.dispose(); interaction.dispose(); for(const e of [...room.emis,...slotEmis])e.dispose(); customization.dispose(); decor.dispose(); room.echo.clear(); for(const p of room.payouts.values()){p.coins.dispose();p.host?.removeFromParent();} },
     setStill(on) { still = !!on; },
     /** Repaint one fixture label, e.g. the wheel's screen for MUST HIT (10.16.E). */
     setLabel(rowKey, node, text) { return room.setLabel(rowKey, node, text); },
@@ -634,7 +647,7 @@ export async function createScene(o) {
     debug() {
       const sorted = frames.slice().sort((a, b) => a - b);
       return {
-        renderBudget: {...budget.debug(), dpr}, slotStretch:slotShape?.factor||1, fov:camera.fov, position: pos.slice(), yaw, pitch, transitioning:!!transition, viewOffset, viewOffsetX, overview, held: !!held, seated: !!seated, leaveAsked, running: !!raf, still,
+        renderBudget: {...budget.debug(), dpr}, slotStretch:slotShape?.factor||1, fov:camera.fov, position: pos.slice(), yaw, pitch, transitioning:!!transition, viewOffset, viewOffsetX, overview, held: !!held, seated: !!seated, leaveAsked, running: !!raf, halted, suspended, contextLost, hidden: document.hidden, still,
         nearest: nearest ? nearest.key : null, fixtures: room.fixtures, bulbs: room.bulbs, screens: room.screens.length,
         pictures: screens.pictures, animation: screens.animation, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
         touch: touch.debug(), decor: decor.debug(), customization: customization.debug(),
