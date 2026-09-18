@@ -22,7 +22,7 @@ test('static pixels stay cached and highlights return to their original stamp', 
 function harness(kind) {
   const source=readFileSync(new URL('../scene.js',import.meta.url),'utf8');
   const frame=source.slice(source.indexOf('  function paint(t, force = false) {'),source.indexOf('  function setStrips(next)'));
-  let draws=0, uploads=0, glow=0;
+  let draws=0, uploads=0, patched=0, glow=0;
   const ctx=new Proxy({}, {get:(_,name)=> name==='createLinearGradient'?()=>({addColorStop(){}}):()=>{}});
   const context=vm.createContext({
     strips:Array.from({length:3},()=>Array(13).fill(kind)),
@@ -32,20 +32,24 @@ function harness(kind) {
     reelPaintStamp,reelCellVisible,reelAngles:[0,0,0],spin:null,paintedCells:[[],[],[]],
     reduced:false,stillFx:()=>false,reelMood:'idle',reelMoodAt:0,look:{},cell:{hw:112,hh:128},CW:256,CH:224,
     drawSymbol:()=>draws++,lastPaint:0,
+    // The painter's in-place upload (scene.js uploadCells): a few changed cells are patched one by one, more
+    // than six go up as the whole strip. Mirrors the real threshold so these counts mean what the GPU sees.
+    uploadCells:(r,cells)=>{ if(cells.length>6)uploads++; else patched+=cells.length; },
   });
   vm.runInContext(frame,context);
   return {paint:(t,force=false)=>vm.runInContext(`paint(${t},${force})`,context),
-    clear(){draws=uploads=0;},counts:()=>({draws,uploads}),glow(value){glow=value;},spin(value){context.spin=value;}};
+    clear(){draws=uploads=patched=0;},counts:()=>({draws,uploads,patched}),glow(value){glow=value;},spin(value){context.spin=value;}};
 }
 test('actual painter skips static cell drawing and texture uploads between highlights', () => {
-  const h=harness('sub');h.paint(0,true);assert.deepEqual(h.counts(),{draws:39,uploads:3});
-  h.clear();h.paint(200);assert.deepEqual(h.counts(),{draws:0,uploads:0});
-  h.glow(.5);h.paint(210);assert.deepEqual(h.counts(),{draws:3,uploads:3});
-  h.clear();h.glow(0);h.paint(220);assert.deepEqual(h.counts(),{draws:3,uploads:3});
+  const h=harness('sub');h.paint(0,true);assert.deepEqual(h.counts(),{draws:39,uploads:3,patched:0});
+  h.clear();h.paint(200);assert.deepEqual(h.counts(),{draws:0,uploads:0,patched:0});
+  h.glow(.5);h.paint(210);assert.deepEqual(h.counts(),{draws:3,uploads:0,patched:3});
+  h.clear();h.glow(0);h.paint(220);assert.deepEqual(h.counts(),{draws:3,uploads:0,patched:3});
 });
 test('actual painter refreshes nearby animated cells at rest, all cells while spinning', () => {
   const h=harness('gif');h.paint(0,true);h.clear();h.paint(200);
-  assert.deepEqual(h.counts(),{draws:15,uploads:3});
-  h.clear();h.paint(220);assert.deepEqual(h.counts(),{draws:0,uploads:0});
-  h.spin({});h.paint(300);assert.deepEqual(h.counts(),{draws:39,uploads:3});
+  // Five live cells a reel at rest: patched in place, never the whole 13-cell strip.
+  assert.deepEqual(h.counts(),{draws:15,uploads:0,patched:15});
+  h.clear();h.paint(220);assert.deepEqual(h.counts(),{draws:0,uploads:0,patched:0});
+  h.spin({});h.paint(300);assert.deepEqual(h.counts(),{draws:39,uploads:3,patched:0});
 });

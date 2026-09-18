@@ -175,7 +175,15 @@ export function createLoomKit({ still = false, log = null } = {}) {
     return phaseAt(name, Number.isFinite(o.now) ? o.now : taskClock());
   }
 
-  /** The surface holding `name` at `phase` for a w x h draw, rendered only when it is not already there. */
+  /** The surface holding `name` at `phase` for a w x h draw, rendered only when it is not already there.
+   *  Returns the canvas and the rect on it that holds the picture: { canvas, sx, sy, sw, sh }.
+   *
+   *  PERF (2026-09-18): the page's one field canvas used to be RESIZED to every draw's backing, and two
+   *  users asking for different sizes in the same frame (the slot's 256 px spiral tiles and the room's
+   *  128 px loom discs) resized it back and forth on every paint. A WebGL canvas resize reallocates its
+   *  drawing buffer, and on the slot seat that was an eighth of the main thread. The canvas now only ever
+   *  GROWS (to 512 x 512 at most) and each draw renders into a viewport of its own backing size, so the
+   *  picture lives in the bottom-left corner of the canvas and the callers blit that rect. */
   function surface(name, phase, w, h, long) {
     const s = ensure();
     if (!s) return null;
@@ -184,11 +192,12 @@ export function createLoomKit({ still = false, log = null } = {}) {
       const b = backingFor(w, h, long);
       const key = name + '|' + phase.toFixed(5) + '|' + b.w + 'x' + b.h;
       if (s.key !== key) {
-        if (s.canvas.width !== b.w || s.canvas.height !== b.h) { s.canvas.width = b.w; s.canvas.height = b.h; }
-        try { s.field.render(q, phase); s.renders++; s.key = key; }
+        if (s.canvas.width < b.w || s.canvas.height < b.h) { s.canvas.width = Math.max(s.canvas.width, b.w); s.canvas.height = Math.max(s.canvas.height, b.h); }
+        try { s.field.render(q, phase, b.w, b.h); s.renders++; s.key = key; s.rect = b; }
         catch (e) { say('loom render threw (' + ((e && e.message) || e) + '), 2D fallback'); s.lost = true; s.key = ''; }
       }
-      if (!s.lost) return s.canvas;
+      // GL's origin is the bottom-left corner; in the canvas's 2D coordinates the viewport is the bottom rows.
+      if (!s.lost) return { canvas: s.canvas, sx: 0, sy: s.canvas.height - s.rect.h, sw: s.rect.w, sh: s.rect.h };
     }
     const b = backingFor(w, h, Math.min(long, FALLBACK_LONG));
     const key = name + '|' + phase.toFixed(5) + '|' + b.w + 'x' + b.h;
@@ -200,7 +209,7 @@ export function createLoomKit({ still = false, log = null } = {}) {
       drawFallbackFrame(g, q, phase, b.w, b.h);
       fbKey = key; stats.fallbacks++;
     }
-    return fb;
+    return { canvas: fb, sx: 0, sy: 0, sw: b.w, sh: b.h };
   }
 
   // A getter, not an Object.assign member: assign would read it once at creation and copy a fixed boolean.
@@ -223,7 +232,7 @@ export function createLoomKit({ still = false, log = null } = {}) {
       if (a <= 0) return true;
       const prev = ctx2d.globalAlpha;
       ctx2d.globalAlpha = prev * a;
-      ctx2d.drawImage(src, x, y, w, h);
+      ctx2d.drawImage(src.canvas, src.sx, src.sy, src.sw, src.sh, x, y, w, h);
       ctx2d.globalAlpha = prev;
       stats.draws++;
       return true;
@@ -236,7 +245,7 @@ export function createLoomKit({ still = false, log = null } = {}) {
       const src = surface(name, phaseOf(name, { now, angle }), canvas.width, canvas.height, long);
       const g = src && canvas.getContext('2d');
       if (!g) return false;
-      g.drawImage(src, 0, 0, canvas.width, canvas.height);
+      g.drawImage(src.canvas, src.sx, src.sy, src.sw, src.sh, 0, 0, canvas.width, canvas.height);
       stats.draws++;
       return true;
     },

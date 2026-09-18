@@ -1,5 +1,5 @@
 import { intro } from './intro.js';
-import { createWelcome, shouldShow, installWelcome, dismissWelcome } from './welcome.js';
+import { createWelcome, shouldShow } from './welcome.js';
 import { createRacePortal, consumeRoomPose } from './race-portal.js';
 import { sliceText } from '../stations/wheel/rewards.js';
 import { setWheelFace } from './wheel-face.js';
@@ -79,6 +79,7 @@ const bell = { entries: [], optIn: false, mustHit: false, fetching: false, fetch
 const spListeners = new Set();
 const settingsListeners = new Set();
 let scene = null, loader = null, hud = null, leaving = false, visiting = false;
+let welcome = null;   // the first-visit card (welcome.js), null once dismissed or when the host says it was seen
 
 let racingOwnership = null, raceOpening = false;
 const previewHost = typeof window.__brSettings === 'object' && typeof window.__hostEmit === 'function';
@@ -400,6 +401,15 @@ function wireAmbience() {
   window.addEventListener('keydown', wake, { once: true, capture: true });
 }
 
+/** The first-visit card from a placard on the counter (welcome-placards.js): the room holds still behind it,
+ * the card opens at that page in read mode, and closing it releases the room to the same spot. Nothing is
+ * remembered: the dismissal that matters was the first visit's. */
+function openCard(page) {
+  if (welcome || leaving || !scene) return;
+  scene.hold();
+  welcome = createWelcome({ layer: $('#br-layer'), lex, page, read: true, onDone: () => { welcome = null; scene?.release(); } });
+}
+
 function wireExits() {
   wireHudKeys();
   wireAmbience();
@@ -408,7 +418,7 @@ function wireExits() {
     if (scene?.documents.opened) return;
     if (e.key !== 'Escape') return;
     // The first-visit card is the top rung: Escape closes it and nothing else in the room hears the press.
-    if (dismissWelcome()) { e.preventDefault(); return; }
+    if (welcome?.dismiss()) { e.preventDefault(); return; }
     e.preventDefault();
     if (scene?.dismissEmi()) return;
     back('key');
@@ -652,6 +662,8 @@ async function start(init) {
       onProgress: (f) => { hud.progress(f); intro.progress(f); },
       onNearest: (row) => hud.nearest(row),
       onVisit: (row) => visit(row),
+      // A tap on one of the counter's placards: the first-visit card again, at that page, to read and close.
+      onCard: (page) => openCard(page),
       // The room asking to stand up (a tap on the floor, a step back): the Back path, so the station settles first.
       onLeave: () => back('room'),
       canLeave: () => loader?.canLeave?.() !== false,
@@ -677,9 +689,7 @@ async function start(init) {
   hud.ready();
   // The first-visit card, over the room the moment the veil lifts. The host remembers the dismissal
   // (room-option welcomeSeen -> AppSettings.BackRoomWelcomeSeen -> init.welcomeSeen), so it shows once per account.
-  // The Prize Parlour's "How it works" re-opens the same card later (reopenWelcome), so it is registered once here.
-  installWelcome({ layer: $('#br-layer'), lex });
-  if (shouldShow(state)) createWelcome({ layer: $('#br-layer'), lex, onDone: () => setOption('welcomeSeen', true) });
+  if (shouldShow(state)) welcome = createWelcome({ layer: $('#br-layer'), lex, onDone: () => { welcome = null; setOption('welcomeSeen', true); } });
   paintMustHit();
   refreshPrizes();
   refreshBell('room-open');

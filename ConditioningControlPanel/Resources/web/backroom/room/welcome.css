@@ -1,8 +1,6 @@
-/* The first-visit card (welcome.js): the loader's card with a hero on top and three steps. */
-.br-welcome-veil { z-index: 60; }
-.br-welcome { width: min(440px, calc(100vw - 48px)); padding: 0 0 22px; max-height: calc(100vh - 32px); overflow: auto; }
-.br-welcome-page[hidden] { display: none; }
-.br-welcome-hero { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover;
+/* The first-visit card (welcome.js): the loader's card with a landscape picture on top, three steps and a pager. */
+.br-welcome { width: min(440px, calc(100vw - 48px)); padding: 0 0 22px; }
+.br-welcome-hero { display: block; width: 100%; aspect-ratio: 2 / 1; object-fit: cover;
   border-bottom: 1px solid rgba(185, 156, 255, .25); background: #1a1026; }
 .br-welcome-title { margin: 18px 26px 4px; font-size: 20px; }
 .br-welcome-sub { position: relative; margin: 0 26px 16px; font-size: 13px; color: var(--br-ink-dim); }
@@ -13,27 +11,27 @@
   color: var(--br-pink); font-size: 16px; font-weight: 700; font-style: normal; }
 .br-welcome-lead { display: block; font-size: 14px; color: var(--br-ink); margin-bottom: 2px; }
 .br-welcome-body { display: block; font-size: 12.5px; line-height: 1.35; color: var(--br-ink-dim); }
-/* Next / Back / dots / Let me in on one row; hidden ones drop out of the flow. */
-.br-welcome-nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; margin: 0 26px; }
-.br-welcome-nav button { white-space: nowrap; }
-.br-welcome-nav [hidden] { display: none; }
+/* Back, the page dots, and the one gold button: Next until the last page, then Let me in (or Close from a placard). */
+.br-welcome-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 26px; }
+.br-welcome-back { padding: 10px 16px; border-radius: 12px; cursor: pointer;
+  border: 1px solid rgba(185, 156, 255, .35); background: transparent; color: var(--br-ink-dim);
+  font: 600 13px/1 "Segoe UI", system-ui, sans-serif; }
+.br-welcome-back:hover { border-color: var(--br-gold); color: var(--br-ink); }
+.br-welcome-back:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 3px; }
+/* The first page keeps Back's box so the dots and the gold button do not shift when it appears. */
+.br-welcome-back[hidden] { display: block; visibility: hidden; }
 .br-welcome-dots { display: flex; gap: 7px; }
-.br-welcome-dot { width: 9px; height: 9px; padding: 0; border-radius: 50%; border: 1px solid rgba(255, 111, 181, .6); background: transparent; cursor: pointer; }
-.br-welcome-dot[data-on="1"] { background: var(--br-pink); }
-.br-welcome-dot:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 2px; }
-.br-welcome-prev { padding: 10px 18px; border-radius: 12px; border: 1px solid rgba(185, 156, 255, .35); background: transparent; cursor: pointer;
-  font: 600 14px/1 "Segoe UI", system-ui, sans-serif; color: var(--br-ink-dim); }
-.br-welcome-prev:hover { color: var(--br-ink); border-color: rgba(185, 156, 255, .7); }
-.br-welcome-prev:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 3px; }
+.br-welcome-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(185, 156, 255, .3); }
+.br-welcome-dot.is-on { background: var(--br-gold); }
 /* The Back chip's gold, so the one button on the card is the one the player already trusts. */
-.br-welcome-go, .br-welcome-next { display: inline-block; padding: 11px 28px; border-radius: 12px; border: 0; cursor: pointer;
+.br-welcome-go { display: inline-block; padding: 11px 30px; border-radius: 12px; border: 0; cursor: pointer;
   font: 600 15px/1 "Segoe UI", system-ui, sans-serif; color: #3a2410;
   background: linear-gradient(180deg, #ffe29a, #f5c15a); box-shadow: 0 4px 0 #a8762a, 0 8px 18px rgba(0, 0, 0, .35);
   transition: transform .08s, box-shadow .08s; }
-.br-welcome-go:hover, .br-welcome-next:hover { background: linear-gradient(180deg, #fff0bf, #ffd070); }
-.br-welcome-go:active, .br-welcome-next:active { transform: translateY(3px); box-shadow: 0 1px 0 #a8762a, 0 4px 10px rgba(0, 0, 0, .35); }
-.br-welcome-go:focus-visible, .br-welcome-next:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 3px; }
-/* A short window (a phone held sideways): the hero shrinks first, the steps stay readable. */
+.br-welcome-go:hover { background: linear-gradient(180deg, #fff0bf, #ffd070); }
+.br-welcome-go:active { transform: translateY(3px); box-shadow: 0 1px 0 #a8762a, 0 4px 10px rgba(0, 0, 0, .35); }
+.br-welcome-go:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 3px; }
+/* A short window (a phone held sideways): the picture shrinks first, the steps stay readable. */
 @media (max-height: 560px) {
   .br-welcome { width: min(560px, calc(100vw - 48px)); padding-bottom: 14px; }
   .br-welcome-hero { aspect-ratio: 3 / 1; }
@@ -41,6 +39,4 @@
   .br-welcome-sub { margin-bottom: 8px; }
   .br-welcome-steps { gap: 6px; margin-bottom: 10px; }
   .br-welcome-body { font-size: 12px; }
-  .br-welcome-go, .br-welcome-next { padding: 9px 26px; }
-  .br-welcome-prev { padding: 8px 14px; }
 }

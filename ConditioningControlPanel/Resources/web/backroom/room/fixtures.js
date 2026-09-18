@@ -44,6 +44,25 @@ const WIN_GOLD = new T.Color(0xffcf6b);
 const WIN_LEAN = 0.6;
 /** The mark the fixture's own screen wears the win line between, the one the slot has always used. */
 const WIN_MARK = '✦';
+/** A borrowed cabinet's screen breathes between these two (grey to colour), the breakout row's fixture. */
+const GLOW_GREY = new T.Color(0x5a5a62), GLOW_TINT = new T.Color(0xff3fa8);
+
+/**
+ * A node borrowed out of another glb (`fixture.node`): cloned, floored and centred on the holder's
+ * origin, fitted to at most 1 m wide and 2.05 m tall, the box the Parlour's unlocked arcade cabinet
+ * takes (room/prize-display.js). Geometry stays shared with the source.
+ */
+function borrowed(node) {
+  const copy = node.clone(true);
+  copy.position.set(0, 0, 0); copy.quaternion.identity(); copy.updateMatrixWorld(true);
+  const box = new T.Box3().setFromObject(copy), size = box.getSize(new T.Vector3());
+  const s = Math.min(1.0 / Math.max(1e-6, size.x), 2.05 / Math.max(1e-6, size.y));
+  copy.scale.setScalar(s);
+  copy.position.set(-(box.min.x + box.max.x) * s / 2, -box.min.y * s, -(box.min.z + box.max.z) * s / 2);
+  const group = new T.Group();
+  group.add(copy);
+  return group;
+}
 
 export function labelTexture(text) {
   const c = document.createElement('canvas');
@@ -300,10 +319,12 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
   let marquee = null;
   /** Every fixture label mesh, `rowKey/node` -> { mesh, text }, so one can be repainted later (10.16.E). */
   const labels = new Map();
+  /** Screen materials that breathe grey to colour (`fixture.glow`). */
+  const glows = [];
   const set = await Promise.all(stations.map(async (row) => {
     const f = row.fixture;
     const source = await fetchModel(row.id === 'slot' ? '../../stations/slot/assets/slot.glb' : f.file);
-    const model = source.clone(true);
+    const model = f.node ? borrowed(source.getObjectByName(f.node) || source) : source.clone(true);
     if (row.id === 'slot') {
       const copies=new Map(), copy=m=>{if(!copies.has(m))copies.set(m,m.clone());return copies.get(m);};
       model.traverse(n=>{if(n.material)n.material=Array.isArray(n.material)?n.material.map(copy):copy(n.material);});
@@ -346,6 +367,10 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
       const t = labelTexture(text);
       o.material = new T.MeshStandardMaterial({ map: t, emissiveMap: t, emissive: 0xffffff, emissiveIntensity: 0.5, roughness: 0.5 });
       labels.set(row.key + '/' + node, { mesh: o, text });
+    }
+    if (f.glow) {
+      const o = model.getObjectByName(f.glow);
+      if (o && o.isMesh && o.material && o.material.emissive) { o.material = o.material.clone(); glows.push(o.material); }
     }
       if (f.reels) {
       for (let i = 1; i <= 3; i++) {
@@ -393,10 +418,17 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     list.forEach((b, i) => { b.phase = i / list.length; });
   }
 
-  // ---- bulbs: one InstancedMesh per (geometry, material) ----
+  // ---- bulbs: one InstancedMesh per (station, lamp shape) ----
+  // PERF (2026-09-18): keyed on geometry uuid this made one batch PER BULB, because the GLBs give every
+  // lamp its own geometry object (25 one-instance batches on the wheel, 28 on the roulette: 53 draw calls
+  // for what is two shapes). Lamps of one station with the same vertex and index counts and the same
+  // bounding radius are the same authored lamp copied about, so they share a batch and draw once. The
+  // original material never mattered here: every batch gets the emissive material below.
   const groups = new Map();
   for (const b of bulbs) {
-    const k = b.mesh.geometry.uuid + '|' + b.mesh.material.uuid;
+    const g = b.mesh.geometry;
+    if (!g.boundingSphere) g.computeBoundingSphere();
+    const k = b.row.id + '|' + (g.attributes.position ? g.attributes.position.count : 0) + '|' + (g.index ? g.index.count : 0) + '|' + (g.boundingSphere ? g.boundingSphere.radius.toFixed(4) : '');
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k).push(b);
   }
@@ -490,6 +522,9 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     if (sconceMaterial) sconceMaterial.emissiveIntensity = 1.7 + 0.2 * Math.sin(t * 0.5);
     const so = 0.5 + 0.07 * Math.sin(t * 0.5);
     const quiet=still || readMotion().off || readMotion().reduced;
+    // A borrowed cabinet's screen breathes grey to colour once every ten seconds or so; quiet holds it half lit.
+    const breath = quiet ? .5 : .5 + .5 * Math.sin(t * .6);
+    for (const m of glows) { m.emissive.copy(GLOW_GREY).lerp(GLOW_TINT, breath); m.emissiveIntensity = .35 + breath * .65; }
     let lampPeak=0;
     for (let n=0;n<sconceAuras.length;n++) {
       const age=(clock-lampRippleAt-lampPositions[n].distanceTo(lampOrigin)*75)/1100;
