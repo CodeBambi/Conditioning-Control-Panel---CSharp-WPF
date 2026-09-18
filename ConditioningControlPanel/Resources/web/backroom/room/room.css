@@ -177,6 +177,8 @@ html.br-reduced .br-bell span.is-in, html.br-still .br-bell span.is-in { animati
 .br-back:active, .br-card-back:active { transform: translateY(2px);
   box-shadow: inset 0 3px 8px #00000080, inset 0 -1px 0 #ffeafb14, 0 0 0 #1a0d23; }
 .br-back:focus-visible, .br-card-back:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 2px; }
+/* Nowhere to go back to while the intro card is still up (room/intro.js removes #br-intro on finish). */
+body:has(#br-intro) .br-back { display: none; }
 /* The SP readout is a plate, not a button: sunken, so it never invites a press it cannot answer. */
 .br-sp { position:relative; display:flex; align-items:center; gap:6px; pointer-events:auto;
   background:linear-gradient(145deg,#49304ff5,#21132ff5 65%); border:1px solid #e9bd72;
