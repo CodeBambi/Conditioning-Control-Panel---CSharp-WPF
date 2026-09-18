@@ -8608,6 +8608,15 @@ namespace ConditioningControlPanel.Models
             set { _deeperEditorSidebarWidth = value; OnPropertyChanged(); }
         }
 
+        // Height of the editor's timeline row (preview / timeline GridSplitter).
+        private int _deeperEditorTimelineHeight = 160;
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public int DeeperEditorTimelineHeight
+        {
+            get => _deeperEditorTimelineHeight;
+            set { _deeperEditorTimelineHeight = value; OnPropertyChanged(); }
+        }
+
         private List<string> _deeperRecentFiles = new();
         [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<string> DeeperRecentFiles

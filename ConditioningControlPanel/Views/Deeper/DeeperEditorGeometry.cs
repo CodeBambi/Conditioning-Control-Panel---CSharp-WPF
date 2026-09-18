@@ -38,6 +38,27 @@ namespace ConditioningControlPanel.Views.Deeper
             return (top + LaneInset, Math.Max(0, height - 2 * LaneInset));
         }
 
+        /// <summary>Transport readout: m:ss.f (h:mm:ss.f past an hour), tenths floored
+        /// so the label never shows a second the playhead has not reached.</summary>
+        internal static string FormatTransportTime(double seconds)
+        {
+            if (double.IsNaN(seconds) || seconds < 0) seconds = 0;
+            long tenths = (long)Math.Floor(seconds * 10 + 1e-6);
+            long s = tenths / 10, t = tenths % 10;
+            long h = s / 3600, m = (s % 3600) / 60, sec = s % 60;
+            return h > 0 ? $"{h}:{m:D2}:{sec:D2}.{t}" : $"{m}:{sec:D2}.{t}";
+        }
+
+        /// <summary>Hover readout over the ruler / canvas: m:ss.ff.</summary>
+        internal static string FormatHoverTime(double seconds)
+        {
+            if (double.IsNaN(seconds) || seconds < 0) seconds = 0;
+            long hund = (long)Math.Floor(seconds * 100 + 1e-6);
+            long s = hund / 100, c = hund % 100;
+            long h = s / 3600, m = (s % 3600) / 60, sec = s % 60;
+            return h > 0 ? $"{h}:{m:D2}:{sec:D2}.{c:D2}" : $"{m}:{sec:D2}.{c:D2}";
+        }
+
         internal static bool RangesOverlap(double a1, double a2, double b1, double b2) => a1 < b2 && a2 > b1;
 
         /// <summary>True when a rubber-band spanning [yMin, yMax] touches the given lane.</summary>
