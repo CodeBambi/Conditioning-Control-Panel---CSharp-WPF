@@ -44,7 +44,8 @@ const LOOK_SENSITIVITY = 0.0022;
 const KEY_YAW_RATE = 1.8, KEY_PITCH_RATE = 1.2;
 const PITCH_MIN = -1.12, PITCH_MAX = 1.2;
 /** A second refused lock in a row means the host has none (or forbids it): stay on click-drag and taps from then on. */
-const LOCK_REFUSALS = 2;
+const LOCK_REFUSALS = 4;
+const LOCK_COOLDOWN_MS = 1500;
 /** The glow on the fixture E would visit (desk tester, 2026-09-18: nothing said what could be played). */
 const GLOW = new T.Color('#ffcf6b');
 
@@ -277,7 +278,8 @@ export async function createScene(o) {
     }
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
   });
-  function lockFailed() { if (++lockErrors >= LOCK_REFUSALS) lockRefused = true; }
+  // Chromium refuses a re-lock for ~1 s after an Esc exit; that is a cooldown, not a refusal, so it never counts.
+  function lockFailed() { if (performance.now() - unlockedAt < LOCK_COOLDOWN_MS) return; if (++lockErrors >= LOCK_REFUSALS) lockRefused = true; }
   function freeLook() { if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch (err) { /* noop */ } } }
   document.addEventListener('pointerlockchange', () => {
     const now = document.pointerLockElement === canvas;
