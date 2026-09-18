@@ -71,6 +71,7 @@ internal static class BackRoomHostService
             case BackRoomBridge.OptionTunnel: s.BackRoomTunnel = option.On; break;
             case BackRoomBridge.OptionMelt: s.BackRoomMelt = option.On; break;
             case BackRoomBridge.OptionInvertLook: s.BackRoomInvertLook = option.On; break;
+            case BackRoomBridge.OptionWelcomeSeen: s.BackRoomWelcomeSeen = option.On; break;
             case BackRoomBridge.OptionIntensity when option.Intensity is { } i: s.BackRoomFxIntensity = i; break;
             case BackRoomBridge.OptionMediaSource when option.Text is { } src: s.BackRoomMediaSource = src; break;
             case BackRoomBridge.OptionSubVolume when option.Level is { } sub: s.BackRoomSubVolume = sub; break;
@@ -462,6 +463,7 @@ internal static class BackRoomHostService
             sp = s?.SkillPoints ?? 0,
             reduced = motion != Models.MotionLevel.Full,
             invertLook = s?.BackRoomInvertLook ?? false,
+            welcomeSeen = s?.BackRoomWelcomeSeen ?? false,
             motion = MotionWire(motion),
             intensity = IntensityWire(s, motion),
             lang = LocalizationManager.Instance.CurrentLanguage,

@@ -231,6 +231,9 @@ public sealed class BackRoomBridge
     public const string OptionTunnel = "tunnel", OptionMelt = "melt", OptionIntensity = "intensity";
     /// <summary>Invert camera (10.14): a drag moves the world instead of the camera. A switch like tunnel and melt.</summary>
     public const string OptionInvertLook = "invertLook";
+    /// <summary>The first-visit card was dismissed (CONTRACT section 13). A switch the page only ever sets true;
+    /// <c>AppSettings.BackRoomWelcomeSeen</c>, echoed as <c>welcomeSeen</c> on <c>init</c>.</summary>
+    public const string OptionWelcomeSeen = "welcomeSeen";
     /// <summary>Where the room's pictures come from (10.13.C). Values as <c>AppSettings.BackRoomMediaSource</c>.</summary>
     public const string OptionMediaSource = "mediaSource";
     /// <summary>The room's own three audio levels, 0-100 (10.14). Not the app's volumes.</summary>
@@ -250,7 +253,7 @@ public sealed class BackRoomBridge
     /// string (<see cref="Text"/>) or a 0-100 level (<see cref="Level"/>). Exactly one is ever set.</summary>
     public sealed record RoomOption(string Key, bool On, BackRoomFxIntensity? Intensity, string? Text = null, int? Level = null);
 
-    /// <summary><c>{type:'room-option', key:'tunnel'|'melt'|'invertLook', value: bool}</c>, <c>{key:'intensity', value:
+    /// <summary><c>{type:'room-option', key:'tunnel'|'melt'|'invertLook'|'welcomeSeen', value: bool}</c>, <c>{key:'intensity', value:
     /// 'calm'|'normal'|'full'}</c>, <c>{key:'mediaSource', value:'auto'|'local'|'online'|'mixed'|'bundled'}</c>
     /// or <c>{key:'subVolume'|'sfxVolume'|'musicVolume', value: 0..100}</c>. A string "true", a level outside
     /// the range, a non-integer level and an unknown key are all null: the page does not get to widen this
@@ -259,7 +262,7 @@ public sealed class BackRoomBridge
     {
         var key = (string?)m["key"];
         var v = m["value"];
-        if ((key == OptionTunnel || key == OptionMelt || key == OptionInvertLook) && v is JValue { Type: JTokenType.Boolean } b)
+        if ((key == OptionTunnel || key == OptionMelt || key == OptionInvertLook || key == OptionWelcomeSeen) && v is JValue { Type: JTokenType.Boolean } b)
             return new RoomOption(key, b.Value<bool>(), null);
         if (key == OptionIntensity && v is JValue { Type: JTokenType.String } t)
             return (string?)t switch

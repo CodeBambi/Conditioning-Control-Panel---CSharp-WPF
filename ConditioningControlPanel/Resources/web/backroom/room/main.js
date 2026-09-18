@@ -1,4 +1,5 @@
 import { intro } from './intro.js';
+import { createWelcome, shouldShow } from './welcome.js';
 import { createRacePortal, consumeRoomPose } from './race-portal.js';
 import { sliceText } from '../stations/wheel/rewards.js';
 import { setWheelFace } from './wheel-face.js';
@@ -78,6 +79,7 @@ const bell = { entries: [], optIn: false, mustHit: false, fetching: false, fetch
 const spListeners = new Set();
 const settingsListeners = new Set();
 let scene = null, loader = null, hud = null, leaving = false, visiting = false;
+let welcome = null;   // the first-visit card (welcome.js), null once dismissed or when the host says it was seen
 
 let racingOwnership = null, raceOpening = false;
 const previewHost = typeof window.__brSettings === 'object' && typeof window.__hostEmit === 'function';
@@ -221,6 +223,10 @@ function setOption(key, value) {
     state.intensityChoice = value;
   } else if (key === 'tunnel' || key === 'melt') {
     state.gates = readGates({ ...state.gates, [key]: !!value });
+  } else if (key === 'welcomeSeen') {
+    // The first-visit card was dismissed (welcome.js). Nothing to paint: the card is already gone, and the
+    // host's write is what keeps it gone on the next open.
+    state.welcomeSeen = true;
   } else if (key === 'invertLook') {
     // Invert camera (owner, 2026-09-18): a drag moves the world instead of the camera. Applied at once
     // through the scene's getter; the host persists it and its frame has the last word like the switches.
@@ -402,6 +408,8 @@ function wireExits() {
   window.addEventListener('keydown', (e) => {
     if (scene?.documents.opened) return;
     if (e.key !== 'Escape') return;
+    // The first-visit card is the top rung: Escape closes it and nothing else in the room hears the press.
+    if (welcome?.dismiss()) { e.preventDefault(); return; }
     e.preventDefault();
     if (scene?.dismissEmi()) return;
     back('key');
@@ -526,6 +534,7 @@ async function start(init) {
     intensityChoice: readChoice(init.intensityChoice, readChoice(init.intensity, 'normal')),
     lex: (init.lex && typeof init.lex === 'object') ? init.lex : {},
     open: typeof init.open === 'boolean' ? init.open : null,
+    welcomeSeen: init.welcomeSeen === true,
   });
   state.levels = readLevels(init.audio);
   state.media = readMedia(init.media);
@@ -660,6 +669,9 @@ async function start(init) {
   if (state.suspended) scene.pause(true);
   paintMotion();
   hud.ready();
+  // The first-visit card, over the room the moment the veil lifts. The host remembers the dismissal
+  // (room-option welcomeSeen -> AppSettings.BackRoomWelcomeSeen -> init.welcomeSeen), so it shows once per account.
+  if (shouldShow(state)) welcome = createWelcome({ layer: $('#br-layer'), lex, onDone: () => { welcome = null; setOption('welcomeSeen', true); } });
   paintMustHit();
   refreshPrizes();
   refreshBell('room-open');

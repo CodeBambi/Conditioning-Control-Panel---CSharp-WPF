@@ -1,0 +1,30 @@
+/* The first-visit card (welcome.js): the loader's card with a hero on top and three steps. */
+.br-welcome { width: min(440px, calc(100vw - 48px)); padding: 0 0 22px; }
+.br-welcome-hero { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover;
+  border-bottom: 1px solid rgba(185, 156, 255, .25); background: #1a1026; }
+.br-welcome-title { margin: 18px 26px 4px; font-size: 20px; }
+.br-welcome-sub { position: relative; margin: 0 26px 16px; font-size: 13px; color: var(--br-ink-dim); }
+.br-welcome-steps { list-style: none; margin: 0 26px 18px; padding: 0; text-align: left; display: grid; gap: 11px; }
+.br-welcome-step { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; }
+.br-welcome-num { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%;
+  background: rgba(255, 111, 181, .16); border: 1px solid rgba(255, 111, 181, .55);
+  color: var(--br-pink); font-size: 16px; font-weight: 700; font-style: normal; }
+.br-welcome-lead { display: block; font-size: 14px; color: var(--br-ink); margin-bottom: 2px; }
+.br-welcome-body { display: block; font-size: 12.5px; line-height: 1.35; color: var(--br-ink-dim); }
+/* The Back chip's gold, so the one button on the card is the one the player already trusts. */
+.br-welcome-go { display: inline-block; margin: 0 26px; padding: 11px 34px; border-radius: 12px; border: 0; cursor: pointer;
+  font: 600 15px/1 "Segoe UI", system-ui, sans-serif; color: #3a2410;
+  background: linear-gradient(180deg, #ffe29a, #f5c15a); box-shadow: 0 4px 0 #a8762a, 0 8px 18px rgba(0, 0, 0, .35);
+  transition: transform .08s, box-shadow .08s; }
+.br-welcome-go:hover { background: linear-gradient(180deg, #fff0bf, #ffd070); }
+.br-welcome-go:active { transform: translateY(3px); box-shadow: 0 1px 0 #a8762a, 0 4px 10px rgba(0, 0, 0, .35); }
+.br-welcome-go:focus-visible { outline: 2px solid var(--br-gold); outline-offset: 3px; }
+/* A short window (a phone held sideways): the hero shrinks first, the steps stay readable. */
+@media (max-height: 560px) {
+  .br-welcome { width: min(560px, calc(100vw - 48px)); padding-bottom: 14px; }
+  .br-welcome-hero { aspect-ratio: 3 / 1; }
+  .br-welcome-title { margin-top: 10px; font-size: 17px; }
+  .br-welcome-sub { margin-bottom: 8px; }
+  .br-welcome-steps { gap: 6px; margin-bottom: 10px; }
+  .br-welcome-body { font-size: 12px; }
+}
