@@ -72,6 +72,11 @@ public sealed record LauncherEntry(
         }
     }
 
+    /// <summary>True while nobody is signed in. Every game needs an account (Sep 18 2026 owner
+    /// decision), so this is one fact for the whole catalogue, read through
+    /// <see cref="LauncherCatalogue.NeedsAccount"/>.</summary>
+    public bool NeedsAccount => LauncherCatalogue.NeedsAccount;
+
     /// <summary><see cref="IsActive"/> wrapped: a probe that throws reads as closed.</summary>
     public bool Active
     {
@@ -103,6 +108,23 @@ public static class LauncherCatalogue
     /// </summary>
     public static readonly bool PieceByPieceAvailable = false;
 
+    /// <summary>
+    /// Whether an account is signed in. Every game needs one; the panel does not. Settable so a
+    /// test can walk the refusal without an App.
+    /// </summary>
+    public static Func<bool> SignedIn { get; set; } = () => App.IsLoggedIn;
+
+    /// <summary>True when the games must refuse and ask for a sign-in. A probe that throws reads
+    /// as signed out, never as signed in.</summary>
+    public static bool NeedsAccount
+    {
+        get
+        {
+            try { return !SignedIn(); }
+            catch (Exception ex) { Log.Debug(ex, "[Launcher] sign-in probe threw"); return true; }
+        }
+    }
+
     private static readonly Lazy<IReadOnlyList<LauncherEntry>> _games = new(Build);
 
     public static IReadOnlyList<LauncherEntry> Games => _games.Value;
@@ -118,14 +140,21 @@ public static class LauncherCatalogue
     public static bool AnyActive => Games.Any(g => g.Active);
 
     /// <summary>
-    /// Starts a game by id. False when the id is unknown or the tile is unavailable; a locked tile
-    /// still routes to <c>Launch</c> because the host owns the refusal toast and the "See tiers" action.
+    /// Starts a game by id. False when the id is unknown, the tile is unavailable or nobody is
+    /// signed in; a locked tile still routes to <c>Launch</c> because the host owns the refusal
+    /// toast and the "See tiers" action.
     /// </summary>
     public static bool TryLaunch(string? id)
     {
         var entry = Find(id);
         if (entry == null) { Log.Warning("[Launcher] unknown game id {Id}", id); return false; }
+        return TryLaunch(entry);
+    }
+
+    internal static bool TryLaunch(LauncherEntry entry)
+    {
         if (!entry.Available) { Log.Information("[Launcher] {Id} is not available in this build", entry.Id); return false; }
+        if (NeedsAccount) { Log.Information("[Launcher] {Id} refused: nobody is signed in", entry.Id); return false; }
         try
         {
             entry.Launch();

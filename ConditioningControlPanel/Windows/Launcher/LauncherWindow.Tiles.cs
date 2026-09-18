@@ -44,7 +44,10 @@ public partial class LauncherWindow
 
     private Border CreateTile(LauncherEntry entry)
     {
-        bool locked = entry.Locked;
+        // Signed out, every tile asks for an account first; the tier lock only shows once there
+        // is an account to hold a tier.
+        bool needsAccount = entry.NeedsAccount;
+        bool locked = !needsAccount && entry.Locked;
         var hue = entry.Hue;
         var tilt = new RotateTransform();
 
@@ -126,7 +129,8 @@ public partial class LauncherWindow
                 },
             },
         });
-        if (locked) plate.Children.Add(BuildPrimePill());
+        if (needsAccount) plate.Children.Add(BuildSignInPill());
+        else if (locked) plate.Children.Add(BuildPrimePill());
 
         var shortcutBtn = new Button
         {
@@ -160,15 +164,21 @@ public partial class LauncherWindow
             Text = entry.Blurb, FontSize = 14, Margin = new Thickness(0, 4, 0, 0), TextWrapping = TextWrapping.Wrap,
             Foreground = (Brush)FindResource("TextSecondaryBrush"), MinHeight = 20,
         });
-        var play = BuildPlayButton(entry, locked);
+        var play = BuildPlayButton(entry, locked, needsAccount);
         play.PreviewMouseLeftButtonDown += Press_Down;
         play.PreviewMouseLeftButtonUp += Press_Up;
         play.Click += (_, _) =>
         {
-            if (locked) LauncherSfx.Denied(); else LauncherSfx.Click();
+            if (locked || needsAccount) LauncherSfx.Denied(); else LauncherSfx.Click();
             FxOnPlay(tile, entry);
-            LauncherHost.LaunchGame(entry.Id);
+            if (needsAccount) OpenSignIn();
+            else LauncherHost.LaunchGame(entry.Id);
         };
+        if (needsAccount)
+        {
+            // The whole card is the ask, not only its button.
+            tile.MouseLeftButtonUp += (_, _) => { LauncherSfx.Denied(); FxOnPlay(tile, entry); OpenSignIn(); };
+        }
         text.Children.Add(play);
         body.Children.Add(text);
         tile.Child = body;
@@ -199,23 +209,26 @@ public partial class LauncherWindow
 
     /// <summary>Outline at rest, a hue fill on hover: the template does the crossfade, the
     /// tile hands it the colours.</summary>
-    private Button BuildPlayButton(LauncherEntry entry, bool locked)
+    private Button BuildPlayButton(LauncherEntry entry, bool locked, bool needsAccount)
     {
         var hue = entry.Hue;
         var label = new StackPanel { Orientation = Orientation.Horizontal };
+        if (!needsAccount)
+            label.Children.Add(new TextBlock
+            {
+                Text = locked ? "🔒" : "▶", FontSize = locked ? 13 : 11, Margin = new Thickness(0, 0, 8, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+            });
         label.Children.Add(new TextBlock
         {
-            Text = locked ? "🔒" : "▶", FontSize = locked ? 13 : 11, Margin = new Thickness(0, 0, 8, 0),
+            Text = Loc.Get(needsAccount ? "launcher_sign_in" : locked ? "launcher_locked" : "launcher_play"),
             VerticalAlignment = VerticalAlignment.Center,
         });
-        label.Children.Add(new TextBlock
-        {
-            Text = Loc.Get(locked ? "launcher_locked" : "launcher_play"),
-            VerticalAlignment = VerticalAlignment.Center,
-        });
-        var fill = locked
-            ? (Brush)FindResource("Tier2DiamondBorderBrush")
-            : new LinearGradientBrush(Lighten(hue, 0.15), Darken(hue, 0.75), 0);
+        var fill = needsAccount
+            ? (Brush)FindResource("AccentGradientBrush")
+            : locked
+                ? (Brush)FindResource("Tier2DiamondBorderBrush")
+                : new LinearGradientBrush(Lighten(hue, 0.15), Darken(hue, 0.75), 0);
         return new Button
         {
             Content = label,
@@ -228,23 +241,31 @@ public partial class LauncherWindow
     }
 
     /// <summary>The premium tag on a locked tile: a small gold pill instead of a bare lock.</summary>
-    private Border BuildPrimePill()
+    private Border BuildPrimePill() => BuildPill("launcher_prime_pill", "🔒",
+        (Brush)FindResource("Tier2DiamondBorderBrush"), new SolidColorBrush(Color.FromRgb(0x2A, 0x1C, 0x08)));
+
+    /// <summary>The ask on a signed-out tile: the same pill in the accent, no lock.</summary>
+    private Border BuildSignInPill() => BuildPill("launcher_pill_sign_in", null,
+        (Brush)FindResource("AccentGradientBrush"), Brushes.White);
+
+    private Border BuildPill(string textKey, string? icon, Brush background, Brush ink)
     {
         var pill = new Border
         {
-            Background = (Brush)FindResource("Tier2DiamondBorderBrush"),
+            Background = background,
             CornerRadius = new CornerRadius(10), Padding = new Thickness(9, 3, 10, 3),
             Margin = new Thickness(12, 10, 0, 0),
             HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
             IsHitTestVisible = false,
         };
         var row = new StackPanel { Orientation = Orientation.Horizontal };
-        row.Children.Add(new TextBlock { Text = "🔒", FontSize = 10, Margin = new Thickness(0, 0, 5, 0), VerticalAlignment = VerticalAlignment.Center });
+        if (icon != null)
+            row.Children.Add(new TextBlock { Text = icon, FontSize = 10, Margin = new Thickness(0, 0, 5, 0), VerticalAlignment = VerticalAlignment.Center });
         row.Children.Add(new TextBlock
         {
-            Text = Loc.Get("launcher_prime_pill"), FontSize = 11, FontWeight = FontWeights.Bold,
+            Text = Loc.Get(textKey), FontSize = 11, FontWeight = FontWeights.Bold,
             FontFamily = new FontFamily("/Fonts/#Fredoka, Segoe UI"),
-            Foreground = new SolidColorBrush(Color.FromRgb(0x2A, 0x1C, 0x08)), VerticalAlignment = VerticalAlignment.Center,
+            Foreground = ink, VerticalAlignment = VerticalAlignment.Center,
         });
         pill.Child = row;
         return pill;

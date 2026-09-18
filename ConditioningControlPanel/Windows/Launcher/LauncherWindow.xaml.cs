@@ -54,6 +54,7 @@ public partial class LauncherWindow : Window
         Loaded += (_, _) => OnLoadedOnce();
         Closed += OnClosedCleanup;
         LauncherHost.FadeOut = FadeOutThen;
+        LauncherHost.RequestSignIn = OpenSignIn;
 
         var lockdown = App.Lockdown;
         if (lockdown != null)
@@ -130,6 +131,7 @@ public partial class LauncherWindow : Window
         _fadeGuard?.Stop();
         _statusTimer.Stop();
         _shortcutTextTimer.Stop();
+        LauncherHost.RequestSignIn = null;
         UnhookEngine();
         var lockdown = App.Lockdown;
         if (lockdown != null)
@@ -176,6 +178,43 @@ public partial class LauncherWindow : Window
     }
 
     private void BtnGear_Click(object sender, RoutedEventArgs e) => OpenPanelTab("appsettings");
+
+    private void AccountChip_Click(object sender, RoutedEventArgs e) => OpenPanelTab("appsettings");
+
+    private void SignIn_Click(object sender, RoutedEventArgs e)
+    {
+        LauncherSfx.Click();
+        OpenSignIn();
+    }
+
+    // ------------------------------------------------------------------ sign in
+
+    private bool _signingIn;
+
+    /// <summary>
+    /// The one sign-in flow, the panel's own (<see cref="MainWindow.OpenUnifiedLoginDialog"/>),
+    /// with the dialog centred over the launcher and the panel left hidden. Whatever the dialog
+    /// returns, the chip, the stats and the tiles are read again so the locks and the name follow
+    /// the account. Reached from the title bar pill, a signed-out tile and
+    /// <see cref="LauncherHost.RequestSignIn"/>.
+    /// </summary>
+    internal void OpenSignIn()
+    {
+        if (_signingIn) return;
+        var mw = App.MainWindowRef;
+        if (mw == null) { Log.Warning("[Launcher] sign-in with no main window"); return; }
+        _signingIn = true;
+        try { mw.OpenUnifiedLoginDialog(this); }
+        catch (Exception ex) { Log.Warning(ex, "[Launcher] sign-in dialog failed"); }
+        finally { _signingIn = false; }
+
+        RefreshAccount();
+        RefreshStats();
+        BuildTiles();
+        if (MotionFx.AllowTransitions)
+            foreach (var t in _tiles) t.Opacity = 0;
+        MotionFx.StaggerIn(_tiles);
+    }
 
     // ------------------------------------------------------------------ the panel card
 
@@ -254,9 +293,12 @@ public partial class LauncherWindow : Window
         try
         {
             var name = App.Settings?.Current?.UserDisplayName;
-            bool signedIn = App.IsLoggedIn && !string.IsNullOrWhiteSpace(name);
+            bool loggedIn = !LauncherCatalogue.NeedsAccount;
+            bool signedIn = loggedIn && !string.IsNullOrWhiteSpace(name);
             AccountName.Text = signedIn ? name!.Trim() : "-";
             AvatarInitial.Text = signedIn ? name!.Trim()[..1].ToUpperInvariant() : "-";
+            AccountChipButton.Visibility = loggedIn ? Visibility.Visible : Visibility.Collapsed;
+            SignInPill.Visibility = loggedIn ? Visibility.Collapsed : Visibility.Visible;
 
             var tier = App.Patreon?.CurrentTier ?? PatreonTier.None;
             string? badge = tier switch
@@ -373,9 +415,6 @@ public partial class LauncherWindow : Window
     }
 
     // ------------------------------------------------------------------ bottom row
-
-    private void PanelLink_Click(object sender, RoutedEventArgs e) =>
-        OpenPanelTab((sender as FrameworkElement)?.Tag as string ?? "settings");
 
     private void OpenPanelTab(string tab)
     {

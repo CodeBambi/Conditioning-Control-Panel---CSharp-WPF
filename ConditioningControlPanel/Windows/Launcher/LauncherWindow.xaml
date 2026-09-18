@@ -150,6 +150,38 @@
             </Setter>
         </Style>
 
+        <!-- The title bar's sign-in pill: accent outline at rest, accent fill on hover. Same height
+             as the account chip it stands in for. -->
+        <Style x:Key="LauncherSignInPill" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentGradientBrush}"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="16,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="17" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource AccentGradientBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="LauncherStatNumber" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="/Fonts/#Fredoka, Segoe UI"/>
             <Setter Property="FontSize" Value="30"/>
@@ -321,10 +353,20 @@
                     </Grid>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                        <!-- account chip -->
+                        <!-- signed out: a sign-in pill where the chip would be -->
+                        <Button x:Name="SignInPill" Content="{loc:Str launcher_sign_in}" Style="{StaticResource LauncherSignInPill}"
+                                Margin="0,0,6,0" Visibility="Collapsed" Click="SignIn_Click"/>
+                        <!-- account chip: a click opens the panel's account settings -->
+                        <Button x:Name="AccountChipButton" Click="AccountChip_Click" Cursor="Hand" Margin="0,0,6,0"
+                                Background="Transparent" BorderThickness="0" Padding="0" FocusVisualStyle="{x:Null}">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <ContentPresenter/>
+                                </ControlTemplate>
+                            </Button.Template>
                         <Border x:Name="AccountChip" Background="{DynamicResource SurfaceBgBrush}"
                                 BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
-                                CornerRadius="18" Height="34" Padding="4,0,12,0" Margin="0,0,6,0">
+                                CornerRadius="18" Height="34" Padding="4,0,12,0">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Border Width="26" Height="26" CornerRadius="13"
                                         Background="{DynamicResource AccentGradientBrush}">
@@ -347,6 +389,7 @@
                                 </StackPanel>
                             </StackPanel>
                         </Border>
+                        </Button>
                         <Button x:Name="BtnGear" Content="⚙" Style="{StaticResource LauncherIconButton}"
                                 Click="BtnGear_Click" Margin="0,0,8,0"/>
                         <Button x:Name="BtnMinimize" Content="─" Width="46" Height="36"
@@ -452,10 +495,7 @@
                     Margin="28,0,28,0" Padding="0,0,0,0">
                 <Grid>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
-                        <Button Content="{loc:Str launcher_link_account}" Style="{StaticResource LauncherLink}" Tag="settings" Click="PanelLink_Click"/>
-                        <Button Content="{loc:Str launcher_link_mods}" Style="{StaticResource LauncherLink}" Tag="exclusives" Click="PanelLink_Click" Margin="14,0,0,0"/>
-                        <Button Content="{loc:Str launcher_link_library}" Style="{StaticResource LauncherLink}" Tag="assets" Click="PanelLink_Click" Margin="14,0,0,0"/>
-                        <Button Content="{loc:Str launcher_link_whats_new}" Style="{StaticResource LauncherLink}" Click="WhatsNew_Click" Margin="14,0,0,0"/>
+                        <Button Content="{loc:Str launcher_link_whats_new}" Style="{StaticResource LauncherLink}" Click="WhatsNew_Click"/>
                     </StackPanel>
                     <CheckBox x:Name="SkipToPanel" Content="{loc:Str launcher_skip_to_panel}" HorizontalAlignment="Right"
                               VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"

@@ -93,6 +93,12 @@ public static partial class LauncherHost
     /// <summary>The game the launcher started and is waiting on, or null.</summary>
     public static LauncherEntry? AwaitingGame => _awaiting;
 
+    /// <summary>
+    /// Set by the launcher window while it exists: opens its sign-in flow. A game asked for with
+    /// nobody signed in (a tile, a shortcut, <c>--game</c>) lands here instead of launching.
+    /// </summary>
+    public static Action? RequestSignIn { get; set; }
+
     // Implemented in LauncherHost.Window.cs next to the XAML. Leaves window null when the UI is
     // not part of this build, and every transition below degrades to "show the panel".
     static partial void CreateWindow(ref Window? window);
@@ -248,13 +254,26 @@ public static partial class LauncherHost
 
     /// <summary>
     /// Start a game from the launcher. The launcher hides while the game is up and returns when
-    /// the host reports the window gone. A refused launch (locked tile, unknown id) leaves the
-    /// launcher where it is so the refusal toast has something to sit on.
+    /// the host reports the window gone. A refused launch (locked tile, unknown id, nobody signed
+    /// in) leaves the launcher where it is so the refusal toast has something to sit on.
     /// </summary>
     public static bool LaunchGame(string id, int? hideDelayMs = null)
     {
         var entry = LauncherCatalogue.Find(id);
         if (entry == null) return false;
+
+        if (LauncherCatalogue.NeedsAccount)
+        {
+            // Every game needs an account. With the launcher up, its sign-in flow takes over;
+            // otherwise the caller shows the launcher, which wears the same rule on every tile.
+            Log.Information("[Launcher] {Id} refused: nobody is signed in", entry.Id);
+            if (IsShown)
+            {
+                try { RequestSignIn?.Invoke(); }
+                catch (Exception ex) { Log.Warning(ex, "[Launcher] sign-in request failed"); }
+            }
+            return false;
+        }
 
         if (entry.Locked)
         {
