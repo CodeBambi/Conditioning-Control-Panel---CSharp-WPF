@@ -49,6 +49,7 @@ import { createSeatLook } from '../../room/seat-look.js';
 
 import { createLoomKit, createDeck, createMoments, strengthK, viewportRect, DECK_VALUES } from '../../shared/hypno/index.js';
 import { createCallout, FX_DELAY_MS } from '../../shared/hypno/callout.js';
+import { showSubs, wordBook } from '../../shared/hypno/words.js';
 import { readState, readHand, legalOf, controls, classify, createIntent, mayRetry, moveBody, owedFor, shownSp, defaultStake,
   isOpen, totalOf, MOVES } from './hand.js';
 import { planSteps, settleMoment, streakAfter, mayFire, wordKeys, aceSlot, bestCard, vortexOf, resultLines, screenHoldMs, TIMING,
@@ -89,6 +90,13 @@ export async function mount(ctx) {
 
   const presentation = createPresentationPacer(navigator, quality);
   let el = null, table = null, kit = null, deck = null, moments = null, chip = null, raf = 0, session = 0, alive = false, suspended = false;
+  let book = new Map();   // THE WORDS (shared/hypno/words.js): the sitting's dealt word texts
+  /** The deck's ctx with the deal's words kept: the getters stay live, only media() is wrapped. */
+  function deckCtx() {
+    if (typeof ctx.media !== 'function') return ctx;
+    const my = session;
+    return Object.create(ctx, { media: { value: (o) => Promise.resolve(ctx.media(o)).then((rep) => { if (my === session) book = wordBook(rep); return rep; }) } });
+  }
   let st = null, shownHand = null, queue = [], busy = false, decide = false, phase = 'loading', note = '', lines = [];
   let stake = 1, stakePicked = false, dealReadyAt = 0, screenUntil = 0, sitting = 0, firstSit = true;
   let lastStill = null, unSp = null, feelLog = [], statusText = '', seat = 0, seating = false, dropped = 0;
@@ -366,7 +374,8 @@ export async function mount(ctx) {
           holdScreenFor(id, out, at);
           if (out.page.includes('win_tunnel')) table.tunnel(at);
           if (!table.settleBets && out.page.includes('chip_vortex') && v) table.vortex(v.dir, v.n, at);
-          log('moment', { id, tokens: out.tokens.length, page: out.page, held: out.held, net: h.result.net, best, streak, delayed });
+          log('moment', { id, tokens: out.tokens.length, page: out.page, held: out.held, net: h.result.net, best, streak, delayed, words: out.words });
+          return out;
         };
         if (paid) {
           // THE WINNING FLOW: the winning cards glow and THE BANK leaves the pot on this frame (the chip's own
@@ -374,7 +383,8 @@ export async function mount(ctx) {
           table.hitCards(winningCards(h), now);
           ownParty(plan, now, WIN_HOLD_MS);
           flyPay(plan, before, chip.server, now);
-          later(FX_DELAY_MS, (at) => { play(at, FX_DELAY_MS); showCallout(co, plan); });
+          // A sub chain owns the centre first (the slot's rule): the announcer follows the last word out.
+          later(FX_DELAY_MS, (at) => { const out = play(at, FX_DELAY_MS); if (out && out.wordsMs > 0) later(out.wordsMs, () => showCallout(co, plan)); else showCallout(co, plan); });
         } else { chip.thud(); play(now, 0); }   // a loss keeps its breath of tunnel on this frame; a push shows nothing
         break;
       }
@@ -521,7 +531,7 @@ export async function mount(ctx) {
     if (!alive || suspended) return;
     ring($('.cards-sit'));
     if (!view(performance.now()).sit) return;
-    sitDown(session, createDeck(ctx, { count: 13, still: dress().still }).catch(() => null));
+    sitDown(session, createDeck(deckCtx(), { count: 13, still: dress().still }).catch(() => null));
   }
 
   /* ------------------------------------------------------------ frame */
@@ -730,7 +740,8 @@ export async function mount(ctx) {
       onLand: (kind, counting) => { if (counting) return; sound.play('token', { last: true }); if (chip) chip.thud(); },
       onDone: () => { if (chip) chip.show(null); },   // the room's Law I rule takes the chip back
     });
-    moments = createMoments(ctx, { station: 'cards' });
+    // THE WORDS: the table's whispers are drawn on the page the way the slot draws them, and spoken by the host.
+    moments = createMoments(ctx, { station: 'cards', wordsOnPage: (steps, id) => showSubs(callout, steps, { book, gates: ctx.gates, seed: `${id}|${wordCursor}` }) });
     callout = createCallout({ ctx, mount: el, lex: typeof ctx.lex === 'function' ? ctx.lex : undefined });
     kit = createLoomKit({ still: dress().still, log: say });
     table = ctx.stage ? createTable3D(ctx.stage, { kit: () => kit, onDeal: deal, onCue: (cue) => sound.play(cue) }) : createTable($('.cards-stage'), { kit: () => kit, onCue: (cue) => sound.play(cue) });
@@ -741,7 +752,7 @@ export async function mount(ctx) {
       } });
     if (typeof ctx.onSp === 'function') unSp = ctx.onSp((v) => { if (chip) chip.setServer(v); });
     raf = requestAnimationFrame(frame);
-    const deckP = createDeck(ctx, { count: 13, still: dress().still }).catch(() => null);
+    const deckP = createDeck(deckCtx(), { count: 13, still: dress().still }).catch(() => null);
     const c = classify(await Promise.resolve(ctx.request('state', {})).catch(() => null));
     if (my !== session) { deckP.then((x) => x && x.dispose()); return; }
     $('.cards-loading').hidden = true;

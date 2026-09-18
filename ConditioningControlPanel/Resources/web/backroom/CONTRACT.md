@@ -2151,6 +2151,24 @@ so a bad duration can never stall the beat. `callout.cancel()`, `cancelWords()`,
 Host: `Services/BackRoom/BackRoomVoice.cs`, `IBackRoomVoice` / `BackRoomVoiceAck` in `BackRoomContracts.cs`,
 `NullBackRoomVoice` in `BackRoomStubs.cs` (what the dev rig and the suite run on).
 
+### 10.21.A Every sub is the slot's sub (owner 2026-09-18)
+
+The wheel, the roulette and the card table used to hand `fx.sub_single` / `fx.sub_pair` / `fx.sub_cascade`
+to the host with the dealt word KEYS and nothing else, so their words were the host's own silent text flash
+on the desktop and a silent fade on the phone playtest: no zoom, no house colours, no clicker, no voice. The
+slot never did that; it draws the dealt text itself (`callout.word`, 60% -> 130% toward the viewer, the house
+gradient) and has the host SPEAK it (`word.speak`, this section), then sends the host pair / cascade with
+`{ wordsShown: true }` and no single at all.
+
+That is now every station's rule, in one place: `shared/hypno/words.js` (`showSubs`). On the frame a
+station's sub fx fire it draws the chain on its own callout layer and hands the host the rewritten list.
+The deal's texts come from the media reply's `words` (`wordBook`); a key with no text falls back to the four
+bundled presets, exactly as the slot's `symbols.js` does. The subliminal gate off leaves every id to the host
+as before, so the host's own toggle stays the only judge. A sub chain owns the centre first: a callout on the
+same frame follows the last word out (`wordsMs`), the slot's timing. The card table's whispers go through
+`createMoments(ctx, { wordsOnPage })`, which rewrites the host steps the same way and lets the callout's own
+word cue replace `cueFor`'s. Nothing on the host changed: `wordsShown` was already honoured.
+
 ## 10.22 The reward pass (owner approved 2026-09-16)
 
 Source: `house-book.md` laws IX, X, XII and XIII with Brakes 2, 3, 5, 8 and 9, and the owner's revisit of the

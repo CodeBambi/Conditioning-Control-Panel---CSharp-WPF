@@ -60,6 +60,7 @@ import { createSeatLook } from '../../room/seat-look.js';
 
 import { createLoomKit, createDeck, createMoments, strengthK, rouletteRunLevel, pocketColor, viewportRect } from '../../shared/hypno/index.js';
 import { createCallout, FX_DELAY_MS } from '../../shared/hypno/callout.js';
+import { showSubs, wordBook } from '../../shared/hypno/words.js';
 import { kit as sound } from '../../shared/sound/kit.js';
 import { freshSit, sitPlan, afterParty } from '../../shared/win/plan.js';
 import { ladderPlan } from '../../shared/win/ladder.js';
@@ -111,6 +112,12 @@ export async function mount(ctx) {
   loadCss();
 
   let el = null, cv = null, g = null, bowl = null, mat = null, kit = null, deck = null, moments = null;
+  let book = new Map(), wordsUntil = 0;   // THE WORDS (shared/hypno/words.js): the deal's texts, and until when the centre is theirs
+  /** The deck's ctx with the deal's words kept: the getters stay live, only media() is wrapped. */
+  function deckCtx(my) {
+    if (typeof ctx.media !== 'function') return ctx;
+    return Object.create(ctx, { media: { value: (o) => Promise.resolve(ctx.media(o)).then((rep) => { if (my === session) book = wordBook(rep); return rep; }) } });
+  }
   let alive = false, suspended = false, session = 0, phase = 'loading', raf = 0, unSp = null, unSettings = null;
   let rotateSeen = false;
   try { rotateSeen = sessionStorage.getItem(ROTATE_SEEN) === '1'; } catch (e) { /* private mode */ }
@@ -323,11 +330,19 @@ export async function mount(ctx) {
     if (!alive || suspended || typeof ctx.fx !== 'function') return fired;
     const plan = fxPlan(name, { gates: gates(), calm: stillNow(), full: fullNow(), streak: run, pocket });
     const now = performance.now();
+    const steps = [];
     for (const step of plan) {
       if (!cool.take(step, now, i)) continue;
       const symbols = fxSymbols(step, { gif: deck && tape && i != null ? deck.pickKey(tape.id + ':' + i) : null, spin: i || 0 });
-      try { const p = ctx.fx(step.fx, symbols.length ? symbols : undefined); if (p && typeof p.catch === 'function') p.catch(() => {}); } catch (e) { /* noop */ }
-      fired.push(step.fx);
+      steps.push({ id: step.fx, symbols: symbols.length ? symbols : undefined, args: undefined });
+    }
+    // THE WORDS (shared/hypno/words.js): a sub step's words are drawn here the way the slot draws them and spoken by
+    // the host; the host is handed the rest. The centre is the words' until wordsUntil, and the callout waits for it.
+    const shown = showSubs(callout, steps, { book, gates: gates(), seed: `${tape ? tape.id : ''}:${i == null ? '' : i}:${name}` });
+    if (shown.wordsMs > 0) wordsUntil = Math.max(wordsUntil, performance.now() + shown.wordsMs);
+    for (const s of shown.steps) {
+      try { const p = ctx.fx(s.id, s.symbols, s.args); if (p && typeof p.catch === 'function') p.catch(() => {}); } catch (e) { /* noop */ }
+      fired.push(s.id);
     }
     note('fx', { beat: name, fired, planned: plan.map((s) => s.fx) });
     return fired;
@@ -552,7 +567,10 @@ export async function mount(ctx) {
       if (m.page.includes('pulled_pair')) list.push({ kind: 'pull', spot }, { kind: 'pull', spot });
     }
     if (list.length) mat.animate(list, now);
-    if (co && callout) { callout.show(co.key, co.fallback, { tier: co.tier }); lastCallout = { key: co.key, tier: co.tier, i: r.i, at: Math.round(performance.now()) }; note('callout', lastCallout); }
+    // A sub chain owns the centre first (the slot's rule): the announcer follows the last word out.
+    const nameIt = () => { if (co && callout) { callout.show(co.key, co.fallback, { tier: co.tier }); lastCallout = { key: co.key, tier: co.tier, i: r.i, at: Math.round(performance.now()) }; note('callout', lastCallout); } };
+    const wordsWait = Math.max(0, wordsUntil - performance.now());
+    if (wordsWait > 0) { const my = session, at = r.i; setTimeout(() => { if (my !== session || !alive || suspended || !cur || cur.i !== at) return; nameIt(); }, wordsWait); } else nameIt();
     const plan = party(r, near);   // THE REWARD, on this same frame: the tokens, the chime, the glow, the shower (Law X)
     note('land', { i: r.i, pocket: r.pocket, pay: r.pay, wake: r.wake, straight: r.straight, moment: id, page: m.page, fx: m.tokens.length, beat: hostBeat, near, streak, hostFx,
       callout: co ? co.key : null, delayed: true, spent: plan ? plan.spent : 0 });
@@ -768,7 +786,7 @@ export async function mount(ctx) {
       onDone: () => { paintSp(null); },
     });
     kit = createLoomKit({ still: stillNow(), log: (m) => note('loom', { m }) });
-    createDeck(ctx, { count: 4 }).then((d) => { if (my === session && alive) deck = d; else d.dispose(); }).catch(() => {});
+    createDeck(deckCtx(my), { count: 4 }).then((d) => { if (my === session && alive) deck = d; else d.dispose(); }).catch(() => {});
     if (typeof ctx.onSp === 'function') unSp = ctx.onSp((v) => { if (Number.isFinite(Number(v)) && phase !== 'asking') { sp = Number(v); if (el) sync(); } });
     if (typeof ctx.onSettings === 'function') unSettings = ctx.onSettings(() => { if (el) sync(); });
     const res = await Promise.resolve(ctx.request('state', {})).catch(() => null);

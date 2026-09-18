@@ -614,7 +614,7 @@ async function start(init) {
     log: (level, msg) => bridge.log(level, msg),
   });
   // Test seam for the smoke checks (never read by the room itself).
-  window.__backroom = { openRace, state, stations, loader, back, lex, visit, bell, refreshBell, rewards, get hud() { return hud; }, get scene() { return scene; } };
+  window.__backroom = { openRace, state, stations, loader, back, lex, visit, bell, refreshBell, rewards, levels, get hud() { return hud; }, get scene() { return scene; } };
 
   try {
     scene = await createScene({

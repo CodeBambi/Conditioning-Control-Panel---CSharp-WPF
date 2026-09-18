@@ -145,7 +145,9 @@ const nowMs = () => Date.now();
  * @param {Object} ctx      a station ctx (fx, fxRelease, fxTunnel, gates, onSettings, intensity, reduced, log)
  * @param {{station?: string}} o
  */
-export function createMoments(ctx, { station = '' } = {}) {
+/** `wordsOnPage(steps, momentId)`: a station that draws its sub words itself (shared/hypno/words.js showSubs)
+ *  hands this in; play() gives it the host steps about to fire and fires what comes back. */
+export function createMoments(ctx, { station = '', wordsOnPage = null } = {}) {
   const c = ctx || {};
   const say = (m) => { try { if (c.bridge && typeof c.bridge.log === 'function') c.bridge.log('warn', m); else if (typeof c.log === 'function') c.log(m); } catch (e) { /* noop */ } };
   const holds = new Map();   // token -> fxId
@@ -233,6 +235,7 @@ export function createMoments(ctx, { station = '' } = {}) {
       if (m.settles) bloomed = false;
       if (held && m.host.some((s) => !s.light)) out.held = true;
       const wordKeys = Array.isArray(words) ? words.filter((w) => typeof w === 'string' && WORD_RE.test(w)) : [];
+      const ready = [];   // the host steps that survive the gates, in order; fired below, after THE WORDS had their say
       for (const step of m.host) {
         if (held && !step.light) continue;
         if (step.tunnel === 'breath') { breath(step.peak, step.ms); sound.play('breath', { ms: step.ms }); continue; }
@@ -249,14 +252,25 @@ export function createMoments(ctx, { station = '' } = {}) {
         if (step.from) { const r = cleanRect(from); if (r) args.from = r; }
         let symbols = step.gif && !bloomStep && typeof gif === 'string' && KEY_RE.test(gif) ? [gif] : undefined;
         if (step.words > 0 && wordKeys.length) symbols = wordKeys.slice(0, step.words);
+        ready.push({ id: step.fx, symbols, args, step });
+      }
+      // THE WORDS (shared/hypno/words.js): a station drawing its own words rewrites the list (a single dropped,
+      // pair and cascade marked wordsShown) and the callout's own word cue replaces cueFor's.
+      let list = ready, wordsShown = false;
+      if (typeof wordsOnPage === 'function' && ready.some((r) => r.step.words > 0)) {
+        let shown = null;
+        try { shown = wordsOnPage(ready, id); } catch (e) { shown = null; }
+        if (shown && Array.isArray(shown.steps) && shown.wordsMs > 0) { list = shown.steps; wordsShown = true; out.wordsMs = shown.wordsMs; out.words = shown.words; }
+      }
+      for (const r of list) {
         let p = null;
-        try { p = c.fx(step.fx, symbols, args); } catch (e) { p = null; }
+        try { p = c.fx(r.id, r.symbols, r.args); } catch (e) { p = null; }
         if (p && typeof p.catch === 'function') p.catch(() => {});
         const token = p && typeof p.token === 'string' ? p.token : null;
-        cueFor(step, args, symbols);
+        if (!(wordsShown && r.step.words > 0)) cueFor(r.step, r.args, r.symbols);
         if (!token) continue;
         out.tokens.push(token);
-        if (args.hold) holds.set(token, step.fx);
+        if (r.args.hold) holds.set(token, r.id);
       }
       return out;
     },

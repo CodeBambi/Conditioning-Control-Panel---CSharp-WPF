@@ -61,6 +61,7 @@ import { sparkBurst, warmGlow } from '../../../arcademy/shell/counterfx.js';
 import { dressOf, edgeAlpha, captionAlpha, hubStill } from './hypno.js';
 import { createLoomKit, createDeck, createMoments, wheelSize, strengthK, wheelTurnLevel, boxAround } from '../../shared/hypno/index.js';
 import { createCallout } from '../../shared/hypno/callout.js';
+import { showSubs, wordBook } from '../../shared/hypno/words.js';
 import { createScene } from './scene.js';
 import { createRoomScene } from './room-scene.js';
 export const roomStage = true;
@@ -105,7 +106,7 @@ export async function mount(ctx) {
   let rewardReveal = null;
   let gainTimer = 0, glanceTimer = 0, feelLog = [], revealAt = -Infinity;
   let moments = null, kit = null, deck = null, unSettings = null, dress = dressOf(), hubPainted = false, turnPlayed = false, lastMoment = null, dealSeq = 0;
-  let fxCool = freshCool(), wordKeys = [], lastFx = null;
+  let fxCool = freshCool(), wordKeys = [], lastFx = null, book = new Map();   // book: the deal's word texts (words.js)
   let sit = freshSit(), lastPlan = null;   // Brake 3's ledger: one per sit-down, counted only by parties that played
   let callout = null, landTimer = 0, lastCallout = null;   // the landing flow: the callout and the delayed fx frame
   const $ = sel => el.querySelector(sel);
@@ -267,6 +268,7 @@ export async function mount(ctx) {
     const media = typeof ctx.media === 'function' ? {
       media: o => Promise.resolve(ctx.media(o)).then(rep => {
         if (mine === dealSeq) wordKeys = Array.isArray(rep && rep.words) ? rep.words.map(w => w && w.key).filter(k => typeof k === 'string' && /^s\d{1,2}$/.test(k)) : [];
+        if (mine === dealSeq) book = wordBook(rep);
         return rep;
       }) } : {};
     createDeck(media, { count: 8, still: dress.calm }).then(d => {
@@ -297,8 +299,13 @@ export async function mount(ctx) {
     const plan = fxPlan(moment, { still, gates: ctx.gates, cool: fxCool, now: performance.now(), gifs: deck ? deck.keys : [], words: wordKeys, seed });
     fxCool = plan.cool;
     const ids = [];
-    for (const f of plan.fx) if (fireFx(f.id, f.symbols, f.args)) ids.push(f.id);
-    lastFx = { moment, ids, why: plan.why, still };
+    // THE WORDS (shared/hypno/words.js): a sub row's words are drawn HERE the way the slot draws them, and spoken by
+    // the host; the host is handed pair / cascade with wordsShown and no single at all. `ids.wordsMs` is how long the
+    // centre is the words', so a callout on the same frame follows the last word out.
+    const shown = showSubs(callout, plan.fx.map(f => ({ id: f.id, symbols: f.symbols, args: f.args })), { book, gates: ctx.gates, seed: `${moment}|${seed}` });
+    for (const f of shown.steps) if (fireFx(f.id, f.symbols, f.args)) ids.push(f.id);
+    ids.wordsMs = shown.wordsMs;
+    lastFx = { moment, ids: ids.slice(), words: shown.words, why: plan.why, still };
     note('fx', lastFx);
     return ids;
   }
@@ -376,9 +383,14 @@ export async function mount(ctx) {
         landTimer = 0;
         if (my !== session || !alive || suspended) return;
         if (r.reward?.kind !== 'nothing') fire(raw, r, idx);
-        playFx(landMoment(r), seed);
+        const played = playFx(landMoment(r), seed);
         if (nearMiss(layout, idx, r)) playFx('nearMiss', seed);
-        if (co && callout) { callout.show(co.key, co.fallback, { tier: co.tier }); lastCallout = { key: co.key, tier: co.tier, at: Math.round(performance.now()) }; note('callout', lastCallout); }
+        // A sub chain owns the centre first (the slot's rule): the announcer follows the last word out.
+        const nameIt = () => {
+          if (my !== session || !alive || suspended) return;
+          if (co && callout) { callout.show(co.key, co.fallback, { tier: co.tier }); lastCallout = { key: co.key, tier: co.tier, at: Math.round(performance.now()) }; note('callout', lastCallout); }
+        };
+        if (played.wordsMs > 0) setTimeout(nameIt, played.wordsMs); else nameIt();
       }, WHEEL_FX_DELAY_MS);
     }
     // THE ANNOUNCEMENT (10.22.B): the room learns what the player has just learnt, once, on the revealed
