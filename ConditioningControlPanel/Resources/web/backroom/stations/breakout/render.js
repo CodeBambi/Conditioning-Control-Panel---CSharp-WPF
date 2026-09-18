@@ -8,6 +8,9 @@
  * draw accepts the CONTRACT v2 form draw(snap, { words, media, now, reduced, dt, word }) and the older
  * draw(snap, now, dt, word). onGameEvent is onEvent (same function, both names exported on the object).
  * Cosmetic-only state (debris, stamps, shake, post) lives in render-fx.js.
+ * The payload bubbles (colliders and the whirlwind well) wear the OG soap
+ * bubble skin (assets/bubble.png) over the picture; until it loads, the old
+ * circle. A broken GIF brick's face (snap.pops) tumbles until it bursts.
  * ==========================================================================*/
 
 import { W, H } from './game.js';
@@ -20,6 +23,11 @@ const FONT = '"Arial Rounded MT Bold", "Trebuchet MS", Arial, sans-serif';
 const BG = [26, 26, 46], PINK = [255, 105, 180], VIOLET = [165, 108, 255], MINT = [120, 230, 200], GOLD = [255, 207, 107], WHITE = [255, 255, 255], GREY = [150, 150, 150];
 const ROWS = [[255, 105, 180], [255, 140, 200], [214, 120, 255], [165, 108, 255], [120, 180, 255], [120, 230, 200]];
 const easeOutBack = (t) => { const c = 1.7; t = clamp(t, 0, 1) - 1; return 1 + t * t * ((c + 1) * t + c); };
+const INFLATE_S = 0.25;
+/* The OG bubble, loaded once per module. import.meta.url keeps it right under play.html's <base> and in dev.html. */
+let BUBBLE = null;
+try { if (typeof Image !== 'undefined') { BUBBLE = new Image(); BUBBLE.decoding = 'async'; BUBBLE.src = new URL('./assets/bubble.png', import.meta.url).href; } } catch (e) { BUBBLE = null; }
+const bubbleReady = () => !!(BUBBLE && BUBBLE.complete && BUBBLE.naturalWidth > 0);
 /** '#rrggbb' (the sim's brick.color) or an [r,g,b] array -> [r,g,b]; anything else -> null. */
 function toRgb(c) {
   if (Array.isArray(c)) return c;
@@ -79,6 +87,21 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       debris.spawn(d.x, d.y, (d.w || 42) * 0.35, (d.h || 18) * 0.6, rgb, rng);
       if (rungs(5) && colour) cam.kick(4);
       if (d.jackpot) cam.kick(6, 1, 0.01);
+      if (d.ghost && (d.plus | 0) > 1) stamps.push({ kind: 'text', text: '+' + (d.plus | 0), x: d.x, y: d.y - 8, life: 0.8, rgb: WHITE, size: 18 });
+    } else if (name === 'popOut') {
+      // The picture leaves the wall: a few shards of the brick and a puff along the kick.
+      const rgb = toRgb(d.color) || PINK;
+      P.rects(d.x, d.y, rgb, 5, { speed: 150, life: 0.5, size: 5 });
+      if (colour) P.spray(d.x, d.y, Math.atan2(d.vy || -1, d.vx || 0), 0.7, WHITE, 8, 170, 0.35);
+    } else if (name === 'burst') {
+      // The bubble inflating: a soap-flavoured burst, light and slow, plus a ring.
+      if (colour) {
+        const rgb = toRgb(d.color) || PINK;
+        P.burst(d.x, d.y, rgb, 22, 190, 0.6, { rise: 30, gv: 120 });
+        P.burst(d.x, d.y, WHITE, 14, 110, 0.7, { rise: 50, gv: 40, r0: 1.5, r1: 3 });
+        stamps.push({ kind: 'ring', x: d.x, y: d.y, r0: 8, r1: d.kind === 'well' ? 96 : 60, life: 0.4, rgb: d.kind === 'well' ? MINT : PINK });
+        cam.kick(d.kind === 'well' ? 5 : 3);
+      }
     } else if (name === 'hit') {
       if (d.kind === 'paddle') recoil = 1;
       if (d.kind === 'gif') { cam.kick(7); if (rungs(8)) { glitch = 0.14; aberr = 1; } }
@@ -179,17 +202,50 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       g.restore();
     }
   }
-  /** The whirlwind: a dealt picture cut into wedges and wound into a spiral (render-well.js). */
+  /** The OG soap bubble over a picture of radius r: the rim highlights sit on top, the picture shows through. */
+  function drawBubble(x, y, r, a = 1) {
+    if (!bubbleReady()) return false;
+    const d = r * 2.16;                                                   // the PNG's bubble sits a little inside its square
+    g.save(); g.globalAlpha = clamp(a, 0, 1); g.drawImage(BUBBLE, x - d / 2, y - d / 2, d, d); g.restore();
+    return true;
+  }
+  /** A broken GIF brick's face, tumbling out of the wall until it bursts. */
+  function drawPops(s, mix) {
+    for (const p of s.pops || []) {
+      const frame = media && rungs(1) ? media.frame(p.gif) : null;
+      g.save(); g.translate(p.x, p.y); g.rotate(p.rot || 0);
+      g.shadowColor = col(PINK, mix, 0.6); g.shadowBlur = 10;
+      roundRect(g, -p.w / 2, -p.h / 2, p.w, p.h, 3);
+      if (frame) {
+        g.fillStyle = col(VIOLET, mix); g.fill(); g.shadowBlur = 0; g.clip();
+        const fw = frame.width || frame.naturalWidth || 1, fh = frame.height || frame.naturalHeight || 1, k = Math.max(p.w / fw, p.h / fh) * 1.05;
+        g.drawImage(frame, -fw * k / 2, -fh * k / 2, fw * k, fh * k);
+        g.strokeStyle = col(PINK, mix, 0.8); g.lineWidth = 1; g.strokeRect(-p.w / 2 + 0.5, -p.h / 2 + 0.5, p.w - 1, p.h - 1);
+      } else {
+        g.fillStyle = col(toRgb(p.color) || PINK, mix); g.fill();
+        g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(-p.w / 2 + 2, -p.h / 2 + 2, p.w - 4, 3);
+      }
+      g.restore();
+    }
+  }
+  /** The whirlwind: a dealt picture cut into wedges and wound into a spiral (render-well.js), inside the bubble. */
   function drawWell(s, mix, dt, extras) {
     const well = s.well; if (!well) return;
     const m = (extras && extras.media) || media;
+    const inflate = Math.max(0.02, easeOutBack((typeof well.born === 'number' ? well.born : 1) / INFLATE_S));
+    g.save();
+    g.translate(well.x, well.y); g.scale(inflate, inflate); g.translate(-well.x, -well.y);
     wellFx.draw(g, well, { mix, col, media: m, dt, sat: s.sat, particles: P,
       pink: PINK, violet: VIOLET, mint: MINT, spiral: drawSpiral });
+    if (mix > 0) drawBubble(well.x, well.y, well.r || 70, clamp(well.fade, 0, 1) * 0.95);
+    g.restore();
   }
   function drawColliders(s, mix) {
     for (const c of s.colliders) {
-      const r = c.r * (1 + c.pulse * 0.25), frame = media ? media.frame(c.gif) : null;
-      g.save(); g.globalAlpha = clamp(c.alpha, 0, 1);
+      const inflate = easeOutBack((typeof c.age === 'number' ? c.age : 1) / INFLATE_S);
+      const r = c.r * (1 + c.pulse * 0.25) * Math.max(0.02, inflate), frame = media ? media.frame(c.gif) : null;
+      const a = clamp(c.alpha, 0, 1);
+      g.save(); g.globalAlpha = a;
       g.beginPath(); g.arc(c.x, c.y, r, 0, 7); g.closePath();
       g.shadowColor = col(PINK, mix, 0.8); g.shadowBlur = 14 + c.pulse * 20;
       g.fillStyle = col(VIOLET, mix); g.fill(); g.shadowBlur = 0;
@@ -199,7 +255,8 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
         g.drawImage(frame, c.x - fw * k / 2, c.y - fh * k / 2, fw * k, fh * k);
       }
       g.restore();
-      g.strokeStyle = col(PINK, mix, 0.9); g.lineWidth = 2 + c.pulse * 3; g.beginPath(); g.arc(c.x, c.y, r, 0, 7); g.stroke();
+      if (!drawBubble(c.x, c.y, r, a)) { g.strokeStyle = col(PINK, mix, 0.9 * a); g.lineWidth = 2 + c.pulse * 3; g.beginPath(); g.arc(c.x, c.y, r, 0, 7); g.stroke(); }
+      else if (c.pulse > 0) { g.strokeStyle = col(PINK, mix, 0.8 * c.pulse * a); g.lineWidth = 1 + c.pulse * 3; g.beginPath(); g.arc(c.x, c.y, r * 1.04, 0, 7); g.stroke(); }
     }
   }
   function drawBall(s, b, mix, words) {
@@ -400,7 +457,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     }
     if (!grey) drawWell(s, mix, fxDt, extras);
     drawBricks(s, mix);
-    if (!grey) drawColliders(s, mix);
+    if (!grey) { drawPops(s, mix); drawColliders(s, mix); }
     if (grey) P.clear(); else ballSparkle(s);
     debris.draw(g, fxDt, mix, col, H);
     drawParticles(fxDt, mix);

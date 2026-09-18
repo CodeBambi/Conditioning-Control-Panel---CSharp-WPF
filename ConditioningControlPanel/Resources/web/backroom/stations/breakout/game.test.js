@@ -72,9 +72,10 @@ test('losing the ball in COLOUR is a RELAPSE: grey, saved saturation, ghost ball
 test('N grey bricks is a BREAKOUT: 0.3 s rewind, 100 ms freeze, then the world snaps back', () => {
   const { game, names, calls } = make({ saturation: 0.55, breakoutN: 3 });
   game.loseBall(); for (let i = 0; i < 8; i++) game.step(0.1);
-  game.breakBrick(0); game.breakBrick(1);
+  const plain = game.snapshot().bricks.map((b, i) => (b.gif < 0 && !b.split && !b.jackpot ? i : -1)).filter(i => i >= 0);
+  game.breakBrick(plain[0]); game.breakBrick(plain[1]);
   assert.equal(game.snapshot().state, 'grey');
-  game.breakBrick(2);
+  game.breakBrick(plain[2]);
   let s = game.snapshot();
   assert.equal(s.pendingBreakout, true); assert.equal(s.transition.kind, 'breakout'); assert.equal(s.state, 'grey', 'still grey during the rewind');
   assert.equal(names().at(-1), 'breakoutStart');
@@ -173,4 +174,77 @@ test('a brick hit pushes the brick and ripples jelly outward by ring', () => {
   game.step(0.1); game.step(0.1);
   assert.ok(ring1.jelly > 0 && ring2.jelly > 0);
   assert.equal(target.pushT, 0, 'push decayed after 120 ms');
+});
+
+test('a GIF brick broken in colour pops out and bursts into the well (rung 7) or a collider (below it)', () => {
+  const { game, events, names } = make({ saturation: 0.75 });
+  game.setForce(7, true);
+  const s = game.snapshot();
+  const gif = s.bricks.findIndex(b => b.alive && b.gif >= 0);
+  assert.ok(gif >= 0, 'the wall deals GIF bricks');
+  game.breakBrick(gif);
+  assert.equal(s.pops.length, 1, 'the brick face pops out');
+  assert.equal(s.pops[0].gif, s.bricks[gif].gif, 'the pop carries the brick picture');
+  assert.ok(names().includes('popOut'));
+  assert.equal(s.well, null, 'nothing spawns before the burst');
+  for (let i = 0; i < 80; i++) game.step(1 / 60, {});
+  assert.equal(game.snapshot().pops.length, 0, 'the pop has burst within 1.3 s');
+  const burst = events.find(e => e[0] === 'burst');
+  assert.ok(burst && burst[1].kind === 'well', 'it burst into the well');
+  const w = game.snapshot().well;
+  assert.ok(w && w.gif === s.bricks[gif].gif && w.r === 70 && w.pull === 110);
+  assert.ok(w.x >= 110 && w.x <= 370 && w.y >= 280 && w.y <= 520, 'inside the band');
+  assert.equal(burst[1].x, w.x); assert.equal(burst[1].y, w.y);
+  // A second GIF brick while the well is live: a collider bubble instead.
+  const gif2 = s.bricks.findIndex((b, i) => b.alive && b.gif >= 0 && i !== gif);
+  game.breakBrick(gif2);
+  for (let i = 0; i < 80; i++) game.step(1 / 60, {});
+  assert.equal(game.snapshot().colliders.length, 1, 'a well is already live, so a collider');
+  assert.equal(game.snapshot().colliders[0].gif, s.bricks[gif2].gif);
+  // Below rung 7 the burst is always a collider.
+  const low = make({ saturation: 0.3 });
+  const s2 = low.game.snapshot(), g3 = s2.bricks.findIndex(b => b.alive && b.gif >= 0);
+  low.game.breakBrick(g3);
+  for (let i = 0; i < 80; i++) low.game.step(1 / 60, {});
+  assert.equal(s2.well, null); assert.equal(s2.colliders.length, 1);
+  assert.equal(low.events.find(e => e[0] === 'burst')[1].kind, 'collider');
+});
+
+test('no timer spawns: 20 s without a GIF brick broken leaves no well and no colliders', () => {
+  const { game } = make({ saturation: 0.95 });
+  game.setNoLose(true);
+  for (const b of game.snapshot().bricks) b.gif = -1;   // the ball may hit bricks; only a GIF brick spawns
+  for (let i = 0; i < 20 * 60; i++) game.step(1 / 60, { x: 240 });
+  const s = game.snapshot();
+  assert.equal(s.well, null); assert.equal(s.colliders.length, 0);
+  assert.ok(s.time >= 19);
+});
+
+test('in grey a special brick (gif, split, jackpot) is +3 on the counter, a plain one is +1', () => {
+  const { game, events } = make({ saturation: 0.5, breakoutN: 40 });
+  game.loseBall(); for (let i = 0; i < 8; i++) game.step(0.1);
+  const s = game.snapshot();
+  const idx = (fn) => s.bricks.findIndex(b => b.alive && fn(b));
+  const plain = idx(b => b.gif < 0 && !b.split && !b.jackpot), gif = idx(b => b.gif >= 0 && !b.jackpot), jackpot = idx(b => b.jackpot);
+  game.breakBrick(plain);
+  assert.equal(s.greyBricks, 1);
+  assert.equal(events.at(-2)[1].plus, 1);
+  game.breakBrick(gif);
+  assert.equal(s.greyBricks, 4);
+  assert.equal(events.filter(e => e[0] === 'brick').at(-1)[1].plus, 3);
+  assert.equal(s.pops.length, 0, 'no pop-out in grey'); assert.equal(s.well, null);
+  game.breakBrick(jackpot);
+  assert.equal(s.greyBricks, 7);
+  const split = idx(b => b.split && b.gif < 0 && !b.jackpot);
+  if (split >= 0) { game.breakBrick(split); assert.equal(s.greyBricks, 10); }
+  assert.equal(events.filter(e => e[0] === 'burst').length, 0);
+});
+
+test('reduced motion: the bubble appears at once, no tumble', () => {
+  const { game, events } = make({ saturation: 0.75, reduced: true });
+  game.setForce(7, true);
+  const s = game.snapshot(), gif = s.bricks.findIndex(b => b.alive && b.gif >= 0);
+  game.breakBrick(gif);
+  assert.equal(s.pops.length, 0); assert.ok(s.well, 'the well is there on the same tick');
+  assert.equal(events.filter(e => e[0] === 'burst').length, 1);
 });

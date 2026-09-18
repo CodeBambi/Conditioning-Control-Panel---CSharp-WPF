@@ -10,7 +10,13 @@
  * createGame({ w, h, rng, audio, onEvent, words }) -> { step(dt, input), snapshot(), ... }
  * Events (onEvent(name, data)): brick, hit, paddle, wallhit, gif, capture, spiral,
  * split, wall, relapse, relapseStart, breakout, breakoutStart, crack, lost,
- * launch, perfect, nearMiss, jackpot, mantra, shatterWall.
+ * launch, perfect, nearMiss, jackpot, mantra, shatterWall, popOut, burst.
+ *
+ * Payloads: the GIF brick is the spawner. Broken in COLOUR its face pops out of
+ * the wall (g.pops), tumbles, and bursts into a bubble holding the picture: the
+ * whirlwind well (g.well, rung 7, one at a time) or a drifting collider bubble
+ * (g.colliders, up to 3). No timer spawns. In GREY a special brick (gif, split,
+ * jackpot) is +3 on the breakout counter and nothing spawns.
  * ==========================================================================*/
 
 export const W = 480, H = 720;
@@ -66,15 +72,16 @@ export function layoutWord(word) {
 }
 
 export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEvent = () => {}, breakoutN = 12,
-  saturation = 0.15, speedScale = 0.55, words = DEFAULT_WORDS } = {}) {
+  saturation = 0.15, speedScale = 0.55, words = DEFAULT_WORDS, reduced = false } = {}) {
   const g = {
     w, h, breakoutN, speedScale, noLose: false,   // dev: the floor bounces, the ball never drops
+    reduced: !!reduced,                            // reduced motion: no tumble, the bubble appears at the brick
     sat: saturation, savedSat: saturation, state: 'colour', greyBricks: 0,
     force: {}, rungs: rungsFor(saturation, 'colour', null), speed: 0,
     paddle: { x: w / 2, w: PADDLE.baseW, h: PADDLE.h, y: h - 40, stretch: 0, tug: 0 },
-    balls: [], bricks: [], colliders: [], well: null,
+    balls: [], bricks: [], colliders: [], well: null, pops: [],
     stats: { bricks: 0, walls: 0, sp: 0 }, combo: 0, comboBest: 0, time: 0, freeze: 0, pendingBreakout: false, breakoutAt: null,
-    wallAge: 1, landRow: 99, wobble: { side: '', t: 0 }, crackFired: false, nextCollider: 0, nextWell: 4, acc: 0, launchTimer: 0,
+    wallAge: 1, landRow: 99, wobble: { side: '', t: 0 }, crackFired: false, acc: 0, launchTimer: 0,
     // contract v2
     transition: null, timeScale: 1, hitStopMs: 0, smear: null, smearFading: false, fractures: 0, shatterWall: false,
     mantra: null, beatPhase: 0, lastPerfectAt: 0, nearMissT: 0,
@@ -166,7 +173,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   function relapse(at) {
     g.transition = null; setTimeScale(1);
     g.savedSat = g.sat; g.sat = 0; g.state = 'grey'; g.greyBricks = 0; g.combo = 0; g.hitStopMs = 0; g.nearMissT = 0;
-    g.colliders = []; g.well = null; g.paddle.tug = 0;
+    g.colliders = []; g.well = null; g.pops = []; g.paddle.tug = 0;
     au('relapse'); au('setState', 'grey'); au('setSaturation', 0);
     emit('relapse', { x: at ? at.x : w / 2, y: at ? at.y : h - 60 });
     respawn(true);
@@ -214,13 +221,15 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     const cx = br.x + br.w / 2, cy = br.y + br.h / 2;
     au('hit', 'brick', { combo: g.combo + 1, x: br.x / w });
     pushBrick(br, ball);
+    const plus = (br.gif >= 0 || br.split || br.jackpot) ? 3 : 1;   // a special brick counts triple on the grey counter
     emit('brick', { x: cx, y: cy, w: br.w, h: br.h, color: br.color, row: br.row, col: br.col, gif: br.gif >= 0, gifIndex: br.gif,
-      jackpot: br.jackpot, letter: br.letter, ghost: grey, sat: g.sat });
+      jackpot: br.jackpot, letter: br.letter, ghost: grey, sat: g.sat, plus });
     bumpCombo(br.gif >= 0 ? 'gif' : 'brick', cx, cy);
     if (br.jackpot) { g.stats.sp += 5; emit('jackpot', { x: cx, y: cy, sp: g.stats.sp, ghost: grey }); }
-    if (grey) { g.greyBricks++; if (g.greyBricks >= g.breakoutN) startBreakout(ball); }
+    if (grey) { g.greyBricks += plus; if (g.greyBricks >= g.breakoutN) startBreakout(ball); }
     else {
       addSat(0.012);
+      if (br.gif >= 0) popOut(br, ball);
       if (g.crackFired && !g.shatterWall) { g.fractures = Math.min(1, g.fractures + 0.04); if (g.fractures >= 1) { g.shatterWall = true; au('shatterWall'); emit('shatterWall', {}); } }
       if (br.split && ball && g.balls.length < MAX_BALLS) split(ball, br);
     }
@@ -240,14 +249,44 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     emit('wall', { walls: g.stats.walls, sp: g.stats.sp, mantra: g.mantra });
   }
 
-  /* ------------------------------------------------------------ payloads: colliders and wells */
-  function spawnCollider() {
-    const r = 28;
-    const a = rng() * TAU;
-    g.colliders.push({ x: lerp(r + 20, w - r - 20, rng()), y: lerp(250, 540, rng()), r, vx: Math.cos(a) * 18, vy: Math.sin(a) * 18,
-      hits: 0, pulse: 0, alpha: 0, fading: false, gif: Math.floor(rng() * 8), age: 0 });
-    const mean = lerp(8, 5, clamp((g.sat - 0.8) / 0.2, 0, 1));
-    g.nextCollider = g.time + mean * (0.5 + rng());
+  /* ------------------------------------------------------------ payloads: the GIF brick pops out into a bubble */
+  const POP_G = 1400, POP_KICK = 210, BAND = { x0: 110, y0: 280, y1: 520 };
+  /** The broken GIF brick's face leaves the wall along the ball direction, tumbles, and bursts inside the band. */
+  function popOut(br, ball) {
+    const cx = br.x + br.w / 2, cy = br.y + br.h / 2;
+    const len = ball ? Math.hypot(ball.vx || 0, ball.vy || 0) : 0;
+    const ux = len > 1 ? ball.vx / len : 0, uy = len > 1 ? ball.vy / len : -1;
+    const pop = { x: cx, y: cy, w: br.w, h: br.h, vx: ux * POP_KICK + (rng() - 0.5) * 60, vy: uy * POP_KICK - 80, rot: 0,
+      vr: (rng() < 0.5 ? -1 : 1) * (5 + rng() * 5), gif: br.gif >= 0 ? br.gif : Math.floor(rng() * 8), color: br.color, t: 0, life: 0.5 + rng() * 0.3, done: false };
+    g.pops.push(pop);
+    emit('popOut', { x: cx, y: cy, w: br.w, h: br.h, vx: pop.vx, vy: pop.vy, gif: pop.gif, color: br.color });
+    if (g.reduced) { burst(pop); g.pops = g.pops.filter(p => !p.done); }
+    return pop;
+  }
+  function updatePops(dt) {
+    if (!g.pops.length) return;
+    for (const p of g.pops) {
+      p.t += dt; p.vy += POP_G * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+      if (p.x < BAND.x0) { p.x = BAND.x0; p.vx = Math.abs(p.vx); } else if (p.x > w - BAND.x0) { p.x = w - BAND.x0; p.vx = -Math.abs(p.vx); }
+      // It bursts where it lands: once its life is up and it is inside the band (a face that leaves upward keeps falling), never past the band, never over 1.2 s.
+      if ((p.t >= p.life && p.y >= BAND.y0) || p.y >= BAND.y1 || p.t >= 1.2) burst(p);
+    }
+    g.pops = g.pops.filter(p => !p.done);
+  }
+  /** The pop bursts into a bubble holding its picture: the whirlwind well from rung 7 (one live), else a collider (up to 3). */
+  function burst(p) {
+    p.done = true;
+    const x = clamp(p.x, BAND.x0, w - BAND.x0), y = clamp(p.y, BAND.y0, BAND.y1);
+    let kind = 'none';
+    if (g.state === 'colour') {
+      if (g.rungs[7] && !g.well) { spawnWell(x, y, p.gif); kind = 'well'; }
+      else if (g.colliders.length < 3) { spawnCollider(x, y, p.gif); kind = 'collider'; }
+    }
+    emit('burst', { x, y, gif: p.gif, kind, color: p.color });
+  }
+  function spawnCollider(x, y, gif) {
+    const r = 28, a = rng() * TAU;
+    g.colliders.push({ x, y, r, vx: Math.cos(a) * 18, vy: Math.sin(a) * 18, hits: 0, pulse: 0, alpha: 0, fading: false, gif, age: 0 });
   }
   function updateColliders(dt) {
     for (const c of g.colliders) {
@@ -260,15 +299,14 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     }
     g.colliders = g.colliders.filter(c => c.alpha > 0);
   }
-  function spawnWell() {
-    // `gif` is the dealt picture the renderer winds into the whirlwind (an int here, like a collider's).
-    g.well = { x: lerp(110, w - 110, rng()), y: lerp(280, 520, rng()), r: 70, pull: 110, age: 0, ttl: 6, rot: 0, used: false, fade: 1,
-      captured: null, gif: Math.floor(rng() * 8) };
-    g.nextWell = g.time + 12;
+  function spawnWell(x, y, gif) {
+    // `gif` is the dealt picture the renderer winds into the whirlwind (an int, like a collider's). `born` never pauses (the bubble inflate).
+    g.well = { x, y, r: 70, pull: 110, age: 0, born: 0, ttl: 6, rot: 0, used: false, fade: 1, captured: null, gif };
   }
   function updateWell(dt) {
     const s = g.well; if (!s) return;
     s.rot += dt * (s.captured ? 4.4 : 1.6);          // the swirl tightens while it holds a ball
+    s.born += dt;
     if (s.captured) return;
     s.age += dt;
     if (s.age >= s.ttl) { s.fade -= dt / 0.4; if (s.fade <= 0) g.well = null; }
@@ -430,11 +468,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       if (br.jellyIn > 0) { br.jellyIn -= dt; if (br.jellyIn <= 0) { br.jellyIn = 0; br.jelly = 1; } }
       if (br.pushT > 0) { br.pushT = Math.max(0, br.pushT - dt / PUSH_S); br.push.dx = br.push0.dx * br.pushT; br.push.dy = br.push0.dy * br.pushT; }
     }
-    if (g.state === 'colour') {
-      if (g.rungs[8] && g.colliders.length < 3 && g.time >= g.nextCollider) spawnCollider();
-      if (g.rungs[7] && !g.well && g.time >= g.nextWell) spawnWell();
-    }
-    updateColliders(dt); updateWell(dt);
+    updatePops(dt); updateColliders(dt); updateWell(dt);
     if (g.balls.some(b => b.stuck)) {
       g.launchTimer += dt;
       if (input.launch || g.launchTimer >= 1.2) { for (const b of g.balls) if (b.stuck) launch(b); g.launchTimer = 0; }
@@ -489,7 +523,13 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     setBreakoutN(n) { g.breakoutN = Math.max(1, Math.floor(Number(n) || 12)); },
     setSpeedScale(s) { g.speedScale = clamp(Number(s) || 0.55, 0.2, 3); },
     setNoLose(on) { g.noLose = !!on; },
-    spawnWellNow() { spawnWell(); return g.well; },
+    setReduced(on) { g.reduced = !!on; },
+    /** Dev: the same pop-out, from a random alive GIF brick (broken for real), else from the field centre. Returns the pop. */
+    spawnWellNow() {
+      const alive = g.bricks.filter(b => b.alive && b.gif >= 0);
+      if (g.state === 'colour' && alive.length) { breakBrick(alive[Math.floor(rng() * alive.length)], g.balls[0]); return g.pops[g.pops.length - 1] || null; }
+      return popOut({ x: w / 2 - BRICK.w / 2, y: h / 2 - BRICK.h / 2, w: BRICK.w, h: BRICK.h, gif: Math.floor(rng() * 8), color: ROW_COLORS[0] }, null);
+    },
     relapseNow() { if (g.state === 'colour') lostAll(g.balls[0]); },
     breakoutNow() { startBreakout(g.balls[0]); },
     breakBrick(i) { const br = g.bricks[i]; if (br) breakBrick(br, g.balls[0]); },

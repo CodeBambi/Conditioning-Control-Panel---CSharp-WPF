@@ -86,6 +86,7 @@ export async function mount(ctx) {
           <button type="button" data-do="relapse">relapse</button>
           <button type="button" data-do="breakout">breakout</button>
           <button type="button" data-do="auto">rungs auto</button>
+          <button type="button" data-do="well">pop a gif</button>
           <label><input type="checkbox" class="bo-nolose"> never lose</label>
           <span class="bo-dev-stats"></span>
         </div>
@@ -149,6 +150,8 @@ export async function mount(ctx) {
       case 'shatterWall': if (cue('shatterWall')) { au('shatterWall'); if (s.state === 'colour') host.shatterWall(fieldBox(), pick(s.stats.walls)); } break;
       case 'brickLand': au('brickLand', { x: Number.isFinite(d.x) ? d.x / s.w : 0.5 }); break;
       case 'split': au('split'); break;
+      case 'popOut': au('popOut', { x: Number.isFinite(d.x) ? d.x / s.w : 0.5 }); break;
+      case 'burst': au('burst', { x: Number.isFinite(d.x) ? d.x / s.w : 0.5 }); break;
       case 'wall':
         if (cue('wall')) au('wallCleared');
         setSp(Number(d.sp) || s.stats.sp || 0);
@@ -239,6 +242,7 @@ export async function mount(ctx) {
       if (act === 'relapse') game.relapseNow();
       else if (act === 'breakout') game.breakoutNow();
       else if (act === 'auto') game.clearForce();
+      else if (act === 'well') game.spawnWellNow();
     });
     for (const n of [dev, ui.gear]) { on(n, 'pointerdown', (e) => e.stopPropagation()); on(n, 'keydown', (e) => e.stopPropagation()); }
   }
@@ -254,6 +258,7 @@ export async function mount(ctx) {
     if (typeof media.mark === 'function') {
       for (const br of s.bricks) if (br.alive && typeof br.gif === 'number' && br.gif >= 0) media.mark(br.gif, br.x + br.w / 2, br.y + br.h / 2);
       for (const c of s.colliders || []) if (typeof c.gif === 'number' && c.gif >= 0) media.mark(c.gif, c.x, c.y);
+      for (const p of s.pops || []) if (typeof p.gif === 'number' && p.gif >= 0) media.mark(p.gif, p.x, p.y);
     }
     if (typeof media.setFocus !== 'function') return;
     const ball = s.balls.find(b => !b.lost) || s.balls[0];
@@ -308,7 +313,7 @@ export async function mount(ctx) {
     // The sim paces on the bed but never plays: every sound is routed from onEvent, so nothing fires twice.
     const beatShim = { beat: audio.beat, now: audio.now };
     game = createGame({ audio: beatShim, onEvent, breakoutN: num(q, 'n', 12), saturation: Math.max(0, Math.min(1, num(q, 'sat', 0.15))),
-      speedScale: num(q, 'speed', 0.55) });
+      speedScale: num(q, 'speed', 0.55), reduced });
     if (q.has('nolose')) game.setNoLose(true);
     renderer = createRenderer(canvas, { reduced, media });
     sawHit = typeof game.snapshot().combo === 'number';   // a v2 sim emits 'hit'; the raw names are then cosmetic only

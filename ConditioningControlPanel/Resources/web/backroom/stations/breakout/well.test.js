@@ -13,28 +13,37 @@ function make(opts = {}) {
   return { game, events, names: () => events.map(e => e[0]).filter(n => n !== 'hit') };
 }
 
+/** The dev hook pops a GIF brick out; a second of stepping lands the bubble, which is the well. */
+function wellNow(game) {
+  const pop = game.spawnWellNow();
+  assert.ok(pop && Number.isInteger(pop.gif), 'spawnWellNow returns the pop');
+  for (let i = 0; i < 90 && !game.snapshot().well; i++) game.step(1 / 60, {});
+  return game.snapshot().well;
+}
+
 test('a well spawns with a picture index inside the dealt count', () => {
-  const { game } = make({ saturation: 0.8 });
-  for (let i = 0; i < 40; i++) {
-    const w = game.spawnWellNow();
+  for (let i = 0; i < 12; i++) {
+    const { game } = make({ saturation: 0.8 });
+    const w = wellNow(game);
+    assert.ok(w, 'the pop bursts into a well within 1.5 s');
     assert.equal(Number.isInteger(w.gif), true, 'gif is an int, the renderer looks it up in the deal');
     assert.ok(w.gif >= 0 && w.gif < MEDIA_COUNT, `gif ${w.gif} out of range`);
     assert.equal(w.r, 70); assert.equal(w.pull, 110); assert.equal(w.captured, null);
   }
 });
 
-test('a well spawns on its own once the spirals rung is up', () => {
+test('the dev hook still works with no GIF brick alive: the pop leaves from the field centre', () => {
   const { game } = make({ saturation: 0.8 });
-  game.launchNow();
-  for (let i = 0; i < 60 * 8 && !game.snapshot().well; i++) game.step(1 / 60, {});
-  const w = game.snapshot().well;
-  assert.ok(w, 'a well should appear within the first 8 seconds at saturation 0.8');
-  assert.ok(w.gif >= 0 && w.gif < MEDIA_COUNT);
+  for (const b of game.snapshot().bricks) if (b.gif >= 0) b.gif = -1;
+  const pop = game.spawnWellNow();
+  assert.ok(Math.abs(pop.x - 240) < 1 && Math.abs(pop.y - 360) < 1);
+  for (let i = 0; i < 90 && !game.snapshot().well; i++) game.step(1 / 60, {});
+  assert.ok(game.snapshot().well);
 });
 
 test('the well still captures the ball, orbits it and pays out on release', () => {
   const { game, names } = make({ saturation: 0.8 });
-  const w = game.spawnWellNow();
+  const w = wellNow(game);
   game.launchNow();
   const s = game.snapshot(), b = s.balls[0];
   b.x = w.x; b.y = w.y + 60; b.vx = 0; b.vy = -400; b.stuck = false;
@@ -51,7 +60,7 @@ test('the well still captures the ball, orbits it and pays out on release', () =
 
 test('the swirl spins faster while it holds a ball', () => {
   const { game } = make({ saturation: 0.8 });
-  const w = game.spawnWellNow();
+  const w = wellNow(game);
   game.launchNow();
   const s = game.snapshot(), b = s.balls[0];
   b.x = w.x - 300; b.y = 60; b.vx = 0; b.vy = 0; b.stuck = false;    // parked far away, no capture

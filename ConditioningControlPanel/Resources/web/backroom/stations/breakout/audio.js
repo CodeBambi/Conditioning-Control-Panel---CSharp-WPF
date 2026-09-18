@@ -8,7 +8,7 @@ import { pentatonic, ROOT_HZ } from '../../shared/sound/kit.js';
  *   createAudio({ bpm, master, AudioContext }) ->
  *     start() stop() destroy() now() beat setSaturation setState hit relapse
  *     breakout crack wallCleared split nearMiss perfect jackpot shatterWall
- *     brickLand setTimeScale (bed pitch for slow-mo; grey adds a vinyl wobble)
+ *     brickLand popOut burst setTimeScale (bed pitch for slow-mo; grey adds a vinyl wobble)
  *
  * Graph:  bed bus -> low-pass (the saturation filter) -> master -> out
  *         sfx bus -> master (hits carry their own saturation-scaled low-pass,
@@ -384,6 +384,22 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
         tone(hz, 0.16, 0.09, { hzTo: hz * SEMI(7), wave: 'triangle', lp: 5000, pan: 0.35, wet: true }),
         tone(hz * 1.012, 0.16, 0.09, { hzTo: hz * SEMI(7) * 1.012, wave: 'triangle', lp: 5000, pan: 0.65, wet: true }),
       ], t, bus.sfx);
+    },
+    /** A GIF brick knocked out of the wall: a short woody knock and a tick, panned to the brick. */
+    popOut({ x = 0.5 } = {}) {
+      if (!running || !live()) return;
+      const p = clamp(num(x, 0.5), 0, 1);
+      play([tone(320, 0.09, 0.1, { hzTo: 170, wave: 'triangle', lp: 2200, pan: p }), noise(2600, 0.02, 0.05, { q: 1.5, pan: p })], ctx.currentTime, bus.sfx);
+    },
+    /** The bubble bursting: a wet pop, two quick blips up, a little air. */
+    burst({ x = 0.5 } = {}) {
+      if (!running || !live()) return;
+      const p = clamp(num(x, 0.5), 0, 1), hz = ROOT_HZ * 2;
+      play([
+        noise(1800, 0.05, 0.12, { hzTo: 4200, q: 0.9, pan: p }),
+        tone(hz, 0.09, 0.08, { hzTo: hz * SEMI(5), wave: 'triangle', lp: 5000, pan: p, wet: true }),
+        tone(hz * SEMI(7), 0.12, 0.06, { at: 0.05, hzTo: hz * SEMI(12), wave: 'triangle', lp: 5000, pan: p, wet: true }),
+      ], ctx.currentTime, bus.sfx);
     },
     /** Test and tuning seams. */
     pump,
