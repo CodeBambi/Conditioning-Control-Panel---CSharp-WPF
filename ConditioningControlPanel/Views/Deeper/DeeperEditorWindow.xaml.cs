@@ -5018,6 +5018,11 @@ namespace ConditioningControlPanel.Views.Deeper
                 JumpToAdjacentItemStart(forward: e.Key == Key.OemCloseBrackets);
                 e.Handled = true;
             }
+            else if (e.Key == Key.D && !inTextBox && ctrl && HasAnySelection)
+            {
+                DuplicateSelection();
+                e.Handled = true;
+            }
             else if ((e.Key == Key.D0 || e.Key == Key.NumPad0) && ctrl)
             {
                 SetZoom(1.0);

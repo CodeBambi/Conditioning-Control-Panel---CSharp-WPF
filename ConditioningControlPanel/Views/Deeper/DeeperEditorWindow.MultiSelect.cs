@@ -465,16 +465,16 @@ namespace ConditioningControlPanel.Views.Deeper
             DeleteSelection();
         }
 
-        internal void PasteFromClipboard()
+        internal void PasteFromClipboard(double? pasteAtOverride = null)
         {
             if (!DeeperClipboard.HasContent) return;
             PushUndoSnapshot();
             try
             {
                 // Anchor-relative paste: the earliest item in the original
-                // selection lands at the playhead; everything else preserves
-                // its offset from that anchor.
-                double pasteAt = _currentSeconds;
+                // selection lands at the playhead (or the caller's anchor);
+                // everything else preserves its offset from that anchor.
+                double pasteAt = pasteAtOverride ?? _currentSeconds;
                 double anchor = DeeperClipboard.AnchorSeconds;
 
                 _selectionSet.Clear();
@@ -546,6 +546,78 @@ namespace ConditioningControlPanel.Views.Deeper
         internal bool HasAnySelection =>
             _selectionSet.Count > 0 || _selectedRegion != null || _selectedHaptic != null
             || _selectedEffect != null || _selectedRule != null;
+
+        /// <summary>
+        /// Ctrl+D / context "Duplicate": copies the selection and pastes it right
+        /// after the selection's last end, via the clipboard code path (the user's
+        /// clipboard is stashed and restored so Duplicate never clobbers it).
+        /// </summary>
+        internal void DuplicateSelection()
+        {
+            if (_selectionSet.Count == 0 && _selectedRule != null)
+            {
+                DuplicateRule(_selectedRule);
+                return;
+            }
+            EnsurePrimaryInSelectionSet();
+            if (_selectionSet.Count == 0) return;
+
+            var savedItems = DeeperClipboard.Items;
+            var savedRegions = DeeperClipboard.Regions;
+            var savedHaptics = DeeperClipboard.Haptics;
+            var savedAnchor = DeeperClipboard.AnchorSeconds;
+            DeeperClipboard.Items = new(); DeeperClipboard.Regions = new(); DeeperClipboard.Haptics = new();
+            try
+            {
+                double end = 0;
+                foreach (var sel in _selectionSet)
+                {
+                    end = Math.Max(end, sel switch
+                    {
+                        Region r => r.End,
+                        HapticEvent ev => ev.Start + ev.Duration,
+                        TimelineItem ti => ti.Start + Math.Max(0, ti.Duration),
+                        _ => 0
+                    });
+                }
+                CopySelection();
+                PasteFromClipboard(end);
+            }
+            finally
+            {
+                DeeperClipboard.Items = savedItems;
+                DeeperClipboard.Regions = savedRegions;
+                DeeperClipboard.Haptics = savedHaptics;
+                DeeperClipboard.AnchorSeconds = savedAnchor;
+            }
+        }
+
+        private void DuplicateRule(EnhancementRule rule)
+        {
+            PushUndoSnapshot();
+            var clone = DeepClone(rule);
+            if (clone.Trigger is TimeReachedTrigger tr)
+            {
+                tr.Time = _totalSeconds > 0 ? Math.Min(_totalSeconds, tr.Time + 1.0) : tr.Time + 1.0;
+            }
+            var band = _enhancement.Regions.FirstOrDefault(r => r != null && r.Id == rule.RegionConstraint);
+            if (band != null)
+            {
+                var newBand = DeepClone(band);
+                newBand.Id = NextRegionId();
+                var len = Math.Max(0, band.End - band.Start);
+                newBand.Start = _totalSeconds > 0 ? Math.Min(band.End, Math.Max(0, _totalSeconds - len)) : band.End;
+                newBand.End = newBand.Start + len;
+                _enhancement.Regions.Add(newBand);
+                clone.RegionConstraint = newBand.Id;
+                if (clone.Trigger is RegionEnteredTrigger re) re.RegionId = newBand.Id;
+                else if (clone.Trigger is RegionExitedTrigger rx) rx.RegionId = newBand.Id;
+            }
+            _enhancement.Rules.Add(clone);
+            MarkDirty();
+            SelectRule(clone);
+            ScheduleValidation();
+        }
 
         /// <summary>Delete key / context "Delete": bulk when a set is active, else
         /// the primary item through its inspector delete path (same undo + cleanup).</summary>

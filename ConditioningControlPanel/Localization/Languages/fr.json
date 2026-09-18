@@ -5476,5 +5476,10 @@
   "br_custom_already_owned": "Déjà acquis.",
   "br_custom_unowned": "Obtiens cet objet avant de l’utiliser.",
   "br_custom_shop_unavailable": "La boutique est indisponible. Tu peux toujours voir les aperçus.",
-  "br_custom_buy_sp": "Acheter pour {n} SP"
+  "br_custom_buy_sp": "Acheter pour {n} SP",
+  "deeper_editor_ctx_item_duplicate": "Duplicate",
+  "deeper_editor_ctx_item_copy": "Copy",
+  "deeper_editor_ctx_item_cut": "Cut",
+  "deeper_editor_ctx_item_delete": "Delete",
+  "deeper_editor_ctx_item_jump": "Jump to start"
 }

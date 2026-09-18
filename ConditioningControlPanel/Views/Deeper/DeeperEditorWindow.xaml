@@ -285,6 +285,35 @@
             <MenuItem Header="Overlay" Click="CtxAddEffectOverlay_Click" Style="{StaticResource TimelineCtxMenuItem}"/>
             <MenuItem Header="Speak (voice)" Click="CtxAddEffectSpeak_Click" Style="{StaticResource TimelineCtxMenuItem}"/>
         </ContextMenu>
+        <!-- Item menu: opened by right-clicking a region band, haptic block,
+             effect dot/segment or rule pin (TrySelectItemUnderRightClick). -->
+        <ContextMenu x:Key="TimelineItemCtxMenu" x:Shared="False"
+                     Background="{DynamicResource DarkerBgBrush}"
+                     BorderBrush="{DynamicResource DeeperAccentBrush}"
+                     BorderThickness="2"
+                     Padding="4">
+            <ContextMenu.Template>
+                <ControlTemplate TargetType="{x:Type ContextMenu}">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="8" Padding="{TemplateBinding Padding}">
+                        <StackPanel IsItemsHost="True"
+                                    KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                    </Border>
+                </ControlTemplate>
+            </ContextMenu.Template>
+            <MenuItem Name="CtxItemDuplicate" Header="{loc:Str deeper_editor_ctx_item_duplicate}" InputGestureText="Ctrl+D"
+                      Click="CtxItemDuplicate_Click" Style="{StaticResource TimelineCtxMenuItem}"/>
+            <MenuItem Name="CtxItemCopy" Header="{loc:Str deeper_editor_ctx_item_copy}" InputGestureText="Ctrl+C"
+                      Click="CtxItemCopy_Click" Style="{StaticResource TimelineCtxMenuItem}"/>
+            <MenuItem Name="CtxItemCut" Header="{loc:Str deeper_editor_ctx_item_cut}" InputGestureText="Ctrl+X"
+                      Click="CtxItemCut_Click" Style="{StaticResource TimelineCtxMenuItem}"/>
+            <MenuItem Name="CtxItemDelete" Header="{loc:Str deeper_editor_ctx_item_delete}" InputGestureText="Del"
+                      Click="CtxItemDelete_Click" Style="{StaticResource TimelineCtxMenuItem}"/>
+            <MenuItem Name="CtxItemJump" Header="{loc:Str deeper_editor_ctx_item_jump}"
+                      Click="CtxItemJump_Click" Style="{StaticResource TimelineCtxMenuItem}"/>
+        </ContextMenu>
         <Style x:Key="EditorTextBox" TargetType="TextBox">
             <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>

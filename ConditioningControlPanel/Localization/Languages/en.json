@@ -6235,5 +6235,10 @@
   "br_photo_blink_note": "the webcam counts your blinks.\nhold them open and get paid.",
   "br_photo_awareness_title": "Awareness",
   "br_photo_awareness_note": "she watches where you look.\nlook away and she says so.",
-  "br_photo_chip_pass": "WEEKLY PASS READY"
+  "br_photo_chip_pass": "WEEKLY PASS READY",
+  "deeper_editor_ctx_item_duplicate": "Duplicate",
+  "deeper_editor_ctx_item_copy": "Copy",
+  "deeper_editor_ctx_item_cut": "Cut",
+  "deeper_editor_ctx_item_delete": "Delete",
+  "deeper_editor_ctx_item_jump": "Jump to start"
 }

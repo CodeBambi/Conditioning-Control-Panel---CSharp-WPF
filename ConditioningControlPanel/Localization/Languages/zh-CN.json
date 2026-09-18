@@ -5988,5 +5988,10 @@
   "br_custom_already_owned": "已拥有。",
   "br_custom_unowned": "拥有此物品后才能使用。",
   "br_custom_shop_unavailable": "商店暂不可用。仍可预览物品。",
-  "br_custom_buy_sp": "花费 {n} SP购买"
+  "br_custom_buy_sp": "花费 {n} SP购买",
+  "deeper_editor_ctx_item_duplicate": "Duplicate",
+  "deeper_editor_ctx_item_copy": "Copy",
+  "deeper_editor_ctx_item_cut": "Cut",
+  "deeper_editor_ctx_item_delete": "Delete",
+  "deeper_editor_ctx_item_jump": "Jump to start"
 }

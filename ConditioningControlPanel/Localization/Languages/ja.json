@@ -5476,5 +5476,10 @@
   "br_custom_already_owned": "所有済みです。",
   "br_custom_unowned": "使用するにはこのアイテムを入手してください。",
   "br_custom_shop_unavailable": "ショップを利用できません。プレビューは引き続き使えます。",
-  "br_custom_buy_sp": "{n} SPで購入"
+  "br_custom_buy_sp": "{n} SPで購入",
+  "deeper_editor_ctx_item_duplicate": "Duplicate",
+  "deeper_editor_ctx_item_copy": "Copy",
+  "deeper_editor_ctx_item_cut": "Cut",
+  "deeper_editor_ctx_item_delete": "Delete",
+  "deeper_editor_ctx_item_jump": "Jump to start"
 }
