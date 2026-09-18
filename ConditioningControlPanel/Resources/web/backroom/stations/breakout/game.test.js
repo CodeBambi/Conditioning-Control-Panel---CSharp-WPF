@@ -30,7 +30,7 @@ test('a fresh session starts in COLOUR at 0.15 with a full wall and a stuck ball
 });
 
 test('bricks add 0.012 saturation and a wall clear adds 0.1 plus one SP', () => {
-  const { game, events, names } = make();
+  const { game, events, names } = make({ saturation: 0.05 });
   game.breakBrick(0);
   assert.ok(Math.abs(game.snapshot().sat - 0.062) < 1e-9);
   assert.equal(names()[0], 'brick');
@@ -40,7 +40,7 @@ test('bricks add 0.012 saturation and a wall clear adds 0.1 plus one SP', () => 
   assert.equal(s.stats.walls, 1); assert.equal(s.stats.sp, 6, '1 SP for the wall plus 5 for the hidden jackpot brick');
   assert.equal(events.filter(e => e[0] === 'jackpot').length, 1, 'one jackpot per wall');
   assert.equal(s.bricks.filter(b => b.alive).length, BRICK.cols * BRICK.rows, 'a new wall descends');
-  assert.ok(Math.abs(s.sat - (0.15 + 60 * 0.012 + 0.1)) < 1e-9);
+  assert.ok(Math.abs(s.sat - (0.05 + 60 * 0.012 + 0.1)) < 1e-9);
   assert.equal(events.filter(e => e[0] === 'crack').length, 0, 'no crack yet at 0.87');
   for (let i = 0; i < 60; i++) game.breakBrick(i);
   assert.equal(game.snapshot().sat, 1, 'capped at 1');
