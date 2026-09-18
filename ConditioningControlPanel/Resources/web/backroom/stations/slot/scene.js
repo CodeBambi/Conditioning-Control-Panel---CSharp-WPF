@@ -28,7 +28,7 @@ import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
 import { reelCellVisible, reelPaintStamp } from './reel-paint.js';
 import { stripTransform } from './strip-transform.js';
 import { kit as wobbleKit } from '../../shared/sound/kit.js';
-import { settleCells, recoilCells, leverRebound, latchTravel } from './juice.js';
+import { settleCells, recoilCells, leverRebound, latchPose, LATCH_DEPTH } from './juice.js';
 import { drawSymbol, disposeSpirals, kindOf, CELL } from './symbols.js';
 import { fitText } from '../../shared/text/wrap.js';
 import { PACE, reelStopMs, reelsMs, respinStopMs, respinMs } from './pace.js';
@@ -588,7 +588,9 @@ export async function createScene(o) {
   const restAngle = i => restX[i] + angle(stopsNow[i], strips[i].length || 13);
   const attractRad = (i, age) => (age / 1000) * ATTRACT.DRIFT_CELLS_PER_S * ATTRACT_SPEED[i] * cellRad(i);
   let heat = { from: 0, to: 0, at: -Infinity, gold: false };
-  const pulse = [-Infinity, -Infinity, -Infinity], stopAt = [-Infinity, -Infinity, -Infinity];
+  // Freeze latches: when each went down (held) and when it was let back up (released, moved or spent by a spin).
+  const latchDownAt = [-Infinity, -Infinity, -Infinity], latchUpAt = [-Infinity, -Infinity, -Infinity];
+  const stopAt = [-Infinity, -Infinity, -Infinity];
   const sparks = [];
   const spawn = get('payout_spawn');
   if (spawn) {
@@ -721,7 +723,8 @@ export async function createScene(o) {
   }
 
   function settleMechanical() {
-    pulse.fill(-Infinity); shiverAt = -Infinity; pullBack = null;
+    // The held latch snaps to its parked depth, the rest to home (a settle is the STATE, not a faster travel).
+    latchDownAt.fill(-Infinity); latchUpAt.fill(-Infinity); shiverAt = -Infinity; pullBack = null;
     if (spin && !spin.motionSuppressed) {
       spin.motionSuppressed = true;
       spin.from = reelAngles.map((a, i) => a - restX[i]);
@@ -820,8 +823,12 @@ export async function createScene(o) {
 
     freezers.forEach((f, i) => {
       if (!f) return;
-      if (f.material && 'emissiveIntensity' in f.material) f.material.emissiveIntensity = hold === i ? 1.8 : 0.1;
-      f.position.y = f.userData.restY - (reduced ? 0 : latchTravel(t - pulse[i]));
+      const held = hold === i;
+      if (f.material && 'emissiveIntensity' in f.material) f.material.emissiveIntensity = held ? 1.8 : 0.1;
+      // A toggle: the held button drops and STAYS down; it only springs back once the hold leaves it.
+      // Reduced motion shows the state without the travel (Law VI).
+      f.position.y = f.userData.restY - (reduced ? (held ? LATCH_DEPTH : 0)
+        : latchPose({ held, downAt: latchDownAt[i], upAt: latchUpAt[i] }, t));
     });
 
     // THE MARQUEE: the chase runs at the heat of the last win, the tier's own palette while it celebrates.
@@ -1107,8 +1114,16 @@ export async function createScene(o) {
     get marqueeLine() { return marqueeMsg; },
     meltShake() { meltShakeAt = performance.now(); },
     setLook(next) { look = { ...next, reduced, face: atlas && atlas.image }; paint(performance.now(), true); },
-    /** A freeze lit or cleared: the button dips either way (Law VIII). */
-    setHold(col) { if (col !== hold) { const c = col !== null ? col : hold; if (c !== null) pulse[c] = performance.now(); } hold = col; },
+    /** The freeze latch is a toggle: the held button goes down and stays down; the one that lost the hold
+     *  (tapped again, moved to another column, or spent by a spin: sync passes null) completes its way up.
+     *  Law VIII: this frame, before the server answers. */
+    setHold(col) {
+      if (col === hold) return;
+      const now = performance.now();
+      if (hold !== null) latchUpAt[hold] = now;
+      if (col !== null) { latchDownAt[col] = now; latchUpAt[col] = -Infinity; }
+      hold = col;
+    },
     /** Law VIII: the lever leans into a press at once, before the tape or the server answers. */
     answer() { if (spin || pull || phase !== 'play') return; pullBack = null; lean = { start: performance.now(), from: lever.rotation.x }; },
     /** A press that was refused: the lean lets go. */

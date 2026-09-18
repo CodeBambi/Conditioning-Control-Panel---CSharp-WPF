@@ -14,6 +14,11 @@ body :is(.br-back,.br-card-back,.br-custom-back,.br-options-back,.slot-back,.slo
   outline: 3px solid #8fffe0; outline-offset: 3px;
 }
 .br-back::before,.br-card-back::before,.br-custom-back::before,.counter-back::before,.counter-closed-back::before { content: "\2190  "; }
+/* In the room with no host Back drawn (the site shim hides #br-back): the station's own Back takes the room's spot,
+   top-left over everything (the slot pins its own the same way in stations/slot/station.css). */
+#br-layer .br-station :is(.wheel-back,.cards-back,.counter-back,.roul-back):not([hidden]) {
+  position: fixed; top: max(12px, var(--br-brow, 0px)); left: max(12px, var(--br-edge-l, 0px)); z-index: 31;
+}
 @media(max-width: 480px) {
   body :is(.br-back,.br-custom-back,.br-options-back,.slot-back,.wheel-back,.cards-back,.roul-back,.counter-back):not([hidden]) { min-width: 86px; padding: 9px 12px; font-size: 15px; }
 }

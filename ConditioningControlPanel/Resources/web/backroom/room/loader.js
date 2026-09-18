@@ -32,6 +32,16 @@ export const CLOSE_BUDGET_MS = 420;
 export const REQUEST_TIMEOUT_MS = 6000;
 export const MEDIA_COUNT_MAX = 13;
 
+/** True while the room's own #br-back is drawn (desktop host). The site shim hides it with display:none; the intro
+ *  card also hides it for a moment, and that is still the desktop, so it counts as drawn. No document (tests): drawn. */
+function roomBackShown() {
+  try {
+    if (typeof document === 'undefined') return true;
+    const b = document.getElementById('br-back');
+    if (!b) return true;
+    return getComputedStyle(b).display !== 'none' || !!document.getElementById('br-intro');
+  } catch (e) { return true; }
+}
 const withTimeout = (p, ms) => Promise.race([Promise.resolve(p).catch(() => {}), new Promise((r) => setTimeout(r, ms))]);
 
 /**
@@ -148,8 +158,10 @@ export function createLoader(room) {
        *  could never fire on any device, while the other three read Calm instead and disagreed with the floor
        *  about the same board. It is the device, so it is settled once and never changes under a sit-down. */
       lite: LITE_BOARD,
-      /** The room draws the only Back (CONTRACT 7): a station hides its own. */
-      hostBack: true,
+      /** The room draws the only Back (CONTRACT 7): a station hides its own. On the site the host shim hides #br-back
+       *  (no desktop to go back to), and a phone then had no way out of a station (tester, 2026-09-18): when the
+       *  room's Back is not drawn the station keeps its own, and shared/back.css pins it where the room's would be. */
+      hostBack: roomBackShown(),
     };
   }
 
