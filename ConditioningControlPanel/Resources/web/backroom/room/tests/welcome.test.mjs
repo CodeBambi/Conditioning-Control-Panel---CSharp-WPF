@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createWelcome, shouldShow, stepKeys, FALLBACK, CLOSE_KEYS, HERO_SRC } from '../welcome.js';
+import { createWelcome, shouldShow, stepKeys, FALLBACK, CLOSE_KEYS, PAGE_KEYS, HERO_SRC, PRIZES_SRC, PAGES, PRIZE_STEPS } from '../welcome.js';
 
 /* Just enough DOM to RUN the card: nodes with children, text, attributes and listeners. */
 function stubDom() {
@@ -54,24 +54,31 @@ test('the card mounts on the layer with the hero, the title, three numbered step
     [FALLBACK.br_welcome_step1_lead, FALLBACK.br_welcome_step2_lead, FALLBACK.br_welcome_step3_lead]);
   assert.equal(byClass(w.root, 'br-welcome-body')[0].textContent, FALLBACK.br_welcome_step1);
   assert.equal(byClass(w.root, 'br-welcome-go').length, 1);
-  assert.ok(seen.includes('br_welcome_go'), 'every line goes through the lexicon');
+  assert.equal(byClass(w.root, 'br-welcome-go')[0].textContent, FALLBACK.br_welcome_next, 'page one turns, it does not let you in yet');
+  assert.ok(seen.includes('br_welcome_next'), 'every line goes through the lexicon');
+  assert.equal(byClass(w.root, 'br-welcome-dot').length, PAGES.length);
+  assert.equal(byClass(w.root, 'br-welcome-back')[0].hidden, true, 'no Back on the first page');
   assert.equal(byClass(w.root, 'br-card')[0].attrs.role, 'dialog');
 });
 
 test('a translation lands, and a lexicon that answers nothing falls back to English', () => {
   const { doc, win, layer } = stubDom();
-  const de = createWelcome({ layer, doc, win, touch: true, lex: (k, f) => k === 'br_welcome_go' ? 'Lass mich rein' : f });
+  const de = createWelcome({ layer, doc, win, touch: true, page: 1, lex: (k, f) => k === 'br_welcome_go' ? 'Lass mich rein' : f });
   assert.equal(byClass(de.root, 'br-welcome-go')[0].textContent, 'Lass mich rein');
+  de.show(0);
   assert.equal(byClass(de.root, 'br-welcome-body')[0].textContent, FALLBACK.br_welcome_step1_touch);
   const none = createWelcome({ layer, doc, win, touch: false, lex: () => '' });
   assert.equal(byClass(none.root, 'br-welcome-title')[0].textContent, FALLBACK.br_welcome_title);
 });
 
-test('the button dismisses once: the node leaves the layer, onDone fires exactly once, the key hook is gone', () => {
+test('the button turns the page, then dismisses once: the node leaves the layer, onDone fires exactly once, the key hook is gone', () => {
   const { doc, win, layer } = stubDom();
   let done = 0;
   const w = createWelcome({ layer, doc, win, touch: false, onDone: () => { done++; } });
   assert.equal(win.listeners.keydown.length, 1);
+  byClass(w.root, 'br-welcome-go')[0].fire('click');
+  assert.equal(w.page(), 1); assert.equal(w.open(), true); assert.equal(done, 0);
+  assert.equal(byClass(w.root, 'br-welcome-go')[0].textContent, FALLBACK.br_welcome_go);
   byClass(w.root, 'br-welcome-go')[0].fire('click');
   assert.equal(w.open(), false);
   assert.equal(layer.children.length, 0);
@@ -104,4 +111,46 @@ test('a tap on the veil closes it; a tap on the card does not', () => {
   assert.equal(w.open(), true);
   w.root.fire('pointerdown', { target: w.root });
   assert.equal(w.open(), false);
+});
+
+
+test('page two is the Prize Parlour: its own picture, title and three steps; Back returns; the arrows turn pages', () => {
+  const { doc, win, layer } = stubDom();
+  const w = createWelcome({ layer, doc, win, touch: true });
+  assert.equal(PAGES.length, 2);
+  assert.equal(PRIZES_SRC, 'room/assets/welcome-prizes.webp');
+  w.show(1);
+  assert.equal(byClass(w.root, 'br-welcome-hero')[0].src, PRIZES_SRC);
+  assert.equal(byClass(w.root, 'br-welcome-title')[0].textContent, FALLBACK.br_welcome_prizes_title);
+  assert.equal(byClass(w.root, 'br-welcome-sub')[0].textContent, FALLBACK.br_welcome_prizes_sub);
+  assert.deepEqual(byClass(w.root, 'br-welcome-lead').map(n => n.textContent), PRIZE_STEPS.map(s => FALLBACK[s.lead]));
+  assert.deepEqual(byClass(w.root, 'br-welcome-body').map(n => n.textContent), PRIZE_STEPS.map(s => FALLBACK[s.body]), 'no phone wording on page two');
+  assert.equal(byClass(w.root, 'br-welcome-num').length, 3);
+  assert.equal(byClass(w.root, 'br-welcome-back')[0].hidden, false);
+  assert.deepEqual(byClass(w.root, 'br-welcome-dot').map(d => d.className.includes('is-on')), [false, true]);
+  assert.equal(byClass(w.root, 'br-card')[0].attrs['aria-label'], FALLBACK.br_welcome_prizes_title);
+  byClass(w.root, 'br-welcome-back')[0].fire('click');
+  assert.equal(w.page(), 0);
+  assert.equal(byClass(w.root, 'br-welcome-hero')[0].src, HERO_SRC);
+  assert.equal(byClass(w.root, 'br-welcome-body')[0].textContent, FALLBACK.br_welcome_step1_touch, 'page one keeps the stick wording');
+  for (const key of Object.keys(PAGE_KEYS)) assert.ok(!CLOSE_KEYS.includes(key));
+  let ev = win.key('ArrowRight'); assert.equal(w.page(), 1); assert.equal(ev.stopped, 1); assert.equal(ev.prevented, 1);
+  ev = win.key('ArrowRight'); assert.equal(w.page(), 1, 'the last page stays');
+  win.key('ArrowLeft'); assert.equal(w.page(), 0);
+  win.key('ArrowLeft'); assert.equal(w.page(), 0, 'the first page stays');
+  assert.equal(w.open(), true, 'turning pages never closes the card');
+});
+
+test('read mode (a placard on the counter): opens at the asked page, the last button says Close, onDone still fires', () => {
+  const { doc, win, layer } = stubDom();
+  let done = 0;
+  const w = createWelcome({ layer, doc, win, touch: false, page: 1, read: true, onDone: () => { done++; } });
+  assert.equal(w.page(), 1);
+  assert.equal(byClass(w.root, 'br-welcome-go')[0].textContent, FALLBACK.br_welcome_close);
+  byClass(w.root, 'br-welcome-go')[0].fire('click');
+  assert.equal(w.open(), false); assert.equal(done, 1); assert.equal(layer.children.length, 0);
+  const first = createWelcome({ layer, doc, win, touch: false, page: 0, read: true });
+  assert.equal(byClass(first.root, 'br-welcome-go')[0].textContent, FALLBACK.br_welcome_next, 'page one still says Next in read mode');
+  const out = createWelcome({ layer, doc, win, touch: false, page: 9, read: true });
+  assert.equal(out.page(), PAGES.length - 1, 'a page past the end lands on the last one');
 });
