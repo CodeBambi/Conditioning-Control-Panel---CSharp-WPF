@@ -1298,7 +1298,7 @@ namespace ConditioningControlPanel
         /// the user also presses "Save Selection". Settings.Save() is debounced (500ms), so a
         /// rapid run of checkbox clicks still costs one disk write.
         /// </summary>
-        private void InvalidateAssetPoolsAfterSelectionChange()
+        internal void InvalidateAssetPoolsAfterSelectionChange()
         {
             App.Flash?.ClearFileCache();
             App.Video?.ReloadAssets();

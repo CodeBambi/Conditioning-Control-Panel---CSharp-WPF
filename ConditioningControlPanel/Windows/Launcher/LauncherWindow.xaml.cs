@@ -177,7 +177,23 @@ public partial class LauncherWindow : Window
         LauncherHost.RequestClose();
     }
 
-    private void BtnGear_Click(object sender, RoutedEventArgs e) => OpenPanelTab("appsettings");
+    /// <summary>The gear is "Game media": one source and one niche list for every room. The
+    /// dialog applies on change and owns its own close; if it cannot open, the panel's settings
+    /// tab is the next best door.</summary>
+    private void BtnGear_Click(object sender, RoutedEventArgs e)
+    {
+        LauncherSfx.Click();
+        try
+        {
+            var dlg = new LauncherMediaDialog { Owner = this };
+            dlg.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[Launcher] Game media dialog failed; falling back to the settings tab");
+            OpenPanelTab("appsettings");
+        }
+    }
 
     private void AccountChip_Click(object sender, RoutedEventArgs e) => OpenPanelTab("appsettings");
 
