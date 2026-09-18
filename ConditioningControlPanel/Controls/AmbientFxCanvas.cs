@@ -25,6 +25,12 @@ namespace ConditioningControlPanel.Controls
         SheenSweep = 1 << 3,
         /// <summary>A pre-baked glow breathing 0.6 to 1.0 opacity.</summary>
         GlowBreath = 1 << 4,
+        /// <summary>
+        /// Warm motes rising from the bottom edge on a slow sine sway, budgeted by the tier and
+        /// thinned by the governor like the dust. Additive: surfaces that never ask for it pay
+        /// nothing.
+        /// </summary>
+        Embers = 1 << 5,
     }
 
     /// <summary>Per-surface tuning for <see cref="AmbientFxCanvas.StartLayers(AmbientFxConfig)"/>.</summary>
@@ -151,6 +157,16 @@ namespace ConditioningControlPanel.Controls
         private struct Dust { public float X, Y, VX, VY, Life, Max, Size; }
         private Dust[] _dust = Array.Empty<Dust>();
         private int _dustN;
+
+        /// <summary>Cap on the ember pool; the tier budget can only lower it.</summary>
+        private const int EmberMax = 40;
+        /// <summary>The share of the live particle budget embers may spend (dust keeps its own).</summary>
+        private const float EmberBudgetShare = 0.66f;
+        private struct Ember { public float X0, Y, VY, Amp, Phase, PhaseSpd, Life, Max, Size; }
+        private Ember[] _embers = Array.Empty<Ember>();
+        private int _emberN;
+        private float _emberT;
+        private SKColorFilter? _emberTint;
 
         private struct Spark { public float X, Y, VX, VY, Life, Max, Size; public uint Rgb; }
         private Spark[]? _burst;
@@ -280,6 +296,7 @@ namespace ConditioningControlPanel.Controls
             _burst = null;
             _burstN = 0;
             _dustN = 0;
+            _emberN = 0;
             _sk.InvalidateVisual();
         }
 
@@ -509,6 +526,10 @@ namespace ConditioningControlPanel.Controls
                 _particleTint?.Dispose(); _particleTint = SKColorFilter.CreateBlendMode(_particle, SKBlendMode.Modulate);
                 _glowTint?.Dispose(); _glowTint = SKColorFilter.CreateBlendMode(_glow, SKBlendMode.Modulate);
                 _flashTint?.Dispose(); _flashTint = SKColorFilter.CreateBlendMode(_flash, SKBlendMode.Modulate);
+                // Embers sit halfway between the mod's particle colour and a candle gold, so they
+                // read warm on every palette without leaving the theme.
+                var ember = new SKColor((byte)((_particle.Red + 255) / 2), (byte)((_particle.Green + 196) / 2), (byte)((_particle.Blue + 110) / 2));
+                _emberTint?.Dispose(); _emberTint = SKColorFilter.CreateBlendMode(ember, SKBlendMode.Modulate);
 
                 _liveBudget = _particleBudget;
                 _fogOnly = false;
@@ -543,6 +564,11 @@ namespace ConditioningControlPanel.Controls
 
             _dust = _particleBudget > 0 ? new Dust[_particleBudget] : Array.Empty<Dust>();
             _dustN = 0;
+            _embers = _particleBudget > 0 && (_config.Layers & AmbientFxLayers.Embers) != 0
+                ? new Ember[Math.Min(EmberMax, _particleBudget)]
+                : Array.Empty<Ember>();
+            _emberN = 0;
+            _emberT = 0f;
             _fogT = _dustT = _sheenT = _breathT = _auroraT = 0f;
             _sheenDone = false;
             _burstN = 0;
@@ -683,6 +709,7 @@ namespace ConditioningControlPanel.Controls
                 _breathT += dt;
                 if (!_sheenDone) _sheenT += dt;
                 StepDust(dt);
+                StepEmbers(dt);
                 StepBurst(dt);
                 StepTokens(dt);
 
@@ -765,6 +792,51 @@ namespace ConditioningControlPanel.Controls
                     VY = -0.010f - (float)_rng.NextDouble() * 0.016f,
                     Life = life, Max = life,
                     Size = 0.0035f + (float)_rng.NextDouble() * 0.0055f,
+                };
+            }
+        }
+
+        /// <summary>How many embers the governor currently allows: a share of the live budget.</summary>
+        private int EmberTarget() =>
+            _fogOnly ? 0 : Math.Min(_embers.Length, (int)Math.Round(_liveBudget * EmberBudgetShare));
+
+        private void StepEmbers(float dt)
+        {
+            if (_embers.Length == 0) return;
+            for (int i = _emberN - 1; i >= 0; i--)
+            {
+                var m = _embers[i];
+                m.Y += m.VY * dt;
+                m.Phase += m.PhaseSpd * dt;
+                m.Life -= dt;
+                if (m.Life <= 0f || m.Y < -0.06f)
+                    _embers[i] = _embers[--_emberN];
+                else
+                    _embers[i] = m;
+            }
+
+            if ((_config.Layers & AmbientFxLayers.Embers) == 0 || _fogOnly) return;
+
+            int target = EmberTarget();
+            if (_emberN > target) _emberN = Math.Max(0, target);
+
+            // One every quarter second at most, so the field fills over ten seconds rather than
+            // appearing as a curtain.
+            _emberT += dt;
+            while (_emberN < target && _emberT > 0.25f)
+            {
+                _emberT -= 0.25f;
+                float life = 10f + (float)_rng.NextDouble() * 8f;
+                _embers[_emberN++] = new Ember
+                {
+                    X0 = (float)_rng.NextDouble(),
+                    Y = 1.02f + (float)_rng.NextDouble() * 0.05f,
+                    VY = -(0.035f + (float)_rng.NextDouble() * 0.030f),
+                    Amp = 0.010f + (float)_rng.NextDouble() * 0.022f,
+                    Phase = (float)(_rng.NextDouble() * Math.PI * 2),
+                    PhaseSpd = 0.8f + (float)_rng.NextDouble() * 1.2f,
+                    Life = life, Max = life,
+                    Size = 0.0040f + (float)_rng.NextDouble() * 0.0045f,
                 };
             }
         }
@@ -878,6 +950,7 @@ namespace ConditioningControlPanel.Controls
                 if ((layers & AmbientFxLayers.FogDrift) != 0) DrawFog(canvas, w, h, min, intensity);
                 if (!_fogOnly && (layers & AmbientFxLayers.GlowBreath) != 0) DrawGlowBreath(canvas, w, h, min, intensity);
                 if (!_fogOnly && (layers & AmbientFxLayers.DustField) != 0) DrawDust(canvas, w, h, min, intensity);
+                if (!_fogOnly && (layers & AmbientFxLayers.Embers) != 0) DrawEmbers(canvas, w, h, min, intensity);
                 if (!_fogOnly && (layers & AmbientFxLayers.SheenSweep) != 0) DrawSheen(canvas, w, h, intensity);
                 DrawBurst(canvas, w, h, min);
                 DrawTokens(canvas, w, h, min);
@@ -951,6 +1024,28 @@ namespace ConditioningControlPanel.Controls
                 float size = d.Size * min * 2f;
                 _paint.Color = SKColors.White.WithAlpha(Alpha(a));
                 DrawSprite(canvas, Dot, d.X * w, d.Y * h, size, size);
+            }
+            _paint.ColorFilter = null;
+        }
+
+        private void DrawEmbers(SKCanvas canvas, float w, float h, float min, float intensity)
+        {
+            if (_emberN == 0) return;
+            _paint.ColorFilter = _emberTint;
+            for (int i = 0; i < _emberN; i++)
+            {
+                var m = _embers[i];
+                // Fade in over the first stretch of the climb, fade out toward the top edge, and
+                // flicker a little on the way like a spark that is still deciding.
+                float rise = Math.Clamp((1.02f - m.Y) / 0.08f, 0f, 1f);
+                float high = Math.Clamp(m.Y / 0.30f, 0f, 1f);
+                float flicker = 0.78f + 0.22f * (float)Math.Sin(m.Phase * 2.7f);
+                float a = 0.72f * rise * high * flicker * intensity;
+                if (a <= 0.004f) continue;
+                float x = m.X0 + m.Amp * (float)Math.Sin(m.Phase);
+                float size = m.Size * min * 2f;
+                _paint.Color = SKColors.White.WithAlpha(Alpha(a));
+                DrawSprite(canvas, Dot, x * w, m.Y * h, size, size);
             }
             _paint.ColorFilter = null;
         }
