@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createAudio, createBeat, cutoffFor, layerLevel, hitSemis, hitCutoff, LOOP_STEPS, MIN_LEAD_S } from './audio.js';
+import { createAudio, createBeat, cutoffFor, layerLevel, hitSemis, hitCutoff, timeScaleCents, LOOP_STEPS, MIN_LEAD_S, WOBBLE_CENTS } from './audio.js';
 
 /* ---- a fake Web Audio graph: enough surface for the module, every scheduled start is counted ---- */
 function fakeContext() {
@@ -25,7 +25,8 @@ function fakeContext() {
     createStereoPanner: () => node({ pan: param(0) }),
     createBuffer: (ch, len) => ({ getChannelData: () => new Float32Array(len) }),
     createBufferSource: () => source({ tag: { k: 'noise' }, buffer: null, loop: false }),
-    createOscillator: () => source({ tag: { k: 'tone' }, type: 'sine', frequency: param(440) }),
+    createOscillator: () => source({ tag: { k: 'tone' }, type: 'sine', frequency: param(440), detune: param(0) }),
+    createConstantSource: () => source({ tag: { k: 'const' }, offset: param(0) }),
   };
   return ctx;
 }
@@ -87,6 +88,7 @@ test('before start(): every method is a no-op, the beat still runs on the fallba
   assert.ok(t0 >= 0 && t0 < 1);
   assert.equal(audio.hit('brick', { combo: 3 }), 0);
   audio.relapse(); audio.breakout(); audio.crack(); audio.wallCleared(); audio.split();
+  audio.nearMiss(); audio.perfect(); audio.jackpot(); audio.shatterWall(); audio.brickLand(); audio.setTimeScale(0.35);
   audio.setSaturation(0.6); audio.setState('grey');
   assert.equal(ctx(), null, 'no context is built before a gesture');
   assert.ok(audio.beat.nextSixteenth(audio.now()) > audio.now());
@@ -182,5 +184,45 @@ test('the loop is 4 bars of 16 sixteenths and a whole loop schedules without thr
   audio.setSaturation(1);
   for (let t = 0; t < audio.beat.loop * 2; t += 0.1) { c.currentTime = t; audio.pump(); }
   assert.ok(c.log.starts.length > 200);
+  audio.destroy();
+});
+
+test('v2 one-shots each schedule voices; the jackpot is six bells, the perfect two notes on the grid', () => {
+  const { audio, ctx } = make({ bpm: 120 });
+  audio.start();
+  const c = ctx();
+  c.currentTime = 2;
+  for (const fn of ['nearMiss', 'shatterWall', 'brickLand']) { const n = c.log.starts.length; audio[fn](); assert.ok(c.log.starts.length > n, fn); }
+  let n = c.log.starts.length;
+  const at = audio.jackpot();
+  assert.ok(c.log.starts.length - n >= 12, 'six bells with a partial each');
+  n = c.log.starts.length;
+  audio.perfect();
+  assert.ok(c.log.starts.length - n >= 3);
+  const tones = c.log.starts.slice(n).filter(s => s.k === 'tone').map(s => s.t);
+  const k = (Math.min(...tones) - audio.beat.origin) / audio.beat.sixteenth;
+  assert.ok(Math.abs(k - Math.round(k)) < 1e-6, 'the perfect stamp lands on a sixteenth');
+  audio.destroy();
+});
+
+test('slow-mo pitches the bed down two semitones at 0.35, straight at 1; grey adds the vinyl wobble', () => {
+  assert.equal(timeScaleCents(1) + 0, 0);
+  assert.ok(Math.abs(timeScaleCents(0.35) + 200) < 1e-9);
+  assert.ok(Math.abs(timeScaleCents(0.675) + 100) < 1e-9);
+  assert.equal(timeScaleCents(0.1), -200, 'never past two semitones');
+  assert.equal(timeScaleCents(1.5) + 0, 0);
+  const { audio } = make();
+  audio.start();
+  assert.equal(audio.bedDetuneCents + 0, 0);
+  assert.ok(audio.wobbleDepth < 0.01, 'no wobble in colour');
+  audio.setTimeScale(0.35);
+  assert.equal(audio.timeScale, 0.35);
+  assert.ok(Math.abs(audio.bedDetuneCents + 200) < 1e-9);
+  audio.setTimeScale(1);
+  assert.equal(audio.bedDetuneCents + 0, 0);
+  audio.setState('grey');
+  assert.equal(audio.wobbleDepth, WOBBLE_CENTS, 'grey: +-8 cents');
+  audio.setState('colour');
+  assert.ok(audio.wobbleDepth < 0.01, 'colour: the wobble is gone');
   audio.destroy();
 });

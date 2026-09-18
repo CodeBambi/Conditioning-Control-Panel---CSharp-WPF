@@ -9,8 +9,9 @@
        node ConditioningControlPanel/Resources/web/backroom/shared/sound/serve.mjs
        http://127.0.0.1:8940/backroom/stations/breakout/dev.html
      Query: ?sat=0.6 (starting saturation)  &still (reduced motion, gifs on frame one)  &bpm=100  &n=12 (breakout N)
-            &speed=0.8 (ball speed scale)  &nosub (gates.subliminal = false)
-     Standalone, so no ctx.hostBack: the station shows its own Back here. -->
+            &speed=0.8 (ball speed scale)  &nosub (gates.subliminal = false)  &words=a,b,c (override the dealt words)
+            &hostback (pretend the host draws its own Back, so the chevron is hidden)
+     Standalone, so no ctx.hostBack by default: the station shows its own chevron Back here. -->
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #160e20; font: 12px Segoe UI, Arial, sans-serif; color: #fce5f3; }
   #root { position: fixed; inset: 0; }
@@ -34,7 +35,10 @@ const names = ['cheer', 'giggle', 'flirt', 'adoring', 'blowkiss', 'entrancing', 
 // back to the slot's bundled animated webps so GIF bricks and colliders still have faces on the default server.
 const emotesReachable = await fetch(gif('cheer'), { method: 'HEAD' }).then(r => r.ok).catch(() => false);
 const gifUrl = (i) => emotesReachable ? gif(names[i % names.length]) : `../slot/fallback/gif${i % 4}.webp`;
-const words = ['Drop', 'Relax', 'Let Go', 'Sink', 'Obey', 'Good Girl', 'Deeper', 'Focus'];
+// Twelve niche-safe generic words so the mantra wall and the word trail have material; ?words=a,b,c overrides.
+const WORDS = ['DROP', 'RELAX', 'LET GO', 'SINK', 'OBEY', 'FOCUS', 'BLANK', 'SOFT', 'EMPTY', 'GOOD', 'DEEPER', 'STILL'];
+const words = (q.get('words') || '').split(',').map(w => w.trim()).filter(Boolean).length
+  ? q.get('words').split(',').map(w => w.trim()).filter(Boolean) : WORDS;
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const logEl = document.getElementById('log');
 const log = (...a) => { console.log(...a); logEl.textContent = (a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ') + '\n' + logEl.textContent).slice(0, 4000); };
@@ -59,7 +63,7 @@ const ctx = {
   lex: (key, fallback) => fallback,
   gates: { subliminal: !q.has('nosub') },
   variant: null,
-  hostBack: null,
+  hostBack: q.has('hostback') ? true : null,
   standUp: () => stand(),
 };
 
@@ -70,7 +74,7 @@ async function open() { sit.hidden = true; await station.open(); log('[station] 
 sit.onclick = open;
 await open();
 
-window.dev = { station, ctx, sent, open, stand, get game() { return station.game; } };
+window.dev = { station, ctx, sent, open, stand, words, get game() { return station.game; }, get audio() { return station.audio; }, get media() { return station.media; } };
 </script>
 </body>
 </html>

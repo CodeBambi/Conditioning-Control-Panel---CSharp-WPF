@@ -7,7 +7,8 @@ import { pentatonic, ROOT_HZ } from '../../shared/sound/kit.js';
  *
  *   createAudio({ bpm, master, AudioContext }) ->
  *     start() stop() destroy() now() beat setSaturation setState hit relapse
- *     breakout crack wallCleared split
+ *     breakout crack wallCleared split nearMiss perfect jackpot shatterWall
+ *     brickLand setTimeScale (bed pitch for slow-mo; grey adds a vinyl wobble)
  *
  * Graph:  bed bus -> low-pass (the saturation filter) -> master -> out
  *         sfx bus -> master (hits carry their own saturation-scaled low-pass,
@@ -41,6 +42,9 @@ export const layerLevel = (s, from) => clamp((num(s, 0) - from) / LAYER_FADE, 0,
 export const hitSemis = combo => pentatonic(clamp(Math.floor(num(combo, 0)), 0, MAX_COMBO));
 /** A hit's own low-pass in colour: 1.2 kHz flat and grey, 9.6 kHz at full juice. */
 export const hitCutoff = s => 1200 * 8 ** clamp(num(s, 0), 0, 1);
+/** Slow-mo: the bed's detune in cents for a time scale, 0 at 1 down to -200 (two semitones) at 0.35. */
+export const SLOWMO_SCALE = 0.35, SLOWMO_CENTS = -200, WOBBLE_CENTS = 8, WOBBLE_HZ = 0.5;
+export const timeScaleCents = s => SLOWMO_CENTS * clamp((1 - num(s, 1)) / (1 - SLOWMO_SCALE), 0, 1) + 0;
 
 /** Pure beat math. `origin` is the clock time of step 0; rebase() moves it when the clock changes. */
 export function createBeat(bpm = 96, origin = 0) {
@@ -74,6 +78,8 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
   let ctx = null, out = null, lp = null, room = null, noiseBuf = null, timer = 0, destroyed = false, running = false;
   const bus = { bed: null, sfx: null, sub: null };
   const layer = { melody: null, arp: null };
+  // The bed's shared detune inputs: a constant for slow-mo pitch and a slow LFO for the grey vinyl wobble.
+  let bedDetune = null, wobbleGain = null, timeScale = 1;
   let saturation = 0, state = 'colour', stepIndex = 0, nextStepTime = 0;
   const level = clamp(num(master, 0.8), 0, 1);
 
@@ -100,9 +106,18 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
       const n = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 2), ctx.sampleRate), d = n.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
       noiseBuf = n;
+      try {                                                           // detune inputs are optional: an old context just plays straight
+        if (typeof ctx.createConstantSource === 'function') {
+          bedDetune = ctx.createConstantSource(); bedDetune.offset.value = timeScaleCents(timeScale); bedDetune.start(0);
+        }
+        const lfo = ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = WOBBLE_HZ;
+        wobbleGain = ctx.createGain(); wobbleGain.gain.value = state === 'grey' ? WOBBLE_CENTS : 0;
+        lfo.connect(wobbleGain); lfo.start(0);
+      } catch (e) { bedDetune = null; wobbleGain = null; }
     } catch (e) { ctx = null; out = null; lp = null; room = null; return false; }
     return true;
   }
+  const isBedDest = d => d === bus.bed || d === layer.melody || d === layer.arp;
   function envelope(g, t, dur, lvl, attack) {
     const a = Math.max(0.003, Math.min(dur * 0.9, dur * (attack == null ? 0.01 : attack)));
     g.gain.setValueAtTime(0.0001, t);
@@ -127,6 +142,9 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
       src = ctx.createOscillator(); src.type = n.wave || 'sine';
       src.frequency.setValueAtTime(n.hz, t);
       if (n.hzTo && n.hzTo !== n.hz) src.frequency.exponentialRampToValueAtTime(n.hzTo, t + dur);
+      if (src.detune && isBedDest(dest)) {                            // the bed follows slow-mo and the grey wobble
+        try { if (bedDetune) bedDetune.connect(src.detune); if (wobbleGain) wobbleGain.connect(src.detune); } catch (e) { /* straight */ }
+      }
       head = src;
     }
     if (n.lp) {
@@ -199,6 +217,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     glide(lp.frequency, grey ? GREY_CUTOFF : cutoffFor(saturation), secs, at, true);
     glide(layer.melody.gain, grey ? 0 : layerLevel(saturation, MELODY_FROM), secs, at);
     glide(layer.arp.gain, grey ? 0 : layerLevel(saturation, ARP_FROM), secs, at);
+    if (wobbleGain) glide(wobbleGain.gain, grey ? WOBBLE_CENTS : 0, Math.max(secs, 0.3), at);   // the vinyl wobble, grey only
   }
 
   /* ---- the hit palette ---- */
@@ -252,7 +271,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
       destroyed = true; running = false;
       if (timer) { clearInterval(timer); timer = 0; }
       if (ctx) { try { ctx.close().catch(() => {}); } catch (e) { /* already */ } }
-      ctx = null; out = null; lp = null; room = null; noiseBuf = null;
+      ctx = null; out = null; lp = null; room = null; noiseBuf = null; bedDetune = null; wobbleGain = null;
     },
     setSaturation(s) {
       saturation = clamp(num(s, saturation), 0, 1);
@@ -311,6 +330,52 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
       }
       play(notes, t, bus.sfx);
     },
+    /** Slow-mo: the bed drops two semitones at 0.35 and comes back at 1 (glide 150 ms). Signed, so not glide(). */
+    setTimeScale(s) {
+      timeScale = clamp(num(s, 1), 0.05, 2);
+      if (!bedDetune || !live()) return;
+      const t = ctx.currentTime, p = bedDetune.offset;
+      try { p.cancelScheduledValues(t); p.setValueAtTime(p.value, t); p.linearRampToValueAtTime(timeScaleCents(timeScale), t + 0.15); }
+      catch (e) { p.value = timeScaleCents(timeScale); }
+    },
+    /** A near miss: one short high ping, dry. */
+    nearMiss() {
+      if (!running || !live()) return;
+      play([tone(ROOT_HZ * 4, 0.07, 0.07, { hzTo: ROOT_HZ * 3.6, pan: 0.5 }), noise(7000, 0.015, 0.03, { q: 2 })], ctx.currentTime, bus.sfx);
+    },
+    /** A perfect paddle hit: a bright two-note stamp on the grid (root, then the fifth an octave up). */
+    perfect() {
+      if (!running || !live()) return;
+      const t = beat.quantise(ctx.currentTime), hz = ROOT_HZ * 2;
+      play([tone(hz, 0.16, 0.12, { wet: true }), tone(hz * SEMI(7), 0.28, 0.12, { at: 0.07, wet: true }),
+        tone(hz * SEMI(7) * 2.76, 0.1, 0.03, { at: 0.07 })], t, bus.sfx);
+    },
+    /** The jackpot: six bells up the scale on the grid, 80 ms apart, and a warm sub under the last one. */
+    jackpot() {
+      if (!running || !live()) return;
+      const t = beat.quantise(ctx.currentTime), notes = [];
+      const steps = [0, 2, 4, 5, 7, 9];
+      steps.forEach((k, i) => { const hz = ROOT_HZ * SEMI(pentatonic(k) + (i > 3 ? 12 : 0)), at = i * 0.08;
+        notes.push(tone(hz, 0.3 + i * 0.05, 0.11, { at, wet: true }), tone(hz * 2, 0.12, 0.03, { at, wave: 'triangle' })); });
+      play(notes, t, bus.sfx);
+      play([tone(90, 0.6, 0.3, { at: 0.4, hzTo: 45, attack: 0.05 })], t, bus.sub);
+    },
+    /** A wall shattered whole: a big glass break, then a sub drop. */
+    shatterWall() {
+      if (!running || !live()) return;
+      const t = ctx.currentTime;
+      play([
+        noise(6000, 0.24, 0.18, { hzTo: 1800, q: 0.6 }), noise(9000, 0.08, 0.1, { q: 2 }),
+        ...[0, 0.04, 0.09, 0.15, 0.22, 0.3].map((at, i) => tone(2400 * SEMI(i * 4 + (i % 2) * 1), 0.12, 0.035, { at, wet: true })),
+        noise(400, 0.5, 0.08, { hzTo: 120, type: 'lowpass', attack: 0.02 }),
+      ], t, bus.sfx);
+      play([tone(110, 0.55, 0.45, { at: 0.06, hzTo: 36, attack: 0.02 })], t, bus.sub);
+    },
+    /** One soft tick per landing brick as a new wall settles. Dry, tiny, on the grid. */
+    brickLand({ x = 0.5 } = {}) {
+      if (!running || !live()) return;
+      play([tone(ROOT_HZ / 2, 0.04, 0.04, { wave: 'triangle', lp: 1400, pan: clamp(num(x, 0.5), 0, 1) })], ctx.currentTime, bus.sfx);
+    },
     /** The multiball split: two voices a few cents apart, blipping up. */
     split() {
       if (!running || !live()) return;
@@ -326,6 +391,9 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     get running() { return running; },
     get state() { return state; },
     get saturation() { return saturation; },
+    get timeScale() { return timeScale; },
+    get wobbleDepth() { return wobbleGain ? wobbleGain.gain.value : 0; },
+    get bedDetuneCents() { return bedDetune ? bedDetune.offset.value : 0; },
     setBus(name, v) { const g = bus[name]; if (g && live()) glide(g.gain, clamp(num(v, 1), 0, 1), 0.05); },
     setMaster(v) { if (out && live()) glide(out.gain, clamp(num(v, level), 0, 1), 0.05); },
   };
