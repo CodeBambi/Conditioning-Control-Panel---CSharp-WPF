@@ -5476,5 +5476,6 @@
   "br_custom_already_owned": "Você já possui este item.",
   "br_custom_unowned": "Adquira este item antes de usá-lo.",
   "br_custom_shop_unavailable": "A loja está indisponível. Você ainda pode ver as prévias.",
-  "br_custom_buy_sp": "Comprar por {n} SP"
+  "br_custom_buy_sp": "Comprar por {n} SP",
+  "deeper_player_video_nav_failed_fmt": "Video failed to load ({0})."
 }

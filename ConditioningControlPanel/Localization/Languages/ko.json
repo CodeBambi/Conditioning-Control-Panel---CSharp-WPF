@@ -5476,5 +5476,6 @@
   "br_custom_already_owned": "이미 보유하고 있어요.",
   "br_custom_unowned": "이 아이템을 보유해야 사용할 수 있어요.",
   "br_custom_shop_unavailable": "상점을 이용할 수 없어요. 미리보기는 계속 볼 수 있어요.",
-  "br_custom_buy_sp": "{n} SP로 구매"
+  "br_custom_buy_sp": "{n} SP로 구매",
+  "deeper_player_video_nav_failed_fmt": "Video failed to load ({0})."
 }

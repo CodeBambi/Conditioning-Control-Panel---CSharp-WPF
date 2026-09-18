@@ -200,7 +200,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (TxtFilterCountEngine != null) TxtFilterCountEngine.Text = engine.ToString();
                 if (TxtFilterCountErrors != null) TxtFilterCountErrors.Text = error.ToString();
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         // ====================================================================
@@ -301,7 +301,7 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 if (Owner is DeeperEditorWindow editor)
                 {
-                    try { editor.Activate(); } catch { }
+                    try { editor.Activate(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 }
                 return;
             }
@@ -311,7 +311,7 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 if (w is DeeperEditorWindow ed && string.Equals(ed.LoadedFilePath, path, StringComparison.OrdinalIgnoreCase))
                 {
-                    try { ed.Activate(); } catch { }
+                    try { ed.Activate(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     return;
                 }
             }
@@ -343,12 +343,20 @@ namespace ConditioningControlPanel.Views.Deeper
         /// enhancement load + from UiTimer_Tick when play/pause state
         /// might have shifted.
         /// </summary>
+        private int _statusPillState = -1; // 0 empty, 1 live, 2 loaded
+
         private void UpdateStatusPill()
         {
             try
             {
                 if (StatusPill == null || StatusPillText == null) return;
                 var enh = _host?.LoadedEnhancement;
+                bool isPlaying = enh != null && ((_videoSource?.IsPlaying ?? false) || _player.IsPlaying);
+                int state = enh == null ? 0 : (isPlaying ? 1 : 2);
+                // Called from the 100 ms tick: FindResource + brush writes are
+                // not free, so only re-skin on an actual transition.
+                if (state == _statusPillState) return;
+                _statusPillState = state;
                 if (enh == null)
                 {
                     StatusPillText.Text = Loc.Get("deeper_player_pill_empty");
@@ -358,7 +366,6 @@ namespace ConditioningControlPanel.Views.Deeper
                     return;
                 }
 
-                bool isPlaying = (_videoSource?.IsPlaying ?? false) || _player.IsPlaying;
                 if (isPlaying)
                 {
                     StatusPillText.Text = Loc.Get("deeper_player_pill_live");
@@ -376,7 +383,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     StatusPill.BorderBrush = soft;
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         // ====================================================================
@@ -451,7 +458,8 @@ namespace ConditioningControlPanel.Views.Deeper
             if (src.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
                 || src.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             {
-                try { return ("🌐", new Uri(src).Host); } catch { return ("🌐", src); }
+                try { return ("🌐", new Uri(src).Host); }
+                catch (UriFormatException) { return ("🌐", src); } // swallow: show the raw source when it is not a URI
             }
             if (File.Exists(src)) return ("✓", System.IO.Path.GetFileName(src));
             return ("⚠", System.IO.Path.GetFileName(src));
@@ -675,7 +683,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 else if (_player != null)
                     media = _player.DurationMs / 1000.0;
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
             var content = ComputeMiniTotalSeconds(enh); // already floored at 60s
             return Math.Max(media, content);
         }
@@ -703,13 +711,13 @@ namespace ConditioningControlPanel.Views.Deeper
                 SeekToMiniPosition(e.GetPosition(MiniTimelineCanvas).X);
                 e.Handled = true;
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void MiniTimelineCanvas_MouseMove(object sender, MouseEventArgs e)
         {
             if (!_miniScrubbing) return;
-            try { SeekToMiniPosition(e.GetPosition(MiniTimelineCanvas).X); } catch { }
+            try { SeekToMiniPosition(e.GetPosition(MiniTimelineCanvas).X); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void MiniTimelineCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -723,7 +731,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 // where the last MouseMove fired before the click landed.
                 SeekToMiniPosition(e.GetPosition(MiniTimelineCanvas).X);
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void MiniTimelineCanvas_LostMouseCapture(object sender, MouseEventArgs e)
@@ -808,7 +816,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 NowRegionSwatch.Fill = brush;
                 NowRegionPanel.Visibility = Visibility.Visible;
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         // ====================================================================
@@ -825,7 +833,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     return new SolidColorBrush(c);
                 }
             }
-            catch { }
+            catch (FormatException) { } // swallow: bad hex in metadata falls back to the accent brush
             return (Brush)Application.Current.FindResource(fallbackResourceKey);
         }
     }

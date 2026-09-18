@@ -4100,10 +4100,10 @@ namespace ConditioningControlPanel.Views.Deeper
                 // the in-memory enhancement and the player opens with no media —
                 // exactly what the user reported when Preview "did nothing".
                 HealEmptyTriggerRegionIds();
-                var win = new EnhancementPlayerWindow(
-                    App.DeeperPlayer, App.DeeperHost, _enhancement, "editor-preview")
-                { Owner = this };
-                win.Show();
+                // One shared player: reuse it when it is already open so a second
+                // Preview cannot kill the first window's playback.
+                EnhancementPlayerWindow.ShowOrActivate(this,
+                    w => w.LoadEnhancementFromMemory(_enhancement, "editor-preview"));
             }
             catch (Exception ex)
             {

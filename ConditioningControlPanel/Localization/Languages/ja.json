@@ -5476,5 +5476,6 @@
   "br_custom_already_owned": "所有済みです。",
   "br_custom_unowned": "使用するにはこのアイテムを入手してください。",
   "br_custom_shop_unavailable": "ショップを利用できません。プレビューは引き続き使えます。",
-  "br_custom_buy_sp": "{n} SPで購入"
+  "br_custom_buy_sp": "{n} SPで購入",
+  "deeper_player_video_nav_failed_fmt": "Video failed to load ({0})."
 }
