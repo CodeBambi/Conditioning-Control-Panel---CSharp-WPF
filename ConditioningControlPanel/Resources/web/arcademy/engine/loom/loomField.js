@@ -416,9 +416,11 @@ export function createFieldRenderer(canvas) {
     gl.uniform3fv(loc('u_colors' + S + '[0]'), flat);
   }
 
-  /** Draw the field for params q (MUST already be normalizeParams2'd) at phase 0..1. */
-  function render(q, phase) {
-    const w = canvas.width, h = canvas.height;
+  /** Draw the field for params q (MUST already be normalizeParams2'd) at phase 0..1.
+   *  `width`/`height` (optional) draw into a viewport of that size at the canvas's bottom-left corner instead
+   *  of the whole canvas: backroom/shared/hypno/loom.js keeps one grown canvas and renders each size into it. */
+  function render(q, phase, width = 0, height = 0) {
+    const w = width > 0 ? Math.min(width, canvas.width) : canvas.width, h = height > 0 ? Math.min(height, canvas.height) : canvas.height;
     gl.viewport(0, 0, w, h);
     gl.useProgram(prog);
     const hueRad = q.hueCycles > 0 ? TWO_PI * q.hueCycles * phase : 0;

@@ -393,10 +393,17 @@ export async function buildRoom({ scene, loader, stations, base, faces, label, o
     list.forEach((b, i) => { b.phase = i / list.length; });
   }
 
-  // ---- bulbs: one InstancedMesh per (geometry, material) ----
+  // ---- bulbs: one InstancedMesh per (station, lamp shape) ----
+  // PERF (2026-09-18): keyed on geometry uuid this made one batch PER BULB, because the GLBs give every
+  // lamp its own geometry object (25 one-instance batches on the wheel, 28 on the roulette: 53 draw calls
+  // for what is two shapes). Lamps of one station with the same vertex and index counts and the same
+  // bounding radius are the same authored lamp copied about, so they share a batch and draw once. The
+  // original material never mattered here: every batch gets the emissive material below.
   const groups = new Map();
   for (const b of bulbs) {
-    const k = b.mesh.geometry.uuid + '|' + b.mesh.material.uuid;
+    const g = b.mesh.geometry;
+    if (!g.boundingSphere) g.computeBoundingSphere();
+    const k = b.row.id + '|' + (g.attributes.position ? g.attributes.position.count : 0) + '|' + (g.index ? g.index.count : 0) + '|' + (g.boundingSphere ? g.boundingSphere.radius.toFixed(4) : '');
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k).push(b);
   }
