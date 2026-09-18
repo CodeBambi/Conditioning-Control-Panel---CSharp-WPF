@@ -99,6 +99,11 @@
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentBrush}"/>
                             </Trigger>
+                            <!-- Brief flash after an import lands (RevealDeeperLibraryRow). -->
+                            <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource DeeperAccentTransparent20Brush}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentBrush}"/>
+                            </DataTrigger>
                         </Style.Triggers>
                     </Style>
                 </Border.Style>

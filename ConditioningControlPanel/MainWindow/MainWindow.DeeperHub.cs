@@ -28,9 +28,25 @@ namespace ConditioningControlPanel
         // the DataTemplate can stay pure-bind (no converters). Holds the
         // original Entry so action handlers can recover FilePath.
         // -------------------------------------------------------------------
-        public sealed class DeeperLibraryRowVm
+        public sealed class DeeperLibraryRowVm : System.ComponentModel.INotifyPropertyChanged
         {
             public EnhancementLibraryEntry Entry { get; init; } = new();
+
+            public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+
+            // Brief accent flash after an import (or when an import turned out to
+            // be a file already in the library) so the eye lands on the row.
+            private bool _isHighlighted;
+            public bool IsHighlighted
+            {
+                get => _isHighlighted;
+                set
+                {
+                    if (_isHighlighted == value) return;
+                    _isHighlighted = value;
+                    PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsHighlighted)));
+                }
+            }
 
             // Identity / header
             public string Name => Entry.Name;
@@ -250,12 +266,12 @@ namespace ConditioningControlPanel
             {
                 string host;
                 try { host = new Uri(mediaSource).Host; }
-                catch { host = mediaSource; }
+                catch (UriFormatException) { host = mediaSource; } // swallow: show the raw source
                 return (host, "🌐", "DeeperAccentBrush");
             }
 
             bool exists = false;
-            try { exists = System.IO.File.Exists(mediaSource); } catch { }
+            try { exists = System.IO.File.Exists(mediaSource); } catch (Exception ex) { Diag.Swallowed(ex); }
             var name = System.IO.Path.GetFileName(mediaSource);
             if (string.IsNullOrEmpty(name)) name = mediaSource;
             return (name,
@@ -309,8 +325,9 @@ namespace ConditioningControlPanel
                         Loc.Get("deeper_submission_badge_pending_tip")),
                 };
             }
-            catch
+            catch (Exception ex)
             {
+                Diag.Swallowed(ex);
                 return (Visibility.Collapsed, "", "", Brushes.Transparent, Brushes.White, "");
             }
         }
@@ -351,7 +368,7 @@ namespace ConditioningControlPanel
                 if (DeeperTab.TxtDeeperPillHapticsCount != null) DeeperTab.TxtDeeperPillHapticsCount.Text = haptics.ToString(CultureInfo.InvariantCulture);
                 if (DeeperTab.TxtDeeperPillWebcamCount  != null) DeeperTab.TxtDeeperPillWebcamCount.Text  = webcam.ToString(CultureInfo.InvariantCulture);
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void UpdateDeeperEmptyState(int filteredCount, int totalCount)
@@ -526,11 +543,62 @@ namespace ConditioningControlPanel
             var lib = App.EnhancementLibrary;
             if (lib == null) return;
             _deeperAllEntries.Clear();
-            foreach (var entry in lib.ScanLibrary()) _deeperAllEntries.Add(entry);
+            foreach (var entry in lib.ScanLibrary())
+            {
+                // A row whose delete is in its undo grace period stays hidden even
+                // though the file is still on disk.
+                if (IsDeeperDeletePending(entry.FilePath)) continue;
+                _deeperAllEntries.Add(entry);
+            }
             ApplyDeeperFilterAndSort();
             if (DeeperTab.TxtDeeperLibraryCount != null)
                 DeeperTab.TxtDeeperLibraryCount.Text = string.Format(Loc.Get("deeper_library_count_fmt"), _deeperAllEntries.Count);
             ProbeDeeperDurations();
+        }
+
+        // Scroll the list to the row for <paramref name="filePath"/> and flash it.
+        // No-op when the row is filtered out.
+        private void RevealDeeperLibraryRow(string filePath)
+        {
+            try
+            {
+                string key;
+                try { key = System.IO.Path.GetFullPath(filePath); } catch (Exception ex) { Diag.Swallowed(ex); key = filePath; }
+                int index = -1;
+                for (int i = 0; i < DeeperFilteredEntries.Count; i++)
+                {
+                    var p = DeeperFilteredEntries[i].Entry.FilePath;
+                    string full;
+                    try { full = System.IO.Path.GetFullPath(p); } catch (Exception ex) { Diag.Swallowed(ex); full = p; }
+                    if (string.Equals(full, key, StringComparison.OrdinalIgnoreCase)) { index = i; break; }
+                }
+                if (index < 0) return;
+                var vm = DeeperFilteredEntries[index];
+
+                // CanContentScroll + VirtualizingStackPanel: the vertical offset is in items.
+                var scroller = FindDescendantScrollViewer(DeeperTab.DeeperLibraryList);
+                scroller?.ScrollToVerticalOffset(Math.Max(0, index - 1));
+
+                vm.IsHighlighted = true;
+                var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1800) };
+                t.Tick += (_, _) => { t.Stop(); vm.IsHighlighted = false; };
+                t.Start();
+            }
+            catch (Exception ex) { App.Logger?.Debug("RevealDeeperLibraryRow error: {Error}", ex.Message); }
+        }
+
+        private static System.Windows.Controls.ScrollViewer? FindDescendantScrollViewer(DependencyObject? root)
+        {
+            if (root == null) return null;
+            int n = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < n; i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                if (child is System.Windows.Controls.ScrollViewer sv) return sv;
+                var deeper = FindDescendantScrollViewer(child);
+                if (deeper != null) return deeper;
+            }
+            return null;
         }
 
         // -------------------------------------------------------------------
