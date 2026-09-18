@@ -376,7 +376,7 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         <!-- The emblem, barely there, tucked into the card's lower corner. -->
-                        <Image Grid.RowSpan="3" Source="pack://application:,,,/Resources/logo2.png" Opacity="0.06"
+                        <Image Grid.RowSpan="3" Source="pack://application:,,,/Resources/logo2.png" Opacity="0.035"
                                Width="250" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                                Margin="0,0,-14,-12" IsHitTestVisible="False"
                                RenderOptions.BitmapScalingMode="HighQuality"/>

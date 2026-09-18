@@ -30,7 +30,7 @@ namespace ConditioningControlPanel.Launcher;
 /// </summary>
 public partial class LauncherWindow
 {
-    private const double TileArtHeight = 170;
+    private const double TileArtHeight = 156;
     private const double TileTiltDegrees = 1.2;
     private const double TileArtParallaxPx = 7;
     private const int TileTiltMs = 90;
@@ -158,7 +158,7 @@ public partial class LauncherWindow
         text.Children.Add(new TextBlock
         {
             Text = entry.Blurb, FontSize = 14, Margin = new Thickness(0, 4, 0, 0), TextWrapping = TextWrapping.Wrap,
-            Foreground = (Brush)FindResource("TextSecondaryBrush"), MinHeight = 38,
+            Foreground = (Brush)FindResource("TextSecondaryBrush"), MinHeight = 20,
         });
         var play = BuildPlayButton(entry, locked);
         play.PreviewMouseLeftButtonDown += Press_Down;
@@ -220,7 +220,7 @@ public partial class LauncherWindow
         {
             Content = label,
             Style = (Style)FindResource("LauncherPlay"),
-            Height = 44, Margin = new Thickness(0, 12, 0, 0),
+            Height = 42, Margin = new Thickness(0, 10, 0, 0),
             Background = fill,
             BorderBrush = new SolidColorBrush(Lighten(hue, 0.25)),
             Foreground = new SolidColorBrush(Lighten(hue, 0.45)),
