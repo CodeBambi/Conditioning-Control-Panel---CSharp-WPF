@@ -69,7 +69,7 @@
 <div id="rotate">Turn your phone upright to play.</div>
 <script type="module">
 import { mount } from './station.js';
-import { bridge, isHosted, mintId, announceReady } from '../../bridge.js';
+import { bridge, isHosted, mintId, announceReady, markInitialized } from '../../bridge.js';
 
 const q = new URLSearchParams(location.search);
 const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -121,7 +121,11 @@ const ctx = {
   standUp: () => stand(),
 };
 
-if (isHosted) { try { announceReady(); } catch (e) { /* the shim boots on ready; optional */ } }
+/* The bridge holds every frame until init: say ready, take the host's init (the phone shim answers at once), then open the lane. */
+if (isHosted) {
+  await new Promise((res) => { const t = setTimeout(res, 1500); bridge.once('init', () => { clearTimeout(t); res(); }); try { announceReady(); } catch (e) { res(); } });
+  markInitialized();
+}
 
 const station = await mount(ctx);
 const sit = document.getElementById('sit');
