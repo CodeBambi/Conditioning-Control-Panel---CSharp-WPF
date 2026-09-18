@@ -1,0 +1,51 @@
+/* station.css - Breakout chrome. Everything scoped under .bo-station so the room's own styles never collide.
+   The canvas draws the whole game (HUD included); this file is the Back button, the SP chip and the dev panel. */
+.bo-station { position: absolute; inset: 0; z-index: 20; overflow: hidden; background: #000; color: #fce5f3;
+  font-family: Segoe UI, Arial, sans-serif; color-scheme: dark; touch-action: none; user-select: none; -webkit-user-select: none; }
+.bo-station * { box-sizing: border-box; }
+.bo-station [hidden] { display: none !important; }
+.bo-stage { position: absolute; inset: 0; display: block; cursor: none; }
+.bo-station .bo-dev:hover ~ .bo-stage, .bo-station:has(.bo-dev[open]) .bo-stage { cursor: default; }
+
+.bo-top { position: absolute; top: 14px; left: 14px; display: flex; align-items: center; gap: 8px; z-index: 4; pointer-events: none; }
+.bo-top > * { pointer-events: auto; }
+.bo-station[data-host-back] .bo-top { top: 58px; left: 12px; }
+.bo-sp { background: #201229e8; border: 1px solid #b77da247; padding: 6px 12px; border-radius: 30px; font-size: 12px;
+  color: #ffe3f2; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bo-sp b { color: #ffcf6b; }
+
+/* The same golden Back as shared/back.css, kept local because that file lists its class names explicitly. */
+.bo-back { min-width: 96px; min-height: 44px; padding: 10px 18px; font: 800 16px/1.2 "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+  color: #281329; background: linear-gradient(180deg, #fff0bf, #f5cc79 56%, #dca75c); border: 2px solid #ffe7ad; border-radius: 14px;
+  box-shadow: inset 0 1px 0 #fff8, 0 3px 0 #69412d, 0 0 16px #ffcf6b38; cursor: pointer; touch-action: manipulation; }
+.bo-back::before { content: "\2190  "; }
+.bo-back:hover { background: linear-gradient(180deg, #fff5d4, #ffe09a 56%, #e9b96f); border-color: #fff4d3; }
+.bo-back:focus-visible { outline: 3px solid #8fffe0; outline-offset: 3px; }
+
+.bo-hint { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); margin: 0; font-size: 12px; letter-spacing: .5px;
+  color: #f5cfe7aa; pointer-events: none; text-shadow: 0 2px 5px #000; transition: opacity .6s; }
+.bo-station.is-played .bo-hint { opacity: 0; }
+
+.bo-dev { position: absolute; top: 14px; right: 14px; z-index: 5; font-size: 11px; opacity: .85; max-height: calc(100% - 28px); overflow: auto; }
+.bo-dev summary { cursor: pointer; text-align: right; padding: 4px 8px; background: #201229e8; border: 1px solid #b77da247; border-radius: 20px; }
+.bo-dev-body { margin-top: 6px; padding: 8px 10px; background: #160e20f2; border: 1px solid #b77da247; border-radius: 10px; display: flex;
+  flex-direction: column; gap: 5px; min-width: 190px; }
+.bo-rungs { display: flex; flex-direction: column; gap: 2px; }
+.bo-rungs label { display: flex; align-items: center; gap: 6px; padding: 1px 3px; border-radius: 4px; cursor: pointer; }
+.bo-rungs label i { margin-left: auto; opacity: .5; font-style: normal; font-variant-numeric: tabular-nums; }
+.bo-rungs label.is-forced { background: #ff69b433; }
+.bo-dev-body label { display: flex; align-items: center; gap: 6px; }
+.bo-dev-body input[type="range"] { flex: 1; min-width: 80px; }
+.bo-dev-body input[type="number"] { width: 54px; font: inherit; background: #0c0713; color: inherit; border: 1px solid #b77da247; border-radius: 4px; padding: 2px 4px; }
+.bo-dev-row { display: flex; gap: 4px; flex-wrap: wrap; }
+.bo-dev-row button { font: inherit; padding: 3px 8px; border-radius: 8px; border: 1px solid #c58bbd59; color: #fce5f3;
+  background: linear-gradient(180deg, #3d2449, #2a1734 54%, #1d0f26); cursor: pointer; }
+.bo-dev-row button:hover { border-color: #ffb7e08c; }
+
+@media (max-width: 480px) {
+  .bo-back { min-width: 86px; padding: 9px 12px; font-size: 15px; }
+  .bo-dev { top: 8px; right: 8px; }
+}
+@media (max-height: 480px) {
+  .bo-back { min-width: 0; min-height: 34px; padding: 6px 12px; font-size: 13px; border-radius: 11px; }
+}
