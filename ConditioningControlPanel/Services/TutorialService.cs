@@ -3185,13 +3185,9 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            var win = enh != null
-                ? new ConditioningControlPanel.Views.Deeper.EnhancementPlayerWindow(
-                    App.DeeperPlayer, App.DeeperHost, enh, "tutorial-followup")
-                : new ConditioningControlPanel.Views.Deeper.EnhancementPlayerWindow(
-                    App.DeeperPlayer, App.DeeperHost);
-            if (owner != null) win.Owner = owner;
-            win.Show();
+            var loaded = enh;
+            ConditioningControlPanel.Views.Deeper.EnhancementPlayerWindow.ShowOrActivate(owner,
+                loaded != null ? w => w.LoadEnhancementFromMemory(loaded, "tutorial-followup") : null);
         }
     }
 }

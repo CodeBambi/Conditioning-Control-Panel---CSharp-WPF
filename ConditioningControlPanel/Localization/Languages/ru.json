@@ -5230,6 +5230,7 @@
   "br_station_slot_violet": "Candy Violet",
   "br_station_slot_mint": "Candy Mint",
   "br_station_roulette": "Velvet Vortex",
+  "br_station_breakout": "Breakout",
   "br_visit": "Visit {0}",
   "br_room_view": "Room view",
   "br_room_walk": "Back to walking",
@@ -5418,6 +5419,10 @@
   "br_slot_paytable": "Призы",
   "br_slot_pay_sp": "{n} SP",
   "br_roulette_rotate": "Поверните телефон вертикально: поле читается лучше",
+  "br_roulette_ready": "Chips are 1 SP each, up to 3 a spin. Pick how many spins, then Spin.",
+  "br_roulette_place_bets": "Chips {n} / {max}",
+  "br_roulette_spins": "Spins ×",
+  "br_roulette_spins_n": "Spins: {n}",
   "br_slot_marquee_spin": "Крутится",
   "br_callout_small_win": "Малый выигрыш",
   "br_callout_nice_spin": "Славный оборот",
@@ -5482,5 +5487,6 @@
   "deeper_editor_ctx_item_cut": "Cut",
   "deeper_editor_ctx_item_delete": "Delete",
   "deeper_editor_ctx_item_jump": "Jump to start",
-  "deeper_editor_saved_inline": "Saved"
+  "deeper_editor_saved_inline": "Saved",
+  "deeper_player_video_nav_failed_fmt": "Video failed to load ({0})."
 }

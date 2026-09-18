@@ -89,6 +89,9 @@ public sealed class BackRoomApi : IBackRoomRelay
             // 10.17.C: the Prize Parlour.
             ["counter"] = new[] { ("GET", "state"), ("POST", "buy") },
             ["decorations"] = new[] { ("GET", "state"), ("POST", "buy"), ("POST", "layout") },
+            // Breakout (open testing, no server API yet): an empty row, so every station-request from it is
+            // refused while media-request and fx, which are not whitelisted per station, work as they do.
+            ["breakout"] = Array.Empty<(string Method, string Path)>(),
         };
 
     private static readonly HttpClient SharedHttp = new() { Timeout = System.Threading.Timeout.InfiniteTimeSpan };

@@ -33,6 +33,7 @@ const ID = /^[a-z0-9_]{1,24}$/;
 const FILE = /^[a-z0-9_-]{1,40}\.glb$/;
 const ENTRY = /^stations\/[a-z0-9_/-]+\.js$/;
 const vec3 = (v) => Array.isArray(v) && v.length === 3 && v.every(Number.isFinite);
+const NODE = /^[A-Za-z0-9_.-]{1,48}$/;
 
 /**
  * Validate stations.json (CONTRACT 7, 3D shape). A row with a bad id or no
@@ -70,6 +71,10 @@ export function normaliseStations(rows) {
         omitPrefixes: Array.isArray(f.omitPrefixes) ? f.omitPrefixes.filter((p) => typeof p === 'string') : [],
         labels: f.labels && typeof f.labels === 'object' ? { ...f.labels } : {},
         faces: !!f.faces, reels: !!f.reels, hub: !!f.hub,
+        // A fixture borrowed out of another glb (the breakout row stands counter.glb's arcade cabinet on
+        // its own): `node` names the subtree, `glow` the screen mesh that breathes (room/fixtures.js).
+        node: typeof f.node === 'string' && NODE.test(f.node) ? f.node : null,
+        glow: typeof f.glow === 'string' && NODE.test(f.glow) ? f.glow : null,
         bounds: { min: f.bounds.min.slice(), max: f.bounds.max.slice() },
       },
     });

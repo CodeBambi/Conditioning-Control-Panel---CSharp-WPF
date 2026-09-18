@@ -144,7 +144,8 @@ html:has(.roul-station[data-seated]) .br-nav > button:first-child { display: non
   .roul-station[data-seated] .roul-pips { display: none; }
   .roul-station[data-seated] .roul-row { gap: 3px; }
   .roul-station[data-seated] .roul-spins button { min-width: 29px; }
-  .roul-station[data-seated] .roul-spins-label { display: none; }
+  /* Kept (tester, 2026-09-18): without it the 1-5 row read as a chip size. 11 px "Spins ×" + five 29 px buttons fit the 218 px column. */
+  .roul-station[data-seated] .roul-spins-label { font-size: 11px; opacity: .85; padding-right: 1px; }
   .roul-station[data-seated] .roul-gain { bottom: 102px; }
 }
 @media (max-height: 500px) and (orientation: landscape) {
