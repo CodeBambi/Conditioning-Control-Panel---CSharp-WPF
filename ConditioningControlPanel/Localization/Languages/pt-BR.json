@@ -5436,6 +5436,8 @@
   "br_callout_on_a_roll": "Na sequência",
   "br_roulette_glyphs_note": "As marcas esmaecidas na roda são o feitiço de cada casa, ganhe ou não. Espiral: uma espiral. Olho: um flash de imagens. Balão: palavras. Gota: um derretimento. A marca acende quando a bola para ali.",
   "br_callout_winner": "Vencedor",
+  "br_callout_dealer_wins": "Dealer Wins",
+  "br_callout_push": "Push",
   "br_callout_blackjack": "Blackjack",
   "br_callout_dealer_bust": "Banca estourou",
   "br_callout_hot_hand": "Mão quente",

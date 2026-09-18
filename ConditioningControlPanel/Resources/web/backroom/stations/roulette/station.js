@@ -279,7 +279,13 @@ export async function mount(ctx) {
     root.querySelectorAll('.roul-spins button').forEach((b) => { const s = t('br_roulette_spins_n', 'Spins: {n}', { n: b.dataset.n }); b.setAttribute('aria-label', s); b.title = s; });
     root.querySelector('.roul-back').onclick = back;
     root.querySelector('.roul-card-back').onclick = back;
-    if (hostBack) { root.dataset.hostBack = ''; root.querySelector('.roul-back').hidden = true; root.querySelector('.roul-card-back').hidden = true; }
+    if (hostBack) {
+      root.dataset.hostBack = '';
+      // Seated in the room (ctx.stage) the station keeps its own Back in the room's corner, the way the slot does.
+      root.querySelector('.roul-back').hidden = !ctx.stage;
+      if (ctx.stage) root.dataset.ownBack = '';
+      root.querySelector('.roul-card-back').hidden = true;
+    }
     if (hook) root.dataset.hostSp = '';
     root.querySelector('.roul-spin').onclick = () => press();
     root.querySelector('.roul-clear').onclick = () => { if (phase === 'bet' && !resume) { chips = {}; why = null; sync(); } };
