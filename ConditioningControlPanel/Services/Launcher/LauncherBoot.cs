@@ -86,7 +86,7 @@ public static class LauncherBoot
     public static bool NamesASurface(string[]? args) =>
         Has(args, PanelFlag) || Has(args, LauncherFlag) || Has(args, ClientFlag) || GameArg(args) != null;
 
-    private static bool Has(string[]? args, string flag)
+    internal static bool Has(string[]? args, string flag)
     {
         if (args == null) return false;
         foreach (var a in args)

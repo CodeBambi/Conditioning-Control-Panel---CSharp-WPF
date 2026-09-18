@@ -14,10 +14,12 @@ namespace ConditioningControlPanel
         /// Hide the panel to the tray for the launcher. Same as close-to-tray, minus nothing: the
         /// engine, the session and every overlay keep going. The tray icon stays the way back.
         /// </summary>
-        public void HideForLauncher()
+        /// <param name="quiet">True at boot, where the panel was never on screen and the tray's
+        /// one-time "minimized" balloon would be wrong.</param>
+        public void HideForLauncher(bool quiet = false)
         {
             if (App.Lockdown?.IsActive == true) return;
-            try { _trayIcon?.MinimizeToTray(); }
+            try { _trayIcon?.MinimizeToTray(balloon: !quiet); }
             catch (Exception ex) { App.Logger?.Warning(ex, "[Launcher] MinimizeToTray failed; hiding directly"); Hide(); }
         }
 

@@ -87,6 +87,38 @@ public static partial class LauncherHost
         if (mw == null) { Log.Warning("[Launcher] OpenPanel with no main window"); return; }
         try { mw.ShowFromTray(); }
         catch (Exception ex) { Log.Error(ex, "[Launcher] ShowFromTray failed"); }
+        ReleaseStartupLadder();
+    }
+
+    /// <summary>The startup ladder (What's New, recap) waits while the panel is tucked away.</summary>
+    public static void HoldStartupLadder()
+    {
+        try { App.StartupLadder?.Hold(); }
+        catch (Exception ex) { Log.Debug(ex, "[Launcher] ladder hold failed"); }
+    }
+
+    public static void ReleaseStartupLadder()
+    {
+        try { App.StartupLadder?.Release(); }
+        catch (Exception ex) { Log.Debug(ex, "[Launcher] ladder release failed"); }
+    }
+
+    /// <summary>
+    /// A second instance started with no surface named (the old desktop icon, a double-click on
+    /// the exe). The panel on screen means "bring it forward", as always. Otherwise the answer is
+    /// the same as a bare boot: the launcher, unless the user asked for the panel directly.
+    /// </summary>
+    public static void OnBareRelaunch()
+    {
+        var mw = App.MainWindowRef;
+        if (mw is { IsVisible: true })
+        {
+            try { mw.ShowFromTray(); }
+            catch (Exception ex) { Log.Debug(ex, "[Launcher] ShowFromTray on bare relaunch failed"); }
+            return;
+        }
+        if (App.Settings?.Current?.LauncherSkipToPanel == true) OpenPanel();
+        else Show();
     }
 
     /// <summary>

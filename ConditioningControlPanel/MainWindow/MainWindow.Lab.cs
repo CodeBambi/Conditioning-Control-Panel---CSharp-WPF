@@ -803,6 +803,8 @@ namespace ConditioningControlPanel
             {
                 try
                 {
+                    // The launcher is never a way around the veil; grey the door as well as refusing it.
+                    if (BtnBackToLauncher != null) BtnBackToLauncher.IsEnabled = false;
                     // Enable system key suppression on the keyboard hook (the setter also
                     // installs the hook if panic key / keyword triggers never started it)
                     // The system-key block is a SAFETY TOGGLE now, not a law: a user who unticked it
@@ -885,6 +887,7 @@ namespace ConditioningControlPanel
             {
                 try
                 {
+                    if (BtnBackToLauncher != null) BtnBackToLauncher.IsEnabled = true;
                     // Disable system key suppression. Lockdown may have installed the hook
                     // itself; drop it again unless another feature still needs it (mirrors
                     // the startup install condition). LockdownService restores the user's
