@@ -101,8 +101,10 @@ namespace ConditioningControlPanel.Views.Deeper
             _uiTimer.Tick += UiTimer_Tick;
             _uiTimer.Start();
 
-            _player.Volume = App.Settings?.Current?.DeeperPlayerVolume ?? EnhancementAudioPlayer.DefaultVolume;
+            var settings = App.Settings?.Current;
+            _player.Volume = settings?.DeeperPlayerVolume ?? EnhancementAudioPlayer.DefaultVolume;
             UpdateVolumeFromPlayer();
+            RestoreWindowBounds(settings);
             SubscribeWebcamStateForButton();
             _instance = this;
         }
@@ -714,10 +716,11 @@ namespace ConditioningControlPanel.Views.Deeper
         private bool _webcamPromptShownForCurrentEnh;
 
         // Offer to start webcam tracking if the loaded enhancement has
-        // webcam-driven rules and the webcam isn't already running. No
-        // return value — the user's choice doesn't block playback, it just
-        // decides whether the webcam-gated rules will actually fire.
-        private async void MaybePromptForWebcamBeforePlay()
+        // webcam-driven rules and the webcam isn't already running. Inline,
+        // non-blocking banner (was a modal YesNo MessageBox): playback proceeds
+        // regardless, the banner just decides whether the webcam-gated rules
+        // will actually fire.
+        private void MaybePromptForWebcamBeforePlay()
         {
             if (_webcamPromptShownForCurrentEnh) return;
             var enh = _host?.LoadedEnhancement;
@@ -729,45 +732,55 @@ namespace ConditioningControlPanel.Views.Deeper
                 _webcamPromptShownForCurrentEnh = true;
                 return;
             }
-
-            // Mark BEFORE the dialog so a re-entrant Play click during the
-            // modal doesn't re-trigger the prompt.
             _webcamPromptShownForCurrentEnh = true;
+            try
+            {
+                TxtWebcamBanner.Text = Loc.Get("deeper_player_webcam_banner_text");
+                BtnWebcamBannerEnable.Visibility = Visibility.Visible;
+                WebcamBanner.Visibility = Visibility.Visible;
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
 
-            var result = MessageBox.Show(this,
-                Loc.Get("deeper_player_webcam_prompt_body"),
-                Loc.Get("deeper_player_webcam_prompt_title"),
-                MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (result != MessageBoxResult.Yes) return;
+        private void BtnWebcamBannerDismiss_Click(object sender, RoutedEventArgs e)
+            => WebcamBanner.Visibility = Visibility.Collapsed;
 
+        private async void BtnWebcamBannerEnable_Click(object sender, RoutedEventArgs e)
+        {
+            var svc = App.Webcam;
+            if (svc == null) { WebcamBanner.Visibility = Visibility.Collapsed; return; }
             try
             {
                 if (!WebcamTrackingService.IsConsentCurrent())
                 {
-                    // Mirror the BtnEyeTracking_Click first-time path —
-                    // consent lives in the Lab tab, not here.
-                    MessageBox.Show(this,
-                        Loc.Get("deeper_player_eye_tracking_first_time"),
-                        Loc.Get("deeper_player_btn_eye_tracking_start"),
-                        MessageBoxButton.OK, MessageBoxImage.Information);
+                    // Consent + calibration live in the Lab tab, not here. Say so
+                    // in the banner itself instead of popping another modal.
+                    TxtWebcamBanner.Text = Loc.Get("deeper_player_eye_tracking_first_time");
+                    BtnWebcamBannerEnable.Visibility = Visibility.Collapsed;
                     return;
                 }
-                // Off the UI thread — Start() opens the camera + loads ONNX
-                // models and can block several seconds; running it inline here
-                // would freeze the player and prevent the loading splash from
-                // painting. Playback already proceeded (this prompt is advisory).
+                BtnWebcamBannerEnable.IsEnabled = false;
+                // Off the UI thread: Start() opens the camera + loads ONNX models
+                // and can block for seconds.
                 if (await svc.StartAsync())
                 {
                     // Remember that THIS player session started the webcam so
                     // Window_Closing can put it back the way it found it.
-                    // Webcams the user had running before opening the player
-                    // are left alone.
                     _playerStartedWebcam = true;
+                    WebcamBanner.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    TxtWebcamBanner.Text = string.Format(Loc.Get("deeper_player_eye_tracking_start_failed_fmt"), svc.State);
                 }
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "EnhancementPlayer: webcam start from play-prompt failed");
+                App.Logger?.Warning(ex, "EnhancementPlayer: webcam start from banner failed");
+            }
+            finally
+            {
+                BtnWebcamBannerEnable.IsEnabled = true;
             }
         }
 
@@ -976,6 +989,7 @@ namespace ConditioningControlPanel.Views.Deeper
             if (_player == null) return;
             var v = (int)Math.Round(e.NewValue);
             _player.Volume = v;
+            _videoSource?.SetVolume(v / 100.0);
             PersistVolume(v);
         }
 
@@ -1195,6 +1209,7 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             // New enhancement loaded → re-arm the webcam pre-play prompt.
             _webcamPromptShownForCurrentEnh = false;
+            WebcamBanner.Visibility = Visibility.Collapsed;
             EnsureUiTimerRunning();
 
             if (enh == null)
@@ -1203,6 +1218,8 @@ namespace ConditioningControlPanel.Views.Deeper
                 TxtEnhMetadata.Text = "";
                 BtnUnloadEnhancement.Visibility = Visibility.Collapsed;
                 TxtEnhSource.Visibility = Visibility.Collapsed;
+                BtnEyeTracking.Visibility = Visibility.Collapsed;
+                Title = Loc.Get("deeper_player_title");
                 UnbindEngineIfRunning();
                 ShowMediaPaneFor(MediaTypes.Audio); // default back to audio UI
                 return;
@@ -1211,6 +1228,10 @@ namespace ConditioningControlPanel.Views.Deeper
             TxtEnhPath.Text = path ?? "";
             var creator = string.IsNullOrEmpty(enh.Metadata?.Creator) ? "" : $" — {enh.Metadata.Creator}";
             var name = string.IsNullOrEmpty(enh.Metadata?.Name) ? "(untitled)" : enh.Metadata!.Name;
+            Title = string.Format(Loc.Get("deeper_player_window_title_fmt"), name);
+            // The eye-tracking control only means something when the
+            // enhancement has webcam-driven rules.
+            BtnEyeTracking.Visibility = EnhancementNeedsWebcam(enh) ? Visibility.Visible : Visibility.Collapsed;
             var counts = $"{enh.Regions.Count} regions, {enh.HapticTracks.Sum(t => t?.Events?.Count ?? 0)} haptic events, {enh.Rules.Count} rules";
             TxtEnhMetadata.Text = $"{name}{creator}  ·  {counts}";
             BtnUnloadEnhancement.Visibility = Visibility.Visible;
@@ -1263,7 +1284,9 @@ namespace ConditioningControlPanel.Views.Deeper
             AudioFileRow.Visibility = isVideo ? Visibility.Collapsed : Visibility.Visible;
             AudioPane.Visibility = isVideo ? Visibility.Collapsed : Visibility.Visible;
             VideoPane.Visibility = isVideo ? Visibility.Visible : Visibility.Collapsed;
-            VolumePanel.Visibility = isVideo ? Visibility.Collapsed : Visibility.Visible;
+            // Volume stays up in video mode too: the slider drives the page's
+            // <video>.volume through BrowserVideoTimeSource.SetVolume.
+            VolumePanel.Visibility = Visibility.Visible;
             BtnPictureInPicture.Visibility = isVideo ? Visibility.Visible : Visibility.Collapsed;
         }
 
@@ -1330,6 +1353,7 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             _videoSource?.Dispose();
             _videoSource = new BrowserVideoTimeSource(VideoBrowser);
+            _videoSource.SetVolume(SliderVolume.Value / 100.0);
             EnsureVideoEngineBound();
         }
 
@@ -1538,6 +1562,22 @@ namespace ConditioningControlPanel.Views.Deeper
                     document.addEventListener('keydown', escHandler, true);
                     window.addEventListener('keydown', escHandler, true);
 
+                    // Hide the mouse cursor after ~2 s idle while the forced
+                    // fullscreen host is up. Chromium owns the cursor over its
+                    // HWND, so this has to happen in the page, not in WPF.
+                    var cursorTimer = null;
+                    function hideCursor() {
+                        if (!window._ccpForcedFs) return;
+                        try { document.documentElement.style.cursor = 'none'; } catch (_) {}
+                    }
+                    function armCursor() {
+                        try { document.documentElement.style.cursor = ''; } catch (_) {}
+                        if (cursorTimer) clearTimeout(cursorTimer);
+                        cursorTimer = setTimeout(hideCursor, 2000);
+                    }
+                    window._ccpArmCursor = armCursor;
+                    window.addEventListener('mousemove', function() { if (window._ccpForcedFs) armCursor(); }, true);
+
                     // Ctrl+MouseWheel = page zoom. IsZoomControlEnabled is
                     // false in WebView2 settings so the built-in shortcut is
                     // off and we own the gesture. preventDefault stops the
@@ -1655,6 +1695,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 TxtVideoStatus.Visibility = Visibility.Collapsed;
                 BtnPlayPause.Content = "⏸";
                 TxtStatus.Text = Loc.Get("deeper_player_status_playing");
+                _videoSource?.SetVolume(SliderVolume.Value / 100.0);
 
                 // Re-arm the forced-fullscreen flag on the NEW document. It lives
                 // on `window`, so every navigation wipes it — and a video that
@@ -2056,7 +2097,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 // `document.fullscreenElement` in the dblclick handler so the
                 // user can always exit our WPF "forced fullscreen" by
                 // double-clicking the video, regardless of page state.
-                try { FireScript("window._ccpForcedFs = true;"); }
+                try { FireScript("window._ccpForcedFs = true; try { window._ccpArmCursor && window._ccpArmCursor(); } catch (_) {}"); }
                 catch (Exception ex) { Diag.Swallowed(ex); }
 
                 // Commit state only after reparent is fully in place.
@@ -2177,7 +2218,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     if (VideoBrowser?.CoreWebView2 != null)
                     {
                         FireScript(
-                            "window._ccpForcedFs = false; try { if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen(); } catch (_) {}");
+                            "window._ccpForcedFs = false; try { document.documentElement.style.cursor = ''; } catch (_) {} try { if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen(); } catch (_) {}");
                     }
                 }
                 catch (Exception ex) { Diag.Swallowed(ex); }
@@ -2409,6 +2450,7 @@ namespace ConditioningControlPanel.Views.Deeper
             // that no longer has an owner to unbind it.
             _isClosing = true;
             if (ReferenceEquals(_instance, this)) _instance = null;
+            SaveWindowBounds();
 
             // Per-step try/catch: a single catch-all around the whole teardown
             // means an early throw (e.g. ScreenMirror NRE) skips _uiTimer.Stop
@@ -2498,6 +2540,59 @@ namespace ConditioningControlPanel.Views.Deeper
         }
 
         private static string FormatTime(double seconds) => MediaDurationCache.Format(seconds);
+
+        // -- Window bounds persistence -------------------------------------------
+
+        private void RestoreWindowBounds(Models.AppSettings? s)
+        {
+            try
+            {
+                if (s == null) return;
+                if (s.DeeperPlayerWindowWidth >= MinWidth && s.DeeperPlayerWindowHeight >= MinHeight)
+                {
+                    Width = s.DeeperPlayerWindowWidth;
+                    Height = s.DeeperPlayerWindowHeight;
+                }
+                var virt = new Rect(SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,
+                                    SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
+                if (s.DeeperPlayerWindowWidth > 0
+                    && IsRectUsableOnScreen(new Rect(s.DeeperPlayerWindowLeft, s.DeeperPlayerWindowTop, Width, Height), virt))
+                {
+                    WindowStartupLocation = WindowStartupLocation.Manual;
+                    Left = s.DeeperPlayerWindowLeft;
+                    Top = s.DeeperPlayerWindowTop;
+                }
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        /// <summary>
+        /// A remembered position counts as usable when at least a 200x120 patch
+        /// of the window (enough to grab the title bar) lies on the virtual desktop.
+        /// </summary>
+        internal static bool IsRectUsableOnScreen(Rect window, Rect virtualScreen)
+        {
+            if (window.IsEmpty || virtualScreen.IsEmpty || virtualScreen.Width <= 0 || virtualScreen.Height <= 0) return false;
+            if (double.IsNaN(window.X) || double.IsNaN(window.Y)) return false;
+            var inter = Rect.Intersect(window, virtualScreen);
+            return !inter.IsEmpty && inter.Width >= 200 && inter.Height >= 120;
+        }
+
+        private void SaveWindowBounds()
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s == null || WindowState != WindowState.Normal) return;
+                if (Width < MinWidth || Height < MinHeight) return;
+                s.DeeperPlayerWindowLeft = Left;
+                s.DeeperPlayerWindowTop = Top;
+                s.DeeperPlayerWindowWidth = Width;
+                s.DeeperPlayerWindowHeight = Height;
+                App.Settings?.Save();
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
 
         // Once per loaded local file, hand the measured length to the
         // duration cache so the library list shows it next time without a

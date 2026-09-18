@@ -5477,5 +5477,8 @@
   "br_custom_unowned": "使用するにはこのアイテムを入手してください。",
   "br_custom_shop_unavailable": "ショップを利用できません。プレビューは引き続き使えます。",
   "br_custom_buy_sp": "{n} SPで購入",
-  "deeper_player_video_nav_failed_fmt": "Video failed to load ({0})."
+  "deeper_player_video_nav_failed_fmt": "Video failed to load ({0}).",
+  "deeper_player_window_title_fmt": "Deeper Player - {0}",
+  "deeper_player_webcam_banner_text": "This enhancement has gaze / blink / attention triggers. They only fire while the webcam is on.",
+  "deeper_player_webcam_banner_enable": "Enable webcam"
 }

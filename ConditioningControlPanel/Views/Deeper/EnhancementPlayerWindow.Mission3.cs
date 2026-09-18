@@ -716,8 +716,36 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void MiniTimelineCanvas_MouseMove(object sender, MouseEventArgs e)
         {
-            if (!_miniScrubbing) return;
-            try { SeekToMiniPosition(e.GetPosition(MiniTimelineCanvas).X); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try
+            {
+                var x = e.GetPosition(MiniTimelineCanvas).X;
+                UpdateMiniHoverLabel(x);
+                if (_miniScrubbing) SeekToMiniPosition(x);
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        private void MiniTimelineCanvas_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (MiniHoverLabel != null) MiniHoverLabel.Visibility = Visibility.Collapsed;
+        }
+
+        // m:ss under the cursor, kept inside the strip's width.
+        private void UpdateMiniHoverLabel(double xInCanvas)
+        {
+            if (MiniHoverLabel == null || TxtMiniHoverTime == null) return;
+            var w = MiniTimelineCanvas.ActualWidth;
+            if (w <= 0 || _miniTotalSeconds <= 0 || _miniEnhancement == null)
+            {
+                MiniHoverLabel.Visibility = Visibility.Collapsed;
+                return;
+            }
+            var frac = Math.Clamp(xInCanvas / w, 0, 1);
+            TxtMiniHoverTime.Text = FormatTime(frac * _miniTotalSeconds);
+            MiniHoverLabel.Visibility = Visibility.Visible;
+            var labelW = MiniHoverLabel.ActualWidth > 0 ? MiniHoverLabel.ActualWidth : 36;
+            var left = Math.Clamp(xInCanvas - labelW / 2, 0, Math.Max(0, w - labelW));
+            MiniHoverLabel.Margin = new Thickness(left, 2, 0, 0);
         }
 
         private void MiniTimelineCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
