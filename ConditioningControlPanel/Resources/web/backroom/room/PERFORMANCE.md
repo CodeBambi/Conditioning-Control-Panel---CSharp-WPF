@@ -53,9 +53,52 @@ reward media caps overlap at four, Loom uses 384 px / 20 fps, and flowing SVG me
 one noise octave with 20 fps parameter updates. This is not a measured phone FPS gain.
 
 Settled slot strips retain unchanged pixels and only paint visible neighbours.
-Static content no longer uploads every 100 ms. Any changed CanvasTexture still
-uploads the whole strip; partial GPU uploads remain a possible future rewrite.
+Static content no longer uploads every 100 ms. The slot's live cells are patched into
+the strip texture in place since September 18 (below); the room's idle reels still
+upload a whole strip when they repaint.
 Off-camera cosmetic room reel/bulb work is skipped without skipping event clocks.
+
+## September 18 frame-cost pass (desktop testers reporting low FPS)
+
+Measured with `smoke/perf-bench.mjs` (real Chrome off-screen, the smoke checks' fake
+host, 1727 x 942 at DPR 1.25, the same desk both times: RTX 5080, so the numbers rank
+costs, they are not a tester's FPS). Chrome's GPU process and the renderer's main
+thread are the two things a weak desktop runs out of first, and both were being spent
+on texture traffic rather than on triangles:
+
+| Scenario | Before | After |
+| --- | --- | --- |
+| Rest, draw calls per frame | 394 | 361 |
+| Rest, texture upload | 11.9 Mpx/s | 1.4 Mpx/s |
+| Rest, GPU process CPU | 45% of a core | 22% |
+| Rest, main thread busy | 19% | 11% |
+| Slot seat, texture upload | 32 Mpx/s | 11 Mpx/s |
+| Slot seat, GPU process CPU | 71% of a core | ~40-50% |
+| Slot seat, main thread busy | 24% | 16% |
+| Wheel seat, draw calls per frame | 217 | 195 |
+
+What changed, in order of measured weight:
+
+1. **Prize marquee** (`room/prize-marquee.js`): the scrolling patter repainted a 2048 x 256
+   canvas 20 times a second with a blurred-shadow `fillText` and re-uploaded it. Hiding that
+   one board took the GPU process from 54% to 24% of a core at rest. The patter is now painted
+   once onto a strip one period wide and scrolled by UV offset, under a static frame plane.
+2. **Loom backing canvas** (`shared/hypno/loom.js`, `arcademy/engine/loom/loomField.js`): the
+   page's one field canvas was resized to every caller's backing, and the slot's 256 px spiral
+   tiles against the room's 128 px loom discs resized it back and forth every paint (a WebGL
+   drawing-buffer reallocation each time; 12% of the main thread on the seat). It now only
+   grows, and each size renders into its own viewport.
+3. **Slot reel strips** (`stations/slot/scene.js`): a live cell re-uploaded its whole
+   3328 x 304 strip. Changed cells (up to six) are now written in place with `texSubImage2D`.
+   Not through three's `copyTextureToTexture`: it reads unpack state back with `getParameter`
+   on every call, and each read is a synchronous round trip to the GPU process (~1 ms).
+4. **Bulb batches** (`room/fixtures.js`): keyed on geometry uuid, and the GLBs give every lamp
+   its own geometry, so 25 + 28 one-instance batches. Keyed on station and lamp shape now.
+
+Still on the table, by size: the stations' own draw calls (counter 94, wheel 90, cards 73,
+EMIs ~60 at rest; a mesh-merge-by-material job in the GLB pipeline), the slot's apron ticker
+(2048 x 88 repainted at 20 Hz; the marquee's strip trick applies) and the crown display
+(512 x 128 at 20 Hz), and the room's idle reel strips. `perf-bench.mjs probe` is the tool.
 
 Media transfer is streamed with 32 MiB/source, 4M pixel and 2,000 frame limits and a 10 s
 load deadline. Header dimensions are checked before native decoding. Still fallback

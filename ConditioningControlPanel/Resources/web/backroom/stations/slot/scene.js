@@ -326,10 +326,40 @@ export async function createScene(o) {
   const angle = (k, n) => ((k + 0.5) / n - 0.5) * Math.PI * 2;
   let reelMood = 'idle', reelMoodAt = 0;
   const paintedCells = [[], [], []];
+  // PERF (2026-09-18): a repainted cell used to re-upload its WHOLE strip (13 cells, 3328 x 304 px), and at
+  // rest on the seat the spirals and EMI's face keep a cell or two live, so that was ~27 megapixels a second
+  // of texture traffic before anyone pulled the lever. A changed cell is now blitted to a one-cell patch and
+  // written into the strip's texture in place with texSubImage2D; the strip canvas itself is still painted
+  // in full, so retainReels and the fallbacks read it as before. A strip that has never reached the GPU, or
+  // that changed in more than a few cells, still uploads whole.
+  // Not three's copyTextureToTexture: that one reads three unpack parameters back with gl.getParameter on
+  // every call to restore them, and each read is a synchronous round trip to the GPU process (measured at
+  // ~1 ms each, a tenth of the main thread on the seat). The unpack state written here is exactly what
+  // three sets before its own canvas uploads (flipY off, premultiply off, alignment 4), so nothing to restore.
+  const patch = makeCanvas(1, 1);
+  function uploadCells(r, cells) {
+    const tex = reelTex[r];
+    const gpu = renderer.properties.get(tex), gl = renderer.getContext();
+    if (cells.length > 6 || !gpu || !gpu.__webglTexture || gpu.__version !== tex.version) { tex.needsUpdate = true; return; }
+    if (patch.width !== CW || patch.height !== CH) { patch.width = CW; patch.height = CH; }
+    const g = patch.getContext('2d');
+    try {
+      renderer.state.bindTexture(gl.TEXTURE_2D, gpu.__webglTexture);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+      gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.BROWSER_DEFAULT_WEBGL);
+      for (const j of cells) {
+        g.clearRect(0, 0, CW, CH);
+        g.drawImage(reelCanvas[r], j * CW, 0, CW, CH, 0, 0, CW, CH);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, j * CW, 0, gl.RGBA, gl.UNSIGNED_BYTE, patch);
+      }
+    } catch { tex.needsUpdate = true; }
+  }
   function paint(t, force = false) {
     for (let r = 0; r < 3; r++) {
       const n = strips[r].length || 1, c = reelCanvas[r], ctx = c.getContext('2d');
-      let dirty = false;
+      let dirty = false; const changed = [];
       for (let j = 0; j < strips[r].length; j++) {
         const hit = j === stopsNow[r] ? hitGlow(r, t) : 0;
         const gh = ghost && ghost.r === r && ghost.j === j ? ghostAmt(t) : 0;
@@ -337,7 +367,7 @@ export async function createScene(o) {
         const stamp = reelPaintStamp(kind, t, reduced || stillFx(), hit, gh, reelMood);
         // Keep static pixels; only the payline and nearby slivers need live art at rest.
         if (!force && (!reelCellVisible(j, n, reelAngles[r], !!spin) || paintedCells[r][j] === stamp)) continue;
-        dirty = true; paintedCells[r][j] = stamp;
+        dirty = true; paintedCells[r][j] = stamp; changed.push(j);
         ctx.clearRect(j * CW, 0, CW, CH);
         ctx.save(); ctx.beginPath(); ctx.rect(j * CW, 0, CW, CH); ctx.clip(); ctx.translate((j + 0.5) * CW, CH / 2); ctx.rotate(-Math.PI / 2); ctx.scale(1, -1);
         // THE GLYPH HIT (shared/hypno/callout.js timings): the landed cell pops 6% inside its own cell and takes a
@@ -357,7 +387,7 @@ export async function createScene(o) {
         if (gh > 0) { ctx.fillStyle = `rgba(255,194,58,${(0.62 * gh).toFixed(3)})`; ctx.fillRect(-cell.hw, -cell.hh, CH, CW); }
         ctx.restore();
       }
-      if (dirty) reelTex[r].needsUpdate = true;
+      if (dirty) { if (force) reelTex[r].needsUpdate = true; else uploadCells(r, changed); }
     }
     lastPaint = t;
   }
