@@ -588,7 +588,7 @@
   "deeper_player_tip_play_pause": "Play / Pause (Space).",
   "deeper_player_tip_stop": "Stop and rewind to the beginning.",
   "deeper_player_tip_volume": "Output volume (0–100).",
-  "deeper_player_tip_minitimeline": "Read-only summary of the enhancement's regions, rule pins, and live playhead. Click to seek (audio only).",
+  "deeper_player_tip_minitimeline": "Read-only summary of the enhancement's regions, rule pins, and live playhead. Click or drag to seek.",
   "deeper_player_tip_pill_all": "Show every event log entry.",
   "deeper_player_tip_pill_actions": "Show only effect / rule firings dispatched by the engine.",
   "deeper_player_tip_pill_engine": "Show only engine-internal diagnostics (webcam state, rule gate hits).",
@@ -6237,5 +6237,6 @@
   "br_photo_blink_note": "the webcam counts your blinks.\nhold them open and get paid.",
   "br_photo_awareness_title": "Awareness",
   "br_photo_awareness_note": "she watches where you look.\nlook away and she says so.",
-  "br_photo_chip_pass": "WEEKLY PASS READY"
+  "br_photo_chip_pass": "WEEKLY PASS READY",
+  "deeper_player_video_nav_failed_fmt": "Video failed to load ({0})."
 }

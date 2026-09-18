@@ -5481,5 +5481,6 @@
   "br_custom_already_owned": "Уже есть в коллекции.",
   "br_custom_unowned": "Сначала получи этот предмет.",
   "br_custom_shop_unavailable": "Магазин недоступен. Просмотр по-прежнему работает.",
-  "br_custom_buy_sp": "Купить за {n} SP"
+  "br_custom_buy_sp": "Купить за {n} SP",
+  "deeper_player_video_nav_failed_fmt": "Video failed to load ({0})."
 }

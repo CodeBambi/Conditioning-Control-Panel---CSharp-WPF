@@ -457,10 +457,10 @@
         <!-- =====================================================================
              Row 3: MINI-TIMELINE READ-OUT
              32px-tall strip showing region bands + rule pins + live playhead.
-             Click-to-seek (audio mode only; video seek goes through the JS
-             time source which would race the WebView2 navigation timing —
-             deferred for v1). Header: "Timeline" label + current/total time.
-             Hidden when no enhancement is loaded.
+             Click or drag to seek in both audio and video mode (video seeks
+             go through the BrowserVideoTimeSource JS bridge). Header:
+             "Timeline" label + current/total time. Hidden when no
+             enhancement is loaded.
              ===================================================================== -->
         <StackPanel Grid.Row="3" x:Name="MiniTimelinePanel" Margin="0,0,0,10"
                     Visibility="Collapsed">
@@ -583,10 +583,19 @@
                         BorderThickness="0,0,0,1"
                         BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
                         Padding="12,6">
-                    <TextBlock x:Name="TxtStatus"
-                               Text="{loc:Str deeper_player_status_idle}"
-                               Foreground="{DynamicResource TextMutedBrush}"
-                               FontSize="10" TextWrapping="Wrap"/>
+                    <DockPanel LastChildFill="True">
+                        <!-- Sticky hint (no-enhancement-for-media, promoted-to-library).
+                             Its own element so the transport's "Playing." write
+                             can no longer overwrite it. -->
+                        <TextBlock x:Name="TxtHint" DockPanel.Dock="Right"
+                                   Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                                   FontSize="10" Margin="12,0,0,0" Visibility="Collapsed"
+                                   TextTrimming="CharacterEllipsis" MaxWidth="420"/>
+                        <TextBlock x:Name="TxtStatus"
+                                   Text="{loc:Str deeper_player_status_idle}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="10" TextWrapping="Wrap"/>
+                    </DockPanel>
                 </Border>
 
                 <!-- Filter strip -->

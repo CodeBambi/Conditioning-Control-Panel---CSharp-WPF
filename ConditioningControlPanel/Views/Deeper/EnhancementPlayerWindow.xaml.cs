@@ -56,6 +56,11 @@ namespace ConditioningControlPanel.Views.Deeper
         // "Create new enhancement..." button hand the editor a pre-linked
         // media so the user starts authoring against the right file.
         private string? _lastMediaPathForCreateNew;
+        // The media the player is actually showing right now (audio path,
+        // local video path or remote URL). _lastMediaPathForCreateNew is only
+        // set by the auto-load ladder, so a library-launched video used to
+        // cache its duration under the WRONG key (or none).
+        private string? _currentMediaPath;
 
         // Mission 3: structured event log replaces the flat string collection.
         // Implementation lives in EnhancementPlayerWindow.Mission3.cs.
@@ -96,8 +101,65 @@ namespace ConditioningControlPanel.Views.Deeper
             _uiTimer.Tick += UiTimer_Tick;
             _uiTimer.Start();
 
+            _player.Volume = App.Settings?.Current?.DeeperPlayerVolume ?? EnhancementAudioPlayer.DefaultVolume;
             UpdateVolumeFromPlayer();
             SubscribeWebcamStateForButton();
+            _instance = this;
+        }
+
+        // -- Single instance -----------------------------------------------------
+        // Every launch site shares App.DeeperPlayer / App.DeeperHost, and closing
+        // ANY player window stops the player and unbinds the engine (Window_Closing),
+        // so two open players killed each other's playback. One window, reused.
+
+        private static EnhancementPlayerWindow? _instance;
+
+        /// <summary>The open player window, or null when none is up.</summary>
+        public static EnhancementPlayerWindow? Current
+            => _instance != null && !_instance._isClosing ? _instance : null;
+
+        /// <summary>
+        /// Show the player (creating it if needed), bring it to the front, then run
+        /// <paramref name="load"/> against it. The owner is only applied to a NEW
+        /// window; an already-open player keeps whoever owned it first.
+        /// </summary>
+        public static EnhancementPlayerWindow ShowOrActivate(Window? owner, Action<EnhancementPlayerWindow>? load = null)
+        {
+            var win = Current;
+            if (win == null)
+            {
+                win = new EnhancementPlayerWindow(App.DeeperPlayer, App.DeeperHost);
+                if (owner != null) win.Owner = owner;
+                win.Show();
+            }
+            else
+            {
+                try
+                {
+                    if (win.WindowState == WindowState.Minimized) win.WindowState = WindowState.Normal;
+                    win.Activate();
+                }
+                catch (Exception ex) { Diag.Swallowed(ex); }
+            }
+            load?.Invoke(win);
+            return win;
+        }
+
+        /// <summary>
+        /// Load an in-memory enhancement (editor Preview, catalogue, tutorial). The
+        /// host fires Loaded which routes through UpdateHostUi and the right media
+        /// loader. Defers until the window's controls exist.
+        /// </summary>
+        public void LoadEnhancementFromMemory(Enhancement enhancement, string sourceTag)
+        {
+            if (enhancement == null) return;
+            void Load()
+            {
+                _lastDiscoverySource = DiscoverySource.Manual;
+                _host.LoadFromMemory(enhancement, sourceTag);
+            }
+            if (IsLoaded) Load();
+            else QueueDeferredLoad(Load);
         }
 
         /// <summary>
@@ -308,6 +370,8 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 UnbindEngineIfRunning();
                 _player.Stop();
+                _currentMediaPath = path;
+                EnsureUiTimerRunning();
 
                 ShowMediaPaneFor(MediaTypes.Video);
                 TxtVideoStatus.Text = Loc.Get("deeper_player_video_loading");
@@ -386,6 +450,7 @@ namespace ConditioningControlPanel.Views.Deeper
             // "from library / embedded / ..." badge under TxtEnhPath.
             _lastMediaPathForCreateNew = mediaPath;
             BtnCreateNewEnhancement.Visibility = Visibility.Collapsed;
+            ClearHint();
             try
             {
                 // Detection ladder (embedded -> sidecar -> library) now lives in
@@ -442,7 +507,10 @@ namespace ConditioningControlPanel.Views.Deeper
                         // Nothing found. Surface the "Create new enhancement..."
                         // button so the user can author against this media.
                         BtnCreateNewEnhancement.Visibility = Visibility.Visible;
-                        TxtStatus.Text = Loc.Get("deeper_player_no_enh_for_media");
+                        // Sticky: LoadAudio is async void and writes "Playing." into
+                        // TxtStatus when its waveform await resumes, which used to
+                        // wipe this line within a second. The hint has its own element.
+                        ShowHint(Loc.Get("deeper_player_no_enh_for_media"), autoClearSeconds: null);
                         return;
                 }
             }
@@ -452,24 +520,43 @@ namespace ConditioningControlPanel.Views.Deeper
             }
         }
 
-        // Non-modal toast under the source badge, auto-clears after ~6s.
-        private System.Windows.Threading.DispatcherTimer? _promotedClearTimer;
+        // Non-modal toast in the status bar, auto-clears after ~6s.
         private void ShowPromotedBanner(string filename)
+        {
+            ShowHint(string.Format(Loc.Get("deeper_player_promoted_to_library_fmt"), filename), autoClearSeconds: 6);
+        }
+
+        // -- Sticky hint (own element next to TxtStatus) ------------------------
+        private DispatcherTimer? _promotedClearTimer;
+
+        private void ShowHint(string text, double? autoClearSeconds)
         {
             try
             {
-                TxtStatus.Text = string.Format(Loc.Get("deeper_player_promoted_to_library_fmt"), filename);
                 _promotedClearTimer?.Stop();
-                _promotedClearTimer = new System.Windows.Threading.DispatcherTimer
+                _promotedClearTimer = null;
+                if (TxtHint == null) return;
+                TxtHint.Text = text;
+                TxtHint.Visibility = Visibility.Visible;
+                if (autoClearSeconds is double secs && secs > 0)
                 {
-                    Interval = TimeSpan.FromSeconds(6)
-                };
-                _promotedClearTimer.Tick += (_, _) =>
-                {
-                    _promotedClearTimer?.Stop();
-                    _promotedClearTimer = null;
-                };
-                _promotedClearTimer.Start();
+                    _promotedClearTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(secs) };
+                    _promotedClearTimer.Tick += (_, _) => ClearHint();
+                    _promotedClearTimer.Start();
+                }
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        private void ClearHint()
+        {
+            try
+            {
+                _promotedClearTimer?.Stop();
+                _promotedClearTimer = null;
+                if (TxtHint == null) return;
+                TxtHint.Text = "";
+                TxtHint.Visibility = Visibility.Collapsed;
             }
             catch (Exception ex) { Diag.Swallowed(ex); }
         }
@@ -510,6 +597,8 @@ namespace ConditioningControlPanel.Views.Deeper
                 UnbindEngineIfRunning();
                 _player.Stop();
                 _lastAudioPath = path;
+                _currentMediaPath = path;
+                EnsureUiTimerRunning();
 
                 TxtAudioPath.Text = path;
                 TxtStatus.Text = Loc.Get("deeper_player_status_loading_audio");
@@ -557,8 +646,11 @@ namespace ConditioningControlPanel.Views.Deeper
 
         // -- Transport ---------------------------------------------------------
 
-        private void BtnPlayPause_Click(object sender, RoutedEventArgs e)
+        private void BtnPlayPause_Click(object sender, RoutedEventArgs e) => TogglePlayPause();
+
+        private void TogglePlayPause()
         {
+            EnsureUiTimerRunning();
             // Video mode: drive the WebView2's <video> via JS bridge.
             if (_videoSource != null)
             {
@@ -570,6 +662,9 @@ namespace ConditioningControlPanel.Views.Deeper
                 else
                 {
                     MaybePromptForWebcamBeforePlay();
+                    // Stop unbinds the engine (so dispatched one-shots die with
+                    // it); re-bind before the video rolls again.
+                    EnsureVideoEngineBound();
                     _videoSource.Play();
                     BtnPlayPause.Content = "⏸";
                 }
@@ -696,6 +791,10 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             if (_videoSource != null)
             {
+                // Mirror the audio path: unbind so dispatched one-shots (haptics,
+                // flash, subliminal) stop with the video instead of running out.
+                // Detach stops the source's poll timer; TogglePlayPause re-binds.
+                UnbindEngineIfRunning();
                 try { _videoSource.Pause(); _videoSource.Seek(0); } catch (Exception ex) { Diag.Swallowed(ex); }
                 BtnPlayPause.Content = "▶";
                 TxtCurrent.Text = "0:00";
@@ -875,7 +974,21 @@ namespace ConditioningControlPanel.Views.Deeper
             // Fires during InitializeComponent when XAML applies Value="80",
             // which is before the constructor reaches the _player assignment.
             if (_player == null) return;
-            _player.Volume = (int)e.NewValue;
+            var v = (int)Math.Round(e.NewValue);
+            _player.Volume = v;
+            PersistVolume(v);
+        }
+
+        private static void PersistVolume(int volume)
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s == null || s.DeeperPlayerVolume == volume) return;
+                s.DeeperPlayerVolume = volume;
+                App.Settings?.Save(); // debounced 500 ms inside SettingsService
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void UpdateVolumeFromPlayer()
@@ -914,7 +1027,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (d > 0)
                 {
                     TxtTotal.Text = FormatTime(d);
-                    RememberDurationOnce(_lastMediaPathForCreateNew ?? _miniEnhancement?.MediaSource, d);
+                    RememberDurationOnce(_currentMediaPath, d);
                 }
                 BtnPlayPause.Content = _videoSource.IsPlaying ? "⏸" : "▶";
             }
@@ -931,6 +1044,22 @@ namespace ConditioningControlPanel.Views.Deeper
             UpdateMiniTimelineReadout();
             RefreshNowRegionOverlay();
             UpdateStatusPill();
+
+            // Nothing loaded, nothing bound: stop ticking. Every load path and
+            // the transport call EnsureUiTimerRunning to wake it back up.
+            if (IsPlayerIdle()) _uiTimer?.Stop();
+        }
+
+        private bool IsPlayerIdle()
+            => _videoSource == null
+               && _host.LoadedEnhancement == null
+               && !_player.IsPlaying && !_player.IsPaused
+               && string.IsNullOrEmpty(_player.CurrentPath);
+
+        private void EnsureUiTimerRunning()
+        {
+            try { if (_uiTimer != null && !_uiTimer.IsEnabled && !_isClosing) _uiTimer.Start(); }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void UpdateMiniTimelineReadout()
@@ -1066,6 +1195,7 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             // New enhancement loaded → re-arm the webcam pre-play prompt.
             _webcamPromptShownForCurrentEnh = false;
+            EnsureUiTimerRunning();
 
             if (enh == null)
             {
@@ -1077,6 +1207,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 ShowMediaPaneFor(MediaTypes.Audio); // default back to audio UI
                 return;
             }
+            ClearHint();
             TxtEnhPath.Text = path ?? "";
             var creator = string.IsNullOrEmpty(enh.Metadata?.Creator) ? "" : $" — {enh.Metadata.Creator}";
             var name = string.IsNullOrEmpty(enh.Metadata?.Name) ? "(untitled)" : enh.Metadata!.Name;
@@ -1150,6 +1281,8 @@ namespace ConditioningControlPanel.Views.Deeper
                 // Stop any audio path that might be active (mode swap).
                 UnbindEngineIfRunning();
                 _player.Stop();
+                _currentMediaPath = url;
+                EnsureUiTimerRunning();
 
                 TxtVideoStatus.Text = Loc.Get("deeper_player_video_loading");
                 TxtVideoStatus.Visibility = Visibility.Visible;
@@ -1197,10 +1330,24 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             _videoSource?.Dispose();
             _videoSource = new BrowserVideoTimeSource(VideoBrowser);
+            EnsureVideoEngineBound();
+        }
+
+        // Bind (or re-bind after Stop) the engine to the live video source. With
+        // no enhancement loaded there is nothing to bind, but the source still
+        // has to poll so the transport readout works.
+        private void EnsureVideoEngineBound()
+        {
             var src = _videoSource;
+            if (src == null || _host.IsRunning) return;
+            if (_host.LoadedEnhancement == null)
+            {
+                try { src.Attach(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                return;
+            }
             _host.Bind(src,
-                attach: () => src?.Attach(),
-                detach: () => { try { src?.Detach(); } catch (Exception ex) { Diag.Swallowed(ex); } });
+                attach: () => src.Attach(),
+                detach: () => { try { src.Detach(); } catch (Exception ex) { Diag.Swallowed(ex); } });
         }
 
         // Single hardened WebView2 init for the Player. Mirrors
@@ -1476,8 +1623,9 @@ namespace ConditioningControlPanel.Views.Deeper
                     App.Logger?.Debug("EnhancementPlayer: blocked nav to {Host}", Services.Logging.UrlLog.Host(e.Uri));
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Diag.Swallowed(ex, "blocking nav on error");
                 e.Cancel = true;
             }
         }
@@ -1491,6 +1639,19 @@ namespace ConditioningControlPanel.Views.Deeper
             // loop will reconcile BtnPlayPause within one tick.
             try
             {
+                if (!e.IsSuccess)
+                {
+                    // A blocked (allowlist) or failed navigation used to show
+                    // "Playing." and the pause glyph over an empty pane.
+                    var msg = string.Format(Loc.Get("deeper_player_video_nav_failed_fmt"), e.WebErrorStatus);
+                    TxtVideoStatus.Text = msg;
+                    TxtVideoStatus.Visibility = Visibility.Visible;
+                    TxtStatus.Text = msg;
+                    BtnPlayPause.Content = "▶";
+                    IngestErrorLine(msg);
+                    App.Logger?.Debug("EnhancementPlayer: video navigation failed ({Status})", e.WebErrorStatus);
+                    return;
+                }
                 TxtVideoStatus.Visibility = Visibility.Collapsed;
                 BtnPlayPause.Content = "⏸";
                 TxtStatus.Text = Loc.Get("deeper_player_status_playing");
@@ -2247,6 +2408,7 @@ namespace ConditioningControlPanel.Views.Deeper
             // so a close that lands mid-await can't start playback + bind an engine
             // that no longer has an owner to unbind it.
             _isClosing = true;
+            if (ReferenceEquals(_instance, this)) _instance = null;
 
             // Per-step try/catch: a single catch-all around the whole teardown
             // means an early throw (e.g. ScreenMirror NRE) skips _uiTimer.Stop

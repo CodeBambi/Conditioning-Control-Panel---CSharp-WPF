@@ -718,9 +718,8 @@ namespace ConditioningControlPanel
                         return false;
                     }
                     // captures MainWindow as owner; valid since this opener is registered during MainWindow's lifetime
-                    var win = new Views.Deeper.EnhancementPlayerWindow(
-                        App.DeeperPlayer, App.DeeperHost, enhancement, "catalogue") { Owner = this };
-                    win.Show();
+                    Views.Deeper.EnhancementPlayerWindow.ShowOrActivate(this,
+                        w => w.LoadEnhancementFromMemory(enhancement, "catalogue"));
                     return true;
                 }
                 catch (Exception ex)

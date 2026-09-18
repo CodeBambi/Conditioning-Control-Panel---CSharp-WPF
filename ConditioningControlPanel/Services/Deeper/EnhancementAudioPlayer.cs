@@ -33,15 +33,30 @@ namespace ConditioningControlPanel.Services.Deeper
         public long CurrentTimeMs => _reader == null ? 0 : (long)_reader.CurrentTime.TotalMilliseconds;
         public long DurationMs => _reader == null ? 0 : (long)_reader.TotalTime.TotalMilliseconds;
 
-        /// <summary>0..100. Default 80.</summary>
+        // Cached so a level set before the first Play (or between Stop and the
+        // next Play) survives: WaveOutEvent is rebuilt on every Play at 1.0, and
+        // the old setter was a no-op with no output, so the slider said 80 while
+        // the device ran at 100 until the user touched it.
+        private int _volume = DefaultVolume;
+        public const int DefaultVolume = 80;
+
+        /// <summary>0..100. Default 80. Applies to the live output and to every later Play.</summary>
         public int Volume
         {
-            get => _output == null ? 80 : (int)Math.Round(_output.Volume * 100);
+            get => _volume;
             set
             {
-                if (_output == null) return;
-                _output.Volume = Math.Clamp(value, 0, 100) / 100f;
+                _volume = ClampVolume(value);
+                ApplyVolume();
             }
+        }
+
+        internal static int ClampVolume(int value) => Math.Clamp(value, 0, 100);
+
+        private void ApplyVolume()
+        {
+            try { if (_output != null) _output.Volume = _volume / 100f; }
+            catch (Exception ex) { App.Logger?.Debug("EnhancementAudioPlayer.Volume apply error: {Error}", ex.Message); }
         }
 
         /// <summary>
@@ -77,6 +92,7 @@ namespace ConditioningControlPanel.Services.Deeper
                 _output = new WaveOutEvent { DesiredLatency = 200 };
                 App.Audio?.ApplyPreferredDevice(_output);
                 _output.Init(_reader);
+                ApplyVolume();
                 _output.PlaybackStopped += OnPlaybackStopped;
                 _output.Play();
                 _currentPath = path;
@@ -135,7 +151,7 @@ namespace ConditioningControlPanel.Services.Deeper
                 _reader.CurrentTime = TimeSpan.FromSeconds(Math.Max(0, seconds));
                 // Push a tick immediately so the engine cursor rewinds without
                 // waiting for the next 100 ms timer fire.
-                try { PlaybackTimeMsChanged?.Invoke(CurrentTimeMs); } catch { }
+                try { PlaybackTimeMsChanged?.Invoke(CurrentTimeMs); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
             catch (Exception ex) { App.Logger?.Debug("EnhancementAudioPlayer.Seek error: {Error}", ex.Message); }
         }
@@ -170,16 +186,16 @@ namespace ConditioningControlPanel.Services.Deeper
                     bool naturalEnd = _reader != null && _reader.Position >= _reader.Length - 1024;
                     if (naturalEnd)
                     {
-                        try { Ended?.Invoke(); } catch { }
+                        try { Ended?.Invoke(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     }
                     if (ex != null)
                         App.Logger?.Warning(ex, "EnhancementAudioPlayer playback stopped with error");
                 }
-                catch { }
+                catch (Exception ex2) { Diag.Swallowed(ex2); }
             }
 
             if (dispatcher.CheckAccess()) Handle();
-            else { try { dispatcher.BeginInvoke((Action)Handle); } catch { } }
+            else { try { dispatcher.BeginInvoke((Action)Handle); } catch (Exception ex2) { Diag.Swallowed(ex2); } }
         }
 
         public void Dispose()
