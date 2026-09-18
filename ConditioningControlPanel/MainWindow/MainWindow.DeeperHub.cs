@@ -9,6 +9,8 @@ using System.Windows.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models.Deeper;
 using ConditioningControlPanel.Services.Deeper;
+using DeeperMediaTypeFilter = ConditioningControlPanel.Services.Deeper.EnhancementLibraryFilter.MediaTypeFilter;
+using DeeperSortMode = ConditioningControlPanel.Services.Deeper.EnhancementLibraryFilter.SortMode;
 
 namespace ConditioningControlPanel
 {
@@ -20,8 +22,8 @@ namespace ConditioningControlPanel
     // sort dropdown, and per-row action buttons.
     public partial class MainWindow
     {
-        public enum DeeperMediaTypeFilter { All, Video, Audio }
-        public enum DeeperSortMode { Recent, Name, Creator }
+        // Filter / sort / count rules live in EnhancementLibraryFilter (pure,
+        // unit-tested); this partial only holds the UI state and the wiring.
 
         // -------------------------------------------------------------------
         // Per-row view model. Pre-computed strings + brushes + visibilities so
@@ -132,6 +134,10 @@ namespace ConditioningControlPanel
         private bool _deeperFilterHaptics;
         private bool _deeperFilterWebcam;
         private DeeperSortMode _deeperSortMode = DeeperSortMode.Recent;
+        private bool _deeperSortDescending = EnhancementLibraryFilter.DefaultDescending(DeeperSortMode.Recent);
+
+        private EnhancementLibraryFilter.Criteria CurrentDeeperCriteria()
+            => new((_deeperSearchText ?? "").Trim(), _deeperMediaTypeFilter, _deeperFilterHaptics, _deeperFilterWebcam);
 
         private DispatcherTimer? _deeperSearchDebounceTimer;
         private const int DeeperSearchDebounceMs = 150;
@@ -141,50 +147,15 @@ namespace ConditioningControlPanel
         // Filter + sort
         // -------------------------------------------------------------------
 
-        private static bool DeeperEntryMatchesSearch(EnhancementLibraryEntry e, string needle)
-        {
-            if (string.IsNullOrEmpty(needle)) return true;
-            if (e == null) return false;
-            if (Contains(e.Name, needle)) return true;
-            if (Contains(e.Creator, needle)) return true;
-            if (e.AutoTags != null)
-                foreach (var tag in e.AutoTags) if (Contains(tag, needle)) return true;
-            return false;
-            static bool Contains(string? hay, string n) =>
-                !string.IsNullOrEmpty(hay) && hay.IndexOf(n, StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        private static bool DeeperEntryMatchesMediaType(EnhancementLibraryEntry e, DeeperMediaTypeFilter filter) => filter switch
-        {
-            DeeperMediaTypeFilter.All   => true,
-            DeeperMediaTypeFilter.Video => string.Equals(e.MediaType, MediaTypes.Video, StringComparison.OrdinalIgnoreCase),
-            DeeperMediaTypeFilter.Audio => string.Equals(e.MediaType, MediaTypes.Audio, StringComparison.OrdinalIgnoreCase),
-            _ => true,
-        };
-
-        private static bool DeeperEntryHasTag(EnhancementLibraryEntry e, string tag)
-            => e.AutoTags != null && e.AutoTags.Contains(tag);
-
-        private IEnumerable<EnhancementLibraryEntry> SortDeeperEntries(IEnumerable<EnhancementLibraryEntry> src) => _deeperSortMode switch
-        {
-            DeeperSortMode.Name    => src.OrderBy(e => e.Name ?? "", StringComparer.OrdinalIgnoreCase),
-            DeeperSortMode.Creator => src.OrderBy(e => e.Creator ?? "", StringComparer.OrdinalIgnoreCase),
-            _                      => src.OrderByDescending(e => e.LastModified),
-        };
-
         private void ApplyDeeperFilterAndSort()
         {
             if (!_deeperHubInitDone) return;
             try
             {
-                var needle = (_deeperSearchText ?? "").Trim();
-                var pass = _deeperAllEntries.Where(e =>
-                    DeeperEntryMatchesSearch(e, needle) &&
-                    DeeperEntryMatchesMediaType(e, _deeperMediaTypeFilter) &&
-                    (!_deeperFilterHaptics || DeeperEntryHasTag(e, EnhancementAutoTagger.TagHaptics)) &&
-                    (!_deeperFilterWebcam  || DeeperEntryHasTag(e, EnhancementAutoTagger.TagWebcam)));
-
-                var sorted = SortDeeperEntries(pass).Select(BuildRowVm).ToList();
+                var criteria = CurrentDeeperCriteria();
+                var pass = _deeperAllEntries.Where(e => EnhancementLibraryFilter.Matches(e, criteria));
+                var sorted = EnhancementLibraryFilter.Sort(pass, _deeperSortMode, _deeperSortDescending)
+                    .Select(BuildRowVm).ToList();
 
                 DeeperFilteredEntries.Clear();
                 foreach (var vm in sorted)
@@ -195,6 +166,7 @@ namespace ConditioningControlPanel
 
                 UpdateDeeperFilterPillCounts();
                 UpdateDeeperEmptyState(sorted.Count, _deeperAllEntries.Count);
+                UpdateDeeperHeaderCount(sorted.Count, _deeperAllEntries.Count);
             }
             catch (Exception ex) { App.Logger?.Debug("ApplyDeeperFilterAndSort error: {Error}", ex.Message); }
         }
@@ -379,14 +351,9 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var needle = (_deeperSearchText ?? "").Trim();
-                var searched = _deeperAllEntries.Where(e => DeeperEntryMatchesSearch(e, needle)).ToList();
-
-                int all = searched.Count;
-                int video   = searched.Count(e => DeeperEntryMatchesMediaType(e, DeeperMediaTypeFilter.Video));
-                int audio   = searched.Count(e => DeeperEntryMatchesMediaType(e, DeeperMediaTypeFilter.Audio));
-                int haptics = searched.Count(e => DeeperEntryHasTag(e, EnhancementAutoTagger.TagHaptics));
-                int webcam  = searched.Count(e => DeeperEntryHasTag(e, EnhancementAutoTagger.TagWebcam));
+                // Each pill = rows that would show with THAT pill on and every other
+                // active filter kept, so the numbers always agree with the list.
+                var (all, video, audio, haptics, webcam) = EnhancementLibraryFilter.CountPills(_deeperAllEntries, CurrentDeeperCriteria());
 
                 if (DeeperTab.TxtDeeperPillAllCount     != null) DeeperTab.TxtDeeperPillAllCount.Text     = all.ToString(CultureInfo.InvariantCulture);
                 if (DeeperTab.TxtDeeperPillVideoCount   != null) DeeperTab.TxtDeeperPillVideoCount.Text   = video.ToString(CultureInfo.InvariantCulture);
@@ -400,12 +367,15 @@ namespace ConditioningControlPanel
         private void UpdateDeeperEmptyState(int filteredCount, int totalCount)
         {
             if (DeeperTab.TxtDeeperLibraryEmpty == null) return;
+            var actions = DeeperTab.DeeperLibraryEmptyActions;
             if (totalCount == 0)
             {
                 DeeperTab.TxtDeeperLibraryEmpty.Text = Loc.Get("deeper_library_empty");
                 DeeperTab.TxtDeeperLibraryEmpty.Visibility = Visibility.Visible;
+                if (actions != null) actions.Visibility = Visibility.Visible;
                 return;
             }
+            if (actions != null) actions.Visibility = Visibility.Collapsed;
             if (filteredCount == 0)
             {
                 DeeperTab.TxtDeeperLibraryEmpty.Text = Loc.Get("deeper_hub_empty_filtered");
@@ -413,6 +383,15 @@ namespace ConditioningControlPanel
                 return;
             }
             DeeperTab.TxtDeeperLibraryEmpty.Visibility = Visibility.Collapsed;
+        }
+
+        // "{total} file(s)", plus "({n} shown)" while a filter hides some.
+        private void UpdateDeeperHeaderCount(int shownCount, int totalCount)
+        {
+            if (DeeperTab.TxtDeeperLibraryCount == null) return;
+            DeeperTab.TxtDeeperLibraryCount.Text = shownCount == totalCount
+                ? string.Format(Loc.Get("deeper_library_count_fmt"), totalCount)
+                : string.Format(Loc.Get("deeper_library_count_shown_fmt"), totalCount, shownCount);
         }
 
         // -------------------------------------------------------------------
@@ -499,11 +478,27 @@ namespace ConditioningControlPanel
             if (!_deeperHubInitDone || DeeperTab.CmbDeeperSort?.SelectedItem is not System.Windows.Controls.ComboBoxItem item) return;
             _deeperSortMode = (item.Tag as string) switch
             {
-                "name"    => DeeperSortMode.Name,
-                "creator" => DeeperSortMode.Creator,
-                _         => DeeperSortMode.Recent,
+                "name"     => DeeperSortMode.Name,
+                "creator"  => DeeperSortMode.Creator,
+                "duration" => DeeperSortMode.Duration,
+                _          => DeeperSortMode.Recent,
             };
+            _deeperSortDescending = EnhancementLibraryFilter.DefaultDescending(_deeperSortMode);
+            RefreshDeeperSortDirGlyph();
             ApplyDeeperFilterAndSort();
+        }
+
+        internal void DeeperSortDir_Click(object sender, RoutedEventArgs e)
+        {
+            _deeperSortDescending = !_deeperSortDescending;
+            RefreshDeeperSortDirGlyph();
+            ApplyDeeperFilterAndSort();
+        }
+
+        private void RefreshDeeperSortDirGlyph()
+        {
+            if (DeeperTab.BtnDeeperSortDir != null)
+                DeeperTab.BtnDeeperSortDir.Content = _deeperSortDescending ? "▼" : "▲";
         }
 
         // -------------------------------------------------------------------
@@ -733,8 +728,6 @@ namespace ConditioningControlPanel
                 _deeperAllEntries.Add(entry);
             }
             ApplyDeeperFilterAndSort();
-            if (DeeperTab.TxtDeeperLibraryCount != null)
-                DeeperTab.TxtDeeperLibraryCount.Text = string.Format(Loc.Get("deeper_library_count_fmt"), _deeperAllEntries.Count);
             ProbeDeeperDurations();
         }
 

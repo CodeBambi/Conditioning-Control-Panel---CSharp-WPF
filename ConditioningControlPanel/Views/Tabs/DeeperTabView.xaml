@@ -412,14 +412,14 @@
                                 BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
                                 Margin="0,0,8,0"/>
                         <Button x:Name="BtnDeeperImport"
-                                ToolTip="Import a .ccpenh.json file into your library (or drag &amp; drop one anywhere on this tab)"
+                                ToolTip="{loc:Str deeper_tab_import_tooltip}"
                                 Click="BtnDeeperImport_Click"
                                 Padding="12,7" FontSize="11.5" Cursor="Hand"
                                 Background="#8C131320"
                                 Foreground="{DynamicResource DeeperAccentBrush}"
                                 BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
                                 Margin="0,0,8,0">
-                            <helpers:EmojiTextBlock Text="📥 Import"/>
+                            <helpers:EmojiTextBlock Text="{loc:Str deeper_tab_import_btn}"/>
                         </Button>
                         <Button x:Name="BtnDeeperNewEnhancement"
                                 Content="{loc:Str deeper_empty_cta}"
@@ -694,7 +694,18 @@
                                                               Tag="name"/>
                                                 <ComboBoxItem Content="{loc:Str deeper_hub_sort_creator}"
                                                               Tag="creator"/>
+                                                <ComboBoxItem Content="{loc:Str deeper_hub_sort_duration}"
+                                                              Tag="duration"/>
                                             </ComboBox>
+                                            <Button x:Name="BtnDeeperSortDir" x:FieldModifier="internal"
+                                                    Content="▼" Click="DeeperSortDir_Click"
+                                                    ToolTip="{loc:Str deeper_hub_tip_sort_dir}"
+                                                    Width="28" Height="28" Padding="0" FontSize="10"
+                                                    Margin="6,0,0,0" Cursor="Hand"
+                                                    Background="Transparent"
+                                                    Foreground="{DynamicResource DeeperAccentBrush}"
+                                                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                                    BorderThickness="1"/>
                                         </StackPanel>
                                     </Grid>
                                 </StackPanel>
@@ -734,6 +745,29 @@
                                                TextWrapping="Wrap" MaxWidth="500"
                                                Margin="0,40,0,0"
                                                TextAlignment="Center"/>
+                                    <!-- Empty-library actions (only while the library has no files). -->
+                                    <StackPanel x:Name="DeeperLibraryEmptyActions" x:FieldModifier="internal"
+                                                Orientation="Horizontal" HorizontalAlignment="Center"
+                                                VerticalAlignment="Top" Margin="0,84,0,0" Visibility="Collapsed">
+                                        <Button Content="{loc:Str deeper_empty_cta}"
+                                                Click="BtnDeeperNewEnhancement_Click"
+                                                Padding="14,7" Cursor="Hand" FontWeight="SemiBold" Margin="0,0,8,0"
+                                                Background="{DynamicResource DeeperAccentBrush}" Foreground="White"
+                                                BorderThickness="0"/>
+                                        <Button Click="BtnDeeperImport_Click"
+                                                Padding="14,7" Cursor="Hand" Margin="0,0,8,0"
+                                                Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                                Foreground="{DynamicResource DeeperAccentBrush}"
+                                                BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1">
+                                            <helpers:EmojiTextBlock Text="{loc:Str deeper_tab_import_btn}"/>
+                                        </Button>
+                                        <Button Content="{loc:Str deeper_hub_catalogue_btn}"
+                                                Click="BtnDeeperCatalogue_Click"
+                                                Padding="14,7" Cursor="Hand"
+                                                Background="Transparent"
+                                                Foreground="{DynamicResource DeeperAccentBrush}"
+                                                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"/>
+                                    </StackPanel>
                                 </Grid>
                             </DockPanel>
                         </Grid>
@@ -764,7 +798,7 @@
                                 </StackPanel>
                                 <!-- "Blink to recalibrate" is one toggle in Settings → Devices since
                                      Phase 2; this was the fifth copy of the same bool. -->
-                                <TextBlock Text="Webcam-driven Deeper triggers (gaze, blink, face-lost) need camera consent + a calibration. Both are free and configured right here."
+                                <TextBlock Text="{loc:Str deeper_webcam_card_intro}"
                                            Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                            TextWrapping="Wrap" Margin="0,0,0,10"/>
 
@@ -863,7 +897,7 @@
                                                  sync with the Blink Trainer toggle via
                                                  RefreshBlinkTrainerTrackerButton. -->
                                             <Button x:Name="BtnDeeperWebcamStartStopTracker" x:FieldModifier="internal"
-                                                    Content="Start tracker"
+                                                    Content="{loc:Str deeper_webcam_start_tracker}"
                                                     Padding="10,4" Margin="0,0,0,6" FontSize="10"
                                                     Style="{StaticResource OutlineButton}"
                                                     Click="BtnDeeperWebcamStartStopTracker_Click"/>

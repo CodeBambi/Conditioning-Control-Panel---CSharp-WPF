@@ -6255,5 +6255,12 @@
   "deeper_hub_menu_copy_path": "Copy path",
   "deeper_hub_menu_submit": "Submit to catalogue",
   "deeper_hub_menu_delete": "Delete",
-  "deeper_hub_tip_media_missing": "Media file not found at its saved location. Open the enhancement in the editor to relink it."
+  "deeper_hub_tip_media_missing": "Media file not found at its saved location. Open the enhancement in the editor to relink it.",
+  "deeper_hub_sort_duration": "Duration",
+  "deeper_hub_tip_sort_dir": "Flip the sort direction.",
+  "deeper_library_count_shown_fmt": "{0} file(s) ({1} shown)",
+  "deeper_tab_import_btn": "📥 Import",
+  "deeper_tab_import_tooltip": "Import a .ccpenh.json file into your library (or drag & drop one anywhere on this tab)",
+  "deeper_webcam_card_intro": "Webcam-driven Deeper triggers (gaze, blink, face-lost) need camera consent + a calibration. Both are free and configured right here.",
+  "deeper_webcam_start_tracker": "Start tracker"
 }

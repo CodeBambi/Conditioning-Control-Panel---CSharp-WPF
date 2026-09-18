@@ -281,5 +281,10 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.DeeperSort_SelectionChanged(sender, e);
         }
+        private void DeeperSortDir_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.DeeperSortDir_Click(sender, e);
+        }
     }
 }
