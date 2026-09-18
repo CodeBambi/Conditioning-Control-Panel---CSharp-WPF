@@ -117,10 +117,11 @@ public static class BackRoomFxPlan
 
     /// <summary>Spiral alphas: the brief one (and the pair's tail) and the full one.</summary>
     public const double SpiralBriefAlpha = 0.55, SpiralFullAlpha = 0.7;
-    /// <summary>The spiral holds (2026-09-17, were 1500 / 4000). Grown with the longer envelope in
-    /// <see cref="Overlays.BackRoomOverlayMath.SpiralFadeInMs"/> so the softer rise does not eat the time
-    /// a spiral spends at full alpha. On screen in total: this plus the 900 ms fade-out.</summary>
-    public const int SpiralBriefMs = 2000, SpiralFullMs = 5000;
+    /// <summary>The spiral holds. Decision 2026-09-17: these stay 1500 / 4000 under the 1250 ms rise in
+    /// <see cref="Overlays.BackRoomOverlayMath.SpiralFadeInMs"/>, so a brief spiral sits at full alpha for
+    /// only its last 250 ms. Growing them (2000 / 5000, #1340) was a second authored change, deliberately
+    /// not made. On screen in total: this plus the 500 ms fade-out.</summary>
+    public const int SpiralBriefMs = 1500, SpiralFullMs = 4000;
 
     /// <summary>gif-full: the cascade's tail and the jackpot's picture.</summary>
     public const double GifFullOpacity = 0.8;
