@@ -20,50 +20,39 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.9.5";
+        public const string AppVersion = "6.10.0";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.9.5 - The Spiral pt. 4
+        public const string CurrentPatchNotes = @"v6.10.0 - Let the games begin
 
-a cleaner home, a quieter first launch, and a copy pass over the whole app.
+CC LABS
+- the app now opens on a launcher, with the panel on one side and the games on the other: the Back Room, Down the Rabbit Hole, the Arcademy, Goon and the Graded Intake. you sign in there first, since every game wants an account, though the Back Room is happy with a free one.
+- the gear sets your media once for everything, whether that is your own library, online niches or a mix, and holds the master volume too.
 
-HOME
-- the premium rail is now Favorites and Recent. right-click a tile or a side rail row to pin it. every chip wears its feature art.
-- the browser card folds shut, and opens itself when a link needs it. the space it frees holds a rotating billboard.
-- left-click opens a tile, right-click switches it on or off. the app says so, on the dashboard and on the Studio rack, until you have done it a few times.
-- off tiles are grey. the Deeper editor has a tile. Just Drop lives under Studio. the mod manager is in the mod dropdown, the language picker in Settings.
+THE BACK ROOM
+- a casino behind the panel that also plays on your phone at cclabs.app, with five tables to lose your evening at: Daily Daze, three Candy slots, Soft Hand and Velvet Vortex.
+- it runs on Sparkle Points, which you earn on every level up and every 100 bubbles you pop, and which the house tends to give back.
+- EMI works the counter, where she trades them for things you cannot get anywhere else, and the shelf keeps growing.
+- the pictures on the walls come from your library or your niches, following whatever you picked in the launcher.
 
-FIRST LAUNCH, AND FEWER POP-UPS
-- the wizard is two screens, then EMI knocks and you take the short walk or not. it opens in your OS language.
-- launch pop-ups come one at a time. announcements, nudges and toasts wait in an Inbox on the title bar while you are new, in a session or in a dialog.
-- coming back with a cloud backup is one sheet, not three boxes, and your content folder stays where it was.
+???
+- one card is a question mark, because something is waiting at the counter.
+
+DEEPER
+- the editor has proper chrome and a quality of life pass, the player has keys, and the library finally has filters.
 
 EMI
-- she has noticed things: a third session in a row, a room you keep coming back to, tabbing away, a broken streak. the companions have voiced lines of their own, and the Cheshire reads you on the way down.
-- the header banner has taglines, CCP trivia and the odd read on your week between announcements. off switch under Settings > Notifications.
+- she has new lines on the marquee between announcements, and Circe speaks gender neutral.
 
-FIXES AND ASKS
-- a machine with no camera stops drawing blink quests. a never-patron drops a premium quest it cannot finish. streak fixes come back monthly, and the app says so.
-- locked achievements show how far along you are. the daily vat fills on sign-in.
-- a video the descent started ends with the descent. the Loom saves every preset, ""bambi haze"" included.
-- Lockdown: ""Hide the clock"", and a switch so the START button stops counting at you. EMI's chip and mute prompt survive a lockdown.
-- the Deeper library says how long each enhancement runs.
-- the cloud companion ends on a full sentence instead of mid-word. the log keeps the shape of a reply, never the words.
-- the Flash card has a GIF speed slider. lock cards can roll their repeat count or size a card by typing length.
-- the asset browser keeps its height in Reddit and Both. the nav rail spiral chip stops flickering. the For You page retries a blank scrolller answer.
-- a fresh install with no mod is neutral by default. a mod keeps its voice. the mod creator keeps every message field on save.
-- the copy pass: about 400 strings rewritten or moved onto translation. no exclamation marks, no sales pitch, and the help cards agree with the app.
-- freezes: the hang report names what the app was stuck in, and rides along in your next bug report.
+FIXES
+- the streak and perfect week cards show their art again, and every help card marks its key words and says where Sparkle Points come from.
+- a blank second account from a mobile sign in is recovered rather than kept, free quests stop asking for premium, the nav rail no longer sticks open, and the Arcademy annex opens like it should.
+- the Graded Intake pass is weekly and says so, with unlimited runs at tier 2.
 
-CCLABS.APP
-- the Remix page is free for everyone. the sorting room has a door, deals only loaded cards on a phone, and a pass costs the chain. the spiral calendar learns more about your days.
-
-every tier is on sale from september 11 to 18. code ARCADEMY at checkout. go play :3
-
-full nerd changelog in pull requests 900, 923 through 931, 1024, 1025, 1029, 1036, and 1038 through 1106.";
+full nerd changelog in pull requests 1107 through 1423.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

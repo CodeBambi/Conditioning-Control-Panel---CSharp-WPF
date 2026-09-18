@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>ConditioningControlPanel</AssemblyName>
     <RootNamespace>ConditioningControlPanel</RootNamespace>
-    <Version>6.9.5</Version>
+    <Version>6.10.0</Version>
     <Company>CodeBambi</Company>
     <Product>Conditioning Control Panel</Product>
     <Description>A professional visual conditioning application with gamification features.</Description>
@@ -588,7 +588,8 @@
       $(MSBuildProjectDirectory)\Resources\web\arcademy\games\**\smoke\**\*;
       $(MSBuildProjectDirectory)\Resources\web\backroom\smoke\**\*;
       $(MSBuildProjectDirectory)\Resources\web\backroom\**\tests\**\*;
-      $(MSBuildProjectDirectory)\Resources\web\backroom\shared\hypno\tests\**\*
+      $(MSBuildProjectDirectory)\Resources\web\backroom\shared\hypno\tests\**\*;
+      $(MSBuildProjectDirectory)\Resources\web\backroom\stations\breakout\**\*
     </ArcademyHarnessExcludeAbs>
   </PropertyGroup>
 
