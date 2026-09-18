@@ -9,4 +9,4 @@
   border: 1px solid #e8c5e4; background: #78416bdd; box-shadow: 0 3px 9px #0008; pointer-events: none; }
 @media (max-height: 480px) { .br-thumbstick { bottom: max(12px, env(safe-area-inset-bottom)); } }
 
-@media (any-pointer: coarse) { .br-hint { display: none !important; } }
+@media (any-pointer: coarse) { .br-hint { display: none !important; } .br-key { display: none !important; } }

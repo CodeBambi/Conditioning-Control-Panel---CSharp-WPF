@@ -443,7 +443,7 @@ await sleep(300);
   ok(JSON.stringify(await counts()) === JSON.stringify(before), 'Space and Enter on a focused Back while walking do not leave the room');
   await ev(`document.querySelector('.br-nav .br-pill').focus()`);
   await press('Enter');
-  ok(!(await dbg()).overview, 'Enter on a focused Room view button while walking does nothing');
+  ok(await ev(`document.querySelector('.br-map-list').hidden`), 'Enter on a focused Stations button while walking does nothing');
 }
 
 // 2d3. the SP chip is the room's: Law I shownSp through a flight, a station-result, Back, a balance frame and a reopen
@@ -497,15 +497,14 @@ await key('Escape');
 await sleep(200);
 ok(!(await ev(`!!document.querySelector('.br-card-veil')`)) && (await dbg()).running, 'Escape closes the card and the room walks again');
 
-// 2f. the room view
-await key('KeyM'); await key('KeyM', 'keyUp');
-await sleep(400);
-d = await dbg();
-ok(d.overview && d.ceiling === false && await ev(`!document.querySelector('.br-map-list').hidden`), 'M opens the room view with the ceiling off and the list');
-await shot('room-view.png');
+// 2f. the Stations list (the top-down room view is gone: the list is the way into a game)
 await key('KeyM'); await key('KeyM', 'keyUp');
 await sleep(200);
-ok(!(await dbg()).overview, 'M again walks');
+ok(await ev(`!document.querySelector('.br-map-list').hidden`), 'M opens the Stations list');
+await shot('stations-list.png');
+await key('KeyM'); await key('KeyM', 'keyUp');
+await sleep(200);
+ok(await ev(`document.querySelector('.br-map-list').hidden`) && (await dbg()).running, 'M again closes it and the room still walks');
 
 // 2f2. the room's Options (CONTRACT 10.14): effects intensity, tunnel vision and melt, each a room-option to the host
 {
@@ -642,14 +641,6 @@ await shot('wall-picture-from-feed.png');
   for (let i = 0; i < 40 && (await reads()) === 1; i++) await sleep(100);
   ok(await reads() === 2, 'closing the station reads the bell again');
   ok(await bellShown() && (await bellText()) === want[0], 'the ticker is back on the newest line');
-
-  // the room view hides it, exactly as it hides the Visit prompt
-  await key('KeyM'); await key('KeyM', 'keyUp');
-  await sleep(300);
-  ok(await vis() === 'hidden', 'the room view hides the bell');
-  await key('KeyM'); await key('KeyM', 'keyUp');
-  await sleep(300);
-  ok(await vis() === 'visible', 'and walking shows it again');
 
   // the opt-in: one more switch row in the 10.14 Options panel, after Melt, posting bell/opt
   const sw = `document.querySelector('.br-options button.br-switch[data-option=\"bellOptIn\"]')`;
