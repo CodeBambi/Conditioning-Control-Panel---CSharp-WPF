@@ -214,12 +214,14 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     for (const p of s.pops || []) {
       const frame = media && rungs(1) ? media.frame(p.gif) : null;
       g.save(); g.translate(p.x, p.y); g.rotate(p.rot || 0);
+      g.globalAlpha *= 0.72;                                              // dimmed a little while it falls (owner, 2026-09-18)
       g.shadowColor = col(PINK, mix, 0.6); g.shadowBlur = 10;
       roundRect(g, -p.w / 2, -p.h / 2, p.w, p.h, 3);
       if (frame) {
         g.fillStyle = col(VIOLET, mix); g.fill(); g.shadowBlur = 0; g.clip();
         const fw = frame.width || frame.naturalWidth || 1, fh = frame.height || frame.naturalHeight || 1, k = Math.max(p.w / fw, p.h / fh) * 1.05;
         g.drawImage(frame, -fw * k / 2, -fh * k / 2, fw * k, fh * k);
+        g.fillStyle = 'rgba(10,4,16,.28)'; g.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
         g.strokeStyle = col(PINK, mix, 0.8); g.lineWidth = 1; g.strokeRect(-p.w / 2 + 0.5, -p.h / 2 + 0.5, p.w - 1, p.h - 1);
       } else {
         g.fillStyle = col(toRgb(p.color) || PINK, mix); g.fill();
@@ -237,7 +239,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     g.translate(well.x, well.y); g.scale(inflate, inflate); g.translate(-well.x, -well.y);
     wellFx.draw(g, well, { mix, col, media: m, dt, sat: s.sat, particles: P,
       pink: PINK, violet: VIOLET, mint: MINT, spiral: drawSpiral });
-    if (mix > 0) drawBubble(well.x, well.y, well.r || 70, clamp(well.fade, 0, 1) * 0.95);
+    if (mix > 0) drawBubble(well.x, well.y, well.r || 70, clamp(well.fade, 0, 1) * 0.72);   // lighter than the colliders: the field must stay readable through the skin
     g.restore();
   }
   function drawColliders(s, mix) {
@@ -250,12 +252,13 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       g.shadowColor = col(PINK, mix, 0.8); g.shadowBlur = 14 + c.pulse * 20;
       g.fillStyle = col(VIOLET, mix); g.fill(); g.shadowBlur = 0;
       if (frame) {
-        g.clip();
-        // The picture fills a smaller circle and fades into the bubble's body before the rim, so it floats with room round it.
-        const inner = r * 0.86;
+        // The picture sits in a smaller circle inside the bubble and its edge fades into the bubble's body, so
+        // there is visible room between the picture and the rim (owner, 2026-09-18).
+        const inner = r * 0.7;
+        g.beginPath(); g.arc(c.x, c.y, inner, 0, 7); g.closePath(); g.clip();
         const fw = frame.width || frame.naturalWidth || 1, fh = frame.height || frame.naturalHeight || 1, k = Math.max(2 * inner / fw, 2 * inner / fh);
         g.drawImage(frame, c.x - fw * k / 2, c.y - fh * k / 2, fw * k, fh * k);
-        const fade = g.createRadialGradient(c.x, c.y, r * 0.52, c.x, c.y, r * 0.9);
+        const fade = g.createRadialGradient(c.x, c.y, inner * 0.62, c.x, c.y, inner);
         fade.addColorStop(0, col(VIOLET, mix, 0)); fade.addColorStop(1, col(VIOLET, mix, 1));
         g.fillStyle = fade; g.fillRect(c.x - r, c.y - r, 2 * r, 2 * r);
       }

@@ -54,9 +54,9 @@ export function createHostFx({ fx = null, clock = null, reduced = false } = {}) 
     shatterWall(box, key) {
       const from = box && Number.isFinite(box.x) && Number.isFinite(box.w) && box.w >= 8 && box.h >= 8
         ? { x: Math.round(box.x), y: Math.round(box.y), w: Math.round(box.w), h: Math.round(box.h) } : undefined;
-      return fire('fx.gif_from', keys(key), { from, ms: 2400, scale: 0.8 });
+      return fire('fx.gif_from', keys(key), { from, ms: 1500, scale: 0.8 });
     },
     breakout(key) { return wash(key, PINK, 1); },
-    jackpot(key) { return fire('fx.gif_from', keys(key), { ms: 2600, scale: 0.6 }, 30); },
+    jackpot(key) { return fire('fx.gif_from', keys(key), { ms: 1600, scale: 0.6 }, 30); },
   };
 }

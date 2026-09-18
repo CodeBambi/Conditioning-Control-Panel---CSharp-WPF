@@ -97,6 +97,8 @@ export function createMedia({ ctx, still = false, count = 8 } = {}) {
     /** How many deals have landed (1 after load, +1 per re-deal). */
     deals: () => deals,
     count: () => sources.length,
+    /** How many resident pictures can play (a still counts as not animated). */
+    animated: () => sources.filter(s => s.src && s.src.animated).length,
     keys: () => sources.map(s => s.key),
     frame(i) { const k = idx(i); return k < 0 ? null : sources[k].src.canvas; },
     /** Where source i sits this frame (field coords); the renderer or the station calls it before tick(). */

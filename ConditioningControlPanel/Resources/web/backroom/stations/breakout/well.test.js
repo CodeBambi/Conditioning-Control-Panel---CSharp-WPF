@@ -30,7 +30,7 @@ test('a well spawns with a picture index inside the dealt count', () => {
     assert.ok(w.gif >= 0 && w.gif < MEDIA_COUNT, `gif ${w.gif} out of range`);
     assert.equal(w.r, 70); assert.equal(w.pull, 110); assert.equal(w.captured, null);
     assert.ok(WELL_PRESETS.includes(w.preset), `preset ${w.preset} is one of the Loom's`);
-    assert.ok(w.spin >= 0.75 && w.spin <= 1.25 && w.hue >= 0 && w.hue < 360, 'its own spin and hue');
+    assert.ok(w.spin >= 0.75 && w.spin <= 1.25 && w.hue >= -35 && w.hue < 35, 'its own spin and hue');
   }
 });
 

@@ -154,7 +154,7 @@ export function createWellFx({ reduced = false, rng = Math.random, noiseTile = n
       spiral(g, well.x, well.y, r, well.rot || 0, col(pink, mix), a);
     }
     // The faint procedural arms still ride on top, so the wind has visible lines.
-    spiral(g, well.x, well.y, r * 0.88, -(well.rot || 0) * 1.3, col(mint, mix), a * 0.13, 3);
+    spiral(g, well.x, well.y, r * 0.88, (well.rot || 0) * 1.3, col(mint, mix), a * 0.13, 3);
     spiral(g, well.x, well.y, r * 0.5, (well.rot || 0) * 1.7, col(pink, mix), a * 0.16, 2);
     g.restore();
 

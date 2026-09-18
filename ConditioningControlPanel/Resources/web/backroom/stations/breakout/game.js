@@ -305,7 +305,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     // `gif` is the dealt picture the renderer winds into the whirlwind (an int, like a collider's). `born` never pauses (the bubble inflate).
     g.well = { x, y, r: 70, pull: 110, age: 0, born: 0, ttl: 6, rot: 0, used: false, fade: 1, captured: null, gif,
       // Its own Loom look: a preset, a spin factor and a hue, so no two wells read the same.
-      preset: WELL_PRESETS[Math.floor(rng() * WELL_PRESETS.length)], spin: 0.75 + rng() * 0.5, hue: Math.floor(rng() * 360) };
+      preset: WELL_PRESETS[Math.floor(rng() * WELL_PRESETS.length)], spin: 0.75 + rng() * 0.5, hue: Math.floor(rng() * 70) - 35 };
   }
   function updateWell(dt) {
     const s = g.well; if (!s) return;
@@ -317,8 +317,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   }
   function capture(b, s) {
     const rx = b.x - s.x, ry = b.y - s.y;
-    const cross = rx * b.vy - ry * b.vx;
-    b.orbit = { r: clamp(Math.hypot(rx, ry), 40, 100), a: Math.atan2(ry, rx), dir: cross < 0 ? -1 : 1, turns: 1 + rng(), done: 0 };
+    b.orbit = { r: clamp(Math.hypot(rx, ry), 40, 100), a: Math.atan2(ry, rx), dir: 1, turns: 1 + rng(), done: 0 };   // always clockwise on screen, the way the Loom field turns (owner, 2026-09-18)
     s.used = true; s.captured = b;
     emit('capture', { x: s.x, y: s.y });
   }

@@ -146,8 +146,8 @@ export async function mount(ctx) {
         break;
       case 'perfect': au('perfect'); break;
       case 'nearMiss': au('nearMiss'); break;
-      case 'jackpot': au('jackpot'); if (!d.ghost) host.jackpot(pick(s.stats.walls)); break;
-      case 'shatterWall': if (cue('shatterWall')) { au('shatterWall'); if (s.state === 'colour') host.shatterWall(fieldBox(), pick(s.stats.walls)); } break;
+      case 'jackpot': au('jackpot'); if (!d.ghost) host.jackpot(pick()); break;
+      case 'shatterWall': if (cue('shatterWall')) { au('shatterWall'); if (s.state === 'colour') host.shatterWall(fieldBox(), pick()); } break;
       case 'brickLand': au('brickLand', { x: Number.isFinite(d.x) ? d.x / s.w : 0.5 }); break;
       case 'split': au('split'); break;
       case 'popOut': au('popOut', { x: Number.isFinite(d.x) ? d.x / s.w : 0.5 }); break;
@@ -163,13 +163,15 @@ export async function mount(ctx) {
       case 'relapse': if (cue('relapse')) au('relapse'); if (subs) subs.reset(); break;
       // The breakout cue carries its own riser, so it starts with the rewind and the snap is silent.
       case 'breakoutStart': if (cue('breakout', 1500)) au('breakout'); break;
-      case 'breakout': host.breakout(pick(s.stats.walls)); break;
+      case 'breakout': host.breakout(pick()); break;
       default: break;
     }
   }
   const nowS = () => performance.now() / 1000;
   /** A dealt picture key for a moment, cycling the resident list by wall count so consecutive moments differ. */
-  const pick = (n) => { const k = media ? media.keys() : []; return k.length ? k[((n | 0) % k.length + k.length) % k.length] : null; };
+  // Every fullscreen picture is a fresh draw from the deal, never the one just shown (owner, 2026-09-18: the same one three times in a row).
+  let lastPick = -1;
+  const pick = () => { const k = media ? media.keys() : []; if (!k.length) return null; if (k.length === 1) return k[0]; let i = Math.floor(Math.random() * (k.length - 1)); if (i >= lastPick) i++; lastPick = i; return k[i]; };
   /** The playfield in page CSS px, the `from` box a fullscreen picture grows out of. */
   function fieldBox() {
     if (!canvas || !renderer) return null;
@@ -182,7 +184,7 @@ export async function mount(ctx) {
     const colour = game.snapshot().state === 'colour';    // grey is payload-free: no host picture, no sub
     if (!colour) { /* noop */ }
     else if (mantra) { const w = media.words.find(x => x.text === mantra); host.mantra(w ? w.key : null); }
-    else host.wall(n, pick(n));
+    else host.wall(n, pick());
     if (sourceChanged || (n > 0 && n % REDEAL_WALLS === 0)) {
       sourceChanged = false;
       media.redeal().then((ok) => { if (ok && game && typeof game.setWords === 'function') game.setWords(media.words.map(w => w.text)); }).catch(() => {});
@@ -221,7 +223,8 @@ export async function mount(ctx) {
     const sp = el.querySelector('.bo-speed'); if (sp && document.activeElement !== sp) sp.value = String(s.speedScale);
     const nl = el.querySelector('.bo-nolose'); if (nl) nl.checked = !!s.noLose;
     const grey = s.state === 'grey' ? `  grey ${s.greyBricks}/${s.breakoutN}` : '';
-    ui['dev-stats'].textContent = `bricks ${s.stats.bricks}  walls ${s.stats.walls}  sat ${s.sat.toFixed(2)}${grey}`;
+    const pics = typeof media.animated === 'function' ? `  pics ${media.animated()}/${media.count()} moving` : '';
+    ui['dev-stats'].textContent = `bricks ${s.stats.bricks}  walls ${s.stats.walls}  sat ${s.sat.toFixed(2)}${grey}${pics}`;
   }
   function wireDev() {
     const dev = ui.dev;

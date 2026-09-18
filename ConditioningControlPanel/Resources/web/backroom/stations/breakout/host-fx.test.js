@@ -19,10 +19,10 @@ test('every moment maps to a room primitive with the picture key in symbols', ()
   host.breakout('g0');
   assert.equal(sent.at(-1).args.strength, 1);
   host.jackpot('g1');
-  assert.deepEqual(sent.at(-1), { id: 'fx.gif_from', symbols: ['g1'], args: { ms: 2600, scale: 0.6 } });
+  assert.deepEqual(sent.at(-1), { id: 'fx.gif_from', symbols: ['g1'], args: { ms: 1600, scale: 0.6 } });
   tick(30);
   host.shatterWall({ x: 10.4, y: 20, w: 300, h: 450.6 }, 'g2');
-  assert.deepEqual(sent.at(-1).args, { from: { x: 10, y: 20, w: 300, h: 451 }, ms: 2400, scale: 0.8 });
+  assert.deepEqual(sent.at(-1).args, { from: { x: 10, y: 20, w: 300, h: 451 }, ms: 1500, scale: 0.8 });
   host.mantra('s2');
   assert.deepEqual(sent.at(-1), { id: 'fx.sub_pair', symbols: ['s2'], args: { wordsShown: true } });
   tick(30);
