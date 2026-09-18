@@ -25,6 +25,7 @@ import { createEmiInteraction, TAP_SLOP } from './emi-interaction.js';
 import { createCasinoDecor } from './casino-decor.js';
 import { createMemorabilia } from './memorabilia.js';
 import { createMemorabiliaViewer } from './memorabilia-viewer.js';
+import { createWelcomePlacards } from './welcome-placards.js';
 import { cardCounts } from '../stations/cards/layout-3d.js';
 import { slotSeat } from './slot-seat.js';
 import { seatPose, easeSeat, shortAngle } from './seat-camera.js';
@@ -40,7 +41,8 @@ const KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'A
  * @param {Object} o
  *   mount, stations, base, faces, ads, label(row,key), media(), still (bool),
  *   onNearest(row|null), onVisit(row), onProgress(0..1), log(msg),
- *   arcade (bool: the unlocked cabinet is a door), onArcade(game)
+ *   arcade (bool: the unlocked cabinet is a door), onArcade(game),
+ *   onCard(page): a tap on one of the counter's placards (welcome-placards.js) asks for the first-visit card at that page
  */
 export async function createScene(o) {
   const say = typeof o.log === 'function' ? o.log : () => {};
@@ -108,6 +110,8 @@ export async function createScene(o) {
   // The eight polaroids advertise vault cards, so their words are lexicon keys like the rest of
   // the room's chrome (LAW VII). The wall cannot reach the room's lookup on its own.
   const memorabilia = createMemorabilia({ scene, lex: o.lex });
+  // The first-visit card's two pages, framed on the counter's apron; a tap reopens the card (onCard).
+  const placards = createWelcomePlacards({ scene, lex: o.lex });
   const documents = createMemorabiliaViewer({ backLabel: o.lex('br_back', 'Back'),
     onOpen() { held = { pos: pos.slice(), yaw, pitch }; resetInput(); interaction.dismiss(); stop(); setNearest(null); },
     onClose() { held = null; resetInput(); if (!halted) run(); }
@@ -274,6 +278,7 @@ export async function createScene(o) {
       return hit.object.isMesh && hit.object.material?.depthWrite !== false;
     });
     if (surface?.object.userData.document) { drag = null; documents.open(surface.object.userData.document); return; }
+    if (surface?.object.userData.welcomePage != null) { drag = null; try { o.onCard?.(surface.object.userData.welcomePage); } catch (err) { say('onCard threw: ' + ((err && err.message) || err)); } return; }
     // A mascot stands inside its fixture, often behind its glass: a tap that reaches an NPC is the bark (emi-interaction), never a visit.
     if(interaction.npcAt(e.clientX,e.clientY))return;
     // The arcade cabinet before the stations: it stands beside the counter, and the counter's screen box (below, with its
@@ -631,7 +636,7 @@ export async function createScene(o) {
       held = null; resetInput(); run();
     },
     pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); interaction.dismiss(); customization.dismiss(); } else run(); },
-    halt() { halted = true; clearInterval(watchdog); documents.dispose(); memorabilia.dispose(); if(transition){transition.resolve(false);transition=null;} for (const view of [...views]) dropView(view); stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); for(const r of roofMaterials){r.node.material=r.original;for(const m of r.copies)m.dispose();} room.disposeSurfaces(); resetInput(); touch.dispose(); interaction.dispose(); for(const e of [...room.emis,...slotEmis])e.dispose(); customization.dispose(); decor.dispose(); room.echo.clear(); for(const p of room.payouts.values()){p.coins.dispose();p.host?.removeFromParent();} },
+    halt() { halted = true; clearInterval(watchdog); documents.dispose(); memorabilia.dispose(); placards.dispose(); if(transition){transition.resolve(false);transition=null;} for (const view of [...views]) dropView(view); stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); for(const r of roofMaterials){r.node.material=r.original;for(const m of r.copies)m.dispose();} room.disposeSurfaces(); resetInput(); touch.dispose(); interaction.dispose(); for(const e of [...room.emis,...slotEmis])e.dispose(); customization.dispose(); decor.dispose(); room.echo.clear(); for(const p of room.payouts.values()){p.coins.dispose();p.host?.removeFromParent();} },
     setStill(on) { still = !!on; },
     /** Repaint one fixture label, e.g. the wheel's screen for MUST HIT (10.16.E). */
     setLabel(rowKey, node, text) { return room.setLabel(rowKey, node, text); },

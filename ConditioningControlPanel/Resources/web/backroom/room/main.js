@@ -401,6 +401,15 @@ function wireAmbience() {
   window.addEventListener('keydown', wake, { once: true, capture: true });
 }
 
+/** The first-visit card from a placard on the counter (welcome-placards.js): the room holds still behind it,
+ * the card opens at that page in read mode, and closing it releases the room to the same spot. Nothing is
+ * remembered: the dismissal that matters was the first visit's. */
+function openCard(page) {
+  if (welcome || leaving || !scene) return;
+  scene.hold();
+  welcome = createWelcome({ layer: $('#br-layer'), lex, page, read: true, onDone: () => { welcome = null; scene?.release(); } });
+}
+
 function wireExits() {
   wireHudKeys();
   wireAmbience();
@@ -646,6 +655,8 @@ async function start(init) {
       onProgress: (f) => { hud.progress(f); intro.progress(f); },
       onNearest: (row) => hud.nearest(row),
       onVisit: (row) => visit(row),
+      // A tap on one of the counter's placards: the first-visit card again, at that page, to read and close.
+      onCard: (page) => openCard(page),
       // The room asking to stand up (a tap on the floor, a step back): the Back path, so the station settles first.
       onLeave: () => back('room'),
       canLeave: () => loader?.canLeave?.() !== false,
