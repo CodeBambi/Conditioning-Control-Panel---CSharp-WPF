@@ -970,6 +970,23 @@ namespace ConditioningControlPanel
                 });
         }
 
+        // Called from OnClosing on a real exit. A confirmed delete inside the 6 s
+        // undo grace must still happen: the DispatcherTimer dies with the window,
+        // and without this the file was never recycled and the row came back on
+        // the next launch. Every step is guarded so shutdown can never be blocked.
+        private void CommitPendingDeeperDeletesOnExit()
+        {
+            if (_deeperPendingDeletes.Count == 0) return;
+            System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, System.Windows.Threading.DispatcherTimer>> pending;
+            try { pending = new(_deeperPendingDeletes); _deeperPendingDeletes.Clear(); }
+            catch (Exception ex) { Diag.Swallowed(ex); return; }
+            foreach (var kv in pending)
+            {
+                try { kv.Value.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { CommitDeeperDelete(kv.Key); } catch (Exception ex) { Diag.Swallowed(ex); }
+            }
+        }
+
         private void CommitDeeperDelete(string fullPath)
         {
             try

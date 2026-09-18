@@ -128,6 +128,11 @@ namespace ConditioningControlPanel
         // Full path of the selected row (null = none). Kept as a path, not a VM,
         // because every filter/sort pass rebuilds the VM list.
         private string? _deeperSelectedPath;
+        // Path of the row currently flashing after an import/reveal. Held here (not
+        // only on the row VM) because the library watcher's debounced LibraryChanged
+        // lands mid-flash and ApplyDeeperFilterAndSort rebuilds every VM; without it
+        // the highlight died at ~300 ms instead of the intended 1800 ms.
+        private string? _deeperHighlightedPath;
 
         private string _deeperSearchText = "";
         private DeeperMediaTypeFilter _deeperMediaTypeFilter = DeeperMediaTypeFilter.All;
@@ -161,6 +166,7 @@ namespace ConditioningControlPanel
                 foreach (var vm in sorted)
                 {
                     vm.IsSelected = DeeperPathsEqual(vm.Entry.FilePath, _deeperSelectedPath);
+                    vm.IsHighlighted = _deeperHighlightedPath != null && DeeperPathsEqual(vm.Entry.FilePath, _deeperHighlightedPath);
                     DeeperFilteredEntries.Add(vm);
                 }
 
@@ -754,9 +760,23 @@ namespace ConditioningControlPanel
                 var scroller = FindDescendantScrollViewer(DeeperTab.DeeperLibraryList);
                 scroller?.ScrollToVerticalOffset(Math.Max(0, index - 1));
 
+                // Remember the path so a watcher-driven rebuild re-applies the flash to
+                // the fresh VM; the Tick clears both the field and whichever VM is live.
+                _deeperHighlightedPath = key;
                 vm.IsHighlighted = true;
                 var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1800) };
-                t.Tick += (_, _) => { t.Stop(); vm.IsHighlighted = false; };
+                t.Tick += (_, _) =>
+                {
+                    t.Stop();
+                    if (DeeperPathsEqual(_deeperHighlightedPath, key)) _deeperHighlightedPath = null;
+                    vm.IsHighlighted = false;
+                    try
+                    {
+                        foreach (var row in DeeperFilteredEntries)
+                            if (row.IsHighlighted && DeeperPathsEqual(row.Entry.FilePath, key)) row.IsHighlighted = false;
+                    }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
+                };
                 t.Start();
             }
             catch (Exception ex) { App.Logger?.Debug("RevealDeeperLibraryRow error: {Error}", ex.Message); }
