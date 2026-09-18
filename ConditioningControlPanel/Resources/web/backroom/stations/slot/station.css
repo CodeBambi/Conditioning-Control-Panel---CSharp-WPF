@@ -80,7 +80,9 @@
    than a freeze you have to read (Brake 9 still keeps the label). */
 .slot-freeze button[aria-pressed="true"] { color: #fff6fd; border-color: #ffd4ee; transform: translateY(2px);
   background: linear-gradient(180deg, #8c48a0, #a45fb4 55%, #b877c6);
-  box-shadow: inset 0 3px 8px #2a0c3aa8, inset 0 -1px 0 #ffffff2e, 0 0 22px #d37ad78c; }
+  box-shadow: inset 0 3px 8px #2a0c3aa8, inset 0 -1px 0 #ffffff2e, 0 0 22px #d37ad78c, 0 0 0 2px #ffd4ee66;
+  text-shadow: 0 0 6px #ffd4eecc; }
+.slot-freeze button[aria-pressed="true"]:hover:not(:disabled) { background: linear-gradient(180deg, #9a55ae, #b06cc0 55%, #c283d0); }
 /* The one button the whole station is about: a lit key, domed, sitting proud of the cabinet. */
 .slot-spin { position: absolute; z-index: 4; right: 22px; bottom: max(18px, var(--br-sill, 0px)); min-width: 120px; font-weight: 700; color: #26122f !important;
   background: linear-gradient(180deg, #ffd2ec, #e59cca 42%, #b06ac0 78%, #8e4ea0) !important;
@@ -219,6 +221,10 @@
 .slot-station[data-shared-room] .slot-controls,
 .slot-station[data-shared-room] .slot-freeze { position:absolute;inset:0;margin:0;padding:0;transform:none;pointer-events:none; }
 .slot-station[data-shared-room] .slot-freeze button { position:absolute;min-width:0;min-height:26px;height:26px;padding:3px 6px;transform:translateX(-50%);font-size:10px;letter-spacing:.25px; }
+/* The pill over the 3D sill keeps its centring AND its 2 px drop while held (the centring transform above
+   used to win, so the pressed pose never showed on the phone). */
+.slot-station[data-shared-room] .slot-freeze button[aria-pressed="true"],
+.slot-station[data-shared-room] .slot-freeze button:active:not(:disabled) { transform:translate(-50%,2px); }
 .slot-station[data-shared-room] .slot-spin { left:50%;right:auto;bottom:auto;top:80%;transform:translateX(-50%);min-width:0;min-height:44px;height:44px;padding:5px 12px; }
 .slot-station[data-shared-room] .slot-spin:active { transform:translate(-50%,2px); }
 .slot-station[data-shared-room] .slot-odds { top:max(12px,var(--br-brow));bottom:auto;right:12px; }
@@ -240,6 +246,7 @@ html:has(.slot-station[data-shared-room]) #__opt-btn { top:58px !important;botto
 
 /* Short landscape screens keep the full apron display clear beneath the controls. */
 @media (max-height:500px) and (orientation:landscape) {
+  .slot-station[data-shared-room] .slot-back { min-width:0; min-height:34px; padding:6px 12px; font-size:13px; }
   .slot-station[data-shared-room] .slot-spin { min-height:28px;height:28px;padding:1px 10px;font-size:12px;line-height:13px; }
   .slot-station[data-shared-room] .slot-spin small { font-size:9px;line-height:10px; }
   .slot-station[data-shared-room] .slot-freeze button { min-height:22px;height:22px;padding:1px 6px; }

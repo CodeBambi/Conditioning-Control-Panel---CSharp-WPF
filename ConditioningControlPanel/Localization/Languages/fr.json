@@ -5230,6 +5230,7 @@
   "br_station_slot_violet": "Candy Violet",
   "br_station_slot_mint": "Candy Mint",
   "br_station_roulette": "Velvet Vortex",
+  "br_station_breakout": "Breakout",
   "br_visit": "Visit {0}",
   "br_room_view": "Room view",
   "br_room_walk": "Back to walking",
@@ -5418,6 +5419,10 @@
   "br_slot_paytable": "Gains",
   "br_slot_pay_sp": "{n} SP",
   "br_roulette_rotate": "Mets ton telephone a la verticale: le tapis se lit mieux",
+  "br_roulette_ready": "Chips are 1 SP each, up to 3 a spin. Pick how many spins, then Spin.",
+  "br_roulette_place_bets": "Chips {n} / {max}",
+  "br_roulette_spins": "Spins ×",
+  "br_roulette_spins_n": "Spins: {n}",
   "br_slot_marquee_spin": "Ça tourne",
   "br_callout_small_win": "Petit gain",
   "br_callout_nice_spin": "Beau tour",
@@ -5503,5 +5508,6 @@
   "deeper_tab_import_btn": "📥 Import",
   "deeper_tab_import_tooltip": "Import a .ccpenh.json file into your library (or drag & drop one anywhere on this tab)",
   "deeper_webcam_card_intro": "Webcam-driven Deeper triggers (gaze, blink, face-lost) need camera consent + a calibration. Both are free and configured right here.",
-  "deeper_webcam_start_tracker": "Start tracker"
+  "deeper_webcam_start_tracker": "Start tracker",
+  "deeper_player_video_nav_failed_fmt": "Video failed to load ({0})."
 }

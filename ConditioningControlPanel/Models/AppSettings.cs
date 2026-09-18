@@ -8816,5 +8816,18 @@ namespace ConditioningControlPanel.Models
         }
 
         #endregion
+
+        #region Deeper Player
+
+        private int _deeperPlayerVolume = 80;
+        /// <summary>Last volume set in the Deeper player (0..100). Restored on the next open.</summary>
+        [JsonProperty]
+        public int DeeperPlayerVolume
+        {
+            get => _deeperPlayerVolume;
+            set { _deeperPlayerVolume = Math.Max(0, Math.Min(100, value)); OnPropertyChanged(); }
+        }
+
+        #endregion
     }
 }

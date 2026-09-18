@@ -420,7 +420,7 @@
   "deeper_player_tip_play_pause": "播放/暂停（空格键）",
   "deeper_player_tip_stop": "停止并回放到开头",
   "deeper_player_tip_volume": "输出音量（0-100）",
-  "deeper_player_tip_minitimeline": "增强区域、规则标记和实时播放头的只读摘要。点击定位（仅音频）",
+  "deeper_player_tip_minitimeline": "增强区域、规则标记和实时播放头的只读摘要。点击或拖动定位",
   "deeper_player_tip_pill_all": "显示所有事件日志条目",
   "deeper_player_tip_pill_actions": "仅显示引擎分发的效果/规则触发",
   "deeper_player_tip_pill_engine": "仅显示引擎内部诊断（摄像头状态、规则门控命中）",
@@ -5742,6 +5742,7 @@
   "br_station_slot_violet": "Candy Violet",
   "br_station_slot_mint": "Candy Mint",
   "br_station_roulette": "Velvet Vortex",
+  "br_station_breakout": "Breakout",
   "br_visit": "Visit {0}",
   "br_room_view": "Room view",
   "br_room_walk": "Back to walking",
@@ -5930,6 +5931,10 @@
   "br_slot_paytable": "奖励",
   "br_slot_pay_sp": "{n} SP",
   "br_roulette_rotate": "把手机竖过来，号码盘更好认",
+  "br_roulette_ready": "Chips are 1 SP each, up to 3 a spin. Pick how many spins, then Spin.",
+  "br_roulette_place_bets": "Chips {n} / {max}",
+  "br_roulette_spins": "Spins ×",
+  "br_roulette_spins_n": "Spins: {n}",
   "br_slot_marquee_spin": "旋转中",
   "br_callout_small_win": "小奖",
   "br_callout_nice_spin": "漂亮一转",
@@ -6015,5 +6020,6 @@
   "deeper_tab_import_btn": "📥 Import",
   "deeper_tab_import_tooltip": "Import a .ccpenh.json file into your library (or drag & drop one anywhere on this tab)",
   "deeper_webcam_card_intro": "Webcam-driven Deeper triggers (gaze, blink, face-lost) need camera consent + a calibration. Both are free and configured right here.",
-  "deeper_webcam_start_tracker": "Start tracker"
+  "deeper_webcam_start_tracker": "Start tracker",
+  "deeper_player_video_nav_failed_fmt": "Video failed to load ({0})."
 }

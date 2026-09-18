@@ -582,19 +582,14 @@ namespace ConditioningControlPanel
             // which knows how to load the bound media (URL or local file).
             //
             // A player that already has THIS file loaded is just brought to the
-            // front: every player shares App.DeeperHost, so a second window would
-            // restart (and, on close, kill) the first one's playback.
-            try
+            // front without reloading: the host would otherwise restart playback
+            // from the top. ShowOrActivate owns the single-window bookkeeping.
+            if (Views.Deeper.EnhancementPlayerWindow.Current != null
+                && DeeperPathsEqual(App.DeeperHost?.LoadedFilePath, entry.FilePath))
             {
-                var open = Application.Current.Windows.OfType<Views.Deeper.EnhancementPlayerWindow>().FirstOrDefault();
-                if (open != null && DeeperPathsEqual(App.DeeperHost?.LoadedFilePath, entry.FilePath))
-                {
-                    if (open.WindowState == WindowState.Minimized) open.WindowState = WindowState.Normal;
-                    open.Activate();
-                    return;
-                }
+                try { Views.Deeper.EnhancementPlayerWindow.ShowOrActivate(this); return; }
+                catch (Exception ex) { Diag.Swallowed(ex); }
             }
-            catch (Exception ex) { Diag.Swallowed(ex); }
             OpenDeeperEnhancementInPlayer(entry.FilePath);
         }
 

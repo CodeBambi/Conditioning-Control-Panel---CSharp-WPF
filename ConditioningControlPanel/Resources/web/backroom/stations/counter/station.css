@@ -126,7 +126,8 @@
 @media (prefers-reduced-motion: reduce) { .counter-station * { transition: none !important; animation: none !important; } }
 
 @media (max-width: 800px) {
-  .counter-station[data-host-back] .counter-top { padding: 12px 16px 6px; margin-top: 44px; }
+  /* .br-through too: in the room without a host Back (the site) the title still has to clear the nav pills' row. */
+  .counter-station[data-host-back] .counter-top, .br-through > .counter-station .counter-top { padding: 12px 16px 6px; margin-top: 44px; }
   .counter-grid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px; }
   .counter-title { font-size: 17px; }
 }

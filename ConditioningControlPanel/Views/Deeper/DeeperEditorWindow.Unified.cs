@@ -13,6 +13,7 @@ using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Deeper;
 using Microsoft.Win32;
 using ConditioningControlPanel.Localization;
+using static ConditioningControlPanel.Views.Deeper.DeeperEditorGeometry;
 
 namespace ConditioningControlPanel.Views.Deeper
 {
@@ -430,11 +431,9 @@ namespace ConditioningControlPanel.Views.Deeper
                 HandleSelectionClick(item);
                 if (ctrl)
                 {
-                    // Pure toggle — refresh all lanes so the new selection-set
+                    // Pure toggle: refresh all lanes so the new selection-set
                     // membership is reflected. Don't promote to primary.
-                    RebuildRegionVisuals();
-                    RebuildHapticVisuals();
-                    RebuildEffectVisuals();
+                    RefreshSelectionVisuals();
                     return;
                 }
                 SelectEffect(item);
@@ -512,9 +511,7 @@ namespace ConditioningControlPanel.Views.Deeper
             // set membership is reflected immediately.
             if (ctrl)
             {
-                RebuildRegionVisuals();
-                RebuildHapticVisuals();
-                RebuildEffectVisuals();
+                RefreshSelectionVisuals();
                 e.Handled = true;
                 return;
             }
@@ -877,12 +874,9 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 PushUndoSnapshot();
                 _enhancement.TimelineItems.Remove(_selectedEffect);
-                _selectedEffect = null;
+                _selectionSet.Remove(_selectedEffect);
+                SelectNothing();
                 MarkDirty();
-                RebuildEffectVisuals();
-                HideAllEditors();
-                if (SelectedPlaceholder != null) SelectedPlaceholder.Visibility = Visibility.Visible;
-                RefreshRulesList();
                 ScheduleValidation();
             }
             catch (Exception ex)

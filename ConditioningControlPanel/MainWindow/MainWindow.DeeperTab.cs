@@ -206,8 +206,7 @@ namespace ConditioningControlPanel
             try { App.Bark?.NotifyUiAction("deeper_player"); } catch (Exception ex) { Diag.Swallowed(ex); }
             try
             {
-                var win = new Views.Deeper.EnhancementPlayerWindow(App.DeeperPlayer, App.DeeperHost) { Owner = this };
-                win.Show();
+                Views.Deeper.EnhancementPlayerWindow.ShowOrActivate(this);
             }
             catch (Exception ex)
             {
@@ -641,9 +640,7 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var win = new Views.Deeper.EnhancementPlayerWindow(App.DeeperPlayer, App.DeeperHost) { Owner = this };
-                win.Show();
-                win.OpenLocalMediaFile(mediaPath);
+                Views.Deeper.EnhancementPlayerWindow.ShowOrActivate(this, w => w.OpenLocalMediaFile(mediaPath));
             }
             catch (Exception ex)
             {
@@ -673,9 +670,7 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var win = new Views.Deeper.EnhancementPlayerWindow(App.DeeperPlayer, App.DeeperHost) { Owner = this };
-                win.Show();
-                win.LoadEnhancementFile(ccpenhJsonPath);
+                Views.Deeper.EnhancementPlayerWindow.ShowOrActivate(this, w => w.LoadEnhancementFile(ccpenhJsonPath));
             }
             catch (Exception ex)
             {
