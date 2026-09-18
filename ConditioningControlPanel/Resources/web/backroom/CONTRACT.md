@@ -258,15 +258,16 @@ x0.5, every duration kept, never a step skipped.
 | `fx.jackpot` (hero, 4 s) | `spiral-full` 4 s at 0.7; then at 4 s: `flash-burst` 8 (medium, opacity 1.0, 300 ms apart), `gif-rain` 4 s (19 GIFs at 0.9), `glitch-bubbles` 3, `sub-burst9` twice (the second right after the first), `gif-full` 2 s at 0.8 | |
 | `fx.gif_storm` | `flash-burst` 5 + `gif-rain` 14 GIFs over 3 s at 0.9 + `glitch-bubbles` 1 | |
 | `fx.sub_cascade` | `sub-burst9` (9 words, onsets 350 ms apart) then `gif-full` 1.5 s at 0.8 | `wordsShown` |
-| `fx.spiral_full` | `spiral-full` 4 s, alpha 0.7 | |
-| `fx.spiral_brief` | `spiral-full` 1.5 s, alpha 0.55 | |
+| `fx.spiral_full` | `spiral-full` 5 s, alpha 0.7 | |
+| `fx.spiral_brief` | `spiral-full` 2 s, alpha 0.55 | |
 | `fx.gif_burst` | `flash-burst` 5 (medium images, opacity 1.0, 300 ms apart) | `count` 1..8 (the slot's GIF tease sends 1) |
-| `fx.sub_pair` | `sub-seq` 2 then `spiral-full` 1.5 s at 0.55 | `wordsShown` |
+| `fx.sub_pair` | `sub-seq` 2 then `spiral-full` 2 s at 0.55 | `wordsShown` |
 | `fx.sub_single` | `sub-single` per word, onsets 500 ms apart | `wordsShown` |
 | `fx.melt` | `brain-drain-melt` 6 s, alpha ramping 0 to 0.8 | |
 
 Every word is VISIBLE then FADES, never a blink: in 80 ms, hold 400 ms, out 350 ms, full opacity. Every spiral fades
-in over 250 ms and out over 500 ms (the same for `fx.loom_spiral`); a fullscreen glitch pulse is 600 ms at 0.35; a
+in over 600 ms and out over 900 ms (the same for `fx.loom_spiral`); the rise is spent inside the hold and the
+fall runs after it, so a spiral is on screen for its hold plus 900 ms; a fullscreen glitch pulse is 600 ms at 0.35; a
 wash is 900 ms at default strength 0.7. `args.wordsShown: true` on the three word ids means the page rendered the
 words itself: the host leaves the word steps out and plays only the rest (single: nothing; pair: the spiral; cascade:
 the fullscreen GIF), each at its authored offset.
@@ -1825,6 +1826,39 @@ k = 2 over draft 1; prizes 1-3 fixed. One-time ownership, no refunds, no re-buys
 stays outside prestige (`lifetime_points_spent` is not touched). Nothing is sold before it works: every row
 ships OFF and is switched on by env (10.17.B).
 
+### 10.16.H Free wheel spins earned at the tables
+
+Owner decision, 2026-09-17. The wheel stays DAILY: one free spin per account per UTC day, unchanged.
+What the tables can do is BANK another one for later, off the single biggest authored moment each
+already has, so a grant always arrives with a celebration already playing.
+
+| Station | Grant | Rate | Already fires |
+|---|---|---|---|
+| slot | a `spiral3` line on a spin that was PAID for | 8,479 over DEN, 1 in 118 paid spins | `fx.spiral_full`, plus its own 3 free slot spins |
+| roulette | a WOKEN STRAIGHT (the only outcome that fires `fx.jackpot`) | about 1 in 765 spins carrying a straight bet | `fx.jackpot` |
+
+A plain Spiral Wake is 1 in 20.7 and far too rich for a daily wheel, so the straight is what makes the
+roulette grant rare. Expansion, free, jar and comp slot spins grant NOTHING: they cost 0 SP, so a
+`spiral3` inside one would mint wheel spins out of nothing. Only `paid` and `freeze` outcomes count.
+
+**The cap is 3.** Over it a grant is DROPPED, never queued, so a hot tape cannot stockpile a month of
+spins. The route logs and reports what actually landed, so a dropped grant is never announced.
+
+**Storage** `user.backroom.wheel.freeSpins`, a non-negative integer, deliberately NOT dated: a banked
+spin keeps until it is spent. It rides the wheel ledger, because the spin route replaces
+`user.backroom.wheel` wholesale and a bank left out of it would be wiped by every ordinary spin.
+Account merge adds the two banks, still capped.
+
+**Wire.** `wheel` `state` and `spin` bodies carry `freeSpins`, and the `already_spun` refusal carries
+`freeSpins: 0`. `POST spin` takes no new field: with the day spent and a bank above zero the server
+simply spends one instead of refusing. The draw uses seed scope `wheel-free-<spins>` in place of
+`wheel`, because the seed is uid + day and without it every banked spin would redraw the daily slice.
+Everything else is untouched: the same table, the same jackpot check, the same one-winner claim.
+
+**Page.** The station asks one question, `spent()`: today's spin is gone AND nothing is banked. While
+a bank is held, a spun wheel reads exactly as an unspun one (idle pose, no countdown, the rim drags),
+with `br_wheel_banked` for the status and `br_wheel_banked_n` under the button.
+
 ### 10.17.A Catalog v1
 
 Prize ids are the `prize_id` metadata already baked into the approved shelf props (`counter.glb`
@@ -1836,20 +1870,25 @@ the cards and the server share one id. Ids are immutable; names are presentation
 | `jackpot_remix` | 15 | `fx.jackpot_remix` | 1 |
 | `rt_demo` | 20 | `rt.original.00` | 2 |
 | `high_roller` | 40 | `discord.high_roller` | 3 |
-| `flashes_v2` | 240 | `fx.flash.drift_bounce`, `fx.flash.pendulum` | 4 |
-| `bubbles_v2` | 240 | `fx.bubble.rain`, `fx.bubble.spiral_in` | 5 |
+| `flashes_v2` | 30 | `fx.flash.drift_bounce`, `fx.flash.pendulum` | 4 |
+| `bubbles_v2` | 30 | `fx.bubble.rain`, `fx.bubble.spiral_in` | 5 |
 | `rt_bundle_1` | 1,200 | `rt.original.01`, `.02`, `.03` | 6 |
 | `rt_bundle_2` | 3,600 | `rt.original.00`, `.04`, `.05`, `.06` | 7 |
 | `rt_bundle_3` | 9,000 | `rt.original.00`, `.07`, `.08`, `.09`, `.10` | 8 |
 
-Whole shelf 14,355 SP. Grant ids are the client contract with the effects work and never change:
+Whole shelf 13,935 SP. The two effect rows were 240 each until 2026-09-17; they were cut to 30 so a
+player who never wants the 3D casino can still buy them out of the wheel's daily spin, whose smallest
+cash slice is 15 SP and whose ordinary cash EV is 28.5 SP. Prices are no longer literals: see 10.17.B. Grant ids are the client contract with the effects work and never change:
 `fx.jackpot_remix`, `fx.flash.drift_bounce`, `fx.flash.pendulum`, `fx.bubble.rain`, `fx.bubble.spiral_in`,
 `rt.original.00` .. `rt.original.10` (two digits, the race `trackNum`, NOT the display `n`), and the
 server-only `discord.high_roller`. An account's grants are the union over owned prizes, so `rt.original.00`
 owned twice is one grant.
 
 The catalog lives in server code (`proxy/backroom-counter.js`, `CATALOG_V1`), versioned by an integer
-`catalogVersion` (1). Changing any `priceSp` or `grants` bumps it. Lexicon keys per row:
+`catalogVersion` (2 since the 2026-09-17 reprice). Changing any `priceSp` or `grants` bumps it, and the
+bump is DERIVED, not typed: the server hashes the resolved catalog into the version, so a price that
+moves without a bump cannot ship. Prices themselves come from env `BACKROOM_COUNTER_PRICES` (10.17.B)
+over the built-in defaults. Lexicon keys per row:
 `br_prize_<prizeId>_name`, `br_prize_<prizeId>_blurb`. Racing Thoughts rows also carry
 `br_prize_rt_note` ("A first demo built on the original files. More themes and mods are coming, on request."),
 wording subject to the rights check before those rows go on sale.

@@ -35,6 +35,7 @@ export const LEX = {
   br_counter_link_discord: 'Link Discord first',
   br_counter_price: '{0} SP',
   br_counter_try: 'Try it',
+  br_counter_wheel_nudge: 'Short for the next one? The wheel spins free once a day.',
   br_counter_delivery_pending: 'The role is on its way to Discord.',
   br_counter_delivery_granted: 'The role is on your Discord account.',
   br_counter_delivery_not_in_guild: 'Join the Discord server and the role follows.',
@@ -100,6 +101,30 @@ export function cardOf(row, sp) {
   const short = row.priceSp - int(sp);
   if (short > 0) return { face: 'short', short };
   return { face: 'buy' };
+}
+
+/**
+ * The power-up rows: the two cheap effect prizes the 2026-09-17 reprice exists for, so a player who
+ * never wants the 3D casino can still buy them out of the wheel's free daily spin.
+ */
+export const POWER_UPS = Object.freeze(['flashes_v2', 'bubbles_v2']);
+
+/**
+ * THE NUDGE (owner decision, 2026-09-17). Read right after a buy lands: if what is left cannot reach
+ * the cheapest power-up still unowned, the wheel is worth a word, because its smallest cash slice
+ * covers one. Answers that row, or null - null when they can already afford it, when they own both,
+ * when neither is on sale, and (deliberately) when the buy was not their FIRST power-up.
+ *
+ * Note the arithmetic the owner asked for is strict: at 30 SP a row and 60 SP in hand, buying one
+ * leaves exactly 30, which is NOT below 30, so the median player never sees this. Widen it by moving
+ * the price in BACKROOM_COUNTER_PRICES rather than by loosening the comparison here.
+ */
+export function wheelNudge(st, boughtId) {
+  if (!obj(st) || !POWER_UPS.includes(boughtId)) return null;
+  const rows = st.catalog.filter((r) => POWER_UPS.includes(r.id));
+  if (rows.filter((r) => r.owned).length !== 1) return null;   // the FIRST power-up, not a later one
+  const next = rows.filter((r) => !r.owned && r.sale === 'on').sort((a, b) => a.priceSp - b.priceSp)[0];
+  return next && int(st.sp) < next.priceSp ? next : null;
 }
 
 /** The delivery line key for an owned row with an outside delivery (today only high_roller), or null. */
@@ -178,6 +203,11 @@ export function createCounter(deps) {
     get confirm() { return confirm && { ...confirm }; },
     get log() { return log; },
     sp: spNow,
+    /**
+     * THE NUDGE: the power-up row they cannot reach after the buy that just landed, or null.
+     * Reads the live balance, not the receipt's, so a refund or a win in the room clears it.
+     */
+    get nudge() { return st ? wheelNudge({ ...st, sp: spNow() }, flipped) : null; },
 
     async open() { const my = ++session; phase = 'loading'; confirm = null; flipped = null; changed(); return load(my); },
     close() { session++; confirm = null; phase = 'idle'; },

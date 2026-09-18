@@ -53,14 +53,14 @@ test('state reads in order, with fallbacks for every prize name and blurb', asyn
 });
 
 test('mixed faces: owned, soon, link Discord first, short by N, buy', async () => {
-  const { server, counter } = rig({ sp: 30, on: '*', discordId: null, owned: { jackpot_remix: { at: 1, paidSp: 15 } } });
+  const { server, counter } = rig({ sp: 20, on: '*', discordId: null, owned: { jackpot_remix: { at: 1, paidSp: 15 } } });
   server.setOn('jackpot_remix,rt_demo,high_roller,flashes_v2');
   await counter.open();
   assert.equal(counter.phase, 'ready');
   const faces = Object.fromEntries(counter.view().map((r) => [r.id, r.face]));
   assert.deepEqual(faces, { jackpot_remix: 'owned', rt_demo: 'buy', high_roller: 'discord', flashes_v2: 'short', bubbles_v2: 'soon',
     rt_bundle_1: 'soon', rt_bundle_2: 'soon', rt_bundle_3: 'soon' });
-  assert.equal(face(counter, 'flashes_v2').short, 210);
+  assert.equal(face(counter, 'flashes_v2').short, 10);
   assert.equal(face(counter, 'rt_demo').noteKey, 'br_prize_rt_note', 'the server row carries the RT note');
   assert.equal(face(counter, 'high_roller').noteKey, null);
   assert.equal(counter.ask('flashes_v2'), false, 'short opens no confirm');
@@ -110,7 +110,7 @@ test('without a room chip the success still chimes and never throws', async () =
 });
 
 test('busy and a lost reply keep the confirm open with retry, and the retry reuses the idem', async () => {
-  const { server, counter, sent, calls } = rig({ sp: 100, on: '*' });
+  const { server, counter, sent, calls } = rig({ sp: 10, on: '*' });
   await counter.open();
   counter.ask('flashes_v2');
   assert.equal(face(counter, 'flashes_v2').face, 'short');
@@ -126,12 +126,12 @@ test('busy and a lost reply keep the confirm open with retry, and the retry reus
   assert.ok(counter.confirm.retry && counter.confirm.idem === idem, 'too_fast keeps the confirm too');
   server.fail('buy', 'timeout', 1, { apply: true });   // settled on the server, the reply lost
   assert.equal(await counter.buy(), 'retry');
-  assert.equal(server.user.sp, 260);
+  assert.equal(server.user.sp, 470);   // 500 less the effect row's 30
   calls.length = 0;
   assert.equal(await counter.buy(), 'ok', 'the same idem replays the receipt');
   assert.deepEqual(sent.filter((x) => x.op === 'buy').map((x) => x.idem), [idem, idem, idem, idem]);
-  assert.equal(server.user.sp, 260, 'charged once');
-  assert.deepEqual(calls.filter((c) => c !== 'paint'), [['set', 260], ['set', null], 'thud', 'chime']);
+  assert.equal(server.user.sp, 470, 'charged once');
+  assert.deepEqual(calls.filter((c) => c !== 'paint'), [['set', 470], ['set', null], 'thud', 'chime']);
 });
 
 test('a second press while pending sends nothing', async () => {
@@ -263,4 +263,50 @@ test('classify maps host shapes', () => {
   assert.equal(classify({ ok: true, status: 200, body: { ok: false, reason: 'busy' } }).kind, 'retry');
   assert.equal(classify({ ok: true, status: 200, body: { ok: false, reason: 'idem_mismatch' } }).kind, 'refresh');
   assert.equal(classify({ ok: true, status: 200, body: { ok: false, reason: 'catalog_changed' } }).kind, 'catalog');
+});
+
+test('THE NUDGE: after the first power-up, a balance short of the other one points at the wheel', async () => {
+  // 45 SP: buys flashes_v2 at 30, leaves 15, which cannot reach bubbles_v2 at 30.
+  const { counter } = rig({ sp: 45, on: '*' });
+  await counter.open();
+  assert.equal(counter.nudge, null, 'nothing before a buy');
+  counter.ask('flashes_v2');
+  assert.equal(await counter.buy(), 'ok');
+  assert.equal(counter.nudge && counter.nudge.id, 'bubbles_v2');
+});
+
+test('THE NUDGE stays quiet when they can still afford the other one, or own both', async () => {
+  const rich = rig({ sp: 500, on: '*' });
+  await rich.counter.open();
+  rich.counter.ask('flashes_v2');
+  assert.equal(await rich.counter.buy(), 'ok');
+  assert.equal(rich.counter.nudge, null, '470 left covers the other row');
+
+  // The owner flagged this one: at 30 a row and 60 in hand, 30 left is NOT below 30. By design.
+  const exact = rig({ sp: 60, on: '*' });
+  await exact.counter.open();
+  exact.counter.ask('bubbles_v2');
+  assert.equal(await exact.counter.buy(), 'ok');
+  assert.equal(exact.counter.nudge, null, 'exactly enough is not short');
+
+  const both = rig({ sp: 45, on: '*', owned: { bubbles_v2: { at: 1, paidSp: 30 } } });
+  await both.counter.open();
+  both.counter.ask('flashes_v2');
+  assert.equal(await both.counter.buy(), 'ok');
+  assert.equal(both.counter.nudge, null, 'owning both leaves nothing to be short of');
+});
+
+test('THE NUDGE is for power-ups only, and only for the FIRST of them', async () => {
+  const other = rig({ sp: 20, on: '*' });
+  await other.counter.open();
+  other.counter.ask('rt_demo');                       // not a power-up row
+  assert.equal(await other.counter.buy(), 'ok');
+  assert.equal(other.counter.nudge, null);
+
+  // The second power-up: nothing left to point at, so no line even though the balance is tiny.
+  const second = rig({ sp: 35, on: '*', owned: { flashes_v2: { at: 1, paidSp: 30 } } });
+  await second.counter.open();
+  second.counter.ask('bubbles_v2');
+  assert.equal(await second.counter.buy(), 'ok');
+  assert.equal(second.counter.nudge, null);
 });

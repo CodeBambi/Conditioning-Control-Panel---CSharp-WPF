@@ -1,7 +1,7 @@
 /* mock-server.js - a stand-in for /v2/backroom/wheel/* for dev.html and the node tests. NOT the table or the
  * draw (that is CCP-Server backroom-wheel.js, table v2): it reproduces the body shapes and the rules the page
  * must cope with, from the binding API and the server lane's routes (PRs #158-159):
- *   GET state  -> { ok, sp, open, day, spun, result|null, snoozeCarry, nextResetAt,
+ *   GET state  -> { ok, sp, open, day, spun, freeSpins, result|null, snoozeCarry, nextResetAt,
  *                   jackpot:{amount, odds, wonToday, eligible, mustHit}, slices:[{id,label,pay,width,odds}], floorMs }
  *   POST spin  -> { ok, sp, result:{day, sliceId, sliceIndex, pay, snoozeCarryPaid, jackpot, jackpotFallback,
  *                   snoozed, total, capped}, jackpot, snoozeCarry, nextResetAt }
@@ -33,9 +33,9 @@ const dayKey = day => new Date(day * DAY_MS).toISOString().slice(0, 10);
 /** CONTRACT 10.16.E: TABLE_V3's jackpot, with mustHitBy pinned to the cap. */
 const JACKPOT = Object.freeze({ start: 250, perDay: 25, cap: 1000, mustHitBy: 1000, targetDays: 10 });
 
-export function createMockServer({ sp = 57, now = () => Date.now(), uid = 'dev-uid', open = true, carry = 0, eligible = true,
+export function createMockServer({ sp = 57, now = () => Date.now(), uid = 'dev-uid', open = true, carry = 0, eligible = true, freeSpins = 0,
                                    potSeedDay = null, spinners = 700, floorMs = 3000 } = {}) {
-  const user = { sp, carry, day: -1, result: null, eligible };
+  const user = { sp, carry, day: -1, result: null, eligible, freeSpins };
   const pot = { seedDay: potSeedDay, wonDay: null };
   const receipts = new Map(), faults = [], script = [], log = [];
   const dayNow = () => Math.floor(now() / DAY_MS);
@@ -73,7 +73,7 @@ export function createMockServer({ sp = 57, now = () => Date.now(), uid = 'dev-u
 
   function state() {
     const day = dayNow(), spun = user.day === day && !!user.result;
-    return { ok: true, sp: user.sp, open, day: dayKey(day), spun, result: spun ? structuredClone(user.result) : null,
+    return { ok: true, sp: user.sp, open, day: dayKey(day), spun, freeSpins: user.freeSpins || 0, result: spun ? structuredClone(user.result) : null,
              snoozeCarry: user.carry, nextResetAt: new Date((day + 1) * DAY_MS).toISOString(), jackpot: jackpotJson(day),
              slices: slices(day), floorMs };
   }
@@ -84,7 +84,9 @@ export function createMockServer({ sp = 57, now = () => Date.now(), uid = 'dev-u
     if (receipts.has(idem)) return structuredClone(receipts.get(idem));
     const day = dayNow(), next = new Date((day + 1) * DAY_MS).toISOString();
     if (user.day === day && user.result) {
-      return { ok: false, reason: 'already_spun', sp: user.sp, result: structuredClone(user.result), jackpot: jackpotJson(day), snoozeCarry: user.carry, nextResetAt: next };
+      // THE BANK (CONTRACT 10.16.H): a spin earned at a table beats already_spun.
+      if (user.freeSpins > 0) { user.freeSpins -= 1; }
+      else return { ok: false, reason: 'already_spun', sp: user.sp, result: structuredClone(user.result), jackpot: jackpotJson(day), snoozeCarry: user.carry, freeSpins: 0, nextResetAt: next };
     }
     const j = jackpot(day);
     let id = draw(day), fallback = false;

@@ -5303,6 +5303,7 @@
   "br_counter_delivery_failed": "O cargo ainda não foi entregue. Ele tenta de novo sozinho.",
   "br_prize_rt_note": "Uma primeira demo feita com os arquivos originais. Mais temas e mods vêm por aí, sob pedido.",
   "br_counter_try": "Experimentar",
+  "br_counter_wheel_nudge": "Short for the next one? The wheel spins free once a day.",
   "br_counter_details": "O que inclui",
   "br_prize_jackpot_remix_details": "Ative Jackpot Remix em Flashes. Cada flash programado tem 1 chance em 100 de usar um remix. Ele aparece quando um remix está pronto; a preparação espera um momento tranquilo e memória livre suficiente. Requer GIFs e movimento ativado. Conta como um flash e não concede SP.",
   "br_prize_flashes_v2_details": "Drift & Bounce move os flashes pela tela; Pendulum os balança a partir do topo. Arraste um GIF, arremesse-o ou arredonde seus cantos. Shatter quebra um flash dispensado em fragmentos que caem. Ative as opções em Flashes. Movimento, arraste e Shatter exigem o modo Solid desativado; os ajustes de movimento continuam valendo.",
