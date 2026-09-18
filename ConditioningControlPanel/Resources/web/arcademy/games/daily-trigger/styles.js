@@ -239,7 +239,8 @@ html.arc-reduced .g-dt-mq{opacity:.16}
 .g-dt-key.miss{background:#20203E;color:#5A5578;border-color:#2A2A4E}
 .g-dt-key.wide{min-width:clamp(52px,5.4vw,84px);font-size:11px;letter-spacing:.06em}
 .g-dt-key.glitched{color:var(--lav,#B8A6E8);text-shadow:-2px 0 var(--pink,#FF69B4),2px 0 #6EE8E0}
-.g-dt-commit{width:100%;max-width:420px;margin-top:2px}
+.g-dt-commit{width:min(100%,420px);margin:0;flex:0 0 auto;align-self:center;
+  min-height:46px;letter-spacing:.06em;position:relative;z-index:6}
 
 /* ---- ceremony overlay (absorb + detention): now a full-room moment -------- */
 .g-dt-cer{position:absolute;inset:0;z-index:12;display:flex;flex-direction:column;
@@ -415,6 +416,13 @@ html.arc-reduced .g-dt-mq{opacity:.16}
   .g-dt-key{min-width:30px;height:44px;font-size:13px}
   .g-dt-board{gap:5px}
   .g-dt-hud{top:64px;left:10px}
+  /* the commit key now hangs under the slab, so the slab gives back the height
+     it costs - board, message and key all stay above the desk instead of the
+     key sliding off the bottom edge */
+  .g-dt-slab{min-height:min(46vh,480px)}
+  .g-dt-stagezone{gap:8px;justify-content:flex-start;padding-bottom:4px}
+  .g-dt-msg{margin:0}
+  .g-dt-commit{width:min(100%,360px);min-height:44px}
 }
 /* very short viewports (the old 420px classroot fallback): drop the flourishes */
 @media (max-height:560px){
