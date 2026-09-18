@@ -10,6 +10,8 @@
         AllowDrop="True"
         DragOver="Window_DragOver"
         Drop="Window_Drop"
+        PreviewKeyDown="Window_PreviewKeyDown"
+        PreviewKeyUp="Window_PreviewKeyUp"
         Closing="Window_Closing">
 
     <Window.Resources>
@@ -430,7 +432,7 @@
                 </DockPanel>
             </Border>
 
-            <!-- Info strip: video status (left), Now: region (right). -->
+            <!-- Info strip: video status (left), hold-Esc hint, Now: region (right). -->
             <DockPanel Grid.Row="1" x:Name="MediaInfoStrip" LastChildFill="False" Margin="0,0,0,4">
                 <Border x:Name="NowRegionPanel" DockPanel.Dock="Right"
                         Padding="8,2" CornerRadius="6"
@@ -446,6 +448,16 @@
                                    VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
+                <StackPanel x:Name="HoldEscHint" DockPanel.Dock="Right" Orientation="Horizontal"
+                            Margin="0,0,8,0" VerticalAlignment="Center" Visibility="Collapsed">
+                    <TextBlock Text="{loc:Str deeper_player_hold_esc_hint}"
+                               Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                               FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <ProgressBar x:Name="HoldEscProgress" Width="70" Height="6" Minimum="0" Maximum="1"
+                                 Foreground="{DynamicResource DeeperAccentBrush}"
+                                 Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                 BorderThickness="0" VerticalAlignment="Center"/>
+                </StackPanel>
                 <TextBlock x:Name="TxtVideoStatus" DockPanel.Dock="Left"
                            Text="{loc:Str deeper_player_video_loading}"
                            Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
@@ -541,10 +553,17 @@
             <!-- Primary cluster: play/stop + time -->
             <Button x:Name="BtnPlayPause" DockPanel.Dock="Left"
                     Content="▶" Click="BtnPlayPause_Click"
-                    ToolTip="{loc:Str deeper_player_tip_play_pause}"
                     Width="38" Height="32" Padding="0"
                     Background="{DynamicResource DeeperAccentBrush}"
-                    Foreground="White" BorderThickness="0" FontSize="15"/>
+                    Foreground="White" BorderThickness="0" FontSize="15">
+                <Button.ToolTip>
+                    <TextBlock>
+                        <Run Text="{loc:Str deeper_player_tip_play_pause}"/>
+                        <LineBreak/>
+                        <Run Text="{loc:Str deeper_player_tip_shortcuts}"/>
+                    </TextBlock>
+                </Button.ToolTip>
+            </Button>
             <Button DockPanel.Dock="Left" Content="⏹"
                     Click="BtnStop_Click"
                     ToolTip="{loc:Str deeper_player_tip_stop}"

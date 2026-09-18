@@ -990,7 +990,9 @@ namespace ConditioningControlPanel.Views.Deeper
             var v = (int)Math.Round(e.NewValue);
             _player.Volume = v;
             _videoSource?.SetVolume(v / 100.0);
-            PersistVolume(v);
+            // A hand-dragged slider ends a mute; a muted 0 is never persisted.
+            if (!_muteChanging) _volumeBeforeMute = null;
+            if (_volumeBeforeMute == null) PersistVolume(v);
         }
 
         private static void PersistVolume(int volume)
@@ -1562,6 +1564,46 @@ namespace ConditioningControlPanel.Views.Deeper
                     document.addEventListener('keydown', escHandler, true);
                     window.addEventListener('keydown', escHandler, true);
 
+                    // Keyboard relay. The Chromium HWND owns focus while the page is
+                    // up, so the WPF window's PreviewKeyDown never sees a key; post
+                    // the ones the player binds (see HandlePlayerKeyDown) back to C#.
+                    function isEditable(t) {
+                        return !!(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable));
+                    }
+                    function keyName(e) {
+                        var k = e.key;
+                        if (k === ' ' || e.code === 'Space') return 'Space';
+                        if (k === 'Escape' || k === 'Esc') return 'Escape';
+                        if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown') return k;
+                        if (k === 'm' || k === 'M') return 'M';
+                        if (k === 'f' || k === 'F') return 'F';
+                        return null;
+                    }
+                    function relayDown(e) {
+                        if (!e || isEditable(e.target)) return;
+                        var n = keyName(e);
+                        if (!n) return;
+                        // F inside the page still has the user gesture, so the HTML5
+                        // fullscreen request can succeed here; C# only gets the key
+                        // when there was no video to go fullscreen on.
+                        if (n === 'F' && !e.repeat && !inAnyFs() && tryEnterFs()) {
+                            try { e.preventDefault(); } catch (_) {}
+                            return;
+                        }
+                        try {
+                            window.chrome.webview.postMessage('ccp_key:' + n + ':' + (e.shiftKey ? 1 : 0) + ':' + (e.repeat ? 1 : 0));
+                        } catch (_) {}
+                        if (n !== 'Escape' && document.querySelector('video')) {
+                            try { e.preventDefault(); } catch (_) {}
+                        }
+                    }
+                    function relayUp(e) {
+                        if (!e || keyName(e) !== 'Escape') return;
+                        try { window.chrome.webview.postMessage('ccp_keyup:Escape'); } catch (_) {}
+                    }
+                    window.addEventListener('keydown', relayDown, true);
+                    window.addEventListener('keyup', relayUp, true);
+
                     // Hide the mouse cursor after ~2 s idle while the forced
                     // fullscreen host is up. Chromium owns the cursor over its
                     // HWND, so this has to happen in the page, not in WPF.
@@ -1629,6 +1671,20 @@ namespace ConditioningControlPanel.Views.Deeper
                 else if (msg == "ccp_zoom_out")
                 {
                     Dispatcher.BeginInvoke(() => { try { AdjustVideoZoom(-0.10); } catch (Exception ex) { Diag.Swallowed(ex); } });
+                }
+                else if (msg != null && msg.StartsWith("ccp_key:", StringComparison.Ordinal))
+                {
+                    // ccp_key:<name>:<shift 0|1>:<repeat 0|1>
+                    var parts = msg.Split(':');
+                    if (parts.Length >= 4 && TryMapRelayKey(parts[1], out var key))
+                    {
+                        bool shift = parts[2] == "1", repeat = parts[3] == "1";
+                        Dispatcher.BeginInvoke(() => { try { HandlePlayerKeyDown(key, shift, repeat); } catch (Exception ex) { Diag.Swallowed(ex); } });
+                    }
+                }
+                else if (msg == "ccp_keyup:Escape")
+                {
+                    Dispatcher.BeginInvoke(() => { try { HandleEscapeUp(); } catch (Exception ex) { Diag.Swallowed(ex); } });
                 }
             }
             catch (Exception ex)
@@ -1996,13 +2052,17 @@ namespace ConditioningControlPanel.Views.Deeper
                 // these lambdas (which capture `this`) from pinning the
                 // EnhancementPlayerWindow if WPF holds internal refs to the
                 // closed fullscreen window.
+                // Same bindings as the player window (Esc/F11 exit, Space, arrows,
+                // M, F) plus the hold-Esc escape hatch, which needs KeyUp.
                 KeyEventHandler keyHandler = (_, args) =>
                 {
-                    if (args.Key == Key.Escape || args.Key == Key.F11)
-                    {
-                        ExitFullscreenViaScript();
+                    if (args.Key == Key.F11) { ExitFullscreenViaScript(); args.Handled = true; return; }
+                    if (HandlePlayerKeyDown(args.Key, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift), args.IsRepeat))
                         args.Handled = true;
-                    }
+                };
+                KeyEventHandler keyUpHandler = (_, args) =>
+                {
+                    if (args.Key == Key.Escape) { HandleEscapeUp(); args.Handled = true; }
                 };
 
                 // Clear THIS window's content, not whatever _videoFullscreenWindow
@@ -2054,6 +2114,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     }
 
                     try { built!.KeyDown -= keyHandler; } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { built!.KeyUp -= keyUpHandler; } catch (Exception ex) { Diag.Swallowed(ex); }
                     try { built!.Closing -= closingHandler; } catch (Exception ex) { Diag.Swallowed(ex); }
                     try { built!.Deactivated -= deactivatedHandler; } catch (Exception ex) { Diag.Swallowed(ex); }
                     try { built!.Activated -= activatedHandler; } catch (Exception ex) { Diag.Swallowed(ex); }
@@ -2078,6 +2139,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 };
 
                 built.KeyDown += keyHandler;
+                built.KeyUp += keyUpHandler;
                 built.Closing += closingHandler;
                 built.Deactivated += deactivatedHandler;
                 built.Activated += activatedHandler;
@@ -2451,6 +2513,7 @@ namespace ConditioningControlPanel.Views.Deeper
             _isClosing = true;
             if (ReferenceEquals(_instance, this)) _instance = null;
             SaveWindowBounds();
+            CancelEscHold();
 
             // Per-step try/catch: a single catch-all around the whole teardown
             // means an early throw (e.g. ScreenMirror NRE) skips _uiTimer.Stop
@@ -2592,6 +2655,229 @@ namespace ConditioningControlPanel.Views.Deeper
                 App.Settings?.Save();
             }
             catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        // -- Keyboard shortcuts --------------------------------------------------
+        // Space play/pause, Left/Right seek 5 s (Shift 30 s), Up/Down volume 5,
+        // M mute, F fullscreen (video), Esc leave fullscreen / close; hold Esc
+        // 3 s to stop playback and unbind the engine. The WPF window, the
+        // fullscreen host and the page-side relay all land in HandlePlayerKeyDown.
+
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (IsTextInputFocused()) return;
+            if (HandlePlayerKeyDown(e.Key, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift), e.IsRepeat))
+                e.Handled = true;
+        }
+
+        private void Window_PreviewKeyUp(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Escape) return;
+            if (IsTextInputFocused()) return;
+            HandleEscapeUp();
+            e.Handled = true;
+        }
+
+        private static bool IsTextInputFocused()
+            => Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase
+               || Keyboard.FocusedElement is PasswordBox;
+
+        private bool HandlePlayerKeyDown(Key key, bool shift, bool isRepeat)
+        {
+            switch (key)
+            {
+                case Key.Escape:
+                    _lastEscSignal = DateTime.UtcNow;
+                    if (!isRepeat) HandleEscapeDown();
+                    return true;
+                case Key.Space:
+                    if (!isRepeat) TogglePlayPause();
+                    return true;
+                case Key.Left:  SeekRelative(shift ? -30 : -5); return true;
+                case Key.Right: SeekRelative(shift ? 30 : 5); return true;
+                case Key.Up:    AdjustVolume(+5); return true;
+                case Key.Down:  AdjustVolume(-5); return true;
+                case Key.M:
+                    if (!isRepeat) ToggleMute();
+                    return true;
+                case Key.F:
+                    if (!isRepeat) ToggleVideoFullscreen();
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool TryMapRelayKey(string name, out Key key)
+        {
+            switch (name)
+            {
+                case "Space": key = Key.Space; return true;
+                case "Escape": key = Key.Escape; return true;
+                case "ArrowLeft": key = Key.Left; return true;
+                case "ArrowRight": key = Key.Right; return true;
+                case "ArrowUp": key = Key.Up; return true;
+                case "ArrowDown": key = Key.Down; return true;
+                case "M": key = Key.M; return true;
+                case "F": key = Key.F; return true;
+                default: key = Key.None; return false;
+            }
+        }
+
+        private void SeekRelative(double deltaSeconds)
+        {
+            try
+            {
+                if (_videoSource != null)
+                {
+                    var d = _videoSource.GetDurationSeconds();
+                    var t = Math.Max(0, _videoSource.GetCurrentTimeSeconds() + deltaSeconds);
+                    if (d > 0) t = Math.Min(t, d);
+                    _videoSource.Seek(t);
+                }
+                else if (_player.DurationMs > 0)
+                {
+                    var total = _player.DurationMs / 1000.0;
+                    var t = Math.Clamp(_player.CurrentTimeMs / 1000.0 + deltaSeconds, 0, total);
+                    _player.Seek(t);
+                    UpdatePlayhead(t / total);
+                }
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        private int? _volumeBeforeMute;
+        private bool _muteChanging;
+
+        private void AdjustVolume(int delta)
+        {
+            try { SliderVolume.Value = Math.Clamp(SliderVolume.Value + delta, 0, 100); }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        private void ToggleMute()
+        {
+            try
+            {
+                _muteChanging = true;
+                if (_volumeBeforeMute is int restore)
+                {
+                    _volumeBeforeMute = null;
+                    SliderVolume.Value = restore;
+                }
+                else
+                {
+                    _volumeBeforeMute = (int)Math.Round(SliderVolume.Value);
+                    SliderVolume.Value = 0;
+                }
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+            finally { _muteChanging = false; }
+        }
+
+        private void ToggleVideoFullscreen()
+        {
+            if (_videoSource == null || VideoPane.Visibility != Visibility.Visible) return;
+            if (_isVideoFullscreen || _videoFullscreenWindow != null) ExitFullscreenViaScript();
+            else EnterVideoFullscreen();
+        }
+
+        // -- Hold-Esc escape hatch -----------------------------------------------
+        // People get stranded in blink/gaze loops. Holding Esc for 3 s anywhere
+        // in the player (window, fullscreen host, or the page via the relay)
+        // stops playback and unbinds the engine. A tap still does the old thing
+        // (leave fullscreen, else close). Both are off under a strict lock.
+
+        private const double EscHoldSeconds = 3.0;
+        private DispatcherTimer? _escHoldTimer;
+        private DateTime _escHoldStart;
+        private DateTime _lastEscSignal;
+        private bool _escConsumed;
+
+        private static bool IsUnderStrictLock()
+            => App.Lockdown?.IsActive == true || App.Settings?.Current?.StrictLockEnabled == true;
+
+        private void HandleEscapeDown()
+        {
+            if (ChangePopup?.IsOpen == true)
+            {
+                ChangePopup.IsOpen = false;
+                _escConsumed = true;
+                return;
+            }
+            if (_escHoldTimer != null) return;
+            _escConsumed = false;
+            if (_isVideoFullscreen || _videoFullscreenWindow != null)
+            {
+                ExitFullscreenViaScript();
+                _escConsumed = true;
+            }
+            if (IsUnderStrictLock()) return;
+            bool anythingRunning = _host.IsRunning || _player.IsPlaying || (_videoSource?.IsPlaying ?? false);
+            if (!anythingRunning) return;
+            _escHoldStart = DateTime.UtcNow;
+            _escHoldTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+            _escHoldTimer.Tick += EscHoldTimer_Tick;
+            _escHoldTimer.Start();
+            ShowHoldEscHint(0);
+        }
+
+        private void EscHoldTimer_Tick(object? sender, EventArgs e)
+        {
+            var now = DateTime.UtcNow;
+            // A key-up can get lost across the fullscreen reparent or a focus
+            // swap between the page and the window; a long silence from the key
+            // (no repeat) counts as a release.
+            if ((now - _lastEscSignal).TotalSeconds > 1.5) { CancelEscHold(); return; }
+            var held = (now - _escHoldStart).TotalSeconds;
+            ShowHoldEscHint(Math.Min(1, held / EscHoldSeconds));
+            if (held < EscHoldSeconds) return;
+            CancelEscHold();
+            _escConsumed = true;
+            EmergencyStop();
+        }
+
+        private void HandleEscapeUp()
+        {
+            CancelEscHold();
+            if (_escConsumed) { _escConsumed = false; return; }
+            if (IsUnderStrictLock()) return;
+            if (_isVideoFullscreen || _videoFullscreenWindow != null) return;
+            Close();
+        }
+
+        private void CancelEscHold()
+        {
+            try
+            {
+                if (_escHoldTimer != null)
+                {
+                    _escHoldTimer.Stop();
+                    _escHoldTimer.Tick -= EscHoldTimer_Tick;
+                    _escHoldTimer = null;
+                }
+                if (HoldEscHint != null) HoldEscHint.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        private void ShowHoldEscHint(double fraction)
+        {
+            try
+            {
+                if (HoldEscHint == null || HoldEscProgress == null) return;
+                HoldEscProgress.Value = Math.Clamp(fraction, 0, 1);
+                HoldEscHint.Visibility = Visibility.Visible;
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        private void EmergencyStop()
+        {
+            try { ForceExitVideoFullscreen("esc hold"); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { BtnStop_Click(this, new RoutedEventArgs()); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { TxtStatus.Text = Loc.Get("deeper_player_status_escape_stopped"); } catch (Exception ex) { Diag.Swallowed(ex); }
+            App.Logger?.Information("[DeeperPlayer] hold-Esc stop");
         }
 
         // Once per loaded local file, hand the measured length to the
