@@ -103,6 +103,7 @@ const clickSel = (sel) => ev(`(() => { const b = document.querySelector(${JSON.s
 await cdp('Page.navigate',{url:`http://127.0.0.1:${PORT}/backroom/index.html`});
 ok(await until("document.documentElement.classList.contains('br-ready')",45000),'room boots');
 ok((await posted('media-request')).some(m=>m.station==='room'&&m.count===8),'room requests eight pictures');
+ok(await ev(`(()=>{const a=__backroom.scene.annex?.debug();return !!a&&a.doors.length===3&&a.clipped>0&&!!__backroom.scene.scene.getObjectByName('annex_door_annex_race')})()`),'the annex stands through the west wall with three doors and the wall cut');
 
 try {
 const coverage=await ev(`(async()=>{const T=await import('three'),root=__backroom.scene.scene,out=[];

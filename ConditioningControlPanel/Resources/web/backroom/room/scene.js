@@ -23,6 +23,7 @@ import { createScreens } from './screens.js';
 import { createSlotEmiIdle } from './slot-emi-idle.js';
 import { createEmiInteraction, TAP_SLOP } from './emi-interaction.js';
 import { createCasinoDecor } from './casino-decor.js';
+import { createAnnex } from './annex.js';
 import { createMemorabilia } from './memorabilia.js';
 import { createMemorabiliaViewer } from './memorabilia-viewer.js';
 import { createWelcomePlacards } from './welcome-placards.js';
@@ -107,6 +108,8 @@ export async function createScene(o) {
   };
   const room = await buildRoom({ scene, loader, stations: o.stations, base: o.base, faces: o.faces, label: o.label, onProgress: o.onProgress, motion, arcade: !!o.arcade });
   const decor = createCasinoDecor({ scene });
+  // The annex (annex.js): the second room through the west wall, its three doors are E targets like stations.
+  const annex = createAnnex({ scene, room, renderer, lex: o.lex });
   // The eight polaroids advertise vault cards, so their words are lexicon keys like the rest of
   // the room's chrome (LAW VII). The wall cannot reach the room's lookup on its own.
   const memorabilia = createMemorabilia({ scene, lex: o.lex });
@@ -158,7 +161,7 @@ export async function createScene(o) {
   const touch = createTouchControl({ mount: o.mount, onReset: () => vel.set(0, 0) });
   const frames = [];
   const racingRow = { id: 'race', key: 'race', name: 'Racing Thoughts', labelKey: 'br_station_race', state: 'live', approach: [4.1, 1.65, -5.7], look: [4.1, 1.2, -7.15] };
-  const stationRows = [...o.stations, customization.row, racingRow];
+  const stationRows = [...o.stations, customization.row, racingRow, ...annex.rows];
   const previewTarget = new T.Vector3();
   const roofFloor=room.ceiling?new T.Box3().setFromObject(room.ceiling).min.y:Infinity;
   const roofMaterials=[];let roofAlpha=1;
@@ -311,7 +314,7 @@ export async function createScene(o) {
    * world box projected, plus a finger's margin) holds the point, the nearest to the camera when boxes overlap.
    * The vending machine is the Room Service row (customization.js). Boxes are cached: fixtures do not move. */
   const TAP_MARGIN = 24, bounds = new Map(), corner = new T.Vector3();
-  function fixtureOf(row) { if (row.key === 'race') return room.prizes.cabinet; return row.key === 'customization' ? scene.getObjectByName('customization_vending') : room.holders.get(row.key); }
+  function fixtureOf(row) { if (row.portal) return annex.fixtureOf(row.key); if (row.key === 'race') return room.prizes.cabinet; return row.key === 'customization' ? scene.getObjectByName('customization_vending') : room.holders.get(row.key); }
   function rowOf(node) { for (let n = node; n; n = n.parent) if (n.name === 'racing_cabinet' || n === room.prizes.cabinet) return racingRow; for (let n = node; n; n = n.parent) { const row = stationRows.find(r => fixtureOf(r) === n); if (row) return row; } return null; }
   function worldBox(node) {
     let box = bounds.get(node);
@@ -459,6 +462,7 @@ export async function createScene(o) {
     room.update(dt, ambient, still, camera);
     for (const view of views) view.update?.(dt, still);
     decor.update(dt, still);
+    annex.update(dt, still, overview);
     customization.update(dt, still);
     /* The stage measured on the frame that uses it: the drawing buffer, the camera aspect and the viewport
      * below all come off the same numbers, and a phone that has just been turned reports the new box here
@@ -636,13 +640,13 @@ export async function createScene(o) {
       held = null; resetInput(); run();
     },
     pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); interaction.dismiss(); customization.dismiss(); } else run(); },
-    halt() { halted = true; clearInterval(watchdog); documents.dispose(); memorabilia.dispose(); placards.dispose(); if(transition){transition.resolve(false);transition=null;} for (const view of [...views]) dropView(view); stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); for(const r of roofMaterials){r.node.material=r.original;for(const m of r.copies)m.dispose();} room.disposeSurfaces(); resetInput(); touch.dispose(); interaction.dispose(); for(const e of [...room.emis,...slotEmis])e.dispose(); customization.dispose(); decor.dispose(); room.echo.clear(); for(const p of room.payouts.values()){p.coins.dispose();p.host?.removeFromParent();} },
+    halt() { halted = true; clearInterval(watchdog); documents.dispose(); memorabilia.dispose(); placards.dispose(); if(transition){transition.resolve(false);transition=null;} for (const view of [...views]) dropView(view); stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); for(const r of roofMaterials){r.node.material=r.original;for(const m of r.copies)m.dispose();} room.disposeSurfaces(); resetInput(); touch.dispose(); interaction.dispose(); for(const e of [...room.emis,...slotEmis])e.dispose(); customization.dispose(); decor.dispose(); annex.dispose(); room.echo.clear(); for(const p of room.payouts.values()){p.coins.dispose();p.host?.removeFromParent();} },
     setStill(on) { still = !!on; },
     /** Repaint one fixture label, e.g. the wheel's screen for MUST HIT (10.16.E). */
     setLabel(rowKey, node, text) { return room.setLabel(rowKey, node, text); },
     dismissEmi() { if(customization.dismiss())return true; const open = !!interaction.debug().id; interaction.dismiss(); return open; },
     celebrate: (key,amount,tier,text)=>room.celebrate(key,amount,tier,text),
-    customization, setOverview, go, visit,
+    customization, annex, setOverview, go, visit,
     navigationPose() { return { position: pos.slice(), yaw, pitch }; },
     pose(p, y = 0, tilt = 0) { pos.splice(0, 3, ...p); yaw = y; pitch = tilt; },
     get transitioning() { return !!transition; },
