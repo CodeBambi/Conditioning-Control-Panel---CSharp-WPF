@@ -10,6 +10,8 @@
         AllowDrop="True"
         DragOver="Window_DragOver"
         Drop="Window_Drop"
+        PreviewKeyDown="Window_PreviewKeyDown"
+        PreviewKeyUp="Window_PreviewKeyUp"
         Closing="Window_Closing">
 
     <Window.Resources>
@@ -394,10 +396,76 @@
 
         <!-- =====================================================================
              Row 2: MEDIA PANE — audio waveform OR video WebView2.
-             Hosts a "Now: [region label]" overlay (top-right) that appears
-             when the playhead is inside a region.
+             A slim WPF strip sits ABOVE the pane: webcam banner, video status,
+             hold-Esc hint and the "Now: [region]" label. They used to be
+             overlays inside the pane, but WebView2 is an HWND and nothing WPF
+             ever renders over it, so in video mode they were invisible.
              ===================================================================== -->
         <Grid Grid.Row="2" Margin="0,0,0,10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Inline, non-blocking webcam offer (replaces the pre-play MessageBox). -->
+            <Border Grid.Row="0" x:Name="WebcamBanner" Visibility="Collapsed"
+                    Margin="0,0,0,6" Padding="10,6" CornerRadius="6"
+                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1">
+                <DockPanel LastChildFill="True">
+                    <Button DockPanel.Dock="Right" x:Name="BtnWebcamBannerDismiss" Content="✕"
+                            Click="BtnWebcamBannerDismiss_Click"
+                            Width="22" Height="22" Padding="0" FontSize="10" Margin="6,0,0,0"
+                            Background="Transparent" BorderThickness="0"
+                            Foreground="{DynamicResource TextMutedBrush}"/>
+                    <Button DockPanel.Dock="Right" x:Name="BtnWebcamBannerEnable"
+                            Content="{loc:Str deeper_player_webcam_banner_enable}"
+                            Click="BtnWebcamBannerEnable_Click"
+                            Padding="10,3" FontSize="11" Margin="8,0,0,0"
+                            Background="{DynamicResource DeeperAccentBrush}"
+                            Foreground="White" BorderThickness="0"/>
+                    <TextBlock x:Name="TxtWebcamBanner"
+                               Text="{loc:Str deeper_player_webcam_banner_text}"
+                               Foreground="{DynamicResource TextLightBrush}"
+                               FontSize="11" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                </DockPanel>
+            </Border>
+
+            <!-- Info strip: video status (left), hold-Esc hint, Now: region (right). -->
+            <DockPanel Grid.Row="1" x:Name="MediaInfoStrip" LastChildFill="False" Margin="0,0,0,4">
+                <Border x:Name="NowRegionPanel" DockPanel.Dock="Right"
+                        Padding="8,2" CornerRadius="6"
+                        Background="{DynamicResource DeeperPlayerOverlayBgBrush}"
+                        Visibility="Collapsed" IsHitTestVisible="False">
+                    <StackPanel Orientation="Horizontal">
+                        <Rectangle x:Name="NowRegionSwatch" Width="8" Height="8"
+                                   RadiusX="2" RadiusY="2" Margin="0,0,6,0"
+                                   VerticalAlignment="Center"
+                                   Fill="{DynamicResource DeeperAccentBrush}"/>
+                        <TextBlock x:Name="TxtNowRegion" Text=""
+                                   Foreground="White" FontSize="10" FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+                <StackPanel x:Name="HoldEscHint" DockPanel.Dock="Right" Orientation="Horizontal"
+                            Margin="0,0,8,0" VerticalAlignment="Center" Visibility="Collapsed">
+                    <TextBlock Text="{loc:Str deeper_player_hold_esc_hint}"
+                               Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                               FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <ProgressBar x:Name="HoldEscProgress" Width="70" Height="6" Minimum="0" Maximum="1"
+                                 Foreground="{DynamicResource DeeperAccentBrush}"
+                                 Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                 BorderThickness="0" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock x:Name="TxtVideoStatus" DockPanel.Dock="Left"
+                           Text="{loc:Str deeper_player_video_loading}"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                           Visibility="Collapsed"/>
+            </DockPanel>
+
+            <Grid Grid.Row="2">
             <!-- Audio mode -->
             <Border x:Name="AudioPane"
                     Background="{DynamicResource DeeperLaneCanvasBrush}"
@@ -418,49 +486,22 @@
                     CornerRadius="4" Visibility="Collapsed">
                 <Grid>
                     <wv2:WebView2 x:Name="VideoBrowser"/>
-                    <TextBlock x:Name="TxtVideoStatus"
-                               Text="{loc:Str deeper_player_video_loading}"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"
-                               IsHitTestVisible="False"/>
-                    <!-- Zoom controls were moved up into the file context
-                         strip (BrowserZoomCluster) — overlaying them on the
-                         video competed with the page chrome. Ctrl+MouseWheel
-                         zoom on the browser itself is wired via JS injection
+                    <!-- Zoom controls live in the file context strip
+                         (BrowserZoomCluster); Ctrl+MouseWheel zoom on the
+                         browser itself is wired via JS injection
                          (see EnsureVideoBrowserReadyAsync). -->
-
                 </Grid>
             </Border>
-
-            <!-- "Now: [region]" overlay — top-right of the media pane.
-                 Updated on _uiTimer tick by RefreshNowRegionOverlay(). The
-                 background is a semi-opaque black overlay; the region label
-                 picks up the region's color. Sits above both panes so it
-                 works in audio + video modes. -->
-            <Border x:Name="NowRegionPanel"
-                    HorizontalAlignment="Right" VerticalAlignment="Top"
-                    Margin="0,8,10,0" Padding="8,3" CornerRadius="6"
-                    Background="{DynamicResource DeeperPlayerOverlayBgBrush}"
-                    Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="20">
-                <StackPanel Orientation="Horizontal">
-                    <Rectangle x:Name="NowRegionSwatch" Width="8" Height="8"
-                               RadiusX="2" RadiusY="2" Margin="0,0,6,0"
-                               VerticalAlignment="Center"
-                               Fill="{DynamicResource DeeperAccentBrush}"/>
-                    <TextBlock x:Name="TxtNowRegion" Text=""
-                               Foreground="White" FontSize="10" FontWeight="SemiBold"
-                               VerticalAlignment="Center"/>
-                </StackPanel>
-            </Border>
+            </Grid>
         </Grid>
 
         <!-- =====================================================================
              Row 3: MINI-TIMELINE READ-OUT
              32px-tall strip showing region bands + rule pins + live playhead.
              Click or drag to seek in both audio and video mode (video seeks
-             go through the BrowserVideoTimeSource JS bridge). Header:
-             "Timeline" label + current/total time. Hidden when no
-             enhancement is loaded.
+             go through the BrowserVideoTimeSource JS bridge). Hovering shows
+             the time under the cursor. Header: "Timeline" label +
+             current/total time. Hidden when no enhancement is loaded.
              ===================================================================== -->
         <StackPanel Grid.Row="3" x:Name="MiniTimelinePanel" Margin="0,0,0,10"
                     Visibility="Collapsed">
@@ -482,13 +523,24 @@
                     BorderThickness="1" CornerRadius="4" Height="32"
                     Cursor="Hand"
                     ToolTip="{loc:Str deeper_player_tip_minitimeline}">
-                <Canvas x:Name="MiniTimelineCanvas" ClipToBounds="True"
-                        Background="Transparent"
-                        SizeChanged="MiniTimelineCanvas_SizeChanged"
-                        MouseLeftButtonDown="MiniTimelineCanvas_MouseLeftButtonDown"
-                        MouseMove="MiniTimelineCanvas_MouseMove"
-                        MouseLeftButtonUp="MiniTimelineCanvas_MouseLeftButtonUp"
-                        LostMouseCapture="MiniTimelineCanvas_LostMouseCapture"/>
+                <Grid>
+                    <Canvas x:Name="MiniTimelineCanvas" ClipToBounds="True"
+                            Background="Transparent"
+                            SizeChanged="MiniTimelineCanvas_SizeChanged"
+                            MouseLeftButtonDown="MiniTimelineCanvas_MouseLeftButtonDown"
+                            MouseMove="MiniTimelineCanvas_MouseMove"
+                            MouseLeave="MiniTimelineCanvas_MouseLeave"
+                            MouseLeftButtonUp="MiniTimelineCanvas_MouseLeftButtonUp"
+                            LostMouseCapture="MiniTimelineCanvas_LostMouseCapture"/>
+                    <!-- Hover time label; positioned by MiniTimelineCanvas_MouseMove. -->
+                    <Border x:Name="MiniHoverLabel" HorizontalAlignment="Left" VerticalAlignment="Top"
+                            Padding="4,1" CornerRadius="3" IsHitTestVisible="False"
+                            Background="{DynamicResource DeeperPlayerOverlayBgBrush}"
+                            Visibility="Collapsed">
+                        <TextBlock x:Name="TxtMiniHoverTime" Text="0:00" Foreground="White"
+                                   FontSize="9" FontFamily="{DynamicResource Font.Mono}"/>
+                    </Border>
+                </Grid>
             </Border>
         </StackPanel>
 
@@ -501,10 +553,17 @@
             <!-- Primary cluster: play/stop + time -->
             <Button x:Name="BtnPlayPause" DockPanel.Dock="Left"
                     Content="▶" Click="BtnPlayPause_Click"
-                    ToolTip="{loc:Str deeper_player_tip_play_pause}"
                     Width="38" Height="32" Padding="0"
                     Background="{DynamicResource DeeperAccentBrush}"
-                    Foreground="White" BorderThickness="0" FontSize="15"/>
+                    Foreground="White" BorderThickness="0" FontSize="15">
+                <Button.ToolTip>
+                    <TextBlock>
+                        <Run Text="{loc:Str deeper_player_tip_play_pause}"/>
+                        <LineBreak/>
+                        <Run Text="{loc:Str deeper_player_tip_shortcuts}"/>
+                    </TextBlock>
+                </Button.ToolTip>
+            </Button>
             <Button DockPanel.Dock="Left" Content="⏹"
                     Click="BtnStop_Click"
                     ToolTip="{loc:Str deeper_player_tip_stop}"
@@ -539,6 +598,7 @@
                         ToolTip="{loc:Str deeper_player_tip_volume}"
                         ValueChanged="SliderVolume_ValueChanged"/>
             </StackPanel>
+            <!-- Only shown while the loaded enhancement has webcam-driven rules. -->
             <Button x:Name="BtnEyeTracking" DockPanel.Dock="Right"
                     Content="{loc:Str deeper_player_btn_eye_tracking_start}"
                     Click="BtnEyeTracking_Click"
@@ -546,7 +606,8 @@
                     Padding="12,0" Height="32" Margin="8,0,0,0" FontSize="11"
                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
                     Foreground="{DynamicResource DeeperAccentBrush}"
-                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
+                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                    Visibility="Collapsed"/>
             <Button x:Name="BtnPictureInPicture" DockPanel.Dock="Right"
                     Content="{loc:Str deeper_player_btn_pip}"
                     Click="BtnPictureInPicture_Click"

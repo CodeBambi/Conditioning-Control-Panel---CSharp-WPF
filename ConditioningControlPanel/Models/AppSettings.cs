@@ -8828,6 +8828,39 @@ namespace ConditioningControlPanel.Models
             set { _deeperPlayerVolume = Math.Max(0, Math.Min(100, value)); OnPropertyChanged(); }
         }
 
+        private double _deeperPlayerWindowLeft;
+        [JsonProperty]
+        public double DeeperPlayerWindowLeft
+        {
+            get => _deeperPlayerWindowLeft;
+            set { _deeperPlayerWindowLeft = value; OnPropertyChanged(); }
+        }
+
+        private double _deeperPlayerWindowTop;
+        [JsonProperty]
+        public double DeeperPlayerWindowTop
+        {
+            get => _deeperPlayerWindowTop;
+            set { _deeperPlayerWindowTop = value; OnPropertyChanged(); }
+        }
+
+        private double _deeperPlayerWindowWidth;
+        /// <summary>0 = never saved; the window then opens at its XAML default size, centred on its owner.</summary>
+        [JsonProperty]
+        public double DeeperPlayerWindowWidth
+        {
+            get => _deeperPlayerWindowWidth;
+            set { _deeperPlayerWindowWidth = value; OnPropertyChanged(); }
+        }
+
+        private double _deeperPlayerWindowHeight;
+        [JsonProperty]
+        public double DeeperPlayerWindowHeight
+        {
+            get => _deeperPlayerWindowHeight;
+            set { _deeperPlayerWindowHeight = value; OnPropertyChanged(); }
+        }
+
         #endregion
     }
 }

@@ -101,8 +101,10 @@ namespace ConditioningControlPanel.Views.Deeper
             _uiTimer.Tick += UiTimer_Tick;
             _uiTimer.Start();
 
-            _player.Volume = App.Settings?.Current?.DeeperPlayerVolume ?? EnhancementAudioPlayer.DefaultVolume;
+            var settings = App.Settings?.Current;
+            _player.Volume = settings?.DeeperPlayerVolume ?? EnhancementAudioPlayer.DefaultVolume;
             UpdateVolumeFromPlayer();
+            RestoreWindowBounds(settings);
             SubscribeWebcamStateForButton();
             _instance = this;
         }
@@ -120,8 +122,11 @@ namespace ConditioningControlPanel.Views.Deeper
 
         /// <summary>
         /// Show the player (creating it if needed), bring it to the front, then run
-        /// <paramref name="load"/> against it. The owner is only applied to a NEW
-        /// window; an already-open player keeps whoever owned it first.
+        /// <paramref name="load"/> against it. The owner is applied to a NEW
+        /// window; an already-open player keeps its owner, except that an editor
+        /// Preview owner hands off to a non-editor caller (the hub library, the
+        /// main window) so closing the editor no longer takes the user's library
+        /// session down with it.
         /// </summary>
         public static EnhancementPlayerWindow ShowOrActivate(Window? owner, Action<EnhancementPlayerWindow>? load = null)
         {
@@ -140,6 +145,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     win.Activate();
                 }
                 catch (Exception ex) { Diag.Swallowed(ex); }
+                HandOffOwnerFromEditor(win, owner);
             }
             load?.Invoke(win);
             return win;
@@ -179,6 +185,26 @@ namespace ConditioningControlPanel.Views.Deeper
             // window's controls are instantiated. LoadFromMemory fires Loaded
             // synchronously which then dispatches to the UI thread anyway.
             Loaded += (_, _) => _host.LoadFromMemory(enhancement, sourceTag);
+        }
+
+        // Owner pinned to the first opener was a trap: Editor Preview owned the
+        // player, the user then launched from the library (reused window), and
+        // closing the editor closed every owned window, library session included.
+        // WPF allows Owner to be reassigned after Show, so move it to the new
+        // caller whenever the current owner is an editor and the new one is not.
+        private static void HandOffOwnerFromEditor(EnhancementPlayerWindow win, Window? owner)
+        {
+            if (owner == null || owner is DeeperEditorWindow) return;
+            if (win.Owner is not DeeperEditorWindow) return;
+            try
+            {
+                win.Owner = owner;
+                App.Logger?.Debug("EnhancementPlayer: owner handed off from editor to {Owner}", owner.GetType().Name);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("EnhancementPlayer: owner hand-off failed: {Error}", ex.Message);
+            }
         }
 
         /// <summary>
@@ -593,6 +619,10 @@ namespace ConditioningControlPanel.Views.Deeper
             _loadInProgress = true;
             try
             {
+                // Mode swap: the reused window may still be rolling a video
+                // (hidden but audible) from the previous enhancement. Drop it
+                // first or BindEngineIfReady refuses the audio path its engine.
+                TearDownVideoForAudio();
                 // Stop any in-flight playback so the new file replaces it cleanly.
                 UnbindEngineIfRunning();
                 _player.Stop();
@@ -714,10 +744,11 @@ namespace ConditioningControlPanel.Views.Deeper
         private bool _webcamPromptShownForCurrentEnh;
 
         // Offer to start webcam tracking if the loaded enhancement has
-        // webcam-driven rules and the webcam isn't already running. No
-        // return value — the user's choice doesn't block playback, it just
-        // decides whether the webcam-gated rules will actually fire.
-        private async void MaybePromptForWebcamBeforePlay()
+        // webcam-driven rules and the webcam isn't already running. Inline,
+        // non-blocking banner (was a modal YesNo MessageBox): playback proceeds
+        // regardless, the banner just decides whether the webcam-gated rules
+        // will actually fire.
+        private void MaybePromptForWebcamBeforePlay()
         {
             if (_webcamPromptShownForCurrentEnh) return;
             var enh = _host?.LoadedEnhancement;
@@ -729,45 +760,55 @@ namespace ConditioningControlPanel.Views.Deeper
                 _webcamPromptShownForCurrentEnh = true;
                 return;
             }
-
-            // Mark BEFORE the dialog so a re-entrant Play click during the
-            // modal doesn't re-trigger the prompt.
             _webcamPromptShownForCurrentEnh = true;
+            try
+            {
+                TxtWebcamBanner.Text = Loc.Get("deeper_player_webcam_banner_text");
+                BtnWebcamBannerEnable.Visibility = Visibility.Visible;
+                WebcamBanner.Visibility = Visibility.Visible;
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
 
-            var result = MessageBox.Show(this,
-                Loc.Get("deeper_player_webcam_prompt_body"),
-                Loc.Get("deeper_player_webcam_prompt_title"),
-                MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (result != MessageBoxResult.Yes) return;
+        private void BtnWebcamBannerDismiss_Click(object sender, RoutedEventArgs e)
+            => WebcamBanner.Visibility = Visibility.Collapsed;
 
+        private async void BtnWebcamBannerEnable_Click(object sender, RoutedEventArgs e)
+        {
+            var svc = App.Webcam;
+            if (svc == null) { WebcamBanner.Visibility = Visibility.Collapsed; return; }
             try
             {
                 if (!WebcamTrackingService.IsConsentCurrent())
                 {
-                    // Mirror the BtnEyeTracking_Click first-time path —
-                    // consent lives in the Lab tab, not here.
-                    MessageBox.Show(this,
-                        Loc.Get("deeper_player_eye_tracking_first_time"),
-                        Loc.Get("deeper_player_btn_eye_tracking_start"),
-                        MessageBoxButton.OK, MessageBoxImage.Information);
+                    // Consent + calibration live in the Lab tab, not here. Say so
+                    // in the banner itself instead of popping another modal.
+                    TxtWebcamBanner.Text = Loc.Get("deeper_player_eye_tracking_first_time");
+                    BtnWebcamBannerEnable.Visibility = Visibility.Collapsed;
                     return;
                 }
-                // Off the UI thread — Start() opens the camera + loads ONNX
-                // models and can block several seconds; running it inline here
-                // would freeze the player and prevent the loading splash from
-                // painting. Playback already proceeded (this prompt is advisory).
+                BtnWebcamBannerEnable.IsEnabled = false;
+                // Off the UI thread: Start() opens the camera + loads ONNX models
+                // and can block for seconds.
                 if (await svc.StartAsync())
                 {
                     // Remember that THIS player session started the webcam so
                     // Window_Closing can put it back the way it found it.
-                    // Webcams the user had running before opening the player
-                    // are left alone.
                     _playerStartedWebcam = true;
+                    WebcamBanner.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    TxtWebcamBanner.Text = string.Format(Loc.Get("deeper_player_eye_tracking_start_failed_fmt"), svc.State);
                 }
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "EnhancementPlayer: webcam start from play-prompt failed");
+                App.Logger?.Warning(ex, "EnhancementPlayer: webcam start from banner failed");
+            }
+            finally
+            {
+                BtnWebcamBannerEnable.IsEnabled = true;
             }
         }
 
@@ -976,7 +1017,10 @@ namespace ConditioningControlPanel.Views.Deeper
             if (_player == null) return;
             var v = (int)Math.Round(e.NewValue);
             _player.Volume = v;
-            PersistVolume(v);
+            _videoSource?.SetVolume(v / 100.0);
+            // A hand-dragged slider ends a mute; a muted 0 is never persisted.
+            if (!_muteChanging) _volumeBeforeMute = null;
+            if (_volumeBeforeMute == null) PersistVolume(v);
         }
 
         private static void PersistVolume(int volume)
@@ -1195,6 +1239,7 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             // New enhancement loaded → re-arm the webcam pre-play prompt.
             _webcamPromptShownForCurrentEnh = false;
+            WebcamBanner.Visibility = Visibility.Collapsed;
             EnsureUiTimerRunning();
 
             if (enh == null)
@@ -1203,6 +1248,8 @@ namespace ConditioningControlPanel.Views.Deeper
                 TxtEnhMetadata.Text = "";
                 BtnUnloadEnhancement.Visibility = Visibility.Collapsed;
                 TxtEnhSource.Visibility = Visibility.Collapsed;
+                BtnEyeTracking.Visibility = Visibility.Collapsed;
+                Title = Loc.Get("deeper_player_title");
                 UnbindEngineIfRunning();
                 ShowMediaPaneFor(MediaTypes.Audio); // default back to audio UI
                 return;
@@ -1211,6 +1258,10 @@ namespace ConditioningControlPanel.Views.Deeper
             TxtEnhPath.Text = path ?? "";
             var creator = string.IsNullOrEmpty(enh.Metadata?.Creator) ? "" : $" — {enh.Metadata.Creator}";
             var name = string.IsNullOrEmpty(enh.Metadata?.Name) ? "(untitled)" : enh.Metadata!.Name;
+            Title = string.Format(Loc.Get("deeper_player_window_title_fmt"), name);
+            // The eye-tracking control only means something when the
+            // enhancement has webcam-driven rules.
+            BtnEyeTracking.Visibility = EnhancementNeedsWebcam(enh) ? Visibility.Visible : Visibility.Collapsed;
             var counts = $"{enh.Regions.Count} regions, {enh.HapticTracks.Sum(t => t?.Events?.Count ?? 0)} haptic events, {enh.Rules.Count} rules";
             TxtEnhMetadata.Text = $"{name}{creator}  ·  {counts}";
             BtnUnloadEnhancement.Visibility = Visibility.Visible;
@@ -1243,16 +1294,56 @@ namespace ConditioningControlPanel.Views.Deeper
                 // path the picker uses when the user picks a .mp4 directly.
                 _ = LoadLocalVideoAsync(enh.MediaSource);
             }
-            else if (_player.IsPlaying)
+            else
             {
+                // Audio enhancement over a still-loaded video: tear the video down
+                // so the transport and the engine both belong to the audio path.
+                if (!string.Equals(enh.MediaType, MediaTypes.Video, StringComparison.OrdinalIgnoreCase))
+                    TearDownVideoForAudio();
                 // Audio mode: if audio is already playing, attach the engine now.
-                BindEngineIfReady();
+                if (_player.IsPlaying) BindEngineIfReady();
             }
 
             // Mission 3: re-skin the file context strip + mini-timeline + status pill.
             RefreshFileContextStrip(enh, path);
             OnEnhancementLoadedForMini(enh);
             UpdateStatusPill();
+        }
+
+        // Video -> audio mode swap. The single-instance window is reused, so an
+        // audio enhancement launched while a video one is playing used to leave
+        // the video source alive: BindEngineIfReady bailed on it, the audio had
+        // no engine, and TogglePlayPause kept driving the hidden, still-audible
+        // video. Unbind, pause, dispose, blank the page and clear video-only
+        // state. The reverse swap (audio -> video) is handled by the two video
+        // loaders, which Stop() the audio player up front.
+        private void TearDownVideoForAudio()
+        {
+            var src = _videoSource;
+            var inFullscreen = _isVideoFullscreen || _videoFullscreenWindow != null;
+            if (src == null && !inFullscreen) return;
+
+            if (inFullscreen)
+            {
+                try { ForceExitVideoFullscreen("audio mode swap"); }
+                catch (Exception ex) { Diag.Swallowed(ex); }
+            }
+            UnbindEngineIfRunning();
+            _videoSource = null;
+            if (src != null)
+            {
+                try { src.Pause(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { src.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            }
+            _initialAllowedFileUrl = null;
+            try
+            {
+                var cw = VideoBrowser?.CoreWebView2;
+                if (cw != null) cw.Navigate("about:blank");
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+            try { TxtVideoStatus.Visibility = Visibility.Collapsed; } catch (Exception ex) { Diag.Swallowed(ex); }
+            App.Logger?.Debug("EnhancementPlayer: video torn down for audio mode swap");
         }
 
         // -- Pane swap + video loading ----------------------------------------
@@ -1263,7 +1354,9 @@ namespace ConditioningControlPanel.Views.Deeper
             AudioFileRow.Visibility = isVideo ? Visibility.Collapsed : Visibility.Visible;
             AudioPane.Visibility = isVideo ? Visibility.Collapsed : Visibility.Visible;
             VideoPane.Visibility = isVideo ? Visibility.Visible : Visibility.Collapsed;
-            VolumePanel.Visibility = isVideo ? Visibility.Collapsed : Visibility.Visible;
+            // Volume stays up in video mode too: the slider drives the page's
+            // <video>.volume through BrowserVideoTimeSource.SetVolume.
+            VolumePanel.Visibility = Visibility.Visible;
             BtnPictureInPicture.Visibility = isVideo ? Visibility.Visible : Visibility.Collapsed;
         }
 
@@ -1330,6 +1423,7 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             _videoSource?.Dispose();
             _videoSource = new BrowserVideoTimeSource(VideoBrowser);
+            _videoSource.SetVolume(SliderVolume.Value / 100.0);
             EnsureVideoEngineBound();
         }
 
@@ -1538,6 +1632,68 @@ namespace ConditioningControlPanel.Views.Deeper
                     document.addEventListener('keydown', escHandler, true);
                     window.addEventListener('keydown', escHandler, true);
 
+                    // Keyboard relay. The Chromium HWND owns focus while the page is
+                    // up, so the WPF window's PreviewKeyDown never sees a key; post
+                    // the ones the player binds (see HandlePlayerKeyDown) back to C#.
+                    function isEditable(t) {
+                        return !!(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable));
+                    }
+                    function keyName(e) {
+                        var k = e.key;
+                        if (k === ' ' || e.code === 'Space') return 'Space';
+                        if (k === 'Escape' || k === 'Esc') return 'Escape';
+                        if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown') return k;
+                        if (k === 'm' || k === 'M') return 'M';
+                        if (k === 'f' || k === 'F') return 'F';
+                        return null;
+                    }
+                    function relayDown(e) {
+                        if (!e || isEditable(e.target)) return;
+                        var n = keyName(e);
+                        if (!n) return;
+                        // F inside the page still has the user gesture, so the HTML5
+                        // fullscreen request can succeed here; C# only gets the key
+                        // when there was no video to go fullscreen on.
+                        if (n === 'F' && !e.repeat && !inAnyFs() && tryEnterFs()) {
+                            try { e.preventDefault(); } catch (_) {}
+                            return;
+                        }
+                        try {
+                            window.chrome.webview.postMessage('ccp_key:' + n + ':' + (e.shiftKey ? 1 : 0) + ':' + (e.repeat ? 1 : 0));
+                        } catch (_) {}
+                        // C# owns the key now. preventDefault alone leaves the
+                        // page's own keydown listeners running (tiktok, the
+                        // hypnotube player), so Space toggled play twice. This
+                        // listener is registered in the capture phase, so
+                        // stopImmediatePropagation beats the page's handlers.
+                        if (n !== 'Escape' && document.querySelector('video')) {
+                            try { e.preventDefault(); } catch (_) {}
+                            try { e.stopImmediatePropagation(); } catch (_) {}
+                        }
+                    }
+                    function relayUp(e) {
+                        if (!e || keyName(e) !== 'Escape') return;
+                        try { window.chrome.webview.postMessage('ccp_keyup:Escape'); } catch (_) {}
+                    }
+                    window.addEventListener('keydown', relayDown, true);
+                    window.addEventListener('keyup', relayUp, true);
+
+                    // Hide the mouse cursor after ~2 s idle while the forced
+                    // fullscreen host is up. Chromium owns the cursor over its
+                    // HWND, so this has to happen in the page, not in WPF.
+                    var cursorTimer = null;
+                    function hideCursor() {
+                        if (!window._ccpForcedFs) return;
+                        try { document.documentElement.style.cursor = 'none'; } catch (_) {}
+                    }
+                    function armCursor() {
+                        try { document.documentElement.style.cursor = ''; } catch (_) {}
+                        if (cursorTimer) clearTimeout(cursorTimer);
+                        cursorTimer = setTimeout(hideCursor, 2000);
+                    }
+                    window._ccpArmCursor = armCursor;
+                    window.addEventListener('mousemove', function() { if (window._ccpForcedFs) armCursor(); }, true);
+
                     // Ctrl+MouseWheel = page zoom. IsZoomControlEnabled is
                     // false in WebView2 settings so the built-in shortcut is
                     // off and we own the gesture. preventDefault stops the
@@ -1590,6 +1746,20 @@ namespace ConditioningControlPanel.Views.Deeper
                 {
                     Dispatcher.BeginInvoke(() => { try { AdjustVideoZoom(-0.10); } catch (Exception ex) { Diag.Swallowed(ex); } });
                 }
+                else if (msg != null && msg.StartsWith("ccp_key:", StringComparison.Ordinal))
+                {
+                    // ccp_key:<name>:<shift 0|1>:<repeat 0|1>
+                    var parts = msg.Split(':');
+                    if (parts.Length >= 4 && TryMapRelayKey(parts[1], out var key))
+                    {
+                        bool shift = parts[2] == "1", repeat = parts[3] == "1";
+                        Dispatcher.BeginInvoke(() => { try { HandlePlayerKeyDown(key, shift, repeat); } catch (Exception ex) { Diag.Swallowed(ex); } });
+                    }
+                }
+                else if (msg == "ccp_keyup:Escape")
+                {
+                    Dispatcher.BeginInvoke(() => { try { HandleEscapeUp(); } catch (Exception ex) { Diag.Swallowed(ex); } });
+                }
             }
             catch (Exception ex)
             {
@@ -1615,6 +1785,9 @@ namespace ConditioningControlPanel.Views.Deeper
                     return;
                 }
 
+                // The mode-swap teardown blanks the page; about:blank is inert.
+                if (string.Equals(e.Uri, "about:blank", StringComparison.OrdinalIgnoreCase)) return;
+
                 if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri)
                     || uri.Scheme != Uri.UriSchemeHttps
                     || !IsAllowedPlayerHost(uri))
@@ -1639,6 +1812,10 @@ namespace ConditioningControlPanel.Views.Deeper
             // loop will reconcile BtnPlayPause within one tick.
             try
             {
+                // No video source means this is the about:blank from the audio
+                // mode swap: nothing to reconcile, and the transport belongs to
+                // the audio player now.
+                if (_videoSource == null) return;
                 if (!e.IsSuccess)
                 {
                     // A blocked (allowlist) or failed navigation used to show
@@ -1655,6 +1832,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 TxtVideoStatus.Visibility = Visibility.Collapsed;
                 BtnPlayPause.Content = "⏸";
                 TxtStatus.Text = Loc.Get("deeper_player_status_playing");
+                _videoSource?.SetVolume(SliderVolume.Value / 100.0);
 
                 // Re-arm the forced-fullscreen flag on the NEW document. It lives
                 // on `window`, so every navigation wipes it — and a video that
@@ -1955,13 +2133,17 @@ namespace ConditioningControlPanel.Views.Deeper
                 // these lambdas (which capture `this`) from pinning the
                 // EnhancementPlayerWindow if WPF holds internal refs to the
                 // closed fullscreen window.
+                // Same bindings as the player window (Esc/F11 exit, Space, arrows,
+                // M, F) plus the hold-Esc escape hatch, which needs KeyUp.
                 KeyEventHandler keyHandler = (_, args) =>
                 {
-                    if (args.Key == Key.Escape || args.Key == Key.F11)
-                    {
-                        ExitFullscreenViaScript();
+                    if (args.Key == Key.F11) { ExitFullscreenViaScript(); args.Handled = true; return; }
+                    if (HandlePlayerKeyDown(args.Key, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift), args.IsRepeat))
                         args.Handled = true;
-                    }
+                };
+                KeyEventHandler keyUpHandler = (_, args) =>
+                {
+                    if (args.Key == Key.Escape) { HandleEscapeUp(); args.Handled = true; }
                 };
 
                 // Clear THIS window's content, not whatever _videoFullscreenWindow
@@ -2013,6 +2195,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     }
 
                     try { built!.KeyDown -= keyHandler; } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { built!.KeyUp -= keyUpHandler; } catch (Exception ex) { Diag.Swallowed(ex); }
                     try { built!.Closing -= closingHandler; } catch (Exception ex) { Diag.Swallowed(ex); }
                     try { built!.Deactivated -= deactivatedHandler; } catch (Exception ex) { Diag.Swallowed(ex); }
                     try { built!.Activated -= activatedHandler; } catch (Exception ex) { Diag.Swallowed(ex); }
@@ -2037,6 +2220,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 };
 
                 built.KeyDown += keyHandler;
+                built.KeyUp += keyUpHandler;
                 built.Closing += closingHandler;
                 built.Deactivated += deactivatedHandler;
                 built.Activated += activatedHandler;
@@ -2056,7 +2240,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 // `document.fullscreenElement` in the dblclick handler so the
                 // user can always exit our WPF "forced fullscreen" by
                 // double-clicking the video, regardless of page state.
-                try { FireScript("window._ccpForcedFs = true;"); }
+                try { FireScript("window._ccpForcedFs = true; try { window._ccpArmCursor && window._ccpArmCursor(); } catch (_) {}"); }
                 catch (Exception ex) { Diag.Swallowed(ex); }
 
                 // Commit state only after reparent is fully in place.
@@ -2177,7 +2361,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     if (VideoBrowser?.CoreWebView2 != null)
                     {
                         FireScript(
-                            "window._ccpForcedFs = false; try { if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen(); } catch (_) {}");
+                            "window._ccpForcedFs = false; try { document.documentElement.style.cursor = ''; } catch (_) {} try { if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen(); } catch (_) {}");
                     }
                 }
                 catch (Exception ex) { Diag.Swallowed(ex); }
@@ -2409,6 +2593,8 @@ namespace ConditioningControlPanel.Views.Deeper
             // that no longer has an owner to unbind it.
             _isClosing = true;
             if (ReferenceEquals(_instance, this)) _instance = null;
+            SaveWindowBounds();
+            CancelEscHold();
 
             // Per-step try/catch: a single catch-all around the whole teardown
             // means an early throw (e.g. ScreenMirror NRE) skips _uiTimer.Stop
@@ -2498,6 +2684,290 @@ namespace ConditioningControlPanel.Views.Deeper
         }
 
         private static string FormatTime(double seconds) => MediaDurationCache.Format(seconds);
+
+        // -- Window bounds persistence -------------------------------------------
+
+        private void RestoreWindowBounds(Models.AppSettings? s)
+        {
+            try
+            {
+                if (s == null) return;
+                if (s.DeeperPlayerWindowWidth >= MinWidth && s.DeeperPlayerWindowHeight >= MinHeight)
+                {
+                    Width = s.DeeperPlayerWindowWidth;
+                    Height = s.DeeperPlayerWindowHeight;
+                }
+                var virt = new Rect(SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,
+                                    SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
+                if (s.DeeperPlayerWindowWidth > 0
+                    && IsRectUsableOnScreen(new Rect(s.DeeperPlayerWindowLeft, s.DeeperPlayerWindowTop, Width, Height), virt))
+                {
+                    WindowStartupLocation = WindowStartupLocation.Manual;
+                    Left = s.DeeperPlayerWindowLeft;
+                    Top = s.DeeperPlayerWindowTop;
+                }
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        /// <summary>
+        /// A remembered position counts as usable when at least a 200x120 patch
+        /// of the window (enough to grab the title bar) lies on the virtual desktop.
+        /// </summary>
+        internal static bool IsRectUsableOnScreen(Rect window, Rect virtualScreen)
+        {
+            if (window.IsEmpty || virtualScreen.IsEmpty || virtualScreen.Width <= 0 || virtualScreen.Height <= 0) return false;
+            if (double.IsNaN(window.X) || double.IsNaN(window.Y)) return false;
+            var inter = Rect.Intersect(window, virtualScreen);
+            return !inter.IsEmpty && inter.Width >= 200 && inter.Height >= 120;
+        }
+
+        private void SaveWindowBounds()
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s == null || WindowState != WindowState.Normal) return;
+                if (Width < MinWidth || Height < MinHeight) return;
+                s.DeeperPlayerWindowLeft = Left;
+                s.DeeperPlayerWindowTop = Top;
+                s.DeeperPlayerWindowWidth = Width;
+                s.DeeperPlayerWindowHeight = Height;
+                App.Settings?.Save();
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        // -- Keyboard shortcuts --------------------------------------------------
+        // Space play/pause, Left/Right seek 5 s (Shift 30 s), Up/Down volume 5,
+        // M mute, F fullscreen (video), Esc leave fullscreen / close; hold Esc
+        // 3 s to stop playback and unbind the engine. The WPF window, the
+        // fullscreen host and the page-side relay all land in HandlePlayerKeyDown.
+
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (IsTextInputFocused()) return;
+            if (HandlePlayerKeyDown(e.Key, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift), e.IsRepeat))
+                e.Handled = true;
+        }
+
+        private void Window_PreviewKeyUp(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Escape) return;
+            if (IsTextInputFocused()) return;
+            HandleEscapeUp();
+            e.Handled = true;
+        }
+
+        private static bool IsTextInputFocused()
+            => Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase
+               || Keyboard.FocusedElement is PasswordBox;
+
+        private bool HandlePlayerKeyDown(Key key, bool shift, bool isRepeat)
+        {
+            switch (key)
+            {
+                case Key.Escape:
+                    _lastEscSignal = DateTime.UtcNow;
+                    if (!isRepeat) HandleEscapeDown();
+                    return true;
+                case Key.Space:
+                    if (!isRepeat) TogglePlayPause();
+                    return true;
+                case Key.Left:  SeekRelative(shift ? -30 : -5); return true;
+                case Key.Right: SeekRelative(shift ? 30 : 5); return true;
+                case Key.Up:    AdjustVolume(+5); return true;
+                case Key.Down:  AdjustVolume(-5); return true;
+                case Key.M:
+                    if (!isRepeat) ToggleMute();
+                    return true;
+                case Key.F:
+                    if (!isRepeat) ToggleVideoFullscreen();
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool TryMapRelayKey(string name, out Key key)
+        {
+            switch (name)
+            {
+                case "Space": key = Key.Space; return true;
+                case "Escape": key = Key.Escape; return true;
+                case "ArrowLeft": key = Key.Left; return true;
+                case "ArrowRight": key = Key.Right; return true;
+                case "ArrowUp": key = Key.Up; return true;
+                case "ArrowDown": key = Key.Down; return true;
+                case "M": key = Key.M; return true;
+                case "F": key = Key.F; return true;
+                default: key = Key.None; return false;
+            }
+        }
+
+        private void SeekRelative(double deltaSeconds)
+        {
+            try
+            {
+                if (_videoSource != null)
+                {
+                    var d = _videoSource.GetDurationSeconds();
+                    var t = Math.Max(0, _videoSource.GetCurrentTimeSeconds() + deltaSeconds);
+                    if (d > 0) t = Math.Min(t, d);
+                    _videoSource.Seek(t);
+                }
+                else if (_player.DurationMs > 0)
+                {
+                    var total = _player.DurationMs / 1000.0;
+                    var t = Math.Clamp(_player.CurrentTimeMs / 1000.0 + deltaSeconds, 0, total);
+                    _player.Seek(t);
+                    UpdatePlayhead(t / total);
+                }
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        private int? _volumeBeforeMute;
+        private bool _muteChanging;
+
+        private void AdjustVolume(int delta)
+        {
+            try { SliderVolume.Value = Math.Clamp(SliderVolume.Value + delta, 0, 100); }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        private void ToggleMute()
+        {
+            try
+            {
+                _muteChanging = true;
+                if (_volumeBeforeMute is int restore)
+                {
+                    _volumeBeforeMute = null;
+                    SliderVolume.Value = restore;
+                }
+                else
+                {
+                    _volumeBeforeMute = (int)Math.Round(SliderVolume.Value);
+                    SliderVolume.Value = 0;
+                }
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+            finally { _muteChanging = false; }
+        }
+
+        private void ToggleVideoFullscreen()
+        {
+            if (_videoSource == null || VideoPane.Visibility != Visibility.Visible) return;
+            if (_isVideoFullscreen || _videoFullscreenWindow != null) ExitFullscreenViaScript();
+            else EnterVideoFullscreen();
+        }
+
+        // -- Hold-Esc escape hatch -----------------------------------------------
+        // People get stranded in blink/gaze loops. Holding Esc for 3 s anywhere
+        // in the player (window, fullscreen host, or the page via the relay)
+        // stops playback and unbinds the engine. A tap leaves fullscreen, or
+        // closes the window only when nothing is playing. Both are off under a
+        // strict lock.
+
+        private const double EscHoldSeconds = 3.0;
+        private DispatcherTimer? _escHoldTimer;
+        private DateTime _escHoldStart;
+        private DateTime _lastEscSignal;
+        private bool _escConsumed;
+
+        private static bool IsUnderStrictLock()
+            => App.Lockdown?.IsActive == true || App.Settings?.Current?.StrictLockEnabled == true;
+
+        private void HandleEscapeDown()
+        {
+            if (ChangePopup?.IsOpen == true)
+            {
+                ChangePopup.IsOpen = false;
+                _escConsumed = true;
+                return;
+            }
+            if (_escHoldTimer != null) return;
+            _escConsumed = false;
+            if (_isVideoFullscreen || _videoFullscreenWindow != null)
+            {
+                ExitFullscreenViaScript();
+                _escConsumed = true;
+            }
+            if (IsUnderStrictLock()) return;
+            if (!IsSessionActive()) return;
+            _escHoldStart = DateTime.UtcNow;
+            _escHoldTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+            _escHoldTimer.Tick += EscHoldTimer_Tick;
+            _escHoldTimer.Start();
+            ShowHoldEscHint(0);
+        }
+
+        private void EscHoldTimer_Tick(object? sender, EventArgs e)
+        {
+            var now = DateTime.UtcNow;
+            // A key-up can get lost across the fullscreen reparent or a focus
+            // swap between the page and the window; a long silence from the key
+            // (no repeat) counts as a release.
+            if ((now - _lastEscSignal).TotalSeconds > 1.5) { CancelEscHold(); return; }
+            var held = (now - _escHoldStart).TotalSeconds;
+            ShowHoldEscHint(Math.Min(1, held / EscHoldSeconds));
+            if (held < EscHoldSeconds) return;
+            CancelEscHold();
+            _escConsumed = true;
+            EmergencyStop();
+        }
+
+        private void HandleEscapeUp()
+        {
+            CancelEscHold();
+            if (_escConsumed) { _escConsumed = false; return; }
+            if (IsUnderStrictLock()) return;
+            if (_isVideoFullscreen || _videoFullscreenWindow != null) return;
+            // A stray tap must never end a session: only an idle player closes on Esc.
+            if (IsSessionActive()) return;
+            Close();
+        }
+
+        // A paused session is still a session: an Esc tap must not close the
+        // window over it, and a held Esc must still be able to stop it. A loaded
+        // video counts whether or not it is currently rolling.
+        private bool IsSessionActive()
+            => _host.IsRunning || _player.IsPlaying || _player.IsPaused || _videoSource != null;
+
+        private void CancelEscHold()
+        {
+            try
+            {
+                if (_escHoldTimer != null)
+                {
+                    _escHoldTimer.Stop();
+                    _escHoldTimer.Tick -= EscHoldTimer_Tick;
+                    _escHoldTimer = null;
+                }
+                if (HoldEscHint != null) HoldEscHint.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        private void ShowHoldEscHint(double fraction)
+        {
+            try
+            {
+                if (HoldEscHint == null || HoldEscProgress == null) return;
+                HoldEscProgress.Value = Math.Clamp(fraction, 0, 1);
+                HoldEscHint.Visibility = Visibility.Visible;
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        private void EmergencyStop()
+        {
+            try { ForceExitVideoFullscreen("esc hold"); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { BtnStop_Click(this, new RoutedEventArgs()); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { TxtStatus.Text = Loc.Get("deeper_player_status_escape_stopped"); } catch (Exception ex) { Diag.Swallowed(ex); }
+            App.Logger?.Information("[DeeperPlayer] hold-Esc stop");
+        }
 
         // Once per loaded local file, hand the measured length to the
         // duration cache so the library list shows it next time without a
