@@ -1226,7 +1226,8 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBox x:Name="TxtRegionEnd" Style="{StaticResource EditorTextBox}"
                                                  ToolTip="{loc:Str deeper_editor_tt_region_end}"
-                                                 TextChanged="RegionField_TextChanged"/>
+                                                 TextChanged="RegionField_TextChanged"
+                                                 LostFocus="TxtRegionEnd_LostFocus"/>
                                         <Button x:Name="BtnSnapRegionEndNext" Grid.Column="1"
                                                 Content="⇥" Click="BtnSnapRegionEndNext_Click"
                                                 ToolTip="{loc:Str deeper_editor_tt_region_snap_next}"

@@ -1048,6 +1048,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 RebuildRegionVisuals();
                 RebuildHapticVisuals();
                 RebuildEffectVisuals();
+                RebuildRuleVisuals();
             }
             _currentSeconds = Math.Max(0, seconds);
             TxtCurrentTime.Text = FormatTime(_currentSeconds);
@@ -1126,6 +1127,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 RebuildRegionVisuals();
                 RebuildHapticVisuals();
                 RebuildEffectVisuals();
+                RebuildRuleVisuals();
             });
         }
 
@@ -1183,6 +1185,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 RebuildRegionVisuals();
                 RebuildHapticVisuals();
                 RebuildEffectVisuals();
+                RebuildRuleVisuals();
             }
             catch (Exception ex)
             {
@@ -1588,7 +1591,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     RebuildHapticVisuals();
                     RebuildEffectVisuals();
                 }
-                if (_selectedRegion == _draggedRegion) UpdateSelectedSidePanel();
+                RefreshInspectorForDraggedRegion();
                 return;
             }
             if (_dragMode == DragMode.ResizeRegionStart && _draggedRegion != null)
@@ -1598,7 +1601,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 _draggedRegion.Start = newStart;
                 MarkDirty();
                 RebuildRegionVisuals();
-                if (_selectedRegion == _draggedRegion) UpdateSelectedSidePanel();
+                RefreshInspectorForDraggedRegion();
                 return;
             }
             if (_dragMode == DragMode.ResizeRegionEnd && _draggedRegion != null)
@@ -1608,7 +1611,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 _draggedRegion.End = newEnd;
                 MarkDirty();
                 RebuildRegionVisuals();
-                if (_selectedRegion == _draggedRegion) UpdateSelectedSidePanel();
+                RefreshInspectorForDraggedRegion();
                 return;
             }
             if (_dragMode == DragMode.DragEffect && _draggedEffect != null)
@@ -1748,6 +1751,25 @@ namespace ConditioningControlPanel.Views.Deeper
             EndMultiDragCapture();
         }
 
+        // A band drag has to refresh whichever inspector is showing it: the
+        // Region editor when the band itself is selected, or the Rule editor's
+        // band-details rows when the band belongs to the selected rule
+        // (clicking a constrained band selects the Rule, not the Region).
+        private void RefreshInspectorForDraggedRegion()
+        {
+            if (_draggedRegion == null) return;
+            if (_selectedRegion == _draggedRegion) { UpdateSelectedSidePanel(); return; }
+            if (_selectedRule == null || _selectedRule.RegionConstraint != _draggedRegion.Id) return;
+            if (TxtRuleBandStart == null || TxtRuleBandEnd == null) return;
+            _suppressRuleSync = true;
+            try
+            {
+                TxtRuleBandStart.Text = _draggedRegion.Start.ToString("0.##", CultureInfo.InvariantCulture);
+                TxtRuleBandEnd.Text = _draggedRegion.End.ToString("0.##", CultureInfo.InvariantCulture);
+            }
+            finally { _suppressRuleSync = false; }
+        }
+
         private void ApplyScrubFromMouse(MouseEventArgs e)
         {
             var pt = e.GetPosition(TimelineCanvas);
@@ -1845,9 +1867,7 @@ namespace ConditioningControlPanel.Views.Deeper
         }
 
         private string NextRegionColor()
-        {
-            return RegionPalette[_enhancement.Regions.Count % RegionPalette.Length];
-        }
+            => LeastUsedPaletteColor(RegionPalette, _enhancement.Regions.Select(r => r?.Color));
 
         private void SelectNothing()
         {
@@ -2010,12 +2030,29 @@ namespace ConditioningControlPanel.Views.Deeper
             if (double.TryParse(TxtRegionStart.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var s))
                 _selectedRegion.Start = Math.Max(0, s);
             if (double.TryParse(TxtRegionEnd.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var ev))
-                _selectedRegion.End = ev;
+                _selectedRegion.End = Math.Clamp(ev, 0, _totalSeconds > 0 ? _totalSeconds : double.MaxValue);
             if (!string.IsNullOrWhiteSpace(TxtRegionColor.Text))
             {
                 _selectedRegion.Color = TxtRegionColor.Text.Trim();
                 UpdateRegionColorSwatchPreview();
             }
+            MarkDirty();
+            RebuildRegionVisuals();
+            ScheduleValidation();
+        }
+
+        // Commit-time normalisation: while typing "12" passes through "1" so
+        // Start<End is not enforced per keystroke, but once the field loses
+        // focus an inverted band is pulled back to a 0.05 s minimum.
+        private void TxtRegionEnd_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (_selectedRegion == null) return;
+            var minEnd = _selectedRegion.Start + 0.05;
+            if (_selectedRegion.End >= minEnd) return;
+            _selectedRegion.End = _totalSeconds > 0 ? Math.Min(_totalSeconds, minEnd) : minEnd;
+            _suppressDirty = true;
+            try { TxtRegionEnd.Text = _selectedRegion.End.ToString("0.##", CultureInfo.InvariantCulture); }
+            finally { _suppressDirty = false; }
             MarkDirty();
             RebuildRegionVisuals();
             ScheduleValidation();
@@ -2092,10 +2129,11 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             if (_selectedRegion == null) return;
             PushUndoSnapshot();
-            _enhancement.Regions.Remove(_selectedRegion);
+            RemoveRegionFromModel(_selectedRegion);
             SelectNothing();
             MarkDirty();
             RebuildRegionVisuals();
+            RebuildRuleVisuals();
             ScheduleValidation();
         }
 
@@ -2199,9 +2237,7 @@ namespace ConditioningControlPanel.Views.Deeper
             // set membership is reflected immediately.
             if (ctrl)
             {
-                RebuildRegionVisuals();
-                RebuildHapticVisuals();
-                RebuildEffectVisuals();
+                RefreshSelectionVisuals();
                 e.Handled = true;
                 return;
             }
@@ -2387,9 +2423,7 @@ namespace ConditioningControlPanel.Views.Deeper
             // capture, no primary swap.
             if (ctrl)
             {
-                RebuildRegionVisuals();
-                RebuildHapticVisuals();
-                RebuildEffectVisuals();
+                RefreshSelectionVisuals();
                 e.Handled = true;
                 return;
             }
@@ -2706,10 +2740,7 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             if (_selectedHaptic == null || _selectedHapticTrack == null) return;
             PushUndoSnapshot();
-            _selectedHapticTrack.Events.Remove(_selectedHaptic);
-            // Remove now-empty default track to keep file clean.
-            if (_selectedHapticTrack.Events.Count == 0 && _selectedHapticTrack.Id == DefaultTrackId)
-                _enhancement.HapticTracks.Remove(_selectedHapticTrack);
+            RemoveHapticFromModel(_selectedHaptic);
             SelectNothing();
             MarkDirty();
             RebuildHapticVisuals();
@@ -4927,28 +4958,12 @@ namespace ConditioningControlPanel.Views.Deeper
                 CreateHapticEventAtPlayhead();
                 e.Handled = true;
             }
-            else if (e.Key == Key.Delete && !inTextBox && _selectionSet.Count > 1)
+            else if (e.Key == Key.Delete && !inTextBox && HasAnySelection)
             {
-                // Multi-select takes priority — bulk delete everything in the set.
-                DeleteSelection();
+                DeleteCurrentSelection();
                 e.Handled = true;
             }
-            else if (e.Key == Key.Delete && !inTextBox && _selectedRegion != null)
-            {
-                BtnDeleteRegion_Click(this, new RoutedEventArgs());
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Delete && !inTextBox && _selectedHaptic != null)
-            {
-                BtnDeleteHaptic_Click(this, new RoutedEventArgs());
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Delete && !inTextBox && _selectedEffect != null)
-            {
-                BtnDeleteEffect_Click(this, new RoutedEventArgs());
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Escape && !inTextBox && (_selectedRegion != null || _selectedHaptic != null || _selectionSet.Count > 0))
+            else if (e.Key == Key.Escape && !inTextBox && HasAnySelection)
             {
                 SelectNothing();
                 e.Handled = true;
