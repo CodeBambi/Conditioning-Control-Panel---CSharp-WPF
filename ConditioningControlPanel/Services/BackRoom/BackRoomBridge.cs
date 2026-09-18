@@ -71,6 +71,9 @@ public sealed class BackRoomBridge
     private readonly HashSet<string> _seenReq = new(StringComparer.Ordinal);
     private readonly HashSet<string> _answered = new(StringComparer.Ordinal);
     private readonly Dictionary<string, BackRoomMediaDeal> _deals = new(StringComparer.Ordinal);
+    /// <summary>Stations with a <c>media-warm</c> waiter in flight: one per station, so a wall that
+    /// re-deals while the batch is still landing does not stack a second.</summary>
+    private readonly HashSet<string> _warmWaits = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (string TapeId, int Played)> _cursor = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (string TapeId, int Played)> _flushed = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _life = new();
@@ -383,6 +386,7 @@ public sealed class BackRoomBridge
                 gifs = deal.Gifs.Select(g => new { key = g.Key, url = g.Url, w = g.W, h = g.H, src = g.Src }),
                 words = deal.Words.Select(w => new { key = w.Key, text = w.Text, src = w.Src }),
             });
+            await PushWarmWhenLandedAsync(station, deal, count).ConfigureAwait(false);
         }
 
         // Guarded here rather than inside: this runs detached (no reply guard on media-request), so
@@ -395,6 +399,28 @@ public sealed class BackRoomBridge
 
         if (_d.OffUi != null) _d.OffUi(() => _ = RunAsync());
         else await RunAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// THE COLD-OPEN SWAP (2026-09-18). A deal that wanted remote pictures and got fewer than it asked
+    /// for went out on the player's folders or the bundled loops, and nothing told the page when the
+    /// batch behind it landed: <c>room\screens.js</c> re-deals on its own only every 72 s, which is the
+    /// "preset gifs for a good while" the owner saw. The web shim answers this with a
+    /// <c>br-media-changed</c> event once its warm ends; this is that event on the wire. Waits on the
+    /// batch (cancelled with the bridge), then posts one <c>media-warm</c> for the station.
+    /// </summary>
+    private async Task PushWarmWhenLandedAsync(string station, BackRoomMediaDeal deal, int count)
+    {
+        if (deal.Source is not ("online" or "mixed")) return;
+        if (deal.Gifs.Count(g => g.Src == "online") >= count) return;
+        lock (_gate) { if (_closed || !_warmWaits.Add(station)) return; }
+        bool warmed = false;
+        try { warmed = await _d.Media.WaitForWarmAsync(_life.Token).ConfigureAwait(false); }
+        catch (Exception ex) { _d.Log?.Invoke("media warm wait threw: " + ex.Message); }
+        finally { lock (_gate) _warmWaits.Remove(station); }
+        if (!warmed) return;
+        lock (_gate) { if (_closed) return; }
+        _d.Post(new { type = "media-warm", station });
     }
 
     private void OnFx(JObject m)

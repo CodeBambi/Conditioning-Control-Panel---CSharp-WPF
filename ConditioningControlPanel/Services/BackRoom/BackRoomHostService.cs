@@ -37,22 +37,18 @@ internal static class BackRoomHostService
     internal static Dictionary<string, string> Lex(IEnumerable<string> keys, Func<string, string> get)
         => keys.Distinct(StringComparer.Ordinal).ToDictionary(k => k, get, StringComparer.Ordinal);
 
-    /// <summary><c>init.gates</c> / <c>settings.gates</c> (10.13.A, 10.14): the four feature toggles plus the room's own
-    /// <c>tunnel</c> and <c>melt</c> switches, sent in full every time. For dressing only: since the authored show
-    /// (2026-09-15) nothing on the host gates a Back Room effect on any of them.</summary>
+    /// <summary><c>init.gates</c> / <c>settings.gates</c> (10.13.A, 10.14): the four hypno gates plus the room's own
+    /// <c>tunnel</c> and <c>melt</c> switches, sent in full every time. The four are ALWAYS on (owner, 2026-09-18):
+    /// the casino ignores the panel's Flash / Subliminal / Spiral Overlay / Brain Drain feature toggles, exactly as the
+    /// web playtest's shim does, so a player who never switched a feature on still gets the whole show. The panel's
+    /// toggles used to drive <c>flash</c>, <c>subliminal</c> and <c>brainDrain</c>, and the fullscreen Spiral Overlay
+    /// (which RandomizeAndStart coin-flips) once drove <c>spiral</c>; only the room's own Options remain.</summary>
     internal static object GatesWire(Models.AppSettings? s) => new
     {
-        flash = s?.FlashEnabled ?? false,
-        subliminal = s?.SubliminalEnabled ?? false,
-        // Not AppSettings.SpiralEnabled. That is the panel's FULLSCREEN Spiral Overlay feature, and
-        // MainWindow.StartStop.cs RandomizeAndStart coin-flips it, so "jump right in" was silently
-        // deciding whether the Back Room's wheel hub is a Loom spiral or a brass crosshatch star -
-        // which is what the owner saw as "the wheel has no spiral in the middle on desktop". The web
-        // playtest has no settings frame, so readGates(null) sends every gate true and it looked fine
-        // there. The room's hypno dressing wants its own switch (BackRoomTunnel / BackRoomMelt are the
-        // pattern); until it has one it is simply on.
+        flash = true,
+        subliminal = true,
         spiral = true,
-        brainDrain = s?.BrainDrainEnabled ?? false,
+        brainDrain = true,
         tunnel = s?.BackRoomTunnel ?? false,
         melt = s?.BackRoomMelt ?? false,
     };
@@ -88,8 +84,8 @@ internal static class BackRoomHostService
     internal static readonly HashSet<string> SettingsFrameProperties = new(StringComparer.Ordinal)
     {
         nameof(Models.AppSettings.MotionLevel), nameof(Models.AppSettings.BackRoomFxIntensity),
-        nameof(Models.AppSettings.FlashEnabled), nameof(Models.AppSettings.SubliminalEnabled),
-        nameof(Models.AppSettings.SpiralEnabled), nameof(Models.AppSettings.BrainDrainEnabled),
+        // Not FlashEnabled / SubliminalEnabled / SpiralEnabled / BrainDrainEnabled: the room's gates no longer
+        // follow the panel's feature toggles (GatesWire), so their changes have nothing to push.
         nameof(Models.AppSettings.BackRoomTunnel), nameof(Models.AppSettings.BackRoomMelt),
         nameof(Models.AppSettings.BackRoomInvertLook),
         // The room's picture source and its three levels, so a room that is already open repaints its own
@@ -232,7 +228,9 @@ internal static class BackRoomHostService
 
             // Start filling the remote picture pool now. A local-only room makes this a no-op, and for an
             // online one it means the first wall the player sees is the one they asked for: the pool's own
-            // bounded wait otherwise lands on the page's boot media-request.
+            // bounded wait otherwise lands on the page's boot media-request. A pool still warm from the
+            // last visit (same source, same niches) is kept and dealt from at once; one warmed for a
+            // different source is drained by the pool itself first.
             try { Media.WarmForRoomOpen(); } catch (Exception ex) { Diag.Swallowed(ex, "backroom warm"); }
             // The bridge is no longer built inline here: the casino's race handoff tears this one down and
             // builds a fresh one on the way back (ReturnToRoom), so there has to be exactly one writer of
@@ -399,6 +397,10 @@ internal static class BackRoomHostService
     public static void ShutdownFlush()
     {
         _openingRace = false;
+        // The pool outlives the room now (2026-09-18): a closed room keeps its clips so a re-open deals at
+        // once. App exit is where they go, and it has to happen before the no-host return below, because
+        // the usual case at exit is a warm pool and NO room.
+        try { Media.ReleaseWarmPool(); } catch (Exception ex) { Diag.Swallowed(ex, "backroom pool release"); }
         try
         {
             if (_host == null) return;
@@ -576,10 +578,13 @@ internal static class BackRoomHostService
         // The pool is keyed to a niche selection, so a selection change makes everything in it stale. The
         // frame above already tells the page to re-deal; this makes sure the re-deal gets new pictures
         // rather than the old ones over again.
+        // Consent withdrawn counts too: the pool then holds pictures the player has said no to.
         if (e.PropertyName is nameof(Models.AppSettings.BackRoomMediaSubs)
             or nameof(Models.AppSettings.BackRoomMediaSubsOff)
             or nameof(Models.AppSettings.BackRoomMediaSource)
-            or nameof(Models.AppSettings.MediaSource))
+            or nameof(Models.AppSettings.MediaSource)
+            or nameof(Models.AppSettings.RemoteMediaConsented)
+            or nameof(Models.AppSettings.FypOnlineConsented))
         {
             try { Media.ReleaseWarmPool(); Media.WarmForRoomOpen(); }
             catch (Exception ex) { Diag.Swallowed(ex, "backroom repool"); }
@@ -603,9 +608,12 @@ internal static class BackRoomHostService
             _host = null;
             _bridge = null;
             try { host?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
-            // The pool's materialized pictures are temp files under the assets folder. Let them go with
-            // the room: otherwise up to a poolful survive until RemoteMediaCache's next startup sweep.
-            try { Media.ReleaseWarmPool(); } catch (Exception ex) { Diag.Swallowed(ex, "backroom pool release"); }
+            // The warm pool is NOT released here (2026-09-18). Its clips are at most ReadyMax small files
+            // under the assets .temp folder, and keeping them is what makes a re-open in the same session
+            // deal fetched pictures at once instead of the bundled loops. They go at app exit
+            // (ShutdownFlush), on a source / niche / consent change (OnSettingChanged while open, the
+            // pool's own source key on the next Launch while closed), and RemoteMediaCache's startup
+            // sweep still clears anything a crash left behind.
             _panicSuspended = _minimised = false;
             App.Logger?.Information("BackRoomHostService: closed");
         }

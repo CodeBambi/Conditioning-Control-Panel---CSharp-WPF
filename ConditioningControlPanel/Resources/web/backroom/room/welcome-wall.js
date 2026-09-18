@@ -4,8 +4,10 @@
  * The Prize Parlour's apron carries three framed panels under the shelf: the
  * middle one reads SPARKLES / PRIZES in the GLB, the two beside it are bare
  * lining. Each of those two gets one placard, one per page of welcome.js's
- * card (PAGES is the one list): the page's landscape picture on the left, its
- * title and one line on the right, and "Tap to read". welcome-placards.js
+ * card flagged placard (PAGES is the one list; the middle page, pictures and
+ * sparkles, hangs nowhere and is reached with Next): the page's landscape
+ * picture on the left, its title and one line on the right, and "Tap to read".
+ * welcome-placards.js
  * hangs them; this file is the records and the paint, with no three and no
  * DOM, so the node suite can read the wall (memorabilia-wall.js's split).
  *
@@ -21,10 +23,11 @@ export const PANEL = Object.freeze({ x: 1.72, y: .536, z: -4.728, size: Object.f
 /** The paper, in pixels: the panel's own aspect, so the picture is not stretched. */
 export const PAPER = Object.freeze({ w: 1024, h: 310, pad: 14 });
 
-/** One record per page: where it hangs and which words it carries. Pure, so the node suite can read it. */
-export const PLACARDS = Object.freeze(PAGES.map((p, i) => Object.freeze({
-  id: 'placard-' + p.id, page: i, src: p.hero, titleKey: p.title, subKey: p.sub, readKey: 'br_welcome_read',
-  position: Object.freeze([i === 0 ? -PANEL.x : PANEL.x, PANEL.y, PANEL.z]), yaw: 0, size: PANEL.size,
+/** One record per placard page: where it hangs, which page of the card it opens (its index in PAGES) and which
+ * words it carries. Pure, so the node suite can read it. */
+export const PLACARDS = Object.freeze(PAGES.map((p, i) => [p, i]).filter(([p]) => p.placard).map(([p, page], n) => Object.freeze({
+  id: 'placard-' + p.id, page, src: p.hero, titleKey: p.title, subKey: p.sub, readKey: 'br_welcome_read',
+  position: Object.freeze([n === 0 ? -PANEL.x : PANEL.x, PANEL.y, PANEL.z]), yaw: 0, size: PANEL.size,
 })));
 
 /**

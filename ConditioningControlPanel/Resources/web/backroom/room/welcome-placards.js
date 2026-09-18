@@ -1,12 +1,14 @@
 /* ============================================================================
  * backroom/room/welcome-placards.js - the first-visit card, hung on the counter.
  *
- * One plane per page of welcome.js's card, in the two framed panels either
- * side of SPARKLES / PRIZES on the Prize Parlour's apron (the records and the
- * paint are welcome-wall.js). A tap on a placard reopens the card at that page
- * in read mode: scene.js finds userData.welcomePage on the hit and calls
- * onCard(page), so the two pages a player skipped past on their first visit
- * stay on the wall like any other piece of paper in the room.
+ * One plane per placard page of welcome.js's card (the room and the Parlour;
+ * the pictures-and-sparkles page between them is reached with Next), in the
+ * two framed panels either side of SPARKLES / PRIZES on the Prize Parlour's
+ * apron (the records and the paint are welcome-wall.js). A tap on a placard
+ * reopens the card at that page in read mode: scene.js finds
+ * userData.welcomePage on the hit and calls onCard(page), so the pages a
+ * player skipped past on their first visit stay on the wall like any other
+ * piece of paper in the room.
  *
  * Static paper: one plane and one 1024 x 310 canvas per placard, painted once
  * at boot and once more when its picture lands. No render loop.

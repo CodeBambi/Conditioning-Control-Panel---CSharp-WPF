@@ -41,6 +41,12 @@ internal interface IBackRoomRemotePool
     /// <summary>The clips whose bytes are on disk RIGHT NOW. Never a network call.</summary>
     IReadOnlyList<BackRoomRemoteClip> Ready();
 
+    /// <summary>The batch filling the set right now, or null when none is. Completes when every lane
+    /// has landed (or the fetch failed), which is the moment the host tells the page to re-deal
+    /// (<c>media-warm</c>): the web shim fires <c>br-media-changed</c> the same way once its warm ends,
+    /// and without it the wall sat on the bundled loops until its own 72 s refresh.</summary>
+    Task? WarmInFlight() => null;
+
     /// <summary>Room closed: hand every materialized file back.</summary>
     void Drain();
 }
@@ -153,6 +159,17 @@ internal sealed class BackRoomRemotePool : IBackRoomRemotePool
     private readonly HashSet<string> _inFlightIds = new(StringComparer.Ordinal);
     private Task? _warming;
     private DateTime _lastWarmUtc = DateTime.MinValue;
+    /// <summary>What the warm set was filled FOR: the effective source and the channel list. The pool
+    /// stays warm across a room close now (2026-09-18, the cold re-open), so the set is only ever
+    /// thrown away when this key moves - a niche change, a source change, consent withdrawn - or at
+    /// app exit. Held by the pool rather than the host so that a change made while the room is closed
+    /// (nothing is hooked then) is still caught on the next open.</summary>
+    private string? _key;
+    /// <summary>Set the moment the FIRST clip of a batch lands. <see cref="WarmAsync"/> waits on this
+    /// rather than on the whole batch: a batch is over only when every lane has landed, so a deal that
+    /// waited on it saw an empty set at the 2 s cap even when one clip had been on disk since 1.3 s, and
+    /// the wall opened on the bundled loops. Pictures are offered as they arrive instead.</summary>
+    private TaskCompletionSource<bool> _firstLanded = Completed();
 
     /// <summary>The app's live sources.</summary>
     internal BackRoomRemotePool()
@@ -229,31 +246,70 @@ internal sealed class BackRoomRemotePool : IBackRoomRemotePool
     public Task WarmAsync(CancellationToken ct)
     {
         var warm = StartWarm();
-        return warm == null ? Task.CompletedTask : WaitBounded(warm, ct);
+        if (warm == null) return Task.CompletedTask;
+        Task first;
+        lock (_gate) first = _firstLanded.Task;
+        return WaitBounded(warm, first, ct);
     }
 
     /// <summary>The one gate. Returns the warm in flight, a new one, or null when the set does not
     /// need topping up right now.</summary>
     private Task? StartWarm()
     {
-        if (!Wanted) return null;
+        Models.AppSettings? s;
+        try { s = _settings(); } catch { s = null; }
+        if (!Wanted)
+        {
+            // Consent withdrawn, or the source turned local: the set is not stale, it is not allowed.
+            if (Count() > 0) Drain();
+            return null;
+        }
+        var key = SourceKey(s);
+        bool moved;
+        lock (_gate) moved = _key != null && _key != key && _order.Count > 0;
+        if (moved) Drain();
         lock (_gate)
         {
+            _key = key;
             if (_warming != null) return _warming;
             if (_order.Count >= ReadyTarget) return null;
             if ((DateTime.UtcNow - _lastWarmUtc).TotalSeconds < WarmGapSeconds) return null;
             _lastWarmUtc = DateTime.UtcNow;
+            // A cold set is the only one a deal has to wait for; a top-up already has clips to deal.
+            if (_order.Count == 0) _firstLanded = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             return _warming = Task.Run(WarmBatchAsync);
         }
     }
 
+    public Task? WarmInFlight() { lock (_gate) return _warming; }
+
+    private int Count() { lock (_gate) return _order.Count; }
+
+    /// <summary>The identity of a warm set: effective source plus the room's channels, in order. Two
+    /// settings that resolve to the same pair share a set, so flipping between them keeps the wall.</summary>
+    internal static string SourceKey(Models.AppSettings? s)
+    {
+        string source;
+        try { source = BackRoomHostService.EffectiveMediaSource(s); } catch { source = "local"; }
+        IReadOnlyList<string> channels;
+        try { channels = RoomChannels(s); } catch { channels = Array.Empty<string>(); }
+        return source + "|" + string.Join(",", channels.Select(c => c.ToLowerInvariant()));
+    }
+
+    private static TaskCompletionSource<bool> Completed()
+    {
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        tcs.TrySetResult(true);
+        return tcs;
+    }
+
     /// <summary>Wait on a warm, but never past <see cref="WarmWaitMs"/>. The batch keeps filling
     /// afterwards; only the waiting stops, which is what keeps a sit-down off the network's clock.</summary>
-    private static async Task WaitBounded(Task warm, CancellationToken ct)
+    private static async Task WaitBounded(Task warm, Task firstLanded, CancellationToken ct)
     {
         using var cap = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var delay = Task.Delay(WarmWaitMs, cap.Token);
-        await Task.WhenAny(warm, delay).ConfigureAwait(false);
+        await Task.WhenAny(warm, firstLanded, delay).ConfigureAwait(false);
         cap.Cancel();
         // Observe the loser so a cancelled delay cannot surface as an unobserved fault.
         try { await delay.ConfigureAwait(false); } catch (OperationCanceledException) { }
@@ -336,7 +392,7 @@ internal sealed class BackRoomRemotePool : IBackRoomRemotePool
             // set the next warm believes is idle. A lane never throws; its failures are counted.
             try { await Task.WhenAll(lanes).ConfigureAwait(false); } catch { /* counted inside the lane */ }
             int ready;
-            lock (_gate) { _warming = null; ready = _order.Count; }
+            lock (_gate) { _warming = null; ready = _order.Count; _firstLanded.TrySetResult(ready > 0); }
             // Counts only, never a path and never a url (PII rule). A host, when one is ever worth
             // naming here, goes through Logging.UrlLog.Host and nothing else.
             if (warmed > 0 || dropped > 0)
@@ -378,6 +434,7 @@ internal sealed class BackRoomRemotePool : IBackRoomRemotePool
             {
                 _byId[entry.Id] = new Warm(entry.Id, url, entry.Width ?? 0, entry.Height ?? 0, path!);
                 _order.Add(entry.Id);
+                _firstLanded.TrySetResult(true);
             }
         }
         if (!added) Release(path!);

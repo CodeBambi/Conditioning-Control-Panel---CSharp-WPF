@@ -157,17 +157,29 @@ public class BackRoomHypnoBridgeTests
     public void CardsAndRoulette_NothingElse(string station, string op)
         => Assert.False(BackRoomApi.TryResolve(station, op, out _, out _));
 
+    /// <summary>
+    /// Owner, 2026-09-18: the casino ignores the panel's feature toggles. The four hypno gates are always on, the
+    /// same object the web shim sends, so a player who never switched Flash / Subliminal / Brain Drain on still gets
+    /// the whole show. Only the room's own tunnel and melt switches still come off the settings.
+    /// </summary>
     [Fact]
-    public void Gates_AreTheFourTogglesAndTheRoomSwitches_AllFalseWithNoSettings()
+    public void Gates_IgnoreThePanelToggles_OnlyTheRoomSwitchesFollowSettings()
     {
-        var s = new AppSettings { FlashEnabled = true, SubliminalEnabled = false, SpiralEnabled = true, BrainDrainEnabled = false, BackRoomMelt = false };
-        Assert.Equal("""{"flash":true,"subliminal":false,"spiral":true,"brainDrain":false,"tunnel":true,"melt":false}""",
-            JObject.FromObject(BackRoomHostService.GatesWire(s)).ToString(Newtonsoft.Json.Formatting.None));
+        var allOff = new AppSettings { FlashEnabled = false, SubliminalEnabled = false, SpiralEnabled = false, BrainDrainEnabled = false,
+            BackRoomTunnel = true, BackRoomMelt = false };
+        Assert.Equal("""{"flash":true,"subliminal":true,"spiral":true,"brainDrain":true,"tunnel":true,"melt":false}""",
+            JObject.FromObject(BackRoomHostService.GatesWire(allOff)).ToString(Newtonsoft.Json.Formatting.None));
+        var roomOn = new AppSettings { FlashEnabled = false, SubliminalEnabled = false, BrainDrainEnabled = false, BackRoomTunnel = false, BackRoomMelt = true };
+        Assert.Equal("""{"flash":true,"subliminal":true,"spiral":true,"brainDrain":true,"tunnel":false,"melt":true}""",
+            JObject.FromObject(BackRoomHostService.GatesWire(roomOn)).ToString(Newtonsoft.Json.Formatting.None));
+        // No settings at all: the four are still on; the room switches read as off.
         Assert.All(JObject.FromObject(BackRoomHostService.GatesWire(null)).Properties(),
-            p => Assert.Equal(p.Name == "spiral", (bool)p.Value));
-        foreach (var name in new[] { "FlashEnabled", "SubliminalEnabled", "SpiralEnabled", "BrainDrainEnabled", "MotionLevel", "BackRoomFxIntensity",
-                     "BackRoomTunnel", "BackRoomMelt" })
+            p => Assert.Equal(p.Name is not ("tunnel" or "melt"), (bool)p.Value));
+        foreach (var name in new[] { "MotionLevel", "BackRoomFxIntensity", "BackRoomTunnel", "BackRoomMelt" })
             Assert.Contains(name, BackRoomHostService.SettingsFrameProperties);
+        // The panel toggles no longer push a settings frame: the gates do not follow them.
+        foreach (var name in new[] { "FlashEnabled", "SubliminalEnabled", "SpiralEnabled", "BrainDrainEnabled" })
+            Assert.DoesNotContain(name, BackRoomHostService.SettingsFrameProperties);
     }
 
     /// <summary>

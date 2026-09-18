@@ -179,6 +179,25 @@ internal sealed class BackRoomMedia : IBackRoomMedia
         catch (Exception ex) { _log()?.Debug("BackRoomMedia: warm release failed ({Type})", ex.GetType().Name); }
     }
 
+    public async Task<bool> WaitForWarmAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var pool = _remote();
+            if (pool == null || !pool.Wanted) return false;
+            var warm = pool.WarmInFlight();
+            if (warm == null) return false;
+            await warm.WaitAsync(ct).ConfigureAwait(false);
+            return pool.Ready().Count > 0;
+        }
+        catch (OperationCanceledException) { return false; }
+        catch (Exception ex)
+        {
+            _log()?.Debug("BackRoomMedia: warm wait failed ({Type})", ex.GetType().Name);
+            return false;
+        }
+    }
+
     /// <summary>
     /// The async deal, and the one the protocol uses. The only thing it ever awaits is the warm pool
     /// topping itself up, and that wait is bounded and skipped entirely unless the source wants remote
