@@ -22,7 +22,7 @@ function stillSource(url) {
 }
 
 /**
- * createMedia({ ctx, still }) -> { load(), frame(i), count(), tick(now), words, keys(), trailWords(n),
+ * createMedia({ ctx, still }) -> { load(), redeal(), deals(), frame(i), count(), tick(now), words, keys(), trailWords(n),
  *                                  mark(i, x, y), setFocus(x, y, r), dispose() }
  * `frame(i)` picks a resident source by index modulo the resident count (bricks and colliders store a small
  * integer, so a short list still covers them). Returns a canvas or image, or null before anything loaded.
@@ -32,7 +32,7 @@ function stillSource(url) {
  */
 export function createMedia({ ctx, still = false, count = 8 } = {}) {
   const sources = [];
-  let words = [], disposed = false, focus = null;
+  let words = [], disposed = false, focus = null, busy = false, deals = 0;
   const controller = new AbortController();
   const idx = i => (!sources.length ? -1 : ((i | 0) % sources.length + sources.length) % sources.length);
   const near = s => !focus || !s.at || Math.hypot(s.at.x - focus.x, s.at.y - focus.y) <= focus.r;
@@ -45,23 +45,57 @@ export function createMedia({ ctx, still = false, count = 8 } = {}) {
     } catch (e) { /* fall through to a still */ }
     try { return await stillSource(url); } catch (e) { return null; }
   }
-  async function load() {
+  /** Ask the host for a deal and decode it into a list; the host keeps the newest deal for this sit-down. */
+  async function deal() {
     let dealt = null;
     try { dealt = await ctx.media({ count }); } catch (e) { dealt = null; }
-    if (!dealt || disposed) return;
-    words = Array.isArray(dealt.words) ? dealt.words.filter(w => w && w.text).map(w => ({ key: w.key, text: String(w.text) })) : [];
+    if (!dealt || disposed) return null;
+    const list = [];
     const gifs = Array.isArray(dealt.gifs) ? dealt.gifs.slice(0, MAX_RESIDENT) : [];
     await Promise.all(gifs.map(async (gif) => {
       if (!gif || !gif.url) return;
       const src = await one(gif.url);
       if (!src) return;
-      if (disposed || sources.length >= MAX_RESIDENT) { try { src.dispose(); } catch (e) { /* noop */ } return; }
-      sources.push({ key: gif.key, src });
+      if (disposed || list.length >= MAX_RESIDENT) { try { src.dispose(); } catch (e) { /* noop */ } return; }
+      list.push({ key: gif.key, src });
     }));
+    if (disposed) { for (const s of list) { try { s.src.dispose(); } catch (e) { /* noop */ } } return null; }
+    return { list, words: Array.isArray(dealt.words) ? dealt.words.filter(w => w && w.text).map(w => ({ key: w.key, text: String(w.text) })) : [] };
+  }
+  async function load() {
+    const d = await deal();
+    if (!d) return false;
+    words = d.words;
+    sources.push(...d.list);
+    deals++;
+    return true;
+  }
+  /**
+   * A fresh deal mid-run (every third wall, or after the room's source changed). The old pictures stay on
+   * screen until the new ones are decoded, then the list swaps in place: bricks and colliders keep their small
+   * indices and simply wear the new faces. One re-deal in flight at a time; a deal with nothing in it is kept out.
+   */
+  async function redeal() {
+    if (busy || disposed) return false;
+    busy = true;
+    try {
+      const d = await deal();
+      if (!d || disposed) return false;
+      if (!d.list.length && !d.words.length) return false;
+      if (d.list.length) {
+        const old = sources.splice(0, sources.length, ...d.list);
+        for (const s of old) { try { s.src.dispose(); } catch (e) { /* noop */ } }
+      }
+      if (d.words.length) words = d.words;
+      deals++;
+      return true;
+    } finally { busy = false; }
   }
   return {
-    load,
+    load, redeal,
     get words() { return words; },
+    /** How many deals have landed (1 after load, +1 per re-deal). */
+    deals: () => deals,
     count: () => sources.length,
     keys: () => sources.map(s => s.key),
     frame(i) { const k = idx(i); return k < 0 ? null : sources[k].src.canvas; },
@@ -77,14 +111,13 @@ export function createMedia({ ctx, still = false, count = 8 } = {}) {
 }
 
 /**
- * createSubliminals({ words(), rng, enabled, fx, w, h }) -> { tick(now, sat, on, ball), onBrick(now, sat, ball), current(now) }
+ * createSubliminals({ words(), rng, enabled, fx, w, h }) -> { tick(now, sat, on, ball), onBrick(now, sat, ball), current(now), reset() }
  * A word flashes for ~50 ms NEAR the ball (offset, never under it). Cadence: variable ratio, mean 4 s at rung 7
- * falling to 2 s at saturation 1; plus a 25% chance on every brick above 0.6. `fx('fx.sub_single', {s0})` at most
- * once per 10 s so the desktop host can flash its own.
+ * falling to 2 s at saturation 1; plus a 25% chance on every brick above 0.6. `fx('fx.sub_single', [key])` at most
+ * once per 10 s so the desktop host can flash its own. The fullscreen moments live in host-fx.js.
  */
-export function createSubliminals({ words, rng = Math.random, enabled = true, fx = null, w = 480, h = 720, gifKey = null, clock = null } = {}) {
-  let next = 0, flash = null, lastFx = -Infinity, lastJackpot = -Infinity;
-  const wall = () => (typeof clock === 'function' ? clock() : (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000);
+export function createSubliminals({ words, rng = Math.random, enabled = true, fx = null, w = 480, h = 720 } = {}) {
+  let next = 0, flash = null, lastFx = -Infinity;
   const list = () => (typeof words === 'function' ? words() : words) || [];
   function place(now, ball) {
     const pool = list();
@@ -94,7 +127,7 @@ export function createSubliminals({ words, rng = Math.random, enabled = true, fx
     const x = Math.max(40, Math.min(w - 40, (ball ? ball.x : w / 2) + Math.cos(a) * d));
     const y = Math.max(30, Math.min(h - 60, (ball ? ball.y : h / 2) + Math.sin(a) * d));
     flash = { text: word.text, key: word.key, x, y, at: now, until: now + 0.05 };
-    if (fx && now - lastFx >= 10) { lastFx = now; try { fx('fx.sub_single', { s0: word.key }); } catch (e) { /* host optional */ } }
+    if (fx && now - lastFx >= 10) { lastFx = now; try { fx('fx.sub_single', word.key ? [word.key] : []); } catch (e) { /* host optional */ } }
     return flash;
   }
   return {
@@ -108,27 +141,8 @@ export function createSubliminals({ words, rng = Math.random, enabled = true, fx
     onBrick(now, sat, ball) { return (enabled && sat > 0.6 && rng() < 0.25) ? place(now, ball) : null; },
     current(now) { return flash && now < flash.until ? flash : null; },
     reset() { flash = null; },
-    /**
-     * A jackpot brick: one fullscreen host effect, at most once per 30 s, never awaited. `fx.gif_from` is the
-     * fullscreen GIF in CONTRACT.md 10.13.B (there is no fx.gif_full); it grows from the window centre when no
-     * `from` box is given and rides the first dealt gif key. Failures are the host's business.
-     */
-    onJackpot() {
-      if (!fx) return false;
-      const now = wall();
-      if (now - lastJackpot < JACKPOT_FX_GAP_S) return false;
-      lastJackpot = now;
-      let key = null;
-      try { key = typeof gifKey === 'function' ? gifKey() : gifKey; } catch (e) { key = null; }
-      try {
-        const p = fx(JACKPOT_FX_ID, key ? [key] : [], { ms: 2600, scale: 1 });
-        if (p && typeof p.catch === 'function') p.catch(() => {});
-      } catch (e) { /* host optional */ }
-      return true;
-    },
   };
 }
-export const JACKPOT_FX_ID = 'fx.gif_from', JACKPOT_FX_GAP_S = 30;
 
 /** Three arms of a logarithmic spiral, rotated by `rot`, in `stroke`, with alpha. Procedural, no asset. */
 export function drawSpiral(g, x, y, r, rot, stroke, alpha = 1, arms = 3) {

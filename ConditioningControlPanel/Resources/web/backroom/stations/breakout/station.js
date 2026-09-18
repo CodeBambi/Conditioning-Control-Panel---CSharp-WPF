@@ -11,18 +11,22 @@
  *
  * Wiring: every game event goes to renderer.onGameEvent (falls back to the
  * older onEvent) and to the matching audio cue; the game gets a beat-only
- * audio shim so the sim paces on the bed but never plays sounds itself.
+ * audio shim so the sim paces on the bed but never plays sounds itself. The
+ * big beats also reach the host's fullscreen effects (host-fx.js), and the
+ * pictures re-deal every REDEAL_WALLS walls, or on the next wall after the
+ * room's source changed (br-media-changed), so a long run never goes stale.
  * ==========================================================================*/
 
 import { createGame, RUNG_NAMES, RUNG_AT } from './game.js';
 import { createRenderer } from './render.js';
 import { createMedia, createSubliminals } from './payloads.js';
 import { createAudio } from './audio.js';
+import { createHostFx } from './host-fx.js';
 
 export const roomStage = false;
 
 const num = (q, k, d) => (q.has(k) && !Number.isNaN(Number(q.get(k))) ? Number(q.get(k)) : d);
-const DEV_KEY = 'bo.dev.open', FOCUS_R = 140;
+const DEV_KEY = 'bo.dev.open', FOCUS_R = 140, REDEAL_WALLS = 3;
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private window */ } },
@@ -44,10 +48,10 @@ export async function mount(ctx) {
     (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
   const t = (k, f) => { try { const v = typeof ctx.lex === 'function' ? ctx.lex(k, f) : f; return v || f; } catch (e) { return f; } };
 
-  let el = null, canvas = null, game = null, renderer = null, media = null, subs = null, audio = null;
+  let el = null, canvas = null, game = null, renderer = null, media = null, subs = null, audio = null, host = null;
   let raf = 0, running = false, suspended = false, paused = false, lastT = 0, dpr = 1, frames = 0, audioOn = false;
   let sizeW = 0, sizeH = 0, fieldScale = 1, fieldOx = 0, fieldOy = 0, moved = false;
-  let lastSat = -1, lastState = '', lastTimeScale = 1, lastCombo = 0, lastSp = 0, sawHit = false;
+  let lastSat = -1, lastState = '', lastTimeScale = 1, lastCombo = 0, lastSp = 0, sawHit = false, sourceChanged = false;
   const lastCue = {};
   const input = { x: null, left: false, right: false, launch: false };
   const off = [];
@@ -140,21 +144,46 @@ export async function mount(ctx) {
         break;
       case 'perfect': au('perfect'); break;
       case 'nearMiss': au('nearMiss'); break;
-      case 'jackpot': au('jackpot'); if (subs && !d.ghost) subs.onJackpot(); break;
-      case 'shatterWall': if (cue('shatterWall')) au('shatterWall'); break;
+      case 'jackpot': au('jackpot'); if (!d.ghost) host.jackpot(pick(s.stats.walls)); break;
+      case 'shatterWall': if (cue('shatterWall')) { au('shatterWall'); if (s.state === 'colour') host.shatterWall(fieldBox(), pick(s.stats.walls)); } break;
       case 'brickLand': au('brickLand', { x: Number.isFinite(d.x) ? d.x / s.w : 0.5 }); break;
       case 'split': au('split'); break;
-      case 'wall': if (cue('wall')) au('wallCleared'); setSp(Number(d.sp) || s.stats.sp || 0); break;
-      case 'crack': if (cue('crack', 2000)) au('crack'); break;
+      case 'wall':
+        if (cue('wall')) au('wallCleared');
+        setSp(Number(d.sp) || s.stats.sp || 0);
+        onWall(Number(d.walls) || s.stats.walls || 0, d.mantra);
+        break;
+      case 'crack': if (cue('crack', 2000)) { au('crack'); host.crack(); } break;
       // The slow-mo starts silent (the bed pitches down via setTimeScale); the relapse cue lands on the cut.
       case 'relapseStart': if (subs) subs.reset(); break;
       case 'relapse': if (cue('relapse')) au('relapse'); if (subs) subs.reset(); break;
       // The breakout cue carries its own riser, so it starts with the rewind and the snap is silent.
-      case 'breakoutStart': case 'breakout': if (cue('breakout', 1500)) au('breakout'); break;
+      case 'breakoutStart': if (cue('breakout', 1500)) au('breakout'); break;
+      case 'breakout': host.breakout(pick(s.stats.walls)); break;
       default: break;
     }
   }
   const nowS = () => performance.now() / 1000;
+  /** A dealt picture key for a moment, cycling the resident list by wall count so consecutive moments differ. */
+  const pick = (n) => { const k = media ? media.keys() : []; return k.length ? k[((n | 0) % k.length + k.length) % k.length] : null; };
+  /** The playfield in page CSS px, the `from` box a fullscreen picture grows out of. */
+  function fieldBox() {
+    if (!canvas || !renderer) return null;
+    const r = canvas.getBoundingClientRect(), s = game.snapshot();
+    const a = toCss(0, 0), b = toCss(s.w, s.h);
+    return { x: r.left + a.x, y: r.top + a.y, w: b.x - a.x, h: b.y - a.y };
+  }
+  /** Every wall: the wash; a mantra wall: the sub rule; every third wall or after a source change: fresh pictures. */
+  function onWall(n, mantra) {
+    const colour = game.snapshot().state === 'colour';    // grey is payload-free: no host picture, no sub
+    if (!colour) { /* noop */ }
+    else if (mantra) { const w = media.words.find(x => x.text === mantra); host.mantra(w ? w.key : null); }
+    else host.wall(n, pick(n));
+    if (sourceChanged || (n > 0 && n % REDEAL_WALLS === 0)) {
+      sourceChanged = false;
+      media.redeal().then((ok) => { if (ok && game && typeof game.setWords === 'function') game.setWords(media.words.map(w => w.text)); }).catch(() => {});
+    }
+  }
 
   /* ------------------------------------------------------------ geometry */
   function resize() {
@@ -280,14 +309,16 @@ export async function mount(ctx) {
     renderer = createRenderer(canvas, { reduced, media });
     sawHit = typeof game.snapshot().combo === 'number';   // a v2 sim emits 'hit'; the raw names are then cosmetic only
     const gates = ctx.gates || {};
-    subs = createSubliminals({ words: () => media.words, enabled: gates.subliminal !== false, fx: typeof ctx.fx === 'function' ? ctx.fx : null,
-      gifKey: () => (media.keys()[0] || null) });
+    const fx = typeof ctx.fx === 'function' ? ctx.fx : null;
+    subs = createSubliminals({ words: () => media.words, enabled: gates.subliminal !== false, fx });
+    host = createHostFx({ fx, reduced });
     media.load().then(() => {
       if (!game || typeof game.setWords !== 'function') return;
       try { game.setWords(media.words.map(w => w.text)); } catch (e) { /* words are optional */ }
     }).catch(() => {});
     resize();
     on(window, 'resize', resize);
+    on(window, 'br-media-changed', () => { sourceChanged = true; });
     on(canvas, 'pointermove', (e) => { input.x = pointerX(e); if (!moved) { firstMove(); input.launch = true; } });
     on(window, 'pointermove', () => { if (paused) setPaused(false); });
     on(canvas, 'pointerdown', (e) => { startAudio(); input.x = pointerX(e); input.launch = true; firstMove(); if (paused) setPaused(false); });
@@ -323,7 +354,7 @@ export async function mount(ctx) {
     try { renderer && renderer.dispose(); } catch (e) { /* noop */ }
     if (el && el.parentNode) el.parentNode.removeChild(el);
     el = canvas = null; audioOn = false; paused = false; moved = false;
-    lastSat = -1; lastState = ''; lastTimeScale = 1; lastCombo = 0; lastSp = 0; sawHit = false;
+    lastSat = -1; lastState = ''; lastTimeScale = 1; lastCombo = 0; lastSp = 0; sawHit = false; sourceChanged = false;
   }
   function suspend(onOff) {
     suspended = !!onOff;
@@ -334,7 +365,7 @@ export async function mount(ctx) {
   async function destroy() {
     await close();
     try { audio && audio.destroy && audio.destroy(); } catch (e) { /* noop */ }
-    audio = null; game = null; renderer = null; media = null; subs = null;
+    audio = null; game = null; renderer = null; media = null; subs = null; host = null;
   }
 
   return { open, close, suspend, destroy,
