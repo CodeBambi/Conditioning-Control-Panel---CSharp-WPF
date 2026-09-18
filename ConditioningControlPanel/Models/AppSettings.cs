@@ -5026,6 +5026,21 @@ namespace ConditioningControlPanel.Models
             set { _backRoomMelt = value; OnPropertyChanged(); }
         }
 
+        private bool _backRoomWelcomeSeen;
+        /// <summary>
+        /// THE BACK ROOM first-visit card (CONTRACT section 13, 2026-09-18): true once the player has dismissed the
+        /// welcome card the room shows over its first open. Written from the room's <c>room-option welcomeSeen</c>
+        /// and echoed as <c>welcomeSeen</c> on <c>init</c>; it rides the settings file, so the card follows the
+        /// account rather than the WebView2 profile. Off by default: a settings file from before the card reads as
+        /// never seen, and that player gets the card once.
+        /// </summary>
+        [JsonProperty]
+        public bool BackRoomWelcomeSeen
+        {
+            get => _backRoomWelcomeSeen;
+            set { _backRoomWelcomeSeen = value; OnPropertyChanged(); }
+        }
+
         private bool _backRoomInvertLook;
         /// <summary>
         /// THE BACK ROOM Invert camera (CONTRACT 10.14, owner 2026-09-18): a drag in the room moves the world instead

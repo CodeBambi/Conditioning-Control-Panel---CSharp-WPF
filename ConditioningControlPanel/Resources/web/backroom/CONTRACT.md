@@ -1175,7 +1175,17 @@ Effects (Calm / Normal / Full, the existing `AppSettings.BackRoomFxIntensity`, s
 the card before anything else in the room. Lexicon keys `br_opt_title`, `br_opt_effects`, `br_opt_calm`,
 `br_opt_normal`, `br_opt_full`, `br_opt_calm_forced`, `br_opt_tunnel`, `br_opt_melt`, `br_opt_invert`, `br_opt_on`, `br_opt_off`.
 
-- Page -> host (section 2.1): `{ "type": "room-option", "key": "tunnel" | "melt" | "invertLook", "value": true | false }`
+**13. The first-visit card.** The first time the room opens for an account, `room/welcome.js` lays the loader's
+card chrome over the room the moment the veil lifts: the hero (`room/assets/welcome-hero.webp`, the Play tab's Back
+Room art), the title, three numbered steps (walk in / take a seat / spend your sparkles; the phone wording names the
+stick where the desk wording names keys) and one button. The button, Escape, Enter, Space or a tap on the veil close
+it; while it is up every key stops at the window's capture phase, so nothing behind the veil walks or seats.
+Dismissing posts `room-option {welcomeSeen:true}`; the host writes `AppSettings.BackRoomWelcomeSeen` and echoes
+`welcomeSeen` on `init`, so the card follows the account and never the browser profile (the room keeps no
+localStorage). An older host that sends no field reads as never seen. Lexicon keys `br_welcome_title`,
+`br_welcome_sub`, `br_welcome_step{1,2,3}_lead`, `br_welcome_step{1,2,3}`, `br_welcome_step{1,2}_touch`, `br_welcome_go`.
+
+- Page -> host (section 2.1): `{ "type": "room-option", "key": "tunnel" | "melt" | "invertLook" | "welcomeSeen", "value": true | false }`
   (`invertLook` = Invert camera, 2026-09-18: a drag moves the world instead of the camera, both axes, the seated look
   included; `AppSettings.BackRoomInvertLook`, off by default, echoed as `invertLook` on `init` and `settings`),
   `{ "key": "intensity", "value": "calm" | "normal" | "full" }`,

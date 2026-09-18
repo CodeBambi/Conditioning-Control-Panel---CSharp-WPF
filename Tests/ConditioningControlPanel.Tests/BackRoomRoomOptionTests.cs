@@ -69,6 +69,20 @@ public class BackRoomRoomOptionTests
         Assert.Null(Read("invertLook", 1));
     }
 
+    /* --------------------------------------------------------------- the first-visit card (2026-09-18) */
+
+    [Fact]
+    public void WelcomeSeen_IsASwitchTheRoomSetsOnce()
+    {
+        // Off by default: a settings file from before the card reads as never seen, and that player gets the card once.
+        Assert.False(new AppSettings().BackRoomWelcomeSeen);
+        Assert.True(Apply(new AppSettings(), "welcomeSeen", true).BackRoomWelcomeSeen);
+        // The wire is a bool switch like the others, so a false is honoured too (nothing sends one today).
+        Assert.False(Apply(new AppSettings { BackRoomWelcomeSeen = true }, "welcomeSeen", false).BackRoomWelcomeSeen);
+        Assert.Null(Read("welcomeSeen", "true"));
+        Assert.Null(Read("welcomeSeen", 1));
+    }
+
     /* --------------------------------------------------------------------- the three levels */
 
     [Theory]
