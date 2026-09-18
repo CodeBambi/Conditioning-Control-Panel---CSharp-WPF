@@ -11,6 +11,12 @@ namespace ConditioningControlPanel
     public partial class MainWindow
     {
         /// <summary>
+        /// When the engine last started (UTC), or null while it is stopped. The launcher's status
+        /// line reads it; the field itself belongs to MainWindow.StartStop.cs.
+        /// </summary>
+        public DateTime? EngineStartedUtc => _emiEngineStartedUtc;
+
+        /// <summary>
         /// Hide the panel to the tray for the launcher. Same as close-to-tray, minus nothing: the
         /// engine, the session and every overlay keep going. The tray icon stays the way back.
         /// </summary>
