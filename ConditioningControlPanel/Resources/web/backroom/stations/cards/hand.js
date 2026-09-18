@@ -6,14 +6,13 @@
  * or a lost reply, the returned hand adopted on stale, illegal and hand_open)
  * and holds Law I: a settled hand's return is owed until the page shows it.
  *
- * Never the rules: legal moves, the hint, totals and pays all come from the
+ * Never the rules: legal moves, totals and pays all come from the
  * server. The only arithmetic here is a display total for the cards that are
  * face up on the felt while the dealer's hand is still being turned.
  * ==========================================================================*/
 
 export const MOVES = Object.freeze(['hit', 'stand', 'double', 'split']);
 export const IDEM_RE = /^[A-Za-z0-9_-]{16,64}$/;
-export const HINT_KEY = 'br_cards_hint';
 /** Below this balance the bet chip starts on the smallest stake (owner decision, 10.13.F). */
 export const LOW_SP = 30;
 export const RETRY = Object.freeze({ busyMs: 650, timeoutMs: 250, tries: 3, fastTries: 2, fastCapMs: 9000 });
@@ -71,19 +70,20 @@ export function readHand(h) {
 
 export const legalOf = (legal) => (Array.isArray(legal) ? MOVES.filter((m) => legal.includes(m)) : []);
 
-/** GET state (or any body that carries hand, legal, hint). Missing fields read as a table with no hand. */
+/** GET state (or any body that carries hand and legal). Missing fields read as a table with no hand. The server
+ *  still sends a basic-strategy `hint` in these bodies; the hint feature is gone from the page, so it is dropped
+ *  here rather than read, and a server that keeps sending it is harmless. */
 export function readState(body) {
   const b = body && typeof body === 'object' ? body : {};
   const rules = b.rules && typeof b.rules === 'object' ? b.rules : {};
-  const stakes = Array.isArray(rules.stakes) && rules.stakes.length ? rules.stakes.map((s) => int(s)).filter((s) => s > 0) : [1, 2];
+  const stakes = Array.isArray(rules.stakes) && rules.stakes.length ? rules.stakes.map((s) => int(s)).filter((s) => s > 0) : [1, 2, 3];
   return {
     sp: Math.max(0, int(b.sp)),
     open: b.open !== false,
     hand: readHand(b.hand),
     legal: legalOf(b.legal),
-    hint: MOVES.includes(b.hint) ? b.hint : null,
     autoStandAt: typeof b.autoStandAt === 'string' ? b.autoStandAt : null,
-    rules: { ...rules, stakes: stakes.length ? stakes : [1, 2] },
+    rules: { ...rules, stakes: stakes.length ? stakes : [1, 2, 3] },
     floorMs: Math.max(0, int(b.floorMs, 5000)),
   };
 }
@@ -91,7 +91,7 @@ export function readState(body) {
 export const isOpen = (hand) => !!hand && !hand.done;
 
 /** The bet chip a sit-down starts on: the smallest stake below LOW_SP, else the largest the balance covers. */
-export function defaultStake(sp, stakes = [1, 2]) {
+export function defaultStake(sp, stakes = [1, 2, 3]) {
   const s = stakes.slice().sort((a, b) => a - b);
   if (!s.length) return 1;
   if (!(Number(sp) >= LOW_SP)) return s[0];
@@ -168,11 +168,3 @@ export function owedFor(body) {
   return Math.max(0, Math.min(hand.result.returned, credited));
 }
 export const shownSp = (sp, owed) => Math.max(0, int(sp) - Math.max(0, int(owed)));
-
-/** The hint preference (off by default). Storage can throw or be missing; both read as off. */
-export function readHintPref(storage) {
-  try { return !!storage && storage.getItem(HINT_KEY) === '1'; } catch (e) { return false; }
-}
-export function writeHintPref(storage, on) {
-  try { if (storage) { if (on) storage.setItem(HINT_KEY, '1'); else storage.removeItem(HINT_KEY); } } catch (e) { /* noop */ }
-}

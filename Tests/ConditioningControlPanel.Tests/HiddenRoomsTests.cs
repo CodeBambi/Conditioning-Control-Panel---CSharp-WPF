@@ -6,9 +6,17 @@ using Xunit;
 namespace ConditioningControlPanel.Tests;
 
 /// <summary>
-/// Racing Thoughts and Piece by Piece are on main but not ready for a release. Their Play wall
-/// surfaces are collapsed in PlayTabView.xaml; this tripwire fails the build the moment one of
-/// them is revealed, so the reveal is a deliberate commit and not a stray reflow.
+/// The Play wall's release gate for the two rooms that shipped hidden at the 6.9.5 cut.
+///
+/// <para>Piece by Piece is still behind it: its strip is collapsed in PlayTabView.xaml and this
+/// tripwire fails the build the moment it is revealed, so the reveal is a deliberate commit and
+/// not a stray reflow.</para>
+///
+/// <para>Racing Thoughts came out from behind it on 2026-09-17, and the assertion INVERTED rather
+/// than being deleted. That button is the only door the game has ever had - no Lab entry, no hub
+/// tile, nothing but the two dev args - so a reflow that re-collapses it takes the whole game off
+/// the wall with no other way in. The tripwire is worth as much pointing this way as it was
+/// pointing the other.</para>
 /// </summary>
 public class HiddenRoomsTests
 {
@@ -31,11 +39,20 @@ public class HiddenRoomsTests
     }
 
     [Theory]
-    [InlineData("BtnPlayRace")]
     [InlineData("SlotPieceByPiece")]
     public void UnreleasedRoomStaysCollapsed(string name)
     {
         var tag = OpeningTag(PlayXaml(), name);
         Assert.Contains(@"Visibility=""Collapsed""", tag);
+    }
+
+    [Fact]
+    public void RacingThoughtsHasItsDoorBack()
+    {
+        // Not just "not Collapsed": an explicit Visibility of any kind on this button means someone
+        // has started driving it from XAML again, and the last time that happened the game vanished.
+        var tag = OpeningTag(PlayXaml(), "BtnPlayRace");
+        Assert.DoesNotContain("Visibility=", tag);
+        Assert.Contains("Click=\"BtnStartRace_Click\"", tag);
     }
 }

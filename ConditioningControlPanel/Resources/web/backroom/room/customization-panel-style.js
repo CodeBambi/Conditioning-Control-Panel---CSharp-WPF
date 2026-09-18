@@ -8,7 +8,7 @@ body:has(.br-custom-panel:not([hidden])) .br-nav{right:calc(50vw + 12px)}
 .br-custom-panel button{background:#30203c;border:1px solid #75536d;border-radius:8px;padding:8px}
 .br-custom-panel button:hover{background:#523257}.br-custom-panel :is(button,summary):focus-visible{outline:2px solid #78f4dc;outline-offset:2px}
 .br-custom-panel button[aria-pressed=true]{background:#713a60;border-color:#edc077;color:#fff0cf}
-.br-custom-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;background:#24122f}
+.br-custom-header{display:flex;align-items:center;justify-content:flex-start;gap:14px;padding:8px 68px 8px 12px;background:#24122f}
 .br-custom-header h2{font:600 20px/1.2 "Segoe UI",system-ui,sans-serif;color:#f3d5a0;margin:0}
 .br-custom-stage{position:relative;flex:1;min-height:100px;overflow:hidden;touch-action:none}
 .br-custom-overview{position:absolute;right:8px;top:8px;z-index:3;background:#21142ed9!important;font-size:11px!important}
@@ -19,8 +19,9 @@ body:has(.br-custom-panel:not([hidden])) .br-nav{right:calc(50vw + 12px)}
 .br-custom-more{font-size:12px}.br-custom-more summary{padding:5px 0;color:#d6c0df}
 .br-custom-more[open]{position:absolute;bottom:100%;left:10px;right:10px;z-index:6;padding:10px;background:#24122ff5;border:1px solid #bd936c;border-radius:12px;box-shadow:0 -8px 25px #0008}
 .br-custom-footer{order:3;padding:4px 12px;background:#160d24;text-align:right}.br-custom-footer button{padding:3px;border:0;background:transparent;font-size:11px;color:#b8a4bf}
-.br-custom-remove{display:block;width:100%;margin-top:7px;font-size:13px}
+.br-custom-buy,.br-custom-remove{display:block;width:100%;margin-top:7px;font-size:13px}
 .br-custom-note{font-size:12px;color:#e1c8dc;margin:4px 0}.br-custom-prompt{margin:0;color:#d8c3e1}
+.br-custom-panel button:disabled{opacity:.5;cursor:default}.br-custom-buy{border-color:#edc077!important;background:#503048!important}
 .br-custom-palettes button:nth-child(1){border-bottom:3px solid #ef26aa}.br-custom-palettes button:nth-child(2){border-bottom:3px solid #13bea5}.br-custom-palettes button:nth-child(3){border-bottom:3px solid #f47939}
 /* The lever arrows sit on the room pane, the part of the screen the sheet leaves free. */
 .br-custom-arrows{position:fixed;left:0;top:0;right:50vw;bottom:0;z-index:29;pointer-events:none;font:13px/1.35 "Segoe UI",system-ui,sans-serif;color:#f7e5ef}

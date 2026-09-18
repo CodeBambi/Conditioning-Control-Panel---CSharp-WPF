@@ -65,6 +65,10 @@
     const val = (id) => { const r = q(`.rm-row[data-id="${id}"] .rm-row-val`); return r ? r.textContent : '(no row)'; };
     const shown = (node) => !!node && !node.hidden;
 
+    ok(!shown(q('.rm-btn[data-id="options"]')), 'secondary actions start folded');
+    tap(q('.rm-btn[data-id="more"]'));
+    ok(q('.rm-btn[data-id="more"]').getAttribute('aria-expanded') === 'true', 'more exposes secondary actions');
+
     // ---- trap 1: a tap could only ever step the value UP ----
     tap(q('.rm-btn[data-id="options"]'));
     ok(shown(q('.rm-options')), 'the options verb opens the options panel');
@@ -99,12 +103,20 @@
     const verbs = [...document.querySelectorAll('#race-root .rm-list .rm-btn:not([hidden])')];
     ok(verbs.length >= 5 && verbs.every((b) => b.getBoundingClientRect().height > 0), `every visible verb has a box to hit (${verbs.length} of them)`);
     ok(getComputedStyle(q('.rm-col')).overflowY === 'auto', 'the column scrolls itself instead of spilling under the clip');
-    // the landscape phone. Run this page at 844x390 and the number below is the whole point of the
-    // short-viewport rule: all SEVEN verbs (track and clear only ever show under a host) in 390 px.
-    // Only asserted while the short-viewport rule is live, so the same page passes on a desktop too.
-    for (const b of document.querySelectorAll('#race-root .rm-list .rm-btn')) b.hidden = false;
-    const col = q('.rm-col'), short = matchMedia('(max-height: 480px)').matches;
-    ok(!short || col.scrollHeight <= 390, `all seven verbs in 390 px: ${col.scrollHeight} px${short ? '' : ' (tall screen, not asserted)'}`);
+    menu.hideVerb('surface');
+    tap(q('.rm-btn[data-id="more"]'));
+    ok(!shown(q('.rm-btn[data-id="options"]')), 'less folds secondary actions');
+    tap(q('.rm-btn[data-id="more"]'));
+    ok(!shown(q('.rm-btn[data-id="surface"]')), 'host-hidden exit stays hidden after expanding');
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', key: 'Escape', bubbles: true }));
+    ok(q('.rm-btn[data-id="more"]').getAttribute('aria-expanded') === 'false', 'escape folds more');
+    q('.rm-btn[data-id="more"]').focus();
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Enter', key: 'Enter', bubbles: true }));
+    ok(shown(q('.rm-btn[data-id="options"]')), 'enter follows the actual focused button');
+    const last = q('.rm-btn[data-id="story"]');
+    last.scrollIntoView({ block: 'nearest' });
+    const box = last.getBoundingClientRect();
+    ok(box.top >= 0 && box.bottom <= innerHeight, 'expanded actions remain reachable on a short screen');
 
     const head = document.createElement('div');
     head.textContent = fails ? `FAIL ${fails}` : 'PASS';

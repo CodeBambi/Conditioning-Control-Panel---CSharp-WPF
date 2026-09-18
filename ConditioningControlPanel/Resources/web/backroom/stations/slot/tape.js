@@ -64,9 +64,10 @@ function adoptTape(t) {
 const unplayed = t => !!t && t.played < t.outcomes.length;
 
 export function createTape({ request, sleep = ms => new Promise(r => setTimeout(r, ms)),
-                             mint = mintId, onMelt = () => {} }) {
+                             mint = mintId, onMelt = () => {}, chaseSession = null }) {
   let sp = 0, table = null, strips = null, shown = null, floorMs = 800;
-  let main = null, side = null;
+  let main = null, side = null, wheelChase = null;
+  let chaseEnabled = !!chaseSession;
   let hold = null;          // ONE frozen column (9.1), null when none
   let pending = null;       // { key, idem, op, body }: kept until a definitive answer
   let melt = 0, free = 0, lastWin = 0, last = null;
@@ -88,6 +89,11 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
   function adopt(body) {
     if (Number.isFinite(body.sp)) sp = body.sp;
     if (body.table) table = body.table;
+    if (body.wheelChase?.id && Array.isArray(body.wheelChase.symbols)) {
+      // Credit totals settle ahead of playback. Expose only the target, never future bonus awards.
+      const { id, symbols, oneIn } = body.wheelChase;
+      wheelChase = { id, symbols: symbols.slice(0, 3), oneIn };
+    }
     if (Number.isFinite(body.jackpot) && table) table = { ...table, jackpot: body.jackpot };
     if (Array.isArray(body.strips)) strips = body.strips;
     if (Array.isArray(body.shown)) shown = body.shown;
@@ -119,6 +125,13 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
     comp = compOffer(res.body.comp);   // 10.16.C: `state` reports what the room's visit ping stored
     free = last ? last.freeLeft || 0 : 0;
     lastWin = last ? last.pay || 0 : 0;
+    if (chaseEnabled) {
+      const chase = await send('chase', 'chase', { session: chaseSession }, my);
+      if (chase.kind) return { ok: false, reason: chase.kind };
+      if (!chase.ok && ['bad_op', '404', 'http_404'].includes(String(chase.reason))) { chaseEnabled = false; wheelChase = null; }
+      else if (!chase.ok) return { ok: false, reason: chase.reason };
+      else adopt(chase.body);
+    }
     reported = null;
     reportMelt();
     return { ok: true };
@@ -193,6 +206,13 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
     if (comp) return buyComp(my);
     const count = tapeCount();
     if (count < 1) return refuse('insufficient');
+    if (chaseEnabled && pending?.op !== 'tape') {
+      const chase = await send('chase', 'chase', { session: chaseSession, ...cursorBody() }, my);
+      if (chase.kind) return chase;
+      if (!chase.ok && ['bad_op', '404', 'http_404'].includes(String(chase.reason))) { chaseEnabled = false; wheelChase = null; }
+      else if (!chase.ok) return refuse(chase.reason);
+      else adopt(chase.body);
+    }
     const r = await send('tape', 'tape', { count, ...cursorBody() }, my);
     if (r.kind) return r;
     if (!r.ok && r.reason === 'tape_unplayed' && r.body.tape) {
@@ -277,7 +297,7 @@ export function createTape({ request, sleep = ms => new Promise(r => setTimeout(
     snapshot() {
       const n = next();
       return {
-        sp, shownSp: shownSpOf(sp, main, side), melt, free, lastWin, last, hold,
+        sp, shownSp: shownSpOf(sp, main, side), melt, free, lastWin, last, hold, wheelChase,
         // 10.16: the jar as of the cursor, the table's jar block, and the comp still standing.
         jar, jarSize: (table && table.jar && table.jar.size) || 0, jarFree: (table && table.jar && table.jar.free) || 0,
         comp, compSpent, jackpotOdds: (table && table.jackpotOdds) || null,

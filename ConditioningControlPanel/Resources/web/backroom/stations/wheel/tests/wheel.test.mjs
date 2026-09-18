@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TAU, layoutOf, kindOf, sliceAt, landingAngle, resultIndex, readResult, landingRotation, restRotation,
-         planLanding, rotationAt, countdown, shownSp } from '../wheel.js';
+         planLanding, rotationAt, settleMs, SETTLE_EPS_RAD, countdown, shownSp } from '../wheel.js';
 
 // Server TABLE_V2 order and drawn widths (degrees), as GET state sends them.
 const WIDTHS = [['jackpot', 7.2], ['sip_a', 31.3], ['glow', 42], ['sparkle_a', 44], ['dreamy', 8], ['sip_b', 31.3], ['shimmer', 25],
@@ -49,6 +49,23 @@ test('every sliceIndex lands inside its drawn slice, from any start, either dire
       }
     }
   }
+});
+
+test('THE SETTLE ends the landing when the picture is still, not when the clock runs out', () => {
+  for (const [omega, landing] of [[0.01, 2], [-0.012, 4], [0.008, 0.3], [-0.005, 5.5]]) {
+    const plan = planLanding({ from: 0, omega, landing });
+    const at = settleMs(plan);
+    assert.ok(at > 0 && at < plan.ms, `settle ${at} of ${plan.ms}`);
+    // What is left to travel at the settle is the snap, and it is under the eye's threshold at the rim.
+    const left = Math.abs(plan.to - rotationAt(plan, at));
+    assert.ok(left <= SETTLE_EPS_RAD * 1.0001, `left ${left} rad`);
+    // The trimmed tail is real: a tenth of the plan clock or more, which the warp stretches into seconds.
+    assert.ok(plan.ms - at > plan.ms * 0.1, `tail ${plan.ms - at} ms`);
+  }
+  // A nudge shorter than the epsilon has no dead tail to trim, and a broken plan asks for no time at all.
+  assert.equal(settleMs({ from: 0, to: 0.001, ms: 700 }), 700);
+  assert.equal(settleMs({ from: 0, to: 9, ms: 0 }), 0);
+  assert.equal(settleMs(null), 0);
 });
 
 test('the plan starts at the coast speed when the duration is not clamped', () => {

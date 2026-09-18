@@ -2804,14 +2804,17 @@ namespace ConditioningControlPanel
             }
 
             // Racing Thoughts (the kart run on the descent's media), dev shortcut: `--race` opens
-            // the race window straight away. Same door as `--dtrh` - the race is a DtRH sibling
-            // and answers to the descent's tier gate, not one of its own.
-            if (e.Args.Contains("--race"))
-            {
-                var raceGate = Services.TierGate.RequiresLab("Down the Rabbit Hole", "dtrh");
-                if (raceGate.Allowed) Services.Chaos.CaucusHostService.Launch();
-                else Logger?.Information("--race ignored: {Reason}", raceGate.Reason);
-            }
+            // the race window straight away. NOT the same door as `--dtrh` any more: the race has
+            // no tier door since 2026-09-17 (owner's call - open testing on both surfaces) while
+            // the descent above is still tier 2. This arg asks exactly what BtnStartRace_Click
+            // asks, which is the only thing that keeps a dev shortcut honest about the product.
+            //
+            // The race-06/race-07 stack arrived a day later proposing a PURCHASE door here
+            // (RacingAccess.CanLaunch) in place of the tier one. Refused at the merge: a purchase
+            // check is the same closed door under a new name, and the owner deleted that door
+            // hours before the stack landed. RacingAccess itself is kept whole and tested, and
+            // disarmed in ONE place - see the PurchaseDoorArmed note in Services/Race/RacingAccess.cs.
+            if (e.Args.Contains("--race")) Services.Chaos.CaucusHostService.Launch();
 
             // `--race-chart <file>`: chart a hypno file from the command line - decode, the energy
             // pass, the word pass when it is available, then write the chart to the cache and quit.
@@ -2861,9 +2864,8 @@ namespace ConditioningControlPanel
 
             // Track charts (CHART.md PR c6), dev shortcut: `--race-track <file>` opens the race
             // and drives the host's own track handlers against that file - pick, play, pause at
-            // 5s, resume at 8s, stop at 12s - logging every track-* post as JSON. Unrestricted
-            // like `--dtrh-m2test`: it is a debugging rig for the audio + analysis path, not a
-            // way into the game (the page it drives is the same one `--race` opens).
+            // 5s, resume at 8s, stop at 12s - logging every track-* post as JSON. The host
+            // enforces the same racing purchase as every other launch path.
             int raceTrackArg = Array.IndexOf(e.Args, "--race-track");
             if (raceTrackArg >= 0)
             {
@@ -2876,13 +2878,10 @@ namespace ConditioningControlPanel
             // `--race-cloud`: open the race and then the BambiCloud window straight away. The
             // cloud path starts from a menu verb, and a browser frame cannot be driven by synthetic
             // clicks, so this is the only way to exercise it end to end. A dev rig like
-            // `--race-track`: it opens the same page `--race` opens and gates nothing.
-            if (e.Args.Contains("--race-cloud"))
-            {
-                var cloudGate = Services.TierGate.RequiresLab("Down the Rabbit Hole", "dtrh");
-                if (cloudGate.Allowed) Services.Chaos.CaucusHostService.Launch(null, openCloud: true);
-                else Logger?.Information("--race-cloud ignored: {Reason}", cloudGate.Reason);
-            }
+            // `--race-track`: it opens the same page `--race` opens, and now really does gate
+            // nothing - the comment said so while the code below still asked for tier 2. The
+            // stack's purchase check is refused here for the same reason it is refused above.
+            if (e.Args.Contains("--race-cloud")) Services.Chaos.CaucusHostService.Launch(null, openCloud: true);
 
             // Goon Game browser client, dev shortcut: `--goon` opens the web duel window straight
             // away (same shape as `--dtrh`). Needs MainWindow to exist first — the host owns its

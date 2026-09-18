@@ -1,13 +1,19 @@
+@import url("../../shared/back.css");
 /* station.css - Velvet Vortex roulette station chrome, the wheel station's look (stations/wheel/station.css)
    scoped under .roul-station so the room's own styles never collide. No backdrop-filter (law 7). */
 .roul-station { position: absolute; inset: 0; z-index: 20; overflow: hidden; color: #efe6ff; background: #0a0614;
   font-family: Segoe UI, Arial, sans-serif; color-scheme: dark; }
 .roul-station * { box-sizing: border-box; }
 .roul-station button, .roul-station summary { font: inherit; cursor: pointer; }
-.roul-station button { border: 1px solid #ab79a766; color: #efe6ff; background: #28172fe8; border-radius: 10px;
-  padding: 8px 14px; min-height: 36px; transition: background .15s, transform .1s; }
-.roul-station button:hover:not(:disabled) { background: #583056; }
-.roul-station button:active:not(:disabled) { transform: scale(.96); }
+.roul-station button { border: 1px solid #c58bbd59; border-top-color: #efc0e47a; color: #fce5f3; border-radius: 11px;
+  padding: 8px 14px; min-height: 36px; background: linear-gradient(180deg, #3d2449, #2a1734 54%, #1d0f26);
+  box-shadow: inset 0 1px 0 #ffeafb26, inset 0 -2px 0 #00000057, 0 2px 0 #150b1f, 0 6px 16px #05020a73;
+  text-shadow: 0 1px 2px #0a0512cc; transition: background .15s, box-shadow .12s, transform .08s; }
+.roul-station button:hover:not(:disabled) { background: linear-gradient(180deg, #55305f, #3a1f46 54%, #27142f);
+  border-color: #ffb7e08c; box-shadow: inset 0 1px 0 #fff0fc3d, inset 0 -2px 0 #00000057, 0 2px 0 #150b1f, 0 8px 22px #0b0416a1; }
+.roul-station button:active:not(:disabled) { transform: translateY(2px);
+  background: linear-gradient(180deg, #24132e, #2e1a39 60%, #351f40);
+  box-shadow: inset 0 3px 7px #00000080, inset 0 -1px 0 #ffeafb12, 0 0 0 #150b1f; }
 .roul-station button:focus-visible, .roul-station summary:focus-visible { outline: 2px solid #5fffd0; outline-offset: 3px; }
 .roul-station button:disabled { opacity: .5; cursor: default; }
 .roul-station [hidden] { display: none !important; }
@@ -26,7 +32,7 @@
 .roul-history li { background: #1a0f24e0; border: 1px solid #e8c27a33; border-radius: 20px; padding: 2px 8px; color: #e8d6f3;
   font-variant-numeric: tabular-nums; }
 
-.roul-controls { position: absolute; right: 3vw; bottom: 16px; z-index: 4; display: flex; flex-direction: column; align-items: flex-end;
+.roul-controls { position: absolute; right: 3vw; bottom: max(16px, var(--br-sill, 0px)); z-index: 4; display: flex; flex-direction: column; align-items: flex-end;
   gap: 8px; width: min(47vw, 560px); }
 .roul-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; font-size: 12px; }
 .roul-pips { display: inline-flex; gap: 4px; margin-right: 4px; }
@@ -46,14 +52,40 @@
 /* Law VIII: a press answers on its frame with a ring (a state, so reduced motion keeps it). */
 .roul-station .is-ringing { box-shadow: 0 0 0 3px #5fffd0cc !important; }
 
-.roul-odds { position: absolute; left: 14px; bottom: 16px; z-index: 4; font-size: 12px; max-width: min(420px, calc(100vw - 32px)); }
+.roul-odds { position: absolute; left: 14px; bottom: max(16px, var(--br-sill, 0px)); z-index: 4; font-size: 12px; max-width: min(420px, calc(100vw - 32px)); }
 .roul-odds summary { list-style: none; border: 1px solid #ab79a766; background: #28172fe8; border-radius: 8px; padding: 7px 12px; display: inline-block; }
-.roul-odds[open] { background: #24142df5; border: 1px solid #ab79a766; border-radius: 12px; padding: 10px; max-height: calc(100vh - 150px); overflow: auto; }
+/* dvh, not vh: on mobile Safari 100vh is the LARGE viewport, so an open panel ran under the browser chrome and
+   its last rows could not be reached. The vh line stays first as the fallback for a browser without dvh. */
+.roul-odds[open] { background: #24142df5; border: 1px solid #ab79a766; border-radius: 12px; padding: 10px; overflow: auto;
+  max-height: calc(100vh - 150px); max-height: calc(100dvh - 150px); }
 .roul-odds table { border-collapse: collapse; margin-top: 8px; width: 100%; }
 .roul-odds th { text-align: left; font-weight: 500; padding: 2px 10px 2px 0; }
 .roul-odds td { text-align: right; padding: 2px 0 2px 10px; color: #edc7df; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .roul-odds p { margin: 8px 0 0; color: #bda2bf; }
 
+/* THE REWARD (CONTRACT 10.22). THE BANK's tokens fly over everything but the callout (z 60): the handful
+   leaves the paying chips on the mat and lands on the SP chip, so it crosses the odds panel and the controls. */
+.roul-tokens { position: absolute; inset: 0; z-index: 7; pointer-events: none; overflow: hidden; }
+.roul-token { position: absolute; left: -8px; top: -8px; width: 16px; height: 16px; border-radius: 50%; will-change: transform;
+  background: radial-gradient(circle at 35% 30%, #fff6d8, #e8c27a 45%, #ff5fa2 100%); box-shadow: 0 0 10px #e8c27a99; }
+/* THE +N, the band of felt between the odds panel and the controls. Brake 9: the pay is text before it is
+   anything else, and it survives motion level 0. THE GLOW (cfx-warm), THE SPARKLE BURST (cfx-sparks, fired from
+   the middle of this box) and THE REVEAL all land here, which is why it is positioned and has a radius of its
+   own: .cfx-warm borrows `border-radius: inherit` and .cfx-sparks sits at 50%/50% of its host. */
+.roul-gain { position: absolute; left: 50%; bottom: 88px; transform: translateX(-50%); z-index: 7; margin: 0;
+  padding: 7px 18px; border-radius: 30px; background: #2a1a33e8; border: 1px solid #e8c27a77; color: #ffe8bd;
+  font-size: 19px; font-weight: 700; letter-spacing: .02em; font-variant-numeric: tabular-nums; white-space: nowrap;
+  text-shadow: 0 2px 10px #0d0616; max-width: calc(100vw - 24px); }
+/* The hero's own look, held for as long as the badge is up: the move is the 620 ms animate() in station.js.
+   34 px of nowrap with no ceiling ran off BOTH edges of a phone on a five-figure pay or a longer locale, and
+   this is the one frame of 10.22.D that must not look broken. It shrinks to fit instead. */
+.roul-gain[data-reveal] { font-size: min(34px, 8.2vw); padding: 10px min(26px, 5vw); color: #fff3d6; border-color: #ffe3a6;
+  box-shadow: 0 0 34px #e8c27a66, 0 0 70px #ff5fa233; }
+
+.roul-rotate { position: absolute; left: 50%; bottom: max(96px, calc(var(--br-sill, 0px) + 84px)); transform: translateX(-50%);
+  z-index: 5; max-width: calc(100vw - 32px); display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 30px;
+  font-size: 12px; line-height: 1.3; background: #201229ee; border-color: #ffcf6b66; color: #ffe3f2; box-shadow: 0 4px 16px #08030c66; }
+.roul-rotate i { font-style: normal; font-size: 16px; color: #ffcf6b; }
 .roul-card { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 6; background: #28172ff2;
   border: 1px solid #edb1d177; border-radius: 14px; padding: 18px 22px; text-align: center; max-width: min(420px, calc(100vw - 32px)); }
 .roul-card p { margin: 0 0 12px; }
@@ -67,7 +99,7 @@
   .roul-controls { left: 16px; right: 16px; width: auto; align-items: stretch; }
   .roul-row { justify-content: flex-start; }
   .roul-why { text-align: left; }
-  .roul-odds { bottom: auto; top: 50%; }
+  .roul-odds { bottom: auto; top: 84px; }   /* it grows DOWNWARD, so anchoring it at the middle put its tail off screen */
 }
 @media (prefers-reduced-motion: reduce) { .roul-station * { transition: none !important; } }
 /* Seated play (CONTRACT 10.18) uses the room canvas: the room camera frames the authored mat, taps land on it. */
@@ -78,32 +110,7 @@
 .roul-station[data-seated] .roul-top { top: 108px; max-width: calc(100% - 104px); }
 .roul-chips-label { font-weight: 600; padding: 4px 0; white-space: nowrap; }
 @media (max-width: 800px), (max-aspect-ratio: 11/10) {
-  .roul-station[data-seated] .roul-controls { top: auto; bottom: 16px; }
-}
-
-/* A phone held upright: the mat fills the width, the controls hold one bar under it (seat-camera.js keeps 108 px clear). */
-@media (max-width: 800px) and (orientation: portrait) {
-  .roul-station[data-seated] .roul-controls { left: 10px; right: 10px; width: auto; top: auto; bottom: 8px; display: grid; grid-template-columns: 1fr 112px; gap: 4px 8px; align-items: stretch; }
-  .roul-station[data-seated] .roul-controls > .roul-row:first-child { grid-column: 1; }
-  .roul-station[data-seated] .roul-spins { grid-column: 1; }
-  .roul-station[data-seated] .roul-spin { grid-column: 2; grid-row: 1 / 3; min-width: 0; padding: 8px 4px; }
-  .roul-station[data-seated] .roul-row { gap: 3px; justify-content: flex-start; }
-  .roul-station[data-seated] .roul-pips { display: none; }
-  .roul-station[data-seated] .roul-spins button { min-width: 31px; padding: 6px 0; }
-  .roul-station[data-seated] .roul-why { grid-column: 1 / -1; position: absolute; bottom: 100%; right: 0; margin-bottom: 4px; }
-}
-
-/* A phone on its side: status and controls in one column at the right (seat-camera.js keeps 200 px clear), the mat beside it. */
-@media (max-height: 500px) and (orientation: landscape) {
-  .roul-station[data-seated] .roul-top { top: 84px; left: auto; right: 12px; width: 196px; max-width: 196px; align-items: stretch; }
-  .roul-station[data-seated] .roul-controls { left: auto; right: 12px; width: 196px; top: auto; bottom: 12px; gap: 5px; align-items: stretch; }
-  .roul-station[data-seated] .roul-pips { display: none; }
-  .roul-station[data-seated] .roul-row { gap: 4px; justify-content: flex-start; }
-  .roul-station[data-seated] .roul-spins-label { flex-basis: 100%; }
-  .roul-station[data-seated] .roul-spins button { min-width: 30px; padding: 5px 0; }
-  .roul-station[data-seated] .roul-spin { min-width: 0; padding: 6px 4px; }
-  .roul-station[data-seated] .roul-why { text-align: left; }
-  .roul-station[data-seated] .roul-odds { top: 84px; left: 12px; right: auto; }
+  .roul-station[data-seated] .roul-controls { top: auto; bottom: max(16px, var(--br-sill, 0px)); }
 }
 
 /* THE GLYPH HIT (shared/hypno/callout.js): a winning element on the DOM glows and pops 1.06 over HIGHLIGHT_MS (400 ms).
@@ -116,3 +123,38 @@
 }
 @media (prefers-reduced-motion: reduce) { .br-glyph-hit { animation-name: br-glyph-hit-still; } }
 @keyframes br-glyph-hit-still { 0%, 100% { box-shadow: 0 0 0 0 #5fffd000; } 50% { box-shadow: 0 0 18px 4px #5fffd0cc; } }
+
+/* The close-up keeps one thin control bar below the whole betting board. */
+.roul-station[data-seated] .roul-top { top: 54px; left: 12px; max-width: min(310px, 32vw); }
+.roul-station[data-seated] .roul-status { font-size: 11px; padding: 4px 8px; }
+.roul-station[data-seated] .roul-controls { left: 86px; right: 12px; bottom: max(8px, var(--br-sill, 0px)); width: auto;
+  display: flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 14px; }
+.roul-station[data-seated] .roul-row { flex-wrap: nowrap; }
+.roul-station[data-seated] .roul-odds { left: 12px; right: auto; top: auto; bottom: max(12px, var(--br-sill, 0px)); }
+.roul-station[data-seated] .roul-odds[open] { bottom: 12px; }
+.roul-station[data-seated] .roul-why { position: absolute; bottom: 100%; right: 0; margin-bottom: 5px; }
+.roul-station[data-seated] .roul-gain { bottom: 76px; }
+html:has(.roul-station[data-seated]) .br-nav > button:first-child { display: none; }
+@media (orientation: portrait) {
+  .roul-station[data-seated] .roul-top { top: 108px; max-width: calc(100% - 24px); }
+  .roul-station[data-seated] .roul-controls { left: 74px; right: 8px; display: grid; grid-template-columns: 1fr 84px; gap: 4px 6px; }
+  .roul-station[data-seated] .roul-controls > .roul-row:first-child { grid-column: 1; }
+  .roul-station[data-seated] .roul-spins { grid-column: 1; }
+  .roul-station[data-seated] .roul-spin { grid-column: 2; grid-row: 1 / 3; min-width: 0; }
+  .roul-station[data-seated] .roul-pips { display: none; }
+  .roul-station[data-seated] .roul-row { gap: 3px; }
+  .roul-station[data-seated] .roul-spins button { min-width: 29px; }
+  .roul-station[data-seated] .roul-spins-label { display: none; }
+  .roul-station[data-seated] .roul-gain { bottom: 102px; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .roul-station[data-seated] .roul-controls { gap: 9px; }
+  .roul-station[data-seated] .roul-top { width: auto; align-items: flex-start; }
+  .roul-station[data-seated] .roul-spins-label { flex-basis: auto; }
+  .roul-station[data-seated] .roul-row { justify-content: flex-end; }
+  .roul-station[data-seated] .roul-spins button { min-width: 30px; }
+  .roul-station[data-seated] .roul-spin { min-width: 90px; }
+}
+
+/* SP travels as faceted sparkles, not coins. */
+.roul-token { border-radius:0; border:0; clip-path:polygon(50% 0,85% 30%,100% 50%,50% 100%,0 50%,15% 30%); background:conic-gradient(from 45deg,#fff6da,#fca6e1,#b791ff,#fff6da,#ffda83); color:transparent; filter:drop-shadow(0 0 5px #ffcaec); }

@@ -65,3 +65,21 @@ test('every glyph paints, on a plain 2d context, inside its box', () => {
   }
   assert.equal(paintGlyph(new Proxy({}, { get: () => () => {}, set: () => true }), 'moon', 64), false, 'an unknown glyph paints nothing');
 });
+
+test('a glyph is traced twice: a dark contour under the cream mark, so it reads on both halves of the wheel', () => {
+  for (const id of GLYPH_RING) {
+    const sets = [], calls = [];
+    const g = new Proxy({}, {
+      get: (_, name) => (name === 'lineWidth' ? 0 : (...a) => { calls.push(name); void a; }),
+      set: (_, name, v) => { sets.push([name, v]); return true; },
+    });
+    assert.equal(paintGlyph(g, id, 64), true, id);
+    const strokes = sets.filter(([k]) => k === 'strokeStyle').map(([, v]) => v);
+    const widths = sets.filter(([k]) => k === 'lineWidth').map(([, v]) => v);
+    assert.equal(strokes.length, 2, id + ': two passes');
+    assert.notEqual(strokes[0], '#ffffff', id + ': the first pass is the dark contour');
+    assert.equal(strokes[1], '#ffffff', id + ': the cream goes on top');
+    assert.ok(widths[0] > widths[1], id + ': the contour is the wider line, so it shows as an edge');
+    assert.equal(calls.filter((n) => n === 'clearRect').length, 1, id + ': the box is cleared once, not per pass');
+  }
+});

@@ -15,7 +15,9 @@
  * `maxFps`, one decode in flight, into a canvas no larger than `maxEdge` px.
  * ==========================================================================*/
 
+import { boundedStill } from './bounded-still.js';
 import { compatibilityDecoder } from './image-frames.js';
+import { MEDIA_LIMITS, MediaLimitError, refusedMedia, boundedImageBytes, imageDimensions, checkDimensions } from './media-limits.js';
 
 export const MAX_FPS = 12;
 export const MAX_EDGE = 384;
@@ -23,35 +25,60 @@ const EXT = { gif: 'image/gif', webp: 'image/webp', png: 'image/png', jpg: 'imag
 
 export const canAnimate = () => typeof ImageDecoder === 'function';
 
+function whileLoading(promise, signal) {
+  if (signal.aborted) return Promise.reject(new DOMException('Media load cancelled', 'AbortError'));
+  return new Promise((resolve,reject) => {
+    const abort = () => reject(new DOMException('Media load cancelled', 'AbortError'));
+    signal.addEventListener('abort',abort,{once:true});
+    Promise.resolve(promise).then(resolve,reject).finally(()=>signal.removeEventListener('abort',abort));
+  });
+}
+
 /**
  * Decode `url` into a playable source, or null when this page cannot (caller uses a still).
  * `onFrame` (optional) runs after each frame lands in the canvas, the first one excluded.
  * @returns {Promise<{canvas, animated, frames, index, tick(now, still), dispose()} | null>}
  */
-export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS, onFrame = null } = {}) {
-  let decoder = null;
+export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS, onFrame = null, signal = null, maxBytes = MEDIA_LIMITS.bytes } = {}) {
+  let decoder = null, data = null, type = '', validated = false;
+  const controller = new AbortController();
+  const abort = () => { controller.abort(); try { decoder?.close(); } catch {} };
+  signal?.addEventListener('abort', abort, {once:true});
+  if (signal?.aborted) abort();
+  const timer = setTimeout(abort, MEDIA_LIMITS.loadMs);
   try {
-    const res = await fetch(url, { mode: 'cors', credentials: 'omit' });
-    if (!res.ok) return null;
+    const res = await whileLoading(fetch(url, { mode: 'cors', credentials: 'omit', signal: controller.signal }), controller.signal);
+    if (!res.ok) throw new MediaLimitError('Media transfer failed','transfer');
     const ext = (new URL(url, location.href).pathname.split('.').pop() || '').toLowerCase();
-    const type = (res.headers.get('content-type') || '').split(';')[0].trim() || EXT[ext] || '';
-    if (!type.startsWith('image/')) return null;
-    const data = await res.arrayBuffer();
-    decoder = canAnimate() && await ImageDecoder.isTypeSupported(type)
+    type = (res.headers.get('content-type') || '').split(';')[0].trim() || EXT[ext] || '';
+    if (!type.startsWith('image/')) throw new MediaLimitError('Not an image','transfer');
+    data = await boundedImageBytes(res, controller.signal, maxBytes);
+    const dimensions = imageDimensions(data, type);
+    if (!dimensions) throw new MediaLimitError('Unsupported image header','transfer');   // our sniffer's gap, not the file's fault: the browser may still decode it
+    checkDimensions(...dimensions); validated = true;
+    controller.signal.throwIfAborted();
+    decoder = canAnimate() && await whileLoading(ImageDecoder.isTypeSupported(type), controller.signal)
       ? new ImageDecoder({ data, type }) : await compatibilityDecoder(data, type);
-    if (!decoder) return null;
-    await decoder.tracks.ready;
-    await decoder.completed;
+    controller.signal.throwIfAborted();
+    if (!decoder) return await boundedStill(data, type, maxEdge, controller.signal);
+    await whileLoading(decoder.tracks.ready, controller.signal);
+    await whileLoading(decoder.completed, controller.signal);
+    controller.signal.throwIfAborted();
     const track = decoder.tracks.selectedTrack;
     let count = track ? track.frameCount : 1;
-    const first = (await decoder.decode({ frameIndex: 0 })).image;
+    if (count > MEDIA_LIMITS.frames) throw new MediaLimitError('Animation frame count exceeds media budget');
+    const first = (await whileLoading(decoder.decode({ frameIndex: 0 }).then(result => {
+      if (controller.signal.aborted) { result.image.close(); throw new DOMException('Media load cancelled','AbortError'); }
+      return result;
+    }), controller.signal)).image;
+    try { controller.signal.throwIfAborted(); checkDimensions(first.displayWidth, first.displayHeight); }
+    catch(error) { first.close(); throw error; }
     const scale = Math.min(1, maxEdge / Math.max(first.displayWidth, first.displayHeight));
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.round(first.displayWidth * scale));
     canvas.height = Math.max(1, Math.round(first.displayHeight * scale));
     const g = canvas.getContext('2d');
-    g.drawImage(first, 0, 0, canvas.width, canvas.height);
-    first.close();
+    try { g.drawImage(first, 0, 0, canvas.width, canvas.height); } finally { first.close(); }
 
     if (count < 2) { try { decoder.close(); } catch (e) { /* noop */ } }   // a still needs no decoder kept open
     const minGap = 1000 / Math.max(1, maxFps);
@@ -60,10 +87,11 @@ export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS,
       busy = true;
       return decoder.decode({ frameIndex: i }).then((r) => {
         if (closed) { r.image.close(); return; }
-        g.clearRect(0, 0, canvas.width, canvas.height);
-        g.drawImage(r.image, 0, 0, canvas.width, canvas.height);
         const delay = r.image.duration ? r.image.duration / 1000 : 100;   // microseconds to ms
-        r.image.close();
+        try {
+          g.clearRect(0, 0, canvas.width, canvas.height);
+          g.drawImage(r.image, 0, 0, canvas.width, canvas.height);
+        } finally { r.image.close(); }
         index = i; frames++;
         dueAt = performance.now() + Math.max(minGap, delay);
         if (typeof onFrame === 'function') { try { onFrame(i); } catch (e) { /* the caller's problem */ } }
@@ -71,7 +99,7 @@ export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS,
     };
 
     return {
-      canvas, animated: count > 1,
+      canvas, byteLength: data.byteLength, animated: count > 1,
       get frames() { return frames; },
       get index() { return index; },
       /** Advance if due. `still` holds (and returns to) the first frame. Returns true when a decode started. */
@@ -86,6 +114,11 @@ export async function decodedSource(url, { maxEdge = MAX_EDGE, maxFps = MAX_FPS,
     };
   } catch (e) {
     try { if (decoder) decoder.close(); } catch (err) { /* noop */ }
-    return null;
+    if (controller.signal.aborted) throw new DOMException('Media load cancelled', 'AbortError');
+    if (refusedMedia(e)) throw e;
+    if (data && validated) return await boundedStill(data, type, maxEdge, controller.signal);
+    throw new MediaLimitError('Media transfer failed','transfer');
+  } finally {
+    clearTimeout(timer); signal?.removeEventListener('abort', abort);
   }
 }

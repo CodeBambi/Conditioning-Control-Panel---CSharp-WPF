@@ -28,8 +28,16 @@ export function createBowl3D({ stage, wheel, rose }) {
   const rotorScale = rotor.getWorldScale(new T.Vector3()).y;
   const lift = ballRadius / rotorScale;
   const track = center(nodes.ball_track);
-  const trackBox = new T.Box3().setFromObject(nodes.ball_track);
-  const trackRadius = Math.max(trackBox.getSize(new T.Vector3()).x, trackBox.getSize(new T.Vector3()).z) / (2 * rotorScale);
+  // Horizontal radius cannot be divided by world Y scale: the room compresses this
+  // table vertically, which otherwise stretches the lighthouse out across the felt.
+  let trackRadius=0;
+  const trackToRotor=rotor.matrixWorld.clone().invert(),trackTransform=new T.Matrix4(),trackVertex=new T.Vector3();
+  nodes.ball_track.traverse(n=>{
+    if(!n.isMesh||!n.geometry?.attributes.position)return;
+    trackTransform.multiplyMatrices(trackToRotor,n.matrixWorld);
+    const a=n.geometry.attributes.position;
+    for(let i=0;i<a.count;i++){trackVertex.fromBufferAttribute(a,i).applyMatrix4(trackTransform);trackRadius=Math.max(trackRadius,Math.hypot(trackVertex.x,trackVertex.z));}
+  });
   const path=createBallPath(rotor,ball,nodes.ball_track,restRadius,lift);
   const pocketTops=wheel.map(n=>{
     const node=nodes['pocket_'+n],bounds=node.geometry.boundingBox||new T.Box3().setFromBufferAttribute(node.geometry.attributes.position);
@@ -61,7 +69,29 @@ export function createBowl3D({ stage, wheel, rose }) {
   const hintHead=new T.Mesh(new T.CircleGeometry(hintTube*3.6,3),hintMaterial);
   hintHead.position.set(Math.cos(HINT_ARC)*hintR,-Math.sin(HINT_ARC)*hintR,0);hintHead.rotation.z=-HINT_ARC-Math.PI/2;
   const hint=new T.Group();hint.name='roulette_flick_hint';hint.add(hintArc,hintHead);
-  hint.rotation.x=-Math.PI/2;hint.position.y=track.y+lift*3;hint.renderOrder=4;hint.visible=false;rotor.add(hint);
+  // The complete arrow, including its widest breathing head, clears the authored brim.
+  // A track centre is below that lip, so a fixed multiple of ball height cuts through it.
+  const hintScaleMax=1.035, hintOuter=(hintR+hintTube*3.6)*hintScaleMax;
+  const hintInner=Math.max(0,(hintR-hintTube*3.6)/hintScaleMax);
+  const toRotor=rotor.matrixWorld.clone().invert(), meshToRotor=new T.Matrix4(), vertex=new T.Vector3();
+  let hintSurface=track.y;
+  function scanHintSurface(node){
+    if(!node.isMesh||!node.geometry?.attributes.position||node===ball)return;
+    meshToRotor.multiplyMatrices(toRotor,node.matrixWorld);
+    const position=node.geometry.attributes.position,index=node.geometry.index,count=index?index.count:position.count;
+    for(let i=0;i<count;i+=3){
+      let lo=Infinity,hi=-Infinity,top=-Infinity;
+      for(let j=0;j<3;j++){
+        vertex.fromBufferAttribute(position,index?index.getX(i+j):i+j).applyMatrix4(meshToRotor);
+        const r=Math.hypot(vertex.x,vertex.z);lo=Math.min(lo,r);hi=Math.max(hi,r);top=Math.max(top,vertex.y);
+      }
+      // Lathe facets are chords; a small radial padding keeps this bound conservative.
+      if(hi>=hintInner-.01 && lo<=hintOuter+.01)hintSurface=Math.max(hintSurface,top);
+    }
+  }
+  rotor.traverse(scanHintSurface);nodes.ball_track.traverse(scanHintSurface);
+  const hintMargin=Math.max(.008,lift*.3), hintHeight=hintSurface+hintTube*hintScaleMax+hintMargin;
+  hint.rotation.x=-Math.PI/2;hint.position.y=hintHeight;hint.renderOrder=4;hint.visible=false;rotor.add(hint);
   // THE POCKET GLYPHS (glyphs.js, GLYPHS.md): one faded decal per numbered pocket on the rotor's inner slope, just
   // inside the ball's footprint, keyed by the pocket number. A ray down from above finds the authored surface under
   // each so the mark lies on the wheel, whatever its profile; a miss falls back to the pocket's own top.
@@ -73,7 +103,10 @@ export function createBowl3D({ stage, wheel, rose }) {
     const tex = new T.CanvasTexture(c); tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = 4;
     glyphTextures.set(id, tex); return tex;
   }
-  const glyphR = Math.max(restRadius * .55, restRadius - lift * 2.4), glyphSize = SEG * glyphR * .8;
+  // Pulled further in off the number tiles: at .8 of a segment sitting at restRadius - 2.4 lifts, the mark's
+  // outer edge ran into the numbers and the two read as one smudge on a phone (owner, 2026-09-16). One more
+  // lift inward and a hair smaller is enough to put daylight between them without leaving the inner slope.
+  const glyphR = Math.max(restRadius * .5, restRadius - lift * 3.9), glyphSize = SEG * glyphR * .76;
   const glyphGeometry = new T.PlaneGeometry(1, 1), caster = new T.Raycaster(), rotorInverse = rotor.matrixWorld.clone().invert();
   const skip = new Set([beam, sparks, trail, hintArc, hintHead, ball]);
   const glyphs = wheel.map((n, i) => {
@@ -91,9 +124,20 @@ export function createBowl3D({ stage, wheel, rose }) {
     mesh.position.copy(at).addScaledVector(normal, lift * .12); mesh.scale.setScalar(glyphSize); rotor.add(mesh);
     return { n, id, index: i, angle: a, material, mesh };
   });
+  const landingRing=new T.Mesh(new T.RingGeometry(lift*1.5,lift*2.5,32),new T.MeshBasicMaterial({color:0xffc75d,transparent:true,opacity:0,depthWrite:false,side:T.DoubleSide}));
+  landingRing.name='roulette_landing_ring';landingRing.rotation.x=-Math.PI/2;rotor.add(landingRing);
+  const numberCanvas=document.createElement('canvas');numberCanvas.width=numberCanvas.height=128;
+  const numberTexture=new T.CanvasTexture(numberCanvas);numberTexture.colorSpace=T.SRGBColorSpace;
+  const numberSprite=new T.Sprite(new T.SpriteMaterial({map:numberTexture,transparent:true,depthTest:false}));numberSprite.name='roulette_winning_number';numberSprite.renderOrder=8;rotor.add(numberSprite);
+  let numberShown=null;
   let glyphLitIndex = -1, glyphLitAt = -Infinity;
   let disposed = false, lastView = {}, activePlan=null, launchAt=0, currentNow=0;
   const trailPoints=[];
+  const dust = new T.InstancedMesh(new T.OctahedronGeometry(lift*.32),
+    new T.MeshBasicMaterial({color:0x65ffe0,transparent:true,opacity:.8,depthWrite:false}),48);
+  dust.name='roulette_ball_diamonds'; dust.instanceMatrix.setUsage(T.DynamicDrawUsage); root.add(dust);
+  const mote=new T.Object3D(), dustColor=new T.Color();
+  let lastTrailAt=-Infinity;
   const lit = new Set();
   function apply() {
     if (disposed) return;
@@ -103,14 +147,15 @@ export function createBowl3D({ stage, wheel, rose }) {
     ball.visible = s.phase !== 'idle';
     if (ball.visible && s.index >= 0) {
       const p = centers[s.index];
-      // Source order runs clockwise; the canvas plan uses increasing indices.
-      const angle = angles[s.index] - (s.rel - restRel(s.index));
+      // Ball and rotor share the same angular convention; the relative run is negative.
+      const angle = angles[s.index] + (s.rel - restRel(s.index));
       const radial = Math.max(0, Math.min(1, (s.radius - FEEL.R_REST) / (FEEL.R_RIM - FEEL.R_REST)));
       const radius = restRadius + (path.rimRadius - restRadius) * radial;
       point.set(Math.cos(angle) * radius, path.height(radius), -Math.sin(angle) * radius);
       if (s.phase === 'rest') point.copy(p).setY(pocketTops[s.index]+lift+path.margin);
       rotor.localToWorld(point); ball.parent.worldToLocal(point); ball.position.copy(point);
     }
+    stage.emi?.attend?.(ball.visible ? Math.cos(s.rot+s.rel)*.9 : 0, ball.visible ? .65 : 0);
     const beamA = beamAngle(s.beamT), k = lastView.k ?? 1;
     beam.rotation.z=beamA-s.rot;beam.material.opacity=.2*k;
     const sec=(currentNow-launchAt)/1000;
@@ -118,15 +163,27 @@ export function createBowl3D({ stage, wheel, rose }) {
     if(activePlan && !lastView.still)for(const hit of activePlan.sparks){
       const age=(sec-hit.at)/FEEL.SPARK_S;if(age<0||age>=1)continue;
       const index=((Math.floor(hit.a/SEG)%wheel.length)+wheel.length)%wheel.length;
-      const a=angles[index]+SEG*.5;
+      const a=angles[activePlan.index]+hit.a-restRel(activePlan.index);
       for(const radius of [restRadius*.9,restRadius*1.12])sparkGeometry.attributes.position.setXYZ(sparkCount++,Math.cos(a)*radius,centers[index].y+lift,-Math.sin(a)*radius);
     }
     sparks.visible=sparkCount>0;sparkGeometry.setDrawRange(0,sparkCount);sparkGeometry.attributes.position.needsUpdate=true;sparks.material.opacity=.8*k;
-    if(lastView.full&&!lastView.still&&ball.visible){
+    if(!lastView.still&&ball.visible&&['run','drop','rattle'].includes(s.phase)&&currentNow!==lastTrailAt){
+      lastTrailAt=currentNow;
       trailPoints.unshift(root.worldToLocal(ball.getWorldPosition(new T.Vector3())));trailPoints.length=Math.min(24,trailPoints.length);
       trailPoints.forEach((p,i)=>trailGeometry.attributes.position.setXYZ(i,p.x,p.y,p.z));trailGeometry.setDrawRange(0,trailPoints.length);trailGeometry.attributes.position.needsUpdate=true;
-    }else trailPoints.length=0;
-    trail.visible=trailPoints.length>1;trail.material.opacity=.2*k;
+    }else if(lastView.still||!['run','drop','rattle'].includes(s.phase)) trailPoints.length=0;
+    trail.visible=trailPoints.length>1;trail.material.opacity=.28*k;
+    dust.visible=trail.visible; dust.count=Math.min(48,trailPoints.length*2);
+    for(let i=0;i<dust.count;i++){
+      const age=i/dust.count, p=trailPoints[Math.floor(i/2)];
+      mote.position.copy(p); mote.position.y+=Math.sin(i*2.4+sec*9)*lift*age*2;
+      mote.position.x+=Math.cos(i*2.1)*lift*age*2;
+      mote.rotation.set(sec*4+i,i*2,sec*3); mote.scale.setScalar((1-age)*1.3);
+      mote.updateMatrix();dust.setMatrixAt(i,mote.matrix);
+      dustColor.setHSL(.43+age*.4,1,.65);dust.setColorAt(i,dustColor);
+    }
+    dust.instanceMatrix.needsUpdate=true;if(dust.instanceColor)dust.instanceColor.needsUpdate=true;
+    dust.material.opacity=.8*k;
     if (hint.visible) {
       const pulse = lastView.still ? .5 : (1 - Math.cos((currentNow % HINT_MS) / HINT_MS * Math.PI * 2)) / 2;
       hint.rotation.z = -HINT_A0 - s.rot;   // the room's angle, not the rotor's (mirrored: the seat reads y up)
@@ -144,6 +201,15 @@ export function createBowl3D({ stage, wheel, rose }) {
       g.material.opacity = (GLYPH_REST + (1 - GLYPH_REST) * strength) * k;
       g.material.color.copy(glyphCold).lerp(glyphHot, strength);
       g.mesh.scale.setScalar(glyphSize * (1 + (hot ? .3 * glyphPulse : 0)));
+    }
+    landingRing.visible=seated>=0 && pq>=0 && pq<1 && !lastView.still;
+    if(landingRing.visible){landingRing.position.copy(centers[seated]);landingRing.position.y=pocketTops[seated]+lift*.3;landingRing.scale.setScalar(1+pq*3);landingRing.material.opacity=(1-pq)*.85*k;}
+    const numberAge=currentNow-s.hitAt;
+    numberSprite.visible=numberAge>=180 && numberAge<1100 && seated>=0 && !lastView.still;
+    if(numberSprite.visible){
+      const value=wheel[seated];
+      if(numberShown!==value){const c=numberCanvas.getContext('2d');c.clearRect(0,0,128,128);c.font='900 86px Fredoka, sans-serif';c.textAlign='center';c.textBaseline='middle';c.lineWidth=9;c.strokeStyle='#4b174f';c.strokeText(String(value),64,67);c.fillStyle='#ffd778';c.fillText(String(value),64,67);numberTexture.needsUpdate=true;numberShown=value;}
+      const q=Math.min(1,(numberAge-180)/920);numberSprite.position.copy(centers[seated]);numberSprite.position.y=pocketTops[seated]+lift*(4+q*3);numberSprite.scale.setScalar(lift*7*(1+.15*Math.sin(q*Math.PI)));numberSprite.material.opacity=Math.min(1,q*8)*(1-Math.max(0,(q-.7)/.3))*k;
     }
     // THE GLYPH HIT: the landed pocket's number lights on its own over HIGHLIGHT_MS from the winning frame (callout.js)
     const hq = (currentNow - s.hitAt) / HIGHLIGHT_MS, hitPulse = hq >= 0 && hq < 1 ? Math.sin(hq * Math.PI) : 0, hitN = s.index >= 0 ? wheel[s.index] : null;
@@ -168,10 +234,11 @@ export function createBowl3D({ stage, wheel, rose }) {
   }
   function dispose() {
     if (disposed) return; disposed = true;
+    stage.emi?.attend?.(null,null);landingRing.removeFromParent();landingRing.geometry.dispose();landingRing.material.dispose();numberSprite.removeFromParent();numberSprite.material.dispose();numberTexture.dispose();
     rotor.quaternion.copy(saved.rotor); ball.position.copy(saved.ball); ball.visible = saved.visible;
     surfaces.reset(); if(!existingSurfaces)surfaces.dispose();
-    for(const object of [beam,sparks,trail,hintArc,hintHead]){object.removeFromParent();object.geometry.dispose();}
-    for(const object of [beam,sparks,trail]) object.material.dispose();
+    for(const object of [beam,sparks,trail,dust,hintArc,hintHead]){object.removeFromParent();object.geometry.dispose();}
+    for(const object of [beam,sparks,trail,dust]) object.material.dispose();
     hint.removeFromParent(); hintMaterial.dispose();
     for (const g of glyphs) if (g) { g.mesh.removeFromParent(); g.material.dispose(); }
     glyphGeometry.dispose(); for (const tex of glyphTextures.values()) tex.dispose(); glyphTextures.clear();
@@ -220,7 +287,7 @@ export function createBowl3D({ stage, wheel, rose }) {
     get geo() { return core.geo; }, get phase() { return core.phase; },
     debug() { return { ...core.debug(), view: '3d', lit: [...lit], whirlDrawn: !!lastView.whirlDrawn, hint: hint.visible,
       glyphs: glyphs.filter(Boolean).map((g) => ({ n: g.n, id: g.id })), glyphLit: glyphLitIndex >= 0 ? wheel[glyphLitIndex] : null,
-      clearance: {rimRadius:path.rimRadius,ballRadius:lift,profileEdges:path.edges,margin:path.margin},
+      clearance: {trackRadius,rimRadius:path.rimRadius,ballRadius:lift,profileEdges:path.edges,margin:path.margin, hint:{surface:hintSurface,bottom:hintHeight-hintTube*hintScaleMax,margin:hintMargin,inner:hintInner,outer:hintOuter}},
       ballWorld: ball.getWorldPosition(new T.Vector3()).toArray(),
       pockets: centers.map(p => rotor.localToWorld(p.clone()).toArray()), disposed }; },
   };

@@ -1,3 +1,4 @@
+@import url("../../shared/back.css");
 /* station.css - The Prize Parlour. The other stations' chrome (plum glass, rose borders, gold and mint accents),
    scoped under .counter-station. No backdrop-filter (CONTRACT 10.13, law 7). Still (reduced, Calm) = no tilt, no flip. */
 .counter-station { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; overflow: hidden; color: #fce5f3;
@@ -5,10 +6,16 @@
   background: radial-gradient(ellipse at 50% 0%, #6b2d6a66, transparent 60%), radial-gradient(ellipse at 50% 110%, #2d6b6040, transparent 55%), #140a1cf2; }
 .counter-station * { box-sizing: border-box; }
 .counter-station [hidden] { display: none !important; }
-.counter-station button { font: inherit; cursor: pointer; border: 1px solid #ab79a766; color: #fce5f3; background: #28172fe8;
-  border-radius: 10px; padding: 8px 16px; min-height: 38px; transition: background .15s, transform .1s; }
-.counter-station button:hover:not(:disabled) { background: #583056; }
-.counter-station button:active:not(:disabled) { transform: scale(.96); }
+.counter-station button { border: 1px solid #c58bbd59; border-top-color: #efc0e47a; color: #fce5f3; border-radius: 11px;
+  padding: 8px 16px; min-height: 38px; background: linear-gradient(180deg, #3d2449, #2a1734 54%, #1d0f26);
+  box-shadow: inset 0 1px 0 #ffeafb26, inset 0 -2px 0 #00000057, 0 2px 0 #150b1f, 0 6px 16px #05020a73;
+  text-shadow: 0 1px 2px #0a0512cc; transition: background .15s, box-shadow .12s, transform .08s; }
+.counter-station button:hover:not(:disabled) { background: linear-gradient(180deg, #55305f, #3a1f46 54%, #27142f);
+  border-color: #ffb7e08c; box-shadow: inset 0 1px 0 #fff0fc3d, inset 0 -2px 0 #00000057, 0 2px 0 #150b1f, 0 8px 22px #0b0416a1; }
+.counter-station button:active:not(:disabled) { transform: translateY(2px);
+  background: linear-gradient(180deg, #24132e, #2e1a39 60%, #351f40);
+  box-shadow: inset 0 3px 7px #00000080, inset 0 -1px 0 #ffeafb12, 0 0 0 #150b1f; }
+.counter-station button { font: inherit; cursor: pointer; }
 .counter-station button:focus-visible { outline: 2px solid #ff8ed2; outline-offset: 3px; }
 .counter-station button:disabled { opacity: .5; cursor: default; }
 
@@ -22,6 +29,8 @@
 .counter-sp { background: #201229e8; border: 1px solid #b77da247; padding: 6px 12px; border-radius: 30px; font-size: 12px; font-weight: 600;
   color: #ffe3f2; font-variant-numeric: tabular-nums; }
 
+.counter-nudge { margin: 0 0 10px; padding: 8px 12px; border-left: 2px solid #e8c27a; color: #efe6ff;
+  opacity: .78; font-size: 13px; line-height: 1.35; }
 .counter-grid { flex: 1; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); gap: 14px;
   grid-auto-rows: max-content; padding: 8px 16px 20px; align-content: start; max-width: 1240px; width: 100%; margin: 0 auto; }
 .counter-card { position: relative; display: flex; flex-direction: column; border-radius: 16px; overflow: hidden;
@@ -31,8 +40,23 @@
 .counter-card:hover { transform: perspective(800px) rotateX(2.5deg) rotateY(-3deg) translateY(-2px);
   box-shadow: 0 0 0 1px #ff8ed255, 0 10px 30px #c767b340, inset 0 1px 0 #ffffff1c; }
 .counter-card[data-face="owned"] { border-color: #5fffd077; }
-.counter-card.is-flip { animation: counter-flip .6s ease-out; }
-@keyframes counter-flip { 0% { transform: perspective(800px) rotateY(90deg); } 100% { transform: perspective(800px) rotateY(0); } }
+/* A successful purchase delivers the art into a shallow collection tray. Ownership is already live. */
+.counter-card.is-flip .counter-art > img,
+.counter-card.is-flip .counter-art[data-plate] > .counter-plate { animation: counter-deliver 620ms both; transform-origin: 50% 90%; }
+.counter-card.is-flip .counter-art::after { content: ''; position: absolute; z-index: 2; pointer-events: none;
+  left: 12%; right: 12%; bottom: 6%; height: 8px; border-radius: 3px 3px 9px 9px;
+  background: linear-gradient(#f7d9a4, #765137); box-shadow: 0 5px 9px #08040b99;
+  animation: counter-tray 620ms both; }
+.counter-card.is-flip .counter-badge.is-owned { animation: counter-receipt 620ms both; }
+@keyframes counter-deliver {
+  0% { transform: translateY(-20%) scale(.84) rotate(-3deg); animation-timing-function: cubic-bezier(.5,0,1,.7); }
+  52% { transform: translateY(6%) scale(.86,.8) rotate(1deg); animation-timing-function: ease-out; }
+  70% { transform: translateY(-3%) scale(.86) rotate(-1deg); }
+  84% { transform: translateY(2%) scale(.87,.85); }
+  100% { transform: none; }
+}
+@keyframes counter-tray { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes counter-receipt { 0%, 55% { transform: none; } 72% { transform: scale(1.08); } 100% { transform: none; } }
 
 .counter-art { position: relative; flex: none; aspect-ratio: 16 / 11; max-width: 100%; display: grid; place-items: center; overflow: hidden;
   background: radial-gradient(circle at 50% 42%, #7a3b7a, #3a1f45 62%, #2a1734); }
@@ -117,3 +141,30 @@
   .counter-blurb, .counter-note { font-size: 14px; line-height: 1.5; }
   .counter-details { font-size: 14px; }
 }
+
+/* A confirmed purchase lifts the mockup, then stamps the shelf card. */
+.counter-sold { display:none; position:absolute; z-index:4; left:50%; top:54%; transform:translate(-50%,-50%) rotate(-9deg);
+  border:3px double #ffd18e; background:#28132ef2; color:#ffe3b6; padding:8px 22px; font-size:22px; font-weight:800; letter-spacing:.13em; pointer-events:none; }
+.counter-card[data-face="owned"] .counter-sold { display:block; }
+.counter-card.is-flip .counter-sold { animation:counter-stamp 900ms ease-out; }
+@keyframes counter-stamp { 0%,55% { opacity:0; transform:translate(-50%,-50%) rotate(-9deg) scale(1.7); } 78% { opacity:1; transform:translate(-50%,-50%) rotate(-9deg) scale(.94); } 100% { opacity:1; transform:translate(-50%,-50%) rotate(-9deg) scale(1); } }
+.counter-station[data-still] .is-flip * { animation:none!important; }
+@media (prefers-reduced-motion:reduce) { .counter-card.is-flip * { animation:none!important; } }
+
+.counter-demo-pic[data-kind="shard"] { aspect-ratio: 4 / 3; border-radius: 0; }
+.counter-demo-pic[data-kind="bubble"] {
+  border: 2px solid #ffc7f4aa;
+  background: radial-gradient(ellipse at 28% 22%, #fff 0 3%, #ffeafa99 4% 9%, transparent 14%),
+    radial-gradient(circle at 65% 70%, #79ffda44, #bd72ee66 58%, #ffacf4cc 96%);
+  box-shadow: inset -3px -5px 9px #ca83e488, inset 2px 2px 6px #fff9, 0 0 12px #ff8ed255;
+}
+
+.counter-demo-caption { position: absolute; bottom: 7px; left: 8px; right: 8px; text-align: center;
+  color: #ffe6fa; font-size: 12px; font-weight: 700; padding: 4px; background: #190b24db; border-radius: 6px; }
+.counter-demo-pic[data-variant="drain"] { filter: hue-rotate(25deg); box-shadow: 0 0 24px #bc75ff; }
+.counter-demo-pic[data-variant="magnet"] { filter: hue-rotate(110deg); }
+
+/* A hanging catalogue leaves the room visible and the perimeter available to leave. */
+.br-through > .counter-station { inset: 58px clamp(18px, 5vw, 88px) 48px; border: 1px solid #e6adcf80; border-radius: 22px; box-shadow: 0 18px 48px #08031288; background: linear-gradient(155deg,#301536ed,#160d24ed); }
+.br-through > .counter-station[data-host-back] .counter-top { padding: 14px 18px 8px; }
+@media(max-width:600px){.br-through > .counter-station{inset:58px 18px 38px;border-radius:16px}.counter-grid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}}

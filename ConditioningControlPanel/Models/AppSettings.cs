@@ -5026,6 +5026,127 @@ namespace ConditioningControlPanel.Models
             set { _backRoomMelt = value; OnPropertyChanged(); }
         }
 
+        private bool _backRoomWelcomeSeen;
+        /// <summary>
+        /// THE BACK ROOM first-visit card (CONTRACT section 13, 2026-09-18): true once the player has dismissed the
+        /// welcome card the room shows over its first open. Written from the room's <c>room-option welcomeSeen</c>
+        /// and echoed as <c>welcomeSeen</c> on <c>init</c>; it rides the settings file, so the card follows the
+        /// account rather than the WebView2 profile. Off by default: a settings file from before the card reads as
+        /// never seen, and that player gets the card once.
+        /// </summary>
+        [JsonProperty]
+        public bool BackRoomWelcomeSeen
+        {
+            get => _backRoomWelcomeSeen;
+            set { _backRoomWelcomeSeen = value; OnPropertyChanged(); }
+        }
+
+        private bool _backRoomInvertLook;
+        /// <summary>
+        /// THE BACK ROOM Invert camera (CONTRACT 10.14, owner 2026-09-18): a drag in the room moves the world instead
+        /// of the camera, both axes, the seated look included. The room's own switch in the room's Options, off by
+        /// default; the page applies it at once and this is the persist, echoed as <c>invertLook</c> on every frame.
+        /// </summary>
+        [JsonProperty]
+        public bool BackRoomInvertLook
+        {
+            get => _backRoomInvertLook;
+            set { _backRoomInvertLook = value; OnPropertyChanged(); }
+        }
+
+        // ---- THE BACK ROOM: media source and its own three audio levels (CONTRACT 10.14) ----
+        // These are the room's own switches, shown in the room's Options and not in Settings, the same
+        // way BackRoomTunnel and BackRoomMelt are. They are deliberately NOT the app-wide MediaSource /
+        // MasterVolume: the player is sitting in a casino and wants to change the pictures and turn the
+        // whisper down without moving what their flashes and their session do.
+
+        private string _backRoomMediaSource = "auto";
+        /// <summary>
+        /// Where the room's wall pictures and reel symbols come from: <c>auto</c> (follow the app-wide
+        /// <see cref="MediaSource"/>, the default), <c>local</c> (the assets folder only), <c>online</c>
+        /// (Scrolller only), <c>mixed</c> (both, blended by <see cref="RemoteMediaRatio"/>) or
+        /// <c>bundled</c> (the four built-in loops, chosen on purpose rather than fallen back to).
+        /// Whitelisted string rather than an enum, matching <see cref="MediaSource"/>: an unknown value
+        /// from a synced or hand-edited file must degrade to following the app, not throw.
+        /// </summary>
+        [JsonProperty]
+        public string BackRoomMediaSource
+        {
+            get => _backRoomMediaSource;
+            set
+            {
+                _backRoomMediaSource = value is "auto" or "local" or "online" or "mixed" or "bundled" ? value : "auto";
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>The most niches the room deals from at once. Matches the web playtest's cap, which
+        /// the owner set: past eight, one sit-down's four GIFs stop representing the selection at all.</summary>
+        public const int BackRoomMediaSubCap = 8;
+
+        private List<string> _backRoomMediaSubs = new();
+        /// <summary>
+        /// The room's own niche list (bare subreddit names, no "r/"). EMPTY means follow whatever the
+        /// app-wide picker resolved, which is the default, so a player who never opens the room's
+        /// picker gets the niches they already chose in Assets. Its own list rather than a second
+        /// writer on <see cref="FypOnlineNiches"/>: editing the room's pictures must not silently
+        /// re-aim the For You feed and the flashes.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> BackRoomMediaSubs
+        {
+            get => _backRoomMediaSubs;
+            set { _backRoomMediaSubs = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        private List<string> _backRoomMediaSubsOff = new();
+        /// <summary>
+        /// Niches the player has turned off without removing. Kept so a disabled pill stays visible in
+        /// the room's picker and can be switched back on, which is the owner's ruling on that control:
+        /// never a comma-separated editor, and a saved disabled niche does not disappear.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> BackRoomMediaSubsOff
+        {
+            get => _backRoomMediaSubsOff;
+            set { _backRoomMediaSubsOff = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        private int _backRoomSubVolume = 100;
+        /// <summary>
+        /// The room's SUBLIMINAL level (0-100): the spoken word and the whisper bed under it. Replaces
+        /// the app's <c>MasterVolume x SubAudioVolume</c> on the room's spoken word, which was the one
+        /// piece of room audio that followed the app - so a session preset moving MasterVolume moved
+        /// the casino's whisper and nothing else in the casino, which is the wrong half.
+        /// </summary>
+        [JsonProperty]
+        public int BackRoomSubVolume
+        {
+            get => _backRoomSubVolume;
+            set { _backRoomSubVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
+        private int _backRoomSfxVolume = 100;
+        /// <summary>The room's SFX level (0-100): levers, reels, chips, cards, ticks, wins, both rolls.</summary>
+        [JsonProperty]
+        public int BackRoomSfxVolume
+        {
+            get => _backRoomSfxVolume;
+            set { _backRoomSfxVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
+        private int _backRoomMusicVolume = 15;
+        /// <summary>
+        /// The room's GENERAL level (0-100): the soundtrack plus the ambience and spiral beds. Default 15
+        /// to match the level the room has always played its music at; the beds sit far under it already.
+        /// </summary>
+        [JsonProperty]
+        public int BackRoomMusicVolume
+        {
+            get => _backRoomMusicVolume;
+            set { _backRoomMusicVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
         private bool _videoForceHardwareDecoding = false;
         /// <summary>
         /// Force GPU (DXVA) hardware decoding for mandatory videos. Default OFF — mandatory videos

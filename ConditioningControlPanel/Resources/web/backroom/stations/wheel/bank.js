@@ -1,80 +1,115 @@
-/* bank.js - THE BANK (Law XII) for the wheel. Value leaves the landed slice and flies to the SP readout:
- * 3-7 tokens (4 on lite), 560 ms each, 70 ms stagger, the readout ticks per landing (never before, Law X), the
- * last one lands with a mini-thud. The slot's bank (stations/slot/bank.js on the feel branch) is the pattern;
- * the wheel only ever pays, so there is no reversed spend here.
+/* bank.js - THE BANK (Law XII) at the wheel: the ELEMENTS, over the shared engine.
  *
- * Law I: a picture of a number the server already settled. skip() puts the readout on the final value at once.
- * Law VI: reduced motion takes the STATE: no tokens, the final value, a lit readout, the cue still plays. */
+ * The maths, the clock, the tick ladder, the rollup tail and the event order left this file for
+ * shared/win/bank.js (CONTRACT 10.22.C). This file and stations/slot/bank.js were the same arithmetic
+ * written twice - the header here used to say so in as many words ("the slot's bank is the pattern"). What
+ * stays is what is NOT shared and should not be: the `<i class="wheel-token">` elements, the layer's rect and
+ * the rel() that turns the station's client px into layer px. The token class differs per station, so the
+ * element code does too.
+ *
+ * The API station.js knows is unchanged - busy, start(), skip(), dispose() - with one addition: `rollupMs`
+ * (the plan's partyMs), how long the READOUT keeps counting once the tokens are down. It never changes the
+ * token count or the flight, and the mini-thud waits for the END of that count, not the end of the flight
+ * (Law X: one gesture, one beat).
+ *
+ *   Law I   a picture of a number the server already settled. The run only ever finishes on `settled`.
+ *   Law VI  reduced motion takes the STATE - no tokens, the final value, a lit readout, the cue still plays -
+ *           and skip() settles at once and leaves quietly. Back, suspend and close never get a faster
+ *           version of the travel.
+ *   Law X   the readout ticks when a token LANDS, never before.
+ *   Brake 8 Calm still flies (the caller's `n` is already capped at 4 by the plan). Calm is NOT reduced
+ *           motion: a value that just changes is a Law XII break at every motion level, so `reduced` here is
+ *           OS reduced motion / Motion off alone - the conflation this pass split.
+ *
+ * The wheel only ever pays, so the engine's 'spend' kind and its merge() go unspent here: one free spin a day
+ * cannot land a second pay inside a running one.
+ */
 
-import { FEEL, tickValues } from './feel.js';
+import { createBankRun, tokenAt } from '../../shared/win/bank.js';
 
-const ARC_PX = 70;
+/** `reduced` may be a flag or a getter (the station's is live). `now` is the clock seam the tests drive. */
+export function createBank({ layer, reduced, onTick, onLand, onDone, now = () => performance.now() }) {
+  let run = null, els = [], from = null, to = null, startMs = 0, raf = 0;
 
-export function createBank({ layer, reduced, onTick, onLand, onDone }) {
-  let run = null, raf = 0;
-
-  function frame(now) {
-    raf = 0;
-    const r = run;
-    if (!r) return;
-    let flying = false;
-    r.tokens.forEach((tok, i) => {
-      const q = (now - r.start - i * FEEL.BANK_STAGGER_MS) / FEEL.BANK_FLY_MS;
-      if (q >= 1) {
-        if (!tok.landed) {
-          tok.landed = true; tok.el.remove();
-          onTick(r.values[i], false);
-          if (i === r.tokens.length - 1) onLand();
-        }
-        return;
-      }
-      flying = true;
-      if (q < 0) { tok.el.style.opacity = '0'; return; }
-      const from = r.from(), to = r.to(), s = (i % 3) - 1;
-      const x = from.x + s * 10 + (to.x - from.x - s * 10) * q, y = from.y + (to.y - from.y) * q * q - ARC_PX * Math.sin(Math.PI * q);
-      tok.el.style.opacity = '1';
-      tok.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) scale(${(1 - 0.35 * q).toFixed(3)})`;
-    });
-    if (flying) raf = requestAnimationFrame(frame);
-    else finish();
+  /** Every token element goes; the run is already over or about to be. */
+  function clearTokens() {
+    for (const el of els) if (el) el.remove();
+    els = [];
   }
 
-  function finish() {
-    const r = run;
+  function teardown() {
     run = null;
     if (raf) cancelAnimationFrame(raf);
     raf = 0;
-    if (!r) return;
-    r.tokens.forEach(t => t.el.remove());
+    clearTokens();
     if (onDone) onDone();
+  }
+
+  /** The engine's events, in the order it gave them. `tail` is the rollup's own count-up: no second gesture,
+   *  so no token cue (that is what the station's `quiet` flag has always meant). */
+  function play(events) {
+    for (const e of events) {
+      if (e.type === 'tick') onTick(e.value, !!e.tail);
+      else if (e.type === 'land') { if (!e.counting) onLand(); }
+      else if (e.type === 'done') teardown();
+    }
+  }
+
+  /** from()/to() are re-measured every frame: the cabinet may still be moving under the tokens. */
+  function draw(list, ms) {
+    if (!list.length) { clearTokens(); return; }
+    const a = from(), b = to();
+    for (const { i, state } of list) {
+      const el = els[i];
+      if (!el) continue;
+      if (state === 'landed') { el.remove(); els[i] = null; continue; }
+      const p = tokenAt(i, ms, a, b);
+      el.style.opacity = String(p.opacity);
+      if (p.opacity) el.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px) scale(${p.scale.toFixed(3)})`;
+    }
+  }
+
+  function frame(at) {
+    raf = 0;
+    const r = run;
+    if (!r) return;
+    const out = r.step(at);
+    draw(out.tokens, at - startMs);
+    play(out.events);
+    if (run === r && !out.done) raf = requestAnimationFrame(frame);
   }
 
   return {
     get busy() { return !!run; },
-    /** from()/to() give client px each frame. Returns 'flying' or 'state' (reduced). */
-    start({ n, fromValue, toValue, from, to }) {
+    /**
+     * from()/to() give client px each frame. `rollupMs` is the plan's partyMs (0 keeps the flat count-up).
+     * Returns 'flying', or 'state' when reduced motion took the settled value instead (Law VI).
+     */
+    start({ n, fromValue, toValue, from: src, to: dst, rollupMs = 0 }) {
       if (run) this.skip();
-      if (typeof reduced === 'function' ? reduced() : reduced) { onTick(toValue, true); onLand(); if (onDone) onDone(); return 'state'; }
+      const off = typeof reduced === 'function' ? reduced() : reduced;
+      startMs = now();
+      run = createBankRun({ kind: 'pay', n, fromValue, toValue, rollupMs, reduced: !!off, startMs });
+      if (off) { play(run.step(startMs).events); return 'state'; }
       const origin = layer.getBoundingClientRect();
-      const tokens = Array.from({ length: n }, () => {
+      const rel = f => () => { const p = f() || { x: origin.width / 2, y: origin.height / 2 }; return { x: p.x - origin.left, y: p.y - origin.top }; };
+      from = rel(src); to = rel(dst);
+      els = Array.from({ length: run.n }, () => {
         const el = document.createElement('i');
         el.className = 'wheel-token';
         el.style.opacity = '0';
         layer.append(el);
-        return { el, landed: false };
+        return el;
       });
-      const rel = f => () => { const p = f() || { x: origin.width / 2, y: origin.height / 2 }; return { x: p.x - origin.left, y: p.y - origin.top }; };
-      run = { values: tickValues(fromValue, toValue, n), tokens, from: rel(from), to: rel(to), start: performance.now() };
       raf = requestAnimationFrame(frame);
       return 'flying';
     },
-    /** Settle at once on the final value, no cue (Law VI). */
+    /** Settle at once on the settled value, no mini-thud (Law VI: Back, suspend and close leave quietly). */
     skip() {
       const r = run;
       if (!r) return;
-      onTick(r.values[r.values.length - 1], true);
-      finish();
+      play(r.skip());
     },
-    dispose() { run = null; if (raf) cancelAnimationFrame(raf); raf = 0; },
+    dispose() { run = null; if (raf) cancelAnimationFrame(raf); raf = 0; clearTokens(); },
   };
 }

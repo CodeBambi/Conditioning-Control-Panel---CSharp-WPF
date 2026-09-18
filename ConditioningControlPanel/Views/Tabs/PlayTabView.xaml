@@ -180,6 +180,28 @@
                 <Setter Property="TextWrapping" Value="Wrap"/>
                 <Setter Property="VerticalAlignment" Value="Top"/>
             </Style>
+            <!-- A numbered step on an explainer card. The pip is a fixed 18px circle so three of
+                 them stack into a straight left margin whatever the step text wraps to. -->
+            <Style x:Key="PlayStepPip" TargetType="Border">
+                <Setter Property="Width" Value="18"/>
+                <Setter Property="Height" Value="18"/>
+                <Setter Property="CornerRadius" Value="9"/>
+                <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="VerticalAlignment" Value="Top"/>
+                <Setter Property="Margin" Value="0,1,9,0"/>
+            </Style>
+            <Style x:Key="PlayStepNumber" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+                <Setter Property="FontSize" Value="10.5"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="HorizontalAlignment" Value="Center"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+            <Style x:Key="PlayStepText" TargetType="TextBlock" BasedOn="{StaticResource PlayCardBlurb}">
+                <Setter Property="Margin" Value="0,0,0,7"/>
+            </Style>
             <!-- NEW / BETA / SOON chip. Mod-tinted, unlike the lock vocabulary below. -->
             <Style x:Key="PlayBadgePill" TargetType="Border">
                 <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
@@ -516,11 +538,26 @@
                                         </Button.Resources>
                                     </Button>
                                     <!-- Racing Thoughts: the kart run on the same media, a DtRH sibling
-                                         page (dtrh/race.html). Same outline as Quick Drop and the same
-                                         door - BtnStartRace_Click asks the descent's TierGate, so the
-                                         lockband above needs no third exception. -->
-                                    <!-- HIDDEN for 6.9.5: not ready for release. The handler and the race dev arg stay wired. -->
-                                    <Button x:Name="BtnPlayRace" Content="☕ Racing Thoughts" Cursor="Hand" Visibility="Collapsed"
+                                         page (dtrh/race.html). Same outline as Quick Drop, NOT the same
+                                         door: BtnStartRace_Click stopped asking the descent's TierGate on
+                                         2026-09-17 (open testing, owner's call), so this is the one control
+                                         on the card a free account may actually use. The lockband above
+                                         therefore DOES want an exception now - it is hit-test invisible so
+                                         the button still works, but it scrims a button that is no longer
+                                         locked. Left as a known cosmetic debt rather than reflowing the
+                                         hero card inside a gate change. -->
+                                    <!-- Revealed 2026-09-17 on the owner's word. Collapsed at the 6.9.5 cut and for the
+                                         four days after it, which left the game with NO door anywhere in the app: this
+                                         button is the only entry point there has ever been. HiddenRoomsTests now fails
+                                         if it goes back, so a stray reflow cannot quietly shut the room again. -->
+                                    <!-- The race-06/race-07 stack moved this button out into a card of its own,
+                                         paired with a TxtRaceAccess line reading "Unlock Racing Thoughts with the
+                                         demo or any racing pack". That card was dropped at the 2026-09-18 merge: it
+                                         exists only to narrate a purchase door the owner had already deleted, and
+                                         it would have left the page with two controls named BtnPlayRace. Reflowing
+                                         the hero card to lift this button clear of the lockband scrim is still the
+                                         open cosmetic debt named above, and is still its own change. -->
+                                    <Button x:Name="BtnPlayRace" Content="☕ Racing Thoughts" Cursor="Hand"
                                             Background="Transparent" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" FontSize="12"
                                             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="14,6" Margin="0,8,0,0"
                                             HorizontalAlignment="Right" ToolTip="the tea party on wheels. beta"
@@ -1368,40 +1405,70 @@
                         </Grid>
                     </Border>
                 </Grid>
-                <!-- THE BACK ROOM: the Sparkle Points room (Services\BackRoom\BackRoomHostService).
-                     The Arcademy's strip, minus everything that gates: free for every account, so no
-                     tier badge, no lockband and no code-driven visibility. -->
-                <Grid x:Name="SlotBackRoom" x:FieldModifier="internal" Margin="0,0,0,10">
-                    <Border Style="{StaticResource PlayCard}" Padding="0" MinHeight="118">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="22,20,20,20">
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <Border Style="{StaticResource PlayTitleGlyphPlate}">
-                                        <Image Width="18" Height="18" Source="{Binding Source='🎰', Converter={StaticResource EmojiToImageSource}}"/>
-                                    </Border>
-                                    <TextBlock Text="{loc:Str play_backroom_title}" Style="{StaticResource PlayCardTitle}"/>
+                <!-- Casino entry and two reserved seats. Reserved cards do not launch. -->
+                <UniformGrid Columns="3" Margin="-9,0,-9,10">
+                    <Grid x:Name="SlotBackRoom" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <Grid MinHeight="290">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}"><Border.Background><ImageBrush x:Name="PlayBackRoomHeroBrush" x:FieldModifier="internal" Stretch="UniformToFill"><ImageBrush.ImageSource><BitmapImage UriSource="pack://application:,,,/Resources/features/backroom.png" DecodePixelWidth="640"/></ImageBrush.ImageSource></ImageBrush></Border.Background></Border>
+                                <TextBlock Grid.Row="1" Text="{loc:Str play_backroom_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6" TextWrapping="Wrap"/>
+                                <!-- The casino in three steps. It replaced a single blurb: the Back Room is
+                                     the one Play card whose loop is not obvious from its name, and people were
+                                     entering without knowing SP bought anything. Art on top, steps under it. -->
+                                <StackPanel Grid.Row="2" Margin="0,0,0,14">
+                                    <Grid Margin="0,0,0,0">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Style="{StaticResource PlayStepPip}"><TextBlock Text="1" Style="{StaticResource PlayStepNumber}"/></Border>
+                                        <TextBlock Grid.Column="1" Text="{loc:Str play_backroom_step1}" Style="{StaticResource PlayStepText}"/>
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Style="{StaticResource PlayStepPip}"><TextBlock Text="2" Style="{StaticResource PlayStepNumber}"/></Border>
+                                        <TextBlock Grid.Column="1" Text="{loc:Str play_backroom_step2}" Style="{StaticResource PlayStepText}"/>
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Style="{StaticResource PlayStepPip}"><TextBlock Text="3" Style="{StaticResource PlayStepNumber}"/></Border>
+                                        <TextBlock Grid.Column="1" Text="{loc:Str play_backroom_step3}" Style="{StaticResource PlayStepText}"/>
+                                    </Grid>
                                 </StackPanel>
-                                <TextBlock Text="{loc:Str play_backroom_blurb}"
-                                           Style="{StaticResource PlayCardBlurb}" MaxWidth="560" HorizontalAlignment="Left"/>
-                            </StackPanel>
-                            <Button Grid.Column="1" x:Name="BtnPlayBackRoom" x:FieldModifier="internal"
-                                    Content="{loc:Str play_backroom_cta}" Cursor="Hand"
-                                    VerticalAlignment="Center" Margin="0,0,24,0" Padding="24,10"
-                                    Background="{DynamicResource PinkBrush}" Foreground="White"
-                                    BorderThickness="0" FontWeight="Bold" FontSize="14"
-                                    ToolTip="{loc:Str play_backroom_tooltip}"
-                                    Click="BtnStartBackRoom_Click">
-                                <Button.Resources>
-                                    <Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style>
-                                </Button.Resources>
-                            </Button>
-                        </Grid>
-                    </Border>
-                </Grid>
+                                <Button Grid.Row="3" x:Name="BtnPlayBackRoom" x:FieldModifier="internal" Content="{loc:Str play_backroom_cta}" Cursor="Hand" Padding="18,9" Background="{DynamicResource PinkBrush}" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13" ToolTip="{loc:Str play_backroom_tooltip}" Click="BtnStartBackRoom_Click"><Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style></Button.Resources></Button>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <Grid x:Name="SlotRacingReserved" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <Grid MinHeight="290">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}"><Image Width="64" Height="64" Opacity="0.65" Source="{Binding Source='🏁', Converter={StaticResource EmojiToImageSource}}"/></Border>
+                                <TextBlock Grid.Row="1" Text="{loc:Str play_racing_reserved_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6" TextWrapping="Wrap"/>
+                                <TextBlock Grid.Row="2" Text="{loc:Str play_racing_reserved_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                <Border Grid.Row="3" Style="{StaticResource PlayStatusPill}" Padding="18,9"><TextBlock Text="{loc:Str exclusives_badge_soon}" Foreground="{DynamicResource TextMutedBrush}" FontWeight="Bold" HorizontalAlignment="Center"/></Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <Grid x:Name="SlotFutureReserved" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <Grid MinHeight="290">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}"><TextBlock Text="?" FontSize="64" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                                <TextBlock Grid.Row="1" Text="{loc:Str play_future_reserved_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6" TextWrapping="Wrap"/>
+                                <TextBlock Grid.Row="2" Text="{loc:Str play_future_reserved_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                <Border Grid.Row="3" Style="{StaticResource PlayStatusPill}" Padding="18,9"><TextBlock Text="{loc:Str exclusives_badge_soon}" Foreground="{DynamicResource TextMutedBrush}" FontWeight="Bold" HorizontalAlignment="Center"/></Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </UniformGrid>
                 <!-- PIECE BY PIECE: the 3D chess board (Services\PieceByPiece\
                      PieceByPieceHostService). A STRIP built to the Arcademy's pattern directly
                      above, for the same reason it is one: there is no Resources/features art for

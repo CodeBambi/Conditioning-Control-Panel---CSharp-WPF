@@ -115,10 +115,11 @@ public sealed class BackRoomBridge
 
     /// <summary>A server reply carried <c>sp</c>: that is the true balance, adopted now and never
     /// echoed back to the page that asked for it.</summary>
-    public void AdoptSp(int sp)
+    public void AdoptSp(int sp, Func<bool>? canAdopt = null)
     {
         void Write()
         {
+            if (IsClosed || canAdopt?.Invoke() == false) return;
             _adopting = true;
             try { _d.SetSp?.Invoke(sp); }
             finally { _adopting = false; }
@@ -187,7 +188,7 @@ public sealed class BackRoomBridge
                 _ = OnStationRequestAsync(m);
                 break;
             case "media-request":
-                OnMediaRequest(m);
+                _ = OnMediaRequestAsync(m);
                 break;
             case "fx":
                 OnFx(m);
@@ -228,17 +229,40 @@ public sealed class BackRoomBridge
     }
 
     public const string OptionTunnel = "tunnel", OptionMelt = "melt", OptionIntensity = "intensity";
+    /// <summary>Invert camera (10.14): a drag moves the world instead of the camera. A switch like tunnel and melt.</summary>
+    public const string OptionInvertLook = "invertLook";
+    /// <summary>The first-visit card was dismissed (CONTRACT section 13). A switch the page only ever sets true;
+    /// <c>AppSettings.BackRoomWelcomeSeen</c>, echoed as <c>welcomeSeen</c> on <c>init</c>.</summary>
+    public const string OptionWelcomeSeen = "welcomeSeen";
+    /// <summary>Where the room's pictures come from (10.13.C). Values as <c>AppSettings.BackRoomMediaSource</c>.</summary>
+    public const string OptionMediaSource = "mediaSource";
+    /// <summary>The room's own three audio levels, 0-100 (10.14). Not the app's volumes.</summary>
+    public const string OptionSubVolume = "subVolume", OptionSfxVolume = "sfxVolume", OptionMusicVolume = "musicVolume";
+    /// <summary>One niche at a time (10.13.C). A list on this wire would mean the page owning the
+    /// selection and the host taking dictation; one name per press keeps the host the writer.</summary>
+    public const string OptionSubAdd = "mediaSubAdd", OptionSubRemove = "mediaSubRemove", OptionSubToggle = "mediaSubToggle";
 
-    /// <summary>One validated <c>room-option</c>: a switch (<see cref="On"/>) or the intensity.</summary>
-    public sealed record RoomOption(string Key, bool On, BackRoomFxIntensity? Intensity);
+    /// <summary>A niche name the host will accept: what Reddit and Scrolller allow, and nothing that
+    /// could be read as a path. The room validates too, but only so a typo is answered in the room.</summary>
+    private static readonly System.Text.RegularExpressions.Regex NicheName =
+        new("^[A-Za-z0-9_]{2,40}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
-    /// <summary><c>{type:'room-option', key:'tunnel'|'melt', value: bool}</c> or <c>{key:'intensity', value:
-    /// 'calm'|'normal'|'full'}</c>. A string "true", a number or an unknown key is null.</summary>
+    private static readonly string[] MediaSourceValues = { "auto", "local", "online", "mixed", "bundled" };
+
+    /// <summary>One validated <c>room-option</c>: a switch (<see cref="On"/>), the intensity, a whitelisted
+    /// string (<see cref="Text"/>) or a 0-100 level (<see cref="Level"/>). Exactly one is ever set.</summary>
+    public sealed record RoomOption(string Key, bool On, BackRoomFxIntensity? Intensity, string? Text = null, int? Level = null);
+
+    /// <summary><c>{type:'room-option', key:'tunnel'|'melt'|'invertLook'|'welcomeSeen', value: bool}</c>, <c>{key:'intensity', value:
+    /// 'calm'|'normal'|'full'}</c>, <c>{key:'mediaSource', value:'auto'|'local'|'online'|'mixed'|'bundled'}</c>
+    /// or <c>{key:'subVolume'|'sfxVolume'|'musicVolume', value: 0..100}</c>. A string "true", a level outside
+    /// the range, a non-integer level and an unknown key are all null: the page does not get to widen this
+    /// wire by sending something new.</summary>
     internal static RoomOption? ReadRoomOption(JObject m)
     {
         var key = (string?)m["key"];
         var v = m["value"];
-        if ((key == OptionTunnel || key == OptionMelt) && v is JValue { Type: JTokenType.Boolean } b)
+        if ((key == OptionTunnel || key == OptionMelt || key == OptionInvertLook || key == OptionWelcomeSeen) && v is JValue { Type: JTokenType.Boolean } b)
             return new RoomOption(key, b.Value<bool>(), null);
         if (key == OptionIntensity && v is JValue { Type: JTokenType.String } t)
             return (string?)t switch
@@ -248,12 +272,36 @@ public sealed class BackRoomBridge
                 "full" => new RoomOption(key, false, BackRoomFxIntensity.Full),
                 _ => null,
             };
+        if (key == OptionMediaSource && v is JValue { Type: JTokenType.String } src
+            && Array.IndexOf(MediaSourceValues, (string?)src) >= 0)
+            return new RoomOption(key, false, null, (string?)src);
+        if ((key == OptionSubVolume || key == OptionSfxVolume || key == OptionMusicVolume)
+            && v is JValue { Type: JTokenType.Integer } lv)
+        {
+            var level = lv.Value<long>();
+            if (level is < 0 or > 100) return null;
+            return new RoomOption(key, false, null, null, (int)level);
+        }
+        if ((key == OptionSubAdd || key == OptionSubRemove || key == OptionSubToggle)
+            && v is JValue { Type: JTokenType.String } niche
+            && (string?)niche is { } name && NicheName.IsMatch(name))
+            return new RoomOption(key, false, null, name);
         return null;
     }
 
     /// <summary><c>media-request.count</c>: an integer 1..13, anything else reads as 4 (10.13.C).</summary>
     internal static int MediaCount(JToken? t)
         => t is JValue { Type: JTokenType.Integer } v && v.Value<long>() is >= 1 and <= 13 ? (int)v.Value<long>() : 4;
+
+    /// <summary><c>media-request.source</c> (10.13.C): an optional per-request override, one of the same
+    /// values <c>room-option: mediaSource</c> takes. Absent, a non-string, or anything off the list reads
+    /// as null and the room's own setting decides - shape-strict like the rest of this file, because the
+    /// page does not get to invent a source. The feed still applies consent to whatever it is handed:
+    /// narrowing is the page's to ask for, widening is not.</summary>
+    internal static string? MediaSourceRequest(JToken? t)
+        => t is JValue { Type: JTokenType.String } v && Array.IndexOf(MediaSourceValues, (string?)v) >= 0
+            ? (string?)v
+            : null;
 
     private static string? Station(JObject m)
     {
@@ -305,7 +353,7 @@ public sealed class BackRoomBridge
         _d.Post(new { type = "station-result", reqId, ok = r.Ok, status = r.Status, reason = r.Reason, body = r.Body });
     }
 
-    private void OnMediaRequest(JObject m)
+    private async Task OnMediaRequestAsync(JObject m)
     {
         var reqId = (string?)m["reqId"];
         var station = Station(m);
@@ -313,11 +361,16 @@ public sealed class BackRoomBridge
         lock (_gate) { if (!_answered.Add("media:" + reqId)) return; }
         int seed = _d.NextSeed?.Invoke() ?? Random.Shared.Next();
         int count = MediaCount(m["count"]);
-        // BackRoomMedia reads file headers: deal off the UI thread; Post marshals the reply back.
-        void DealAndPost()
+        var wanted = MediaSourceRequest(m["source"]);
+
+        // The deal reads file headers, so it still starts off the UI thread (OffUi); DealAsync's own
+        // await - a bounded top-up of the warm remote pool - then continues on the pool. Post marshals
+        // the reply back. The reply shape is additive: the same gifs and words, plus the source the
+        // deal actually resolved to, so the page can show what it GOT.
+        async Task DealAndPostAsync()
         {
             BackRoomMediaDeal deal;
-            try { deal = _d.Media.Deal(station, seed, count); }
+            try { deal = await _d.Media.DealAsync(station, seed, count, wanted, _life.Token).ConfigureAwait(false); }
             catch (Exception ex)
             {
                 _d.Log?.Invoke("media deal threw, using fallback: " + ex.Message);
@@ -326,12 +379,22 @@ public sealed class BackRoomBridge
             lock (_gate) { if (_closed) return; _deals[station] = deal; }
             _d.Post(new
             {
-                type = "media", reqId, seed = deal.Seed,
+                type = "media", reqId, seed = deal.Seed, source = deal.Source,
                 gifs = deal.Gifs.Select(g => new { key = g.Key, url = g.Url, w = g.W, h = g.H, src = g.Src }),
                 words = deal.Words.Select(w => new { key = w.Key, text = w.Text, src = w.Src }),
             });
         }
-        if (_d.OffUi != null) _d.OffUi(DealAndPost); else DealAndPost();
+
+        // Guarded here rather than inside: this runs detached (no reply guard on media-request), so
+        // nothing it throws may reach the task scheduler.
+        async Task RunAsync()
+        {
+            try { await DealAndPostAsync().ConfigureAwait(false); }
+            catch (Exception ex) { _d.Log?.Invoke("media post threw: " + ex.Message); }
+        }
+
+        if (_d.OffUi != null) _d.OffUi(() => _ = RunAsync());
+        else await RunAsync().ConfigureAwait(false);
     }
 
     private void OnFx(JObject m)

@@ -31,14 +31,29 @@ export function glyphFx(pocket) {
   return id ? GLYPHS[id].fx : null;
 }
 
+/* THE CONTOUR. The pockets alternate hot pink and near-black, so a cream engraving at 26% (GLYPHS.md) had a
+ * bright half of the wheel to disappear into: on a phone the marks read as smudges (owner, 2026-09-16). The
+ * shape is now traced TWICE, a dark line first and the cream over it, which buys the mark an edge against both
+ * halves without touching the authored 26% or the cream itself. */
+const CONTOUR = '#1b0d27', CONTOUR_SCALE = 2.3;
+
 /**
- * Paint glyph `id` white on a transparent `size` x `size` box of `g` (a 2d context). Strokes only, thick and
- * round: the mark reads at 14 px on a phone and takes its colour from the material.
+ * Paint glyph `id` on a transparent `size` x `size` box of `g` (a 2d context): a dark contour under a cream
+ * mark. Strokes only, thick and round, so it reads at 14 px on a phone and takes its tint from the material.
  */
 export function paintGlyph(g, id, size = 128) {
   const s = size, c = s / 2, w = s * 0.085;
+  if (!GLYPH_IDS.includes(id)) return false;
   g.clearRect(0, 0, s, s);
-  g.strokeStyle = g.fillStyle = '#ffffff'; g.lineWidth = w; g.lineCap = g.lineJoin = 'round';
+  g.lineCap = g.lineJoin = 'round';
+  g.strokeStyle = g.fillStyle = CONTOUR; g.lineWidth = w * CONTOUR_SCALE;
+  trace(g, id, s, c);
+  g.strokeStyle = g.fillStyle = '#ffffff'; g.lineWidth = w;
+  return trace(g, id, s, c);
+}
+
+/** The shape alone, on whatever line the caller has set. Run once per pass. */
+function trace(g, id, s, c) {
   g.beginPath();
   if (id === 'spiral') {
     const turns = 2.6, steps = 72;

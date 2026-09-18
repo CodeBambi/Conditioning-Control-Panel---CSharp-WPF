@@ -1,3 +1,5 @@
+import { siliconeRebound, SILICONE_SETTLE_MS, customLeverReturn, LEVER_RETURN_MS, releasedLeverAngle, customSpinLeverAngle, customSpinReturnMs } from '../../room/lever-return.js';
+import { sampleEmiReaction } from '../../room/emi-gestures.js';
 /* ============================================================================
  * scene.js - the slot cabinet in three.js, ported from blender-scripting
  * slot/preview/{app,polish}.js. One WebGL context per createScene(), freed by
@@ -14,13 +16,20 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { createApronTicker } from './apron-ticker.js';
+import { createCrownDisplay } from './crown-display.js';
+import { createRimLighting } from './rim-lighting.js';
 import { createRenderBudget } from '../../room/render-budget.js';
 import { attachSlotCustomHandle, slotHandleStyle } from '../../room/slot-custom-handles.js';
 import { createCoinShower } from '../../room/coin-shower.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { REQUIRED, OPTIONAL, FACE_MATERIAL } from './nodes.js';
-import { drawSymbol } from './symbols.js';
+import { reelCellVisible, reelPaintStamp } from './reel-paint.js';
+import { stripTransform } from './strip-transform.js';
+import { kit as wobbleKit } from '../../shared/sound/kit.js';
+import { settleCells, recoilCells, leverRebound, latchTravel } from './juice.js';
+import { drawSymbol, disposeSpirals, kindOf, CELL } from './symbols.js';
 import { fitText } from '../../shared/text/wrap.js';
 import { PACE, reelStopMs, reelsMs, respinStopMs, respinMs } from './pace.js';
 import { applyPalette } from './palette.js';
@@ -34,9 +43,25 @@ const FIT_MARGIN = 1.04;        // breathing room around the marquee, reels and 
 // lever and EMI's shelf stand well in front of the reel glass, so a straight fit leaves a band of empty room down
 // each side. A desk seat takes this much of that distance off: the reels, and the art on them, read big.
 const PLAY_CLOSE = 0.93;
+// A phone crops INTO its fit: the owner's reference close-ups cut the shelf and the lever ball at the edges
+// rather than leaving room around them (owner, 2026-09-16, one shot per orientation).
+const LAND_CLOSE = 0.95, PORT_CLOSE = 1.02;
+// 0 aims dead at the reel glass, 1 at the middle of the whole span: half way keeps the glass near the centre
+// and still leaves the lever its room on the right (owner, 2026-09-16: "keep a little space on the right").
+const GLASS_AIM = 0.16;
 // EMI'S SHELF: her perch beside the reel window while the player is seated, answering the lever on the right.
 // Cabinet space, the glb's own units: outboard of the side panel, the top surface level with the reels.
-const SHELF = { x: -0.66, top: 0.99, z: 0.36, w: 0.17, d: 0.16, lip: 0.03 };
+/* THE T moved her (owner, 2026-09-16). The arms now reach x +-0.673 and their underside is at y 0.978, so
+ * the plank goes OUTBOARD of the arm's edge and DOWN into the pocket the overhang makes: she stands beside
+ * the stem, under the left arm, with her head just clear of it. This is the sketch, and it is also why the
+ * reels could take the width - she is no longer competing with them for it. */
+const SHELF = { x: -0.70, top: 0.78, z: 0.36, w: 0.17, d: 0.16, lip: 0.03 };
+/* UPRIGHT the plank comes IN off that line. A tall frame is bought by the width, and the shelf at -0.66 is the
+ * widest thing in it: every pixel it reaches outboard is a pixel of reel. Pulled in and forward she still stands
+ * beside the glass, on the same plank, and the reels come up by about a fifth (owner, 2026-09-16). -0.52 was a
+ * step too far: at that distance she stood ON the cabinet's left panel rather than beside it, so -0.58 is where
+ * the plank clears the corner and she reads against the room (owner: "move emi slightly to the left"). */
+const SHELF_TALL = { x: -0.66, z: 0.44 };
 const PERCH_SCALE = 0.85, PERCH_HOP = 0.11;   // a smaller EMI on a small shelf, and the arc of her jump across
 const PULL_MAX = 0.5, PULL_COMMIT = 0.55;
 const LEAN = 0.22, BREATH_RAD = 0.03;   // Law VIII lean into a press; THE BREATH's reach at rest
@@ -86,12 +111,13 @@ const MARQUEE_FLICKER_MS = 260;   // the neon restrike on a change: a brief emis
 const MARQUEE_LIT = 0.45;
 const displayFont = (px) => `600 ${px}px Segoe UI, Arial, sans-serif`;
 
-function paintDisplay(ctx, w, h, marquee, text) {
+function paintDisplay(ctx, w, h, marquee, text, aspect=1) {
   const g = ctx.createLinearGradient(0, 0, w, h);
   g.addColorStop(0, '#180d27'); g.addColorStop(0.5, '#432040'); g.addColorStop(1, '#180d27');
   ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
   ctx.lineWidth = 1.5; ctx.strokeStyle = '#bf85ac'; ctx.strokeRect(9, 9, w - 18, h - 18);
   ctx.strokeStyle = '#744366'; ctx.strokeRect(15, 15, w - 30, h - 30);
+  ctx.save();ctx.translate(w/2,h/2);ctx.scale(1,aspect);ctx.translate(-w/2,-h/2);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const lh = 1.06, measure = (str, size) => { ctx.font = displayFont(size); return ctx.measureText(str).width; };
   const fit = fitText(text, { measure, width: w * 0.82, height: h * (marquee ? 0.78 : 0.74),
@@ -100,7 +126,7 @@ function paintDisplay(ctx, w, h, marquee, text) {
   ctx.shadowColor = '#ff75c8'; ctx.shadowBlur = marquee ? 12 : 4; ctx.fillStyle = '#ffe3f2';
   const step = fit.size * lh, top = h / 2 - (fit.lines.length - 1) * step / 2;
   for (let i = 0; i < fit.lines.length; i++) ctx.fillText(fit.lines[i], w / 2, top + i * step, w * 0.84);
-  ctx.shadowBlur = 0;
+  ctx.shadowBlur = 0;ctx.restore();
 }
 
 /**
@@ -111,19 +137,28 @@ function paintDisplay(ctx, w, h, marquee, text) {
  * @returns {Promise<{missing:string[], dispose:()=>void} | object>}
  */
 export async function createScene(o) {
-  const { canvas, reduced } = o;
+  const { reduced } = o;
+  const shared = o.stage || null, canvas = shared ? shared.canvas : o.canvas;
+  let releaseView = null, rig = null, coinShower = null, retainReels = null, apronTicker = null, rimLighting = null, releaseEmiClick = null;
+  const extras = [], borrowed = new Map(), roomVisibility=new Map();
+  const initialStretch=shared?.fixture.userData.slotStretch||1,initialStretchX=shared?.fixture.userData.slotStretchX||1;
+  if(shared)for(const n of shared.scene.children)if(n!==shared.fixture&&!n.isLight){roomVisibility.set(n,n.visible);n.visible=false;}
+  if (shared) shared.fixture.children[0].traverse(n => borrowed.set(n, { material:n.material, geometry:n.geometry, position:n.position.clone(), rotation:n.rotation.clone(), scale:n.scale.clone(), visible:n.visible }));
   // Law VI: reduced motion, Calm and Motion off all settle the cosmetic travel (station.js stillFx).
   const stillFx = typeof o.stillFx === 'function' ? o.stillFx : () => reduced;
   const budget = createRenderBudget(navigator, devicePixelRatio);
   let lastDraw = -Infinity;
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'default' });
-  renderer.setPixelRatio(budget.dpr(canvas.clientWidth, canvas.clientHeight));
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.25;
-  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(LENS_DEG, 16 / 9, 0.015, 60);
-  scene.add(new THREE.HemisphereLight(0xe3bdf9, 0x40213e, 2));
-  for (const [color, intensity, pos] of [[0xffd9ed, 3, [-3, 5, 4]], [0xb69cf4, 2, [3, 2, 2]], [0xff83c9, 3, [1, 4, -3]]]) {
-    const l = new THREE.DirectionalLight(color, intensity); l.position.set(...pos); scene.add(l);
+  const renderer = shared ? shared.renderer : new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'default' });
+  const scene = shared ? shared.scene : new THREE.Scene();
+  const camera = shared ? shared.camera : new THREE.PerspectiveCamera(LENS_DEG, 16 / 9, 0.015, 60);
+  if (!shared) {
+    renderer.setPixelRatio(budget.dpr(canvas.clientWidth, canvas.clientHeight));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.8;
+    scene.add(new THREE.HemisphereLight(0xe3bdf9, 0x40213e, 2));
+    for (const [color, intensity, pos] of [[0xffd9ed, 3, [-3, 5, 4]], [0xb69cf4, 2, [3, 2, 2]], [0xff83c9, 3, [1, 4, -3]]]) {
+      const l = new THREE.DirectionalLight(color, intensity); l.position.set(...pos); scene.add(l);
+    }
   }
   const owned = [];            // textures and materials made here, freed in dispose()
   let raf = 0, disposed = false, settle = null;
@@ -134,27 +169,55 @@ export async function createScene(o) {
     if (settle) settle();         // a rise, sink or spin cut short by dispose still resolves its promise
     canvas.removeEventListener('pointerdown', onDown); canvas.removeEventListener('pointermove', onMove);
     canvas.removeEventListener('pointerup', onUp); canvas.removeEventListener('pointercancel', cancelPull);
+    retainReels?.(); releaseEmiClick?.();
+    for(const [n,visible] of roomVisibility)n.visible=visible;
     customHandle?.dispose();
-    scene.traverse(n => {
-      if (n.geometry) n.geometry.dispose();
-      for (const m of [].concat(n.material || [])) { for (const k of Object.keys(m)) if (m[k] && m[k].isTexture) m[k].dispose(); m.dispose(); }
-    });
+    disposeSpirals();            // the reel spirals' Loom tiles, and the page's field context with them
+    coinShower?.dispose();
+    apronTicker?.dispose();
+    rimLighting?.dispose();
+    if (shared) {
+      const oldMaterials = new Set([...borrowed.values()].flatMap(v => [].concat(v.material || [])));
+      const oldGeometry = new Set([...borrowed.values()].map(v => v.geometry));
+      const oldTextures = new Set([...oldMaterials].flatMap(m => Object.values(m).filter(v => v?.isTexture)));
+      const disposeNode = n => {
+        if (n.geometry && !oldGeometry.has(n.geometry)) n.geometry.dispose();
+        for (const m of [].concat(n.material || [])) if (!oldMaterials.has(m)) {
+          for (const t of Object.values(m)) if (t?.isTexture && !oldTextures.has(t)) t.dispose();
+          m.dispose();
+        }
+      };
+      const added = [];
+      rig?.traverse(n => { disposeNode(n); if (!borrowed.has(n)) added.push(n); });
+      for (const n of added) n.removeFromParent();
+      for (const n of extras) { n.traverse(disposeNode); n.removeFromParent(); }
+      for (const [n,v] of borrowed) { n.material=v.material; n.geometry=v.geometry; n.position.copy(v.position); n.rotation.copy(v.rotation); n.scale.copy(v.scale); n.visible=v.visible; }
+      rig?.updateMatrixWorld(true);
+      shared.fixture.userData.slotPlaying = false;
+      releaseView?.();
+    } else {
+      scene.traverse(n => {
+        if (n.geometry) n.geometry.dispose();
+        for (const m of [].concat(n.material || [])) { for (const k of Object.keys(m)) if (m[k]?.isTexture) m[k].dispose(); m.dispose(); }
+      });
+      renderer.dispose(); renderer.forceContextLoss();
+    }
     owned.forEach(x => x.dispose());
-    renderer.dispose(); renderer.forceContextLoss();
   }
 
-  let customHandle = null;
+  let customHandle = null, returning=false;
   let gltf, atlas = null;
   try {
     [gltf, atlas] = await Promise.all([
-      new GLTFLoader().loadAsync(asset('./assets/slot.glb')),
+      shared ? Promise.resolve({ scene:shared.fixture.children[0] }) : new GLTFLoader().loadAsync(asset('./assets/slot.glb')),
       new THREE.TextureLoader().loadAsync(asset('./assets/emi-faces-slot.png')).catch(() => null),
     ]);
   } catch (e) { dispose(); throw e; }
-  const rig = gltf.scene;
-  const coinShower = createCoinShower(rig);
+  rig = gltf.scene;
+  coinShower = createCoinShower(rig);
   let coinTick = performance.now();
-  scene.add(rig);
+  if (!shared) scene.add(rig);
+  else shared.fixture.userData.slotPlaying = true;
   const recoloured = applyPalette(rig, o.palette);   // a room variant's cabinet colours, before any other swap
   owned.push(...recoloured);
   const get = name => rig.getObjectByName(name) || null;
@@ -163,18 +226,22 @@ export async function createScene(o) {
   const absent = OPTIONAL.filter(n => !get(n));
   if (absent.length) console.warn(`[slot] glb lacks optional nodes, degrading: ${absent.join(', ')}`);
 
-  customHandle = await attachSlotCustomHandle({rig,loader:new GLTFLoader().setMeshoptDecoder(MeshoptDecoder),base:asset('../../room/assets/'),style:slotHandleStyle(o.variant)}).catch(()=>null);
+  if (!shared) customHandle = await attachSlotCustomHandle({rig,loader:new GLTFLoader().setMeshoptDecoder(MeshoptDecoder),base:asset('../../room/assets/'),style:slotHandleStyle(o.variant)}).catch(()=>null);
   const cabinet = get('cabinet'), lever = get('lever'), rigRest = rig.position.clone();
-  const reels = [1, 2, 3].map(i => get(`reel_${i}`)), restX = reels.map(r => r.rotation.x);
+  const reels = [1, 2, 3].map(i => get(`reel_${i}`)), restX = reels.map(() => 0), reelAngles = [0,0,0];
   const freezers = [1, 2, 3].map(i => get(`freeze_${i}`));
   freezers.forEach(f => f && f.material && (f.material = f.material.clone(), f.userData.restY = f.position.y));
   const bulbs = [];
   rig.traverse(n => { if (n.isMesh && /^lights_chase_\d+$/.test(n.name)) bulbs.push(n); });
   bulbs.sort((a, b) => a.name.localeCompare(b.name));
+  const bulbScales = bulbs.map(b => b.scale.clone().multiplyScalar(1.3));
+  // Keep the authored perimeter, with 30% larger lamps in the seated view.
+  // Rim lighting measures their world scale, so its existing aura grows with them.
   bulbs.forEach((b, i) => {
     b.material = new THREE.MeshPhysicalMaterial({ color: PALETTES.idle[i % 5], emissive: PALETTES.idle[i % 5],
-      emissiveIntensity: 0.1, roughness: 0.24, metalness: 0.08, clearcoat: 1, clearcoatRoughness: 0.14 });
+      emissiveIntensity: .6, roughness: .24, metalness: .08, clearcoat: 1, clearcoatRoughness: .14 });
   });
+  rimLighting = createRimLighting(scene, bulbs, camera, renderer);
   const glass = get('reel_window');
   if (glass && glass.material) Object.assign(glass.material, { transparent: true, opacity: 0.035, depthWrite: false });
   // THE MARQUEE's heat lives on marquee_glow (its own clone: neon_pink is shared with the piping).
@@ -199,10 +266,36 @@ export async function createScene(o) {
   for (const name of ['screen_jackpot', 'screen_status', 'marquee']) {
     const mesh = get(name);
     if (!mesh || !mesh.isMesh) continue;
-    const c = makeCanvas(1024, 128), t = canvasTexture(c);
+    const c = makeCanvas(name === 'screen_jackpot' ? 512 : 1024, 128), t = canvasTexture(c);
     mesh.material = new THREE.MeshStandardMaterial({ map: t, emissiveMap: t, emissive: 0xffffff, emissiveIntensity: 0.45, roughness: 0.6 });
     owned.push(t);
     screens[name] = { c, t, mesh, text: null };
+  }
+
+  const crown = screens.screen_jackpot;
+  const crownDisplay = crown ? createCrownDisplay(crown.c, () => { crown.t.needsUpdate = true; }) : null;
+  const crownSize = new THREE.Vector3(), crownScale = new THREE.Vector3();
+  if (crown) { crown.mesh.geometry.computeBoundingBox(); crown.mesh.geometry.boundingBox.getSize(crownSize); }
+
+  const apronDisplay = get('apron_display');
+  const apronScale = new THREE.Vector3(), apronSize = new THREE.Vector3();
+  if (apronDisplay?.isMesh) {
+    apronDisplay.geometry.computeBoundingBox();
+    apronDisplay.geometry.boundingBox.getSize(apronSize);
+    let texture;
+    apronTicker = createApronTicker({ reduced: stillFx(), onDirty: () => { if (texture) texture.needsUpdate = true; } });
+    texture = canvasTexture(apronTicker.canvas);
+    apronDisplay.material = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false });
+    owned.push(texture);
+    apronTicker.update(performance.now(), stillFx());
+  }
+
+  const spinFace=get('spin_button_face');
+  if(shared && spinFace)spinFace.visible=false;
+  if(!shared && spinFace?.isMesh){
+    const c=makeCanvas(512,160),g=c.getContext('2d');
+    g.fillStyle='#f2b5dc';g.fillRect(0,0,512,160);g.fillStyle='#32143e';g.textAlign='center';g.textBaseline='middle';g.font='700 70px Segoe UI, sans-serif';g.fillText(o.spinLabel || 'Spin',256,80,470);
+    const t=canvasTexture(c);owned.push(t);spinFace.material=new THREE.MeshBasicMaterial({map:t});
   }
 
   // THE MARQUEE BOARD: the live message (null = the cabinet name) and the frame it was posted on.
@@ -227,60 +320,99 @@ export async function createScene(o) {
     return age < rise ? ease(age / rise) : 1 - clamp((age - rise) / FEEL_ALMOST.SNAP_MS);
   }
   const reelCanvas = [], reelTex = [];
+  // Canvas X follows the strip travel; canvas Y spans the physical reel width.
+  // The authored shallow arc exposes 1.4 cells, with UV travel driven by the same spin angle.
+  let cell={...CELL,hw:CELL.hw*initialStretchX/initialStretch}, CW=cell.hh*2, CH=cell.hw*2;
   const angle = (k, n) => ((k + 0.5) / n - 0.5) * Math.PI * 2;
-  function paint(t) {
+  let reelMood = 'idle', reelMoodAt = 0;
+  const paintedCells = [[], [], []];
+  function paint(t, force = false) {
     for (let r = 0; r < 3; r++) {
       const n = strips[r].length || 1, c = reelCanvas[r], ctx = c.getContext('2d');
-      ctx.clearRect(0, 0, c.width, c.height);
+      let dirty = false;
       for (let j = 0; j < strips[r].length; j++) {
-        ctx.save(); ctx.translate((j + 0.5) * 256, 128); ctx.rotate(-Math.PI / 2); ctx.scale(1, -1);
+        const hit = j === stopsNow[r] ? hitGlow(r, t) : 0;
+        const gh = ghost && ghost.r === r && ghost.j === j ? ghostAmt(t) : 0;
+        const kind = kindOf(strips[r][j]).kind;
+        const stamp = reelPaintStamp(kind, t, reduced || stillFx(), hit, gh, reelMood);
+        // Keep static pixels; only the payline and nearby slivers need live art at rest.
+        if (!force && (!reelCellVisible(j, n, reelAngles[r], !!spin) || paintedCells[r][j] === stamp)) continue;
+        dirty = true; paintedCells[r][j] = stamp;
+        ctx.clearRect(j * CW, 0, CW, CH);
+        ctx.save(); ctx.beginPath(); ctx.rect(j * CW, 0, CW, CH); ctx.clip(); ctx.translate((j + 0.5) * CW, CH / 2); ctx.rotate(-Math.PI / 2); ctx.scale(1, -1);
         // THE GLYPH HIT (shared/hypno/callout.js timings): the landed cell pops 6% inside its own cell and takes a
         // rim, reel order, HIGHLIGHT_GAP_MS apart. Reduced motion takes the lit rim and no pop (Law VI).
-        const hit = j === stopsNow[r] ? hitGlow(r, t) : 0;
-        if (hit > 0 && !reduced) { ctx.beginPath(); ctx.rect(-128, -128, 256, 256); ctx.clip(); ctx.scale(1 + 0.06 * hit, 1 + 0.06 * hit); }
+        if (hit > 0 && !reduced && !stillFx()) { ctx.beginPath(); ctx.rect(-cell.hw, -cell.hh, CH, CW); ctx.clip(); ctx.scale(1 + 0.06 * hit, 1 + 0.06 * hit); }
         // One bad drawable (a broken or tainted GIF) paints the fallback tile, never the whole reel.
-        try { ctx.save(); drawSymbol(ctx, strips[r][j], t, look); } catch { ctx.restore(); ctx.save(); drawSymbol(ctx, strips[r][j], t, { reduced: look.reduced, face: look.face }); }
+        try { ctx.save(); drawSymbol(ctx, strips[r][j], t, {...look,reduced:reduced||stillFx(),faceMood:reelMood,faceAge:t-reelMoodAt},cell); } catch { ctx.restore(); ctx.save(); drawSymbol(ctx, strips[r][j], t, { reduced: look.reduced, face: look.face },cell); }
         ctx.restore();
-        const glaze = ctx.createLinearGradient(-128, 0, 128, 0);
+        const glaze = ctx.createLinearGradient(-cell.hw, 0, cell.hw, 0);
         glaze.addColorStop(0, '#07040f99'); glaze.addColorStop(0.12, '#ffffff08'); glaze.addColorStop(0.5, '#ffffff00');
         glaze.addColorStop(0.88, '#ffffff08'); glaze.addColorStop(1, '#07040f99');
-        ctx.fillStyle = glaze; ctx.fillRect(-128, -128, 256, 256);
-        ctx.strokeStyle = '#e8bbd526'; ctx.lineWidth = 1; ctx.strokeRect(-116, -116, 232, 232);
-        if (hit > 0) { ctx.strokeStyle = `rgba(255,214,120,${(0.9 * hit).toFixed(3)})`; ctx.lineWidth = 12; ctx.strokeRect(-116, -116, 232, 232); }
+        ctx.fillStyle = glaze; ctx.fillRect(-cell.hw, -cell.hh, CH, CW);
+        ctx.strokeStyle = '#e8bbd526'; ctx.lineWidth = 1; ctx.strokeRect(-cell.hw + 12, -cell.hh + 12, CH - 24, CW - 24);
+        if (hit > 0) { ctx.strokeStyle = `rgba(255,214,120,${(0.9 * hit).toFixed(3)})`; ctx.lineWidth = 12; ctx.strokeRect(-cell.hw + 12, -cell.hh + 12, CH - 24, CW - 24); }
         // A2: the cell one step off the payline ghosts gold. The reel window shows about half of each
         // neighbour (drum r 0.43, 13 cells, window 0.39 tall), so the tell reads without moving a stop.
-        const gh = ghost && ghost.r === r && ghost.j === j ? ghostAmt(t) : 0;
-        if (gh > 0) { ctx.fillStyle = `rgba(255,194,58,${(0.62 * gh).toFixed(3)})`; ctx.fillRect(-128, -128, 256, 256); }
+        if (gh > 0) { ctx.fillStyle = `rgba(255,194,58,${(0.62 * gh).toFixed(3)})`; ctx.fillRect(-cell.hw, -cell.hh, CH, CW); }
         ctx.restore();
       }
-      if (n) reelTex[r].needsUpdate = true;
+      if (dirty) reelTex[r].needsUpdate = true;
     }
     lastPaint = t;
   }
   function setStrips(next) {
     strips = [0, 1, 2].map(r => (next && Array.isArray(next[r]) ? next[r] : []));
     for (let r = 0; r < 3; r++) {
-      if (reelTex[r]) reelTex[r].dispose();
-      reelCanvas[r] = makeCanvas(Math.max(1, strips[r].length) * 256, 256);
+      if (reelTex[r]) { reelTex[r].dispose(); reels[r].material.dispose(); }
+      paintedCells[r] = [];
+      reelCanvas[r] = makeCanvas(Math.max(1, strips[r].length) * CW, CH);
       reelTex[r] = canvasTexture(reelCanvas[r]);
+      reelTex[r].wrapS = THREE.RepeatWrapping;
+      reelTex[r].repeat.x = stripTransform(0, strips[r].length).repeat;
       reels[r].material = new THREE.MeshBasicMaterial({ map: reelTex[r] });
     }
     owned.push(...reelTex);
-    paint(performance.now());
+    paint(performance.now(), true);
   }
   setStrips([]);
+  // Keep the final dealt picture on the very same room mesh after standing up.
+  // The copied canvas owns no media element and replaces only this cabinet's map image.
+  if(shared) retainReels=()=>{
+    for(let i=0;i<3;i++){
+      const original=borrowed.get(reels[i])?.material, map=original?.map, source=reelCanvas[i];
+      // Nothing dealt means nothing to retain. A refused sit-down (setStrips([]) is still in force)
+      // used to hand the ROOM's 1664x128 strip a repeat of 13 and a blank 256x304 image, and since
+      // .image cannot resize an uploaded texture the old spiral pixels stayed on the GPU with 13x the
+      // UV span: the cabinet you stood up from smeared into horizontal bands for the rest of the session.
+      if(!map || !source || !strips[i].length)continue;
+      const copy=makeCanvas(source.width,source.height);copy.getContext('2d').drawImage(source,0,0);
+      map.image=copy;map.wrapS=THREE.RepeatWrapping;
+      const uv=stripTransform(reelAngles[i],strips[i].length);map.repeat.x=uv.repeat;map.offset.x=uv.offset;
+      map.needsUpdate=true;
+    }
+  };
   function setStops(stops) {
-    stops.forEach((k, r) => { stopsNow[r] = k; reels[r].rotation.x = restX[r] + angle(k, strips[r].length || 13); });
+    stops.forEach((k, r) => { stopsNow[r] = k; reelAngles[r] = restX[r] + angle(k, strips[r].length || 13); });
   }
 
   // Framing: from cam_seat/cam_target and live bounds, at the rest pose. The marquee is in the play box
   // and EMI's face so the cabinet's name and her glance read above the reels at every aspect (in-room tidy, lane F1).
   let poses = null;
-  /** A phone on its side (station.css, the same query and column): the pills, Freeze and Odds take a 110 px column on
-   *  the left; Spin and the face keep the right corners, so the lever may reach into the free middle of that edge. */
-  const sideband = (w, h) => (h <= 500 && w > h ? { left: 110, right: 12, top: 16, bottom: 16 } : null);
+  /** A phone on its side (station.css, the same query and the same numbers). The chips and Odds take a column
+   *  on the left, Spin and the face keep the right corners, and Freeze runs along the BOTTOM (owner,
+   *  2026-09-16) rather than stacking down the left, which is why the two side columns are now EQUAL: the
+   *  view offset below is (right - left) / 2, so matching them is what puts the cabinet in the middle of the
+   *  screen instead of shouldering it into whatever space the left column left over.
+   *
+   *  THE BANDS ARE MARGINS NOW, NOT COLUMNS (owner, 2026-09-16: "push the pov closer on landscape"). A band is
+   *  screen the fit is forbidden to use, so a 142 px column down each side and a 66 px sill was paying for the
+   *  chrome twice - once in pixels and again in camera distance. The chips are small and opaque and they read
+   *  perfectly well OVER the cabinet, so the only thing still bought is the Freeze sill along the bottom. */
+  const sideband = (w, h) => (h <= 500 && w > h ? { left: 16, right: 16, top: 8, bottom: 54 } : null);
   function frame(aspect, w = 16, h = 9) {
-    let closeSeat = false;   // the desk pose: the one EMI takes her shelf for (a phone keeps her on her topper)
+    let closeSeat = false;   // the seated pose: the one EMI takes her shelf for (the overview keeps her topper)
+    standShelf(aspect < 0.8);   // where the plank is has to be settled BEFORE the box that measures it
     const y = rig.position.y; rig.position.y = 0; rig.updateMatrixWorld(true);
     const seat = get('cam_seat').getWorldPosition(new THREE.Vector3()), target = get('cam_target').getWorldPosition(new THREE.Vector3());
     const dir = seat.sub(target); if (dir.lengthSq() < 1e-8) dir.set(0, 0, 1); dir.normalize();
@@ -291,8 +423,23 @@ export async function createScene(o) {
     // EMI's shelf, and EMI standing on it, are the left of the seated frame the way the lever is the right. The
     // perch is used, never wherever she happens to be standing this frame, so the framing never rides her hop.
     // Without a shelf (a glb short of emi_stage) she keeps her topper, and the frame keeps reaching up for it.
-    if (shelf && perch) { playBox.expandByObject(shelf); playBox.union(new THREE.Box3().setFromCenterAndSize(emiHost.localToWorld(perch.clone().setY(perch.y + emiSpan.y / 2)), emiSpan)); }
-    else if (faceMesh) playBox.expandByObject(faceMesh);
+    /** Put EMI in a box, in the pose that frame will hold her in. Neither branch reads where she happens to be
+     *  standing this instant - the shelf is measured at its perch, the topper at her stage - so a resize that
+     *  lands mid-hop still measures the pose she is about to settle into. */
+    const withEmi = (box, onShelf) => {
+      if (onShelf && shelf && perch) {
+        box.expandByObject(shelf);
+        box.union(new THREE.Box3().setFromCenterAndSize(emiHost.localToWorld(perch.clone().setY(perch.y + emiSpan.y / 2)), emiSpan));
+      } else if (stage && emiSpan) {
+        const plinth = new THREE.Box3().setFromObject(stage), mid = plinth.getCenter(new THREE.Vector3());
+        const full = emiSpan.clone().divideScalar(PERCH_SCALE);   // on her topper she is her whole size
+        box.union(plinth);
+        box.union(new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(mid.x, plinth.max.y + full.y / 2, mid.z), full));
+      } else if (emi) box.expandByObject(emi);
+      else if (faceMesh) box.expandByObject(faceMesh);
+      return box;
+    };
+    withEmi(playBox, true);
     const whole = new THREE.Box3().setFromObject(cabinet);
     // `span` is the fraction of the canvas the box may fill on each axis (1 = all of it), the way room/seat-camera.js
     // leaves the station chrome its bands: a smaller span backs the camera off so the box fits inside what is left.
@@ -314,25 +461,44 @@ export async function createScene(o) {
     rig.position.y = y; rig.updateMatrixWorld(true);
     const play = fit(playBox, dir, target);
     if (aspect < 0.8) {
-      // Keep the reels prominent, with the whole working lever inside the phone frame.
+      // UPRIGHT, to the owner's own reference frame (2026-09-16): the topper on top, the marquee under it, the
+      // reels big, the lever and a little room to its right - and EMI ON THE SIDE SHELF, not on her topper.
+      // She took the topper here until now because the shelf is outboard and a tall frame has no width to sell;
+      // the owner would rather buy it, so the shelf is in the box and `closeSeat` sends her out to it.
+      // THE T CHANGED WHAT UPRIGHT CAN AFFORD (owner, 2026-09-16). The arms span 1.28 m of glass and the two
+      // attendants take the span to 1.62; a 390 px frame fitting all of that put the whole cabinet - topper
+      // stage, tray and all - on the screen and left the reels smaller than they were before the rebuild. So
+      // upright fits THE GLASS and nothing else, and the shelf and the lever ball are cropped at the edges,
+      // which is the crop the owner's own reference close-ups hold. Sideways still buys them both.
       const reelBox = new THREE.Box3();
       (glass ? [glass] : reels).forEach(n => reelBox.expandByObject(n));
-      reelBox.expandByObject(lever);
+      closeSeat = true;
       const close = fit(reelBox, dir);
       play.look.copy(close.look);
-      play.dist = close.dist * 1.06;
+      play.dist = close.dist * PORT_CLOSE;
       play.pos.copy(play.look).addScaledVector(dir, play.dist);
     }
     const band = sideband(w, h);
     if (band) {
-      // The reels fill the height of the band between the side columns; the marquee reads above them or not at all.
       // A view offset (resize) aims the band's centre, not the canvas centre, at the reels: the seat-camera mechanism.
-      const reelBox = new THREE.Box3();
-      (glass ? [glass] : reels).forEach(n => reelBox.expandByObject(n));
-      reelBox.expandByObject(lever);
+      // SIDEWAYS is the desk's problem exactly: a short frame cuts her topper off the top. So a phone on its
+      // side takes the shelf too, and she reads level with the reels between the button column and the glass.
+      // The box is EMI's shelf, the glass and the lever - her at one edge and the handle at the other, which is
+      // the span the owner's reference close-up holds. It is the BANDS that got the camera in, not a smaller box:
+      // dropping the lever out of the fit did bring the reels up, but it also swung the box's centre over to
+      // EMI's side and put the glass off to the right, because the fit aims at the box, not at the glass.
+      const reelBox = new THREE.Box3(), glassBox = new THREE.Box3();
+      (glass ? [glass] : reels).forEach(n => glassBox.expandByObject(n));
+      reelBox.copy(glassBox).expandByObject(lever);
+      withEmi(reelBox, true);
+      closeSeat = true;
       const close = fit(reelBox, dir, null, { x: (w - band.left - band.right) / w, y: (h - band.top - band.bottom) / h });
-      play.look.copy(close.look);
-      play.dist = close.dist;
+      // THE T made the aim matter here too (owner, 2026-09-16). The arms are high and the two attendants are
+      // low, so the box's own centre now sits down in the BODY: fitting to it and aiming at it pushed the reels
+      // to the top of the screen and gave the control deck the bottom half. The box still buys the distance;
+      // the glass buys the aim, exactly as upright has done since the reference frame.
+      play.look.copy(glassBox.getCenter(new THREE.Vector3()).lerp(close.look, GLASS_AIM));
+      play.dist = close.dist * LAND_CLOSE;
       play.pos.copy(play.look).addScaledVector(dir, play.dist);
     } else if (aspect >= 0.8) {
       // A desk seat: closer than the box fit, so the cabinet fills the frame (PLAY_CLOSE). A phone keeps its own
@@ -346,6 +512,14 @@ export async function createScene(o) {
   const aim = (pos, lookAt) => { camera.position.copy(pos); camera.lookAt(lookAt); };
   function resize() {
     const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
+    if (shared) {
+      const stretch=shared.fixture.userData.slotStretch||1,nextWidth=CELL.hw*(shared.fixture.userData.slotStretchX||1)/stretch;
+      if(Math.abs(nextWidth-cell.hw)>.01){cell={...CELL,hw:nextWidth};CW=cell.hh*2;CH=cell.hw*2;setStrips(strips);}
+      const look = get('cam_target').getWorldPosition(new THREE.Vector3());
+      const forward = new THREE.Vector3(0,0,1).transformDirection(rig.matrixWorld);
+      poses = { play:{pos:camera.position.clone(),look,dist:camera.position.distanceTo(look),right:new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),forward)}, band:null, closeSeat:false, drop:0 };
+      return;
+    }
     renderer.setPixelRatio(budget.dpr(w, h));
     renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
     poses = frame(camera.aspect, w, h);
@@ -357,6 +531,7 @@ export async function createScene(o) {
   // Timeline state.
   let phase = 'hidden', tl = null, spin = null, pull = null, pullBack = null, hold = null, mood = 'idle', moodAt = 0;
   settle = () => { const t = tl, s = spin; tl = null; spin = null; if (t && t.done) t.done(); if (s && s.resolve) s.resolve(); };
+  let meltShakeAt = -Infinity;
   let revealAt = -Infinity, revealGain = 0, lean = null, party = null, shiverAt = -Infinity, trayAt = -Infinity, melted = false;
   let teasing = false;   // A1: reel 3 is alone and holding (the marquee's tease mood, the lights a notch down)
   // A4 attract and A5 the EMI land-wiggle: both live on the loop, so neither holds a timer of its own.
@@ -376,7 +551,7 @@ export async function createScene(o) {
     m.position.copy(centre).addScaledVector(dir, size.z * 0.5 + 0.25);
     m.lookAt(m.position.clone().sub(dir));
     m.renderOrder = -1; m.visible = false;
-    scene.add(m);
+    scene.add(m); extras.push(m);
     return m;
   }
   const cellRad = i => TAU / (strips[i].length || 13);
@@ -388,9 +563,14 @@ export async function createScene(o) {
   const spawn = get('payout_spawn');
   if (spawn) {
     const geo = new THREE.OctahedronGeometry(0.012), mat = new THREE.MeshBasicMaterial({ color: 0xffd7a6 });
-    for (let i = 0; i < 7; i++) { const m = new THREE.Mesh(geo, mat); m.visible = false; scene.add(m); sparks.push(m); }
+    for (let i = 0; i < 7; i++) { const m = new THREE.Mesh(geo, mat); m.visible = false; scene.add(m); extras.push(m); sparks.push(m); }
   }
+  let gazeYaw = 0, gazePitch = 0, gazeAt = 0, gazeReel = -1;
+  const gazePoint = new THREE.Vector3();
   const emi = get('emi_topper'), emiRest = emi && { p: emi.position.clone(), s: emi.scale.clone(), r: emi.rotation.clone() };
+  const emiArms = ['shoulderL','shoulderR'].map(name => {const node=emi?.getObjectByName(name); return node?{node,rest:node.rotation.clone()}:null;});
+  let emiClickAt = -Infinity;
+  releaseEmiClick = shared?.onEmiClick?.(()=>{if(!stillFx())emiClickAt=performance.now();});
   const tmp = new THREE.Vector3(), nextColor = new THREE.Color(), GOLD = new THREE.Color(0xffc23a);
 
   /* EMI'S SHELF (owner, 2026-09-15). The close seat cuts her topper off the top of the frame, so while the player
@@ -400,7 +580,7 @@ export async function createScene(o) {
    * perch is simply a position in her own space. Nothing is asked of the glb (section 9.6). */
   const stage = get('emi_stage'), emiHost = emi && (emi.parent || rig);
   let shelf = null, perch = null, emiSpan = null;
-  if (emi && stage && emiHost) {
+  if (!shared && emi && stage && emiHost) {
     const span = new THREE.Box3().setFromObject(stage).getSize(new THREE.Vector3());
     emiSpan = new THREE.Box3().setFromObject(emi).getSize(new THREE.Vector3()).multiplyScalar(PERCH_SCALE);
     perch = new THREE.Vector3(SHELF.x, SHELF.top, SHELF.z);
@@ -419,11 +599,21 @@ export async function createScene(o) {
     }
     emiHost.add(shelf);
   }
+  /** Move the plank between its two stations (wide and tall). The perch is the same vector the hop and the fit
+   *  both read, so moving it moves her, her shelf and the frame that measures them together. */
+  function standShelf(tall) {
+    if (!perch || !shelf) return;
+    const x = tall ? SHELF_TALL.x : SHELF.x, z = tall ? SHELF_TALL.z : SHELF.z;
+    if (perch.x === x && perch.z === z) return;
+    perch.set(x, SHELF.top, z);
+    shelf.position.copy(perch);
+    shelf.updateMatrixWorld(true);
+  }
   /** THE HOP: 0 on her topper, 1 on the shelf. She crosses while the camera settles into the seat and climbs back
    *  as the cabinet sinks. Law VI: reduced motion settles the travel (rise() goes straight to `play`), so k is 0
    *  or 1 there and the arc never runs. */
   function perchAt(t) {
-    if (!perch || !poses || !poses.closeSeat) return 0;   // a phone frames the whole cabinet: she keeps her topper
+    if (!perch || !poses || !poses.closeSeat) return 0;   // no shelf to take: she keeps her topper
     if (phase === 'play') return 1;
     if (tl && tl.kind === 'rise') return ease(clamp((t - tl.start - RISE_MS) / CAMERA_MS));
     if (tl && tl.kind === 'sink') return 1 - ease(clamp((t - tl.start) / SINK_MS));
@@ -432,8 +622,9 @@ export async function createScene(o) {
 
   function screen(name, text) {
     const s = screens[name];
-    if (!s || s.text === text) return;
-    s.text = text; paintDisplay(s.c.getContext('2d'), s.c.width, s.c.height, name === 'marquee', text); s.t.needsUpdate = true;
+    const aspect=1;
+    if (!s || (s.text === text&&s.aspect===aspect)) return;
+    s.text = text;s.aspect=aspect; paintDisplay(s.c.getContext('2d'), s.c.width, s.c.height, name === 'marquee', text,aspect); s.t.needsUpdate = true;
   }
   function setFace(name) {
     faceName = FACES[name] !== undefined ? name : 'idle0_0';
@@ -471,12 +662,12 @@ export async function createScene(o) {
     return { left, top, width: right - left, height: bottom - top };
   }
 
-  /* B1 THE SPIRAL JAR (playbook Tier B, CONTRACT 10.16.A). There is no glb node for a jar and no model
-   * request is allowed (section 9.6), so it is a DOM tube on live projected bounds, exactly the pattern the
-   * payline frame uses: the payout_tray's middle (the cabinet's own box when the tray is absent), at the
-   * CABINET's left edge in screen space, one reel_window tall. No new material, no geometry, nothing added
-   * to the glb. Brake 9: the count is printed inside it, so the jar survives motion level 0. */
-  const JAR_W = 0.17;          // of its own height: a narrow upright tube
+  /* B1 THE SPIRAL JAR (playbook Tier B, CONTRACT 10.16.A) USED TO STAND HERE, as a DOM tube on live
+   * projected bounds at the cabinet's left edge. It is gone (owner, 2026-09-16: "that bar near emi is
+   * horrible, remove it") - on a phone it stood exactly where EMI's shelf is, and two narrow things beside
+   * one cabinet is one too many. The jar is not gone: the tape counts it, it spills, it pays, and the count
+   * reads in the status line (station.js jarPart), which is all Brake 9 ever asked of it. `screenBox` stays
+   * because the payline frame is projected the same way. */
   function screenBox(node) {
     if (!node) return null;
     const box = new THREE.Box3().setFromObject(node);
@@ -490,21 +681,6 @@ export async function createScene(o) {
     const top = Math.min(...pts.map(q => q[1])), bottom = Math.max(...pts.map(q => q[1]));
     return right > left && bottom > top ? { left, top, width: right - left, height: bottom - top } : null;
   }
-  function jarRect() {
-    const cab = screenBox(cabinet);
-    if (!cab) return null;
-    const anchor = screenBox(tray) || cab, win = screenBox(glass);
-    const height = Math.max(24, win ? win.height : cab.height * 0.3), width = Math.max(12, height * JAR_W);
-    const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1, m = 8;
-    const edge = poses && poses.band ? poses.band.left + m : m;   // a phone on its side: right of the left column, never under Freeze
-    // The play camera frames the marquee and the reels, so payout_tray's projected middle sits BELOW the
-    // viewport entirely at 16:9 (measured: y 930 of 720). Brake 9 says the count has to be readable, so the
-    // tray is where the tube wants to stand and the screen is where it has to: held inside the canvas and
-    // never lower than the reel window's own bottom, so it reads as a jar standing beside the reels.
-    const floor = win ? win.top + win.height - height : h - height - m;
-    const top = Math.min(anchor.top + anchor.height / 2 - height / 2, floor, Math.max(m, h - height - m));
-    return { left: Math.min(Math.max(cab.left, edge), Math.max(edge, w - width - m)), top: Math.max(m, top), width, height };
-  }
 
   function settleSpin() {
     if (!spin) return;
@@ -514,7 +690,23 @@ export async function createScene(o) {
     s.resolve();
   }
 
+  function settleMechanical() {
+    pulse.fill(-Infinity); shiverAt = -Infinity; pullBack = null;
+    if (spin && !spin.motionSuppressed) {
+      spin.motionSuppressed = true;
+      spin.from = reelAngles.map((a, i) => a - restX[i]);
+    }
+  }
+
   function update(t) {
+    const reduced = !!o.reduced || stillFx();
+    if (reduced) settleMechanical();
+    if (apronTicker) {
+      apronDisplay.getWorldScale(apronScale);
+      apronTicker.setAspect(apronSize.x * apronScale.x / Math.max(.001, apronSize.y * apronScale.y));
+      apronTicker.update(t, reduced);
+    }
+    for(const n of roomVisibility.keys())n.visible=false;
     coinShower.update((t-coinTick)/1000,stillFx()); coinTick=t;
     if (tl) {
       const dt = t - tl.start;
@@ -537,11 +729,12 @@ export async function createScene(o) {
       ? t - spin.start < respinStopMs(PACE, spin.teaseMs)
       : t - spin.start >= reelStopMs(1) && t - spin.start < reelStopMs(2, PACE, spin.teaseMs));
     const partying = !!party && t < party.end, pr = partying ? party.r : null;
+    const sculptureAge = spin ? t - spin.start - customSpinReturnMs(spin.leverFrom) : pullBack ? t - pullBack.start - LEVER_RETURN_MS : Infinity;
     if (spin) {
-      const s = spin, dt = t - s.start;
+      const s = spin, dt = t - s.start, stillSpin = reduced || !!s.motionSuppressed;
       // The pull carries on from wherever the Law VIII lean (or the drag) left the lever.
       const wholeMs = s.solo ? respinMs(PACE, s.teaseMs) : reelsMs(PACE, s.teaseMs);
-      lever.rotation.x = reduced ? (dt < wholeMs ? LEAN : 0) : Math.max(0.4 * Math.sin(Math.PI * clamp(dt / 420)), s.leverFrom * (1 - ease(dt / 420)));
+      lever.rotation.x = stillSpin ? (dt < wholeMs ? LEAN : 0) : get('chess_handle_socket') ? customSpinLeverAngle(dt, s.leverFrom) : Math.max(0.4 * Math.sin(Math.PI * clamp(dt / 420)), s.leverFrom * (1 - ease(dt / 420))) + (get('chess_handle_socket') ? customLeverReturn(dt - 420) : leverRebound(dt - 420));
       let all = true;
       for (let i = 0; i < 3; i++) {
         if (s.held === i || s.keep.includes(i)) continue;
@@ -553,36 +746,36 @@ export async function createScene(o) {
         // A1's hold stretches reel 3's slow-down across the whole hold, so it crawls into its stop instead of
         // blurring longer and stopping as sharply as ever (the stop itself is the tape's; only the curve moves).
         const down = i === 2 && s.teaseMs > 0 ? Math.min(PACE.DECEL_MS + s.teaseMs, dur * 0.5) : Math.min(PACE.DECEL_MS, dur * 0.5);
-        let x = reduced ? s.from[i] : THREE.MathUtils.lerp(s.from[i], target, reelTravel(dt, dur, 180, down));
+        let x = stillSpin ? s.from[i] : THREE.MathUtils.lerp(s.from[i], target, reelTravel(Math.max(0, dt - 100), dur - 100, 180, down)) + recoilCells(dt) * cellRad(i);
         // THE ROLL follows the drum off the curve itself, so reduced motion keeps it: sound is where the beat
         // lives when the travel is gone (Law VI), and it is the same slope whether the drum is drawn or not.
-        if (o.onReelSpeed && dt < dur) o.onReelSpeed(i, reelSpeed(dt, dur, 180, down));
+        if (o.onReelSpeed && dt < dur) o.onReelSpeed(i, reelSpeed(Math.max(0, dt - 100), dur - 100, 180, down));
         if (dt >= dur) {
           if (!s.stopped[i]) { s.stopped[i] = true; stopAt[i] = t; if (o.onReelStop) o.onReelStop(i); }   // THE THUD: cue on this frame
           const k = clamp((dt - dur) / THUD_MS);
-          x = reduced ? home : target + (1 - thud(k)) * 0.035;
+          x = stillSpin ? home : target + settleCells(dt - dur, THUD_MS) * cellRad(i);
           if (k < 1) all = false;
         } else all = false;
-        reels[i].rotation.x = restX[i] + x;
+        reelAngles[i] = restX[i] + x;
       }
       if (all && dt >= wholeMs) settleSpin();   // a held column never shortens the pace
     } else if (pull) lever.rotation.x = PULL_MAX * pull.amount;
-    else if (pullBack) { const q = clamp((t - pullBack.start) / 200); lever.rotation.x = pullBack.angle * (1 - ease(q)); if (q === 1) pullBack = null; }
+    else if (pullBack) { const dt = t - pullBack.start, q = clamp(dt / 200); lever.rotation.x = reduced ? 0 : get('chess_handle_socket') ? releasedLeverAngle(dt, pullBack.angle) : pullBack.angle * (1 - ease(q)) + (get('chess_handle_socket') ? customLeverReturn(dt - 200) : leverRebound(dt - 200)); if (dt >= (get('chess_handle_socket') ? LEVER_RETURN_MS + SILICONE_SETTLE_MS : 400) || reduced) pullBack = null; }
     else if (lean) lever.rotation.x = reduced ? LEAN : lean.from + (LEAN - lean.from) * ease((t - lean.start) / FEEL.LEAN_MS);   // Law VIII
-    else lever.rotation.x = reduced || phase !== 'play' || partying ? 0 : BREATH_RAD * breath(t);   // THE BREATH, the only breather
+    else lever.rotation.x = reduced || phase !== 'play' || partying || get('chess_handle_socket') ? 0 : BREATH_RAD * breath(t);   // THE BREATH, the only breather
 
     // A4 THE DRIFT while attracting: the drums roll slowly and the payline lands nothing (the stops never move).
     // Leaving it eases home over SETTLE_MS, never a thud: entering or leaving attract is not a party (Brake 1).
     if (!spin && (attract || attractOut)) {
       const q = attractOut ? clamp((t - attractOut.start) / ATTRACT.SETTLE_MS) : 0;
-      for (let i = 0; i < 3; i++) reels[i].rotation.x = restAngle(i) + (attract ? attractRad(i, t - attract.start) : attractOut.from[i] * (1 - ease(q)));
+      for (let i = 0; i < 3; i++) reelAngles[i] = restAngle(i) + (attract ? attractRad(i, t - attract.start) : attractOut.from[i] * (1 - ease(q)));
       if (attractOut && q >= 1) attractOut = null;
     }
     // A5 THE EMI LAND-WIGGLE: a cell that landed EMI shrugs once after its own reel's thud and comes back to
     // the same stop. It rides after the thud, so no other reel waits on it (Law X). Reduced motion: nothing.
     if (!reduced) for (let i = 0; i < 3; i++) {
       const w = wiggleCells(t - wiggleAt[i]);
-      if (w) reels[i].rotation.x = (spin ? reels[i].rotation.x : restAngle(i)) + w * cellRad(i);
+      if (w) reelAngles[i] = (spin ? reelAngles[i] : restAngle(i)) + w * cellRad(i);
     }
 
     // The payline reveal lifts (a win) or dims (nothing) for REVEAL_MS; THE THUD flashes each reel 2.2 -> 1.
@@ -598,7 +791,7 @@ export async function createScene(o) {
     freezers.forEach((f, i) => {
       if (!f) return;
       if (f.material && 'emissiveIntensity' in f.material) f.material.emissiveIntensity = hold === i ? 1.8 : 0.1;
-      f.position.y = f.userData.restY - (reduced ? 0 : Math.sin(clamp((t - pulse[i]) / 200) * Math.PI) * 0.012);
+      f.position.y = f.userData.restY - (reduced ? 0 : latchTravel(t - pulse[i]));
     });
 
     // THE MARQUEE: the chase runs at the heat of the last win, the tier's own palette while it celebrates.
@@ -606,12 +799,22 @@ export async function createScene(o) {
     const partyMood = pr && pr.chase ? (pr.gold ? 'jackpot' : pr.tier >= 3 ? 'big' : 'win') : null;
     const m = spin ? (teasing ? (spin.teaseGold ? 'tease_gold' : 'tease') : 'spin')
       : partyMood || (mood !== 'idle' ? mood : hold !== null ? 'freeze' : pull ? 'pull' : 'idle');
+    const bulbStretchX = shared?.fixture.userData.slotStretchX || 1;
+    const bulbStretchY = shared?.fixture.userData.slotStretch || 1;
+    const customHandle=get('chess_handle_socket');
+    if(customHandle){
+      customHandle.scale.set(1/bulbStretchX,1/bulbStretchY,1);
+      if(lever.rotation.x > .12) returning=true;
+      if(returning && sculptureAge >= 0){returning=false;if(!reduced)try{wobbleKit.play('silicone');}catch{}}
+      customHandle.userData.flexTip?.(stillFx()?0:siliconeRebound(sculptureAge));
+    }
     const colors = PALETTES[m], period = m === 'spin' ? 420 : chaseMs(partyMood ? Math.max(h, pr.tier) : h);
     const travel = reduced ? 0 : (t - (partyMood ? party.start : moodAt)) / period;
     bulbs.forEach((b, i) => {
+      b.scale.copy(bulbScales[i]); b.scale.x /= bulbStretchX; b.scale.y /= bulbStretchY;
       const p = i * 0.65 + travel, step = Math.floor(p), mix = p - step;
       b.material.color.setHex(colors[step % colors.length]).lerp(nextColor.setHex(colors[(step + 1) % colors.length]), mix * mix * (3 - 2 * mix));
-      b.material.emissive.copy(b.material.color); b.material.emissiveIntensity = (0.1 + 0.04 * h) * (teasing ? TEASE_DIM : 1);
+      b.material.emissive.copy(b.material.color); b.material.emissiveIntensity = (0.6 + 0.1 * h) * (teasing ? TEASE_DIM : 1);
     });
     // A4: one chase sweeps the bulbs every ~8 s while attracting. Brightness only, one pulse a bulb, no colour
     // change and nothing near the strobe floor.
@@ -622,6 +825,7 @@ export async function createScene(o) {
         if (d < 4) b.material.emissiveIntensity += 0.9 * (1 - d / 4) ** 2;
       });
     }
+    rimLighting?.update(t, reduced);
     if (glowMat) {
       glowMat.emissive.copy(glowRest.color).lerp(GOLD, heat.gold ? clamp(h / 4) : 0);
       glowMat.emissiveIntensity = glowRest.intensity * (0.55 + 0.45 * h);
@@ -630,21 +834,43 @@ export async function createScene(o) {
     if (emi) {
       const k = perchAt(t);
       emi.position.copy(emiRest.p); emi.scale.copy(emiRest.s); emi.rotation.copy(emiRest.r);
+      if(shared){emi.scale.y*=initialStretch/(shared.fixture.userData.slotStretch||1);emi.scale.x*=initialStretchX/(shared.fixture.userData.slotStretchX||1);}
       if (k > 0) {
         emi.position.lerp(perch, k);
         if (k < 1 && !reduced) emi.position.y += PERCH_HOP * Math.sin(Math.PI * k);   // the little jump across
         emi.scale.multiplyScalar(1 - (1 - PERCH_SCALE) * k);
       }
+      // Follow the next reel to stop, then the final moving reel. Settle before the reaction.
+      gazeReel = !reduced && spin ? [0,1,2].find(i => spin.held !== i && !spin.keep.includes(i) && !spin.stopped[i]) ?? -1 : -1;
+      let aimYaw = 0, aimPitch = 0;
+      if (gazeReel >= 0) {
+        reels[gazeReel].getWorldPosition(gazePoint); emiHost.worldToLocal(gazePoint);
+        const dx = gazePoint.x - emi.position.x, dy = gazePoint.y - emi.position.y;
+        aimYaw = THREE.MathUtils.clamp(dx * .45, -.22, .22);
+        aimPitch = -THREE.MathUtils.clamp(dy * .15, -.1, .1);
+      }
+      const gazeEase = reduced || partying ? 1 : 1 - Math.exp(-Math.min(100,t-gazeAt)/120);
+      gazeAt = t;
+      gazeYaw += (aimYaw-gazeYaw)*gazeEase; gazePitch += (aimPitch-gazePitch)*gazeEase;
+      emi.rotation.y += gazeYaw; emi.rotation.x += gazePitch;
       const age = t - moodAt, pa = partying ? t - party.start : Infinity;
-      if (!reduced && phase === 'play') {
-        let lean2 = 0, hop = 0, squash = 1, pop = 1, turn = 0;
-        if (spin) lean2 = 0.055 * Math.sin((t - spin.start) / (melted ? 440 : 220));   // Brake 5: EMI slows while melted
+      for(const arm of emiArms)if(arm)arm.node.rotation.copy(arm.rest);
+      if(stillFx())emiClickAt=-Infinity;
+      if (!stillFx() && phase === 'play') {
+        let lean2 = .035*Math.sin(t/820), hop = 0, squash = 1, pop = 1, turn = .10*Math.sin(t/1900);
+        // A small glance and body lean keep the ledge mascot alive between pulls.
+        emi.rotation.x += .022*Math.sin(t/1100);
+        if (spin) { lean2 = 0.085 * Math.sin((t - spin.start) / (melted ? 440 : 220)); emi.rotation.x += .07; }   // Brake 5: EMI slows while melted
         else if (pull) lean2 = -0.09 * pull.amount;
         else if (pr && pr.reveal && pa < FEEL.REVEAL_MS) { const q = pa / FEEL.REVEAL_MS; pop = 0.6 + 0.4 * reveal(q); turn = Math.PI * 2 * reveal(q); }   // THE REVEAL
         else if (pr && pr.jolt && pa < 600) { const q = pa / 600; hop = Math.sin(q * Math.PI) * 0.025; squash = 1 - 0.07 * Math.sin(q * Math.PI * 2); lean2 = 0.06 * Math.sin(q * Math.PI * 2); }
         else if (m === 'melt') { squash = 0.91; lean2 = -0.07; }
         else if (m === 'free' && age < 600) lean2 = 0.08 * Math.sin(age / 600 * Math.PI * 2);
-        emi.position.y += hop; emi.rotation.z += lean2; emi.rotation.y += turn;
+        const click = sampleEmiReaction('greet',(t-emiClickAt)/1000);
+        const armLift = spin ? .45+.10*Math.sin(t/180) : pr?.jolt && pa<1600 ? 1.4*Math.sin(Math.PI*pa/1600) : .10+.06*Math.sin(t/700);
+        if(emiArms[0])emiArms[0].node.rotation.z-=armLift+click.left;
+        if(emiArms[1])emiArms[1].node.rotation.z+=armLift+click.right;
+        emi.position.y += hop; emi.rotation.z += lean2+click.roll; emi.rotation.y += turn+click.yaw;
         emi.scale.multiplyScalar(pop); emi.scale.y *= squash; emi.scale.x /= Math.sqrt(squash);
       }
     }
@@ -658,7 +884,9 @@ export async function createScene(o) {
         lit = reduced ? 1 : pr.tier >= 3 ? 0.45 * (1 + 1.2 * (1 - ease(pa / THUD_MS))) + 0.35 : 0.45 + 0.5 * (1 - ease(pa / FEEL.GLOW_OUT_MS));
       }
       sj.mesh.material.emissiveIntensity = lit;
-      screen('screen_jackpot', text);
+      sj.mesh.getWorldScale(crownScale);
+      crownDisplay.update(t, { base: sj.base || '', result: pr?.screen ? text : '', still: reduced,
+        aspect: Math.abs(crownSize.x*crownScale.x / (crownSize.y*crownScale.y || 1)) });
     }
     // THE MARQUEE BOARD: the live line while it holds, then the cabinet name, with a short neon restrike
     // on every change. Reduced motion takes the steady level and no stutter (Law VI).
@@ -671,7 +899,7 @@ export async function createScene(o) {
       sm.mesh.material.emissiveIntensity = MARQUEE_LIT * (1 + 1.6 * flick);
     }
     const payout=coinShower.debug();
-    screen('screen_status',payout.active?'✦ '+payout.label+' ✦':screens.screen_status?.base||'');
+    screen('screen_status',payout.active?'âœ¦ '+payout.label+' âœ¦':screens.screen_status?.base||'');
     if(screens.screen_status) {const m=screens.screen_status.mesh.material;
       if(payout.active)m.emissive.setHSL(reduced ? .1 :(payout.age*.18)%1,.8,.6);else m.emissive.set(0xffffff);}
     sparks.forEach((s, i) => {
@@ -688,19 +916,13 @@ export async function createScene(o) {
       if (!reduced && k >= 0 && k < 1) tray.scale.y *= 1 + 0.12 * (1 - thud(k));
     }
     // THE SHIVER: the whole cabinet, +-4 px across the screen, no colour change. Reduced motion plays nothing.
-    const px = reduced ? 0 : shiverPx(t - shiverAt);
+    const meltAge = (t - meltShakeAt) / 520;
+    const meltPx = meltAge >= 0 && meltAge < 1 ? Math.sin(meltAge*37)*9*(1-meltAge)*(1-meltAge) : 0;
+    const px = reduced ? 0 : shiverPx(t - shiverAt) + meltPx;
     if (poses && phase === 'play') {
-      const wpp = (2 * poses.play.dist * Math.tan(THREE.MathUtils.degToRad(LENS_DEG) / 2)) / (canvas.clientHeight || 1);
-      rig.position.x = rigRest.x + poses.play.right.x * px * wpp; rig.position.z = rigRest.z + poses.play.right.z * px * wpp;
-    }
-    if (o.jar) {   // B1: the tube rides the cabinet's live bounds; the station paints the fill and the count
-      const jr = phase === 'play' && o.jar.dataset.on != null ? jarRect() : null;
-      o.jar.hidden = !jr;
-      if (jr) {
-        const js = o.jar.style;
-        js.left = `${jr.left.toFixed(1)}px`; js.top = `${jr.top.toFixed(1)}px`;
-        js.width = `${jr.width.toFixed(1)}px`; js.height = `${jr.height.toFixed(1)}px`;
-      }
+      const wpp = (2 * poses.play.dist * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) / (canvas.clientHeight || 1);
+      const localRight = shared ? poses.play.right.clone().transformDirection(rig.parent.matrixWorld.clone().invert()) : poses.play.right;
+      rig.position.x = rigRest.x + localRight.x * px * wpp; rig.position.z = rigRest.z + localRight.z * px * wpp;
     }
     if (o.payline) {   // A6: the winning row is framed for the rollup, then THE GLOW goes out over 480 ms
       const lit = phase === 'play' ? paylineGlow(t - paylineAt, paylineHold, paylinePulseN) : 0;
@@ -724,6 +946,31 @@ export async function createScene(o) {
       hazeTick = t;
     }
     if (ghost && t - ghost.at >= FEEL_ALMOST.TELL_MS) ghost = null;
+    if(shared) {
+      const compact = canvas.clientHeight <= 500 && canvas.clientWidth > canvas.clientHeight;
+      const windowBox=screenBox(glass);
+      if(windowBox && o.topRow){
+        const width=Math.min(canvas.clientWidth-12,windowBox.width+20);
+        o.topRow.style.left=`${Math.max(6,windowBox.left+windowBox.width/2-width/2)}px`;
+        const crown = screenBox(get('screen_jackpot'));
+        o.topRow.style.top=`${Math.max(4,windowBox.top-(compact?22:31),(crown?.top||0)+(crown?.height||0)+2)}px`;
+        o.topRow.style.width=`${width}px`;
+      }
+      if(o.freezeLabels)for(let i=0;i<3;i++){
+        const b=screenBox(freezers[i]),label=o.freezeLabels[i];
+        if(b && label){label.style.left=`${b.left+b.width/2}px`;label.style.top=`${Math.min(canvas.clientHeight-122,b.top+b.height+1)}px`;label.style.width=`${Math.max(64,Math.min(90,b.width+8))}px`;}
+      }
+      const buttonBox=screenBox(get('spin_button'));
+      if(buttonBox && o.spinControl){
+        o.spinControl.style.left=`${buttonBox.left+buttonBox.width/2}px`;
+        const buttonHeight = compact ? 28 : 44;
+        const freezeBottom=Math.max(...(o.freezeLabels||[]).map(n=>(parseFloat(n.style.top)||0)+(compact?22:26)));
+        const apron = screenBox(apronDisplay);
+        const bottomLimit = Math.min(canvas.clientHeight-50, apron ? apron.top-3 : Infinity);
+        o.spinControl.style.top=`${Math.min(bottomLimit-buttonHeight,Math.max(freezeBottom+3,buttonBox.top+buttonBox.height/2-buttonHeight/2))}px`;
+        o.spinControl.style.width=`${Math.max(110,Math.min(180,buttonBox.width+12))}px`;
+      }
+    }
     if (o.hint) {
       o.hint.hidden = phase !== 'play' || !!spin;
       if (!o.hint.hidden) {
@@ -731,8 +978,9 @@ export async function createScene(o) {
         o.hint.style.left = `${(p.x + 1) * canvas.clientWidth / 2}px`; o.hint.style.top = `${(1 - p.y) * canvas.clientHeight / 2 - 12}px`;
       }
     }
+    for (let i=0;i<3;i++) if(reelTex[i]) reelTex[i].offset.x=stripTransform(reelAngles[i],strips[i].length).offset;
     const gap = 1000 / (budget.mobile ? 30 : 60);
-    if (!document.hidden && t - lastDraw >= gap - 1) {
+    if (!shared && !document.hidden && t - lastDraw >= gap - 1) {
       renderer.render(scene, camera); lastDraw = t;
     }
   }
@@ -751,8 +999,17 @@ export async function createScene(o) {
 
   // Lever drag and freeze taps (preview gesture: release past 55% of the pull spins once).
   const ray = new THREE.Raycaster(), pointer = new THREE.Vector2();
+  /** The lever and whatever is mounted as its handle. The custom sculptures (room/slot-custom-handles.js) hang off
+   *  `handle_socket` on the room cabinet, which is not under `lever`, so a pick that only knew the lever node missed
+   *  the top of a chess piece: the owner could pull the base and not the head (phone, 2026-09-18). */
+  function leverParts() {
+    const parts = [lever];
+    for (const name of ['chess_handle_socket', 'handle_socket']) { const n = get(name); if (n && !parts.some(p => p === n || n.parent === p)) parts.push(n); }
+    return parts.filter(Boolean);
+  }
   function leverRect() {
-    const box = new THREE.Box3().setFromObject(lever), r = canvas.getBoundingClientRect(), pts = [];
+    const box = new THREE.Box3(); for (const part of leverParts()) box.expandByObject(part);
+    const r = canvas.getBoundingClientRect(), pts = [];
     for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
       const p = new THREE.Vector3(x, y, z).project(camera); pts.push([r.left + (p.x + 1) * r.width / 2, r.top + (1 - p.y) * r.height / 2]);
     }
@@ -769,14 +1026,17 @@ export async function createScene(o) {
     const r = canvas.getBoundingClientRect();
     pointer.set((e.clientX - r.left) / r.width * 2 - 1, 1 - (e.clientY - r.top) / r.height * 2);
     ray.setFromCamera(pointer, camera);
-    const targets = [lever, ...freezers.filter(Boolean)];
+    const spinButton=get('spin_button');
+    const parts = leverParts(), targets = [...parts, spinButton, ...freezers].filter(Boolean);
     let ob = ray.intersectObjects(targets, true)[0]?.object;
     while (ob && !targets.includes(ob)) ob = ob.parent;
+    if (parts.includes(ob)) ob = lever;
     const b = leverRect(), pad = 18;
     if (ob === lever || (!ob && e.clientX >= b.left - pad && e.clientX <= b.right + pad && e.clientY >= b.top - pad && e.clientY <= b.bottom + pad)) {
       e.preventDefault(); pullBack = null; lean = null; pull = { id: e.pointerId, y: e.clientY, amount: 0 };
       canvas.setPointerCapture(e.pointerId); canvas.style.cursor = 'grabbing';
-    } else if (ob) o.onFreeze(freezers.indexOf(ob));
+    } else if (ob === spinButton) { e.preventDefault(); o.onLever(); }
+    else if (ob) o.onFreeze(freezers.indexOf(ob));
   }
   // THE STROKE SOUNDS ON THE WAY DOWN, not when the hand lets go: the cue fires the frame the drag crosses
   // PULL_COMMIT, which is mid-stroke, so the pull and its sound share a frame however long the hand holds on.
@@ -791,10 +1051,11 @@ export async function createScene(o) {
   canvas.addEventListener('pointerup', onUp); canvas.addEventListener('pointercancel', cancelPull);
 
   resize();
-  rig.position.y = -poses.drop;
-  aim(poses.arrive.pos, poses.arrive.look);
+  if (!shared) rig.position.y = -poses.drop;
+  if (!shared) aim(poses.arrive.pos, poses.arrive.look);
   setFace('idle0_0');
-  raf = requestAnimationFrame(loop);
+  if (shared) releaseView = shared.register({ update:() => { try { update(performance.now()); } catch(err) { if(look.gif){look={...look,gif:null};setStrips(strips);} else if(!frameFailed)console.error('[slot] shared frame failed',err); frameFailed=true; } } });
+  else raf = requestAnimationFrame(loop);
 
   return {
     missing: [],
@@ -810,10 +1071,12 @@ export async function createScene(o) {
     marquee(text) {
       const line = text == null ? '' : String(text).trim();
       marqueeMsg = line || null;
+      apronTicker?.message(line);
       marqueeAt = performance.now();
     },
     get marqueeLine() { return marqueeMsg; },
-    setLook(next) { look = { ...next, reduced, face: atlas && atlas.image }; paint(performance.now()); },
+    meltShake() { meltShakeAt = performance.now(); },
+    setLook(next) { look = { ...next, reduced, face: atlas && atlas.image }; paint(performance.now(), true); },
     /** A freeze lit or cleared: the button dips either way (Law VIII). */
     setHold(col) { if (col !== hold) { const c = col !== null ? col : hold; if (c !== null) pulse[c] = performance.now(); } hold = col; },
     /** Law VIII: the lever leans into a press at once, before the tape or the server answers. */
@@ -824,6 +1087,7 @@ export async function createScene(o) {
     /** One cabinet celebration per landed outcome (feel.recipe). Brake 2: a lesser party inside a running one merges. */
     celebrate(r, amount = 0, label = '') {
       coinShower.start(amount,r.tier,label);
+      if (r.gold) { reelMood = 'jackpot'; reelMoodAt = performance.now(); }
       const t = performance.now();
       heatTo(Math.max(r.heat, party && t < party.end ? heat.to : 0), r.gold || (party && t < party.end && heat.gold));
       if (r.shiver) shiverAt = t;
@@ -833,6 +1097,7 @@ export async function createScene(o) {
     },
     /** THE BANK touches the tray: when a win starts paying out, or when a spend lands in it. */
     trayThud() { trayAt = performance.now(); },
+    malus() { shiverAt = performance.now(); },
     /** A6: frame the winning row for `ms` (THE BANK's rollup), then let THE GLOW out. It rides the landing
      *  beat the reveal already owns (Law X): tier 1 takes one soft pulse, reduced motion and a melted spin
      *  take a steady frame. `r` is feel.recipe's verdict for the outcome. */
@@ -846,7 +1111,7 @@ export async function createScene(o) {
     /** Law VI: a press or a new spin takes the frame straight to its settled end, never a faster pulse. */
     paylineOut() { if (paylineAt > -Infinity) paylineHold = Math.max(0, Math.min(paylineHold, performance.now() - paylineAt)); },
     /** Law VI: Back and suspend skip every ceremony to its settled state. */
-    skip() { marqueeMsg = null; party = null; shiverAt = trayAt = -Infinity; stopAt.fill(-Infinity); revealAt = -Infinity; lean = null; ghost = null; teasing = false; heat = { ...heat, from: heat.to, at: -Infinity }; paylineAt = -Infinity; if (o.payline) o.payline.hidden = true; hitAt.fill(-Infinity); hitDirty = true; hazeOn = null; hazeOut = null; },
+    skip() { reelMood = 'idle'; settleMechanical(); meltShakeAt = -Infinity; apronTicker?.message(null); marqueeMsg = null; party = null; shiverAt = trayAt = -Infinity; stopAt.fill(-Infinity); revealAt = -Infinity; lean = null; ghost = null; teasing = false; heat = { ...heat, from: heat.to, at: -Infinity }; paylineAt = -Infinity; if (o.payline) o.payline.hidden = true; hitAt.fill(-Infinity); hitDirty = true; hazeOn = null; hazeOut = null; },
     /** THE GLYPH HIT (feel.highlightPlan): the landed cells on `plan` ([{ reel, at }]) glow from this frame, reel
      *  order, each `at` ms in, all out by HIGHLIGHT_MS. Nothing moves a stop; it lights what the tape landed. */
     highlight(plan) {
@@ -870,6 +1135,16 @@ export async function createScene(o) {
     get hazing() { return !!hazeOn; },
     /** A node's centre in client px (tokens fly from and to these), null when the glb lacks it. `top` takes the
      *  middle of its top edge instead: where a speech bubble wants to stand, EMI's shelf or her topper. */
+    portrait(i) {
+      const box = screenBox(reels[i]);
+      if (!box || !strips[i]) return null;
+      const image = makeCanvas(Math.round(cell.hw*2), Math.round(cell.hh*2));
+      const g = image.getContext('2d'); g.translate(image.width/2,image.height/2);
+      drawSymbol(g, strips[i][stopsNow[i]], performance.now(), {...look, reduced:reduced||stillFx(), faceMood:reelMood, faceAge:performance.now()-reelMoodAt}, cell);
+      const rect = canvas.getBoundingClientRect();
+      return { canvas:image, x:rect.left+box.left+box.width/2, y:rect.top+box.top+box.height/2,
+        w:box.width, h:Math.min(box.height,box.width*image.height/image.width) };
+    },
     project(name, top = false) {
       const n = get(name);
       if (!n) return null;
@@ -883,6 +1158,7 @@ export async function createScene(o) {
     reveal(win) { revealAt = performance.now(); revealGain = win ? 0.45 : -0.25; },
     /** Rise over the dimmed room, then ease to the seat. Resolves when interactive. */
     rise() {
+      if (shared) { phase='play'; return Promise.resolve(); }
       if (reduced) { rig.position.y = 0; phase = 'play'; aim(poses.play.pos, poses.play.look); return Promise.resolve(); }
       phase = 'rise';
       return new Promise(done => { tl = { kind: 'rise', start: performance.now(), done }; });
@@ -890,6 +1166,7 @@ export async function createScene(o) {
     /** Slide down from wherever it is (Back at every phase). */
     sink() {
       cancelPull(); settleSpin();
+      if (shared) { phase='hidden'; return Promise.resolve(); }
       if (reduced || phase === 'hidden') { tl = null; phase = 'hidden'; return Promise.resolve(); }
       const prev = tl; phase = 'sink';
       return new Promise(done => { tl = { kind: 'sink', start: performance.now(), fromY: rig.position.y, done: () => { done(); if (prev && prev.done) prev.done(); } }; });
@@ -900,6 +1177,7 @@ export async function createScene(o) {
      *  and thuds late; reduced motion and Calm keep the hold, they only drop the light change. */
     spin(stops, held = null, tease = null) {
       coinShower.clear();
+      reelMood = 'idle';
       settleSpin();
       ghost = null;
       wiggleAt.fill(-Infinity);
@@ -911,13 +1189,14 @@ export async function createScene(o) {
                  resolve, stopped: [false, false, false],
                  teaseMs: Math.max(0, (tease && tease.holdMs) || 0), teaseGold: !!(tease && tease.gold),
                  teaseDim: tease ? tease.dim !== false : true,
-                 from: reels.map((r, i) => r.rotation.x - restX[i]) };
+                 from: reelAngles.map((a, i) => a - restX[i]) };
         pull = null; pullBack = null; lean = null;
       });
     },
     /** A2 THE ALMOST, from feel.almost: the off-by-one cell the server's own strip put next to the line
      *  ghosts gold and snaps back, once. Nothing is weighted, nudged or re-drawn; this shows what landed. */
     almost(near) {
+      if (near) { reelMood = 'near'; reelMoodAt = performance.now(); }
       if (!near || !(near.cell >= 0)) return;
       ghost = { r: near.reel === undefined ? 2 : near.reel, j: near.cell, at: performance.now() };
     },
@@ -942,15 +1221,16 @@ export async function createScene(o) {
     /** For dev.html and CDP checks only. */
     debug() {
       const t = performance.now();
-      return { lever: lever.rotation.x, heat: heatNow(t), gold: heat.gold, party: party && t < party.end ? party.r.party : null,
-               tier: party && t < party.end ? party.r.tier : 0, face: faceName, shiverPx: reduced ? 0 : shiverPx(t - shiverAt),
+      return { meltShakeAgeMs: performance.now()-meltShakeAt, crown: crownDisplay?.debug(), shared:!!shared, responsiveStretch:shared?.fixture.userData.slotStretch||1, fov:camera.fov, hiddenRoomObjects:roomVisibility.size, rigId:rig.uuid, reelIds:reels.map(r=>r.uuid), reelAngles:reelAngles.slice(), reelOffsets:reels.map(r=>r.material?.map?.offset.x), lever: lever.rotation.x, heat: heatNow(t), gold: heat.gold, party: party && t < party.end ? party.r.party : null,
+               tier: party && t < party.end ? party.r.tier : 0, face: faceName, gaze: { reel:gazeReel, yaw:gazeYaw, pitch:gazePitch }, shiverPx: reduced ? 0 : shiverPx(t - shiverAt),
                reelBrightness: reels.map(r => r.material && r.material.color ? r.material.color.r : 1), leaning: !!lean,
                tease: teasing, teaseMs: spin ? spin.teaseMs : 0, teaseGold: !!(spin && spin.teaseGold),
                almost: ghost ? { cell: ghost.j, reel: ghost.r, amt: Number(ghostAmt(t).toFixed(3)) } : null,
+               apron: apronTicker?.debug() || null, apronBounds: screenBox(apronDisplay), bulbs: bulbs.length,
                tray: !!tray, glow: !!glowMat, emiScale: emi ? emi.scale.x / emiRest.s.x : null,
                payline: { lit: paylineGlow(t - paylineAt, paylineHold, paylinePulseN), hold: paylineHold, pulses: paylinePulseN, rect: paylineRect() },
                window: screenBox(glass), band: poses ? poses.band : null, canvas: { w: canvas.clientWidth, h: canvas.clientHeight },
-               jar: jarRect(), solo: !!(spin && spin.solo), keep: spin ? spin.keep : [],
+               solo: !!(spin && spin.solo), keep: spin ? spin.keep : [],
                attract: !!attract, drifting: !!(attract || attractOut), wiggling: wiggleAt.map(a => wiggleCells(t - a) !== 0),
                hits: [0, 1, 2].map(i => Number(hitGlow(i, t).toFixed(3))), haze: { on: !!hazeOn, opacity: hazeMesh ? Number(hazeMesh.material.opacity.toFixed(3)) : 0 },
                // THE CLOSE SEAT: what the seated frame actually holds, so a re-check can measure it without eyes.

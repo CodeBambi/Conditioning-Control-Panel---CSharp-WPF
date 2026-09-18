@@ -31,7 +31,7 @@ public readonly record struct FxAdmission(FxAdmitKind Kind, int DelayMs);
 /// </summary>
 public sealed class FxHeroGate
 {
-    public const int MaxQueueMs = 4000;
+    public const int MaxQueueMs = 5000;
 
     private readonly Func<long> _nowMs;
     private readonly object _lock = new();

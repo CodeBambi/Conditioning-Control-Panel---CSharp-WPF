@@ -10,7 +10,8 @@
  * the right half taps to jump and holds to drift, plus pause / mute buttons.
  * `createInput({ root })` needs the race root or the touch layer is never built.
  *
- *   read() -> { steer:-1..1, accel:0..1, brake:0..1, drift:bool, jump:bool }
+ *   pollActions()  poll gamepad actions even under Brake, without consuming movement
+ *   read(poll = true) -> { steer:-1..1, accel:0..1, brake:0..1, drift:bool, jump:bool }
  *   onAction(cb)   cb(action) for the ACTIONS table below ('brake' | 'pixel' | 'mute'), edge-triggered, never repeats on hold
  *   flush()        drop everything held or queued (run.js calls it as the run starts)
  *   dispose()
@@ -113,7 +114,17 @@ export function createInput({ target = window, root = null } = {}) {
   }
   const btn = (g, i) => { const b = g.buttons && g.buttons[i]; return b ? (typeof b.value === 'number' ? b.value : (b.pressed ? 1 : 0)) : 0; };
 
-  function read() {
+  /** Poll action edges even while simulation is paused. Does not consume movement. */
+  function pollActions() {
+    if (disposed) return null;
+    const g = pad(), start = !!g && btn(g, PAD.start) > 0.5;
+    const pressed = start && !padWas.start;
+    padWas.start = start;
+    if (pressed) fire('brake');
+    return g;
+  }
+
+  function read(poll = true) {
     const now = performance.now();
     const dt = lastT ? clamp((now - lastT) / 1000, 0, 0.1) : 0.016;
     lastT = now;
@@ -124,7 +135,7 @@ export function createInput({ target = window, root = null } = {}) {
     let jump = jumpQ; jumpQ = false;                           // one frame, one press
     if (aidLeft > 0 && --aidLeft === 0) jump = true;            // `?jump=<ms>`, see the header
     let digital = true;
-    const g = pad();
+    const g = poll ? pollActions() : pad();
     if (g) {
       const ax = g.axes && g.axes.length > PAD.steer ? g.axes[PAD.steer] : 0;
       if (Math.abs(ax) > DEADZONE && steer === 0) {
@@ -134,10 +145,9 @@ export function createInput({ target = window, root = null } = {}) {
       accel = Math.max(accel, btn(g, PAD.accelBtn));
       brake = Math.max(brake, btn(g, PAD.brakeBtn));
       drift = drift || btn(g, PAD.drift) > 0.5;
-      const start = btn(g, PAD.start) > 0.5, jmp = btn(g, PAD.jump) > 0.5;
-      if (start && !padWas.start) fire('brake');
+      const jmp = btn(g, PAD.jump) > 0.5;
       if (jmp && !padWas.jump) jump = true;                    // pad B, edge-triggered like the key
-      padWas.start = start; padWas.jump = jmp;
+      padWas.jump = jmp;
     }
     if (touch) {
       const t = touch.read();
@@ -159,8 +169,11 @@ export function createInput({ target = window, root = null } = {}) {
   /** Drop everything held or queued. `jumpHeld` stays: a key still physically down only jumps
    *  again once it has come up, so a space that closed the last card cannot jump twice either. */
   function flush() {
-    down.clear(); jumpQ = false;
-    padWas.start = false; padWas.jump = false;
+    down.clear(); jumpQ = false; steerE = 0; lastT = 0;
+    // A physically held Start or jump is not a new press after pause/resume.
+    const g = pad();
+    padWas.start = !!g && btn(g, PAD.start) > 0.5;
+    padWas.jump = !!g && btn(g, PAD.jump) > 0.5;
     if (touch) touch.flush();   // and a thumb still on the glass starts the run neutral
   }
 
@@ -176,6 +189,7 @@ export function createInput({ target = window, root = null } = {}) {
 
   return {
     read,
+    pollActions,
     flush,
     /** The touch layer element, or null where none was built. Test aid only. */
     get touchEl() { return touch ? touch.el : null; },

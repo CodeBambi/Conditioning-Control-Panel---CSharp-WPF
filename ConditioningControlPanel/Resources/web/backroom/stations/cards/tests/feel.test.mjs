@@ -236,3 +236,11 @@ test('streakAfter, the cooldowns and the whisper rotation', () => {
   assert.deepEqual(wordKeys(1, 0), ['s0']); assert.deepEqual(wordKeys(2, 3), ['s3', 's0']); assert.deepEqual(wordKeys(0, 1), []);
   assert.deepEqual(wordKeys(9, 2), ['s2', 's3', 's0', 's1'], 'four dealt words at most');
 });
+
+test('a new deal gives the old hand time to leave, without delaying Motion Off', () => {
+ const normal=planSteps(lose,bj), still=planSteps(lose,bj,{still:true});
+ assert.equal(normal[0].op,'clear');assert.equal(normal[0].sweep,true);
+ assert.ok(normal.find(s=>s.op==='card').at>=620);
+ assert.equal(still.find(s=>s.op==='card').at,0);
+ assert.equal(planSteps(null,bj)[0].sweep,false);
+});

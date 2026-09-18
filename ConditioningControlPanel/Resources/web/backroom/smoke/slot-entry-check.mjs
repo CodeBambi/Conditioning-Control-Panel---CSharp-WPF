@@ -238,22 +238,35 @@ n = await nudge();
 ok(n && n.hidden, 'nudge: hidden in landscape');
 const land = await ev('window.__backroom.loader.current.debug().feel.scene');
 report.landscape.landscape = land;
-ok(land && land.band && land.band.left === 110 && land.band.right === 12, 'landscape: the frame uses the side-column band ' + JSON.stringify(land && land.band));
+ok(land && land.band && land.band.left === 16 && land.band.right === 16, 'landscape: the frame uses the margin band ' + JSON.stringify(land && land.band));
 const win = land && land.window;
-ok(win && win.height >= 390 * 0.5 && win.height <= 390 - 24, `landscape: the reel window fills the height comfortably (${win && Math.round(win.height)} of 390 px)`);
-ok(win && win.left >= 110 - 12 && win.left + win.width <= 844 - 12, `landscape: the reels sit inside the band (${win && Math.round(win.left)}..${win && Math.round(win.left + win.width)})`);
+// The owner's reference close-up (2026-09-16): the glass is the frame, not a picture inside it. THE T CABINET
+// (2026-09-16, second pass) is what this now measures: the reel bay is wider than the body and the cell is 16:9,
+// so the glass owns the WIDTH and is landscape in its own right. A window that goes back to being taller than it
+// is wide means the rebuilt bay, the wide canvas or the glass-aimed fit has been undone.
+ok(win && win.width >= 844 * 0.5, `landscape: the reel window owns the width (${win && Math.round(win.width)} of 844 px)`);
+ok(win && win.width / win.height >= 2.6, `landscape: the glass is landscape, not a portrait slot (${win && (win.width / win.height).toFixed(2)}:1, was 2.27 before the T)`);
+ok(win && win.height >= 390 * 0.33 && win.height <= 390 - 24, `landscape: the reel window keeps its share of the height (${win && Math.round(win.height)} of 390 px)`);
 const wbox = win && { left: win.left, top: win.top, right: win.left + win.width, bottom: win.top + win.height };
-for (const sel of ['.slot-spin', '.slot-controls .slot-freeze', '.slot-odds', '.slot-top', '.slot-face', '#br-back', '.br-sp']) {
+// The readings overlay the cabinet on purpose now - they are opaque chips and the camera stopped paying for a
+// column to hold them. What still has to stand clear is the sill: the three buttons under the glass.
+for (const sel of ['.slot-spin', '.slot-controls .slot-freeze']) {
   const b = await boxOf(sel);
-  ok(b && !overlap(wbox, b), `landscape: ${sel} is clear of the reels ` + JSON.stringify(b && { l: Math.round(b.left), t: Math.round(b.top), r: Math.round(b.right), b: Math.round(b.bottom) }));
+  ok(b && wbox && b.top >= wbox.bottom - 8, `landscape: ${sel} sits on the sill under the glass ` + JSON.stringify(b && { t: Math.round(b.top), glass: Math.round(wbox.bottom) }));
 }
+// THE PRIZE LEGEND hangs from the top right instead (owner, 2026-09-16): sideways, that band is the only chrome-free
+// one left, and the sill below the glass is already carrying Freeze and Spin. Shut it is a pill in the corner.
+const pill = await boxOf('.slot-odds');
+ok(pill && pill.top < 390 * 0.25 && pill.left > 844 * 0.5, 'landscape: the Prizes pill hangs from the top right ' + JSON.stringify(pill && { t: Math.round(pill.top), l: Math.round(pill.left) }));
+const pillW = pill && pill.right - pill.left, pillH = pill && pill.bottom - pill.top;
+ok(pillW >= 54 && pillH >= 26, `landscape: the Prizes pill is a real tap target (${Math.round(pillW)}x${Math.round(pillH)})`);
 const jar = await boxOf('.slot-jar');
 ok(!jar || (!overlap(jar, await boxOf('.slot-controls .slot-freeze')) && !overlap(jar, await boxOf('.slot-top'))), 'landscape: the spiral jar stands clear of the left column ' + JSON.stringify(jar && { l: Math.round(jar.left), t: Math.round(jar.top) }));
 for (const sel of ['.slot-spin', '.slot-controls .slot-freeze', '.slot-odds', '.slot-top']) {
   const b = await boxOf(sel);
   ok(b && b.left >= 0 && b.right <= 844 && b.top >= 0 && b.bottom <= 390, `landscape: ${sel} is on screen`);
 }
-ok(!overlap(await boxOf('.slot-controls .slot-freeze'), await boxOf('.slot-spin')) && !overlap(await boxOf('.slot-controls .slot-freeze'), await boxOf('.slot-face')), 'landscape: Freeze, Spin and the face keep their own places');
+ok(!overlap(await boxOf('.slot-controls .slot-freeze'), await boxOf('.slot-spin')) && !overlap(await boxOf('.slot-controls .slot-freeze'), await boxOf('.slot-odds')), 'landscape: Freeze, Spin and Odds keep their own places');
 await shot('landscape-01-playing.png');
 // THE FLOW (shared/hypno/callout.js): a paid landing lights its glyphs, then the word and the host fx fire TOGETHER at
 // 400 ms; the next row is a two-GIF `none`, the GIF tease: one fx.gif_burst { count: 1 }, no word, no SP.
@@ -265,7 +278,13 @@ const flow = await ev(`(() => { const d = window.__backroom.loader.current.debug
 report.flow = flow;
 ok(flow && flow.shown.at(-1).key === 'br_callout_echo' && flow.shown.at(-1).tier === 'small', 'flow: debug().callout.shown ends on br_callout_echo (small)');
 ok(flow && flow.flow.fxAt - flow.flow.landedAt >= 400 && flow.flow.fxAt - flow.flow.landedAt < 800, `flow: the fx fired ${flow && flow.flow.fxAt - flow.flow.landedAt} ms after the landing (>= 400)`);
-ok(flow && Math.abs(flow.flow.calloutAt - flow.flow.fxAt) <= 50, `flow: the word and the fx share the frame (${flow && flow.flow.calloutAt - flow.flow.fxAt} ms apart)`);
+// The WORD and the fx share the landing's frame; the CALLOUT deliberately does not - a sub chain owns the centre
+// first (station.js), so the callout waits out WORD_MS + WORD_GAP_MS per extra word and lands after it. This used
+// to assert the callout shared the frame and had been red for exactly that authored delay.
+const chain = flow && flow.flow.words ? flow.flow.words.length : 0;
+const owed = chain > 1 ? 980 + 500 * (chain - 1) : 0;
+ok(flow && Math.abs((flow.flow.calloutAt - flow.flow.fxAt) - owed) <= 120,
+   `flow: the callout follows the ${chain}-word chain it waits out (${flow && flow.flow.calloutAt - flow.flow.fxAt} ms, owed ${owed})`);
 ok(flow && flow.fx.some((m) => m.fxId === 'fx.sub_pair'), 'flow: the row\'s own fx.sub_pair went to the host');
 ok(flow && flow.flow.hits.length === 2 && flow.flow.hits[0].reel === 0 && flow.flow.hits[1].reel === 2 && flow.flow.hits[1].at === 80, 'flow: the two sub glyphs are the hit, 80 ms apart');
 ok(flow && flow.flow.unlockMs === 2000, 'flow: a paid line unlocks at landing + 2000 ms');

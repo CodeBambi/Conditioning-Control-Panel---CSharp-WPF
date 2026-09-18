@@ -579,7 +579,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   for (const [k, v] of [['arrows / wasd', 'steer, throttle, brake'], ['shift', 'drift (hold, let go for turbo)'], ['space', 'jump (time it at a ramp for big air)'], ['p', 'pixel look'], ['m', 'mute'], ['esc', 'the brake'], ['pad', 'stick steers, rt goes, a drifts, b jumps, start brakes']]) {
     const row = el('div', 'rm-key', howPanel); el('kbd', '', row, k); el('span', '', row, v);
   }
-  el('div', 'rm-hint', howPanel, 'nothing is lost. you cannot fail.');
+  el('div', 'rm-hint', howPanel, 'whole phrases build combo. missed words keep your streak; missed ordinary bubbles reset it. your score stays.');
   // the way out for a finger: the keyboard has esc and enter, a phone has this row and the backdrop
   const howBack = el('button', 'rm-btn rm-how-back', howPanel, 'back'); howBack.type = 'button'; howBack.setAttribute('role', 'menuitem');
   howBack.addEventListener('click', (e) => { e.stopPropagation(); ui('back'); hit(howBack, 'is-hit'); open('main'); });
@@ -625,6 +625,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     const wireMedia = (b) => {
       b.addEventListener('click', (e) => { e.stopPropagation(); idx.media = mediaEls.indexOf(b); act('press'); });
       b.addEventListener('pointerenter', () => { idx.media = mediaEls.indexOf(b); ui('tick'); refresh(); });
+      b.addEventListener('focus', () => { idx.media = mediaEls.indexOf(b); refresh(); });
     };
     mediaEls = MEDIA_ROWS.map((r) => {
       const b = el('button', 'rm-btn rm-media-btn', mediaPanel, r.label); b.type = 'button';
@@ -657,17 +658,18 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   function applyLevels() { if (canLevels) { try { audio.setLevels({ music: options.music, sfx: options.sfx }); } catch (e) { /* audio gone */ } } }
   function setPixel(n) { pixel.setBlock(n); pixel.retexture(stage.scene); options.pixel = pixel.block; }
   const ROWS = [
-    { id: 'pixel', label: 'pixel block', get: () => (pixel.block ? `${pixel.block} px` : 'off'), move: (d) => setPixel(cyc(PIXEL_STEPS, pixel.block, d)) },
+    { id: 'pixel', label: 'pixel style', get: () => (pixel.block ? `${pixel.block} px` : 'off'), move: (d) => setPixel(cyc(PIXEL_STEPS, pixel.block, d)) },
     { id: 'music', label: 'music', get: () => pct(options.music), move: (d) => step('music', d * 0.1), dim: !canLevels },
-    { id: 'sfx', label: 'sfx', get: () => pct(options.sfx), move: (d) => step('sfx', d * 0.1), dim: !canLevels },
+    { id: 'sfx', label: 'sound effects', get: () => pct(options.sfx), move: (d) => step('sfx', d * 0.1), dim: !canLevels },
     { id: 'motion', label: 'reduced motion', get: () => options.motion, move: (d) => { options.motion = cyc(MOTIONS, options.motion, d); stage.setReduced(reduced()); layer.dataset.motion = options.motion; }, hint: 'stage and intro now, the run on the next launch' },
-    { id: 'lite', label: 'lighter', get: () => options.lite, move: (d) => { options.lite = cyc(LITES, options.lite, d); }, hint: 'for recording: lower resolution, fewer bubbles, flat washes. the run on the next launch' },
-    { id: 'seed', label: 'seed', get: () => (options.seed === 'custom' ? `custom ${options.seedValue}` : options.seed), move: (d) => { options.seed = cyc(SEEDS, options.seed, d); seedIn.hidden = options.seed !== 'custom'; }, press: () => { if (options.seed === 'custom') seedIn.focus(); } },
+    { id: 'lite', label: 'lighter graphics', get: () => options.lite, move: (d) => { options.lite = cyc(LITES, options.lite, d); }, hint: 'fewer effects for slower devices or screen recording. applies next run' },
+    { id: 'seed', label: 'road layout', get: () => (options.seed === 'custom' ? `custom ${options.seedValue}` : options.seed), move: (d) => { options.seed = cyc(SEEDS, options.seed, d); seedIn.hidden = options.seed !== 'custom'; }, press: () => { if (options.seed === 'custom') seedIn.focus(); } },
     { id: 'back', label: 'back', get: () => '', press: () => open('main') },
   ];
   el('h3', 'rm-h', optPanel, 'options');
   const rowEls = ROWS.map((r) => {
-    const row = el('div', `rm-row${r.dim ? ' is-dim' : ''}`, optPanel); row.dataset.id = r.id; row.setAttribute('role', 'menuitem');
+    const row = el('div', `rm-row${r.dim ? ' is-dim' : ''}`, optPanel); row.dataset.id = r.id; row.setAttribute('role', 'menuitem'); row.tabIndex = 0;
+    row.addEventListener('focus', () => focusRow(ROWS.indexOf(r)));
     el('span', 'rm-row-label', row, r.label);
     // the value wears its own left / right buttons: a tap on the number alone can only ever step ONE
     // way (the pad's press), so music and sfx would ratchet up and never come down on a phone.
@@ -687,6 +689,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     return row;
   });
   const seedIn = el('input', 'rm-seed', optPanel); seedIn.type = 'number'; seedIn.min = '1'; seedIn.step = '1'; seedIn.value = String(options.seedValue); seedIn.hidden = options.seed !== 'custom';
+  seedIn.setAttribute('aria-label', 'custom road number');
   seedIn.addEventListener('input', () => { const v = Number(seedIn.value); if (isFinite(v) && v > 0) { options.seedValue = v >>> 0; refresh(); } });
   seedIn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); seedIn.blur(); } e.stopPropagation(); });
 
@@ -696,16 +699,29 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   // file and the smoke read one predicate rather than two copies of it. It sits directly under
   // `race` because on a phone it is the whole happy path: open, see the levels, tap one.
   const canCloud = levelsEnabled(settings) && !!levels;
-  const VERBS = [['race', 'race'], [CLOUD_VERB, CLOUD_LABEL], ['track', 'load a track'], ['clear', 'just the road'], ['options', 'options'], ['media', 'your media'], ['how', 'how to drive'], ['story', 'the story'], ['surface', 'surface']];
+  const VERBS = [['race', 'play'], [CLOUD_VERB, CLOUD_LABEL], ['track', 'load a track'], ['more', 'more'], ['clear', 'just the road'], ['options', 'options'], ['media', 'your media'], ['how', 'how to drive'], ['story', 'the story'], ['surface', settings.returnToCasino ? 'back to casino' : 'leave game']];
+  const secondary = new Set(['clear', 'options', 'media', 'how', 'story']);
+  const unavailable = new Set();
+  let moreOpen = false;
   const verbEls = VERBS.map(([id, label], i) => {
     const b = el('button', 'rm-btn', list, label); b.type = 'button'; b.dataset.id = id; b.setAttribute('role', 'menuitem');
     b.addEventListener('click', (e) => { e.stopPropagation(); idx.main = i; act('press'); });
     b.addEventListener('pointerenter', () => { idx.main = i; ui('tick'); refresh(); });
+    b.addEventListener('focus', () => { idx.main = i; refresh(); });
+    if (id === 'race') b.classList.add('rm-play');
+    if (secondary.has(id) || id === 'surface') b.classList.add('rm-secondary');
     return b;
   });
   const verbEl = (id) => verbEls[VERBS.findIndex(([v]) => v === id)];
   verbEl('track').hidden = !canTrack; verbEl('clear').hidden = true; verbEl('media').hidden = !webMedia;
   verbEl(CLOUD_VERB).hidden = !canCloud;
+  function paintMore() {
+    for (const id of secondary) verbEl(id).hidden = !moreOpen || unavailable.has(id)
+      || (id === 'media' && !webMedia) || (id === 'clear' && (!trackState || trackState.stage !== 'ready'));
+    verbEl('more').textContent = moreOpen ? 'less' : 'more';
+    verbEl('more').setAttribute('aria-expanded', String(moreOpen));
+    list.classList.toggle('is-expanded', moreOpen);
+  }
   // The panel builds itself into its own node and hands back its live rows: the list of tracks
   // changes as links are pasted, so the menu asks for the rows each time it walks them.
   // The panel is BUILT further down, after the focus index exists: buildPanel paints itself once,
@@ -713,6 +729,12 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   let cloudUi = null;
   const cloudRows = () => (cloudUi ? cloudUi.rows() : []);
   const cloudEls = () => (cloudUi ? cloudUi.els() : []);
+  // Delegation survives ownership updates rebuilding every level button.
+  cloudPanel.addEventListener('focusin', (event) => {
+    const i = cloudEls().indexOf(event.target.closest('button'));
+    if (i < 0) return;
+    idx.cloud = i; refresh();
+  });
   const stepVerb = (from, dir) => {   // the next visible verb in that direction, wrapping
     let i = from;
     for (let k = 0; k < VERBS.length; k++) { i = (i + dir + VERBS.length) % VERBS.length; if (!verbEls[i].hidden) return i; }
@@ -792,9 +814,9 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     const bLine = bestLine(trackBestRec);
     trackBest.hidden = !bLine;
     if (bLine && trackBest.textContent !== bLine) trackBest.textContent = bLine;
-    verbEl('race').textContent = ready ? `start · ${st.name || 'the track'}` : 'race';
+    verbEl('race').textContent = ready ? `play · ${st.name || 'the track'}` : 'play';
     verbEl('track').textContent = ready ? 'another track' : 'load a track';
-    verbEl('clear').hidden = !ready;
+    paintMore();
     if (verbEls[idx.main].hidden) idx.main = stepVerb(idx.main, 1);
     refresh();
   }
@@ -820,6 +842,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   }
   function focusRow(i) { idx.options = clamp(i, 0, ROWS.length - 1); ui('tick'); refresh(); }
   function refresh() {
+    paintMore();
     verbEls.forEach((b, i) => b.classList.toggle('is-focus', panel === 'main' && i === idx.main));
     ROWS.forEach((r, i) => { const v = r.get(); if (r.valEl.textContent !== v) r.valEl.textContent = v; rowEls[i].classList.toggle('is-focus', panel === 'options' && i === idx.options); });
     mediaEls.forEach((b, i) => b.classList.toggle('is-focus', panel === 'media' && i === idx.media));
@@ -840,11 +863,13 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   function act(what) {
     if (!shown || disposed) return;
     if (panel === 'main') {
+      if (what === 'back' && moreOpen) { moreOpen = false; idx.main = VERBS.findIndex(([id]) => id === 'more'); refresh(); onResize(); verbEl('more').focus(); return; }
       if (what === 'up' || what === 'down') { idx.main = stepVerb(idx.main, what === 'up' ? -1 : 1); ui('tick'); refresh(); return; }
       if (what !== 'press') return;
       const id = VERBS[idx.main][0];
       if (verbEls[idx.main].hidden) return;
       hit(verbEls[idx.main], 'is-hit'); ui('pick');
+      if (id === 'more') { moreOpen = !moreOpen; refresh(); onResize(); return; }
       if (id === 'options' || id === 'how' || id === 'media' || id === CLOUD_VERB) open(id); else pick(id);
       return;
     }
@@ -985,6 +1010,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
      *  hosted and has nowhere to surface to, so nobody taps their way to a blank screen. */
     hideVerb(id) {
       const b = verbEl(id); if (!b) return;
+      unavailable.add(id);
       b.hidden = true;
       if (verbEls[idx.main].hidden) idx.main = stepVerb(idx.main, 1);
       refresh();
