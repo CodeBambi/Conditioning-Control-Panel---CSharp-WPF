@@ -26,9 +26,46 @@ namespace ConditioningControlPanel.Services.Launcher;
 /// </summary>
 public static partial class LauncherHost
 {
+    /// <summary>The longest the window may hold its exit beat before it hides, in ms.</summary>
+    public const int MaxHideDelayMs = 1500;
+
     private static Window? _window;
     private static DispatcherTimer? _returnPoll;
     private static LauncherEntry? _awaiting;
+    private static int _hideDelayMs;
+
+    /// <summary>
+    /// How long the launcher stays on screen after Play or the CTA so its exit beat (the burst,
+    /// the shockwave, the shake) can be seen, in ms. The window sets this from its own
+    /// choreography when it shows; 0 hides at once. Clamped to <see cref="MaxHideDelayMs"/>.
+    /// </summary>
+    public static int HideDelayMs
+    {
+        get => _hideDelayMs;
+        set => _hideDelayMs = ClampHideDelay(value);
+    }
+
+    public static int ClampHideDelay(int ms) => Math.Clamp(ms, 0, MaxHideDelayMs);
+
+    private static DateTime _beatArmedUntil = DateTime.MinValue;
+
+    /// <summary>
+    /// The window calls this as it starts an exit beat. The next <see cref="OpenPanel"/> or
+    /// <see cref="LaunchGame"/> within a second then holds its hide for <see cref="HideDelayMs"/>;
+    /// everything else that opens the panel (the gear, the footer links) hides at once.
+    /// </summary>
+    public static void ArmExitBeat() => _beatArmedUntil = DateTime.UtcNow.AddSeconds(1);
+
+    /// <summary>True once per armed beat, then the arm is spent.</summary>
+    public static bool ConsumeArmedBeat()
+    {
+        bool armed = DateTime.UtcNow <= _beatArmedUntil;
+        _beatArmedUntil = DateTime.MinValue;
+        return armed;
+    }
+
+    private static int PendingHideDelay(int? hideDelayMs) =>
+        ClampHideDelay(hideDelayMs ?? (ConsumeArmedBeat() ? HideDelayMs : 0));
 
     /// <summary>Raised on the UI thread whenever the launcher's visibility changes.</summary>
     public static event Action? VisibilityChanged;
@@ -79,8 +116,19 @@ public static partial class LauncherHost
         catch (Exception ex) { Log.Debug(ex, "[Launcher] Hide failed"); }
     }
 
-    /// <summary>The launcher's panel tile and the second-instance "--panel" handoff.</summary>
-    public static void OpenPanel()
+    /// <summary>
+    /// The launcher's panel tile and the second-instance "--panel" handoff. With the launcher on
+    /// screen and a positive delay (<paramref name="hideDelayMs"/>, or <see cref="HideDelayMs"/>
+    /// when null and a beat is armed), the whole step waits that long so the beat plays first.
+    /// </summary>
+    public static void OpenPanel(int? hideDelayMs = null)
+    {
+        int delay = PendingHideDelay(hideDelayMs);
+        if (delay > 0 && IsShown) { After(delay, OpenPanelNow); return; }
+        OpenPanelNow();
+    }
+
+    private static void OpenPanelNow()
     {
         Hide();
         var mw = App.MainWindowRef;
@@ -144,7 +192,7 @@ public static partial class LauncherHost
     /// the host reports the window gone. A refused launch (locked tile, unknown id) leaves the
     /// launcher where it is so the refusal toast has something to sit on.
     /// </summary>
-    public static bool LaunchGame(string id)
+    public static bool LaunchGame(string id, int? hideDelayMs = null)
     {
         var entry = LauncherCatalogue.Find(id);
         if (entry == null) return false;
@@ -161,7 +209,14 @@ public static partial class LauncherHost
         // A host that failed to boot reports inactive at once. Check on the next pump, not now,
         // because every host creates its window synchronously inside Launch.
         _awaiting = entry;
-        Hide();
+        int delay = PendingHideDelay(hideDelayMs);
+        if (delay > 0)
+        {
+            // The exit beat plays over the game's first frames. A host that died in the meantime
+            // has already cleared the wait (and shown the launcher), so the late hide stands down.
+            After(delay, () => { if (ReferenceEquals(_awaiting, entry)) Hide(); });
+        }
+        else Hide();
         StartReturnPoll();
         return true;
     }
@@ -218,6 +273,18 @@ public static partial class LauncherHost
         // clicked the tray). Then the launcher stays out of the way.
         if (App.MainWindowRef is { IsVisible: true }) return;
         Show();
+    }
+
+    private static void After(int ms, Action step)
+    {
+        var timer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(ms) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            try { step(); }
+            catch (Exception ex) { Log.Debug(ex, "[Launcher] delayed step failed"); }
+        };
+        timer.Start();
     }
 
     private static void RaiseVisibility()

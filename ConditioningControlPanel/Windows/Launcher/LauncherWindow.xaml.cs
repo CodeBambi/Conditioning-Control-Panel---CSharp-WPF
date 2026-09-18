@@ -174,6 +174,30 @@ public partial class LauncherWindow : Window
 
     // ------------------------------------------------------------------ the panel card
 
+    /// <summary>
+    /// The hero plate keeps the card's top radius and runs its clip past the bottom edge so the
+    /// fade, not a corner, is what ends it. Same recipe as the tile plates.
+    /// </summary>
+    private void PanelArtPlate_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        try
+        {
+            const double radius = 20;
+            PanelArtPlate.Clip = new RectangleGeometry(
+                new Rect(0, 0, PanelArtPlate.ActualWidth, PanelArtPlate.ActualHeight + radius), radius, radius);
+            if (PanelArtFade.Background == null)
+            {
+                var surface = (FindResource("SurfaceBgBrush") as SolidColorBrush)?.Color ?? Color.FromRgb(0x17, 0x12, 0x2A);
+                var fade = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
+                fade.GradientStops.Add(new GradientStop(Color.FromArgb(0x00, surface.R, surface.G, surface.B), 0.0));
+                fade.GradientStops.Add(new GradientStop(Color.FromArgb(0x40, surface.R, surface.G, surface.B), 0.55));
+                fade.GradientStops.Add(new GradientStop(surface, 1.0));
+                PanelArtFade.Background = fade;
+            }
+        }
+        catch (Exception ex) { Log.Debug(ex, "[Launcher] panel art plate clip failed"); }
+    }
+
     private void HookEngine()
     {
         var mw = App.MainWindowRef;
@@ -215,6 +239,7 @@ public partial class LauncherWindow : Window
                 PanelCta.Content = Loc.Get("launcher_panel_launch");
             }
             FxOnEngineState(running);
+            FxOnStatusTick();
         }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] RefreshStatus failed"); }
     }
@@ -405,6 +430,7 @@ public partial class LauncherWindow : Window
     partial void FxOnHidden();
     partial void FxOnClosed();
     partial void FxOnEngineState(bool running);
+    partial void FxOnStatusTick();
     partial void FxOnPanelLaunch();
     partial void FxOnPlay(Border tile, LauncherEntry entry);
     partial void FxOnTileHover(Border tile, LauncherEntry entry, bool on);

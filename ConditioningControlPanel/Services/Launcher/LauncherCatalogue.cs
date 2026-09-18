@@ -173,7 +173,7 @@ public static class LauncherCatalogue
             () => BackRoom.BackRoomHostService.IsActive);
 
         // Racing Thoughts: the race page of the descent. Open testing since 2026-09-17, no door.
-        G("race", null, "☕", Tile(0xFF, 0xB3, 0x6B), Always, Never,
+        G("race", "features/race.png", "☕", Tile(0xFF, 0xB3, 0x6B), Always, Never,
             () => Chaos.CaucusHostService.Launch(),
             () => Chaos.CaucusHostService.IsActive);
 
@@ -198,7 +198,7 @@ public static class LauncherCatalogue
 
         // Goon Game: free to join. The launcher has already tucked the panel away, so the game
         // must not duck it a second time.
-        G("goon", "features/goon_game.png", "●", Tile(0x76, 0xC8, 0x93), Always, Never,
+        G("goon", "features/goon_game_tile.png", "●", Tile(0x76, 0xC8, 0x93), Always, Never,
             () => GoonGame.GoonHostService.Launch(duckMainWindow: false),
             () => GoonGame.GoonHostService.IsActive);
 

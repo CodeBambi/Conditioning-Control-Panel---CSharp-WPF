@@ -30,7 +30,6 @@ public partial class LauncherWindow
     private const double ParallaxPoolPx = 14;
     private const double ParallaxSpiralPx = 12;
     private const double ParallaxAmbientPx = 8;
-    private const double ParallaxMascotPx = 6;
 
     private const double SpiralTurns = 7;
     private const double SpiralInnerRadius = 14;
@@ -233,7 +232,7 @@ public partial class LauncherWindow
 
     /// <summary>
     /// Near layers follow the cursor, far layers move against it; the difference is the depth.
-    /// The glow and the ember canvas ride with the hand, the spirals and the mascot lean away.
+    /// The glow and the ember canvas ride with the hand, the spirals lean away.
     /// </summary>
     private void ApplyParallax(double nx, double ny)
     {
@@ -242,7 +241,6 @@ public partial class LauncherWindow
         Ease(AmbientShift, nx * ParallaxAmbientPx, ny * ParallaxAmbientPx);
         Ease(SpiralShift, -nx * ParallaxSpiralPx, -ny * ParallaxSpiralPx);
         Ease(SpiralSmallShift, -nx * ParallaxSpiralPx * 0.7, -ny * ParallaxSpiralPx * 0.7);
-        Ease(MascotShift, -nx * ParallaxMascotPx, -ny * ParallaxMascotPx * 0.5);
     }
 
     private void SettleParallax()
@@ -252,7 +250,7 @@ public partial class LauncherWindow
             if (MotionFx.AllowTransitions && !_perfLow && IsVisible) ApplyParallax(0, 0);
             else
             {
-                foreach (var shift in new[] { GlowShift, PoolShift, AmbientShift, SpiralShift, SpiralSmallShift, MascotShift })
+                foreach (var shift in new[] { GlowShift, PoolShift, AmbientShift, SpiralShift, SpiralSmallShift })
                 {
                     shift.BeginAnimation(TranslateTransform.XProperty, null);
                     shift.BeginAnimation(TranslateTransform.YProperty, null);

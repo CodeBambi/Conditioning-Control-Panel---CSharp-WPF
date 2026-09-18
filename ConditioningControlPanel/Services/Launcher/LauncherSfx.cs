@@ -5,7 +5,7 @@ using Serilog;
 namespace ConditioningControlPanel.Services.Launcher;
 
 /// <summary>
-/// The launcher's four cues, on the <see cref="EmiDesk.EmiSfx"/> shape: one-shots through
+/// The launcher's six cues, on the <see cref="EmiDesk.EmiSfx"/> shape: one-shots through
 /// <c>App.Audio.PlayOneShot</c>, silent when output is suppressed, the master volume is 0 or the
 /// file is missing. Quiet on purpose: the hover cue fires on every tile crossing.
 /// </summary>
@@ -15,6 +15,8 @@ public static class LauncherSfx
     private const float HoverScale = 0.06f;
     private const float ClickScale = 0.16f;
     private const float DeniedScale = 0.16f;
+    private const float LaunchScale = 0.24f;
+    private const float ReturnScale = 0.14f;
     private const int HoverMinGapMs = 130;
 
     private static readonly object Gate = new();
@@ -40,6 +42,12 @@ public static class LauncherSfx
 
     /// <summary>A locked tile pressed. The host paints the toast; this is its sound.</summary>
     public static void Denied() => Play("chaos/ui_denied.mp3", DeniedScale, "launcher-denied");
+
+    /// <summary>Play or the CTA landing: the sting under the exit beat.</summary>
+    public static void Launch() => Play("chaos/reveal_chime.mp3", LaunchScale, "launcher-launch");
+
+    /// <summary>The launcher back after a game.</summary>
+    public static void Return() => Play("chaos/dling.mp3", ReturnScale, "launcher-return");
 
     private static bool Audible(out float master)
     {
