@@ -1514,6 +1514,12 @@ namespace ConditioningControlPanel
                                     {
                                         RouteSurfaceHandoff(path);
                                     }
+                                    else if (action == null)
+                                    {
+                                        // Bare relaunch: the old icon while the launcher is up.
+                                        try { Services.Launcher.LauncherHost.OnBareRelaunch(); }
+                                        catch (Exception ex) { Logger?.Warning(ex, "OnBareRelaunch failed"); }
+                                    }
                                     else
                                     {
                                         try { mainWin.ShowFromTray(); }
@@ -3276,6 +3282,7 @@ namespace ConditioningControlPanel
         {
             try
             {
+                Services.Launcher.LauncherHost.HoldStartupLadder();
                 mainWindow.HideForLauncher(quiet: true);
                 if (Boot.Surface == Services.Launcher.BootSurface.Game && Boot.GameId != null)
                 {
@@ -3290,6 +3297,7 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 Logger?.Error(ex, "[Launcher] boot routing failed; leaving the panel up");
+                Services.Launcher.LauncherHost.ReleaseStartupLadder();
                 try { if (!mainWindow.IsVisible) mainWindow.ShowFromTray(); }
                 catch (Exception ex2) { Logger?.Debug("ShowFromTray after failed boot routing: {Error}", ex2.Message); }
             }
