@@ -78,6 +78,7 @@ request never rejects: a missing reply resolves as `{ok:false, reason:'timeout'}
 | `init` | `protocol, sp, reduced, motion, intensity, gates, lang, lex, stations[], open` | Boot state. `open` = server door flag. `gates` 10.13.A. |
 | `balance` | `sp, why:'server'\|'earn'\|'sync'` | Authoritative SP changed outside a station result. |
 | `media` | `reqId, gifs[4], words[4], seed` | Sit-down media (section 5). |
+| `media-warm` | `station` | The remote batch behind a short `media` deal for `station` has landed (2026-09-18). The page dispatches `br-media-changed`; `room/screens.js` re-deals at once, a seated station on its next sit-down. At most one per deal. |
 | `station-result` | `reqId, ok, status, reason?, body` | Server answer, or a host refusal (`offline`, `closed`, `bad_op`). |
 | `fx-ack` | `token, fired[], skipped[]` | What actually played. `skipped` entries: `{prim, why:'busy'\|'unknown'}` (the authored show, 2026-09-15: no setting skips a primitive; `toggle`/`motion`/`calm` are gone). |
 | `settings` | `motion, intensity, reduced, gates` | A setting changed while open (`gates` 10.13.A). |
@@ -1192,6 +1193,12 @@ says Close, the room holds still behind it, and nothing is written). Lexicon key
 `br_welcome_sub`, `br_welcome_step{1,2,3}_lead`, `br_welcome_step{1,2,3}`, `br_welcome_step{1,2}_touch`,
 `br_welcome_prizes_title`, `br_welcome_prizes_sub`, `br_welcome_prize{1,2,3}_lead`, `br_welcome_prize{1,2,3}`,
 `br_welcome_go`, `br_welcome_next`, `br_welcome_close`, `br_welcome_read` (Back reuses `br_back`).
+
+Between those two sits a third page (2026-09-18), "Pictures and sparkles" (`PAGES[1]`, id `media`, under the room
+hero): the pictures and GIFs come from the source picked in Options > Pictures and GIFs, Sparkle Points are earned in
+the app (a level up, 100 bubbles popped) and paid back by the tables, and the Prize Parlour trades them; it has no
+placard (only `welcome` and `prizes` hang on the apron, and Next walks the welcome placard through all three). Lexicon
+keys `br_welcome_p2_title`, `br_welcome_p2_sub`, `br_welcome_{media,sp,prizes}_lead`, `br_welcome_{media,sp,prizes}`.
 
 - Page -> host (section 2.1): `{ "type": "room-option", "key": "tunnel" | "melt" | "invertLook" | "welcomeSeen", "value": true | false }`
   (`invertLook` = Invert camera, 2026-09-18: a drag moves the world instead of the camera, both axes, the seated look

@@ -90,3 +90,24 @@ public class DeeperEditorGeometryTests
         Assert.Equal("#A", LeastUsedPaletteColor(Palette, used));
     }
 }
+
+public class DeeperEditorTimeFormatTests
+{
+    [Theory]
+    [InlineData(0, "0:00.0")]
+    [InlineData(0.04, "0:00.0")]
+    [InlineData(65.26, "1:05.2")]
+    [InlineData(59.99, "0:59.9")]
+    [InlineData(3661.55, "1:01:01.5")]
+    [InlineData(-3, "0:00.0")]
+    [InlineData(double.NaN, "0:00.0")]
+    public void TransportTime_ShowsFlooredTenths(double seconds, string expected)
+        => Assert.Equal(expected, FormatTransportTime(seconds));
+
+    [Theory]
+    [InlineData(12.345, "0:12.34")]
+    [InlineData(0.999, "0:00.99")]
+    [InlineData(3600, "1:00:00.00")]
+    public void HoverTime_ShowsHundredths(double seconds, string expected)
+        => Assert.Equal(expected, FormatHoverTime(seconds));
+}

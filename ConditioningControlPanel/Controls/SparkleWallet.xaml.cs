@@ -22,6 +22,7 @@ public partial class SparkleWallet : UserControl
     private long _rewardShown;
     private bool _listening;
     private bool _dismissedByWalletPress;
+    private bool _dismissedByHelpPress;
     public event EventHandler? VisitRequested;
 
     public SparkleWallet()
@@ -48,7 +49,7 @@ public partial class SparkleWallet : UserControl
         {
             // StaysOpen=false closes on mouse-down outside the popup, before this Click arrives.
             if (_dismissedByWalletPress) { _dismissedByWalletPress = false; return; }
-            RefreshText(); InvitePopup.IsOpen = !InvitePopup.IsOpen;
+            RefreshText(); HelpPopup.IsOpen = false; InvitePopup.IsOpen = !InvitePopup.IsOpen;
         };
         InvitePopup.Closed += (_, _) =>
         {
@@ -65,6 +66,24 @@ public partial class SparkleWallet : UserControl
         {
             if (e.Key != Key.Escape) return;
             ClosePopup(); WalletButton.Focus(); e.Handled = true;
+        };
+        HelpButton.Click += (_, _) =>
+        {
+            if (_dismissedByHelpPress) { _dismissedByHelpPress = false; return; }
+            RefreshText(); InvitePopup.IsOpen = false; HelpPopup.IsOpen = !HelpPopup.IsOpen;
+        };
+        HelpPopup.Closed += (_, _) =>
+        {
+            _dismissedByHelpPress = Mouse.LeftButton == MouseButtonState.Pressed && HelpButton.IsMouseOver;
+        };
+        HelpButton.MouseLeave += (_, _) => _dismissedByHelpPress = false;
+        HelpLaterButton.Click += (_, _) => { ClosePopup(); HelpButton.Focus(); };
+        HelpVisitButton.Click += (_, _) => { ClosePopup(); VisitRequested?.Invoke(this, EventArgs.Empty); };
+        HelpPopup.Opened += (_, _) => HelpVisitButton.Focus();
+        HelpPopup.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key != Key.Escape) return;
+            ClosePopup(); HelpButton.Focus(); e.Handled = true;
         };
     }
 
@@ -116,7 +135,19 @@ public partial class SparkleWallet : UserControl
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(RefreshText)); return; }
         WalletLabel.Text = Loc.Get("sparkle_wallet_label");
-        WalletButton.ToolTip = WalletLabel.Text;
+        // One line on hover for both the count and the help circle; the card carries the rest.
+        var hint = Loc.Get("sparkle_help_tooltip");
+        WalletButton.ToolTip = hint;
+        HelpButton.ToolTip = hint;
+        AutomationProperties.SetName(HelpButton, Loc.Get("sparkle_help_title"));
+        HelpTitle.Text = Loc.Get("sparkle_help_title");
+        HelpIntro.Text = Loc.Get("sparkle_help_intro");
+        HelpHead1.Text = Loc.Get("sparkle_help_backroom_title"); HelpBody1.Text = Loc.Get("sparkle_help_backroom_body");
+        HelpHead2.Text = Loc.Get("sparkle_help_win_title"); HelpBody2.Text = Loc.Get("sparkle_help_win_body");
+        HelpHead3.Text = Loc.Get("sparkle_help_pictures_title"); HelpBody3.Text = Loc.Get("sparkle_help_pictures_body");
+        HelpHead4.Text = Loc.Get("sparkle_help_honest_title"); HelpBody4.Text = Loc.Get("sparkle_help_honest_body");
+        HelpVisitButton.Content = Loc.Get("sparkle_help_visit");
+        HelpLaterButton.Content = Loc.Get("sparkle_help_later");
         InviteText.Text = Loc.Get("sparkle_wallet_invite");
         VisitButton.Content = Loc.Get("sparkle_wallet_visit");
         CloseButton.ToolTip = Loc.Get("sparkle_wallet_close");
@@ -125,7 +156,7 @@ public partial class SparkleWallet : UserControl
         if (_rewardShown > 0) GainText.Text = Loc.GetF("sparkle_wallet_gain", _rewardShown.ToString("N0", CultureInfo.CurrentCulture));
     }
 
-    public void ClosePopup() => InvitePopup.IsOpen = false;
+    public void ClosePopup() { InvitePopup.IsOpen = false; HelpPopup.IsOpen = false; }
 
     private static bool AnimateInteractions => MotionFx.AllowTransitions && PerformanceProfile.CurrentTier != PerformanceTier.Performance;
 

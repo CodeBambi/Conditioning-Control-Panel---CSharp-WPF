@@ -580,6 +580,13 @@ async function start(init) {
     const frame = { motion: state.userStill ? 'off' : state.motion, intensity: state.intensity, reduced: state.reduced, gates: state.gates };
     for (const fn of Array.from(settingsListeners)) { try { fn(frame); } catch (e) { bridge.log('warn', 'onSettings threw: ' + e); } }
   });
+  // THE COLD-OPEN SWAP (2026-09-18). The host posts this once the remote batch behind a short deal has
+  // landed; the web shim dispatches the same event when its own warm ends. screens.js re-deals at once,
+  // a seated station on its next sit-down - the same two speeds a source switch has.
+  bridge.on('media-warm', () => {
+    try { window.dispatchEvent(new Event('br-media-changed')); }
+    catch (e) { bridge.log('warn', 'media warm event threw: ' + e); }
+  });
   bridge.on('suspend', (m) => {
     state.suspended = !!m.on;
     music?.suspend(state.suspended);

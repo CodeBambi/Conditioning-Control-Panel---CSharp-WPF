@@ -141,6 +141,13 @@ public interface IBackRoomMedia
 
     /// <summary>Room closed: hand back anything the warm pool materialized.</summary>
     void ReleaseWarmPool() { }
+
+    /// <summary>After a deal that could not use the remote pool (cold, or short of <c>count</c>): wait,
+    /// unbounded but cancellable, for the batch in flight to finish, and say whether the pool now holds
+    /// anything. False at once when nothing is warming. The bridge turns a true into a <c>media-warm</c>
+    /// frame so the page re-deals the moment the pictures exist, the way the web shim's
+    /// <c>br-media-changed</c> does after its warm - the alternative was the wall's own 72 s refresh.</summary>
+    Task<bool> WaitForWarmAsync(CancellationToken ct = default) => Task.FromResult(false);
 }
 
 /// <summary>What the host did with one <c>word.speak</c> (CONTRACT 10.21). Becomes the

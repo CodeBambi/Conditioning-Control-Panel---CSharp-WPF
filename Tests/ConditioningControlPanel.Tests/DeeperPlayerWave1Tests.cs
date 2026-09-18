@@ -1,5 +1,7 @@
+using System.Windows;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Deeper;
+using ConditioningControlPanel.Views.Deeper;
 using Newtonsoft.Json;
 using Xunit;
 
@@ -7,8 +9,9 @@ namespace ConditioningControlPanel.Tests;
 
 /// <summary>
 /// Deeper player wave 1: the volume level must survive with no output device
-/// (it used to be a no-op setter + a hard-coded 80 getter) and the persisted
-/// setting clamps.
+/// (it used to be a no-op setter + a hard-coded 80 getter), the persisted
+/// setting clamps, and a remembered window position is only reused when
+/// enough of the window lands on the virtual desktop.
 /// </summary>
 public class DeeperPlayerWave1Tests
 {
@@ -48,6 +51,7 @@ public class DeeperPlayerWave1Tests
     {
         var fresh = new AppSettings();
         Assert.Equal(80, fresh.DeeperPlayerVolume);
+        Assert.Equal(0, fresh.DeeperPlayerWindowWidth);
 
         fresh.DeeperPlayerVolume = 140;
         Assert.Equal(100, fresh.DeeperPlayerVolume);
@@ -56,5 +60,26 @@ public class DeeperPlayerWave1Tests
 
         var loaded = JsonConvert.DeserializeObject<AppSettings>("{\"DeeperPlayerVolume\": 55}")!;
         Assert.Equal(55, loaded.DeeperPlayerVolume);
+    }
+
+    [Fact]
+    public void WindowRect_OnScreen_IsUsable()
+    {
+        var screen = new Rect(0, 0, 1920, 1080);
+        Assert.True(EnhancementPlayerWindow.IsRectUsableOnScreen(new Rect(100, 100, 900, 768), screen));
+        // Partly off the right edge but still grabbable.
+        Assert.True(EnhancementPlayerWindow.IsRectUsableOnScreen(new Rect(1700, 100, 900, 768), screen));
+    }
+
+    [Fact]
+    public void WindowRect_OffScreen_IsNotUsable()
+    {
+        var screen = new Rect(0, 0, 1920, 1080);
+        // Saved on a monitor that is no longer there.
+        Assert.False(EnhancementPlayerWindow.IsRectUsableOnScreen(new Rect(2500, 100, 900, 768), screen));
+        Assert.False(EnhancementPlayerWindow.IsRectUsableOnScreen(new Rect(-880, 100, 900, 768), screen));
+        Assert.False(EnhancementPlayerWindow.IsRectUsableOnScreen(new Rect(100, 1050, 900, 768), screen));
+        Assert.False(EnhancementPlayerWindow.IsRectUsableOnScreen(new Rect(double.NaN, 0, 900, 768), screen));
+        Assert.False(EnhancementPlayerWindow.IsRectUsableOnScreen(new Rect(0, 0, 900, 768), Rect.Empty));
     }
 }
