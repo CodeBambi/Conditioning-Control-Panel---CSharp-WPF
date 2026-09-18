@@ -9,6 +9,7 @@ using System.Windows.Shapes;
 using ConditioningControlPanel.Models.Deeper;
 using ConditioningControlPanel.Services.Deeper;
 using Newtonsoft.Json;
+using static ConditioningControlPanel.Views.Deeper.DeeperEditorGeometry;
 
 namespace ConditioningControlPanel.Views.Deeper
 {
@@ -259,21 +260,10 @@ namespace ConditioningControlPanel.Views.Deeper
 
                 _selectionSet.Clear();
 
-                // Lane Y mapping mirrors the rebuild methods so the hit math
-                // stays in lockstep with what the user sees:
-                //   Regions: top lane           y in [0, h/2)
-                //   Haptics: bottom-half lane   y in [h/2 + 2, h - 2)
-                //   Effect segments/dots:       y in [h - 22, h)
-                double regionLaneTop = 0;
-                double regionLaneBottom = canvasH / 2.0;
-                double hapticLaneTop = canvasH / 2.0 + 2;
-                double hapticLaneBottom = canvasH - 4;
-                double effectLaneTop = canvasH - 22;
-                double effectLaneBottom = canvasH;
-
-                bool RangesOverlap(double a1, double a2, double b1, double b2) => a1 < b2 && a2 > b1;
-
-                if (RangesOverlap(yMin, yMax, regionLaneTop, regionLaneBottom))
+                // Lane Y mapping goes through LaneBand() so the hit math stays
+                // in lockstep with what the rebuild methods draw (three equal
+                // thirds: Regions / Effects / Haptics).
+                if (BandHitsLane(TimelineLane.Regions, yMin, yMax, canvasH))
                 {
                     foreach (var r in _enhancement.Regions)
                     {
@@ -282,7 +272,7 @@ namespace ConditioningControlPanel.Views.Deeper
                             _selectionSet.Add(r);
                     }
                 }
-                if (RangesOverlap(yMin, yMax, hapticLaneTop, hapticLaneBottom))
+                if (BandHitsLane(TimelineLane.Haptics, yMin, yMax, canvasH))
                 {
                     foreach (var track in _enhancement.HapticTracks)
                     {
@@ -295,7 +285,7 @@ namespace ConditioningControlPanel.Views.Deeper
                         }
                     }
                 }
-                if (RangesOverlap(yMin, yMax, effectLaneTop, effectLaneBottom))
+                if (BandHitsLane(TimelineLane.Effects, yMin, yMax, canvasH))
                 {
                     foreach (var item in _enhancement.TimelineItems)
                     {
@@ -318,10 +308,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 _selectedEffect = _selectionSet.OfType<TimelineItem>().FirstOrDefault();
                 _selectedRule = null;
                 UpdateSelectedSidePanel();
-
-                RebuildRegionVisuals();
-                RebuildHapticVisuals();
-                RebuildEffectVisuals();
+                RefreshSelectionVisuals();
             }
             finally
             {
@@ -343,26 +330,10 @@ namespace ConditioningControlPanel.Views.Deeper
                     switch (sel)
                     {
                         case Region r:
-                            _enhancement.Regions.Remove(r);
-                            // Detach any rule that pointed at this region.
-                            foreach (var rule in _enhancement.Rules)
-                            {
-                                if (rule.RegionConstraint == r.Id) rule.RegionConstraint = null;
-                            }
-                            // Remove the paired Rule-kind TimelineItem the loader
-                            // projected for this region, otherwise BackProject on
-                            // save resurrects the deleted region from the orphan.
-                            if (!string.IsNullOrEmpty(r.Id))
-                            {
-                                _enhancement.TimelineItems.RemoveAll(ti =>
-                                    ti != null
-                                    && ti.Kind == TimelineItemKind.Rule
-                                    && ti.Id == r.Id);
-                            }
+                            RemoveRegionFromModel(r);
                             break;
                         case HapticEvent ev:
-                            foreach (var track in _enhancement.HapticTracks)
-                                if (track?.Events != null && track.Events.Remove(ev)) break;
+                            RemoveHapticFromModel(ev);
                             break;
                         case TimelineItem ti:
                             _enhancement.TimelineItems.Remove(ti);
@@ -387,6 +358,64 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 App.Logger?.Debug("DeeperEditor: DeleteSelection error: {Error}", ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Single removal path for a region, shared by bulk delete and the
+        /// inspector's Delete button: detaches any rule constrained to it and
+        /// drops the paired Rule-kind TimelineItem the loader projected for it
+        /// (otherwise BackProject on save resurrects the region from the orphan).
+        /// </summary>
+        internal void RemoveRegionFromModel(Region r)
+        {
+            _enhancement.Regions.Remove(r);
+            _selectionSet.Remove(r);
+            foreach (var rule in _enhancement.Rules)
+            {
+                if (rule.RegionConstraint == r.Id) rule.RegionConstraint = null;
+            }
+            if (!string.IsNullOrEmpty(r.Id))
+            {
+                _enhancement.TimelineItems.RemoveAll(ti =>
+                    ti != null
+                    && ti.Kind == TimelineItemKind.Rule
+                    && ti.Id == r.Id);
+            }
+        }
+
+        internal void RemoveHapticFromModel(HapticEvent ev)
+        {
+            _selectionSet.Remove(ev);
+            foreach (var track in _enhancement.HapticTracks)
+            {
+                if (track?.Events == null || !track.Events.Remove(ev)) continue;
+                // Drop a now-empty default track to keep the file clean.
+                if (track.Events.Count == 0 && track.Id == DefaultTrackId)
+                    _enhancement.HapticTracks.Remove(track);
+                break;
+            }
+        }
+
+        /// <summary>
+        /// Makes sure the primary (single-click / Items-list) selection is part of
+        /// the selection set so set-based ops (copy, cut, duplicate, nudge) act on it.
+        /// </summary>
+        internal void EnsurePrimaryInSelectionSet()
+        {
+            if (_selectionSet.Count > 0) return;
+            if (_selectedRegion != null) _selectionSet.Add(_selectedRegion);
+            else if (_selectedHaptic != null) _selectionSet.Add(_selectedHaptic);
+            else if (_selectedEffect != null) _selectionSet.Add(_selectedEffect);
+        }
+
+        /// <summary>Redraw every lane plus the summary strip and Items list after a
+        /// selection-set change that did not go through a SelectXxx setter.</summary>
+        internal void RefreshSelectionVisuals()
+        {
+            RebuildRegionVisuals();
+            RebuildHapticVisuals();
+            RebuildEffectVisuals();
+            RefreshRulesList();
         }
 
         // -- Clipboard --------------------------------------------------------
@@ -503,15 +532,31 @@ namespace ConditioningControlPanel.Views.Deeper
                 _selectedEffect = _selectionSet.OfType<TimelineItem>().FirstOrDefault();
                 UpdateSelectedSidePanel();
                 MarkDirty();
-                RebuildRegionVisuals();
-                RebuildHapticVisuals();
-                RebuildEffectVisuals();
+                RefreshSelectionVisuals();
                 ScheduleValidation();
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("DeeperEditor: PasteFromClipboard error: {Error}", ex.Message);
             }
+        }
+
+        // -- Duplicate --------------------------------------------------------
+
+        internal bool HasAnySelection =>
+            _selectionSet.Count > 0 || _selectedRegion != null || _selectedHaptic != null
+            || _selectedEffect != null || _selectedRule != null;
+
+        /// <summary>Delete key / context "Delete": bulk when a set is active, else
+        /// the primary item through its inspector delete path (same undo + cleanup).</summary>
+        internal void DeleteCurrentSelection()
+        {
+            if (_selectionSet.Count > 1) { DeleteSelection(); return; }
+            if (_selectedRegion != null) { BtnDeleteRegion_Click(this, new RoutedEventArgs()); return; }
+            if (_selectedHaptic != null) { BtnDeleteHaptic_Click(this, new RoutedEventArgs()); return; }
+            if (_selectedEffect != null) { BtnDeleteEffect_Click(this, new RoutedEventArgs()); return; }
+            if (_selectedRule != null) { BtnDeleteRule_Click(this, new RoutedEventArgs()); return; }
+            if (_selectionSet.Count == 1) DeleteSelection();
         }
 
         // -- Undo / Redo ------------------------------------------------------
@@ -721,9 +766,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (ti.EffectType == EffectTypes.Haptic) continue;
                 _selectionSet.Add(ti);
             }
-            RebuildRegionVisuals();
-            RebuildHapticVisuals();
-            RebuildEffectVisuals();
+            RefreshSelectionVisuals();
         }
 
         // -- Deep clone helper ------------------------------------------------
