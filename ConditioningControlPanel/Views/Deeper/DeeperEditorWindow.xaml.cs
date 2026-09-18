@@ -20,6 +20,7 @@ using NAudio.Wave;
 using Microsoft.Win32;
 using VlcMediaPlayer = LibVLCSharp.Shared.MediaPlayer;
 using VlcMedia = LibVLCSharp.Shared.Media;
+using static ConditioningControlPanel.Views.Deeper.DeeperEditorGeometry;
 
 namespace ConditioningControlPanel.Views.Deeper
 {

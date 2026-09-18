@@ -13,6 +13,7 @@ using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Deeper;
 using Microsoft.Win32;
 using ConditioningControlPanel.Localization;
+using static ConditioningControlPanel.Views.Deeper.DeeperEditorGeometry;
 
 namespace ConditioningControlPanel.Views.Deeper
 {
