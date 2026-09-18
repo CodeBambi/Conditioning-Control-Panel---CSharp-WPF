@@ -2,6 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        xmlns:fx="clr-namespace:ConditioningControlPanel.Controls"
+        xmlns:emi="clr-namespace:ConditioningControlPanel.Services.EmiDesk"
         Title="CC Labs"
         Icon="pack://application:,,,/Resources/app.ico"
         Height="800" Width="1280"
@@ -112,6 +114,35 @@
     </Window.Resources>
 
     <Grid x:Name="RootGrid">
+        <!-- Backdrop: radial base -> mod-tinted glow -> vignette (the ceremony recipe), then the
+             ambient canvas (fog, dust, aurora) behind everything. All of it parks with the window. -->
+        <Border>
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="0.3,0.25" Center="0.3,0.25" RadiusX="0.95" RadiusY="0.9">
+                    <GradientStop Color="#FF241041" Offset="0"/>
+                    <GradientStop Color="#FF17122A" Offset="0.55"/>
+                    <GradientStop Color="#FF0A0514" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+        <Border x:Name="GlowLayer" Opacity="0.28">
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="0.72,0.18" Center="0.72,0.18" RadiusX="0.55" RadiusY="0.5">
+                    <GradientStop Color="{DynamicResource FxGlowColor}" Offset="0"/>
+                    <GradientStop Color="#00000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+        <Border>
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.8" RadiusY="0.8">
+                    <GradientStop Color="#00000000" Offset="0.5"/>
+                    <GradientStop Color="#8C000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+        <fx:AmbientFxCanvas x:Name="Ambient"/>
+
         <Grid x:Name="ContentRoot">
             <Grid.RowDefinitions>
                 <RowDefinition Height="48"/>
@@ -129,13 +160,38 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel x:Name="Wordmark" Orientation="Horizontal" Margin="18,0,0,0" VerticalAlignment="Center">
-                        <Image x:Name="WordmarkImage" Source="pack://application:,,,/Resources/logo2.png"
-                               Height="28" RenderOptions.BitmapScalingMode="HighQuality"/>
-                        <TextBlock Text="{loc:Str launcher_window_title}" Margin="10,0,0,0"
-                                   FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="18" FontWeight="SemiBold"
-                                   Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
-                    </StackPanel>
+                    <Grid x:Name="Wordmark" Margin="18,0,0,0" VerticalAlignment="Center" ClipToBounds="True">
+                        <StackPanel Orientation="Horizontal">
+                            <Image x:Name="WordmarkImage" Source="pack://application:,,,/Resources/logo2.png"
+                                   Height="28" RenderOptions.BitmapScalingMode="HighQuality"
+                                   RenderTransformOrigin="0.5,0.5">
+                                <Image.RenderTransform>
+                                    <ScaleTransform x:Name="WordmarkScale"/>
+                                </Image.RenderTransform>
+                            </Image>
+                            <TextBlock Text="{loc:Str launcher_window_title}" Margin="10,0,0,0"
+                                       FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="18" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <!-- One light pass over the wordmark every 25-40 s (a timer, never a loop).
+                             Opacity 0 at rest, so it costs nothing between passes. -->
+                        <Rectangle x:Name="WordmarkSheen" Width="70" HorizontalAlignment="Left"
+                                   IsHitTestVisible="False" Opacity="0">
+                            <Rectangle.Fill>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="Transparent" Offset="0"/>
+                                    <GradientStop Color="{DynamicResource FxGlowColor}" Offset="0.5"/>
+                                    <GradientStop Color="Transparent" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Rectangle.Fill>
+                            <Rectangle.RenderTransform>
+                                <TransformGroup>
+                                    <SkewTransform AngleX="-18"/>
+                                    <TranslateTransform x:Name="WordmarkSheenSlide" X="-90"/>
+                                </TransformGroup>
+                            </Rectangle.RenderTransform>
+                        </Rectangle>
+                    </Grid>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                         <!-- account chip -->
@@ -216,6 +272,27 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <TextBlock x:Name="GamesEyebrow" Text="{loc:Str launcher_section_games}" Style="{StaticResource LauncherEyebrow}" Margin="9,0,0,4"/>
+                    <!-- The croupier Emi from the prize counter, peeking in under the tiles (the
+                         column clips her). Body, then the waving arm, then the face: the same three
+                         layers as SparkleWallet, in the same order. Behind the grid in z, so a full
+                         third row of tiles simply covers her. -->
+                    <Viewbox x:Name="Mascot" Grid.Row="1" Height="180" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                             Margin="0,0,14,-52" IsHitTestVisible="False" Opacity="0.96">
+                        <Viewbox.RenderTransform>
+                            <TranslateTransform x:Name="MascotSlide"/>
+                        </Viewbox.RenderTransform>
+                        <Grid Width="954" Height="995">
+                            <Image Source="pack://application:,,,/Resources/emi/wallet_croupier_body.png"
+                                   Stretch="Fill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                            <Image Source="pack://application:,,,/Resources/emi/wallet_croupier_arm.png"
+                                   Stretch="Fill" RenderOptions.BitmapScalingMode="HighQuality"
+                                   RenderTransformOrigin="0.848,0.676">
+                                <Image.RenderTransform><RotateTransform x:Name="MascotArmTurn"/></Image.RenderTransform>
+                            </Image>
+                            <emi:EmiFace x:Name="MascotFace" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                         Margin="320,297,0,0" Width="389" Height="349"/>
+                        </Grid>
+                    </Viewbox>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                                   PanningMode="VerticalOnly">
                         <UniformGrid x:Name="GamesGrid" Columns="2" VerticalAlignment="Top"/>
@@ -239,6 +316,11 @@
                 </Grid>
             </Border>
         </Grid>
+
+        <!-- Event layers over the content, under the veil: the cursor's sparkle trail (a handful
+             of ellipses, not a sim) and the burst canvas every Play and the CTA fire into. -->
+        <Canvas x:Name="TrailCanvas" IsHitTestVisible="False"/>
+        <fx:AmbientFxCanvas x:Name="BurstLayer" IsHitTestVisible="False"/>
 
         <!-- Lockdown veil: the launcher waits, it never argues. -->
         <Border x:Name="LockdownVeil" Background="#D9070310" Visibility="Collapsed">
