@@ -2497,7 +2497,8 @@
                      lockbands are decoration and TierGate does the refusing.
                      ShowTab("lab") is a permanent alias onto this view — the key is API (54 bark rules
                      per mod match on it) and BarkTabAliases["play"]="lab" keeps those rules firing.
-                     Owns this door's single ambient loop, RabbitHoleFx, registered as "play". -->
+                     No ambient loop since 2026-09-18: the Rabbit Hole hero that carried it moved to
+                     the CC Labs launcher with the other games. -->
                 <views:PlayTabView x:Name="PlayTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 

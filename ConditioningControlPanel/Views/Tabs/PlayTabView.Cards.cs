@@ -39,21 +39,10 @@ namespace ConditioningControlPanel.Views.Tabs
         /// event plumbing.</summary>
         private MainWindow? Owner => Window.GetWindow(this) as MainWindow;
 
-        // ---- DESCENT ---------------------------------------------------------------------
-
-        private void BtnStartChaos_Click(object sender, RoutedEventArgs e)
-            => Owner?.BtnStartChaos_Click(sender, e);
-
-        private void BtnQuickStartChaos_Click(object sender, RoutedEventArgs e)
-            => Owner?.BtnQuickStartChaos_Click(sender, e);
-
-        private void BtnStartRace_Click(object sender, RoutedEventArgs e)
-            => Owner?.BtnStartRace_Click(sender, e);
+        // The DESCENT shims and the Goon, Arcademy, Piece by Piece and Back Room shims left on
+        // 2026-09-18 with their cards: the games are launched from the CC Labs launcher now.
 
         // ---- TOGETHER --------------------------------------------------------------------
-
-        private void BtnStartGoon_Click(object sender, RoutedEventArgs e)
-            => Owner?.BtnStartGoon_Click(sender, e);
 
         private void BtnPlayRemoteControl_Click(object sender, RoutedEventArgs e)
             => Owner?.ShowTab("remotecontrol");
@@ -105,21 +94,5 @@ namespace ConditioningControlPanel.Views.Tabs
         // editor. OpenStudioModule is the same helper every dashboard mosaic tile routes through.
         private void BtnPlayLoom_Click(object sender, RoutedEventArgs e)
             => Owner?.OpenStudioModule("spiral");
-
-        // The Arcademy is a LAUNCH, not navigation: it has no tab of its own, so this forwards to
-        // the MainWindow handler beside the DtRH / Goon / Intake ones, and ArcademyHostService
-        // .Launch owns every gate (T2, then AudioOnlySession, then idempotency).
-        private void BtnStartArcademy_Click(object sender, RoutedEventArgs e)
-            => Owner?.BtnStartArcademy_Click(sender, e);
-
-        // Piece by Piece is a LAUNCH too, and forwards for the same reason: no tab of its own, and
-        // PieceByPieceHostService.Launch owns both of its gates (idempotency, then T2).
-        private void BtnStartPieceByPiece_Click(object sender, RoutedEventArgs e)
-            => Owner?.BtnStartPieceByPiece_Click(sender, e);
-
-        // The Back Room: a LAUNCH with no gate at all (free for everyone); the host re-focuses a
-        // room that is already open.
-        private void BtnStartBackRoom_Click(object sender, RoutedEventArgs e)
-            => Owner?.BtnStartBackRoom_Click(sender, e);
     }
 }

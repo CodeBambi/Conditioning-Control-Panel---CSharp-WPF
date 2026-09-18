@@ -19,73 +19,24 @@ namespace ConditioningControlPanel.Views.Tabs
     /// share one file.</para>
     ///
     /// <para><b>Launch parity is the contract.</b> A shim means an entitled user's click runs the
-    /// same handler object the old button ran — <c>BtnStartChaos_Click</c>,
-    /// <c>BtnQuickStartChaos_Click</c>, <c>BtnStartGoon_Click</c>, <c>BtnGazeMinigame_Click</c>,
+    /// same handler object the old button ran — <c>BtnGazeMinigame_Click</c>,
     /// <c>ChkFocusGaze_Changed</c>, <c>BtnStartBureau_Click</c>, <c>BtnStartIntake_Click</c>, and
     /// <c>ShowTab</c> for everything that is a page rather than a window. Nothing here
     /// re-implements a launch, and nothing here decides a tier: the lockbands are decoration and
     /// <c>TierGate</c> does the refusing inside the handler.</para>
     ///
-    /// <para><b>The one loop.</b> <c>RabbitHoleFx</c> is this surface's single focal ambient
-    /// canvas (FX_OVERHAUL_PLAN: one per surface). It is composed once, on first show, and then
-    /// handed to <c>MainWindow.RegisterTabFx("play", …)</c> — which is simultaneously the
-    /// park/resume hook (<c>SwitchTabFx</c> on every navigation) and the motion kill-switch's
-    /// reach (<c>CmbMotionLevel_SelectionChanged</c> parks every registered canvas via
-    /// <c>SwitchTabFx("")</c>). The registration key must stay the key <c>ShowTab</c> passes for
-    /// this view; register it under anything else and the canvas runs forever off-screen.</para>
+    /// <para><b>No ambient loop.</b> The Rabbit Hole hero carried this surface's one focal
+    /// canvas until 2026-09-18, when the games moved to the CC Labs launcher; the wall has no
+    /// registered canvas now, and <c>SwitchTabFx</c> simply finds nothing under "play".</para>
     /// </summary>
     public partial class PlayTabView : UserControl
     {
-        /// <summary>
-        /// Ember density behind the portal card. Twin of
-        /// <c>MainWindow.TabFxTakeoverLabStatus.cs</c>'s private <c>RabbitHoleFxIntensity</c>, kept
-        /// to the digit so the hero looks identical to the Lab card it replaces.
-        /// </summary>
-        private const double RabbitHoleFxIntensity = 0.62;
-
-        /// <summary>The ShowTab key this view answers to, and therefore the ambient registry key.
-        /// <c>"lab"</c> is a permanent alias that routes here; it is NEVER the registry key —
-        /// SwitchTabFx compares against the key ShowTab was called with, and the Play door's
-        /// canonical key is this one.</summary>
-        private const string TabKey = "play";
-
-        private bool _fxComposed;
-
         public PlayTabView()
         {
             InitializeComponent();
 
-            // Composed on first show rather than in the constructor: the canvas needs a live visual
-            // tree to size its layers against, and the window is not up yet at construction time.
-            // Views stay instantiated for the app's life (ground rule §2.3), so this fires exactly
-            // once and never again.
-            IsVisibleChanged += OnPlayTabVisibleChanged;
-        }
-
-        private void OnPlayTabVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
-        {
-            try
-            {
-                if (_fxComposed || !IsVisible) return;
-                if (Window.GetWindow(this) is not MainWindow mw) return;   // retry on the next show
-                if (RabbitHoleFx == null) return;
-
-                _fxComposed = true;
-
-                // Embers, not weather: a DustField alone. The card already carries a three-stop
-                // gradient of its own and a fog layer on top of that would just wash it out.
-                // Colour is FxTheme's particle slot, so this is an ember on a Bambi build and a
-                // green mote on Dronification — no orange is hard-coded into the Play door.
-                RabbitHoleFx.StartLayers(new AmbientFxConfig
-                {
-                    Layers = AmbientFxLayers.DustField,
-                    Intensity = RabbitHoleFxIntensity,
-                });
-
-                // Park/resume for free from here on, and reachable from the motion kill-switch.
-                mw.RegisterTabFx(TabKey, RabbitHoleFx);
-            }
-            catch (Exception ex) { App.Logger?.Debug("PlayTabView FX compose: {E}", ex.Message); }
+            // Nothing composed here since the games left the wall (2026-09-18): the only
+            // ambient canvas this view ever owned sat behind the Rabbit Hole hero.
         }
     }
 }

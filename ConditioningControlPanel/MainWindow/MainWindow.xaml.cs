@@ -2691,23 +2691,17 @@ namespace ConditioningControlPanel
                 {
                     ("features/lab_gaze_hero.png",      PlayTab?.PlayGazeHeroBrush,     512, ModArtFramingRegistry.SurfacePlayCard),
                     ("features/lab_focusgaze_hero.png", PlayTab?.PlayFocusHeroBrush,    512, ModArtFramingRegistry.SurfacePlayCard),
-                    ("features/goon_game.png",          PlayTab?.PlayGoonHeroBrush,     512, ModArtFramingRegistry.SurfacePlayCardTall),
                     ("features/lab_quiz_hero.png",      PlayTab?.PlayIntakeHeroBrush,   512, ModArtFramingRegistry.SurfacePlayCard),
                     ("features/blink_trainer.png",      PlayTab?.PlayBlinkHeroBrush,    512, ModArtFramingRegistry.SurfacePlayCard),
                     // Its art plate overrides PlayCardArtPlate's 138 to 168, so it frames against
                     // the tall variant - a 138-shaped window would be re-cropped ~18% narrower.
                     ("features/remote_control.png",     PlayTab?.PlayRemoteHeroBrush,   768, ModArtFramingRegistry.SurfacePlayCardTall),
-                    ("features/backroom.png",           PlayTab?.PlayBackRoomHeroBrush, 640, ModArtFramingRegistry.SurfacePlayCard),
                     ("features/fyp.png",                PlayTab?.PlayFypHeroBrush,      512, ModArtFramingRegistry.SurfacePlayCard),
                     ("lockdown_icon.png",               PlayTab?.PlayLockdownHeroBrush, 1024, ModArtFramingRegistry.SurfacePlayCard),
-                    // The page hero and the Loom strip. Both brushes were named and left mutable
-                    // by the 0812 remake but never fed, so a .ccpmod overriding features/dtrh.png
-                    // or features/loom.png repainted every OTHER surface that uses those files and
-                    // left the two biggest ones on the embedded art. 1024 for the hero because it
-                    // is the full-width banner at the top of the wall; 512 for the strip.
-                    // dtrh is the full-width banner at the top of the wall, not a card header, so
-                    // it frames against a much wider box (playHero).
-                    ("features/dtrh.png",               PlayTab?.PlayDtrhHeroBrush,     1024, ModArtFramingRegistry.SurfacePlayHero),
+                    // The Loom strip. Named and left mutable by the 0812 remake but never fed, so
+                    // a .ccpmod overriding features/loom.png repainted every OTHER surface that
+                    // uses the file and left the strip on the embedded art. (The Rabbit Hole hero,
+                    // Goon and Back Room brushes left this map on 2026-09-18 with their cards.)
                     // The Loom strip is a FIXED 216-wide column, not a card plate. Framed as a
                     // 2.85:1 plate, an author's 16:9 file was cropped to a 2.85 window and then
                     // re-cropped by UniformToFill to the column's 1.83 - about 64% x 62% of their

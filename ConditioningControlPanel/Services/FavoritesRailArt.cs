@@ -151,8 +151,7 @@ namespace ConditioningControlPanel.Services
             ["tab.enhancements"] = Cover("skills/sparkle_boost_3.png"),// a skill node, which is what the tree is made of
             ["tab.programs"] = Cover("programs/plate_default.png"),    // the default program plate
             ["tab.leaderboard"] = Cover("skills/trophy_case.png"),
-            ["card.arcademy"] = Cover("achievements/teachers_pet.png"),// the Arcademy is a school; its own plate is Content, not a pack Resource
-            ["card.backroom"] = Cover("skills/lucky_bubbles.png"),     // a lucky node with a slot machine on its label; the room render is Content too
+            // card.arcademy and card.backroom rows left on 2026-09-18 with their Play cards.
             ["launch.mods"] = Cover("achievements/modder.png"),
             ["launch.catalogue"] = Cover("achievements/curator.png"),  // a wall of cards under a glass
             ["launch.phrases"] = Cover("achievements/word_perfect.png"),
