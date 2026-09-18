@@ -5577,5 +5577,10 @@
   "launcher_game_goon_title": "[JA] Goon Game",
   "launcher_game_goon_blurb": "[JA] Hold on as long as you can.",
   "launcher_game_piecebypiece_title": "[JA] Piece by Piece",
-  "launcher_game_piecebypiece_blurb": "[JA] Chess, with stakes."
+  "launcher_game_piecebypiece_blurb": "[JA] Chess, with stakes.",
+  "launcher_stat_level": "レベル",
+  "launcher_stat_sparkles": "スパークルポイント",
+  "launcher_stat_time": "トランス時間",
+  "launcher_stat_xp": "{0} / {1} XP",
+  "launcher_prime_pill": "プライム"
 }

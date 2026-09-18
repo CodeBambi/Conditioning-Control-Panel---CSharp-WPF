@@ -5577,5 +5577,10 @@
   "launcher_game_goon_title": "[KO] Goon Game",
   "launcher_game_goon_blurb": "[KO] Hold on as long as you can.",
   "launcher_game_piecebypiece_title": "[KO] Piece by Piece",
-  "launcher_game_piecebypiece_blurb": "[KO] Chess, with stakes."
+  "launcher_game_piecebypiece_blurb": "[KO] Chess, with stakes.",
+  "launcher_stat_level": "레벨",
+  "launcher_stat_sparkles": "스파클 포인트",
+  "launcher_stat_time": "트랜스 시간",
+  "launcher_stat_xp": "{0} / {1} XP",
+  "launcher_prime_pill": "프라임"
 }

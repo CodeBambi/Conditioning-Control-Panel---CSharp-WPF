@@ -5577,5 +5577,10 @@
   "launcher_game_goon_title": "[PT-BR] Goon Game",
   "launcher_game_goon_blurb": "[PT-BR] Hold on as long as you can.",
   "launcher_game_piecebypiece_title": "[PT-BR] Piece by Piece",
-  "launcher_game_piecebypiece_blurb": "[PT-BR] Chess, with stakes."
+  "launcher_game_piecebypiece_blurb": "[PT-BR] Chess, with stakes.",
+  "launcher_stat_level": "Nível",
+  "launcher_stat_sparkles": "Pontos de Brilho",
+  "launcher_stat_time": "Tempo em transe",
+  "launcher_stat_xp": "{0} / {1} XP",
+  "launcher_prime_pill": "Prime"
 }

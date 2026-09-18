@@ -6333,5 +6333,10 @@
   "launcher_game_goon_title": "Goon Game",
   "launcher_game_goon_blurb": "Hold on as long as you can.",
   "launcher_game_piecebypiece_title": "Piece by Piece",
-  "launcher_game_piecebypiece_blurb": "Chess, with stakes."
+  "launcher_game_piecebypiece_blurb": "Chess, with stakes.",
+  "launcher_stat_level": "Level",
+  "launcher_stat_sparkles": "Sparkle Points",
+  "launcher_stat_time": "Time under",
+  "launcher_stat_xp": "{0} / {1} XP",
+  "launcher_prime_pill": "Prime"
 }

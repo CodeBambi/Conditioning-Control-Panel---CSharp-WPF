@@ -29,7 +29,6 @@ namespace ConditioningControlPanel.Launcher;
 public partial class LauncherWindow : Window
 {
     private const double TileRadius = 16;
-    private const double TileArtHeight = 150;
 
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _shortcutTextTimer = new() { Interval = TimeSpan.FromSeconds(3) };
@@ -44,7 +43,7 @@ public partial class LauncherWindow : Window
 
         try { DataContext = App.Settings?.Current; } catch { }
 
-        _statusTimer.Tick += (_, _) => RefreshStatus();
+        _statusTimer.Tick += (_, _) => { RefreshStatus(); RefreshStats(); };
         _shortcutTextTimer.Tick += (_, _) =>
         {
             _shortcutTextTimer.Stop();
@@ -88,6 +87,7 @@ public partial class LauncherWindow : Window
             BuildTiles();
             RefreshAccount();
             RefreshStatus();
+            RefreshStats();
             RefreshLockdownVeil();
             HookEngine();
             _statusTimer.Start();
@@ -292,145 +292,55 @@ public partial class LauncherWindow : Window
         }
     }
 
-    private Border CreateTile(LauncherEntry entry)
+    // ------------------------------------------------------------------ the stats strip
+
+    private double _shownLevel, _shownSparkles, _shownXpWidth = -1;
+
+    /// <summary>
+    /// Three live numbers on the panel card: level, Sparkle Points and time under, plus a slim
+    /// XP bar. Read from the same settings the panel's own chips read (PlayerLevel, PlayerXP,
+    /// SkillPoints, TotalConditioningMinutes) and the progression curve for the level's cap.
+    /// The numbers odometer from the last value shown, so the first show counts up from zero
+    /// and a tick while the engine runs nudges rather than snaps.
+    /// </summary>
+    private void RefreshStats()
     {
-        bool locked = entry.Locked;
-
-        var tile = new Border
+        try
         {
-            CornerRadius = new CornerRadius(TileRadius),
-            Background = (Brush)FindResource("SurfaceBgBrush"),
-            BorderBrush = (Brush)FindResource(locked ? "Tier2DiamondBorderBrush" : "PanelAccentBrush"),
-            BorderThickness = new Thickness(1),
-            Margin = new Thickness(9),
-            Tag = entry,
-            Cursor = Cursors.Hand,
-            // Scale for HoverLift, translate for StaggerIn: both helpers look inside a group.
-            RenderTransformOrigin = new Point(0.5, 0.5),
-            RenderTransform = new TransformGroup
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            int level = Math.Max(1, s.PlayerLevel);
+            double xp = Math.Max(0, s.PlayerXP);
+            double need = 0;
+            try { need = App.Progression?.GetXPForLevel(level) ?? 0; } catch { }
+            int sparkles = Math.Max(0, s.SkillPoints);
+            double minutes = Math.Max(0, s.TotalConditioningMinutes);
+
+            MotionFx.Odometer(StatLevel, _shownLevel, level, "{0:0}", _shownLevel == 0 ? 0.9 : 0.5);
+            MotionFx.Odometer(StatSparkles, _shownSparkles, sparkles, "{0:N0}", _shownSparkles == 0 ? 1.1 : 0.5);
+            _shownLevel = level;
+            _shownSparkles = sparkles;
+
+            int hours = (int)(minutes / 60);
+            int mins = (int)(minutes % 60);
+            StatTime.Text = hours > 0 ? $"{hours}h {mins:00}m" : $"{mins}m";
+
+            double ratio = need > 0 ? Math.Clamp(xp / need, 0, 1) : 0;
+            double track = XpTrack.ActualWidth;
+            if (track > 0)
             {
-                Children = { new ScaleTransform(1, 1), new TranslateTransform() },
-            },
-        };
-
-        var body = new Grid();
-        body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(TileArtHeight) });
-        body.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-        // --- the art plate, rounded at the top only (the clip runs past the bottom edge) ---
-        var plate = new Grid { ClipToBounds = true };
-        plate.SizeChanged += (_, _) =>
-            plate.Clip = new RectangleGeometry(new Rect(0, 0, plate.ActualWidth, plate.ActualHeight + TileRadius),
-                                               TileRadius, TileRadius);
-        ImageSource? art = null;
-        if (entry.ArtPath != null)
-        {
-            try { art = ModResourceResolver.ResolveImageDecoded(entry.ArtPath, 640); }
-            catch (Exception ex) { Log.Debug(ex, "[Launcher] art {Path} failed", entry.ArtPath); }
+                double width = track * ratio;
+                if (Math.Abs(width - _shownXpWidth) >= 0.5)
+                {
+                    MotionFx.BarFill(XpFill, _shownXpWidth < 0 ? 0 : _shownXpWidth, width, null, _shownXpWidth < 0 ? 1.0 : 0.5);
+                    _shownXpWidth = width;
+                }
+            }
+            XpCaption.Text = Loc.GetF("launcher_stat_xp", ((int)xp).ToString("N0"), ((int)need).ToString("N0"));
         }
-        if (art != null)
-        {
-            var image = new Image { Source = art, Stretch = Stretch.UniformToFill };
-            RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
-            plate.Children.Add(image);
-            FxDecorateArt(image);
-        }
-        else
-        {
-            var hue = entry.Hue;
-            plate.Background = new RadialGradientBrush(hue, Darken(hue, 0.45))
-            {
-                GradientOrigin = new Point(0.5, 0.35), Center = new Point(0.5, 0.35),
-                RadiusX = 0.8, RadiusY = 0.9,
-            };
-            plate.Children.Add(new TextBlock
-            {
-                Text = entry.Glyph, FontSize = 48, FontFamily = new FontFamily("/Fonts/#Fredoka, Segoe UI"),
-                Foreground = Brushes.White, Opacity = 0.9,
-                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
-            });
-        }
-        // A soft fade into the card so the plate never ends on a hard line.
-        plate.Children.Add(new Border
-        {
-            IsHitTestVisible = false,
-            Background = new LinearGradientBrush(Colors.Transparent, Color.FromArgb(0x66, 0, 0, 0), 90),
-        });
-        if (locked)
-        {
-            plate.Children.Add(new TextBlock
-            {
-                Text = "🔒", FontSize = 16, Margin = new Thickness(12, 10, 0, 0),
-                HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
-            });
-        }
-        var shortcutBtn = new Button
-        {
-            Content = "🔗", Style = (Style)FindResource("LauncherIconButton"),
-            ToolTip = Loc.Get("launcher_add_shortcut"), Opacity = 0,
-            Margin = new Thickness(0, 8, 8, 0),
-            HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
-            Background = (Brush)FindResource("SurfaceBgBrush"),
-        };
-        shortcutBtn.Click += (_, _) =>
-        {
-            LauncherSfx.Click();
-            ShowShortcutResult(LauncherShortcuts.TryCreateDesktopShortcut(entry.Id));
-        };
-        plate.Children.Add(shortcutBtn);
-        body.Children.Add(plate);
-
-        // --- title, blurb, play ---
-        var text = new StackPanel { Margin = new Thickness(16, 12, 16, 16) };
-        Grid.SetRow(text, 1);
-        text.Children.Add(new TextBlock
-        {
-            Text = entry.Title, FontSize = 19, FontWeight = FontWeights.SemiBold,
-            FontFamily = new FontFamily("/Fonts/#Fredoka, Segoe UI"),
-            Foreground = (Brush)FindResource("TextLightBrush"), TextTrimming = TextTrimming.CharacterEllipsis,
-        });
-        text.Children.Add(new TextBlock
-        {
-            Text = entry.Blurb, FontSize = 14, Margin = new Thickness(0, 4, 0, 0), TextWrapping = TextWrapping.Wrap,
-            Foreground = (Brush)FindResource("TextSecondaryBrush"), MinHeight = 38,
-        });
-        var play = new Button
-        {
-            Content = Loc.Get(locked ? "launcher_locked" : "launcher_play"),
-            Style = (Style)FindResource("OutlineButton"), Height = 44, Margin = new Thickness(0, 12, 0, 0),
-            FontSize = 14,
-        };
-        play.PreviewMouseLeftButtonDown += Press_Down;
-        play.PreviewMouseLeftButtonUp += Press_Up;
-        play.Click += (_, _) =>
-        {
-            if (locked) LauncherSfx.Denied(); else LauncherSfx.Click();
-            FxOnPlay(tile, entry);
-            LauncherHost.LaunchGame(entry.Id);
-        };
-        text.Children.Add(play);
-        body.Children.Add(text);
-        tile.Child = body;
-
-        tile.MouseEnter += (_, _) =>
-        {
-            MotionFx.HoverLift(tile, true);
-            shortcutBtn.Opacity = 1;
-            LauncherSfx.Hover();
-            FxOnTileHover(tile, entry, true);
-        };
-        tile.MouseLeave += (_, _) =>
-        {
-            MotionFx.HoverLift(tile, false);
-            shortcutBtn.Opacity = 0;
-            FxOnTileHover(tile, entry, false);
-        };
-        FxDecorateTile(tile, entry);
-        return tile;
+        catch (Exception ex) { Log.Debug(ex, "[Launcher] RefreshStats failed"); }
     }
-
-    private static Color Darken(Color c, double keep) =>
-        Color.FromRgb((byte)(c.R * keep), (byte)(c.G * keep), (byte)(c.B * keep));
 
     // ------------------------------------------------------------------ bottom row
 
