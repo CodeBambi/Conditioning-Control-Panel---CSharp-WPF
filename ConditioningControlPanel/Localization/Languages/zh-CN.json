@@ -6001,5 +6001,12 @@
   "deeper_import_skipped_not_enh": "That JSON isn't a Deeper enhancement, so it was skipped.",
   "deeper_import_already_in_library": "That enhancement is already in your library.",
   "deeper_library_deleted_toast_fmt": "Removed \"{0}\" from your library.",
-  "btn_undo": "Undo"
+  "btn_undo": "Undo",
+  "deeper_hub_menu_open": "Open in editor",
+  "deeper_hub_menu_play": "Play",
+  "deeper_hub_menu_reveal": "Reveal in folder",
+  "deeper_hub_menu_copy_path": "Copy path",
+  "deeper_hub_menu_submit": "Submit to catalogue",
+  "deeper_hub_menu_delete": "Delete",
+  "deeper_hub_tip_media_missing": "Media file not found at its saved location. Open the enhancement in the editor to relink it."
 }

@@ -7,6 +7,7 @@
              xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
+             PreviewKeyDown="DeeperTab_PreviewKeyDown"
              d:DesignHeight="450" d:DesignWidth="800">
 
     <ContentControl.Resources>
@@ -68,6 +69,7 @@
              with default WPF gray-chrome hover, which was the one square element left
              on an otherwise rounded tab. -->
         <Style x:Key="DeeperRowActionBtnStyle" TargetType="Button" BasedOn="{StaticResource DeeperRoundIconButton}">
+            <Setter Property="Focusable" Value="False"/>
             <Setter Property="Width" Value="28"/>
             <Setter Property="Height" Value="28"/>
             <Setter Property="Padding" Value="0"/>
@@ -80,6 +82,51 @@
             <Setter Property="Margin" Value="4,0,0,0"/>
         </Style>
 
+        <!-- Row context menu, dark. WPF's stock menu is white with an icon gutter,
+             which would be the one light surface on the tab. -->
+        <Style x:Key="DeeperContextMenuStyle" TargetType="ContextMenu">
+            <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentTransparent40Brush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="4"/>
+            <Setter Property="HasDropShadow" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <StackPanel IsItemsHost="True"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="DeeperMenuItemStyle" TargetType="MenuItem">
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="bd" Background="Transparent" CornerRadius="4" Padding="12,6">
+                            <ContentPresenter ContentSource="Header" VerticalAlignment="Center"
+                                              TextBlock.Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource DeeperAccentTransparent20Brush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Per-row template. DataContext = DeeperLibraryRowVm; the original
              EnhancementLibraryEntry hangs off vm.Entry for action handlers. -->
         <DataTemplate x:Key="DeeperLibraryRowTemplate">
@@ -89,16 +136,39 @@
                     BorderThickness="1" CornerRadius="6"
                     Padding="10,8" Margin="0,0,0,6"
                     Cursor="Hand"
+                    MouseLeftButtonDown="DeeperRow_MouseDown"
                     MouseLeftButtonUp="DeeperRow_Click"
                     MouseEnter="DeeperRow_MouseEnter"
                     MouseLeave="DeeperRow_MouseLeave"
                     ToolTip="{loc:Str deeper_hub_tip_row_open}">
+                <Border.ContextMenu>
+                    <ContextMenu Style="{StaticResource DeeperContextMenuStyle}">
+                        <MenuItem Header="{loc:Str deeper_hub_menu_open}" Click="DeeperRowMenuOpen_Click"
+                                  Style="{StaticResource DeeperMenuItemStyle}"/>
+                        <MenuItem Header="{loc:Str deeper_hub_menu_play}" Click="DeeperRowPlay_Click"
+                                  Style="{StaticResource DeeperMenuItemStyle}"/>
+                        <MenuItem Header="{loc:Str deeper_hub_menu_reveal}" Click="DeeperRowMenuReveal_Click"
+                                  Style="{StaticResource DeeperMenuItemStyle}"/>
+                        <MenuItem Header="{loc:Str deeper_hub_menu_copy_path}" Click="DeeperRowMenuCopyPath_Click"
+                                  Style="{StaticResource DeeperMenuItemStyle}"/>
+                        <MenuItem Header="{loc:Str deeper_hub_menu_submit}" Click="DeeperRowSubmit_Click"
+                                  Visibility="{Binding ShowSubmitButton}" IsEnabled="{Binding SubmitEnabled}"
+                                  Style="{StaticResource DeeperMenuItemStyle}"/>
+                        <MenuItem Header="{loc:Str deeper_hub_menu_delete}" Click="DeeperRowDelete_Click"
+                                  Foreground="{DynamicResource DangerBrush}"
+                                  Style="{StaticResource DeeperMenuItemStyle}"/>
+                    </ContextMenu>
+                </Border.ContextMenu>
                 <Border.Style>
                     <Style TargetType="Border">
                         <Style.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentBrush}"/>
                             </Trigger>
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource DeeperAccentTransparent20Brush}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentBrush}"/>
+                            </DataTrigger>
                             <!-- Brief flash after an import lands (RevealDeeperLibraryRow). -->
                             <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
                                 <Setter Property="Background" Value="{DynamicResource DeeperAccentTransparent20Brush}"/>
@@ -127,6 +197,7 @@
                     <!-- CENTER: name + meta line -->
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Name}"
+                                   ToolTip="{Binding Name}"
                                    Foreground="{DynamicResource TextLightBrush}"
                                    FontSize="13" FontWeight="SemiBold"
                                    TextTrimming="CharacterEllipsis"/>
@@ -149,7 +220,8 @@
                                        Foreground="{DynamicResource TextDimBrush}" FontSize="11"/>
                             <!-- Media source (status glyph + label) -->
                             <StackPanel Orientation="Horizontal"
-                                        Visibility="{Binding ShowMediaSource}">
+                                        Visibility="{Binding ShowMediaSource}"
+                                        ToolTip="{Binding MediaSourceTooltip}">
                                 <TextBlock Text="{Binding MediaSourceGlyph}"
                                            Foreground="{Binding MediaSourceBrush}"
                                            FontSize="11" FontWeight="Bold"
@@ -200,9 +272,13 @@
                         <StackPanel.Style>
                             <Style TargetType="StackPanel">
                                 <Setter Property="Opacity" Value="0"/>
+                                <!-- An invisible button is still a button: keep the
+                                     cluster out of hit-testing until it fades in. -->
+                                <Setter Property="IsHitTestVisible" Value="False"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsMouseOver, ElementName=RowBorder}" Value="True">
                                         <Setter Property="Opacity" Value="1"/>
+                                        <Setter Property="IsHitTestVisible" Value="True"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -628,6 +704,8 @@
                                      top via the wrapping Grid, controlled from code-behind. -->
                                 <Grid>
                                     <ItemsControl x:Name="DeeperLibraryList" x:FieldModifier="internal"
+                                                  Focusable="True" FocusVisualStyle="{x:Null}"
+                                                  PreviewKeyDown="DeeperLibraryList_PreviewKeyDown"
                                                   ItemsSource="{Binding DeeperFilteredEntries, RelativeSource={RelativeSource AncestorType=Window}}"
                                                   ItemTemplate="{StaticResource DeeperLibraryRowTemplate}"
                                                   VirtualizingPanel.IsVirtualizing="True"

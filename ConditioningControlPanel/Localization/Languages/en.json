@@ -447,7 +447,7 @@
   "deeper_hub_tip_pill_haptics": "Limit to enhancements that drive a haptic toy. Stacks with the media-type pill.",
   "deeper_hub_tip_pill_webcam": "Limit to enhancements that need a webcam (gaze, blink, attention). Stacks with the media-type pill.",
   "deeper_hub_tip_sort": "Sort by most-recently-edited, name, or creator.",
-  "deeper_hub_tip_row_open": "Click anywhere on this row to open it in the editor.",
+  "deeper_hub_tip_row_open": "Click to select, double-click to open in the editor. Right-click for more.",
   "deeper_hub_tip_row_play": "Open this enhancement in the Deeper Player.",
   "deeper_hub_tip_row_delete": "Delete this enhancement from your library.",
   "deeper_editor_section_selected": "SELECTED",
@@ -6248,5 +6248,12 @@
   "deeper_import_skipped_not_enh": "That JSON isn't a Deeper enhancement, so it was skipped.",
   "deeper_import_already_in_library": "That enhancement is already in your library.",
   "deeper_library_deleted_toast_fmt": "Removed \"{0}\" from your library.",
-  "btn_undo": "Undo"
+  "btn_undo": "Undo",
+  "deeper_hub_menu_open": "Open in editor",
+  "deeper_hub_menu_play": "Play",
+  "deeper_hub_menu_reveal": "Reveal in folder",
+  "deeper_hub_menu_copy_path": "Copy path",
+  "deeper_hub_menu_submit": "Submit to catalogue",
+  "deeper_hub_menu_delete": "Delete",
+  "deeper_hub_tip_media_missing": "Media file not found at its saved location. Open the enhancement in the editor to relink it."
 }

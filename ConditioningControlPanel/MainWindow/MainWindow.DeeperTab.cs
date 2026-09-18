@@ -593,12 +593,39 @@ namespace ConditioningControlPanel
             });
         }
 
+        // One editor per file: a second Open on the same path activates the
+        // window that already has it instead of spawning a twin that would race
+        // it on save.
+        private readonly System.Collections.Generic.Dictionary<string, Views.Deeper.DeeperEditorWindow> _deeperOpenEditors
+            = new(StringComparer.OrdinalIgnoreCase);
+
         private void OpenDeeperEditor(Models.Deeper.Enhancement enhancement, string? filePath)
         {
             try
             {
+                string? key = null;
+                if (!string.IsNullOrEmpty(filePath))
+                {
+                    try { key = System.IO.Path.GetFullPath(filePath); }
+                    catch (Exception ex) { Diag.Swallowed(ex); key = filePath; }
+                    if (_deeperOpenEditors.TryGetValue(key, out var existing))
+                    {
+                        try
+                        {
+                            if (existing.WindowState == WindowState.Minimized) existing.WindowState = WindowState.Normal;
+                            existing.Activate();
+                            return;
+                        }
+                        catch (Exception ex) { Diag.Swallowed(ex, "stale editor handle"); _deeperOpenEditors.Remove(key); }
+                    }
+                }
                 var window = new Views.Deeper.DeeperEditorWindow(enhancement, filePath) { Owner = this };
-                window.Closed += (_, _) => RefreshDeeperLibraryUI();
+                if (key != null) _deeperOpenEditors[key] = window;
+                window.Closed += (_, _) =>
+                {
+                    if (key != null) _deeperOpenEditors.Remove(key);
+                    RefreshDeeperLibraryUI();
+                };
                 window.Show();
             }
             catch (Exception ex)
