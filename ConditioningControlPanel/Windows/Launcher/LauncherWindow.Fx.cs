@@ -17,9 +17,10 @@ using Serilog;
 namespace ConditioningControlPanel.Launcher;
 
 /// <summary>
-/// The juice. Fog, dust and an aurora wash behind the content; a burst on every Play and on the
-/// CTA; a sparkle trail under the cursor; a comet lapping the hovered tile; sheen on the first
-/// tile, the CTA and the wordmark; the croupier Emi waving at the Back Room tile.
+/// The juice. Fog, dust and an aurora wash behind the content; a sparkle trail under the cursor;
+/// a comet lapping the hovered tile; sheen on the CTA and the wordmark; the croupier Emi waving at
+/// the Back Room tile. The event beats (Play, the CTA, the return, the running engine, the
+/// wandering sheen, the veil) live in the Choreo partial and hang off the seams here.
 ///
 /// <para>Rails, all of them: every loop is gated on <see cref="MotionFx.AllowAmbientLoops"/> or
 /// <see cref="MotionFx.AllowParticles"/>, everything parks on Deactivated and on minimize, ambient
@@ -33,8 +34,6 @@ public partial class LauncherWindow
     private const int TrailMinGapMs = 30;
     private const int TrailMaxLive = 48;
     private const int TrailLifeMs = 460;
-    private const int PlayBurstCount = 120;
-    private const int PanelBurstCount = 150;
     private const int OpenBurstCount = 70;
     private const double WordmarkDriftTo = 1.04;
     private const double WordmarkDriftSeconds = 40;
@@ -53,7 +52,6 @@ public partial class LauncherWindow
     private DateTime _lastTrail = DateTime.MinValue;
     private int _trailLive;
     private PerimeterCometAdorner? _comet;
-    private CardSheenAdorner? _firstTileSheen;
     private CardSheenAdorner? _ctaSheen;
     private DispatcherTimer? _wordmarkSheenTimer;
     private DispatcherTimer? _transitionTimer;
@@ -76,6 +74,7 @@ public partial class LauncherWindow
             {
                 StartSheens();
                 BurstAt(WordmarkImage, FxColor("FxGlowColor"), OpenBurstCount);
+                ChoreoOnShown(firstShow);
             });
             BackdropOnShown();
         }
@@ -95,6 +94,7 @@ public partial class LauncherWindow
             ParkFx();
             UnhookFxWindowEvents();
             BackdropOnClosed();
+            ChoreoOnClosed();
             Ambient.Stop();
             BurstLayer.Stop();
         }
@@ -105,6 +105,7 @@ public partial class LauncherWindow
     {
         try
         {
+            ChoreoEngineState(running);
             bool breathe = running && MotionFx.AllowAmbientLoops && !_fxParked;
             if (breathe == _dotBreathing) return;
             _dotBreathing = breathe;
@@ -120,14 +121,14 @@ public partial class LauncherWindow
 
     partial void FxOnPanelLaunch()
     {
-        try { BurstAt(PanelCta, FxColor("FxParticleColor"), PanelBurstCount); }
-        catch (Exception ex) { Log.Debug(ex, "[Launcher] CTA burst failed"); }
+        try { ChoreoPanelLaunch(); }
+        catch (Exception ex) { Log.Debug(ex, "[Launcher] CTA beat failed"); }
     }
 
     partial void FxOnPlay(Border tile, LauncherEntry entry)
     {
-        try { BurstAt(tile, entry.Hue, PlayBurstCount); }
-        catch (Exception ex) { Log.Debug(ex, "[Launcher] play burst failed"); }
+        try { ChoreoPlay(tile, entry); }
+        catch (Exception ex) { Log.Debug(ex, "[Launcher] play beat failed"); }
     }
 
     partial void FxOnTileHover(Border tile, LauncherEntry entry, bool on)
@@ -141,6 +142,7 @@ public partial class LauncherWindow
 
             if (string.Equals(entry.Id, "backroom", StringComparison.OrdinalIgnoreCase))
                 MascotWave(on);
+            ChoreoTileHover(tile, entry, on);
         }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] tile hover fx failed"); }
     }
@@ -207,8 +209,8 @@ public partial class LauncherWindow
             Ambient.Pause();
             _wordmarkSheenTimer?.Stop();
             StopWordmarkDrift();
-            _firstTileSheen?.Stop();
             _ctaSheen?.Stop();
+            ChoreoPark();
             PerimeterCometAdorner.Detach(_comet);
             _comet = null;
             MascotWave(false);
@@ -229,12 +231,9 @@ public partial class LauncherWindow
             Ambient.Resume();
             StartWordmarkDrift();
             StartWordmarkSheenTimer();
-            if (MotionFx.AllowAmbientLoops)
-            {
-                _firstTileSheen?.Start();
-                _ctaSheen?.Start();
-            }
+            if (MotionFx.AllowAmbientLoops) _ctaSheen?.Start();
             BackdropUnpark();
+            ChoreoUnpark();
             FxOnEngineState(App.IsEngineRunning);
         }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] UnparkFx failed"); }
@@ -308,13 +307,15 @@ public partial class LauncherWindow
 
     /// <summary>
     /// Three to five tiny sparks under the cursor, throttled to one spawn per 30 ms and capped at
-    /// 48 live. Plain ellipses with a short fade and drift rather than a canvas burst: the burst
-    /// sim has a 60-particle floor, which is a firework, not a trail.
+    /// 48 live, in the hovered tile's hue when there is one and every eighth a star. Plain
+    /// ellipses with a short fade and drift rather than a canvas burst: the burst sim has a
+    /// 60-particle floor, which is a firework, not a trail.
     /// </summary>
     private void OnFxMouseMove(object sender, MouseEventArgs e)
     {
         try
         {
+            ClearStaleHover();
             if (_perfLow || _fxParked || _transitionBusy || !MotionFx.AllowParticles) return;
             if (LockdownVeil.Visibility == Visibility.Visible) return;
             var now = DateTime.UtcNow;
@@ -322,9 +323,13 @@ public partial class LauncherWindow
             _lastTrail = now;
 
             var at = e.GetPosition(TrailCanvas);
-            var tint = FxColor("FxParticleColor");
+            var tint = _trailTint ?? FxColor("FxParticleColor");
             int n = 3 + _fxRng.Next(3);
-            for (int i = 0; i < n && _trailLive < TrailMaxLive; i++) SpawnSpark(at, tint);
+            for (int i = 0; i < n && _trailLive < TrailMaxLive; i++)
+            {
+                if (++_sparkSerial % StarEvery == 0) SpawnStar(at, tint);
+                else SpawnSpark(at, tint);
+            }
         }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] trail failed"); }
     }
@@ -373,11 +378,11 @@ public partial class LauncherWindow
     {
         try
         {
-            DetachSheen(ref _firstTileSheen);
             DetachSheen(ref _ctaSheen);
+            StopWanderingSheen();
             if (!MotionFx.AllowAmbientLoops || _fxParked) return;
-            if (_tiles.Count > 0) _firstTileSheen = AttachSheen(_tiles[0], TileRadius);
             _ctaSheen = AttachSheen(PanelCta, 12);
+            StartWanderingSheen();
         }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] sheens failed"); }
     }

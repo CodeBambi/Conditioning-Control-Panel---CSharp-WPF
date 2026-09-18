@@ -215,6 +215,7 @@ public partial class LauncherWindow : Window
                 PanelCta.Content = Loc.Get("launcher_panel_launch");
             }
             FxOnEngineState(running);
+            FxOnStatusTick();
         }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] RefreshStatus failed"); }
     }
@@ -405,6 +406,7 @@ public partial class LauncherWindow : Window
     partial void FxOnHidden();
     partial void FxOnClosed();
     partial void FxOnEngineState(bool running);
+    partial void FxOnStatusTick();
     partial void FxOnPanelLaunch();
     partial void FxOnPlay(Border tile, LauncherEntry entry);
     partial void FxOnTileHover(Border tile, LauncherEntry entry, bool on);

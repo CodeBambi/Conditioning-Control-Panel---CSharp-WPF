@@ -267,6 +267,10 @@
         </fx:AmbientFxCanvas>
 
         <Grid x:Name="ContentRoot">
+            <!-- The shake on Play and on the CTA moves the whole content, never the backdrop. -->
+            <Grid.RenderTransform>
+                <TranslateTransform x:Name="ShakeSlide"/>
+            </Grid.RenderTransform>
             <Grid.RowDefinitions>
                 <RowDefinition Height="48"/>
                 <RowDefinition Height="*"/>
@@ -333,6 +337,14 @@
                                            MaxWidth="180" TextTrimming="CharacterEllipsis"/>
                                 <Image x:Name="TierBadge" Height="18" Margin="6,0,0,0" Visibility="Collapsed"
                                        RenderOptions.BitmapScalingMode="HighQuality"/>
+                                <!-- Sparkle Points, counted up by the odometer on every show. -->
+                                <StackPanel x:Name="SpChip" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed">
+                                    <Border Width="1" Height="14" Margin="10,0,8,0" Background="{DynamicResource GlassBorderBrush}"/>
+                                    <TextBlock Text="&#x25C6;" FontSize="10" Foreground="{DynamicResource PanelAccentBrush}" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="SpReadout" Text="0" Margin="5,0,0,0" FontSize="13" FontWeight="SemiBold"
+                                               FontFamily="/Fonts/#Fredoka, Segoe UI" Foreground="{DynamicResource TextLightBrush}"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                         <Button x:Name="BtnGear" Content="⚙" Style="{StaticResource LauncherIconButton}"
@@ -473,16 +485,22 @@
             </Border>
         </Grid>
 
-        <!-- Event layers over the content, under the veil: the cursor's sparkle trail (a handful
-             of ellipses, not a sim) and the burst canvas every Play and the CTA fire into. -->
+        <!-- Event layers over the content, under the veil: the shockwave rings, the cursor's
+             sparkle trail (a handful of ellipses and the odd star, not a sim) and the burst canvas
+             every Play and the CTA fire into. -->
+        <Canvas x:Name="ShockwaveCanvas" IsHitTestVisible="False" ClipToBounds="True"/>
         <Canvas x:Name="TrailCanvas" IsHitTestVisible="False"/>
         <fx:AmbientFxCanvas x:Name="BurstLayer" IsHitTestVisible="False"/>
 
-        <!-- Lockdown veil: the launcher waits, it never argues. -->
+        <!-- Lockdown veil: the launcher waits, it never argues. The vignette breathes red. -->
         <Border x:Name="LockdownVeil" Background="#D9070310" Visibility="Collapsed">
-            <TextBlock Text="{loc:Str launcher_lockdown_veil}" HorizontalAlignment="Center" VerticalAlignment="Center"
-                       FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="22" Foreground="{DynamicResource TextLightBrush}"
-                       TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
+            <Grid>
+                <Border x:Name="LockdownVignette" IsHitTestVisible="False"/>
+                <TextBlock x:Name="LockdownText" Text="{loc:Str launcher_lockdown_veil}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="22" Foreground="{DynamicResource TextLightBrush}"
+                           TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
+            </Grid>
         </Border>
     </Grid>
 </Window>

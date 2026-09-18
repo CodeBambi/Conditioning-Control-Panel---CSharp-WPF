@@ -79,4 +79,26 @@ public class LauncherHandoffTests
             Assert.Equal((kind, id), LauncherHandoff.Decode(payload));
         }
     }
+
+    [Fact]
+    public void Hide_delay_is_clamped_to_the_exit_beat_ceiling()
+    {
+        Assert.Equal(0, LauncherHost.ClampHideDelay(-40));
+        Assert.Equal(450, LauncherHost.ClampHideDelay(450));
+        Assert.Equal(LauncherHost.MaxHideDelayMs, LauncherHost.ClampHideDelay(90_000));
+
+        LauncherHost.HideDelayMs = 90_000;
+        Assert.Equal(LauncherHost.MaxHideDelayMs, LauncherHost.HideDelayMs);
+        LauncherHost.HideDelayMs = 0;
+        Assert.Equal(0, LauncherHost.HideDelayMs);
+    }
+
+    [Fact]
+    public void An_armed_exit_beat_is_spent_by_its_first_consumer()
+    {
+        Assert.False(LauncherHost.ConsumeArmedBeat());
+        LauncherHost.ArmExitBeat();
+        Assert.True(LauncherHost.ConsumeArmedBeat());
+        Assert.False(LauncherHost.ConsumeArmedBeat());
+    }
 }
