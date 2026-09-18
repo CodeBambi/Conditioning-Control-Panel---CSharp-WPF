@@ -122,8 +122,11 @@ namespace ConditioningControlPanel.Views.Deeper
 
         /// <summary>
         /// Show the player (creating it if needed), bring it to the front, then run
-        /// <paramref name="load"/> against it. The owner is only applied to a NEW
-        /// window; an already-open player keeps whoever owned it first.
+        /// <paramref name="load"/> against it. The owner is applied to a NEW
+        /// window; an already-open player keeps its owner, except that an editor
+        /// Preview owner hands off to a non-editor caller (the hub library, the
+        /// main window) so closing the editor no longer takes the user's library
+        /// session down with it.
         /// </summary>
         public static EnhancementPlayerWindow ShowOrActivate(Window? owner, Action<EnhancementPlayerWindow>? load = null)
         {
@@ -142,6 +145,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     win.Activate();
                 }
                 catch (Exception ex) { Diag.Swallowed(ex); }
+                HandOffOwnerFromEditor(win, owner);
             }
             load?.Invoke(win);
             return win;
@@ -181,6 +185,26 @@ namespace ConditioningControlPanel.Views.Deeper
             // window's controls are instantiated. LoadFromMemory fires Loaded
             // synchronously which then dispatches to the UI thread anyway.
             Loaded += (_, _) => _host.LoadFromMemory(enhancement, sourceTag);
+        }
+
+        // Owner pinned to the first opener was a trap: Editor Preview owned the
+        // player, the user then launched from the library (reused window), and
+        // closing the editor closed every owned window, library session included.
+        // WPF allows Owner to be reassigned after Show, so move it to the new
+        // caller whenever the current owner is an editor and the new one is not.
+        private static void HandOffOwnerFromEditor(EnhancementPlayerWindow win, Window? owner)
+        {
+            if (owner == null || owner is DeeperEditorWindow) return;
+            if (win.Owner is not DeeperEditorWindow) return;
+            try
+            {
+                win.Owner = owner;
+                App.Logger?.Debug("EnhancementPlayer: owner handed off from editor to {Owner}", owner.GetType().Name);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("EnhancementPlayer: owner hand-off failed: {Error}", ex.Message);
+            }
         }
 
         /// <summary>
@@ -595,6 +619,10 @@ namespace ConditioningControlPanel.Views.Deeper
             _loadInProgress = true;
             try
             {
+                // Mode swap: the reused window may still be rolling a video
+                // (hidden but audible) from the previous enhancement. Drop it
+                // first or BindEngineIfReady refuses the audio path its engine.
+                TearDownVideoForAudio();
                 // Stop any in-flight playback so the new file replaces it cleanly.
                 UnbindEngineIfRunning();
                 _player.Stop();
@@ -1266,16 +1294,56 @@ namespace ConditioningControlPanel.Views.Deeper
                 // path the picker uses when the user picks a .mp4 directly.
                 _ = LoadLocalVideoAsync(enh.MediaSource);
             }
-            else if (_player.IsPlaying)
+            else
             {
+                // Audio enhancement over a still-loaded video: tear the video down
+                // so the transport and the engine both belong to the audio path.
+                if (!string.Equals(enh.MediaType, MediaTypes.Video, StringComparison.OrdinalIgnoreCase))
+                    TearDownVideoForAudio();
                 // Audio mode: if audio is already playing, attach the engine now.
-                BindEngineIfReady();
+                if (_player.IsPlaying) BindEngineIfReady();
             }
 
             // Mission 3: re-skin the file context strip + mini-timeline + status pill.
             RefreshFileContextStrip(enh, path);
             OnEnhancementLoadedForMini(enh);
             UpdateStatusPill();
+        }
+
+        // Video -> audio mode swap. The single-instance window is reused, so an
+        // audio enhancement launched while a video one is playing used to leave
+        // the video source alive: BindEngineIfReady bailed on it, the audio had
+        // no engine, and TogglePlayPause kept driving the hidden, still-audible
+        // video. Unbind, pause, dispose, blank the page and clear video-only
+        // state. The reverse swap (audio -> video) is handled by the two video
+        // loaders, which Stop() the audio player up front.
+        private void TearDownVideoForAudio()
+        {
+            var src = _videoSource;
+            var inFullscreen = _isVideoFullscreen || _videoFullscreenWindow != null;
+            if (src == null && !inFullscreen) return;
+
+            if (inFullscreen)
+            {
+                try { ForceExitVideoFullscreen("audio mode swap"); }
+                catch (Exception ex) { Diag.Swallowed(ex); }
+            }
+            UnbindEngineIfRunning();
+            _videoSource = null;
+            if (src != null)
+            {
+                try { src.Pause(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { src.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            }
+            _initialAllowedFileUrl = null;
+            try
+            {
+                var cw = VideoBrowser?.CoreWebView2;
+                if (cw != null) cw.Navigate("about:blank");
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+            try { TxtVideoStatus.Visibility = Visibility.Collapsed; } catch (Exception ex) { Diag.Swallowed(ex); }
+            App.Logger?.Debug("EnhancementPlayer: video torn down for audio mode swap");
         }
 
         // -- Pane swap + video loading ----------------------------------------
@@ -1593,8 +1661,14 @@ namespace ConditioningControlPanel.Views.Deeper
                         try {
                             window.chrome.webview.postMessage('ccp_key:' + n + ':' + (e.shiftKey ? 1 : 0) + ':' + (e.repeat ? 1 : 0));
                         } catch (_) {}
+                        // C# owns the key now. preventDefault alone leaves the
+                        // page's own keydown listeners running (tiktok, the
+                        // hypnotube player), so Space toggled play twice. This
+                        // listener is registered in the capture phase, so
+                        // stopImmediatePropagation beats the page's handlers.
                         if (n !== 'Escape' && document.querySelector('video')) {
                             try { e.preventDefault(); } catch (_) {}
+                            try { e.stopImmediatePropagation(); } catch (_) {}
                         }
                     }
                     function relayUp(e) {
@@ -1711,6 +1785,9 @@ namespace ConditioningControlPanel.Views.Deeper
                     return;
                 }
 
+                // The mode-swap teardown blanks the page; about:blank is inert.
+                if (string.Equals(e.Uri, "about:blank", StringComparison.OrdinalIgnoreCase)) return;
+
                 if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri)
                     || uri.Scheme != Uri.UriSchemeHttps
                     || !IsAllowedPlayerHost(uri))
@@ -1735,6 +1812,10 @@ namespace ConditioningControlPanel.Views.Deeper
             // loop will reconcile BtnPlayPause within one tick.
             try
             {
+                // No video source means this is the about:blank from the audio
+                // mode swap: nothing to reconcile, and the transport belongs to
+                // the audio player now.
+                if (_videoSource == null) return;
                 if (!e.IsSuccess)
                 {
                     // A blocked (allowlist) or failed navigation used to show
@@ -2814,8 +2895,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 _escConsumed = true;
             }
             if (IsUnderStrictLock()) return;
-            bool anythingRunning = _host.IsRunning || _player.IsPlaying || (_videoSource?.IsPlaying ?? false);
-            if (!anythingRunning) return;
+            if (!IsSessionActive()) return;
             _escHoldStart = DateTime.UtcNow;
             _escHoldTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             _escHoldTimer.Tick += EscHoldTimer_Tick;
@@ -2845,10 +2925,15 @@ namespace ConditioningControlPanel.Views.Deeper
             if (IsUnderStrictLock()) return;
             if (_isVideoFullscreen || _videoFullscreenWindow != null) return;
             // A stray tap must never end a session: only an idle player closes on Esc.
-            bool anythingRunning = _host.IsRunning || _player.IsPlaying || (_videoSource?.IsPlaying ?? false);
-            if (anythingRunning) return;
+            if (IsSessionActive()) return;
             Close();
         }
+
+        // A paused session is still a session: an Esc tap must not close the
+        // window over it, and a held Esc must still be able to stop it. A loaded
+        // video counts whether or not it is currently rolling.
+        private bool IsSessionActive()
+            => _host.IsRunning || _player.IsPlaying || _player.IsPaused || _videoSource != null;
 
         private void CancelEscHold()
         {
