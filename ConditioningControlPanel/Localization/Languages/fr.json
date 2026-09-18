@@ -5586,5 +5586,19 @@
   "launcher_stat_sparkles": "Points Étincelle",
   "launcher_stat_time": "Temps sous transe",
   "launcher_stat_xp": "{0} / {1} XP",
-  "launcher_prime_pill": "Prime"
+  "launcher_prime_pill": "Prime",
+  "launcher_media_title": "Médias des jeux",
+  "launcher_media_blurb": "Images et clips pour les jeux. Réglez une fois, chaque salle suit.",
+  "launcher_media_source": "Source",
+  "launcher_media_src_local": "Ma bibliothèque",
+  "launcher_media_src_local_hint": "Votre bibliothèque de médias CCP",
+  "launcher_media_src_online": "En ligne",
+  "launcher_media_src_online_hint": "Diffusé depuis les niches que vous choisissez",
+  "launcher_media_src_mixed": "Mixte",
+  "launcher_media_src_mixed_hint": "Les deux, mélangés selon la part ci-dessous",
+  "launcher_media_mixed_share": "{0} % en ligne",
+  "launcher_media_niches": "Niches",
+  "launcher_media_footnote": "Le Back Room suit aussi ce réglage.",
+  "launcher_media_done": "Terminé",
+  "launcher_media_tooltip": "Médias des jeux"
 }

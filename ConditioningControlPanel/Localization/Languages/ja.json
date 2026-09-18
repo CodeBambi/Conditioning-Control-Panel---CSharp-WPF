@@ -5586,5 +5586,19 @@
   "launcher_stat_sparkles": "スパークルポイント",
   "launcher_stat_time": "トランス時間",
   "launcher_stat_xp": "{0} / {1} XP",
-  "launcher_prime_pill": "プライム"
+  "launcher_prime_pill": "プライム",
+  "launcher_media_title": "ゲームのメディア",
+  "launcher_media_blurb": "ゲームで使う画像とクリップ。一度設定すれば、すべての部屋に反映されます。",
+  "launcher_media_source": "ソース",
+  "launcher_media_src_local": "マイライブラリ",
+  "launcher_media_src_local_hint": "あなたのCCPメディアライブラリ",
+  "launcher_media_src_online": "オンライン",
+  "launcher_media_src_online_hint": "選んだニッチからストリーミング",
+  "launcher_media_src_mixed": "ミックス",
+  "launcher_media_src_mixed_hint": "両方を下の割合でブレンド",
+  "launcher_media_mixed_share": "オンライン {0}%",
+  "launcher_media_niches": "ニッチ",
+  "launcher_media_footnote": "バックルームにも反映されます。",
+  "launcher_media_done": "完了",
+  "launcher_media_tooltip": "ゲームのメディア"
 }

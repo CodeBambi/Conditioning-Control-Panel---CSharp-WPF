@@ -6342,5 +6342,19 @@
   "launcher_stat_sparkles": "Sparkle Points",
   "launcher_stat_time": "Time under",
   "launcher_stat_xp": "{0} / {1} XP",
-  "launcher_prime_pill": "Prime"
+  "launcher_prime_pill": "Prime",
+  "launcher_media_title": "Game media",
+  "launcher_media_blurb": "Pictures and clips for the games. Set it once and every room follows.",
+  "launcher_media_source": "Source",
+  "launcher_media_src_local": "My library",
+  "launcher_media_src_local_hint": "Your CCP media library",
+  "launcher_media_src_online": "Online",
+  "launcher_media_src_online_hint": "Streamed from the niches you pick",
+  "launcher_media_src_mixed": "Mixed",
+  "launcher_media_src_mixed_hint": "Both, blended by the share below",
+  "launcher_media_mixed_share": "{0}% online",
+  "launcher_media_niches": "Niches",
+  "launcher_media_footnote": "The Back Room follows this too.",
+  "launcher_media_done": "Done",
+  "launcher_media_tooltip": "Game media"
 }

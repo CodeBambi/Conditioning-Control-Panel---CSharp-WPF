@@ -5586,5 +5586,19 @@
   "launcher_stat_sparkles": "Sparkle-Punkte",
   "launcher_stat_time": "Zeit in Trance",
   "launcher_stat_xp": "{0} / {1} XP",
-  "launcher_prime_pill": "Prime"
+  "launcher_prime_pill": "Prime",
+  "launcher_media_title": "Spielmedien",
+  "launcher_media_blurb": "Bilder und Clips für die Spiele. Einmal einstellen, und jeder Raum folgt.",
+  "launcher_media_source": "Quelle",
+  "launcher_media_src_local": "Meine Bibliothek",
+  "launcher_media_src_local_hint": "Deine CCP-Medienbibliothek",
+  "launcher_media_src_online": "Online",
+  "launcher_media_src_online_hint": "Gestreamt aus den Nischen, die du wählst",
+  "launcher_media_src_mixed": "Gemischt",
+  "launcher_media_src_mixed_hint": "Beides, gemischt nach dem Anteil unten",
+  "launcher_media_mixed_share": "{0} % online",
+  "launcher_media_niches": "Nischen",
+  "launcher_media_footnote": "Der Back Room folgt dem ebenfalls.",
+  "launcher_media_done": "Fertig",
+  "launcher_media_tooltip": "Spielmedien"
 }

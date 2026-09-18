@@ -5586,5 +5586,19 @@
   "launcher_stat_sparkles": "Очки искр",
   "launcher_stat_time": "Время в трансе",
   "launcher_stat_xp": "{0} / {1} XP",
-  "launcher_prime_pill": "Prime"
+  "launcher_prime_pill": "Prime",
+  "launcher_media_title": "Медиа для игр",
+  "launcher_media_blurb": "Картинки и клипы для игр. Настройте один раз, и все комнаты последуют.",
+  "launcher_media_source": "Источник",
+  "launcher_media_src_local": "Моя библиотека",
+  "launcher_media_src_local_hint": "Ваша медиатека CCP",
+  "launcher_media_src_online": "Онлайн",
+  "launcher_media_src_online_hint": "Потоком из выбранных вами ниш",
+  "launcher_media_src_mixed": "Смешанный",
+  "launcher_media_src_mixed_hint": "И то и другое, в пропорции ниже",
+  "launcher_media_mixed_share": "{0}% онлайн",
+  "launcher_media_niches": "Ниши",
+  "launcher_media_footnote": "Back Room тоже следует этому.",
+  "launcher_media_done": "Готово",
+  "launcher_media_tooltip": "Медиа для игр"
 }
