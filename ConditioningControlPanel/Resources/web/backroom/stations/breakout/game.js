@@ -261,12 +261,14 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     g.colliders = g.colliders.filter(c => c.alpha > 0);
   }
   function spawnWell() {
-    g.well = { x: lerp(110, w - 110, rng()), y: lerp(280, 520, rng()), r: 70, pull: 110, age: 0, ttl: 6, rot: 0, used: false, fade: 1, captured: null };
+    // `gif` is the dealt picture the renderer winds into the whirlwind (an int here, like a collider's).
+    g.well = { x: lerp(110, w - 110, rng()), y: lerp(280, 520, rng()), r: 70, pull: 110, age: 0, ttl: 6, rot: 0, used: false, fade: 1,
+      captured: null, gif: Math.floor(rng() * 8) };
     g.nextWell = g.time + 12;
   }
   function updateWell(dt) {
     const s = g.well; if (!s) return;
-    s.rot += dt * 1.6;
+    s.rot += dt * (s.captured ? 4.4 : 1.6);          // the swirl tightens while it holds a ball
     if (s.captured) return;
     s.age += dt;
     if (s.age >= s.ttl) { s.fade -= dt / 0.4; if (s.fade <= 0) g.well = null; }
@@ -486,6 +488,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     clearForce() { g.force = {}; g.rungs = rungsFor(g.sat, g.state, g.force); },
     setBreakoutN(n) { g.breakoutN = Math.max(1, Math.floor(Number(n) || 12)); },
     setSpeedScale(s) { g.speedScale = clamp(Number(s) || 0.55, 0.2, 3); },
+    spawnWellNow() { spawnWell(); return g.well; },
     relapseNow() { if (g.state === 'colour') lostAll(g.balls[0]); },
     breakoutNow() { startBreakout(g.balls[0]); },
     breakBrick(i) { const br = g.bricks[i]; if (br) breakBrick(br, g.balls[0]); },

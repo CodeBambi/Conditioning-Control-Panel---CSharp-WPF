@@ -13,6 +13,8 @@
 import { W, H } from './game.js';
 import { drawSpiral } from './payloads.js';
 import { makeCrack, makeShatterWeb, strokeLines, createDebris, createStamps, createShake, makeNoiseTile, makeScanTile, postProcess, clamp, lerp } from './render-fx.js';
+import { createParticles } from './particles.js';
+import { createWellFx } from './render-well.js';
 
 const FONT = '"Arial Rounded MT Bold", "Trebuchet MS", Arial, sans-serif';
 const BG = [26, 26, 46], PINK = [255, 105, 180], VIOLET = [165, 108, 255], MINT = [120, 230, 200], GOLD = [255, 207, 107], WHITE = [255, 255, 255], GREY = [150, 150, 150];
@@ -41,10 +43,13 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   let cw = 0, ch = 0, scale = 1, ox = 0, oy = 0, off = null, scanPat = null;
   let last = null, glitch = 0, wipe = 0, crackFlash = 0, spin = 0, aberr = 0, recoil = 0, lastNow = 0, lastCombo = 0, comboPop = 0;
   let blinkAt = 3 + rng() * 2, blink = 0, wordIdx = 0, wordAt = 0, flash = 0;
-  const particles = [], shards = [], shockwaves = [], drifters = [];
+  const shockwaves = [], drifters = [];
+  const P = createParticles({ max: 600, rng });
   const crack = makeCrack(rng, W, H), web = makeShatterWeb(rng, W, H);
   const debris = createDebris(60), stamps = createStamps(FONT, W, H), cam = createShake(reduced);
   const noise = makeNoiseTile(128), scanTile = makeScanTile();
+  const wellFx = createWellFx({ reduced, rng, noiseTile: noise });
+  let frameNo = 0;
   let noisePat = null, vignette = null;
 
   function resize(w, h) {
@@ -60,24 +65,16 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   const toField = (px, py) => ({ x: (px - ox) / scale, y: (py - oy) / scale });
   const rungs = (i) => !!(last && last.rungs[i]);
 
-  function burst(x, y, rgb, n, speed, life) {
-    for (let i = 0; i < n; i++) {
-      const a = rng() * Math.PI * 2, s = speed * (0.4 + rng());
-      particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 40, life, max: life, rgb, r: 2 + rng() * 3 });
-    }
-  }
-  function shatterBall(x, y, n) {
-    for (let i = 0; i < n; i++) {
-      const a = rng() * Math.PI * 2, s = 120 + rng() * 260;
-      shards.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, rot: rng() * 6, vr: (rng() - 0.5) * 12, life: 1.1, max: 1.1, size: 3 + rng() * 6 });
-    }
-  }
   function onEvent(name, d) {
     d = d || {};
     const colour = !last || last.state === 'colour';
+    const sat = last ? clamp(last.sat || 0, 0, 1) : 0;
     if (name === 'brick') {
       const rgb = toRgb(d.color) || ROWS[(d.row || 0) % ROWS.length];
-      if (rungs(3) && colour) burst(d.x, d.y, rgb, 12, 160, 0.6);
+      if (rungs(3) && colour) {
+        P.burst(d.x, d.y, rgb, Math.round(8 + 20 * sat), 160 + 70 * sat, 0.6);
+        P.rects(d.x, d.y, rgb, 4 + Math.round(2 * sat), { speed: 190, life: 0.7, size: 6 });
+      }
       debris.spawn(d.x, d.y, (d.w || 42) * 0.55, (d.h || 18) * 0.7, rgb, rng);
       debris.spawn(d.x, d.y, (d.w || 42) * 0.35, (d.h || 18) * 0.6, rgb, rng);
       if (rungs(5) && colour) cam.kick(4);
@@ -89,43 +86,62 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       else if (d.kind === 'brick' && colour && rungs(5)) aberr = Math.max(aberr, 0.35);
     } else if (name === 'paddle') {
       recoil = 1;
+      if (colour && rungs(3) && last) {
+        const ang = -Math.PI / 2 + clamp(d.t || 0, -1, 1) * (Math.PI / 3);
+        P.spray(d.x, last.paddle.y - last.paddle.h, ang, 0.8, PINK, 6 + Math.round(4 * sat), 180, 0.45);
+      }
     } else if (name === 'gif') {
       cam.kick(7); if (rungs(8)) { glitch = 0.14; aberr = 1; }
-      burst(d.x, d.y, VIOLET, 18, 220, 0.7);
+      P.burst(d.x, d.y, VIOLET, 24, 220, 0.7);
+      P.rects(d.x, d.y, VIOLET, 4, { speed: 150, life: 0.6, size: 5 });
+    } else if (name === 'capture') {
+      // The well swallowing the ball: everything falls inward, then the release throws it back out.
+      if (colour) P.implode(d.x, d.y, MINT, 30, 190, 0.6, { from: 115 });
     } else if (name === 'spiral') {
-      burst(d.x, d.y, MINT, 24, 200, 0.9);
+      P.burst(d.x, d.y, MINT, 30, 220, 0.9);
+      P.after(0.1, () => P.burst(d.x, d.y, PINK, 18, 160, 0.7));
     } else if (name === 'perfect') {
       stamps.push({ kind: 'text', text: 'PERFECT', x: d.x || W / 2, y: (d.y || H / 2) - 18, life: 0.8, rgb: GOLD, size: 20 });
       stamps.push({ kind: 'ring', x: d.x || W / 2, y: d.y || H / 2, r0: 6, r1: 60, life: 0.45, rgb: GOLD });
+      P.spray(d.x || W / 2, d.y || H / 2, -Math.PI / 2, 1.5, GOLD, 16, 230, 0.6);
       flash = Math.max(flash, 0.25);
     } else if (name === 'nearMiss') {
       stamps.push({ kind: 'ring', x: d.x || W / 2, y: d.y || H - 40, r0: 4, r1: 48, life: 0.4, rgb: WHITE });
     } else if (name === 'jackpot') {
       stamps.push({ kind: 'stamp', text: 'JACKPOT', x: W / 2, y: H * 0.4, life: 1.3, rgb: GOLD, rgb2: VIOLET, size: 60 });
       stamps.push({ kind: 'stamp', text: '+5 SP', x: W / 2, y: H * 0.4 + 52, life: 1.3, rgb: WHITE, rgb2: VIOLET, size: 30 });
-      burst(d.x || W / 2, d.y || H / 2, GOLD, 30, 260, 1);
+      P.burst(d.x || W / 2, d.y || H / 2, GOLD, 46, 260, 1);
+      P.after(0.12, () => P.burst(d.x || W / 2, d.y || H / 2, VIOLET, 30, 320, 0.9));
       cam.kick(9, 1.5, 0.02); flash = 0.5;
     } else if (name === 'shatterWall') {
-      shatterBall(web.cx, web.cy, 30); cam.kick(10, 1, 0.015); flash = 0.6;
+      P.shatter(web.cx, web.cy, 44);
+      P.after(0.12, () => P.burst(web.cx, web.cy, WHITE, 26, 300, 0.8));
+      cam.kick(10, 1, 0.015); flash = 0.6;
     } else if (name === 'relapseStart') {
       stamps.push({ kind: 'ring', x: d.x || W / 2, y: d.y || H - 40, r0: 10, r1: 140, life: 0.6, rgb: GREY });
     } else if (name === 'lost') {
       stamps.push({ kind: 'ring', x: d.x || W / 2, y: H - 20, r0: 8, r1: 80, life: 0.5, rgb: GREY });
     } else if (name === 'relapse') {
-      wipe = 0.1; particles.length = 0; shockwaves.length = 0; drifters.length = 0; glitch = 0; aberr = 0; cam.reset();
+      wipe = 0.1; P.clear(); shockwaves.length = 0; drifters.length = 0; glitch = 0; aberr = 0; cam.reset(); wellFx.reset();
       stamps.push({ kind: 'cross', text: 'RELAPSE', life: 1.6 });
     } else if (name === 'breakoutStart') {
       flash = Math.max(flash, 0.3);
     } else if (name === 'breakout') {
-      shatterBall(d.x, d.y, 26);
+      P.shatter(d.x, d.y, 44);
+      P.burst(d.x, d.y, WHITE, 24, 240, 0.8);
       shockwaves.push({ x: d.x, y: d.y, at: 0, life: 0.7 });
+      P.after(0.12, () => { P.burst(d.x, d.y, GOLD, 34, 320, 0.9); shockwaves.push({ x: d.x, y: d.y, at: 0, life: 0.6 }); });
       stamps.push({ kind: 'stamp', text: 'BREAKOUT', life: 1.1, rgb: GOLD, rgb2: VIOLET });
       cam.kick(10, 1.2, 0.02);
     } else if (name === 'split') {
       drifters.push({ x: d.x, y: d.y, at: 0, life: 2.2 });
-      burst(d.x, d.y, PINK, 14, 140, 0.6);
+      P.burst(d.x, d.y, PINK, 18, 140, 0.6);
     } else if (name === 'wall') {
       flash = Math.max(flash, 0.2);                                       // the SP chip in the DOM strip pops; no second counter here
+      if (colour && rungs(3)) {                                           // two beats: the clear, then the echo
+        P.burst(W / 2, H * 0.35, GOLD, 40, 260, 0.9);
+        P.after(0.12, () => P.burst(W / 2, H * 0.35, MINT, 30, 330, 0.8));
+      }
     } else if (name === 'crack') {
       crackFlash = 1; cam.kick(12, 1, 0.01);
     }
@@ -163,14 +179,12 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       g.restore();
     }
   }
-  function drawWell(s, mix) {
+  /** The whirlwind: a dealt picture cut into wedges and wound into a spiral (render-well.js). */
+  function drawWell(s, mix, dt, extras) {
     const well = s.well; if (!well) return;
-    const a = clamp(well.fade, 0, 1) * clamp(well.age * 3, 0, 1);
-    g.save();
-    g.fillStyle = col(VIOLET, mix, 0.08 * a); g.beginPath(); g.arc(well.x, well.y, well.pull, 0, 7); g.fill();
-    drawSpiral(g, well.x, well.y, well.r, well.rot, col(PINK, mix), a);
-    drawSpiral(g, well.x, well.y, well.r * 0.6, -well.rot * 1.4, col(MINT, mix), a * 0.7);
-    g.restore();
+    const m = (extras && extras.media) || media;
+    wellFx.draw(g, well, { mix, col, media: m, dt, sat: s.sat, particles: P,
+      pink: PINK, violet: VIOLET, mint: MINT, spiral: drawSpiral });
   }
   function drawColliders(s, mix) {
     for (const c of s.colliders) {
@@ -263,19 +277,14 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     const a = wob && wob.side === 'top' ? amp : 0;
     g.beginPath(); g.moveTo(0, 1); for (let x = 0; x <= W; x += 24) g.lineTo(x, 1 + a * Math.sin(x / W * Math.PI * 3)); g.stroke();
   }
-  function drawParticles(dt, mix) {
-    for (let i = particles.length - 1; i >= 0; i--) {
-      const p = particles[i]; p.life -= dt; if (p.life <= 0) { particles.splice(i, 1); continue; }
-      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 300 * dt;
-      g.fillStyle = col(p.rgb, mix, p.life / p.max); g.beginPath(); g.arc(p.x, p.y, p.r * (p.life / p.max), 0, 7); g.fill();
-    }
-    for (let i = shards.length - 1; i >= 0; i--) {
-      const p = shards[i]; p.life -= dt; if (p.life <= 0) { shards.splice(i, 1); continue; }
-      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 260 * dt; p.rot += p.vr * dt;
-      g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.globalAlpha = p.life / p.max;
-      g.fillStyle = '#b8b8b8'; g.beginPath(); g.moveTo(-p.size, 0); g.lineTo(0, -p.size * 0.6); g.lineTo(p.size, 0); g.lineTo(0, p.size * 0.5); g.fill();
-      g.restore();
-    }
+  const drawParticles = (dt, mix) => P.step(g, dt, mix, col);
+  /** A mote shed behind the ball every other frame once the field is bright. */
+  function ballSparkle(s) {
+    if (reduced || s.state !== 'colour' || s.sat <= 0.5 || (frameNo & 1)) return;
+    const b = s.balls.find(x => !x.ghost && !x.lost); if (!b) return;
+    const sp = Math.hypot(b.vx || 0, b.vy || 0) || 1;
+    P.sparkle(b.x - (b.vx / sp) * b.r * 1.4 + (rng() - 0.5) * 6, b.y - (b.vy / sp) * b.r * 1.4 + (rng() - 0.5) * 6,
+      rng() < 0.5 ? MINT : WHITE, 0.35 + rng() * 0.3);
   }
   function drawShatterWall(s, mix, extras) {
     const m = (extras && extras.media) || media, frame = m && m.frame ? m.frame(0) : null;
@@ -357,7 +366,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     if (a && typeof a === 'object') { extras = a; now = extras.now != null ? extras.now : performance.now() / 1000; if (now > 1e6) now /= 1000;
       dt = extras.dt != null ? extras.dt : (lastNow ? now - lastNow : 1 / 60); word = extras.word || null; }
     else { now = a || 0; dt = b != null ? b : 1 / 60; word = c || null; }
-    lastNow = now; dt = clamp(dt, 0, 0.05);
+    lastNow = now; dt = clamp(dt, 0, 0.05); frameNo++;
     last = snap;
     const s = snap, grey = s.state === 'grey', tr = s.transition || null, ts = typeof s.timeScale === 'number' ? s.timeScale : 1;
     const fxDt = dt * ts;
@@ -389,10 +398,10 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       g.save(); g.font = `900 62px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = col(PINK, mix, 0.09);
       g.fillText(String(s.mantra).toUpperCase(), W / 2, 150); g.restore();
     }
-    if (!grey) drawWell(s, mix);
+    if (!grey) drawWell(s, mix, fxDt, extras);
     drawBricks(s, mix);
     if (!grey) drawColliders(s, mix);
-    if (grey) particles.length = 0;
+    if (grey) P.clear(); else ballSparkle(s);
     debris.draw(g, fxDt, mix, col, H);
     drawParticles(fxDt, mix);
     for (const bl of s.balls) drawBall(s, bl, mix, words);
@@ -418,6 +427,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   }
 
   const r = { resize, draw, onEvent, onGameEvent: onEvent, toField,
-    dispose() { particles.length = shards.length = shockwaves.length = drifters.length = 0; debris.clear(); stamps.clear(); off = null; } };
+    dispose() { P.clear(); shockwaves.length = drifters.length = 0; debris.clear(); stamps.clear(); wellFx.reset(); off = null; },
+    particleCount: () => P.count() };
   return r;
 }
