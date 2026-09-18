@@ -67,7 +67,7 @@
 .cards-loading { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 15px 22px;
   background: #28172fea; border-radius: 12px; z-index: 5; }
 
-@media (max-width: 800px) {
+@media (max-width:800px), (max-height:480px) {
   .cards-top { top: 10px; left: 12px; max-width: 220px; }
   .cards-sp, .cards-status { font-size: 11px; padding: 5px 10px; }
   .cards-side { left: 12px; bottom: max(12px, var(--br-sill, 0px)); }
@@ -118,7 +118,7 @@
 .cards-in-room > .cards-bet .cards-bet-label { display:none; }
 .cards-in-room > .cards-bet button { min-width:34px; min-height:34px; padding:4px 8px; font-size:20px; }
 .cards-in-room:not([data-phase="play"]) > .cards-bet { visibility:hidden; }
-@media (min-width:801px) {
+@media (min-width:801px) and (min-height:481px) {
  .cards-in-room .cards-controls { left:clamp(170px,var(--hand-x,50%),calc(100% - 170px)); top:min(calc(var(--hand-bottom,75%) + 10px),calc(100% - 104px)); right:auto; bottom:auto; transform:translateX(-50%); width:268px; max-width:none; display:grid; grid-template-columns:1fr 1fr; gap:9px 26px; align-items:start; }
  .cards-in-room .cards-move[data-move="hit"] { grid-area:1 / 2; min-height:46px; font-size:19px; }
  .cards-in-room .cards-move[data-move="stand"] { grid-area:1 / 1; min-height:44px; margin-top:2px; font-size:18px; }
@@ -127,14 +127,14 @@
  .cards-in-room .cards-move:is([data-move="double"],[data-move="split"]) { min-height:30px; min-width:80px; padding:5px 10px; font-size:12px; justify-self:center; }
  .cards-in-room .cards-deal { grid-column:1 / 3; justify-self:center; }
 }
-@media(max-width:800px) {
+@media (max-width:800px), (max-height:480px) {
  .cards-total { left:var(--phone-total-x,50%); top:var(--phone-total-y,50%); width:70px; margin-left:-35px; }
  .cards-total strong { font-size:28px; }
  .cards-total small { font-size:10px; }
  .cards-in-room > .cards-bet { left:auto; top:auto; bottom:110px; right:12px; transform:none; }
 }
 
-@media(max-width:800px) {
+@media (max-width:800px), (max-height:480px) {
  .cards-in-room > .cards-bet { bottom:73px; }
  .cards-in-room[data-open] > .cards-bet { display:flex; }
 }
@@ -157,7 +157,7 @@
 @keyframes cards-score-spark { from { transform:translate(0,0) rotate(0);opacity:1; } to { transform:translate(var(--sx),var(--sy)) rotate(150deg);opacity:0; } }
 [data-still] .cards-total strong,[data-still] .cards-score-sparks i { animation:none!important; }
 @media(prefers-reduced-motion:reduce) { .cards-total strong,.cards-score-sparks i { animation:none!important; } }
-@media(max-width:800px) { .cards-total { width:72px; margin-left:-36px; padding:3px; border-radius:10px; } .cards-total strong { font-size:24px; } .cards-dealer-total strong { font-size:21px; } }
+@media (max-width:800px), (max-height:480px) { .cards-total { width:72px; margin-left:-36px; padding:3px; border-radius:10px; } .cards-total strong { font-size:24px; } .cards-dealer-total strong { font-size:21px; } }
 
 /* Hit and Deal share one target; Stand sits below, optional moves beneath the score. */
 .cards-in-room .cards-controls { display:contents!important; }
@@ -166,11 +166,11 @@
 .cards-in-room .cards-move[data-move="stand"] { left:var(--hit-x); top:calc(var(--action-y) + 74px); background:linear-gradient(#fa87cb,#a53386)!important; box-shadow:inset 0 2px 0 #fff8,0 5px 0 #56224b,0 0 24px #ff6fb955; }
 .cards-in-room .cards-move[data-move="hit"] { left:var(--hit-x); min-height:64px; color:#073e36; text-shadow:0 1px #fff8; background:linear-gradient(#a5ffe2,#38c6a6)!important; border-color:#baffed; box-shadow:inset 0 2px 0 #fff8,0 5px 0 #135d50,0 0 24px #54ffcb55; }
  .cards-in-room .cards-deal { left:var(--hit-x); top:var(--action-y); width:142px; min-width:0; min-height:64px; margin:0; font-size:22px; font-weight:800; }
-.cards-in-room .cards-move:is([data-move="split"],[data-move="double"]) { left:var(--stand-x); top:var(--secondary-y); width:110px; min-height:38px; margin:0; font-size:14px; }
+.cards-in-room .cards-move:is([data-move="split"],[data-move="double"]) { left:var(--side-x, var(--stand-x)); top:var(--secondary-y); width:110px; min-height:38px; margin:0; font-size:14px; }
 .cards-in-room .cards-move[data-move="double"] { top:calc(var(--secondary-y) + 46px); }
 .cards-in-room .cards-total:not(.cards-dealer-total) { width:110px; margin-left:-55px; border-width:3px; box-shadow:0 5px 0 #101c26,0 0 24px currentColor,inset 0 2px 0 #fff8; }
 .cards-in-room .cards-total:not(.cards-dealer-total) strong { font-size:52px; font-weight:900; -webkit-text-stroke:1px currentColor; text-shadow:0 4px #153e37,0 0 16px currentColor; }
-@media(max-width:800px) {
+@media (max-width:800px), (max-height:480px) {
  .cards-in-room .cards-move:is([data-move="stand"],[data-move="hit"]) { width:84px; min-height:50px; font-size:17px; padding:8px 3px; }
  .cards-in-room .cards-total:not(.cards-dealer-total) { width:72px; margin-left:-36px; }
  .cards-in-room .cards-total:not(.cards-dealer-total) strong { font-size:34px; }
@@ -179,7 +179,7 @@
 /* SP travels as faceted sparkles, not coins. */
 .cards-token { border-radius:0; border:0; clip-path:polygon(50% 0,85% 30%,100% 50%,50% 100%,0 50%,15% 30%); background:conic-gradient(from 45deg,#fff6da,#fca6e1,#b791ff,#fff6da,#ffda83); color:transparent; filter:drop-shadow(0 0 5px #ffcaec); }
 
-@media(max-width:800px) {
+@media (max-width:800px), (max-height:480px) {
  .cards-in-room .cards-deal { width:84px; min-height:50px; font-size:17px; padding:6px 3px; }
  .cards-in-room .cards-move[data-move="stand"] { top:calc(var(--action-y) + 60px); }
  .cards-in-room .cards-move:is([data-move="split"],[data-move="double"]) { width:76px; min-width:0; min-height:36px; padding:5px 3px; font-size:12px; }
@@ -193,3 +193,9 @@
 .cards-in-room .cards-move:is([data-move="split"],[data-move="double"]),
 .cards-in-room .cards-total:not(.cards-dealer-total) { rotate:var(--hud-left-tilt,0deg); }
 .cards-hud-trail { position:absolute; z-index:3; width:7px; height:11px; border-radius:2px; box-shadow:0 0 9px currentColor; pointer-events:none; }
+
+/* A phone held sideways (station.js landscapePhone): Split and Double stack above Hit on the right; the stake
+ * sits under the hand, centred, clear of Stand; the Sit button moves right of the thumbstick. */
+.cards-in-room[data-landscape-phone] > .cards-bet { right:auto; left:50%; transform:translateX(-50%); bottom:14px; }
+.cards-in-room[data-landscape-phone] .cards-side { left:150px; bottom:max(14px, var(--br-sill, 0px)); }
+.cards-in-room[data-landscape-phone] .cards-move:is([data-move="split"],[data-move="double"]) { width:84px; min-height:38px; font-size:13px; }

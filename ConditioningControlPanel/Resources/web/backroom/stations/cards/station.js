@@ -669,7 +669,12 @@ export async function mount(ctx) {
     el.toggleAttribute('data-still', still);
     const now=performance.now(), dt=Math.min(50, now-(hudClock||now)); hudClock=now;
     for (const [key,value] of Object.entries({ 'phone-total-x':hud.x, 'phone-total-y':hud.top-18, 'hand-x': hud.x, 'hand-bottom': hud.bottom, 'total-x': hud.left - (hud.hands>1 ? 48 : 65), 'total-y': hud.y, 'bet-x': hud.betX, 'bet-y': hud.betY + 44 })) { if (!ctx.stage.lookShift || !key.startsWith('hand-')) el.style.setProperty('--' + key, value + 'px'); }
-    const compact = el.clientWidth <= 800;
+    // A phone held sideways is 844 wide and 390 tall: by width it is a desk, by height it is not. Desk numbers
+    // put Split and Double bottom-left, under the thumbstick (z 15 beats the buttons' 5) and the Sit button, and
+    // Stand on the bottom edge. Sideways, the secondaries stack ABOVE Hit in one right-hand column instead.
+    const landscapePhone = el.clientHeight <= 480 && el.clientWidth > el.clientHeight;
+    const compact = el.clientWidth <= 800 || landscapePhone;
+    el.toggleAttribute('data-landscape-phone', landscapePhone);
     const sideWidth = compact ? 84 : 142;
     const leftTarget = Math.max(sideWidth/2+12, Math.min(hud.left, hud.x-(compact?65:150))-sideWidth/2-(compact?20:28));
     const previousLeft=hudPositions.get('left');
@@ -695,7 +700,8 @@ export async function mount(ctx) {
     total.style.left = standX+'px';
     const scoreY = slideHud('scoreY',Math.max(110, Math.min(el.clientHeight-180, hud.y-48)),dt,still);
     total.style.top = scoreY+'px';
-    el.style.setProperty('--secondary-y', (scoreY+(compact?30:62))+'px');
+    el.style.setProperty('--side-x', (landscapePhone ? hitX : standX)+'px');
+    el.style.setProperty('--secondary-y', (landscapePhone ? actionY-92 : scoreY+(compact?30:62))+'px');
     // Stake stays below the cards, clear of the shared Hit/Deal target.
     const bet = el.querySelector(':scope > .cards-bet');
     if (bet) { bet.style.left = hud.x+'px'; bet.style.top = Math.min(el.clientHeight-40,hud.bottom+42)+'px'; bet.style.bottom = 'auto'; bet.style.right = 'auto'; bet.style.transform = 'translate(-50%,-50%)'; }
