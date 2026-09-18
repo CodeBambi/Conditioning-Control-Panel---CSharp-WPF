@@ -10,8 +10,8 @@ namespace ConditioningControlPanel
     ///
     /// <para>The card wall itself is <c>Views\Tabs\PlayTabView.xaml</c> (frame + slots) and
     /// <c>PlayTabView.Cards.cs</c> (click shims). This file is everything those two are not allowed
-    /// to be: the live state on the wall — tier lockbands, the Graded Intake's four pass states and
-    /// the Goon perk line.</para>
+    /// to be: the live state on the wall — tier lockbands and the Graded Intake's four pass
+    /// states.</para>
     ///
     /// <para><b>2026-08-12 relayout.</b> Five cards left the Play page (Available Subjects, Mantras,
     /// Deeper, the Inspection Bureau, the Showcase shelf), and three pieces of this painter went
@@ -23,27 +23,27 @@ namespace ConditioningControlPanel
     ///
     /// <para><b>The bands are presentation, not enforcement.</b> Every verdict below comes from
     /// <see cref="TierGate"/>, which is the same truth the launch handlers consult
-    /// (<c>BtnStartChaos_Click</c> → <c>DemandLab</c>, <c>BtnActivateLockdown_Click</c> →
+    /// (<c>OpenFypFeed</c> → <c>DemandPremium</c>, <c>BtnActivateLockdown_Click</c> →
     /// <c>DemandPremium</c>, …), so the band on the card, the refusal the click produces and the
     /// copy in the toast cannot drift apart the way the Lab smokescreen and the launch handlers
     /// once did. The bands are <c>IsHitTestVisible="False"</c> in the view, so a locked click still
     /// lands on the real handler and still raises the "See tiers" toast. That is the whole point:
     /// this door has no smokescreen, because it mixes free, Tier 1 and Tier 2 in one wall.</para>
     ///
-    /// <para><b>Two cards deliberately have no band</b> — Goon (joining is free by design; the two
-    /// paid rungs are named in a sub-line instead of hidden behind a padlock) and Loom (free, and a
-    /// signpost to the Studio rather than a launch).</para>
+    /// <para><b>One card deliberately has no band</b> — Loom (free, and a signpost to the Studio
+    /// rather than a launch).</para>
     ///
-    /// <para><b>Motion budget: nothing.</b> No clock, Forever or one-shot, is started here. The
-    /// door's single ambient loop is <c>RabbitHoleFx</c>, owned and registered by the view.</para>
+    /// <para><b>2026-09-18.</b> The games (Down the Rabbit Hole, Racing Thoughts, Goon, the
+    /// Arcademy, the Back Room, Piece by Piece) moved to the CC Labs launcher, and their bands,
+    /// the Goon perk line, the Arcademy door flip and the descent's FREE TODAY stamp went with
+    /// them. The launcher's tiles carry the tier signs now (LauncherCatalogue.IsLocked).</para>
+    ///
+    /// <para><b>Motion budget: nothing.</b> No clock, Forever or one-shot, is started here, and
+    /// the view registers no ambient canvas any more.</para>
     /// </summary>
     public partial class MainWindow
     {
         // ---- tuning ----------------------------------------------------------------------
-
-        /// <summary>Opacity of a Goon perk this account has not bought. Dimmed, never hidden and
-        /// never disabled: naming the perk is the point (GoonHostService.cs:888-889).</summary>
-        private const double GoonPerkLockedOpacity = 0.42;
 
         // The race-06/race-07 stack hooked PrizeGrants.GrantsChanged here to repaint a
         // "your racing purchase is ready" line beside the Racing Thoughts button. Both the hook and
@@ -83,66 +83,14 @@ namespace ConditioningControlPanel
                 // Feature names come from the SAME loc keys the cards themselves render, so the
                 // band, the click's refusal and the card title are one string in every language -
                 // a Japanese user no longer reads a Japanese refusal about an English subject.
-                // "Down the Rabbit Hole" stays a literal: it is the brand name, identical in all
-                // nine files, so a key would only add a row nobody translates.
-                var dtrhVerdict = TierGate.RequiresLab("Down the Rabbit Hole", "dtrh");
-                SetLockband(tab.PlayLockDtrh, dtrhVerdict);
-                // The DTRH band is hit-test invisible on purpose (FALL IN / Quick Drop refuse in
-                // their handlers), but the card's two settings checkboxes write
-                // ChaosAnnouncerEnabled / ChaosWebGameEnabled straight through a TwoWay binding
-                // with no handler to refuse in. Disable them alongside the band so a free account
-                // cannot click through the padlock and rewrite two Descent settings.
-                if (tab.ChkPlayChaosAnnouncer != null)
-                    tab.ChkPlayChaosAnnouncer.IsEnabled = dtrhVerdict.Allowed;
-                if (tab.ChkPlayChaosWebGame != null)
-                    tab.ChkPlayChaosWebGame.IsEnabled = dtrhVerdict.Allowed;
                 SetLockband(tab.PlayLockGaze, TierGate.RequiresLab(Loc.Get("label_gaze_minigame")));
                 SetLockband(tab.PlayLockFocusGaze, TierGate.RequiresLab(Loc.Get("label_focus_gaze")));
                 SetLockband(tab.PlayLockRemote, TierGate.RequiresPremium(Loc.Get("tab_remote_control"), "remote"));
                 SetLockband(tab.PlayLockLockdown, TierGate.RequiresPremium(Loc.Get("tab_lockdown_mode")));
                 SetLockband(tab.PlayLockBlink, TierGate.RequiresPremium(Loc.Get("tab_blink_trainer")));
                 SetLockband(tab.PlayLockFyp, TierGate.RequiresPremium(Loc.Get("tab_fyp"), "fyp"));
-                // The Arcademy: T2, and NOT on the daily-free wheel (no key passed, so no FREE
-                // TODAY stamp to keep in step). Literal name for the same reason the descent's is
-                // literal - it is the brand, identical in all nine language files. The lockband is
-                // still computed because the card is only HIDDEN, not removed - when the door
-                // opens (ArcademyHostService.DoorAvailable) the band must already be right.
-                SetLockband(tab.PlayLockArcademy,
-                    TierGate.RequiresLab(Services.Arcademy.ArcademyHostService.ProductName));
-                // Piece by Piece: the same T2 bar and the same posture - a literal product name,
-                // identical in all nine language files, so a key would only add a row nobody
-                // translates. Not on the daily-free wheel either (no key passed, so no FREE TODAY
-                // stamp to keep in step).
-                SetLockband(tab.PlayLockPieceByPiece,
-                    TierGate.RequiresLab(Services.PieceByPiece.PieceByPieceHostService.ProductName));
-
-                // --- The Arcademy: present, and locked when the account is not T2 ------------
-                // NOT the Just Drop posture below any more. Until v6.8.5 the door was shut and a
-                // lockband would have advertised a feature nobody could buy, so the card was
-                // hidden outright; the door is open now, so the card is PRESENT on every account
-                // and the band above is what tells a free one why Attend refuses. The hide is
-                // still what closing the door again would do - flipping
-                // ArcademyHostService.DoorAvailable back to false is a one-line retreat, and the
-                // band stays computed above so it is already right when it reopens.
-                if (tab.SlotArcademy != null)
-                    tab.SlotArcademy.Visibility = Services.Arcademy.ArcademyHostService.DoorAvailable
-                        ? Visibility.Visible
-                        : Visibility.Collapsed;
-
                 // --- FREE TODAY re-stamps ---------------------------------------------------
                 RefreshPlayFreeStamps(tab);
-
-                // --- Goon: name the rungs, gate nothing -------------------------------------
-                // Joining is free and stays free. The T1 send half and the T2 host half are the
-                // ONLY paid parts, they are enforced in GoonHostService and on the server, and this
-                // line is the honest label for them. Dimming, never disabling: a dead ad is a worse
-                // ad, and the click below it opens the lobby either way.
-                var canSend = App.Patreon?.HasPremiumAccess == true;
-                var canHost = App.Patreon?.HasLabAccess == true;
-                if (tab.TxtPlayGoonPerkSend != null)
-                    tab.TxtPlayGoonPerkSend.Opacity = canSend ? 1.0 : GoonPerkLockedOpacity;
-                if (tab.TxtPlayGoonPerkHost != null)
-                    tab.TxtPlayGoonPerkHost.Opacity = canHost ? 1.0 : GoonPerkLockedOpacity;
 
                 // --- Graded Intake: four states, not two ------------------------------------
                 RefreshPlayIntakeCard();
@@ -184,12 +132,11 @@ namespace ConditioningControlPanel
         private static void RefreshPlayFreeStamps(Views.Tabs.PlayTabView tab)
         {
             bool premium = App.Patreon?.HasPremiumAccess == true;
-            bool lab = App.Patreon?.HasLabAccess == true;
 
             SetFreeStamp(tab.PlayBadgeRemote, "remote", owned: premium);
             SetFreeStamp(tab.PlayBadgeFyp, "fyp", owned: premium);
-            // Override-only: the wheel never lands on the descent, but a promo Saturday can.
-            SetFreeStamp(tab.PlayBadgeDtrh, "dtrh", owned: lab);
+            // The descent's stamp ("dtrh", a promo-Saturday override) left with its card; the
+            // launcher tile's Locked state reads the same TierGate verdict.
         }
 
         /// <summary>One badge's stamp. Null-safe, and silent when there is no daily-free service
