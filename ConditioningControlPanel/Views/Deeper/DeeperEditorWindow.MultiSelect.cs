@@ -652,8 +652,10 @@ namespace ConditioningControlPanel.Views.Deeper
         internal void PushUndoSnapshot()
         {
             if (_suppressUndoSnapshot) return;
-            // An explicit snapshot supersedes any inspector session capture.
+            // An explicit snapshot supersedes any inspector session capture, and
+            // starts a fresh session so later typing gets its own undo entry.
             _inspectorPendingSnapshot = null;
+            _inspectorSessionSnapshotted = false;
             try
             {
                 PushUndoJson(JsonConvert.SerializeObject(_enhancement, EnhancementSerializer.JsonReadSettingsForClone()));
