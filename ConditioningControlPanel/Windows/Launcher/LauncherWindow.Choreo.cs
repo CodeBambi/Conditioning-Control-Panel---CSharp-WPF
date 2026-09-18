@@ -136,10 +136,11 @@ public partial class LauncherWindow
 
     // ------------------------------------------------------------------ the exit beats
 
-    /// <summary>Play pressed. A locked tile only flinches; the host paints its toast.</summary>
+    /// <summary>Play pressed. A locked or signed-out tile only flinches; the host paints its
+    /// toast, the window opens its sign-in.</summary>
     private void ChoreoPlay(Border tile, LauncherEntry entry)
     {
-        if (entry.Locked) { Shake(0.45); return; }
+        if (entry.NeedsAccount || entry.Locked) { Shake(0.45); return; }
         LauncherHost.ArmExitBeat();
         LauncherSfx.Launch();
         Pop(tile, TilePopScale);

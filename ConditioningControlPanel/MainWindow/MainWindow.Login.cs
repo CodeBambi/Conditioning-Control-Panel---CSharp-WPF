@@ -76,9 +76,12 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Opens the unified login dialog and handles the result
+        /// Opens the unified login dialog and handles the result. <paramref name="owner"/> is the
+        /// window the dialog centres over: the panel by default, the CC Labs launcher when the
+        /// sign-in starts there (the panel stays hidden behind it). Everything after the dialog
+        /// (the progression wipe on a different account, the cloud sync) runs either way.
         /// </summary>
-        private void OpenUnifiedLoginDialog()
+        internal void OpenUnifiedLoginDialog(Window? owner = null)
         {
             // Fall back to the startup snapshot: an expired session can null both
             // App.UnifiedUserId and _lastKnownUnifiedId (which is only set on an explicit
@@ -89,7 +92,7 @@ namespace ConditioningControlPanel
 
             var loginDialog = new LoginDialog
             {
-                Owner = this,
+                Owner = owner ?? this,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner
             };
 

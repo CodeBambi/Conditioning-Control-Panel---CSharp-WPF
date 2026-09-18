@@ -149,7 +149,7 @@ public partial class LauncherWindow
     {
         try
         {
-            if (!entry.Locked) return;
+            if (entry.NeedsAccount || !entry.Locked) return;
             TierFxBorder.SetRimThickness(tile, tile.BorderThickness.Left);
             TierFxBorder.SetTier(tile, 2);
         }
