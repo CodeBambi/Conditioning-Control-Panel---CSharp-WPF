@@ -29,10 +29,10 @@
 import { mount } from './station.js';
 
 const q = new URLSearchParams(location.search);
-const gif = name => `../../../../avatar0_emotes/${name}.gif`;
+const gif = name => `/emotes/${name}.gif`;   // serve.mjs maps /emotes/ to Resources/avatar0_emotes
 const names = ['cheer', 'giggle', 'flirt', 'adoring', 'blowkiss', 'entrancing', 'sultry', 'praise'];
-// serve.mjs roots at Resources/web, where avatar0_emotes is out of reach (it sits beside web/). Probe once and fall
-// back to the slot's bundled animated webps so GIF bricks and colliders still have faces on the default server.
+// An older serve.mjs has no /emotes/ route. Probe once and fall back to the slot's bundled animated webps so GIF
+// bricks and colliders still have faces.
 const emotesReachable = await fetch(gif('cheer'), { method: 'HEAD' }).then(r => r.ok).catch(() => false);
 const gifUrl = (i) => emotesReachable ? gif(names[i % names.length]) : `../slot/fallback/gif${i % 4}.webp`;
 // Twelve niche-safe generic words so the mantra wall and the word trail have material; ?words=a,b,c overrides.
