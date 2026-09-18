@@ -18,7 +18,7 @@ namespace ConditioningControlPanel.Launcher;
 /// and while the engine runs. Play and the CTA get the full beat (pop, shockwave, two bursts, the
 /// rest of the screen dims, the content shakes) and the host holds the hide for
 /// <see cref="ExitBeatMs"/> so it can be seen. A return from a game is a welcome: bursts from the
-/// mascot corner and a wave. The running engine laps the panel card with a comet and breathes its
+/// Launch button and the wordmark. The running engine laps the panel card with a comet and breathes its
 /// rim. A sheen wanders the tiles instead of sitting on the first one. The trail takes the hovered
 /// tile's hue and throws a twinkling star every few sparks, and that hue bleeds into the backdrop.
 ///
@@ -41,7 +41,6 @@ public partial class LauncherWindow
     private const double TilePopScale = 1.06;
     private const double CardLiftScale = 1.03;
     private const int PopMs = 380;
-    private const int WelcomeWaveMs = 2500;
     private const int WelcomeEchoMs = 200;
     private const int WelcomeBurstCount = 110;
     private const double PanelCometLapSeconds = 12;
@@ -68,8 +67,6 @@ public partial class LauncherWindow
     private DispatcherTimer? _wanderTimer;
     private DispatcherTimer? _wanderEndTimer;
     private CardSheenAdorner? _wanderSheen;
-    private DispatcherTimer? _welcomeTimer;
-    private bool _mascotHover;
     private GradientStop? _veilEdge;
     private bool _veilHooked;
     private double _spShown = double.NaN;
@@ -99,7 +96,6 @@ public partial class LauncherWindow
     {
         try
         {
-            _welcomeTimer?.Stop();
             StopWanderingSheen();
             _trailTint = null;
             RestoreGlow(false);
@@ -122,7 +118,6 @@ public partial class LauncherWindow
     {
         try
         {
-            _welcomeTimer?.Stop();
             StopWanderingSheen();
             PerimeterCometAdorner.Detach(_panelComet);
             _panelComet = null;
@@ -316,32 +311,14 @@ public partial class LauncherWindow
     private void WelcomeBack()
     {
         LauncherSfx.Return();
-        BurstAt(Mascot, FxColor("FxParticleColor"), WelcomeBurstCount);
-        Later(WelcomeEchoMs, () => BurstAt(Mascot, FxColor("FxGlowColor"), WelcomeBurstCount));
-        if (_fxParked) return;
-        MascotWave(true);
-        _welcomeTimer ??= new DispatcherTimer(DispatcherPriority.Background)
-        {
-            Interval = TimeSpan.FromMilliseconds(WelcomeWaveMs),
-        };
-        _welcomeTimer.Tick -= OnWelcomeSettle;
-        _welcomeTimer.Tick += OnWelcomeSettle;
-        _welcomeTimer.Stop();
-        _welcomeTimer.Start();
-    }
-
-    private void OnWelcomeSettle(object? sender, EventArgs e)
-    {
-        _welcomeTimer?.Stop();
-        try { if (!_mascotHover) MascotWave(false); }
-        catch (Exception ex) { Log.Debug(ex, "[Launcher] welcome settle failed"); }
+        BurstAt(PanelCta, FxColor("FxParticleColor"), WelcomeBurstCount);
+        Later(WelcomeEchoMs, () => BurstAt(WordmarkImage, FxColor("FxGlowColor"), WelcomeBurstCount));
     }
 
     // ------------------------------------------------------------------ hover
 
     private void ChoreoTileHover(Border tile, LauncherEntry entry, bool on)
     {
-        if (string.Equals(entry.Id, "backroom", StringComparison.OrdinalIgnoreCase)) _mascotHover = on;
         if (on)
         {
             _hoverTile = tile;

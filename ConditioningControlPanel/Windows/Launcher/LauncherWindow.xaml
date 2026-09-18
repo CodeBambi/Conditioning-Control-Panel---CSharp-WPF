@@ -59,9 +59,9 @@
             <Setter Property="Background" Value="{DynamicResource AccentGradientBrush}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontFamily" Value="/Fonts/#Fredoka, Segoe UI"/>
-            <Setter Property="FontSize" Value="19"/>
+            <Setter Property="FontSize" Value="23"/>
             <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Height" Value="56"/>
+            <Setter Property="Height" Value="76"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
@@ -368,23 +368,26 @@
                 <!-- the panel card -->
                 <Border x:Name="PanelCard" Background="{DynamicResource SurfaceBgBrush}"
                         BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
-                        CornerRadius="20" Padding="32,30" VerticalAlignment="Stretch">
+                        CornerRadius="20" Padding="0" VerticalAlignment="Stretch">
                     <Grid>
                         <Grid.RowDefinitions>
+                            <RowDefinition Height="190"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
-                        <!-- The emblem, barely there, tucked into the card's lower corner. -->
-                        <Image Grid.RowSpan="3" Source="pack://application:,,,/Resources/logo2.png" Opacity="0.035"
-                               Width="250" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                               Margin="0,0,-14,-12" IsHitTestVisible="False"
-                               RenderOptions.BitmapScalingMode="HighQuality"/>
-                        <StackPanel>
+                        <!-- The hero plate: the CC Labs neon wordmark on its circuit board, rounded at the
+                             top with the card and fading into the card's own surface at the bottom. -->
+                        <Grid x:Name="PanelArtPlate" Grid.Row="0" SizeChanged="PanelArtPlate_SizeChanged">
+                            <Image x:Name="PanelArt" Source="pack://application:,,,/Resources/features/ccp_banner.png"
+                                   Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                            <Border x:Name="PanelArtFade" IsHitTestVisible="False"/>
+                        </Grid>
+                        <StackPanel Grid.Row="1" Margin="32,20,32,0">
                             <TextBlock x:Name="PanelEyebrow" Text="{loc:Str launcher_section_panel}" Style="{StaticResource LauncherEyebrow}"/>
-                            <TextBlock Text="{loc:Str launcher_panel_title}" Margin="0,10,0,0" TextWrapping="Wrap"
-                                       FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="34" FontWeight="SemiBold"
-                                       LineHeight="38" Foreground="{DynamicResource TextLightBrush}"/>
+                            <TextBlock Text="{loc:Str launcher_panel_title}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                       FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="30" FontWeight="SemiBold"
+                                       LineHeight="34" Foreground="{DynamicResource TextLightBrush}"/>
                             <TextBlock Text="{loc:Str launcher_panel_blurb}" Margin="0,14,0,0" TextWrapping="Wrap"
                                        FontSize="14" LineHeight="21" Foreground="{DynamicResource TextSecondaryBrush}"/>
                             <StackPanel Orientation="Horizontal" Margin="0,22,0,0">
@@ -398,7 +401,7 @@
                         </StackPanel>
                         <!-- Three live numbers and a slim XP bar: what the panel is worth to you
                              today, read from the same settings the panel's own chips use. -->
-                        <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="0,18,0,18">
+                        <StackPanel Grid.Row="2" VerticalAlignment="Center" Margin="32,18,32,18">
                             <UniformGrid Columns="3">
                                 <StackPanel>
                                     <TextBlock x:Name="StatLevel" Text="1" Style="{StaticResource LauncherStatNumber}"/>
@@ -421,7 +424,7 @@
                             <TextBlock x:Name="XpCaption" Text="" Margin="0,8,0,0" FontSize="11" HorizontalAlignment="Right"
                                        Foreground="{DynamicResource TextMutedBrush}"/>
                         </StackPanel>
-                        <StackPanel Grid.Row="2">
+                        <StackPanel Grid.Row="3" Margin="32,0,32,26">
                             <Button x:Name="PanelCta" Content="{loc:Str launcher_panel_launch}" Style="{StaticResource LauncherCta}"
                                     Click="PanelCta_Click" PreviewMouseLeftButtonDown="Press_Down" PreviewMouseLeftButtonUp="Press_Up"/>
                             <Button x:Name="ShortcutLink" Content="{loc:Str launcher_add_shortcut}" Style="{StaticResource LauncherLink}"
@@ -437,30 +440,6 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <TextBlock x:Name="GamesEyebrow" Text="{loc:Str launcher_section_games}" Style="{StaticResource LauncherEyebrow}" Margin="9,0,0,4"/>
-                    <!-- The croupier Emi from the prize counter, peeking in under the tiles (the
-                         column clips her). Body, then the waving arm, then the face: the same three
-                         layers as SparkleWallet, in the same order. Behind the grid in z, so a full
-                         third row of tiles simply covers her. -->
-                    <Viewbox x:Name="Mascot" Grid.Row="1" Height="180" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                             Margin="0,0,14,-52" IsHitTestVisible="False" Opacity="0.96">
-                        <Viewbox.RenderTransform>
-                            <TransformGroup>
-                                <TranslateTransform x:Name="MascotSlide"/>
-                                <TranslateTransform x:Name="MascotShift"/>
-                            </TransformGroup>
-                        </Viewbox.RenderTransform>
-                        <Grid Width="954" Height="995">
-                            <Image Source="pack://application:,,,/Resources/emi/wallet_croupier_body.png"
-                                   Stretch="Fill" RenderOptions.BitmapScalingMode="HighQuality"/>
-                            <Image Source="pack://application:,,,/Resources/emi/wallet_croupier_arm.png"
-                                   Stretch="Fill" RenderOptions.BitmapScalingMode="HighQuality"
-                                   RenderTransformOrigin="0.848,0.676">
-                                <Image.RenderTransform><RotateTransform x:Name="MascotArmTurn"/></Image.RenderTransform>
-                            </Image>
-                            <emi:EmiFace x:Name="MascotFace" HorizontalAlignment="Left" VerticalAlignment="Top"
-                                         Margin="320,297,0,0" Width="389" Height="349"/>
-                        </Grid>
-                    </Viewbox>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                                   PanningMode="VerticalOnly">
                         <UniformGrid x:Name="GamesGrid" Columns="2" VerticalAlignment="Top"/>

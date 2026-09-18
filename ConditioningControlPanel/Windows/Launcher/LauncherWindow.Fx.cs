@@ -140,8 +140,6 @@ public partial class LauncherWindow
             if (on && !_perfLow && !_fxParked && MotionFx.AllowAmbientLoops)
                 _comet = PerimeterCometAdorner.Attach(tile, TileRadius, 7.0);
 
-            if (string.Equals(entry.Id, "backroom", StringComparison.OrdinalIgnoreCase))
-                MascotWave(on);
             ChoreoTileHover(tile, entry, on);
         }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] tile hover fx failed"); }
@@ -213,7 +211,6 @@ public partial class LauncherWindow
             ChoreoPark();
             PerimeterCometAdorner.Detach(_comet);
             _comet = null;
-            MascotWave(false);
             TrailCanvas.Children.Clear();
             _trailLive = 0;
             BackdropPark();
@@ -472,52 +469,5 @@ public partial class LauncherWindow
             WordmarkSheen.BeginAnimation(UIElement.OpacityProperty, glow);
         }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] wordmark sheen failed"); }
-    }
-
-    // ------------------------------------------------------------------ the mascot
-
-    /// <summary>
-    /// Emi waves at the Back Room tile: the arm loops about its shoulder (2 s, auto-reverse) and
-    /// she rises a little out of the column's edge. Off the tile she settles and goes still.
-    /// </summary>
-    private void MascotWave(bool on)
-    {
-        try
-        {
-            bool loops = on && !_fxParked && MotionFx.AllowAmbientLoops;
-            if (loops)
-            {
-                var wave = new DoubleAnimation(-4, -30, TimeSpan.FromSeconds(1))
-                {
-                    AutoReverse = true,
-                    RepeatBehavior = RepeatBehavior.Forever,
-                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
-                };
-                Timeline.SetDesiredFrameRate(wave, AmbientFps);
-                MascotArmTurn.BeginAnimation(RotateTransform.AngleProperty, wave);
-            }
-            else
-            {
-                MascotArmTurn.BeginAnimation(RotateTransform.AngleProperty, null);
-                MascotArmTurn.Angle = 0;
-            }
-
-            double lift = on && !_fxParked ? -26 : 0;
-            if (MotionFx.AllowTransitions)
-            {
-                var rise = new DoubleAnimation(lift, TimeSpan.FromMilliseconds(340))
-                {
-                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
-                };
-                Timeline.SetDesiredFrameRate(rise, AmbientFps);
-                MascotSlide.BeginAnimation(TranslateTransform.YProperty, rise);
-            }
-            else
-            {
-                MascotSlide.BeginAnimation(TranslateTransform.YProperty, null);
-                MascotSlide.Y = lift;
-            }
-        }
-        catch (Exception ex) { Log.Debug(ex, "[Launcher] mascot wave failed"); }
     }
 }
