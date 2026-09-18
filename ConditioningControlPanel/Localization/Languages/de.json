@@ -5476,5 +5476,18 @@
   "br_custom_already_owned": "Bereits im Besitz.",
   "br_custom_unowned": "Kaufe diesen Gegenstand, bevor du ihn verwendest.",
   "br_custom_shop_unavailable": "Der Shop ist nicht verfügbar. Die Vorschau funktioniert weiterhin.",
-  "br_custom_buy_sp": "Für {n} SP kaufen"
+  "br_custom_buy_sp": "Für {n} SP kaufen",
+  "deeper_dialog_title": "Deeper",
+  "deeper_demo_missing_text": "The bundled demo couldn't be found in your library - try restarting the app.",
+  "deeper_import_dialog_title": "Import enhancement",
+  "deeper_import_library_not_ready": "The enhancement library isn't ready yet.",
+  "deeper_import_err_not_enh_fmt": "{0}: not a .ccpenh.json file.",
+  "deeper_import_err_write_fmt": "{0}: couldn't write into the library folder.",
+  "deeper_import_done_one_fmt": "Imported \"{0}\" into your library.",
+  "deeper_import_done_many_fmt": "Imported {0} enhancements into your library.",
+  "deeper_import_failed_fmt": "{0} file(s) couldn't be imported:",
+  "deeper_import_skipped_not_enh": "That JSON isn't a Deeper enhancement, so it was skipped.",
+  "deeper_import_already_in_library": "That enhancement is already in your library.",
+  "deeper_library_deleted_toast_fmt": "Removed \"{0}\" from your library.",
+  "btn_undo": "Undo"
 }

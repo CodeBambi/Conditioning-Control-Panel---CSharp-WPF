@@ -257,7 +257,7 @@
   "deeper_library_open_folder_tooltip": "Open the enhancements folder in Windows Explorer.",
   "deeper_library_delete_tooltip": "Delete this enhancement file.",
   "deeper_library_delete_title": "Delete enhancement",
-  "deeper_library_delete_confirm_fmt": "Delete \"{0}\"? This permanently removes the .ccpenh.json file from disk.",
+  "deeper_library_delete_confirm_fmt": "Delete \"{0}\"? The .ccpenh.json file goes to the Recycle Bin.",
   "deeper_library_submit_tooltip": "Submit this enhancement to the catalogue.",
   "deeper_library_submit_button_disabled_tooltip": "Sign in to submit to the catalogue.",
   "dialog_catalogue_submit_title": "Submit to the catalogue",
@@ -6235,5 +6235,18 @@
   "br_photo_blink_note": "the webcam counts your blinks.\nhold them open and get paid.",
   "br_photo_awareness_title": "Awareness",
   "br_photo_awareness_note": "she watches where you look.\nlook away and she says so.",
-  "br_photo_chip_pass": "WEEKLY PASS READY"
+  "br_photo_chip_pass": "WEEKLY PASS READY",
+  "deeper_dialog_title": "Deeper",
+  "deeper_demo_missing_text": "The bundled demo couldn't be found in your library - try restarting the app.",
+  "deeper_import_dialog_title": "Import enhancement",
+  "deeper_import_library_not_ready": "The enhancement library isn't ready yet.",
+  "deeper_import_err_not_enh_fmt": "{0}: not a .ccpenh.json file.",
+  "deeper_import_err_write_fmt": "{0}: couldn't write into the library folder.",
+  "deeper_import_done_one_fmt": "Imported \"{0}\" into your library.",
+  "deeper_import_done_many_fmt": "Imported {0} enhancements into your library.",
+  "deeper_import_failed_fmt": "{0} file(s) couldn't be imported:",
+  "deeper_import_skipped_not_enh": "That JSON isn't a Deeper enhancement, so it was skipped.",
+  "deeper_import_already_in_library": "That enhancement is already in your library.",
+  "deeper_library_deleted_toast_fmt": "Removed \"{0}\" from your library.",
+  "btn_undo": "Undo"
 }
