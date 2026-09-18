@@ -77,6 +77,7 @@ public partial class LauncherWindow
                 StartSheens();
                 BurstAt(WordmarkImage, FxColor("FxGlowColor"), OpenBurstCount);
             });
+            BackdropOnShown();
         }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] FxOnShown failed"); }
     }
@@ -93,6 +94,7 @@ public partial class LauncherWindow
         {
             ParkFx();
             UnhookFxWindowEvents();
+            BackdropOnClosed();
             Ambient.Stop();
             BurstLayer.Stop();
         }
@@ -156,7 +158,7 @@ public partial class LauncherWindow
 
     partial void FxDecorateArt(Image art)
     {
-        try { HoverPop.SetIsEnabled(art, true); }
+        try { BackdropDecorateArt(art); HoverPop.SetIsEnabled(art, true); }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] hover pop failed"); }
     }
 
@@ -212,6 +214,7 @@ public partial class LauncherWindow
             MascotWave(false);
             TrailCanvas.Children.Clear();
             _trailLive = 0;
+            BackdropPark();
             FxOnEngineState(App.IsEngineRunning);
         }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] ParkFx failed"); }
@@ -231,6 +234,7 @@ public partial class LauncherWindow
                 _firstTileSheen?.Start();
                 _ctaSheen?.Start();
             }
+            BackdropUnpark();
             FxOnEngineState(App.IsEngineRunning);
         }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] UnparkFx failed"); }
@@ -260,10 +264,11 @@ public partial class LauncherWindow
         if (!MotionFx.AllowAmbientLoops) { Ambient.Stop(); return; }
         Ambient.StartLayers(new AmbientFxConfig
         {
-            Layers = AmbientFxLayers.FogDrift | AmbientFxLayers.DustField | AmbientFxLayers.AuroraWash,
-            Intensity = 0.9,
+            Layers = AmbientFxLayers.FogDrift | AmbientFxLayers.DustField | AmbientFxLayers.AuroraWash
+                   | AmbientFxLayers.Embers,
+            Intensity = 0.95,
             FogPuffs = 4,
-            DustDensity = 1.0,
+            DustDensity = 1.4,
         });
     }
 

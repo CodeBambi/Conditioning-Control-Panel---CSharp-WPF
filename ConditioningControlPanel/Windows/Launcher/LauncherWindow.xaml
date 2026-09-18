@@ -114,34 +114,105 @@
     </Window.Resources>
 
     <Grid x:Name="RootGrid">
-        <!-- Backdrop: radial base -> mod-tinted glow -> vignette (the ceremony recipe), then the
-             ambient canvas (fog, dust, aurora) behind everything. All of it parks with the window. -->
+        <!-- Backdrop: radial base -> two spiral watermarks -> mod-tinted glow -> vignette (the
+             ceremony recipe with the brand drawn into it), then the ambient canvas (fog, dust,
+             embers, aurora) behind everything. Every layer here carries a TranslateTransform the
+             Backdrop partial nudges with the cursor for depth, and the moving ones bleed past the
+             window edge (negative margins) so a nudge never uncovers a seam. All of it parks with
+             the window. -->
         <Border>
             <Border.Background>
-                <RadialGradientBrush GradientOrigin="0.3,0.25" Center="0.3,0.25" RadiusX="0.95" RadiusY="0.9">
-                    <GradientStop Color="#FF241041" Offset="0"/>
-                    <GradientStop Color="#FF17122A" Offset="0.55"/>
-                    <GradientStop Color="#FF0A0514" Offset="1"/>
+                <RadialGradientBrush GradientOrigin="0.28,0.22" Center="0.28,0.22" RadiusX="0.98" RadiusY="0.92">
+                    <GradientStop Color="#FF2C1450" Offset="0"/>
+                    <GradientStop Color="#FF1C1233" Offset="0.42"/>
+                    <GradientStop Color="#FF100A1E" Offset="0.72"/>
+                    <GradientStop Color="#FF06030E" Offset="1"/>
                 </RadialGradientBrush>
             </Border.Background>
         </Border>
-        <Border x:Name="GlowLayer" Opacity="0.28">
+
+        <!-- The big spiral: an Archimedean curve built in code (SpiralPath.Data), sitting behind
+             the panel card and turning once every 90 s. Cached to a bitmap so the rotation is a
+             texture spin, not a re-tessellation of a seven-turn stroke at 10 fps. -->
+        <Grid x:Name="SpiralLayer" Width="900" Height="900" HorizontalAlignment="Left" VerticalAlignment="Center"
+              Margin="-230,0,0,0" Opacity="0.11" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
+            <Grid.CacheMode>
+                <BitmapCache/>
+            </Grid.CacheMode>
+            <Grid.RenderTransform>
+                <TransformGroup>
+                    <RotateTransform x:Name="SpiralTurn"/>
+                    <TranslateTransform x:Name="SpiralShift"/>
+                </TransformGroup>
+            </Grid.RenderTransform>
+            <Path x:Name="SpiralPath" StrokeThickness="2.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round">
+                <Path.Stroke>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="{DynamicResource FxGlowColor}" Offset="0"/>
+                        <GradientStop Color="{DynamicResource FxParticleColor}" Offset="1"/>
+                    </LinearGradientBrush>
+                </Path.Stroke>
+            </Path>
+        </Grid>
+        <!-- A smaller one under the tiles, counter-turning, fainter. -->
+        <Grid x:Name="SpiralSmall" Width="560" Height="560" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+              Margin="0,0,-120,-170" Opacity="0.065" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
+            <Grid.CacheMode>
+                <BitmapCache/>
+            </Grid.CacheMode>
+            <Grid.RenderTransform>
+                <TransformGroup>
+                    <RotateTransform x:Name="SpiralSmallTurn"/>
+                    <TranslateTransform x:Name="SpiralSmallShift"/>
+                </TransformGroup>
+            </Grid.RenderTransform>
+            <Path x:Name="SpiralSmallPath" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round">
+                <Path.Stroke>
+                    <LinearGradientBrush StartPoint="1,0" EndPoint="0,1">
+                        <GradientStop Color="{DynamicResource FxParticleColor}" Offset="0"/>
+                        <GradientStop Color="{DynamicResource FxGlowColor}" Offset="1"/>
+                    </LinearGradientBrush>
+                </Path.Stroke>
+            </Path>
+        </Grid>
+
+        <Border x:Name="GlowLayer" Opacity="0.36" Margin="-28">
+            <Border.RenderTransform>
+                <TranslateTransform x:Name="GlowShift"/>
+            </Border.RenderTransform>
             <Border.Background>
-                <RadialGradientBrush GradientOrigin="0.72,0.18" Center="0.72,0.18" RadiusX="0.55" RadiusY="0.5">
+                <RadialGradientBrush GradientOrigin="0.72,0.18" Center="0.72,0.18" RadiusX="0.58" RadiusY="0.52">
                     <GradientStop Color="{DynamicResource FxGlowColor}" Offset="0"/>
                     <GradientStop Color="#00000000" Offset="1"/>
                 </RadialGradientBrush>
             </Border.Background>
         </Border>
-        <Border>
+        <!-- A second, cooler pool low on the left, so the panel card sits in its own light. -->
+        <Border Opacity="0.22" Margin="-28" IsHitTestVisible="False">
+            <Border.RenderTransform>
+                <TranslateTransform x:Name="PoolShift"/>
+            </Border.RenderTransform>
             <Border.Background>
-                <RadialGradientBrush GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.8" RadiusY="0.8">
-                    <GradientStop Color="#00000000" Offset="0.5"/>
-                    <GradientStop Color="#8C000000" Offset="1"/>
+                <RadialGradientBrush GradientOrigin="0.16,0.82" Center="0.16,0.82" RadiusX="0.48" RadiusY="0.46">
+                    <GradientStop Color="{DynamicResource FxParticleColor}" Offset="0"/>
+                    <GradientStop Color="#00000000" Offset="1"/>
                 </RadialGradientBrush>
             </Border.Background>
         </Border>
-        <fx:AmbientFxCanvas x:Name="Ambient"/>
+        <Border IsHitTestVisible="False">
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.82" RadiusY="0.82">
+                    <GradientStop Color="#00000000" Offset="0.42"/>
+                    <GradientStop Color="#66000000" Offset="0.78"/>
+                    <GradientStop Color="#C4000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+        <fx:AmbientFxCanvas x:Name="Ambient" Margin="-12">
+            <fx:AmbientFxCanvas.RenderTransform>
+                <TranslateTransform x:Name="AmbientShift"/>
+            </fx:AmbientFxCanvas.RenderTransform>
+        </fx:AmbientFxCanvas>
 
         <Grid x:Name="ContentRoot">
             <Grid.RowDefinitions>
@@ -279,7 +350,10 @@
                     <Viewbox x:Name="Mascot" Grid.Row="1" Height="180" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                              Margin="0,0,14,-52" IsHitTestVisible="False" Opacity="0.96">
                         <Viewbox.RenderTransform>
-                            <TranslateTransform x:Name="MascotSlide"/>
+                            <TransformGroup>
+                                <TranslateTransform x:Name="MascotSlide"/>
+                                <TranslateTransform x:Name="MascotShift"/>
+                            </TransformGroup>
                         </Viewbox.RenderTransform>
                         <Grid Width="954" Height="995">
                             <Image Source="pack://application:,,,/Resources/emi/wallet_croupier_body.png"
