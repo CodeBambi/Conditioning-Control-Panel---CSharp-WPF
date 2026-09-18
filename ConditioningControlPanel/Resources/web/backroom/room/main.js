@@ -68,7 +68,7 @@ const readGates = (g) => {
 const INTENSITIES = ['calm', 'normal', 'full'];
 const readChoice = (v, fallback) => (INTENSITIES.includes(v) ? v : fallback);
 
-const state = { sp: 0, reduced: false, motion: 'full', intensity: 'normal', intensityChoice: 'normal', gates: readGates(null), lex: {}, open: null, suspended: false, userStill: false,
+const state = { sp: 0, reduced: false, invertLook: false, motion: 'full', intensity: 'normal', intensityChoice: 'normal', gates: readGates(null), lex: {}, open: null, suspended: false, userStill: false,
   // The room's own picture source and mix, both owned by the host. These defaults only hold for the
   // few frames before init lands, and they are the quiet ones on purpose.
   media: { source: 'auto', effective: 'local', subs: [], off: [], cap: 8, consented: false },
@@ -82,7 +82,7 @@ let scene = null, loader = null, hud = null, leaving = false, visiting = false;
 let racingOwnership = null, raceOpening = false;
 const previewHost = typeof window.__brSettings === 'object' && typeof window.__hostEmit === 'function';
 const racePortal = createRacePortal({
-  hosted: !previewHost, send: bridge.send, on: bridge.on,
+  hosted: !previewHost, send: bridge.send, on: bridge.on, getOwnership: () => racingOwnership,
   getPose: () => scene?.navigationPose(), racePath: '/backroom/racing/race.html',
   beforeNavigate: () => { leaving = true; hud?.stop(); doubleCharm?.dispose(); scene?.halt(); kit.dispose(); window.__fxCancelAll?.(); },
   onRefused: m => { raceOpening = false; scene?.release(); if (m.reason === 'locked') visit(window.__backroom.stations.find(r => r.id === 'counter')); },
@@ -211,7 +211,7 @@ function paintMotion() {
   if (!hud) return;
   hud.motion(still(), forcedStill());
   hud.options({ intensityChoice: state.intensityChoice, forcedCalm: !!state.reduced, tunnel: state.gates.tunnel,
-                melt: state.gates.melt, media: state.media, levels: state.levels });
+                melt: state.gates.melt, invertLook: state.invertLook, media: state.media, levels: state.levels });
 }
 
 /** The room's Options (10.14): tell the host and show the press at once; the host's settings frame has the last word. */
@@ -221,6 +221,10 @@ function setOption(key, value) {
     state.intensityChoice = value;
   } else if (key === 'tunnel' || key === 'melt') {
     state.gates = readGates({ ...state.gates, [key]: !!value });
+  } else if (key === 'invertLook') {
+    // Invert camera (owner, 2026-09-18): a drag moves the world instead of the camera. Applied at once
+    // through the scene's getter; the host persists it and its frame has the last word like the switches.
+    state.invertLook = !!value;
   } else if (key === 'mediaSource') {
     // Optimistic, like the switches: paint the press now, let the settings frame correct it. The host
     // resolves 'auto' and refuses online without consent, so `effective` can come back as something
@@ -515,6 +519,7 @@ async function start(init) {
   Object.assign(state, {
     sp: Number.isFinite(init.sp) ? init.sp : 0,
     reduced: !!init.reduced,
+    invertLook: init.invertLook === true,
     motion: String(init.motion || 'full'),
     intensity: String(init.intensity || 'normal'),
     gates: readGates(init.gates),
@@ -535,6 +540,7 @@ async function start(init) {
     state.motion = String(m.motion || state.motion);
     state.intensity = String(m.intensity || state.intensity);
     state.reduced = !!m.reduced;
+    if (typeof m.invertLook === 'boolean') state.invertLook = m.invertLook;
     if (m.gates && typeof m.gates === 'object') state.gates = readGates(m.gates);
     state.intensityChoice = readChoice(m.intensityChoice, state.intensityChoice);
     if (m.audio) { state.levels = readLevels(m.audio); applyLevels(); }
@@ -627,6 +633,7 @@ async function start(init) {
       media, lex,
       still: still(),
       cameraMotion:()=>({off:state.userStill||state.motion==='off'||state.motion==='still',reduced:state.reduced||state.motion==='reduced'||state.intensity==='calm'}),
+      invertLook: () => state.invertLook,
       onProgress: (f) => { hud.progress(f); intro.progress(f); },
       onNearest: (row) => hud.nearest(row),
       onVisit: (row) => visit(row),

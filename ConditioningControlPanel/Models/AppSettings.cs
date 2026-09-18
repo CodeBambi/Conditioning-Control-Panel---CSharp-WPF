@@ -5026,6 +5026,19 @@ namespace ConditioningControlPanel.Models
             set { _backRoomMelt = value; OnPropertyChanged(); }
         }
 
+        private bool _backRoomInvertLook;
+        /// <summary>
+        /// THE BACK ROOM Invert camera (CONTRACT 10.14, owner 2026-09-18): a drag in the room moves the world instead
+        /// of the camera, both axes, the seated look included. The room's own switch in the room's Options, off by
+        /// default; the page applies it at once and this is the persist, echoed as <c>invertLook</c> on every frame.
+        /// </summary>
+        [JsonProperty]
+        public bool BackRoomInvertLook
+        {
+            get => _backRoomInvertLook;
+            set { _backRoomInvertLook = value; OnPropertyChanged(); }
+        }
+
         // ---- THE BACK ROOM: media source and its own three audio levels (CONTRACT 10.14) ----
         // These are the room's own switches, shown in the room's Options and not in Settings, the same
         // way BackRoomTunnel and BackRoomMelt are. They are deliberately NOT the app-wide MediaSource /

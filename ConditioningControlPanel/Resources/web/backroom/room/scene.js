@@ -257,8 +257,10 @@ export async function createScene(o) {
     if (!drag || drag.id !== e.pointerId || overview || seated || held || customization.opened) return;
     drag.moved ||= Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)>TAP_SLOP;
     if(!drag.moved)return;
-    yaw -= (e.clientX - drag.x) * 0.003;
-    pitch = T.MathUtils.clamp(pitch - (e.clientY - drag.y) * 0.003, -1.12, 1.2);
+    // Invert camera (o.invertLook, the room's Options switch): the drag moves the world instead of the camera, both axes.
+    const dir = o.invertLook?.() ? -1 : 1;
+    yaw -= (e.clientX - drag.x) * 0.003 * dir;
+    pitch = T.MathUtils.clamp(pitch - (e.clientY - drag.y) * 0.003 * dir, -1.12, 1.2);
     drag.x = e.clientX; drag.y = e.clientY;
   });
   canvas.addEventListener('pointerup',e=>{
@@ -576,7 +578,7 @@ export async function createScene(o) {
     if (!fixture || !seat(row)) return null;
     let closed = false;
     const owned = new Set();
-    return { get ready(){return !closed&&!transition&&!!seated;}, arrived:arrival, renderer, scene, fixture, camera, canvas, emi: room.emis.find(e => e.id === row.id), pick: pickAt,
+    return { get ready(){return !closed&&!transition&&!!seated;}, arrived:arrival, renderer, scene, fixture, camera, canvas, lookInverted: () => !!o.invertLook?.(), emi: room.emis.find(e => e.id === row.id), pick: pickAt,
       onEmiClick(callback) { emiClicks.set(row.key, callback); return () => { if (emiClicks.get(row.key) === callback) emiClicks.delete(row.key); }; },
       register(view) {
         if (closed || halted) { view.dispose?.(); return () => {}; }

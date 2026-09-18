@@ -5787,6 +5787,7 @@
   "br_opt_calm_forced": "Calm while Motion is not Full",
   "br_opt_tunnel": "Tunnel vision",
   "br_opt_melt": "Melt",
+  "br_opt_invert": "Invert camera",
   "br_opt_on": "On",
   "br_opt_off": "Off",
   "br_loading": "A little further in.",

@@ -57,6 +57,18 @@ public class BackRoomRoomOptionTests
         Assert.Null(Read("mediaSource", true));
     }
 
+    /* --------------------------------------------------------------------- invert camera (2026-09-18) */
+
+    [Fact]
+    public void InvertLook_IsASwitchLikeTunnelAndMelt()
+    {
+        Assert.False(new AppSettings().BackRoomInvertLook);   // off by default: the drag moves the camera until the player says otherwise
+        Assert.True(Apply(new AppSettings(), "invertLook", true).BackRoomInvertLook);
+        Assert.False(Apply(new AppSettings { BackRoomInvertLook = true }, "invertLook", false).BackRoomInvertLook);
+        Assert.Null(Read("invertLook", "true"));
+        Assert.Null(Read("invertLook", 1));
+    }
+
     /* --------------------------------------------------------------------- the three levels */
 
     [Theory]

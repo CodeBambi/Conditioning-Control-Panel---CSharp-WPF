@@ -1173,9 +1173,11 @@ judged on screen; `screen.gif` is 5.69 MB at 512.
 Effects (Calm / Normal / Full, the existing `AppSettings.BackRoomFxIntensity`, still also in Settings), Tunnel vision
 (On/Off) and Melt (On/Off). While MotionLevel is below Full the card notes that Calm is in use. Escape or Back closes
 the card before anything else in the room. Lexicon keys `br_opt_title`, `br_opt_effects`, `br_opt_calm`,
-`br_opt_normal`, `br_opt_full`, `br_opt_calm_forced`, `br_opt_tunnel`, `br_opt_melt`, `br_opt_on`, `br_opt_off`.
+`br_opt_normal`, `br_opt_full`, `br_opt_calm_forced`, `br_opt_tunnel`, `br_opt_melt`, `br_opt_invert`, `br_opt_on`, `br_opt_off`.
 
-- Page -> host (section 2.1): `{ "type": "room-option", "key": "tunnel" | "melt", "value": true | false }`,
+- Page -> host (section 2.1): `{ "type": "room-option", "key": "tunnel" | "melt" | "invertLook", "value": true | false }`
+  (`invertLook` = Invert camera, 2026-09-18: a drag moves the world instead of the camera, both axes, the seated look
+  included; `AppSettings.BackRoomInvertLook`, off by default, echoed as `invertLook` on `init` and `settings`),
   `{ "key": "intensity", "value": "calm" | "normal" | "full" }`,
   `{ "key": "mediaSource", "value": "auto" | "local" | "online" | "mixed" | "bundled" }`,
   `{ "key": "subVolume" | "sfxVolume" | "musicVolume", "value": 0..100 }` (an integer; a fraction and the
@@ -2386,3 +2388,11 @@ Roulette exit exception requested 2026-09-17: block station exit while requestin
 The racing cabinet opens Racing Thoughts in the current window with `game-open {game:"race"}`. The host acknowledges `game-open-result` and finishes the room close handshake before transferring its browser. Race init sets `settings.returnToCasino`; normal exit returns to `/backroom/index.html?raceReturn=1`. A bounded one-use camera pose survives; no balance or reward state is restored from it. The separate Play entry retains normal exit behavior. Native callbacks are invalidated on transfer, and each run may settle rewards once. Preview uses the same camera contract with a local-ledger-only adapter and full same-origin navigation.
 
 **The cabinet is not a purchase door (2026-09-18).** The stack that wrote this section had the host validate canonical original-track ownership before the transfer, and refuse with `reason:"locked"`. That check is disarmed: the owner removed Racing Thoughts' tier gate on 2026-09-17 and chose open testing on both surfaces, and a purchase check is the same closed door under another name. The rule survives whole in `Services/Race/RacingAccess.cs` behind one constant, so the cabinet's only refusal today is `reason:"busy"` when a race window is already up. ONE PAYOUT PER RUN is a separate rule and is in force: `RaceRunLifecycle` latches the run and never asks about ownership.
+
+**The same-window race door and what the account owns (2026-09-18).** A native host answers `game-open` with the race
+window and sends `init.settings.racingTracks` itself. The web room has no host on the other side of a navigation, so
+`room/race-portal.js` writes `{ version: 1, tracks: [0..10] }` to sessionStorage under `backroom.race-ownership.v1`
+(the prize snapshot's `rt.original.NN` grants, shared/prize-state.js) right before it leaves for
+`/backroom/racing/race.html?casino=1&back=...`. The race's web router (cclabs-web `scripts/race-web-ext/host/index.js`)
+reads it only when `?casino=1` is on the URL and sends it as `racingTracks` (plus `returnToCasino: true`); through the
+door with no record the race owns nothing. Off the door the field stays absent and the race keeps its web contract.

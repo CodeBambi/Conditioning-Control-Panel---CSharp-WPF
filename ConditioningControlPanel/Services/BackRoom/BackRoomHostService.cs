@@ -70,6 +70,7 @@ internal static class BackRoomHostService
         {
             case BackRoomBridge.OptionTunnel: s.BackRoomTunnel = option.On; break;
             case BackRoomBridge.OptionMelt: s.BackRoomMelt = option.On; break;
+            case BackRoomBridge.OptionInvertLook: s.BackRoomInvertLook = option.On; break;
             case BackRoomBridge.OptionIntensity when option.Intensity is { } i: s.BackRoomFxIntensity = i; break;
             case BackRoomBridge.OptionMediaSource when option.Text is { } src: s.BackRoomMediaSource = src; break;
             case BackRoomBridge.OptionSubVolume when option.Level is { } sub: s.BackRoomSubVolume = sub; break;
@@ -89,6 +90,7 @@ internal static class BackRoomHostService
         nameof(Models.AppSettings.FlashEnabled), nameof(Models.AppSettings.SubliminalEnabled),
         nameof(Models.AppSettings.SpiralEnabled), nameof(Models.AppSettings.BrainDrainEnabled),
         nameof(Models.AppSettings.BackRoomTunnel), nameof(Models.AppSettings.BackRoomMelt),
+        nameof(Models.AppSettings.BackRoomInvertLook),
         // The room's picture source and its three levels, so a room that is already open repaints its own
         // Options when something else changes them. MediaSource and RemoteMediaRatio are the APP's, and they
         // are here because BackRoomMediaSource defaults to "auto" and follows them: changing the source in
@@ -459,6 +461,7 @@ internal static class BackRoomHostService
             racingTracks = RacingAccess.OwnedTracks,
             sp = s?.SkillPoints ?? 0,
             reduced = motion != Models.MotionLevel.Full,
+            invertLook = s?.BackRoomInvertLook ?? false,
             motion = MotionWire(motion),
             intensity = IntensityWire(s, motion),
             lang = LocalizationManager.Instance.CurrentLanguage,
@@ -480,6 +483,7 @@ internal static class BackRoomHostService
         {
             type = "settings", motion = MotionWire(motion), intensity = IntensityWire(s, motion),
             reduced = motion != Models.MotionLevel.Full, gates = GatesWire(s), intensityChoice = IntensityChoiceWire(s),
+            invertLook = s?.BackRoomInvertLook ?? false,
             media = MediaWire(s), audio = AudioWire(s),
         };
     }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRacePortal, racePortalUrl, consumeRoomPose, validatedRoomPose, RACE_POSE_KEY, CASINO_RETURN } from '../race-portal.js';
+import { createRacePortal, racePortalUrl, consumeRoomPose, validatedRoomPose, raceOwnershipTracks, RACE_POSE_KEY, RACE_OWNERSHIP_KEY, CASINO_RETURN } from '../race-portal.js';
 const loc = { href: 'http://localhost:8798/backroom/index.html' };
 const returning = { href: loc.href + '?raceReturn=1' };
 const pose = { position: [1, 1.65, 6], yaw: 0.5, pitch: -0.2, sp: 9999, grants: ['fake'] };
@@ -20,8 +20,10 @@ test('preview navigation stays on the same origin and the two approved race path
 test('local full navigation disposes once and stores only a bounded camera pose', () => {
   const store = storage(), calls = [];
   const portal = createRacePortal({ location: loc, storage: store, racePath: '/backroom/racing/race.html',
-    getPose: () => pose, beforeNavigate: () => calls.push('dispose'), navigate: url => calls.push(url) });
+    getPose: () => pose, getOwnership: () => ({ owned: ['rt_demo'], racing: true, tracks: [3, 0, 3, 11, -1, 1.5, '2'] }),
+    beforeNavigate: () => calls.push('dispose'), navigate: url => calls.push(url) });
   assert.equal(portal.open(), true); assert.equal(portal.open(), false);
+  assert.deepEqual(JSON.parse(store.getItem(RACE_OWNERSHIP_KEY)), { version: 1, tracks: [0, 3] }, 'the owned tracks wait for the race page, cleaned');
   assert.equal(calls.length, 2); assert.equal(calls[0], 'dispose');
   const saved = JSON.parse(store.getItem(RACE_POSE_KEY));
   assert.deepEqual(Object.keys(saved.pose).sort(), ['pitch', 'position', 'yaw']);
@@ -40,6 +42,7 @@ test('native game-open sends no URL or balance and a refusal rearms the same por
   listener({ game: 'other', ok: false }); assert.equal(portal.pending, true);
   listener({ game: 'race', ok: false, reason: 'locked' });
   assert.equal(portal.pending, false); assert.equal(refused, 'locked'); assert.equal(store.getItem(RACE_POSE_KEY), undefined);
+  assert.equal(store.getItem(RACE_OWNERSHIP_KEY), undefined, 'a native host sends racingTracks itself');
   assert.equal(portal.open(), true); portal.dispose(); assert.equal(stopped, 1); assert.equal(portal.open(), false);
 });
 
@@ -68,4 +71,14 @@ test('unavailable browser storage does not block entering or leaving the game', 
   const portal = createRacePortal({ location: loc, storage: store, getPose: () => pose, navigate: url => { target = url; } });
   assert.equal(portal.open(), true); assert.ok(target.includes('/dtrh/race.html'));
   assert.equal(consumeRoomPose({ location: returning, storage: store }), null);
+});
+
+test('the ownership record is the prize snapshot track numbers and nothing else', () => {
+  assert.deepEqual(raceOwnershipTracks({ tracks: [10, 0, 4] }), [0, 4, 10]);
+  assert.deepEqual(raceOwnershipTracks(null), []);
+  assert.deepEqual(raceOwnershipTracks({ racing: true }), []);
+  assert.deepEqual(raceOwnershipTracks({ tracks: 'all' }), []);
+  const store = storage(), portal = createRacePortal({ location: loc, storage: store, getPose: () => pose, navigate: () => {} });
+  assert.equal(portal.open(), true);
+  assert.deepEqual(JSON.parse(store.getItem(RACE_OWNERSHIP_KEY)), { version: 1, tracks: [] }, 'no snapshot yet: the door still opens, the race owns nothing');
 });

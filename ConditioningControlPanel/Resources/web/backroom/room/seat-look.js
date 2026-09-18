@@ -22,8 +22,9 @@ export function createSeatLook(stage, { mount, enabled, surface }) {
     if (!drag || drag.id !== e.pointerId) return;
     if (!enabled() || !stage.ready) { end(); return; }
     const rect = stage.canvas.getBoundingClientRect();
-    tx = Math.max(-.075, Math.min(.075, drag.tx - (e.clientX-drag.x)/rect.width*.3));
-    ty = Math.max(-.045, Math.min(.045, drag.ty - (e.clientY-drag.y)/rect.height*.2));
+    const dir = stage.lookInverted?.() ? -1 : 1;   // the room's Invert camera switch reaches the seated look too
+    tx = Math.max(-.075, Math.min(.075, drag.tx - (e.clientX-drag.x)/rect.width*.3*dir));
+    ty = Math.max(-.045, Math.min(.045, drag.ty - (e.clientY-drag.y)/rect.height*.2*dir));
     e.preventDefault();
   }
   const events = { pointerdown:down, pointermove:move, pointerup:end, pointercancel:end, lostpointercapture:end };

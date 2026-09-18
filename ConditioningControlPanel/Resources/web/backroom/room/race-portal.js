@@ -2,11 +2,22 @@
 import { EYE, WALLS } from './walk.js';
 
 export const RACE_POSE_KEY = 'backroom.race-return-pose.v1';
+/** THE OWNED TRACKS, for the page on the other side of the door. The desktop host tells the race what the
+ * account owns in `init.settings.racingTracks`; a same-window navigation has no host, so the room leaves the
+ * list here (same origin, this tab only) and the race's web router reads it when `?casino=1` is on the URL.
+ * Without it every level would be open, which is what the owner saw (2026-09-18). */
+export const RACE_OWNERSHIP_KEY = 'backroom.race-ownership.v1';
 export const CASINO_RETURN = '/backroom/index.html?raceReturn=1';
 const RACE_PATHS = new Set(['/dtrh/race.html', '/backroom/racing/race.html']);
 const browserLocation = () => typeof location === 'object' ? location : null;
 const browserStorage = () => { try { return sessionStorage; } catch { return null; } };
-const forget = storage => { try { storage?.removeItem(RACE_POSE_KEY); } catch { /* storage unavailable */ } };
+const forget = storage => { try { storage?.removeItem(RACE_POSE_KEY); storage?.removeItem(RACE_OWNERSHIP_KEY); } catch { /* storage unavailable */ } };
+
+/** The track numbers 0..10 out of a prize snapshot (shared/prize-state.js); anything else is nothing owned. */
+export function raceOwnershipTracks(value) {
+  const list = Array.isArray(value?.tracks) ? value.tracks : [];
+  return [...new Set(list.filter(n => Number.isInteger(n) && n >= 0 && n <= 10))].sort((a, b) => a - b);
+}
 
 export function validatedRoomPose(value) {
   const p = value?.position;
@@ -43,7 +54,7 @@ export function racePortalUrl(href, racePath = '/dtrh/race.html') {
   } catch { return null; }
 }
 
-export function createRacePortal({ hosted = false, send, on, getPose, beforeNavigate,
+export function createRacePortal({ hosted = false, send, on, getPose, getOwnership, beforeNavigate,
   navigate, location: loc = browserLocation(), storage = browserStorage(),
   racePath = '/dtrh/race.html', onRefused } = {}) {
   let pending = false, disposed = false;
@@ -61,6 +72,8 @@ export function createRacePortal({ hosted = false, send, on, getPose, beforeNavi
       const pose = validatedRoomPose(getPose?.());
       forget(storage);
       if (pose) { try { storage?.setItem(RACE_POSE_KEY, JSON.stringify({ version: 1, pose })); } catch { /* spawn normally on return */ } }
+      // Only the same-window door needs the list; a native host sends racingTracks itself.
+      if (!hosted) { try { storage?.setItem(RACE_OWNERSHIP_KEY, JSON.stringify({ version: 1, tracks: raceOwnershipTracks(getOwnership?.()) })); } catch { /* the race owns nothing then */ } }
       if (hosted) send({ type: 'game-open', game: 'race' });
       else {
         beforeNavigate?.();
