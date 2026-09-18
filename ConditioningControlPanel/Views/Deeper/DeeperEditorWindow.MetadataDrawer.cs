@@ -210,7 +210,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 {
                     int h = App.Settings?.Current?.DeeperEditorTimelineHeight ?? 160;
                     if (h < 120) h = 120;
-                    if (h > 600) h = 600;
+                    if (h > 400) h = 400;
                     TimelineRow.Height = new GridLength(h, GridUnitType.Pixel);
                 }
             }
