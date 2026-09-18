@@ -340,27 +340,9 @@ namespace ConditioningControlPanel
             _trayIcon = new TrayIconService(this);
             // Let the bark system observe tray-driven events (e.g. "wake Bambi").
             App.Bark?.AttachTray(_trayIcon);
-            _trayIcon.OnExitRequested += () =>
-            {
-                if (App.Lockdown?.IsActive == true) return;
-
-                _exitRequested = true;
-                if (_isRunning) StopEngine();
-
-                // Kill all audio and effects - ensures clean exit with audio unducked
-                App.KillAllAudio();
-
-                // Explicitly dispose overlay
-                try
-                {
-                    App.Overlay?.Dispose();
-                }
-                catch { }
-
-                EnsureSessionRestoredForExit();
-                SaveSettings();
-                Application.Current.Shutdown();
-            };
+            // The one real exit path lives in MainWindow.Launcher.cs (RequestExit) so the tray
+            // and the launcher leave through the same door.
+            _trayIcon.OnExitRequested += RequestExit;
             _trayIcon.OnShowRequested += () =>
             {
                 ShowAvatarTube();
