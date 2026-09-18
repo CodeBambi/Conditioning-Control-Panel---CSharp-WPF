@@ -68,7 +68,7 @@ export function layoutWord(word) {
 export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEvent = () => {}, breakoutN = 12,
   saturation = 0.15, speedScale = 0.55, words = DEFAULT_WORDS } = {}) {
   const g = {
-    w, h, breakoutN, speedScale,
+    w, h, breakoutN, speedScale, noLose: false,   // dev: the floor bounces, the ball never drops
     sat: saturation, savedSat: saturation, state: 'colour', greyBricks: 0,
     force: {}, rungs: rungsFor(saturation, 'colour', null), speed: 0,
     paddle: { x: w / 2, w: PADDLE.baseW, h: PADDLE.h, y: h - 40, stretch: 0, tug: 0 },
@@ -306,7 +306,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     if (b.x - b.r < 0) { b.x = b.r; b.vx = Math.abs(b.vx); wallHit('left', b); }
     else if (b.x + b.r > w) { b.x = w - b.r; b.vx = -Math.abs(b.vx); wallHit('right', b); }
     if (b.y - b.r < 0) { b.y = b.r; b.vy = Math.abs(b.vy); wallHit('top', b); }
-    if (b.y - b.r > h) b.lost = true;
+    if (b.y - b.r > h) { if (g.noLose) { b.y = h - b.r; b.vy = -Math.abs(b.vy); wallHit('bottom', b); } else b.lost = true; }
   }
   function collidePaddle(b, py) {
     const p = g.paddle;
@@ -392,7 +392,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       collideBricks(b, px, py);
       if (g.state === 'colour') collideColliders(b);
       // The last live ball slipping under the paddle in COLOUR: the relapse begins here, in slow motion.
-      if (g.state === 'colour' && !g.transition && b.vy > 0 && b.y - b.r > g.paddle.y + g.paddle.h / 2 && liveBalls() === 1) startRelapse(b);
+      if (g.state === 'colour' && !g.transition && !g.noLose && b.vy > 0 && b.y - b.r > g.paddle.y + g.paddle.h / 2 && liveBalls() === 1) startRelapse(b);
     }
     pushTrail(b);
   }
@@ -488,6 +488,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     clearForce() { g.force = {}; g.rungs = rungsFor(g.sat, g.state, g.force); },
     setBreakoutN(n) { g.breakoutN = Math.max(1, Math.floor(Number(n) || 12)); },
     setSpeedScale(s) { g.speedScale = clamp(Number(s) || 0.55, 0.2, 3); },
+    setNoLose(on) { g.noLose = !!on; },
     spawnWellNow() { spawnWell(); return g.well; },
     relapseNow() { if (g.state === 'colour') lostAll(g.balls[0]); },
     breakoutNow() { startBreakout(g.balls[0]); },

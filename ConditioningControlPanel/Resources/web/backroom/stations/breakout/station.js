@@ -86,6 +86,7 @@ export async function mount(ctx) {
           <button type="button" data-do="relapse">relapse</button>
           <button type="button" data-do="breakout">breakout</button>
           <button type="button" data-do="auto">rungs auto</button>
+          <label><input type="checkbox" class="bo-nolose"> never lose</label>
           <span class="bo-dev-stats"></span>
         </div>
       </div>`;
@@ -215,6 +216,7 @@ export async function mount(ctx) {
     const sat = el.querySelector('.bo-sat'); if (sat && document.activeElement !== sat) sat.value = String(s.state === 'grey' ? s.savedSat : s.sat);
     const n = el.querySelector('.bo-n'); if (n && document.activeElement !== n) n.value = String(s.breakoutN);
     const sp = el.querySelector('.bo-speed'); if (sp && document.activeElement !== sp) sp.value = String(s.speedScale);
+    const nl = el.querySelector('.bo-nolose'); if (nl) nl.checked = !!s.noLose;
     const grey = s.state === 'grey' ? `  grey ${s.greyBricks}/${s.breakoutN}` : '';
     ui['dev-stats'].textContent = `bricks ${s.stats.bricks}  walls ${s.stats.walls}  sat ${s.sat.toFixed(2)}${grey}`;
   }
@@ -225,6 +227,7 @@ export async function mount(ctx) {
       const x = e.target;
       if (x.dataset.rung !== undefined) game.setForce(Number(x.dataset.rung), x.checked);
       else if (x.classList.contains('bo-n')) game.setBreakoutN(x.value);
+      else if (x.classList.contains('bo-nolose')) game.setNoLose(x.checked);
     });
     on(dev, 'input', (e) => {
       const x = e.target;
@@ -306,6 +309,7 @@ export async function mount(ctx) {
     const beatShim = { beat: audio.beat, now: audio.now };
     game = createGame({ audio: beatShim, onEvent, breakoutN: num(q, 'n', 12), saturation: Math.max(0, Math.min(1, num(q, 'sat', 0.15))),
       speedScale: num(q, 'speed', 0.55) });
+    if (q.has('nolose')) game.setNoLose(true);
     renderer = createRenderer(canvas, { reduced, media });
     sawHit = typeof game.snapshot().combo === 'number';   // a v2 sim emits 'hit'; the raw names are then cosmetic only
     const gates = ctx.gates || {};

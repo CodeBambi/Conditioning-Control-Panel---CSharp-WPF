@@ -102,6 +102,20 @@ test('the loop runs, launches and keeps the ball at the beat speed', () => {
   assert.ok(s.time > 1.4);
 });
 
+test('never lose (dev): the floor bounces the ball and no relapse starts', () => {
+  const { game, names } = make({ saturation: 0.6 });
+  game.setNoLose(true);
+  const s = game.snapshot();
+  const b = s.balls[0]; b.stuck = false; b.x = 40; b.y = s.paddle.y + 30; b.vx = 0; b.vy = 400;
+  for (let i = 0; i < 20; i++) game.step(0.05, { x: 440 });
+  assert.equal(game.snapshot().state, 'colour');
+  assert.ok(!names().includes('relapseStart'));
+  assert.ok(game.snapshot().balls[0].vy < 0 && !game.snapshot().balls[0].lost, 'bounced back up');
+  game.setNoLose(false);
+  game.loseBall(); for (let i = 0; i < 8; i++) game.step(0.1);
+  assert.equal(game.snapshot().state, 'grey', 'off again, the ball is lost as usual');
+});
+
 test('dev hooks: relapseNow, breakoutNow and setSaturation', () => {
   const { game } = make({ saturation: 0.3 });
   game.setSaturation(0.8);
