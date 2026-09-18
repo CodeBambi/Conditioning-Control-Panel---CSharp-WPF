@@ -5587,7 +5587,7 @@
   "launcher_stat_time": "트랜스 시간",
   "launcher_stat_xp": "{0} / {1} XP",
   "launcher_prime_pill": "프라임",
-  "launcher_media_title": "게임 미디어",
+  "launcher_media_title": "미디어와 사운드",
   "launcher_media_blurb": "게임에 쓰는 사진과 클립. 한 번 설정하면 모든 방에 적용됩니다.",
   "launcher_media_source": "소스",
   "launcher_media_src_local": "내 라이브러리",
@@ -5598,7 +5598,11 @@
   "launcher_media_src_mixed_hint": "둘 다, 아래 비율로 섞음",
   "launcher_media_mixed_share": "온라인 {0}%",
   "launcher_media_niches": "니치",
+  "launcher_media_niches_hint": "소스가 온라인 또는 혼합일 때 사용됩니다.",
+  "launcher_media_sound": "사운드",
+  "launcher_media_master": "마스터 볼륨",
+  "launcher_media_master_hint": "앱 전체, 게임 포함.",
   "launcher_media_footnote": "백룸에도 적용됩니다.",
   "launcher_media_done": "완료",
-  "launcher_media_tooltip": "게임 미디어"
+  "launcher_media_tooltip": "미디어와 사운드"
 }

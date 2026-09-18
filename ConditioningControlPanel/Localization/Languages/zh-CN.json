@@ -6099,7 +6099,7 @@
   "launcher_stat_time": "恍惚时长",
   "launcher_stat_xp": "{0} / {1} XP",
   "launcher_prime_pill": "Prime",
-  "launcher_media_title": "游戏媒体",
+  "launcher_media_title": "媒体与声音",
   "launcher_media_blurb": "游戏用的图片和短片。设置一次，每个房间都跟随。",
   "launcher_media_source": "来源",
   "launcher_media_src_local": "我的媒体库",
@@ -6110,7 +6110,11 @@
   "launcher_media_src_mixed_hint": "两者兼有，按下方比例混合",
   "launcher_media_mixed_share": "在线 {0}%",
   "launcher_media_niches": "细分类别",
+  "launcher_media_niches_hint": "当来源为在线或混合时使用。",
+  "launcher_media_sound": "声音",
+  "launcher_media_master": "主音量",
+  "launcher_media_master_hint": "整个应用，包括游戏。",
   "launcher_media_footnote": "后台房间也会跟随此设置。",
   "launcher_media_done": "完成",
-  "launcher_media_tooltip": "游戏媒体"
+  "launcher_media_tooltip": "媒体与声音"
 }

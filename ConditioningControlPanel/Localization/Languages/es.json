@@ -5587,7 +5587,7 @@
   "launcher_stat_time": "Tiempo en trance",
   "launcher_stat_xp": "{0} / {1} XP",
   "launcher_prime_pill": "Prime",
-  "launcher_media_title": "Medios de los juegos",
+  "launcher_media_title": "Medios y sonido",
   "launcher_media_blurb": "Imágenes y clips para los juegos. Configúralo una vez y todas las salas lo siguen.",
   "launcher_media_source": "Fuente",
   "launcher_media_src_local": "Mi biblioteca",
@@ -5598,7 +5598,11 @@
   "launcher_media_src_mixed_hint": "Ambos, mezclados según la proporción de abajo",
   "launcher_media_mixed_share": "{0}% en línea",
   "launcher_media_niches": "Nichos",
+  "launcher_media_niches_hint": "Se usa cuando la fuente es En línea o Mixto.",
+  "launcher_media_sound": "Sonido",
+  "launcher_media_master": "Volumen general",
+  "launcher_media_master_hint": "Toda la app, juegos incluidos.",
   "launcher_media_footnote": "El Back Room también lo sigue.",
   "launcher_media_done": "Listo",
-  "launcher_media_tooltip": "Medios de los juegos"
+  "launcher_media_tooltip": "Medios y sonido"
 }

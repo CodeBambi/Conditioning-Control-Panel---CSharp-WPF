@@ -58,6 +58,15 @@ public static class LauncherMediaSettings
         return kept;
     }
 
+    /// <summary>The app-wide master volume, clamped to 0..100. Returns what was stored. The
+    /// launcher's own cues read this at play time, so the dialog's next click is the preview.</summary>
+    public static int ApplyMasterVolume(AppSettings s, int volume)
+    {
+        if (s == null) throw new ArgumentNullException(nameof(s));
+        s.MasterVolume = Math.Clamp(volume, 0, 100);
+        return s.MasterVolume;
+    }
+
     /// <summary>Known catalogue ids only, in catalogue order, never empty.</summary>
     public static List<string> KeepAtLeastOne(IEnumerable<string>? niches)
     {

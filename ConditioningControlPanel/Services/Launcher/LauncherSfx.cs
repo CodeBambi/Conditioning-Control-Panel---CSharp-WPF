@@ -7,12 +7,13 @@ namespace ConditioningControlPanel.Services.Launcher;
 /// <summary>
 /// The launcher's six cues, on the <see cref="EmiDesk.EmiSfx"/> shape: one-shots through
 /// <c>App.Audio.PlayOneShot</c>, silent when output is suppressed, the master volume is 0 or the
-/// file is missing. Quiet on purpose: the hover cue fires on every tile crossing.
+/// file is missing. Quiet on purpose: the hover cue fires on every tile crossing, and only one
+/// hover instance is ever in flight (the previous one is stopped), so a sweep never stacks.
 /// </summary>
 public static class LauncherSfx
 {
     private const float OpenScale = 0.18f;
-    private const float HoverScale = 0.06f;
+    private const float HoverScale = 0.05f;
     private const float ClickScale = 0.16f;
     private const float DeniedScale = 0.16f;
     private const float LaunchScale = 0.24f;
@@ -21,20 +22,30 @@ public static class LauncherSfx
 
     private static readonly object Gate = new();
     private static DateTime _lastHover = DateTime.MinValue;
+    private static AudioPlaybackHandle? _hover;
+
+    /// <summary>The Breakout cabinet's brick hit (stations/breakout/audio.js, combo 0), rendered
+    /// once to a file: a soft C5 ping through the cabinet's small delay room, 0.58 s.</summary>
+    private const string HoverCue = "launcher/hover.wav";
 
     /// <summary>The window coming up.</summary>
     public static void Open() => Play("chaos/reveal_chime.mp3", OpenScale, "launcher-open");
 
-    /// <summary>A tile under the cursor. Throttled: a fast sweep across the grid is one cue.</summary>
+    /// <summary>A tile under the cursor. Throttled, and the previous hover is cut before the
+    /// next starts: a sweep across the grid is one soft ping moving, never a pile of them.</summary>
     public static void Hover()
     {
         var now = DateTime.UtcNow;
+        AudioPlaybackHandle? previous;
         lock (Gate)
         {
             if ((now - _lastHover).TotalMilliseconds < HoverMinGapMs) return;
             _lastHover = now;
+            previous = _hover;
         }
-        Play("chaos/cards_in.mp3", HoverScale, "launcher-hover");
+        try { previous?.Stop(); } catch (Exception ex) { Log.Debug(ex, "[Launcher] hover cut failed"); }
+        var handle = Play(HoverCue, HoverScale, "launcher-hover");
+        lock (Gate) _hover = handle;
     }
 
     /// <summary>Any button.</summary>
@@ -68,18 +79,19 @@ public static class LauncherSfx
         }
     }
 
-    private static void Play(string rel, float scale, string tag)
+    private static AudioPlaybackHandle? Play(string rel, float scale, string tag)
     {
-        if (!Audible(out var master)) return;
+        if (!Audible(out var master)) return null;
         try
         {
             var path = ModResourceResolver.ResolveAudioPath(rel);
-            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
-            App.Audio?.PlayOneShot(path, Math.Clamp(master * scale, 0f, 1f), tag);
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
+            return App.Audio?.PlayOneShot(path, Math.Clamp(master * scale, 0f, 1f), tag);
         }
         catch (Exception ex)
         {
             Log.Debug(ex, "[Launcher] sfx {Tag} failed", tag);
+            return null;
         }
     }
 }

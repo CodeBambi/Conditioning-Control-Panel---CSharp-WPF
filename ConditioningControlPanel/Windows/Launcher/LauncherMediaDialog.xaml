@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
         Title="{loc:Str launcher_media_title}"
-        Width="560" Height="620"
+        Width="560" Height="720"
         Background="{DynamicResource DarkerBgBrush}"
         WindowStartupLocation="CenterOwner"
         WindowStyle="None"
@@ -13,8 +13,9 @@
         UseLayoutRounding="True"
         FontFamily="Segoe UI">
 
-    <!-- "Game media": the launcher's gear. One source, one niche list, every room follows. Same
-         shell as the launcher: no OS chrome, our own close button, never AllowsTransparency. -->
+    <!-- "Media and sound": the launcher's gear. One source, one niche list, every room follows,
+         and the app-wide master volume. Same shell as the launcher: no OS chrome, our own close
+         button, never AllowsTransparency. -->
 
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="0" ResizeBorderThickness="0" GlassFrameThickness="0"
@@ -113,11 +114,28 @@
                                        Style="{StaticResource MediaCopy}" FontSize="13" VerticalAlignment="Center"/>
                         </Grid>
 
-                        <!-- online and mixed only: which niches -->
+                        <!-- which niches: always live, so the list can be set before going online -->
                         <StackPanel x:Name="NicheBlock" Margin="0,22,0,0">
                             <TextBlock Text="{loc:Str launcher_media_niches}" Style="{StaticResource MediaEyebrow}" Margin="0,0,0,10"/>
                             <WrapPanel x:Name="NicheChips"/>
+                            <TextBlock Text="{loc:Str launcher_media_niches_hint}" Style="{StaticResource MediaCopy}" FontSize="13" Margin="0,2,0,0"/>
                         </StackPanel>
+
+                        <!-- sound: the app-wide master volume, every game included -->
+                        <TextBlock Text="{loc:Str launcher_media_sound}" Style="{StaticResource MediaEyebrow}" Margin="0,22,0,10"/>
+                        <TextBlock Text="{loc:Str launcher_media_master}" Style="{StaticResource MediaCopy}" FontSize="13"/>
+                        <Grid Margin="0,6,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Slider x:Name="MasterSlider" Minimum="0" Maximum="100" TickFrequency="5" IsSnapToTickEnabled="True"
+                                    VerticalAlignment="Center" ValueChanged="MasterSlider_Changed"
+                                    PreviewMouseLeftButtonUp="MasterSlider_Released"/>
+                            <TextBlock x:Name="MasterLabel" Grid.Column="1" Margin="14,0,0,0" MinWidth="48"
+                                       Style="{StaticResource MediaCopy}" FontSize="13" VerticalAlignment="Center"/>
+                        </Grid>
+                        <TextBlock Text="{loc:Str launcher_media_master_hint}" Style="{StaticResource MediaCopy}" FontSize="13" Margin="0,2,0,0"/>
                     </StackPanel>
                 </ScrollViewer>
             </Border>

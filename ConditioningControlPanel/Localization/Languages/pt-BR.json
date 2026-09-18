@@ -5587,7 +5587,7 @@
   "launcher_stat_time": "Tempo em transe",
   "launcher_stat_xp": "{0} / {1} XP",
   "launcher_prime_pill": "Prime",
-  "launcher_media_title": "Mídia dos jogos",
+  "launcher_media_title": "Mídia e som",
   "launcher_media_blurb": "Imagens e clipes para os jogos. Configure uma vez e todas as salas seguem.",
   "launcher_media_source": "Fonte",
   "launcher_media_src_local": "Minha biblioteca",
@@ -5598,7 +5598,11 @@
   "launcher_media_src_mixed_hint": "Ambos, misturados pela proporção abaixo",
   "launcher_media_mixed_share": "{0}% online",
   "launcher_media_niches": "Nichos",
+  "launcher_media_niches_hint": "Usado quando a fonte é Online ou Misto.",
+  "launcher_media_sound": "Som",
+  "launcher_media_master": "Volume geral",
+  "launcher_media_master_hint": "O app inteiro, jogos incluídos.",
   "launcher_media_footnote": "O Back Room também segue isso.",
   "launcher_media_done": "Concluído",
-  "launcher_media_tooltip": "Mídia dos jogos"
+  "launcher_media_tooltip": "Mídia e som"
 }
