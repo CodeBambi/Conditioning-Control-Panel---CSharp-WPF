@@ -2059,8 +2059,12 @@ namespace ConditioningControlPanel
         {
             var oldKeys = new HashSet<string>(App.Settings.Current.SubliminalPool.Keys);
             // OrdinalIgnoreCase to match the removed-set and ModService's top-up comparison.
+            // The fallback is the NEUTRAL pool, not BambiSleep's. It only fires before the mod
+            // layer is up, and an unmodded install must not be told the themed list is its set of
+            // defaults - that is the same reason AppSettings._subliminalPool is seeded from
+            // CCPDefault. A Bambi user still gets Bambi's pool, via GetDefaultSubliminalPool.
             var defaults = new HashSet<string>(
-                (App.Mods?.GetDefaultSubliminalPool() ?? Models.BuiltInMods.BambiSleep.SubliminalPool ?? new Dictionary<string, bool>()).Keys,
+                (App.Mods?.GetDefaultSubliminalPool() ?? Models.BuiltInMods.CCPDefault.SubliminalPool ?? new Dictionary<string, bool>()).Keys,
                 StringComparer.OrdinalIgnoreCase);
 
             var dialog = new TextEditorDialog("Subliminal Messages", App.Settings.Current.SubliminalPool);
