@@ -64,6 +64,16 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 _rightClickSeconds = MouseToSeconds(e);
 
+                // Right-clicking an item selects it and opens the item menu;
+                // the playhead stays where it is so the user's place is kept.
+                if (TrySelectItemUnderRightClick(e))
+                {
+                    var itemMenu = (ContextMenu)FindResource("TimelineItemCtxMenu");
+                    ConfigureItemContextMenu(itemMenu);
+                    TimelineCanvas.ContextMenu = itemMenu;
+                    return;
+                }
+
                 // Move the playhead to the click point. Most users right-clicking
                 // on the timeline want to drop something there; seeking now keeps
                 // the playback cursor in sync with their intent (and the hero
@@ -93,6 +103,79 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 App.Logger?.Debug("DeeperEditor: ctx menu prep error: {Error}", ex.Message);
             }
+        }
+
+        // -- Item context menu (right-click on a region / haptic / effect / rule pin)
+
+        private object? _ctxItem;
+
+        private bool TrySelectItemUnderRightClick(MouseButtonEventArgs e)
+        {
+            if (e.OriginalSource is not FrameworkElement fe || fe.Tag == null) return false;
+            switch (fe.Tag)
+            {
+                case Region region:
+                    HandleSelectionClick(region);
+                    var attached = FindRuleByRegionConstraint(region.Id);
+                    if (attached != null) SelectRule(attached); else SelectRegion(region);
+                    _ctxItem = region;
+                    return true;
+                case ValueTuple<HapticTrack, HapticEvent> t:
+                    HandleSelectionClick(t.Item2);
+                    SelectHaptic(t.Item1, t.Item2);
+                    _ctxItem = t.Item2;
+                    return true;
+                case TimelineItem ti:
+                    HandleSelectionClick(ti);
+                    SelectEffect(ti);
+                    _ctxItem = ti;
+                    return true;
+                case EnhancementRule rule:
+                    // A plain right-click on a pin replaces any multi-selection, the
+                    // same as the region/haptic/effect cases above, so the menu acts
+                    // on the pin and not on a stale set.
+                    if ((Keyboard.Modifiers & ModifierKeys.Control) == 0) _selectionSet.Clear();
+                    SelectRule(rule);
+                    _ctxItem = rule;
+                    return true;
+            }
+            return false;
+        }
+
+        // Rules are not clipboard-able (they live outside the selection set),
+        // so Copy / Cut grey out when the pin under the cursor is a rule.
+        private void ConfigureItemContextMenu(ContextMenu menu)
+        {
+            bool clipboardable = _ctxItem is not EnhancementRule;
+            foreach (var mi in menu.Items.OfType<MenuItem>())
+            {
+                if (mi.Name is "CtxItemCopy" or "CtxItemCut") mi.IsEnabled = clipboardable;
+            }
+        }
+
+        private void CtxItemDuplicate_Click(object sender, RoutedEventArgs e) => DuplicateSelection();
+        private void CtxItemCopy_Click(object sender, RoutedEventArgs e) { EnsurePrimaryInSelectionSet(); CopySelection(); }
+        private void CtxItemCut_Click(object sender, RoutedEventArgs e) { EnsurePrimaryInSelectionSet(); CutSelection(); }
+        private void CtxItemDelete_Click(object sender, RoutedEventArgs e) => DeleteCurrentSelection();
+        private void CtxItemJump_Click(object sender, RoutedEventArgs e)
+        {
+            var t = ItemStartSeconds(_ctxItem);
+            if (t.HasValue && _totalSeconds > 0) SeekToFraction(t.Value / _totalSeconds);
+        }
+
+        private double? ItemStartSeconds(object? item)
+        {
+            switch (item)
+            {
+                case Region r: return r.Start;
+                case HapticEvent ev: return ev.Start;
+                case TimelineItem ti: return ti.Start;
+                case EnhancementRule rule:
+                    if (rule.Trigger is TimeReachedTrigger tr) return Math.Max(0, tr.Time);
+                    var band = _enhancement.Regions.FirstOrDefault(x => x != null && x.Id == rule.RegionConstraint);
+                    return band?.Start;
+            }
+            return null;
         }
 
         private void ApplyAudioModeToContextMenu(ContextMenu menu)
@@ -557,6 +640,7 @@ namespace ConditioningControlPanel.Views.Deeper
         private void UpdateSelectedSidePanelForEffect()
         {
             HideAllEditors();
+            ResetInspectorSession();
             if (_selectedEffect == null)
             {
                 if (SelectedPlaceholder != null) SelectedPlaceholder.Visibility = Visibility.Visible;

@@ -5502,5 +5502,19 @@
   "br_custom_already_owned": "Déjà acquis.",
   "br_custom_unowned": "Obtiens cet objet avant de l’utiliser.",
   "br_custom_shop_unavailable": "La boutique est indisponible. Tu peux toujours voir les aperçus.",
-  "br_custom_buy_sp": "Acheter pour {n} SP"
+  "br_custom_buy_sp": "Acheter pour {n} SP",
+  "deeper_editor_ctx_item_duplicate": "Duplicate",
+  "deeper_editor_ctx_item_copy": "Copy",
+  "deeper_editor_ctx_item_cut": "Cut",
+  "deeper_editor_ctx_item_delete": "Delete",
+  "deeper_editor_ctx_item_jump": "Jump to start",
+  "deeper_editor_saved_inline": "Saved",
+  "deeper_player_video_nav_failed_fmt": "Video failed to load ({0}).",
+  "deeper_player_video_nav_failed_fmt": "Video failed to load ({0}).",
+  "deeper_player_window_title_fmt": "Deeper Player - {0}",
+  "deeper_player_webcam_banner_text": "This enhancement has gaze / blink / attention triggers. They only fire while the webcam is on.",
+  "deeper_player_webcam_banner_enable": "Enable webcam",
+  "deeper_player_hold_esc_hint": "Hold Esc to stop",
+  "deeper_player_status_escape_stopped": "Stopped (Esc held). Playback and effects are off.",
+  "deeper_player_tip_shortcuts": "Space play/pause, Left/Right seek 5 s (Shift 30 s), Up/Down volume, M mute, F fullscreen, hold Esc to stop."
 }
