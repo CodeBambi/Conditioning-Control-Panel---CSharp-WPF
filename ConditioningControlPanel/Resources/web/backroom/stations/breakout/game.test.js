@@ -201,12 +201,13 @@ test('a SPIRAL brick broken in colour pops out and bursts into the well (rung 7,
   assert.ok(w.x >= 110 && w.x <= 370 && w.y >= 280 && w.y <= 520, 'inside the band');
   assert.equal(burst[1].x, w.x); assert.equal(burst[1].y, w.y);
   assert.equal(events.filter(e => e[0] === 'brick').at(-1)[1].plus, 3, 'a spiral brick is a special');
-  // A second spiral brick while the well is live: the pop bursts into nothing but sparkle.
+  // A second spiral brick while the well is live and empty: the new well replaces it (one at a time, never a collider).
   const sp2 = s.bricks.findIndex((b, i) => b.alive && b.spiral && i !== sp);
   if (sp2 >= 0) {
     game.breakBrick(sp2);
     for (let i = 0; i < 80; i++) game.step(1 / 60, {});
-    assert.equal(events.filter(e => e[0] === 'burst').at(-1)[1].kind, 'none', 'one well at a time');
+    assert.equal(events.filter(e => e[0] === 'burst').at(-1)[1].kind, 'well', 'the new spiral takes over');
+    assert.equal(game.snapshot().well.preset, s.bricks[sp2].spiral);
     assert.equal(game.snapshot().colliders.length, 0, 'a spiral never becomes a collider');
   }
   // A GIF brick is always a collider, well or no well.
@@ -215,13 +216,13 @@ test('a SPIRAL brick broken in colour pops out and bursts into the well (rung 7,
   for (let i = 0; i < 80; i++) game.step(1 / 60, {});
   assert.equal(game.snapshot().colliders.length, 1, 'a picture brick is a collider');
   assert.equal(game.snapshot().colliders[0].gif, s.bricks[gif].gif);
-  // Below rung 7 a spiral brick's pop bursts into nothing; a GIF brick is still a collider.
+  // Below rung 7 a spiral brick still makes its well (the brick is the gate); a GIF brick is still a collider.
   const low = make({ saturation: 0.3 });
   const s2 = low.game.snapshot(), l1 = s2.bricks.findIndex(b => b.alive && b.spiral), l2 = s2.bricks.findIndex(b => b.alive && b.gif >= 0);
   low.game.breakBrick(l1); low.game.breakBrick(l2);
   for (let i = 0; i < 80; i++) low.game.step(1 / 60, {});
-  assert.equal(s2.well, null); assert.equal(s2.colliders.length, 1);
-  assert.deepEqual(low.events.filter(e => e[0] === 'burst').map(e => e[1].kind).sort(), ['collider', 'none']);
+  assert.ok(s2.well && s2.well.preset === s2.bricks[l1].spiral, 'the well is there at low saturation'); assert.equal(s2.colliders.length, 1);
+  assert.deepEqual(low.events.filter(e => e[0] === 'burst').map(e => e[1].kind).sort(), ['collider', 'well']);
 });
 
 test('word bricks swap their word on their own clocks with a glitch, in colour only, never the same word twice running', () => {

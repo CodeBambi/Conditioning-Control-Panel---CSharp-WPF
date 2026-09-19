@@ -21,7 +21,9 @@
  * COLOUR the face pops out of the wall (g.pops), tumbles, and bursts: a picture
  * brick into a drifting collider bubble (g.colliders, up to 3), a spiral brick
  * (it wears one of the Loom's fields, brick.spiral) into the whirlwind well
- * (g.well, rung 7, one at a time, no bubble: the field itself is the well).
+ * (g.well, one at a time, no bubble: the field itself is the well). The brick
+ * is the gate, not the rung: a spiral brick always makes its well; a new one
+ * while one is live replaces it unless it is holding a ball.
  * No timer spawns. In GREY a special brick (gif, spiral, split, jackpot) is +3
  * on the breakout counter and nothing spawns.
  *
@@ -304,13 +306,13 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     }
     g.pops = g.pops.filter(p => !p.done);
   }
-  /** The pop bursts: a spiral face into the whirlwind well (rung 7, one live, no bubble), a picture face into a collider bubble (up to 3). */
+  /** The pop bursts: a spiral face into the whirlwind well (one live, no bubble; the brick is the gate, not the rung), a picture face into a collider bubble (up to 3). */
   function burst(p) {
     p.done = true;
     const x = clamp(p.x, BAND.x0, w - BAND.x0), y = clamp(p.y, BAND.y0, BAND.y1);
     let kind = 'none';
     if (g.state === 'colour') {
-      if (p.spiral) { if (g.rungs[7] && !g.well) { spawnWell(x, y, p); kind = 'well'; } }
+      if (p.spiral) { if (!g.well || !g.well.captured) { spawnWell(x, y, p); kind = 'well'; } }   // owner, 2026-09-19: the spiral must always show up
       else if (g.colliders.length < 3) { spawnCollider(x, y, p.gif); kind = 'collider'; }
     }
     emit('burst', { x, y, gif: p.gif, spiral: p.spiral || null, kind, color: p.color });
@@ -448,7 +450,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     if (b.stuck) { b.x = g.paddle.x; b.y = g.paddle.y - g.paddle.h / 2 - b.r; return; }
     if (b.orbit) { orbitStep(b, dt); pushTrail(b); return; }
     const s = g.well;
-    if (s && !s.used && g.rungs[7] && g.state === 'colour' && !b.ghost && !b.falling && Math.hypot(b.x - s.x, b.y - s.y) < s.pull) { capture(b, s); return; }
+    if (s && !s.used && g.state === 'colour' && !b.ghost && !b.falling && Math.hypot(b.x - s.x, b.y - s.y) < s.pull) { capture(b, s); return; }
     if (!b.falling) normalise(b);
     if (g.rungs[9] && g.state === 'colour' && !b.ghost && !b.falling) steerToBrick(b, dt);
     const speed = Math.hypot(b.vx, b.vy), n = Math.max(1, Math.ceil(speed * dt / b.r)), ds = dt / n;
@@ -482,7 +484,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     else if (input.right) base += 640 * dt;
     // A live spiral within 200 px tugs the paddle toward its centre at 60 px/s; the player's input still wins.
     const s = g.well;
-    if (s && g.state === 'colour' && g.rungs[7] && Math.hypot(s.x - p.x, s.y - p.y) < 200) p.tug = clamp(p.tug + Math.sign(s.x - p.x) * 60 * dt, -60, 60);
+    if (s && g.state === 'colour' && Math.hypot(s.x - p.x, s.y - p.y) < 200) p.tug = clamp(p.tug + Math.sign(s.x - p.x) * 60 * dt, -60, 60);
     else p.tug = p.tug > 0 ? Math.max(0, p.tug - 120 * dt) : Math.min(0, p.tug + 120 * dt);
     p.x = clamp(base + p.tug, p.w / 2, w - p.w / 2);
   }
