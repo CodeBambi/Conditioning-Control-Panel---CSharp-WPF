@@ -68,9 +68,9 @@ test('the swirl spins faster while it holds a ball', () => {
   b.x = w.x - 300; b.y = 60; b.vx = 0; b.vy = 0; b.stuck = false;    // parked far away, no capture
   const before = w.rot;
   game.step(0.1, {});
-  const idle = w.rot - before;
+  const idle = Math.abs(w.rot - before);
   w.captured = b;
   const at = w.rot;
   game.step(0.1, {});
-  assert.ok(w.rot - at > idle * 2, 'a captured ball winds the picture up');
+  assert.ok(Math.abs(w.rot - at) > idle * 2, 'a captured ball winds the picture up');
 });

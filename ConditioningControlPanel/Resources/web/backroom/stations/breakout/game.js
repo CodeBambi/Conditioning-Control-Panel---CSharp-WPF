@@ -322,7 +322,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   }
   function updateWell(dt) {
     const s = g.well; if (!s) return;
-    s.rot += dt * (s.captured ? 4.4 : 1.6) * (s.spin || 1);          // the swirl tightens while it holds a ball
+    s.rot -= dt * (s.captured ? 4.4 : 1.6) * (s.spin || 1);   // turns the way the ball orbits, counter-clockwise on screen (owner, 2026-09-19); tightens while it holds a ball
     s.born += dt;
     if (s.captured) return;
     s.age += dt;
