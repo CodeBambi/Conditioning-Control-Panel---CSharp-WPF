@@ -294,11 +294,11 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       if (frame) {
         // The picture sits in a smaller circle inside the bubble and its edge fades into the bubble's body, so
         // there is visible room between the picture and the rim (owner, 2026-09-18).
-        const inner = r * 0.7;
+        const inner = r * 0.93;                                          // a slim band only, the picture nearly at the rim (owner, 2026-09-19)
         g.beginPath(); g.arc(c.x, c.y, inner, 0, 7); g.closePath(); g.clip();
         const fw = frame.width || frame.naturalWidth || 1, fh = frame.height || frame.naturalHeight || 1, k = Math.max(2 * inner / fw, 2 * inner / fh);
         g.drawImage(frame, c.x - fw * k / 2, c.y - fh * k / 2, fw * k, fh * k);
-        const fade = g.createRadialGradient(c.x, c.y, inner * 0.62, c.x, c.y, inner);
+        const fade = g.createRadialGradient(c.x, c.y, inner * 0.84, c.x, c.y, inner);
         fade.addColorStop(0, col(VIOLET, mix, 0)); fade.addColorStop(1, col(VIOLET, mix, 1));
         g.fillStyle = fade; g.fillRect(c.x - r, c.y - r, 2 * r, 2 * r);
       }
