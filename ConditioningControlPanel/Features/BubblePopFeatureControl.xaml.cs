@@ -153,7 +153,6 @@ namespace ConditioningControlPanel.Features
                 SelectMotion(s.BubbleMotionStyle);
                 ChkBubbleGazePop.IsChecked = s.BubbleGazePopEnabled;
                 ChkBrainDrainBubble.IsChecked = s.BubbleBrainDrainEnabled;
-                ChkMagnetBubble.IsChecked = s.BubbleMagnetEnabled;
 
                 // Easter-egg hint (companion auto-pops a lingering effect bubble): name the active persona.
                 var persona = App.Mods?.ActiveModId switch
@@ -194,7 +193,8 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.BubbleGazePopEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleTriggersEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleTriggerChance) ||
-                e.PropertyName == nameof(Models.AppSettings.BubbleTriggerVariants))
+                e.PropertyName == nameof(Models.AppSettings.BubbleTriggerVariants) ||
+                e.PropertyName == nameof(Models.AppSettings.BubbleBrainDrainEnabled))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
@@ -309,6 +309,7 @@ namespace ConditioningControlPanel.Features
             bool spiral = Services.AmbientBubbleMotion.SpiralInOwned;
             // The BOX is what collapses now, not the row: Motion and the Brain Drain bubble both
             // arrive with the v2 prizes, so with none owned there is nothing in here to show.
+            ChkBrainDrainBubble.Visibility = rain || spiral ? Visibility.Visible : Visibility.Collapsed;
             V2Box.Visibility = rain || spiral ? Visibility.Visible : Visibility.Collapsed;
             V2BoxBadge.Content ??= FeatureCard.NewV2Badge(new Thickness(0));
             bool wasLoading = _isLoading;
@@ -419,20 +420,6 @@ namespace ConditioningControlPanel.Features
             var s = App.Settings?.Current;
             if (s == null) return;
             s.BubbleBrainDrainEnabled = ChkBrainDrainBubble.IsChecked ?? false;
-            App.Settings?.Save();
-        }
-
-        /// <summary>
-        /// The Magnet bubble (Bubbles v2, wave 2). Same shape as the Brain Drain row above: default
-        /// ON, so buying the prize is the only opt-in and this row is the way back out. It grants
-        /// nothing on its own - the roll also asks PrizeGrants every time (see MagnetBubble.RollPool).
-        /// </summary>
-        private void ChkMagnetBubble_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current;
-            if (s == null) return;
-            s.BubbleMagnetEnabled = ChkMagnetBubble.IsChecked ?? false;
             App.Settings?.Save();
         }
 

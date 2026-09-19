@@ -1,4 +1,4 @@
-using System.Windows.Media.Imaging;
+﻿using System.Windows.Media.Imaging;
 using SkiaSharp;
 
 namespace ConditioningControlPanel.Services.Compositor;
@@ -254,12 +254,14 @@ public sealed class BubbleLayer : BaseLayer
                 _fill.Shader = null;
             }
 
-            // ---- Tease face (dark disc + clipped current frame + diagonal shine) ----
-            if (item.IsTease)
+            // ---- Picture face with a soft edge inside the glass ----
+            if (item.HasFace)
             {
                 float ir = item.TeaseInnerDip * 0.5f * s;
                 int tsave = canvas.Save();
                 canvas.ClipRoundRect(new SKRoundRect(new SKRect(cx - ir, cy - ir, cx + ir, cy + ir), ir, ir), antialias: true);
+                var faceBounds = new SKRect(cx - ir, cy - ir, cx + ir, cy + ir);
+                int faceLayer = canvas.SaveLayer(faceBounds, null);
                 _fill.Color = new SKColor(0x14, 0x07, 0x0C, ga);
                 canvas.DrawCircle(cx, cy, ir, _fill);
                 var frame = item.CurrentTeaseFrame();
@@ -283,6 +285,13 @@ public sealed class BubbleLayer : BaseLayer
                     canvas.DrawCircle(cx, cy, ir, _fill);
                     _fill.Shader = null;
                 }
+                // Mask only the face layer, preserving the glass sprite underneath.
+                using (var edgeShader = SKShader.CreateRadialGradient(new SKPoint(cx, cy), ir,
+                    new[] { SKColors.White, SKColors.White, SKColors.Transparent },
+                    new[] { 0f, BubbleFace.EdgeFadeStart, 1f }, SKShaderTileMode.Clamp))
+                using (var edgePaint = new SKPaint { Shader = edgeShader, BlendMode = SKBlendMode.DstIn })
+                    canvas.DrawRect(faceBounds, edgePaint);
+                canvas.RestoreToCount(faceLayer);
                 canvas.RestoreToCount(tsave);
             }
 
@@ -420,7 +429,7 @@ public sealed class BubbleLayer : BaseLayer
         public bool HasShine;
         public bool IsEcho;
         public SKColor EchoColor;
-        public bool IsTease;
+        public bool HasFace;
         public float TeaseInnerDip;
         public bool HasGlow;
         public SKColor GlowColor;
@@ -482,17 +491,31 @@ public sealed class BubbleLayer : BaseLayer
 
         // Tease frame: the WPF face Image's current Source (animated webp/gif frame or a still),
         // converted to an owned SKImage lazily and cached per source so repeated frames reuse.
-        public BitmapSource? TeaseSource;
+        public bool LiveFace;
+        public BitmapSource? FaceSource;
         private BitmapSource? _teaseKey;
         private SKImage? _teaseImg;
         private Dictionary<BitmapSource, SKImage>? _teaseFrames;
 
         public SKImage? CurrentTeaseFrame()
         {
-            var src = TeaseSource;
+            var src = FaceSource;
             if (src == null) return _teaseImg;
             if (ReferenceEquals(src, _teaseKey)) return _teaseImg;
             _teaseKey = src;
+            if (LiveFace)
+            {
+                if (_teaseFrames != null)
+                {
+                    foreach (var cached in _teaseFrames.Values) cached.Dispose();
+                    _teaseFrames = null;
+                    _teaseImg = null;
+                }
+                var next = SkiaWpfInterop.ToSKImage(src);
+                _teaseImg?.Dispose();
+                _teaseImg = next;
+                return next;
+            }
             _teaseFrames ??= new Dictionary<BitmapSource, SKImage>();
             if (!_teaseFrames.TryGetValue(src, out var img))
             {
@@ -514,6 +537,7 @@ public sealed class BubbleLayer : BaseLayer
 
         public void ReleaseTeaseFrames()
         {
+            if (LiveFace) _teaseImg?.Dispose();
             if (_teaseFrames != null)
             {
                 foreach (var v in _teaseFrames.Values) { try { v.Dispose(); } catch { } }
