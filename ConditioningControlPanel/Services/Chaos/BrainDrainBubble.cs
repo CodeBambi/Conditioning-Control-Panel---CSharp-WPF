@@ -20,7 +20,7 @@ namespace ConditioningControlPanel.Services.Chaos;
 /// </summary>
 public static class BrainDrainBubble
 {
-    /// <summary>Spec/sprite id. No art file ships for it, so it wears the tinted bubble.png.</summary>
+    /// <summary>Spec/sprite id. Resolves the bundled molten-spiral bubble art.</summary>
     public const string VariantId = "braindrain_melt";
 
     /// <summary>How long the pop holds the drain, in ms.</summary>

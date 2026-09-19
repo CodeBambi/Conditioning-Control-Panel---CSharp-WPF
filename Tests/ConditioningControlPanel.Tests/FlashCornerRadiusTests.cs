@@ -10,7 +10,7 @@ namespace ConditioningControlPanel.Tests;
 /// (compositor round-rect clip, glow WPF card, no-glow WPF/solid host backing). The whole point
 /// of the shared resolver is that a glow flash and a plain one cannot disagree about how round
 /// they are, so these pin the four rules: ownership gates it, glow keeps its legacy 12, the
-/// switch raises everything to 14, and nothing ever rounds past a quarter of the shorter side.
+/// switch rounds by 7%, and nothing ever rounds past a quarter of the shorter side.
 /// </summary>
 public class FlashCornerRadiusTests
 {
@@ -43,8 +43,8 @@ public class FlashCornerRadiusTests
     [Fact]
     public void OnAndOwned_RoundsPlainAndRaisesGlow()
     {
-        Assert.Equal(FlashCorners.RoundedDip, FlashCorners.Resolve(true, true, false, BigSide, 1.0));
-        Assert.Equal(FlashCorners.RoundedDip, FlashCorners.Resolve(true, true, true, BigSide, 1.0));
+        Assert.Equal(BigSide * FlashCorners.RoundedFraction, FlashCorners.Resolve(true, true, false, BigSide, 1.0));
+        Assert.Equal(BigSide * FlashCorners.RoundedFraction, FlashCorners.Resolve(true, true, true, BigSide, 1.0));
     }
 
     [Theory]
@@ -56,18 +56,18 @@ public class FlashCornerRadiusTests
     {
         // World px: the same physical roundness on a 150% screen as on a 100% one.
         var r = FlashCorners.Resolve(true, true, false, BigSide * dpi, dpi);
-        Assert.Equal(FlashCorners.RoundedDip * dpi, r, 6);
+        Assert.Equal(BigSide * FlashCorners.RoundedFraction * dpi, r, 6);
     }
 
     [Fact]
     public void ADpiOfZeroFallsBackToOne()
-        => Assert.Equal(FlashCorners.RoundedDip, FlashCorners.Resolve(true, true, false, BigSide, 0));
+        => Assert.Equal(BigSide * FlashCorners.RoundedFraction, FlashCorners.Resolve(true, true, false, BigSide, 0));
 
     [Fact]
     public void NeverMoreThanAQuarterOfTheShorterSide()
     {
-        // A 40px-tall sliver would be a lozenge at 14: the cap pins it to 10.
-        Assert.Equal(10.0, FlashCorners.Resolve(true, true, false, 40, 1.0));
+        // Small pictures keep the same proportional corners.
+        Assert.Equal(2.8, FlashCorners.Resolve(true, true, false, 40, 1.0), 6);
         // The cap binds on the glow card too.
         Assert.Equal(8.0, FlashCorners.Resolve(false, false, true, 32, 1.0));
     }
@@ -75,8 +75,8 @@ public class FlashCornerRadiusTests
     [Fact]
     public void TheCapAppliesAfterTheDpiScale()
     {
-        // 40 DIP tall on a 200% screen is 80 world px, so the cap is 20 and 28 does not fit.
-        Assert.Equal(20.0, FlashCorners.Resolve(true, true, false, 80, 2.0));
+        // The physical size already includes DPI; do not multiply the fraction again.
+        Assert.Equal(5.6, FlashCorners.Resolve(true, true, false, 80, 2.0), 6);
     }
 
     [Fact]
