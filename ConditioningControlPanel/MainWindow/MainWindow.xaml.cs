@@ -2872,6 +2872,27 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// The launcher's title-bar mod switcher. Deliberately the SAME two steps as the top-bar
+        /// combo above (ActivateMod + <see cref="ApplyActiveModChange"/>), so the launcher is a
+        /// second door onto the one switching path and never a second path. Works with the panel
+        /// tray-hidden: everything ApplyActiveModChange repaints exists from construction.
+        /// </summary>
+        internal void SwitchActiveModFromLauncher(string modId)
+        {
+            if (_isLoading || App.Mods == null || string.IsNullOrWhiteSpace(modId)) return;
+            if (string.Equals(App.Mods.ActiveModId, modId, StringComparison.OrdinalIgnoreCase)) return;
+
+            App.Mods.ActivateMod(modId);
+            if (!string.Equals(App.Mods.ActiveModId, modId, StringComparison.OrdinalIgnoreCase)) return;
+            ApplyActiveModChange();
+        }
+
+        /// <summary>The launcher's "Manage mods" row: the panel's own Mod Manager, through the one
+        /// launcher the rail entry and the combo's footer row use. The panel must be on screen
+        /// first (the dialog is owned by it); LauncherHost.OpenPanelModManager sees to that.</summary>
+        internal void OpenModManagerFromLauncher() => BtnManageMods_Click(this, new RoutedEventArgs());
+
+        /// <summary>
         /// The last row of the mod drop-down is a verb, not a mod. Put the selection back on the
         /// active mod under the same suppress flag InitializeModSelector uses (so this handler does
         /// not re-enter and the chip never paints "Open Mod Manager"), close the list, and open the

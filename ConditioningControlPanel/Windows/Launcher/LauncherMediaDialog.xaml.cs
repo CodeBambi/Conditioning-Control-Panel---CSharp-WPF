@@ -5,7 +5,9 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using ConditioningControlPanel.Localization;
+using System.Linq;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Fyp.Online;
 using ConditioningControlPanel.Services.Launcher;
 using Serilog;
@@ -36,7 +38,51 @@ public partial class LauncherMediaDialog : Window
     {
         InitializeComponent();
         BuildChips();
+        BuildPresets();
         Refresh();
+    }
+
+    // ------------------------------------------------------------------ asset presets
+
+    /// <summary>The panel's saved asset presets, the "All Assets" row first. Built once; the
+    /// panel's Save/Update/Delete live on its Assets tab, reached by the link beside the box.</summary>
+    private void BuildPresets()
+    {
+        var s = App.Settings?.Current;
+        if (s == null) return;
+        if (!s.AssetPresets.Any(p => p.IsDefault)) s.AssetPresets.Insert(0, AssetPreset.CreateDefault());
+        PresetCombo.ItemsSource = s.AssetPresets.ToList();
+    }
+
+    private void PresetCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncing) return;
+        try
+        {
+            var s = App.Settings?.Current;
+            if (s == null || PresetCombo.SelectedItem is not AssetPreset preset) return;
+            if (string.Equals(preset.Id, s.CurrentAssetPresetId, StringComparison.Ordinal)) return;
+
+            LauncherSfx.Click();
+
+            // The panel does the write AND its repaint (tree, counts, caches, save); without a
+            // panel the service writes and the file is saved. Same shape as Commit below.
+            var mw = App.MainWindowRef;
+            if (mw != null) mw.ApplyAssetPresetFromLauncher(preset.Id);
+            else if (AssetPresetService.Apply(s, preset.Id) != null) App.Settings?.Save();
+
+            Log.Information("[Launcher] asset preset -> {Name}", preset.Name);
+        }
+        catch (Exception ex) { Log.Warning(ex, "[Launcher] asset preset change failed"); }
+    }
+
+    /// <summary>Save, update and delete live on the panel's Assets tab. This dialog closes so the
+    /// panel is what the user is looking at when it comes up.</summary>
+    private void BtnAssetBrowser_Click(object sender, RoutedEventArgs e)
+    {
+        LauncherSfx.Click();
+        Close();
+        LauncherHost.OpenPanelTab("assets");
     }
 
     // ------------------------------------------------------------------ build
@@ -94,6 +140,8 @@ public partial class LauncherMediaDialog : Window
 
             MasterSlider.Value = s.MasterVolume;
             MasterLabel.Text = $"{s.MasterVolume}%";
+
+            PresetCombo.SelectedValue = AssetPresetService.Active(s)?.Id;
         }
         finally { _syncing = false; }
     }

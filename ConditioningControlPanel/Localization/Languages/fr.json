@@ -5607,5 +5607,13 @@
   "launcher_media_master_hint": "Toute l'application, jeux compris.",
   "launcher_media_footnote": "Le Back Room suit aussi ce réglage.",
   "launcher_media_done": "Terminé",
-  "launcher_media_tooltip": "Médias et son"
+  "launcher_media_tooltip": "Médias et son",
+  "launcher_media_button": "Médias",
+  "launcher_mod_label": "Mod : {0}",
+  "launcher_mod_tooltip": "Changer le mod actif",
+  "launcher_mod_manage": "Gérer les mods",
+  "launcher_media_library": "Bibliothèque",
+  "launcher_media_preset": "Préréglage de ressources",
+  "launcher_media_preset_hint": "Quelles images et quels clips de ta bibliothèque les jeux utilisent. Enregistré dans le navigateur de ressources du panneau.",
+  "launcher_media_open_browser": "Ouvrir le navigateur de ressources"
 }

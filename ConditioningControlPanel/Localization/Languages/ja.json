@@ -5607,5 +5607,13 @@
   "launcher_media_master_hint": "アプリ全体、ゲームも含みます。",
   "launcher_media_footnote": "バックルームにも反映されます。",
   "launcher_media_done": "完了",
-  "launcher_media_tooltip": "メディアとサウンド"
+  "launcher_media_tooltip": "メディアとサウンド",
+  "launcher_media_button": "メディア",
+  "launcher_mod_label": "Mod: {0}",
+  "launcher_mod_tooltip": "使用中のModを切り替える",
+  "launcher_mod_manage": "Modを管理",
+  "launcher_media_library": "ライブラリ",
+  "launcher_media_preset": "アセットプリセット",
+  "launcher_media_preset_hint": "ゲームが使う画像とクリップの選択。パネルのアセットブラウザーに保存されます。",
+  "launcher_media_open_browser": "アセットブラウザーを開く"
 }

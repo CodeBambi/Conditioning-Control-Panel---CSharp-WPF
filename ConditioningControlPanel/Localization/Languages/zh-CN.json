@@ -6119,5 +6119,13 @@
   "launcher_media_master_hint": "整个应用，包括游戏。",
   "launcher_media_footnote": "后台房间也会跟随此设置。",
   "launcher_media_done": "完成",
-  "launcher_media_tooltip": "媒体与声音"
+  "launcher_media_tooltip": "媒体与声音",
+  "launcher_media_button": "媒体",
+  "launcher_mod_label": "模组：{0}",
+  "launcher_mod_tooltip": "切换当前模组",
+  "launcher_mod_manage": "管理模组",
+  "launcher_media_library": "素材库",
+  "launcher_media_preset": "资源预设",
+  "launcher_media_preset_hint": "游戏使用你的哪些图片和视频片段。保存在面板的资源浏览器中。",
+  "launcher_media_open_browser": "打开资源浏览器"
 }

@@ -182,6 +182,37 @@
             </Setter>
         </Style>
 
+        <!-- A labelled title-bar pill (Media, Mod): the account chip's glass, a little icon and a
+             word. Same height as the chip and the sign-in pill it stands beside. -->
+        <Style x:Key="LauncherBarPill" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="17" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="LauncherStatNumber" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="/Fonts/#Fredoka, Segoe UI"/>
             <Setter Property="FontSize" Value="30"/>
@@ -390,9 +421,27 @@
                             </StackPanel>
                         </Border>
                         </Button>
-                        <Button x:Name="BtnGear" Content="⚙" Style="{StaticResource LauncherIconButton}"
+                        <!-- the active mod: a click lists the installed mods and "Manage mods" -->
+                        <Button x:Name="ModPill" Style="{StaticResource LauncherBarPill}"
+                                ToolTip="{loc:Str launcher_mod_tooltip}"
+                                Click="ModPill_Click" Margin="0,0,6,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="ModPillText" Text="Mod" VerticalAlignment="Center"
+                                           MaxWidth="170" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="&#x25BE;" FontSize="10" Margin="6,1,0,0" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                        </Button>
+                        <!-- "Media": source, niches, asset preset and the master volume for every room -->
+                        <Button x:Name="BtnGear" Style="{StaticResource LauncherBarPill}"
                                 ToolTip="{loc:Str launcher_media_tooltip}"
-                                Click="BtnGear_Click" Margin="0,0,8,0"/>
+                                Click="BtnGear_Click" Margin="0,0,8,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#x25A3;" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource PanelAccentBrush}"/>
+                                <TextBlock Text="{loc:Str launcher_media_button}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
                         <Button x:Name="BtnMinimize" Content="─" Width="46" Height="36"
                                 Click="BtnMinimize_Click" Style="{StaticResource WindowControlButton}"/>
                         <Button x:Name="BtnClose" Content="✕" Width="46" Height="36"

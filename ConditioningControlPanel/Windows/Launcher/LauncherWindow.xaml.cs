@@ -56,6 +56,9 @@ public partial class LauncherWindow : Window
         LauncherHost.FadeOut = FadeOutThen;
         LauncherHost.RequestSignIn = OpenSignIn;
 
+        var mods = App.Mods;
+        if (mods != null) mods.ModChanged += OnModChanged;
+
         var lockdown = App.Lockdown;
         if (lockdown != null)
         {
@@ -89,6 +92,7 @@ public partial class LauncherWindow : Window
             FadeIn();
             BuildTiles();
             RefreshAccount();
+            RefreshMod();
             RefreshStatus();
             RefreshStats();
             RefreshLockdownVeil();
@@ -133,6 +137,8 @@ public partial class LauncherWindow : Window
         _shortcutTextTimer.Stop();
         LauncherHost.RequestSignIn = null;
         UnhookEngine();
+        var mods = App.Mods;
+        if (mods != null) mods.ModChanged -= OnModChanged;
         var lockdown = App.Lockdown;
         if (lockdown != null)
         {
@@ -196,6 +202,78 @@ public partial class LauncherWindow : Window
     }
 
     private void AccountChip_Click(object sender, RoutedEventArgs e) => OpenPanelTab("appsettings");
+
+    // ------------------------------------------------------------------ mod pill
+
+    /// <summary>The pill reads the active mod's name. ModChanged is the authoritative signal
+    /// and fires for every switch (this menu, the panel's combo, the Mod Manager, the first-run
+    /// picker), so the pill never needs to know who switched.</summary>
+    private void RefreshMod()
+    {
+        try
+        {
+            ModPillText.Text = LauncherModMenu.Label(Loc.Get("launcher_mod_label"), App.Mods?.ActiveMod?.Name, "-");
+        }
+        catch (Exception ex) { Log.Debug(ex, "[Launcher] RefreshMod failed"); }
+    }
+
+    private void OnModChanged(object? sender, ModPackage mod)
+    {
+        if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(DispatcherPriority.Normal, RefreshMod); return; }
+        RefreshMod();
+    }
+
+    /// <summary>
+    /// The installed mods as a dropdown under the pill, the active one ticked, and "Manage mods"
+    /// as the last row. A pick goes to MainWindow.SwitchActiveModFromLauncher, which is the
+    /// panel's own switching path (ActivateMod + ApplyActiveModChange) and nothing else.
+    /// </summary>
+    private void ModPill_Click(object sender, RoutedEventArgs e)
+    {
+        LauncherSfx.Click();
+        try
+        {
+            var mods = App.Mods;
+            var menu = new ContextMenu { PlacementTarget = ModPill, Placement = PlacementMode.Bottom, MaxHeight = 420 };
+
+            if (mods != null)
+            {
+                var rows = mods.InstalledMods.Values.Select(m => new LauncherModRow(m.Id, m.Name, m.IsBuiltIn));
+                foreach (var row in LauncherModMenu.Order(rows))
+                {
+                    var item = new MenuItem
+                    {
+                        Header = row.Name,
+                        IsChecked = string.Equals(row.Id, mods.ActiveModId, StringComparison.OrdinalIgnoreCase),
+                    };
+                    var id = row.Id;
+                    item.Click += (_, _) => SwitchMod(id);
+                    menu.Items.Add(item);
+                }
+                menu.Items.Add(new Separator());
+            }
+
+            var manage = new MenuItem { Header = Loc.Get("launcher_mod_manage") };
+            manage.Click += (_, _) => { LauncherSfx.Click(); LauncherHost.OpenPanelModManager(); };
+            menu.Items.Add(manage);
+
+            menu.IsOpen = true;
+        }
+        catch (Exception ex) { Log.Warning(ex, "[Launcher] mod menu failed"); }
+    }
+
+    private void SwitchMod(string modId)
+    {
+        LauncherSfx.Click();
+        try
+        {
+            var mw = App.MainWindowRef;
+            if (mw == null) { Log.Warning("[Launcher] mod switch with no main window"); return; }
+            mw.SwitchActiveModFromLauncher(modId);
+            RefreshMod();
+        }
+        catch (Exception ex) { Log.Warning(ex, "[Launcher] mod switch to {Id} failed", modId); }
+    }
 
     private void SignIn_Click(object sender, RoutedEventArgs e)
     {
