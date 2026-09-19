@@ -8,7 +8,11 @@
  * draw accepts the CONTRACT v2 form draw(snap, { words, media, now, reduced, dt, word }) and the older
  * draw(snap, now, dt, word). onGameEvent is onEvent (same function, both names exported on the object).
  * Cosmetic-only state (debris, stamps, shake, post) lives in render-fx.js.
- * The payload bubbles (colliders and the whirlwind well) wear the OG soap
+ * The word bricks wear their word on a dark plate (gradient fill, glow) and
+ * glitch when the sim swaps it (brick.glitch: slices, chromatic split, scramble).
+ * The spiral bricks show their Loom field in a small disc (render-well.js tile)
+ * and their pop grows into the well; the well itself has no bubble skin.
+ * The payload bubbles (the colliders) wear the OG soap
  * bubble skin (assets/bubble.png) over the picture; until it loads, the old
  * circle. A broken GIF brick's face (snap.pops) tumbles until it bursts.
  * ==========================================================================*/
@@ -114,6 +118,8 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
         const ang = -Math.PI / 2 + clamp(d.t || 0, -1, 1) * (Math.PI / 3);
         P.spray(d.x, last.paddle.y - last.paddle.h, ang, 0.8, PINK, 6 + Math.round(4 * sat), 180, 0.45);
       }
+    } else if (name === 'wordSwap') {
+      if (colour) { P.rects(d.x, d.y, MINT, 2, { speed: 70, life: 0.35, size: 3 }); P.burst(d.x, d.y, PINK, 3, 60, 0.4, { rise: 20, gv: 30, r0: 1, r1: 1.5 }); }
     } else if (name === 'gif') {
       cam.kick(7); if (rungs(8)) { glitch = 0.14; aberr = 1; }
       P.burst(d.x, d.y, VIOLET, 24, 220, 0.7);
@@ -227,6 +233,8 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
         const k = Math.max(br.w / fw, br.h / fh) * 1.05;
         g.drawImage(frame, -fw * k / 2, -fh * k / 2, fw * k, fh * k);
         g.strokeStyle = col(PINK, mix, 0.7); g.lineWidth = 1; g.strokeRect(-br.w / 2 + 0.5, -br.h / 2 + 0.5, br.w - 1, br.h - 1);
+      } else if (br.spiral) {
+        drawSpiralBrick(br, s, mix);
       } else {
         const rgb = br.jackpot ? GOLD : ROWS[br.row % ROWS.length];
         roundRect(g, -br.w / 2, -br.h / 2, br.w, br.h, 3);
@@ -234,13 +242,80 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
         g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(-br.w / 2 + 2, -br.h / 2 + 2, br.w - 4, 3);
         if (br.split) { g.fillStyle = col(GOLD, mix); g.beginPath(); g.arc(0, 0, 3, 0, 7); g.fill(); }
         if (br.letter) { g.fillStyle = 'rgba(20,20,40,.8)'; g.font = `800 11px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(br.letter, 0, 0.5); }
-        else if (br.word) {                                                // a word brick wears its word in small caps
-          g.fillStyle = s.state === 'colour' ? 'rgba(255,255,255,.88)' : 'rgba(40,40,40,.7)'; g.font = `800 8px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
-          g.fillText(String(br.word).toUpperCase().slice(0, 8), 0, 0.5);
-        }
+        else if (br.word) drawWordLabel(br, s, mix);
       }
       g.restore();
     }
+  }
+  const SCRAMBLE = '#%&@!?<>/=+*XZKQ0173';
+  /** A cheap per-letter hash for the glitch scramble: stable within a frame pair, different across bricks. */
+  const gh = (a, b, c) => { let h = (a * 374761393 + b * 668265263 + c * 2246822519) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+  /** The word on a word brick, drawn in brick space (0,0 = centre): a dark plate, gradient text with a glow and a
+   *  slow sheen; while brick.glitch runs down the plate tears into offset slices, the text splits into colours and
+   *  its letters scramble before the new word settles (owner, 2026-09-19: the bare white text was underwhelming). */
+  function drawWordLabel(br, s, mix) {
+    const colour = s.state === 'colour', gl = clamp(br.glitch || 0, 0, 1);
+    const pw = br.w - 4, ph = br.h - 4, hx = pw / 2, hy = ph / 2;
+    const text = String(br.word || '').toUpperCase().slice(0, 9);
+    let shown = text;
+    if (gl > 0.45) {                                                       // the old word tearing into the new one
+      const p = gl > 0.75 ? 0.65 : 0.3, fr = frameNo >> 1;
+      shown = [...text].map((ch, i) => (ch !== ' ' && gh(fr, i, br.row * 31 + br.col) < p ? SCRAMBLE[(gh(fr + 7, i, br.col) * SCRAMBLE.length) | 0] : ch)).join('');
+    }
+    g.font = `900 10px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    if ('letterSpacing' in g) g.letterSpacing = '0.5px';
+    const tw = Math.max(1, g.measureText(shown).width), k = Math.min(1, (pw - 5) / tw);
+    const label = (dx, dy) => {
+      g.save(); g.translate(dx, dy);
+      roundRect(g, -hx, -hy, pw, ph, 2.5);
+      g.fillStyle = colour ? 'rgba(22,9,34,.66)' : 'rgba(34,34,34,.55)'; g.fill();
+      g.clip();
+      g.fillStyle = 'rgba(255,255,255,.10)'; g.fillRect(-hx + 1, -hy + 1, pw - 2, 1);
+      if (colour) {                                                        // the sheen: a slanted band crossing the plate every few seconds
+        const ph2 = ((s.time || 0) * 0.3 + (br.row * 3 + br.col) * 0.137) % 1;
+        const sx = -hx - 8 + ph2 * (pw + 16);
+        g.fillStyle = 'rgba(255,255,255,.13)'; g.beginPath(); g.moveTo(sx, -hy); g.lineTo(sx + 5, -hy); g.lineTo(sx + 1, hy); g.lineTo(sx - 4, hy); g.closePath(); g.fill();
+      }
+      g.scale(k, 1);
+      if (colour) {
+        const grad = g.createLinearGradient(0, -5, 0, 5);
+        grad.addColorStop(0, col(WHITE, mix)); grad.addColorStop(0.5, col([255, 214, 238], mix)); grad.addColorStop(1, col(PINK, mix));
+        g.shadowColor = col(PINK, mix, 0.85); g.shadowBlur = 4 + gl * 8;
+        if (gl > 0) {                                                      // chromatic split, widening with the glitch
+          g.fillStyle = col(MINT, mix, 0.85 * gl); g.fillText(shown, -2.4 * gl, 0.5);
+          g.fillStyle = col(VIOLET, mix, 0.85 * gl); g.fillText(shown, 2.4 * gl, 0.5);
+        }
+        g.lineJoin = 'round'; g.lineWidth = 1.6; g.strokeStyle = 'rgba(16,6,26,.8)'; g.strokeText(shown, 0, 0.5);
+        g.fillStyle = grad; g.fillText(shown, 0, 0.5);
+        g.shadowBlur = 0;
+      } else {
+        g.fillStyle = 'rgba(190,190,190,.7)'; g.fillText(shown, 0, 0.5);
+      }
+      g.restore();
+    };
+    if (gl <= 0 || reduced) { label(0, 0); return; }
+    // Torn into three horizontal slices, each shoved sideways by its own amount that dies with the glitch.
+    const fr = frameNo >> 1, cuts = [-hy, -hy + ph * (0.25 + 0.2 * gh(fr, 1, br.col)), -hy + ph * (0.6 + 0.2 * gh(fr, 2, br.col)), hy];
+    for (let i = 0; i < 3; i++) {
+      g.save(); g.beginPath(); g.rect(-hx - 6, cuts[i], pw + 12, cuts[i + 1] - cuts[i]); g.clip();
+      label((gh(fr, 3 + i, br.row * 31 + br.col) - 0.5) * 7 * gl, 0);
+      g.restore();
+    }
+  }
+  /** A spiral brick in brick space: its Loom field in a disc a little larger than the brick, clipped to the brick, a pink rim. */
+  function drawSpiralBrick(br, s, mix) {
+    const rot = -(s.time || 0) * 1.4 * (br.spin || 1);                     // counter-clockwise, the way the well turns
+    const tile = wellFx.tile(br.spiral, rot, br.hue || 0, mix, 56, frameNo);
+    roundRect(g, -br.w / 2, -br.h / 2, br.w, br.h, 3);
+    g.fillStyle = col([30, 14, 44], mix); g.fill();
+    g.save(); g.clip();
+    if (tile) { const d = Math.max(br.w, br.h) * 1.3; g.drawImage(tile, -d / 2, -d / 2, d, d); }
+    else drawSpiral(g, 0, 0, br.w * 0.5, rot, col(PINK, mix), 0.8, 2);
+    g.fillStyle = 'rgba(255,255,255,.10)'; g.fillRect(-br.w / 2 + 2, -br.h / 2 + 2, br.w - 4, 2);
+    g.restore();
+    g.shadowColor = col(PINK, mix, 0.6); g.shadowBlur = 5;
+    g.strokeStyle = col(PINK, mix, 0.75); g.lineWidth = 1; g.strokeRect(-br.w / 2 + 0.5, -br.h / 2 + 0.5, br.w - 1, br.h - 1);
+    g.shadowBlur = 0;
   }
   /** The OG soap bubble over a picture of radius r: the rim highlights sit on top, the picture shows through. */
   function drawBubble(x, y, r, a = 1) {
@@ -252,6 +327,18 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   /** A broken GIF brick's face, tumbling out of the wall until it bursts. */
   function drawPops(s, mix) {
     for (const p of s.pops || []) {
+      if (p.spiral) {                                                      // the spiral face swells into a disc on its way to becoming the well
+        const k = clamp((p.t || 0) / 0.7, 0, 1), R = lerp(11, 34, k), rot = -(s.time || 0) * 1.4 * (p.spin || 1);
+        const tile = wellFx.tile(p.spiral, rot, p.hue || 0, mix, 56, frameNo);
+        g.save(); g.translate(p.x, p.y); g.globalAlpha *= 0.9;
+        g.shadowColor = col(PINK, mix, 0.7); g.shadowBlur = 10 + 10 * k;
+        g.beginPath(); g.arc(0, 0, R, 0, 7); g.fillStyle = col([30, 14, 44], mix); g.fill(); g.shadowBlur = 0;
+        g.clip();
+        if (tile) g.drawImage(tile, -R * 1.08, -R * 1.08, R * 2.16, R * 2.16);
+        else drawSpiral(g, 0, 0, R, rot, col(PINK, mix), 0.8, 2);
+        g.restore();
+        continue;
+      }
       const frame = media && rungs(1) ? media.frame(p.gif) : null;
       g.save(); g.translate(p.x, p.y); g.rotate(p.rot || 0);
       g.globalAlpha *= 0.72;                                              // dimmed a little while it falls (owner, 2026-09-18)
@@ -270,7 +357,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       g.restore();
     }
   }
-  /** The whirlwind: one of the Loom's fields wound inside the bubble (render-well.js), its preset, spin and hue the well's own. */
+  /** The whirlwind: one of the Loom's fields (render-well.js), its preset, spin and hue the spiral brick's it came out of. */
   function drawWell(s, mix, dt, extras) {
     const well = s.well; if (!well) return;
     const m = (extras && extras.media) || media;
@@ -279,7 +366,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     g.translate(well.x, well.y); g.scale(inflate, inflate); g.translate(-well.x, -well.y);
     wellFx.draw(g, well, { mix, col, media: m, dt, sat: s.sat, particles: P,
       pink: PINK, violet: VIOLET, mint: MINT, spiral: drawSpiral });
-    if (mix > 0) drawBubble(well.x, well.y, well.r || 70, clamp(well.fade, 0, 1) * 0.72);   // lighter than the colliders: the field must stay readable through the skin
+    // No bubble skin on the well (owner, 2026-09-19): the field is the well, its own torn rim is the edge.
     g.restore();
   }
   function drawColliders(s, mix) {

@@ -11,7 +11,9 @@
  * way so the edge stays ragged. Torn chunks of the disc break off the rim as
  * particles (particles.js 'crop').
  *
- * createWellFx({ reduced, rng, noiseTile }) -> { draw(g, well, opts), reset(), dispose() }
+ * createWellFx({ reduced, rng, noiseTile }) -> { draw(g, well, opts), tile(preset, rot, hue, mix, size, frameNo), reset(), dispose() }
+ * tile() is the same field in a small disc for a spiral BRICK (and its pop): one
+ * offscreen per preset + hue + size, recomposed every third frame, staggered.
  * opts: { mix, col, dt, particles, pink, violet, mint, spiral }
  * The sim gives us { x, y, r, pull, rot, age, ttl, fade, captured, preset, spin, hue }.
  * ==========================================================================*/
@@ -169,10 +171,60 @@ export function createWellFx({ reduced = false, rng = Math.random, noiseTile = n
     }
   }
 
+  /* ---- brick tiles: the field in a small disc, for the spiral bricks and their pops ---- */
+  const tiles = new Map();
+  const TILE_CAP = 12;
+  /** A canvas of `size` px holding preset `preset` turned to `rot` (hue-shifted, grey-safe by `mix`), or null without the Loom.
+   *  Recomposed every third frame (once in reduced motion), each tile on its own frame so they never all render together. */
+  function tile(preset, rot, hue, mix, size, frameNo) {
+    const k = loom();
+    if (!k) return null;
+    const name = LOOM_PRESETS[preset] ? preset : FALLBACK_PRESET;
+    const key = name + '|' + (hue | 0) + '|' + size;
+    let t = tiles.get(key);
+    if (!t) {
+      if (tiles.size >= TILE_CAP) tiles.delete(tiles.keys().next().value);
+      const c = document.createElement('canvas'); c.width = c.height = size;
+      t = { c, x: c.getContext('2d'), ok: false, ever: false, ph: tiles.size % 3 };
+      tiles.set(key, t);
+    }
+    const due = !t.ever || (!reduced && ((frameNo | 0) + t.ph) % 3 === 0);
+    if (!due) return t.ok ? t.c : null;
+    t.ever = true;
+    const x = t.x, h = size / 2, r = h - 1;
+    x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, size, size);
+    x.save(); x.translate(h, h);
+    x.beginPath(); x.arc(0, 0, r, 0, 7); x.clip();
+    x.fillStyle = 'rgba(30,14,44,.96)'; x.fillRect(-h, -h, size, size);
+    const d = r * 2.4;
+    let drawn = false;
+    try {
+      if (hue && 'filter' in x) x.filter = `hue-rotate(${hue | 0}deg)`;
+      drawn = k.draw(x, name, -d / 2, -d / 2, d, d, { angle: rot, alpha: 1, backing: 'small' });
+    } catch (e) { drawn = false; }
+    try { x.filter = 'none'; } catch (e) { /* no filter support */ }
+    if (drawn && mix < 0.999) {
+      x.globalCompositeOperation = 'saturation'; x.globalAlpha = 1 - mix;
+      x.fillStyle = '#808080'; x.fillRect(-h, -h, size, size);
+      x.globalAlpha = 1; x.globalCompositeOperation = 'source-over';
+    }
+    x.globalCompositeOperation = 'destination-out';
+    const eye = x.createRadialGradient(0, 0, 0, 0, 0, r * 0.22);
+    eye.addColorStop(0, 'rgba(0,0,0,.9)'); eye.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = eye; x.fillRect(-h, -h, size, size);
+    const rim = x.createRadialGradient(0, 0, r * 0.8, 0, 0, r);
+    rim.addColorStop(0, 'rgba(0,0,0,0)'); rim.addColorStop(1, 'rgba(0,0,0,.85)');
+    x.fillStyle = rim; x.fillRect(-h, -h, size, size);
+    x.restore();
+    t.ok = drawn;
+    return drawn ? t.c : null;
+  }
+
   return {
     draw,
+    tile,
     reset() { cap = 0; chunkAt = 0; frames = 0; },
     /** Free the Loom context (the station's close). A later draw makes a new one. */
-    dispose() { if (kit) { try { kit.dispose(); } catch (e) { /* noop */ } kit = null; } kitDead = false; },
+    dispose() { tiles.clear(); if (kit) { try { kit.dispose(); } catch (e) { /* noop */ } kit = null; } kitDead = false; },
   };
 }

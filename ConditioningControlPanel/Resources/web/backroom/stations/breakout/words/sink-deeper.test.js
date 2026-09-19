@@ -34,6 +34,7 @@ function fakeSynth() {
 
 test('SINK: slow-mo to 0.3x in the middle, safe throughout, eases back and leaves the world a notch pinker', () => {
   const { game, s } = make({ words: ['SINK'] });
+  for (const b of s.bricks) b.word = null;   // the ball's own hits must not fire a SINK under the test's
   const sat0 = s.sat;
   const fx = game.fireWordNow('SINK');
   assert.ok(fx && fx.key === 'SINK');

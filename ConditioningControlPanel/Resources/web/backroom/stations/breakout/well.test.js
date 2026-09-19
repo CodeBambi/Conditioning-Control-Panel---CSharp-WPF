@@ -13,30 +13,29 @@ function make(opts = {}) {
   return { game, events, names: () => events.map(e => e[0]).filter(n => n !== 'hit') };
 }
 
-/** The dev hook pops a GIF brick out; a second of stepping lands the bubble, which is the well. */
+/** The dev hook pops a spiral brick out; a second of stepping lands the pop, which becomes the well. */
 function wellNow(game) {
   const pop = game.spawnWellNow();
-  assert.ok(pop && Number.isInteger(pop.gif), 'spawnWellNow returns the pop');
+  assert.ok(pop && WELL_PRESETS.includes(pop.spiral), 'spawnWellNow returns a spiral pop');
   for (let i = 0; i < 90 && !game.snapshot().well; i++) game.step(1 / 60, {});
   return game.snapshot().well;
 }
 
-test('a well spawns with a picture index inside the dealt count', () => {
+test('a well spawns with the spiral brick\'s own field, no picture', () => {
   for (let i = 0; i < 12; i++) {
     const { game } = make({ saturation: 0.8 });
     const w = wellNow(game);
     assert.ok(w, 'the pop bursts into a well within 1.5 s');
-    assert.equal(Number.isInteger(w.gif), true, 'gif is an int, the renderer looks it up in the deal');
-    assert.ok(w.gif >= 0 && w.gif < MEDIA_COUNT, `gif ${w.gif} out of range`);
+    assert.equal(w.gif, -1, 'no picture in the whirlwind');
     assert.equal(w.r, 70); assert.equal(w.pull, 110); assert.equal(w.captured, null);
     assert.ok(WELL_PRESETS.includes(w.preset), `preset ${w.preset} is one of the Loom's`);
     assert.ok(w.spin >= 0.75 && w.spin <= 1.25 && w.hue >= -35 && w.hue < 35, 'its own spin and hue');
   }
 });
 
-test('the dev hook still works with no GIF brick alive: the pop leaves from the field centre', () => {
+test('the dev hook still works with no spiral brick alive: the pop leaves from the field centre', () => {
   const { game } = make({ saturation: 0.8 });
-  for (const b of game.snapshot().bricks) if (b.gif >= 0) b.gif = -1;
+  for (const b of game.snapshot().bricks) b.spiral = null;
   const pop = game.spawnWellNow();
   assert.ok(Math.abs(pop.x - 240) < 1 && Math.abs(pop.y - 360) < 1);
   for (let i = 0; i < 90 && !game.snapshot().well; i++) game.step(1 / 60, {});

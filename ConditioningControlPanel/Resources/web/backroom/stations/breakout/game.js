@@ -12,16 +12,21 @@
  * split, wall, relapse, relapseStart, breakout, breakoutStart, crack, lost,
  * launch, perfect, nearMiss, jackpot, mantra, shatterWall, popOut, burst, word.
  *
- * Words: about one brick in three carries a subliminal word (g.words). Broken in
+ * Words: about one plain brick in six carries a subliminal word (g.words). Broken in
  * COLOUR it fires the word's diegetic effect (word-fx.js, one module per word
  * under words/); the effect's frame mods land in g.mod. In GREY a word brick is
  * a special (+3) and nothing fires.
  *
- * Payloads: the GIF brick is the spawner. Broken in COLOUR its face pops out of
- * the wall (g.pops), tumbles, and bursts into a bubble holding the picture: the
- * whirlwind well (g.well, rung 7, one at a time) or a drifting collider bubble
- * (g.colliders, up to 3). No timer spawns. In GREY a special brick (gif, split,
- * jackpot) is +3 on the breakout counter and nothing spawns.
+ * Payloads: the GIF brick and the SPIRAL brick are the spawners. Broken in
+ * COLOUR the face pops out of the wall (g.pops), tumbles, and bursts: a picture
+ * brick into a drifting collider bubble (g.colliders, up to 3), a spiral brick
+ * (it wears one of the Loom's fields, brick.spiral) into the whirlwind well
+ * (g.well, rung 7, one at a time, no bubble: the field itself is the well).
+ * No timer spawns. In GREY a special brick (gif, spiral, split, jackpot) is +3
+ * on the breakout counter and nothing spawns.
+ *
+ * Word bricks swap their word on their own clock (WORD_SWAP_S, each brick out
+ * of step with the others) with a short glitch (brick.glitch 1 -> 0), in COLOUR.
  * ==========================================================================*/
 
 import { createWordSim, freshMod, WORD_BRICK_P } from './word-fx.js';
@@ -36,6 +41,10 @@ export const MAX_BALLS = 3;
 /* The Loom fields a well can wear (shared/hypno/loom.js presets); each well draws one at spawn. */
 export const WELL_PRESETS = ['candy', 'pinwheel', 'ribbon', 'mint', 'star', 'hub', 'whirl', 'wake'];
 export const DEFAULT_WORDS = ['DROP', 'RELAX', 'LET GO', 'SINK'];
+/* Spiral bricks: this share of the plain bricks wears a Loom field (about three or four a wall). */
+export const SPIRAL_BRICK_P = 0.07;
+/* A word brick swaps its word every WORD_SWAP_S (+ up to WORD_SWAP_J) seconds, its glitch lasting GLITCH_S. */
+export const WORD_SWAP_S = 1.7, WORD_SWAP_J = 0.9, GLITCH_S = 0.36;
 export const ROW_COLORS = ['#ff5fa2', '#ff8ac4', '#c86bff', '#7fd6ff', '#ffd166', '#7bffb0'];
 const STEP = 1 / 120;
 const TAU = Math.PI * 2;
@@ -112,6 +121,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   /* ------------------------------------------------------------ wall */
   function mkBrick(x, y, bw, bh, row, col, extra) {
     return { x, y, w: bw, h: bh, alive: true, row, col, gif: -1, split: false, jackpot: false, letter: null, word: null, color: ROW_COLORS[row % ROW_COLORS.length],
+      spiral: null, hue: 0, spin: 1,                 // a spiral brick: the Loom preset it wears (its hue and spin go to the well it becomes)
+      wordAt: 0, glitch: 0, swaps: 0,                // a word brick: seconds to its next swap, the glitch left (1 -> 0), swaps so far
       jelly: 0, jellyIn: 0, push: { dx: 0, dy: 0 }, pushT: 0, push0: { dx: 0, dy: 0 }, ...extra };
   }
   function buildWall() {
@@ -128,10 +139,13 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       const x0 = (w - (BRICK.cols * BRICK.w + (BRICK.cols - 1) * BRICK.gap)) / 2;
       for (let row = 0; row < BRICK.rows; row++) for (let col = 0; col < BRICK.cols; col++) {
         const gif = rng() < 0.15 ? Math.floor(rng() * 8) : -1;
-        // About one plain brick in three carries a word, dealt in turn so every word gets its share (owner, 2026-09-19).
+        // About one plain brick in six carries a word, dealt in turn so every word gets its share (owner, 2026-09-19).
         const word = gif < 0 && g.words.length && rng() < WORD_BRICK_P ? g.words[g.wordIx++ % g.words.length] : null;
+        // A few plain bricks wear a spiral: the well comes out of the brick it was in (owner, 2026-09-19).
+        const spiral = gif < 0 && !word && rng() < SPIRAL_BRICK_P ? WELL_PRESETS[Math.floor(rng() * WELL_PRESETS.length)] : null;
         bricks.push(mkBrick(x0 + col * (BRICK.w + BRICK.gap), BRICK.top + row * (BRICK.h + BRICK.gap), BRICK.w, BRICK.h, row, col,
-          { gif, split: rng() < 0.05, word }));
+          { gif, split: rng() < 0.05, word, spiral, hue: spiral ? Math.floor(rng() * 70) - 35 : 0, spin: spiral ? 0.75 + rng() * 0.5 : 1,
+            wordAt: word ? 0.6 + rng() * (WORD_SWAP_S + WORD_SWAP_J) : 0 }));   // each word brick starts its clock somewhere else
       }
       g.mantra = null;
     }
@@ -235,16 +249,16 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     const cx = br.x + br.w / 2, cy = br.y + br.h / 2;
     au('hit', 'brick', { combo: g.combo + 1, x: br.x / w });
     pushBrick(br, ball);
-    const plus = (br.gif >= 0 || br.split || br.jackpot || br.word) ? 3 : 1;   // a special brick counts triple on the grey counter
+    const plus = (br.gif >= 0 || br.spiral || br.split || br.jackpot || br.word) ? 3 : 1;   // a special brick counts triple on the grey counter
     emit('brick', { x: cx, y: cy, w: br.w, h: br.h, color: br.color, row: br.row, col: br.col, gif: br.gif >= 0, gifIndex: br.gif,
-      jackpot: br.jackpot, letter: br.letter, word: br.word, ghost: grey, sat: g.sat, plus });
+      spiral: br.spiral, jackpot: br.jackpot, letter: br.letter, word: br.word, ghost: grey, sat: g.sat, plus });
     if (br.word && !grey) wordSim.fire(br.word, cx, cy);
-    bumpCombo(br.gif >= 0 ? 'gif' : 'brick', cx, cy);
+    bumpCombo(br.gif >= 0 || br.spiral ? 'gif' : 'brick', cx, cy);
     if (br.jackpot) { g.stats.sp += 5; emit('jackpot', { x: cx, y: cy, sp: g.stats.sp, ghost: grey }); }
     if (grey) { g.greyBricks += plus; if (g.greyBricks >= g.breakoutN) startBreakout(ball); }
     else {
       addSat(0.012);
-      if (br.gif >= 0) popOut(br, ball);
+      if (br.gif >= 0 || br.spiral) popOut(br, ball);
       if (g.crackFired && !g.shatterWall) { g.fractures = Math.min(1, g.fractures + 0.04); if (g.fractures >= 1) { g.shatterWall = true; au('shatterWall'); emit('shatterWall', {}); } }
       if (br.split && ball && g.balls.length < MAX_BALLS) split(ball, br);
     }
@@ -271,10 +285,12 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     const cx = br.x + br.w / 2, cy = br.y + br.h / 2;
     const len = ball ? Math.hypot(ball.vx || 0, ball.vy || 0) : 0;
     const ux = len > 1 ? ball.vx / len : 0, uy = len > 1 ? ball.vy / len : -1;
+    const spiral = br.spiral || null;
     const pop = { x: cx, y: cy, w: br.w, h: br.h, vx: ux * POP_KICK + (rng() - 0.5) * 60, vy: uy * POP_KICK - 80, rot: 0,
-      vr: (rng() < 0.5 ? -1 : 1) * (5 + rng() * 5), gif: br.gif >= 0 ? br.gif : Math.floor(rng() * 8), color: br.color, t: 0, life: 0.5 + rng() * 0.3, done: false };
+      vr: (rng() < 0.5 ? -1 : 1) * (5 + rng() * 5), gif: spiral ? -1 : br.gif >= 0 ? br.gif : Math.floor(rng() * 8), color: br.color, t: 0, life: 0.5 + rng() * 0.3, done: false,
+      spiral, hue: spiral ? (br.hue || 0) : 0, spin: spiral ? (br.spin || 1) : 1 };   // a spiral pop grows into the well, the same field
     g.pops.push(pop);
-    emit('popOut', { x: cx, y: cy, w: br.w, h: br.h, vx: pop.vx, vy: pop.vy, gif: pop.gif, color: br.color });
+    emit('popOut', { x: cx, y: cy, w: br.w, h: br.h, vx: pop.vx, vy: pop.vy, gif: pop.gif, spiral, color: br.color });
     if (g.reduced) { burst(pop); g.pops = g.pops.filter(p => !p.done); }
     return pop;
   }
@@ -288,16 +304,16 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     }
     g.pops = g.pops.filter(p => !p.done);
   }
-  /** The pop bursts into a bubble holding its picture: the whirlwind well from rung 7 (one live), else a collider (up to 3). */
+  /** The pop bursts: a spiral face into the whirlwind well (rung 7, one live, no bubble), a picture face into a collider bubble (up to 3). */
   function burst(p) {
     p.done = true;
     const x = clamp(p.x, BAND.x0, w - BAND.x0), y = clamp(p.y, BAND.y0, BAND.y1);
     let kind = 'none';
     if (g.state === 'colour') {
-      if (g.rungs[7] && !g.well) { spawnWell(x, y, p.gif); kind = 'well'; }
+      if (p.spiral) { if (g.rungs[7] && !g.well) { spawnWell(x, y, p); kind = 'well'; } }
       else if (g.colliders.length < 3) { spawnCollider(x, y, p.gif); kind = 'collider'; }
     }
-    emit('burst', { x, y, gif: p.gif, kind, color: p.color });
+    emit('burst', { x, y, gif: p.gif, spiral: p.spiral || null, kind, color: p.color });
   }
   function spawnCollider(x, y, gif) {
     const r = 46, a = rng() * TAU;
@@ -314,11 +330,11 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     }
     g.colliders = g.colliders.filter(c => c.alpha > 0);
   }
-  function spawnWell(x, y, gif) {
-    // `gif` is the dealt picture the renderer winds into the whirlwind (an int, like a collider's). `born` never pauses (the bubble inflate).
-    g.well = { x, y, r: 70, pull: 110, age: 0, born: 0, ttl: 6, rot: 0, used: false, fade: 1, captured: null, gif,
-      // Its own Loom look: a preset, a spin factor and a hue, so no two wells read the same.
-      preset: WELL_PRESETS[Math.floor(rng() * WELL_PRESETS.length)], spin: 0.75 + rng() * 0.5, hue: Math.floor(rng() * 70) - 35 };
+  function spawnWell(x, y, from) {
+    // The field is the brick's own (preset, spin, hue ride in on the pop), so the well is the spiral the player saw in the wall. `born` never pauses (the inflate).
+    const preset = from && WELL_PRESETS.includes(from.spiral) ? from.spiral : WELL_PRESETS[Math.floor(rng() * WELL_PRESETS.length)];
+    g.well = { x, y, r: 70, pull: 110, age: 0, born: 0, ttl: 6, rot: 0, used: false, fade: 1, captured: null, gif: -1,
+      preset, spin: from && Number.isFinite(from.spin) ? from.spin : 0.75 + rng() * 0.5, hue: from && Number.isFinite(from.hue) ? from.hue : Math.floor(rng() * 70) - 35 };
   }
   function updateWell(dt) {
     const s = g.well; if (!s) return;
@@ -470,6 +486,19 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     else p.tug = p.tug > 0 ? Math.max(0, p.tug - 120 * dt) : Math.min(0, p.tug + 120 * dt);
     p.x = clamp(base + p.tug, p.w / 2, w - p.w / 2);
   }
+  /** A word brick's own clock: when it runs out the brick glitches and shows another word from the list. */
+  function swapWord(br, dt) {
+    br.wordAt -= dt;
+    if (br.wordAt > 0) return;
+    br.wordAt = WORD_SWAP_S + rng() * WORD_SWAP_J;
+    const list = g.words, n = list.length;
+    if (n > 1) {
+      const cur = list.indexOf(br.word);
+      br.word = list[((cur < 0 ? Math.floor(rng() * n) : cur) + 1 + Math.floor(rng() * (n - 1))) % n];   // never the same word twice running
+    }
+    br.glitch = 1; br.swaps++;
+    emit('wordSwap', { x: br.x + br.w / 2, y: br.y + br.h / 2, word: br.word, row: br.row, col: br.col });
+  }
   function tick(dt, input) {
     g.time += dt; g.wallAge += dt;
     // One tick per landing row as the new wall settles (rows stagger by 0.04 s, the bounce reads at about 0.3 s).
@@ -487,6 +516,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       if (br.jelly > 0) br.jelly = Math.max(0, br.jelly - dt * 3);
       if (br.jellyIn > 0) { br.jellyIn -= dt; if (br.jellyIn <= 0) { br.jellyIn = 0; br.jelly = 1; } }
       if (br.pushT > 0) { br.pushT = Math.max(0, br.pushT - dt / PUSH_S); br.push.dx = br.push0.dx * br.pushT; br.push.dy = br.push0.dy * br.pushT; }
+      if (br.glitch > 0) br.glitch = Math.max(0, br.glitch - dt / GLITCH_S);
+      if (br.word && br.alive && g.state === 'colour') swapWord(br, dt);
     }
     updatePops(dt); updateColliders(dt); updateWell(dt);
     if (g.balls.some(b => b.stuck)) {
@@ -546,8 +577,15 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     setSpeedScale(s) { g.speedScale = clamp(Number(s) || 0.55, 0.2, 3); },
     setNoLose(on) { g.noLose = !!on; },
     setReduced(on) { g.reduced = !!on; },
-    /** Dev: the same pop-out, from a random alive GIF brick (broken for real), else from the field centre. Returns the pop. */
+    /** Dev: the same pop-out, from a random alive spiral brick (broken for real), else a spiral pop from the field centre. Returns the pop. */
     spawnWellNow() {
+      const alive = g.bricks.filter(b => b.alive && b.spiral);
+      if (g.state === 'colour' && alive.length) { breakBrick(alive[Math.floor(rng() * alive.length)], g.balls[0]); return g.pops[g.pops.length - 1] || null; }
+      return popOut({ x: w / 2 - BRICK.w / 2, y: h / 2 - BRICK.h / 2, w: BRICK.w, h: BRICK.h, gif: -1, color: ROW_COLORS[0],
+        spiral: WELL_PRESETS[Math.floor(rng() * WELL_PRESETS.length)], hue: Math.floor(rng() * 70) - 35, spin: 0.75 + rng() * 0.5 }, null);
+    },
+    /** Dev: pop a random alive picture brick (a collider), else a picture pop from the field centre. Returns the pop. */
+    popGifNow() {
       const alive = g.bricks.filter(b => b.alive && b.gif >= 0);
       if (g.state === 'colour' && alive.length) { breakBrick(alive[Math.floor(rng() * alive.length)], g.balls[0]); return g.pops[g.pops.length - 1] || null; }
       return popOut({ x: w / 2 - BRICK.w / 2, y: h / 2 - BRICK.h / 2, w: BRICK.w, h: BRICK.h, gif: Math.floor(rng() * 8), color: ROW_COLORS[0] }, null);

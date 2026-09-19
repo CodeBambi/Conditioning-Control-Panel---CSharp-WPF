@@ -2,7 +2,7 @@
  * stations/breakout/word-fx.js - the word triggers: one diegetic effect per
  * subliminal word (owner, 2026-09-19: "map effects to specific triggers").
  *
- * About one brick in three carries a word (game.js buildWall). Breaking it in
+ * About one plain brick in six carries a word (game.js buildWall). Breaking it in
  * COLOUR fires the word's effect; in GREY the brick is a special (+3) and no
  * effect fires. Each word lives in its own module under words/ and exports:
  *

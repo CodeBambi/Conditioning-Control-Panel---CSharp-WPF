@@ -98,7 +98,8 @@ export async function mount(ctx) {
           <button type="button" data-do="relapse">relapse</button>
           <button type="button" data-do="breakout">breakout</button>
           <button type="button" data-do="auto">rungs auto</button>
-          <button type="button" data-do="well">pop a gif</button>
+          <button type="button" data-do="well">spiral</button>
+          <button type="button" data-do="gif">pop a gif</button>
           <label><input type="checkbox" class="bo-nolose"> never lose</label>
           <span class="bo-dev-stats"></span>
         </div>
@@ -263,6 +264,7 @@ export async function mount(ctx) {
       else if (act === 'breakout') game.breakoutNow();
       else if (act === 'auto') game.clearForce();
       else if (act === 'well') game.spawnWellNow();
+      else if (act === 'gif') game.popGifNow();
       else if (e.target.dataset && e.target.dataset.word && typeof game.fireWordNow === 'function') game.fireWordNow(e.target.dataset.word);
     });
     for (const n of [dev, ui.gear]) { on(n, 'pointerdown', (e) => e.stopPropagation()); on(n, 'keydown', (e) => e.stopPropagation()); }

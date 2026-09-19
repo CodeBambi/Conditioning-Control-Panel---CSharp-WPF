@@ -1,7 +1,7 @@
 /* node --test game.test.js - the state machine and the saturation ladder, nothing visual. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, rungsFor, layoutWord, RUNG_AT, BRICK } from './game.js';
+import { createGame, rungsFor, layoutWord, RUNG_AT, BRICK, WELL_PRESETS } from './game.js';
 
 const seeded = (seed = 7) => () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
 function make(opts = {}) {
@@ -176,15 +176,18 @@ test('a brick hit pushes the brick and ripples jelly outward by ring', () => {
   assert.equal(target.pushT, 0, 'push decayed after 120 ms');
 });
 
-test('a GIF brick broken in colour pops out and bursts into the well (rung 7) or a collider (below it)', () => {
+test('a SPIRAL brick broken in colour pops out and bursts into the well (rung 7, one live); a GIF brick into a collider', () => {
   const { game, events, names } = make({ saturation: 0.75 });
   game.setForce(7, true);
   const s = game.snapshot();
-  const gif = s.bricks.findIndex(b => b.alive && b.gif >= 0);
-  assert.ok(gif >= 0, 'the wall deals GIF bricks');
-  game.breakBrick(gif);
+  const sp = s.bricks.findIndex(b => b.alive && b.spiral);
+  assert.ok(sp >= 0, 'the wall deals spiral bricks');
+  const brick = s.bricks[sp];
+  assert.ok(WELL_PRESETS.includes(brick.spiral) && brick.gif < 0 && !brick.word, 'a spiral brick wears a Loom preset, never a picture or a word');
+  game.breakBrick(sp);
   assert.equal(s.pops.length, 1, 'the brick face pops out');
-  assert.equal(s.pops[0].gif, s.bricks[gif].gif, 'the pop carries the brick picture');
+  assert.equal(s.pops[0].spiral, brick.spiral, 'the pop carries the brick field');
+  assert.equal(s.pops[0].gif, -1, 'no picture on a spiral pop');
   assert.ok(names().includes('popOut'));
   assert.equal(s.well, null, 'nothing spawns before the burst');
   for (let i = 0; i < 80; i++) game.step(1 / 60, {});
@@ -192,28 +195,71 @@ test('a GIF brick broken in colour pops out and bursts into the well (rung 7) or
   const burst = events.find(e => e[0] === 'burst');
   assert.ok(burst && burst[1].kind === 'well', 'it burst into the well');
   const w = game.snapshot().well;
-  assert.ok(w && w.gif === s.bricks[gif].gif && w.r === 70 && w.pull === 110);
+  assert.ok(w && w.r === 70 && w.pull === 110);
+  assert.equal(w.preset, brick.spiral, 'the well is the field the brick showed');
+  assert.equal(w.hue, brick.hue); assert.equal(w.spin, brick.spin);
   assert.ok(w.x >= 110 && w.x <= 370 && w.y >= 280 && w.y <= 520, 'inside the band');
   assert.equal(burst[1].x, w.x); assert.equal(burst[1].y, w.y);
-  // A second GIF brick while the well is live: a collider bubble instead.
-  const gif2 = s.bricks.findIndex((b, i) => b.alive && b.gif >= 0 && i !== gif);
-  game.breakBrick(gif2);
+  assert.equal(events.filter(e => e[0] === 'brick').at(-1)[1].plus, 3, 'a spiral brick is a special');
+  // A second spiral brick while the well is live: the pop bursts into nothing but sparkle.
+  const sp2 = s.bricks.findIndex((b, i) => b.alive && b.spiral && i !== sp);
+  if (sp2 >= 0) {
+    game.breakBrick(sp2);
+    for (let i = 0; i < 80; i++) game.step(1 / 60, {});
+    assert.equal(events.filter(e => e[0] === 'burst').at(-1)[1].kind, 'none', 'one well at a time');
+    assert.equal(game.snapshot().colliders.length, 0, 'a spiral never becomes a collider');
+  }
+  // A GIF brick is always a collider, well or no well.
+  const gif = s.bricks.findIndex(b => b.alive && b.gif >= 0);
+  game.breakBrick(gif);
   for (let i = 0; i < 80; i++) game.step(1 / 60, {});
-  assert.equal(game.snapshot().colliders.length, 1, 'a well is already live, so a collider');
-  assert.equal(game.snapshot().colliders[0].gif, s.bricks[gif2].gif);
-  // Below rung 7 the burst is always a collider.
+  assert.equal(game.snapshot().colliders.length, 1, 'a picture brick is a collider');
+  assert.equal(game.snapshot().colliders[0].gif, s.bricks[gif].gif);
+  // Below rung 7 a spiral brick's pop bursts into nothing; a GIF brick is still a collider.
   const low = make({ saturation: 0.3 });
-  const s2 = low.game.snapshot(), g3 = s2.bricks.findIndex(b => b.alive && b.gif >= 0);
-  low.game.breakBrick(g3);
+  const s2 = low.game.snapshot(), l1 = s2.bricks.findIndex(b => b.alive && b.spiral), l2 = s2.bricks.findIndex(b => b.alive && b.gif >= 0);
+  low.game.breakBrick(l1); low.game.breakBrick(l2);
   for (let i = 0; i < 80; i++) low.game.step(1 / 60, {});
   assert.equal(s2.well, null); assert.equal(s2.colliders.length, 1);
-  assert.equal(low.events.find(e => e[0] === 'burst')[1].kind, 'collider');
+  assert.deepEqual(low.events.filter(e => e[0] === 'burst').map(e => e[1].kind).sort(), ['collider', 'none']);
 });
 
-test('no timer spawns: 20 s without a GIF brick broken leaves no well and no colliders', () => {
+test('word bricks swap their word on their own clocks with a glitch, in colour only, never the same word twice running', () => {
+  const { game, events } = make({ saturation: 0.75, words: ['SINK', 'DROP', 'RELAX', 'BLANK'] });
+  game.setNoLose(true);
+  const s = game.snapshot();
+  const worded = s.bricks.filter(b => b.word);
+  assert.ok(worded.length >= 4, `${worded.length} word bricks`);
+  const clocks = new Set(worded.map(b => b.wordAt.toFixed(3)));
+  assert.ok(clocks.size >= worded.length - 1, 'each brick starts its clock somewhere else');
+  const first = worded.map(b => b.word);
+  for (let i = 0; i < 60; i++) game.step(1 / 60, { x: 240 });   // 1 s: nothing has swapped yet on most, some may have
+  for (let i = 0; i < 120; i++) game.step(1 / 60, { x: 240 });  // 3 s in: every brick has swapped at least once
+  const alive = worded.filter(b => b.alive);
+  assert.ok(alive.every(b => b.swaps >= 1), 'every live word brick swapped within 3 s');
+  assert.ok(alive.some((b, i) => b.word !== first[worded.indexOf(b)]), 'the words changed');
+  const swaps = events.filter(e => e[0] === 'wordSwap');
+  assert.ok(swaps.length >= alive.length, 'a wordSwap event per swap');
+  assert.ok(swaps.every(e => ['SINK', 'DROP', 'RELAX', 'BLANK'].includes(e[1].word)));
+  // The glitch runs 1 -> 0 in about a third of a second after a swap.
+  const b0 = alive[0]; b0.wordAt = 0; const before = b0.word;
+  game.step(1 / 60, { x: 240 });
+  assert.ok(b0.glitch > 0.9 && b0.glitch <= 1, 'the glitch starts at 1');
+  assert.notEqual(b0.word, before, 'a different word');
+  for (let i = 0; i < 30; i++) game.step(1 / 60, { x: 240 });
+  assert.equal(b0.glitch, 0, 'and is gone half a second later');
+  // Not in grey: the clocks stop.
+  game.setNoLose(false); game.loseBall(); for (let i = 0; i < 8; i++) game.step(0.1);
+  assert.equal(game.snapshot().state, 'grey');
+  const n0 = events.filter(e => e[0] === 'wordSwap').length;
+  for (let i = 0; i < 240; i++) game.step(1 / 60, { x: 240 });
+  assert.equal(events.filter(e => e[0] === 'wordSwap').length, n0, 'no swaps in grey');
+});
+
+test('no timer spawns: 20 s without a GIF or spiral brick broken leaves no well and no colliders', () => {
   const { game } = make({ saturation: 0.95 });
   game.setNoLose(true);
-  for (const b of game.snapshot().bricks) b.gif = -1;   // the ball may hit bricks; only a GIF brick spawns
+  for (const b of game.snapshot().bricks) { b.gif = -1; b.spiral = null; b.word = null; }   // the ball may hit bricks; only a GIF or spiral brick spawns (and a word would slow the clock)
   for (let i = 0; i < 20 * 60; i++) game.step(1 / 60, { x: 240 });
   const s = game.snapshot();
   assert.equal(s.well, null); assert.equal(s.colliders.length, 0);
@@ -240,11 +286,11 @@ test('in grey a special brick (gif, split, jackpot) is +3 on the counter, a plai
   assert.equal(events.filter(e => e[0] === 'burst').length, 0);
 });
 
-test('reduced motion: the bubble appears at once, no tumble', () => {
+test('reduced motion: the well appears at once, no tumble', () => {
   const { game, events } = make({ saturation: 0.75, reduced: true });
   game.setForce(7, true);
-  const s = game.snapshot(), gif = s.bricks.findIndex(b => b.alive && b.gif >= 0);
-  game.breakBrick(gif);
+  const s = game.snapshot(), sp = s.bricks.findIndex(b => b.alive && b.spiral);
+  game.breakBrick(sp);
   assert.equal(s.pops.length, 0); assert.ok(s.well, 'the well is there on the same tick');
   assert.equal(events.filter(e => e[0] === 'burst').length, 1);
 });
