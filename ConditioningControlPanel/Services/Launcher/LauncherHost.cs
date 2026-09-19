@@ -173,12 +173,30 @@ public static partial class LauncherHost
     /// screen and a positive delay (<paramref name="hideDelayMs"/>, or <see cref="HideDelayMs"/>
     /// when null and a beat is armed), the whole step waits that long so the beat plays first.
     /// </summary>
-    public static void OpenPanel(int? hideDelayMs = null)
+    public static void OpenPanel(int? hideDelayMs = null) => OpenPanel(hideDelayMs, null);
+
+    /// <summary>As <see cref="OpenPanel(int?)"/>, then <paramref name="then"/> once the panel is
+    /// on screen: the door for anything that needs the panel as an owner (a modal of its own).</summary>
+    private static void OpenPanel(int? hideDelayMs, Action? then)
     {
         _panelRequested = true;
         int delay = PendingHideDelay(hideDelayMs);
-        if (delay > 0 && IsShown) { After(FadeLeadMs(delay), OpenPanelNow); return; }
-        OpenPanelNow();
+        if (delay > 0 && IsShown) { After(FadeLeadMs(delay), () => OpenPanelNow(then)); return; }
+        OpenPanelNow(then);
+    }
+
+    /// <summary>
+    /// The launcher's "Manage mods" row. The Mod Manager is a modal OWNED BY THE PANEL, and a
+    /// tray-hidden panel cannot own a dialog (no shown owner), so the panel comes up first and the
+    /// manager opens over it; the panel's own return path applies whatever was changed.
+    /// </summary>
+    public static void OpenPanelModManager()
+    {
+        OpenPanel(null, () =>
+        {
+            try { App.MainWindowRef?.OpenModManagerFromLauncher(); }
+            catch (Exception ex) { Log.Warning(ex, "[Launcher] Mod Manager from the launcher failed"); }
+        });
     }
 
     /// <summary>
@@ -194,7 +212,8 @@ public static partial class LauncherHost
     }
 
     /// <summary>The launcher fades and hides, then the panel comes up and fades in.</summary>
-    private static void OpenPanelNow() => FadeThenHide(ShowPanel);
+    private static void OpenPanelNow(Action? then = null)
+        => FadeThenHide(then == null ? ShowPanel : () => { ShowPanel(); then(); });
 
     private static void ShowPanel()
     {

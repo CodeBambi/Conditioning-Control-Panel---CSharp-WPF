@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
         Title="{loc:Str launcher_media_title}"
-        Width="560" Height="720"
+        Width="560" Height="790"
         Background="{DynamicResource DarkerBgBrush}"
         WindowStartupLocation="CenterOwner"
         WindowStyle="None"
@@ -120,6 +120,50 @@
                             <WrapPanel x:Name="NicheChips"/>
                             <TextBlock Text="{loc:Str launcher_media_niches_hint}" Style="{StaticResource MediaCopy}" FontSize="13" Margin="0,2,0,0"/>
                         </StackPanel>
+
+                        <!-- library: which saved asset selection the games draw from -->
+                        <TextBlock Text="{loc:Str launcher_media_library}" Style="{StaticResource MediaEyebrow}" Margin="0,22,0,10"/>
+                        <TextBlock Text="{loc:Str launcher_media_preset}" Style="{StaticResource MediaCopy}" FontSize="13"/>
+                        <Grid Margin="0,6,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <!-- Foreground=Black on the box AND the rows, or the text is invisible on the theme. -->
+                            <ComboBox x:Name="PresetCombo" Foreground="Black" FontSize="13" MinHeight="32"
+                                      SelectedValuePath="Id" VerticalAlignment="Center"
+                                      SelectionChanged="PresetCombo_Changed">
+                                <ComboBox.ItemContainerStyle>
+                                    <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+                                        <Setter Property="Foreground" Value="Black"/>
+                                    </Style>
+                                </ComboBox.ItemContainerStyle>
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding DisplayText}" Foreground="Black"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <Button x:Name="BtnAssetBrowser" Grid.Column="1" Content="{loc:Str launcher_media_open_browser}"
+                                    Click="BtnAssetBrowser_Click" Margin="12,0,0,0" VerticalAlignment="Center"
+                                    Background="Transparent" BorderThickness="0" Padding="4,2" Cursor="Hand"
+                                    Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13" FocusVisualStyle="{x:Null}">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                                            <TextBlock x:Name="Txt" Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Txt" Property="TextDecorations" Value="Underline"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                        </Grid>
+                        <TextBlock Text="{loc:Str launcher_media_preset_hint}" Style="{StaticResource MediaCopy}" FontSize="13" Margin="0,2,0,0"/>
 
                         <!-- sound: the app-wide master volume, every game included -->
                         <TextBlock Text="{loc:Str launcher_media_sound}" Style="{StaticResource MediaEyebrow}" Margin="0,22,0,10"/>

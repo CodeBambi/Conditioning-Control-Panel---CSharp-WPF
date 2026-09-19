@@ -5606,5 +5606,13 @@
   "launcher_media_master_hint": "Die ganze App, Spiele eingeschlossen.",
   "launcher_media_footnote": "Der Back Room folgt dem ebenfalls.",
   "launcher_media_done": "Fertig",
-  "launcher_media_tooltip": "Medien und Ton"
+  "launcher_media_tooltip": "Medien und Ton",
+  "launcher_media_button": "Medien",
+  "launcher_mod_label": "Mod: {0}",
+  "launcher_mod_tooltip": "Aktiven Mod wechseln",
+  "launcher_mod_manage": "Mods verwalten",
+  "launcher_media_library": "Bibliothek",
+  "launcher_media_preset": "Datei-Preset",
+  "launcher_media_preset_hint": "Welche deiner Bilder und Clips die Spiele verwenden. Gespeichert im Datei-Browser des Panels.",
+  "launcher_media_open_browser": "Datei-Browser öffnen"
 }

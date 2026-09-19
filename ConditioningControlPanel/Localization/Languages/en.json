@@ -6362,5 +6362,13 @@
   "launcher_media_master_hint": "The whole app, games included.",
   "launcher_media_footnote": "The Back Room follows this too.",
   "launcher_media_done": "Done",
-  "launcher_media_tooltip": "Media and sound"
+  "launcher_media_tooltip": "Media and sound",
+  "launcher_media_button": "Media",
+  "launcher_mod_label": "Mod: {0}",
+  "launcher_mod_tooltip": "Switch the active mod",
+  "launcher_mod_manage": "Manage mods",
+  "launcher_media_library": "Library",
+  "launcher_media_preset": "Asset preset",
+  "launcher_media_preset_hint": "Which of your pictures and clips the games draw from. Saved in the panel's asset browser.",
+  "launcher_media_open_browser": "Open asset browser"
 }
