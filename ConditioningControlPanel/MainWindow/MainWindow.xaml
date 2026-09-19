@@ -471,17 +471,22 @@
 
                 <!-- Window Control Buttons -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
-                    <Button x:Name="BtnBackToLauncher" Width="46" Height="36"
+                    <Button x:Name="BtnBackToLauncher" Height="36"
                             Click="BtnBackToLauncher_Click" Style="{StaticResource WindowControlButton}"
                             ToolTip="{loc:Str launcher_tooltip_back_to_client}"
                             AutomationProperties.Name="{loc:Str launcher_back_to_client}">
-                        <!-- A left chevron into a small square: back to the client. -->
-                        <Canvas Width="16" Height="14">
-                            <Path Data="M9,2 L4,7 L9,12" Stroke="White" StrokeThickness="1.6"
-                                  StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                            <Rectangle Canvas.Left="11.5" Canvas.Top="4" Width="5" Height="6"
-                                       Stroke="White" StrokeThickness="1.4" RadiusX="1" RadiusY="1"/>
-                        </Canvas>
+                        <!-- A left chevron into a small square, and the name of where it goes:
+                             testers never found the bare icon. -->
+                        <StackPanel Orientation="Horizontal" Margin="12,0,12,0">
+                            <Canvas Width="16" Height="14" VerticalAlignment="Center">
+                                <Path Data="M9,2 L4,7 L9,12" Stroke="White" StrokeThickness="1.6"
+                                      StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                <Rectangle Canvas.Left="11.5" Canvas.Top="4" Width="5" Height="6"
+                                           Stroke="White" StrokeThickness="1.4" RadiusX="1" RadiusY="1"/>
+                            </Canvas>
+                            <TextBlock Text="{loc:Str launcher_back_to_client_short}" Foreground="White" FontSize="12"
+                                       FontWeight="SemiBold" Margin="7,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
                     </Button>
                     <Button x:Name="BtnTitleBarBugReport" Content="🐛" Width="46" Height="36"
                             Click="BtnReportBug_Click" Style="{StaticResource WindowControlButton}"

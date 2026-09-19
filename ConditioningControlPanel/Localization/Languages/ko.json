@@ -5563,6 +5563,7 @@
   "launcher_skip_to_panel": "[KO] Open the panel directly next time",
   "launcher_back_to_client": "[KO] Back to CC Labs",
   "launcher_tooltip_back_to_client": "[KO] Tuck the panel away and go back to the launcher. Everything keeps running.",
+  "launcher_back_to_client_short": "CC Labs",
   "launcher_link_whats_new": "[KO] What's new",
   "launcher_sign_in": "로그인",
   "launcher_pill_sign_in": "플레이하려면 로그인",

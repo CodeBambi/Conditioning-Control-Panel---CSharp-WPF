@@ -35,7 +35,9 @@ namespace ConditioningControlPanel.Launcher;
 /// </summary>
 public partial class LauncherWindow
 {
-    private const double TileArtHeight = 156;
+    /// <summary>The art row is star-sized so a tile takes the height its row hands it; this is
+    /// the floor under the plate, the same number <see cref="LauncherGridLayout.MinArtHeight"/> is.</summary>
+    private const double TileArtMinHeight = LauncherGridLayout.MinArtHeight;
     private const double TileTiltDegrees = 1.2;
     private const double TileArtParallaxPx = 7;
     private const int TileTiltMs = 90;
@@ -85,7 +87,7 @@ public partial class LauncherWindow
         }
 
         var body = new Grid();
-        body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(TileArtHeight) });
+        body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star), MinHeight = TileArtMinHeight });
         body.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         // --- the art plate, rounded at the top only (the clip runs past the bottom edge) ---
@@ -159,7 +161,8 @@ public partial class LauncherWindow
         body.Children.Add(plate);
 
         // --- title, blurb, play ---
-        var text = new StackPanel { Margin = new Thickness(16, 10, 16, 16) };
+        // Margins and the Play height are part of LauncherGridLayout.MinTileHeight's sum.
+        var text = new StackPanel { Margin = new Thickness(16, 8, 16, 12) };
         Grid.SetRow(text, 1);
         var textLight = ((SolidColorBrush)FindResource("TextLightBrush")).Color;
         var titleBrush = new SolidColorBrush(textLight);
@@ -247,7 +250,7 @@ public partial class LauncherWindow
         {
             Content = label,
             Style = (Style)FindResource("LauncherPlay"),
-            Height = 42, Margin = new Thickness(0, 10, 0, 0),
+            Height = 40, Margin = new Thickness(0, 8, 0, 0),
             Background = fill,
             BorderBrush = new SolidColorBrush(Lighten(hue, 0.25)),
             Foreground = new SolidColorBrush(Lighten(hue, 0.45)),
