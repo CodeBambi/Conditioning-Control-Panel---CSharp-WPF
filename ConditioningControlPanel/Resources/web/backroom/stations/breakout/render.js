@@ -188,9 +188,10 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     for (const fx of list) {
       const d = WORD_FX[fx.key];
       if (!d || !d.render || typeof d.render[hook] !== 'function') continue;
-      g.save();
+      const wrap = hook !== 'world';                    // world hooks move the whole world, so their transform must survive
+      if (wrap) g.save();
       try { d.render[hook](g, s, fx, R); } catch (e) { /* a word's bug never breaks the frame */ }
-      g.restore();
+      if (wrap) g.restore();
     }
   }
   const rInfo = (s, mix, dt, fxDt) => ({ W, H, cw, ch, scale, ox, oy, mix, dt, fxDt, P, stamps, cam, col, toRgb, PINK, MINT, VIOLET, WHITE, BG, GOLD, GREY, FONT, reduced, rng, media, frame: copyFrame, sat: s.sat });

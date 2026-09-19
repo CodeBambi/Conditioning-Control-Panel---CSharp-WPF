@@ -16,7 +16,9 @@
  * fx = { key, word, t, dur, phase (t/dur, 0..1), heavy, x, y, data: {} } and is
  * the same object in the sim, the renderer (via the snapshot's s.fx.active)
  * and the sound cue. `fx.t` runs on wall-clock seconds (not the sim's slowed
- * time), so a word that slows the game does not slow itself.
+ * time), so a word that slows the game does not slow itself; it does pause
+ * with the sim's own holds (g.freeze, g.hitStopMs, the transitions). The heavy
+ * gap is measured on g.fx.wall, the same clock.
  *
  * sim.tick sets fields on g.mod (reset to MOD_DEFAULTS before each round of
  * ticks): timeScale (the lowest wins), paddleW (multiplier), ballSpeed
@@ -27,7 +29,9 @@
  * api = { emit, au, rng, addSat, clamp, lerp, W, H }.
  *
  * render.world runs right after the camera transform, before the background,
- * so a transform on ctx (scale, rotate, translate) moves the whole world.
+ * and is NOT wrapped in save/restore, so a transform on ctx (scale, rotate,
+ * translate) moves the whole world for the rest of the frame; leave fill and
+ * alpha state as you found it. (over and post are wrapped.)
  * render.over runs after the overlays, still in field space (0..W x 0..H):
  * vignettes, mists, flashes. render.post runs after the post pass in canvas
  * pixel space (echoes, whole-frame tricks). R = { W, H, cw, ch, scale, ox, oy,
@@ -88,6 +92,7 @@ export function createWordSim(g, api) {
   const def = k => WORD_FX[k] || null;
   const call = (fx, hook, ...args) => { const d = def(fx.key); try { if (d && d.sim && typeof d.sim[hook] === 'function') d.sim[hook](g, fx, ...args); } catch (e) { /* a word's bug never stops the game */ } };
   function end(fx) { if (fx.done) return; fx.done = true; fx.phase = 1; call(fx, 'end', api); }
+  const wall = () => (Number.isFinite(g.fx.wall) ? g.fx.wall : 0);
   return {
     /** Break of a word brick (or the dev button). Returns the fx when it fired, null for a stamp only. */
     fire(word, x, y) {
@@ -96,9 +101,9 @@ export function createWordSim(g, api) {
       if (!d || g.state !== 'colour') { api.emit('word', { ...base, fired: false }); return null; }
       const active = g.fx.active.filter(f => !f.done);
       const heavyRunning = active.some(f => f.heavy);
-      if (d.heavy && (g.time - g.fx.lastHeavyAt < HEAVY_GAP_S || heavyRunning)) { api.emit('word', { ...base, fired: false }); return null; }
+      if (d.heavy && (wall() - g.fx.lastHeavyAt < HEAVY_GAP_S || heavyRunning)) { api.emit('word', { ...base, fired: false }); return null; }
       if (!d.heavy && heavyRunning) { api.emit('word', { ...base, fired: false }); return null; }
-      if (d.heavy) { for (const f of active) end(f); g.fx.lastHeavyAt = g.time; }
+      if (d.heavy) { for (const f of active) end(f); g.fx.lastHeavyAt = wall(); }
       else { for (const f of active) if (f.key === key) end(f); }        // the same soft word restarts rather than stacks
       const fx = { ...base, t: 0, phase: 0, done: false, data: {} };
       g.fx.active = g.fx.active.filter(f => !f.done).concat(fx);
@@ -108,6 +113,7 @@ export function createWordSim(g, api) {
     },
     /** Wall-clock advance; sets g.mod for this frame. */
     advance(dt) {
+      g.fx.wall = wall() + dt;                            // the word clock: wall seconds, paused only by the sim's own holds
       g.mod = freshMod();
       for (const fx of g.fx.active) {
         if (fx.done) continue;

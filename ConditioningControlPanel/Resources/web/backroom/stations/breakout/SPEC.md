@@ -76,6 +76,12 @@ export function createAudio({ bpm = 96, master = 0.8 } = {})
 - Everything synthesised with oscillators/noise, no sample files, so the dev harness works offline. Music bed: a soft 4-bar loop (pad + pulse on the beat) in C pentatonic (ROOT 523.25 Hz like `shared/sound/kit.js`), running from `start()`. Keep CPU tiny.
 - Three gain buses like the room: `bed`, `sfx`, `sub`. Master 0.8.
 
+## Word triggers (owner, 2026-09-19: "map effects to specific triggers")
+- About one plain brick in three carries a subliminal word (`brick.word`, dealt in turn from the word list, never on a picture brick). Breaking it in COLOUR fires the word's diegetic effect; in GREY it is a special (+3) and nothing fires.
+- `word-fx.js` is the contract and the registry; one module per word under `words/` (`sink`, `drop`, `relax`, `let-go`, `deeper`, `blank`), each with sim, render (world / over / post) and sound hooks. Effects run on wall-clock and set per-frame mods on `g.mod` (timeScale, paddleW, ballSpeed, safe, autopilot, hideBricks, zoom).
+- Rules: a heavy word ducks the running soft ones and the music (audio `duck`); one heavy every 4 s, a second heavy inside the gap is a stamp only; a soft word under a heavy is a stamp only; the ball never dies during a word; reduced motion keeps the sound and the tint only.
+- A mod's own words land on the six by keyword family (`wordKey`: sleep -> SINK, freeze -> BLANK, surrender -> LET GO ...); an unknown word is a plain stamp. The dev panel's Words row fires each one (`game.fireWordNow`).
+
 ## Rewards (v1)
 - SP: 1 SP per wall cleared, capped at 20 SP per sit-down. v1: just `onEvent('wall')` and a local counter shown in the HUD ("+1 SP"), no server call. Wiring to the server comes later.
 - HUD: bricks broken, walls cleared, a thin saturation bar along the top edge (NOT a number), SP earned this sit-down.

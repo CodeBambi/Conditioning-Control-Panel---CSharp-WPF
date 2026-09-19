@@ -418,7 +418,13 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     duck(amount = 0.6, hold = 1, release = 0.6) {
       if (!live()) return;
       const t = ctx.currentTime, to = clamp(1 - num(amount, 0.6), 0, 1);
-      for (const k of ['bed', 'sfx', 'sub']) { const g = bus[k]; if (!g) continue; glide(g.gain, to, 0.06, t); glide(g.gain, 1, Math.max(0.05, num(release, 0.6)), t + Math.max(0, num(hold, 1))); }
+      const back = t + Math.max(0, num(hold, 1)), rel = Math.max(0.05, num(release, 0.6));
+      for (const k of ['bed', 'sfx', 'sub']) {
+        const g = bus[k]; if (!g) continue;
+        // Scheduled by hand: glide() snapshots the param's value at call time, so a later return would snap to 1.
+        try { const p = g.gain; p.cancelScheduledValues(t); p.setValueAtTime(Math.max(0.0001, p.value), t); p.linearRampToValueAtTime(to, t + 0.06); p.setValueAtTime(to, back); p.linearRampToValueAtTime(1, back + rel); }
+        catch (e) { g.gain.value = 1; }
+      }
     },
     /** A word trigger's signature sound (word-fx.js modules: sound(synth, fx)). */
     word(key, fx = {}) {
