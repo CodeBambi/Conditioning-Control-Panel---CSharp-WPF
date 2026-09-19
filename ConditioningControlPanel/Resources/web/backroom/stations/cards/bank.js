@@ -97,7 +97,7 @@ export function createCardsBank({ layer, onTick, onLand, onDone }) {
       at = { from, to };
       startMs = performance.now();
       run = createBankRun({ kind: 'pay', n, fromValue, toValue, rollupMs, reduced, startMs });
-      if (run.mode === 'state') { play(run.step(startMs)); return 'state'; }   // Law VI: the STATE, no travel
+      if (run.mode === 'state') { play(run.step(startMs).events); return 'state'; }   // Law VI: the STATE, no travel
       origin = layer.getBoundingClientRect();
       els = Array.from({ length: run.n }, () => {
         const el = document.createElement('i');
