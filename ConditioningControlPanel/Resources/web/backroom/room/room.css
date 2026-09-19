@@ -28,7 +28,7 @@ html, body { margin: 0; height: 100%; background: var(--br-ground); color: var(-
 .br-stage { position: fixed; inset: 0; }
 .br-canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
 .br-canvas:active { cursor: grabbing; }
-html.br-overview .br-canvas { cursor: default; }
+.br-canvas.is-locked { cursor: none; }
 
 /* The room's own chrome sits between the view and the station layer. */
 .br-room-ui { position: fixed; inset: 0; z-index: 10; pointer-events: none; }
@@ -50,6 +50,14 @@ html.br-visiting .br-room-ui, html.br-visiting.br-seated .br-room-ui { visibilit
 .br-crosshair { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%;
   background: rgba(255, 224, 240, .6); box-shadow: 0 0 5px #120914; pointer-events: none; }
 .br-crosshair[hidden] { display: none; }
+/* The Play prompt: under the crosshair, the key drawn as a key. Hidden with the crosshair while seated or visiting. */
+.br-prompt { position: absolute; left: 50%; top: calc(50% + 22px); transform: translateX(-50%); pointer-events: none;
+  display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 10px; white-space: nowrap;
+  color: var(--br-ink); font: 600 14px/1 "Segoe UI", system-ui, sans-serif;
+  background: linear-gradient(180deg, #3a1f46e6, #27142fe6); border: 1px solid var(--br-gold); box-shadow: 0 2px 12px #120914; }
+.br-prompt[hidden] { display: none; }
+.br-key { display: inline-block; min-width: 18px; padding: 3px 6px; border-radius: 5px; text-align: center;
+  font: 700 12px/1 "Segoe UI", system-ui, sans-serif; color: #2a1838; background: var(--br-gold); }
 
 /* THE ROOM'S CHROME (owner, 2026-09-16: "they are plain and shallow"). Every chip and button in the Back Room
    is lit from the top, shaded at the bottom, and has a body under it that it travels into on a press. Same
@@ -99,10 +107,8 @@ html.br-visiting .br-room-ui, html.br-visiting.br-seated .br-room-ui { visibilit
 .br-switch { min-width: 52px; }
 .br-map-list { position: absolute; left: 16px; right: 16px; bottom: 26px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .br-map-list[hidden] { display: none; }
-html.br-overview .br-hint { visibility: hidden; }
 
 /* The room view puts the Options card away with the rest of the walking chrome. */
-html.br-overview .br-options { visibility: hidden; }
 /* THE PICTURE PICKER (10.13.C). Its own card, wider than the Options one because it holds a text
    field and a list that grows: a niche pill has to fit "r/" plus a name without wrapping mid-word.
    The seg row wraps, so five sources and eight niches both stack instead of overflowing. */
@@ -148,7 +154,6 @@ html.br-overview .br-options { visibility: hidden; }
 .br-niche-remove:focus-visible { outline: 2px solid var(--br-gold); outline-offset: -2px; }
 /* A disabled source is refused, not absent: Scrolller needs consent, which lives in the Assets tab. */
 .br-media .br-seg:disabled { opacity: .45; cursor: default; }
-html.br-overview .br-media { visibility: hidden; }
 
 /* THE FLOOR BELL (CONTRACT 10.16.B). One line of text under the nav pills. It is
  * somebody else's party (Brake 1): one colour, no background flash, no sound. */
@@ -158,7 +163,6 @@ html.br-overview .br-media { visibility: hidden; }
 .br-bell[hidden] { display: none; }
 .br-bell span { opacity: 1; }
 .br-bell span.is-in { animation: br-bell-in 200ms ease-out; }
-html.br-overview .br-bell { visibility: hidden; }
 @keyframes br-bell-in { from { opacity: 0; } }
 /* Reduced motion and Calm: the line still rotates (it is text, not motion), it just lands at 0 ms. */
 html.br-reduced .br-bell span.is-in, html.br-still .br-bell span.is-in { animation: none; }
@@ -236,7 +240,8 @@ html.br-reduced .br-back, html.br-reduced .br-loading-bar i { transition: none; 
 
 /* Seated controls share the room; the top band belongs to Back, SP, Options and bell. */
 html.br-seated .br-room-ui { visibility: visible; z-index: 25; }
-html.br-seated .br-hint, html.br-seated .br-crosshair, html.br-seated .br-visit { visibility: hidden; }
+html.br-seated .br-hint, html.br-seated .br-crosshair, html.br-seated .br-prompt, html.br-seated .br-visit { visibility: hidden; }
+html.br-visiting .br-prompt { visibility: hidden; }
 .br-station.br-seat { background: transparent; pointer-events: none; }
 .br-seat button, .br-seat input, .br-seat select { pointer-events: auto; }
 .br-seat > * { max-width: 100%; }
