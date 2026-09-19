@@ -104,9 +104,9 @@ export function createWellFx({ reduced = false, rng = Math.random, noiseTile = n
     const eye = dg.createRadialGradient(ex, ey, 0, ex, ey, r * (0.3 - tight * 0.1));
     eye.addColorStop(0, 'rgba(0,0,0,1)'); eye.addColorStop(0.55, 'rgba(0,0,0,.85)'); eye.addColorStop(1, 'rgba(0,0,0,0)');
     dg.fillStyle = eye; dg.fillRect(-half, -half, size, size);
-    // The rim: feathered, never a hard circle.
-    const rim = dg.createRadialGradient(0, 0, r * 0.82, 0, 0, r);
-    rim.addColorStop(0, 'rgba(0,0,0,0)'); rim.addColorStop(1, 'rgba(0,0,0,.9)');
+    // The rim: a wide feather that reaches full transparency at the edge, so the field fades straight into the screen.
+    const rim = dg.createRadialGradient(0, 0, r * 0.62, 0, 0, r);
+    rim.addColorStop(0, 'rgba(0,0,0,0)'); rim.addColorStop(0.55, 'rgba(0,0,0,.5)'); rim.addColorStop(1, 'rgba(0,0,0,1)');
     dg.fillStyle = rim; dg.fillRect(-half, -half, size, size);
     if (!reduced && tear) { dg.rotate(-rot * 0.5); dg.drawImage(tear, -half, -half); }
     dg.restore();
@@ -140,11 +140,8 @@ export function createWellFx({ reduced = false, rng = Math.random, noiseTile = n
     const pull = g.createRadialGradient(well.x, well.y, r * 0.5, well.x, well.y, well.pull || 110);
     pull.addColorStop(0, col(violet, mix, 0.2 * a)); pull.addColorStop(1, col(violet, mix, 0));
     g.fillStyle = pull; g.beginPath(); g.arc(well.x, well.y, well.pull || 110, 0, 7); g.fill();
-    // Presence without the bubble skin (owner, 2026-09-19: "can't see the spirals"): a pink halo behind the disc.
-    const halo = g.createRadialGradient(well.x, well.y, r * 0.55, well.x, well.y, r * 1.4);
-    halo.addColorStop(0, col(pink, mix, 0.42 * a)); halo.addColorStop(0.6, col(pink, mix, 0.16 * a)); halo.addColorStop(1, col(pink, mix, 0));
-    g.fillStyle = halo; g.beginPath(); g.arc(well.x, well.y, r * 1.4, 0, 7); g.fill();
-
+    // No halo, no rim, no glow (owner, 2026-09-19: "remove the pink circle, the edges faded directly on the screen"):
+    // the disc's own feather (compose) is the only edge.
     ensure(r);
     frames++;
     let ok = true;
@@ -154,23 +151,15 @@ export function createWellFx({ reduced = false, rng = Math.random, noiseTile = n
       g.save();
       g.globalAlpha = a;
       g.translate(well.x, well.y); g.scale(pop, pop);
-      g.shadowColor = col(pink, mix, 0.9); g.shadowBlur = 24 + cap * 16;
       g.drawImage(disc, -half, -half);
-      g.restore();
-      // A mint rim turning with the field, dashed so it reads as motion, and a thin pink one just outside it.
-      g.save(); g.globalAlpha = a;
-      g.lineWidth = 2; g.strokeStyle = col(mint, mix, 0.7); g.setLineDash([7, 11]); g.lineDashOffset = (well.rot || 0) * r;
-      g.beginPath(); g.arc(well.x, well.y, r * 0.98, 0, 7); g.stroke();
-      g.setLineDash([]); g.lineWidth = 1.5; g.strokeStyle = col(pink, mix, 0.55);
-      g.beginPath(); g.arc(well.x, well.y, r * 1.06, 0, 7); g.stroke();
       g.restore();
     } else {
       // No Loom (no canvas at all): the old procedural look, so the well is never invisible.
       spiral(g, well.x, well.y, r, well.rot || 0, col(pink, mix), a);
     }
     // The faint procedural arms still ride on top, so the wind has visible lines.
-    spiral(g, well.x, well.y, r * 0.88, (well.rot || 0) * 1.3, col(mint, mix), a * 0.3, 3);
-    spiral(g, well.x, well.y, r * 0.5, (well.rot || 0) * 1.7, col(pink, mix), a * 0.32, 2);
+    spiral(g, well.x, well.y, r * 0.7, (well.rot || 0) * 1.3, col(mint, mix), a * 0.22, 3);
+    spiral(g, well.x, well.y, r * 0.45, (well.rot || 0) * 1.7, col(pink, mix), a * 0.26, 2);
     g.restore();
 
     if (reduced || !P || !ok) return;
