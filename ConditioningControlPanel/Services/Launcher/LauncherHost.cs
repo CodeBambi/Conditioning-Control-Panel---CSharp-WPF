@@ -91,6 +91,13 @@ public static partial class LauncherHost
 
     public static bool IsCreated => _window != null;
 
+    /// <summary>
+    /// True while the launcher is part of this run: it has been created, or the boot did not ask
+    /// for the panel outright (<c>--panel</c>, <c>--startup</c>, the skip-to-panel preference).
+    /// The tray's "Back to CC Labs" row shows on this; the title-bar button is always there.
+    /// </summary>
+    public static bool SurfaceInPlay => IsCreated || App.Boot.Surface != BootSurface.Panel;
+
     /// <summary>The game the launcher started and is waiting on, or null.</summary>
     public static LauncherEntry? AwaitingGame => _awaiting;
 

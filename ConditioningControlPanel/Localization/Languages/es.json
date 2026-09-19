@@ -5563,6 +5563,7 @@
   "launcher_skip_to_panel": "[ES] Open the panel directly next time",
   "launcher_back_to_client": "[ES] Back to CC Labs",
   "launcher_tooltip_back_to_client": "[ES] Tuck the panel away and go back to the launcher. Everything keeps running.",
+  "launcher_back_to_client_short": "CC Labs",
   "launcher_link_whats_new": "[ES] What's new",
   "launcher_sign_in": "Iniciar sesión",
   "launcher_pill_sign_in": "Inicia sesión para jugar",

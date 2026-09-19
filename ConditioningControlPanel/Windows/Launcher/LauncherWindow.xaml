@@ -477,14 +477,16 @@
                     </Grid>
                 </Border>
 
-                <!-- the games -->
-                <Grid x:Name="GamesColumn" Grid.Column="2" ClipToBounds="True">
+                <!-- the games. Every tile fits: the grid is sized to the viewport on SizeChanged
+                     (LauncherGridLayout), two columns or three by the column's width, and the
+                     scroller only scrolls when the tiles would drop under the card floor. -->
+                <Grid x:Name="GamesColumn" Grid.Column="2" ClipToBounds="True" SizeChanged="GamesColumn_SizeChanged">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <TextBlock x:Name="GamesEyebrow" Text="{loc:Str launcher_section_games}" Style="{StaticResource LauncherEyebrow}" Margin="9,0,0,4"/>
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                    <ScrollViewer x:Name="GamesScroller" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                                   PanningMode="VerticalOnly">
                         <UniformGrid x:Name="GamesGrid" Columns="2" VerticalAlignment="Top"/>
                     </ScrollViewer>

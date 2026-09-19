@@ -5563,6 +5563,7 @@
   "launcher_skip_to_panel": "[JA] Open the panel directly next time",
   "launcher_back_to_client": "[JA] Back to CC Labs",
   "launcher_tooltip_back_to_client": "[JA] Tuck the panel away and go back to the launcher. Everything keeps running.",
+  "launcher_back_to_client_short": "CC Labs",
   "launcher_link_whats_new": "[JA] What's new",
   "launcher_sign_in": "サインイン",
   "launcher_pill_sign_in": "プレイするにはサインイン",

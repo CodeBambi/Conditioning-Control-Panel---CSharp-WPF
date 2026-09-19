@@ -378,6 +378,34 @@ public partial class LauncherWindow : Window
             }
             catch (Exception ex) { Log.Warning(ex, "[Launcher] tile {Id} failed to build", entry.Id); }
         }
+        FitTiles();
+    }
+
+    private void GamesColumn_SizeChanged(object sender, SizeChangedEventArgs e) => FitTiles();
+
+    /// <summary>
+    /// Size the grid so every tile is on screen: columns by the column's width, the grid as tall
+    /// as the scroller's viewport so the rows share it, and only when a row would drop under the
+    /// card floor does the grid grow past the viewport and the scroller scroll. The sums live in
+    /// <see cref="LauncherGridLayout"/>; the tile's own art row is star-sized and takes whatever
+    /// the row hands it above the text.
+    /// </summary>
+    private void FitTiles()
+    {
+        try
+        {
+            int count = GamesGrid.Children.Count;
+            if (count == 0) return;
+            int columns = LauncherGridLayout.Columns(GamesColumn.ActualWidth, count);
+            if (GamesGrid.Columns != columns) GamesGrid.Columns = columns;
+            double available = GamesScroller.ActualHeight;
+            if (available <= 0) return;
+            double height = LauncherGridLayout.GridHeight(available, LauncherGridLayout.Rows(count, columns));
+            // Height starts as NaN, and NaN compares false with everything: test for it first.
+            if (height > 0 && (double.IsNaN(GamesGrid.Height) || Math.Abs(GamesGrid.Height - height) > 0.5))
+                GamesGrid.Height = height;
+        }
+        catch (Exception ex) { Log.Debug(ex, "[Launcher] tile fit failed"); }
     }
 
     // ------------------------------------------------------------------ the stats strip
