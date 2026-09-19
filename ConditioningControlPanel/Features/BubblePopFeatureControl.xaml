@@ -215,31 +215,8 @@
                                                   SelectionChanged="CmbMotion_Changed"/>
                                     </Grid>
 
-                                    <Grid x:Name="BrainDrainBubbleRow" Height="34" Background="Transparent"
-                                          ToolTip="{loc:Str tooltip_bubble_braindrain}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_bubble_braindrain}" FontSize="13" FontWeight="SemiBold"
-                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                        <CheckBox Grid.Column="1" x:Name="ChkBrainDrainBubble"
-                                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                                  Checked="ChkBrainDrainBubble_Changed" Unchecked="ChkBrainDrainBubble_Changed"/>
-                                    </Grid>
 
-                                    <Grid x:Name="MagnetBubbleRow" Height="34" Background="Transparent"
-                                          ToolTip="{loc:Str tooltip_bubble_magnet}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_bubble_magnet}" FontSize="13" FontWeight="SemiBold"
-                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                        <CheckBox Grid.Column="1" x:Name="ChkMagnetBubble"
-                                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                                  Checked="ChkMagnetBubble_Changed" Unchecked="ChkMagnetBubble_Changed"/>
-                                    </Grid>
+
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -320,6 +297,10 @@
                                     <CheckBox x:Name="ChkTypeGlitch"     Tag="glitch"     Content="Glitch"      Foreground="White" Margin="0,0,16,8" Checked="TriggerType_Changed" Unchecked="TriggerType_Changed"/>
                                     <CheckBox x:Name="ChkTypeCascade"    Tag="htlink"     Content="Cascade"     Foreground="White" Margin="0,0,16,8" Checked="TriggerType_Changed" Unchecked="TriggerType_Changed"/>
                                     <CheckBox x:Name="ChkTypeVideo"      Tag="video"      Content="Video"       Foreground="White" Margin="0,0,16,8" Checked="TriggerType_Changed" Unchecked="TriggerType_Changed"/>
+                                    <CheckBox x:Name="ChkBrainDrainBubble" Content="{loc:Str setting_bubble_braindrain}"
+                                              Foreground="White" Margin="0,0,16,8"
+                                              ToolTip="{loc:Str tooltip_bubble_braindrain}"
+                                              Checked="ChkBrainDrainBubble_Changed" Unchecked="ChkBrainDrainBubble_Changed"/>
                                 </WrapPanel>
                             </StackPanel>
                         </Grid>
