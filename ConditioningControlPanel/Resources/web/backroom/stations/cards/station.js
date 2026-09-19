@@ -50,7 +50,7 @@ import { createSeatLook } from '../../room/seat-look.js';
 import { createLoomKit, createDeck, createMoments, strengthK, viewportRect, DECK_VALUES } from '../../shared/hypno/index.js';
 import { createCallout, FX_DELAY_MS } from '../../shared/hypno/callout.js';
 import { showSubs, wordBook } from '../../shared/hypno/words.js';
-import { readState, readHand, legalOf, controls, classify, createIntent, mayRetry, moveBody, owedFor, shownSp, defaultStake,
+import { readState, readHand, legalOf, controls, classify, createIntent, mayRetry, moveBody, owedFor, shownSp, flightValue, defaultStake,
   isOpen, totalOf, MOVES } from './hand.js';
 import { planSteps, settleMoment, streakAfter, mayFire, wordKeys, aceSlot, bestCard, vortexOf, resultLines, screenHoldMs, TIMING,
   calloutFor, winningCards, isBloom, WIN_HOLD_MS } from './feel.js';
@@ -196,7 +196,7 @@ export async function mount(ctx) {
       owe(n) { owed = Math.max(0, Math.trunc(Number(n) || 0)); paint(); },
       /** THE BANK is flying: the chip says exactly this until the last token is down (`show(null)` releases it
        *  back to the room's Law I rule). Nothing else may write the number while a run owns it. */
-      show(v) { flying = Number.isFinite(Number(v)) ? Math.round(Number(v)) : null; paint(); },
+      show(v) { flying = flightValue(v); paint(); },
       /** THE BANK's target: the room's chip, or the station's own in a standalone page. */
       target() { return hook && typeof hook.target === 'function' ? hook.target() : (el && $('.cards-sp')); },
       thud() {
