@@ -1,4 +1,5 @@
 import { pentatonic, ROOT_HZ } from '../../shared/sound/kit.js';
+import { WORD_FX } from './word-fx.js';
 
 /* ============================================================================
  * stations/breakout/audio.js - the cabinet's ears. Everything synthesised
@@ -76,7 +77,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
   const perfOrigin = perf();
   const beat = createBeat(bpm, 0);
   let ctx = null, out = null, lp = null, room = null, noiseBuf = null, timer = 0, destroyed = false, running = false;
-  const bus = { bed: null, sfx: null, sub: null };
+  const bus = { bed: null, sfx: null, sub: null, word: null };   // word: the word triggers' own cues, never ducked
   const layer = { melody: null, arp: null };
   // The bed's shared detune inputs: a constant for slow-mo pitch and a slow LFO for the grey vinyl wobble.
   let bedDetune = null, wobbleGain = null, timeScale = 1;
@@ -413,6 +414,20 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     get wobbleDepth() { return wobbleGain ? wobbleGain.gain.value : 0; },
     get bedDetuneCents() { return bedDetune ? bedDetune.offset.value : 0; },
     setBus(name, v) { const g = bus[name]; if (g && live()) glide(g.gain, clamp(num(v, 1), 0, 1), 0.05); },
+    /** Everything but the word bus dips by `amount` for `hold` s and comes back over `release` s (a heavy word ducks the rest). */
+    duck(amount = 0.6, hold = 1, release = 0.6) {
+      if (!live()) return;
+      const t = ctx.currentTime, to = clamp(1 - num(amount, 0.6), 0, 1);
+      for (const k of ['bed', 'sfx', 'sub']) { const g = bus[k]; if (!g) continue; glide(g.gain, to, 0.06, t); glide(g.gain, 1, Math.max(0.05, num(release, 0.6)), t + Math.max(0, num(hold, 1))); }
+    },
+    /** A word trigger's signature sound (word-fx.js modules: sound(synth, fx)). */
+    word(key, fx = {}) {
+      if (!running || !live()) return;
+      const d = WORD_FX[key];
+      if (!d || typeof d.sound !== 'function') return;
+      const synth = { ctx, now: ctx.currentTime, play, tone, noise, bus, glide, SEMI, ROOT_HZ, duck: api.duck, dest: bus.word };
+      try { d.sound(synth, fx); } catch (e) { /* a word's bug never stops the music */ }
+    },
     setMaster(v) { if (out && live()) glide(out.gain, clamp(num(v, level), 0, 1), 0.05); },
   };
   return api;

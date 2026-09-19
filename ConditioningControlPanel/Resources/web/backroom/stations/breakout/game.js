@@ -10,7 +10,12 @@
  * createGame({ w, h, rng, audio, onEvent, words }) -> { step(dt, input), snapshot(), ... }
  * Events (onEvent(name, data)): brick, hit, paddle, wallhit, gif, capture, spiral,
  * split, wall, relapse, relapseStart, breakout, breakoutStart, crack, lost,
- * launch, perfect, nearMiss, jackpot, mantra, shatterWall, popOut, burst.
+ * launch, perfect, nearMiss, jackpot, mantra, shatterWall, popOut, burst, word.
+ *
+ * Words: about one brick in three carries a subliminal word (g.words). Broken in
+ * COLOUR it fires the word's diegetic effect (word-fx.js, one module per word
+ * under words/); the effect's frame mods land in g.mod. In GREY a word brick is
+ * a special (+3) and nothing fires.
  *
  * Payloads: the GIF brick is the spawner. Broken in COLOUR its face pops out of
  * the wall (g.pops), tumbles, and bursts into a bubble holding the picture: the
@@ -18,6 +23,8 @@
  * (g.colliders, up to 3). No timer spawns. In GREY a special brick (gif, split,
  * jackpot) is +3 on the breakout counter and nothing spawns.
  * ==========================================================================*/
+
+import { createWordSim, freshMod, WORD_BRICK_P } from './word-fx.js';
 
 export const W = 480, H = 720;
 export const RUNG_AT = [0, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90];
@@ -88,6 +95,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     transition: null, timeScale: 1, hitStopMs: 0, smear: null, smearFading: false, fractures: 0, shatterWall: false,
     mantra: null, beatPhase: 0, lastPerfectAt: 0, nearMissT: 0,
     words: (Array.isArray(words) && words.length ? words : DEFAULT_WORDS).map(x => String(x)), wordIx: 0,
+    // word triggers (word-fx.js): the running effects and this frame's mods
+    fx: { active: [], lastHeavyAt: -99 }, mod: freshMod(),
   };
   const emit = (name, data) => { try { onEvent(name, data); } catch (e) { /* the listener's problem */ } };
   const au = (fn, ...args) => { try { if (audio && typeof audio[fn] === 'function') audio[fn](...args); } catch (e) { /* audio is optional */ } };
@@ -102,7 +111,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
 
   /* ------------------------------------------------------------ wall */
   function mkBrick(x, y, bw, bh, row, col, extra) {
-    return { x, y, w: bw, h: bh, alive: true, row, col, gif: -1, split: false, jackpot: false, letter: null, color: ROW_COLORS[row % ROW_COLORS.length],
+    return { x, y, w: bw, h: bh, alive: true, row, col, gif: -1, split: false, jackpot: false, letter: null, word: null, color: ROW_COLORS[row % ROW_COLORS.length],
       jelly: 0, jellyIn: 0, push: { dx: 0, dy: 0 }, pushT: 0, push0: { dx: 0, dy: 0 }, ...extra };
   }
   function buildWall() {
@@ -118,8 +127,11 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     } else {
       const x0 = (w - (BRICK.cols * BRICK.w + (BRICK.cols - 1) * BRICK.gap)) / 2;
       for (let row = 0; row < BRICK.rows; row++) for (let col = 0; col < BRICK.cols; col++) {
+        const gif = rng() < 0.15 ? Math.floor(rng() * 8) : -1;
+        // About one plain brick in three carries a word, dealt in turn so every word gets its share (owner, 2026-09-19).
+        const word = gif < 0 && g.words.length && rng() < WORD_BRICK_P ? g.words[g.wordIx++ % g.words.length] : null;
         bricks.push(mkBrick(x0 + col * (BRICK.w + BRICK.gap), BRICK.top + row * (BRICK.h + BRICK.gap), BRICK.w, BRICK.h, row, col,
-          { gif: rng() < 0.15 ? Math.floor(rng() * 8) : -1, split: rng() < 0.05 }));
+          { gif, split: rng() < 0.05, word }));
       }
       g.mantra = null;
     }
@@ -143,7 +155,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     emit('launch', { x: b.x, y: b.y });
   }
   function normalise(b) {
-    const s = targetSpeed();
+    const s = targetSpeed() * g.mod.ballSpeed;
     let len = Math.hypot(b.vx, b.vy) || 1;
     b.vx = b.vx / len * s; b.vy = b.vy / len * s;
     // Never let it settle into a horizontal shuttle.
@@ -173,7 +185,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     emit('relapseStart', { x: b.x, y: b.y });
   }
   function relapse(at) {
-    g.transition = null; setTimeScale(1);
+    g.transition = null; setTimeScale(1); wordSim.endAll();
     g.savedSat = g.sat; g.sat = 0; g.state = 'grey'; g.greyBricks = 0; g.combo = 0; g.hitStopMs = 0; g.nearMissT = 0;
     g.colliders = []; g.well = null; g.pops = []; g.paddle.tug = 0;
     au('relapse'); au('setState', 'grey'); au('setSaturation', 0);
@@ -223,9 +235,10 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     const cx = br.x + br.w / 2, cy = br.y + br.h / 2;
     au('hit', 'brick', { combo: g.combo + 1, x: br.x / w });
     pushBrick(br, ball);
-    const plus = (br.gif >= 0 || br.split || br.jackpot) ? 3 : 1;   // a special brick counts triple on the grey counter
+    const plus = (br.gif >= 0 || br.split || br.jackpot || br.word) ? 3 : 1;   // a special brick counts triple on the grey counter
     emit('brick', { x: cx, y: cy, w: br.w, h: br.h, color: br.color, row: br.row, col: br.col, gif: br.gif >= 0, gifIndex: br.gif,
-      jackpot: br.jackpot, letter: br.letter, ghost: grey, sat: g.sat, plus });
+      jackpot: br.jackpot, letter: br.letter, word: br.word, ghost: grey, sat: g.sat, plus });
+    if (br.word && !grey) wordSim.fire(br.word, cx, cy);
     bumpCombo(br.gif >= 0 ? 'gif' : 'brick', cx, cy);
     if (br.jackpot) { g.stats.sp += 5; emit('jackpot', { x: cx, y: cy, sp: g.stats.sp, ghost: grey }); }
     if (grey) { g.greyBricks += plus; if (g.greyBricks >= g.breakoutN) startBreakout(ball); }
@@ -347,7 +360,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     if (b.x - b.r < 0) { b.x = b.r; b.vx = Math.abs(b.vx); wallHit('left', b); }
     else if (b.x + b.r > w) { b.x = w - b.r; b.vx = -Math.abs(b.vx); wallHit('right', b); }
     if (b.y - b.r < 0) { b.y = b.r; b.vy = Math.abs(b.vy); wallHit('top', b); }
-    if (b.y - b.r > h) { if (g.noLose) { b.y = h - b.r; b.vy = -Math.abs(b.vy); wallHit('bottom', b); } else b.lost = true; }
+    if (b.y - b.r > h) { if (g.noLose || g.mod.safe) { b.y = h - b.r; b.vy = -Math.abs(b.vy); wallHit('bottom', b); } else b.lost = true; }
   }
   function collidePaddle(b, py) {
     const p = g.paddle;
@@ -433,7 +446,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       collideBricks(b, px, py);
       if (g.state === 'colour') collideColliders(b);
       // The last live ball slipping under the paddle in COLOUR: the relapse begins here, in slow motion.
-      if (g.state === 'colour' && !g.transition && !g.noLose && b.vy > 0 && b.y - b.r > g.paddle.y + g.paddle.h / 2 && liveBalls() === 1) startRelapse(b);
+      if (g.state === 'colour' && !g.transition && !g.noLose && !g.mod.safe && b.vy > 0 && b.y - b.r > g.paddle.y + g.paddle.h / 2 && liveBalls() === 1) startRelapse(b);
     }
     pushTrail(b);
   }
@@ -444,7 +457,11 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   function movePaddle(dt, input) {
     const p = g.paddle;
     let base = p.x - p.tug;
-    if (typeof input.x === 'number' && !Number.isNaN(input.x)) base = input.x;
+    if (g.mod.autopilot) {                           // LET GO: the paddle glides under the lowest live ball on its own
+      const low = g.balls.filter(b => !b.lost && !b.stuck && !b.falling).sort((a, b) => b.y - a.y)[0];
+      base += ((low ? low.x : w / 2) - base) * Math.min(1, dt * 14);
+    }
+    else if (typeof input.x === 'number' && !Number.isNaN(input.x)) base = input.x;
     else if (input.left) base -= 640 * dt;
     else if (input.right) base += 640 * dt;
     // A live spiral within 200 px tugs the paddle toward its centre at 60 px/s; the player's input still wins.
@@ -462,8 +479,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       g.landRow++;
     }
     g.rungs = rungsFor(g.sat, g.state, g.force);
-    g.speed = targetSpeed();
-    g.paddle.w = PADDLE.baseW * (1 + 0.6 * g.sat);
+    g.speed = targetSpeed() * g.mod.ballSpeed;
+    g.paddle.w = PADDLE.baseW * (1 + 0.6 * g.sat) * g.mod.paddleW;
     g.paddle.stretch = Math.max(0, g.paddle.stretch - dt * 4);
     g.wobble.t = Math.max(0, g.wobble.t - dt * 2);
     for (const br of g.bricks) {
@@ -503,7 +520,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     if (g.hitStopMs > 0) { g.hitStopMs = Math.max(0, g.hitStopMs - dt * 1000); if (g.hitStopMs > 0) return; }
     if (tr && tr.kind === 'relapse') tr.t = Math.min(1, tr.t + dt / RELAPSE_S + 1e-9);
     if (g.nearMissT > 0) g.nearMissT = Math.max(0, g.nearMissT - dt);
-    setTimeScale(tr && tr.kind === 'relapse' ? 0.35 : g.nearMissT > 0 ? 0.4 : 1);
+    wordSim.advance(dt);                              // wall-clock: a word that slows the game does not slow itself
+    setTimeScale(Math.min(tr && tr.kind === 'relapse' ? 0.35 : g.nearMissT > 0 ? 0.4 : 1, g.mod.timeScale));
     movePaddle(dt, input);
     g.acc += dt * g.timeScale;
     let guard = 0;
@@ -511,6 +529,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     if (tr && tr.kind === 'relapse' && tr.t >= 1) relapse(g.balls[0] || g.smear);
   }
 
+  const wordSim = createWordSim(g, { emit, au, rng, addSat, clamp, lerp, W: w, H: h });
   buildWall();
   respawn(false);
   au('setSaturation', g.sat); au('setState', 'colour');
@@ -533,6 +552,8 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       if (g.state === 'colour' && alive.length) { breakBrick(alive[Math.floor(rng() * alive.length)], g.balls[0]); return g.pops[g.pops.length - 1] || null; }
       return popOut({ x: w / 2 - BRICK.w / 2, y: h / 2 - BRICK.h / 2, w: BRICK.w, h: BRICK.h, gif: Math.floor(rng() * 8), color: ROW_COLORS[0] }, null);
     },
+    /** Dev: fire a word as if its brick broke, at the first ball (or the field centre). Returns the fx or null (a stamp only). */
+    fireWordNow(word) { const b = g.balls[0]; return wordSim.fire(word, b ? b.x : w / 2, b ? Math.min(b.y, h * 0.5) : h * 0.4); },
     relapseNow() { if (g.state === 'colour') lostAll(g.balls[0]); },
     breakoutNow() { startBreakout(g.balls[0]); },
     breakBrick(i) { const br = g.bricks[i]; if (br) breakBrick(br, g.balls[0]); },

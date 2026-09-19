@@ -18,6 +18,7 @@ import { drawSpiral } from './payloads.js';
 import { makeCrack, makeShatterWeb, strokeLines, createDebris, createStamps, createShake, makeNoiseTile, makeScanTile, postProcess, clamp, lerp } from './render-fx.js';
 import { createParticles } from './particles.js';
 import { createWellFx } from './render-well.js';
+import { WORD_FX } from './word-fx.js';
 
 const FONT = '"Arial Rounded MT Bold", "Trebuchet MS", Arial, sans-serif';
 const BG = [26, 26, 46], PINK = [255, 105, 180], VIOLET = [165, 108, 255], MINT = [120, 230, 200], GOLD = [255, 207, 107], WHITE = [255, 255, 255], GREY = [150, 150, 150];
@@ -167,12 +168,38 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       }
     } else if (name === 'crack') {
       crackFlash = 1; cam.kick(12, 1, 0.01);
+    } else if (name === 'word') {
+      // The word leaves its brick: a stamp, big when the effect fired, small when it was a stamp only.
+      if (colour) stamps.push({ kind: 'text', text: String(d.word || '').toUpperCase(), x: d.x || W / 2, y: (d.y || 200) - 6, life: d.fired ? 1.1 : 0.6, rgb: d.fired ? PINK : WHITE, size: d.fired ? 34 : 16 });
     }
   }
+
+  /* ------------------------------------------------------------ word effects (word-fx.js) */
+  /** A copy of the canvas as it is now (post hooks only). Pass a canvas to reuse it. */
+  function copyFrame(target) {
+    const c = target || document.createElement('canvas');
+    if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
+    const x = c.getContext('2d'); x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, cw, ch); x.drawImage(canvas, 0, 0);
+    return c;
+  }
+  function wordHooks(hook, s, R) {
+    const list = s.fx && Array.isArray(s.fx.active) ? s.fx.active : null;
+    if (!list || !list.length) return;
+    for (const fx of list) {
+      const d = WORD_FX[fx.key];
+      if (!d || !d.render || typeof d.render[hook] !== 'function') continue;
+      g.save();
+      try { d.render[hook](g, s, fx, R); } catch (e) { /* a word's bug never breaks the frame */ }
+      g.restore();
+    }
+  }
+  const rInfo = (s, mix, dt, fxDt) => ({ W, H, cw, ch, scale, ox, oy, mix, dt, fxDt, P, stamps, cam, col, toRgb, PINK, MINT, VIOLET, WHITE, BG, GOLD, GREY, FONT, reduced, rng, media, frame: copyFrame, sat: s.sat });
 
   /* ------------------------------------------------------------ pieces */
   function drawBricks(s, mix) {
     const landing = s.wallAge < 0.7 && rungs(1);
+    const hide = s.mod && s.state === 'colour' ? clamp(s.mod.hideBricks || 0, 0, 1) : 0;   // BLANK: the wall fades from sight, still there
+    if (hide >= 1) return;
     for (const br of s.bricks) {
       if (!br.alive) continue;
       const tween = landing ? easeOutBack((s.wallAge - br.row * 0.04) / 0.45) : 1;
@@ -181,7 +208,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       const px = br.push ? br.push.dx || 0 : 0, py = br.push ? br.push.dy || 0 : 0;
       const cx = br.x + br.w / 2 + px, cy = br.y + br.h / 2 + py - (1 - tween) * 140;
       g.save();
-      g.globalAlpha = clamp(tween, 0, 1);
+      g.globalAlpha = clamp(tween, 0, 1) * (1 - hide);
       g.translate(cx, cy); g.scale(sx, sy);
       const gifOn = br.gif === true || (typeof br.gif === 'number' && br.gif >= 0);
       const frame = gifOn && rungs(1) && s.state === 'colour' && media ? media.frame(typeof br.gif === 'number' ? br.gif : br.col) : null;
@@ -198,6 +225,10 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
         g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(-br.w / 2 + 2, -br.h / 2 + 2, br.w - 4, 3);
         if (br.split) { g.fillStyle = col(GOLD, mix); g.beginPath(); g.arc(0, 0, 3, 0, 7); g.fill(); }
         if (br.letter) { g.fillStyle = 'rgba(20,20,40,.8)'; g.font = `800 11px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(br.letter, 0, 0.5); }
+        else if (br.word) {                                                // a word brick wears its word in small caps
+          g.fillStyle = s.state === 'colour' ? 'rgba(255,255,255,.88)' : 'rgba(40,40,40,.7)'; g.font = `800 8px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+          g.fillText(String(br.word).toUpperCase().slice(0, 8), 0, 0.5);
+        }
       }
       g.restore();
     }
@@ -450,6 +481,13 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     g.translate(ox + W * scale / 2, oy + H * scale / 2); g.rotate(shk.rot); g.scale(scale * shk.zoom, scale * shk.zoom);
     g.translate(-W / 2 + shk.sx, -H / 2 + shk.sy);
     g.beginPath(); g.rect(0, 0, W, H); g.clip();
+    const R = rInfo(s, mix, dt, fxDt);
+    const zm = s.mod && Number.isFinite(s.mod.zoom) ? s.mod.zoom : 1;
+    if (zm !== 1 && !reduced) {                                              // DEEPER and friends: the field zooms around the ball
+      const zb = s.balls[0], zx = zb ? clamp(zb.x, W * 0.3, W * 0.7) : W / 2, zy = zb ? clamp(zb.y, H * 0.3, H * 0.7) : H / 2;
+      g.translate(zx, zy); g.scale(zm, zm); g.translate(-zx, -zy);
+    }
+    wordHooks('world', s, R);
     g.fillStyle = col(BG, mix); g.fillRect(0, 0, W, H);
     if (s.shatterWall) drawShatterWall(s, mix, extras);
     if (!grey && mix > 0) {
@@ -478,6 +516,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       g.save(); g.globalCompositeOperation = 'saturation'; g.fillStyle = '#808080'; g.fillRect(0, y0, W, H - y0); g.restore();
       g.fillStyle = `rgba(120,120,120,${0.25 * tr.t})`; g.fillRect(0, y0, W, H - y0);
     }
+    if (!grey) wordHooks('over', s, R);
     drawHud(s, mix);
     if (grey) drawGreyPost(s);
     g.restore();
@@ -489,6 +528,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       glitch: glitch > 0 && !reduced, scan: scanPat, rng,
     });
     if (glitch > 0) glitch -= dt;
+    if (!grey) { g.setTransform(1, 0, 0, 1, 0, 0); wordHooks('post', s, R); }
   }
 
   const r = { resize, draw, onEvent, onGameEvent: onEvent, toField,

@@ -21,6 +21,7 @@ import { createGame, RUNG_NAMES, RUNG_AT } from './game.js';
 import { createRenderer } from './render.js';
 import { createMedia, createSubliminals } from './payloads.js';
 import { createAudio } from './audio.js';
+import { WORD_KEYS } from './word-fx.js';
 import { createHostFx } from './host-fx.js';
 
 export const roomStage = false;
@@ -90,6 +91,7 @@ export async function mount(ctx) {
           <label><input type="checkbox" class="bo-nolose"> never lose</label>
           <span class="bo-dev-stats"></span>
         </div>
+        <div class="bo-dev-row"><span class="bo-dev-lab">${t('br_breakout_dev_words', 'Words')}</span><div class="bo-words"></div></div>
       </div>`;
     root.appendChild(el);
     canvas = el.querySelector('.bo-stage');
@@ -101,6 +103,8 @@ export async function mount(ctx) {
       lab.innerHTML = `<input type="checkbox" data-rung="${i}">${name}`;
       rungs.appendChild(lab);
     });
+    const wordsRow = el.querySelector('.bo-words');
+    for (const key of WORD_KEYS) { const b = document.createElement('button'); b.type = 'button'; b.dataset.word = key; b.textContent = key.toLowerCase(); wordsRow.appendChild(b); }
     setDevOpen(store.get(DEV_KEY) === '1');
   }
   function setDevOpen(open) {
@@ -158,6 +162,7 @@ export async function mount(ctx) {
         onWall(Number(d.walls) || s.stats.walls || 0, d.mantra);
         break;
       case 'crack': if (cue('crack', 2000)) { au('crack'); host.crack(); } break;
+      case 'word': if (d.fired) au('word', d.key, d.fx || d); break;
       // The slow-mo starts silent (the bed pitches down via setTimeScale); the relapse cue lands on the cut.
       case 'relapseStart': if (subs) subs.reset(); break;
       case 'relapse': if (cue('relapse')) au('relapse'); if (subs) subs.reset(); break;
@@ -224,7 +229,8 @@ export async function mount(ctx) {
     const nl = el.querySelector('.bo-nolose'); if (nl) nl.checked = !!s.noLose;
     const grey = s.state === 'grey' ? `  grey ${s.greyBricks}/${s.breakoutN}` : '';
     const pics = typeof media.animated === 'function' ? `  pics ${media.animated()}/${media.count()} moving` : '';
-    ui['dev-stats'].textContent = `bricks ${s.stats.bricks}  walls ${s.stats.walls}  sat ${s.sat.toFixed(2)}${grey}${pics}`;
+    const fxs = s.fx && s.fx.active && s.fx.active.length ? `  fx ${s.fx.active.map(f => `${f.key} ${(f.phase * 100) | 0}%`).join(', ')}` : '';
+    ui['dev-stats'].textContent = `bricks ${s.stats.bricks}  walls ${s.stats.walls}  sat ${s.sat.toFixed(2)}${grey}${pics}${fxs}`;
   }
   function wireDev() {
     const dev = ui.dev;
@@ -246,6 +252,7 @@ export async function mount(ctx) {
       else if (act === 'breakout') game.breakoutNow();
       else if (act === 'auto') game.clearForce();
       else if (act === 'well') game.spawnWellNow();
+      else if (e.target.dataset && e.target.dataset.word && typeof game.fireWordNow === 'function') game.fireWordNow(e.target.dataset.word);
     });
     for (const n of [dev, ui.gear]) { on(n, 'pointerdown', (e) => e.stopPropagation()); on(n, 'keydown', (e) => e.stopPropagation()); }
   }
