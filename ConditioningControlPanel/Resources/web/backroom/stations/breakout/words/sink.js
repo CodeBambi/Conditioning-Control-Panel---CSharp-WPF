@@ -35,6 +35,9 @@ function anchor(s, R) {
   return { x, y };
 }
 
+/** The frame copy the melt reuses across frames and fires (never allocated per frame). */
+const melt = { canvas: null };
+
 export default {
   key: 'SINK', heavy: true, dur: DUR,
   sim: {
@@ -79,7 +82,31 @@ export default {
         ctx.fillStyle = top; ctx.fillRect(-R.W, -R.H * 0.2, R.W * 3, R.H * 0.58);
       }
     },
-    post(ctx, s, fx, R) { /* nothing: the fall is all in world and over */ },
+    /** The picture goes soft and runs: a blurred copy of the frame over itself, then vertical strips sliding down
+     *  by different amounts, so the field melts while it sinks (owner, 2026-09-19: "a little blur/melt"). */
+    post(ctx, s, fx, R) {
+      if (R.reduced) return;
+      const d = depth(fx.t);
+      if (d <= 0.02) return;
+      const src = R.frame(melt.canvas); melt.canvas = src;
+      const cw = R.cw, ch = R.ch;
+      // Blur: one full-frame draw through a canvas filter, a few device px at full depth.
+      const blur = (1.5 + 2.5 * d) * (cw / 780);
+      if ('filter' in ctx) {
+        ctx.save(); ctx.globalAlpha = 0.55 * d; ctx.filter = `blur(${blur.toFixed(1)}px)`;
+        ctx.drawImage(src, 0, 0); ctx.restore();
+      }
+      // Melt: 16 strips, each sliding down by its own amount that grows with depth, drawn at low alpha so the
+      // picture drips without losing the ball.
+      const n = 16, sw = Math.ceil(cw / n), t = fx.t;
+      ctx.save(); ctx.globalAlpha = 0.28 * d;
+      for (let i = 0; i < n; i++) {
+        const k = 0.5 + 0.5 * Math.sin(i * 1.7 + t * 2.1);
+        const dy = (6 + 34 * k) * d * (ch / 1688);
+        ctx.drawImage(src, i * sw, 0, sw, ch, i * sw, dy, sw, ch);
+      }
+      ctx.restore();
+    },
   },
   sound(synth, fx) {
     const t = synth.now;

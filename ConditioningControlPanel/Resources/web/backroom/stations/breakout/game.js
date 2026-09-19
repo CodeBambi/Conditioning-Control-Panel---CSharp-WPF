@@ -330,7 +330,7 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
   }
   function capture(b, s) {
     const rx = b.x - s.x, ry = b.y - s.y;
-    b.orbit = { r: clamp(Math.hypot(rx, ry), 40, 100), a: Math.atan2(ry, rx), dir: 1, turns: 1 + rng(), done: 0 };   // always clockwise on screen, the way the Loom field turns (owner, 2026-09-18)
+    b.orbit = { r: clamp(Math.hypot(rx, ry), 40, 100), a: Math.atan2(ry, rx), dir: -1, turns: 1 + rng(), done: 0 };   // counter-clockwise on screen: the ball ran against the field the other way (owner, 2026-09-19)
     s.used = true; s.captured = b;
     emit('capture', { x: s.x, y: s.y });
   }

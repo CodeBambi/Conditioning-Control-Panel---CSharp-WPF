@@ -22,6 +22,7 @@ import { createRenderer } from './render.js';
 import { createMedia, createSubliminals } from './payloads.js';
 import { createAudio } from './audio.js';
 import { WORD_KEYS } from './word-fx.js';
+import { createVoice } from '../../shared/hypno/voice.js';
 import { createHostFx } from './host-fx.js';
 
 export const roomStage = false;
@@ -50,6 +51,16 @@ export async function mount(ctx) {
   const t = (k, f) => { try { const v = typeof ctx.lex === 'function' ? ctx.lex(k, f) : f; return v || f; } catch (e) { return f; } };
 
   let el = null, canvas = null, game = null, renderer = null, media = null, subs = null, audio = null, host = null;
+  // The room's voice (shared/hypno/voice.js -> word.speak): the host says every word the game shows, a brick's or a flash's.
+  let voice = null, lastSay = -Infinity;
+  const SAY_GAP_S = 1.1;
+  function say(text) {
+    if (!voice || !text || (ctx.gates && ctx.gates.subliminal === false)) return;
+    const now = performance.now() / 1000;
+    if (now - lastSay < SAY_GAP_S) return;
+    lastSay = now;
+    try { voice.speak({ text: String(text) }).catch(() => {}); } catch (e) { /* host gone */ }
+  }
   let raf = 0, running = false, suspended = false, paused = false, lastT = 0, dpr = 1, frames = 0, audioOn = false;
   let sizeW = 0, sizeH = 0, fieldScale = 1, fieldOx = 0, fieldOy = 0, moved = false;
   let lastSat = -1, lastState = '', lastTimeScale = 1, lastCombo = 0, lastSp = 0, sawHit = false, sourceChanged = false;
@@ -146,7 +157,7 @@ export async function mount(ctx) {
       case 'spiral': if (!sawHit) hitAu('spiral', { combo: s.combo, x: d.x }); break;
       case 'brick':
         if (!sawHit) hitAu('brick', { combo: s.combo, x: d.x });
-        if (!d.ghost && s.state === 'colour' && subs) subs.onBrick(nowS(), s.sat, s.balls[0]);
+        if (!d.ghost && s.state === 'colour' && subs) { const f = subs.onBrick(nowS(), s.sat, s.balls[0]); if (f) say(f.text); }
         break;
       case 'perfect': au('perfect'); break;
       case 'nearMiss': au('nearMiss'); break;
@@ -162,7 +173,7 @@ export async function mount(ctx) {
         onWall(Number(d.walls) || s.stats.walls || 0, d.mantra);
         break;
       case 'crack': if (cue('crack', 2000)) { au('crack'); host.crack(); } break;
-      case 'word': if (d.fired) au('word', d.key, d.fx || d); break;
+      case 'word': if (d.fired) au('word', d.key, d.fx || d); if (s.state === 'colour') say(d.word); break;
       // The slow-mo starts silent (the bed pitches down via setTimeScale); the relapse cue lands on the cut.
       case 'relapseStart': if (subs) subs.reset(); break;
       case 'relapse': if (cue('relapse')) au('relapse'); if (subs) subs.reset(); break;
@@ -302,7 +313,7 @@ export async function mount(ctx) {
     focusMedia(s);
     media.tick(performance.now());
     let word = subs.current(now);
-    if (!word && s.state === 'colour' && s.balls[0]) word = subs.tick(now, s.sat, s.rungs[6], s.balls[0]);
+    if (!word && s.state === 'colour' && s.balls[0]) { word = subs.tick(now, s.sat, s.rungs[6], s.balls[0]); if (word) say(word.text); }
     renderer.draw(s, { words: media.trailWords(12), media, now, dt, reduced, word });
     setCombo(s.combo | 0);
     if (s.stats && s.stats.sp !== lastSp) setSp(s.stats.sp);
@@ -331,6 +342,7 @@ export async function mount(ctx) {
     const gates = ctx.gates || {};
     const fx = typeof ctx.fx === 'function' ? ctx.fx : null;
     subs = createSubliminals({ words: () => media.words, enabled: gates.subliminal !== false, fx });
+    try { voice = createVoice(); } catch (e) { voice = null; }   // null unhosted (dev.html): the harness stays mute
     host = createHostFx({ fx, reduced });
     media.load().then(() => {
       if (!game || typeof game.setWords !== 'function') return;
@@ -370,6 +382,8 @@ export async function mount(ctx) {
     if (raf) cancelAnimationFrame(raf); raf = 0;
     while (off.length) { try { off.pop()(); } catch (e) { /* noop */ } }
     try { audio && audio.stop(); } catch (e) { /* noop */ }
+    try { voice && voice.stop(); } catch (e) { /* noop */ }
+    voice = null;
     try { media && media.dispose(); } catch (e) { /* noop */ }
     try { renderer && renderer.dispose(); } catch (e) { /* noop */ }
     if (el && el.parentNode) el.parentNode.removeChild(el);
@@ -378,6 +392,7 @@ export async function mount(ctx) {
   }
   function suspend(onOff) {
     suspended = !!onOff;
+    if (suspended) { try { voice && voice.stop(); } catch (e) { /* noop */ } }
     if (!audio) return;
     try { if (suspended) audio.stop(); else if (audioOn && !paused) audio.start(); } catch (e) { /* noop */ }
     if (!suspended) lastT = 0;

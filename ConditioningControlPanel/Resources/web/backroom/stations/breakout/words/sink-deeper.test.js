@@ -123,7 +123,7 @@ test('the render hooks run clean at every phase, live and reduced, and the ghost
       for (const hook of ['world', 'over', 'post']) { mod.render[hook](ctx, s, fx, r); mod.render[hook](ctx, s, fx, rr); }
     }
     if (key === 'DEEPER') assert.ok(frames >= 6 && frames <= 7, `ghost captured every other frame: ${frames}`);
-    else assert.equal(frames, 0, 'SINK does no post work');
+    else assert.ok(frames > 0, 'SINK melts a copy of the frame once per post');
     run(game, 4.2);
   }
   assert.deepEqual(s.mod, MOD_DEFAULTS);
