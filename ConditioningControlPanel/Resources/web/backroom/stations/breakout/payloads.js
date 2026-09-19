@@ -138,11 +138,11 @@ export function createSubliminals({ words, rng = Math.random, enabled = true, fx
     tick(now, sat, on, ball) {
       if (!on || !enabled) { next = now + 1; return null; }
       if (now < next) return null;
-      const mean = 4 - 2 * Math.max(0, Math.min(1, (sat - 0.6) / 0.4));
+      const mean = 8 - 4 * Math.max(0, Math.min(1, (sat - 0.6) / 0.4));   // halved cadence (owner, 2026-09-19)
       next = now + mean * (0.5 + rng());
       return place(now, ball);
     },
-    onBrick(now, sat, ball) { return (enabled && sat > 0.6 && rng() < 0.25) ? place(now, ball) : null; },
+    onBrick(now, sat, ball) { return (enabled && sat > 0.6 && rng() < 0.125) ? place(now, ball) : null; },
     current(now) { return flash && now < flash.until ? flash : null; },
     reset() { flash = null; },
   };

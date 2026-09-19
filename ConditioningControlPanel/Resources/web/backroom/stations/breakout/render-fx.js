@@ -102,6 +102,26 @@ export function createStamps(FONT, W, H) {
         g.translate(s.x, s.y - t * 26); g.scale(k, k); g.globalAlpha = a;
         g.font = `900 ${s.size || 18}px ${FONT}`; g.lineWidth = 3; g.strokeStyle = 'rgba(20,20,40,.75)'; g.strokeText(s.text, 0, 0);
         g.fillStyle = col(s.rgb, mix); g.fillText(s.text, 0, 0);
+      } else if (s.kind === 'word') {
+        // A subliminal leaving its brick (or its afterglow near the ball): pops in with an overshoot, wobbles,
+        // each letter riding its own wave, a pink glow with a mint chromatic twin, then it lifts and thins out.
+        const pop = t < 0.18 ? 0.3 + 0.7 * (1 - (1 - t / 0.18) ** 3) * (1 + 0.35 * Math.sin(t / 0.18 * Math.PI)) : 1;
+        const a = (t > 0.6 ? (1 - t) / 0.4 : 1) * (s.alpha == null ? 1 : s.alpha);
+        const size = s.size || 34, text = String(s.text || '');
+        g.translate(s.x, s.y - t * 34); g.rotate(Math.sin(s.at * 9) * 0.06 * (1 - t)); g.scale(pop, pop);
+        g.globalAlpha = a; g.font = `900 ${size}px ${FONT}`;
+        const widths = [...text].map(ch => g.measureText(ch).width), total = widths.reduce((p, w) => p + w, 0);
+        let x = -total / 2;
+        for (let i = 0; i < text.length; i++) {
+          const ch = text[i], w = widths[i], cx = x + w / 2, cy = Math.sin(s.at * 12 + i * 0.9) * size * 0.08 * (1 - t);
+          g.shadowColor = col(s.rgb, mix, 0.9); g.shadowBlur = 14;
+          g.fillStyle = col(s.rgb2 || [120, 230, 200], mix, 0.7); g.fillText(ch, cx + 2, cy + 2);
+          g.shadowBlur = 0;
+          g.lineWidth = 3; g.strokeStyle = 'rgba(20,20,40,.7)'; g.strokeText(ch, cx, cy);
+          g.fillStyle = col(s.rgb, mix); g.fillText(ch, cx, cy);
+          g.fillStyle = 'rgba(255,255,255,.55)'; g.fillText(ch, cx - 0.5, cy - 1.5);
+          x += w;
+        }
       } else if (s.kind === 'cross') {
         g.font = `900 96px ${FONT}`; g.fillStyle = `rgba(210,210,210,${0.16 * Math.sin(t * Math.PI)})`;
         g.fillText(s.text, lerp(-W * 0.6, W * 1.6, t), H * 0.46);

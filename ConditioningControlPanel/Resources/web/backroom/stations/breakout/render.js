@@ -51,7 +51,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
   const g = canvas.getContext('2d');
   let cw = 0, ch = 0, scale = 1, ox = 0, oy = 0, off = null, scanPat = null;
   let last = null, glitch = 0, wipe = 0, crackFlash = 0, spin = 0, aberr = 0, recoil = 0, lastNow = 0, lastCombo = 0, comboPop = 0;
-  let blinkAt = 3 + rng() * 2, blink = 0, wordIdx = 0, wordAt = 0, flash = 0;
+  let blinkAt = 3 + rng() * 2, blink = 0, wordIdx = 0, wordAt = 0, flash = 0, lastFlashAt = -1;
   const shockwaves = [], drifters = [];
   const P = createParticles({ max: 600, rng });
   const crack = makeCrack(rng, W, H), web = makeShatterWeb(rng, W, H);
@@ -170,7 +170,15 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
       crackFlash = 1; cam.kick(12, 1, 0.01);
     } else if (name === 'word') {
       // The word leaves its brick: a stamp, big when the effect fired, small when it was a stamp only.
-      if (colour) stamps.push({ kind: 'text', text: String(d.word || '').toUpperCase(), x: d.x || W / 2, y: (d.y || 200) - 6, life: d.fired ? 1.1 : 0.6, rgb: d.fired ? PINK : WHITE, size: d.fired ? 34 : 16 });
+      if (colour) {
+        const x = d.x || W / 2, y = (d.y || 200) - 6;
+        stamps.push({ kind: 'word', text: String(d.word || '').toUpperCase(), x, y, life: d.fired ? 1.2 : 0.8, rgb: d.fired ? PINK : WHITE, rgb2: d.fired ? MINT : PINK, size: d.fired ? 40 : 26 });
+        stamps.push({ kind: 'ring', x, y, r0: 6, r1: d.fired ? 90 : 50, life: 0.45, rgb: d.fired ? PINK : MINT });
+        P.burst(x, y, PINK, d.fired ? 22 : 10, 220, 0.7, { rise: 60, gv: 160 });
+        P.burst(x, y, WHITE, d.fired ? 12 : 6, 120, 0.8, { rise: 90, gv: 60, r0: 1.5, r1: 2.5 });
+        P.rects(x, y, MINT, d.fired ? 6 : 3, { speed: 200, life: 0.6, size: 5 });
+        if (d.fired) cam.kick(3);
+      }
     }
   }
 
@@ -404,11 +412,26 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     g.fillStyle = col(c >= 10 ? GOLD : c >= 5 ? MINT : WHITE, mix); g.fillText(String(c), 0, 0);
     g.restore();
   }
-  function drawOverlays(s, dt, mix, word) {
+  function drawOverlays(s, dt, mix, word, now) {
     if (word) {
-      g.save(); g.font = `800 30px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillStyle = col(MINT, mix, 0.9); g.fillText(word.text, word.x + 1.5, word.y + 1.5);
-      g.fillStyle = col(PINK, mix, 0.95); g.fillText(word.text, word.x, word.y);
+      // The flash near the ball: a chromatic triple that lands from large to size, plus one burst of sparkles and an
+      // afterglow stamp the first frame it shows (owner, 2026-09-19: the bare text was underwhelming).
+      if (word.at !== lastFlashAt) {
+        lastFlashAt = word.at;
+        P.burst(word.x, word.y, PINK, 10, 150, 0.5, { rise: 40, gv: 120, r0: 1.5, r1: 2 });
+        P.burst(word.x, word.y, MINT, 6, 90, 0.6, { rise: 60, gv: 40, r0: 1, r1: 1.5 });
+        stamps.push({ kind: 'ring', x: word.x, y: word.y, r0: 4, r1: 46, life: 0.3, rgb: MINT });
+        stamps.push({ kind: 'word', text: String(word.text).toUpperCase(), x: word.x, y: word.y, life: 0.32, rgb: PINK, rgb2: MINT, size: 30, alpha: 0.4 });
+      }
+      const span = Math.max(0.016, (word.until || 0) - (word.at || 0)), tt = clamp(((now || 0) - (word.at || 0)) / span, 0, 1);
+      const k = 1.5 - 0.5 * tt;
+      g.save(); g.translate(word.x, word.y); g.scale(k, k); g.font = `900 30px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.shadowColor = col(PINK, mix, 0.8); g.shadowBlur = 12;
+      g.fillStyle = col(MINT, mix, 0.9); g.fillText(word.text, 2.5, 0);
+      g.fillStyle = col(VIOLET, mix, 0.9); g.fillText(word.text, -2.5, 0);
+      g.shadowBlur = 0;
+      g.fillStyle = col(PINK, mix, 0.95); g.fillText(word.text, 0, 0);
+      g.fillStyle = 'rgba(255,255,255,.6)'; g.fillText(word.text, 0, -1.5);
       g.restore();
     }
     for (let i = drifters.length - 1; i >= 0; i--) {
@@ -511,7 +534,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     for (const bl of s.balls) drawBall(s, bl, mix, words);
     drawPaddle(s, mix, dt);
     if (!extras) drawCombo(s, mix, dt);                                   // the v2 station shows the combo in its strip
-    drawOverlays(s, dt, mix, grey ? null : word);
+    drawOverlays(s, dt, mix, grey ? null : word, now);
     if (tr && tr.kind === 'relapse' && !grey) {                             // slow-mo drain: colour leaves from the bottom up
       const y0 = H * (1 - clamp(tr.t, 0, 1));
       g.save(); g.globalCompositeOperation = 'saturation'; g.fillStyle = '#808080'; g.fillRect(0, y0, W, H - y0); g.restore();

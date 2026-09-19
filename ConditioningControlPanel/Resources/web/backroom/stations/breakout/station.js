@@ -53,13 +53,13 @@ export async function mount(ctx) {
   let el = null, canvas = null, game = null, renderer = null, media = null, subs = null, audio = null, host = null;
   // The room's voice (shared/hypno/voice.js -> word.speak): the host says every word the game shows, a brick's or a flash's.
   let voice = null, lastSay = -Infinity;
-  const SAY_GAP_S = 1.1;
+  const SAY_GAP_S = 1.1, VOICE_LEVEL = 0.5;   // half the room's level (owner, 2026-09-19)
   function say(text) {
     if (!voice || !text || (ctx.gates && ctx.gates.subliminal === false)) return;
     const now = performance.now() / 1000;
     if (now - lastSay < SAY_GAP_S) return;
     lastSay = now;
-    try { voice.speak({ text: String(text) }).catch(() => {}); } catch (e) { /* host gone */ }
+    try { voice.speak({ text: String(text), volume: VOICE_LEVEL }).catch(() => {}); } catch (e) { /* host gone */ }
   }
   let raf = 0, running = false, suspended = false, paused = false, lastT = 0, dpr = 1, frames = 0, audioOn = false;
   let sizeW = 0, sizeH = 0, fieldScale = 1, fieldOx = 0, fieldOy = 0, moved = false;

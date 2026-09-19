@@ -33,12 +33,12 @@ test('mod words land on a family: first match wins, unknown words map to nothing
   assert.equal(wordKey('good girl'), null); assert.equal(wordKey(''), null); assert.equal(wordKey(null), null);
 });
 
-test('about one plain brick in three carries a word, dealt in turn, never on a picture brick', () => {
+test('about one plain brick in six carries a word, dealt in turn, never on a picture brick', () => {
   const { game } = make({ words: ['SINK', 'DROP', 'RELAX', 'LET GO'] });
   const s = game.snapshot();
   const worded = s.bricks.filter(b => b.word);
   const plain = s.bricks.filter(b => b.gif < 0).length;
-  assert.ok(worded.length > plain * 0.2 && worded.length < plain * 0.5, `${worded.length} of ${plain} plain bricks`);
+  assert.ok(worded.length > plain * 0.08 && worded.length < plain * 0.28, `${worded.length} of ${plain} plain bricks`);
   assert.ok(worded.every(b => b.gif < 0));
   assert.equal(worded[0].word, 'SINK'); assert.equal(worded[1].word, 'DROP'); assert.equal(worded[4].word, 'SINK');
   assert.equal(s.bricks.length, BRICK.cols * BRICK.rows);
