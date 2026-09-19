@@ -128,7 +128,9 @@ export function createWellFx({ reduced = false, rng = Math.random, noiseTile = n
   function draw(g, well, o) {
     const { mix, col, dt = 1 / 60, particles: P, pink, violet, mint, spiral } = o;
     const r = well.r || 70;
-    const fadeIn = clamp((well.age || 0) / IN_S, 0, 1);
+    // On `born`, the clock that never pauses: `age` stops while the well holds a ball, and a ball caught at the burst
+    // used to leave the field near invisible until the release snapped it to full (owner, 2026-09-19).
+    const fadeIn = clamp((typeof well.born === 'number' ? well.born : well.age || 0) / IN_S, 0, 1);
     const a = clamp(well.fade, 0, 1) * fadeIn;
     if (a <= 0 || mix <= 0) return;
     cap += ((well.captured ? 1 : 0) - cap) * Math.min(1, dt * 6);

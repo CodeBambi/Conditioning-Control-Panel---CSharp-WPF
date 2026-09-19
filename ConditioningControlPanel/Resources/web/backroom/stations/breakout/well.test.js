@@ -73,3 +73,17 @@ test('the swirl spins faster while it holds a ball', () => {
   game.step(0.1, {});
   assert.ok(Math.abs(w.rot - at) > idle * 2, 'a captured ball winds the picture up');
 });
+
+test('born keeps counting while the well holds a ball (the renderer fades the field in on it), age does not', () => {
+  const { game } = make({ saturation: 0.8 });
+  const w = wellNow(game);
+  game.launchNow();
+  const s = game.snapshot(), b = s.balls[0];
+  b.x = w.x + 50; b.y = w.y; b.vx = 0; b.vy = -200; b.stuck = false;   // inside the pull radius: captured on the next tick
+  game.step(1 / 60, {});
+  assert.equal(w.captured, b, 'caught at once');
+  const born0 = w.born, age0 = w.age;
+  for (let i = 0; i < 30; i++) game.step(1 / 60, {});
+  assert.ok(w.born - born0 > 0.4, `born advanced ${(w.born - born0).toFixed(2)} s`);
+  assert.equal(w.age, age0, 'age holds while the ball orbits');
+});
