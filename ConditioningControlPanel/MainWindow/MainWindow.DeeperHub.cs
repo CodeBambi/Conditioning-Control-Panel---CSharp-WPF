@@ -517,24 +517,19 @@ namespace ConditioningControlPanel
             return null;
         }
 
-        // Single click selects; double click (MouseLeftButtonDown, ClickCount 2)
-        // opens; Enter/Delete/Up/Down work on the selection; right-click menu
-        // targets the row under the cursor.
+        // One click selects the row AND opens it in the editor. The library wave
+        // (34de48be1) briefly made a single click select-only with double-click to
+        // open; testers read that as "clicking a file does nothing" on the 6.10.0
+        // pre-release, so the click opens again (owner call, 2026-09-19). A second
+        // click of a double-click lands on the same path and ShowOrActivate reuses
+        // the editor window, so it is harmless. Enter/Delete/Up/Down still work on
+        // the selection; the right-click menu targets the row under the cursor.
         internal void DeeperRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             var entry = EntryFromDataContext(sender);
             if (entry == null) return;
             SelectDeeperRow(entry.FilePath, scrollIntoView: false);
             try { DeeperTab.DeeperLibraryList?.Focus(); } catch (Exception ex) { Diag.Swallowed(ex); }
-        }
-
-        internal void DeeperRow_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            if (e.ClickCount != 2) return;
-            var entry = EntryFromDataContext(sender);
-            if (entry == null) return;
-            e.Handled = true;
-            SelectDeeperRow(entry.FilePath, scrollIntoView: false);
             OpenDeeperFile(entry.FilePath);
         }
 
