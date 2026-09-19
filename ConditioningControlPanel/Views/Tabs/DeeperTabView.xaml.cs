@@ -225,11 +225,6 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.DeeperRow_Click(sender, e);
         }
-        private void DeeperRow_MouseDown(object sender, MouseButtonEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.DeeperRow_MouseDown(sender, e);
-        }
         private void DeeperRowMenuOpen_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
