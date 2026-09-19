@@ -366,9 +366,9 @@
   }
 
   function gifFull(ms, opacity, keys) {
-    const d = kDuration(), a = opacity * kOpacity();
+    const d = kDuration(), a = opacity * 0.7 * kOpacity();   // softer (owner, 2026-09-19: fullscreen pictures lower and faded in and out)
     const img = mediaNode('fxfull', keys[0], 'full');
-    anim(img, [{ opacity: 0 }, { opacity: a, offset: 0.12 }, { opacity: a, offset: 0.8 }, { opacity: 0 }], ms * d);
+    anim(img, [{ opacity: 0 }, { opacity: a, offset: 0.25 }, { opacity: a, offset: 0.7 }, { opacity: 0 }], ms * d);
     drop(img, ms * d + 40);
   }
 
@@ -415,14 +415,18 @@
   }
 
   function gifFrom(rect, keys, ms, scale) {
+    // Owner (2026-09-19): the picture fades in, holds low, fades out; never a hard pop. In and out take a real share of a short moment.
     const d = kDuration(), dur = (ms || 3400) * d, s = scale == null ? 1 : scale;
+    const peak = Math.min(1, s) * 0.55 * kOpacity();
+    const inF = Math.min(0.4, 450 / dur), outF = Math.min(0.45, 600 / dur);
     const dim = s < 1 ? null : add('fxdim');
-    if (dim) { anim(dim, [{ opacity: 0 }, { opacity: 0.55, offset: 0.2 }, { opacity: 0.55, offset: 0.75 }, { opacity: 0 }], dur); drop(dim, dur + 40); }
+    if (dim) { anim(dim, [{ opacity: 0 }, { opacity: 0.35, offset: inF }, { opacity: 0.35, offset: 1 - outF }, { opacity: 0 }], dur); drop(dim, dur + 40); }
     const img = mediaNode('fxfull', keys[0], 'full');
     const r = rect && Number.isFinite(rect.x) ? rect : { x: innerWidth / 2 - 30, y: innerHeight / 2 - 22, w: 60, h: 44 };
     const fromT = `translate(${r.x + r.w / 2 - innerWidth / 2}px, ${r.y + r.h / 2 - innerHeight / 2}px) scale(${Math.max(0.02, r.w / innerWidth)})`;
-    anim(img, [{ transform: fromT, opacity: 0.2 }, { transform: 'translate(0,0) scale(1)', opacity: s, offset: 700 / dur },
-      { transform: 'translate(0,0) scale(1)', opacity: s, offset: 1 - 900 / dur }, { transform: 'translate(0,0) scale(1)', opacity: 0 }],
+    const at = 'translate(0,0) scale(1)';
+    anim(img, [{ transform: fromT, opacity: 0 }, { transform: at, opacity: peak, offset: inF },
+      { transform: at, opacity: peak, offset: 1 - outF }, { transform: at, opacity: 0 }],
       dur, 'cubic-bezier(.4,0,.2,1)');
     drop(img, dur + 40);
   }
