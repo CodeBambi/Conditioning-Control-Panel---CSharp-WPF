@@ -106,8 +106,8 @@ test('the room clock owns the frame rate, and every frame lands in the canvas', 
 
   assert.equal(src.tick(0, false), true);
   assert.equal(src.tick(1, false), false, 'a second tick in the same millisecond costs nothing');
-  assert.equal(src.tick(40, false), false, 'still inside the 12 fps gap');
-  assert.equal(src.tick(90, false), true);
+  assert.equal(src.tick(20, false), false, 'still inside the 30 fps gap');
+  assert.equal(src.tick(40, false), true);
   assert.equal(dom.drawn.length, first + 2);
   assert.equal(frames, 2);
   src.dispose();

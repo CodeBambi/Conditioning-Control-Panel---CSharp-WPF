@@ -488,8 +488,10 @@ export async function mount(ctx) {
 - **Playing GIFs (amended 2026-09-13).** Dealt GIFs play, decoded in the page with WebCodecs
   `ImageDecoder` (Chromium 94+, no vendored decoder; a page without it shows the first frame). Caps: a
   picture advances only while a screen showing it is inside the camera frustum (not in the room view,
-  not while a station holds the room), at most 12 frames a second, into a canvas texture of at most
-  384 px on the long edge, and at most one new decode per rendered frame. Still (reduced, Calm, Motion
+  not while a station holds the room), at its own frame delays up to 30 frames a second (amended
+  2026-09-18; was 12, which lurched on spirals), into a canvas texture of at most 384 px on the long
+  edge, one decode in flight per picture, and at most eight decode starts per rendered frame across
+  the wall (four per 1/6 s in Performance). Still (reduced, Calm, Motion
   still) shows the first frame.
 - **The SP chip (`ctx.spReadout`, amended 2026-09-14).** The room's HUD chip is the only SP on screen
   and the room owns its rule: it always shows Law I `shownSp` = `state.sp` minus what the tape still
