@@ -227,135 +227,6 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Lab → "Goon Game" card. Opens the 1v1 duel client (Resources/web/goon) in a WebView2
-        /// window via <see cref="Services.GoonGame.GoonHostService"/>, which supplies identity, the
-        /// server bridge and the asset manifest. No entitlement check here on purpose: the card is
-        /// an unconditional door, and the lobby/server do the gating (the transfer-your-own-media
-        /// half is the only premium part, and GoonHostService advertises that capability itself).
-        /// Launch() is idempotent — a live duel is re-focused rather than relaunched — so there is
-        /// no IsActive guard to duplicate.
-        /// </summary>
-        internal void BtnStartGoon_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                Services.GoonGame.GoonHostService.Launch();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "BtnStartGoon_Click failed");
-                MessageBox.Show("Couldn't open the Goon Game:\n\n" + ex.Message,
-                    Services.GoonGame.GoonHostService.ProductName, MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
-
-        /// <summary>
-        /// Lab → Chaos Mode hero card. Opens the setup/lobby window where the user
-        /// configures the run; BEGIN CHAOS there persists settings and launches via
-        /// <see cref="App.Chaos"/> (which owns the countdown, HUD and loop).
-        /// Modeless on purpose: ShowDialog would disable every other app window,
-        /// including the loadout sidebar that opens beside the Warren.
-        /// </summary>
-        internal void BtnStartChaos_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                // Tier 2 door, checked here rather than left to the Lab smokescreen: the overlay
-                // covers one tab, and the descent is reachable from the hero card, Quick Start and
-                // (Phase 6) a Play card that will not have an overlay at all. Keyed: on a
-                // server-declared DtRH drop day (DailyFreeService, off-pool override) the door
-                // opens for everyone.
-                if (!TierGate.DemandLab("Down the Rabbit Hole", "dtrh")) return;
-
-                // DtRH browser game (default ON since M6): the whole experience lives in the web
-                // page — hub, run and all. The legacy WPF path below stays for the Lab toggle and
-                // as the automatic fallback when the page reported a WebGL boot-error this session.
-                bool webPath = App.Settings?.Current?.ChaosWebGameEnabled == true
-                               && !Services.Chaos.DtrhHostService.BootFailedThisSession;
-
-                // Already down the hole? Just focus it — never re-pick a save mid-session.
-                if (webPath && Services.Chaos.DtrhHostService.IsActive)
-                {
-                    Services.Chaos.DtrhHostService.Launch();
-                    return;
-                }
-                if (!webPath && (App.Chaos == null || App.Chaos.IsRunning)) return;
-
-                // Save slots: choose which of the three local saves to descend into, right before
-                // the hole opens. Cancel backs out; the pick becomes the live slot for this session.
-                var slot = ChaosSlotPickerWindow.Pick(this);
-                if (slot == null) return;
-                Services.Chaos.ChaosMeta.SwitchSlot(slot.Value);
-
-                if (webPath)
-                {
-                    Services.Chaos.DtrhHostService.Launch();
-                    return;
-                }
-                // Happy path run 1: the Dollhouse stays shut until the first descent is done.
-                // FALL IN drops straight into the scripted naked run instead.
-                if (Services.Chaos.ChaosMeta.State.RunsCompleted == 0)
-                {
-                    App.Chaos!.StartRun(Services.Chaos.ChaosHappyPath.BuildFirstRunConfig());
-                    return;
-                }
-                if (ChaosHubWindow.Current != null) { ChaosHubWindow.Current.Activate(); return; }
-                var hub = new ChaosHubWindow { Owner = this };
-                hub.Show();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "BtnStartChaos_Click failed");
-                MessageBox.Show("Couldn't start Down the Rabbit Hole:\n\n" + ex.Message, "Down the Rabbit Hole",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
-
-        /// <summary>
-        /// Play tab, DtRH card -> "Racing Thoughts": the kart run on the descent's media, hosted
-        /// as its own WebView2 window (CaucusHostService).
-        ///
-        /// <para>NO TIER DOOR since 2026-09-17, by the owner's call: the race is in open testing
-        /// on BOTH surfaces, so the app asks no more of it than the web does at /race - an
-        /// account, which signing in already covered. Nothing is added here to replace the tier
-        /// check: requiring a fresh sign-in where nothing required one before would be adding a
-        /// gate while removing one, and the race banks into the local chaos_meta.json either way.</para>
-        ///
-        /// <para>AND NO PURCHASE DOOR EITHER. The race-06/race-07 stack proposed replacing the
-        /// tier check with <c>RacingAccess.CanLaunch</c> and a "buy a racing pack" message box.
-        /// That is the same closed door wearing a different lock, and it was refused at the merge
-        /// on 2026-09-18 because the owner had deleted the tier door the day before and chose open
-        /// testing twice over. The stack's rules survive, whole and tested, disarmed by one
-        /// constant in Services/Race/RacingAccess.cs; the stack's ONE-PAYOUT-PER-RUN rule is a
-        /// different thing entirely (RaceRunLifecycle, which never asks about ownership) and came
-        /// in untouched.</para>
-        ///
-        /// <para>This is the ONE button on this card that is not tier 2, and the cosmetic price
-        /// was named when the call was made: a free account still sees the card's Lab lockband,
-        /// and this button sits under that scrim. It still works - the band is hit-test invisible
-        /// and PlayDoorRenderTests.EveryLockbandStartsCollapsedAndNeverSwallowsTheClick holds that
-        /// in place - it just READS locked. Lifting it above the scrim is a layout change, not a
-        /// gate change, so it was deliberately left out rather than smuggled in here.</para>
-        ///
-        /// <para>Putting a gate back means putting it back in THREE places, not one: here, and
-        /// the `--race` and `--race-cloud` args in App.OnStartup. FALL IN and Quick Drop still
-        /// demand tier 2 and are untouched.</para>
-        /// </summary>
-        internal void BtnStartRace_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                Services.Chaos.CaucusHostService.Launch();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "BtnStartRace_Click failed");
-                MessageBox.Show("Couldn't start Racing Thoughts:\n\n" + ex.Message, "Racing Thoughts",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
-
-        /// <summary>
         /// Exclusives → "For You" spotlight. Opens the TikTok-style feed window (WebView2).
         /// Reached through ShowTab("fyp"), which intercepts the key rather than switching tabs.
         /// The card itself never blocks, so premium is enforced here.
@@ -388,8 +259,8 @@ namespace ConditioningControlPanel
         /// Play → The Arcademy strip. Opens the webview mini-game hub (Resources/web/arcademy) via
         /// <see cref="Services.Arcademy.ArcademyHostService"/>, the sibling of the DtRH, Intake and
         /// Goon hosts. Every gate lives in <c>Launch()</c> (T2 through <see cref="TierGate"/>, then
-        /// AudioOnlySession, then idempotency) for the same reason the DtRH card leaves its refusal
-        /// to <c>BtnStartChaos_Click</c>: the card's lockband is decoration, and the one code path
+        /// AudioOnlySession, then idempotency) for the same reason the launcher's tiles leave
+        /// their refusal to the hosts: a tile's lock sign is decoration, and the one code path
         /// that actually opens the door has to be the one that can say no.
         /// </summary>
         internal void BtnStartArcademy_Click(object sender, RoutedEventArgs e)
@@ -398,7 +269,7 @@ namespace ConditioningControlPanel
             {
                 // The page's LAST attempt failed (WebView2 runtime missing, WebGL refused, or the
                 // shell never answered its 45s progress deadline). DtRH consumes its own
-                // BootFailedThisSession at BtnStartChaos_Click, but there the flag DEGRADES to the
+                // BootFailedThisSession in DtrhHostService.Launch, but there the flag DEGRADES to the
                 // native game, so the user still gets a feature. Here there is nothing to degrade
                 // to, and half of what sets the flag is transient (a cold WebView2 start, a machine
                 // under load, a stalled driver), so refusing outright would cost a paying user the
@@ -442,72 +313,6 @@ namespace ConditioningControlPanel
             }
         }
 
-        /// <summary>
-        /// Play → Piece by Piece strip. Opens the 3D chess board (Resources/web/piecebypiece) via
-        /// <see cref="Services.PieceByPiece.PieceByPieceHostService"/>, the sibling of the DtRH,
-        /// Arcademy and Intake hosts. Both gates live in <c>Launch()</c> - idempotent re-focus
-        /// first, then the T2 bar through <see cref="TierGate"/> - for the same reason the
-        /// Arcademy card leaves its refusal there: the strip's lockband is decoration, and the
-        /// one code path that actually opens the door has to be the one that can say no.
-        ///
-        /// <para>No <c>BootFailedThisSession</c> prompt, unlike the Arcademy. That warning exists
-        /// because losing the Arcademy costs a paying account the headline feature; a chess board
-        /// that refused to start once is worth simply clicking again, and a second black window
-        /// is a cheaper thing to spend than a dialog on every visit.</para>
-        /// </summary>
-        internal void BtnStartPieceByPiece_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                Services.PieceByPiece.PieceByPieceHostService.Launch();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "BtnStartPieceByPiece_Click failed");
-                MessageBox.Show(Loc.GetF("play_pbp_open_failed_body", ex.Message),
-                    Services.PieceByPiece.PieceByPieceHostService.ProductName,
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
-
-        /// <summary>
-        /// Quick Start: launch a Chaos run with the saved settings, bypassing the modal hub.
-        /// Mirrors what BEGIN CHAOS does after SaveToSettings (StartRun reads ChaosRunConfig.FromSettings),
-        /// just without the dialog.
-        /// </summary>
-        internal void BtnQuickStartChaos_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                // Same tier-2 door as the hero card - Quick Start skips the picker, not the gate.
-                if (!TierGate.DemandLab("Down the Rabbit Hole", "dtrh")) return;
-
-                // DtRH browser game: same surface as the hero card — see BtnStartChaos_Click.
-                // Quick Start skips the save picker by design (that's the "quick" part) and reuses
-                // the last-chosen slot, already live in ChaosMeta.State.
-                if (App.Settings?.Current?.ChaosWebGameEnabled == true
-                    && !Services.Chaos.DtrhHostService.BootFailedThisSession)
-                {
-                    Services.Chaos.DtrhHostService.Launch();
-                    return;
-                }
-                if (App.Chaos == null || App.Chaos.IsRunning) return;
-                // Happy path run 1: the quick start drops into the same scripted naked run.
-                if (Services.Chaos.ChaosMeta.State.RunsCompleted == 0)
-                {
-                    App.Chaos.StartRun(Services.Chaos.ChaosHappyPath.BuildFirstRunConfig());
-                    return;
-                }
-                App.Chaos.StartRun();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "BtnQuickStartChaos_Click failed");
-                MessageBox.Show("Couldn't start Down the Rabbit Hole:\n\n" + ex.Message, "Down the Rabbit Hole",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
-
         /// <summary>True once <see cref="Services.IntakePassService.PassStateChanged"/> has been
         /// wired up. The service is created in App.OnStartup, but MainWindow's own constructor and
         /// the tab-navigation path both run refreshes that can beat any fixed hook-up point, so the
@@ -546,12 +351,12 @@ namespace ConditioningControlPanel
             try
             {
                 // Fall back to the pre-pass behaviour if the service somehow never came up:
-                // premium keeps its unlocked page, and everyone else gets the closed door.
+                // tier 2 keeps its unlocked page, and everyone else gets the closed door.
                 // "Spent" rather than "NeedsLogin" for the fallback deliberately - it matches
                 // IntakePassService's own fail-closed default, so a broken service never shows
                 // a signed-in user a sign-in prompt they can't act on.
                 var state = App.IntakePass?.State
-                            ?? (App.Patreon?.HasPremiumAccess == true
+                            ?? (App.Patreon?.HasLabAccess == true
                                 ? Services.IntakePassState.Premium
                                 : Services.IntakePassState.Spent);
 
@@ -803,6 +608,8 @@ namespace ConditioningControlPanel
             {
                 try
                 {
+                    // The launcher is never a way around the veil; grey the door as well as refusing it.
+                    if (BtnBackToLauncher != null) BtnBackToLauncher.IsEnabled = false;
                     // Enable system key suppression on the keyboard hook (the setter also
                     // installs the hook if panic key / keyword triggers never started it)
                     // The system-key block is a SAFETY TOGGLE now, not a law: a user who unticked it
@@ -885,6 +692,7 @@ namespace ConditioningControlPanel
             {
                 try
                 {
+                    if (BtnBackToLauncher != null) BtnBackToLauncher.IsEnabled = true;
                     // Disable system key suppression. Lockdown may have installed the hook
                     // itself; drop it again unless another feature still needs it (mirrors
                     // the startup install condition). LockdownService restores the user's

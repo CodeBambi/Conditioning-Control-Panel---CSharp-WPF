@@ -471,6 +471,23 @@
 
                 <!-- Window Control Buttons -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button x:Name="BtnBackToLauncher" Height="36"
+                            Click="BtnBackToLauncher_Click" Style="{StaticResource WindowControlButton}"
+                            ToolTip="{loc:Str launcher_tooltip_back_to_client}"
+                            AutomationProperties.Name="{loc:Str launcher_back_to_client}">
+                        <!-- A left chevron into a small square, and the name of where it goes:
+                             testers never found the bare icon. -->
+                        <StackPanel Orientation="Horizontal" Margin="12,0,12,0">
+                            <Canvas Width="16" Height="14" VerticalAlignment="Center">
+                                <Path Data="M9,2 L4,7 L9,12" Stroke="White" StrokeThickness="1.6"
+                                      StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                <Rectangle Canvas.Left="11.5" Canvas.Top="4" Width="5" Height="6"
+                                           Stroke="White" StrokeThickness="1.4" RadiusX="1" RadiusY="1"/>
+                            </Canvas>
+                            <TextBlock Text="{loc:Str launcher_back_to_client_short}" Foreground="White" FontSize="12"
+                                       FontWeight="SemiBold" Margin="7,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                     <Button x:Name="BtnTitleBarBugReport" Content="🐛" Width="46" Height="36"
                             Click="BtnReportBug_Click" Style="{StaticResource WindowControlButton}"
                             ToolTip="{loc:Str btn_report_bug}" FontSize="14"/>
@@ -1922,8 +1939,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v6_9_5_is_out}"
-                            Click="BtnUpdateAvailable_Click" ToolTip="{loc:Str tooltip_v6_9_5_the_spiral_pt_4}"
+                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v6_10_0_is_out}"
+                            Click="BtnUpdateAvailable_Click" ToolTip="{loc:Str tooltip_v6_10_0_let_the_games_begin}"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -2485,7 +2502,8 @@
                      lockbands are decoration and TierGate does the refusing.
                      ShowTab("lab") is a permanent alias onto this view — the key is API (54 bark rules
                      per mod match on it) and BarkTabAliases["play"]="lab" keeps those rules firing.
-                     Owns this door's single ambient loop, RabbitHoleFx, registered as "play". -->
+                     No ambient loop since 2026-09-18: the Rabbit Hole hero that carried it moved to
+                     the CC Labs launcher with the other games. -->
                 <views:PlayTabView x:Name="PlayTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 

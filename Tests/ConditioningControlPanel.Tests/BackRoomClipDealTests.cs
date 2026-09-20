@@ -306,6 +306,72 @@ public sealed class BackRoomClipDealTests : IDisposable
     // ---------------------------------------------------------------- the warm set
 
     [Fact]
+    public async Task WarmAsync_ReturnsOnTheFirstLandedClip_NotTheWholeBatch_AndTheBridgeCanWaitForTheRest()
+    {
+        // The cold open (2026-09-18): the wait used to end only with the batch, which is over when
+        // EVERY lane lands, so a deal at the 2 s cap saw nothing even with a clip on disk. Now the
+        // first clip releases the wait, and the batch itself is exposed so the bridge can post
+        // media-warm when the rest has landed.
+        int downloads = 0;
+        var second = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var (pool, _, _) = Pool(Settings(), clips: new List<FypAssetManifest.Entry> { Clip("scrolller/s/a"), Clip("scrolller/s/b") },
+            beforeWrite: () => Interlocked.Increment(ref downloads) == 1 ? Task.CompletedTask : second.Task);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        await pool.WarmAsync(CancellationToken.None);
+        Assert.True(sw.ElapsedMilliseconds < BackRoomRemotePool.WarmWaitMs, "the wait ended with the first clip, not the cap");
+        Assert.Single(pool.Ready());
+        var warm = pool.WarmInFlight();
+        Assert.NotNull(warm);
+        Assert.False(warm!.IsCompleted, "the second lane is still on the wire");
+
+        var media = Media(Settings(), pool, new[] { Gif("own.gif") });
+        var waiting = media.WaitForWarmAsync();
+        Assert.False(waiting.IsCompleted);
+        second.SetResult(true);
+        Assert.True(await waiting);
+        Assert.Equal(2, pool.Ready().Count);
+        Assert.Null(pool.WarmInFlight());
+        // Nothing warming: the bridge gets its answer at once and posts nothing.
+        Assert.False(await media.WaitForWarmAsync());
+    }
+
+    [Fact]
+    public async Task WarmPool_StaysWarmForTheSameSource_AndDrainsItselfWhenTheSourceMovesOrConsentGoes()
+    {
+        // The cold re-open (2026-09-18): the room no longer drains the pool on close, so the pool has
+        // to know what it was filled for and let go on its own when that changes.
+        var s = Settings();
+        var (pool, materialized, released) = Pool(s, clips: new List<FypAssetManifest.Entry> { Clip("scrolller/s/a"), Clip("scrolller/s/b") });
+        await pool.WarmAsync(CancellationToken.None);
+        await Settle(() => pool.Ready().Count, 2);
+        await (pool.WarmInFlight() ?? Task.CompletedTask);
+        Assert.Equal(2, pool.Ready().Count);
+
+        // Same source, same niches: a re-open keeps the set and starts nothing.
+        pool.EnsureWarm();
+        Assert.Null(pool.WarmInFlight());
+        Assert.Equal(2, pool.Ready().Count);
+        Assert.Empty(released);
+
+        // A niche change moves the key: the old clips go and a fresh batch starts.
+        s.BackRoomMediaSubs = new List<string> { "othersub" };
+        await pool.WarmAsync(CancellationToken.None);
+        await Settle(() => released.Count, 2);
+        Assert.Equal(2, released.Count);
+        await (pool.WarmInFlight() ?? Task.CompletedTask);
+        Assert.Equal(2, pool.Ready().Count);
+        Assert.Equal(4, materialized.Count);
+
+        // Consent withdrawn: the source resolves local, and the set is released rather than kept.
+        s.RemoteMediaConsented = false; s.FypOnlineConsented = false;
+        Assert.False(pool.Wanted);
+        pool.EnsureWarm();
+        Assert.Empty(pool.Ready());
+        Assert.Equal(4, released.Count);
+    }
+
+    [Fact]
     public async Task WarmPool_MaterializesOneEntryIdExactlyOnce()
     {
         // The trap: every MaterializeAsync mints a new guid filename, so materializing one clip twice

@@ -225,6 +225,31 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.DeeperRow_Click(sender, e);
         }
+        private void DeeperRowMenuOpen_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.DeeperRowMenuOpen_Click(sender, e);
+        }
+        private void DeeperRowMenuReveal_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.DeeperRowMenuReveal_Click(sender, e);
+        }
+        private void DeeperRowMenuCopyPath_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.DeeperRowMenuCopyPath_Click(sender, e);
+        }
+        private void DeeperLibraryList_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.DeeperLibraryList_PreviewKeyDown(sender, e);
+        }
+        private void DeeperTab_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.DeeperTab_PreviewKeyDown(sender, e);
+        }
 
         private void DeeperRowDelete_Click(object sender, RoutedEventArgs e)
         {
@@ -250,6 +275,11 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.DeeperSort_SelectionChanged(sender, e);
+        }
+        private void DeeperSortDir_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.DeeperSortDir_Click(sender, e);
         }
     }
 }

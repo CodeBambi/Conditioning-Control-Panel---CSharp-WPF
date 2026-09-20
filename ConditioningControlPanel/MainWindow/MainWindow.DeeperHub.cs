@@ -9,6 +9,8 @@ using System.Windows.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models.Deeper;
 using ConditioningControlPanel.Services.Deeper;
+using DeeperMediaTypeFilter = ConditioningControlPanel.Services.Deeper.EnhancementLibraryFilter.MediaTypeFilter;
+using DeeperSortMode = ConditioningControlPanel.Services.Deeper.EnhancementLibraryFilter.SortMode;
 
 namespace ConditioningControlPanel
 {
@@ -20,17 +22,47 @@ namespace ConditioningControlPanel
     // sort dropdown, and per-row action buttons.
     public partial class MainWindow
     {
-        public enum DeeperMediaTypeFilter { All, Video, Audio }
-        public enum DeeperSortMode { Recent, Name, Creator }
+        // Filter / sort / count rules live in EnhancementLibraryFilter (pure,
+        // unit-tested); this partial only holds the UI state and the wiring.
 
         // -------------------------------------------------------------------
         // Per-row view model. Pre-computed strings + brushes + visibilities so
         // the DataTemplate can stay pure-bind (no converters). Holds the
         // original Entry so action handlers can recover FilePath.
         // -------------------------------------------------------------------
-        public sealed class DeeperLibraryRowVm
+        public sealed class DeeperLibraryRowVm : System.ComponentModel.INotifyPropertyChanged
         {
             public EnhancementLibraryEntry Entry { get; init; } = new();
+
+            public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+
+            // Single-click selection (keyboard + context menu target). Restored by
+            // path across list rebuilds in ApplyDeeperFilterAndSort.
+            private bool _isSelected;
+            public bool IsSelected
+            {
+                get => _isSelected;
+                set
+                {
+                    if (_isSelected == value) return;
+                    _isSelected = value;
+                    PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsSelected)));
+                }
+            }
+
+            // Brief accent flash after an import (or when an import turned out to
+            // be a file already in the library) so the eye lands on the row.
+            private bool _isHighlighted;
+            public bool IsHighlighted
+            {
+                get => _isHighlighted;
+                set
+                {
+                    if (_isHighlighted == value) return;
+                    _isHighlighted = value;
+                    PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsHighlighted)));
+                }
+            }
 
             // Identity / header
             public string Name => Entry.Name;
@@ -44,6 +76,8 @@ namespace ConditioningControlPanel
 
             public string MediaSourceLabel { get; init; } = "";
             public string MediaSourceGlyph { get; init; } = "";
+            // Explains the glyph: the missing-media warning used to be a bare "⚠".
+            public string MediaSourceTooltip { get; init; } = "";
             public Brush MediaSourceBrush { get; init; } = Brushes.Gray;
             public Visibility ShowMediaSource { get; init; } = Visibility.Collapsed;
 
@@ -91,11 +125,24 @@ namespace ConditioningControlPanel
         private readonly List<EnhancementLibraryEntry> _deeperAllEntries = new();
         public ObservableCollection<DeeperLibraryRowVm> DeeperFilteredEntries { get; } = new();
 
+        // Full path of the selected row (null = none). Kept as a path, not a VM,
+        // because every filter/sort pass rebuilds the VM list.
+        private string? _deeperSelectedPath;
+        // Path of the row currently flashing after an import/reveal. Held here (not
+        // only on the row VM) because the library watcher's debounced LibraryChanged
+        // lands mid-flash and ApplyDeeperFilterAndSort rebuilds every VM; without it
+        // the highlight died at ~300 ms instead of the intended 1800 ms.
+        private string? _deeperHighlightedPath;
+
         private string _deeperSearchText = "";
         private DeeperMediaTypeFilter _deeperMediaTypeFilter = DeeperMediaTypeFilter.All;
         private bool _deeperFilterHaptics;
         private bool _deeperFilterWebcam;
         private DeeperSortMode _deeperSortMode = DeeperSortMode.Recent;
+        private bool _deeperSortDescending = EnhancementLibraryFilter.DefaultDescending(DeeperSortMode.Recent);
+
+        private EnhancementLibraryFilter.Criteria CurrentDeeperCriteria()
+            => new((_deeperSearchText ?? "").Trim(), _deeperMediaTypeFilter, _deeperFilterHaptics, _deeperFilterWebcam);
 
         private DispatcherTimer? _deeperSearchDebounceTimer;
         private const int DeeperSearchDebounceMs = 150;
@@ -105,56 +152,27 @@ namespace ConditioningControlPanel
         // Filter + sort
         // -------------------------------------------------------------------
 
-        private static bool DeeperEntryMatchesSearch(EnhancementLibraryEntry e, string needle)
-        {
-            if (string.IsNullOrEmpty(needle)) return true;
-            if (e == null) return false;
-            if (Contains(e.Name, needle)) return true;
-            if (Contains(e.Creator, needle)) return true;
-            if (e.AutoTags != null)
-                foreach (var tag in e.AutoTags) if (Contains(tag, needle)) return true;
-            return false;
-            static bool Contains(string? hay, string n) =>
-                !string.IsNullOrEmpty(hay) && hay.IndexOf(n, StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        private static bool DeeperEntryMatchesMediaType(EnhancementLibraryEntry e, DeeperMediaTypeFilter filter) => filter switch
-        {
-            DeeperMediaTypeFilter.All   => true,
-            DeeperMediaTypeFilter.Video => string.Equals(e.MediaType, MediaTypes.Video, StringComparison.OrdinalIgnoreCase),
-            DeeperMediaTypeFilter.Audio => string.Equals(e.MediaType, MediaTypes.Audio, StringComparison.OrdinalIgnoreCase),
-            _ => true,
-        };
-
-        private static bool DeeperEntryHasTag(EnhancementLibraryEntry e, string tag)
-            => e.AutoTags != null && e.AutoTags.Contains(tag);
-
-        private IEnumerable<EnhancementLibraryEntry> SortDeeperEntries(IEnumerable<EnhancementLibraryEntry> src) => _deeperSortMode switch
-        {
-            DeeperSortMode.Name    => src.OrderBy(e => e.Name ?? "", StringComparer.OrdinalIgnoreCase),
-            DeeperSortMode.Creator => src.OrderBy(e => e.Creator ?? "", StringComparer.OrdinalIgnoreCase),
-            _                      => src.OrderByDescending(e => e.LastModified),
-        };
-
         private void ApplyDeeperFilterAndSort()
         {
             if (!_deeperHubInitDone) return;
             try
             {
-                var needle = (_deeperSearchText ?? "").Trim();
-                var pass = _deeperAllEntries.Where(e =>
-                    DeeperEntryMatchesSearch(e, needle) &&
-                    DeeperEntryMatchesMediaType(e, _deeperMediaTypeFilter) &&
-                    (!_deeperFilterHaptics || DeeperEntryHasTag(e, EnhancementAutoTagger.TagHaptics)) &&
-                    (!_deeperFilterWebcam  || DeeperEntryHasTag(e, EnhancementAutoTagger.TagWebcam)));
-
-                var sorted = SortDeeperEntries(pass).Select(BuildRowVm).ToList();
+                var criteria = CurrentDeeperCriteria();
+                var pass = _deeperAllEntries.Where(e => EnhancementLibraryFilter.Matches(e, criteria));
+                var sorted = EnhancementLibraryFilter.Sort(pass, _deeperSortMode, _deeperSortDescending)
+                    .Select(BuildRowVm).ToList();
 
                 DeeperFilteredEntries.Clear();
-                foreach (var vm in sorted) DeeperFilteredEntries.Add(vm);
+                foreach (var vm in sorted)
+                {
+                    vm.IsSelected = DeeperPathsEqual(vm.Entry.FilePath, _deeperSelectedPath);
+                    vm.IsHighlighted = _deeperHighlightedPath != null && DeeperPathsEqual(vm.Entry.FilePath, _deeperHighlightedPath);
+                    DeeperFilteredEntries.Add(vm);
+                }
 
                 UpdateDeeperFilterPillCounts();
                 UpdateDeeperEmptyState(sorted.Count, _deeperAllEntries.Count);
+                UpdateDeeperHeaderCount(sorted.Count, _deeperAllEntries.Count);
             }
             catch (Exception ex) { App.Logger?.Debug("ApplyDeeperFilterAndSort error: {Error}", ex.Message); }
         }
@@ -166,6 +184,7 @@ namespace ConditioningControlPanel
         private DeeperLibraryRowVm BuildRowVm(EnhancementLibraryEntry e)
         {
             var (mediaLabel, mediaGlyph, mediaBrushKey) = ResolveMediaSourceDisplay(e.MediaSource);
+            var mediaTooltip = mediaGlyph == "⚠" ? Loc.Get("deeper_hub_tip_media_missing") : (mediaLabel ?? "");
 
             var typeBadgeBgKey = e.MediaType == MediaTypes.Audio
                 ? "DeeperHubAudioBadgeBgBrush"
@@ -217,6 +236,7 @@ namespace ConditioningControlPanel
 
                 MediaSourceLabel = mediaLabel,
                 MediaSourceGlyph = mediaGlyph,
+                MediaSourceTooltip = mediaTooltip,
                 MediaSourceBrush = (Brush)FindResource(mediaBrushKey),
                 ShowMediaSource  = string.IsNullOrEmpty(mediaLabel) ? Visibility.Collapsed : Visibility.Visible,
 
@@ -250,12 +270,12 @@ namespace ConditioningControlPanel
             {
                 string host;
                 try { host = new Uri(mediaSource).Host; }
-                catch { host = mediaSource; }
+                catch (UriFormatException) { host = mediaSource; } // swallow: show the raw source
                 return (host, "🌐", "DeeperAccentBrush");
             }
 
             bool exists = false;
-            try { exists = System.IO.File.Exists(mediaSource); } catch { }
+            try { exists = System.IO.File.Exists(mediaSource); } catch (Exception ex) { Diag.Swallowed(ex); }
             var name = System.IO.Path.GetFileName(mediaSource);
             if (string.IsNullOrEmpty(name)) name = mediaSource;
             return (name,
@@ -309,8 +329,9 @@ namespace ConditioningControlPanel
                         Loc.Get("deeper_submission_badge_pending_tip")),
                 };
             }
-            catch
+            catch (Exception ex)
             {
+                Diag.Swallowed(ex);
                 return (Visibility.Collapsed, "", "", Brushes.Transparent, Brushes.White, "");
             }
         }
@@ -336,14 +357,9 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var needle = (_deeperSearchText ?? "").Trim();
-                var searched = _deeperAllEntries.Where(e => DeeperEntryMatchesSearch(e, needle)).ToList();
-
-                int all = searched.Count;
-                int video   = searched.Count(e => DeeperEntryMatchesMediaType(e, DeeperMediaTypeFilter.Video));
-                int audio   = searched.Count(e => DeeperEntryMatchesMediaType(e, DeeperMediaTypeFilter.Audio));
-                int haptics = searched.Count(e => DeeperEntryHasTag(e, EnhancementAutoTagger.TagHaptics));
-                int webcam  = searched.Count(e => DeeperEntryHasTag(e, EnhancementAutoTagger.TagWebcam));
+                // Each pill = rows that would show with THAT pill on and every other
+                // active filter kept, so the numbers always agree with the list.
+                var (all, video, audio, haptics, webcam) = EnhancementLibraryFilter.CountPills(_deeperAllEntries, CurrentDeeperCriteria());
 
                 if (DeeperTab.TxtDeeperPillAllCount     != null) DeeperTab.TxtDeeperPillAllCount.Text     = all.ToString(CultureInfo.InvariantCulture);
                 if (DeeperTab.TxtDeeperPillVideoCount   != null) DeeperTab.TxtDeeperPillVideoCount.Text   = video.ToString(CultureInfo.InvariantCulture);
@@ -351,18 +367,21 @@ namespace ConditioningControlPanel
                 if (DeeperTab.TxtDeeperPillHapticsCount != null) DeeperTab.TxtDeeperPillHapticsCount.Text = haptics.ToString(CultureInfo.InvariantCulture);
                 if (DeeperTab.TxtDeeperPillWebcamCount  != null) DeeperTab.TxtDeeperPillWebcamCount.Text  = webcam.ToString(CultureInfo.InvariantCulture);
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void UpdateDeeperEmptyState(int filteredCount, int totalCount)
         {
             if (DeeperTab.TxtDeeperLibraryEmpty == null) return;
+            var actions = DeeperTab.DeeperLibraryEmptyActions;
             if (totalCount == 0)
             {
                 DeeperTab.TxtDeeperLibraryEmpty.Text = Loc.Get("deeper_library_empty");
                 DeeperTab.TxtDeeperLibraryEmpty.Visibility = Visibility.Visible;
+                if (actions != null) actions.Visibility = Visibility.Visible;
                 return;
             }
+            if (actions != null) actions.Visibility = Visibility.Collapsed;
             if (filteredCount == 0)
             {
                 DeeperTab.TxtDeeperLibraryEmpty.Text = Loc.Get("deeper_hub_empty_filtered");
@@ -370,6 +389,15 @@ namespace ConditioningControlPanel
                 return;
             }
             DeeperTab.TxtDeeperLibraryEmpty.Visibility = Visibility.Collapsed;
+        }
+
+        // "{total} file(s)", plus "({n} shown)" while a filter hides some.
+        private void UpdateDeeperHeaderCount(int shownCount, int totalCount)
+        {
+            if (DeeperTab.TxtDeeperLibraryCount == null) return;
+            DeeperTab.TxtDeeperLibraryCount.Text = shownCount == totalCount
+                ? string.Format(Loc.Get("deeper_library_count_fmt"), totalCount)
+                : string.Format(Loc.Get("deeper_library_count_shown_fmt"), totalCount, shownCount);
         }
 
         // -------------------------------------------------------------------
@@ -456,11 +484,27 @@ namespace ConditioningControlPanel
             if (!_deeperHubInitDone || DeeperTab.CmbDeeperSort?.SelectedItem is not System.Windows.Controls.ComboBoxItem item) return;
             _deeperSortMode = (item.Tag as string) switch
             {
-                "name"    => DeeperSortMode.Name,
-                "creator" => DeeperSortMode.Creator,
-                _         => DeeperSortMode.Recent,
+                "name"     => DeeperSortMode.Name,
+                "creator"  => DeeperSortMode.Creator,
+                "duration" => DeeperSortMode.Duration,
+                _          => DeeperSortMode.Recent,
             };
+            _deeperSortDescending = EnhancementLibraryFilter.DefaultDescending(_deeperSortMode);
+            RefreshDeeperSortDirGlyph();
             ApplyDeeperFilterAndSort();
+        }
+
+        internal void DeeperSortDir_Click(object sender, RoutedEventArgs e)
+        {
+            _deeperSortDescending = !_deeperSortDescending;
+            RefreshDeeperSortDirGlyph();
+            ApplyDeeperFilterAndSort();
+        }
+
+        private void RefreshDeeperSortDirGlyph()
+        {
+            if (DeeperTab.BtnDeeperSortDir != null)
+                DeeperTab.BtnDeeperSortDir.Content = _deeperSortDescending ? "▼" : "▲";
         }
 
         // -------------------------------------------------------------------
@@ -473,10 +517,51 @@ namespace ConditioningControlPanel
             return null;
         }
 
+        // One click selects the row AND opens it in the editor. The library wave
+        // (34de48be1) briefly made a single click select-only with double-click to
+        // open; testers read that as "clicking a file does nothing" on the 6.10.0
+        // pre-release, so the click opens again (owner call, 2026-09-19). A second
+        // click of a double-click lands on the same path and ShowOrActivate reuses
+        // the editor window, so it is harmless. Enter/Delete/Up/Down still work on
+        // the selection; the right-click menu targets the row under the cursor.
         internal void DeeperRow_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             var entry = EntryFromDataContext(sender);
+            if (entry == null) return;
+            SelectDeeperRow(entry.FilePath, scrollIntoView: false);
+            try { DeeperTab.DeeperLibraryList?.Focus(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            OpenDeeperFile(entry.FilePath);
+        }
+
+        internal void DeeperRowMenuOpen_Click(object sender, RoutedEventArgs e)
+        {
+            var entry = EntryFromDataContext(sender);
             if (entry != null) OpenDeeperFile(entry.FilePath);
+        }
+
+        internal void DeeperRowMenuReveal_Click(object sender, RoutedEventArgs e)
+        {
+            var entry = EntryFromDataContext(sender);
+            if (entry == null) return;
+            try
+            {
+                if (!System.IO.File.Exists(entry.FilePath)) return;
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = "/select,\"" + System.IO.Path.GetFullPath(entry.FilePath) + "\"",
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Deeper: reveal in folder failed"); }
+        }
+
+        internal void DeeperRowMenuCopyPath_Click(object sender, RoutedEventArgs e)
+        {
+            var entry = EntryFromDataContext(sender);
+            if (entry == null) return;
+            try { Clipboard.SetText(System.IO.Path.GetFullPath(entry.FilePath)); }
+            catch (Exception ex) { App.Logger?.Debug("Deeper: copy path failed: {Error}", ex.Message); }
         }
 
         internal void DeeperRowPlay_Click(object sender, RoutedEventArgs e)
@@ -490,7 +575,112 @@ namespace ConditioningControlPanel
             // audio and fail with "Couldn't open that audio file."
             // OpenDeeperEnhancementInPlayer routes the JSON through the host,
             // which knows how to load the bound media (URL or local file).
+            //
+            // A player that already has THIS file loaded is just brought to the
+            // front without reloading: the host would otherwise restart playback
+            // from the top. ShowOrActivate owns the single-window bookkeeping.
+            if (Views.Deeper.EnhancementPlayerWindow.Current != null
+                && DeeperPathsEqual(App.DeeperHost?.LoadedFilePath, entry.FilePath))
+            {
+                try { Views.Deeper.EnhancementPlayerWindow.ShowOrActivate(this); return; }
+                catch (Exception ex) { Diag.Swallowed(ex); }
+            }
             OpenDeeperEnhancementInPlayer(entry.FilePath);
+        }
+
+        internal void DeeperLibraryList_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            try
+            {
+                switch (e.Key)
+                {
+                    case System.Windows.Input.Key.Enter:
+                    {
+                        var sel = SelectedDeeperEntry();
+                        if (sel != null) { OpenDeeperFile(sel.FilePath); e.Handled = true; }
+                        break;
+                    }
+                    case System.Windows.Input.Key.Delete:
+                    {
+                        var sel = SelectedDeeperEntry();
+                        if (sel != null) { DeleteDeeperLibraryEntry(sel); e.Handled = true; }
+                        break;
+                    }
+                    case System.Windows.Input.Key.Up:
+                        MoveDeeperSelection(-1);
+                        e.Handled = true;
+                        break;
+                    case System.Windows.Input.Key.Down:
+                        MoveDeeperSelection(+1);
+                        e.Handled = true;
+                        break;
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("Deeper list key error: {Error}", ex.Message); }
+        }
+
+        // Ctrl+F anywhere on the tab focuses the search box.
+        internal void DeeperTab_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key != System.Windows.Input.Key.F
+                || !System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Control)) return;
+            var box = DeeperTab.TxtDeeperSearch;
+            if (box == null) return;
+            box.Focus();
+            box.SelectAll();
+            e.Handled = true;
+        }
+
+        private static bool DeeperPathsEqual(string? a, string? b)
+        {
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+            try { return string.Equals(System.IO.Path.GetFullPath(a), System.IO.Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase); }
+            catch (Exception ex) { Diag.Swallowed(ex); return string.Equals(a, b, StringComparison.OrdinalIgnoreCase); }
+        }
+
+        private int SelectedDeeperIndex()
+        {
+            for (int i = 0; i < DeeperFilteredEntries.Count; i++)
+                if (DeeperFilteredEntries[i].IsSelected) return i;
+            return -1;
+        }
+
+        private EnhancementLibraryEntry? SelectedDeeperEntry()
+        {
+            var i = SelectedDeeperIndex();
+            return i < 0 ? null : DeeperFilteredEntries[i].Entry;
+        }
+
+        private void MoveDeeperSelection(int delta)
+        {
+            if (DeeperFilteredEntries.Count == 0) return;
+            var cur = SelectedDeeperIndex();
+            var next = cur < 0 ? (delta > 0 ? 0 : DeeperFilteredEntries.Count - 1)
+                               : Math.Clamp(cur + delta, 0, DeeperFilteredEntries.Count - 1);
+            SelectDeeperRow(DeeperFilteredEntries[next].Entry.FilePath, scrollIntoView: true);
+        }
+
+        private void SelectDeeperRow(string? filePath, bool scrollIntoView)
+        {
+            _deeperSelectedPath = filePath;
+            int index = -1;
+            for (int i = 0; i < DeeperFilteredEntries.Count; i++)
+            {
+                var vm = DeeperFilteredEntries[i];
+                vm.IsSelected = DeeperPathsEqual(vm.Entry.FilePath, filePath);
+                if (vm.IsSelected) index = i;
+            }
+            if (!scrollIntoView || index < 0) return;
+            try
+            {
+                var scroller = FindDescendantScrollViewer(DeeperTab.DeeperLibraryList);
+                if (scroller == null) return;
+                // CanContentScroll + VirtualizingStackPanel: offsets are in items.
+                if (index < scroller.VerticalOffset) scroller.ScrollToVerticalOffset(index);
+                else if (index >= scroller.VerticalOffset + scroller.ViewportHeight)
+                    scroller.ScrollToVerticalOffset(index - Math.Max(1, scroller.ViewportHeight) + 1);
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         internal void DeeperRowDelete_Click(object sender, RoutedEventArgs e)
@@ -526,11 +716,74 @@ namespace ConditioningControlPanel
             var lib = App.EnhancementLibrary;
             if (lib == null) return;
             _deeperAllEntries.Clear();
-            foreach (var entry in lib.ScanLibrary()) _deeperAllEntries.Add(entry);
+            foreach (var entry in lib.ScanLibrary())
+            {
+                // A row whose delete is in its undo grace period stays hidden even
+                // though the file is still on disk.
+                if (IsDeeperDeletePending(entry.FilePath)) continue;
+                _deeperAllEntries.Add(entry);
+            }
             ApplyDeeperFilterAndSort();
-            if (DeeperTab.TxtDeeperLibraryCount != null)
-                DeeperTab.TxtDeeperLibraryCount.Text = string.Format(Loc.Get("deeper_library_count_fmt"), _deeperAllEntries.Count);
             ProbeDeeperDurations();
+        }
+
+        // Scroll the list to the row for <paramref name="filePath"/> and flash it.
+        // No-op when the row is filtered out.
+        private void RevealDeeperLibraryRow(string filePath)
+        {
+            try
+            {
+                string key;
+                try { key = System.IO.Path.GetFullPath(filePath); } catch (Exception ex) { Diag.Swallowed(ex); key = filePath; }
+                int index = -1;
+                for (int i = 0; i < DeeperFilteredEntries.Count; i++)
+                {
+                    var p = DeeperFilteredEntries[i].Entry.FilePath;
+                    string full;
+                    try { full = System.IO.Path.GetFullPath(p); } catch (Exception ex) { Diag.Swallowed(ex); full = p; }
+                    if (string.Equals(full, key, StringComparison.OrdinalIgnoreCase)) { index = i; break; }
+                }
+                if (index < 0) return;
+                var vm = DeeperFilteredEntries[index];
+
+                // CanContentScroll + VirtualizingStackPanel: the vertical offset is in items.
+                var scroller = FindDescendantScrollViewer(DeeperTab.DeeperLibraryList);
+                scroller?.ScrollToVerticalOffset(Math.Max(0, index - 1));
+
+                // Remember the path so a watcher-driven rebuild re-applies the flash to
+                // the fresh VM; the Tick clears both the field and whichever VM is live.
+                _deeperHighlightedPath = key;
+                vm.IsHighlighted = true;
+                var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1800) };
+                t.Tick += (_, _) =>
+                {
+                    t.Stop();
+                    if (DeeperPathsEqual(_deeperHighlightedPath, key)) _deeperHighlightedPath = null;
+                    vm.IsHighlighted = false;
+                    try
+                    {
+                        foreach (var row in DeeperFilteredEntries)
+                            if (row.IsHighlighted && DeeperPathsEqual(row.Entry.FilePath, key)) row.IsHighlighted = false;
+                    }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
+                };
+                t.Start();
+            }
+            catch (Exception ex) { App.Logger?.Debug("RevealDeeperLibraryRow error: {Error}", ex.Message); }
+        }
+
+        private static System.Windows.Controls.ScrollViewer? FindDescendantScrollViewer(DependencyObject? root)
+        {
+            if (root == null) return null;
+            int n = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < n; i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                if (child is System.Windows.Controls.ScrollViewer sv) return sv;
+                var deeper = FindDescendantScrollViewer(child);
+                if (deeper != null) return deeper;
+            }
+            return null;
         }
 
         // -------------------------------------------------------------------

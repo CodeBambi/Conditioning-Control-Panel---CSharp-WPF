@@ -170,6 +170,10 @@ namespace ConditioningControlPanel
                 // method's own doc comment already promised.
                 try { PersistCompanionDrawerStates(); } catch { }
 
+                // A Deeper library delete still inside its undo grace was confirmed by
+                // the user; honour it now rather than letting the timer die with us.
+                try { CommitPendingDeeperDeletesOnExit(); } catch (Exception ex) { Diag.Swallowed(ex); }
+
                 // Actually closing - clean up
                 SaveSettings();
 

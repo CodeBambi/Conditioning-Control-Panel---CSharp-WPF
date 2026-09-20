@@ -37,6 +37,25 @@ namespace ConditioningControlPanel.Services
         public static T? FindThemeResource<T>(FrameworkElement host, string key) where T : class
             => TryFind<T>(host, key);
 
+        /// <summary>
+        /// Fills <paramref name="block"/> from <paramref name="text"/>, where <c>**word**</c>
+        /// becomes a bold run in the accent so the key words pop off the grey body copy.
+        /// </summary>
+        private static TextBlock Marked(string? text, Brush accent, TextBlock block)
+        {
+            foreach (var (piece, emphasis) in UI.HelpMarkup.Split(text))
+            {
+                var run = new System.Windows.Documents.Run(piece);
+                if (emphasis)
+                {
+                    run.FontWeight = FontWeights.SemiBold;
+                    run.Foreground = accent;
+                }
+                block.Inlines.Add(run);
+            }
+            return block;
+        }
+
         private static T? TryFind<T>(FrameworkElement host, string key) where T : class
         {
             // Walk the host's logical tree first (picks up Window.Resources).
@@ -94,14 +113,13 @@ namespace ConditioningControlPanel.Services
                 FontWeight = FontWeights.Bold,
                 Margin = new Thickness(0, 0, 0, 4)
             });
-            whatSection.Children.Add(new TextBlock
+            whatSection.Children.Add(Marked(content.WhatItDoes, pinkBrush, new TextBlock
             {
-                Text = content.WhatItDoes,
                 Foreground = new SolidColorBrush(Color.FromRgb(208, 208, 208)),
                 FontSize = 12,
                 TextWrapping = TextWrapping.Wrap,
                 LineHeight = 18
-            });
+            }));
             panel.Children.Add(whatSection);
 
             // Tips section (if any)
@@ -126,14 +144,13 @@ namespace ConditioningControlPanel.Services
                         Margin = new Thickness(0, 0, 6, 0),
                         FontSize = 12
                     });
-                    tipRow.Children.Add(new TextBlock
+                    tipRow.Children.Add(Marked(tip, pinkBrush, new TextBlock
                     {
-                        Text = tip,
                         Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
                         FontSize = 11,
                         TextWrapping = TextWrapping.Wrap,
                         MaxWidth = 310
-                    });
+                    }));
                     tipsSection.Children.Add(tipRow);
                 }
                 panel.Children.Add(tipsSection);
@@ -158,15 +175,14 @@ namespace ConditioningControlPanel.Services
                     FontWeight = FontWeights.Bold,
                     Margin = new Thickness(0, 0, 0, 4)
                 });
-                howStack.Children.Add(new TextBlock
+                howStack.Children.Add(Marked(content.HowItWorks, pinkBrush, new TextBlock
                 {
-                    Text = content.HowItWorks,
                     Foreground = new SolidColorBrush(Color.FromRgb(136, 136, 136)),
                     FontSize = 10,
                     TextWrapping = TextWrapping.Wrap,
                     LineHeight = 14,
                     FontStyle = FontStyles.Italic
-                });
+                }));
                 howBorder.Child = howStack;
                 panel.Children.Add(howBorder);
             }

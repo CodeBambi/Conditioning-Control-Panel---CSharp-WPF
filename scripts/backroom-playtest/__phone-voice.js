@@ -19,7 +19,7 @@ export function createPresetVoice({ Context = globalThis.AudioContext, fetcher =
   function arm() {
     try { context().resume().catch(() => {}); for (const word of words) load(word); } catch (_) { /* unavailable audio */ }
   }
-  async function speak({ text, reversed = false } = {}) {
+  async function speak({ text, reversed = false, volume } = {}) {
     stop(); const ticket = epoch;
     const key = String(text || '').trim().toLowerCase().replace(/\s+/g, ' ');
     // Never revive the browser's harsh fallback if a recording cannot play.
@@ -37,7 +37,7 @@ export function createPresetVoice({ Context = globalThis.AudioContext, fetcher =
         for (let n = 0; n < buffer.numberOfChannels; n++) audio.getChannelData(n).set(buffer.getChannelData(n).slice().reverse());
       }
       const s = c.createBufferSource(), g = c.createGain();
-      s.buffer = audio; g.gain.value = 0.65; s.connect(g); g.connect(c.destination);
+      s.buffer = audio; g.gain.value = 0.65 * (Number.isFinite(volume) ? Math.max(0, Math.min(1, volume)) : 1); s.connect(g); g.connect(c.destination);
       source = s; gain = g;
       s.onended = () => { s.disconnect(); g.disconnect(); if (source === s) source = gain = null; };
       s.start();

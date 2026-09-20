@@ -8,41 +8,38 @@ using Newtonsoft.Json.Linq;
 namespace ConditioningControlPanel.Services.Race;
 
 /// <summary>Purchases, not subscription tier, open the race. Catalogue rows retain their own grants.
-/// <para>DISARMED - see <see cref="PurchaseDoorArmed"/>. The rules below are the race-06/race-07
-/// stack's, kept whole and tested; what they are NOT allowed to do right now is shut anyone out.</para></summary>
+/// <para>ARMED since 2026-09-18 - see <see cref="PurchaseDoorArmed"/>. The rules below are the
+/// race-06/race-07 stack's, kept whole and tested, and they now decide who gets in.</para></summary>
 public static class RacingAccess
 {
     /// <summary>
-    /// THE DOOR IS OPEN, and this constant is the only place that says so.
+    /// THE DOOR IS CLOSED, and this constant is the only place that says so.
     ///
-    /// <para>On 2026-09-17 the owner removed Racing Thoughts' tier gate and chose open testing,
-    /// "account only", on both the desktop and the web (208711cfc). The race-06/race-07 stack was
-    /// written the same day against an older tree and arrives proposing a PURCHASE gate in its
-    /// place: no racing pack, no race. That is the same closed door wearing a different lock, and
-    /// it was refused when the stack was merged on 2026-09-18.</para>
+    /// <para>History, short. On 2026-09-17 the owner removed Racing Thoughts' tier gate for open
+    /// testing (208711cfc). The race-06/race-07 stack landed a day later proposing a PURCHASE gate
+    /// in its place and was disarmed here at the merge. Later on 2026-09-18 the owner reversed
+    /// that: Racing Thoughts is a Back Room unlock. A player who owns no racing track does not
+    /// get the race, and the launcher shows a mystery card in its place until the first track is
+    /// bought at the counter (PrizeGrants.RacingTrack(n), see LauncherCatalogue).</para>
     ///
-    /// <para>Refused in ONE place rather than six. Six call sites ask this class whether the race
+    /// <para>Armed in ONE place rather than six. Six call sites ask this class whether the race
     /// may open: CaucusHostService.Launch and its grant watcher and both cloud hooks, and
-    /// BackRoomHostService's cabinet handoff (OnRoomMessage, OnRoomClosed). Unpicking the question
-    /// from every one of them would have deleted the stack's work and left nothing to switch back
-    /// on; deleting the answer instead leaves the rules readable, tested, and one word from live.
-    /// The two entry points the owner named by hand - BtnStartRace_Click and the `--race` /
-    /// `--race-cloud` args - do not ask at all any more, because their own comments already record
-    /// that the race has no door and a dev arg that asks more than the button is a lie.</para>
+    /// BackRoomHostService's cabinet handoff (OnRoomMessage, OnRoomClosed). The `--race` dev arg
+    /// and BtnStartRace_Click both go through CaucusHostService.Launch, so they inherit the door
+    /// without asking themselves.</para>
     ///
-    /// <para>Flip this to true and the purchase door closes everywhere at once: launching, the
+    /// <para>Flip this to false and the purchase door opens everywhere at once: launching, the
     /// cabinet, the per-track catalogue and the BambiCloud source check. Nothing else needs
     /// touching, and Tests/ConditioningControlPanel.Tests/RacingAccessTests.cs still asserts the
-    /// rule either way whether it is armed or not, because
-    /// the tests drive <see cref="AllowsLaunch"/> and <see cref="AllowsCloud"/> directly and those
-    /// are left pure on purpose.</para>
+    /// rules either way, because the tests drive <see cref="AllowsLaunch"/> and
+    /// <see cref="AllowsCloud"/> directly and those are left pure on purpose.</para>
     ///
     /// <para>NOT part of this. One payout per run is a different rule with a different owner -
     /// <see cref="RaceRunLifecycle"/> latches the active run and never asks anything about
     /// ownership - and it came in from the stack untouched and in force, because it is anti-abuse
     /// and the owner wants it.</para>
     /// </summary>
-    private const bool PurchaseDoorArmed = false;
+    private const bool PurchaseDoorArmed = true;
 
     /// <summary>Every original track, which is what an open door hands the page.</summary>
     private static int[] AllTracks => Enumerable.Range(0, PrizeGrants.RacingTrackMax + 1).ToArray();

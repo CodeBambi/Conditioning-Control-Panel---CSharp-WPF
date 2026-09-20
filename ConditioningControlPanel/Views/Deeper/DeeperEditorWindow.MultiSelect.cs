@@ -9,6 +9,7 @@ using System.Windows.Shapes;
 using ConditioningControlPanel.Models.Deeper;
 using ConditioningControlPanel.Services.Deeper;
 using Newtonsoft.Json;
+using static ConditioningControlPanel.Views.Deeper.DeeperEditorGeometry;
 
 namespace ConditioningControlPanel.Views.Deeper
 {
@@ -259,21 +260,10 @@ namespace ConditioningControlPanel.Views.Deeper
 
                 _selectionSet.Clear();
 
-                // Lane Y mapping mirrors the rebuild methods so the hit math
-                // stays in lockstep with what the user sees:
-                //   Regions: top lane           y in [0, h/2)
-                //   Haptics: bottom-half lane   y in [h/2 + 2, h - 2)
-                //   Effect segments/dots:       y in [h - 22, h)
-                double regionLaneTop = 0;
-                double regionLaneBottom = canvasH / 2.0;
-                double hapticLaneTop = canvasH / 2.0 + 2;
-                double hapticLaneBottom = canvasH - 4;
-                double effectLaneTop = canvasH - 22;
-                double effectLaneBottom = canvasH;
-
-                bool RangesOverlap(double a1, double a2, double b1, double b2) => a1 < b2 && a2 > b1;
-
-                if (RangesOverlap(yMin, yMax, regionLaneTop, regionLaneBottom))
+                // Lane Y mapping goes through LaneBand() so the hit math stays
+                // in lockstep with what the rebuild methods draw (three equal
+                // thirds: Regions / Effects / Haptics).
+                if (BandHitsLane(TimelineLane.Regions, yMin, yMax, canvasH))
                 {
                     foreach (var r in _enhancement.Regions)
                     {
@@ -282,7 +272,7 @@ namespace ConditioningControlPanel.Views.Deeper
                             _selectionSet.Add(r);
                     }
                 }
-                if (RangesOverlap(yMin, yMax, hapticLaneTop, hapticLaneBottom))
+                if (BandHitsLane(TimelineLane.Haptics, yMin, yMax, canvasH))
                 {
                     foreach (var track in _enhancement.HapticTracks)
                     {
@@ -295,7 +285,7 @@ namespace ConditioningControlPanel.Views.Deeper
                         }
                     }
                 }
-                if (RangesOverlap(yMin, yMax, effectLaneTop, effectLaneBottom))
+                if (BandHitsLane(TimelineLane.Effects, yMin, yMax, canvasH))
                 {
                     foreach (var item in _enhancement.TimelineItems)
                     {
@@ -318,10 +308,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 _selectedEffect = _selectionSet.OfType<TimelineItem>().FirstOrDefault();
                 _selectedRule = null;
                 UpdateSelectedSidePanel();
-
-                RebuildRegionVisuals();
-                RebuildHapticVisuals();
-                RebuildEffectVisuals();
+                RefreshSelectionVisuals();
             }
             finally
             {
@@ -343,26 +330,10 @@ namespace ConditioningControlPanel.Views.Deeper
                     switch (sel)
                     {
                         case Region r:
-                            _enhancement.Regions.Remove(r);
-                            // Detach any rule that pointed at this region.
-                            foreach (var rule in _enhancement.Rules)
-                            {
-                                if (rule.RegionConstraint == r.Id) rule.RegionConstraint = null;
-                            }
-                            // Remove the paired Rule-kind TimelineItem the loader
-                            // projected for this region, otherwise BackProject on
-                            // save resurrects the deleted region from the orphan.
-                            if (!string.IsNullOrEmpty(r.Id))
-                            {
-                                _enhancement.TimelineItems.RemoveAll(ti =>
-                                    ti != null
-                                    && ti.Kind == TimelineItemKind.Rule
-                                    && ti.Id == r.Id);
-                            }
+                            RemoveRegionFromModel(r);
                             break;
                         case HapticEvent ev:
-                            foreach (var track in _enhancement.HapticTracks)
-                                if (track?.Events != null && track.Events.Remove(ev)) break;
+                            RemoveHapticFromModel(ev);
                             break;
                         case TimelineItem ti:
                             _enhancement.TimelineItems.Remove(ti);
@@ -387,6 +358,64 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 App.Logger?.Debug("DeeperEditor: DeleteSelection error: {Error}", ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Single removal path for a region, shared by bulk delete and the
+        /// inspector's Delete button: detaches any rule constrained to it and
+        /// drops the paired Rule-kind TimelineItem the loader projected for it
+        /// (otherwise BackProject on save resurrects the region from the orphan).
+        /// </summary>
+        internal void RemoveRegionFromModel(Region r)
+        {
+            _enhancement.Regions.Remove(r);
+            _selectionSet.Remove(r);
+            foreach (var rule in _enhancement.Rules)
+            {
+                if (rule.RegionConstraint == r.Id) rule.RegionConstraint = null;
+            }
+            if (!string.IsNullOrEmpty(r.Id))
+            {
+                _enhancement.TimelineItems.RemoveAll(ti =>
+                    ti != null
+                    && ti.Kind == TimelineItemKind.Rule
+                    && ti.Id == r.Id);
+            }
+        }
+
+        internal void RemoveHapticFromModel(HapticEvent ev)
+        {
+            _selectionSet.Remove(ev);
+            foreach (var track in _enhancement.HapticTracks)
+            {
+                if (track?.Events == null || !track.Events.Remove(ev)) continue;
+                // Drop a now-empty default track to keep the file clean.
+                if (track.Events.Count == 0 && track.Id == DefaultTrackId)
+                    _enhancement.HapticTracks.Remove(track);
+                break;
+            }
+        }
+
+        /// <summary>
+        /// Makes sure the primary (single-click / Items-list) selection is part of
+        /// the selection set so set-based ops (copy, cut, duplicate, nudge) act on it.
+        /// </summary>
+        internal void EnsurePrimaryInSelectionSet()
+        {
+            if (_selectionSet.Count > 0) return;
+            if (_selectedRegion != null) _selectionSet.Add(_selectedRegion);
+            else if (_selectedHaptic != null) _selectionSet.Add(_selectedHaptic);
+            else if (_selectedEffect != null) _selectionSet.Add(_selectedEffect);
+        }
+
+        /// <summary>Redraw every lane plus the summary strip and Items list after a
+        /// selection-set change that did not go through a SelectXxx setter.</summary>
+        internal void RefreshSelectionVisuals()
+        {
+            RebuildRegionVisuals();
+            RebuildHapticVisuals();
+            RebuildEffectVisuals();
+            RefreshRulesList();
         }
 
         // -- Clipboard --------------------------------------------------------
@@ -436,16 +465,16 @@ namespace ConditioningControlPanel.Views.Deeper
             DeleteSelection();
         }
 
-        internal void PasteFromClipboard()
+        internal void PasteFromClipboard(double? pasteAtOverride = null)
         {
             if (!DeeperClipboard.HasContent) return;
             PushUndoSnapshot();
             try
             {
                 // Anchor-relative paste: the earliest item in the original
-                // selection lands at the playhead; everything else preserves
-                // its offset from that anchor.
-                double pasteAt = _currentSeconds;
+                // selection lands at the playhead (or the caller's anchor);
+                // everything else preserves its offset from that anchor.
+                double pasteAt = pasteAtOverride ?? _currentSeconds;
                 double anchor = DeeperClipboard.AnchorSeconds;
 
                 _selectionSet.Clear();
@@ -503,15 +532,103 @@ namespace ConditioningControlPanel.Views.Deeper
                 _selectedEffect = _selectionSet.OfType<TimelineItem>().FirstOrDefault();
                 UpdateSelectedSidePanel();
                 MarkDirty();
-                RebuildRegionVisuals();
-                RebuildHapticVisuals();
-                RebuildEffectVisuals();
+                RefreshSelectionVisuals();
                 ScheduleValidation();
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("DeeperEditor: PasteFromClipboard error: {Error}", ex.Message);
             }
+        }
+
+        // -- Duplicate --------------------------------------------------------
+
+        internal bool HasAnySelection =>
+            _selectionSet.Count > 0 || _selectedRegion != null || _selectedHaptic != null
+            || _selectedEffect != null || _selectedRule != null;
+
+        /// <summary>
+        /// Ctrl+D / context "Duplicate": copies the selection and pastes it right
+        /// after the selection's last end, via the clipboard code path (the user's
+        /// clipboard is stashed and restored so Duplicate never clobbers it).
+        /// </summary>
+        internal void DuplicateSelection()
+        {
+            if (_selectionSet.Count == 0 && _selectedRule != null)
+            {
+                DuplicateRule(_selectedRule);
+                return;
+            }
+            EnsurePrimaryInSelectionSet();
+            if (_selectionSet.Count == 0) return;
+
+            var savedItems = DeeperClipboard.Items;
+            var savedRegions = DeeperClipboard.Regions;
+            var savedHaptics = DeeperClipboard.Haptics;
+            var savedAnchor = DeeperClipboard.AnchorSeconds;
+            DeeperClipboard.Items = new(); DeeperClipboard.Regions = new(); DeeperClipboard.Haptics = new();
+            try
+            {
+                double end = 0;
+                foreach (var sel in _selectionSet)
+                {
+                    end = Math.Max(end, sel switch
+                    {
+                        Region r => r.End,
+                        HapticEvent ev => ev.Start + ev.Duration,
+                        TimelineItem ti => ti.Start + Math.Max(0, ti.Duration),
+                        _ => 0
+                    });
+                }
+                CopySelection();
+                PasteFromClipboard(end);
+            }
+            finally
+            {
+                DeeperClipboard.Items = savedItems;
+                DeeperClipboard.Regions = savedRegions;
+                DeeperClipboard.Haptics = savedHaptics;
+                DeeperClipboard.AnchorSeconds = savedAnchor;
+            }
+        }
+
+        private void DuplicateRule(EnhancementRule rule)
+        {
+            PushUndoSnapshot();
+            var clone = DeepClone(rule);
+            if (clone.Trigger is TimeReachedTrigger tr)
+            {
+                tr.Time = _totalSeconds > 0 ? Math.Min(_totalSeconds, tr.Time + 1.0) : tr.Time + 1.0;
+            }
+            var band = _enhancement.Regions.FirstOrDefault(r => r != null && r.Id == rule.RegionConstraint);
+            if (band != null)
+            {
+                var newBand = DeepClone(band);
+                newBand.Id = NextRegionId();
+                var len = Math.Max(0, band.End - band.Start);
+                newBand.Start = _totalSeconds > 0 ? Math.Min(band.End, Math.Max(0, _totalSeconds - len)) : band.End;
+                newBand.End = newBand.Start + len;
+                _enhancement.Regions.Add(newBand);
+                clone.RegionConstraint = newBand.Id;
+                if (clone.Trigger is RegionEnteredTrigger re) re.RegionId = newBand.Id;
+                else if (clone.Trigger is RegionExitedTrigger rx) rx.RegionId = newBand.Id;
+            }
+            _enhancement.Rules.Add(clone);
+            MarkDirty();
+            SelectRule(clone);
+            ScheduleValidation();
+        }
+
+        /// <summary>Delete key / context "Delete": bulk when a set is active, else
+        /// the primary item through its inspector delete path (same undo + cleanup).</summary>
+        internal void DeleteCurrentSelection()
+        {
+            if (_selectionSet.Count > 1) { DeleteSelection(); return; }
+            if (_selectedRegion != null) { BtnDeleteRegion_Click(this, new RoutedEventArgs()); return; }
+            if (_selectedHaptic != null) { BtnDeleteHaptic_Click(this, new RoutedEventArgs()); return; }
+            if (_selectedEffect != null) { BtnDeleteEffect_Click(this, new RoutedEventArgs()); return; }
+            if (_selectedRule != null) { BtnDeleteRule_Click(this, new RoutedEventArgs()); return; }
+            if (_selectionSet.Count == 1) DeleteSelection();
         }
 
         // -- Undo / Redo ------------------------------------------------------
@@ -535,25 +652,141 @@ namespace ConditioningControlPanel.Views.Deeper
         internal void PushUndoSnapshot()
         {
             if (_suppressUndoSnapshot) return;
+            // An explicit snapshot supersedes any inspector session capture, and
+            // starts a fresh session so later typing gets its own undo entry.
+            _inspectorPendingSnapshot = null;
+            _inspectorSessionSnapshotted = false;
             try
             {
-                var json = JsonConvert.SerializeObject(_enhancement, EnhancementSerializer.JsonReadSettingsForClone());
-                _undo.Push(json);
-                while (_undo.Count > UndoCap)
-                {
-                    // Stack lacks Dequeue — copy, drop the oldest (bottom), rebuild.
-                    var arr = _undo.ToArray(); // top first
-                    _undo.Clear();
-                    int keep = Math.Min(arr.Length, UndoCap);
-                    for (int i = keep - 1; i >= 0; i--) _undo.Push(arr[i]);
-                    break;
-                }
-                _redo.Clear();
+                PushUndoJson(JsonConvert.SerializeObject(_enhancement, EnhancementSerializer.JsonReadSettingsForClone()));
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("DeeperEditor: PushUndoSnapshot error: {Error}", ex.Message);
             }
+        }
+
+        private void PushUndoJson(string json)
+        {
+            _undo.Push(json);
+            while (_undo.Count > UndoCap)
+            {
+                // Stack lacks Dequeue: copy, drop the oldest (bottom), rebuild.
+                var arr = _undo.ToArray(); // top first
+                _undo.Clear();
+                int keep = Math.Min(arr.Length, UndoCap);
+                for (int i = keep - 1; i >= 0; i--) _undo.Push(arr[i]);
+                break;
+            }
+            _redo.Clear();
+        }
+
+        // -- Inspector edit sessions -------------------------------------------
+        // Inspector fields mutate the model on every keystroke / slider tick, so
+        // snapshotting inside each handler would push one entry per character.
+        // Instead the sidebar's PreviewMouseDown / PreviewKeyDown capture the
+        // pre-edit state ONCE per focus session (a serialisation, no push), and
+        // the first MarkDirty that follows commits it. A click always starts a
+        // new session (a slider grab or checkbox is a discrete action); typing
+        // keeps the session until focus moves or the inspector is repopulated.
+        private string? _inspectorPendingSnapshot;
+        private bool _inspectorSessionSnapshotted;
+
+        internal void ArmInspectorSnapshot(bool newSession)
+        {
+            if (_suppressUndoSnapshot) return;
+            if (newSession) _inspectorSessionSnapshotted = false;
+            if (_inspectorSessionSnapshotted || _inspectorPendingSnapshot != null) return;
+            try
+            {
+                _inspectorPendingSnapshot = JsonConvert.SerializeObject(_enhancement, EnhancementSerializer.JsonReadSettingsForClone());
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("DeeperEditor: ArmInspectorSnapshot error: {Error}", ex.Message);
+            }
+        }
+
+        internal void ResetInspectorSession()
+        {
+            _inspectorSessionSnapshotted = false;
+            _inspectorPendingSnapshot = null;
+        }
+
+        private void CommitPendingInspectorSnapshot()
+        {
+            if (_inspectorPendingSnapshot == null || _suppressUndoSnapshot) return;
+            PushUndoJson(_inspectorPendingSnapshot);
+            _inspectorPendingSnapshot = null;
+            _inspectorSessionSnapshotted = true;
+        }
+
+        // -- Keyboard nudge / jump --------------------------------------------
+
+        private double ClampStart(double start, double length)
+        {
+            var max = _totalSeconds > 0 ? Math.Max(0, _totalSeconds - length) : double.MaxValue;
+            return Math.Max(0, Math.Min(max, start));
+        }
+
+        /// <summary>Left / Right arrow: shift the selection by <paramref name="delta"/> seconds.</summary>
+        internal void NudgeSelection(double delta)
+        {
+            EnsurePrimaryInSelectionSet();
+            var rule = _selectionSet.Count == 0 ? _selectedRule : null;
+            if (_selectionSet.Count == 0 && rule == null) return;
+            PushUndoSnapshot();
+            if (rule != null)
+            {
+                if (rule.Trigger is TimeReachedTrigger tr) tr.Time = ClampStart(tr.Time + delta, 0);
+                var band = _enhancement.Regions.FirstOrDefault(r => r != null && r.Id == rule.RegionConstraint);
+                if (band != null) ShiftItem(band, delta);
+            }
+            foreach (var sel in _selectionSet) ShiftItem(sel, delta);
+            MarkDirty();
+            UpdateSelectedSidePanel();
+            RefreshSelectionVisuals();
+            RebuildRuleVisuals();
+            ScheduleValidation();
+        }
+
+        private void ShiftItem(object item, double delta)
+        {
+            switch (item)
+            {
+                case Region r:
+                    var len = Math.Max(0, r.End - r.Start);
+                    r.Start = ClampStart(r.Start + delta, len);
+                    r.End = r.Start + len;
+                    break;
+                case HapticEvent ev:
+                    ev.Start = ClampStart(ev.Start + delta, ev.Duration);
+                    break;
+                case TimelineItem ti:
+                    ti.Start = ClampStart(ti.Start + delta, Math.Max(0, ti.Duration));
+                    break;
+            }
+        }
+
+        /// <summary>[ / ]: move the playhead to the previous / next item start.</summary>
+        internal void JumpToAdjacentItemStart(bool forward)
+        {
+            if (_totalSeconds <= 0) return;
+            var starts = new List<double>();
+            foreach (var r in _enhancement.Regions) if (r != null) starts.Add(r.Start);
+            foreach (var t in _enhancement.HapticTracks)
+                if (t?.Events != null) foreach (var ev in t.Events) if (ev != null) starts.Add(ev.Start);
+            foreach (var ti in _enhancement.TimelineItems)
+                if (ti != null && ti.Kind == TimelineItemKind.Effect) starts.Add(ti.Start);
+            foreach (var rule in _enhancement.Rules)
+                if (rule?.Trigger is TimeReachedTrigger tr) starts.Add(tr.Time);
+            const double eps = 0.01;
+            var candidates = forward
+                ? starts.Where(s => s > _currentSeconds + eps)
+                : starts.Where(s => s < _currentSeconds - eps);
+            if (!candidates.Any()) return;
+            var target = forward ? candidates.Min() : candidates.Max();
+            SeekToFraction(target / _totalSeconds);
         }
 
         internal void Undo()
@@ -564,6 +797,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 var current = JsonConvert.SerializeObject(_enhancement, EnhancementSerializer.JsonReadSettingsForClone());
                 _redo.Push(current);
                 var snapshot = _undo.Pop();
+                ResetInspectorSession();
                 ApplyHistorySnapshot(snapshot);
             }
             catch (Exception ex)
@@ -580,6 +814,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 var current = JsonConvert.SerializeObject(_enhancement, EnhancementSerializer.JsonReadSettingsForClone());
                 _undo.Push(current);
                 var snapshot = _redo.Pop();
+                ResetInspectorSession();
                 ApplyHistorySnapshot(snapshot);
             }
             catch (Exception ex)
@@ -721,9 +956,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (ti.EffectType == EffectTypes.Haptic) continue;
                 _selectionSet.Add(ti);
             }
-            RebuildRegionVisuals();
-            RebuildHapticVisuals();
-            RebuildEffectVisuals();
+            RefreshSelectionVisuals();
         }
 
         // -- Deep clone helper ------------------------------------------------

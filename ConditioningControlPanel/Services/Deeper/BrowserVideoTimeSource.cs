@@ -178,10 +178,29 @@ namespace ConditioningControlPanel.Services.Deeper
             try
             {
                 if (_webView.CoreWebView2 == null) return;
-                _ = _webView.CoreWebView2.ExecuteScriptAsync(
-                    "(function(){var v=document.querySelector('video');if(v)v.play();})();");
+                // Re-apply the remembered level on every play: sites rebuild
+                // their <video> between clips and a fresh element starts at 1.0.
+                _ = _webView.CoreWebView2.ExecuteScriptAsync(string.Format(CultureInfo.InvariantCulture,
+                    "(function(){{var v=document.querySelector('video');if(v){{v.volume={0:0.###};v.play();}}}})();",
+                    _volume));
             }
             catch (Exception ex) { App.Logger?.Debug("BrowserVideoTimeSource.Play error: {Error}", ex.Message); }
+        }
+
+        // 0..1, applied to the page's <video> immediately and on each Play().
+        private double _volume = 1.0;
+
+        public void SetVolume(double volume01)
+        {
+            _volume = Math.Clamp(double.IsNaN(volume01) ? 1.0 : volume01, 0, 1);
+            try
+            {
+                if (_webView.CoreWebView2 == null) return;
+                _ = _webView.CoreWebView2.ExecuteScriptAsync(string.Format(CultureInfo.InvariantCulture,
+                    "(function(){{var v=document.querySelector('video');if(v)v.volume={0:0.###};}})();",
+                    _volume));
+            }
+            catch (Exception ex) { App.Logger?.Debug("BrowserVideoTimeSource.SetVolume error: {Error}", ex.Message); }
         }
 
         public Rect GetVideoRect()

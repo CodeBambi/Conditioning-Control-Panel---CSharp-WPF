@@ -1,4 +1,4 @@
-/* backroom/room/tests/welcome-placards.test.mjs - the first-visit card's two pages, framed on the counter.
+/* backroom/room/tests/welcome-placards.test.mjs - the first-visit card's first and last pages, framed on the counter.
  * node --test ConditioningControlPanel/Resources/web/backroom/room/tests/*.test.mjs */
 
 import { test } from 'node:test';
@@ -10,12 +10,16 @@ import { PAGES, FALLBACK } from '../welcome.js';
 /* The counter as stations.json places it: the placards must hang on its apron, not float in the room. */
 const counter = JSON.parse(readFileSync(new URL('../../stations.json', import.meta.url), 'utf8')).find(r => r.id === 'counter');
 
-test('one placard per page, mirrored across the SPARKLES / PRIZES panel, on the counter apron', () => {
-  assert.equal(PLACARDS.length, PAGES.length);
-  assert.deepEqual(PLACARDS.map(p => p.page), PAGES.map((_, i) => i));
+test('two placards, the room and the Parlour, mirrored across the SPARKLES / PRIZES panel, on the counter apron', () => {
+  assert.equal(PAGES.length, 3, 'three pages: the room, pictures and sparkles, the Parlour');
+  assert.deepEqual(PAGES.map(p => p.id), ['welcome', 'media', 'prizes']);
+  assert.equal(PLACARDS.length, 2, 'the middle page hangs nowhere');
+  assert.deepEqual(PLACARDS.map(p => p.page), [0, 2], 'each placard opens the card at its own index in PAGES');
+  assert.deepEqual(PLACARDS.map(p => p.id), ['placard-welcome', 'placard-prizes']);
+  assert.deepEqual(PAGES.filter(p => p.placard).map(p => 'placard-' + p.id), PLACARDS.map(p => p.id));
   const [left, right] = PLACARDS;
   assert.equal(left.position[0], -right.position[0], 'the two panels sit either side of the middle one');
-  assert.ok(left.position[0] < 0 && right.position[0] > 0, 'page one on the left, page two on the right');
+  assert.ok(left.position[0] < 0 && right.position[0] > 0, 'the room on the left, the Parlour on the right');
   for (const p of PLACARDS) {
     assert.equal(p.position[1], PANEL.y); assert.equal(p.position[2], PANEL.z); assert.equal(p.yaw, 0);
     const { min, max } = counter.fixture.bounds;
@@ -27,10 +31,10 @@ test('one placard per page, mirrored across the SPARKLES / PRIZES panel, on the 
 });
 
 test('each placard carries its page: the picture on disk, the title and the line in the lexicon', () => {
-  for (const [i, p] of PLACARDS.entries()) {
-    assert.equal(p.src, PAGES[i].hero);
+  for (const p of PLACARDS) {
+    assert.equal(p.src, PAGES[p.page].hero);
     assert.ok(existsSync(new URL('../../' + p.src, import.meta.url)), p.src + ' exists');
-    assert.equal(p.titleKey, PAGES[i].title); assert.equal(p.subKey, PAGES[i].sub);
+    assert.equal(p.titleKey, PAGES[p.page].title); assert.equal(p.subKey, PAGES[p.page].sub);
     for (const k of [p.titleKey, p.subKey, p.readKey]) assert.ok(FALLBACK[k], k + ' has an English fallback');
   }
   assert.equal(FALLBACK[PLACARDS[1].titleKey], 'The Prize Parlour');

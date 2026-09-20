@@ -1,17 +1,19 @@
 /* ============================================================================
  * backroom/room/welcome.js - the first-visit card (CONTRACT section 13).
  *
- * Shown once, over the room, the moment the loading veil lifts: two pages, each
- * a landscape picture on top, a title, three numbered steps and the buttons.
+ * Shown once, over the room, the moment the loading veil lifts: three pages,
+ * each a landscape picture on top, a title, three numbered steps and the buttons.
  * Page one is the room (walk in, take a seat, spend your sparkles), page two is
- * the Prize Parlour (what the sparkles buy). Dismissed by the last page's
+ * pictures and sparkles (where the pictures and the points come from), page
+ * three is the Prize Parlour (what the sparkles buy). Dismissed by the last page's
  * button, Escape, Enter, Space or a tap on the veil; Next/Back and the arrow
  * keys turn the page. It is the loader's card chrome (.br-card-veil / .br-card),
  * so it looks like the room's own furniture and not a tutorial bolted on.
  *
- * The same two pages hang on the counter's apron as placards
- * (welcome-placards.js): a tap on one reopens the card at that page, in READ
- * mode (o.read), where the last button says Close and nothing is remembered.
+ * The first and last pages (placard: true) hang on the counter's apron as
+ * placards (welcome-placards.js): a tap on one reopens the card at that page,
+ * in READ mode (o.read), where the last button says Close and nothing is
+ * remembered; Next from the welcome placard still walks pages two and three.
  *
  * WHO REMEMBERS: the host. Dismissing posts one room-option {welcomeSeen:true}
  * through main.js's setOption, the host writes AppSettings.BackRoomWelcomeSeen
@@ -39,7 +41,14 @@ export const STEPS = Object.freeze([
   { lead: 'br_welcome_step3_lead', body: 'br_welcome_step3', touch: null },
 ]);
 
-/** Page two's three steps: the counter, in the same shape, one wording for every device. */
+/** Page two's three steps: the pictures, the points, the prizes; one wording for every device. */
+export const MEDIA_STEPS = Object.freeze([
+  { lead: 'br_welcome_media_lead', body: 'br_welcome_media', touch: null },
+  { lead: 'br_welcome_sp_lead', body: 'br_welcome_sp', touch: null },
+  { lead: 'br_welcome_prizes_lead', body: 'br_welcome_prizes', touch: null },
+]);
+
+/** Page three's three steps: the counter, in the same shape, one wording for every device. */
 export const PRIZE_STEPS = Object.freeze([
   { lead: 'br_welcome_prize1_lead', body: 'br_welcome_prize1', touch: null },
   { lead: 'br_welcome_prize2_lead', body: 'br_welcome_prize2', touch: null },
@@ -50,10 +59,12 @@ export const PRIZE_STEPS = Object.freeze([
 export const HERO_SRC = 'room/assets/welcome-hero.webp';
 export const PRIZES_SRC = 'room/assets/welcome-prizes.webp';
 
-/** The two pages, in reading order. welcome-placards.js hangs one placard per entry, so this is the one list. */
+/** The three pages, in reading order: this is the one list. welcome-placards.js hangs the entries flagged
+ * placard (the room and the Parlour, one per framed panel); the media page in between has no panel of its own. */
 export const PAGES = Object.freeze([
-  Object.freeze({ id: 'welcome', hero: HERO_SRC, title: 'br_welcome_title', sub: 'br_welcome_sub', steps: STEPS }),
-  Object.freeze({ id: 'prizes', hero: PRIZES_SRC, title: 'br_welcome_prizes_title', sub: 'br_welcome_prizes_sub', steps: PRIZE_STEPS }),
+  Object.freeze({ id: 'welcome', hero: HERO_SRC, title: 'br_welcome_title', sub: 'br_welcome_sub', steps: STEPS, placard: true }),
+  Object.freeze({ id: 'media', hero: HERO_SRC, title: 'br_welcome_p2_title', sub: 'br_welcome_p2_sub', steps: MEDIA_STEPS, placard: false }),
+  Object.freeze({ id: 'prizes', hero: PRIZES_SRC, title: 'br_welcome_prizes_title', sub: 'br_welcome_prizes_sub', steps: PRIZE_STEPS, placard: true }),
 ]);
 
 export const FALLBACK = Object.freeze({
@@ -67,6 +78,14 @@ export const FALLBACK = Object.freeze({
   br_welcome_step2_touch: 'Walk up to a station and tap it. Pull the stick back to stand up.',
   br_welcome_step3_lead: 'Spend your sparkles',
   br_welcome_step3: 'Every play costs Sparkle Points, every win pays them back. The counter trades them for prizes.',
+  br_welcome_p2_title: 'Pictures and sparkles',
+  br_welcome_p2_sub: 'Where the pictures and the points come from.',
+  br_welcome_media_lead: 'Pick your pictures',
+  br_welcome_media: 'The room shows pictures and GIFs from the source you choose in Options, under Pictures and GIFs: your files, Scrolller, both, or the built-in art. On Scrolller you can add your own niches.',
+  br_welcome_sp_lead: 'Earn your sparkles',
+  br_welcome_sp: 'Sparkle Points come from the app: one for every level up and one for every 100 bubbles popped. The house is generous, so the tables pay them back over time.',
+  br_welcome_prizes_lead: 'Turn them into prizes',
+  br_welcome_prizes: 'The Prize Parlour, the counter at the back, trades sparkles for prizes: new effects, Racing Thoughts bundles and more.',
   br_welcome_prizes_title: 'The Prize Parlour',
   br_welcome_prizes_sub: 'What your sparkles buy.',
   br_welcome_prize1_lead: 'Walk up to the counter',

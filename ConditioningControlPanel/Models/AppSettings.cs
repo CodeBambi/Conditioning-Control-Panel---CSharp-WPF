@@ -2726,6 +2726,16 @@ namespace ConditioningControlPanel.Models
             set { _autoStartEngine = value; OnPropertyChanged(); }
         }
 
+        // The launcher's "open the panel directly next time" box. Off: a bare launch shows the
+        // CC Labs launcher with the panel tucked in the tray. On: the classic boot. --panel,
+        // --launcher and --game override it either way (Services/Launcher/LauncherBoot.cs).
+        private bool _launcherSkipToPanel = false;
+        public bool LauncherSkipToPanel
+        {
+            get => _launcherSkipToPanel;
+            set { _launcherSkipToPanel = value; OnPropertyChanged(); }
+        }
+
         private bool _panicKeyEnabled = true; // ESC to stop
         public bool PanicKeyEnabled
         {
@@ -8608,6 +8618,15 @@ namespace ConditioningControlPanel.Models
             set { _deeperEditorSidebarWidth = value; OnPropertyChanged(); }
         }
 
+        // Height of the editor's timeline row (preview / timeline GridSplitter).
+        private int _deeperEditorTimelineHeight = 160;
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public int DeeperEditorTimelineHeight
+        {
+            get => _deeperEditorTimelineHeight;
+            set { _deeperEditorTimelineHeight = value; OnPropertyChanged(); }
+        }
+
         private List<string> _deeperRecentFiles = new();
         [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<string> DeeperRecentFiles
@@ -8813,6 +8832,52 @@ namespace ConditioningControlPanel.Models
                 _emiDeskWidth = Math.Max(152, Math.Min(420, v));
                 OnPropertyChanged();
             }
+        }
+
+        #endregion
+
+        #region Deeper Player
+
+        private int _deeperPlayerVolume = 80;
+        /// <summary>Last volume set in the Deeper player (0..100). Restored on the next open.</summary>
+        [JsonProperty]
+        public int DeeperPlayerVolume
+        {
+            get => _deeperPlayerVolume;
+            set { _deeperPlayerVolume = Math.Max(0, Math.Min(100, value)); OnPropertyChanged(); }
+        }
+
+        private double _deeperPlayerWindowLeft;
+        [JsonProperty]
+        public double DeeperPlayerWindowLeft
+        {
+            get => _deeperPlayerWindowLeft;
+            set { _deeperPlayerWindowLeft = value; OnPropertyChanged(); }
+        }
+
+        private double _deeperPlayerWindowTop;
+        [JsonProperty]
+        public double DeeperPlayerWindowTop
+        {
+            get => _deeperPlayerWindowTop;
+            set { _deeperPlayerWindowTop = value; OnPropertyChanged(); }
+        }
+
+        private double _deeperPlayerWindowWidth;
+        /// <summary>0 = never saved; the window then opens at its XAML default size, centred on its owner.</summary>
+        [JsonProperty]
+        public double DeeperPlayerWindowWidth
+        {
+            get => _deeperPlayerWindowWidth;
+            set { _deeperPlayerWindowWidth = value; OnPropertyChanged(); }
+        }
+
+        private double _deeperPlayerWindowHeight;
+        [JsonProperty]
+        public double DeeperPlayerWindowHeight
+        {
+            get => _deeperPlayerWindowHeight;
+            set { _deeperPlayerWindowHeight = value; OnPropertyChanged(); }
         }
 
         #endregion
