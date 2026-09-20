@@ -320,7 +320,9 @@ function setSp(sp) {
 async function visit(row) {
   if (leaving || visiting || !scene || !loader || scene.transitioning || scene.seated) return;
   scene.freeLook();   // a station, card or panel is taking the screen: the mouse is the player's again
-  if(row?.key==='race'){await openRace();return;}
+  // The annex doors (room/annex.js): the race door is the same door as the cabinet, the locked ones only rattle.
+  if(row?.key==='race'||row?.portal==='race'){await openRace();return;}
+  if(row?.portal==='locked'){scene.annex?.refuse(row.key);return;}
   if(raceOpening)return;
   if(row?.key==='customization'){scene.customization.open();return;}
   visiting = true;
