@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -16,6 +17,7 @@ namespace ConditioningControlPanel.Avalonia
 
         private AvaloniaCoreDispatch? _desktopDispatch;
         private int _exitHandled;
+        private int _warnedMissingCustomAssetsPath;
 
         /// <summary>
         /// Creates the desktop session catalogue. Headless paths never call this factory; tests can
@@ -67,6 +69,7 @@ namespace ConditioningControlPanel.Avalonia
                 // out one default instance, which is what the renders bind against.
                 Settings = new SettingsService();
                 CoreSettings.ServiceProvider = () => Settings;
+                CorePaths.EffectiveAssetsProvider = ResolveEffectiveAssetsPath;
                 LocalizationManager.Instance.SetLanguage(Settings.Current.Language);
 
                 // The lock-card surface seam. The schedule and the no-repeat phrase rotation are in
@@ -174,6 +177,18 @@ namespace ConditioningControlPanel.Avalonia
                     : new Views.Windows.MainShellWindow(sessions);
             }
             base.OnFrameworkInitializationCompleted();
+        }
+
+        private string ResolveEffectiveAssetsPath()
+        {
+            var customPath = Settings?.Current.CustomAssetsPath;
+            if (!string.IsNullOrWhiteSpace(customPath))
+            {
+                if (Directory.Exists(customPath)) return customPath;
+                if (Interlocked.Exchange(ref _warnedMissingCustomAssetsPath, 1) == 0)
+                    Serilog.Log.Warning("CustomAssetsPath '{Path}' does not exist — falling back to default assets folder. Imports/extractions will go to the default location.", customPath);
+            }
+            return Path.Combine(CorePaths.UserData, "assets");
         }
 
         private void OnDesktopExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
