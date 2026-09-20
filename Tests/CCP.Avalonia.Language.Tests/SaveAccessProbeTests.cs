@@ -19,8 +19,10 @@ namespace CCP.Avalonia.Language.Tests;
 ///
 /// <para>WHAT THIS ASKS. Only: what is the EXACT production exception, from WHICH call inside
 /// <see cref="SettingsService.SaveImmediate"/>, and does a held reader matter at all? So it adds a
-/// no-held-reader CONTROL the earlier experiment never had. Access-denied with no reader held
-/// would mean the reader was never the variable.</para>
+/// no-held-reader CONTROL the earlier experiment never had. Access-denied with no reader held would
+/// show only that a held reader is NOT NECESSARY for that observed failure — an observation, not a
+/// cause. Independent faults can coexist, and equal exception types or HResults do not establish
+/// equal causes.</para>
 ///
 /// <para>WHAT IT DELIBERATELY DOES NOT DO. It asserts no cause for the held-reader observations.
 /// The stack is captured and uploaded; ARTIFACT INSPECTION is the gate, not an assertion encoding
@@ -90,15 +92,16 @@ public sealed class SaveAccessProbeTests
 
         // Order matters for honesty, not for the result: the control runs FIRST, so it cannot be
         // explained away by state a held-reader run left behind.
-        var control = RunControl("no-reader-control", null);
-        var heldRead = RunControl("held-reader-read", FileShare.Read);
-        var heldReadDelete = RunControl("held-reader-read-delete", FileShare.Read | FileShare.Delete);
-
-        WriteEvidence(control, heldRead, heldReadDelete);
+        // Each observation is persisted the moment it completes, so a later sequence that cannot
+        // even start (absent file, failed open) can never erase the evidence already gathered.
+        var control = RunAndRecord("no-reader-control", null);
+        var heldRead = RunAndRecord("held-reader-read", FileShare.Read);
+        var heldReadDelete = RunAndRecord("held-reader-read-delete", FileShare.Read | FileShare.Delete);
 
         // --- Control only. A genuine production SaveImmediate with nothing held: if this cannot
-        // persist either, the reader was never the variable. Asserted because it is the baseline
-        // the whole probe is calibrated against.
+        // persist either, that records only that a held reader is not necessary for the failure —
+        // never that the reader was never a factor. Asserted because it is the baseline the whole
+        // probe is calibrated against.
         Assert.Equal("ja", control.SeededLanguage);
         Assert.Contains(control.SaveLogLines, IsSuccessfulSave);
         Assert.DoesNotContain(control.SaveLogLines, IsAnySaveFailure);
@@ -118,6 +121,30 @@ public sealed class SaveAccessProbeTests
                 $"{held.Control}: neither an observed save success nor a failure with a stack was captured — "
                 + "the artifact cannot answer anything. See save-access-probe.log.");
         }
+    }
+
+    /// <summary>
+    /// Runs one sequence and PERSISTS its result before returning, so the next sequence cannot lose
+    /// it. A setup failure (missing settings.json, an open that throws) is recorded explicitly and
+    /// then rethrown: an unexpected setup failure must never pass silently.
+    /// </summary>
+    private static Observation RunAndRecord(string control, FileShare? share)
+    {
+        Observation observation;
+        try
+        {
+            observation = RunControl(control, share);
+        }
+        catch (Exception ex)
+        {
+            WriteReport($"[save-access-probe] control={control} held={Describe(share)}"
+                + " SETUP-FAILED before an observation could be formed" + Environment.NewLine
+                + $"[save-access-probe]   setup-exception: {ex}");
+            throw;
+        }
+
+        WriteEvidence(observation);
+        return observation;
     }
 
     /// <summary>
@@ -164,8 +191,10 @@ public sealed class SaveAccessProbeTests
     private static string Describe(FileShare? share) => share is { } s ? s.ToString() : "nothing";
 
     /// <summary>
-    /// Shape of the directory after the attempt — never its contents. Leftover <c>*.tmp</c> files
-    /// separate "the temp write failed" from "the publish failed", which the message alone cannot.
+    /// Shape of the directory after the attempt — never its contents. The leftover <c>*.tmp</c>
+    /// count is recorded as a plain observation only: production deletes the temporary file after
+    /// EITHER a write failure or a publication failure, so the count cannot discriminate between
+    /// them.
     /// </summary>
     private static string DiskFacts(string settingsPath)
     {
@@ -202,17 +231,13 @@ public sealed class SaveAccessProbeTests
     }
 
     /// <summary>
-    /// Appends every observation to the probe artifact directory: language codes, the held share
+    /// Appends one completed observation to the probe artifact directory: language codes, the held share
     /// mode, directory shape, and the product's own save log lines and exception stacks. Never the
     /// settings file contents.
     /// </summary>
     private static void WriteEvidence(params Observation[] observations)
     {
         var report = new StringBuilder();
-        report.AppendLine($"[save-access-probe] {DateTime.UtcNow:O} pid={Environment.ProcessId}"
-            + $" runtime={System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}"
-            + $" os={System.Runtime.InteropServices.RuntimeInformation.OSDescription}"
-            + $" owned-profile={TestProfile.DirectoryPath}");
 
         foreach (var o in observations)
         {
@@ -230,13 +255,29 @@ public sealed class SaveAccessProbeTests
                 report.AppendLine($"[save-access-probe]   stack: {detail}");
         }
 
-        Console.WriteLine(report.ToString());
+        WriteReport(report.ToString().TrimEnd());
+    }
+
+    /// <summary>
+    /// Emits one record to the console and, when configured, appends it to the probe log at once,
+    /// so evidence already gathered survives anything that happens next.
+    /// </summary>
+    private static void WriteReport(string body)
+    {
+        var report = $"[save-access-probe] {DateTime.UtcNow:O} pid={Environment.ProcessId}"
+            + $" runtime={System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}"
+            + $" os={System.Runtime.InteropServices.RuntimeInformation.OSDescription}"
+            + $" owned-profile={TestProfile.DirectoryPath}" + Environment.NewLine
+            + body + Environment.NewLine;
+
+        Console.WriteLine(report);
+        Console.Out.Flush();
         var dir = Environment.GetEnvironmentVariable("CCP_PROBE_LOG_DIR");
         if (string.IsNullOrEmpty(dir)) return;
         try
         {
             Directory.CreateDirectory(dir);
-            File.AppendAllText(Path.Combine(dir, "save-access-probe.log"), report.ToString());
+            File.AppendAllText(Path.Combine(dir, "save-access-probe.log"), report);
         }
         catch (Exception ex)
         {
