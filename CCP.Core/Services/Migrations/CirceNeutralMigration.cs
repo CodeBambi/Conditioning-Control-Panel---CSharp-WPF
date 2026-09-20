@@ -247,13 +247,13 @@ namespace ConditioningControlPanel.Services.Migrations
             return added;
         }
 
-        /// <summary>Same shape as <see cref="CompanionPhraseService.VoiceLineId"/>, from a stem.</summary>
+        /// <summary>Same shape as <see cref="CompanionPhraseIds.VoiceLineId"/>, from a stem.</summary>
         internal static string VoiceLineIdFor(string stem) =>
-            CompanionPhraseService.VoiceLineCategory + ":" + stem;
+            CompanionPhraseIds.VoiceLineCategory + ":" + stem;
 
-        /// <summary>Same shape as <see cref="BarkService.BarkLineId"/> for a variant with no audio.</summary>
+        /// <summary>Same shape as <see cref="CompanionPhraseIds.BarkLineId"/> for a variant with no audio.</summary>
         internal static string TextBarkIdFor(string ruleId, string text) =>
-            "Bark:" + ruleId + ":t_" + CompanionPhraseService.Slugify(text);
+            CompanionPhraseIds.BarkLineId(ruleId, text, audio: null);
 
         /// <summary>The CURRENT Circe prompts, from the manifest, keyed by preset id.</summary>
         private static Dictionary<string, string> NewPromptsById()

@@ -29,7 +29,7 @@ namespace ConditioningControlPanel.Services.Migrations
         /// <summary>
         /// Voice-line filename stems in <c>flashes_audio</c> (old to new), as
         /// <c>tools/voicegen/generate_locked_voicelines.py</c> names them. The Phrase Manager keys a
-        /// voice-line toggle on the stem (<see cref="CompanionPhraseService.VoiceLineId"/>).
+        /// voice-line toggle on the stem (<see cref="CompanionPhraseIds.VoiceLineId"/>).
         /// </summary>
         internal static readonly IReadOnlyDictionary<string, string> VoiceLineStemMap = new Dictionary<string, string>
         {
@@ -63,7 +63,7 @@ namespace ConditioningControlPanel.Services.Migrations
         /// <summary>
         /// Text-only Circe bark variants (no audio file) whose text changed: rule id, old text, new text.
         /// A text-only bark's toggle id is a slug of its text
-        /// (<see cref="BarkService.BarkLineId"/>), so a new text is a new id. Voiced variants
+        /// (<see cref="CompanionPhraseIds.BarkLineId"/>), so a new text is a new id. Voiced variants
         /// keep their audio filename, and with it their id, so they are not listed.
         /// </summary>
         internal static readonly (string RuleId, string OldText, string NewText)[] TextOnlyBarks =

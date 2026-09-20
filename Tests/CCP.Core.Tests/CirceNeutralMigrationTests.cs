@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
-using ConditioningControlPanel.Services.Bark;
 using ConditioningControlPanel.Services.Migrations;
 using Xunit;
 
@@ -276,7 +276,7 @@ public class CirceNeutralMigrationTests
         s.DisabledPhraseIds.Add("VoiceLine:Good boy. Pop.");
         s.RemovedPhraseIds.Add("VoiceLine:GOOD BOYS DON'T DECIDE.");
         var (rule, oldText, newText) = CirceNeutralMigration.TextOnlyBarks[0];
-        var oldBarkId = BarkService.BarkLineId(rule, new BarkVariant(oldText));
+        var oldBarkId = CompanionPhraseIds.BarkLineId(rule, oldText, audio: null);
         s.DisabledPhraseIds.Add(oldBarkId);
         s.PhraseAudioOverrides["VoiceLine:Wiped clean. Good boy."] = "mine.mp3";
         s.PhrasePresets.Add(new PhrasePreset { DisabledPhraseIds = new() { "VoiceLine:GOOD BOY" } });
@@ -286,7 +286,7 @@ public class CirceNeutralMigrationTests
         Assert.Contains("VoiceLine:Good pet. Pop.", s.DisabledPhraseIds);
         Assert.Contains("VoiceLine:Good boy. Pop.", s.DisabledPhraseIds);
         Assert.Contains("VoiceLine:GOOD PETS DON'T DECIDE.", s.RemovedPhraseIds);
-        Assert.Contains(BarkService.BarkLineId(rule, new BarkVariant(newText)), s.DisabledPhraseIds);
+        Assert.Contains(CompanionPhraseIds.BarkLineId(rule, newText, audio: null), s.DisabledPhraseIds);
         Assert.Equal("mine.mp3", s.PhraseAudioOverrides["VoiceLine:Wiped clean. Good pet."]);
         Assert.Contains("VoiceLine:GOOD PET", s.PhrasePresets[0].DisabledPhraseIds);
         Assert.Equal(5, result!.ToggleIds);
@@ -296,10 +296,10 @@ public class CirceNeutralMigrationTests
     public void The_migration_id_shapes_match_the_services_that_read_them()
     {
         Assert.Equal(
-            CompanionPhraseService.VoiceLineId(@"C:\x\flashes_audio\GOOD PET.mp3"),
+            CompanionPhraseIds.VoiceLineId(Path.Combine("x", "flashes_audio", "GOOD PET.mp3")),
             CirceNeutralMigration.VoiceLineIdFor("GOOD PET"));
         foreach (var (rule, _, newText) in CirceNeutralMigration.TextOnlyBarks)
-            Assert.Equal(BarkService.BarkLineId(rule, new BarkVariant(newText)), CirceNeutralMigration.TextBarkIdFor(rule, newText));
+            Assert.Equal(CompanionPhraseIds.BarkLineId(rule, newText, audio: null), CirceNeutralMigration.TextBarkIdFor(rule, newText));
     }
 
     // ---- The map itself --------------------------------------------------------------------

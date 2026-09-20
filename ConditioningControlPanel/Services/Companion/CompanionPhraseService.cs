@@ -120,18 +120,7 @@ namespace ConditioningControlPanel.Services
         /// collapse every non-alphanumeric run to a single space, trim. e.g. "*giggles* You clicked it~"
         /// -> "giggles you clicked it"; "LEVEL UP! Good girl!~" -> "level up good girl".
         /// </summary>
-        public static string Slugify(string text)
-        {
-            if (string.IsNullOrEmpty(text)) return string.Empty;
-            var noTokens = System.Text.RegularExpressions.Regex.Replace(text, @"\{[^}]*\}", " ");
-            var sb = new System.Text.StringBuilder(noTokens.Length);
-            foreach (var ch in noTokens.ToLowerInvariant())
-            {
-                if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) sb.Append(ch);
-                else sb.Append(' ');
-            }
-            return System.Text.RegularExpressions.Regex.Replace(sb.ToString(), @"\s+", " ").Trim();
-        }
+        public static string Slugify(string text) => CompanionPhraseIds.Slugify(text);
 
         /// <summary>
         /// Full path to the event-comment audio for a spoken line in the active mod, or null if the mod
@@ -147,7 +136,7 @@ namespace ConditioningControlPanel.Services
             return File.Exists(path) ? path : null;
         }
 
-        public const string VoiceLineCategory = "VoiceLine";
+        public const string VoiceLineCategory = CompanionPhraseIds.VoiceLineCategory;
 
         /// <summary>
         /// Literal text the voiceline generator bakes into FILENAMES wherever a
@@ -541,8 +530,7 @@ namespace ConditioningControlPanel.Services
         /// (content packs download later), and an index-based id silently re-targets every toggle the
         /// user already made the moment the list grows. Mirrors <see cref="BarkService.BarkLineId"/>.
         /// </summary>
-        public static string VoiceLineId(string filePath) =>
-            VoiceLineCategory + ":" + Path.GetFileNameWithoutExtension(filePath);
+        public static string VoiceLineId(string filePath) => CompanionPhraseIds.VoiceLineId(filePath);
 
         /// <summary>True for the pre-migration positional form, e.g. <c>VoiceLine:12</c>.</summary>
         private static bool IsLegacyVoiceLineId(string id)

@@ -14,5 +14,6 @@ using System.Runtime.CompilerServices;
 // <InternalsVisibleTo> item. The assembly is unsigned, so unkeyed names are correct.
 [assembly: InternalsVisibleTo("ConditioningControlPanel")]
 [assembly: InternalsVisibleTo("ConditioningControlPanel.Tests")]
+[assembly: InternalsVisibleTo("CCP.Core.Tests")]
 [assembly: InternalsVisibleTo("CCP.Avalonia")]
 [assembly: InternalsVisibleTo("CCP.Avalonia.Language.Tests")]
