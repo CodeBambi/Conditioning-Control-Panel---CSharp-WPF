@@ -309,6 +309,7 @@ export function createCaptions(root, opts = {}) {
 
   function clearPhrase() {
     line.textContent = '';
+    cap.classList.remove('is-complete');
     spans = [];
     shown = -1; inked = -1;
     cap.hidden = true;
@@ -601,6 +602,12 @@ export function createCaptions(root, opts = {}) {
       return phrases.length;
     },
     update,
+    activeAt(t) { return phraseAt(phrases, num(t, 0)) >= 0; },
+    complete(t) {
+      const i = phraseAt(phrases, num(t, 0));
+      if (i < 0 || i !== shown) return;
+      cap.classList.add('is-complete');
+    },
     showPlate,
     showWord,
     /** Which third of this file is driving the band: 'slot' (the script, lit by the pops), 'flash'

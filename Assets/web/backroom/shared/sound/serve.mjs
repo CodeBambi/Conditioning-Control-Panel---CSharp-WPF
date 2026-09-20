@@ -13,6 +13,8 @@ import { join, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const WEB = resolve(fileURLToPath(import.meta.url), '../../../..');   // Resources/web
+// A second root for the dev pages that want real animated pictures: EMI's emote GIFs, beside web/, at /emotes/.
+const EMOTES = resolve(WEB, '../avatar0_emotes');
 const PORT = Number(process.env.SOUND_PORT || 8940);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
   '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary', '.mp3': 'audio/mpeg' };
@@ -21,7 +23,7 @@ createServer(async (req, res) => {
   const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   if (path.includes('..')) { res.writeHead(400); return res.end(); }
   try {
-    const body = await readFile(join(WEB, path));
+    const body = await readFile(path.startsWith('/emotes/') ? join(EMOTES, path.slice(8)) : join(WEB, path));
     res.writeHead(200, { 'content-type': MIME[extname(path).toLowerCase()] || 'application/octet-stream' });
     res.end(body);
   } catch { res.writeHead(404); res.end('no'); }

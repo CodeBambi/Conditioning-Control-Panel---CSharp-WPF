@@ -53,13 +53,13 @@ test('Back is on screen before state answers; Escape stands up; hostBack hides t
 });
 
 test('cards paint every face, the RT note and the delivery line', async () => {
-  const r = room({ sp: 30, on: 'rt_demo,high_roller,flashes_v2', owned: { jackpot_remix: { at: 1, paidSp: 15 } } });
+  const r = room({ sp: 20, on: 'rt_demo,high_roller,flashes_v2', owned: { jackpot_remix: { at: 1, paidSp: 15 } } });
   r.server.linkDiscord(null);
   const st = await mount(r.ctx);
   await st.open();
   const faces = r.root.all('counter-card').map((c) => c.dataset.face);
   assert.deepEqual(faces, ['owned', 'buy', 'discord', 'short', 'soon', 'soon', 'soon', 'soon']);
-  assert.equal(card(r.root, 'flashes_v2').one('counter-buy').textContent, 'Short by 210');
+  assert.equal(card(r.root, 'flashes_v2').one('counter-buy').textContent, 'Short by 10');
   assert.ok(card(r.root, 'flashes_v2').one('counter-buy').disabled);
   assert.ok(card(r.root, 'rt_demo').one('counter-note') && !card(r.root, 'high_roller').one('counter-note'));
   assert.equal(card(r.root, 'bubbles_v2').one('counter-buy'), null, 'soon has no button');
@@ -215,4 +215,52 @@ test('destroy frees the page: root, keydown, onSp, onSettings and the stylesheet
   assert.equal(dom.listeners.get('keydown').size, 0);
   assert.equal(dom.document.head.children.length, 0);
   st.destroy();   // twice is harmless
+});
+
+
+test('prize delivery is success-only, ownership is immediate, and live motion changes never replay it', async () => {
+  const r = room({ sp: 100, on: '*', owned: { jackpot_remix: { at: 1, paidSp: 15 } } }, { hostBack: false });
+  const st = await mount(r.ctx); await st.open();
+  assert.equal(card(r.root, 'jackpot_remix').classList.contains('is-flip'), false);
+  const c = card(r.root, 'rt_demo');
+  c.one('counter-buy').click(); r.server.fail('buy', 'busy'); c.one('counter-yes').click(); await wait(5);
+  assert.equal(c.classList.contains('is-flip'), false);
+  c.one('counter-yes').click(); await wait(5);
+  assert.equal(c.dataset.face, 'owned');
+  assert.equal(c.classList.contains('is-flip'), true);
+  assert.ok(c.one('counter-badge').textContent.includes('Owned'));
+  r.root.one('counter-back').click(); assert.equal(r.stood, 1, 'Back remains live during delivery');
+  r.ctx.motion = 'off'; for (const fn of r.setSubs) fn();
+  assert.equal(c.classList.contains('is-flip'), false);
+  r.ctx.motion = 'full'; for (const fn of r.setSubs) fn();
+  assert.equal(c.classList.contains('is-flip'), false, 'returning to full does not replay a purchase');
+  st.destroy();
+});
+
+test('suspending settles prize delivery and Calm or Off purchases start settled', async () => {
+  for (const mode of ['full', 'off', 'calm']) {
+    const r = room({ sp: 100, on: '*' });
+    r.ctx.motion = mode === 'off' ? 'off' : 'full';
+    r.ctx.intensity = mode === 'calm' ? 'calm' : 'normal';
+    const st = await mount(r.ctx); await st.open();
+    const c = card(r.root, 'rt_demo');
+    c.one('counter-buy').click(); c.one('counter-yes').click(); await wait(5);
+    assert.equal(c.dataset.face, 'owned');
+    assert.equal(c.classList.contains('is-flip'), mode === 'full');
+    st.suspend(true); assert.equal(c.classList.contains('is-flip'), false);
+    st.suspend(false); for (const fn of r.spSubs) fn();
+    assert.equal(c.classList.contains('is-flip'), false);
+    st.destroy(); assert.equal(r.root.children.length, 0);
+  }
+});
+test('demo unlock removes its listing and notifies the room once; return restores without a celebration', async () => {
+  const r=room({sp:100,on:'*'}), events=[];
+  r.ctx.prizesChanged=(body,id)=>events.push({body,id});
+  const st=await mount(r.ctx); await st.open();
+  const c=card(r.root,'rt_demo'); c.one('counter-buy').click(); c.one('counter-yes').click(); await wait(15);
+  assert.equal(c.hidden,true); assert.equal(events.filter(e=>e.id==='rt_demo').length,1);
+  assert.ok(events.find(e=>e.id)?.body.catalog.find(row=>row.id==='rt_demo').owned);
+  st.close(); events.length=0; await st.open();
+  assert.equal(card(r.root,'rt_demo').hidden,true); assert.equal(events.some(e=>e.id),false);
+  st.destroy();
 });

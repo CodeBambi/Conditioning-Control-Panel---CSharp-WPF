@@ -46,6 +46,16 @@ namespace ConditioningControlPanel.Views.Tabs
                 App.Mods.ModChanged += OnModChangedArt;
                 _modArtHooked = true;
             }
+
+            // #1222: "in deeper tab, i can't scroll up/down while hovering pointer over the vids
+            // list, only when it's on either left or right". The library list templates its own
+            // ScrollViewer, but the whole tab is one page ScrollViewer, so the list is measured
+            // with unbounded height and its inner viewer ends up with ScrollableHeight 0 - and
+            // WPF's ScrollViewer marks a wheel notch Handled even when it had nothing to scroll.
+            // Every notch over the rows was being eaten. Attach is idempotent, so a re-parent
+            // that fires Loaded again cannot double-subscribe.
+            Views.Controls.Companion.CompanionWheelRelay.Attach(DeeperLibraryList);
+
             ApplyFeatureArt();
         }
 
@@ -215,6 +225,31 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.DeeperRow_Click(sender, e);
         }
+        private void DeeperRowMenuOpen_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.DeeperRowMenuOpen_Click(sender, e);
+        }
+        private void DeeperRowMenuReveal_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.DeeperRowMenuReveal_Click(sender, e);
+        }
+        private void DeeperRowMenuCopyPath_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.DeeperRowMenuCopyPath_Click(sender, e);
+        }
+        private void DeeperLibraryList_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.DeeperLibraryList_PreviewKeyDown(sender, e);
+        }
+        private void DeeperTab_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.DeeperTab_PreviewKeyDown(sender, e);
+        }
 
         private void DeeperRowDelete_Click(object sender, RoutedEventArgs e)
         {
@@ -240,6 +275,11 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.DeeperSort_SelectionChanged(sender, e);
+        }
+        private void DeeperSortDir_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.DeeperSortDir_Click(sender, e);
         }
     }
 }

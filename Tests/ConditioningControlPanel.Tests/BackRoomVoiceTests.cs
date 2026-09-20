@@ -98,9 +98,9 @@ public class BackRoomVoiceTests
     }
 
     [Fact]
-    public void Manifest_ShippedFileParsesAndIsEmptyUntilTheOwnerFillsIt()
+    public void Manifest_ShippedClipsExist()
     {
-        // Ships with the manifest only, so a build with no clips in it still behaves.
+        // Every shipped voice entry must resolve to a bundled clip.
         var repo = FindRepoRoot();
         // Shared bytes live in the repo-root /Assets tree; the head links them back under Resources\.
         var shipped = Path.Combine(repo, "Assets", "Audio", "backroom", "words", "words.json");
@@ -108,7 +108,10 @@ public class BackRoomVoiceTests
         var doc = JObject.Parse(File.ReadAllText(shipped));
         Assert.Equal(1, (int)doc["version"]!);
         Assert.NotNull(doc["words"] as JObject);
-        Assert.Empty(BackRoomVoice.ReadManifest(shipped));
+        var clips = BackRoomVoice.ReadManifest(shipped);
+        Assert.NotEmpty(clips);
+        foreach (var clip in clips.Values)
+            Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(shipped)!, clip)), clip);
     }
 
     private static string FindRepoRoot()

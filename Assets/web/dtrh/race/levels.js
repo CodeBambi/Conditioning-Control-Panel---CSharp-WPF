@@ -132,6 +132,7 @@ export function parseSets(json) {
         durationSec: Number(l.durationSec) || 0,
         bytes: Number(l.bytes) || 0,
         hash: String(l.hash || ''),
+        trackNum: Number.isInteger(l.trackNum) && l.trackNum >= 0 && l.trackNum <= 10 ? l.trackNum : null,
       });
     }
     if (!levels.length) continue;
@@ -175,13 +176,21 @@ const elm = (tag, cls, parent, text) => {
  * @param {function} [o.log]
  * @param {object}   [o.store]    localStorage, or null. The smoke's seam.
  */
+export function ownedLevels(levels, owned) {
+  // An absent field keeps the existing web host contract. An explicit empty list owns nothing.
+  if (owned === undefined) return levels;
+  const allow = new Set(Array.isArray(owned) ? owned.filter(n => Number.isInteger(n) && n >= 0 && n <= 10) : []);
+  return levels.filter(l => l.trackNum !== null && allow.has(l.trackNum));
+}
+
 export function createLevels({ settings = {}, sets = [], cloud = null, index = null, hooks = {}, log = null, store = undefined }) {
   const say = (m) => { try { if (log) log('levels: ' + m); } catch (e) { /* no log */ } };
   const call = (n, ...a) => { try { return typeof hooks[n] === 'function' ? hooks[n](...a) : undefined; } catch (e) { say(n + ': ' + e); return undefined; } };
   // A desktop host owns playback outright: this panel only ever points it at a page.
   const desktop = settings.trackPick === true || !cloud;
   const set = sets[0] || null;
-  const levels = set ? set.levels : [];
+  const allLevels = set ? set.levels : [];
+  let levels = ownedLevels(allLevels, settings.racingTracks);
   const mem = store !== undefined ? store : (typeof localStorage !== 'undefined' ? localStorage : null);
 
   let slotEl = null, listEl = null, pasteEl = null, cloudUi = null;
@@ -267,6 +276,7 @@ export function createLevels({ settings = {}, sets = [], cloud = null, index = n
    *  The tap is the whole visit: the panel closes behind it and the main list takes over,
    *  where the menu's plate shows the load and the first verb becomes `start · <name>`. */
   function tap(lv) {
+    if (!levels.includes(lv)) return;
     remember(lv.id);
     pickedId = lv.id; prog = null;   // the row itself is the answer from here on
     if (desktop) {
@@ -442,6 +452,14 @@ export function createLevels({ settings = {}, sets = [], cloud = null, index = n
       return true;
     },
     /** Which level the panel is lit on right now, or ''. The smoke's window on the pick. */
+    setOwnership(owned) {
+      levels = ownedLevels(allLevels, owned);
+      if (slotEl) {
+        slotEl.textContent = '';
+        buildPanel({ slot: slotEl, pick: onPick, close: onClose, refresh: onRefresh });
+        if (onRefresh) onRefresh();
+      }
+    },
     get picked() { const lv = pickedLevel(); return lv ? lv.id : ''; },
     get state() { return { desktop, sets: sets.length, levels: levels.length, pasteOpen, last, stage: stageWord, picked: (pickedLevel() || {}).id || '' }; },
     dispose() { disposed = true; try { if (cloud) cloud.dispose(); } catch (e) { /* already gone */ } },

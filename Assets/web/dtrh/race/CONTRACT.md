@@ -442,7 +442,7 @@ emoticons only, never a drawn face, never a speech line.
 ```js
 export const POSES, PIVOTS;   // the pure preset table (rotations + per-arm `reach`), and the four glb pivots a preset may name
 export function resolvePose(name, opts) -> flattened target
-export function createPoseLayer(model) -> { set(name, opts), update(dt, ctx), dispose, fraught, name }
+export function createPoseLayer(model, { reducedMotion }) -> { set(name, opts), setBase(name, opts), settle(ctx), update(dt, ctx), dispose, fraught, name }
 export function snapshotRest(model)     // bank the authored stance before a mixer moves it
 ```
 Poses: `cruise` (the rest), `drift`, `boost` -> `boostOut`, `air`, `landing` / `landingKerb`,
@@ -584,7 +584,7 @@ drives that whole path through the real page and holds it down.
 
 As built (PR 5 reality notes):
 - `race/input.js` is the single reader of keyboard + gamepad + touch:
-  `createInput({ root }) -> { read(), onAction(cb), flush(), dispose(), touchEl }`,
+  `createInput({ root }) -> { read(), pollActions(), onAction(cb), flush(), dispose(), touchEl }`,
   `read()` = `{ steer, accel, brake, drift, jump }` with `accel` defaulting to 1 when nothing is pressed.
   The three sources are ADDITIVE and never remap one another (Law II): `steer` takes whichever source
   has the larger magnitude (an analog source, stick or thumb, also turns the digital easing off),
@@ -916,3 +916,62 @@ Bubble pops themselves play in-page from `/dtrh/assets/bubbles/sfx/` via `engine
 - No em-dashes anywhere (code comments, HUD copy, PR bodies).
 - Every module gets a small `// self-check` block that can run in node with a THREE stub only if it
   costs nothing; otherwise `node --check` clean is the bar.
+
+## Phrase feedback and recap polish (2026-09-13)
+- `captions.activeAt(t)` reports whether a spoken phrase occupies the caption band;
+  `captions.complete(t)` marks the currently visible phrase caught in full.
+- HUD `phraseFocus(on)` quiets routine pop, near-miss, item and effect toasts during
+  speech. `phraseCaught()` gives the completed line priority and marks the contextual
+  steering hint learned in `race.phrase-learned`. The hint uses the actual track;
+  it does not add words to the recording or change chart timing.
+- HUD `streakLost(reason)` explains a reset at most once per eight seconds.
+  `resetPolish()` clears transient feedback between runs. Scoring rules are unchanged.
+- Track recap leads with raw thoughts caught. Compare only a completed run with a
+  previous best having the same total; never call a best the last run. An early exit
+  explicitly keeps the old record. Extra summary fields: `trackFinished` and
+  `previousThoughts` (null when no comparable previous record exists).
+
+## Racing foundation fixes (2026-09-17)
+- `pauseGate.js` aggregates pause owners. Releasing the host pause never releases Brake,
+  and closing Brake never releases a host pause. Only the combined state resumes the track.
+  Video playback relies on actual host pause notifications; a refused payload may send no reply.
+- `input.pollActions()` runs before the simulation gate, including while paused. Escape and
+  gamepad Start toggle Brake. `flush()` preserves the held gamepad button edges so resuming
+  cannot count the same press twice.
+- `resolutionGovernor.js` accepts healthy 60 Hz frame intervals (up to 18 ms) for recovery,
+  with eight healthy seconds per upward step. Slow frames above 24 ms lower quality;
+  each changed resolution starts a fresh sample. The player's Lighter cap stays fixed.
+- EMI's driving pose is persistent: inverted, airborne, drift, then cruise. Short reactions
+  return to that current posture. `kart.settleAnimation()` settles cosmetic movement on pause.
+  Reduced motion keeps readable limb poses without body bounce or spring travel.
+- Animation springs consume ordinary elapsed time in bounded substeps. Long gaps settle
+  instead of replaying missed motion; reaction duration does not stretch at 10 fps.
+
+## Visible driving feedback (2026-09-17)
+- Drift charge builds tea lean and antenna tension; release adds a brief cup counter-roll,
+  saucer spin and delayed tea rings. Landing reactions use `landing.impact`, captured before
+  vertical speed is cleared. These are presentation changes, never steering or scoring inputs.
+- `createSpeedFx().beat(event, kartState, layout)` emits track-relative contact sparks for
+  drift release and landing. The fixed pool caps at 96 sparks and one draw call; drift colours
+  follow the existing blue/orange/purple tiers. `clear()` settles bursts on pause/reset/end.
+- `createRaceAudio().kartBeat(event)` aligns short sounds with actual contact/release events,
+  replacing overlapping generic stingers and inferred landing sounds. Pausing stops contact voices.
+- Reduced motion suppresses the added physical travel, tea rings and contact particles.
+- Regression checks: `ride-feel-check.mjs`, `contact-fx-check.mjs`, and the sampled/contact
+  playback assertions in `reliability-check.mjs`. Headless chase captures at 1280x720 and
+  390x844 cover cruise, charge, release, airborne, contact and settled frames.
+
+## Final menu and banking polish (2026-09-17)
+- Play, Levels and local track selection lead the lobby. More reveals secondary actions; Escape folds it. Leave game remains visible when supported by the host. Keyboard focus and menu selection stay synchronized. Run-only touch controls stay hidden in the lobby.
+- Banking uses `hud.bankTransfer(total)`: tokens target the kept readout, each arrival adds its integer share, and the last arrival gives one confirmation. New score earned during the transfer is independent. Pause, reset, disposal and overlap settle the authoritative total and invalidate stale arrivals.
+- Reduced motion settles banking immediately without token travel or readout pulses. `bank-transfer-check.mjs` covers conservation, overlap, cancellation, new earnings and reduced motion; a real-browser check verifies transition completion and pause before arrival.
+
+## CCP purchase access (2026-09-17)
+- `RacingAccess.CanLaunch` accepts any canonical `rt.original.00..10` grant through PrizeGrants. The independent Play entry, developer launch arguments and host launch obey that rule. Subscription tier is not a substitute for purchase.
+- Desktop `init.settings.racingTracks` carries owned track numbers. Missing preserves the existing web-host behavior; an explicit empty list grants no built-in levels. `levels.json` supplies the stable trackNum mapping.
+- Host additions send `{type: 'race-ownership', tracks: [...]}` and the menu rebuilds its level list. Losing a racing grant closes the current race. The host rechecks cloud selection and playlist transitions against the shipped catalog; missing catalog fails closed. Personal audio remains available after game unlock.
+- Same-window casino switching is a separate follow-up. Both games currently own separate host lifecycles; do not navigate one game's host to the other page without switching message handlers, cleaning up active work and preventing duplicate payouts.
+- A refused cloud source can be retried by the next Play after purchase without changing tracks; purchase alone never starts playback. Local files are treated as personal audio and are not fingerprinted for pack ownership.
+
+## Casino and racing window transfer (2026-09-17)
+The racing cabinet opens Racing Thoughts in the current window with `game-open {game:"race"}`. The host validates canonical original-track ownership, acknowledges `game-open-result`, and finishes the room close handshake before transferring its browser. Race init sets `settings.returnToCasino`; normal exit returns to `/backroom/index.html?raceReturn=1`. A bounded one-use camera pose survives; no balance or reward state is restored from it. The separate Play entry retains normal exit behavior. Native callbacks are invalidated on transfer, and each run may settle rewards once. Preview uses the same camera contract with a local-ledger-only adapter and full same-origin navigation.

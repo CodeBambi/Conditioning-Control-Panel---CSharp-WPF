@@ -8,9 +8,11 @@ page node contract, so the station draws a **2D canvas table** filling the stati
 | File | What |
 |---|---|
 | `station.js` | `mount(ctx)` -> `{open, close, suspend, destroy}`. DOM, controls, the request flow, the step queue, moments, the SP chip. |
-| `hand.js` | Pure: `readHand` / `readState` (publicHand), `controls` (which buttons are live), `classify` (what a reply means), `createIntent` + `mayRetry` (one idem per press), `owedFor` (Law I), the hint preference. |
+| `hand.js` | Pure: `readHand` / `readState` (publicHand), `controls` (which buttons are live), `classify` (what a reply means), `createIntent` + `mayRetry` (one idem per press), `owedFor` (Law I). |
 | `feel.js` | Pure: `planSteps` (a reply's hand against the felt -> timed steps), `momentOf`, `isBloom`, `bestCard`, `vortexOf`, `resultLines`, `fanCard`, `lampBreath`, `TIMING`. |
 | `table.js` | The canvas: lamp, felt weave, printed arc, shoe, chip spot, hands, and the page effects. |
+| `reward.js` | Pure: what a settled hand is WORTH and what its party may SPEND, over `shared/win/` (`settleTier`, `bloomTier`, `settleCue`, `ladderRoot`, `climbSteps`, `joinParty`, `calloutTier`, `showsRoom`). |
+| `bank.js` | THE BANK at the table: the tokens, the layer and the rAF loop over `shared/win/bank.js` (the maths, the clock and the event order are the shared engine's). |
 | `mock-server.js`, `dev.html` | Standalone harness on the 10.13.E shapes with scripted fixture shoes. Not shipped behaviour, never the server's rules. |
 | `tests/*.test.mjs`, `tests/cards-check.mjs` | Node tests; the headless check (`CARDS_PORT` default 8898, debug +500). |
 
@@ -20,7 +22,8 @@ Shared code comes only through the hypno kit (`shared/hypno/index.js`): `createL
 
 ## Server API (binding, CONTRACT 10.13.E, CCP-Server `backroom-cards-routes.js`)
 
-- `GET state` -> `{ ok, sp, open, hand: publicHand | null, legal, hint, autoStandAt, rules, floorMs }`.
+- `GET state` -> `{ ok, sp, open, hand: publicHand | null, legal, hint, autoStandAt, rules, floorMs }`. The page
+  dropped its basic-strategy hint, so `hint` is ignored wherever the server sends it.
 - `POST deal {idem, stake}`; `POST hit | stand | double | split {idem, handId, step}` -> `{ ok, idem, sp, spBefore, cost,
   returned, capped, hand, legal, hint, autoStood?, autoStandAt }`.
 - Refusals and what the page does (`hand.js` `classify`):
@@ -31,15 +34,14 @@ Shared code comes only through the hypno kit (`shared/hypno/index.js`): `createL
   - `no_hand`, `bad_request`: GET state again. `insufficient`: a line. `closed` (403) and a host `bad_op`: a card, the
     controls close. `offline` and anything else: a line.
 - Host Ops row (H1): `["cards"] = { ("GET","state"), ("POST","deal"), ("POST","hit"), ("POST","stand"), ("POST","double"), ("POST","split") }`.
-- Rules, odds and pays are the server's (RULES_V1). The page never computes a pay, a legal move or a hint; the only
+- Rules, odds and pays are the server's (RULES_V1). The page never computes a pay or a legal move; the only
   arithmetic is the display total of face-up cards while the dealer's hand is being turned.
 
 ## The table
 
 - **Controls.** Bet chip 1 or 2 SP (`rules.stakes`), starting on 1 below 30 SP and on 2 from 30. Deal (Space or Enter).
-  Hit, Stand, Double, Split exactly as `legal` says, shown only while a hand is open. The basic-strategy hint is off by
-  default, remembered in `localStorage` `br_cards_hint`, and shows the server's `hint` as a line and a mint ring on
-  that button. "Stand up, sit back down" while no hand is open; it latches on the press (Deal, the moves and a second
+  Hit, Stand, Double, Split exactly as `legal` says, shown only while a hand is open. "Stand up, sit back down"
+  while no hand is open; it latches on the press (Deal, the moves and a second
   Sit are refused while the 13 pictures are dealt), and each sit owns its deck (the last one is disposed when the new one
   is in; a late deck from an older sit is disposed, never adopted). Moves have no letter keys (the room walks on WASD).
 - **Law VIII.** Every press rings its button on the frame. **Law VI.** Back (the room's, or the station's own
@@ -116,6 +118,49 @@ rotate through the four dealt words (`wordKeys`). The streak counter resets on `
   dispose): re-dealing on resume would ask the host for 13 new pictures and swap them under an open hand. Leaving the
   station (close) and sitting down again re-deals. cards-check asserts both.
 
+## The reward pass (CONTRACT 10.22)
+
+The table used to take `spReadout.set` and `.owe` and never `.thud()`, and a winning hand paid by having the SP number
+change - Law XII broken outright. Every paid hand now asks `shared/win/` for a plan and obeys it. **Nothing in this
+station re-decides Law IX or Brakes 2, 3, 5 or 8**: `shared/win/plan.js` owns all of it and `reward.js` only asks.
+
+- **The rung** (`reward.settleTier`). `feel.settleMoment` through `shared/win/tier.js`, raised by the settled net:
+  `cards.win` / `cards.dealer_bust` **1**, `cards.bloom` / `cards.streak` **3**, `cards.sweep` **4** (this table's hero),
+  `cards.lose` / `cards.push` **0**. Those are the `CALLOUTS` sizes this file already had; the table hands out no bare 2.
+- **THE BANK** (`bank.js` over `shared/win/bank.js`, Law XII). On the settle frame of a paid hand, beside the winning
+  cards' glow: `plan.bank` tokens (3-7, 4 under Calm) leave THE POT (`table.potRect`, the chip spot on the felt or the
+  authored `bet_spot` anchors in the room view) and arc to `ctx.spReadout.target()`. The chip is pinned to the
+  pre-settle number until the first token lands, ticks a rung per landing (Law X, never before), keeps counting over
+  `plan.partyMs`, and takes its thud at the END of the count, not the end of the flight. Reduced motion takes the STATE:
+  no tokens, the settled number and the cue at once (`plan.bank === 0`). A loss and a push keep the plain chip thud.
+- **THE CHIME LADDER** (`reward.ladderRoot` / `climbSteps` over `shared/win/ladder.js`). The streak is the root: the
+  first win of a run is the root note and every win after it starts a semitone higher, capped at seven. The landing cue
+  is step 0 (Law X) and only the steps after it are scheduled, across `plan.partyMs`. A skip, a suspend, Back and a new
+  deal all `stop('ladder')`: the climb is silenced, never played faster (Law VI).
+- **The cue** (`reward.settleCue`). Chosen by what the plan SPENT, not by the moment id: `small` / `mid` / `big` /
+  `hero`. A worn-down streak (Brake 3) sounds like the chime it has become. A loss is still THE SETTLE and a push still
+  a sigh, whatever the plan says - neither is a party and both always sound.
+- **THE GLOW and THE SPARKLE BURST** (10.22.D, `arcademy/shell/counterfx.js`). `warmGlow` on the SP chip at every paying
+  rung (`plan.glow`, 480 ms; 0 while melted and under reduced motion) and `sparkBurst` into `.cards-tokens` at
+  `plan.sparkle` (7 at tier 3, 9 at tier 4; never under Calm, lite or reduced motion).
+- **The room** (10.22.B). `ctx.revealedWin(net, plan.shower, name)` fires ONCE a result, on the settle frame, and only
+  when `plan.shower > 0` - a tier 1 is a close-up event and does not show from across the room, and a loss or a push
+  tells the room nothing. `net` is `hand.result.net`; the name is the callout's own localised text.
+- **THE REVEAL** (`reward.calloutTier`). The hero callout (14vh, a rim and a short shake) is the declared hero move and
+  plays once a sit-down: a second sweep, a sweep under Calm and a sweep in a trance all name themselves at `big`. A
+  callout never shouts above what the brakes left the rung.
+- **Brake 2** (`reward.joinParty`). A beat that lands while an earlier party still owns the station merges into the
+  HIGHER plan and throws no second ceremony - in practice a blackjack's settle inside its own bloom, which pays but
+  says nothing more. THE BANK ignores the merge: a pay must be seen to move at every rung.
+- **Brake 5**. This table's focus state is a fullscreen hypno moment from an EARLIER beat still on the screen (the
+  bloom's four seconds of picture). A settle under it is `melted`: rung 1, no shower, no sparkle, no glow, no reveal,
+  the ladder an octave down - and the tokens still fly.
+- **Brake 3 and the sit-down**. `freshSit` / `sitPlan` / `afterParty`, one ledger per sitting, counted PER RUNG.
+  "Stand up, sit back down" is a new sitting: the worn rungs come back and the once-a-sitting hero is owed again.
+  `afterParty` only counts a hero the frame it actually fired, so a sweep under Calm does not burn it.
+- `debug().reward` carries the last plan, the live party and its ms left, the sit ledger and the bank's state.
+
+
 **Calm and reduced motion** (`reduced`, `intensity: calm`, or `prefers-reduced-motion`): every step lands at once in
 order (cards on their spots, face up), except that a blackjack keeps the bloom's 1.6 s to the reveal and 0.9 s to the
 settle, so the win wash is never inside the host's 360 ms wash gap and the bloom never shares a frame with the result.
@@ -134,8 +179,6 @@ so host washes and tunnels stay Normal there (as the wheel does). **Gates** are 
 | `br_cards_bet` | Bet |
 | `br_cards_deal` / `br_cards_hit` / `br_cards_stand` / `br_cards_double` / `br_cards_split` | Deal / Hit / Stand / Double / Split |
 | `br_cards_wait` / `br_cards_moment` | {s} s / One moment |
-| `br_cards_hint_toggle` | Basic-strategy hint |
-| `br_cards_hint_is` | Hint: {move}. |
 | `br_cards_sit` | Stand up, sit back down |
 | `br_cards_sitting` | Sitting {n} |
 | `br_cards_loading` | Shuffling the deck |

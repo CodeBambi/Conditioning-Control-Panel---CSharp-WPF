@@ -44,6 +44,12 @@ namespace ConditioningControlPanel.Views.Tabs
                 mw.BtnProgramSubmitRitual_Click(sender, e);
         }
 
+        private void BtnProgramOpenMantras_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.BtnProgramOpenMantras_Click(sender, e);
+        }
+
         private void BtnProgramRestart_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

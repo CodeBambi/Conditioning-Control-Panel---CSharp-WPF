@@ -117,6 +117,28 @@ namespace ConditioningControlPanel.Services.Startup
         public bool IsModalUp => _modalUp;
 
         /// <summary>
+        /// True while the launcher has the screen and the panel is tucked in the tray. A ladder
+        /// surface is owned by the panel, and a What's New floating over the launcher with no
+        /// visible parent reads as a bug, so the pump waits without spending the surface's five
+        /// minutes. <see cref="Services.Launcher.LauncherHost.OpenPanel"/> releases it.
+        /// </summary>
+        public bool Held { get; private set; }
+
+        public void Hold()
+        {
+            if (Held) return;
+            Held = true;
+            App.Logger?.Information("[Startup] the ladder is held behind the launcher");
+        }
+
+        public void Release()
+        {
+            if (!Held) return;
+            Held = false;
+            App.Logger?.Information("[Startup] the ladder is released");
+        }
+
+        /// <summary>
         /// Nothing is on screen and nothing is waiting for a turn. What "after the startup ladder"
         /// means for anything that wants to be last (the EMI knock).
         /// </summary>
@@ -357,10 +379,11 @@ namespace ConditioningControlPanel.Services.Startup
 
                     var waited = TimeSpan.Zero;
                     while (waited < MaxWaitPerSurface &&
-                           !StartupQueueCore.CanStartModal(false, SafeUpdateDialogActive(), SafeTutorialActive(), SafeWindowReady()))
+                           (Held || !StartupQueueCore.CanStartModal(false, SafeUpdateDialogActive(), SafeTutorialActive(), SafeWindowReady())))
                     {
                         await Task.Delay(PollInterval);
-                        waited += PollInterval;
+                        // A held ladder is parked, not waiting: the launcher can sit for an hour.
+                        if (!Held) waited += PollInterval;
                     }
 
                     // Take that exact key. False means somebody dropped it while we waited, which

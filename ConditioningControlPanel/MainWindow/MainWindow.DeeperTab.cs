@@ -72,7 +72,7 @@ namespace ConditioningControlPanel
 
         internal void BtnDeeperWelcomeTour_Click(object sender, RoutedEventArgs e)
         {
-            try { App.Bark?.NotifyUiAction("deeper_tour"); } catch { }
+            try { App.Bark?.NotifyUiAction("deeper_tour"); } catch (Exception ex) { Diag.Swallowed(ex); }
             DismissDeeperWelcomeCard();
             StartDeeperTabTutorial();
         }
@@ -108,9 +108,7 @@ namespace ConditioningControlPanel
                             StringComparison.OrdinalIgnoreCase));
                 if (match == null)
                 {
-                    MessageBox.Show(this,
-                        "The bundled demo couldn't be found in your library — try restarting the app.",
-                        "Deeper", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ShowStyledDialog(Loc.Get("deeper_dialog_title"), Loc.Get("deeper_demo_missing_text"), Loc.Get("btn_ok"), "");
                     return;
                 }
                 OpenDeeperFile(match.FilePath);
@@ -193,7 +191,7 @@ namespace ConditioningControlPanel
 
         internal void BtnDeeperNewEnhancement_Click(object sender, RoutedEventArgs e)
         {
-            try { App.Bark?.NotifyUiAction("deeper_new"); } catch { }
+            try { App.Bark?.NotifyUiAction("deeper_new"); } catch (Exception ex) { Diag.Swallowed(ex); }
             var dialog = new Views.Deeper.NewEnhancementDialog { Owner = this };
             if (dialog.ShowDialog() != true) return;
 
@@ -205,11 +203,10 @@ namespace ConditioningControlPanel
 
         internal void BtnDeeperOpenPlayer_Click(object sender, RoutedEventArgs e)
         {
-            try { App.Bark?.NotifyUiAction("deeper_player"); } catch { }
+            try { App.Bark?.NotifyUiAction("deeper_player"); } catch (Exception ex) { Diag.Swallowed(ex); }
             try
             {
-                var win = new Views.Deeper.EnhancementPlayerWindow(App.DeeperPlayer, App.DeeperHost) { Owner = this };
-                win.Show();
+                Views.Deeper.EnhancementPlayerWindow.ShowOrActivate(this);
             }
             catch (Exception ex)
             {
@@ -288,12 +285,12 @@ namespace ConditioningControlPanel
                     ? "tooltip_browser_webcam_tracking_on"
                     : "tooltip_browser_webcam_tracking_off");
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         internal async void BtnWebcamTracking_Click(object sender, RoutedEventArgs e)
         {
-            try { App.Bark?.NotifyUiAction("webcam_tracking"); } catch { }
+            try { App.Bark?.NotifyUiAction("webcam_tracking"); } catch (Exception ex) { Diag.Swallowed(ex); }
             var svc = App.Webcam;
             if (svc == null) return;
 
@@ -595,12 +592,39 @@ namespace ConditioningControlPanel
             });
         }
 
+        // One editor per file: a second Open on the same path activates the
+        // window that already has it instead of spawning a twin that would race
+        // it on save.
+        private readonly System.Collections.Generic.Dictionary<string, Views.Deeper.DeeperEditorWindow> _deeperOpenEditors
+            = new(StringComparer.OrdinalIgnoreCase);
+
         private void OpenDeeperEditor(Models.Deeper.Enhancement enhancement, string? filePath)
         {
             try
             {
+                string? key = null;
+                if (!string.IsNullOrEmpty(filePath))
+                {
+                    try { key = System.IO.Path.GetFullPath(filePath); }
+                    catch (Exception ex) { Diag.Swallowed(ex); key = filePath; }
+                    if (_deeperOpenEditors.TryGetValue(key, out var existing))
+                    {
+                        try
+                        {
+                            if (existing.WindowState == WindowState.Minimized) existing.WindowState = WindowState.Normal;
+                            existing.Activate();
+                            return;
+                        }
+                        catch (Exception ex) { Diag.Swallowed(ex, "stale editor handle"); _deeperOpenEditors.Remove(key); }
+                    }
+                }
                 var window = new Views.Deeper.DeeperEditorWindow(enhancement, filePath) { Owner = this };
-                window.Closed += (_, _) => RefreshDeeperLibraryUI();
+                if (key != null) _deeperOpenEditors[key] = window;
+                window.Closed += (_, _) =>
+                {
+                    if (key != null) _deeperOpenEditors.Remove(key);
+                    RefreshDeeperLibraryUI();
+                };
                 window.Show();
             }
             catch (Exception ex)
@@ -616,9 +640,7 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var win = new Views.Deeper.EnhancementPlayerWindow(App.DeeperPlayer, App.DeeperHost) { Owner = this };
-                win.Show();
-                win.OpenLocalMediaFile(mediaPath);
+                Views.Deeper.EnhancementPlayerWindow.ShowOrActivate(this, w => w.OpenLocalMediaFile(mediaPath));
             }
             catch (Exception ex)
             {
@@ -648,13 +670,11 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var win = new Views.Deeper.EnhancementPlayerWindow(App.DeeperPlayer, App.DeeperHost) { Owner = this };
-                win.Show();
-                win.LoadEnhancementFile(ccpenhJsonPath);
+                Views.Deeper.EnhancementPlayerWindow.ShowOrActivate(this, w => w.LoadEnhancementFile(ccpenhJsonPath));
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Failed to open Deeper player for enhancement {Path}", ccpenhJsonPath);
+                App.Logger?.Error(ex, "Failed to open Deeper player for enhancement");
                 MessageBox.Show(this,
                     $"Couldn't open Deeper Player:\n\n{ex.GetType().Name}: {ex.Message}",
                     "Open Player failed", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -675,7 +695,7 @@ namespace ConditioningControlPanel
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Failed to open Deeper editor for {Path}", mediaPath);
+                App.Logger?.Error(ex, "Failed to open Deeper editor for media");
                 MessageBox.Show(this,
                     $"Couldn't open Deeper Editor:\n\n{ex.GetType().Name}: {ex.Message}",
                     "Open Editor failed", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -730,7 +750,7 @@ namespace ConditioningControlPanel
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to open Deeper file {Path}", path);
+                App.Logger?.Warning(ex, "Failed to open Deeper file");
                 MessageBox.Show(this, ex.Message, "Deeper", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
@@ -750,17 +770,17 @@ namespace ConditioningControlPanel
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to open Deeper library folder {Folder}", folder);
+                App.Logger?.Warning(ex, "Failed to open Deeper library folder");
                 MessageBox.Show(this, ex.Message, "Deeper", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 
         internal void BtnDeeperImport_Click(object sender, RoutedEventArgs e)
         {
-            try { App.Bark?.NotifyUiAction("deeper_import"); } catch { }
+            try { App.Bark?.NotifyUiAction("deeper_import"); } catch (Exception ex) { Diag.Swallowed(ex); }
             var dlg = new Microsoft.Win32.OpenFileDialog
             {
-                Title = "Import enhancement",
+                Title = Loc.Get("deeper_import_dialog_title"),
                 Filter = "Deeper enhancements (*.ccpenh.json)|*.ccpenh.json|JSON files (*.json)|*.json|All files (*.*)|*.*",
                 DefaultExt = ".ccpenh.json",
                 Multiselect = true,
@@ -778,46 +798,60 @@ namespace ConditioningControlPanel
         // part of the tab. Keeping one global handler makes the entire window — and thus
         // the whole Deeper tab — a uniform drop target.
 
+        // Extension gate only; ImportEnhancementFiles sniffs the JSON for the
+        // schema tag so a dropped settings.json is skipped quietly instead of
+        // producing an "Import failed" dialog.
         private static bool IsImportableEnhancementPath(string path)
-        {
-            if (string.IsNullOrEmpty(path)) return false;
-            // Accept either the canonical "*.ccpenh.json" double-suffix or a plain
-            // ".json" — the serializer will reject anything that doesn't carry the
-            // expected $schema tag, so plain .json is safe to offer.
-            return path.EndsWith(".ccpenh.json", StringComparison.OrdinalIgnoreCase)
-                || path.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
-        }
+            => Services.Deeper.EnhancementImportRules.IsImportablePath(path);
 
         private void ImportEnhancementFiles(System.Collections.Generic.IEnumerable<string> paths)
         {
             var lib = App.EnhancementLibrary;
             if (lib == null)
             {
-                MessageBox.Show(this, "Enhancement library isn't ready yet.", "Import failed",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                App.Notifications?.Show(Loc.Get("deeper_import_library_not_ready"),
+                    Services.NotificationType.Warning);
                 return;
             }
 
             var imported = new System.Collections.Generic.List<string>();
             var errors = new System.Collections.Generic.List<string>();
+            int skippedNonEnhancement = 0;
             string? lastImportedPath = null;
+            string? duplicateOfPath = null;
 
             foreach (var path in paths)
             {
+                var fileName = System.IO.Path.GetFileName(path);
                 if (!IsImportableEnhancementPath(path))
                 {
-                    errors.Add($"{System.IO.Path.GetFileName(path)} — not a .ccpenh.json file.");
+                    errors.Add(string.Format(Loc.Get("deeper_import_err_not_enh_fmt"), fileName));
                     continue;
                 }
                 try
                 {
+                    // Plain .json that is not an enhancement (settings.json, a
+                    // preset...) is skipped quietly rather than reported as a failure.
+                    if (!Services.Deeper.EnhancementImportRules.FileLooksLikeEnhancement(path))
+                    {
+                        skippedNonEnhancement++;
+                        continue;
+                    }
+                    // Same file, or identical content under another name: no
+                    // "Name (2)" copy, just point at the row that is already there.
+                    var existing = lib.FindDuplicateOf(path);
+                    if (existing != null)
+                    {
+                        duplicateOfPath = existing;
+                        continue;
+                    }
                     // Validate by loading; bad schema / oversized files throw with
                     // a useful message from the serializer.
                     var enhancement = Services.Deeper.EnhancementSerializer.LoadFromFile(path);
                     var saved = lib.PromoteToLibrary(enhancement, sourceTag: "import");
                     if (saved == null)
                     {
-                        errors.Add($"{System.IO.Path.GetFileName(path)} — couldn't write into the library folder.");
+                        errors.Add(string.Format(Loc.Get("deeper_import_err_write_fmt"), fileName));
                         continue;
                     }
                     lastImportedPath = saved;
@@ -825,12 +859,12 @@ namespace ConditioningControlPanel
                 }
                 catch (Services.Deeper.EnhancementLoadException ex)
                 {
-                    errors.Add($"{System.IO.Path.GetFileName(path)} — {ex.Message}");
+                    errors.Add($"{fileName}: {ex.Message}");
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning(ex, "ImportEnhancementFiles: failed on {Path}", path);
-                    errors.Add($"{System.IO.Path.GetFileName(path)} — {ex.GetType().Name}: {ex.Message}");
+                    App.Logger?.Warning(ex, "ImportEnhancementFiles: import failed");
+                    errors.Add($"{fileName}: {ex.GetType().Name}");
                 }
             }
 
@@ -852,44 +886,124 @@ namespace ConditioningControlPanel
 
             // Force-refresh the hub list now in addition to the FileSystemWatcher
             // signal, since the watcher's debounce can lag a fast manual import.
-            try { RefreshDeeperLibraryUI(); } catch { }
+            try { RefreshDeeperLibraryUI(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
-            if (errors.Count == 0 && imported.Count > 0)
+            // Toasts, like the rest of the tab, instead of stock modals.
+            if (imported.Count > 0)
             {
                 var msg = imported.Count == 1
-                    ? $"Imported \"{imported[0]}\" into your library."
-                    : $"Imported {imported.Count} enhancements into your library.";
-                MessageBox.Show(this, msg, "Import complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ? string.Format(Loc.Get("deeper_import_done_one_fmt"), imported[0])
+                    : string.Format(Loc.Get("deeper_import_done_many_fmt"), imported.Count);
+                App.Notifications?.Show(msg, Services.NotificationType.Success);
             }
-            else if (errors.Count > 0)
+            if (errors.Count > 0)
             {
-                var head = imported.Count > 0
-                    ? $"Imported {imported.Count}, but {errors.Count} failed:\n\n"
-                    : $"{errors.Count} file(s) couldn't be imported:\n\n";
-                MessageBox.Show(this, head + string.Join("\n", errors), "Import failed",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                App.Notifications?.Show(
+                    string.Format(Loc.Get("deeper_import_failed_fmt"), errors.Count) + "\n" + string.Join("\n", errors),
+                    Services.NotificationType.Warning, TimeSpan.FromSeconds(10));
             }
+            else if (imported.Count == 0)
+            {
+                if (duplicateOfPath != null)
+                    App.Notifications?.Show(Loc.Get("deeper_import_already_in_library"), Services.NotificationType.Info);
+                else if (skippedNonEnhancement > 0)
+                    App.Notifications?.Show(Loc.Get("deeper_import_skipped_not_enh"), Services.NotificationType.Info);
+            }
+
+            var reveal = lastImportedPath ?? duplicateOfPath;
+            if (reveal != null) RevealDeeperLibraryRow(reveal);
+        }
+
+        // Delete is two-step: the row disappears at once, the file goes to the
+        // Recycle Bin after a short grace period, and the toast's Undo cancels it.
+        // Pending paths are skipped by ReloadDeeperLibraryFromDisk so a watcher
+        // refresh inside the window cannot resurrect the row.
+        private readonly System.Collections.Generic.Dictionary<string, System.Windows.Threading.DispatcherTimer> _deeperPendingDeletes
+            = new(StringComparer.OrdinalIgnoreCase);
+        private const int DeeperDeleteGraceMs = 6000;
+
+        private bool IsDeeperDeletePending(string path)
+        {
+            if (_deeperPendingDeletes.Count == 0) return false;
+            try { return _deeperPendingDeletes.ContainsKey(System.IO.Path.GetFullPath(path)); }
+            catch (Exception ex) { Diag.Swallowed(ex); return false; }
         }
 
         private void DeleteDeeperLibraryEntry(Services.Deeper.EnhancementLibraryEntry entry)
         {
             var label = string.IsNullOrEmpty(entry.Name) ? System.IO.Path.GetFileName(entry.FilePath) : entry.Name;
             var msg = string.Format(Loc.Get("deeper_library_delete_confirm_fmt"), label);
-            var result = MessageBox.Show(this, msg, Loc.Get("deeper_library_delete_title"),
-                MessageBoxButton.OKCancel, MessageBoxImage.Warning);
-            if (result != MessageBoxResult.OK) return;
+            if (!ShowStyledDialog(Loc.Get("deeper_library_delete_title"), msg, Loc.Get("btn_delete"), Loc.Get("btn_cancel")))
+                return;
+
+            string key;
+            try { key = System.IO.Path.GetFullPath(entry.FilePath); }
+            catch (Exception ex) { Diag.Swallowed(ex); key = entry.FilePath; }
+            if (_deeperPendingDeletes.ContainsKey(key)) return;
+
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(DeeperDeleteGraceMs) };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                _deeperPendingDeletes.Remove(key);
+                CommitDeeperDelete(key);
+            };
+            _deeperPendingDeletes[key] = timer;
+            timer.Start();
+            RefreshDeeperLibraryUI();
+
+            App.Notifications?.Show(
+                string.Format(Loc.Get("deeper_library_deleted_toast_fmt"), label),
+                Services.NotificationType.Info,
+                TimeSpan.FromMilliseconds(DeeperDeleteGraceMs),
+                actionLabel: Loc.Get("btn_undo"),
+                action: () =>
+                {
+                    if (!_deeperPendingDeletes.Remove(key, out var pending)) return;
+                    pending.Stop();
+                    RefreshDeeperLibraryUI();
+                });
+        }
+
+        // Called from OnClosing on a real exit. A confirmed delete inside the 6 s
+        // undo grace must still happen: the DispatcherTimer dies with the window,
+        // and without this the file was never recycled and the row came back on
+        // the next launch. Every step is guarded so shutdown can never be blocked.
+        private void CommitPendingDeeperDeletesOnExit()
+        {
+            if (_deeperPendingDeletes.Count == 0) return;
+            System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, System.Windows.Threading.DispatcherTimer>> pending;
+            try { pending = new(_deeperPendingDeletes); _deeperPendingDeletes.Clear(); }
+            catch (Exception ex) { Diag.Swallowed(ex); return; }
+            foreach (var kv in pending)
+            {
+                try { kv.Value.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { CommitDeeperDelete(kv.Key); } catch (Exception ex) { Diag.Swallowed(ex); }
+            }
+        }
+
+        private void CommitDeeperDelete(string fullPath)
+        {
             try
             {
-                if (System.IO.File.Exists(entry.FilePath))
-                    System.IO.File.Delete(entry.FilePath);
-                // FileSystemWatcher in EnhancementLibrary will fire LibraryChanged
-                // and refresh the UI, but force an immediate refresh for snappiness.
+                if (System.IO.File.Exists(fullPath))
+                {
+                    Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(fullPath,
+                        Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                        Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+                }
+                // The catalogue-submission record is keyed by this path; drop it so
+                // a future file under the same name does not inherit a stale badge.
+                var subs = App.Settings?.Current?.DeeperSubmissions;
+                if (subs != null && subs.Remove(CanonicalSubmissionKey(fullPath)))
+                    App.Settings?.Save();
                 RefreshDeeperLibraryUI();
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to delete Deeper library entry {Path}", entry.FilePath);
-                MessageBox.Show(this, ex.Message, "Deeper", MessageBoxButton.OK, MessageBoxImage.Warning);
+                App.Logger?.Warning(ex, "Failed to delete Deeper library entry");
+                App.Notifications?.Show(ex.Message, Services.NotificationType.Error);
+                RefreshDeeperLibraryUI();
             }
         }
 

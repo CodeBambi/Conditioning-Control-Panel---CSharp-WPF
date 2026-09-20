@@ -84,7 +84,8 @@ namespace ConditioningControlPanel
             ("BtnPlayRemoteControl", "tab.remotecontrol"), ("BtnPlayBlinkTrainer", "tab.blinktrainer"),
             ("BtnPlayGradedIntake", "tab.gradedintake"), ("BtnPlayFyp", "tab.fyp"),
             ("BtnPlayLockdown", "tab.lockdown"),
-            ("BtnPlayArcademy", "card.arcademy"), ("BtnPlayBackRoom", "card.backroom"),
+            // card.arcademy and card.backroom left with their cards (2026-09-18, the launcher
+            // owns the games); a saved favourite with either id resolves to no entry and is skipped.
         };
 
         /// <summary>Subscribe to patron-status changes, wire the pin menus, paint once.</summary>

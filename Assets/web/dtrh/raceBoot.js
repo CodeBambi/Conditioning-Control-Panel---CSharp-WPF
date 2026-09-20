@@ -114,7 +114,17 @@ const hosted = bridge.isHosted;
  * same-origin referrer, else null and the verb comes off the list. Same origin only, always, so the
  * query string can never point a player somewhere else.
  */
+// The casino return is a fixed local door, never a query-controlled redirect.
+const casinoBack = (() => {
+  if (hosted || params.get('casino') !== '1') return null;
+  try {
+    const back = new URL(params.get('back') || '', location.href);
+    return back.origin === location.origin && back.pathname === '/backroom/index.html'
+      ? new URL('/backroom/index.html?raceReturn=1', location.origin).href : null;
+  } catch { return null; }
+})();
 function resolveBack() {
+  if (params.get('casino') === '1') return casinoBack ? () => { location.href = casinoBack; } : null;
   const want = params.get('back');
   if (want) {
     try { const u = new URL(want, location.href); if (u.origin === location.origin) return () => { location.href = u.href; }; }
@@ -172,6 +182,8 @@ function fail(err) {
   const msg = String((err && (err.stack || err.message)) || err || 'unknown').slice(0, 600);
   console.error('[race] boot-error', msg);
   note('something broke. the host has the log.');
+  ensureCasinoExit();
+  if (casinoBack || initMsg?.settings?.returnToCasino) { splash.hidden = false; splash.classList.remove('is-off'); }
   showDetail(msg);
   host.send({ type: 'boot-error', msg, message: msg });
 }
@@ -206,6 +218,19 @@ window.addEventListener('unhandledrejection', (e) => {
   if (!started) fail('promise: ' + msg); else host.log('promise: ' + msg);
 });
 
+/** The splash keeps a way home even if 3D boot or a later dynamic import fails. */
+function ensureCasinoExit() {
+  if (!splash || !(casinoBack || initMsg?.settings?.returnToCasino === true)) return;
+  if (document.getElementById('race-casino-exit')) return;
+  const button = document.createElement('button');
+  button.id = 'race-casino-exit'; button.type = 'button'; button.textContent = 'back to casino';
+  Object.assign(button.style, { marginTop: '18px', padding: '10px 18px', color: '#ffb6d9',
+    border: '1px solid #ffb6d9', borderRadius: '9px', background: '#211421', cursor: 'pointer' });
+  button.addEventListener('click', surface);
+  splash.appendChild(button);
+}
+ensureCasinoExit();
+
 // ---- capability -> quality tier ----
 // reducedIs3d: prefers-reduced-motion is NOT a boot blocker here. The race owns
 // a complete reduced path (menu stage, HUD, flashes, cards, intro and the run's
@@ -222,7 +247,7 @@ if (mode.hardBlock || !mode.canTry3d) {
 }
 
 // ---- host wiring ----
-bridge.on('init', (m) => { initMsg = m; maybeBoot(); });
+bridge.on('init', (m) => { initMsg = m; ensureCasinoExit(); maybeBoot(); });
 bridge.on('manifest', (m) => {
   try { media.setManifest(m); warmWallPosters(media); } catch (e) { host.log('manifest: ' + e); }
   haveManifest = true; maybeBoot();
@@ -258,6 +283,11 @@ const keysOf = (chart) => {
 };
 
 // ---- track charts (CHART.md host protocol). The run owns the clock; this only relays. ----
+bridge.on('race-ownership', (m) => {
+  settings.racingTracks = Array.isArray(m && m.tracks) ? m.tracks : [];
+  if (levels) levels.setOwnership(settings.racingTracks);
+});
+
 bridge.on('track-chart', (m) => {
   if (!race || !m || !m.chart) return;
   try { (race.track && started) ? race.replaceTrack(m.chart) : race.setTrack(m.chart); }
@@ -360,6 +390,7 @@ async function boot() {
     const [{ createRace }, { createMenu, loadOptions, seedFromOptions, wantsReducedMotion, wantsLite }] = await Promise.all([import('./race/run.js'), import('./race/menu.js')]);
     const opts = loadOptions();
     settings = { ...((initMsg && initMsg.settings) || {}) };
+    if (casinoBack) { settings.returnToCasino = true; settings.canSurface = true; }
     if (opts.pixel !== undefined) settings.pixel = opts.pixel;
     if (params.has('pixel') && params.get('pixel') !== '') settings.pixel = Number(params.get('pixel'));
     settings.reducedMotion = wantsReducedMotion(opts, settings.reducedMotion != null ? settings.reducedMotion : !!(matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches));
@@ -402,7 +433,7 @@ async function boot() {
     while (settingEchoes.length) { try { menu.settingEcho(settingEchoes.shift()); } catch (e) { host.log('setting: ' + e); } }
     // Nowhere to surface to: no host and no `?back=`, or a host that says outright it cannot take
     // the window away (the browser host with neither a same-origin ?back= nor a same-origin referrer).
-    if ((!hosted && !standaloneExit) || settings.canSurface === false) { menu.hideVerb('surface'); host.log('surface hidden: nowhere to go'); }
+    if ((!hosted && !standaloneExit) || (settings.canSurface === false && !settings.returnToCasino)) { menu.hideVerb('surface'); host.log('surface hidden: nowhere to go'); }
     menu.onPick((id) => {
       if (id === 'race') startRun(true);
       else if (id === 'surface') surface();

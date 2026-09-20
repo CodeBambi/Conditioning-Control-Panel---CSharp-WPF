@@ -389,16 +389,23 @@ internal sealed class BackRoomVoice : IBackRoomVoice
     private static readonly object HandleGate = new();
     private static AudioPlaybackHandle? _handle;
 
-    /// <summary>Through <see cref="AudioService.PlayOneShot"/>, at the subliminal whisper's own volume
-    /// curve and on the device the audio picker chose. A new word cuts the one before it, which is what
-    /// the page's <c>speechSynthesis.cancel()</c> did.</summary>
+    /// <summary>Through <see cref="AudioService.PlayOneShot"/>, at the room's OWN subliminal level and on
+    /// the device the audio picker chose. A new word cuts the one before it, which is what the page's
+    /// <c>speechSynthesis.cancel()</c> did.
+    ///
+    /// <para>This used to be <c>MasterVolume x SubAudioVolume</c>, and that was the only piece of Back Room
+    /// audio that followed the app: everything else in the room is Web Audio inside WebView2 and never saw
+    /// those settings. So a session preset moving MasterVolume turned the casino's whisper down and left the
+    /// levers, reels, wins and soundtrack exactly where they were, which is the wrong half of the mix. The
+    /// room now carries its own three levels (<see cref="Models.AppSettings.BackRoomSubVolume"/> and friends)
+    /// and this reads the subliminal one. The 1.5 power curve is unchanged, so the whisper's character is
+    /// identical at a given level.</para></summary>
     private static bool PlayThroughApp(string path)
     {
         StopApp();
         var settings = App.Settings?.Current;
-        var master = (settings?.MasterVolume ?? 100) / 100.0f;
-        var sub = (settings?.SubAudioVolume ?? 100) / 100.0f;
-        var volume = (float)Math.Pow(Math.Clamp(sub * master, 0f, 1f), 1.5);
+        var sub = (settings?.BackRoomSubVolume ?? 100) / 100.0f;
+        var volume = (float)Math.Pow(Math.Clamp(sub, 0f, 1f), 1.5);
         if (volume <= 0f) return false;   // a deliberate mute: the host still owns the word, it is just silent
         var handle = App.Audio?.PlayOneShot(path, volume, "br-word");
         lock (HandleGate) _handle = handle;

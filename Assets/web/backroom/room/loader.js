@@ -20,11 +20,28 @@
  * ==========================================================================*/
 
 import * as bridge from '../bridge.js';
+import { flashesBusy } from '../shared/hypno/flash-interaction.js';
+import { createRenderBudget } from './render-budget.js';
+
+/* The same board test the render budget makes, so the room's echo and a station's echo can never disagree
+ * about the device they are both running on. It is hardware, so it is asked once. */
+const LITE_BOARD = createRenderBudget(typeof navigator === 'undefined' ? {} : navigator,
+  typeof devicePixelRatio === 'number' ? devicePixelRatio : 1).mobile;
 
 export const CLOSE_BUDGET_MS = 420;
 export const REQUEST_TIMEOUT_MS = 6000;
 export const MEDIA_COUNT_MAX = 13;
 
+/** True while the room's own #br-back is drawn (desktop host). The site shim hides it with display:none; the intro
+ *  card also hides it for a moment, and that is still the desktop, so it counts as drawn. No document (tests): drawn. */
+function roomBackShown() {
+  try {
+    if (typeof document === 'undefined') return true;
+    const b = document.getElementById('br-back');
+    if (!b) return true;
+    return getComputedStyle(b).display !== 'none' || !!document.getElementById('br-intro');
+  } catch (e) { return true; }
+}
 const withTimeout = (p, ms) => Promise.race([Promise.resolve(p).catch(() => {}), new Promise((r) => setTimeout(r, ms))]);
 
 /**
@@ -115,6 +132,7 @@ export function createLoader(room) {
       onSp: (fn) => room.onSp(fn),
       /** The room's SP chip (CONTRACT 7.1): { set(value|null), owe(n | () => n), thud(), target() }. */
       spReadout: room.spReadout,
+      prizesChanged: (body, bought) => { if (!subs.closed && station.id === 'counter') room.prizesChanged?.(body, bought); },
       rewardLanded: body => { if(!subs.closed && current?.subs === subs && station.id === 'wheel') room.rewardLanded?.(body); },
       revealedWin: (amount,tier,text) => { if(!subs.closed) room.revealedWin?.(station.key,amount,tier,text); },
       get reduced() { return s.reduced; },
@@ -134,8 +152,16 @@ export function createLoader(room) {
       standUp: () => room.standUp(),
       /** { id, name, palette:{materialName: 'rrggbb'} | null } or null. Optional for a station to honour. */
       variant: variant || null,
-      /** The room draws the only Back (CONTRACT 7): a station hides its own. */
-      hostBack: true,
+      /** BRAKE 8, the board test (CONTRACT 10.22.C): a lite board flies 4 tokens, never 7, drops the sparks and
+       *  keeps every sound. The room's own win echo has always read this (room/scene.js `lite: budget.mobile`);
+       *  the stations had no way to ask, so the roulette's `ctx.lite` was a field nobody set and its Brake 8
+       *  could never fire on any device, while the other three read Calm instead and disagreed with the floor
+       *  about the same board. It is the device, so it is settled once and never changes under a sit-down. */
+      lite: LITE_BOARD,
+      /** The room draws the only Back (CONTRACT 7): a station hides its own. On the site the host shim hides #br-back
+       *  (no desktop to go back to), and a phone then had no way out of a station (tester, 2026-09-18): when the
+       *  room's Back is not drawn the station keeps its own, and shared/back.css pins it where the room's would be. */
+      hostBack: roomBackShown(),
     };
   }
 
@@ -217,5 +243,5 @@ export function createLoader(room) {
   }
 
   /** `current.debug()` is a test seam (smoke/): the station's own debug(), never read by the room. */
-  return { open, close, suspend, get current() { return current ? { id: current.station.id, kind: current.kind, debug: () => current?.handle?.debug?.() } : null; } };
+  return { open, close, suspend, canLeave: () => current?.station.id !== 'roulette' || (!flashesBusy() && current?.handle?.canLeave?.() !== false), get current() { return current ? { id: current.station.id, kind: current.kind, debug: () => current?.handle?.debug?.() } : null; } };
 }

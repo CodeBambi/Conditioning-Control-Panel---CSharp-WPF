@@ -417,3 +417,21 @@
 }
 #race-root .rc-root[data-motion="on"] .rc-card.is-in, #race-root .rc-root[data-motion="on"] .rc-card.is-hit { animation: none; }
 #race-root .rc-root[data-motion="on"] .rc-dot { transition: none; }
+
+/* Primary play stays obvious; the rest opens on request. */
+#race-root .rm-list .rm-play { min-height: 52px; background: #b62c79; border-radius: 8px; }
+#race-root .rm-list .rm-play.is-focus { background: #ca378b; }
+#race-root .rm-list .rm-secondary,
+#race-root .rm-list [data-id="more"] { font-size: 16px; min-height: 44px; padding-top: 8px; padding-bottom: 8px; }
+#race-root .rm-list [data-id="more"] { color: #ffd6ea; background: rgba(255, 255, 255, 0.025); }
+#race-root .rm-btn:focus-visible, #race-root .rm-row:focus-visible { outline: 2px solid #ffe3a3; outline-offset: 4px; }
+#race-root .rm-options .rm-row-label { min-width: 0; }
+#race-root .rm-options .rm-row-ctl { white-space: nowrap; }
+@media (max-width: 420px) {
+  #race-root .rm-options .rm-row { font-size: 15px; column-gap: 6px; padding-inline: 9px; }
+}
+
+#race-root .rm-list [data-id="surface"] { margin-top: 8px; color: #d4bddb; background: transparent; box-shadow: none; }
+
+/* Driving controls belong to the run, not the lobby. */
+#race-root .race-hud.is-lobby .rh-touch { display: none; }

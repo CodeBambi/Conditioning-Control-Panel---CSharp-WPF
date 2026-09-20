@@ -621,8 +621,11 @@ public class AchievementService : IDisposable
             var settings = App.Settings?.Current;
             if (settings != null)
             {
+                var previousPoints = settings.SkillPoints;
                 settings.SkillPoints += 1;
+                var creditedBalance = settings.SkillPoints;
                 App.Settings?.Save();
+                SparklePointRewards.PublishCredit(previousPoints, creditedBalance, SparklePointSource.BubbleMilestone);
                 App.Logger?.Information("Bubble milestone! {Total} bubbles popped — awarded 1 sparkle point (total: {Points})",
                     _progress.TotalBubblesPopped, settings.SkillPoints);
                 ShowBubbleMilestoneNotification(_progress.TotalBubblesPopped);
@@ -673,8 +676,11 @@ public class AchievementService : IDisposable
             var settings = App.Settings?.Current;
             if (settings != null)
             {
+                var previousPoints = settings.SkillPoints;
                 settings.SkillPoints += milestones;
+                var creditedBalance = settings.SkillPoints;
                 App.Settings?.Save();
+                SparklePointRewards.PublishCredit(previousPoints, creditedBalance, SparklePointSource.BubbleMilestone);
                 App.Logger?.Information("Bubble milestone (batch)! {Total} bubbles popped — awarded {N} sparkle point(s) (total: {Points})",
                     after, milestones, settings.SkillPoints);
                 // one popup for the highest 100-boundary reached this run

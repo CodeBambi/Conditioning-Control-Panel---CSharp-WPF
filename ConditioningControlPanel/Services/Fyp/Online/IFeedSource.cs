@@ -78,6 +78,13 @@ internal enum FeedMediaKind
     /// mirroring the web's filter usage exactly. Entries come out as
     /// <see cref="RemoteMediaFormats.TypeImage"/>, same shape as <see cref="Image"/>.</summary>
     GifStill,
+    /// <summary>The CLIP half of the provider's GIF filter: the silent webm/mp4 rendition of the
+    /// same posts <see cref="GifStill"/> takes the poster of, and never the VIDEO filter. The Back
+    /// Room asks for this and nothing else (2026-09-17, "discard stills"): a room paints at 384 px,
+    /// so a full-length VIDEO upload is bytes it cannot use, and an empty VIDEO page used to retire
+    /// the channel for ten minutes for every kind the tenant asked. Entries come out as
+    /// <see cref="RemoteMediaFormats.TypeVideo"/>, same shape as <see cref="Video"/>.</summary>
+    GifClip,
 }
 
 /// <summary>One fetched page of feed entries plus the cursor to continue from.</summary>

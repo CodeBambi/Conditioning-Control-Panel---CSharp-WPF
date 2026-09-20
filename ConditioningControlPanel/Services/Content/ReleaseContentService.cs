@@ -1421,11 +1421,22 @@ namespace ConditioningControlPanel.Services
                     if (count >= MinModMediaFiles) return true;
                 }
 
-                // 2) Loose companion audio. ContentLocator covers both roots.
+                // 2) Loose companion audio. ContentLocator covers both roots, EXCEPT for builtin-locked
+                //    while the TEMPORARY Circe neutral hotfix overlay ships 109 of its mp3s in-box
+                //    (csproj CirceNeutralInBoxOverride). Those clear the floor on their own, so a Circe
+                //    user who never fetched mod-locked would read as stocked and never get the other
+                //    ~1,400 clips or the .ccpmod. Only the downloaded copy proves that pack. Drop this
+                //    branch with the overlay.
                 var relAudio = Path.Combine("Resources", "sounds", "companion_audio", "mods", modId);
-                var audioCount = CountMediaFiles(
-                    ContentLocator.EnumerateFiles(relAudio, "*", SearchOption.AllDirectories),
-                    MinModMediaFiles);
+                var lockedOverlay = string.Equals(modId, BuiltInMods.LockedId, StringComparison.OrdinalIgnoreCase);
+                var contentAudioDir = string.IsNullOrEmpty(ContentLocator.ContentRoot)
+                    ? null : Path.Combine(ContentLocator.ContentRoot, relAudio);
+                var audioFiles = !lockedOverlay
+                    ? ContentLocator.EnumerateFiles(relAudio, "*", SearchOption.AllDirectories)
+                    : contentAudioDir != null && Directory.Exists(contentAudioDir)
+                        ? SafeEnumerateFiles(contentAudioDir)
+                        : Array.Empty<string>();
+                var audioCount = CountMediaFiles(audioFiles, MinModMediaFiles);
                 if (audioCount >= MinModMediaFiles) return true;
 
                 count = Math.Max(count, audioCount);   // for the log line below

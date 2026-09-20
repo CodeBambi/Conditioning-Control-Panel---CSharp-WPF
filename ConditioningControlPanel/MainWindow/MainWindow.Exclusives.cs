@@ -19,8 +19,8 @@ namespace ConditioningControlPanel
     // Exclusives tab ("the Velvet Vault"): the registry-driven showcase that replaced
     // the launcher popup. ExclusiveFeature.All is the single source of truth - this
     // file turns each entry into a card and keeps entitlement chips/veils current.
-    // Cards never block: ShowTab(key) always runs and the destination tab's own
-    // premium gate does the enforcement, exactly as the popup items did.
+    // Cards and the spotlight share one destination dispatcher. Each existing launcher
+    // or destination tab owns its access checks.
     public partial class MainWindow
     {
         private sealed class ExclusiveCardUi
@@ -50,6 +50,7 @@ namespace ConditioningControlPanel
 
         private readonly List<ExclusiveCardUi> _exclusiveCards = new();
         private readonly List<TextBlock> _exclusiveTeaserMarks = new();
+        private readonly List<(TextBlock Text, string Key)> _exclusiveReservationLabels = new();
 
         /// <summary>The three teaser cards' outer borders, kept for the accent re-tint.</summary>
         private readonly List<Border> _exclusiveTeaserCards = new();
@@ -215,7 +216,13 @@ namespace ConditioningControlPanel
             && App.DailyFree?.IsFreeToday(feature.DailyFreeKey) == true;
 
         /// <summary>Spotlight = the first registry entry (the newest exclusive).</summary>
-        internal void OpenExclusiveSpotlight() => ShowTab(ExclusiveFeature.All[0].Key);
+        internal void OpenExclusiveSpotlight() => OpenExclusiveFeature(ExclusiveFeature.All[0]);
+
+        private void OpenExclusiveFeature(ExclusiveFeature feature)
+        {
+            if (feature.Key == "backroom") BtnStartBackRoom_Click(this, new RoutedEventArgs());
+            else ShowTab(feature.Key);
+        }
 
         // ============================== build ==============================
 
@@ -241,12 +248,11 @@ namespace ConditioningControlPanel
                 foreach (var feature in ExclusiveFeature.All)
                     ExclusivesTab.ExclusivesShelf.Children.Add(BuildExclusiveCard(feature));
 
-                // The shelf never just ends: three teaser silhouettes close it out,
-                // one per unannounced feature. They are deliberately NOT registry
-                // entries - no ShowTab key, no gate, no refresh contract - because
-                // the features behind them don't exist yet.
-                for (int i = 1; i <= 3; i++)
-                    ExclusivesTab.ExclusivesShelf.Children.Add(BuildComingSoonCard(i));
+                // The casino fills the first former teaser. Two seats remain reserved.
+                ExclusivesTab.ExclusivesShelf.Children.Add(BuildComingSoonCard(2,
+                    "play_racing_reserved_title", "play_racing_reserved_blurb"));
+                ExclusivesTab.ExclusivesShelf.Children.Add(BuildComingSoonCard(3,
+                    "play_future_reserved_title", "play_future_reserved_blurb"));
 
                 // Parks/resumes with tab switches like every other ambient canvas.
                 RegisterTabFx("exclusives", ExclusivesTab.ExclusivesAmbientFx);
@@ -504,7 +510,7 @@ namespace ConditioningControlPanel
 
             card.MouseEnter += (_, _) => OnExclusiveCardHover(card, art, true);
             card.MouseLeave += (_, _) => OnExclusiveCardHover(card, art, false);
-            card.MouseLeftButtonUp += (_, _) => ShowTab(feature.Key);
+            card.MouseLeftButtonUp += (_, _) => OpenExclusiveFeature(feature);
 
             _exclusiveCards.Add(new ExclusiveCardUi
             {
@@ -531,7 +537,7 @@ namespace ConditioningControlPanel
         /// breathing mark is re-painted (see RefreshExclusivesTab) so it obeys the
         /// same motion/perf gates as the veil padlocks.
         /// </summary>
-        private Border BuildComingSoonCard(int ordinal)
+        private Border BuildComingSoonCard(int ordinal, string? titleKey = null, string? taglineKey = null)
         {
             var host = new Grid();
 
@@ -553,7 +559,7 @@ namespace ConditioningControlPanel
 
             var title = new TextBlock
             {
-                Text = $"{TeaserEmoji(ordinal)} ???",
+                Text = titleKey == null ? $"{TeaserEmoji(ordinal)} ???" : Loc.Get(titleKey),
                 FontFamily = FredokaFont,
                 FontWeight = FontWeights.SemiBold,
                 FontSize = 15,
@@ -562,7 +568,7 @@ namespace ConditioningControlPanel
             };
             var tagline = new TextBlock
             {
-                Text = Loc.Get($"exclusives_soon_tag_{ordinal}"),
+                Text = Loc.Get(taglineKey ?? $"exclusives_soon_tag_{ordinal}"),
                 Foreground = new SolidColorBrush(Color.FromRgb(0x9A, 0x93, 0xB8)),
                 FontSize = 11,
                 TextWrapping = TextWrapping.Wrap,
@@ -570,6 +576,8 @@ namespace ConditioningControlPanel
                 MaxHeight = 30,
                 Margin = new Thickness(0, 2, 0, 0),
             };
+            if (titleKey != null) _exclusiveReservationLabels.Add((title, titleKey));
+            if (taglineKey != null) _exclusiveReservationLabels.Add((tagline, taglineKey));
             host.Children.Add(new Border
             {
                 VerticalAlignment = VerticalAlignment.Bottom,
@@ -725,6 +733,8 @@ namespace ConditioningControlPanel
 
                 // Teaser "?" marks breathe under the same motion/perf gates as the
                 // veil padlocks, so a tier change repaints them here too.
+                foreach (var label in _exclusiveReservationLabels) label.Text.Text = Loc.Get(label.Key);
+
                 foreach (var mark in _exclusiveTeaserMarks)
                     ApplyVeilLockBreath(mark, true);
 

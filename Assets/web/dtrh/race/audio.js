@@ -476,7 +476,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     } catch (e) { return null; }
   }
   /** Synth one-shot: a sine sweep (thumps, rises) or a filtered noise burst (whooshes, puffs). */
-  function synth({ kind = 'sine', f0 = 200, f1 = 60, sec = 0.2, level = 0.3, filter = null, q = 0.8, at = 0 }) {
+  function synth({ kind = 'sine', f0 = 200, f1 = 60, sec = 0.2, level = 0.3, filter = null, q = 0.8, at = 0, contact = false }) {
     if (isMuted() || disposed || !ensureGraph()) return;
     admit(level);
     try {
@@ -489,7 +489,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
       let head = src;
       if (filter) { const bq = ctx.createBiquadFilter(); bq.type = filter.type || 'bandpass'; bq.Q.value = q; bq.frequency.setValueAtTime(filter.f0, t); bq.frequency.exponentialRampToValueAtTime(Math.max(1, filter.f1), t + sec); head.connect(bq); head = bq; }
       head.connect(gain); gain.connect(sfxBus);
-      const v = { src, gain, level, t0: t };
+      const v = { src, gain, level, t0: t, contact };
       voices.push(v);
       src.onended = () => { const i = voices.indexOf(v); if (i >= 0) voices.splice(i, 1); try { gain.disconnect(); } catch (e) { /* ignore */ } };
       src.start(t); src.stop(t + sec + 0.02);
@@ -531,7 +531,19 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
   function arpeggio(level, gap) { ['chime1', 'chime2', 'chime3'].forEach((f, i) => play(f, { level, at: i * gap })); }
   function boostWhoosh() { synth({ kind: 'noise', sec: 0.7, level: 0.3, filter: { f0: 300, f1: 3200 }, q: 1.6 }); }
   function rampRise() { synth({ kind: 'sine', f0: 220, f1: 700, sec: 0.36, level: 0.1, filter: { type: 'lowpass', f0: 900, f1: 2200 } }); }
-  function rampLand() { synth({ kind: 'sine', f0: 110, f1: 42, sec: 0.2, level: 0.42 }); synth({ kind: 'noise', sec: 0.06, level: 0.12, filter: { f0: 900, f1: 300 } }); }
+  function kartBeat(e) {
+    // A single authored contact, instead of a native stinger plus an inferred edge.
+    if (e.type === 'driftBoost') {
+      const tier = clamp(e.tier || 1, 1, 3);
+      synth({ kind: 'noise', sec: 0.26 + tier * 0.07, level: 0.16 + tier * 0.035, filter: { f0: 450, f1: 1800 + tier * 350 }, q: 1.1, contact: true });
+    } else if (e.type === 'landing') {
+      const impact = clamp(e.impact || 0.5, 0.25, 1);
+      synth({ kind: 'sine', f0: 90 + impact * 35, f1: 42, sec: 0.12 + impact * 0.1, level: 0.16 + impact * 0.22, contact: true });
+      synth({ kind: 'noise', sec: e.clean ? 0.045 : 0.085, level: 0.05 + impact * 0.07, filter: { f0: e.clean ? 1000 : 1600, f1: 300 }, contact: true });
+    }
+    // A clean trick landing and a drift release may start a boost on this same frame.
+    if (live.kart) edge.boost = live.kart.boostSec;
+  }
   function wheelSwoosh() { synth({ kind: 'noise', sec: 1.3, level: 0.26, filter: { f0: 240, f1: 2400 }, q: 2.2 }); synth({ kind: 'noise', sec: 1.0, level: 0.2, filter: { f0: 2400, f1: 200 }, q: 2.2, at: 0.9 }); }
   function gateSting() { play('chime2', { level: LEVELS.chime * 0.75, semis: -3 }); }
   function endSting() { arpeggio(LEVELS.chime, 0.13); play('chime3', { level: LEVELS.chime * 0.8, semis: 5, at: 0.5 }); }
@@ -608,7 +620,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     if (roomId && roomId !== music.roomId) { music.roomId = roomId; enterTrack(roomId); }
     if (music.duckTo !== standing) setDuck(standing, standing < 1 ? 'track' : null);   // update() only runs while the run is live: only a loaded track ducks it
     colour(roomId, clamp((run.effects ? run.effects.length : 0) / 3, 0, 1), run.timeScale == null ? 1 : run.timeScale);
-    if (k.airborne && !edge.airborne) rampRise(); else if (!k.airborne && edge.airborne) rampLand();
+    if (k.airborne && !edge.airborne) rampRise();
     edge.airborne = !!k.airborne;
     if (k.boostSec > 0 && edge.boost <= 0) boostWhoosh();
     edge.boost = k.boostSec;
@@ -636,6 +648,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     log('levels applied: music ' + levels.music.toFixed(2) + ' sfx ' + levels.sfx.toFixed(2));
   }
   function duck(on, why) {
+    if (on && why !== 'track') for (const v of voices) if (v.contact) { try { v.src.stop(); } catch (e) { /* already settled */ } }
     if (why === 'track') { standing = on ? TRACK_DUCK : 1; setDuck(standing, on ? 'track' : null); return; }
     if (why === 'brake') { if (on) play('pop', { level: 0.3, semis: -7 }); else play('pop2', { level: 0.24, semis: 3 }); }
     if (on) setDuck(why === 'end' ? 0.45 : 0.1, why || 'host'); else setDuck(1, null);
@@ -691,7 +704,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     master = null;
   }
 
-  return { sfx, ui, menu: menuMusic, setLevels, setRoute, update, duck, toggleMute, dispose, _voices: voices, _music: music, _levels: levels, _tracks: tracks };
+  return { sfx, kartBeat, ui, menu: menuMusic, setLevels, setRoute, update, duck, toggleMute, dispose, _voices: voices, _music: music, _levels: levels, _tracks: tracks };
 }
 
 // self-check: node --check is the bar; the pure parts (pitchSemis, chimeFor, pickVoiceToDrop)

@@ -157,16 +157,44 @@ public class BackRoomHypnoBridgeTests
     public void CardsAndRoulette_NothingElse(string station, string op)
         => Assert.False(BackRoomApi.TryResolve(station, op, out _, out _));
 
+    /// <summary>
+    /// Owner, 2026-09-18: the casino ignores the panel's feature toggles. The four hypno gates are always on, the
+    /// same object the web shim sends, so a player who never switched Flash / Subliminal / Brain Drain on still gets
+    /// the whole show. Only the room's own tunnel and melt switches still come off the settings.
+    /// </summary>
     [Fact]
-    public void Gates_AreTheFourTogglesAndTheRoomSwitches_AllFalseWithNoSettings()
+    public void Gates_IgnoreThePanelToggles_OnlyTheRoomSwitchesFollowSettings()
     {
-        var s = new AppSettings { FlashEnabled = true, SubliminalEnabled = false, SpiralEnabled = true, BrainDrainEnabled = false, BackRoomMelt = false };
-        Assert.Equal("""{"flash":true,"subliminal":false,"spiral":true,"brainDrain":false,"tunnel":true,"melt":false}""",
-            JObject.FromObject(BackRoomHostService.GatesWire(s)).ToString(Newtonsoft.Json.Formatting.None));
-        Assert.All(JObject.FromObject(BackRoomHostService.GatesWire(null)).Properties(), p => Assert.False((bool)p.Value));
-        foreach (var name in new[] { "FlashEnabled", "SubliminalEnabled", "SpiralEnabled", "BrainDrainEnabled", "MotionLevel", "BackRoomFxIntensity",
-                     "BackRoomTunnel", "BackRoomMelt" })
+        var allOff = new AppSettings { FlashEnabled = false, SubliminalEnabled = false, SpiralEnabled = false, BrainDrainEnabled = false,
+            BackRoomTunnel = true, BackRoomMelt = false };
+        Assert.Equal("""{"flash":true,"subliminal":true,"spiral":true,"brainDrain":true,"tunnel":true,"melt":false}""",
+            JObject.FromObject(BackRoomHostService.GatesWire(allOff)).ToString(Newtonsoft.Json.Formatting.None));
+        var roomOn = new AppSettings { FlashEnabled = false, SubliminalEnabled = false, BrainDrainEnabled = false, BackRoomTunnel = false, BackRoomMelt = true };
+        Assert.Equal("""{"flash":true,"subliminal":true,"spiral":true,"brainDrain":true,"tunnel":false,"melt":true}""",
+            JObject.FromObject(BackRoomHostService.GatesWire(roomOn)).ToString(Newtonsoft.Json.Formatting.None));
+        // No settings at all: the four are still on; the room switches read as off.
+        Assert.All(JObject.FromObject(BackRoomHostService.GatesWire(null)).Properties(),
+            p => Assert.Equal(p.Name is not ("tunnel" or "melt"), (bool)p.Value));
+        foreach (var name in new[] { "MotionLevel", "BackRoomFxIntensity", "BackRoomTunnel", "BackRoomMelt" })
             Assert.Contains(name, BackRoomHostService.SettingsFrameProperties);
+        // The panel toggles no longer push a settings frame: the gates do not follow them.
+        foreach (var name in new[] { "FlashEnabled", "SubliminalEnabled", "SpiralEnabled", "BrainDrainEnabled" })
+            Assert.DoesNotContain(name, BackRoomHostService.SettingsFrameProperties);
+    }
+
+    /// <summary>
+    /// The room's hypno dressing is not the panel's fullscreen Spiral Overlay. It used to carry
+    /// AppSettings.SpiralEnabled, which RandomizeAndStart coin-flips, so "jump right in" decided at
+    /// random whether the Daily Daze wheel had a Loom spiral in its hub or a brass star. It renders on
+    /// the web playtest because a page with no settings frame reads every gate as true.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SpiralDressing_DoesNotFollowTheFullscreenOverlayToggle(bool overlay)
+    {
+        var gates = JObject.FromObject(BackRoomHostService.GatesWire(new AppSettings { SpiralEnabled = overlay }));
+        Assert.True((bool)gates["spiral"]!);
     }
 
     [Fact]

@@ -50,7 +50,7 @@ namespace ConditioningControlPanel.Services.Deeper
         {
             LibraryFolder = Path.Combine(App.UserDataPath, "enhancements");
             try { Directory.CreateDirectory(LibraryFolder); }
-            catch (Exception ex) { App.Logger?.Warning(ex, "EnhancementLibrary: could not create library folder {Path}", LibraryFolder); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "EnhancementLibrary: could not create library folder"); }
             SeedBundledDemos();
             StartWatching();
         }
@@ -90,7 +90,7 @@ namespace ConditioningControlPanel.Services.Deeper
                     App.Settings?.Save();
                 }
                 if (copied > 0)
-                    App.Logger?.Information("EnhancementLibrary: seeded {Count} demo enhancement(s) into {Path}", copied, LibraryFolder);
+                    App.Logger?.Information("EnhancementLibrary: seeded {Count} demo enhancement(s)", copied);
             }
             catch (Exception ex)
             {
@@ -119,7 +119,7 @@ namespace ConditioningControlPanel.Services.Deeper
                 _watcher.Changed += OnFsEvent;
                 _watcher.Renamed += OnFsRenamed;
                 _watcher.Error += OnFsError;
-                App.Logger?.Information("EnhancementLibrary: watching {Path}", LibraryFolder);
+                App.Logger?.Information("EnhancementLibrary: watching the library folder");
             }
             catch (Exception ex)
             {
@@ -347,7 +347,7 @@ namespace ConditioningControlPanel.Services.Deeper
                     if (n > 999) return null; // sanity cap
                 }
                 Save(enhancement, target);
-                App.Logger?.Information("EnhancementLibrary: promoted to library: {Path} (from {Tag})", target, sourceTag);
+                App.Logger?.Information("EnhancementLibrary: promoted to library (from {Tag})", sourceTag);
                 return target;
             }
             catch (Exception ex)
@@ -355,6 +355,38 @@ namespace ConditioningControlPanel.Services.Deeper
                 App.Logger?.Warning(ex, "EnhancementLibrary: PromoteToLibrary failed (tag={Tag})", sourceTag);
                 return null;
             }
+        }
+
+        /// <summary>
+        /// The library path an import of <paramref name="sourcePath"/> would duplicate:
+        /// the file itself when it already lives in the library folder, or a library
+        /// file with identical (formatting-insensitive) content. Null when it is new.
+        /// </summary>
+        public string? FindDuplicateOf(string sourcePath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath)) return null;
+                if (EnhancementImportRules.IsInsideFolder(sourcePath, LibraryFolder))
+                    return Path.GetFullPath(sourcePath);
+                if (!Directory.Exists(LibraryFolder)) return null;
+
+                var wanted = EnhancementImportRules.NormalizedContentHash(File.ReadAllText(sourcePath));
+                foreach (var candidate in Directory.GetFiles(LibraryFolder, "*" + FileSuffix, SearchOption.TopDirectoryOnly))
+                {
+                    try
+                    {
+                        if (EnhancementImportRules.NormalizedContentHash(File.ReadAllText(candidate)) == wanted)
+                            return candidate;
+                    }
+                    catch (IOException) { } // swallow: an unreadable neighbour is not a duplicate
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("EnhancementLibrary.FindDuplicateOf error: {Error}", ex.Message);
+            }
+            return null;
         }
 
         public List<EnhancementLibraryEntry> ScanLibrary()
@@ -461,7 +493,7 @@ namespace ConditioningControlPanel.Services.Deeper
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("EnhancementLibrary: skipping unreadable file {Path}: {Error}", path, ex.Message);
+                App.Logger?.Debug("EnhancementLibrary: skipping unreadable file: {Error}", ex.Message);
                 return null;
             }
         }

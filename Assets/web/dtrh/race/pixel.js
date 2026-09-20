@@ -29,14 +29,15 @@
  * `stats` is last frame's draw calls + triangles summed over the passes plus
  * the frame time (avg + p95 ms over the last FRAME_WIN frames); with `log`
  * given, a line goes out every PERF_LOG_SEC seconds. THE GOVERNOR: on a
- * high-DPI screen an average frame above SLOW_MS drops the canvas to one
- * device pixel per CSS pixel, and one under FAST_MS restores the native ratio.
+ * high-DPI screen an average frame above 24 ms drops the canvas to one
+ * device pixel per CSS pixel; eight healthy seconds at 18 ms or better allow
+ * one rung of recovery, including ordinary 60 Hz screens.
  * On a COARSE POINTER (2026-09-10, the owner's phone: "fps drop a lot" under
  * effects and bubbles) the ladder has one more rung, TOUCH_DPR_FLOOR, and it is
  * read every GOV_TOUCH_SEC instead of every PERF_LOG_SEC: a phone's fill rate is
  * the frame, and a hold that drops it needs an answer in two seconds, not five.
  * It climbs back the same way, one rung at a time, when the average frame is
- * under FAST_MS again.
+ * healthy for the recovery hold again.
  * LIGHTER (2026-09-10, the owner: it lags "unless i record my phone"): with
  * `lite` the lid is LITE_DPR from the first frame and the governor never lifts
  * it. A recording is a load the page cannot see, so the player asks for the
@@ -45,6 +46,7 @@
 
 import * as THREE from 'three';
 import { Q } from '../shared/quality.js';
+import { createResolutionGovernor } from './resolutionGovernor.js';
 
 export const PIXEL_STEPS = [0, 2, 3, 4, 6];
 /** The smallest block there is, `off` aside. This is the default a mouse gets. */
@@ -62,7 +64,7 @@ const MAP_KEYS = ['map', 'emissiveMap', 'alphaMap', 'normalMap', 'roughnessMap',
 const FAR_FADE = [42, 80];     // metres: the world pass fades to the fog colour across this band
 const PERF_LOG_SEC = 5;
 const FRAME_WIN = 300;         // frames kept for the avg / p95
-const SLOW_MS = 24, FAST_MS = 13;   // governor thresholds on the avg frame (about 42 and 77 fps)
+// Thresholds and recovery hysteresis live in resolutionGovernor.js.
 /** The coarse pointer's lower rung and its faster read (see THE GOVERNOR in the header). */
 export const TOUCH_DPR_FLOOR = 0.8, GOV_TOUCH_SEC = 2;
 /** The lighter switch's fixed lid (see LIGHTER in the header). */
@@ -144,6 +146,7 @@ export function createPixelizer({ renderer, canvas, block = pixelDefault(), log 
   let w = 1, h = 1;
   let dprCap = lite ? LITE_DPR : Infinity;   // the governor's lid on the device pixel ratio (1 while slow, the touch floor while slower, LITE_DPR for good under lighter)
   const touch = coarsePointer();
+  const governor = createResolutionGovernor({ touch, lite, floor: TOUCH_DPR_FLOOR, liteCap: LITE_DPR });
   const screenDpr = () => Math.min(window.devicePixelRatio || 1, Q.maxDpr, 1.5);
   const nativeDpr = () => Math.min(screenDpr(), dprCap);
   const caps = renderer.capabilities || {};
@@ -214,14 +217,13 @@ export function createPixelizer({ renderer, canvas, block = pixelDefault(), log 
     const view = sorted.subarray(0, gapN); view.sort();
     return { avg: sum / gapN, p95: view[Math.min(gapN - 1, Math.floor(gapN * 0.95))] };
   }
-  function govern(avg) {
-    if (lite) return;              // the lid is the player's, not the governor's
-    if (gapN < 60) return;
-    const native = screenDpr();
-    if (avg > SLOW_MS && dprCap > 1 && native > 1) { dprCap = 1; apply(); if (log) log(`[race-perf] governor: dpr 1 (avg frame ${avg.toFixed(1)} ms)`); }
-    else if (avg > SLOW_MS && touch && dprCap > TOUCH_DPR_FLOOR) { dprCap = TOUCH_DPR_FLOOR; apply(); if (log) log(`[race-perf] governor: dpr ${TOUCH_DPR_FLOOR} (avg frame ${avg.toFixed(1)} ms)`); }
-    else if (avg < FAST_MS && dprCap < 1) { dprCap = 1; apply(); if (log) log(`[race-perf] governor: dpr 1, climbing (avg frame ${avg.toFixed(1)} ms)`); }
-    else if (avg < FAST_MS && dprCap < native) { dprCap = Infinity; apply(); if (log) log(`[race-perf] governor: dpr native (avg frame ${avg.toFixed(1)} ms)`); }
+  function govern(avg, now) {
+    const next = governor.sample(avg, now, gapN, screenDpr());
+    if (next === dprCap) return;
+    dprCap = next; apply();
+    // Judge this rung on fresh frames, not the slow frames from the old size.
+    gapN = gapI = 0;
+    if (log) log(`[race-perf] governor: dpr ${nativeDpr()} (avg frame ${avg.toFixed(1)} ms)`);
   }
   let govLast = 0;
   function closeFrame() {
@@ -234,13 +236,13 @@ export function createPixelizer({ renderer, canvas, block = pixelDefault(), log 
     if (!perfLast) perfLast = now;
     if (touch && now - govLast >= GOV_TOUCH_SEC && now - perfLast < PERF_LOG_SEC) {
       govLast = now;                       // the phone's faster read, between the log lines
-      govern(frameStats().avg);
+      govern(frameStats().avg, now);
     }
     if (now - perfLast < PERF_LOG_SEC) return;
     perfLast = govLast = now;
     const { avg, p95 } = frameStats();
     stats.frameMs = avg; stats.frameP95 = p95;
-    govern(avg);
+    govern(avg, now);
     if (!log) return;
     try { log(`[race-perf] t+${Math.round(now)}s calls ${stats.calls} tris ${stats.triangles} frame ${avg.toFixed(1)}ms p95 ${p95.toFixed(1)} dpr ${renderer.getPixelRatio().toFixed(2)} ${label()}${rt ? ` rt ${rtW}x${rtH}` : ''}`); } catch (e) { /* host gone */ }
   }

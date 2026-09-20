@@ -15,17 +15,24 @@
 
 import * as T from 'three';
 import { createRenderBudget } from './render-budget.js';
+import { quality } from '../shared/quality.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { buildRoom } from './fixtures.js';
 import { createScreens } from './screens.js';
+import { createSlotEmiIdle } from './slot-emi-idle.js';
 import { createEmiInteraction, TAP_SLOP } from './emi-interaction.js';
 import { createCasinoDecor } from './casino-decor.js';
+import { createMemorabilia } from './memorabilia.js';
+import { createMemorabiliaViewer } from './memorabilia-viewer.js';
+import { createWelcomePlacards } from './welcome-placards.js';
 import { cardCounts } from '../stations/cards/layout-3d.js';
+import { slotSeat } from './slot-seat.js';
 import { seatPose, easeSeat, shortAngle } from './seat-camera.js';
 import { createTouchControl } from './touch-control.js';
 import { createCustomization } from './customization.js';
 import { isBackKey, isBackwardMove, isStationHit } from './leave-intent.js';
+import { stageRect, ndcIn, viewportPageRect } from './stage-rect.js';
 import { START, WALK_SPEED, RUN_SPEED, step, worldDelta, nearestStation, facing } from './walk.js';
 
 const KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
@@ -33,7 +40,9 @@ const KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'A
 /**
  * @param {Object} o
  *   mount, stations, base, faces, ads, label(row,key), media(), still (bool),
- *   onNearest(row|null), onVisit(row), onProgress(0..1), log(msg)
+ *   onNearest(row|null), onVisit(row), onProgress(0..1), log(msg),
+ *   arcade (bool: the unlocked cabinet is a door), onArcade(game),
+ *   onCard(page): a tap on one of the counter's placards (welcome-placards.js) asks for the first-visit card at that page
  */
 export async function createScene(o) {
   const say = typeof o.log === 'function' ? o.log : () => {};
@@ -41,14 +50,25 @@ export async function createScene(o) {
   canvas.className = 'br-canvas';
   canvas.setAttribute('aria-label', 'The Back Room');
   o.mount.appendChild(canvas);
-  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); say('room webgl context lost'); });
+  // A lost context is the one way this canvas goes still while the HUD around it keeps working. preventDefault
+  // asks the browser for a restore; three.js re-initialises on the restored event, and the loop is run() again
+  // because the browser hands frames to nobody while a context is gone.
+  let contextLost = false;
+  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); contextLost = true; say('room webgl context lost'); });
+  canvas.addEventListener('webglcontextrestored', () => { contextLost = false; say('room webgl context restored'); run(); });
 
   const budget = createRenderBudget(navigator, window.devicePixelRatio || 1);
   const renderer = new T.WebGLRenderer({ canvas, antialias: true, powerPreference: 'default' });
   let dpr = budget.dpr(o.mount.clientWidth, o.mount.clientHeight);
   renderer.setPixelRatio(dpr);
-  renderer.toneMapping = T.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  /* TONE MAPPING. ACES Filmic was taking half the chroma off the four hues this room is built out of - measured
+     through three's own RRTAndODTFit: lavender #b99cff and mint #5fffd0 came out at 0.48 and 0.51 saturation,
+     gold #ffcf6b at 0.64. That is the "not quite vibrant" the owner read (2026-09-16). Neutral holds them at
+     0.88-0.92 for the same perceived lightness. The exposure goes UP with the swap and that is not a brightness
+     grab: ACES prescales internally by exposure/0.6, so 1.05 was really 1.75. */
+  renderer.outputColorSpace = T.SRGBColorSpace;   // the default, said out loud, so a vendor bump cannot wash the room out
+  renderer.toneMapping = T.NeutralToneMapping;
+  renderer.toneMappingExposure = 1.7;
   const scene = new T.Scene();
   scene.background = new T.Color('#1a1125');
   scene.fog = new T.FogExp2('#201229', 0.023);
@@ -76,9 +96,30 @@ export async function createScene(o) {
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
   const t0 = performance.now();
-  const room = await buildRoom({ scene, loader, stations: o.stations, base: o.base, faces: o.faces, label: o.label, onProgress: o.onProgress });
+  /* THE WIN ECHO's motion (CONTRACT 10.22). `still` and `reduced` are two different questions and the
+   * plan answers them differently: Calm takes the room's decoration and keeps the news, reduced motion
+   * takes the state. `lite` is the same board test the render budget already made. Read live, never
+   * captured: a player turning Calm on mid-echo is answered on the next frame. */
+  const motion = () => {
+    const m = o.cameraMotion?.() || {};
+    return { still, off: !!m.off, lite: quality.performance,
+      reduced: !!m.reduced || matchMedia('(prefers-reduced-motion: reduce)').matches };
+  };
+  const room = await buildRoom({ scene, loader, stations: o.stations, base: o.base, faces: o.faces, label: o.label, onProgress: o.onProgress, motion, arcade: !!o.arcade });
   const decor = createCasinoDecor({ scene });
+  // The eight polaroids advertise vault cards, so their words are lexicon keys like the rest of
+  // the room's chrome (LAW VII). The wall cannot reach the room's lookup on its own.
+  const memorabilia = createMemorabilia({ scene, lex: o.lex });
+  // The first-visit card's two pages, framed on the counter's apron; a tap reopens the card (onCard).
+  const placards = createWelcomePlacards({ scene, lex: o.lex });
+  const documents = createMemorabiliaViewer({ backLabel: o.lex('br_back', 'Back'),
+    onOpen() { held = { pos: pos.slice(), yaw, pitch }; resetInput(); interaction.dismiss(); stop(); setNearest(null); },
+    onClose() { held = null; resetInput(); if (!halted) run(); }
+  });
   let customization, catalogueView=null;
+  /* The viewport the last frame rendered the room into, kept for the picks: null while the room owns the
+   * whole canvas, which is every frame but the ones with the Room Service panel up. */
+  let pass = null;
   customization = await createCustomization({scene,loader,room,onPreview:view=>{catalogueView=view;},base:o.base,mount:o.mount,lex:o.lex,canvas,camera,isActive:()=>!pendingVisit&&!transition&&!seated&&!held&&!halted&&!suspended&&!overview&&!customization?.opened});
   const screens = await createScreens({ meshes: [...room.screens,...customization.screens], ads: o.ads, media: o.media, log: say });
   // Subtle cartridge refraction otherwise renders the entire room a second time.
@@ -95,6 +136,16 @@ export async function createScene(o) {
   let raf = 0, last = performance.now(), lastTick = last, nearest = null, drag = null, tap = null, standTap = null, leaveAsked = false;
   let pendingVisit=false, transition=null, viewOffset=0, viewOffsetX=0, arrival=Promise.resolve(true), cardHands=1, counts={d:2,0:2}, composition='';
   const views = new Set();
+  let slotShape=null;
+  function setSlotStretch(factor,xFactor=slotShape?.factorX||1){
+    if(!slotShape)return;
+    slotShape.factor=factor;slotShape.factorX=xFactor;slotShape.holder.scale.y=slotShape.baseY*factor;slotShape.holder.scale.x=slotShape.baseX*xFactor;
+    slotShape.holder.userData.slotStretch=factor;slotShape.holder.userData.slotStretchX=xFactor;
+    if(slotShape.emi){slotShape.emi.scale.y=slotShape.emiY/factor;slotShape.emi.scale.x=slotShape.emiX/xFactor;}
+    const handle=slotShape.holder.getObjectByName('chess_handle_socket');
+    if(handle)handle.scale.set(1/xFactor,1/factor,1);
+    slotShape.holder.updateMatrixWorld(true);
+  }
   const ray = new T.Raycaster(), pointer = new T.Vector2();
   const saved = { pos: null, yaw: 0, pitch: 0 };
   const keys = new Set();
@@ -103,10 +154,11 @@ export async function createScene(o) {
   /* LEAVING BY HAND (leave-intent.js). Seated at a station, a tap that lands on the room instead of the
    * station and a step backwards both stand you up the way the Back chip does: o.onLeave runs the room's
    * own Back path, so the station settles first and the camera walks back to where you stood (Law VI). */
-  const canLeave = () => !!seated && !held && !halted && !suspended && !transition && !pendingVisit && !overview && !leaveAsked && !customization.opened;
+  const canLeave = () => o.canLeave?.() !== false && !!seated && !held && !halted && !suspended && !transition && !pendingVisit && !overview && !leaveAsked && !customization.opened;
   const touch = createTouchControl({ mount: o.mount, onReset: () => vel.set(0, 0) });
   const frames = [];
-  const stationRows = [...o.stations, customization.row];
+  const racingRow = { id: 'race', key: 'race', name: 'Racing Thoughts', labelKey: 'br_station_race', state: 'live', approach: [4.1, 1.65, -5.7], look: [4.1, 1.2, -7.15] };
+  const stationRows = [...o.stations, customization.row, racingRow];
   const previewTarget = new T.Vector3();
   const roofFloor=room.ceiling?new T.Box3().setFromObject(room.ceiling).min.y:Infinity;
   const roofMaterials=[];let roofAlpha=1;
@@ -122,15 +174,28 @@ export async function createScene(o) {
     room.ceiling.visible=alpha>.001;
   }
 
-  const interaction = createEmiInteraction({ canvas, camera, scene, emis: room.emis, mount: o.mount, label: o.lex,
-    isActive: () => !pendingVisit && !transition && !seated && !held && !halted && !suspended && !overview && !customization.opened,
+  const emiClicks = new Map();
+  const slotEmis = o.stations.filter(row => row.id === 'slot').map((row, index) => createSlotEmiIdle({
+    fixture: room.holders.get(row.key), phase: index * 2.7, onClick: kind => emiClicks.get(row.key)?.(kind)
+  })).filter(Boolean);
+  const interaction = createEmiInteraction({ canvas, camera, scene, emis: [...room.emis, ...slotEmis], mount: o.mount, label: o.lex,
+    isActive: () => !pendingVisit && !transition && !held && !halted && !suspended && !overview && !customization.opened,
     // Law VI: a still room keeps every NPC at rest, so a click gets the bark without the gesture.
     canGesture: () => !still });
 
   function topDown() { camera.position.set(0, Math.max(21, 19 / camera.aspect), 0.01); camera.lookAt(0, 0, 0); }
+  /* ONE MEASUREMENT, APPLIED ONCE. `sized` is the measurement this function last put into the renderer.
+   * One turn of a phone raises a burst of events (resize, orientationchange and visualViewport's own
+   * resize all fire for the same rotation) and frame() measures again on every frame, so without the key
+   * a seated camera would be re-posed from under a running transition sixty times a second. Keep the key
+   * on the measurement rather than on a flag: it is what makes calling this often free and safe. */
+  let sized = '';
   function resize() {
     const w = Math.max(1, o.mount.clientWidth || window.innerWidth), h = Math.max(1, o.mount.clientHeight || window.innerHeight);
-    dpr = budget.dpr(w, h); renderer.setPixelRatio(dpr);
+    const ratio = budget.dpr(w, h), key = w + 'x' + h + '@' + ratio;
+    if (key === sized) return;
+    sized = key;
+    dpr = ratio; renderer.setPixelRatio(dpr);
     renderer.setSize(w, h, false);
     for (const hub of room.hubs) hub.setDpr(dpr);
     camera.aspect = w / h;
@@ -139,20 +204,38 @@ export async function createScene(o) {
     if (overview) topDown();
     else if (seated?.row) {
       const target=gamePose(seated.row);
-      if(transition)transition.to=target;
-      else {pos.splice(0,3,...target.pos);yaw=target.yaw;pitch=target.pitch;viewOffset=target.offset;viewOffsetX=target.offsetX;}
+      if(transition)transition.to={fov:66,stretch:1,stretchX:1,...target};
+      else {if(target.fov){camera.fov=target.fov;camera.updateProjectionMatrix();setSlotStretch(target.stretch||1,target.stretchX||1);}pos.splice(0,3,...target.pos);yaw=target.yaw;pitch=target.pitch;viewOffset=target.offset;viewOffsetX=target.offsetX;}
     }
   }
-  window.addEventListener('resize', resize);
+  /* ROTATION ON A PHONE. iOS Safari raises `resize` while the layout is still the PRE-rotation one, so a
+   * single read leaves the drawing buffer landscape-sized after the box on screen has gone portrait. The
+   * room then paints into a sliver of its own buffer and the rest of the canvas stays dark (the owner's
+   * split screenshot, 2026-09-17), and every pointer normalised through the canvas rect lands somewhere
+   * else, which is the same rotation read as dead input. The cure is to measure AGAIN once the layout has
+   * settled: visualViewport is the viewport that actually moved, orientationchange covers where it is
+   * missing, and the deferred read catches the browsers that report the old box at both. frame() measures
+   * every frame too, so a drawing room heals itself within a frame; these listeners are what wake a room
+   * that has stopped drawing, and resize() applies a measurement once so none of them can double-fire. */
+  let settling = 0;
+  function settle() {
+    resize(); run();
+    if (settling) return;
+    settling = setTimeout(() => { settling = 0; resize(); run(); }, 300);
+  }
+  window.addEventListener('resize', settle);
+  window.addEventListener('orientationchange', settle);
+  window.visualViewport?.addEventListener('resize', settle);
 
   /** `keepStick`: a seat keeps the touch stick alive and centred by the player's own finger, so a push back still reads. */
-  function resetInput(keepStick) { keys.clear(); vel.set(0, 0); drag = tap = null; if (!keepStick) { standTap = null; touch.reset(); } touch.setEnabled(canWalk() || canLeave()); }
+  function resetInput(keepStick) { keys.clear(); vel.set(0, 0); drag = tap = null; if (!keepStick) { standTap = null; touch.reset(); } touch.setEnabled(canWalk() || (canLeave() && seated?.row.id !== 'slot')); }
   function leaveSeat() {
     if (!canLeave()) return;
     leaveAsked = true; resetInput();
     try { if (o.onLeave) o.onLeave(seated.row); else unseat(); } catch (e) { say('onLeave threw: ' + ((e && e.message) || e)); }
   }
   window.addEventListener('keydown', (e) => {
+    if (e.target?.closest?.('input,textarea,select,[contenteditable]:not([contenteditable="false"])')) { resetInput(); return; }
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     // A seat has no walk: S or the down arrow there is a step back out of the station, never a step in the room.
     if (isBackKey(e.code) && !e.repeat && canLeave()) { e.preventDefault(); leaveSeat(); return; }
@@ -163,6 +246,7 @@ export async function createScene(o) {
     if (e.code === 'KeyM') { e.preventDefault(); setOverview(!overview); }
   });
   window.addEventListener('keyup', (e) => keys.delete(e.code));
+  document.addEventListener('focusin', e => { if(e.target?.closest?.('input,textarea,select,[contenteditable]')) resetInput(); });
   window.addEventListener('blur', () => resetInput());   // an Event is not a keepStick
   // A finger rolls a little between down and up (a mouse hardly moves): under TAP_SLOP css px (emi-interaction.js) it is a tap, over it a look.
   canvas.addEventListener('pointerdown', (e) => {
@@ -177,16 +261,30 @@ export async function createScene(o) {
     if (!drag || drag.id !== e.pointerId || overview || seated || held || customization.opened) return;
     drag.moved ||= Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)>TAP_SLOP;
     if(!drag.moved)return;
-    yaw -= (e.clientX - drag.x) * 0.003;
-    pitch = T.MathUtils.clamp(pitch - (e.clientY - drag.y) * 0.003, -1.12, 1.2);
+    // Invert camera (o.invertLook, the room's Options switch): the drag moves the world instead of the camera, both axes.
+    const dir = o.invertLook?.() ? -1 : 1;
+    yaw -= (e.clientX - drag.x) * 0.003 * dir;
+    pitch = T.MathUtils.clamp(pitch - (e.clientY - drag.y) * 0.003 * dir, -1.12, 1.2);
     drag.x = e.clientX; drag.y = e.clientY;
   });
   canvas.addEventListener('pointerup',e=>{
     // The tap keeps its own record: Safari can drop the capture (lostpointercapture) before the up clears `drag`.
     const start=tap;tap=null;
+    if(e.__brStatueTouch)return;
     if(!canWalk()||start?.id!==e.pointerId||start.moved||Math.hypot(e.clientX-start.startX,e.clientY-start.startY)>TAP_SLOP)return;
+    // The closest visible surface prevents reading a document through a cabinet or wall.
+    const surface = pickAt(e, scene.children).find(hit => {
+      for (let node = hit.object; node; node = node.parent) if (!node.visible) return false;
+      return hit.object.isMesh && hit.object.material?.depthWrite !== false;
+    });
+    if (surface?.object.userData.document) { drag = null; documents.open(surface.object.userData.document); return; }
+    if (surface?.object.userData.welcomePage != null) { drag = null; try { o.onCard?.(surface.object.userData.welcomePage); } catch (err) { say('onCard threw: ' + ((err && err.message) || err)); } return; }
     // A mascot stands inside its fixture, often behind its glass: a tap that reaches an NPC is the bark (emi-interaction), never a visit.
     if(interaction.npcAt(e.clientX,e.clientY))return;
+    // The arcade cabinet before the stations: it stands beside the counter, and the counter's screen box (below, with its
+    // finger's margin) would otherwise claim a tap that the exact ray already put on the cabinet.
+    const arcade=arcadeAt(e);
+    if(arcade){drag=null;try{o.onArcade?.(arcade);}catch(err){say('onArcade threw: '+((err&&err.message)||err));}return;}
     const row=stationAt(e);
     if(row){drag=null;visit(row);}
   });
@@ -194,10 +292,11 @@ export async function createScene(o) {
   /* THE WAY OUT BY TAP. Seated, the station's own DOM keeps its buttons (room.css: the seat sheet is
    * pointer-events: none but its controls are not), so anything that reaches the canvas is either the
    * station's own meshes - ignored here, the station handles them - or the room, and the room stands you up. */
-  canvas.addEventListener('pointerdown', (e) => { if (e.button === 0 && canLeave()) standTap = { id: e.pointerId, x: e.clientX, y: e.clientY }; });
+  const exitEdge = e => { const r=canvas.getBoundingClientRect(); return seated?.row.id !== 'roulette' || e.clientY >= r.bottom - Math.min(60,r.height*.08); };
+  canvas.addEventListener('pointerdown', (e) => { if (e.button === 0 && canLeave() && exitEdge(e)) standTap = { id: e.pointerId, x: e.clientX, y: e.clientY }; });
   canvas.addEventListener('pointerup', (e) => {
     const start = standTap; standTap = null;
-    if (!start || start.id !== e.pointerId || !canLeave()) return;
+    if (!start || start.id !== e.pointerId || !canLeave() || !exitEdge(e)) return;
     // The same slop as every other tap in the room: a drag on the wheel rim or across the mat is not a click.
     if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > TAP_SLOP) return;
     if ([...views].some((view) => view.coversRoom)) return;   // no room on screen to be tapped
@@ -212,8 +311,8 @@ export async function createScene(o) {
    * world box projected, plus a finger's margin) holds the point, the nearest to the camera when boxes overlap.
    * The vending machine is the Room Service row (customization.js). Boxes are cached: fixtures do not move. */
   const TAP_MARGIN = 24, bounds = new Map(), corner = new T.Vector3();
-  function fixtureOf(row) { return row.key === 'customization' ? scene.getObjectByName('customization_vending') : room.holders.get(row.key); }
-  function rowOf(node) { for (let n = node; n; n = n.parent) { const row = stationRows.find(r => fixtureOf(r) === n); if (row) return row; } return null; }
+  function fixtureOf(row) { if (row.key === 'race') return room.prizes.cabinet; return row.key === 'customization' ? scene.getObjectByName('customization_vending') : room.holders.get(row.key); }
+  function rowOf(node) { for (let n = node; n; n = n.parent) if (n.name === 'racing_cabinet' || n === room.prizes.cabinet) return racingRow; for (let n = node; n; n = n.parent) { const row = stationRows.find(r => fixtureOf(r) === n); if (row) return row; } return null; }
   function worldBox(node) {
     let box = bounds.get(node);
     if (box) return box;
@@ -259,6 +358,14 @@ export async function createScene(o) {
     return best;
   }
 
+  /* THE ARCADE CABINET (prize-display.js). The unlocked cabinet is a small prop, not a fixture: the exact ray only, no
+   * screen-box guess, and only while it is on the floor (demo owned) and tagged as a door (a hosted room). */
+  function arcadeAt(e) {
+    const cabinet = room.prizes?.cabinet;
+    if (!cabinet || !cabinet.visible || !cabinet.userData.arcade) return null;
+    return pickAt(e, [cabinet]).length ? cabinet.userData.arcade : null;
+  }
+
   function setNearest(row) {
     if (row === nearest) return;
     nearest = row;
@@ -296,12 +403,13 @@ export async function createScene(o) {
     if (held || halted || suspended) return;
     raf = requestAnimationFrame(frame);
     const raw = now - last;
-    touch.setEnabled(canWalk() || canLeave());
+    touch.setEnabled(canWalk() || (canLeave() && seated?.row.id !== 'slot'));
     const active = !!transition || !!seated || keys.size > 0 || drag || touch.value.x || touch.value.z || customization.opened;
-    const gap = 1000 / (active && !budget.mobile ? 60 : 30);
+    const gap = 1000 / (active && !budget.mobile && !quality.performance ? 60 : 30);
     if (raw < gap - 1) return;
     last = raw < gap ? now : now - (raw % gap);
     if (document.hidden) return;
+    quality.sample(now - lastTick, gap, !seated && !transition);
     if (budget.sample(now - lastTick, gap)) resize();
     const dt = Math.min(0.1, Math.max(0, (now - lastTick) / 1000));
     const frameElapsed = now - lastTick;
@@ -330,6 +438,7 @@ export async function createScene(o) {
       pos.splice(0,3,...tr.from.pos.map((v,i)=>v+(tr.to.pos[i]-v)*k));
       yaw=tr.from.yaw+(shortAngle(tr.from.yaw,tr.to.yaw)-tr.from.yaw)*k;
       pitch=tr.from.pitch+(tr.to.pitch-tr.from.pitch)*k; viewOffset=tr.from.offset+(tr.to.offset-tr.from.offset)*k;viewOffsetX=tr.from.offsetX+(tr.to.offsetX-tr.from.offsetX)*k;
+      camera.fov=tr.from.fov+(tr.to.fov-tr.from.fov)*k;setSlotStretch(tr.from.stretch+(tr.to.stretch-tr.from.stretch)*k,tr.from.stretchX+(tr.to.stretchX-tr.from.stretchX)*k);camera.updateProjectionMatrix();
       if(t===1){transition=null;tr.resolve(true);resetInput();}
     }
     if (!overview) {
@@ -343,18 +452,25 @@ export async function createScene(o) {
       walkPhase += vel.length() * dt * 3.1;
       camera.position.set(pos[0], pos[1] + Math.sin(walkPhase * 2) * 0.004 * sway, pos[2]);
       camera.rotation.set(pitch + Math.sin(walkPhase * 2) * 0.0008 * sway, yaw, Math.sin(walkPhase) * 0.0014 * sway, 'YXZ');
-      setNearest(customization.opened || seated || transition ?null:nearestStation(pos,stationRows));
+      setNearest(customization.opened || seated || transition ?null:nearestStation(pos,stationRows.filter(row => row.key !== 'race' || room.prizes.cabinet.visible)));
     }
     if (!still) ambient += dt;
-    room.update(dt, ambient, still);
+    camera.updateMatrixWorld();
+    room.update(dt, ambient, still, camera);
     for (const view of views) view.update?.(dt, still);
     decor.update(dt, still);
     customization.update(dt, still);
+    /* The stage measured on the frame that uses it: the drawing buffer, the camera aspect and the viewport
+     * below all come off the same numbers, and a phone that has just been turned reports the new box here
+     * a frame or two before any event carries it (settle(), above). resize() applies a measurement once,
+     * so this is two integer reads when nothing has moved. */
+    resize();
     const fullWidth=Math.max(1,o.mount.clientWidth||window.innerWidth);
     const height=Math.max(1,o.mount.clientHeight||window.innerHeight);
     // The room keeps whatever the panel does not cover: the strip beside it, or the band above it once
     // the panel is a full-width sheet (the phone layout, customization-panel-style.js).
     const box=customization.opened?customization.previewBox(fullWidth,height):{x:0,y:0,w:fullWidth,h:height};
+    pass=customization.opened?{box,w:fullWidth,h:height}:null;   // what pickAt() has to normalise against
     if(camera.aspect!==box.w/box.h){camera.aspect=box.w/box.h;camera.updateProjectionMatrix();}
     if(catalogueView&&customization.opened){
       const target=previewTarget.fromArray(catalogueView.look);
@@ -368,6 +484,7 @@ export async function createScene(o) {
     }
     if(viewOffset||viewOffsetX)camera.setViewOffset(fullWidth,height,viewOffsetX*fullWidth,viewOffset*height,fullWidth,height);else camera.clearViewOffset();
     camera.updateMatrixWorld();fadeRoof();
+    for (const emi of slotEmis) emi.update(dt, still);
     interaction.update(dt, still);
     screens.update(ambient, overview ? null : camera, still);
     // The catalogue close-up shares this context (CONTRACT 7): its own scissored pass, drawn first so
@@ -392,20 +509,29 @@ export async function createScene(o) {
 
   function gamePose(row) {
     const width=Math.max(1,o.mount.clientWidth),height=Math.max(1,o.mount.clientHeight);
+    if (row.id === 'slot') {
+      const stretch=height>width?Math.min(3,Math.max(1.4,height/width*1.39)):1,stretchX=height>width?1:Math.min(1.8,Math.max(1,width/height/1.35)),previous=slotShape?.factor||1,previousX=slotShape?.factorX||1;
+      setSlotStretch(stretch,stretchX);
+      const target=slotSeat(room.holders.get(row.key),{fov:24},width,height);
+      setSlotStretch(previous,previousX);
+      return {...target,fov:24,stretch,stretchX};
+    }
     return seatPose(row,room.holders.get(row.key),camera,width,height,cardHands,counts)||{pos:row.approach.slice(),...facing(row.approach,row.look),offset:0,offsetX:0};
   }
   function moveCamera(to, duration=2100) {
+    to={fov:66,stretch:1,stretchX:1,...to};
     if(transition){transition.resolve(false);transition=null;}
     const motion=o.cameraMotion?.()||{off:still};
     motion.reduced ||= matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if(motion.off||halted){pos.splice(0,3,...to.pos);yaw=to.yaw;pitch=to.pitch;viewOffset=to.offset;viewOffsetX=to.offsetX;camera.position.fromArray(pos);camera.rotation.set(pitch,yaw,0,'YXZ');camera.updateMatrixWorld();return Promise.resolve(!halted);}
+    if(motion.off||halted){camera.fov=to.fov;camera.updateProjectionMatrix();setSlotStretch(to.stretch,to.stretchX);pos.splice(0,3,...to.pos);yaw=to.yaw;pitch=to.pitch;viewOffset=to.offset;viewOffsetX=to.offsetX;camera.position.fromArray(pos);camera.rotation.set(pitch,yaw,0,'YXZ');camera.updateMatrixWorld();return Promise.resolve(!halted);}
     const rotation=new T.Euler().setFromQuaternion(camera.quaternion,'YXZ');
-    const rendered={pos:camera.position.toArray(),yaw:rotation.y,pitch:rotation.x,offset:viewOffset,offsetX:viewOffsetX};
+    const rendered={fov:camera.fov,stretch:slotShape?.factor||1,stretchX:slotShape?.factorX||1,pos:camera.position.toArray(),yaw:rotation.y,pitch:rotation.x,offset:viewOffset,offsetX:viewOffsetX};
     return new Promise(resolve=>{transition={from:rendered,to,elapsed:0,duration:motion.reduced?duration*1.35:duration,resolve};resetInput();run();});
   }
   function seat(row) {
     if (!row || seated || held || halted || transition) return false;
-    pendingVisit=false;leaveAsked=false;seated={pos:pos.slice(),yaw,pitch,row}; sway=0;cardHands=1;counts={d:2,0:2};composition='';
+    if(row.id==='slot'){const holder=room.holders.get(row.key),emi=holder.getObjectByName('emi_topper');slotEmis.find(e=>e.fixture===holder)?.settle();holder.userData.slotPlaying=true;slotShape={holder,emi,baseY:holder.scale.y,baseX:holder.scale.x,emiY:emi?.scale.y||1,emiX:emi?.scale.x||1,factor:1,factorX:1};}
+    pendingVisit=false;leaveAsked=false;seated={pos:pos.slice(),yaw,pitch,row,fov:camera.fov}; sway=0;cardHands=1;counts={d:2,0:2};composition='';
     if(overview){overview=false;decor.setOverview(false);}
     if(room.ceiling)room.ceiling.visible=true;
     interaction.dismiss();customization.dismiss();setNearest(null);resetInput();
@@ -414,19 +540,40 @@ export async function createScene(o) {
   function unseat() {
     if (!seated) return;
     for (const view of [...views]) dropView(view);
-    const previous=seated;seated=null;resetInput();
+    const previous=seated;
+    if(previous.row.id==='slot')room.holders.get(previous.row.key).userData.slotPlaying=false;
+    seated=null;resetInput();
     arrival=moveCamera({...previous,offset:0,offsetX:0});
-    arrival.then(()=>{if(!seated&&room.ceiling)room.ceiling.visible=true;});run();
+    arrival.then(()=>{if(!seated){setSlotStretch(1,1);slotShape=null;if(room.ceiling)room.ceiling.visible=true;}});run();
   }
   function dropView(view) {
     if (!views.delete(view)) return;
     try { view.dispose?.(); } catch (e) { say('stage dispose failed: ' + e); }
   }
+  /* THE BOX THE ROOM WAS DRAWN IN. A pick normalises against the viewport the last frame actually rendered
+   * into, not against the canvas. The two are the same rectangle almost always, but with the Room Service
+   * panel up the room keeps only the strip beside the panel or the band above the phone sheet (frame(),
+   * previewBox), and a pointer measured against the full canvas rect then comes out up to half a screen
+   * from the finger. Anyone reverting this to canvas.getBoundingClientRect() will see nothing break: every
+   * caller of pickAt() today is gated on canWalk() or canLeave(), and both are false while the panel is
+   * open. It is the first pick that runs with the panel up that pays, and it will look like a broken room
+   * rather than a broken rectangle. The three spaces are stage-rect.js.
+   */
+  function pickBox() {
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    /* The room owns the whole canvas: the canvas rect itself, the exact arithmetic the room always used.
+     * The panel's own state decides it, not just the remembered pass, because the loop can be stopped
+     * (hold(), pause()) after the panel closed and before another frame refreshed the viewport. */
+    if (!pass || !customization.opened) return { page: { x: rect.left, y: rect.top, w: rect.width, h: rect.height } };
+    return stageRect(rect, viewportPageRect(rect, pass.box, pass.w, pass.h), rect.width, rect.height);
+  }
   function pickAt(event, objects) {
     if (transition || halted || suspended || !Array.isArray(objects) || !objects.length) return [];
-    const box = canvas.getBoundingClientRect();
-    if (!box.width || !box.height) return [];
-    pointer.set((event.clientX - box.left) / box.width * 2 - 1, 1 - (event.clientY - box.top) / box.height * 2);
+    const box = pickBox();
+    if (!box) return [];
+    const ndc = ndcIn(box, event.clientX, event.clientY);
+    pointer.set(ndc.x, ndc.y);
     scene.updateMatrixWorld(true); camera.updateMatrixWorld();
     ray.setFromCamera(pointer, camera);
     return ray.intersectObjects(objects, true);
@@ -436,7 +583,8 @@ export async function createScene(o) {
     if (!fixture || !seat(row)) return null;
     let closed = false;
     const owned = new Set();
-    return { get ready(){return !closed&&!transition&&!!seated;}, arrived:arrival, renderer, scene, fixture, camera, canvas, emi: room.emis.find(e => e.id === row.id), pick: pickAt,
+    return { get ready(){return !closed&&!transition&&!!seated;}, arrived:arrival, renderer, scene, fixture, camera, canvas, lookInverted: () => !!o.invertLook?.(), emi: room.emis.find(e => e.id === row.id), pick: pickAt,
+      onEmiClick(callback) { emiClicks.set(row.key, callback); return () => { if (emiClicks.get(row.key) === callback) emiClicks.delete(row.key); }; },
       register(view) {
         if (closed || halted) { view.dispose?.(); return () => {}; }
         views.add(view); owned.add(view);
@@ -444,7 +592,7 @@ export async function createScene(o) {
       },
       dispose() {
         if (closed) return;
-        closed = true;
+        closed = true; emiClicks.delete(row.key);
         for (const view of owned) dropView(view);
         owned.clear(); unseat();
       },
@@ -458,13 +606,23 @@ export async function createScene(o) {
   }
   const stop = () => { if (raf) cancelAnimationFrame(raf); raf = 0; };
 
-  const visibility = () => { resetInput(); if(document.hidden) stop(); else run(); };
+  const visibility = () => { quality.resetSamples(); resetInput(); if(document.hidden) stop(); else run(); };
   document.addEventListener('visibilitychange', visibility);
   resize();
   run();
+  // THE WATCHDOG. frame() drops the loop whenever held, halted or suspended, and every path that clears those
+  // is supposed to run() again. A path that forgets leaves a room that draws nothing while its HUD works. Rather
+  // than trust every future path, look once a second and restart a loop that nothing is holding.
+  const watchdog = setInterval(() => {
+    if (raf || held || halted || suspended || document.hidden || contextLost) return;
+    say('room loop was stopped with nothing holding it; restarted');
+    run();
+  }, 1000);
   screens.deal(() => ambient).catch(() => {});
 
   return {
+    setPrizes: (snapshot, bought) => room.prizes.apply(snapshot, bought),
+    documents,
     prepareVisit(){pendingVisit=true;resetInput();},
     setRewards: snapshot => customization.setOwned(snapshot.owned),
     renderer, camera, scene, buildMs, seat, unseat, pickAt, stage,
@@ -478,13 +636,14 @@ export async function createScene(o) {
       held = null; resetInput(); run();
     },
     pause(on) { suspended = !!on; if (suspended) { stop(); resetInput(); interaction.dismiss(); customization.dismiss(); } else run(); },
-    halt() { halted = true; if(transition){transition.resolve(false);transition=null;} for (const view of [...views]) dropView(view); stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); for(const r of roofMaterials){r.node.material=r.original;for(const m of r.copies)m.dispose();} room.disposeSurfaces(); resetInput(); touch.dispose(); interaction.dispose(); for(const e of room.emis)e.dispose(); customization.dispose(); decor.dispose(); for(const p of room.payouts.values())p.coins.dispose(); },
+    halt() { halted = true; clearInterval(watchdog); documents.dispose(); memorabilia.dispose(); placards.dispose(); if(transition){transition.resolve(false);transition=null;} for (const view of [...views]) dropView(view); stop(); document.removeEventListener('visibilitychange', visibility); screens.dispose(); for(const r of roofMaterials){r.node.material=r.original;for(const m of r.copies)m.dispose();} room.disposeSurfaces(); resetInput(); touch.dispose(); interaction.dispose(); for(const e of [...room.emis,...slotEmis])e.dispose(); customization.dispose(); decor.dispose(); room.echo.clear(); for(const p of room.payouts.values()){p.coins.dispose();p.host?.removeFromParent();} },
     setStill(on) { still = !!on; },
     /** Repaint one fixture label, e.g. the wheel's screen for MUST HIT (10.16.E). */
     setLabel(rowKey, node, text) { return room.setLabel(rowKey, node, text); },
     dismissEmi() { if(customization.dismiss())return true; const open = !!interaction.debug().id; interaction.dismiss(); return open; },
     celebrate: (key,amount,tier,text)=>room.celebrate(key,amount,tier,text),
     customization, setOverview, go, visit,
+    navigationPose() { return { position: pos.slice(), yaw, pitch }; },
     pose(p, y = 0, tilt = 0) { pos.splice(0, 3, ...p); yaw = y; pitch = tilt; },
     get transitioning() { return !!transition; },
     get nearest() { return nearest; },
@@ -495,11 +654,12 @@ export async function createScene(o) {
     debug() {
       const sorted = frames.slice().sort((a, b) => a - b);
       return {
-        renderBudget: {...budget.debug(), dpr}, position: pos.slice(), yaw, pitch, transitioning:!!transition, viewOffset, viewOffsetX, overview, held: !!held, seated: !!seated, leaveAsked, running: !!raf, still,
+        renderBudget: {...budget.debug(), dpr}, slotStretch:slotShape?.factor||1, fov:camera.fov, position: pos.slice(), yaw, pitch, transitioning:!!transition, viewOffset, viewOffsetX, overview, held: !!held, seated: !!seated, leaveAsked, running: !!raf, halted, suspended, contextLost, hidden: document.hidden, still,
         nearest: nearest ? nearest.key : null, fixtures: room.fixtures, bulbs: room.bulbs, screens: room.screens.length,
         pictures: screens.pictures, animation: screens.animation, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
         touch: touch.debug(), decor: decor.debug(), customization: customization.debug(),
         payouts: Object.fromEntries([...room.payouts].map(([key,p])=>[key,p.coins.debug()])),
+        winEcho: room.echo.debug(),
         emiBubble: interaction.debug(),
         emis: room.emis.map((e) => e.debug()),
         marquee: room.marquee?.userData.text,

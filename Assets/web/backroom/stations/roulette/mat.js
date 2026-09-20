@@ -13,6 +13,7 @@
  * fade where they end.
  * ==========================================================================*/
 
+import { chipLanding, traceProgress } from './juice.js';
 import { FEEL } from './feel.js';
 import { HIGHLIGHT_MS } from '../../shared/hypno/callout.js';
 
@@ -30,7 +31,8 @@ export function createMat({ spots, rose, label }) {
   const roseSet = new Set((rose || []).map(Number));
   const has = (id) => !Array.isArray(spots) || spots.includes(id);
   let cells = [];   // { spot, x, y, w, h, fill }
-  let anims = [];   // { kind: 'in' | 'lose' | 'pull', spot, t0, i }
+  let anims = [];
+  const arrivals = new Map(); let traceAt = -Infinity, traceSpot = null;   // { kind: 'in' | 'lose' | 'pull', spot, t0, i }
   let hits = { spots: new Set(), at: -Infinity };   // THE GLYPH HIT: the paying chips' rim glow over HIGHLIGHT_MS (callout.js)
   const box = { x: 0, y: 0, w: 0, h: 0, cell: 0 };
   /** A paying landing: the chips on `spots` glow and pop from station time `now`. */
@@ -84,7 +86,7 @@ export function createMat({ spots, rose, label }) {
     let i = 0;
     for (const a of list) anims.push({ kind: a.kind, spot: a.spot, t0: now + FEEL.CHIP_DELAY_MS + (a.kind === 'lose' ? 0 : i++ * FEEL.CHIP_STAGGER_MS), i: anims.length });
   }
-  function clearAnims() { anims = []; }
+  function clearAnims() { anims = []; arrivals.clear(); traceAt = -Infinity; }
 
   /**
    * view = { now, chips {spot: amt}, hover, hits: string[], landed: number | null, k, still, bowl: {cx, cy, R}, locked }
@@ -92,6 +94,7 @@ export function createMat({ spots, rose, label }) {
   function draw(g, view) {
     const { now, k } = view, cell = box.cell, chipR = Math.max(6, cell * 0.28);
     const hitsNow = new Set(view.hits || []);
+    if (view.still) { arrivals.clear(); traceAt = -Infinity; }
     g.save();
     g.fillStyle = 'rgba(12,7,22,.72)'; g.strokeStyle = 'rgba(232,194,122,.35)'; g.lineWidth = 1;
     g.beginPath(); g.roundRect(box.x - cell * 0.3, box.y - cell * 0.3, box.w + cell * 0.6, box.h + cell * 0.6, cell * 0.3); g.fill(); g.stroke();
@@ -119,11 +122,19 @@ export function createMat({ spots, rose, label }) {
       if (!(amt > 0) || flying.has(spot)) continue;
       const p = stackAt(spot), pulse = hitPulse(spot, now), r = chipR * (1 + 0.06 * pulse);
       if (pulse > 0) { g.save(); g.globalAlpha = 0.7 * pulse * k; g.fillStyle = COL.mint; g.shadowColor = COL.mint; g.shadowBlur = 20; g.beginPath(); g.arc(p.x, p.y, r * 1.35, 0, TAU); g.fill(); g.restore(); }
-      for (let n = 0; n < amt; n++) chip(g, p.x, p.y - n * 3, r, COL.rose, 1);
+      for (let n = 0; n < amt; n++) {
+        const at = arrivals.get(spot), motion = chipLanding(at != null && n === amt - 1 ? now - at : -1, view.still);
+        chip(g, p.x + motion.tilt * chipR, p.y - n * 3 - chipR * (motion.lift * .6 + (view.still ? 0 : pulse * .65)) * k, r, COL.rose, 1);
+      }
       if (amt > 1) { g.fillStyle = COL.text; g.font = `700 ${Math.max(9, chipR)}px ${FONT}`; g.fillText(String(amt), p.x, p.y - (amt - 1) * 3); }
     }
 
     const bowl = view.bowl || { cx: box.x - cell * 4, cy: box.y + box.h / 2, R: cell * 3 };
+    const tq = traceProgress(now - traceAt, view.still);
+    if (tq !== null) {
+      const to = stackAt(traceSpot);g.fillStyle = COL.mint;g.shadowColor = COL.mint;g.shadowBlur = 8 * k;
+      g.beginPath();g.arc(lerp(bowl.cx, to.x, tq), lerp(bowl.cy, to.y, tq) - Math.sin(tq * Math.PI) * cell, Math.max(2, cell * .075), 0, TAU);g.fill();g.shadowBlur = 0;
+    }
     const bankX = box.x + box.w + cell * 1.2;
     const stacked = {};
     for (const a of anims) {
@@ -153,6 +164,8 @@ export function createMat({ spots, rose, label }) {
 
   return {
     layout, hit, glow, draw, animate, clearAnims, stackAt,
+    place(spot, now) { arrivals.set(spot, now); },
+    trace(pocket, now) { traceSpot = 's' + pocket; traceAt = now; },
     get box() { return { ...box }; },
     /** A spot's cell rect (CSS px), or null. */
     rectOf(spot) { const c = cellOf(spot); return c ? { x: c.x, y: c.y, w: c.w, h: c.h } : null; },

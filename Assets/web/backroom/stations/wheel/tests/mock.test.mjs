@@ -149,3 +149,26 @@ test('a young account is never forced: the must-hit day does not mint it a pot',
   assert.notEqual(spin.result.sliceId, 'jackpot');
   assert.equal((await server.handle('state')).body.jackpot.mustHit, true, 'and the pot is still there for someone else');
 });
+
+test('THE BANK (10.16.H): a spin earned at a table beats already_spun', async () => {
+  const { s } = clocked({ freeSpins: 2 });
+  assert.equal((await s.handle('state')).body.freeSpins, 2);
+  assert.equal((await s.handle('spin', { idem: idem(10) })).body.ok, true);
+  assert.equal((await s.handle('state')).body.spun, true, 'the day is spent');
+
+  assert.equal((await s.handle('spin', { idem: idem(11) })).body.ok, true, 'a banked spin turns it again');
+  assert.equal((await s.handle('state')).body.freeSpins, 1, 'and spends exactly one');
+
+  assert.equal((await s.handle('spin', { idem: idem(12) })).body.ok, true);
+  const empty = (await s.handle('spin', { idem: idem(13) })).body;
+  assert.equal(empty.reason, 'already_spun');
+  assert.equal(empty.freeSpins, 0);
+  assert.equal((await s.handle('state')).body.freeSpins, 0, 'the bank never goes negative');
+});
+
+test('THE BANK: with nothing banked the wheel stays daily', async () => {
+  const { s } = clocked();
+  assert.equal((await s.handle('state')).body.freeSpins, 0);
+  assert.equal((await s.handle('spin', { idem: idem(20) })).body.ok, true);
+  assert.equal((await s.handle('spin', { idem: idem(21) })).body.reason, 'already_spun');
+});

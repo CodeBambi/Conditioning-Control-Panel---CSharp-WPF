@@ -5,9 +5,26 @@
  * The shared atoms (THE THUD, THE SHIVER, THE BANK's timings and its reversed token count) come from
  * arcademy/shell/counterfx.js so a thud is a thud in the Arcademy and in the Back Room. */
 
-import { CFX, bankCount } from '../../../arcademy/shell/counterfx.js';
+import { CFX } from '../../../arcademy/shell/counterfx.js';
 import { ANTICIPATION } from './pace.js';
 import { HIGHLIGHT_MS, HIGHLIGHT_GAP_MS, FX_DELAY_MS, CALLOUT_MS } from '../../shared/hypno/callout.js';
+// THE SPINE (CONTRACT 10.22.C). What used to be this file's own arithmetic and is now the ROOM's: four
+// stations climb one ladder, fly one bank and obey one Brake. This file keeps the SLOT's opinions - which
+// line pays which rung, which cabinet move a verdict buys - and borrows everything else.
+import { TIER } from '../../shared/win/tier.js';
+import { winPlan, PARTY } from '../../shared/win/plan.js';
+import { BANK, winTokens, spendTokens, tickValues, rollupAt, rollupTicks, bankFlightMs, bankLandMs } from '../../shared/win/bank.js';
+import { LADDER, ladderSemis, ladderPlan } from '../../shared/win/ladder.js';
+
+/* THE SPINE re-exported under the names this station already calls them by, so scene.js, station.js and the
+ * suite keep one import surface (`./feel.js`) while the maths lives in exactly one file:
+ *   winTokens / spendTokens              THE BANK's counts (Law XII, Brake 8)
+ *   tickValues / rollupAt / rollupTicks   what the readout SAYS between two numbers (Law I, Law X)
+ *   bankFlightMs / bankLandMs            the flight clock
+ *   ladderSemis / ladderPlan             THE CHIME LADDER (Law IX, Brakes 5 and 7)
+ * Every one of them was lifted VERBATIM out of this file into shared/win/, so the numbers are the numbers
+ * they always were - tests/feel.test.mjs still holds all seven of them to the House Book's own figures. */
+export { winTokens, spendTokens, tickValues, rollupAt, rollupTicks, bankFlightMs, bankLandMs, ladderSemis, ladderPlan };
 
 export const FEEL = Object.freeze({
   ANSWER_MS: 100,                 // Law VIII: every input answers inside this, before any network reply
@@ -20,19 +37,19 @@ export const FEEL = Object.freeze({
   SHIVER_PX: 4,
   GLOW_OUT_MS: CFX.GLOW_MS,       // THE GLOW: in fast, out slow (480 ms)
   GLOW_IN_MS: 80,
-  BANK_FLY_MS: CFX.BANK_FLY_MS,   // THE BANK: 560 ms a token, 70 ms stagger, 3-7 tokens, 4 on lite
-  BANK_STAGGER_MS: CFX.BANK_STAGGER_MS,
-  BANK_MIN: CFX.BANK_MIN,
-  BANK_MAX: CFX.BANK_MAX,
-  BANK_MAX_LITE: CFX.BANK_MAX_LITE,
+  BANK_FLY_MS: BANK.FLY_MS,       // THE BANK: 560 ms a token, 70 ms stagger, 3-7 tokens, 4 on lite
+  BANK_STAGGER_MS: BANK.STAGGER_MS,   // ...and all five of them are shared/win/bank.js's now, not a copy
+  BANK_MIN: BANK.MIN,
+  BANK_MAX: BANK.MAX,
+  BANK_MAX_LITE: BANK.MAX_LITE,
   GLANCE_HOLD_MS: 600,            // THE MASCOT GLANCE holds 400-800 ms...
   GLANCE_HOLD_MELT_MS: 800,       // ...and slows while melted (Brake 5)
   BREATH_MS: 3200,                // THE BREATH: one element (the lever at rest), 2.6-4 s ease-in-out
-  LADDER_CAP: 7,                  // THE CHIME LADDER: +1 semitone a step, 7 at most
-  FANFARE_TIMES: 3,               // Brake 3: the first three get the fanfare...
-  THUD_ONLY_FROM: 40,             // ...the 40th is a thud and the tokens
+  LADDER_CAP: LADDER.CAP,         // THE CHIME LADDER: +1 semitone a step, 7 at most
+  FANFARE_TIMES: PARTY.FANFARE_TIMES,     // Brake 3: the first three get the fanfare...
+  THUD_ONLY_FROM: PARTY.THUD_ONLY_FROM,   // ...the 40th is a thud and the tokens. Both are plan.js's gates.
   MOVE_CAP_MS: 620,               // no move longer, except the declared hero (the jackpot REVEAL)
-  STROBE_MIN_MS: 1000 / 6,        // no light changes faster than 6 Hz
+  STROBE_MIN_MS: LADDER.STROBE_MIN_MS,    // no light changes faster than 6 Hz (Brake 7)
 });
 
 /** Law IX tiers: 0 nothing, 1 small (a chime), 2 bigger (two notes and a jolt), 3 big (THE THUD), 4 jackpot (THE REVEAL). */
@@ -49,9 +66,16 @@ export const meltedBy = o => !!o && (!!o.halved || (o.meltLeft || 0) > 0);
 
 /**
  * THE BRAKE, per landed outcome. `seen` = how many earlier outcomes of this tier celebrated this sit-down,
- * `jackpots` = earlier jackpots this sit-down (Law IX: the top tier's REVEAL plays once a run).
+ * `jackpots` = earlier jackpots this sit-down (Law IX: the top tier's REVEAL plays once a run). Both are read
+ * off station.js's ONE sit-down ledger (plan.js `freshSit` / `afterParty`); no counter lives in this file.
  *   party: 'shiver' | 'melt' | 'fanfare' | 'bead' | 'thud'
  *   sound: 'muted' (a no-pay thud) | 'chime' | 'two' | 'thud' | 'reveal'
+ *
+ * WHICH restraint applies is not decided here any more (CONTRACT 10.22.C: plan.js is where the Brake lives,
+ * and nowhere else). `winPlan` is asked; this table only says what the CABINET does about its verdict.
+ * The plan is asked BARE - no reduced, no Calm, no lite - on purpose: a motion level strips the DECORATION
+ * on top of this (scene.js's stillFx, station.js's plan), while the recipe underneath is the same recipe at
+ * every one of them. station.js asks for the motion-aware plan itself and spends that.
  */
 export function recipe(o, { seen = 0, jackpots = 0 } = {}) {
   const tier = tierOf(o), melted = meltedBy(o);
@@ -61,55 +85,33 @@ export function recipe(o, { seen = 0, jackpots = 0 } = {}) {
   // muted thud and nothing else - `hold`, a quiet party - and the re-spin that follows IS the event.
   if (isHold(o)) return { ...r, tier: 0, party: 'hold', sound: 'muted', tokens: false, heat: 0 };
   if (tier === 0) return { ...r, party: 'shiver', sound: 'muted', heat: 0, shiver: true };   // Brake 6: never silence
-  if (melted) return { ...r, party: 'melt', heat: Math.min(1, tier) };                         // Brake 5: no ceremonies
-  if (tier === 4 && jackpots === 0) {
+  const p = winPlan(tier, { seen, heroesThisSit: jackpots, melted });
+  // Brake 3 wears a CAPPED jackpot down too (a second one is a very good tier 3), and the plan says so by
+  // keeping `why: 'capped'` while quietly spending less than a whole tier 3 - so THAT is the tell, not `why`.
+  const worn = p.why === 'repeat' || (p.why === 'capped' && p.spent < TIER.BIG);
+  if (p.why === 'melted') return { ...r, party: 'melt', heat: Math.min(1, tier) };            // Brake 5: no ceremonies
+  if (p.reveal) {                                                                             // Law IX: once a sit-down
     return { ...r, sound: 'reveal', gold: true, chase: true, screen: true, jolt: true, reveal: true, sparks: true };
   }
-  if (seen >= FEEL.THUD_ONLY_FROM - 1) return { ...r, party: 'thud', sound: 'thud', heat: 0 };
-  if (seen >= FEEL.FANFARE_TIMES) return { ...r, party: 'bead', sound: 'chime' };            // chime + the marquee bead
+  if (p.why === 'thud') return { ...r, party: 'thud', sound: 'thud', heat: 0 };
+  if (worn) return { ...r, party: 'bead', sound: 'chime' };                                   // chime + the marquee bead
   return { ...r, sound: tier === 1 ? 'chime' : tier === 2 ? 'two' : 'thud',
            gold: tier === 4, chase: true, screen: tier >= 2, jolt: tier >= 2 };
 }
 
-/** THE CHIME LADDER: `step` wins in a row before this one, capped, an octave down while melted. */
-export function ladderSemis(step, melted) {
-  const s = Math.max(0, Math.min(FEEL.LADDER_CAP, Math.floor(Number(step) || 0)));
-  return melted ? s - 12 : s;
-}
-
-/** THE CHIME LADDER across THE BANK's rollup (playbook A3): the ladder climbs while the readout counts, so a
- *  big win rises instead of ringing once. Step 0 is the landing cue sound.js has already played; the steps after
- *  it follow a semitone apart, spread over `ms`, never closer than the strobe floor (Brake 7, 6 Hz) and never
- *  more than LADDER_CAP. Tier 1 and a melted win get the landing note and nothing more (Law IX, Brake 5).
- *  Returns `[{ at, semis }]` in ms from the landing, both rising. */
-const LADDER_STEPS = Object.freeze([0, 1, 3, 5, 7]);
-export function ladderPlan(tier, ms, melted = false) {
-  const t = Math.max(0, Math.min(4, Math.floor(Number(tier) || 0))), span = Math.max(0, Number(ms) || 0);
-  const want = melted || t <= 1 ? 1 : Math.min(FEEL.LADDER_CAP, LADDER_STEPS[t]);
-  const gap = Math.max(FEEL.STROBE_MIN_MS, span / want);
-  const n = Math.max(1, Math.min(want, Math.floor(span / gap) || 1));
-  return Array.from({ length: n }, (_, i) => ({ at: Math.round(i * gap), semis: i }));
-}
-
-/** THE BANK token count: a win by its tier, a spend by its cost (counterfx's reversed count). */
-export function winTokens(tier, lite) {
-  const hi = lite ? FEEL.BANK_MAX_LITE : FEEL.BANK_MAX;
-  return Math.max(FEEL.BANK_MIN, Math.min(hi, tier >= 4 ? FEEL.BANK_MAX : tier + 2));
-}
-export const spendTokens = (cost, lite) => bankCount(cost, lite);
-
-/** The readout value after each landing: evenly stepped, the last one exactly `to` (Law X: ticks on landing). */
-export function tickValues(from, to, n) {
-  const a = Math.round(Number(from) || 0), b = Math.round(Number(to) || 0), k = Math.max(1, n | 0);
-  return Array.from({ length: k }, (_, i) => (i === k - 1 ? b : Math.round(a + (b - a) * ((i + 1) / k))));
-}
+/* THE CHIME LADDER (`ladderSemis`, `ladderPlan`) and THE BANK's counts and value ladder (`winTokens`,
+ * `spendTokens`, `tickValues`) used to be written out here. They are shared/win/ladder.js's and
+ * shared/win/bank.js's now - lifted across unchanged, re-exported at the top of this file - because the
+ * wheel, the roulette and the cards climb the same notes and fly the same tokens (CONTRACT 10.22.C). */
 
 /* THE BANK's proportional rollup (playbook A3). A casino scales the count-up to the win, and so does this:
  * the token count and stagger never move (3-7 tokens, 4 on Calm, 560 ms each, 70 ms apart, House Book), only
  * how long the READOUT keeps counting. The tokens tick it as they land, exactly as before; when the rollup is
  * longer than their flight the readout carries on from the last landing to the settled value over the rest,
  * and the mini-thud waits for the end. Law I: the value it lands on is the tape's, never this file's. */
-export const ROLLUP_MS = Object.freeze([0, 500, 1200, 2000, 6000]);   // by tier: nothing, 500, 1.2 s, 2 s, the 6 s jackpot climb
+// ...and it IS plan.js's `PARTY.MS`, because THE PARTY's length by rung is the rollup's length by rung: the
+// ladder climbs for exactly as long as the readout counts, at every station (Law X, one gesture one beat).
+export const ROLLUP_MS = PARTY.MS;   // by tier: nothing, 500, 1.2 s, 2 s, the 6 s jackpot climb
 
 /** How long the count-up runs. `x` is a tier (0-4), an outcome, or a raw pay read through tierOf's thresholds
  *  (only a tier or an outcome can name the jackpot: a bare 400 is a big line, not `emi3`). */
@@ -120,23 +122,8 @@ export function rollupMs(x) {
   return ROLLUP_MS[n >= 40 ? 3 : n >= 10 ? 2 : 1];
 }
 
-/** The tokens' whole flight, and when token `i` lands (both from the House Book's own two numbers). */
-export const bankFlightMs = n => FEEL.BANK_FLY_MS + Math.max(0, (n | 0) - 1) * FEEL.BANK_STAGGER_MS;
-export const bankLandMs = i => FEEL.BANK_FLY_MS + Math.max(0, i | 0) * FEEL.BANK_STAGGER_MS;
-
-/** The count-up curve: a shallow ease-out, so a big roll sprints and then settles. `q >= 1` is exactly `to`. */
-export function rollupAt(from, to, q) {
-  const a = Math.round(Number(from) || 0), b = Math.round(Number(to) || 0), k = Math.min(1, Math.max(0, Number(q) || 0));
-  return k >= 1 ? b : Math.round(a + (b - a) * (1 - (1 - k) ** 2));
-}
-
-/** The readout value at each token landing. Without a rollup longer than the flight this is the old even ladder,
- *  the last one exactly `to`; with one, each landing is that moment's count and the tail finishes the job. */
-export function rollupTicks(from, to, n, ms) {
-  const k = Math.max(1, n | 0), flight = bankFlightMs(k);
-  if (!(Number(ms) > flight)) return tickValues(from, to, k);
-  return Array.from({ length: k }, (_, i) => rollupAt(from, to, bankLandMs(i) / Number(ms)));
-}
+/* The flight clock (`bankFlightMs`, `bankLandMs`), the count-up curve (`rollupAt`) and the per-landing value
+ * ladder (`rollupTicks`) went the same way: shared/win/bank.js, re-exported above. */
 
 /** THE MASCOT GLANCE. Poses from the face atlas. Never the same pose twice in a row: a repeat takes its alternate. */
 export const POSES = Object.freeze(['idle0_0', 'hearts', 'spirals', 'melt', 'jackpot']);

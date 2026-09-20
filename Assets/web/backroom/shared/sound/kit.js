@@ -1,15 +1,18 @@
+import { FOLEY, SAMPLE_CUES, loadFoleySample } from './foley.js';
+
 /* ============================================================================
  * shared/sound/kit.js - THE ONE KIT. Every sound the Back Room makes.
  *
  * One AudioContext for the whole room (made inside the first gesture), one
- * master gain, one small delay-feedback room behind a send bus, and a table of
+ * master gain over three buses (the subliminal lane, the floor's sfx, the beds),
+ * one small delay-feedback room tapped once per bus, and a table of
  * cues that are SCORED first (pure data: notes, times, pitches, a tail) and
  * only then rendered onto Web Audio nodes. score() is exported on its own so
  * the schedules can be checked in bare node with no audio at all, and so a
  * station can read what a cue will do before it does it.
  *
- * Everything is synthesised (oscillators, filtered noise, a delay line): the
- * room ships no licensed samples and owns every sound it makes. The race's
+ * The scored palette is synthesised. Three local ElevenLabs foley samples replace
+ * their scored fallback once decoded; failed loads never delay an action. The race's
  * mp3 chimes the stations used to borrow are retired here; the bell family
  * below is the one voice the whole floor shares.
  *
@@ -46,7 +49,7 @@ export const TIERS = Object.freeze({
 });
 export const TIER_ORDER = Object.freeze(['small', 'mid', 'big', 'hero']);
 /** -24 dB under master for the bed, a whisper is quieter still. */
-export const BED_LEVEL = 0.063;
+export const BED_LEVEL = 0.0126;
 export const DEFAULT_MASTER = 0.8;
 /** A cue on this list plays once per window even when two lanes call it on the same frame (the slot's muted
  *  last thud and its dead-spin lane both say `settle`). Milliseconds. */
@@ -56,8 +59,8 @@ export const DEDUPE_MS = Object.freeze({ settle: 120, clicker: 25 });
  *  D: Vintage on the lever; A: Ticker, B: Purr, C: Rattle and bell, D: Hybrid casino on the reels. */
 export const LEVER_VARIANTS = Object.freeze(['A', 'B', 'C', 'D']);
 export const REEL_VARIANTS = Object.freeze(['A', 'B', 'C', 'D']);
-/** The owner's pair: a candy lever over a rattle-and-bell drum. */
-export const DEFAULT_SFX = Object.freeze({ lever: 'B', reel: 'C' });
+/** The owner's pair: a candy lever over a ticker drum. */
+export const DEFAULT_SFX = Object.freeze({ lever: 'B', reel: 'A' });
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
@@ -80,6 +83,14 @@ const bell = (hz, at, dur, level, part) => [
 ];
 
 const SCORES = {
+  ...FOLEY,
+  /** A tiny electronic answer, voiced through the same master gain as the games. */
+  'emi-bleep'({ variant = 0 } = {}) {
+    const patterns = [[0, 7, 4], [4, 0, 9, 7], [7, 12, 4]];
+    const notes = patterns[Math.abs(Math.floor(num(variant, 0))) % patterns.length];
+    return notes.map((step, i) => tone(660 * SEMI(step), i * .085, .065, .07,
+      { wave: 'triangle', attack: .12, lp: 2400, part: 'emi', dry: true }));
+  },
   /** A reel's tick train: decelerating clicks with a rising pitch ladder per reel. `ms` is the travel. */
   ticks({ reel = 0, ms = 1800 } = {}) {
     const r = clamp(Math.floor(num(reel, 0)), 0, 4), span = clamp(num(ms, 1800), 120, 12000) / 1000;
@@ -235,6 +246,10 @@ const SCORES = {
     return [tone(120 * SEMI(s), 0, 0.32, lv, { hzTo: 38, lp: muted ? 700 : 0, part: 'thud' }), noise(1200, 0, 0.05, lv * 0.2, { type: 'lowpass', part: 'thud', dry: true })];
   },
   /** THE BANK's token landing: a small bell that rises with the count (`i` of `n`), the last one a mini-thud. */
+  cash() {
+    return [noise(1800,0,.055,.11,{part:'cash',dry:true}), noise(2300,.065,.045,.09,{part:'cash',dry:true}),
+      ...bell(1318,.11,.38,.18,'cash'), ...bell(1760,.15,.42,.13,'cash')];
+  },
   token({ i = 0, last = false } = {}) {
     if (last) return SCORES.thud({ semis: 5, level: 0.6 });
     return bell(ROOT_HZ * 2 * SEMI(pentatonic(clamp(Math.floor(num(i, 0)), 0, 14))), 0, 0.18, 0.1, 'arp');
@@ -243,7 +258,7 @@ const SCORES = {
    * THE LEVER PULL, the whole gesture in one cue: the stroke down, the stop at the bottom, the spring back.
    * 500-700 ms, and the four voices are four cabinets:
    *   A Iron     ratchet ticks up the stroke, a heavy metallic clank at the bottom, a spring click coming back
-   *   B Candy    a velvety whoosh, a muted pop, two little chimes on the release (the pink cabinet's own)
+   *   B Candy    a catch on the grab, a velvety whoosh, a muted pop, two little chimes on the release
    *   C Toy      plastic click-clack, a knock, a cartoon spring boing: the shortest and the bounciest
    *   D Vintage  one long creaking ratchet, a deep wooden thunk, a "krrr" that hands the beat to the reels
    */
@@ -257,7 +272,8 @@ const SCORES = {
         noise(2300, 0.52, 0.03, 0.055 * lv, { q: 5, part: 'spring', dry: true }),
         tone(700, 0.52, 0.04, 0.035 * lv, { part: 'spring', dry: true }));
     } else if (v === 'B') {
-      out.push(noise(320, 0, 0.3, 0.07 * lv, { hzTo: 1500, q: 0.9, attack: 0.45, part: 'whoosh', dry: true }),
+      out.push(noise(1250, 0, 0.022, 0.06 * lv, { q: 3.4, part: 'catch', dry: true }),   // THE GRAB: B had nothing until the pop at 0.29, so the pull read late
+        noise(320, 0, 0.3, 0.07 * lv, { hzTo: 1500, q: 0.9, attack: 0.18, part: 'whoosh', dry: true }),
         tone(250, 0.29, 0.14, 0.2 * lv, { hzTo: 96, wave: 'triangle', lp: 900, part: 'pop' }),
         noise(700, 0.29, 0.05, 0.045 * lv, { type: 'lowpass', part: 'pop', dry: true }),
         ...bell(ROOT_HZ, 0.44, 0.2, 0.07 * lv, 'chime'), ...bell(ROOT_HZ * SEMI(7), 0.53, 0.17, 0.065 * lv, 'chime'));
@@ -304,6 +320,7 @@ const SCORES = {
       tone(ROOT_HZ * 2 * SEMI(pentatonic(r + 2)), 0.02, 0.12, 0.028 * lv, { part: 'chime' })];
   },
   /** A button, a lever, "no more bets": one soft tap. */
+  silicone() { return [0,1,2,3].map(i=>tone(190/(1+i*.17),i*.09,.14,.063*Math.exp(-i*.7),{hzTo:90+i*15,part:'silicone',dry:true})); },
   tap() { return [tone(220, 0, 0.03, 0.06, { part: 'tap', dry: true }), noise(1500, 0, 0.012, 0.03, { part: 'tap', dry: true })]; },
   /** The ball's launch: a short rising whoosh. */
   launch() { return [noise(400, 0, 0.3, 0.06, { hzTo: 1600, q: 0.8, attack: 0.3, part: 'rise' })]; },
@@ -331,6 +348,32 @@ export const BEDS = Object.freeze(['ambience', 'spiral']);
 export const ROLLS = Object.freeze(['reel', 'wheel']);
 export const CUES = Object.freeze([...Object.keys(SCORES), ...BEDS, ...ROLLS]);
 
+/* ----------------------------------------------------------------------------
+ * THE THREE BUSES. One master over three lanes: the subliminal whisper, the
+ * floor's own noise, and the beds that loop behind both. setSub / setSfx /
+ * setBed move one each; setMaster, setTrim and mute still sit over all three.
+ * -------------------------------------------------------------------------- */
+export const BUSES = Object.freeze(['sub', 'sfx', 'bed']);
+/** Every bus starts here, so a kit nobody has touched is the mix the room already had. */
+export const DEFAULT_BUS = Object.freeze({ sub: 1, sfx: 1, bed: 1 });
+/** Into the room's delay line, tapped once per bus. */
+export const SEND_LEVEL = 0.22;
+const onBus = (b, names) => Object.fromEntries(names.map(n => [n, b]));
+/** EVERY cue names its bus here, as data and not as a conditional somewhere in the render. A cue that lands
+ *  on no bus is a silent cue, and silence is the one bug the floor cannot hear: the two loops under the table
+ *  are the guard, so a cue added to SCORES without a bus fails at load and never in the room. */
+export const CUE_BUS = Object.freeze({
+  ...onBus('sub', ['word', 'breath']),   // the whisper shimmer under a spoken word, and the melt's deep breath
+  ...onBus('bed', BEDS),                 // the two loops that hold while the room is open
+  ...onBus('sfx', [...Object.keys(FOLEY), ...ROLLS, 'emi-bleep', 'ticks', 'tick', 'riser', 'almost', 'settle',
+    'sigh', 'ladder', 'win', 'chips', 'card', 'rattle', 'drop', 'clack', 'clicker', 'thud', 'cash', 'token',
+    'lever', 'reelStop', 'silicone', 'tap', 'launch', 'whir']),
+});
+for (const name of CUES) if (!CUE_BUS[name]) throw new Error('sound/kit: cue on no bus: ' + name);
+for (const name of Object.keys(CUE_BUS)) if (!CUES.includes(name)) throw new Error('sound/kit: bus for no cue: ' + name);
+/** The bus a cue plays on. An unknown name never reaches the graph (play scores first), so the floor is a safe home. */
+export const busOf = name => CUE_BUS[name] || 'sfx';
+
 /**
  * Pure: the schedule for cue `name`: { name, notes, tail } (tail = seconds to the last note's end), or null for a
  * bed or an unknown name. `rand` (0..1) makes the chips and the clicker deterministic in a test.
@@ -353,8 +396,8 @@ const ROLL_LAYER = Object.freeze({
 });
 /** A tick peaks here, clear of the bed at -24 dB without being harsh; the purr and the hum together sit just
  *  over it at full blur and fall away with the drum. */
-export const ROLL_TICK = 0.0585;
-export const ROLL_BED = 0.052;
+export const ROLL_TICK = 0.038;
+export const ROLL_BED = 0.034;
 const TICK_AHEAD = 0.14, TICK_MS = 45;
 const rollKey = reel => 'reel:' + clamp(Math.floor(num(reel, 0)), 0, 4);
 /** THE TICK RATE IS THE REEL SPEED: 38 ms a tick at full blur, 260 ms crawling into the stop. */
@@ -372,9 +415,10 @@ export const wheelGap = speed => 0.054 + 0.286 * (1 - clamp(num(speed, 1), 0, 1)
  * THE KIT. createKit({ AudioContext?, master?, random?, now? }) for a test; the
  * module singleton `kit` below for the room and the stations.
  * -------------------------------------------------------------------------- */
-export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, random = Math.random, trim = 1, now = null } = {}) {
-  let ctx = null, out = null, dry = null, send = null, noiseBuf = null;
+export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, random = Math.random, trim = 1, now = null, loadSample = loadFoleySample } = {}) {
+  let ctx = null, out = null, buses = null, noiseBuf = null;
   let masterLevel = clamp(num(master, DEFAULT_MASTER), 0, 1), trimLevel = clamp(num(trim, 1), 0, 1), muted = false;
+  const busLevel = { ...DEFAULT_BUS };   // each bus's own level, under the master and over its own cues
   let suspended = false;
   const live = new Set();       // every voice not yet ended (the leak check)
   const voices = new Map();     // name -> Set of voices
@@ -383,11 +427,14 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
   const wanted = new Set();     // beds to bring back after a suspend
   const lastAt = new Map();     // name -> page time of the last play, for DEDUPE_MS
   const trace = [];
+  const samples = new Map();
+  let sampleContext = null;
   const rand = () => { const v = Number(random()); return Number.isFinite(v) ? clamp(v, 0, 1) : 0.5; };
   const clock = typeof now === 'function' ? now : () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
   const Ctor = () => AC || globalThis.AudioContext || globalThis.webkitAudioContext || null;
   const level = () => (muted ? 0 : masterLevel * trimLevel);
+  const busFor = name => buses[busOf(name)];
 
   function graph() {
     if (ctx) return ctx;
@@ -396,17 +443,23 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     try {
       ctx = new C();
       out = ctx.createGain(); out.gain.value = level(); out.connect(ctx.destination);
-      dry = ctx.createGain(); dry.gain.value = 1; dry.connect(out);
+      // The three buses take the one dry leg's place, all of them under `out`, so the master, the trim and the
+      // mute still scale the whole room from above. A voice finds its bus through CUE_BUS, never a conditional.
+      buses = {};
+      for (const k of BUSES) { const g = ctx.createGain(); g.gain.value = busLevel[k]; g.connect(out); buses[k] = { gain: g, send: null }; }
       // The room: a short delay fed back on itself under a lowpass, on a send bus. Convolver-free, cheap.
-      send = ctx.createGain(); send.gain.value = 0.22;
+      // ONE room, tapped once per bus, not one room each. The line is linear, so three taps at the default
+      // levels sum to exactly the tail the single tap gave; and a bus turned down takes its own wet down with
+      // it, instead of leaving a tail ringing over a lane that was asked for quiet.
       const delay = ctx.createDelay(1); delay.delayTime.value = 0.093;
       const fb = ctx.createGain(); fb.gain.value = 0.34;
       const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2800;
-      send.connect(delay); delay.connect(lp); lp.connect(fb); fb.connect(delay); lp.connect(out);
+      delay.connect(lp); lp.connect(fb); fb.connect(delay); lp.connect(out);
+      for (const k of BUSES) { const s = ctx.createGain(); s.gain.value = SEND_LEVEL * busLevel[k]; s.connect(delay); buses[k].send = s; }
       const n = ctx.createBuffer(1, Math.floor(ctx.sampleRate * NOISE_S), ctx.sampleRate), d = n.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = rand() * 2 - 1;
       noiseBuf = n;
-    } catch (e) { ctx = null; out = null; dry = null; send = null; return null; }
+    } catch (e) { ctx = null; out = null; buses = null; return null; }
     return ctx;
   }
   const ready = () => !suspended && !!ctx && ctx.state !== 'closed';   // arm() builds the graph; a play before the gesture only traces
@@ -418,8 +471,8 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     g.gain.exponentialRampToValueAtTime(Math.max(0.0002, lvl), t + a);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   }
-  /** One note onto the graph at absolute time t0 + n.at. The voice takes every node down with it when it ends. */
-  function render(n, t0, set) {
+  /** One note onto bus `b` at absolute time t0 + n.at. The voice takes every node down with it when it ends. */
+  function render(n, t0, set, b) {
     const t = t0 + n.at, dur = Math.max(0.005, n.dur), g = ctx.createGain(), nodes = [g];
     let src, head;
     if (n.k === 'tone') {
@@ -437,13 +490,34 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     }
     nodes.push(src);
     envelope(g, t, dur, n.level, n.attack);
-    head.connect(g); g.connect(dry);
-    if (!n.dry && send) g.connect(send);
+    head.connect(g); g.connect(b.gain);
+    if (!n.dry && b.send) g.connect(b.send);   // the wet leaves through the bus's own tap: a quiet bus is quiet wet too
     const voice = { src, nodes, set };
     live.add(voice); set.add(voice);
     src.onended = () => end(voice);
     src.start(t); src.stop(t + dur + 0.02);
     return voice;
+  }
+  function warmSamples() {
+    if (!ctx || sampleContext === ctx || typeof loadSample !== 'function') return;
+    const owner = ctx; sampleContext = owner;
+    for (const name of SAMPLE_CUES) {
+      Promise.resolve().then(() => loadSample(name, owner)).then(buffer => {
+        if (ctx === owner && buffer && buffer.duration > 0 && buffer.duration <= 1.5) samples.set(name, buffer);
+      }).catch(() => { /* Optional foley: the scored fallback remains available. */ });
+    }
+  }
+  function renderSample(name, buffer, opts, t0, set, b) {
+    const src = ctx.createBufferSource(), gain = ctx.createGain();
+    src.buffer = buffer;
+    const rate = 0.98 + rand() * 0.04;
+    src.playbackRate.value = rate;
+    gain.gain.value = 0.65 * clamp(num(opts.level, 1), 0, 1);
+    src.connect(gain); gain.connect(b.gain);
+    const voice = { src, nodes: [src, gain], set };
+    live.add(voice); set.add(voice); src.onended = () => end(voice);
+    src.start(t0); src.stop(t0 + buffer.duration / rate + 0.02);
+    return 1;
   }
   function end(voice) {
     live.delete(voice); voice.set.delete(voice);
@@ -462,7 +536,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     const sh = ctx.createBufferSource(); sh.buffer = noiseBuf; sh.loop = true;
     const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 3; bp.frequency.value = 3000;
     const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.05; lg.gain.value = 1000; lfo.connect(lg); lg.connect(bp.frequency);
-    const sg = ctx.createGain(); sg.gain.value = 0.09; sh.connect(bp); bp.connect(sg); sg.connect(g); sh.start(); lfo.start(); nodes.push(sh, lfo);
+    const sg = ctx.createGain(); sg.gain.value = 0.045; sh.connect(bp); bp.connect(sg); sg.connect(g); sh.start(); lfo.start(); nodes.push(sh, lfo);
     // Two high sines breathing under a 12 s tremolo, barely there.
     const tg = ctx.createGain(); tg.gain.value = 0.05;
     const tr = ctx.createOscillator(), trg = ctx.createGain(); tr.frequency.value = 0.08; trg.gain.value = 0.04; tr.connect(trg); trg.connect(tg.gain); tr.start(); nodes.push(tr);
@@ -486,7 +560,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     const t = ctx.currentTime;
     b.g.gain.setValueAtTime(0.0001, t);
     b.g.gain.exponentialRampToValueAtTime(b.level, t + b.fadeIn);
-    b.g.connect(dry);
+    b.g.connect(busFor(name).gain);
     const bed = {
       nodes: b.nodes, gain: b.g, timer: 0,
       stop(fade) {
@@ -531,7 +605,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     const until = ctx.currentTime + TICK_AHEAD;
     if (roll.next < ctx.currentTime) roll.next = ctx.currentTime;
     for (let i = 0; i < 24 && roll.next < until; i++) {
-      try { render(tickNote(roll), roll.next, roll.set); } catch (e) { /* a tick never breaks a beat */ }
+      try { render(tickNote(roll), roll.next, roll.set, roll.bus); } catch (e) { /* a tick never breaks a beat */ }
       roll.next += tickGap(roll.speed);
     }
     roll.timer = setTimeout(() => pump(roll), TICK_MS);
@@ -546,11 +620,11 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     const variant = pick(opts.variant, REEL_VARIANTS, DEFAULT_SFX.reel), layer = ROLL_LAYER[variant];
     let set = voices.get(key);
     if (!set) { set = new Set(); voices.set(key, set); }
-    const roll = { key, reel: r, variant, layer, speed, level: clamp(num(opts.level, 1), 0, 1),
+    const roll = { key, reel: r, variant, layer, speed, level: clamp(num(opts.level, 1), 0, 1), bus: busFor('reel'),
                    base: 1250 * SEMI(r * 3), nodes: [], gain: null, band: null, next: 0, timer: 0, set };
     try {
       if (layer.purr || layer.hum) {
-        const g = ctx.createGain(); g.gain.value = 0.0001; g.connect(dry); roll.gain = g; roll.nodes.push(g);
+        const g = ctx.createGain(); g.gain.value = 0.0001; g.connect(roll.bus.gain); roll.gain = g; roll.nodes.push(g);
         if (layer.purr) {
           const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
           const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.4; bp.frequency.value = 240;
@@ -615,7 +689,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     const until = ctx.currentTime + TICK_AHEAD;
     if (w.next < ctx.currentTime) w.next = ctx.currentTime;
     for (let i = 0; i < 24 && w.next < until; i++) {
-      try { render(wheelTick(w), w.next, w.set); } catch (e) { /* a click never breaks a beat */ }
+      try { render(wheelTick(w), w.next, w.set, w.bus); } catch (e) { /* a click never breaks a beat */ }
       w.next += wheelGap(w.speed);
     }
     w.timer = setTimeout(() => pumpWheel(w), TICK_MS);
@@ -627,9 +701,9 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     if (wheelRoll) { wheelRoll.speed = speed; shapeWheel(wheelRoll); return 1; }
     let set = voices.get(WHEEL_ROLL);
     if (!set) { set = new Set(); voices.set(WHEEL_ROLL, set); }
-    const w = { speed, level: clamp(num(opts.level, 1), 0, 1), nodes: [], gain: null, band: null, next: 0, timer: 0, set };
+    const w = { speed, level: clamp(num(opts.level, 1), 0, 1), bus: busFor(WHEEL_ROLL), nodes: [], gain: null, band: null, next: 0, timer: 0, set };
     try {
-      const g = ctx.createGain(); g.gain.value = 0.0001; g.connect(dry); w.gain = g; w.nodes.push(g);
+      const g = ctx.createGain(); g.gain.value = 0.0001; g.connect(w.bus.gain); w.gain = g; w.nodes.push(g);
       const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
       const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2.2; bp.frequency.value = 140;
       src.connect(bp); bp.connect(g); src.start(); src.onended = () => freeWheel(w);
@@ -662,7 +736,7 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
 
   const api = {
     /** Wake the context inside a gesture (a press, a pull, a key). True when there is a context to play on. */
-    arm() { const c = graph(); if (!c) return false; if (c.state === 'suspended' && !suspended) c.resume().catch(() => {}); return true; },
+    arm() { const c = graph(); if (!c) return false; warmSamples(); if (c.state === 'suspended' && !suspended) c.resume().catch(() => {}); return true; },
     /**
      * Play cue `name`. One-shots take `at` (seconds ahead) and the cue's own options; a bed loops until stop().
      * Returns the number of notes scheduled (0 when the kit cannot sound: still traced).
@@ -677,11 +751,15 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
       const s = score(name, opts, rand);
       if (!s) return 0;
       if (!ready()) return 0;
-      const t0 = ctx.currentTime + Math.max(0, num(opts.at, 0));
+      const t0 = ctx.currentTime + Math.max(0, num(opts.at, 0)), b = busFor(name);
       let set = voices.get(name);
       if (!set) { set = new Set(); voices.set(name, set); }
+      if (samples.has(name)) {
+        try { return renderSample(name, samples.get(name), opts, t0, set, b); }
+        catch (e) { samples.delete(name); } // A bad sample never silences the scored cue.
+      }
       let n = 0;
-      for (const nt of s.notes) { try { render(nt, t0, set); n++; } catch (e) { /* a note never breaks a beat */ } }
+      for (const nt of s.notes) { try { render(nt, t0, set, b); n++; } catch (e) { /* a note never breaks a beat */ } }
       return n;
     },
     /** Take a cue back: a bed fades (500 ms), a one-shot and everything it scheduled ahead stops now. */
@@ -721,6 +799,11 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     /** A quieter room under Calm (the slot and the wheel already play their cues softer there). */
     setTrim(v) { trimLevel = clamp(num(v, 1), 0, 1); applyLevel(); },
     mute(on) { muted = !!on; applyLevel(); },
+    /** THE THREE BUSES, 0..1 each, over the top of the cues on them and of their own tail in the room. The
+     *  master, the trim and the mute still sit above all three, so this is a mix and not a second volume. */
+    setSub(v) { setBus('sub', v); },
+    setSfx(v) { setBus('sfx', v); },
+    setBed(v) { setBus('bed', v); },
     /** Follow a drum. Untraced on purpose: the reels call this every frame while they travel. */
     setRollSpeed(reel, speed) { const roll = rolls.get(rollKey(reel)); if (!roll) return; roll.speed = clamp(num(speed, roll.speed), 0, 1); shapeRoll(roll); },
     /** Follow the rotor. Untraced on purpose: the wheel calls this every frame while it turns. */
@@ -731,22 +814,34 @@ export function createKit({ AudioContext: AC = null, master = DEFAULT_MASTER, ra
     get context() { return ctx; },
     /** Close the context. A later arm() builds a fresh one (the room may be opened again on the same page). */
     dispose() {
-      wanted.clear();
+      wanted.clear(); samples.clear(); sampleContext = null;
       if (ctx) {
         try { stopRolls(); stopWheel(); killAll(); for (const name of Array.from(beds.keys())) stopBed(name, 0.02); } catch (e) { /* closing */ }
         try { ctx.close().catch(() => {}); } catch (e) { /* already */ }
       }
-      ctx = null; out = null; dry = null; send = null; noiseBuf = null; live.clear(); voices.clear(); beds.clear(); rolls.clear(); wheelRoll = null; lastAt.clear(); suspended = false;
+      ctx = null; out = null; buses = null; noiseBuf = null; live.clear(); voices.clear(); beds.clear(); rolls.clear(); wheelRoll = null; lastAt.clear(); suspended = false;
     },
     trace,
     /** Test seam. */
-    debug() { return { live: live.size, voices: Array.from(voices.keys()), beds: Array.from(beds.keys()), rolls: Array.from(rolls.keys()), wheel: !!wheelRoll, wanted: Array.from(wanted), master: masterLevel, trim: trimLevel, muted, suspended, has: !!ctx, state: ctx ? ctx.state : 'none' }; },
+    debug() { return { live: live.size, voices: Array.from(voices.keys()), beds: Array.from(beds.keys()), rolls: Array.from(rolls.keys()), wheel: !!wheelRoll, wanted: Array.from(wanted), master: masterLevel, trim: trimLevel, bus: { ...busLevel }, muted, suspended, has: !!ctx, state: ctx ? ctx.state : 'none' }; },
   };
+  /** Every level move is this one 50 ms ramp: a gain that jumps clicks, and the room is never allowed to click. */
+  function ramp(param, to) {
+    const t = ctx.currentTime;
+    try { param.cancelScheduledValues(t); param.setValueAtTime(param.value, t); param.linearRampToValueAtTime(to, t + 0.05); } catch (e) { param.value = to; }
+  }
   function applyLevel() {
     if (!out) return;
-    const t = ctx.currentTime;
-    try { out.gain.cancelScheduledValues(t); out.gain.setValueAtTime(out.gain.value, t); out.gain.linearRampToValueAtTime(level(), t + 0.05); } catch (e) { out.gain.value = level(); }
+    ramp(out.gain, level());
   }
+  /** A bus moves its dry leg and its tap into the room together, or its tail would outlive it. */
+  function applyBus(k) {
+    const b = buses && buses[k];
+    if (!b) return;
+    ramp(b.gain.gain, busLevel[k]);
+    ramp(b.send.gain, SEND_LEVEL * busLevel[k]);
+  }
+  function setBus(k, v) { busLevel[k] = clamp(num(v, DEFAULT_BUS[k]), 0, 1); applyBus(k); }
   return api;
 }
 

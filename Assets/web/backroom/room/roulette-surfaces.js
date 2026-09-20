@@ -35,8 +35,19 @@ export function createRouletteSurfaces(root){
     const mesh=new T.Mesh(geometry,material);mesh.name='roulette_runtime_surfaces';rotor.add(mesh);batches.push(mesh);
     let offset=0;for(const item of group.colors){numberColors.push({...item,offset,attribute:geometry.attributes.color});offset+=item.count;}
   }
+  // THE DEALER'S BACK AND TRAY (tester, 2026-09-18, phone): from the seat's top-down camera the EMI dealer's rear
+  // inlet (emi_dark, near-black) and the house chip well beside the mat read as two empty picture frames, while the
+  // face screen next to them shows hearts. Neither is a media surface (the fixture has no media_screen nodes and the
+  // roulette's GIF deal only keys fx.gif_from). The inlet wears the dealer's own rose gold. The chip well is a cut in
+  // bet_cell_assembly's shared `recess` material (the wheel pockets use it too), so it keeps the authored look.
+  const reskinned=[];
+  const reskin=(name,index,donor,donorIndex=0)=>{const node=root.getObjectByName(name),from=root.getObjectByName(donor);if(!node?.isMesh||!from?.isMesh)return;
+    const material=Array.isArray(from.material)?from.material[donorIndex]:from.material;if(!material)return;
+    const was=node.material;reskinned.push({node,was});
+    if(Array.isArray(was)){const next=was.slice();next[index]=material;node.material=next;}else node.material=material;};
+  reskin('inlet',0,'bezel',0);
   let disposed=false;
-  const result={numberColors,reset(){for(const n of numberColors){for(let i=n.offset;i<n.offset+n.count;i++)n.attribute.setXYZ(i,1,1,1);n.attribute.needsUpdate=true;}},
-    dispose(){if(disposed)return;disposed=true;cached.delete(root);for(const entry of hidden)entry.node.visible=entry.visible;for(const mesh of batches){mesh.removeFromParent();mesh.geometry.dispose();mesh.material.dispose();}}};
+  const result={numberColors,reskinned:reskinned.map(r=>r.node.name),reset(){for(const n of numberColors){for(let i=n.offset;i<n.offset+n.count;i++)n.attribute.setXYZ(i,1,1,1);n.attribute.needsUpdate=true;}},
+    dispose(){if(disposed)return;disposed=true;cached.delete(root);for(const entry of hidden)entry.node.visible=entry.visible;for(const r of reskinned)r.node.material=r.was;for(const mesh of batches){mesh.removeFromParent();mesh.geometry.dispose();mesh.material.dispose();}}};
   cached.set(root,result);return result;
 }

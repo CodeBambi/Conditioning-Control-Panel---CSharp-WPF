@@ -84,25 +84,25 @@ public class BackRoomFxPlanTests
     public void Jackpot_Normal_IsTheHero()
     {
         var p = Plan("fx.jackpot");
-        Assert.Equal(4000, p.HeroMs);
+        Assert.Equal(5000, p.HeroMs);
         Assert.Equal(new[] { "spiral-full", "flash-burst", "gif-rain", "glitch-bubbles", "sub-burst9", "sub-burst9", "gif-full" }, p.Fired);
         Assert.Empty(p.Skipped);
 
         var spiral = Step(p, FxPrim.SpiralFull);
-        Assert.Equal((0, 4000, 0.7), (spiral.AtMs, spiral.DurationMs, spiral.Level));
+        Assert.Equal((0, 5000, 0.7), (spiral.AtMs, spiral.DurationMs, spiral.Level));
         var flash = Step(p, FxPrim.FlashBurst);
-        Assert.Equal((4000, 8, 1.0), (flash.AtMs, flash.Count, flash.Level));
+        Assert.Equal((5000, 8, 1.0), (flash.AtMs, flash.Count, flash.Level));
         var rain = Step(p, FxPrim.GifRain);
-        Assert.Equal((4000, 4000, 0.9), (rain.AtMs, rain.DurationMs, rain.Level));
+        Assert.Equal((5000, 4000, 0.9), (rain.AtMs, rain.DurationMs, rain.Level));
         var glitch = Step(p, FxPrim.GlitchBubbles);
-        Assert.Equal((4000, 3, 0.35), (glitch.AtMs, glitch.Count, glitch.Level));
+        Assert.Equal((5000, 3, 0.35), (glitch.AtMs, glitch.Count, glitch.Level));
         var gif = Step(p, FxPrim.GifFull);
-        Assert.Equal((4000, 2000, 0.8), (gif.AtMs, gif.DurationMs, gif.Level));
+        Assert.Equal((5000, 2000, 0.8), (gif.AtMs, gif.DurationMs, gif.Level));
 
         var bursts = p.Steps.Where(s => s.Step.Prim == FxPrim.SubBurst9).ToList();
         Assert.Equal(2, bursts.Count);
-        Assert.Equal(4000, bursts[0].Step.AtMs);
-        Assert.Equal(4000 + 9 * 350, bursts[1].Step.AtMs);
+        Assert.Equal(5000, bursts[0].Step.AtMs);
+        Assert.Equal(5000 + 9 * 350, bursts[1].Step.AtMs);
         Assert.All(bursts, b => Assert.Equal(9, b.Words.Count));
         Assert.NotEqual(bursts[0].Words, bursts[1].Words);   // the second run continues, not repeats
     }
@@ -111,13 +111,13 @@ public class BackRoomFxPlanTests
     public void Jackpot_Full_KeepsTheCounts_StretchesTheDurations()
     {
         var p = Plan("fx.jackpot", BackRoomFxIntensity.Full);
-        Assert.Equal(5200, p.HeroMs);
+        Assert.Equal(6200, p.HeroMs);
         Assert.Equal(7, p.Steps.Count);
-        Assert.Equal(5200, Step(p, FxPrim.SpiralFull).DurationMs);
+        Assert.Equal(6200, Step(p, FxPrim.SpiralFull).DurationMs);
         Assert.Equal(8, Step(p, FxPrim.FlashBurst).Count);
         Assert.Equal(5200, Step(p, FxPrim.GifRain).DurationMs);
         Assert.Equal(2600, Step(p, FxPrim.GifFull).DurationMs);
-        Assert.All(p.Steps.Skip(1), s => Assert.True(s.Step.AtMs >= 5200));   // everything else after the spiral
+        Assert.All(p.Steps.Skip(1), s => Assert.True(s.Step.AtMs >= 6200));   // everything else after the spiral
         // Full changes no opacity.
         Assert.Equal(0.7, Step(p, FxPrim.SpiralFull).Level);
         Assert.Equal(1.0, Step(p, FxPrim.FlashBurst).Level);
@@ -205,7 +205,7 @@ public class BackRoomFxPlanTests
         Assert.Equal((0, 2), (words.Step.AtMs, words.Step.Count));
         Assert.Equal(new[] { "Drop", "Sink" }, words.Words);
         var spiral = Step(p, FxPrim.SpiralFull);
-        Assert.Equal((500 + Word, 1500, 0.55), (spiral.AtMs, spiral.DurationMs, spiral.Level));
+        Assert.Equal((500 + Word, 2500, 0.55), (spiral.AtMs, spiral.DurationMs, spiral.Level));
         Assert.Equal(@"C:\woven\screen.gif", p.Steps[1].SpiralPath);
     }
 
@@ -257,14 +257,14 @@ public class BackRoomFxPlanTests
     public void Spirals_BriefAndFull_AtTheirAlphas()
     {
         var brief = Assert.Single(Plan("fx.spiral_brief").Steps).Step;
-        Assert.Equal((FxPrim.SpiralFull, 1500, 0.55), (brief.Prim, brief.DurationMs, brief.Level));
+        Assert.Equal((FxPrim.SpiralFull, 2500, 0.55), (brief.Prim, brief.DurationMs, brief.Level));
         var full = Assert.Single(Plan("fx.spiral_full").Steps).Step;
-        Assert.Equal((FxPrim.SpiralFull, 4000, 0.7), (full.Prim, full.DurationMs, full.Level));
+        Assert.Equal((FxPrim.SpiralFull, 5000, 0.7), (full.Prim, full.DurationMs, full.Level));
 
         var briefFull = Assert.Single(Plan("fx.spiral_brief", BackRoomFxIntensity.Full).Steps).Step;
-        Assert.Equal((1950, 0.55), (briefFull.DurationMs, briefFull.Level));
+        Assert.Equal((2950, 0.55), (briefFull.DurationMs, briefFull.Level));
         var fullCalm = Assert.Single(Plan("fx.spiral_full", BackRoomFxIntensity.Calm).Steps).Step;
-        Assert.Equal((4000, 0.35), (fullCalm.DurationMs, fullCalm.Level));
+        Assert.Equal((5000, 0.35), (fullCalm.DurationMs, fullCalm.Level));
     }
 
     [Fact]
@@ -342,7 +342,7 @@ public class BackRoomFxPlanTests
     [Fact]
     public void LengthMs_IsTheLastStepsEnd()
     {
-        Assert.Equal(4000 + 9 * 350 + 8 * 350 + Word, BackRoomFxPlan.LengthMs(BackRoomFxPlan.Recipe("fx.jackpot", BackRoomFxIntensity.Normal)!));
+        Assert.Equal(5000 + 9 * 350 + 8 * 350 + Word, BackRoomFxPlan.LengthMs(BackRoomFxPlan.Recipe("fx.jackpot", BackRoomFxIntensity.Normal)!));
         Assert.Equal(0, BackRoomFxPlan.LengthMs(new FxRecipe(0, Array.Empty<FxStep>())));
     }
 }

@@ -1,19 +1,25 @@
 import * as T from 'three';
+import { createDecorationShop } from './decoration-shop.js';
+import { decorationId, defaultDecorationLayout } from './decoration-catalog.js';
 import { createCustomizationPanel } from './customization-panel.js';
 import { createSlotCustomHandles } from './slot-custom-handles.js';
 import { createCustomizationScreens } from './customization-screens.js';
 import { createCustomizationProps } from './customization-props.js';
 import { createSpiralSamples } from './vending-spirals.js';
+import { placePlan, placeFeel } from './prop-landing.js';
+import { freshSit, afterParty } from '../shared/win/plan.js';
 import { kit } from '../shared/sound/kit.js';
 
 const PIECES=['knight','queen','rook'];
+/** A restore is the room reading its own saved state back, never a placement: it lands nothing. */
+const SILENT=Object.freeze({silent:true});
 
-/** Local room previews. Ownership and SP are unchanged. */
+/** Temporary previews and server-authoritative decoration ownership/layout. */
 export async function createCustomization({scene,loader,base,mount,lex,canvas,camera,isActive,room,onPreview=()=>{}}) {
   const row={key:'customization',id:'customization',name:'Room Service',labelKey:'br_custom_title',approach:[5.5,1.65,6.6],look:[7.05,1.4,6.7]};
   const root=new T.Group();root.name='room_customization';scene.add(root);
   const selected={statues:[0,1,2]};let floorEnabled=true;
-  let owned=new Set();
+  let owned=new Set(),shop=null,shopUnsubscribe=null,committed=defaultDecorationLayout();
   const propIds=['monstera','ivy','terrarium','gallery','portraits','billboard'];
   const load=async file=>(await loader.loadAsync(base+'customization/'+file+'.glb')).scene;
   const vending=await load('vending');vending.name='customization_vending';
@@ -37,22 +43,41 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     mini.position.set(-(box.min.x+size.x/2)*scale,-box.min.y*scale,-(box.min.z+size.z/2)*scale);
     vending.getObjectByName('bay_'+String(index+1).padStart(2,'0'))?.add(mini);
   });
-  const statueSpots=[[-4.1,.03,-6.85],[4.1,.03,-6.85],[3.7,.03,7.25]].map((position,spot)=>sculptures.map((source,index)=>{
+  const statueSpots=[[-4.1,.03,-6.85],[5.9,.03,5.35],[3.7,.03,7.25]].map((position,spot)=>sculptures.map((source,index)=>{
     const model=source.clone(true);root.add(model);
     model.name='statue_spot_'+spot+'_'+PIECES[index];model.rotation.y=spot===2?Math.PI:0;
     model.position.fromArray(position);model.visible=index===spot;return model;
   }));
+  const statueFlex=statueSpots.flat().map(model=>{
+    const pivot=new T.Group();model.add(pivot);const meshes=[];model.traverse(n=>{if(n.isMesh&&n.name.includes('_original_'))meshes.push(n);});
+    model.updateMatrixWorld(true);for(const n of meshes)pivot.attach(n);
+    const box=new T.Box3().setFromObject(pivot);const base=model.worldToLocal(new T.Vector3(0,box.min.y,0));
+    pivot.position.y=base.y;for(const n of meshes)n.position.y-=base.y;
+    return {model,pivot,age:9};
+  });
   // The pull-for-fun cues, on the room's one kit: the lever's tap, the drums' roll, a thud per stop.
   let pulled=0;
   const cue=(name,index,reel=0)=>{
     if(name==='pull')pulled++;
-    try{if(!kit.arm())return;if(name==='pull'){kit.play('tap');kit.play('ticks',{reel:0,ms:1100});}else kit.play('thud',{semis:(reel-1)*2});}catch{/* a cue never breaks a pull */}
+    try{if(!kit.arm())return;if(name==='silicone'){kit.play('silicone');}else if(name==='pull'){kit.play('tap');kit.play('ticks',{reel:0,ms:1100});}else kit.play('thud',{semis:(reel-1)*2});}catch{/* a cue never breaks a pull */}
   };
   const handles=await createSlotCustomHandles({holders:room.holders,loader,base,sources:sculptures,onCue:cue});
-  const getState=()=>({screens:extras.getState(),props:props.getState(),statues:[...selected.statues],handles:handles.getState(),floor:floorEnabled?room.getFloorStyle().design:-1,palette:room.getFloorStyle().palette});
-  const select=(category,index,target=0)=>{
+  const actualState=()=>({screens:extras.getState(),props:props.getState(),statues:[...selected.statues],handles:handles.getState(),floor:floorEnabled?room.getFloorStyle().design:-1,palette:room.getFloorStyle().palette});
+  /* THE PLACED PROP (CONTRACT 10.22.D). The decoration won at the wheel is the room's only reward with
+   * no number on it, and it used to arrive by `visible = true`. Now it lands: a drop, the furniture cut
+   * of THE THUD and THE GLOW, sized by shared/win/plan.js off Room Service's own Brake 3 ledger, so a
+   * player flicking the same plant on and off gets less ceremony each time and never none. */
+  let placeSit=freshSit();
+  const placement=()=>{
+    const ctx={still:quiet,reduced:matchMedia('(prefers-reduced-motion: reduce)').matches};
+    const plan=placePlan(placeSit,ctx);placeSit=afterParty(placeSit,plan);
+    return placeFeel(plan,ctx);
+  };
+  const select=(category,index,target=0,opts)=>{
+    const grant=decorationId(category,index,target);
+    if(grant&&!owned.has(grant)&&!opts?.preview)return false;
     if(category==='screens')return extras.set(target,index);
-    if(category==='props')return (!index || owned.has(propIds[target])) && props.set(target,index);
+    if(category==='props')return (!index || opts?.preview || owned.has(propIds[target])) && props.set(target,index,index&&!opts?.silent?placement():undefined);
     if(!Number.isInteger(index))return false;
     if(category==='handles')return handles.set(target,index);
     if(category==='floor'||category==='palette'){
@@ -63,15 +88,15 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     }
     if(category!=='statues'||!statueSpots[target]||index< -1||index>2)return false;
     selected.statues[target]=index;statueSpots[target].forEach((g,i)=>{
-      g.visible=i===Math.max(0,index);
+      g.visible=index>=0&&i===index;
       g.traverse(o=>{if(o.isMesh&&o.name.includes('_original_'))o.visible=index!==-1;});
     });return true;
   };
   const restore=async state=>{
     state.screens.forEach((on,index)=>select('screens',on,index));
-    state.props.forEach((on,index)=>select('props',on,index));
+    state.props.forEach((on,index)=>select('props',on,index,SILENT));
     select('floor',state.floor);select('palette',state.palette);
-    await Promise.all(state.statues.map((piece,spot)=>{select('statues',piece,spot);return select('handles',state.handles[spot],spot);}));
+    await Promise.all(state.statues.map((piece,spot)=>{select('statues',piece,spot);return handles.getState()[spot]===state.handles[spot]?true:select('handles',state.handles[spot],spot);}));
   };
   // The lever close-up: one cabinet at a time, the camera at +x looking down -x, so screen-right is -z.
   const SLOTS=['slot:rose','slot:violet','slot:mint'];
@@ -80,15 +105,18 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
   const slotZ=i=>room.holders.get(SLOTS[i]).getWorldPosition(new T.Vector3()).z;
   const slotOrder=[0,1,2].filter(i=>room.holders.get(SLOTS[i])).sort((a,b)=>slotZ(b)-slotZ(a));
   // The pan between cabinets: a short eased travel, driven from update(); a snap when motion is off or reduced.
-  let travel=null,shown=null,quiet=false;
+  let travel=null,shown=null,quiet=false,disposed=false;
   const mix=(a,b,k)=>a.map((v,i)=>v+(b[i]-v)*k);
   const snaps=()=>quiet||matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const endPreview=()=>{if(disposed)return;props.endPreview();void restore(committed);};
+  const getState=()=>structuredClone(committed);
   const preview=(category,index,target=0)=>{
-    props.endPreview();
+    endPreview();
+    if(category!=='room'&&category!=='props')void select(category,category==='screens'?true:index,target,{preview:true,silent:true});
     if(category!=='handles'){travel=null;shown=null;}
     if(category==='room'){onPreview({position:[0,2.9,5.5],look:[0,1.7,-3]});return;}
     if(category==='screens'){onPreview(extras.preview(target));return;}
-    if(category==='props'){const view=props.preview(target);if(view)onPreview(view);return;}
+    if(category==='props'){const view=props.preview(target,{show:true});if(view)onPreview(view);return;}
     if(category==='floor'||category==='palette'){onPreview({position:[0,4.2,5.5],look:[0,0,0]});return;}
     if(category==='handles'){
       const goal=slotView(target);if(!goal)return;
@@ -100,7 +128,19 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     const distance=Math.max(1.5,size.y*1.6,size.x*1.15);
     onPreview({position:[center.x,center.y+.12,center.z+Math.cos(object.rotation.y)*distance],look:center.toArray(),width:size.x,height:size.y});
   };
-  const panel=createCustomizationPanel({mount,lex,vending,decorations:props.models,select,getState,restore,preview,slotOrder,hasOwnership:id=>owned.has(id),onClose:()=>{props.endPreview();travel=null;shown=null;onPreview(null);}});
+  const saveLayout=next=>shop?.save(next)??Promise.resolve(false);
+  const commitSelection=(category,value,index=0)=>{
+    const next=getState();if(Array.isArray(next[category]))next[category][index]=value;else next[category]=value;
+    return saveLayout(next);
+  };
+  const panel=createCustomizationPanel({mount,lex,vending,decorations:[...props.models,...sculptures],select:commitSelection,getState,restore:endPreview,endPreview,saveLayout,shop:()=>shop,preview,slotOrder,hasOwnership:id=>owned.has(id),onClose:()=>{endPreview();travel=null;shown=null;onPreview(null);}});
+  async function configureShop(options){
+    shopUnsubscribe?.();shop?.dispose();shop=createDecorationShop(options);shop.grant([...owned]);
+    shopUnsubscribe=shop.subscribe(state=>{owned=new Set([...owned,...state.owned]);if(state.ready){committed=structuredClone(state.layout);endPreview();}panel.refresh();});
+    return shop.load();
+  }
+
+  await restore(committed);
   const ray=new T.Raycaster(),pointer=new T.Vector2();let down=null;
   // A finger on the room pane while the lever close-up is up: a horizontal swipe pans to the next cabinet
   // (swipe left, the way a carousel reads) or the previous one; the sheet keeps its own pointer events.
@@ -117,6 +157,9 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     if(!isActive()||Math.hypot(e.clientX-start.x,e.clientY-start.y)>7||performance.now()-start.t>650)return;
     const rect=canvas.getBoundingClientRect();pointer.set((e.clientX-rect.left)/rect.width*2-1,1-(e.clientY-rect.top)/rect.height*2);
     ray.setFromCamera(pointer,camera);
+    const touched=ray.intersectObjects(scene.children,true).find(h=>{for(let n=h.object;n;n=n.parent)if(!n.visible)return false;return h.object.isMesh&&!h.object.material?.transparent;});
+    const statue=statueFlex.find(s=>{for(let n=touched?.object;n;n=n.parent)if(n===s.model)return true;return false;});
+    if(statue&&touched.distance<5){e.__brStatueTouch=true;statue.age=0;try{kit.arm();kit.play('silicone');}catch{}return;}
     const hit=ray.intersectObject(vending,true)[0];if(!hit||hit.distance>4)return;
     const obstructed=ray.intersectObjects(scene.children,true).some(h=>{
       if(h.distance>=hit.distance-.04)return false;
@@ -126,9 +169,10 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     if(!obstructed)panel.open();
   };
   canvas.addEventListener('pointerdown',onDown);canvas.addEventListener('pointerup',onUp);
-  return {setOwned(ids){owned=new Set(ids);propIds.forEach((id,index)=>{if(!owned.has(id))props.set(index,false);});panel.refresh();},row,screens:[...extras.screens,...props.screens],select,getState,restore,preview,open:()=>panel.open(),get opened(){return panel.opened;},
+  return {configureShop,get shop(){return shop;},setOwned(ids){owned=new Set([...owned,...ids]);shop?.grant(ids);panel.refresh();},row,screens:[...extras.screens,...props.screens],select,getState,restore,preview,open:()=>panel.open(),get opened(){return panel.opened;},
     dismiss(){if(!panel.opened)return false;panel.close();return true;},
-    update(dt,still){spirals.update(dt,still);panel.update?.(dt,still);handles.update(dt,still);quiet=!!still;
+    update(dt,still){spirals.update(dt,still);panel.update?.(dt,still);handles.update(dt,still);props.update(dt);quiet=!!still;
+      for(const s of statueFlex){s.age+=Math.min(.05,Math.max(0,dt));const a=snaps()||s.age>1.2?0:.065*Math.exp(-s.age*4)*Math.sin(s.age*22);s.pivot.rotation.z=a;s.pivot.rotation.x=a*.35;}
       if(travel){travel.elapsed+=dt;const t=still?1:Math.min(1,travel.elapsed/travel.duration),k=1-Math.pow(1-t,3);
         shown={...travel.to,position:mix(travel.from.position,travel.to.position,k),look:mix(travel.from.look,travel.to.look,k)};onPreview(shown);if(t>=1)travel=null;}},
     /** The close-up: a scissored pass on the room's own renderer, so it opens no second context. */
@@ -136,6 +180,6 @@ export async function createCustomization({scene,loader,base,mount,lex,canvas,ca
     /** What the open panel leaves the room to draw into (viewport pixels, y up from the bottom). */
     previewBox(w,h){return panel.previewBox(w,h);},
     debug:()=>({selected:getState(),opened:panel.opened,models:9,props:props.debug(),view:panel.viewDebug(),pulls:{count:pulled,target:panel.slotTarget,active:[0,1,2].map(i=>handles.pulling(i))},arrows:{...panel.arrowsDebug(),order:slotOrder.slice(),travel:!!travel,view:shown,slots:[0,1,2].map(slotView)}}),
-    dispose(){handles.dispose();props.dispose();extras.dispose();titleMap.dispose();panel.dispose();canvas.removeEventListener('pointerdown',onDown);canvas.removeEventListener('pointerup',onUp);root.removeFromParent();const gs=new Set(),ms=new Set();root.traverse(o=>{if(o.geometry)gs.add(o.geometry);for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m)ms.add(m);});gs.forEach(g=>g.dispose());ms.forEach(m=>m.dispose());}
+    dispose(){disposed=true;shopUnsubscribe?.();shop?.dispose();handles.dispose();props.dispose();extras.dispose();titleMap.dispose();panel.dispose();canvas.removeEventListener('pointerdown',onDown);canvas.removeEventListener('pointerup',onUp);root.removeFromParent();const gs=new Set(),ms=new Set();root.traverse(o=>{if(o.geometry)gs.add(o.geometry);for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m)ms.add(m);});gs.forEach(g=>g.dispose());ms.forEach(m=>m.dispose());}
   };
 }

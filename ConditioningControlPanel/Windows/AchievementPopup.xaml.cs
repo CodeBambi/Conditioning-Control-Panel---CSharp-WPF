@@ -91,7 +91,11 @@ public partial class AchievementPopup : Window
             // Mod override first, then the embedded pack:// resource - both handled by the
             // resolver. Probing the disk copy first would always hit the bundled PNG and make
             // mod art unreachable here (the gallery and profile showcase resolve the same way).
-            var image = Services.ModResourceResolver.ResolveImage($"achievements/{imageName}");
+            // A name with a folder in it ("skills/milestone_rewards.png", the streak and perfect
+            // week bonuses) is resolved as given: the resolver refuses "..", so the old
+            // "../skills/x.png" hop never loaded and those popups came up with no art.
+            var relative = imageName.Contains('/') ? imageName : $"achievements/{imageName}";
+            var image = Services.ModResourceResolver.ResolveImage(relative);
             if (image != null)
             {
                 AchievementImage.Source = image;
@@ -100,7 +104,7 @@ public partial class AchievementPopup : Window
             }
 
             // Last resort: a loose file on disk (content pack or hand-dropped art)
-            var imagePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "achievements", imageName);
+            var imagePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", relative.Replace('/', Path.DirectorySeparatorChar));
 
             if (File.Exists(imagePath))
             {

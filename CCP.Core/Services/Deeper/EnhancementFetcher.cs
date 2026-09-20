@@ -169,7 +169,7 @@ namespace ConditioningControlPanel.Services.Deeper
                 }
 
                 lock (_gate) _cache[url] = enh;
-                Log.Information("EnhancementFetcher: cached '{Name}' from {Host}", enh.Metadata?.Name, Logging.UrlLog.Host(url));
+                Log.Information("EnhancementFetcher: cached enhancement from {Host}", Logging.UrlLog.Host(url));
                 return enh;
             }
             catch (TaskCanceledException) { return null; }

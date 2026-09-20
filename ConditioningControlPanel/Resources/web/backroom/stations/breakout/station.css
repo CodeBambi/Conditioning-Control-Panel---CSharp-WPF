@@ -1,0 +1,78 @@
+/* station.css - Breakout chrome. Everything scoped under .bo-station so the room's own styles never collide.
+   The canvas draws the game (saturation bar included); this file is the thin HUD strip (SP chip, combo), the chevron
+   Back (only without a host Back), the first-move hint, the ghost countdown, PAUSED, and the gear + dev panel. */
+.bo-station { position: absolute; inset: 0; z-index: 20; overflow: hidden; background: #000; color: #fce5f3;
+  font-family: Segoe UI, Arial, sans-serif; color-scheme: dark; touch-action: none; user-select: none; -webkit-user-select: none; }
+.bo-station * { box-sizing: border-box; }
+.bo-station [hidden] { display: none !important; }
+.bo-stage { position: absolute; inset: 0; display: block; cursor: none; }
+.bo-station.is-paused .bo-stage, .bo-station.is-dev .bo-stage, .bo-station:not(.is-played) .bo-stage { cursor: default; }
+
+/* ---- the strip: SP chip top-right of the field, combo beside it. Nothing else lives up here. ---- */
+.bo-hud { position: absolute; top: 12px; right: 52px; display: flex; align-items: center; gap: 8px; z-index: 4; pointer-events: none; }
+.bo-station[data-host-back] .bo-hud { top: 58px; }
+.bo-sp { background: #201229e8; border: 1px solid #b77da247; padding: 5px 11px; border-radius: 30px; font-size: 12px;
+  color: #ffe3f2; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: .3px; }
+.bo-sp b { color: #ffcf6b; font-size: 14px; }
+.bo-combo { font: 900 22px/1 "Arial Rounded MT Bold", "Trebuchet MS", sans-serif; color: #ff8ad0; text-shadow: 0 0 12px #ff69b4aa, 0 2px 4px #000;
+  font-variant-numeric: tabular-nums; }
+.bo-sp.is-pop, .bo-combo.is-pop { animation: bo-pop .45s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes bo-pop { 0% { transform: scale(1); } 35% { transform: scale(1.35); } 100% { transform: scale(1); } }
+
+/* ---- the chevron Back, only when the host has none ---- */
+.bo-back { position: absolute; top: 10px; left: 10px; z-index: 5; width: 40px; height: 40px; padding: 0; border-radius: 50%;
+  border: 1px solid #ffe7ad66; background: #201229cc; color: #ffcf6b; cursor: pointer; touch-action: manipulation;
+  display: flex; align-items: center; justify-content: center; opacity: .8; transition: opacity .2s, background .2s; }
+.bo-back::before { content: ""; width: 11px; height: 11px; border-left: 3px solid currentColor; border-bottom: 3px solid currentColor;
+  transform: translateX(2px) rotate(45deg); border-radius: 1px; }
+.bo-back:hover { opacity: 1; background: #3a2246e6; }
+.bo-back:focus-visible { outline: 3px solid #8fffe0; outline-offset: 2px; }
+
+/* ---- hints: first move, then the ghost countdown in grey ---- */
+.bo-hint { position: absolute; left: 50%; bottom: 14%; transform: translateX(-50%); margin: 0; font: 600 15px/1 Segoe UI, Arial, sans-serif;
+  letter-spacing: 2px; text-transform: uppercase; color: #f5cfe7cc; pointer-events: none; text-shadow: 0 2px 8px #000;
+  transition: opacity .5s; animation: bo-breathe 2.2s ease-in-out infinite; }
+.bo-station.is-played .bo-hint { opacity: 0; animation: none; }
+@keyframes bo-breathe { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+.bo-ghost-hint { position: absolute; left: 0; top: 0; margin: 0; padding: 3px 9px; border-radius: 12px; white-space: nowrap; pointer-events: none;
+  font: 600 11px/1.2 Segoe UI, Arial, sans-serif; letter-spacing: .6px; color: #d6d6d6; background: #1a1a1acc; border: 1px solid #ffffff22;
+  font-variant-numeric: tabular-nums; will-change: transform; }
+
+/* ---- PAUSED: one word, the field dims, any move resumes ---- */
+.bo-paused { position: absolute; inset: 0; z-index: 6; display: flex; align-items: center; justify-content: center; pointer-events: none;
+  background: #000000a6; font: 900 44px/1 "Arial Rounded MT Bold", "Trebuchet MS", sans-serif; letter-spacing: 6px; color: #fce5f3;
+  text-shadow: 0 0 24px #ff69b466; }
+
+/* ---- the gear and its panel: closed by default, remembered ---- */
+.bo-gear { position: absolute; top: 10px; right: 10px; z-index: 7; width: 34px; height: 34px; padding: 0; border-radius: 50%; cursor: pointer;
+  border: 1px solid #b77da247; background: #201229cc; color: #e9c2dc; opacity: .55; transition: opacity .2s, transform .3s; touch-action: manipulation; }
+.bo-gear::before { content: "\2699"; font-size: 18px; line-height: 1; }
+.bo-gear:hover, .bo-gear[aria-expanded="true"] { opacity: 1; }
+.bo-gear[aria-expanded="true"] { transform: rotate(60deg); }
+.bo-gear:focus-visible { outline: 3px solid #8fffe0; outline-offset: 2px; }
+.bo-dev { position: absolute; top: 50px; right: 10px; z-index: 7; font-size: 11px; max-height: calc(100% - 60px); overflow: auto; min-width: 250px;
+  max-width: calc(100% - 20px); padding: 8px 10px; background: #160e20f2; border: 1px solid #b77da247; border-radius: 10px;
+  display: flex; flex-direction: column; gap: 7px; }
+.bo-dev-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+.bo-dev-lab { width: 40px; flex: none; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; font-size: 10px; color: #ffcf6b; }
+.bo-rungs { display: flex; flex-wrap: wrap; gap: 2px 6px; flex: 1; }
+.bo-words { display: flex; flex-wrap: wrap; gap: 3px 4px; flex: 1; }
+.bo-rungs label { display: inline-flex; align-items: center; gap: 3px; padding: 1px 4px; border-radius: 4px; cursor: pointer; }
+.bo-rungs label.is-forced { background: #ff69b433; }
+.bo-rungs input { margin: 0; }
+.bo-dev label { display: inline-flex; align-items: center; gap: 4px; }
+.bo-dev input[type="range"] { width: 70px; }
+.bo-dev input[type="number"] { width: 46px; font: inherit; background: #0c0713; color: inherit; border: 1px solid #b77da247; border-radius: 4px; padding: 2px 4px; }
+.bo-dev button { font: inherit; padding: 3px 8px; border-radius: 8px; border: 1px solid #c58bbd59; color: #fce5f3;
+  background: linear-gradient(180deg, #3d2449, #2a1734 54%, #1d0f26); cursor: pointer; }
+.bo-dev button:hover { border-color: #ffb7e08c; }
+.bo-dev-stats { flex-basis: 100%; opacity: .6; font-variant-numeric: tabular-nums; white-space: pre; }
+
+@media (max-width: 480px) {
+  .bo-hud { top: 10px; right: 48px; }
+  .bo-combo { font-size: 19px; }
+  .bo-paused { font-size: 32px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bo-sp.is-pop, .bo-combo.is-pop, .bo-hint { animation: none; }
+}

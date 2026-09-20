@@ -107,7 +107,7 @@ ok((await ev('window.dev.host.media.length === 1 && window.dev.host.media[0].cou
 ok(new Set(d.deck.map).size === 13 && d.deck.map[0] === 'g0' && d.deck.map[12] === 'g12', 'values A..K wear g0..g12 in deal order');
 await until("window.dev.station.debug().phase === 'play'", 6000);
 d = await dbg();
-ok(/Pick a bet and deal/.test(d.status) && d.stake === 2 && d.hint === false && (await ev("localStorage.getItem('br_cards_hint') === null && !document.querySelector('.cards-hint-toggle input').checked")), 'ready: bet 2 at 57 SP, hint off by default');
+ok(/Pick a bet and deal/.test(d.status) && d.stake === 2, 'ready: bet 2 at 57 SP');
 
 await mark();
 const pressed = await ev(`(async () => { const t0 = performance.now(); document.querySelector('.cards-deal').click();
@@ -123,12 +123,6 @@ ok(d.controls.moves.hit && d.controls.moves.stand && d.controls.moves.double && 
 ok(/18 against Emi showing 9\. Your move\./.test(d.status) && d.chip.value === 55, `status as text: "${d.status}", 55 SP`);
 const r0 = await dbg(); await sleep(600); const r1 = await dbg();
 ok(r1.kit.renders - r0.kit.renders <= r1.table.frames - r0.table.frames, `every card back shares one Loom render a frame (${r1.kit.renders - r0.kit.renders} renders over ${r1.table.frames - r0.table.frames} frames)`);
-await click('.cards-hint-toggle input');
-await sleep(150);
-ok(/Hint: Stand\./.test(await ev("document.querySelector('.cards-hint').textContent")) && (await ev("document.querySelector('.cards-move[data-move=stand]').classList.contains('is-hint') && localStorage.getItem('br_cards_hint') === '1'")), 'hint on: "Hint: Stand." and remembered in br_cards_hint');
-await shot('hint-on.png');
-await click('.cards-hint-toggle input');
-
 await mark();
 let t0 = Date.now();
 await click('.cards-move[data-move=stand]');

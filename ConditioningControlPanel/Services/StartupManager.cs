@@ -105,7 +105,7 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private static string GetExecutablePath()
+        internal static string GetExecutablePath()
         {
             // Try to get the executable path
             var processPath = Environment.ProcessPath;
@@ -131,7 +131,7 @@ namespace ConditioningControlPanel.Services
             return processPath ?? "";
         }
 
-        private static void CreateShortcut(string shortcutPath, string targetPath, string workingDirectory,
+        internal static void CreateShortcut(string shortcutPath, string targetPath, string workingDirectory,
             string description, string arguments = "")
         {
             // Use COM interop to create a proper Windows shortcut

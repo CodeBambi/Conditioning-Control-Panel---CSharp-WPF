@@ -25,7 +25,7 @@
  *   4. a tap is a ONE TRACK run: that track and nothing else, and the run's
  *      clock is the file's clock. The tap closes the panel: the main list is
  *      back with the plate up, its name on it, the status line stood down for
- *      the plate, and the first verb reading `start · <name>`
+ *      the plate, and the first verb reading `play · <name>`
  *  4b. the tapped row IS the status inside the panel: it alone is `is-picked`,
  *      it alone grows a progress bar, a road in hand fills that bar and reads
  *      `loaded`, the plate stays down while the panel is open, and `back` is
@@ -234,7 +234,7 @@ await sleep(3000);
   ok(await ev(`document.querySelector('.rm-cloud').hidden === true && !document.querySelector('.rm-list').hidden`), 'the tap closed the panel: the main list is back');
   ok(await ev(`document.querySelector('.rm-track').hidden === false`), 'and the plate is UP on the main list, bar and all');
   ok(await ev(`document.querySelector('.rm-status-track').hidden === true`), 'the track status line stands down for the plate');
-  ok(await ev(`document.querySelector('.rm-list .rm-btn[data-id=race]').textContent`) === 'start · The Second One', 'and the first verb reads `start · The Second One`');
+  ok(await ev(`document.querySelector('.rm-list .rm-btn[data-id=race]').textContent`) === 'play · The Second One', 'and the first verb reads `play · The Second One`');
 }
 
 /* ---- 4b. the picked row IS the status, and `back` never leaves the screen ---- */
@@ -336,6 +336,20 @@ await sleep(700);
   const after = asked.slice(before).filter((u) => /\.wav|\.mp3/.test(u));
   ok(after.length === 0, 'and not one byte of audio was asked for on this page' + (after.length ? ': ' + after.join(', ') : ''));
 }
+
+/* ---- 8b. live desktop ownership, including old click closures ---------------- */
+await click('.rm-list .rm-btn[data-id=cloud]');
+await ev("window.__oldLevel = window.__race.levels.rows()[0]; window.__race.levels.setOwnership([0])");
+ok((await levelRows()).length === 1, 'a demo-only purchase shows one level');
+await ev("window.__race.levels.setOwnership([1])");
+ok((await levelRows())[0].title === 'The Second One', 'a pack without demo shows its own level');
+const admitted = logs.filter(l=>l.includes('cloud-open')).length;
+await ev('window.__oldLevel.press()');
+ok(logs.filter(l=>l.includes('cloud-open')).length === admitted, 'a stale unowned row cannot open a track');
+await ev('window.__race.levels.setOwnership([])');
+ok((await levelRows()).length === 0, 'explicit empty ownership removes all built-ins');
+await ev('window.__race.levels.setOwnership([0,1])');
+ok((await levelRows()).length === 2, 'a newly purchased pack appears without reopening');
 
 /* ---- 9. nothing left this machine ---------------------------------------- */
 {

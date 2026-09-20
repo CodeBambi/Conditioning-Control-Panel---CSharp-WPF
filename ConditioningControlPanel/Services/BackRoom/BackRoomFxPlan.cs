@@ -117,6 +117,10 @@ public static class BackRoomFxPlan
 
     /// <summary>Spiral alphas: the brief one (and the pair's tail) and the full one.</summary>
     public const double SpiralBriefAlpha = 0.55, SpiralFullAlpha = 0.7;
+    /// <summary>The spiral holds. Decision 2026-09-17: these stay 1500 / 4000 under the 1250 ms rise in
+    /// <see cref="Overlays.BackRoomOverlayMath.SpiralFadeInMs"/>, so a brief spiral sits at full alpha for
+    /// only its last 250 ms. Growing them (2000 / 5000, #1340) was a second authored change, deliberately
+    /// not made. On screen in total: this plus the 500 ms fade-out.</summary>
     public const int SpiralBriefMs = 1500, SpiralFullMs = 4000;
 
     /// <summary>gif-full: the cascade's tail and the jackpot's picture.</summary>
@@ -199,7 +203,9 @@ public static class BackRoomFxPlan
         _ => "unknown",
     };
 
-    private static FxRecipe R(params FxStep[] steps) => new(0, steps);
+    private static FxRecipe R(params FxStep[] steps) => new(0, steps.Select(s =>
+        (s.Prim is FxPrim.SpiralFull or FxPrim.SpiralLoom) && s.Look?.Hold != true
+            ? s with { DurationMs = Math.Min(HoldCapMs, s.DurationMs + 1000) } : s).ToArray());
 
     /// <summary>
     /// The table (CONTRACT section 4, authored 2026-09-15). "+" is the same start, "then" is after the
@@ -223,7 +229,7 @@ public static class BackRoomFxPlan
         {
             case "fx.jackpot":
             {
-                int t = D(JackpotHeroMs);
+                int t = D(JackpotHeroMs) + 1000;
                 return new FxRecipe(t, new[]
                 {
                     S(FxPrim.SpiralFull, 0, ms: t, level: SpiralFullAlpha),

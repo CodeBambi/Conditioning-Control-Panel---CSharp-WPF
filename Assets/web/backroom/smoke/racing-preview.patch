@@ -1,0 +1,180 @@
+--- a/room/main.js
++++ b/room/main.js
+@@ -1,3 +1,4 @@
++import { createRacePortal, consumeRoomPose } from './race-portal.js';
+ import { sliceText } from '../stations/wheel/rewards.js';
+ import { setWheelFace } from './wheel-face.js';
+ /* ============================================================================
+@@ -70,6 +71,48 @@
+ const spListeners = new Set();
+ const settingsListeners = new Set();
+ let scene = null, loader = null, hud = null, leaving = false, visiting = false;
++
++let racingOwnership = null, raceOpening = false;
++const previewHost = typeof window.__brSettings === 'object' && typeof window.__hostEmit === 'function';
++const racePortal = createRacePortal({
++  hosted: !previewHost, send: bridge.send, on: bridge.on,
++  getPose: () => scene?.navigationPose(), racePath: '/backroom/racing/race.html',
++  beforeNavigate: () => { leaving = true; hud?.stop(); doubleCharm?.dispose(); scene?.halt(); kit.dispose(); window.__fxCancelAll?.(); },
++  onRefused: m => { raceOpening = false; scene?.release(); if (m.reason === 'locked') visit(window.__backroom.stations.find(r => r.id === 'counter')); },
++});
++function applyPrizes(body, bought) {
++  const snapshot = prizeState(body);
++  if (!snapshot) return;
++  racingOwnership = snapshot;
++  scene?.setPrizes(snapshot, bought);
++}
++async function openRace() {
++  if (leaving || visiting || raceOpening || !scene || scene.seated || scene.transitioning || loader?.current) return false;
++  raceOpening = true;
++  if (!previewHost) {
++    // Native access is canonical even when the prize counter is temporarily closed.
++    scene.hold();
++    if (!racePortal.open()) { scene.release(); raceOpening = false; return false; }
++    return true;
++  }
++  try {
++    // Refresh access before leaving; no station can be abandoned with a paid result pending.
++    const reqId = bridge.mintId();
++    const res = await bridge.request({type:'station-request', reqId, station:'counter', op:'state', body:{}},
++      'station-result', m => m.reqId === reqId, BELL_TIMEOUT_MS);
++    if (leaving || visiting || scene.seated || loader?.current) return false;
++    const freshOwnership = res?.ok ? prizeState(res.body) : null;
++    if (freshOwnership) applyPrizes(res.body);
++    if (!freshOwnership?.racing) {
++      raceOpening = false;
++      await visit(window.__backroom.stations.find(r => r.id === 'counter'));
++      return false;
++    }
++    scene.hold();
++    if (!racePortal.open()) { scene.release(); return false; }
++    return true;
++  } finally { if (!racePortal.pending) raceOpening = false; }
++}
+ 
+ const $ = (sel) => document.querySelector(sel);
+ 
+@@ -182,6 +225,8 @@
+ 
+ async function visit(row) {
+   if (leaving || visiting || !scene || !loader || scene.overview || scene.transitioning || scene.seated) return;
++  if(row?.key==='race'){await openRace();return;}
++  if(raceOpening)return;
+   if(row?.key==='customization'){scene.customization.open();return;}
+   visiting = true;
+   scene.prepareVisit();
+@@ -361,11 +406,13 @@
+   const reqId = bridge.mintId();
+   const res = await bridge.request({type:'station-request', reqId, station:'counter', op:'state', body:{}},
+     'station-result', m => m.reqId === reqId, BELL_TIMEOUT_MS);
+-  if (!leaving && !seated() && res?.ok) scene?.setPrizes(prizeState(res.body));
++  if (!leaving && !seated() && res?.ok) applyPrizes(res.body);
+ }
+ 
+ async function start(init) {
+   rewards.reset();
++  const ownedTracks = Array.isArray(init.racingTracks) ? init.racingTracks.filter(n => Number.isInteger(n) && n >= 0 && n <= 10) : [];
++  if (ownedTracks.length) racingOwnership = { owned: [], tracks: ownedTracks, demo: ownedTracks.includes(0), racing: true };
+   Object.assign(state, {
+     sp: Number.isFinite(init.sp) ? init.sp : 0,
+     reduced: !!init.reduced,
+@@ -443,14 +490,14 @@
+     spReadout,
+     spChanged,
+     chipSettle,
+-    prizesChanged: (body, bought) => scene?.setPrizes(prizeState(body), bought),
++    prizesChanged: applyPrizes,
+     rewardLanded: body => applyRewards(body),
+     revealedWin: (key,amount,tier,text)=>scene?.celebrate(key,amount,tier,text),
+     standUp: () => back('back'),
+     log: (level, msg) => bridge.log(level, msg),
+   });
+   // Test seam for the smoke checks (never read by the room itself).
+-  window.__backroom = { state, stations, loader, back, lex, visit, bell, refreshBell, rewards, get hud() { return hud; }, get scene() { return scene; } };
++  window.__backroom = { openRace, state, stations, loader, back, lex, visit, bell, refreshBell, rewards, get hud() { return hud; }, get scene() { return scene; } };
+ 
+   try {
+     scene = await createScene({
+@@ -479,6 +526,9 @@
+   if (leaving) { scene.halt(); return; }
+   // M toggles the view inside the scene; keep the HUD in step after it has.
+   window.addEventListener('keydown', (e) => { if (e.code === 'KeyM') setTimeout(() => hud.overview(scene.overview), 0); });
++  if (racingOwnership) scene.setPrizes(racingOwnership);
++  const returnPose = consumeRoomPose();
++  if (returnPose) scene.pose(returnPose.position, returnPose.yaw, returnPose.pitch);
+   if (state.suspended) scene.pause(true);
+   paintMotion();
+   hud.ready();
+--- a/room/scene.js
++++ b/room/scene.js
+@@ -140,7 +140,8 @@
+   const canLeave = () => o.canLeave?.() !== false && !!seated && !held && !halted && !suspended && !transition && !pendingVisit && !overview && !leaveAsked && !customization.opened;
+   const touch = createTouchControl({ mount: o.mount, onReset: () => vel.set(0, 0) });
+   const frames = [];
+-  const stationRows = [...o.stations, customization.row];
++  const racingRow = { id: 'race', key: 'race', name: 'Racing Thoughts', labelKey: 'br_station_race', state: 'live', approach: [4.1, 1.65, -5.7], look: [4.1, 1.2, -7.15] };
++  const stationRows = [...o.stations, customization.row, racingRow];
+   const previewTarget = new T.Vector3();
+   const roofFloor=room.ceiling?new T.Box3().setFromObject(room.ceiling).min.y:Infinity;
+   const roofMaterials=[];let roofAlpha=1;
+@@ -260,8 +261,8 @@
+    * world box projected, plus a finger's margin) holds the point, the nearest to the camera when boxes overlap.
+    * The vending machine is the Room Service row (customization.js). Boxes are cached: fixtures do not move. */
+   const TAP_MARGIN = 24, bounds = new Map(), corner = new T.Vector3();
+-  function fixtureOf(row) { return row.key === 'customization' ? scene.getObjectByName('customization_vending') : room.holders.get(row.key); }
+-  function rowOf(node) { for (let n = node; n; n = n.parent) { const row = stationRows.find(r => fixtureOf(r) === n); if (row) return row; } return null; }
++  function fixtureOf(row) { if (row.key === 'race') return room.prizes.cabinet; return row.key === 'customization' ? scene.getObjectByName('customization_vending') : room.holders.get(row.key); }
++  function rowOf(node) { for (let n = node; n; n = n.parent) if (n.name === 'racing_cabinet' || n === room.prizes.cabinet) return racingRow; for (let n = node; n; n = n.parent) { const row = stationRows.find(r => fixtureOf(r) === n); if (row) return row; } return null; }
+   function worldBox(node) {
+     let box = bounds.get(node);
+     if (box) return box;
+@@ -392,7 +393,7 @@
+       walkPhase += vel.length() * dt * 3.1;
+       camera.position.set(pos[0], pos[1] + Math.sin(walkPhase * 2) * 0.004 * sway, pos[2]);
+       camera.rotation.set(pitch + Math.sin(walkPhase * 2) * 0.0008 * sway, yaw, Math.sin(walkPhase) * 0.0014 * sway, 'YXZ');
+-      setNearest(customization.opened || seated || transition ?null:nearestStation(pos,stationRows));
++      setNearest(customization.opened || seated || transition ?null:nearestStation(pos,stationRows.filter(row => row.key !== 'race' || room.prizes.cabinet.visible)));
+     }
+     if (!still) ambient += dt;
+     room.update(dt, ambient, still);
+@@ -549,6 +550,7 @@
+     dismissEmi() { if(customization.dismiss())return true; const open = !!interaction.debug().id; interaction.dismiss(); return open; },
+     celebrate: (key,amount,tier,text)=>room.celebrate(key,amount,tier,text),
+     customization, setOverview, go, visit,
++    navigationPose() { return { position: pos.slice(), yaw, pitch }; },
+     pose(p, y = 0, tilt = 0) { pos.splice(0, 3, ...p); yaw = y; pitch = tilt; },
+     get transitioning() { return !!transition; },
+     get nearest() { return nearest; },
+--- a/room/prize-display.js
++++ b/room/prize-display.js
+@@ -39,7 +39,7 @@
+   const sourceCabinet = counter?.getObjectByName('racing_cabinet');
+   if (!sourceCabinet) throw new Error('counter.glb lacks preserved racing_cabinet');
+   cabinet.add(fitted(sourceCabinet, 1.0, 2.05)); sourceCabinet.visible = true;
+-  const plate = sign(lex('br_arcade_play_tab', 'Play in CCP: Play tab'), .82, .205); plate.position.set(0, .44, .55); cabinet.add(plate);
++  const plate = sign(lex('br_arcade_play', 'Play Racing Thoughts'), .82, .205); plate.position.set(0, .44, .55); cabinet.add(plate);
+   counter.updateMatrixWorld(true);
+   for (const id of ['jackpot_remix', 'rt_demo', 'high_roller', 'flashes_v2', 'bubbles_v2', 'rt_bundle_1', 'rt_bundle_2', 'rt_bundle_3']) {
+     const source = counter.getObjectByName('shelf_' + id); if (!source) continue;
+@@ -84,8 +84,8 @@
+         travel.set(bought,{display,start:rack.worldToLocal(start.clone()),end,elapsed:0});
+       }
+     }
+-    if (snapshot.demo && !demo) reveal = bought ? 0 : null;
+-    demo = snapshot.demo; sourceCabinet.visible = !demo; cabinet.visible = rack.visible = demo;
++    if (snapshot.racing && !demo) reveal = bought ? 0 : null;
++    demo = !!snapshot.racing; sourceCabinet.visible = !demo; cabinet.visible = demo; rack.visible = demo;
+     if (!demo) reveal = null;
+     // A repeated state refresh must not restart the reveal.
+     update(0, false);
+--- a/shared/prize-state.js
++++ b/shared/prize-state.js
+@@ -3,7 +3,7 @@
+   if (body?.ok !== true || body.open === false || !Array.isArray(body.catalog)) return null;
+   const owned = body.catalog.filter(row => row?.owned && typeof row.id === 'string').map(row => row.id);
+   const grants = Array.isArray(body.prizes?.grants) ? body.prizes.grants : [];
+-  return { owned, demo: grants.includes('rt.original.00') || owned.includes('rt_demo') };
++  return { owned, racing: grants.some(id => /^rt\.original\.(0[0-9]|10)$/.test(id)), tracks: grants.filter(id => /^rt\.original\.(0[0-9]|10)$/.test(id)).map(id => Number(id.slice(-2))), demo: grants.includes('rt.original.00') || owned.includes('rt_demo') };
+ }
+ export function prizeFrame(seconds, still = false) {
+   const p = still ? 1 : Math.max(0, Math.min(1, seconds / 1.25));

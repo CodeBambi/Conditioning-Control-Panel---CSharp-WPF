@@ -557,7 +557,7 @@ public class SkillTreeService : IDisposable
                 Id = "daily_streak_bonus",
                 Name = Loc.GetF("skill_streak_bonus_name", streakDays),
                 FlavorText = Loc.GetF("skill_streak_bonus_flavor", xpAwarded, streakDays),
-                ImageName = "../skills/milestone_rewards.png",
+                ImageName = "skills/milestone_rewards.png",
                 Category = Models.AchievementCategory.TimeSessions
             };
 
@@ -673,7 +673,7 @@ public class SkillTreeService : IDisposable
                 Id = "perfect_week_bonus",
                 Name = Loc.Get("skill_perfect_week_name_popup"),
                 FlavorText = Loc.GetF("skill_perfect_week_flavor_popup", streak, xpAwarded),
-                ImageName = "../skills/perfect_bimbo_week.png",
+                ImageName = "skills/perfect_bimbo_week.png",
                 Category = Models.AchievementCategory.TimeSessions
             };
 
@@ -848,7 +848,9 @@ public class SkillTreeService : IDisposable
         if (settings == null) return;
 
         var pointsAwarded = levelsGained * PointsPerLevel;
+        var previousPoints = settings.SkillPoints;
         settings.SkillPoints += pointsAwarded;
+        var creditedBalance = settings.SkillPoints;
 
         // Track total skill points earned (for stats)
         App.Achievements?.TrackSkillPointsEarned(pointsAwarded);
@@ -860,6 +862,7 @@ public class SkillTreeService : IDisposable
             newLevel, pointsAwarded, settings.SkillPoints);
 
         App.Settings?.Save();
+        SparklePointRewards.PublishCredit(previousPoints, creditedBalance, SparklePointSource.LevelUp);
     }
 
     #endregion
