@@ -61,8 +61,8 @@ public sealed class PresetsSessionCatalogueTests
                 Assert.False(view.FindControl<Button>("BtnSessionHistory")!.IsEnabled);
                 Assert.False(view.FindControl<Button>("BtnCreateSession")!.IsEnabled);
                 Assert.False(view.FindControl<Border>("SessionDropZone")!.IsEnabled);
-                Assert.False(view.FindControl<ComboBox>("CmbRackSort")!.IsEnabled);
-                Assert.False(view.FindControl<TextBox>("TxtRackSearch")!.IsEnabled);
+                Assert.True(view.FindControl<ComboBox>("CmbRackSort")!.IsEnabled);
+                Assert.True(view.FindControl<TextBox>("TxtRackSearch")!.IsEnabled);
                 var sourceChips = view.FindControl<StackPanel>("RackSourceChips")!.Children.OfType<ToggleButton>().ToArray();
                 Assert.All(sourceChips, chip => Assert.True(chip.IsEnabled));
                 Assert.Single(sourceChips, chip => (string)chip.Tag! == "all" && chip.IsChecked == true);
@@ -316,8 +316,8 @@ public sealed class PresetsSessionCatalogueTests
 
                 var panel = view.FindControl<StackPanel>("SessionRackPanel")!;
                 var rows = panel.Children.OfType<Border>().ToArray();
-                Assert.Equal(available.Select(session => session.Id),
-                    rows.Select(row => (row.Tag as Session)?.Id));
+                Assert.Equal(available.Select(session => session.Id).OrderBy(id => id),
+                    rows.Select(row => (row.Tag as Session)?.Id).OrderBy(id => id));
                 Assert.DoesNotContain(rows, row => (row.Tag as Session)?.Id == "fixture_unavailable");
                 Assert.Same(custom, rows.Single(row => (row.Tag as Session)?.Id == custom.Id).Tag);
 
@@ -346,8 +346,8 @@ public sealed class PresetsSessionCatalogueTests
                 Assert.False(view.FindControl<Button>("BtnSessionHistory")!.IsEnabled);
                 Assert.False(view.FindControl<Button>("BtnCreateSession")!.IsEnabled);
                 Assert.False(view.FindControl<Border>("SessionDropZone")!.IsEnabled);
-                Assert.False(view.FindControl<ComboBox>("CmbRackSort")!.IsEnabled);
-                Assert.False(view.FindControl<TextBox>("TxtRackSearch")!.IsEnabled);
+                Assert.True(view.FindControl<ComboBox>("CmbRackSort")!.IsEnabled);
+                Assert.True(view.FindControl<TextBox>("TxtRackSearch")!.IsEnabled);
                 Assert.All(view.FindControl<StackPanel>("RackSourceChips")!.Children.OfType<ToggleButton>(),
                     chip => Assert.True(chip.IsEnabled));
                 Assert.All(view.FindControl<StackPanel>("RackDifficultyChips")!.Children.OfType<ToggleButton>(),
@@ -576,13 +576,13 @@ public sealed class PresetsSessionCatalogueTests
                 Assert.Equal("4 sessions", view.FindControl<TextBlock>("TxtRackCount")!.Text);
                 Assert.Equal(fallbackSource, CoreSettings.Current.SessionRackSourceFilter);
 
-                // Sort/search/drop/CRUD and all row actions remain deliberately unavailable.
+                // Search and sort are live views; drop/CRUD and all row actions remain deliberately unavailable.
                 Assert.False(view.FindControl<Button>("BtnStartSession")!.IsEnabled);
                 Assert.False(view.FindControl<StackPanel>("SessionButtonsPanel")!.IsVisible);
                 Assert.False(view.FindControl<Button>("BtnRevealSpoilers")!.IsEnabled);
                 Assert.False(view.FindControl<Button>("BtnExportSession")!.IsEnabled);
-                Assert.False(view.FindControl<ComboBox>("CmbRackSort")!.IsEnabled);
-                Assert.False(view.FindControl<TextBox>("TxtRackSearch")!.IsEnabled);
+                Assert.True(view.FindControl<ComboBox>("CmbRackSort")!.IsEnabled);
+                Assert.True(view.FindControl<TextBox>("TxtRackSearch")!.IsEnabled);
                 Assert.False(view.FindControl<Border>("SessionDropZone")!.IsEnabled);
                 Assert.All(panel.Children.OfType<Border>(), row =>
                 {
@@ -608,6 +608,229 @@ public sealed class PresetsSessionCatalogueTests
             return Task.CompletedTask;
         });
     }
+
+    [Fact]
+    public async Task MountedCatalogueSearchesAndSortsThroughLiveControls()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            var previousLanguage = LocalizationManager.Instance.CurrentLanguage;
+            var previousModProvider = CoreMods.MakeModAwareProvider;
+            var root = Path.Combine(Path.GetTempPath(), "ccp-mounted-query-tests-" + Guid.NewGuid().ToString("N"));
+            Window? host = null;
+            try
+            {
+                EnsureAvalonia();
+                CoreMods.MakeModAwareProvider = text => text.Replace("Bambi", "Bimbo", StringComparison.Ordinal);
+                Directory.CreateDirectory(root);
+                var manager = new SessionManager(new SessionFileService(
+                    Path.Combine(root, "custom"), Path.Combine(root, "built-in")));
+                var stamp = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Local);
+
+                Session Add(string id, string name, string description, SessionDifficulty difficulty,
+                    int duration, int xp, SessionSource source, DateTime lastWrite, bool available = true)
+                {
+                    var path = Path.Combine(root, id + ".session.json");
+                    File.WriteAllText(path, "{}");
+                    File.SetLastWriteTime(path, lastWrite);
+                    var session = new Session
+                    {
+                        Id = id,
+                        Name = name,
+                        Description = description,
+                        Difficulty = difficulty,
+                        DurationMinutes = duration,
+                        BonusXP = xp,
+                        Source = source,
+                        SourceFilePath = path,
+                        IsAvailable = available,
+                    };
+                    manager.AllSessions.Add(session);
+                    return session;
+                }
+
+                var zulu = Add("query_zulu", "Zulu Name", "Description Needle", SessionDifficulty.Easy,
+                    40, 100, SessionSource.BuiltIn, stamp.AddMinutes(10));
+                var alpha = Add("query_alpha", "Alpha Name", "Custom metadata", SessionDifficulty.Hard,
+                    60, 900, SessionSource.Custom, stamp.AddMinutes(20));
+                var mode = Add("query_mode", "Bambi Name", "Mode metadata", SessionDifficulty.Medium,
+                    20, 500, SessionSource.Imported, stamp.AddMinutes(40));
+                var delta = Add("query_delta", "Delta Name", "Other metadata", SessionDifficulty.Extreme,
+                    10, 700, SessionSource.BuiltIn, stamp.AddMinutes(30));
+                Add("query_unavailable", "Unavailable", "Not shown", SessionDifficulty.Easy,
+                    1, 1, SessionSource.Custom, stamp.AddMinutes(50), available: false);
+
+                var view = new PresetsTabView { Width = 1100, Height = 760 };
+                view.UseSessionManager(manager);
+                host = new Window { Width = 1100, Height = 760, Content = view };
+                host.Show();
+                Dispatcher.UIThread.RunJobs();
+                Dispatcher.UIThread.RunJobs();
+
+                var panel = view.FindControl<StackPanel>("SessionRackPanel")!;
+                var search = view.FindControl<TextBox>("TxtRackSearch")!;
+                var sort = view.FindControl<ComboBox>("CmbRackSort")!;
+                Assert.True(search.IsEnabled);
+                Assert.True(sort.IsEnabled);
+                Assert.NotNull(search.Template);
+                Assert.NotNull(sort.Template);
+                var toolbar = Assert.IsType<Grid>(search.Parent);
+                Assert.True(search.IsVisible);
+                Assert.True(search.Bounds.Width >= 64);
+                Assert.True(search.Bounds.Height > 0);
+                Assert.True(search.Bounds.Left >= 0);
+                Assert.True(search.Bounds.Right <= toolbar.Bounds.Width + 0.5,
+                    $"search={search.Bounds}, toolbar={toolbar.Bounds}");
+                Assert.True(search.Bounds.Bottom <= toolbar.Bounds.Height + 0.5,
+                    $"search={search.Bounds}, toolbar={toolbar.Bounds}");
+                Assert.Equal(new[] { mode.Id, delta.Id, alpha.Id, zulu.Id }, RowIds(panel));
+                Assert.Equal("4 sessions", view.FindControl<TextBlock>("TxtRackCount")!.Text);
+                Assert.Equal(new[] { "All  4", "Built-in  2", "Yours  1", "Catalogue  1" },
+                    view.FindControl<StackPanel>("RackSourceChips")!.Children.OfType<ToggleButton>()
+                        .Select(chip => ((TextBlock)chip.Content!).Text));
+                Assert.Equal("recent", SortTag(sort));
+
+                var alphaRow = Assert.Single(panel.Children.OfType<Border>(), row => row.Tag is Session session && session.Id == alpha.Id);
+                Click(host, alphaRow);
+                Assert.Equal($"{alpha.Icon} Alpha Name", view.FindControl<TextBlock>("TxtDetailTitle")!.Text);
+
+                // TextInput is the real mounted TextBox path. Leading/trailing whitespace is kept
+                // in the control but omitted from the normalized query sent to Core.
+                search.Focus();
+                host.KeyTextInput("  NEEDLE  ");
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal("  NEEDLE  ", search.Text);
+                Assert.Equal(new[] { zulu.Id }, RowIds(panel));
+                Assert.Equal("1 of 4", view.FindControl<TextBlock>("TxtRackCount")!.Text);
+                Assert.Equal($"{alpha.Icon} Alpha Name", view.FindControl<TextBlock>("TxtDetailTitle")!.Text);
+
+                // Localization refreshes the existing filtered row in place. Neither the active
+                // query nor the invariant sort identity is a localized display value.
+                var filteredRow = Assert.Single(panel.Children.OfType<Border>());
+                LocalizationManager.Instance.SetLanguage("zh-CN");
+                Dispatcher.UIThread.RunJobs();
+                Dispatcher.UIThread.RunJobs();
+                Assert.Same(filteredRow, panel.Children.Single());
+                Assert.Equal("  NEEDLE  ", search.Text);
+                Assert.Equal("recent", SortTag(sort));
+                Assert.Equal(Loc.Get("rack_sort_recent"), SortFace(sort));
+                LocalizationManager.Instance.SetLanguage("en");
+                Dispatcher.UIThread.RunJobs();
+
+                // A whitespace-only query clears the previous normalized value. Further whitespace
+                // changes are no-ops, so the row control is not needlessly replaced.
+                search.Text = "   ";
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(new[] { mode.Id, delta.Id, alpha.Id, zulu.Id }, RowIds(panel));
+                var firstRow = Assert.IsType<Border>(panel.Children[0]);
+                search.Text = "  ";
+                Dispatcher.UIThread.RunJobs();
+                Assert.Same(firstRow, panel.Children[0]);
+                search.Text = "";
+                Dispatcher.UIThread.RunJobs();
+                Assert.Same(firstRow, panel.Children[0]);
+
+                search.Text = "ALPHA";
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(new[] { alpha.Id }, RowIds(panel));
+                search.Text = "BIMBO";
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(new[] { mode.Id }, RowIds(panel));
+                search.Text = "built-in";
+                Dispatcher.UIThread.RunJobs();
+                Assert.Empty(panel.Children.OfType<Border>());
+                Assert.IsType<TextBlock>(Assert.Single(panel.Children));
+                search.Text = "no-match";
+                Dispatcher.UIThread.RunJobs();
+                Assert.Empty(panel.Children.OfType<Border>());
+                search.Text = "";
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(4, panel.Children.OfType<Border>().Count());
+
+                // Source, difficulty and search are an AND while their counts still come from the
+                // unfiltered available snapshot. Keep the query active through both source cases:
+                // Yours + a mismatching query is empty; matching Alpha + disabling Hard is empty.
+                var sourceChips = view.FindControl<StackPanel>("RackSourceChips")!.Children.OfType<ToggleButton>().ToArray();
+                var difficultyDots = view.FindControl<StackPanel>("RackDifficultyChips")!.Children.OfType<ToggleButton>().ToArray();
+                var yours = Assert.Single(sourceChips, chip => (string)chip.Tag! == "yours");
+                var all = Assert.Single(sourceChips, chip => (string)chip.Tag! == "all");
+                var hard = Assert.Single(difficultyDots, dot => (SessionDifficulty)dot.Tag! == SessionDifficulty.Hard);
+                search.Text = "needle";
+                Dispatcher.UIThread.RunJobs();
+                Click(host, yours);
+                Assert.Empty(panel.Children.OfType<Border>());
+                Assert.Equal("0 of 4", view.FindControl<TextBlock>("TxtRackCount")!.Text);
+                search.Text = "ALPHA";
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(new[] { alpha.Id }, RowIds(panel));
+                Click(host, hard);
+                Assert.Empty(panel.Children.OfType<Border>());
+                Assert.Equal("0 of 4", view.FindControl<TextBlock>("TxtRackCount")!.Text);
+                Assert.Equal(new[] { "All  4", "Built-in  2", "Yours  1", "Catalogue  1" },
+                    sourceChips.Select(chip => ((TextBlock)chip.Content!).Text));
+                Click(host, hard);
+                Click(host, all);
+                search.Text = "";
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(new[] { mode.Id, delta.Id, alpha.Id, zulu.Id }, RowIds(panel));
+                var restoredAlpha = Assert.Single(panel.Children.OfType<Border>(), row => row.Tag is Session session && session.Id == alpha.Id);
+                Assert.True(view.Resources.TryGetResource("SdSessionRowSelected", null, out var selectedTheme));
+                Assert.Same(selectedTheme, restoredAlpha.Theme);
+
+                // One real keyboard selection proves the enabled ComboBox is not furniture. The
+                // remaining choices use the same control's SelectionChanged path.
+                sort.Focus();
+                host.KeyPress(Key.Down, RawInputModifiers.None, PhysicalKey.ArrowDown, "");
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal("name", SortTag(sort));
+                Assert.Equal(new[] { alpha.Id, mode.Id, delta.Id, zulu.Id }, RowIds(panel));
+
+                void SelectSort(string token)
+                {
+                    sort.SelectedItem = sort.Items.OfType<ComboBoxItem>()
+                        .Single(item => (item.Tag as string) == token);
+                    Dispatcher.UIThread.RunJobs();
+                    Assert.Equal(token, SortTag(sort));
+                }
+
+                SelectSort("easiest");
+                Assert.Equal(new[] { zulu.Id, mode.Id, alpha.Id, delta.Id }, RowIds(panel));
+                SelectSort("hardest");
+                Assert.Equal(new[] { delta.Id, alpha.Id, mode.Id, zulu.Id }, RowIds(panel));
+                SelectSort("shortest");
+                Assert.Equal(new[] { delta.Id, mode.Id, zulu.Id, alpha.Id }, RowIds(panel));
+                SelectSort("xp");
+                Assert.Equal(new[] { alpha.Id, delta.Id, mode.Id, zulu.Id }, RowIds(panel));
+                SelectSort("recent");
+                Assert.Equal(new[] { mode.Id, delta.Id, alpha.Id, zulu.Id }, RowIds(panel));
+                Assert.False(CoreSettings.HasProvider);
+                Assert.Equal("recent", CoreSettings.Current.SessionRackSort);
+            }
+            finally
+            {
+                try
+                {
+                    host?.Close();
+                    Dispatcher.UIThread.RunJobs();
+                }
+                finally
+                {
+                    CoreMods.MakeModAwareProvider = previousModProvider;
+                    LocalizationManager.Instance.SetLanguage(previousLanguage);
+                    Dispatcher.UIThread.RunJobs();
+                    if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+                }
+            }
+
+            return Task.CompletedTask;
+        });
+    }
+
+    private static string SortTag(ComboBox combo) =>
+        (combo.SelectedItem as ComboBoxItem)?.Tag as string ?? "<missing>";
+
+    private static string SortFace(ComboBox combo) =>
+        ((combo.SelectedItem as ComboBoxItem)?.Content as TextBlock)?.Text ?? "<missing>";
 
     [Fact]
     public async Task MountedCataloguePreservesCallerLanguageStartingInGerman()

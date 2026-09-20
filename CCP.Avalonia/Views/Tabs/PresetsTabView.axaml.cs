@@ -48,6 +48,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // x:Name fields, and Load leaves every one of them permanently null - a silent no-op
             // that compiles, renders and reviews clean.
             InitializeComponent();
+            RestoreRackSortSelection();
+            CmbRackSort.SelectionChanged += CmbRackSort_SelectionChanged;
+            TxtRackSearch.TextChanged += TxtRackSearch_TextChanged;
             TxtDetailTitle.Text = Loc.Get("label_select_a_preset");
             TxtDetailSubtitle.Text = Loc.Get("label_click_on_a_preset_or_session_to_see_details");
             TxtSessionDuration.Text = Loc.Get("label_30_minutes");
@@ -169,6 +172,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (SessionRackPanel.Children.OfType<TextBlock>().FirstOrDefault() is TextBlock empty)
                 empty.Text = Loc.Get("rack_empty");
             UpdateRackCount(SessionRackPanel.Children.OfType<Border>().Count());
+            RefreshRackSortSelection();
+        }
+
+        /// <summary>Refresh the closed ComboBox face after a language change. Avalonia's default
+        /// selection presenter can retain the old visual when an item carries a live TextBlock
+        /// binding; reselecting the same item keeps its invariant Tag while letting the presenter
+        /// read the localized content. The toolbar guard prevents a persistence echo.</summary>
+        private void RefreshRackSortSelection()
+        {
+            if (CmbRackSort.SelectedItem is not object selected) return;
+
+            _rackToolbarSyncing = true;
+            try
+            {
+                CmbRackSort.SelectedItem = null;
+                CmbRackSort.SelectedItem = selected;
+            }
+            finally
+            {
+                _rackToolbarSyncing = false;
+            }
         }
 
         private static void SetTextContent(ToggleButton control, string text)
@@ -199,6 +223,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private const string RackSourceCatalogue = "catalogue";
 
         private string _rackSourceFilter = InitialRackSourceFilter();
+        private string _rackSort = InitialRackSort();
+        private string _rackSearch = "";
         private readonly HashSet<SessionDifficulty> _rackDifficulties = new()
         {
             SessionDifficulty.Easy,
@@ -214,6 +240,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private static string InitialRackSourceFilter() =>
             CoreSettings.HasProvider ? CoreSettings.Current.SessionRackSourceFilter : RackSourceAll;
+
+        private static string InitialRackSort() =>
+            CoreSettings.HasProvider ? CoreSettings.Current.SessionRackSort : "recent";
 
         /// <summary>Replaces the offline built-in source with an already-loaded manager. Loading
         /// stays in App's desktop composition so constructing a view for render/nav never touches
@@ -352,16 +381,53 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 ? Loc.GetF("rack_count_all", _availableSessions.Count)
                 : Loc.GetF("rack_count_filtered", shownCount, _availableSessions.Count);
 
-        private bool RackAccepts(Session session)
+        private void RestoreRackSortSelection()
         {
-            var sourceMatches = _rackSourceFilter switch
+            _rackToolbarSyncing = true;
+            try
             {
-                RackSourceBuiltIn => session.Source == SessionSource.BuiltIn,
-                RackSourceYours => session.Source == SessionSource.Custom,
-                RackSourceCatalogue => session.Source == SessionSource.Imported,
-                _ => true,
-            };
-            return sourceMatches && _rackDifficulties.Contains(session.Difficulty);
+                var item = CmbRackSort.Items.OfType<ComboBoxItem>()
+                    .FirstOrDefault(candidate => (candidate.Tag as string) == _rackSort)
+                    ?? CmbRackSort.Items.OfType<ComboBoxItem>().FirstOrDefault();
+                if (item is not null)
+                {
+                    CmbRackSort.SelectedItem = item;
+                    _rackSort = item.Tag as string ?? "recent";
+                }
+            }
+            finally
+            {
+                _rackToolbarSyncing = false;
+            }
+        }
+
+        private bool RackAccepts(Session session) =>
+            SessionRackQuery.RackAccepts(session, _rackSourceFilter, _rackDifficulties, _rackSearch);
+
+        private void CmbRackSort_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (_rackToolbarSyncing || sender is not ComboBox combo ||
+                combo.SelectedItem is not ComboBoxItem item || item.Tag is not string sort ||
+                sort == _rackSort) return;
+
+            _rackSort = sort;
+            if (CoreSettings.HasProvider)
+            {
+                CoreSettings.Current.SessionRackSort = sort;
+                CoreSettings.Save();
+            }
+
+            RepaintSessionRack();
+        }
+
+        private void TxtRackSearch_TextChanged(object? sender, TextChangedEventArgs e)
+        {
+            if (sender is not TextBox search) return;
+
+            var normalized = (search.Text ?? "").Trim();
+            if (normalized == _rackSearch) return;
+            _rackSearch = normalized;
+            RepaintSessionRack();
         }
 
         private void RackSourceChip_Changed(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
@@ -420,11 +486,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Build the selectable rows from the available Core session snapshot.</summary>
         private void SeedSessionRack()
         {
-            var shown = _availableSessions.Where(RackAccepts).ToArray();
+            var filtered = _availableSessions.Where(RackAccepts).ToArray();
+            var shown = SessionRackQuery.SortRackSessions(filtered, _availableSessions, _rackSort);
             foreach (var session in shown)
                 SessionRackPanel.Children.Add(RackRow(session));
 
-            if (shown.Length == 0)
+            if (shown.Count == 0)
             {
                 SessionRackPanel.Children.Add(new TextBlock
                 {
@@ -433,7 +500,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 });
             }
 
-            UpdateRackCount(shown.Length);
+            UpdateRackCount(shown.Count);
             RefreshSessionRackSelection();
         }
 

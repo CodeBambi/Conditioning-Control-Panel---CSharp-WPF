@@ -125,14 +125,43 @@ public sealed class LanguageSelectorTests
             WaitForPersistedSetting(settingsPath, "SessionRackSourceFilter", "yours");
             Assert.Equal("yours", new SettingsService().Current.SessionRackSourceFilter);
 
+            var sort = presets.FindControl<ComboBox>("CmbRackSort")!;
+            sort.SelectedItem = sort.Items.OfType<ComboBoxItem>()
+                .Single(item => (item.Tag as string) == "xp");
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("xp", RackSortTag(sort));
+            WaitForPersistedSetting(settingsPath, "SessionRackSort", "xp");
+            Assert.Equal("xp", new SettingsService().Current.SessionRackSort);
+
+            // Search and difficulty are deliberately transient. Type through the mounted control,
+            // then hide the selected medium row before constructing a fresh view.
+            var search = presets.FindControl<TextBox>("TxtRackSearch")!;
+            search.Focus();
+            shell.KeyTextInput("language");
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("language", search.Text);
+            var medium = presets.FindControl<StackPanel>("RackDifficultyChips")!
+                .Children.OfType<ToggleButton>()
+                .Single(dot => (SessionDifficulty)dot.Tag! == SessionDifficulty.Medium);
+            Click(shell, medium);
+            Assert.False(medium.IsChecked == true);
+
             var restoredView = new PresetsTabView();
             var restoredSources = restoredView.FindControl<StackPanel>("RackSourceChips")!
                 .Children.OfType<ToggleButton>().ToArray();
             Assert.Single(restoredSources, chip => (string)chip.Tag! == "yours" && chip.IsChecked == true);
             Assert.All(restoredSources.Where(chip => (string)chip.Tag! != "yours"),
                 chip => Assert.False(chip.IsChecked == true));
+            Assert.Equal("xp", RackSortTag(restoredView.FindControl<ComboBox>("CmbRackSort")!));
+            Assert.True(string.IsNullOrEmpty(restoredView.FindControl<TextBox>("TxtRackSearch")!.Text));
+            Assert.All(restoredView.FindControl<StackPanel>("RackDifficultyChips")!
+                .Children.OfType<ToggleButton>(), dot => Assert.True(dot.IsChecked == true));
 
             // Leave the profile in its original state for the remainder of this lifecycle test.
+            sort.SelectedItem = sort.Items.OfType<ComboBoxItem>()
+                .Single(item => (item.Tag as string) == "recent");
+            Dispatcher.UIThread.RunJobs();
+            WaitForPersistedSetting(settingsPath, "SessionRackSort", "recent");
             var all = sourceChips.Single(chip => (string)chip.Tag! == "all");
             Click(shell, all);
             Assert.Equal("all", CoreSettings.Current.SessionRackSourceFilter);
@@ -327,6 +356,9 @@ public sealed class LanguageSelectorTests
             .FindControl<ComboBox>("CmbLanguageSetting")!;
 
     private static string? SelectedCode(ComboBox combo) =>
+        (combo.SelectedItem as ComboBoxItem)?.Tag as string;
+
+    private static string? RackSortTag(ComboBox combo) =>
         (combo.SelectedItem as ComboBoxItem)?.Tag as string;
 
     private static void Select(ComboBox combo, string code)
