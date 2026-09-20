@@ -1,3 +1,15 @@
+import {createPowerups, ordinaryTarget} from './powerups.js';
+import { junctionProtected } from './junction-shield.js';
+import { FINALE_REBUILD_SECONDS, FINALE_FEED_LIFE, FINALE_BRICK_LIMIT, FINALE_THREAD_COUNT, FINALE_GATE_COUNT, finaleChaosMetadata, finaleChaosPose, finaleWhirlPose } from './finale-chaos.js';
+import {distributeGreyMetal, metalActive} from './grey-metal.js';
+import { finaleHelpSeat, finaleHelpAngle } from './finale-help.js';
+import { STRENGTH_BY_WALL, distributeStrength } from './brick-strength.js';
+import { openPayloadSpot, brickOverlap } from './placement.js';
+import { REFORM_WORDS, reformLayout, nextReformIndex, rotatedBrickContact } from './reform.js';
+import { IRIS_ARMS, IRIS_LIFE, IRIS_INTERVAL, irisPose } from './iris.js';
+import { TIDE_ROWS, TIDE_COLS, tidePose } from './tide.js';
+import { CURTAIN_ROWS, CURTAIN_COLS, ANCHOR_GUARDS, createPendulums, curtainPose, advancePendulum, releasePendulum, collidePendulum } from './pendulum.js';
+import { shieldY } from './words/let-go.js';
 /* ============================================================================
  * stations/breakout/game.js - the sim. DOM-free so `node --test` can drive it.
  *
@@ -156,7 +168,159 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     g.fractures = 0; g.shatterWall = false;
     if (mantra) emit('mantra', { word: g.mantra });
   }
+  function updatePendulums(dt) {
+    const pendulums=g.pendulums;
+    if(!pendulums || g.wallAge<1.9)return;
+    for(const p of pendulums) {
+      advancePendulum(p,dt,w,h,g.reduced);
+      for(const br of g.bricks) if(br.alive && br.curtain && br.pendulumId===p.id && p.mode==='hung')
+        Object.assign(br,curtainPose(p,br.curtainRow,br.curtainCol));
+      // Collapse the freed curtain in a bounded cascade; sweeps hit neighbouring curtains and anchors.
+      let collapsed=0; p.collapseClock=(p.collapseClock||0)-dt;
+      for(const br of g.bricks) {
+        if(g.pendulums!==pendulums)return;
+        if(!br.alive || p.struck.has(br) || p.mode==='hung' || p.mode==='spent')continue;
+        const own=br.curtain && br.pendulumId===p.id;
+        const contact=p.mode==='sweep' && rotatedBrickContact({x:p.x,y:p.y,r:p.r},br);
+        if((own && collapsed<1 && p.collapseClock<=0) || contact) {
+          if(own){collapsed++;p.collapseClock=.065;}
+          p.struck.add(br);
+          if (own && br.strength) br.hp = 1; // A released curtain crushes its own reinforced pieces.
+          breakBrick(br,{x:p.x,y:p.y,vx:p.toX-p.fromX,vy:-100});
+        }
+      }
+    }
+  }
+
+  function updateTide(dt) {
+    if (!g.tide) return;
+    g.tide.age += dt;
+    for (const brick of g.bricks) if (brick.alive) {
+      Object.assign(brick, tidePose(brick.row, brick.col, g.tide.age, w, h, g.reduced));
+    }
+  }
+
+  function makeIrisBrick(arm, age=0) {
+    const gif=rng()<.12?Math.floor(rng()*8):-1;
+    const word=gif<0&&g.words.length&&rng()<WORD_BRICK_P?g.words[g.wordIx++%g.words.length]:null;
+    return mkBrick(0,0,39,24,arm,Math.floor(age/IRIS_INTERVAL),{
+      ...irisPose(arm,age,w,h,g.iris?.rotation||0),arm,irisAge:age,gif,tier:gif>=0?bubbleTier(rng()):0,
+      word,wordAt:.8+rng(),split:rng()<.05,
+      spiral:gif<0&&!word&&rng()<SPIRAL_BRICK_P?WELL_PRESETS[Math.floor(rng()*WELL_PRESETS.length)]:null
+    });
+  }
+
+  function irisGuardPose(arm,guard) {
+    const pose=irisPose(arm,0,w,h,g.iris.rotation);
+    const angle=pose.angle+guard*Math.PI/3;
+    return {x:pose.x+pose.w/2+43*Math.cos(angle)-18,
+      y:pose.y+pose.h/2+43*Math.sin(angle)-8,w:36,h:16,angle:angle+Math.PI/2};
+  }
+
+  function updateIris(dt) {
+    if(!g.iris)return;
+    g.iris.rotation+=dt*(g.reduced?.035:.14);
+    g.iris.eye.age+=dt;g.iris.eye.born+=dt;g.iris.eye.rot-=dt*.28;
+    for(const b of g.bricks)if(b.alive&&b.irisCore){
+      const pose=irisPose(b.arm,0,w,h,g.iris.rotation);
+      b.x=pose.x-5;b.y=pose.y-5;b.angle=pose.angle;
+    }
+    for(const b of g.bricks)if(b.alive&&b.irisGuard)Object.assign(b,irisGuardPose(b.arm,b.guard));
+    for(const b of g.bricks) if(b.alive&&!b.irisCore&&!b.irisGuard) {
+      b.irisAge+=dt;
+      if(b.irisAge>=IRIS_LIFE){b.alive=false;continue;}
+      Object.assign(b,irisPose(b.arm,b.irisAge,w,h,g.iris.rotation));
+    }
+    // Remove consumed/dead pieces: continuous play must not grow the array forever.
+    g.bricks=g.bricks.filter(b=>b.alive);
+    for(let arm=0;arm<IRIS_ARMS;arm++) {
+      if(!g.bricks.some(b=>b.irisCore&&b.arm===arm))continue;
+      g.iris.clocks[arm]+=dt;
+      if(g.iris.clocks[arm]>=IRIS_INTERVAL){
+        g.iris.clocks[arm]-=IRIS_INTERVAL;
+        const b=makeIrisBrick(arm); b.reformSafe=true; g.bricks.push(b);
+      }
+    }
+    for(const b of g.bricks)if(b.reformSafe)
+      b.reformSafe=g.balls.some(ball=>!ball.lost&&rotatedBrickContact(ball,b));
+    if(!bricksAlive())wallCleared();
+  }
+
   const bricksAlive = () => g.bricks.some(b => b.alive);
+  function updateReform(dt) {
+    const r = g.reform; if (!r) return;
+    if (r.moving > 0) {
+      r.moving = Math.max(0, r.moving - dt);
+      const t = 1 - r.moving / .65, ease = t * t * (3 - 2 * t);
+      for (const b of g.bricks) if (b.alive && b.reformFrom) {
+        for (const key of ['x','y','w','h','angle']) b[key] = lerp(b.reformFrom[key], b.reformTo[key], ease);
+        if (!r.moving) { b.reformFrom = null; b.reformTo = null; }
+      }
+    }
+    if (!r.moving) for (const b of g.bricks) if (b.reformSafe) {
+      b.reformSafe = g.balls.some(ball => !ball.lost && rotatedBrickContact(ball, b));
+    }
+    const beat = g.beatPhase < r.lastPhase - .5; r.lastPhase = g.beatPhase;
+    if (!beat || g.transition) return;
+    r.beats++; emit('metronome', { accent: r.beats % r.every === 0 });
+    if (r.stopped || r.beats % r.every !== 0) return;
+    const alive = g.bricks.filter(b => b.alive);
+    const next = nextReformIndex(r.index, alive.length);
+    if (next < 0 || (next === r.index && r.word === 'I')) { r.stopped = true; return; }
+    if (next === r.index) return;
+    r.index = next; r.word = REFORM_WORDS[next];
+    const targets = reformLayout(r.word, alive.length, w);
+    const unused = [...targets];
+    for (const b of alive) {
+      let nearest = 0;
+      for (let i = 1; i < unused.length; i++) if (Math.hypot(unused[i].x-b.x,unused[i].y-b.y) < Math.hypot(unused[nearest].x-b.x,unused[nearest].y-b.y)) nearest = i;
+      const to = unused.splice(nearest,1)[0];
+      b.reformFrom = { x:b.x,y:b.y,w:b.w,h:b.h,angle:b.angle||0 }; b.reformTo = to; b.reformSafe = true; b.letter = to.letter;
+      if (g.reduced) { Object.assign(b,to); b.reformFrom = null; b.reformTo = null; }
+    }
+    r.moving = g.reduced ? 0 : .65;
+    emit('reform', { word:r.word, count:alive.length });
+  }
+
+  function startSpellRound() {
+    const previous = g.spell;
+    const choices = SPELL_WORDS.filter(word => word !== previous?.word);
+    const word = choices[Math.floor(rng() * choices.length)];
+    g.spell = { word, filled: Array.from(word, letter => letter === ' '), round: (previous?.round || 0) + 1,
+      hits: 0, complete: false, celebrate: 0 };
+    g.mantra = word;
+  }
+
+  function cycleSpellLetters() {
+    const spell = g.spell;
+    if (!spell) return;
+    const missing = Array.from(spell.word).filter((letter, i) => letter !== ' ' && !spell.filled[i]);
+    const letters = missing.length ? missing : Array.from(spell.word).filter(letter => letter !== ' ');
+    // All dealt letters are useful. Occasionally reverse their order for a last-slot-first hit.
+    if (rng() < 0.2) letters.reverse();
+    let i = spell.hits;
+    for (const brick of g.bricks) if (brick.alive) brick.letter = letters[i++ % letters.length];
+  }
+
+  function fillSpell(brick, x, y) {
+    const spell = g.spell;
+    if (!spell) return;
+    spell.hits++;
+    if (g.state === 'colour' && !spell.complete) {
+      const index = Array.from(spell.word).findIndex((letter, i) => letter === brick.letter && !spell.filled[i]);
+      if (index >= 0) {
+        spell.filled[index] = true;
+        const style = g.reduced ? 'static' : rng() < 0.65 ? 'stamp' : 'drift';
+        emit('spellFill', { word: spell.word, index, letter: brick.letter, x, y, style });
+        if (spell.filled.every(Boolean)) {
+          spell.complete = true; spell.celebrate = 1.6;
+          emit('spellComplete', { word: spell.word, style });
+        }
+      }
+    }
+    cycleSpellLetters();
+  }
+
 
   /* ------------------------------------------------------------ balls */
   function newBall(ghost) {
@@ -266,6 +430,194 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     }
     if (!bricksAlive()) wallCleared();
   }
+  function makeFinaleFeed(id, age = 0) {
+    const meta=finaleChaosMetadata(id);
+    const br=mkBrick(0,0,meta.w,meta.h,id%6,0,{...meta,finaleFeed:true,feedAge:age});
+    // Per 80 seats: twelve words and six spirals, both 20% above the prior feed.
+    const kind=id%16, seat=id%80, cycle=Math.floor(id/16);
+    if(kind===1||kind===9){br.gif=(cycle*2+(kind===9?1:0))%8;br.tier=1;}
+    else if(kind===3||kind===11||seat===2||seat===34){br.word=['SINK','RELAX','LET GO','DROP'][cycle%4];br.wordAt=2;}
+    else if(kind===5)br.split=true;
+    else if(kind===7||seat===6){br.spiral=WELL_PRESETS[(cycle+(seat===6?1:0))%WELL_PRESETS.length];br.spin=1;}
+    else if(seat===14||seat===46||seat===78)br.jackpot=true;
+    if(br.finaleHinge){
+      br.hp=3;
+      br.gif=-1;br.word=null;br.split=false;br.jackpot=false;br.spiral=WELL_PRESETS[id%WELL_PRESETS.length];br.spin=1;
+    }
+    Object.assign(br,finaleChaosPose(br,g.finale,w,h,g.reduced));
+    powers.assign(br);
+    return br;
+  }
+
+  function dressFinale() {
+    const f=g.finale;
+    if(f.mixed)return;
+    f.mixed=true;f.stageAge=0;
+    const pieces=g.bricks.filter(b=>b.alive&&!b.finaleWord);
+    f.initialBricks=pieces.length;
+    pieces.forEach((br,i)=>{
+      // Sparse permanent metal, tough dull pieces, and a varied colourful remainder.
+      const kind=i%16;
+      if(kind===0)br.finaleMetal=true;
+      else if(kind<5){br.finaleGrey=true;br.strength=2;br.hp=2;}
+      else if(kind===5||kind===11){br.gif=(Math.floor(i/16)*2+(kind===11?1:0))%8;br.tier=1;}
+      else if(kind===7){br.word=['SINK','RELAX','LET GO'][Math.floor(i/16)%3];br.wordAt=2;}
+      else if(kind===9)br.split=true;
+      else if(kind===13){br.spiral=WELL_PRESETS[i%WELL_PRESETS.length];br.spin=1;br.hue=0;}
+    });
+    // A reachable centre is an alternate stage-one objective, protected by worn shields.
+    for(let i=0;i<12;i++) {
+      const a=i*TAU/12, strength=i%2?2:3, radius=57.6;
+      g.bricks.push(mkBrick(f.centreX+Math.cos(a)*radius-10.8,f.centreY+Math.sin(a)*radius-7.2,21.6,14.4,i%6,i,
+        {finaleCenterGuard:true,strength,hp:strength,angle:a+Math.PI/2}));
+    }
+    for(const br of g.bricks)powers.assign(br);
+    f.initialBricks=g.bricks.filter(b=>b.alive&&!b.finaleWord).length;
+  }
+
+  function beginFinaleSpiral() {
+    powers.reset();
+    const f=g.finale; f.stage=2; f.stageAge=0; f.feedClock=0; f.feedIndex=0;
+    f.centreY=h*.36; f.coreRadius=28;
+    // Existing survivors fly into arm positions. New pieces enter from outside the field.
+    g.bricks=g.bricks.filter(br=>br.alive).slice(0,Math.floor((FINALE_BRICK_LIMIT-FINALE_GATE_COUNT)*.6));
+    g.bricks.forEach((br,i)=>{
+      br.finaleMetal=false; br.finaleRing=false; br.finaleDefense=false; br.finaleFeed=true;
+      br.flyFrom={x:br.x,y:br.y,angle:br.angle||0};
+      Object.assign(br,finaleChaosMetadata(f.feedIndex++));
+      if(br.finaleHinge){br.hp=3;br.strength=0;br.finaleGrey=false;br.gif=-1;br.word=null;br.split=false;br.jackpot=false;br.spiral=WELL_PRESETS[0];}
+      br.feedAge=FINALE_FEED_LIFE*(.2+.8*(Math.floor(br.chaosId/FINALE_THREAD_COUNT)%24+.5)/24);
+    });
+    for(let ring=0;ring<2;ring++) {
+      const count=ring===0?14:20,radius=ring===0?60:90,strength=3;
+      for(let i=0;i<count;i++) {
+        const a=i*TAU/count;
+        const target={x:f.centreX+Math.cos(a)*radius-13.2,y:f.centreY+Math.sin(a)*radius-9.6,angle:a+Math.PI/2};
+        const entry=a+ring*.37, reach=Math.hypot(w,h);
+        const x=f.centreX+Math.cos(entry)*reach,y=f.centreY+Math.sin(entry)*reach;
+        g.bricks.push(mkBrick(x,y,26.4,19.2,ring,i,{finaleGate:true,gateRing:ring,strength,hp:strength,
+          finaleMetal:i%9===4,angle:target.angle,
+          flyFrom:{x,y,angle:target.angle},flyTarget:target}));
+      }
+    }
+    while(g.bricks.length<FINALE_BRICK_LIMIT) {
+      const id=f.feedIndex++, br=makeFinaleFeed(id,FINALE_FEED_LIFE*(.2+.8*(Math.floor(id/FINALE_THREAD_COUNT)%24+.5)/24));
+      const a=id*2.3999632297,reach=Math.hypot(w,h);
+      br.flyFrom={x:f.centreX+Math.cos(a)*reach,y:f.centreY+Math.sin(a)*reach,angle:a};
+      br.x=br.flyFrom.x;br.y=br.flyFrom.y;
+      g.bricks.push(br);
+    }
+    emit('finaleStage',{stage:2,x:f.centreX,y:f.centreY});
+  }
+
+  function updateFinaleFormation(dt) {
+    const f=g.finale;if(!f)return;
+    if(f.phase==='interrupt'||f.phase==='outro')return;
+    f.motionAge=(f.motionAge||0)+dt;
+    if(f.stage===1) {
+      const time=g.reduced?0:f.motionAge;
+      for(const br of g.bricks)if(br.alive&&br.finaleRing){
+        const beat=(time+br.ring*1.7)%9;
+        const shiver=beat<1.2?Math.sin(beat*23)*Math.sin(beat*Math.PI/1.2):0;
+        const angle=br.ringAngle+time*(br.ring%2?-.045:.035)+shiver*.014;
+        const radius=br.ringRadius+shiver*2.5;
+        br.x=f.centreX+Math.cos(angle)*radius*(br.ring===0?1.3:1)-br.w/2;
+        br.y=f.centreY+Math.sin(angle)*radius-br.h/2;
+        br.angle=angle+Math.PI/2;
+      }
+    }
+    if(f.phase!=='released')return;
+    f.stageAge+=dt;
+    if(f.stage===1) {
+      if(f.stageAge>=300 || g.bricks.filter(b=>b.alive&&!b.finaleWord).length<=f.initialBricks*.2)beginFinaleSpiral();
+      return;
+    }
+    if(f.stage!==2)return;
+    const arrival=Math.min(1,f.stageAge/FINALE_REBUILD_SECONDS);
+    for(const br of g.bricks) {
+      if(!br.alive)continue;
+      if(br.finaleFeed) {
+        br.feedAge+=dt;
+        if(br.feedAge>=FINALE_FEED_LIFE){br.alive=false;continue;}
+        Object.assign(br,finaleChaosPose(br,f,w,h,g.reduced));
+        br.irisAlpha=Math.min(1,(FINALE_FEED_LIFE-br.feedAge)/1.2);
+      } else if(br.flyTarget)Object.assign(br,br.flyTarget);
+      if(br.flyFrom) {
+        if(g.reduced || arrival===1){br.flyFrom=null;}
+        else Object.assign(br,finaleWhirlPose(br.flyFrom,br,f,arrival,br.w,br.h));
+      }
+    }
+    g.bricks=g.bricks.filter(br=>br.alive);
+    {
+      f.feedClock+=dt;
+      if(f.feedClock>=.3) {
+        f.feedClock-=.3;
+        if(g.bricks.length<FINALE_BRICK_LIMIT)g.bricks.push(makeFinaleFeed(f.feedIndex++));
+      }
+    }
+  }
+
+  function finaleProgress(ball, value = 1) {
+    if (g.pendingBreakout) return;
+    g.greyBricks += value; g.fractures = Math.min(1, g.greyBricks/g.breakoutN);
+    if (g.greyBricks >= g.breakoutN) startBreakout(ball);
+  }
+
+  function updateFinale(dt, input) {
+    const f = g.finale; if (!f) return false;
+    if(f.phase==='outro') { f.outroAge+=dt; return true; }
+    f.age += dt;
+    for (const burst of f.bursts) burst.age += dt;
+    f.bursts = f.bursts.filter(b => b.age < .55);
+    if (f.phase === 'interrupt') {
+      if (f.age >= 3.95) {
+        relapse(); au('finaleGrey',true); f.phase = 'locked'; f.age = 0; f.wordClock = 30; emit('finaleLocked',{});
+        g.rungs = rungsFor(0, 'grey', g.force);
+      }
+      return true;
+    }
+    if (f.phase === 'forming' || f.phase === 'ready') {
+      g.wallAge = Math.min(2, f.age); g.rungs = rungsFor(g.sat,g.state,g.force);
+      movePaddle(dt,input);
+      for(const b of g.balls) {b.x=g.paddle.x;b.y=g.paddle.y-g.paddle.h/2-b.r;}
+      if (f.age >= 1.9) f.phase = 'ready';
+      if (f.phase === 'ready' && input.launch) {f.phase='approach';for(const b of g.balls)launch(b);}
+      return true;
+    }
+    if (f.phase === 'locked') {
+      for (const br of g.bricks) if (br.finaleWord) {
+        br.ttl -= dt;
+        if (br.ttl <= 0) {
+          br.alive = false;
+          f.bursts.push({x:br.x+br.w/2,y:br.y+br.h/2,text:br.finaleWord,age:0});
+        }
+      }
+      f.bursts = f.bursts.slice(-8);
+      g.bricks = g.bricks.filter(br=>!br.finaleWord || br.alive);
+      f.wordClock -= dt;
+      if (f.wordClock <= 0 && g.bricks.filter(br=>br.finaleWord).length < 4) {
+        const phrases=['GIVE UP','TOO LATE','STOP','GO BACK','NOT ENOUGH','WHY TRY'];
+        // Upper side lanes stay reachable outside the sealed ring.
+        const seats=[[.17,.14],[.83,.28],[.17,.42],[.83,.14],[.17,.28],[.83,.42]];
+        const helpSeat=finaleHelpSeat(g);
+        if(helpSeat) {
+          const text=phrases[f.wordIndex++%phrases.length],life=5+rng();
+          g.bricks.push(mkBrick(helpSeat.x,helpSeat.y,helpSeat.w,helpSeat.h,0,-1,
+            {finaleWord:text,seat:-1,ttl:life,wordLife:life}));
+        }
+        for (let offset=0;!helpSeat&&offset<seats.length;offset++) {
+          const seat=(f.wordIndex+offset)%seats.length;
+          if(g.bricks.some(br=>br.finaleWord&&br.seat===seat))continue;
+          const [x,y]=seats[seat],text=phrases[f.wordIndex++%phrases.length],life=5+rng();
+          g.bricks.push(mkBrick(w*x-65,h*y-14,130,28,0,seat,{finaleWord:text,seat,ttl:life,wordLife:life}));
+          break;
+        }
+        f.wordClock=2.7+rng()*.6;
+      }
+    }
+    return false;
+  }
+
   function split(ball, br) {
     const nb = { ...newBall(false), x: br.x + br.w / 2, y: br.y + br.h / 2, vx: -ball.vx, vy: ball.vy, stuck: false, trail: [] };
     g.balls.push(nb);
@@ -332,6 +684,21 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     }
     g.colliders = g.colliders.filter(c => c.alpha > 0);
   }
+  function chargeDome(amount = .22) {
+    if (g.well?.persistent && g.state === 'colour') {
+      const s = g.well;
+      s.energy = Math.min(1, s.energy + amount);
+      s.turnPending = Math.min(2.4, s.turnPending + .84 + amount);
+      s.hitPulse = 1;
+    }
+  }
+
+  function spawnDome() {
+    g.well = { x: w / 2, y: h / 2, r: 115, pull: 145, age: 0, born: 0, ttl: Infinity,
+      rot: 0, used: false, fade: 1, captured: null, gif: -1, preset: 'whirl', spin: 1,
+      hue: 0, persistent: true, energy: 0, cooldown: 0, turnPending: 0, musicPulse: 0, hitPulse: 0, lastBeatPhase: g.beatPhase };
+  }
+
   function spawnWell(x, y, from) {
     // The field is the brick's own (preset, spin, hue ride in on the pop), so the well is the spiral the player saw in the wall. `born` never pauses (the inflate).
     const preset = from && WELL_PRESETS.includes(from.spiral) ? from.spiral : WELL_PRESETS[Math.floor(rng() * WELL_PRESETS.length)];
@@ -572,6 +939,36 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     snapshot: () => g,
     setWords(list) { if (Array.isArray(list) && list.length) { g.words = list.map(x => String(x)); g.wordIx = 0; } },
     /* dev and test hooks */
+    replayEntrance() { g.wallAge = 0; g.landRow = 0; },
+    jumpToWall(n) {
+      g.stats.walls = Math.max(0, Math.floor(Number(n) || 1) - 1);
+      wordSim.endAll(); g.colliders = []; g.pops = []; g.well = null;
+      g.hitStopMs = 0; g.freeze = 0; g.pendingBreakout = false; g.transition = null;
+      buildWall(); g.wallAge = 2; g.landRow = 99; respawn(g.state === 'grey');
+      emit('wall', { walls: g.stats.walls, sp: g.stats.sp, mantra: g.mantra });
+    },
+    /** Debug shortcuts map the three playable finale beats, not a new ending. */
+    jumpToFinaleBeat(beat) {
+      this.jumpToWall(8);
+      if (beat === 'opening') return;
+      if (!['words', 'rings', 'spiral', 'remaining'].includes(beat)) return;
+      relapse();
+      g.finale.phase = 'locked'; g.finale.age = 30; g.finale.wordClock = 0;
+      g.rungs = rungsFor(0, 'grey', g.force);
+      emit('finaleLocked', {});
+      if (beat !== 'words') {
+        startBreakout(g.balls[0]);
+        completeBreakout();
+        g.breakoutShield = null;
+        if (beat === 'spiral') beginFinaleSpiral();
+        if (beat === 'remaining') {
+          const alive=g.bricks.filter(b=>b.alive);
+          const keep=Math.floor(alive.length*.2);
+          alive.forEach((br,i)=>{br.alive=Math.floor(i*keep/alive.length)!==Math.floor((i+1)*keep/alive.length);});
+        }
+      }
+      respawn(g.state === 'grey');
+    },
     setSaturation(s) { g.sat = clamp(Number(s) || 0, 0, 1); if (g.state === 'grey') g.savedSat = g.sat, g.sat = 0; au('setSaturation', g.sat); },
     setForce(i, v) { g.force[i] = v; g.rungs = rungsFor(g.sat, g.state, g.force); },
     clearForce() { g.force = {}; g.rungs = rungsFor(g.sat, g.state, g.force); },
