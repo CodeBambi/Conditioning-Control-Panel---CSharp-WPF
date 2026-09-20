@@ -1,0 +1,95 @@
+# Diagnostic-only Windows OBSERVATION of the production settings save. It follows run
+# 35532748991, which CONTRADICTED the reader-sharing hypothesis: both readers (with and without
+# FileShare.Delete) persisted "ja" and both failed with UnauthorizedAccessException 0x80070005,
+# not the predicted sharing-violation IOException 0x80070020.
+#
+# This job therefore asserts NO cause. It adds the no-held-reader control that experiment lacked
+# and captures the exact production exception STACK, so artifact inspection — not an assertion
+# encoding a second guess — is the gate. It is not a fix and it establishes nothing about the
+# original CI language failure.
+#
+# Filtered to SaveAccessProbeTests only. The earlier reader-sharing test is preserved, still
+# fails, and is deliberately NOT executed here, so a green job here can never be read as "the old
+# predictions now pass". language-probe.yml and reader-sharing-probe.yml are pinned to other
+# branches and are untouched, so neither fires on this branch. build.yml, Core and the shipping
+# stack are untouched. Runs ONCE on push — never retry-until-green.
+name: save-access-probe
+
+on:
+  push:
+    branches: [avalonia-port/probe-windows-save-access]
+
+jobs:
+  windows-save-access-probe:
+    runs-on: windows-latest
+    # Bounded: the observation is seconds of work, so anything near this is a hang.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          # Same environment as the previous probes: 8.0 runtime for the net8.0 testhost,
+          # 10.0 SDK because that is what the repo builds with.
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      # Results directory exists before anything can fail, so artifacts survive a build break.
+      - name: Effective environment
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP/probe" | Out-Null
+          # The PowerShell host's framework and the INSTALLED tooling, NOT the testhost runtime.
+          # The testhost records its own actual runtime and owned profile into
+          # probe/testhost-runtime.log and probe/save-access-probe.log.
+          @(
+            "[save-access-probe] pwsh-host-os=$([System.Runtime.InteropServices.RuntimeInformation]::OSDescription)"
+            "[save-access-probe] pwsh-host-framework=$([System.Runtime.InteropServices.RuntimeInformation]::FrameworkDescription)"
+          ) | Tee-Object -FilePath "$env:RUNNER_TEMP/probe/environment.log"
+          dotnet --info 2>&1 | Tee-Object -Append -FilePath "$env:RUNNER_TEMP/probe/environment.log"
+
+      - name: Build language suite
+        shell: pwsh
+        run: |
+          dotnet build Tests/CCP.Avalonia.Language.Tests/CCP.Avalonia.Language.Tests.csproj -c Release 2>&1 |
+            Tee-Object -FilePath "$env:RUNNER_TEMP/probe/build.log"
+          exit $LASTEXITCODE
+
+      - name: Run save-access observation (once)
+        shell: pwsh
+        env:
+          # Existing seam: makes the testhost record its real runtime, owned profile and every
+          # observation (plus the exception stacks), pass or fail.
+          CCP_PROBE_LOG_DIR: ${{ runner.temp }}/probe
+        run: |
+          dotnet test Tests/CCP.Avalonia.Language.Tests/CCP.Avalonia.Language.Tests.csproj `
+            -c Release --no-build `
+            --filter "FullyQualifiedName~SaveAccessProbeTests" `
+            --blame-hang --blame-hang-timeout 5m `
+            --logger "trx;LogFileName=save-access-probe.trx" `
+            --results-directory "$env:RUNNER_TEMP/probe" 2>&1 |
+            Tee-Object -FilePath "$env:RUNNER_TEMP/probe/save-access-probe-run.log"
+          $code = $LASTEXITCODE
+          Write-Host "[save-access-probe] exit=$code"
+          "{`"run`":1,`"exitCode`":$code}" |
+            Out-File -Append -Encoding utf8 "$env:RUNNER_TEMP/probe/run.jsonl"
+          # A non-zero exit means the control failed or an observation came back empty — itself
+          # the finding. Surfaced rather than swallowed, and never retried.
+          exit $code
+
+      # Explicit allowlist of text/JSON/TRX diagnostics. Uploading the whole results directory
+      # would also ship a --blame-hang memory dump, which can contain in-memory settings and
+      # environment data; dumps are deliberately NOT uploaded. No settings file is ever uploaded.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-save-access-probe
+          path: |
+            ${{ runner.temp }}/probe/environment.log
+            ${{ runner.temp }}/probe/build.log
+            ${{ runner.temp }}/probe/testhost-runtime.log
+            ${{ runner.temp }}/probe/save-access-probe.log
+            ${{ runner.temp }}/probe/save-access-probe-run.log
+            ${{ runner.temp }}/probe/save-access-probe.trx
+            ${{ runner.temp }}/probe/run.jsonl
+          if-no-files-found: warn

@@ -80,13 +80,39 @@ internal sealed class SaveProbeSink : Serilog.Core.ILogEventSink
 
     private readonly System.Collections.Generic.Queue<string> _lines = new();
 
+    // [save-access-probe] Full exception detail (type, message, HResult and STACK) for the same
+    // events, kept in a SEPARATE buffer: the one-line _lines format above is what the earlier
+    // reader-sharing probe asserts on, so it is left byte-identical.
+    private readonly System.Collections.Generic.Queue<string> _exceptionDetails = new();
+
     /// <summary>[lang-probe] Opens a mutation window so later lines can be attributed to it.</summary>
     internal void Mark(string label)
     {
+        var marker = $"{MarkPrefix}{label} ({DateTime.Now:HH:mm:ss.fff}) ----";
         lock (_lines)
         {
-            _lines.Enqueue($"{MarkPrefix}{label} ({DateTime.Now:HH:mm:ss.fff}) ----");
+            _lines.Enqueue(marker);
             while (_lines.Count > 200) _lines.Dequeue();
+        }
+        lock (_exceptionDetails)
+        {
+            _exceptionDetails.Enqueue(marker);
+            while (_exceptionDetails.Count > 50) _exceptionDetails.Dequeue();
+        }
+    }
+
+    /// <summary>
+    /// [save-access-probe] Exception detail recorded after the most recent mutation marker,
+    /// including the stack — which is the only thing that says WHICH call inside SaveImmediate
+    /// (temp create, rotate, File.Move, …) actually threw.
+    /// </summary>
+    internal string[] ExceptionDetailsSinceLastMark()
+    {
+        lock (_exceptionDetails)
+        {
+            var all = _exceptionDetails.ToArray();
+            var mark = Array.FindLastIndex(all, line => line.StartsWith(MarkPrefix, StringComparison.Ordinal));
+            return all.Skip(mark + 1).ToArray();
         }
     }
 
@@ -99,7 +125,14 @@ internal sealed class SaveProbeSink : Serilog.Core.ILogEventSink
 
         var text = $"{logEvent.Timestamp:HH:mm:ss.fff} {logEvent.Level} {message}";
         if (logEvent.Exception is { } ex)
+        {
             text += $" || {ex.GetType().Name}: {ex.Message} (HResult=0x{ex.HResult:X8})";
+            lock (_exceptionDetails)
+            {
+                _exceptionDetails.Enqueue($"{logEvent.Timestamp:HH:mm:ss.fff} {message} || {ex}");
+                while (_exceptionDetails.Count > 50) _exceptionDetails.Dequeue();
+            }
+        }
 
         lock (_lines)
         {
