@@ -59,85 +59,19 @@ expected_slots=(
   "later:$later_test"
   "approved_skip:$approved_skip"
 )
-# Emitted by WaitForPublicationTemp; means the test never saw contention, i.e. proves nothing.
-missed_temp='did not leave its flushed temp file behind'
+# The helper recognizes the two documented transient-temp messages on the individual release
+# failure node; all other setup/temp/timeout text remains unrecognized and fail-closed.
 # The ONLY baseline failure this gate accepts: after the reader is released the baseline never
-# publishes, so the re-read language is still the seeded "ja" where the test demands "fr".
-expected_exception='EqualException'
-# xunit v3 renders string diffs with the quotes backslash-escaped (Expected: \"fr\"), so the
-# value patterns below allow that one optional backslash. Nothing else about them is relaxed.
+# publishes, so the re-read language is still the seeded "ja" where the test demands "fr". The
+# Python parser owns the exact exception, message fields, and attributed stack-frame contract.
 
 is_count() { [[ ${1:-} =~ ^[0-9]+$ ]]; }
 
 # A REAL XML parser, not text matching: an incomplete, truncated or malformed results document
 # must be unparseable rather than silently yielding the handful of attributes a grep can see.
-# xml.etree.ElementTree is Python stdlib, so this needs no package install anywhere.
-PARSER_PY='
-import sys, xml.etree.ElementTree as ET
-def out(k, v): print(k + "=" + " ".join(str(v).split()))
-path, rel = sys.argv[1], sys.argv[2]
-# slot -> expected record identity, supplied by the caller so the names live in one place only.
-slots = dict(a.split(":", 1) for a in sys.argv[3:])
-try:
-    root = ET.parse(path).getroot()
-except Exception as e:
-    out("ok", 0); out("error", repr(e)[:300]); sys.exit(0)
-if root.tag not in ("assemblies", "assembly"):
-    out("ok", 0); out("error", "unexpected root element <%s>" % root.tag); sys.exit(0)
-asms = [root] if root.tag == "assembly" else root.findall("assembly")
-if len(asms) != 1:
-    out("ok", 0); out("error", "expected exactly one <assembly>, found %d" % len(asms)); sys.exit(0)
-a = asms[0]
-out("ok", 1)
-for k in ("total", "passed", "failed", "skipped", "errors", "environment"):
-    out(k, a.get(k, ""))
-tests = a.findall(".//test")
-seen = {"Pass": 0, "Fail": 0, "Skip": 0, "unknown": 0}
-for t in tests:
-    r = t.get("result", "")
-    seen[r if r in seen else "unknown"] += 1
-out("n_tests", len(tests))
-out("n_pass", seen["Pass"]); out("n_fail", seen["Fail"])
-out("n_skip", seen["Skip"]); out("n_unknown", seen["unknown"])
-out("skip_names", ",".join(sorted((t.get("method") or "?") for t in tests if t.get("result") == "Skip")))
-
-def record_text(t):
-    s = "".join(t.itertext())
-    for f in t.iter("failure"):
-        s += " " + (f.get("exception-type") or "")
-    return s
-
-def ident(t):
-    # method + the parameter list as rendered in `name`, so each theory row is its own identity
-    # and a substituted parameter can never impersonate an expected row.
-    m, n = t.get("method") or "?", t.get("name") or ""
-    return m + ("(" + n.split("(", 1)[1] if "(" in n else "")
-
-by_ident = {}
-for t in tests:
-    by_ident.setdefault(" ".join(ident(t).split()), []).append(t)
-want = {" ".join(v.split()): s for s, v in slots.items()}
-unmatched, matched = [], set()
-for key, ts in sorted(by_ident.items()):
-    slot = want.get(key)
-    if slot is None:
-        unmatched.append("unexpected record '%s'" % key); continue
-    if len(ts) != 1:
-        unmatched.append("'%s' reported %d times" % (key, len(ts))); continue
-    matched.add(slot)
-    out("slot_" + slot, ts[0].get("result", ""))
-    out("text_" + slot, record_text(ts[0]))
-out("unmatched", "; ".join(unmatched))
-out("missing", ", ".join(sorted(want[k] + " (" + k + ")" for k in want if want[k] not in matched)))
-
-hits = [t for t in tests if t.get("method") == rel]
-out("n_release", len(hits))
-if len(hits) == 1:
-    out("release_result", hits[0].get("result", ""))
-    out("release_text", record_text(hits[0]))
-else:
-    out("release_result", ""); out("release_text", "")
-'
+# xml.etree.ElementTree is Python stdlib, so this needs no package install anywhere. The helper
+# also validates each test's failure-node shape and compares assertion fields structurally.
+parser="$(cd "$(dirname "$0")" && pwd)/verify-settings-publication-gate.py"
 
 py=
 for c in python3 python py; do
@@ -152,14 +86,20 @@ if [[ -z $py ]]; then
   exit 2
 fi
 
-parse_xml() { # var-prefix file -> sets <prefix>_ok/_total/.../_release_text
+parse_xml() { # var-prefix file -> sets <prefix>_ok/_total/.../_release_summary
   local prefix=$1 file=$2 k v
   for k in ok error total passed failed skipped errors environment \
-           n_tests n_pass n_fail n_skip n_unknown n_release release_result release_text skip_names \
-           unmatched missing \
+           n_tests n_pass n_fail n_skip n_unknown n_release release_result release_shape \
+           release_signature release_missed_temp release_summary skip_names unmatched missing invalid \
            slot_noreader slot_release slot_hold_read slot_hold_read_delete slot_later \
-           slot_approved_skip text_noreader text_release text_hold_read text_hold_read_delete \
-           text_later text_approved_skip; do
+           slot_approved_skip failure_shape_noreader failure_shape_release failure_shape_hold_read \
+           failure_shape_hold_read_delete failure_shape_later failure_shape_approved_skip \
+           failure_signature_noreader failure_signature_release failure_signature_hold_read \
+           failure_signature_hold_read_delete failure_signature_later failure_signature_approved_skip \
+           failure_missed_temp_noreader failure_missed_temp_release failure_missed_temp_hold_read \
+           failure_missed_temp_hold_read_delete failure_missed_temp_later failure_missed_temp_approved_skip \
+           failure_summary_noreader failure_summary_release failure_summary_hold_read \
+           failure_summary_hold_read_delete failure_summary_later failure_summary_approved_skip; do
     printf -v "${prefix}_${k}" '%s' ''
   done
   # Python on Windows opens stdout in text mode, so every line arrives CRLF-terminated and an
@@ -167,32 +107,20 @@ parse_xml() { # var-prefix file -> sets <prefix>_ok/_total/.../_release_text
   while IFS='=' read -r k v; do
     k=${k%$'\r'}; v=${v%$'\r'}
     [[ -n $k ]] && printf -v "${prefix}_${k}" '%s' "$v"
-  done < <("$py" -c "$PARSER_PY" "$file" "$release_test" "${expected_slots[@]}" 2>/dev/null)
+  done < <("$py" "$parser" "$file" "$release_test" "${expected_slots[@]}" 2>/dev/null)
 }
 
-# The persistent-hold theory rows: the instrumented baseline has NO retries, so each row must
-# fail on the attempt count exactly 6-vs-1, raised from its own method. Any other failure there
-# (HoldReader IOException, profile/setup error, timeout, different counts) is an unexplained
-# failure, never an expected deficit.
-hold_row_ok() { # result text
-  [[ $1 == Fail ]] &&
-    grep -qF "$expected_exception" <<<"$2" &&
-    grep -qE 'Assert\.Equal\(\) Failure' <<<"$2" &&
-    grep -qE 'Expected: +6([^0-9]|$)' <<<"$2" &&
-    grep -qE 'Actual: +1([^0-9]|$)' <<<"$2" &&
-    grep -qE "at CCP\.Core\.Settings\.Tests\.SettingsPublicationTests\.$hold_test" <<<"$2"
+# The Python parser has already validated one direct failure node, one message/stack pair,
+# exact exception/value fields, and a complete own-method stack frame. Bash only consumes its
+# boolean contract result; it never pools or regex-matches failure text.
+hold_row_ok() { # result signature
+  [[ $1 == Fail && $2 == 1 ]]
 }
 
 # LaterSaveWins… is end-state only: with no retries the earlier save's value can be the one that
-# survives, so either a Pass or precisely the de-vs-ja assertion on its OWN frame is expected.
-later_row_ok() { # result text
-  [[ $1 == Pass ]] && return 0
-  [[ $1 == Fail ]] &&
-    grep -qF "$expected_exception" <<<"$2" &&
-    grep -qE 'Assert\.Equal\(\) Failure' <<<"$2" &&
-    grep -qE 'Expected: +\\?"?de\\?"?' <<<"$2" &&
-    grep -qE 'Actual: +\\?"?ja\\?"?' <<<"$2" &&
-    grep -qE "at CCP\.Core\.Settings\.Tests\.SettingsPublicationTests\.$later_test" <<<"$2"
+# survives, so either a Pass or precisely the de-vs-ja assertion on its own frame is expected.
+later_row_ok() { # result signature
+  [[ $1 == Pass ]] || [[ $1 == Fail && $2 == 1 ]]
 }
 
 verdict=PASS
@@ -204,7 +132,6 @@ if [[ ! -s $baseline_xml ]]; then
 else
   parse_xml b "$baseline_xml"
   b_release=$b_release_result
-  b_fail_text=$b_release_text
   notes+=("baseline exit=$baseline_exit total=$b_total passed=$b_passed failed=$b_failed skipped=$b_skipped errors=$b_errors")
   notes+=("baseline runtime banner: $b_environment")
   notes+=("baseline parsed test records: $b_n_tests (pass=$b_n_pass fail=$b_n_fail skip=$b_n_skip unknown=$b_n_unknown)")
@@ -230,6 +157,9 @@ else
   elif (( b_n_release != 1 )); then
     verdict=INCONCLUSIVE
     notes+=("baseline contains $b_n_release records for $release_test: absent or ambiguous duplicate evidence")
+  elif [[ -n $b_invalid ]]; then
+    verdict=INCONCLUSIVE
+    notes+=("baseline contains structurally invalid test evidence: $b_invalid")
   elif (( b_errors != 0 )); then
     verdict=INCONCLUSIVE
     notes+=("baseline reported $b_errors assembly-level error(s): host/collection failure, not the regression")
@@ -245,28 +175,24 @@ else
   elif [[ $b_release != Fail ]]; then
     verdict=INCONCLUSIVE
     notes+=("baseline release-recovery regression did not fail (result: ${b_release:-<absent>}): an unexpected pass, skip or absence needs investigation, not a weaker assertion")
-  elif grep -qF "$missed_temp" <<<"$b_fail_text"; then
+  elif [[ $b_release_missed_temp == 1 ]]; then
     verdict=INCONCLUSIVE
-    notes+=("baseline failure is only a missed transient-temp observation: no contention was proven")
-  elif ! grep -qF "$expected_exception" <<<"$b_fail_text" ||
-       ! grep -qE 'Assert\.Equal\(\) Failure' <<<"$b_fail_text" ||
-       ! grep -qE 'Expected: +\\?"?fr\\?"?' <<<"$b_fail_text" ||
-       ! grep -qE 'Actual: +\\?"?ja\\?"?' <<<"$b_fail_text" ||
-       ! grep -qE "at CCP\.Core\.Settings\.Tests\.SettingsPublicationTests\.$release_test" <<<"$b_fail_text"; then
+    notes+=("baseline release failure is a missed transient-temp observation: no contention was proven")
+  elif [[ $b_release_signature != 1 ]]; then
     verdict=INCONCLUSIVE
-    notes+=("baseline failure is not the expected post-release publication assertion (EqualException fr vs ja attributed to $release_test): setup failure, absent observer notification, persistent-hold attempt-count failure, open/cancel/timeout or unrecognized signature - none of which substitutes for it")
+    notes+=("baseline release failure is not the exact post-release publication assertion (EqualException fr vs ja attributed to $release_test): setup failure, absent observer notification, persistent-hold attempt-count failure, open/cancel/timeout or unrecognized signature - none of which substitutes for it")
   elif [[ $b_slot_noreader != Pass ]]; then
     verdict=INCONCLUSIVE
     notes+=("baseline $noreader_test is '${b_slot_noreader:-<absent>}', not the expected Pass: the no-contention control did not hold")
-  elif ! hold_row_ok "$b_slot_hold_read" "$b_text_hold_read"; then
+  elif ! hold_row_ok "$b_slot_hold_read" "$b_failure_signature_hold_read"; then
     verdict=INCONCLUSIVE
-    notes+=("baseline $hold_test(share: Read) is not the expected retry deficit (Fail, EqualException, Expected: 6 / Actual: 1, own method frame): got '${b_slot_hold_read:-<absent>}' - a setup/HoldReader/timeout failure or different counts there is unexplained, not an expected deficit")
-  elif ! hold_row_ok "$b_slot_hold_read_delete" "$b_text_hold_read_delete"; then
+    notes+=("baseline $hold_test(share: Read) is not the exact retry deficit (Fail, EqualException, Expected: 6 / Actual: 1, own method frame): got '${b_slot_hold_read:-<absent>}' (${b_failure_summary_hold_read:-no structured failure}) - a setup/HoldReader/timeout failure or different counts there is unexplained, not an expected deficit")
+  elif ! hold_row_ok "$b_slot_hold_read_delete" "$b_failure_signature_hold_read_delete"; then
     verdict=INCONCLUSIVE
-    notes+=("baseline $hold_test(share: Read | Delete) is not the expected retry deficit (Fail, EqualException, Expected: 6 / Actual: 1, own method frame): got '${b_slot_hold_read_delete:-<absent>}'")
-  elif ! later_row_ok "$b_slot_later" "$b_text_later"; then
+    notes+=("baseline $hold_test(share: Read | Delete) is not the exact retry deficit (Fail, EqualException, Expected: 6 / Actual: 1, own method frame): got '${b_slot_hold_read_delete:-<absent>}' (${b_failure_summary_hold_read_delete:-no structured failure})")
+  elif ! later_row_ok "$b_slot_later" "$b_failure_signature_later"; then
     verdict=INCONCLUSIVE
-    notes+=("baseline $later_test is neither a Pass nor the narrowly recorded de-vs-ja loss on its own frame: got '${b_slot_later:-<absent>}' - any other failure there is unexplained")
+    notes+=("baseline $later_test is neither a Pass nor the exact de-vs-ja loss on its own frame: got '${b_slot_later:-<absent>}' (${b_failure_summary_later:-no structured failure}) - any other failure there is unexplained")
   else
     notes+=("baseline failure is the expected post-release publication regression: Assert.Equal expected \"fr\", actual \"ja\" in $release_test")
     notes+=("baseline matrix matched: $noreader_test=Pass, both $hold_test rows=Fail 6-vs-1, $later_test=$b_slot_later, single approved skip")
@@ -296,6 +222,9 @@ else
        (( c_n_skip != c_skipped )) || (( c_n_unknown != 0 )) || (( c_n_release != 1 )); then
     verdict=INCONCLUSIVE
     notes+=("candidate summary does not reconcile with its actual test records: claimed $c_total/$c_passed/$c_failed/$c_skipped vs parsed $c_n_tests/$c_n_pass/$c_n_fail/$c_n_skip (unknown=$c_n_unknown, $release_test records=$c_n_release)")
+  elif [[ -n $c_invalid ]]; then
+    verdict=INCONCLUSIVE
+    notes+=("candidate contains structurally invalid test evidence: $c_invalid")
   elif [[ -n $c_unmatched || -n $c_missing ]]; then
     verdict=INCONCLUSIVE
     notes+=("candidate records are not exactly the six expected identities: ${c_unmatched:-no unexpected records}; missing: ${c_missing:-none}")

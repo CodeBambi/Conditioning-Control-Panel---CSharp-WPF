@@ -432,6 +432,36 @@ matrix "$tmp/b-hold-timeout.xml" "$(test_el "$hold(share: Read)" Fail "$(failure
 check "hold row failed on a timeout" INCONCLUSIVE 2 \
   "$tmp/b-hold-timeout.xml" "$tmp/candidate.xml" 1 0
 
+# 7a. Astra's three anonymous in-memory counterexamples, recreated from the review description:
+# prefix-sharing assertion values and a valid hold failure with a second direct failure child.
+fringe_failure=$(failure_el 'Xunit.Sdk.EqualException' \
+  'Assert.Equal() Failure: Strings differ
+Expected: "fringe"
+Actual:   "jargon"' \
+  "   at CCP.Core.Settings.Tests.SettingsPublicationTests.$release() in D:\\a\\x\\SettingsPublicationTests.cs:line 118")
+red_with "$tmp/b-release-fringe.xml" "$fringe_failure"
+check "Astra release fringe/jargon prefix mutation" INCONCLUSIVE 2 \
+  "$tmp/b-release-fringe.xml" "$tmp/candidate.xml" 1 0
+
+later_debris=$(failure_el 'Xunit.Sdk.EqualException' \
+  'Assert.Equal() Failure: Strings differ
+Expected: "debris"
+Actual:   "jargon"' \
+  "   at CCP.Core.Settings.Tests.SettingsPublicationTests.$later() in D:\\a\\x\\SettingsPublicationTests.cs:line 226")
+matrix "$tmp/b-later-debris.xml" '' '' "$(test_el "$later" Fail "$later_debris")" '' \
+  'total="6" passed="1" failed="4" skipped="1" errors="0"'
+check "Astra LaterSave debris/jargon prefix mutation" INCONCLUSIVE 2 \
+  "$tmp/b-later-debris.xml" "$tmp/candidate.xml" 1 0
+
+timeout_failure=$(failure_el 'System.TimeoutException' \
+  'The operation has timed out.' \
+  "   at CCP.Core.Settings.Tests.SettingsPublicationTests.$hold(FileShare share)")
+mixed_hold_failure="${hold_failure}${timeout_failure}"
+matrix "$tmp/b-hold-mixed-failure.xml" \
+  "$(test_el "$hold(share: Read)" Fail "$mixed_hold_failure")"
+check "Astra hold 6/1 plus second TimeoutException failure" INCONCLUSIVE 2 \
+  "$tmp/b-hold-mixed-failure.xml" "$tmp/candidate.xml" 1 0
+
 # 7b. the attempt counts themselves must be exactly 6-vs-1, on that method's own frame.
 matrix "$tmp/b-hold-counts.xml" "$(test_el "$hold(share: Read)" Fail "$(failure_el 'Xunit.Sdk.EqualException' \
   'Assert.Equal() Failure: Values differ
