@@ -62,6 +62,9 @@ jobs:
       - name: Test Avalonia report workflow
         run: dotnet test Tests/CCP.Avalonia.Report.Tests/CCP.Avalonia.Report.Tests.csproj -c Release
 
+      - name: Test Avalonia General settings picker (isolated profile)
+        run: dotnet test Tests/CCP.Avalonia.GeneralSettings.Tests/CCP.Avalonia.GeneralSettings.Tests.csproj -c Release
+
       # The VR head. Builds and self-checks on ubuntu with no OpenXR runtime and no headset -
       # StereoKit ships natives for linux-x64/arm64 and android-arm64, so the same assembly
       # targets Steam Frame (SteamOS/ARM64) and Quest standalone. Rendering needs a device;
@@ -126,6 +129,8 @@ jobs:
         run: dotnet test Tests/CCP.Avalonia.Report.Tests/CCP.Avalonia.Report.Tests.csproj -c Release
       - name: Test Avalonia consent flow
         run: dotnet test Tests/CCP.Avalonia.Consent.Tests/CCP.Avalonia.Consent.Tests.csproj -c Release
+      - name: Test Avalonia General settings picker (isolated profile)
+        run: dotnet test Tests/CCP.Avalonia.GeneralSettings.Tests/CCP.Avalonia.GeneralSettings.Tests.csproj -c Release
 
   # Greps the compiler cannot do: APIs that compile fine in a net8.0 library and only fail at
   # runtime, plus the XAML clr-namespace tripwire. See the script for what and why.
