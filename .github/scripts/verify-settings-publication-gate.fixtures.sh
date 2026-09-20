@@ -158,6 +158,69 @@ check "candidate exit file missing" INCONCLUSIVE 2 \
 check "both revisions produced nothing" INCONCLUSIVE 2 \
   "$tmp/absent.xml" "$tmp/absent.xml" missing missing
 
+# 4b. review blocker 4: nonempty but INCOMPLETE XML is not evidence either. Every one of these
+# passes the old attribute greps; none may PASS now that the document is really parsed.
+
+# header-only: the exact raw artefact the review quoted, never closed.
+printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<assemblies>' \
+  '<assembly environment="64-bit .NET 8.0.21" total="5" passed="5" failed="0" skipped="0" errors="0">' \
+  >"$tmp/c-headeronly.xml"
+check "candidate header-only XML (unclosed)" INCONCLUSIVE 2 \
+  "$tmp/baseline-good.xml" "$tmp/c-headeronly.xml" 1 0
+printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<assemblies>' \
+  '<assembly environment="64-bit .NET 8.0.21" total="5" passed="4" failed="1" skipped="0" errors="0">' \
+  >"$tmp/b-headeronly.xml"
+check "baseline header-only XML (unclosed)" INCONCLUSIVE 2 \
+  "$tmp/b-headeronly.xml" "$tmp/candidate.xml" 1 0
+
+# closed but empty: well-formed, claims five results, carries none.
+xml "$tmp/c-emptyassembly.xml" 'total="5" passed="5" failed="0" skipped="0" errors="0"'
+check "candidate claims 5 passed with no test records" INCONCLUSIVE 2 \
+  "$tmp/baseline-good.xml" "$tmp/c-emptyassembly.xml" 1 0
+xml "$tmp/b-emptyassembly.xml" 'total="5" passed="4" failed="1" skipped="0" errors="0"'
+check "baseline claims a failure with no test records" INCONCLUSIVE 2 \
+  "$tmp/b-emptyassembly.xml" "$tmp/candidate.xml" 1 0
+
+# truncated immediately after the recognized failure text: every inspected field intact.
+sed "s#</stack-trace>.*##" "$tmp/baseline-good.xml" >"$tmp/b-truncated.xml"
+grep -qF 'Actual' "$tmp/b-truncated.xml" || { echo "[FAIL] truncation fixture lost its failure text"; fails=$((fails + 1)); }
+check "baseline truncated after the failure text" INCONCLUSIVE 2 \
+  "$tmp/b-truncated.xml" "$tmp/candidate.xml" 1 0
+sed "s#</collection>.*##" "$tmp/candidate.xml" >"$tmp/c-truncated.xml"
+check "candidate truncated before its close" INCONCLUSIVE 2 \
+  "$tmp/baseline-good.xml" "$tmp/c-truncated.xml" 1 0
+
+# fewer real records than the summary claims, and unknown/absent result values.
+xml "$tmp/c-short.xml" 'total="5" passed="5" failed="0" skipped="0" errors="0"' \
+  "$(test_el "$release" Pass)" "$(test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass)"
+check "candidate has 2 records but claims 5" INCONCLUSIVE 2 \
+  "$tmp/baseline-good.xml" "$tmp/c-short.xml" 1 0
+xml "$tmp/c-unknown.xml" 'total="5" passed="5" failed="0" skipped="0" errors="0"' \
+  "$(others_pass)" "$(test_el "$release" NotRun)"
+check "candidate record with an unknown result" INCONCLUSIVE 2 \
+  "$tmp/baseline-good.xml" "$tmp/c-unknown.xml" 1 0
+xml "$tmp/b-unknown-result.xml" 'total="5" passed="4" failed="1" skipped="0" errors="0"' \
+  "$(others_pass)" "<test name=\"x\" method=\"$release\">$expected_failure</test>"
+check "baseline release record with no result attribute" INCONCLUSIVE 2 \
+  "$tmp/b-unknown-result.xml" "$tmp/candidate.xml" 1 0
+
+# ambiguous duplicate evidence: the same test reported twice.
+xml "$tmp/b-dup.xml" 'total="5" passed="3" failed="2" skipped="0" errors="0"' \
+  "$(test_el NoReaderPublishesTheLatestSettingsAndCleansItsTempFile Pass)" \
+  "$(test_el PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile Pass)" \
+  "$(test_el LaterSaveWinsWhenAnEarlierPublicationWaitsForTheReader Pass)" \
+  "$(test_el "$release" Fail "$expected_failure")" "$(test_el "$release" Fail "$expected_failure")"
+check "baseline reports the release test twice" INCONCLUSIVE 2 \
+  "$tmp/b-dup.xml" "$tmp/candidate.xml" 1 0
+
+# not XML at all / wrong document.
+printf 'MSBuild version 17\nerror MSB1009\n' >"$tmp/b-notxml.xml"
+check "baseline artefact is not XML" INCONCLUSIVE 2 \
+  "$tmp/b-notxml.xml" "$tmp/candidate.xml" 1 0
+printf '%s\n' '<?xml version="1.0"?><testsuite tests="5" failures="1"/>' >"$tmp/b-wrongroot.xml"
+check "baseline artefact has the wrong root element" INCONCLUSIVE 2 \
+  "$tmp/b-wrongroot.xml" "$tmp/candidate.xml" 1 0
+
 # 5. a genuinely red candidate is still a FAIL, not an INCONCLUSIVE.
 xml "$tmp/c-red.xml" 'total="5" passed="4" failed="1" skipped="0" errors="0"' \
   "$(others_pass)" "$(test_el "$release" Fail "$expected_failure")"

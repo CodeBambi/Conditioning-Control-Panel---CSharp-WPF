@@ -32,41 +32,90 @@ expected_exception='EqualException'
 
 is_count() { [[ ${1:-} =~ ^[0-9]+$ ]]; }
 
-flat() { tr '\n' ' ' <"$1"; }
+# A REAL XML parser, not text matching: an incomplete, truncated or malformed results document
+# must be unparseable rather than silently yielding the handful of attributes a grep can see.
+# xml.etree.ElementTree is Python stdlib, so this needs no package install anywhere.
+PARSER_PY='
+import sys, xml.etree.ElementTree as ET
+def out(k, v): print(k + "=" + " ".join(str(v).split()))
+path, rel = sys.argv[1], sys.argv[2]
+try:
+    root = ET.parse(path).getroot()
+except Exception as e:
+    out("ok", 0); out("error", repr(e)[:300]); sys.exit(0)
+if root.tag not in ("assemblies", "assembly"):
+    out("ok", 0); out("error", "unexpected root element <%s>" % root.tag); sys.exit(0)
+asms = [root] if root.tag == "assembly" else root.findall("assembly")
+if len(asms) != 1:
+    out("ok", 0); out("error", "expected exactly one <assembly>, found %d" % len(asms)); sys.exit(0)
+a = asms[0]
+out("ok", 1)
+for k in ("total", "passed", "failed", "skipped", "errors", "environment"):
+    out(k, a.get(k, ""))
+tests = a.findall(".//test")
+seen = {"Pass": 0, "Fail": 0, "Skip": 0, "unknown": 0}
+for t in tests:
+    r = t.get("result", "")
+    seen[r if r in seen else "unknown"] += 1
+out("n_tests", len(tests))
+out("n_pass", seen["Pass"]); out("n_fail", seen["Fail"])
+out("n_skip", seen["Skip"]); out("n_unknown", seen["unknown"])
+hits = [t for t in tests if t.get("method") == rel]
+out("n_release", len(hits))
+if len(hits) == 1:
+    t = hits[0]
+    text = "".join(t.itertext())
+    for f in t.iter("failure"):
+        text += " " + (f.get("exception-type") or "")
+    out("release_result", t.get("result", ""))
+    out("release_text", text)
+else:
+    out("release_result", ""); out("release_text", "")
+'
 
-assembly_attr() { # file attr
-  flat "$1" | grep -o "<assembly [^>]*" | head -1 | grep -o "$2=\"[^\"]*\"" | head -1 |
-    sed "s/^$2=\"//; s/\"$//"
-}
+py=
+for c in python3 python py; do
+  if command -v "$c" >/dev/null 2>&1 && "$c" -c "import xml.etree.ElementTree" >/dev/null 2>&1; then
+    py=$c; break
+  fi
+done
+if [[ -z $py ]]; then
+  # No parser means no verified evidence. Never fall back to text matching, never PASS.
+  printf '%s\n' "VERDICT: INCONCLUSIVE" \
+    "no Python 3 with xml.etree available to parse the results XML: cannot verify the artefacts"
+  exit 2
+fi
 
-test_result() { # file test-method-name
-  flat "$1" | tr '<' '\n' | grep "^test .*method=\"$2\"" | grep -o 'result="[^"]*"' | head -1 |
-    sed 's/^result="//; s/"$//'
-}
-
-test_failure_text() { # file test-method-name -> everything from that test element to its close
-  flat "$1" | sed "s/<test /\n<test /g" | grep "method=\"$2\""
+parse_xml() { # var-prefix file -> sets <prefix>_ok/_total/.../_release_text
+  local prefix=$1 file=$2 k v
+  for k in ok error total passed failed skipped errors environment \
+           n_tests n_pass n_fail n_skip n_unknown n_release release_result release_text; do
+    printf -v "${prefix}_${k}" '%s' ''
+  done
+  while IFS='=' read -r k v; do
+    [[ -n $k ]] && printf -v "${prefix}_${k}" '%s' "$v"
+  done < <("$py" -c "$PARSER_PY" "$file" "$release_test" 2>/dev/null)
 }
 
 verdict=PASS
-notes=()
+notes=("XML parsed with $($py -c 'import sys;print(sys.version.split()[0])') xml.etree.ElementTree via $py")
 
 if [[ ! -s $baseline_xml ]]; then
   verdict=INCONCLUSIVE
   notes+=("baseline produced no results XML (exit $baseline_exit): cannot distinguish regression from host/build failure")
 else
-  b_release=$(test_result "$baseline_xml" "$release_test")
-  b_total=$(assembly_attr "$baseline_xml" total)
-  b_passed=$(assembly_attr "$baseline_xml" passed)
-  b_failed=$(assembly_attr "$baseline_xml" failed)
-  b_skipped=$(assembly_attr "$baseline_xml" skipped)
-  b_errors=$(assembly_attr "$baseline_xml" errors)
-  b_fail_text=$(test_failure_text "$baseline_xml" "$release_test")
+  parse_xml b "$baseline_xml"
+  b_release=$b_release_result
+  b_fail_text=$b_release_text
   notes+=("baseline exit=$baseline_exit total=$b_total passed=$b_passed failed=$b_failed skipped=$b_skipped errors=$b_errors")
-  notes+=("baseline runtime banner: $(assembly_attr "$baseline_xml" environment)")
+  notes+=("baseline runtime banner: $b_environment")
+  notes+=("baseline parsed test records: $b_n_tests (pass=$b_n_pass fail=$b_n_fail skip=$b_n_skip unknown=$b_n_unknown)")
   notes+=("baseline $release_test = ${b_release:-<absent>}")
 
-  if ! is_count "$baseline_exit" || [[ $baseline_exit == 0 ]]; then
+  if [[ $b_ok != 1 ]]; then
+    verdict=INCONCLUSIVE
+    notes+=("baseline results XML is not a complete well-formed xunit document: ${b_error:-unparseable}")
+  elif ! is_count "$baseline_exit" || [[ $baseline_exit == 0 ]]; then
     verdict=INCONCLUSIVE
     notes+=("baseline exit code '$baseline_exit' is absent, non-numeric or zero: a red baseline must exit nonzero")
   elif ! is_count "$b_total" || ! is_count "$b_passed" || ! is_count "$b_failed" ||
@@ -76,6 +125,13 @@ else
   elif (( b_passed + b_failed + b_skipped != b_total )) || (( b_total != 5 )); then
     verdict=INCONCLUSIVE
     notes+=("baseline summary is inconsistent or not the whole 5-case suite: $b_passed+$b_failed+$b_skipped vs total $b_total")
+  elif (( b_n_tests != b_total )) || (( b_n_pass != b_passed )) || (( b_n_fail != b_failed )) ||
+       (( b_n_skip != b_skipped )) || (( b_n_unknown != 0 )); then
+    verdict=INCONCLUSIVE
+    notes+=("baseline summary does not reconcile with its actual test records: claimed $b_total/$b_passed/$b_failed/$b_skipped vs parsed $b_n_tests/$b_n_pass/$b_n_fail/$b_n_skip (unknown-result records: $b_n_unknown)")
+  elif (( b_n_release != 1 )); then
+    verdict=INCONCLUSIVE
+    notes+=("baseline contains $b_n_release records for $release_test: absent or ambiguous duplicate evidence")
   elif (( b_errors != 0 )); then
     verdict=INCONCLUSIVE
     notes+=("baseline reported $b_errors assembly-level error(s): host/collection failure, not the regression")
@@ -107,21 +163,25 @@ if [[ ! -s $candidate_xml ]]; then
   verdict=INCONCLUSIVE
   notes+=("candidate produced no results XML (exit $candidate_exit)")
 else
-  c_total=$(assembly_attr "$candidate_xml" total)
-  c_passed=$(assembly_attr "$candidate_xml" passed)
-  c_failed=$(assembly_attr "$candidate_xml" failed)
-  c_skipped=$(assembly_attr "$candidate_xml" skipped)
-  c_errors=$(assembly_attr "$candidate_xml" errors)
-  notes+=("candidate runtime banner: $(assembly_attr "$candidate_xml" environment)")
+  parse_xml c "$candidate_xml"
+  notes+=("candidate runtime banner: $c_environment")
   notes+=("candidate exit=$candidate_exit total=$c_total passed=$c_passed failed=$c_failed skipped=$c_skipped errors=$c_errors")
-  if ! is_count "$candidate_exit"; then
+  notes+=("candidate parsed test records: $c_n_tests (pass=$c_n_pass fail=$c_n_fail skip=$c_n_skip unknown=$c_n_unknown)")
+  if [[ $c_ok != 1 ]]; then
+    verdict=INCONCLUSIVE
+    notes+=("candidate results XML is not a complete well-formed xunit document: ${c_error:-unparseable}")
+  elif ! is_count "$candidate_exit"; then
     verdict=INCONCLUSIVE
     notes+=("candidate exit code '$candidate_exit' is absent or non-numeric: no valid evidence of a green run")
   elif ! is_count "$c_total" || ! is_count "$c_passed" || ! is_count "$c_failed" ||
        ! is_count "$c_skipped" || ! is_count "$c_errors"; then
     verdict=INCONCLUSIVE
     notes+=("candidate summary is incomplete: totals/passed/failed/skipped/errors must all be present")
-  elif [[ $candidate_exit != 0 || $c_total != 5 || $c_passed != 5 || $c_failed != 0 || $c_skipped != 0 || $c_errors != 0 ]]; then
+  elif (( c_n_tests != c_total )) || (( c_n_pass != c_passed )) || (( c_n_fail != c_failed )) ||
+       (( c_n_skip != c_skipped )) || (( c_n_unknown != 0 )) || (( c_n_release != 1 )); then
+    verdict=INCONCLUSIVE
+    notes+=("candidate summary does not reconcile with its actual test records: claimed $c_total/$c_passed/$c_failed/$c_skipped vs parsed $c_n_tests/$c_n_pass/$c_n_fail/$c_n_skip (unknown=$c_n_unknown, $release_test records=$c_n_release)")
+  elif [[ $candidate_exit != 0 || $c_total != 5 || $c_passed != 5 || $c_failed != 0 || $c_skipped != 0 || $c_errors != 0 || $c_n_pass != 5 ]]; then
     [[ $verdict == PASS ]] && verdict=FAIL
     notes+=("candidate did not reach 5 passed / 0 failed / 0 skipped on Windows")
   fi
