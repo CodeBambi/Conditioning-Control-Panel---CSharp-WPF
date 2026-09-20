@@ -1539,13 +1539,8 @@ namespace ConditioningControlPanel.Services
         /// collides with the manager's <c>Category:index</c> / GUID ids, so it shares
         /// <see cref="AppSettings.DisabledPhraseIds"/> / <see cref="AppSettings.RemovedPhraseIds"/>.
         /// </summary>
-        public static string BarkLineId(string ruleId, BarkVariant v)
-        {
-            var key = string.IsNullOrWhiteSpace(v.Audio)
-                ? "t_" + CompanionPhraseService.Slugify(v.Text)
-                : System.IO.Path.GetFileNameWithoutExtension(v.Audio);
-            return "Bark:" + ruleId + ":" + key;
-        }
+        public static string BarkLineId(string ruleId, BarkVariant v) =>
+            CompanionPhraseIds.BarkLineId(ruleId, v.Text, v.Audio);
 
         /// <summary>True unless the user disabled or hid this bark line in the Phrase Manager.</summary>
         private static bool IsBarkLineEnabled(string ruleId, BarkVariant v)

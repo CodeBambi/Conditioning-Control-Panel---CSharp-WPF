@@ -294,11 +294,11 @@ namespace ConditioningControlPanel.Services
             {
                 var result = Migrations.CirceNeutralMigration.Apply(settings);
                 if (result != null)
-                    App.Logger?.Information("Circe neutral text migration: {Summary}", result.ToString());
+                    Log.Information("Circe neutral text migration: {Summary}", result.ToString());
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Circe neutral text migration failed; old text kept");
+                Log.Warning(ex, "Circe neutral text migration failed; old text kept");
             }
         }
 
