@@ -22,12 +22,8 @@
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #160e20;
     font: 13px Segoe UI, Arial, sans-serif; color: #fce5f3; -webkit-text-size-adjust: 100%; touch-action: none; }
-  #root { position: fixed; inset: 0; }
-  /* the phone's notch and home bar: push the station's own chrome inside the safe area */
-  .bo-station .bo-back { top: calc(10px + env(safe-area-inset-top, 0px)); left: calc(10px + env(safe-area-inset-left, 0px)); }
-  .bo-station .bo-gear { top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); }
-  .bo-station .bo-hud { top: calc(12px + env(safe-area-inset-top, 0px)); right: calc(52px + env(safe-area-inset-right, 0px)); }
-  .bo-station .bo-dev { top: calc(50px + env(safe-area-inset-top, 0px)); }
+  #root { position: fixed; inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+  /* Keep the whole playable field clear of the notch and home bar in either orientation. */
   #sit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 14px 28px; border-radius: 24px;
     background: #28172fea; color: inherit; border: 1px solid #edb1d177; font: inherit; font-size: 17px; font-weight: 600;
     letter-spacing: 1px; cursor: pointer; touch-action: manipulation; }
@@ -47,9 +43,6 @@
   #pics button { font: inherit; padding: 6px 12px; border-radius: 10px; border: 1px solid #c58bbd59; color: #fce5f3;
     background: linear-gradient(180deg, #3d2449, #2a1734 54%, #1d0f26); cursor: pointer; touch-action: manipulation; }
   #pics .note { font-size: 11px; opacity: .7; }
-  #rotate { position: fixed; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center; text-align: center;
-    background: #160e20f2; font-size: 18px; letter-spacing: 1px; padding: 24px; }
-  @media (orientation: landscape) and (pointer: coarse) and (max-height: 520px) { #rotate { display: flex; } }
 </style>
 </head>
 <body>
@@ -66,7 +59,6 @@
   <div class="row"><button id="apply" type="button">Use these</button><button id="close" type="button">Close</button></div>
   <div class="note" id="note">New pictures arrive on the next wall.</div>
 </div>
-<div id="rotate">Turn your phone upright to play.</div>
 <script type="module">
 import { mount } from './station.js';
 import { bridge, isHosted, mintId, announceReady, markInitialized } from '../../bridge.js';
