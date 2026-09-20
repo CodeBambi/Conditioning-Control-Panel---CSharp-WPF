@@ -6,6 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Media;
 using Serilog;
+using static ConditioningControlPanel.Views.Deeper.DeeperEditorGeometry;
 
 namespace ConditioningControlPanel.Avalonia.Views.Deeper
 {
