@@ -449,7 +449,8 @@
                 <StackPanel Grid.Column="0" x:Name="DeeperHubColumn">
 
                     <!-- First-run welcome card. IsVisible flipped to false in code once the user
-                         clicks Tour, Open Demo, or Got it. -->
+                         clicks Tour or Got it. Avalonia does not seed a bundled demo, so this head
+                         deliberately omits the WPF-only Open Demo affordance. -->
                     <Border x:Name="DeeperWelcomeCard" x:FieldModifier="internal"
                             IsVisible="{Binding ShowWelcomeCard}"
                             Theme="{StaticResource SettingCardStyle}">
@@ -464,7 +465,7 @@
                                     <TextBlock Text="{loc:Str deeper_welcome_card_title}"
                                                Foreground="{DynamicResource DeeperAccentBrush}"
                                                FontSize="14" FontWeight="Bold" Margin="0,0,0,6"/>
-                                    <TextBlock Text="{loc:Str deeper_welcome_card_body}"
+                                    <TextBlock Text="{loc:Str deeper_empty_pitch}"
                                                Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"
                                                TextWrapping="Wrap" Margin="0,0,0,12"/>
                                     <StackPanel Orientation="Horizontal">
@@ -475,16 +476,6 @@
                                                 Background="{DynamicResource DeeperAccentBrush}" Foreground="White"
                                                 BorderThickness="0" Margin="0,0,8,0">
                                             <TextBlock Text="{loc:Str deeper_welcome_card_take_tour}"/>
-                                        </Button>
-                                        <Button x:Name="BtnDeeperWelcomeDemo"
-                                                Theme="{StaticResource DeeperRoundButton}"
-                                                Click="BtnDeeperWelcomeDemo_Click"
-                                                Padding="14,7" Cursor="Hand"
-                                                Background="{DynamicResource DeeperAccentTransparent20Brush}"
-                                                Foreground="{DynamicResource DeeperAccentBrush}"
-                                                BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
-                                                Margin="0,0,8,0">
-                                            <TextBlock Text="{loc:Str deeper_welcome_card_open_demo}"/>
                                         </Button>
                                         <Button x:Name="BtnDeeperWelcomeDismiss"
                                                 Theme="{StaticResource DeeperRoundButton}"
@@ -667,7 +658,18 @@
                                                 <ComboBoxItem Content="{loc:Str deeper_hub_sort_recent}" Tag="recent"/>
                                                 <ComboBoxItem Content="{loc:Str deeper_hub_sort_name}" Tag="name"/>
                                                 <ComboBoxItem Content="{loc:Str deeper_hub_sort_creator}" Tag="creator"/>
+                                                <ComboBoxItem Content="{loc:Str deeper_hub_sort_duration}" Tag="duration"/>
                                             </ComboBox>
+                                            <Button x:Name="BtnDeeperSortDir"
+                                                    Theme="{StaticResource DeeperRoundIconButton}"
+                                                    Content="▼" Click="DeeperSortDir_Click"
+                                                    ToolTip.Tip="{loc:Str deeper_hub_tip_sort_dir}"
+                                                    Width="28" Height="28" Padding="0" FontSize="10"
+                                                    Margin="6,0,0,0" Cursor="Hand"
+                                                    Background="Transparent"
+                                                    Foreground="{DynamicResource DeeperAccentBrush}"
+                                                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                                    BorderThickness="1"/>
                                         </StackPanel>
                                     </Grid>
                                 </StackPanel>

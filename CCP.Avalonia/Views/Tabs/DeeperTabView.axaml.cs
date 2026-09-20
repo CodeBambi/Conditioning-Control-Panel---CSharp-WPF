@@ -15,6 +15,7 @@ using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.Deeper;
 using ConditioningControlPanel.Services.Deeper;
+using DeeperFilter = ConditioningControlPanel.Services.Deeper.EnhancementLibraryFilter;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
@@ -105,26 +106,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void BtnDeeperWebcamQuickRecal_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDeeperWebcamRevokeConsent_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDeeperWebcamStartStopTracker_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnDeeperWelcomeDemo_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDeeperWelcomeDismiss_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDeeperWelcomeTour_Click(object? sender, RoutedEventArgs e) { }
         private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e) { }
 
         private void DeeperPillAll_Click(object? sender, RoutedEventArgs e)
         {
-            ViewModel?.SetMediaType(DeeperLocalLibrary.MediaTypeFilter.All);
+            ViewModel?.SetMediaType(DeeperFilter.MediaTypeFilter.All);
             RefreshPills();
         }
 
         private void DeeperPillAudio_Click(object? sender, RoutedEventArgs e)
         {
-            ViewModel?.SetMediaType(DeeperLocalLibrary.MediaTypeFilter.Audio);
+            ViewModel?.SetMediaType(DeeperFilter.MediaTypeFilter.Audio);
             RefreshPills();
         }
 
         private void DeeperPillVideo_Click(object? sender, RoutedEventArgs e)
         {
-            ViewModel?.SetMediaType(DeeperLocalLibrary.MediaTypeFilter.Video);
+            ViewModel?.SetMediaType(DeeperFilter.MediaTypeFilter.Video);
             RefreshPills();
         }
 
@@ -143,9 +143,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void RefreshPills()
         {
             if (ViewModel is not { } model) return;
-            BtnDeeperPillAll.IsChecked = model.MediaType == DeeperLocalLibrary.MediaTypeFilter.All;
-            BtnDeeperPillVideo.IsChecked = model.MediaType == DeeperLocalLibrary.MediaTypeFilter.Video;
-            BtnDeeperPillAudio.IsChecked = model.MediaType == DeeperLocalLibrary.MediaTypeFilter.Audio;
+            BtnDeeperPillAll.IsChecked = model.MediaType == DeeperFilter.MediaTypeFilter.All;
+            BtnDeeperPillVideo.IsChecked = model.MediaType == DeeperFilter.MediaTypeFilter.Video;
+            BtnDeeperPillAudio.IsChecked = model.MediaType == DeeperFilter.MediaTypeFilter.Audio;
             BtnDeeperPillHaptics.IsChecked = model.Haptics;
             BtnDeeperPillWebcam.IsChecked = model.Webcam;
         }
@@ -162,7 +162,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void DeeperSort_SelectionChanged(object? sender, SelectionChangedEventArgs e)
         {
             if (sender is ComboBox combo && combo.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+            {
                 ViewModel?.SetSort(tag);
+                RefreshSortDirection();
+            }
+        }
+
+        private void DeeperSortDir_Click(object? sender, RoutedEventArgs e)
+        {
+            ViewModel?.ToggleSortDirection();
+            RefreshSortDirection();
+        }
+
+        private void RefreshSortDirection()
+        {
+            if (ViewModel is { } model && BtnDeeperSortDir is { } button)
+                button.Content = model.SortDirectionGlyph;
         }
     }
 
@@ -170,20 +185,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// all file parsing and filtering is shared in <see cref="DeeperLocalLibrary"/>.</summary>
     public sealed class DeeperTabViewModel : INotifyPropertyChanged
     {
-        private readonly List<DeeperLocalLibrary.Entry> _allEntries = new();
+        private readonly List<EnhancementLibraryEntry> _allEntries = new();
         private string _search = "";
-        private DeeperLocalLibrary.MediaTypeFilter _mediaType;
+        private DeeperFilter.MediaTypeFilter _mediaType;
         private bool _haptics;
         private bool _webcam;
-        private DeeperLocalLibrary.SortMode _sort = DeeperLocalLibrary.SortMode.Recent;
-        private bool _descending = true;
+        private DeeperFilter.SortMode _sort = DeeperFilter.SortMode.Recent;
+        private bool _descending = DeeperFilter.DefaultDescending(DeeperFilter.SortMode.Recent);
         private bool _libraryError;
 
-        public DeeperTabViewModel() => ReloadLibrary();
+        // The shell/visual-tree attach owns the first scan. Keeping construction cheap prevents
+        // the first show from enumerating the folder twice (the standalone renderer still scans
+        // from OnAttachedToVisualTree when it has no shell owner).
+        public DeeperTabViewModel() { }
 
         public event PropertyChangedEventHandler? PropertyChanged;
         public ObservableCollection<DeeperLibraryRowVm> FilteredEntries { get; } = new();
-        public DeeperLocalLibrary.MediaTypeFilter MediaType => _mediaType;
+        public DeeperFilter.MediaTypeFilter MediaType => _mediaType;
         public bool Haptics => _haptics;
         public bool Webcam => _webcam;
         public bool ShowLibraryError => _libraryError;
@@ -193,18 +211,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         public string LibraryCountText => FilteredEntries.Count == _allEntries.Count
             ? Loc.GetF("deeper_library_count_fmt", _allEntries.Count)
             : Loc.GetF("deeper_library_count_shown_fmt", _allEntries.Count, FilteredEntries.Count);
-        public int PillAllCount => Count(DeeperLocalLibrary.MediaTypeFilter.All);
-        public int PillVideoCount => Count(DeeperLocalLibrary.MediaTypeFilter.Video);
-        public int PillAudioCount => Count(DeeperLocalLibrary.MediaTypeFilter.Audio);
-        public int PillHapticsCount => Count(new DeeperLocalLibrary.FilterCriteria(_search, _mediaType, true, _webcam));
-        public int PillWebcamCount => Count(new DeeperLocalLibrary.FilterCriteria(_search, _mediaType, _haptics, true));
+        public int PillAllCount => CurrentPillCounts.All;
+        public int PillVideoCount => CurrentPillCounts.Video;
+        public int PillAudioCount => CurrentPillCounts.Audio;
+        public int PillHapticsCount => CurrentPillCounts.Haptics;
+        public int PillWebcamCount => CurrentPillCounts.Webcam;
         public bool ShowWelcomeCard => true;
+        public string SortDirectionGlyph => _descending ? "▼" : "▲";
 
-        private int Count(DeeperLocalLibrary.MediaTypeFilter type)
-            => Count(new DeeperLocalLibrary.FilterCriteria(_search, type, _haptics, _webcam));
+        private DeeperFilter.Criteria CurrentCriteria()
+            => new((_search ?? "").Trim(), _mediaType, _haptics, _webcam);
 
-        private int Count(DeeperLocalLibrary.FilterCriteria criteria)
-            => _allEntries.Count(entry => DeeperLocalLibrary.Matches(entry, criteria));
+        private DeeperFilter.PillCounts CurrentPillCounts
+            => DeeperFilter.CountPills(_allEntries, CurrentCriteria());
 
         public void ReloadLibrary()
         {
@@ -221,7 +240,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ApplyFilter();
         }
 
-        public void SetMediaType(DeeperLocalLibrary.MediaTypeFilter type)
+        public void SetMediaType(DeeperFilter.MediaTypeFilter type)
         {
             _mediaType = type;
             ApplyFilter();
@@ -243,26 +262,35 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             _sort = tag switch
             {
-                "name" => DeeperLocalLibrary.SortMode.Name,
-                "creator" => DeeperLocalLibrary.SortMode.Creator,
-                _ => DeeperLocalLibrary.SortMode.Recent,
+                "name" => DeeperFilter.SortMode.Name,
+                "creator" => DeeperFilter.SortMode.Creator,
+                "duration" => DeeperFilter.SortMode.Duration,
+                _ => DeeperFilter.SortMode.Recent,
             };
-            _descending = _sort == DeeperLocalLibrary.SortMode.Recent;
+            _descending = DeeperFilter.DefaultDescending(_sort);
+            ApplyFilter();
+        }
+
+        public void ToggleSortDirection()
+        {
+            _descending = !_descending;
             ApplyFilter();
         }
 
         private void ApplyFilter()
         {
-            var criteria = new DeeperLocalLibrary.FilterCriteria(_search, _mediaType, _haptics, _webcam, _sort, _descending);
-            var rows = DeeperLocalLibrary.Filter(_allEntries, criteria);
+            var criteria = CurrentCriteria();
+            var rows = DeeperFilter.Sort(
+                _allEntries.Where(entry => DeeperFilter.Matches(entry, criteria)), _sort, _descending);
             FilteredEntries.Clear();
             foreach (var entry in rows) FilteredEntries.Add(BuildRow(entry));
             Notify(nameof(LibraryCountText), nameof(ShowLibraryEmpty), nameof(LibraryEmptyText),
                 nameof(PillAllCount), nameof(PillVideoCount), nameof(PillAudioCount),
-                nameof(PillHapticsCount), nameof(PillWebcamCount), nameof(ShowLibraryError));
+                nameof(PillHapticsCount), nameof(PillWebcamCount), nameof(ShowLibraryError),
+                nameof(SortDirectionGlyph));
         }
 
-        private static DeeperLibraryRowVm BuildRow(DeeperLocalLibrary.Entry entry)
+        private static DeeperLibraryRowVm BuildRow(EnhancementLibraryEntry entry)
         {
             var isAudio = string.Equals(entry.MediaType, MediaTypes.Audio, StringComparison.OrdinalIgnoreCase);
             var tags = entry.AutoTags.Select(tag => new DeeperAutoTagVm
@@ -275,6 +303,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var source = DescribeSource(entry.MediaSource);
             return new DeeperLibraryRowVm
             {
+                Entry = entry,
                 Name = entry.Name,
                 MediaTypeIcon = isAudio ? "🎵" : "🎬",
                 MediaTypeBadgeBg = new SolidColorBrush(Color.FromArgb(0x33,
@@ -337,11 +366,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// brushes so the DataTemplate stays pure-bind. Two shape changes, both forced: WPF's
     /// <c>Visibility</c> becomes <c>bool</c> (Avalonia binds IsVisible directly), and the two
     /// two-<c>Run</c> TextBlocks become one pre-joined string, since an Avalonia
-    /// <c>Run</c> takes a literal rather than a binding. The real Entry is not carried: it is a
-    /// WPF-head model, and no handler on this head reads it yet.
+    /// <c>Run</c> takes a literal rather than a binding. The shared Core Entry is carried on the
+    /// row VM so future head action handlers can consume the same parsed record.
     /// </summary>
     public sealed class DeeperLibraryRowVm
     {
+        public EnhancementLibraryEntry Entry { get; init; } = new();
         public string Name { get; init; } = "";
         public string MediaTypeIcon { get; init; } = "🎬";
         public IBrush MediaTypeBadgeBg { get; init; } = Brushes.Transparent;

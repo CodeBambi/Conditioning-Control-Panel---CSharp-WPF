@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using ConditioningControlPanel.Models.Deeper;
 using ConditioningControlPanel.Services.Deeper;
 using Xunit;
@@ -9,7 +10,7 @@ namespace CCP.Core.Tests;
 public class DeeperLocalLibraryTests
 {
     [Fact]
-    public void Scan_SkipsMalformedAndInvalidEntries()
+    public void Scan_SkipsMalformedButListsParseableValidationInvalidEntries()
     {
         WithTempDirectory(root =>
         {
@@ -19,14 +20,20 @@ public class DeeperLocalLibraryTests
                 Metadata = new EnhancementMetadata { Name = "Valid", Creator = "author" },
             });
             File.WriteAllText(Path.Combine(root, "broken.ccpenh.json"), "{ not json");
-            WriteEnhancement(root, "invalid.ccpenh.json", new Enhancement { MediaType = "other" });
+            WriteEnhancement(root, "invalid.ccpenh.json", new Enhancement
+            {
+                MediaType = MediaTypes.Audio,
+                Metadata = new EnhancementMetadata { Name = "Invalid" },
+                TimelineItems = { new TimelineItem { Id = "" } },
+            });
 
             var result = DeeperLocalLibrary.Scan(root);
 
             Assert.False(result.HasError);
-            Assert.Single(result.Entries);
-            Assert.Equal("Valid", result.Entries[0].Name);
-            Assert.Equal(2, result.SkippedCount);
+            Assert.Equal(2, result.Entries.Count);
+            Assert.Contains(result.Entries, entry => entry.Name == "Valid");
+            Assert.Contains(result.Entries, entry => entry.Name == "Invalid");
+            Assert.Equal(1, result.SkippedCount);
         });
     }
 
@@ -83,38 +90,68 @@ public class DeeperLocalLibraryTests
     }
 
     [Fact]
-    public void Filter_CombinesSearchTypeAndHardwareTags()
+    public void SharedFilter_PreservesTagCasingAndDurationDirection()
     {
         var entries = new[]
         {
-            Entry("Video", MediaTypes.Video, "Mira", "haptics"),
-            Entry("Audio", MediaTypes.Audio, "Mira", "webcam"),
-            Entry("Other", MediaTypes.Video, "Zed"),
+            Entry("Long", MediaTypes.Video, "Mira", 120, "haptics"),
+            Entry("Short", MediaTypes.Video, "Mira", 60, "HAPTICS"),
         };
+        var criteria = new EnhancementLibraryFilter.Criteria(
+            "mira", EnhancementLibraryFilter.MediaTypeFilter.Video, Haptics: true, Webcam: false);
 
-        var criteria = new DeeperLocalLibrary.FilterCriteria(
-            "mira", DeeperLocalLibrary.MediaTypeFilter.Video, Haptics: true);
-
-        var filtered = DeeperLocalLibrary.Filter(entries, criteria);
-
-        Assert.Single(filtered);
-        Assert.Equal("Video", filtered[0].Name);
-        Assert.True(DeeperLocalLibrary.Matches(entries[1], criteria with
-        {
-            MediaType = DeeperLocalLibrary.MediaTypeFilter.Audio,
-            Haptics = false,
-            Webcam = true,
-        }));
+        Assert.True(EnhancementLibraryFilter.Matches(entries[0], criteria));
+        Assert.False(EnhancementLibraryFilter.Matches(entries[1], criteria));
+        Assert.Equal(new[] { "Long", "Short" },
+            EnhancementLibraryFilter.Sort(entries, EnhancementLibraryFilter.SortMode.Duration, descending: true)
+                .Select(entry => entry.Name));
+        Assert.Equal(new[] { "Short", "Long" },
+            EnhancementLibraryFilter.Sort(entries, EnhancementLibraryFilter.SortMode.Duration, descending: false)
+                .Select(entry => entry.Name));
     }
 
-    private static DeeperLocalLibrary.Entry Entry(string name, string type, string creator, params string[] tags)
+    [Fact]
+    public void Scan_PreservesWpfNameFallbackDurationAndTagCasing()
+    {
+        WithTempDirectory(root =>
+        {
+            WriteEnhancement(root, "unnamed.ccpenh.json", new Enhancement
+            {
+                MediaType = MediaTypes.Video,
+                Metadata = new EnhancementMetadata { Name = "" },
+            });
+            WriteEnhancement(root, "tagged.ccpenh.json", new Enhancement
+            {
+                MediaType = MediaTypes.Video,
+                Metadata = new EnhancementMetadata
+                {
+                    Name = "Tagged",
+                    MediaDurationSeconds = 123.5,
+                    AutoTags = new() { "HAPTICS" },
+                },
+            });
+
+            var entries = DeeperLocalLibrary.Scan(root).Entries;
+            var unnamed = Assert.Single(entries, entry => entry.FilePath.EndsWith("unnamed.ccpenh.json", StringComparison.OrdinalIgnoreCase));
+            var tagged = Assert.Single(entries, entry => entry.Name == "Tagged");
+            // WPF uses metadata.Name ?? GetFileNameWithoutExtension; an authored empty name
+            // remains empty rather than being replaced with a different suffix-stripping rule.
+            Assert.Equal("", unnamed.Name);
+            Assert.Equal(0, unnamed.DurationSeconds);
+            Assert.Equal(123.5, tagged.DurationSeconds);
+            Assert.Equal(new[] { "HAPTICS" }, tagged.AutoTags);
+        });
+    }
+
+    private static EnhancementLibraryEntry Entry(string name, string type, string creator, double duration, params string[] tags)
         => new()
         {
             FilePath = Path.Combine(Path.GetTempPath(), name + DeeperLocalLibrary.FileSuffix),
             Name = name,
             MediaType = type,
             Creator = creator,
-            AutoTags = tags,
+            DurationSeconds = duration,
+            AutoTags = tags.ToList(),
         };
 
     private static void WriteEnhancement(string folder, string name, Enhancement enhancement)
