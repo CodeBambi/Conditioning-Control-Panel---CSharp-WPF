@@ -813,12 +813,6 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
     }
     return false;
   }
-  function split(ball, br) {
-    const nb = { ...newBall(false), x: br.x + br.w / 2, y: br.y + br.h / 2, vx: -ball.vx, vy: ball.vy, stuck: false, trail: [] };
-    g.balls.push(nb);
-    au('split');
-    emit('split', { x: nb.x, y: nb.y });
-  }
   function wallCleared() {
     g.stats.walls++; g.stats.sp = Math.min(20, g.stats.sp + 1);
     addSat(0.1);
