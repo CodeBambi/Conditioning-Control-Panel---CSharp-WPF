@@ -60,6 +60,7 @@ EMI
 FIXES
 - clicking a file in the Deeper library opens it in the editor again.
 - the launcher fits all of its cards on the screen, and the way back to it is spelled out now, in the title bar and in the tray.
+- the launcher cards are landscape, so the art is shown whole instead of cropped at the sides, the Arcademy has a picture on it instead of a star, and every card's title sits on the same line.
 - the card table hands your Sparkle total back when it is done with it, instead of leaving it reading zero until the next hand.
 - every table draws its own way out, the card table says so when you lose, and reduced motion no longer swallows the payout.
 - the pictures on the walls run at their own speed rather than a third of it.
