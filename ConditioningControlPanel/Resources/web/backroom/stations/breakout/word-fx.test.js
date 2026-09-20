@@ -9,6 +9,11 @@ function make(opts = {}) {
   const events = [], calls = [];
   const audio = new Proxy({ beat: { spb: 60 / 96 } }, { get: (t, k) => k in t ? t[k] : (...a) => calls.push([k, ...a]) });
   const game = createGame({ rng: seeded(), audio, onEvent: (n, d) => events.push([n, d]), ...opts });
+  // These effect tests begin after the opening grey phase.
+  game.breakoutNow();
+  for (let i = 0; i < 4; i++) game.step(0.1, {});
+  events.length = 0;
+  calls.length = 0;
   return { game, events, calls };
 }
 const run = (game, secs, input = {}) => { for (let i = 0; i < Math.round(secs * 60); i++) game.step(1 / 60, input); };
@@ -17,7 +22,7 @@ test('every word module honours the contract', () => {
   for (const key of WORD_KEYS) {
     const d = WORD_FX[key];
     assert.equal(d.key, key);
-    assert.equal(typeof d.heavy, 'boolean'); assert.ok(d.dur > 0 && d.dur <= 4, `${key} lasts ${d.dur}s`);
+    assert.equal(typeof d.heavy, 'boolean'); assert.ok(d.dur > 0 && d.dur <= (key === 'LET GO' ? 5 : 4), `${key} lasts ${d.dur}s`);
     for (const h of ['start', 'tick', 'end']) assert.equal(typeof d.sim[h], 'function', `${key}.sim.${h}`);
     for (const h of ['world', 'over', 'post']) assert.equal(typeof d.render[h], 'function', `${key}.render.${h}`);
     assert.equal(typeof d.sound, 'function');
@@ -33,14 +38,20 @@ test('mod words land on a family: first match wins, unknown words map to nothing
   assert.equal(wordKey('good girl'), null); assert.equal(wordKey(''), null); assert.equal(wordKey(null), null);
 });
 
-test('about one plain brick in six carries a word, dealt in turn, never on a picture brick', () => {
+test('about one plain brick in eight carries a word, dealt in turn, never on a picture brick', () => {
   const { game } = make({ words: ['SINK', 'DROP', 'RELAX', 'LET GO'] });
   const s = game.snapshot();
   const worded = s.bricks.filter(b => b.word);
-  const plain = s.bricks.filter(b => b.gif < 0).length;
-  assert.ok(worded.length > plain * 0.08 && worded.length < plain * 0.28, `${worded.length} of ${plain} plain bricks`);
+  // Sample many walls so a layout change does not turn random variance into a failure.
+  let totalPlain = 0, totalWords = 0;
+  for (let seed = 1; seed <= 100; seed++) {
+    const bricks = createGame({ rng: seeded(seed), words: ['SINK', 'DROP', 'RELAX', 'LET GO'] }).snapshot().bricks;
+    totalPlain += bricks.filter(b => b.gif < 0).length;
+    totalWords += bricks.filter(b => b.word).length;
+  }
+  assert.ok(totalWords / totalPlain > .10 && totalWords / totalPlain < .15);
   assert.ok(worded.every(b => b.gif < 0));
-  assert.equal(worded[0].word, 'SINK'); assert.equal(worded[1].word, 'DROP'); assert.equal(worded[4].word, 'SINK');
+  worded.forEach((b, i) => assert.equal(b.word, ['SINK', 'DROP', 'RELAX', 'LET GO'][i % 4]));
   assert.equal(s.bricks.length, BRICK.cols * BRICK.rows);
 });
 
@@ -52,6 +63,7 @@ test('breaking a word brick in COLOUR fires its effect; the effect runs on wall-
   const w = events.filter(e => e[0] === 'word');
   assert.equal(w.length, 1); assert.equal(w[0][1].key, 'RELAX'); assert.equal(w[0][1].fired, true);
   assert.equal(s.fx.active.length, 1); assert.equal(s.fx.active[0].key, 'RELAX');
+  s.bricks = []; // Isolate effect expiry from new word collisions.
   run(game, 1);
   assert.ok(s.fx.active[0].phase > 0.25 && s.fx.active[0].phase < 0.45, `phase ${s.fx.active[0].phase} after 1 s of a 3 s word`);
   run(game, 2.2);

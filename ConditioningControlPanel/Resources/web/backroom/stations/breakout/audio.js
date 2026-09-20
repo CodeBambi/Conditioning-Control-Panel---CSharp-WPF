@@ -1,3 +1,4 @@
+import { setMusicScene } from '../../shared/sound/music.js';
 import { pentatonic, ROOT_HZ } from '../../shared/sound/kit.js';
 import { WORD_FX } from './word-fx.js';
 
@@ -49,9 +50,10 @@ export const timeScaleCents = s => SLOWMO_CENTS * clamp((1 - num(s, 1)) / (1 - S
 
 /** Pure beat math. `origin` is the clock time of step 0; rebase() moves it when the clock changes. */
 export function createBeat(bpm = 96, origin = 0) {
-  const spb = 60 / clamp(num(bpm, 96), 30, 300), step = spb / STEPS_PER_BEAT;
+  let spb = 60 / clamp(num(bpm, 96), 30, 300), step = spb / STEPS_PER_BEAT;
   const beat = {
     spb, sixteenth: step, bar: spb * BEATS_PER_BAR, loop: step * LOOP_STEPS, origin,
+    setTempo(value) { spb=60/clamp(num(value,96),30,300);step=spb/STEPS_PER_BEAT;beat.spb=spb;beat.sixteenth=step;beat.bar=spb*BEATS_PER_BAR;beat.loop=step*LOOP_STEPS; },
     rebase(o) { beat.origin = num(o, beat.origin); },
     phase(now) { const p = ((num(now, 0) - beat.origin) / spb) % 1; return p < 0 ? p + 1 : p; },
     stepIndex(now) { return Math.floor((num(now, 0) - beat.origin) / step + 1e-6); },
@@ -77,10 +79,13 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
   const perfOrigin = perf();
   const beat = createBeat(bpm, 0);
   let ctx = null, out = null, lp = null, room = null, noiseBuf = null, timer = 0, destroyed = false, running = false;
+  let snapBuffer = null, irisBuffers = [], irisLoading = false, irisSource = null, irisIndex = 0;
+  const mixGains={}, mixLevels={bed:1,sfx:1,sub:1,word:1};
   const bus = { bed: null, sfx: null, sub: null, word: null };   // word: the word triggers' own cues, never ducked
   const layer = { melody: null, arp: null };
   // The bed's shared detune inputs: a constant for slow-mo pitch and a slow LFO for the grey vinyl wobble.
   let bedDetune = null, wobbleGain = null, timeScale = 1;
+  let finaleMuted=false, finaleGrey=false, musicGate=null, musicDrive=null;
   let saturation = 0, state = 'colour', stepIndex = 0, nextStepTime = 0;
   const level = clamp(num(master, 0.8), 0, 1);
 
@@ -94,9 +99,19 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     if (!C) return false;
     try {
       ctx = new C();
+      // Decode during startup, never fetch or decode on a BLANK hit.
+      if (typeof ctx.decodeAudioData === 'function') {
+        fetch(new URL('./assets/finger-snap.mp3', import.meta.url))
+          .then(r => { if (!r.ok) throw new Error('Snap unavailable'); return r.arrayBuffer(); })
+          .then(b => ctx.decodeAudioData(b))
+          .then(b => { if (!destroyed) snapBuffer = b; }).catch(() => {});
+      }
       out = ctx.createGain(); out.gain.value = level; out.connect(ctx.destination);
-      lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.8; lp.frequency.value = cutoffFor(saturation); lp.connect(out);
-      for (const k of Object.keys(bus)) { const g = ctx.createGain(); g.gain.value = 1; g.connect(k === 'bed' ? lp : out); bus[k] = g; }
+      lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.8; lp.frequency.value = cutoffFor(saturation);
+      musicGate=ctx.createGain();musicGate.gain.value=1;musicGate.connect(out);
+      if(typeof ctx.createWaveShaper==='function') {musicDrive=ctx.createWaveShaper();lp.connect(musicDrive);musicDrive.connect(musicGate);}
+      else lp.connect(musicGate);
+      for (const k of Object.keys(bus)) { const g = ctx.createGain(); g.gain.value = 1; const volume=ctx.createGain();volume.gain.value=mixLevels[k];g.connect(volume);volume.connect(k === 'bed' ? lp : out);mixGains[k]=volume;bus[k] = g; }
       for (const k of Object.keys(layer)) { const g = ctx.createGain(); g.gain.value = 0.0001; g.connect(bus.bed); layer[k] = g; }
       // The room: one short delay fed back under a low-pass, tapped by the wetter sfx cues.
       const delay = ctx.createDelay(1); delay.delayTime.value = 0.11;
@@ -202,7 +217,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     }
   }
   function pump() {
-    if (!running || !live()) return;
+    if (!running || !live() || finaleMuted) return;
     const cur = ctx.currentTime;
     if (nextStepTime < cur) {                                         // the tab slept: skip, never catch up in a burst
       const k = Math.ceil((cur - nextStepTime) / beat.sixteenth); stepIndex += k; nextStepTime += k * beat.sixteenth;
@@ -215,10 +230,10 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
   function applyState(secs, at = null) {
     if (!live()) return;
     const grey = state === 'grey';
-    glide(lp.frequency, grey ? GREY_CUTOFF : cutoffFor(saturation), secs, at, true);
-    glide(layer.melody.gain, grey ? 0 : layerLevel(saturation, MELODY_FROM), secs, at);
+    glide(lp.frequency, grey ? (finaleGrey ? 1100 : GREY_CUTOFF) : cutoffFor(saturation), secs, at, true);
+    glide(layer.melody.gain, grey ? (finaleGrey ? .35 : 0) : layerLevel(saturation, MELODY_FROM), secs, at);
     glide(layer.arp.gain, grey ? 0 : layerLevel(saturation, ARP_FROM), secs, at);
-    if (wobbleGain) glide(wobbleGain.gain, grey ? WOBBLE_CENTS : 0, Math.max(secs, 0.3), at);   // the vinyl wobble, grey only
+    if (wobbleGain) glide(wobbleGain.gain, grey ? (finaleGrey ? 18 : WOBBLE_CENTS) : 0, Math.max(secs, 0.3), at);   // the vinyl wobble, grey only
   }
 
   /* ---- the hit palette ---- */
@@ -261,6 +276,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
         stepIndex = Math.max(0, beat.stepIndex(perf() - perfOrigin));   // carry the fallback clock's position into the loop
         nextStepTime = ctx.currentTime + 0.05;
         beat.rebase(nextStepTime - stepIndex * beat.sixteenth);          // the grid the hits quantise to IS the bed's grid
+        if(state==='grey'&&!finaleMuted)api.finaleGrey(true);
         applyState(0.01);
         pump();
         timer = setInterval(pump, TICK_MS);
@@ -268,9 +284,67 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
       }
       return true;
     },
+    finaleInterrupt() {
+      setMusicScene('freeze');
+      if(!live())return;
+      finaleMuted=true;const t=ctx.currentTime;
+      musicGate.gain.cancelScheduledValues(t);musicGate.gain.setValueAtTime(0,t);
+      play([noise(2600,.7,.16,{q:.6,attack:.005})],t,bus.sfx);
+    },
+    finaleGrey(on) {
+      setMusicScene(on?'grey':'normal');
+      finaleGrey=!!on;finaleMuted=false;
+      beat.setTempo(bpm*(finaleGrey?.72:1));
+      if(!live())return;
+      const t=ctx.currentTime;nextStepTime=t+.03;
+      beat.rebase(nextStepTime-stepIndex*beat.sixteenth);
+      if(musicDrive) {
+        if(finaleGrey) {const curve=new Float32Array(256);for(let i=0;i<256;i++){const x=i/127.5-1;curve[i]=Math.tanh(x*1.4)/Math.tanh(1.4);}musicDrive.curve=curve;}
+        else musicDrive.curve=null;
+      }
+      musicGate.gain.cancelScheduledValues(t);musicGate.gain.setValueAtTime(finaleGrey?0:1,t);
+      if(finaleGrey)musicGate.gain.linearRampToValueAtTime(1,t+.35);
+      applyState(.15);
+    },
+    async warmIrisVoice() {
+      if(irisLoading||!live()||typeof ctx.decodeAudioData!=='function')return;
+      irisLoading=true;
+      const ac=ctx;
+      // Sequential decoding keeps the wall entry light; reuse the existing Rabbit Hole drift recordings.
+      for(let i=1;i<=3&&!destroyed;i++) {
+        try {
+          const url=new URL('../../../dtrh/assets/barks/sissy/fall_drift_00'+i+'.mp3',import.meta.url);
+          const response=await fetch(url,{credentials:'same-origin'});
+          if(!response.ok)continue;
+          const buffer=await ac.decodeAudioData(await response.arrayBuffer());
+          if(!destroyed)irisBuffers.push(buffer);
+        }catch(e){/* Unavailable voice never blocks play. */}
+      }
+    },
+    irisVoice() {
+      if(!running||!live()||!irisBuffers.length)return;
+      if(irisSource)for(const source of irisSource){try{source.stop();}catch(e){}}
+      const gain=ctx.createGain(), t=ctx.currentTime;
+      gain.connect(bus.word);gain.gain.setValueAtTime(0,t);
+      gain.gain.linearRampToValueAtTime(.35,t+.25);
+      gain.gain.setValueAtTime(.35,t+6.85);gain.gain.linearRampToValueAtTime(0,t+7.6);
+      const sources=[];let ended=0;
+      for(let i=0;i<4;i++) {
+        const source=ctx.createBufferSource();source.buffer=irisBuffers[irisIndex++%irisBuffers.length];
+        source.playbackRate.value=1;
+        const splice=ctx.createGain(), start=t+i*1.9, end=t+(i+1)*1.9;
+        source.connect(splice);splice.connect(gain);
+        splice.gain.setValueAtTime(0,start);splice.gain.linearRampToValueAtTime(1,start+.08);
+        splice.gain.setValueAtTime(1,end-.08);splice.gain.linearRampToValueAtTime(0,end);
+        source.onended=()=>{source.disconnect();splice.disconnect();if(++ended===4){gain.disconnect();if(irisSource===sources)irisSource=null;}};
+        source.start(t+i*1.9);source.stop(t+(i+1)*1.9);sources.push(source);
+      }
+      irisSource=sources;
+    },
     /** Hold everything; start() brings it back on the same grid (ctx time stops with it). */
     stop() { if (live() && ctx.state === 'running') ctx.suspend().catch(() => {}); },
     destroy() {
+      setMusicScene('normal');
       destroyed = true; running = false;
       if (timer) { clearInterval(timer); timer = 0; }
       if (ctx) { try { ctx.close().catch(() => {}); } catch (e) { /* already */ } }
@@ -282,9 +356,15 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     },
     setState(next) {
       const want = next === 'grey' ? 'grey' : 'colour';
+      if(want==='grey'&&!finaleGrey)api.finaleGrey(true);
+      if(want==='colour'&&(finaleGrey||finaleMuted))api.finaleGrey(false);
       if (want === state) return;
       state = want;
       applyState(want === 'grey' ? 0.06 : 0.4);
+    },
+    metronome(accent = false) {
+      if (!running || !live()) return;
+      play([tone(accent ? 1050 : 760, .045, accent ? .018 : .011, { wave: 'triangle', attack: .002 })], ctx.currentTime, bus.sfx);
     },
     /** A hit on the next sixteenth (the one after when the next is under 15 ms away). `x` 0..1 pans. */
     hit(kind, { combo = 0, x = 0.5 } = {}) {
@@ -379,6 +459,18 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
       if (!running || !live()) return;
       play([tone(ROOT_HZ / 2, 0.04, 0.04, { wave: 'triangle', lp: 1400, pan: clamp(num(x, 0.5), 0, 1) })], ctx.currentTime, bus.sfx);
     },
+    pendulumRelease({x=.5}={}) {
+      if(!running || !live())return;
+      const pan=clamp(num(x,.5),0,1);
+      play([tone(110,1.1,.16,{pan,wave:'sine'}),tone(277,.7,.08,{pan,wave:'sine'}),
+        noise(1800,.12,.07,{pan,q:2})],ctx.currentTime,bus.sfx);
+    },
+    metal({x=.5}={}) {
+      if (!running || !live()) return;
+      const pan=clamp(num(x,.5),0,1);
+      play([tone(740,.19,.07,{pan,wave:'sine'}),tone(1731,.12,.045,{pan,wave:'sine'}),
+        tone(2983,.06,.025,{pan,wave:'sine'}),noise(5200,.018,.025,{pan,q:2})],ctx.currentTime,bus.sfx);
+    },
     /** The multiball split: two voices a few cents apart, blipping up. */
     split() {
       if (!running || !live()) return;
@@ -413,6 +505,7 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
     get timeScale() { return timeScale; },
     get wobbleDepth() { return wobbleGain ? wobbleGain.gain.value : 0; },
     get bedDetuneCents() { return bedDetune ? bedDetune.offset.value : 0; },
+    setMix(name,v) { if(!(name in mixLevels))return;mixLevels[name]=clamp(num(v,1),0,1);if(mixGains[name]&&live())glide(mixGains[name].gain,mixLevels[name],.05); },
     setBus(name, v) { const g = bus[name]; if (g && live()) glide(g.gain, clamp(num(v, 1), 0, 1), 0.05); },
     /** Everything but the word bus dips by `amount` for `hold` s and comes back over `release` s (a heavy word ducks the rest). */
     duck(amount = 0.6, hold = 1, release = 0.6) {
@@ -431,7 +524,15 @@ export function createAudio({ bpm = 96, master = 0.8, AudioContext: AC = null } 
       if (!running || !live()) return;
       const d = WORD_FX[key];
       if (!d || typeof d.sound !== 'function') return;
-      const synth = { ctx, now: ctx.currentTime, play, tone, noise, bus, glide, SEMI, ROOT_HZ, duck: api.duck, dest: bus.word };
+      const synth = { ctx, now: ctx.currentTime, play, tone, noise, bus, glide, SEMI, ROOT_HZ, duck: api.duck, dest: bus.word,
+        snap() {
+          if (!snapBuffer) return;
+          const source = ctx.createBufferSource(), gain = ctx.createGain();
+          source.buffer = snapBuffer; gain.gain.value = 0.45;
+          source.connect(gain); gain.connect(bus.word);
+          source.onended = () => { source.disconnect(); gain.disconnect(); };
+          source.start(ctx.currentTime);
+        } };
       try { d.sound(synth, fx); } catch (e) { /* a word's bug never stops the music */ }
     },
     setMaster(v) { if (out && live()) glide(out.gain, clamp(num(v, level), 0, 1), 0.05); },

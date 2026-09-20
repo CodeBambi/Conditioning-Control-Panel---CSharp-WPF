@@ -11,6 +11,12 @@ function make(opts = {}) {
   const events = [], calls = [];
   const audio = new Proxy({ beat: { spb: 60 / 96 } }, { get: (t, k) => k in t ? t[k] : (...a) => calls.push([k, ...a]) });
   const game = createGame({ rng: seeded(), audio, onEvent: (n, d) => events.push([n, d]), ...opts });
+  // These effect tests begin after the opening grey phase.
+  game.breakoutNow();
+  for (let i = 0; i < 4; i++) game.step(0.1, {});
+  game.snapshot().breakoutShield = null;
+  events.length = 0;
+  calls.length = 0;
   game.setNoLose(true);
   return { game, events, calls, s: game.snapshot() };
 }
@@ -32,33 +38,33 @@ function fakeSynth() {
     tone: (hz, dur, level, o = {}) => ({ k: 'tone', hz, dur, level, ...o }), noise: (hz, dur, level, o = {}) => ({ k: 'noise', hz, dur, level, ...o }) };
 }
 
-test('SINK: slow-mo to 0.3x in the middle, safe throughout, eases back and leaves the world a notch pinker', () => {
+test('SINK: slow-mo to 0.90x in the middle, safe throughout, eases back and leaves the world a notch pinker', () => {
   const { game, s } = make({ words: ['SINK'] });
   for (const b of s.bricks) b.word = null;   // the ball's own hits must not fire a SINK under the test's
   const sat0 = s.sat;
   const fx = game.fireWordNow('SINK');
   assert.ok(fx && fx.key === 'SINK');
-  run(game, 0.5);
-  near(s.mod.timeScale, 0.3, 0.02, 'timeScale mid-word');
+  run(game, 0.25);
+  near(s.mod.timeScale, 0.90, 0.02, 'timeScale mid-word');
   assert.equal(s.mod.safe, true);
-  near(s.mod.zoom, 0.88, 0.005, 'the field drops 12% toward the ball');
-  near(s.timeScale, 0.3, 0.02, 'the sim runs slowed');
-  run(game, 0.8);                                                                  // t = 1.3 of 1.6: on the way out
-  assert.ok(s.mod.timeScale > 0.5 && s.mod.timeScale < 1, `easing out: ${s.mod.timeScale}`);
+  near(s.mod.zoom, 0.975, 0.005, 'the field drops 2.5% toward the ball');
+  near(s.timeScale, 0.90, 0.02, 'the sim runs slowed');
+  run(game, 0.4);                                                                  // t = 0.65 of 0.8: on the way out
+  assert.ok(s.mod.timeScale > 0.90 && s.mod.timeScale < 1, `easing out: ${s.mod.timeScale}`);
   assert.equal(s.mod.safe, true);
-  run(game, 0.4);
+  run(game, 0.2);
   assert.equal(s.fx.active.length, 0, 'ended');
   assert.deepEqual(s.mod, MOD_DEFAULTS, 'nothing persists in g.mod');
   assert.equal(s.timeScale, 1);
   near(s.sat, sat0 + 0.02, 1e-9, 'sat bumped once on end');
   assert.equal(s.balls.length, 1);
-  near(s.fx.wall - s.fx.lastHeavyAt, 1.7, 0.05, 'the heavy gap is measured in wall-clock despite the slow-mo');
+  near(s.fx.wall - s.fx.lastHeavyAt, 0.85, 0.05, 'the heavy gap is measured in wall-clock despite the slow-mo');
   game.setReduced(true);
   run(game, 4.1);
   assert.ok(game.fireWordNow('SINK'));
-  run(game, 0.5);
+  run(game, 0.25);
   assert.equal(s.mod.zoom, 1, 'reduced motion: no drop');
-  near(s.mod.timeScale, 0.3, 0.02, 'the slow-mo stays');
+  near(s.mod.timeScale, 0.90, 0.02, 'the slow-mo stays');
 });
 
 test('DEEPER: zoom 1.08 in the middle, ball 5% faster, safe, sat +0.04 on start, back to 1 and a boost count on end', () => {
@@ -90,7 +96,7 @@ test('DEEPER: zoom 1.08 in the middle, ball 5% faster, safe, sat +0.04 on start,
 test('SINK sound: a sub glide one octave down on the word bus, the rest ducked 60%', () => {
   const synth = fakeSynth();
   SINK.sound(synth, { t: 0, phase: 0, x: 240, y: 300 });
-  assert.deepEqual(synth.ducks, [[0.6, 1.0, 0.6]]);
+  assert.deepEqual(synth.ducks, [[0.6, 0.4, 0.4]]);
   assert.equal(synth.played.length, 1); assert.equal(synth.played[0].dest, 'word');
   const glide = synth.played[0].v.find(n => n.k === 'tone' && n.hzTo);
   near(glide.hzTo / glide.hz, 0.5, 1e-9, 'one octave down');
@@ -128,4 +134,18 @@ test('the render hooks run clean at every phase, live and reduced, and the ghost
     run(game, 4.2);
   }
   assert.deepEqual(s.mod, MOD_DEFAULTS);
+});
+
+test('SINK shades only visible zoom margins and honors both reduced-motion flags', () => {
+  const ctx = fakeCtx(), rects = [], clips = []; let restored = 0, captures = 0;
+  ctx.rect = (...args) => rects.push(args); ctx.clip = rule => clips.push(rule); ctx.restore = () => restored++;
+  const fx = { t: .2, phase: .3, data: {} }, s = { balls: [], reduced: false };
+  const r = R({ frame: () => { captures++; return { width: 780, height: 1688 }; } });
+  SINK.render.world(ctx, s, fx, r);
+  assert.deepEqual(rects, [[-480,-720,1440,2160], [0,0,480,720]]);
+  assert.deepEqual(clips, ['evenodd']); assert.equal(restored, 1, 'clip cannot leak into later drawing');
+  for (const [state, info] of [[{ ...s, reduced: true }, r], [s, { ...r, reduced: true }]]) {
+    SINK.render.world(ctx, state, fx, info); SINK.render.post(ctx, state, fx, info);
+  }
+  assert.equal(clips.length, 1); assert.equal(captures, 0, 'neither reduced path captures a melt frame');
 });

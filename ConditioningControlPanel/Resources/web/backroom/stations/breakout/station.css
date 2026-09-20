@@ -5,7 +5,7 @@
   font-family: Segoe UI, Arial, sans-serif; color-scheme: dark; touch-action: none; user-select: none; -webkit-user-select: none; }
 .bo-station * { box-sizing: border-box; }
 .bo-station [hidden] { display: none !important; }
-.bo-stage { position: absolute; inset: 0; display: block; cursor: none; }
+.bo-stage { position: absolute; inset: 0; display: block; cursor: default; image-rendering: auto; }
 .bo-station.is-paused .bo-stage, .bo-station.is-dev .bo-stage, .bo-station:not(.is-played) .bo-stage { cursor: default; }
 
 /* ---- the strip: SP chip top-right of the field, combo beside it. Nothing else lives up here. ---- */
@@ -76,3 +76,98 @@
 @media (prefers-reduced-motion: reduce) {
   .bo-sp.is-pop, .bo-combo.is-pop, .bo-hint { animation: none; }
 }
+
+/* A quiet cabinet face before the first wall. No animated media or simulation behind it. */
+.bo-station.is-menu .bo-hud,
+.bo-station.is-menu .bo-hint, .bo-station.is-menu .bo-gear,
+.bo-station.is-menu .bo-dev { visibility: hidden; }
+.bo-menu { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; padding: 24px 20px 42px; overflow: auto;
+  background: radial-gradient(ellipse at 50% 35%, #49223880, transparent 55%), #100c15;
+  text-align: center; }
+.bo-menu::before { content: ""; position: absolute; inset: 18px; border: 1px solid #f2be6a20;
+  border-radius: 18px; pointer-events: none; }
+.bo-menu-kicker { margin: 18px 0 8px; font: 600 10px/1.4 Segoe UI, sans-serif;
+  letter-spacing: 5px; color: #d4ac75; }
+.bo-menu h1 { margin: 0; font: 900 clamp(42px, 9vw, 94px)/.95 "Arial Black", "Trebuchet MS", sans-serif;
+  letter-spacing: -5px; color: #e4dce8; text-shadow: 0 5px 0 #08070a; }
+.bo-menu h1 span { color: #ff87c7; }
+.bo-menu-line { margin: 17px 0 25px; color: #b5a3b8; font-size: 15px; letter-spacing: 2px; }
+.bo-play { min-width: 190px; min-height: 52px; padding: 13px 30px; border: 1px solid #ffe1a1;
+  border-radius: 8px; background: #f4c771; color: #261528; font: 800 18px/1.2 Segoe UI, sans-serif;
+  box-shadow: 0 4px 0 #9c6740, 0 8px 30px #f4c77116; cursor: pointer; touch-action: manipulation;
+  transition: transform .15s, background .15s; }
+.bo-play span { margin-left: 20px; }
+.bo-play:hover { background: #ffe2a1; transform: translateY(-2px); }
+.bo-play:active { transform: translateY(2px); box-shadow: 0 2px 0 #9c6740; }
+.bo-play:focus-visible { outline: 3px solid #ff8ed0; outline-offset: 6px; }
+.bo-menu-controls { margin: 23px 0 0; color: #9d8ea7; font-size: 12px; line-height: 1.8; }
+.bo-menu-art { position: relative; width: 236px; height: 115px; flex: none; display: grid;
+  grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 15px); gap: 5px;
+  transform: rotate(-6deg); }
+.bo-menu-art i { border: 1px solid #edacc72e; border-radius: 3px; background: #615268; box-shadow: inset 0 2px 0 #ffffff18; }
+.bo-menu-art i:nth-child(3n + 2) { background: #b86697; }
+.bo-menu-art i:nth-child(3n) { background: #f18fbc; }
+.bo-menu-art i:nth-child(3) { transform: translate(14px, -13px) rotate(14deg); background: #edc782; }
+.bo-menu-art i:nth-child(6) { transform: translate(7px, -3px) rotate(6deg); }
+.bo-menu-art i:nth-child(8) { opacity: .35; }
+.bo-menu-art i:nth-child(9) { opacity: 0; }
+.bo-menu-ball { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #fff1cb;
+  top: 70px; left: 154px; box-shadow: 0 0 18px #ffbcb380; }
+.bo-menu-ball::before { content: ""; position: absolute; width: 2px; height: 28px; bottom: 16px; left: 15px;
+  transform: rotate(30deg); background: linear-gradient(transparent, #f7d79788); }
+.bo-menu-paddle { position: absolute; bottom: 0; left: 89px; width: 66px; height: 7px;
+  border-radius: 9px; background: #ebbad4; box-shadow: 0 3px 0 #5b3c58; }
+@media (max-height: 480px) {
+  .bo-menu { padding: 16px 20px 22px; }
+  .bo-menu-art { height: 70px; width: 180px; grid-template-rows: repeat(3, 10px); gap: 4px; }
+  .bo-menu-ball { top: 44px; left: 127px; width: 9px; height: 9px; }
+  .bo-menu-paddle { left: 82px; height: 5px; width: 52px; }
+  .bo-menu-kicker { margin: 11px 0 6px; }
+  .bo-menu h1 { font-size: 48px; letter-spacing: -3px; }
+  .bo-menu-line { margin: 9px 0 14px; font-size: 12px; }
+  .bo-play { min-height: 44px; padding: 10px 25px; font-size: 16px; }
+  .bo-menu-controls { margin-top: 14px; font-size: 11px; line-height: 1.5; }
+}
+.bo-station[data-reduced] .bo-play { transition: none; }
+.bo-station[data-reduced] .bo-play:hover { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .bo-play { transition: none; }
+  .bo-play:hover { transform: none; }
+}
+/* One bounded drawer keeps diagnostics clear of gameplay controls. */
+.bo-dev { width: 520px; min-width: 0; box-sizing: border-box; font-size: 13px; gap: 14px; overscroll-behavior: contain; touch-action: pan-y; }
+.bo-dev[hidden], .bo-gear[hidden] { display: none !important; }
+.bo-dev-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; position: sticky; top: -8px; z-index: 1; background: #160e20; padding: 8px 0; flex-shrink: 0; }
+.bo-dev-header strong { margin-right: auto; }
+.bo-dev-row { flex-shrink: 0; gap: 8px; }
+.bo-dev-lab { width: 100%; }
+.bo-dev button { min-height: 34px; padding: 6px 10px; }
+.bo-dev label { min-height: 30px; }
+.bo-dev-stats { white-space: normal; overflow-wrap: anywhere; }
+.bo-perf-slot { min-width: 0; flex-shrink: 0; }
+.bo-perf-slot button { margin-bottom: 5px; }
+
+/* Player menu controls stay separate from developer tools. */
+.bo-menu-actions { display:flex; gap:12px; margin-top:12px; }
+.bo-menu-actions button,.bo-pause-card button,.bo-pause-button { color:#f8e8ff; background:#382044; border:1px solid #bb7cd6; border-radius:10px; padding:11px 24px; font:600 15px system-ui; cursor:pointer; }
+.bo-menu-actions button:hover,.bo-pause-card button:hover { background:#643372; }
+.bo-menu button:focus-visible,.bo-pause-card :focus-visible,.bo-pause-button:focus-visible { outline:3px solid #f8cd83; outline-offset:4px; }
+.bo-pause-button { position:absolute;top:14px;left:64px;z-index:5;padding:8px 14px;font-size:13px; }
+.bo-station.is-menu .bo-pause-button { display:none; }
+.bo-paused,.bo-options { position:absolute;inset:0;z-index:12;display:flex;align-items:center;justify-content:center;background:#10091cda;pointer-events:auto; }
+.bo-options { z-index:13; }
+.bo-pause-card { display:flex;flex-direction:column;gap:16px;width:min(340px,85%);max-height:85%;overflow:auto;padding:28px;border:1px solid #bb7cd6;border-radius:20px;background:linear-gradient(145deg,#36204a,#20132f);box-shadow:0 20px 70px #0008;color:#f9edff;font:15px system-ui;text-align:center; }
+.bo-pause-card h2 { margin:0 0 6px;font-size:30px;letter-spacing:4px; }
+.bo-pause-card label { display:flex;flex-direction:column;gap:9px;text-align:left; }
+.bo-pause-card select { padding:9px;background:#24152e;color:#fff;border:1px solid #9565a8;border-radius:7px; }
+.bo-pause-card input { accent-color:#eb88c9; }
+.bo-pause-card p { font-size:12px;line-height:1.7;color:#cbb6d4; }
+.bo-menu { overflow:auto; }
+.bo-paused[hidden],.bo-options[hidden] { display:none; }
+
+.bo-audio-options { border:1px solid #775288;border-radius:10px;padding:12px;display:grid;gap:12px; }
+.bo-audio-options legend { padding:0 7px;text-align:left;color:#e7b2ef; }
+.bo-audio-options label span { display:flex;align-items:center;gap:10px; }
+.bo-audio-options input { min-width:0;flex:1; }
+.bo-audio-options output { width:40px;text-align:right;font-size:12px; }

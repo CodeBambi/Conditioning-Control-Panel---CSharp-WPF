@@ -58,7 +58,7 @@ import DEEPER from './words/deeper.js';
 import BLANK from './words/blank.js';
 
 export const HEAVY_GAP_S = 4;
-export const WORD_BRICK_P = 1 / 6;   // was 1/3; halved (owner, 2026-09-19: "a bit too many subliminals now")
+export const WORD_BRICK_P = 1 / 8;   // Grey World noise dial.
 
 export const WORD_FX = Object.freeze({ SINK, DROP, RELAX, 'LET GO': LETGO, DEEPER, BLANK });
 export const WORD_KEYS = Object.freeze(Object.keys(WORD_FX));
@@ -82,7 +82,7 @@ export function wordKey(text) {
   return null;
 }
 
-export const MOD_DEFAULTS = Object.freeze({ timeScale: 1, paddleW: 1, ballSpeed: 1, safe: false, autopilot: false, hideBricks: 0, zoom: 1 });
+export const MOD_DEFAULTS = Object.freeze({ timeScale: 1, paddleW: 1, ballSpeed: 1, safe: false, shield: false, autopilot: false, hideBricks: 0, zoom: 1 });
 
 /** A fresh g.mod for a round of ticks. */
 export function freshMod() { return { ...MOD_DEFAULTS }; }

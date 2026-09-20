@@ -39,7 +39,8 @@ export function createMedia({ ctx, still = false, count = 8 } = {}) {
 
   async function one(url) {
     try {
-      const opts = { maxEdge: EDGE, maxFps: FPS, signal: controller.signal };
+      // Use composited canvas frames on the 2D cabinet, including embedded browsers.
+      const opts = { maxEdge: EDGE, maxFps: FPS, signal: controller.signal, preferCanvas: true };
       const src = isClip(url) ? await clipSource(url, opts) : await decodedSource(url, opts);
       if (src) return src;
     } catch (e) { /* fall through to a still */ }
@@ -120,7 +121,7 @@ export function createMedia({ ctx, still = false, count = 8 } = {}) {
  * falling to 2 s at saturation 1; plus a 25% chance on every brick above 0.6. `fx('fx.sub_single', [key])` at most
  * once per 10 s so the desktop host can flash its own. The fullscreen moments live in host-fx.js.
  */
-export function createSubliminals({ words, rng = Math.random, enabled = true, fx = null, w = 480, h = 720 } = {}) {
+export function createSubliminals({ words, rng = Math.random, enabled = true, fx = null, w = 1280, h = 720 } = {}) {
   let next = 0, flash = null, lastFx = -Infinity;
   const list = () => (typeof words === 'function' ? words() : words) || [];
   function place(now, ball) {

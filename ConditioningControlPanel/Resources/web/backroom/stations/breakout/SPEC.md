@@ -28,7 +28,7 @@ All modules are plain ES modules, no bundler, no three.js needed (2D canvas only
 - Physics: fixed timestep 1/120 accumulator, swept circle-vs-AABB against bricks and walls, circle-vs-circle against gif colliders. Multiball: `balls[]`, split power-up spawns a second coloured ball; on a split, spawn the GREY "OLD SELF" ghost that drifts off the top of the screen with the text OLD SELF inside it (cosmetic only, no collision).
 
 ## Saturation
-- `saturation` in [0,1], starts 0.05 on a fresh session. Climbs per brick (+0.012), per gif collider hit (+0.03), per spiral orbit completed (+0.05), per wall cleared (+0.1). Never decays in COLOUR. Capped at 1.
+- `saturation` in [0,1], starts at 0 in GREY on every sit-down, with saved saturation 0.15 restored by the first breakout. Climbs per brick (+0.012), per gif collider hit (+0.03), per spiral orbit completed (+0.05), per wall cleared (+0.1). Never decays in COLOUR. Capped at 1.
 - The juice ladder, rungs unlocked by saturation thresholds (each rung is a boolean the renderer/audio read; `dev toggles` can force them):
   1. 0.00  grey, flat colour, hard cuts, no trail. Music low-passed hard (cutoff ~300 Hz).
   2. 0.10  colour begins (lerp grey -> palette by saturation), block tween-in on wall spawn
@@ -44,8 +44,8 @@ All modules are plain ES modules, no bundler, no three.js needed (2D canvas only
 
 ## The two states
 - COLOUR: as above. On losing the ball: `onEvent('relapse')`. Store `savedSaturation = saturation`. Set state GREY. Screen: hard wipe to grey (100 ms), thud, music cutoff slams shut, all particles/trails die instantly, a big faint word RELAPSE crosses the screen once. The ball respawns on the paddle as the OLD SELF ghost: grey, slightly translucent, the text OLD SELF inside it in tiny caps, launches on click/tap or after 1.2 s.
-- GREY: generic Breakout. No payloads at all, no trail, no particles, everything grey. Bricks still break. Count `greyBricks`. When `greyBricks >= N` (N = 12 for v1, tune later; a dev toggle): BREAKOUT.
-- BREAKOUT: freeze frame 100 ms, ball SHATTERS (particles fly, grey shards), reveals the coloured spiral ball underneath, a shockwave ring expands from it, the world snaps (not lerps) back to `savedSaturation`, music filter opens with a whoosh, the word BREAKOUT stamps big at centre, `onEvent('breakout')`. Then COLOUR continues from where it left off; bricks remain where they are (the grey stretch counts).
+- GREY: generic Breakout. No payloads at all, no trail, no particles, everything grey. Bricks still break. Count `greyBricks`. When `greyBricks >= N`: BREAKOUT. Per sit-down, N follows 20, 15, 11, 8, 6, then 5 for every later relapse. Specials count +3, plain bricks +1. Wall clears do not reset this sequence. An explicit dev N override stays fixed.
+- BREAKOUT: freeze frame 100 ms, ball SHATTERS (particles fly, grey shards), reveals the coloured spiral ball underneath, a shockwave ring expands from it, the world snaps (not lerps) back to `savedSaturation`, music filter opens with a whoosh, the word BREAKOUT stamps big at centre, `onEvent('breakout')`. A full-size OLD SELF shell floats upward for 3.6 seconds above the renderer-owned picture flash, without adding a gameplay ball. Reduced motion uses a stationary fading shell and a colour cut. Then COLOUR continues from where it left off; bricks remain where they are (the grey stretch counts).
 - Losing the ball while already GREY: just respawn the ghost, greyBricks keeps counting (never punishing).
 
 ## Payloads (COLOUR only)
@@ -97,3 +97,91 @@ export function createAudio({ bpm = 96, master = 0.8 } = {})
 - Plain modern JS, no TypeScript, no bundler. Files under 500 lines each where possible.
 - No em-dashes in strings or comments.
 - Speed over polish: get it playable, then tune. Tests: only a small `game.test.js` for the state machine (relapse/breakout/saturation) runnable with `node --test`.
+
+### Grey World noise dial and visibility
+- Word bricks draw at 1 in 8. Voice rolls on half of colour word hits, with a 2.5 s minimum gap and volume 0.35. Near-ball text is silent.
+- Old Self keeps the ball radius, with a faint grey shell and smaller wobble. The playable ball draws above the breakout flash with a dark edge.
+- DROP camera shake and tilt strength are halved; timing and gameplay stay unchanged.
+
+### Responsiveness pass
+- SINK lasts 0.8 s, slows to 0.75x and shrinks the field by 6%; its eight-strip melt has no canvas blur.
+- Combo hit stops cap at 20 ms. DROP shake and tilt are half the previous preview strength.
+- Canvas rendering caps at 1.5 million pixels; DROP echoes avoid full-frame tint passes.
+- BLANK uses one quiet synthesized finger snap, with no swell, hard audio cut or return click.
+
+### Follow-up: snap, DROP and grey identities
+
+BLANK cuts immediately to its veil. A predecoded CC0 finger-snap recording plays after that first frame is drawn, without beat quantisation or a fetch on the hit. See assets/CREDITS.md.
+DROP no longer freezes play or copies the frame for tilt and echoes. It uses only a downward nudge of 0.8 field pixels; other camera shake is suppressed while DROP runs. The vertical ball lane stays.
+Visible picture bricks are pinned for animation regardless of ball distance. Decoder limits remain 8 sources, 192 px and 12 fps; reduced motion still holds pictures.
+Grey bricks hide all words, letters, spirals, split marks and pictures. Specials use a darker dense bevel; game data and hit rewards are unchanged.
+
+### Scrolller animation and LET GO follow-up
+
+The shared image decoder retains same-origin credentials so protected preview media can be decoded instead of falling back to frozen images. Cross-origin requests still receive no cookies.
+LET GO guides the paddle for 3 seconds (previously 1.5); its glow and return bell follow that duration.
+
+Breakout requests the canvas compatibility decoder for animated pictures. This avoids native VideoFrame drawing on its 2D surfaces; frame size and playback limits stay at 192 px and 12 fps. Verified nontransparent, changing pixels in an eight-clip browser test. The reported embedded-browser failure still needs confirmation on the owner's session.
+
+### LET GO shield, 2026-09-19
+Owner confirmed animated pictures now work. LET GO replaces automatic paddle guidance with a full-width shield below the paddle for five seconds. The last second flickers and fades (smooth fade under reduced motion); protection remains active through that warning. Paddle input stays manual. Nested bubble tiers are proposed next, not implemented in this pass.
+
+### Bubble tiers and shield visibility, 2026-09-19
+Picture frequency stays 15%; picture bricks carry tiers at 70/20/10. Bubbles take 1/2/3 hits, award saturation +0.03/+0.06/+0.10 only on the final hit, and stop colliding immediately when popped. Maximum three live colliders; nested skins have no timeout. Tier 1 sends one fading picture forward; tier 2 sheds a skin then releases two distinct resident pictures together; tier 3 covers the canvas with 0.4 s fade in, 3 s hold, 0.4 s fade out. The ball and paddle remain visible above rewards. Rewards use the local canvas decoder rather than the throttled host picture calls; a one-picture pool falls back to one picture for tier 2. Grey pool remains separate unfinished work. LET GO now has a brighter mint and white barrier, brief arrival flicker and sparks, and final-second flicker; reduced motion uses steady arrival and smooth expiry.
+
+### Bubble identity, procedural fullscreen and crack polish, 2026-09-19
+Colour-world picture bricks and bubbles use cyan for one picture, gold for two, violet for fullscreen. Pips show remaining bubble hits; reward labels remain visible before media loads. Grey identities stay hidden. The web preview now requests a fresh recipe from the actual Loom randomParams2 generator per fullscreen showing, retaining that recipe across frames and keeping inward motion. Named wake remains unchanged. Crack dressing uses shorter edge fractures, fine refractive lips and tip glints, with a weaker flash and camera kick. Shattering the grey background into many pieces at breakout remains TBD.
+
+
+### Sequential walls: Spell, 2026-09-19
+
+Owner decision: formations are levels in the normal wall-clear sequence. Spell is wall three, reached after clearing two walls; there is no player-facing level selector. Other planned levels remain pending. The existing dev gear includes a wall-three shortcut.
+
+Spell varies DROP, SINK, RELAX and LET GO. Letter tiles cycle with hits; a broken tile fills a matching unfilled position in the large background target. Useful letters dominate, with occasional reordered letters. Completed slots remain earned. A completed word gets a short echo/particle celebration and its spoken audio, then a different word begins. Ball motion continues throughout; reduced motion keeps the reward readable without zoom or flicker. Grey conceals identities.
+
+Picture tiers use cyan, gold and violet auras only. Hard tier outlines, badges, hit pips and reward labels are removed. Cached glow sprites pulse in normal motion and stay still with reduced motion.
+
+
+### Landscape and bubble stages (2026-09-19)
+Arena is 1280x720 (16:9), with wider classic bricks and a 170-unit base paddle. Vertical travel speed is unchanged. Spell tiles cap at 32 units. Bubble aura is 40% dimmer; remaining hits use deep purple (3), violet (2), pink (1), matching brick tiers. Original tier still determines the reward. Soap rims use a cached softened sprite, without per-frame blur.
+
+Landscape wall refinement: 10 columns of 82x27 bricks, 6-unit gaps, starting 42 units from the top. Narrower, taller bricks form a centered wall.
+
+Visual refinement: broken bricks shed ten irregular grey fragments plus dust, capped and fading within 0.9 seconds. Reduced motion skips the burst. Spell tiles widen to 44 units with 25px heavy letters. Broken-pane dressing uses sparse hairline branches and local impact splinters, without concentric rings. Fullscreen preview spirals and GIFs reduce transparency by 20%; fully opaque bubble rewards remain opaque.
+
+Landscape media scale: GIF bubbles and spiral wells, including collision/pull radii, are 33% larger. Single and duo picture rewards grow 33%; fullscreen media already fills the viewport.
+
+Brick height follow-up: classic bricks are 82x34; Spell tiles rise to 48 units, constrained proportionally for longer words.
+
+Fullscreen spiral follow-up: transparency is 30% higher than the preceding preview. While the host spiral is visible, a pointer-transparent foreground canvas redraws the ball above that overlay using the game camera transform. Removed when the effect or station closes.
+
+GIF progression: multiply the landscape GIF bubble radius and single/duo reward size by 0.8 on wall 1, increasing linearly to 1.7 on wall 6, capped thereafter. Fullscreen rewards remain viewport-sized; spiral size stays fixed.
+
+Every grey-to-colour breakout grants a shield for 2 seconds, followed by 0.6 seconds of flicker-out protection. Manual paddle control and the separate five-second LET GO shield remain unchanged.
+
+Default landscape wall: 18 columns by 8 rows of 64x36 bricks (16:9), with 6-unit gaps and 42-unit top margin. Spell keeps its separate letter formation.
+
+Default wall spacing refinement: 18 columns by 5 rows, bricks 57.6x32.4 (10% smaller, still 16:9), top margin 26 units.
+
+Main wall refinement: 16 columns by 5 rows, bricks 48.96x27.54 (another 15% smaller, still 16:9), centered with the existing 26-unit top margin.
+
+
+## Wall 4: dome (owner, 2026-09-19)
+
+The fourth cleared-wall formation is a dome of normal bricks around a central Loom spiral. It follows the letter wall in sequence and has a developer-only jump shortcut.
+
+The central well persists for the entire wall and morphs between procedurally generated Loom recipes. Its idle rotation follows the soundtrack beat. Ball hits add temporary, bounded spin energy that decays between hits. More energy strengthens the well and speeds up the captured ball while slightly shortening the capture. Release must leave enough cooldown to escape the well. Grey mode retains the existing hidden-effect rules; breakout restores the central well.
+
+Keep the ball visible over the spiral, retain reduced-motion behavior, and reuse bounded rendering resources rather than generating new canvases each frame.
+
+
+## Wall 2: The Tide (owner, 2026-09-19)
+
+The second sequential wall has four curved ribbons of twenty normal bricks. Alternating rows move in opposing currents with gentle tilt; gaps open naturally as bricks are destroyed. Brick identities and GIF, spiral, word and split payloads persist. No respawning, new gravitational force or mid-flight aim assistance. The formation stays in the upper playfield, and reduced motion holds it still. Developer shortcut: wall 2: tide.
+
+
+## Wall 8 opening: interruption (owner, 2026-09-19)
+
+Enter in colour, assemble three closed brick rings, and hold the ball on the paddle for explicit tap/click/Space launch. First ring contact freezes before reflection or damage; the full-width defensive row below the smaller raised ring breaks normally before that contact and does not trigger the interruption. ENOUGH then YOU GOTTA STOP cover the field in black, followed by a fade into forced grey. The ring is unbreakable and sounds metallic. The first 30 seconds of grey have no words. Then up to four discouragement words appear in the high side lanes, staggered roughly three seconds apart, lasting five to six seconds and glitching away on expiry; each broken word glitches away and earns one toward the established shrinking breakout counter. Lost balls re-serve without erasing earned word progress. Breakout removes the lock and words, leaving playable rings around a grey glitching Loom core. Destroying an inner-ring brick near the core brings in stage two: a flared spiral continuously fed with bricks from offscreen. Breaching its inner ring stops replenishment. This proximity trigger replaces the earlier 75%-clear handoff proposal. Later stages and the final outro remain pending design approval.
+
+The preceding wall final brick survives grey impacts; these earn one counter step so colour remains reachable. Mobile play permits landscape, respects safe areas, and captures touch paddle drags.
