@@ -1,41 +1,129 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Interactivity;
-using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models.Program;
+using ConditioningControlPanel.Services.Program;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
     /// <summary>
-    /// Training Programs tab. Pure view, exactly as on WPF: every button handler there is a
-    /// one-line forward to the MainWindow partial (MainWindow.ProgramsTab.cs), which owns the
-    /// service reads and the refresh.
-    ///
-    /// PORTED from ConditioningControlPanel/Views/Tabs/ProgramsTabView.xaml.cs.
-    ///  - Every forwarding handler becomes a stub: the partial it forwards to is a
-    ///    <c>System.Windows.Window</c> on the WPF head and the program service is not in Core yet.
-    ///    Names are kept identical so the wiring diffs cleanly when it lands.
-    ///  - <c>SessionBarHost_SizeChanged</c> is genuinely view-only and is ported for real.
-    ///  - The four state panels are seeded with sample data below, because nothing on this head
-    ///    fills them.
+    /// Read-only Programs catalogue. It reads the Core catalogue directly and deliberately does not
+    /// construct ProgramService: this slice has no enrollment, timers, ledger or session execution.
     /// </summary>
     public partial class ProgramsTabView : UserControl
     {
+        private IReadOnlyList<ProgramDefinition> _library = BuiltInPrograms.All();
+        private string? _selectedProgramId;
+
         public ProgramsTabView()
         {
-            AvaloniaXamlLoader.Load(this);
-            SeedPlaceholders();
+            InitializeComponent();
+            Find<ListBox>("ProgramLibraryList").SelectionChanged += ProgramLibraryList_SelectionChanged;
+            RefreshBrowse();
+        }
+
+        protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            base.OnAttachedToVisualTree(e);
+            LocalizationManager.Instance.LanguageChanged += OnLanguageChanged;
+            RefreshBrowse();
+        }
+
+        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
+            base.OnDetachedFromVisualTree(e);
+        }
+
+        private void OnLanguageChanged(object? sender, EventArgs e) =>
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (VisualRoot is not null) RefreshBrowse();
+            });
+
+        /// <summary>Uses a supplied read-only catalogue without creating a runtime service.</summary>
+        internal void UseProgramLibrary(IReadOnlyList<ProgramDefinition> library)
+        {
+            ArgumentNullException.ThrowIfNull(library);
+            _library = library;
+            _selectedProgramId = null;
+            RefreshBrowse();
+        }
+
+        private void RefreshBrowse()
+        {
+            var list = Find<ListBox>("ProgramLibraryList");
+            // Snapshot first: replacing ItemsSource raises SelectionChanged with an empty
+            // selection, which would null out _selectedProgramId before we can restore it.
+            var wantedId = _selectedProgramId;
+            var items = MainShellWindow.BuildProgramBrowseItems(_library);
+            list.ItemsSource = items;
+
+            Find<StackPanel>("ProgramsBrowsePanel").IsVisible = true;
+            Find<StackPanel>("ProgramsRunPanel").IsVisible = false;
+            Find<StackPanel>("ProgramsLapsedPanel").IsVisible = false;
+            Find<StackPanel>("ProgramsGraduatedPanel").IsVisible = false;
+            Find<TextBlock>("TxtProgramsBrowseEmpty").IsVisible = items.Count == 0;
+
+            var selected = items.FirstOrDefault(item => item.ProgramId == wantedId)
+                           ?? items.FirstOrDefault();
+            list.SelectedItem = selected;
+            _selectedProgramId = selected?.ProgramId;
+            ShowProgramDetails(selected);
+        }
+
+        private void ProgramLibraryList_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            var selected = Find<ListBox>("ProgramLibraryList").SelectedItem as ProgramBrowseItem;
+            _selectedProgramId = selected?.ProgramId;
+            ShowProgramDetails(selected);
+        }
+
+        private void ShowProgramDetails(ProgramBrowseItem? item)
+        {
+            var panel = Find<Border>("ProgramDetailsPanel");
+            panel.IsVisible = item is not null;
+            var chapters = Find<ItemsControl>("ProgramDetailsChapterList");
+            chapters.ItemsSource = item?.Definition.Chapters.Select(chapter => new ProgramChapterBrowseItem
+            {
+                Name = chapter.Name,
+                Subtitle = chapter.Subtitle,
+                DaysLabel = Loc.GetF("programs_length_days", chapter.Days.Count),
+                RewardText = chapter.RewardDescription ?? ""
+            }).ToList();
+
+            if (item is null)
+            {
+                Find<TextBlock>("TxtProgramDetailsIcon").Text = "";
+                Find<TextBlock>("TxtProgramDetailsTitle").Text = "";
+                Find<TextBlock>("TxtProgramDetailsSubtitle").Text = "";
+                Find<TextBlock>("TxtProgramDetailsPitch").Text = "";
+                Find<TextBlock>("TxtProgramDetailsLength").Text = "";
+                Find<TextBlock>("TxtProgramDetailsTier").Text = "";
+                return;
+            }
+
+            Find<TextBlock>("TxtProgramDetailsIcon").Text = item.Icon;
+            Find<TextBlock>("TxtProgramDetailsTitle").Text = item.Title;
+            Find<TextBlock>("TxtProgramDetailsSubtitle").Text = item.Subtitle;
+            Find<TextBlock>("TxtProgramDetailsPitch").Text = item.Pitch;
+            Find<TextBlock>("TxtProgramDetailsLength").Text = item.LengthLabel;
+            Find<TextBlock>("TxtProgramDetailsTier").Text = item.TierLabel;
         }
 
         // ---- HANDLERS -------------------------------------------------------------
 
-        // ponytail: each of these forwards to MainWindow on WPF (Window.GetWindow(this) is
-        // MainWindow mw -> mw.<same name>). ProgramService is in CCP.Core now, so the blocker is
-        // no longer the type - it is that MainShellWindow.ProgramsTab.cs is still a stub and this
-        // head constructs no ProgramService instance. See the header of that file.
+        // Execution belongs to the later enrollment/session layer. These handlers intentionally do
+        // nothing while their buttons are disabled by the browse-only carrier; no progress state is
+        // implied by opening or rendering this view.
         private void BtnProgramEnroll_Click(object? sender, RoutedEventArgs e) { }
         private void BtnProgramPauseResume_Click(object? sender, RoutedEventArgs e) { }
         private void BtnProgramWithdraw_Click(object? sender, RoutedEventArgs e) { }
@@ -62,264 +150,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             }
         }
 
-        // ---- PLACEHOLDER DATA -----------------------------------------------------
-
-        /// <summary>
-        /// Sample content for all four state panels.
-        ///
-        /// On WPF exactly ONE of Browse / Run / Lapsed / Graduated is ever visible - MainWindow
-        /// picks it from the live enrollment. That partial is not on this head, so leaving the
-        /// original's IsVisible="False" untouched would render the tab as a header over nothing and
-        /// leave ~900 lines of item templates completely unproven. All four are shown here instead,
-        /// so --render-all draws every template in the file.
-        ///
-        /// ponytail: needs a live ProgramService instance plus the MainShellWindow.ProgramsTab
-        /// partial. The service itself is in CCP.Core as of the program-service layer, and the real
-        /// browse list is ProgramService.Library (BuiltInPrograms.All()); when the run/lapsed/
-        /// graduated builders land, delete this method and the sample carriers under it and the
-        /// panels go back to being driven one at a time.
-        /// </summary>
-        private void SeedPlaceholders()
-        {
-            var accent = new SolidColorBrush(Color.Parse("#FF69B4"));
-            var muted = new SolidColorBrush(Color.Parse("#A9A3C2"));
-            var light = new SolidColorBrush(Color.Parse("#F2ECFF"));
-            var glass = new SolidColorBrush(Color.Parse("#33FFFFFF"));
-            var gold = new SolidColorBrush(Color.Parse("#FFD700"));
-
-            // ---- BROWSE ----------------------------------------------------------
-            Find<StackPanel>("ProgramsBrowsePanel").IsVisible = true;
-            Find<ItemsControl>("ProgramLibraryList").ItemsSource = new List<ProgramBrowseItem>
-            {
-                new()
-                {
-                    ProgramId = "spiral_descent", Icon = "🌀", Title = "The Spiral",
-                    Subtitle = "Fourteen days of pattern work",
-                    Pitch = "One session a day, a little longer each time. The spiral does the rest.",
-                    LengthLabel = "14 days", TierLabel = "FREE",
-                    TierBrush = light, TierBackground = new SolidColorBrush(Color.Parse("#333DFF9E")),
-                    AccentBrush = accent, ActionText = "Enroll",
-                },
-                new()
-                {
-                    ProgramId = "soft_focus", Icon = "💗", Title = "Soft Focus",
-                    Subtitle = "A gentle seven-day intake",
-                    Pitch = "Short sessions, no boss days, one day off allowed. The place to start.",
-                    LengthLabel = "7 days", TierLabel = "FREE",
-                    TierBrush = light, TierBackground = new SolidColorBrush(Color.Parse("#333DFF9E")),
-                    AccentBrush = new SolidColorBrush(Color.Parse("#7BD3FF")), ActionText = "Enroll",
-                },
-                new()
-                {
-                    ProgramId = "deep_dive", Icon = "🔒", Title = "Deep Dive",
-                    Subtitle = "Twenty-eight days, strict only",
-                    Pitch = "The long arc. Boss days every seventh, no days off, one attempt.",
-                    LengthLabel = "28 days", TierLabel = "PATRON",
-                    TierBrush = gold, TierBackground = new SolidColorBrush(Color.Parse("#33FFD700")),
-                    AccentBrush = new SolidColorBrush(Color.Parse("#C08BFF")),
-                    ActionText = "Locked", IsActionEnabled = false, IsLocked = true,
-                    ReasonText = "Needs an active patron tier.", ReasonVisible = true,
-                    CardOpacity = 0.72,
-                },
-            };
-
-            // ---- RUN -------------------------------------------------------------
-            Find<StackPanel>("ProgramsRunPanel").IsVisible = true;
-
-            Find<Border>("RunAccentBar").Background = accent;
-            Find<TextBlock>("TxtRunProgramTitle").Text = "The Spiral";
-            var chapter = Find<TextBlock>("TxtRunChapterName");
-            chapter.Text = "Descent";
-            chapter.Foreground = accent;
-            Find<TextBlock>("TxtRunDayCounter").Text = Loc.GetF("programs_day_counter", 6, 14);
-
-            Find<Border>("RunStrictBadge").IsVisible = true;
-            Find<Border>("RunAttemptBadge").IsVisible = true;
-            Find<TextBlock>("TxtRunAttempt").Text = Loc.GetF("programs_attempt", 2);
-
-            Find<TextBlock>("TxtRunStatDone").Text = "6 / 14";
-            Find<TextBlock>("TxtRunStatPerfect").Text = "4";
-            Find<TextBlock>("TxtRunStatDaysOff").Text = "1";
-
-            // The pause/resume caption is Content on WPF; here it is a TextBlock inside the button,
-            // because Avalonia would read the "_" in the loc key as an access key (CLAUDE.md trap 1).
-            Find<TextBlock>("TxtProgramPauseResume").Text = Loc.Get("btn_program_pause");
-
-            Find<Border>("RunChapterRewardChip").IsVisible = true;
-            Find<TextBlock>("TxtRunChapterReward").Text = "A spiral palette for the overlay";
-
-            // The rail: 14 nodes, five done, today is the sixth. The done segment is sized in star
-            // units so it ends exactly on today's node centre - (5 + 0.5) / 14 of the rail.
-            var railFill = Find<Border>("RailProgressFill");
-            railFill.Background = accent;
-            // RailDoneColumn / RailRestColumn keep their x:Name for a clean diff against the WPF
-            // file, but a ColumnDefinition is not a Control, so FindControl cannot reach it -
-            // the fill's own parent Grid owns exactly those two columns.
-            if (railFill.Parent is Grid railTrack && railTrack.ColumnDefinitions.Count == 2)
-            {
-                railTrack.ColumnDefinitions[0].Width = new GridLength(5.5, GridUnitType.Star);
-                railTrack.ColumnDefinitions[1].Width = new GridLength(8.5, GridUnitType.Star);
-            }
-            Find<ItemsControl>("ProgramDayStrip").ItemsSource = BuildDayPips(accent, muted, light);
-
-            // Today's hero band: the accent wash the WPF code builds from the program accent.
-            Find<Rectangle>("TodayHeroGlow").Fill = new RadialGradientBrush
-            {
-                GradientStops =
-                {
-                    new GradientStop(Color.Parse("#40FF69B4"), 0),
-                    new GradientStop(Color.Parse("#00FF69B4"), 1),
-                },
-            };
-
-            Find<Border>("TodayBossBadge").IsVisible = true;
-            Find<TextBlock>("TxtTodayTitle").Text = "Sink into the pattern";
-            Find<TextBlock>("TxtTodayBlurb").Text =
-                "Longer than yesterday, and the spiral does not stop for the flashes any more. " +
-                "Sit through it. Something pretty turns up near the end.";
-
-            Find<StackPanel>("TodayLayersPanel").IsVisible = true;
-            var templateName = Find<TextBlock>("TxtTodayTemplateName");
-            templateName.Text = "Deep Soak";
-            templateName.Foreground = accent;
-            Find<TextBlock>("TxtTodayTemplateBlurb").Text =
-                "A long, slow ramp. Flash rate and spiral speed climb together for the whole session.";
-            Find<ItemsControl>("TodayLayerList").ItemsSource = new List<ProgramLayerChip>
-            {
-                new() { Label = "Spiral", Tip = "Spiral overlay, full session",
-                        BorderBrush = glass, LabelBrush = light, AccentBrush = accent },
-                new() { Label = "Flashes", Tip = "Flash images, ramping",
-                        BorderBrush = glass, LabelBrush = light, AccentBrush = accent },
-                new() { Label = "Subliminals", Tip = "Subliminal text - new today",
-                        BorderBrush = accent, LabelBrush = light, AccentBrush = accent,
-                        NewForeground = Brushes.Black, NewVisible = true },
-                new() { Label = "Pink filter", Tip = "Screen tint - new today",
-                        BorderBrush = accent, LabelBrush = light, AccentBrush = accent,
-                        NewForeground = Brushes.Black, NewVisible = true },
-            };
-
-            Find<Border>("TodayRewardChip").IsVisible = true;
-            Find<TextBlock>("TxtTodayReward").Text = "Unlocks the Descent mantra pack";
-
-            Find<TextBlock>("TxtTodaySessionMinutes").Text = Loc.GetF("programs_session_minutes", 35);
-            Find<Grid>("TodaySessionProgressRow").IsVisible = true;
-            Find<ProgressBar>("TodaySessionProgressBar").Value = 42;
-            var clock = Find<TextBlock>("TxtTodaySessionProgress");
-            clock.Text = "14:22";
-            clock.Foreground = accent;
-            clock.IsVisible = true;
-
-            Find<Border>("TodayAmbientRow").IsVisible = true;
-            Find<TextBlock>("TxtTodayAmbient").Text = "Keep the spiral running in the background while you work.";
-            Find<TextBlock>("TxtTodayAmbientProgress").Text = Loc.GetF("programs_ambient_progress", 18, 40);
-
-            Find<Border>("TodayTasksDonePill").IsVisible = true;
-            Find<TextBlock>("TxtTodayTasksDone").Text = Loc.GetF("programs_tasks_done_count", 1, 3);
-            Find<ItemsControl>("TodayTaskList").ItemsSource = BuildTasks(accent, muted, light, glass);
-            Find<TextBlock>("TxtRitualPrivacyNote").IsVisible = true;
-
-            Find<ItemsControl>("TodayUpNextList").ItemsSource = new List<ProgramUpNextItem>
-            {
-                new() { DayLabel = "Day 7", Title = "The long soak", DayBrush = accent,
-                        Meta = "45 minutes · Complete 3 lock cards · Boss day",
-                        Glyph = "👑", GlyphTip = "Boss day", GlyphVisible = true },
-                new() { DayLabel = "Day 8", Title = "Rest and repeat", DayBrush = muted,
-                        Meta = "25 minutes · One session", RowOpacity = 0.8 },
-                new() { DayLabel = "Day 9", Title = "Deeper still", DayBrush = muted,
-                        Meta = "40 minutes · One session · Reward",
-                        Glyph = "🎁", GlyphTip = "Reward day", GlyphVisible = true,
-                        RowOpacity = 0.62 },
-            };
-            Find<TextBlock>("TxtTodayCloses").Text = Loc.GetF("programs_closes_at", "4:00 AM");
-            Find<TextBlock>("TxtTodayClosesNote").Text = Loc.Get("programs_closes_note");
-            Find<TextBlock>("TxtTodayStreak").Text = Loc.GetF("programs_streak_many", 5);
-
-            // ---- LAPSED ----------------------------------------------------------
-            Find<StackPanel>("ProgramsLapsedPanel").IsVisible = true;
-            Find<TextBlock>("TxtLapsedBody").Text = Loc.GetF("programs_lapsed_body", "The Spiral", 3);
-
-            // ---- GRADUATED -------------------------------------------------------
-            Find<StackPanel>("ProgramsGraduatedPanel").IsVisible = true;
-            Find<TextBlock>("TxtGraduatedSub").Text = Loc.GetF("programs_graduated_sub", "The Spiral");
-            Find<TextBlock>("TxtGraduatedStats").Text = Loc.GetF("programs_graduated_stats", 2, 11, 14);
-        }
-
-        /// <summary>Fourteen rail nodes: five done, today, then the horizon.</summary>
-        private static List<ProgramDayPip> BuildDayPips(IBrush accent, IBrush muted, IBrush light)
-        {
-            var pips = new List<ProgramDayPip>();
-            var glow = new RadialGradientBrush
-            {
-                GradientStops =
-                {
-                    new GradientStop(Color.Parse("#B0FF69B4"), 0),
-                    new GradientStop(Color.Parse("#00FF69B4"), 1),
-                },
-            };
-
-            for (int day = 1; day <= 14; day++)
-            {
-                bool done = day <= 5, today = day == 6;
-                bool boss = day % 7 == 0;
-
-                pips.Add(new ProgramDayPip
-                {
-                    DayIndex = day,
-                    Label = done ? "✓" : day.ToString(),
-                    Tip = $"Day {day}",
-                    Fill = done ? accent : Brushes.Transparent,
-                    Stroke = today ? accent : muted,
-                    PipBorderThickness = new Thickness(today ? 2 : 1),
-                    LabelBrush = done ? Brushes.Black : today ? light : muted,
-                    LabelWeight = today ? FontWeight.Bold : FontWeight.Normal,
-                    NodeSize = today ? 38 : done ? 32 : 26,
-                    LabelSize = today ? 13 : 11,
-                    PipOpacity = done || today ? 1.0 : 0.7,
-                    IsCurrent = today,
-                    GlowBrush = glow,
-                    GlowVisible = today,
-                    IgniteBrush = glow,
-                    RewardGlyph = boss ? "👑" : day == 9 ? "🎁" : "",
-                    RewardVisible = boss || day == 9,
-                    RewardTip = boss ? "Boss day" : "Reward day",
-                });
-            }
-            return pips;
-        }
-
-        /// <summary>One done task, one counted task and one ritual, so all three card states draw.</summary>
-        private static List<ProgramTaskItem> BuildTasks(IBrush accent, IBrush muted, IBrush light, IBrush glass)
-            => new()
-            {
-                new()
-                {
-                    TaskId = "session", Description = "Run today's session start to finish",
-                    HowTo = "Verified by the session engine.", HowToVisible = false,
-                    StatusGlyph = "✓", StatusBrush = accent, GlyphVisible = true,
-                    CardBorderBrush = accent, DoneChipVisible = true,
-                    DoneChipForeground = Brushes.Black, TextBrush = light,
-                },
-                new()
-                {
-                    TaskId = "bubbles", Description = "Pop forty bubbles while the spiral runs",
-                    HowTo = "Verified by Bubble Pop. Any mode counts.", HowToVisible = true,
-                    StatusGlyph = "○", StatusBrush = muted, GlyphVisible = true,
-                    CardBorderBrush = glass, TextBrush = light,
-                    ProgressText = "26 / 40", BarVisible = true,
-                    ProgressStar = new GridLength(26, GridUnitType.Star),
-                    RemainderStar = new GridLength(14, GridUnitType.Star),
-                    AccentBrush = accent,
-                },
-                new()
-                {
-                    TaskId = "ritual", Description = "Take the evening photo",
-                    HowTo = "Ritual task. Nothing leaves this machine.", HowToVisible = true,
-                    StatusGlyph = "○", StatusBrush = muted, GlyphVisible = true,
-                    CardBorderBrush = glass, TextBrush = light,
-                    BadgeText = "OPTIONAL", BadgeVisible = true,
-                    SubmitVisible = true,
-                },
-            };
+        // ---- BROWSE DATA ----------------------------------------------------------
 
         private T Find<T>(string name) where T : Control => this.FindControl<T>(name)!;
     }
@@ -337,6 +168,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// <summary>One program on the browse list (nothing enrolled).</summary>
     public class ProgramBrowseItem
     {
+        /// <summary>The Core definition behind this row; no catalogue copy is made in the head.</summary>
+        public ProgramDefinition Definition { get; set; } = null!;
         public string ProgramId { get; set; } = "";
         public string Icon { get; set; } = "";
         public string Title { get; set; } = "";
@@ -376,11 +209,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         public string ActionText { get; set; } = "";
         public bool IsActionEnabled { get; set; } = true;
+        public double ActionOpacity { get; set; } = 0.5;
 
         public string ReasonText { get; set; } = "";
         public bool ReasonVisible { get; set; }
 
         public double CardOpacity { get; set; } = 1.0;
+    }
+
+    /// <summary>One chapter in the selected read-only program details.</summary>
+    public class ProgramChapterBrowseItem
+    {
+        public string Name { get; set; } = "";
+        public string Subtitle { get; set; } = "";
+        public string DaysLabel { get; set; } = "";
+        public string RewardText { get; set; } = "";
+        public bool RewardVisible => !string.IsNullOrWhiteSpace(RewardText);
     }
 
     /// <summary>One node on the whole-program reward track.</summary>
