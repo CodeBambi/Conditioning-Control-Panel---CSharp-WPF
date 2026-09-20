@@ -14,7 +14,7 @@ using Avalonia.Media;
 using ConditioningControlPanel.Models.Deeper;
 using ConditioningControlPanel.Services.Deeper;
 using Serilog;
-using static ConditioningControlPanel.Avalonia.Views.Deeper.DeeperEditorGeometry;
+using static ConditioningControlPanel.Views.Deeper.DeeperEditorGeometry;
 
 namespace ConditioningControlPanel.Avalonia.Views.Deeper
 {

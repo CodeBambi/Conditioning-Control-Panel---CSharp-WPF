@@ -24,7 +24,7 @@ using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models.Deeper;
 using ConditioningControlPanel.Services.Deeper;
 using ConditioningControlPanel.Services.Haptics.Core;
-using static ConditioningControlPanel.Avalonia.Views.Deeper.DeeperEditorGeometry;
+using static ConditioningControlPanel.Views.Deeper.DeeperEditorGeometry;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Deeper

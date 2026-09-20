@@ -1,6 +1,6 @@
 using System.Globalization;
 using ConditioningControlPanel.Models.Deeper;
-using static ConditioningControlPanel.Avalonia.Views.Deeper.DeeperEditorGeometry;
+using static ConditioningControlPanel.Views.Deeper.DeeperEditorGeometry;
 
 namespace ConditioningControlPanel.Avalonia.Views.Deeper
 {
