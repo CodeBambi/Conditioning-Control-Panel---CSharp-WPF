@@ -8,6 +8,10 @@
 #
 # Push-triggered on this probe branch only. language-probe.yml is pinned to a different branch and
 # is untouched, so it cannot fire here. build.yml, Core and the shipping stack are untouched.
+#
+# A green job proves only the MECHANISM the test asserts (sharing-violation IOException on the
+# negative control, observed successful save on the positive one). It does not establish the cause
+# of the original CI language failure.
 name: reader-sharing-probe
 
 on:
@@ -74,9 +78,19 @@ jobs:
           # surfaced rather than swallowed, and it is never retried.
           exit $code
 
+      # Explicit allowlist of text/JSON/TRX diagnostics. Uploading the whole results directory
+      # would also ship a --blame-hang memory dump, which can contain in-memory settings and
+      # environment data; dumps are deliberately NOT uploaded.
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: windows-reader-sharing-probe
-          path: ${{ runner.temp }}/probe/
+          path: |
+            ${{ runner.temp }}/probe/environment.log
+            ${{ runner.temp }}/probe/build.log
+            ${{ runner.temp }}/probe/testhost-runtime.log
+            ${{ runner.temp }}/probe/reader-sharing-probe.log
+            ${{ runner.temp }}/probe/reader-sharing-probe-run.log
+            ${{ runner.temp }}/probe/reader-sharing-probe.trx
+            ${{ runner.temp }}/probe/run.jsonl
           if-no-files-found: warn
