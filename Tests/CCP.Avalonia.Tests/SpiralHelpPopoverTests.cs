@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -27,6 +29,10 @@ public sealed class SpiralHelpPopoverTests
     // DIAGNOSTIC TRIAL ONLY: the away-back variant is owner-authorized probe input, not shipped behavior.
     private const string InputVariantEnvironment = "CCP_SPIRAL_HELP_INPUT_VARIANT";
     private const string TracePathEnvironment = "CCP_SPIRAL_HELP_INPUT_TRACE";
+
+    // The German test calls the base body directly, so the running [Fact] and its caller language
+    // are recorded here for the trace: CallerMemberName alone cannot separate the two executions.
+    private static string? _entryTest;
 
     private static bool UseAwayBackVariant =>
         string.Equals(
@@ -224,11 +230,13 @@ public sealed class SpiralHelpPopoverTests
         try
         {
             localization.SetLanguage("de");
+            Volatile.Write(ref _entryTest, $"{nameof(MountedSpiralHelpPreservesCallerLanguageStartingInGerman)}/callerLanguage=de");
             await MountedSpiralHelpUsesLocalizedTopicAndCleansUpAcrossVisibilityAndReload();
             Assert.Equal("de", localization.CurrentLanguage);
         }
         finally
         {
+            Volatile.Write(ref _entryTest, null);
             if (localization.CurrentLanguage != previousLanguage)
                 localization.SetLanguage(previousLanguage);
         }
@@ -236,12 +244,22 @@ public sealed class SpiralHelpPopoverTests
 
     private sealed class PointerTrace : IDisposable
     {
+        private static int _invocations;
+
         private readonly StreamWriter? _writer;
+        private readonly int _invocation;
 
-        private PointerTrace(StreamWriter? writer) => _writer = writer;
-
-        internal static PointerTrace Start()
+        private PointerTrace(StreamWriter? writer, int invocation)
         {
+            _writer = writer;
+            _invocation = invocation;
+        }
+
+        internal static PointerTrace Start([CallerMemberName] string caller = "")
+        {
+            // Every invocation in a process appends its own block; nothing here overwrites an
+            // earlier execution's trace, so the CI-shaped double run stays fully readable.
+            var invocation = Interlocked.Increment(ref _invocations);
             StreamWriter? writer = null;
             try
             {
@@ -251,7 +269,7 @@ public sealed class SpiralHelpPopoverTests
                     var fullPath = Path.GetFullPath(path);
                     var directory = Path.GetDirectoryName(fullPath);
                     if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-                    writer = new StreamWriter(fullPath, append: false) { AutoFlush = true };
+                    writer = new StreamWriter(fullPath, append: true) { AutoFlush = true };
                 }
             }
             catch
@@ -259,13 +277,17 @@ public sealed class SpiralHelpPopoverTests
                 // Diagnostics must never change the test result or hide the lifecycle assertion.
             }
 
-            var trace = new PointerTrace(writer);
+            var trace = new PointerTrace(writer, invocation);
             trace.Write($"kind=runtime variant={Environment.GetEnvironmentVariable(InputVariantEnvironment) ?? "original"} " +
+                        $"caller={caller} entry={EntryTestName()} " +
+                        $"language={LocalizationManager.Instance.CurrentLanguage} " +
                         $"framework={RuntimeInformation.FrameworkDescription} version={Environment.Version} " +
                         $"os={RuntimeInformation.OSDescription} arch={RuntimeInformation.OSArchitecture} " +
-                        $"process={Environment.ProcessId}");
+                        $"process={Environment.ProcessId} thread={Environment.CurrentManagedThreadId}");
             return trace;
         }
+
+        private static string EntryTestName() => Volatile.Read(ref _entryTest) ?? "direct";
 
         internal void State(string stage, Window? host, SpiralTabView? view, Button? button)
         {
@@ -314,7 +336,7 @@ public sealed class SpiralHelpPopoverTests
         {
             try
             {
-                _writer?.WriteLine($"{DateTimeOffset.UtcNow:O} {line}");
+                _writer?.WriteLine($"{DateTimeOffset.UtcNow:O} invocation={_invocation} pid={Environment.ProcessId} {line}");
                 _writer?.Flush();
             }
             catch
