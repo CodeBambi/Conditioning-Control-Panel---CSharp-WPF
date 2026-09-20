@@ -31,11 +31,10 @@
 //   UpdateRackToolbarCounts, RackSourceLabel, RackSourceChipLabel, RackDifficultyLabel, the four
 //   RackSource* constants and the six filter fields.
 //
-//   RackAccepts, SortRackSessions and RackFileStamp are the exception worth calling out: all three
-//   are pure over Models.Session and System.IO and would compile here today. They are held back
-//   because they are the filter engine for rows that do not exist - restoring a sorter with nothing
-//   to sort is padding, and splitting the rack across two layers is how the filters and the rows
-//   drift apart. They come back in the same layer as RepaintSessionRack, which is their only caller.
+//   RackAccepts, SortRackSessions and RackFileStamp now live in Core's shared SessionRackQuery and
+//   are consumed by PresetsTabView for its mounted available-only rack. The remaining WPF builder
+//   and lifecycle stay here as execution/CRUD/import work; this note does not claim those actions
+//   are restored on the Avalonia head.
 //
 //   Session lifecycle - InitializeSessionManager, OnSessionsReloaded, OnSessionAdded,
 //   OnSessionRemoved, RegisterExternallySavedSession, SyncCustomSessionsFromDisk, GetSessionById,

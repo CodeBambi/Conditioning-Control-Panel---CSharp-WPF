@@ -590,8 +590,8 @@
                      One toolbar and ONE StackPanel. Every row - built-in, custom, imported - is
                      built by RepaintSessionRack from the session registry and told apart by a
                      colour code, never by which panel it sits in. Rows carry the session id in
-                     Tag, and that is contractual. The filter controls remain disabled until that
-                     registry wiring reaches this head. -->
+                     Tag, and that is contractual. The source, difficulty, sort and search controls
+                     query this same available-only registry. -->
                 <Border Grid.Row="1" Theme="{StaticResource SectionPanel}" Margin="5,8,5,0" Padding="14,12">
                     <Grid RowDefinitions="Auto,Auto,*">
 
@@ -614,11 +614,21 @@
 
                         <!-- THE RACK TOOLBAR. 28px, one line, and every control here is a VIEW
                              over the same list - none of them mutate a session. Source is
-                             single-select, difficulty is four independent toggles, sort and search
-                             are reserved for the registry wiring that is not part of this slice.
-                             The chips are built in code because each carries a live count; sort and
-                             search are declared here so the existing furniture remains visible. -->
-                        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto,Auto" Height="28" Margin="0,0,0,9">
+                             single-select, difficulty is four independent toggles, and sort and search
+                             query the mounted available-only registry. The chips are built in code
+                             because each carries a live count; sort and search remain declared here
+                             so their localized faces stay in XAML. -->
+                        <Grid Grid.Row="1" Height="28" Margin="0,0,0,9">
+                            <!-- The empty rule column absorbs spare width. The search column has a
+                                 64px floor and 150px ceiling so the toolbar remains usable at the
+                                 1100px shell proof width while keeping the desktop face unchanged. -->
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*" MinWidth="64" MaxWidth="150"/>
+                            </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" x:Name="RackSourceChips"
                                         Orientation="Horizontal" VerticalAlignment="Center"/>
@@ -628,7 +638,7 @@
 
                             <ComboBox Grid.Column="3" x:Name="CmbRackSort" SelectedIndex="0"
                                       Width="128" Height="26" VerticalAlignment="Center" FontSize="11"
-                                      Margin="8,0,7,0" IsEnabled="False" Opacity="0.5"
+                                      Margin="8,0,7,0" Theme="{StaticResource DarkComboBoxStyle}"
                                       ToolTip.Tip="{loc:Str tooltip_rack_sort}">
                                 <!-- Tag is the persisted token; the face text is localized. Never
                                      key the sort off SelectedIndex - reordering this list would
@@ -643,12 +653,13 @@
 
                             <!-- Avalonia's TextBox has a native PlaceholderText, so the WPF sibling
                                  TextBlock (TxtRackSearchHint) and the code that collapses it are
-                                 both gone. Search/filter wiring is not part of this read-only
-                                 slice, so the existing control stays visible but disabled. -->
-                            <TextBox Grid.Column="4" x:Name="TxtRackSearch" Width="150"
-                                     Height="26" FontSize="11" Padding="7,0"
+                                 both gone. The live search handler trims the transient query and
+                                 repaints the same available-only registry immediately. -->
+                            <TextBox Grid.Column="4" x:Name="TxtRackSearch"
+                                     Height="26" MinHeight="0" FontSize="11" Padding="7,0"
+                                     HorizontalAlignment="Stretch"
                                      VerticalContentAlignment="Center"
-                                     VerticalAlignment="Center" IsEnabled="False" Opacity="0.5"
+                                     VerticalAlignment="Center" Theme="{StaticResource FocusGlowTextBox}"
                                      PlaceholderText="{loc:Str rack_search_watermark}"/>
                         </Grid>
 
