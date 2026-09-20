@@ -567,6 +567,85 @@ xml "$tmp/c-sub-identity.xml" 'total="6" passed="5" failed="0" skipped="1" error
 check "candidate ran one theory row twice" INCONCLUSIVE 2 \
   "$tmp/baseline-good.xml" "$tmp/c-sub-identity.xml" 1 0
 
+# 8. document STRUCTURE: every element must be a legitimate child of its parent. A payload that
+# is well-formed XML and lands in the wrong place is unrecognized evidence, never a verdict.
+# (No '&' in a snippet: these are sed replacements.)
+inject() { # dest src closing-tag snippet
+  sed "s#</$3>#$4</$3>#" "$2" >"$1"
+}
+
+stray_failure='<failure exception-type="System.TimeoutException"><message>The operation has timed out.</message><stack-trace>at Setup()</stack-trace></failure>'
+
+# 8a. the review blocker: a failure payload hanging directly off <assembly>, records untouched.
+inject "$tmp/b-assembly-failure.xml" "$tmp/baseline-good.xml" assembly "$stray_failure"
+check "baseline failure payload outside any test" INCONCLUSIVE 2 \
+  "$tmp/b-assembly-failure.xml" "$tmp/candidate.xml" 1 0
+
+inject "$tmp/c-assembly-failure.xml" "$tmp/candidate.xml" assembly "$stray_failure"
+check "candidate failure payload outside any test" INCONCLUSIVE 2 \
+  "$tmp/baseline-good.xml" "$tmp/c-assembly-failure.xml" 1 0
+
+inject "$tmp/b-collection-failure.xml" "$tmp/baseline-good.xml" collection "$stray_failure"
+check "baseline failure payload inside the collection" INCONCLUSIVE 2 \
+  "$tmp/b-collection-failure.xml" "$tmp/candidate.xml" 1 0
+
+# 8b. an unknown extra child inside an otherwise valid failure node (was silently ignored).
+inject "$tmp/b-extra-in-failure.xml" "$tmp/baseline-good.xml" failure \
+  '<extra exception-type="System.TimeoutException">timed out</extra>'
+check "unknown extra child inside a failure node" INCONCLUSIVE 2 \
+  "$tmp/b-extra-in-failure.xml" "$tmp/candidate.xml" 1 0
+
+# 8c. misplaced error/test records, and malformed nesting.
+inject "$tmp/b-loose-error.xml" "$tmp/baseline-good.xml" assembly \
+  "<error type=\"fixture\" name=\"ctor\">$stray_failure</error>"
+check "error node outside any errors element" INCONCLUSIVE 2 \
+  "$tmp/b-loose-error.xml" "$tmp/candidate.xml" 1 0
+
+inject "$tmp/b-errors-node.xml" "$tmp/baseline-good.xml" assembly \
+  "<errors><error type=\"fixture\" name=\"ctor\">$stray_failure</error></errors>"
+check "nonempty assembly errors element" INCONCLUSIVE 2 \
+  "$tmp/b-errors-node.xml" "$tmp/candidate.xml" 1 0
+
+inject "$tmp/c-errors-node.xml" "$tmp/candidate.xml" assembly \
+  "<errors><error type=\"fixture\" name=\"ctor\">$stray_failure</error></errors>"
+check "candidate nonempty assembly errors element" INCONCLUSIVE 2 \
+  "$tmp/baseline-good.xml" "$tmp/c-errors-node.xml" 1 0
+
+inject "$tmp/b-loose-test.xml" "$tmp/baseline-good.xml" assembly \
+  "$(test_el "$noreader" Pass)"
+check "test record outside any collection" INCONCLUSIVE 2 \
+  "$tmp/b-loose-test.xml" "$tmp/candidate.xml" 1 0
+
+inject "$tmp/b-nested-collection.xml" "$tmp/baseline-good.xml" collection \
+  '<collection name="inner"></collection>'
+check "collection nested inside a collection" INCONCLUSIVE 2 \
+  "$tmp/b-nested-collection.xml" "$tmp/candidate.xml" 1 0
+
+inject "$tmp/b-nested-message.xml" "$tmp/baseline-good.xml" message \
+  '<message>nested</message>'
+check "message nested inside a message" INCONCLUSIVE 2 \
+  "$tmp/b-nested-message.xml" "$tmp/candidate.xml" 1 0
+
+# 8d. a collection summary that contradicts the records it holds.
+xml "$tmp/c-collection-summary.xml" 'total="6" passed="5" failed="0" skipped="1" errors="0"' \
+  "$(others_pass)" "$(test_el "$release" Pass)" "$(skip_el)"
+sed -i 's#<collection name="c">#<collection name="c" total="7" passed="6" failed="0" skipped="1">#' \
+  "$tmp/c-collection-summary.xml"
+check "collection summary contradicts its records" INCONCLUSIVE 2 \
+  "$tmp/baseline-good.xml" "$tmp/c-collection-summary.xml" 1 0
+
+# 8e. structure that IS legitimate must still pass: real xunit optional metadata, an empty
+# <errors/>, honest collection counts, and the <reason> element the current Linux run emits.
+inject "$tmp/b-legit-metadata.xml" "$tmp/baseline-good.xml" assembly '<errors></errors>'
+sed -i "s#result=\"Skip\"></test>#result=\"Skip\"><reason><![CDATA[Linux-only]]></reason></test>#" \
+  "$tmp/b-legit-metadata.xml"
+sed -i 's#<collection name="c">#<collection name="c" total="6" passed="2" failed="3" skipped="1">#' \
+  "$tmp/b-legit-metadata.xml"
+inject "$tmp/b-legit2.xml" "$tmp/b-legit-metadata.xml" test \
+  '<traits><trait name="Category" value="Publication"/></traits><output><![CDATA[log line]]></output>'
+check "legitimate xunit metadata still passes" PASS 0 \
+  "$tmp/b-legit2.xml" "$tmp/candidate.xml" 1 0
+
 echo
 if (( fails )); then echo "$fails fixture(s) FAILED"; exit 1; fi
 echo "all fixtures behaved as specified"

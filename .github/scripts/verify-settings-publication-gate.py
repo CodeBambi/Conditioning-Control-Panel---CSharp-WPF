@@ -14,6 +14,32 @@ MISSED_TEMP_MESSAGES = {
     "publication did not leave its flushed temp file behind within 2s",
     "SaveImmediate did not leave its flushed temp file behind while the settings reader was held.",
 }
+# Which child elements each element may legitimately carry. Derived from the SAVED native
+# artifacts (Windows baseline/candidate: assemblies>assembly>collection>test>failure>
+# message|stack-trace; current Linux run adds test>reason) plus xunit's other documented
+# optional per-test metadata. Anything else, or anything in the wrong place - a <failure>
+# hanging off <assembly>, an <error> outside <errors>, an unknown child inside a <failure> -
+# is unrecognized evidence and fails closed. This is an allow-list by parent, NOT a blacklist:
+# a payload nobody anticipated is rejected by default. Attributes are deliberately unconstrained;
+# xunit is free to add metadata attributes anywhere.
+SCHEMA: Dict[str, Set[str]] = {
+    "assemblies": {"assembly"},
+    "assembly": {"errors", "collection"},
+    "errors": {"error"},
+    "error": {"failure"},
+    "collection": {"test"},
+    "test": {"failure", "reason", "traits", "output", "warnings"},
+    "traits": {"trait"},
+    "warnings": {"warning"},
+    "failure": {"message", "stack-trace"},
+    "trait": set(),
+    "warning": set(),
+    "message": set(),
+    "stack-trace": set(),
+    "reason": set(),
+    "output": set(),
+}
+
 CONTRACTS = {
     "release": ("ObservedPublicationFailureThatReleasesTheReaderRecoversAndPublishes", "fr", "ja"),
     "hold_read": ("PersistentHeldReaderLeavesPreviousSnapshotAndCleansItsTempFile", "6", "1"),
@@ -133,6 +159,42 @@ def inspect_record(test: ET.Element, contract: Optional[Tuple[str, str, str]]) -
     return details
 
 
+def structure_violations(root: ET.Element) -> List[str]:
+    """Walk the whole document against SCHEMA; report every unknown or misplaced element."""
+    problems: List[str] = []
+    pending = [(local_name(root.tag), root)]
+    while pending:
+        parent, element = pending.pop()
+        allowed = SCHEMA.get(parent, set())
+        for child in element:
+            name = local_name(child.tag)
+            if name not in allowed:
+                problems.append(f"<{name or '?'}> is not a legitimate child of <{parent}>")
+                continue
+            pending.append((name, child))
+    return sorted(set(problems))
+
+
+def collection_violations(assembly: ET.Element) -> List[str]:
+    """When a <collection> supplies summary counts, they must match its own records."""
+    problems: List[str] = []
+    for collection in assembly.findall("collection"):
+        tests = collection.findall("test")
+        counts = {
+            "total": len(tests),
+            "passed": sum(test.get("result") == "Pass" for test in tests),
+            "failed": sum(test.get("result") == "Fail" for test in tests),
+            "skipped": sum(test.get("result") == "Skip" for test in tests),
+        }
+        for key, actual in counts.items():
+            claimed = collection.get(key)
+            if claimed is not None and claimed.strip() != str(actual):
+                problems.append(
+                    f"collection '{collection.get('name') or '?'}' claims {key}={claimed} but holds {actual}"
+                )
+    return problems
+
+
 def parse(path: str, release_method: str, slot_args: List[str]) -> None:
     slots = dict(argument.split(":", 1) for argument in slot_args)
     try:
@@ -154,6 +216,8 @@ def parse(path: str, release_method: str, slot_args: List[str]) -> None:
 
     assembly = assemblies[0]
     out("ok", 1)
+    out("structure", "; ".join(structure_violations(root) + collection_violations(assembly))[:400])
+    out("error_nodes", sum(1 for node in assembly.iter() if local_name(node.tag) == "error"))
     for key in ("total", "passed", "failed", "skipped", "errors", "environment"):
         out(key, assembly.get(key, ""))
 

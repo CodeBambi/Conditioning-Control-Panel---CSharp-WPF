@@ -88,7 +88,7 @@ fi
 
 parse_xml() { # var-prefix file -> sets <prefix>_ok/_total/.../_release_summary
   local prefix=$1 file=$2 k v
-  for k in ok error total passed failed skipped errors environment \
+  for k in ok error structure error_nodes total passed failed skipped errors environment \
            n_tests n_pass n_fail n_skip n_unknown n_release release_result release_shape \
            release_signature release_missed_temp release_summary skip_names unmatched missing invalid \
            slot_noreader slot_release slot_hold_read slot_hold_read_delete slot_later \
@@ -140,6 +140,14 @@ else
   if [[ $b_ok != 1 ]]; then
     verdict=INCONCLUSIVE
     notes+=("baseline results XML is not a complete well-formed xunit document: ${b_error:-unparseable}")
+  elif [[ -n $b_structure ]]; then
+    # Unknown or misplaced elements anywhere in the document - e.g. a failure payload hanging
+    # off <assembly> rather than owned by a Fail record - are unrecognized evidence, not a red.
+    verdict=INCONCLUSIVE
+    notes+=("baseline results XML has elements outside the xunit result structure: $b_structure")
+  elif [[ ${b_error_nodes:-0} != 0 ]]; then
+    verdict=INCONCLUSIVE
+    notes+=("baseline reported $b_error_nodes assembly-level <error> node(s): host/collection failure, not the regression")
   elif ! is_count "$baseline_exit" || [[ $baseline_exit == 0 ]]; then
     verdict=INCONCLUSIVE
     notes+=("baseline exit code '$baseline_exit' is absent, non-numeric or zero: a red baseline must exit nonzero")
@@ -211,6 +219,12 @@ else
   if [[ $c_ok != 1 ]]; then
     verdict=INCONCLUSIVE
     notes+=("candidate results XML is not a complete well-formed xunit document: ${c_error:-unparseable}")
+  elif [[ -n $c_structure ]]; then
+    verdict=INCONCLUSIVE
+    notes+=("candidate results XML has elements outside the xunit result structure: $c_structure")
+  elif [[ ${c_error_nodes:-0} != 0 ]] || { is_count "$c_errors" && (( c_errors != 0 )); }; then
+    verdict=INCONCLUSIVE
+    notes+=("candidate reported assembly-level errors (attribute='${c_errors}', nodes=${c_error_nodes:-0}): host/collection failure, not a green run")
   elif ! is_count "$candidate_exit"; then
     verdict=INCONCLUSIVE
     notes+=("candidate exit code '$candidate_exit' is absent or non-numeric: no valid evidence of a green run")
