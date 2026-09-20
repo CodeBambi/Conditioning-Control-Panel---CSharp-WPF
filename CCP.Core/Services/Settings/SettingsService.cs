@@ -36,6 +36,15 @@ namespace ConditioningControlPanel.Services
         // never stall the save path indefinitely.
         private static readonly TimeSpan SerializeMarshalTimeout = TimeSpan.FromSeconds(2);
 
+        // Windows can report a destination held by another reader as either access denied or a
+        // sharing/lock violation. Retry only those publication errors, and only for this bounded
+        // window; the final exception still reaches the existing SaveImmediate error log.
+        private const int AtomicPublishMaxRetries = 5;
+        private static readonly TimeSpan AtomicPublishRetryDelay = TimeSpan.FromMilliseconds(50);
+        private const int ErrorAccessDenied = unchecked((int)0x80070005);
+        private const int ErrorSharingViolation = unchecked((int)0x80070020);
+        private const int ErrorLockViolation = unchecked((int)0x80070021);
+
         // Per-instance seam for deterministic lifecycle proofs; production keeps the 500ms default.
         internal int SaveDebounceDueTimeMilliseconds { get; set; } = 500;
 
@@ -905,7 +914,7 @@ namespace ConditioningControlPanel.Services
                             writer.Flush();
                             stream.Flush(true);
                         }
-                        File.Move(tempPath, _settingsPath, overwrite: true);
+                        PublishAtomicFile(tempPath);
                     }
                     catch
                     {
@@ -946,6 +955,39 @@ namespace ConditioningControlPanel.Services
             {
                 Log.Error(ex, "Could not save settings");
             }
+        }
+
+        /// <summary>
+        /// Publishes a fully flushed temp file over settings.json. A reader that briefly holds the
+        /// destination can make Windows reject the replace, so retry only the known transient
+        /// publication errors. The caller owns cleanup if all attempts fail.
+        /// </summary>
+        private void PublishAtomicFile(string tempPath)
+        {
+            for (var retry = 0; ; retry++)
+            {
+                try
+                {
+                    File.Move(tempPath, _settingsPath, overwrite: true);
+                    return;
+                }
+                catch (Exception ex) when (retry < AtomicPublishMaxRetries &&
+                                            IsTransientAtomicPublishFailure(ex))
+                {
+                    Thread.Sleep(AtomicPublishRetryDelay);
+                }
+            }
+        }
+
+        private static bool IsTransientAtomicPublishFailure(Exception ex)
+        {
+            if (!OperatingSystem.IsWindows() ||
+                (ex is not IOException && ex is not UnauthorizedAccessException))
+                return false;
+
+            return ex.HResult == ErrorAccessDenied ||
+                   ex.HResult == ErrorSharingViolation ||
+                   ex.HResult == ErrorLockViolation;
         }
 
         /// <summary>
