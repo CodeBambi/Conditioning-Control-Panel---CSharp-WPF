@@ -47,6 +47,7 @@ test('actual station frame drains gameplay queues on skipped presentation frames
     presentation: createPresentationPacer({ userAgent: 'Android' }),
     table: { draw: value => painted.push(value.now) }, t: () => '', decide: false,
     phase: 'decision', seating: false, sync: time => synced.push(time), requestAnimationFrame: () => 1,
+    chip: null, bank: null,
   });
   vm.runInContext(frame, context);
   for (now of [0, 8.4, 16.7, 25]) vm.runInContext('frame()', context);

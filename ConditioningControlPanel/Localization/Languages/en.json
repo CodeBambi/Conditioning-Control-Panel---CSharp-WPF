@@ -6160,6 +6160,8 @@
   "br_callout_full_wake": "Full Wake",
   "br_callout_on_a_roll": "On A Roll",
   "br_callout_winner": "Winner",
+  "br_callout_dealer_wins": "Dealer Wins",
+  "br_callout_push": "Push",
   "br_callout_blackjack": "Blackjack",
   "br_callout_dealer_bust": "Dealer Bust",
   "br_callout_hot_hand": "Hot Hand",

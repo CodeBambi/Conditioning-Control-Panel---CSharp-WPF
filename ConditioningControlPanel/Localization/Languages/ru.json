@@ -5447,6 +5447,8 @@
   "br_callout_on_a_roll": "На волне",
   "br_roulette_glyphs_note": "Блёклые знаки на колесе - заклинание каждой ячейки, при выигрыше или нет. Спираль: спираль. Глаз: вспышка картинок. Пузырь: слова. Капля: таяние. Знак загорается, когда шарик останавливается там.",
   "br_callout_winner": "Победа",
+  "br_callout_dealer_wins": "Dealer Wins",
+  "br_callout_push": "Push",
   "br_callout_blackjack": "Блэкджек",
   "br_callout_dealer_bust": "Перебор у дилера",
   "br_callout_hot_hand": "Горячая рука",

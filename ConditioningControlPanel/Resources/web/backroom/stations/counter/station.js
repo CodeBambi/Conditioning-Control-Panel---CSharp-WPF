@@ -72,12 +72,14 @@ export async function mount(ctx) {
     return ['off','still','reduced'].includes(String(ctx.motion||'').toLowerCase()) || !!ctx.reduced || pr || String(ctx.intensity || '').toLowerCase() === 'calm';
   }
   function back() { if (typeof ctx.standUp === 'function') ctx.standUp(); else close(); }
-  const backButton = (cls) => { const b = h('button', cls, t('br_back', 'Back')); b.type = 'button'; b.onclick = back; b.hidden = hostBack; return b; };
+  // The header chip (counter-back) is kept in the room too, in the room's corner (shared/back.css), so every station
+  // shows one Back where the slot's is; the closed card's own Back still defers to the host.
+  const backButton = (cls) => { const b = h('button', cls, t('br_back', 'Back')); b.type = 'button'; b.onclick = back; b.hidden = hostBack && cls !== 'counter-back'; return b; };
 
   function build() {
     const root = h('div', 'counter-station');
     root.dataset.phase = 'loading';
-    if (hostBack) root.dataset.hostBack = '';
+    if (hostBack) { root.dataset.hostBack = ''; root.dataset.ownBack = ''; }
     if (hook) root.dataset.hostSp = '';
     const top = h('header', 'counter-top');
     chipEl = h('span', 'counter-sp');
