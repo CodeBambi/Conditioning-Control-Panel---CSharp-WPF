@@ -241,7 +241,10 @@ public static class LauncherCatalogue
             () => Chaos.DtrhHostService.IsActive);
 
         // The Arcademy: Launch owns the build flag, the Lab gate and the audio-only refusal.
-        G("arcademy", "web/arcademy/art/vn/vn-01-entrance-gates.png", "★", Tile(0xFF, 0x69, 0xB4),
+        // The art is the Arcademy's own entrance-gates plate, copied into Resources/features/
+        // because the web tree is Content (copied to disk) and only a WPF Resource resolves
+        // through a pack:// uri - pointed at the web path the tile drew the glyph plate instead.
+        G("arcademy", "features/arcademy.png", "★", Tile(0xFF, 0x69, 0xB4),
             () => Arcademy.ArcademyHostService.DoorAvailable,
             () => !LabOk("launcher_game_arcademy_title", null),
             () => Arcademy.ArcademyHostService.Launch(),

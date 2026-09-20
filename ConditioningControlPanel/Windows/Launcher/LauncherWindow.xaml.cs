@@ -462,11 +462,15 @@ public partial class LauncherWindow : Window
     private void GamesColumn_SizeChanged(object sender, SizeChangedEventArgs e) => FitTiles();
 
     /// <summary>
-    /// Size the grid so every tile is on screen: columns by the column's width, the grid as tall
-    /// as the scroller's viewport so the rows share it, and only when a row would drop under the
-    /// card floor does the grid grow past the viewport and the scroller scroll. The sums live in
-    /// <see cref="LauncherGridLayout"/>; the tile's own art row is star-sized and takes whatever
-    /// the row hands it above the text.
+    /// Size the grid so every card is a landscape card: columns by the column's width, then each
+    /// row exactly one card tall - a 16:9 art plate at that column width plus the fixed text
+    /// block. The sums live in <see cref="LauncherGridLayout"/>; the tile's own art row is
+    /// star-sized and takes what the row has left above the text, which is the 16:9.
+    ///
+    /// <para>A block of cards that fits sits in the MIDDLE of the column: cards are sized by
+    /// their width now, so there is usually room to spare and hanging them off the top would
+    /// leave a bare band under the last row. Only when they overflow does the block go back to
+    /// the top and the scroller scroll.</para>
     /// </summary>
     private void FitTiles()
     {
@@ -474,14 +478,19 @@ public partial class LauncherWindow : Window
         {
             int count = GamesGrid.Children.Count;
             if (count == 0) return;
-            int columns = LauncherGridLayout.Columns(GamesColumn.ActualWidth, count);
+            double width = GamesColumn.ActualWidth;
+            int columns = LauncherGridLayout.Columns(width, count);
             if (GamesGrid.Columns != columns) GamesGrid.Columns = columns;
             double available = GamesScroller.ActualHeight;
-            if (available <= 0) return;
-            double height = LauncherGridLayout.GridHeight(available, LauncherGridLayout.Rows(count, columns));
+            if (available <= 0 || width <= 0) return;
+            double height = LauncherGridLayout.GridHeight(width, columns, LauncherGridLayout.Rows(count, columns));
             // Height starts as NaN, and NaN compares false with everything: test for it first.
             if (height > 0 && (double.IsNaN(GamesGrid.Height) || Math.Abs(GamesGrid.Height - height) > 0.5))
                 GamesGrid.Height = height;
+            var seat = LauncherGridLayout.NeedsScroll(available, height)
+                ? VerticalAlignment.Top
+                : VerticalAlignment.Center;
+            if (GamesGrid.VerticalAlignment != seat) GamesGrid.VerticalAlignment = seat;
         }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] tile fit failed"); }
     }
