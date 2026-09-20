@@ -92,3 +92,29 @@ test('without a document the kit draws nothing and never throws', () => {
   kit.dispose();
   assert.equal(kit.draw({}, 'hub', 0, 0, 10, 10), false);
 });
+
+ test('procedural kits generate once per showing, never per paint', () => {
+  const oldRandom = Math.random; let calls = 0;
+  Math.random = () => { calls++; return 0.4; };
+  try {
+    const a = createLoomKit({ procedural: true });
+    const first = calls; assert.ok(first > 0);
+    a.paint({ width: 100, height: 100 }, 'screen', { now: 100 });
+    a.paint({ width: 100, height: 100 }, 'screen', { now: 200 });
+    assert.equal(calls, first);
+    const b = createLoomKit({ procedural: true }); assert.ok(calls > first);
+    a.dispose(); b.dispose();
+  } finally { Math.random = oldRandom; }
+});
+
+
+test('dynamic recipe slots are bounded and cannot replace shared presets or survive disposal', () => {
+  const kit = createLoomKit();
+  assert.equal(kit.setRecipe('dome-a', LOOM_PRESETS.whirl), true);
+  assert.equal(kit.setRecipe('dome-b', LOOM_PRESETS.candy), true);
+  assert.equal(kit.setRecipe('dome-c', LOOM_PRESETS.mint), false);
+  assert.equal(kit.setRecipe('hub', LOOM_PRESETS.mint), false);
+  assert.equal(kit.setRecipe('dome-a', LOOM_PRESETS.ribbon), true);
+  kit.dispose();
+  assert.equal(kit.setRecipe('dome-a', LOOM_PRESETS.mint), false);
+});

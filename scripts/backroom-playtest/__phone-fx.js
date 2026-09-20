@@ -264,6 +264,8 @@
     if (performanceMode()) for (const stop of [...spiralPlayers]) stop();
     const d=kDuration(),hold=Math.max(0,ms*d*SPIRAL_STRETCH),a=alpha*kOpacity();
     const canvas=add('fxfull','canvas');canvas.style.opacity='0';
+    // Match the Firefox playfield path before Loom acquires this context.
+    canvas.getContext('2d',{willReadFrequently:/Firefox\//i.test(navigator.userAgent)});
     let kit=null,raf=0,last=-Infinity,closed=false,timer=0;
     const stop=()=>{if(closed)return;closed=true;cancelLater(timer);cancelAnimationFrame(raf);kit?.dispose();canvas.remove();spiralPlayers.delete(stop);};
     const end=()=>{if(closed)return;anim(canvas,[{opacity:a},{opacity:0}],500);timer=later(()=>{stop();canvas.remove();},520);};
@@ -273,7 +275,7 @@
       if(closed||!canvas.isConnected)return;
       kit=createLoomKit();
       const name=preset==='wake'?'wake':['screen','candy','pinwheel','mint','ribbon','star'][spiralCursor++%6];
-      let frames=0;
+      let frames=0,shown=false;
       const draw=now=>{
         if(closed||!canvas.isConnected){stop();return;}
         if(now-last>=1000/(performanceMode()?20:30)){
@@ -282,12 +284,16 @@
           kit.setStill(!!still);
           const edge=performanceMode()?384:512,ratio=innerWidth/innerHeight,w=ratio>=1?edge:Math.round(edge*ratio),h=ratio>=1?Math.round(edge/ratio):edge;
           if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
-          kit.paint(canvas,name,{now});last=now;canvas.dataset.frames=String(++frames);
+          const painted=kit.paint(canvas,name,{now});last=now;
+          if(painted){
+            canvas.dataset.frames=String(++frames);
+            if(!shown){shown=true;cancelLater(timer);timer=0;anim(canvas,[{opacity:0},{opacity:a}],1250,'ease-in-out');if(!token){cancelLater(timer);timer=later(end,1250+hold);}}
+          }
         }
         raf=requestAnimationFrame(draw);
       };
-      draw(performance.now());anim(canvas,[{opacity:0},{opacity:a}],1250,'ease-in-out');
-      if(!token)timer=later(end,1250+hold);
+      timer=later(stop,5000);
+      draw(performance.now());
     }).catch(()=>{stop();canvas.remove();});
   }
 
