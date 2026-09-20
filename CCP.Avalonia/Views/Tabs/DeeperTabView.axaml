@@ -688,6 +688,15 @@
                                                TextWrapping="Wrap" MaxWidth="500"
                                                Margin="0,40,0,0"
                                                TextAlignment="Center"/>
+                                    <TextBlock x:Name="TxtDeeperLibraryError" x:FieldModifier="internal"
+                                               Text="{Binding LibraryErrorText}"
+                                               IsVisible="{Binding ShowLibraryError}"
+                                               Foreground="{DynamicResource DangerBrush}"
+                                               FontSize="12" FontStyle="Italic"
+                                               HorizontalAlignment="Center" VerticalAlignment="Top"
+                                               TextWrapping="Wrap" MaxWidth="500"
+                                               Margin="0,40,0,0"
+                                               TextAlignment="Center"/>
                                 </Grid>
                             </DockPanel>
                         </Grid>

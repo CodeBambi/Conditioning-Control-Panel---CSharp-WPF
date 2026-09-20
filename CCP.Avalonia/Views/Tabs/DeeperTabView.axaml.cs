@@ -1,5 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.IO;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -9,6 +13,8 @@ using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Models.Deeper;
+using ConditioningControlPanel.Services.Deeper;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
@@ -39,6 +45,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             base.OnAttachedToVisualTree(e);
             CoreMods.ModChanged += OnModChanged;
             ApplyFeatureArt();
+            if (Owner is { } shell) shell.InitializeDeeperHub();
+            else ViewModel?.ReloadLibrary();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -77,18 +85,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// ported tab writes it (PlayTabView.axaml.cs:56).</summary>
         private MainShellWindow? Owner => TopLevel.GetTopLevel(this) as MainShellWindow;
 
-        // ponytail: every handler below routes to MainWindow on WPF
-        // (Window.GetWindow(this) is MainWindow mw -> mw.<same name>). Needs the
-        // MainWindow.DeeperHub / MainWindow.BlinkTrainer partials, wired when EnhancementLibrary,
-        // WebcamService and the tutorial overlay move to Core.
+        // The index/filter slice is local and read-only. Editor, player, import, delete,
+        // catalogue and webcam actions stay explicit stubs until their head services move.
+        private DeeperTabViewModel? ViewModel => DataContext as DeeperTabViewModel;
+
         private void DeeperRow_MouseEnter(object? sender, PointerEventArgs e) { }
         private void DeeperRow_MouseLeave(object? sender, PointerEventArgs e) { }
         private void DeeperRow_Click(object? sender, PointerReleasedEventArgs e) { }
 
         private void BtnDeeperCatalogue_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDeeperImport_Click(object? sender, RoutedEventArgs e) { }
-        /// <summary>The one handler here that is NOT a stub: its shell target is restored
-        /// (MainShellWindow.DeeperTab.cs), so this is the same one-line relay WPF writes.</summary>
         private void BtnDeeperNewEnhancement_Click(object? sender, RoutedEventArgs e)
             => Owner?.BtnDeeperNewEnhancement_Click(sender, e);
         private void BtnDeeperOpenLibraryFolder_Click(object? sender, RoutedEventArgs e) { }
@@ -102,123 +108,223 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void BtnDeeperWelcomeDemo_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDeeperWelcomeDismiss_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDeeperWelcomeTour_Click(object? sender, RoutedEventArgs e) { }
-        // Phase 2: blink-recal, the camera/monitor pickers and restrict-gaze moved to
-        // Settings -> Devices (one editor per setting). Only the chip's link back is left.
         private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e) { }
-        private void DeeperPillAll_Click(object? sender, RoutedEventArgs e) { }
-        private void DeeperPillAudio_Click(object? sender, RoutedEventArgs e) { }
-        private void DeeperPillHaptics_Click(object? sender, RoutedEventArgs e) { }
-        private void DeeperPillVideo_Click(object? sender, RoutedEventArgs e) { }
-        private void DeeperPillWebcam_Click(object? sender, RoutedEventArgs e) { }
+
+        private void DeeperPillAll_Click(object? sender, RoutedEventArgs e)
+        {
+            ViewModel?.SetMediaType(DeeperLocalLibrary.MediaTypeFilter.All);
+            RefreshPills();
+        }
+
+        private void DeeperPillAudio_Click(object? sender, RoutedEventArgs e)
+        {
+            ViewModel?.SetMediaType(DeeperLocalLibrary.MediaTypeFilter.Audio);
+            RefreshPills();
+        }
+
+        private void DeeperPillVideo_Click(object? sender, RoutedEventArgs e)
+        {
+            ViewModel?.SetMediaType(DeeperLocalLibrary.MediaTypeFilter.Video);
+            RefreshPills();
+        }
+
+        private void DeeperPillHaptics_Click(object? sender, RoutedEventArgs e)
+        {
+            ViewModel?.ToggleHaptics();
+            RefreshPills();
+        }
+
+        private void DeeperPillWebcam_Click(object? sender, RoutedEventArgs e)
+        {
+            ViewModel?.ToggleWebcam();
+            RefreshPills();
+        }
+
+        private void RefreshPills()
+        {
+            if (ViewModel is not { } model) return;
+            BtnDeeperPillAll.IsChecked = model.MediaType == DeeperLocalLibrary.MediaTypeFilter.All;
+            BtnDeeperPillVideo.IsChecked = model.MediaType == DeeperLocalLibrary.MediaTypeFilter.Video;
+            BtnDeeperPillAudio.IsChecked = model.MediaType == DeeperLocalLibrary.MediaTypeFilter.Audio;
+            BtnDeeperPillHaptics.IsChecked = model.Haptics;
+            BtnDeeperPillWebcam.IsChecked = model.Webcam;
+        }
+
         private void DeeperRowDelete_Click(object? sender, RoutedEventArgs e) { }
         private void DeeperRowPlay_Click(object? sender, RoutedEventArgs e) { }
         private void DeeperRowSubmit_Click(object? sender, RoutedEventArgs e) { }
-        private void DeeperSearch_TextChanged(object? sender, TextChangedEventArgs e) { }
-        private void DeeperSort_SelectionChanged(object? sender, SelectionChangedEventArgs e) { }
+        private void DeeperSearch_TextChanged(object? sender, TextChangedEventArgs e)
+        {
+            var text = sender is TextBox box ? box.Text : TxtDeeperSearch?.Text;
+            ViewModel?.SetSearch(text);
+        }
+
+        private void DeeperSort_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (sender is ComboBox combo && combo.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+                ViewModel?.SetSort(tag);
+        }
     }
 
-    /// <summary>
-    /// Supplies the rows and the FORMATTED / state-chosen strings the view binds to. Static
-    /// strings come straight from {loc:Str key} in the XAML; only the ones the WPF head writes
-    /// from code need to live here, with the same keys the WPF code-behind uses:
-    ///   MainWindow.DeeperHub.cs:524   deeper_library_count_fmt
-    ///   MainWindow.DeeperHub.cs:354   deeper_library_empty / deeper_hub_empty_filtered
-    ///   MainWindow.BlinkTrainer.cs:1497 blink_trainer_consent_granted / _required
-    ///   MainWindow.BlinkTrainer.cs:1502 blink_trainer_consent_manage / _grant
-    ///   MainWindow.BlinkTrainer.cs:1515 blink_trainer_calibration_none / _calibrated_format
-    /// The data is placeholder: EnhancementLibrary and WebcamService are still in the WPF head.
-    /// </summary>
-    public sealed class DeeperTabViewModel
+    /// <summary>Read-only local library state for the hub. The shell asks this model to reload;
+    /// all file parsing and filtering is shared in <see cref="DeeperLocalLibrary"/>.</summary>
+    public sealed class DeeperTabViewModel : INotifyPropertyChanged
     {
-        // ---- library ------------------------------------------------------------------
-        // Three sample rows, deliberately different from each other so the row template's
-        // optional branches (tag chips, submission badge, submit button, media source) all
-        // actually draw in --render-all instead of being proved by an empty list.
-        public ObservableCollection<DeeperLibraryRowVm> FilteredEntries { get; } = new()
-        {
-            new DeeperLibraryRowVm
-            {
-                Name = "Sink & Drift - long form",
-                MediaTypeIcon = "🎬",
-                MediaTypeBadgeBg = new SolidColorBrush(Color.FromArgb(0x33, 0x7B, 0x5C, 0xFF)),
-                CreatorDisplay = "bambi",
-                ShowCreator = true,
-                MediaSourceGlyph = "●",
-                MediaSourceLabel = "local file",
-                MediaSourceBrush = new SolidColorBrush(Color.FromRgb(0x4A, 0xDE, 0x80)),
-                ShowMediaSource = true,
-                TimestampDisplay = "2 days ago",
-                ShowTimestamp = true,
-                ShowTags = true,
-                Tags =
-                {
-                    new DeeperAutoTagVm
-                    {
-                        Glyph = "📳", Label = "haptics",
-                        Background = new SolidColorBrush(Color.FromArgb(0x33, 0x7B, 0x5C, 0xFF)),
-                        Foreground = new SolidColorBrush(Color.FromRgb(0xB8, 0xA6, 0xFF)),
-                    },
-                    new DeeperAutoTagVm
-                    {
-                        Glyph = "📷", Label = "webcam",
-                        Background = new SolidColorBrush(Color.FromArgb(0x33, 0x7B, 0x5C, 0xFF)),
-                        Foreground = new SolidColorBrush(Color.FromRgb(0xB8, 0xA6, 0xFF)),
-                    },
-                },
-                ShowSubmitButton = true,
-                SubmitEnabled = true,
-                SubmitTooltip = "Submit this enhancement to the catalogue",
-            },
-            new DeeperLibraryRowVm
-            {
-                Name = "Whisper loop (audio only)",
-                MediaTypeIcon = "🎵",
-                MediaTypeBadgeBg = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0x69, 0xB4)),
-                CreatorDisplay = "cc labs",
-                ShowCreator = true,
-                MediaSourceGlyph = "●",
-                MediaSourceLabel = "catalogue",
-                MediaSourceBrush = new SolidColorBrush(Color.FromRgb(0x7B, 0x5C, 0xFF)),
-                ShowMediaSource = true,
-                TimestampDisplay = "last week",
-                ShowTimestamp = true,
-                ShowSubmissionBadge = true,
-                SubmissionBadgeGlyph = "✓",
-                SubmissionBadgeLabel = "published",
-                SubmissionBadgeBg = new SolidColorBrush(Color.FromArgb(0x33, 0x4A, 0xDE, 0x80)),
-                SubmissionBadgeFg = new SolidColorBrush(Color.FromRgb(0x4A, 0xDE, 0x80)),
-                SubmissionBadgeTooltip = "Accepted into the catalogue",
-            },
-            new DeeperLibraryRowVm
-            {
-                Name = "Untitled import",
-                MediaTypeIcon = "🎬",
-                MediaTypeBadgeBg = new SolidColorBrush(Color.FromArgb(0x33, 0x7B, 0x5C, 0xFF)),
-                TimestampDisplay = "just now",
-                ShowTimestamp = true,
-            },
-        };
+        private readonly List<DeeperLocalLibrary.Entry> _allEntries = new();
+        private string _search = "";
+        private DeeperLocalLibrary.MediaTypeFilter _mediaType;
+        private bool _haptics;
+        private bool _webcam;
+        private DeeperLocalLibrary.SortMode _sort = DeeperLocalLibrary.SortMode.Recent;
+        private bool _descending = true;
+        private bool _libraryError;
 
-        public string LibraryCountText => Loc.GetF("deeper_library_count_fmt", FilteredEntries.Count);
+        public DeeperTabViewModel() => ReloadLibrary();
 
-        /// <summary>WPF picks between two keys in UpdateDeeperEmptyState; the hint only shows when
-        /// the list is empty, which the placeholder list is not.</summary>
-        public bool ShowLibraryEmpty => FilteredEntries.Count == 0;
-        public string LibraryEmptyText => Loc.Get(AllEntriesCount == 0 ? "deeper_library_empty" : "deeper_hub_empty_filtered");
-        private int AllEntriesCount => FilteredEntries.Count;
-
-        // Pill counts. Plain numbers on WPF too (UpdateDeeperFilterPillCounts writes ints).
-        public int PillAllCount => FilteredEntries.Count;
-        public int PillVideoCount => 2;
-        public int PillAudioCount => 1;
-        public int PillHapticsCount => 1;
-        public int PillWebcamCount => 1;
-
-        /// <summary>WPF authors the card Collapsed and MainWindow reveals it on first run. Shown
-        /// here so --render-all proves the card draws rather than hiding a raw key.</summary>
+        public event PropertyChangedEventHandler? PropertyChanged;
+        public ObservableCollection<DeeperLibraryRowVm> FilteredEntries { get; } = new();
+        public DeeperLocalLibrary.MediaTypeFilter MediaType => _mediaType;
+        public bool Haptics => _haptics;
+        public bool Webcam => _webcam;
+        public bool ShowLibraryError => _libraryError;
+        public string LibraryErrorText => Loc.Get("deeper_import_library_not_ready");
+        public bool ShowLibraryEmpty => !_libraryError && FilteredEntries.Count == 0;
+        public string LibraryEmptyText => Loc.Get(_allEntries.Count == 0 ? "deeper_library_empty" : "deeper_hub_empty_filtered");
+        public string LibraryCountText => FilteredEntries.Count == _allEntries.Count
+            ? Loc.GetF("deeper_library_count_fmt", _allEntries.Count)
+            : Loc.GetF("deeper_library_count_shown_fmt", _allEntries.Count, FilteredEntries.Count);
+        public int PillAllCount => Count(DeeperLocalLibrary.MediaTypeFilter.All);
+        public int PillVideoCount => Count(DeeperLocalLibrary.MediaTypeFilter.Video);
+        public int PillAudioCount => Count(DeeperLocalLibrary.MediaTypeFilter.Audio);
+        public int PillHapticsCount => Count(new DeeperLocalLibrary.FilterCriteria(_search, _mediaType, true, _webcam));
+        public int PillWebcamCount => Count(new DeeperLocalLibrary.FilterCriteria(_search, _mediaType, _haptics, true));
         public bool ShowWelcomeCard => true;
 
-        // ---- webcam column ------------------------------------------------------------
+        private int Count(DeeperLocalLibrary.MediaTypeFilter type)
+            => Count(new DeeperLocalLibrary.FilterCriteria(_search, type, _haptics, _webcam));
+
+        private int Count(DeeperLocalLibrary.FilterCriteria criteria)
+            => _allEntries.Count(entry => DeeperLocalLibrary.Matches(entry, criteria));
+
+        public void ReloadLibrary()
+        {
+            var result = DeeperLocalLibrary.Scan();
+            _allEntries.Clear();
+            _allEntries.AddRange(result.Entries);
+            _libraryError = result.HasError;
+            ApplyFilter();
+        }
+
+        public void SetSearch(string? search)
+        {
+            _search = search ?? "";
+            ApplyFilter();
+        }
+
+        public void SetMediaType(DeeperLocalLibrary.MediaTypeFilter type)
+        {
+            _mediaType = type;
+            ApplyFilter();
+        }
+
+        public void ToggleHaptics()
+        {
+            _haptics = !_haptics;
+            ApplyFilter();
+        }
+
+        public void ToggleWebcam()
+        {
+            _webcam = !_webcam;
+            ApplyFilter();
+        }
+
+        public void SetSort(string tag)
+        {
+            _sort = tag switch
+            {
+                "name" => DeeperLocalLibrary.SortMode.Name,
+                "creator" => DeeperLocalLibrary.SortMode.Creator,
+                _ => DeeperLocalLibrary.SortMode.Recent,
+            };
+            _descending = _sort == DeeperLocalLibrary.SortMode.Recent;
+            ApplyFilter();
+        }
+
+        private void ApplyFilter()
+        {
+            var criteria = new DeeperLocalLibrary.FilterCriteria(_search, _mediaType, _haptics, _webcam, _sort, _descending);
+            var rows = DeeperLocalLibrary.Filter(_allEntries, criteria);
+            FilteredEntries.Clear();
+            foreach (var entry in rows) FilteredEntries.Add(BuildRow(entry));
+            Notify(nameof(LibraryCountText), nameof(ShowLibraryEmpty), nameof(LibraryEmptyText),
+                nameof(PillAllCount), nameof(PillVideoCount), nameof(PillAudioCount),
+                nameof(PillHapticsCount), nameof(PillWebcamCount), nameof(ShowLibraryError));
+        }
+
+        private static DeeperLibraryRowVm BuildRow(DeeperLocalLibrary.Entry entry)
+        {
+            var isAudio = string.Equals(entry.MediaType, MediaTypes.Audio, StringComparison.OrdinalIgnoreCase);
+            var tags = entry.AutoTags.Select(tag => new DeeperAutoTagVm
+            {
+                Glyph = tag.Equals(EnhancementAutoTagger.TagHaptics, StringComparison.OrdinalIgnoreCase) ? "📳" : "📷",
+                Label = tag,
+                Background = new SolidColorBrush(Color.FromArgb(0x33, 0x7B, 0x5C, 0xFF)),
+                Foreground = new SolidColorBrush(Color.FromRgb(0xB8, 0xA6, 0xFF)),
+            }).ToList();
+            var source = DescribeSource(entry.MediaSource);
+            return new DeeperLibraryRowVm
+            {
+                Name = entry.Name,
+                MediaTypeIcon = isAudio ? "🎵" : "🎬",
+                MediaTypeBadgeBg = new SolidColorBrush(Color.FromArgb(0x33,
+                    isAudio ? (byte)0xFF : (byte)0x7B,
+                    isAudio ? (byte)0x69 : (byte)0x5C,
+                    isAudio ? (byte)0xB4 : (byte)0xFF)),
+                CreatorDisplay = entry.Creator,
+                ShowCreator = !string.IsNullOrEmpty(entry.Creator),
+                MediaSourceGlyph = source.Glyph,
+                MediaSourceLabel = source.Label,
+                MediaSourceBrush = source.Exists ? new SolidColorBrush(Color.FromRgb(0x4A, 0xDE, 0x80)) : Brushes.Gray,
+                ShowMediaSource = !string.IsNullOrEmpty(source.Label),
+                TimestampDisplay = FormatRelativeTime(entry.LastModified),
+                ShowTimestamp = entry.LastModified != default,
+                Tags = tags,
+                ShowTags = tags.Count > 0,
+            };
+        }
+
+        private static (string Label, string Glyph, bool Exists) DescribeSource(string source)
+        {
+            if (string.IsNullOrWhiteSpace(source)) return ("", "", false);
+            if (Uri.TryCreate(source, UriKind.Absolute, out var uri)
+                && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+                return (uri.Host, "🌐", true);
+            var name = Path.GetFileName(source);
+            if (string.IsNullOrEmpty(name)) name = source;
+            var exists = false;
+            try { exists = File.Exists(source); } catch { }
+            return (name, exists ? "✓" : "⚠", exists);
+        }
+
+        private static string FormatRelativeTime(DateTime when)
+        {
+            if (when == default) return "";
+            var diff = DateTime.Now - when;
+            if (diff.TotalMinutes < 1) return Loc.Get("deeper_hub_time_just_now");
+            if (diff.TotalHours < 1) return Loc.GetF("deeper_hub_time_minutes_ago", (int)diff.TotalMinutes);
+            if (diff.TotalDays < 1) return Loc.GetF("deeper_hub_time_hours_ago", (int)diff.TotalHours);
+            if (diff.TotalDays < 7) return Loc.GetF("deeper_hub_time_days_ago", (int)diff.TotalDays);
+            if (diff.TotalDays < 31) return Loc.GetF("deeper_hub_time_weeks_ago", (int)(diff.TotalDays / 7));
+            if (diff.TotalDays < 365) return Loc.GetF("deeper_hub_time_months_ago", (int)(diff.TotalDays / 30));
+            return Loc.GetF("deeper_hub_time_years_ago", (int)(diff.TotalDays / 365));
+        }
+
+        private void Notify(params string[] names)
+        {
+            foreach (var name in names) PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
+
         private bool Consented => true;
         public string ConsentStatusText => Loc.Get(Consented ? "blink_trainer_consent_granted" : "blink_trainer_consent_required");
         public string ConsentButtonText => Loc.Get(Consented ? "blink_trainer_consent_manage" : "blink_trainer_consent_grant");
