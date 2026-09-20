@@ -61,6 +61,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void RefreshBrowse()
         {
             var list = Find<ListBox>("ProgramLibraryList");
+            // Snapshot first: replacing ItemsSource raises SelectionChanged with an empty
+            // selection, which would null out _selectedProgramId before we can restore it.
+            var wantedId = _selectedProgramId;
             var items = MainShellWindow.BuildProgramBrowseItems(_library);
             list.ItemsSource = items;
 
@@ -70,9 +73,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Find<StackPanel>("ProgramsGraduatedPanel").IsVisible = false;
             Find<TextBlock>("TxtProgramsBrowseEmpty").IsVisible = items.Count == 0;
 
-            var selected = items.FirstOrDefault(item => item.ProgramId == _selectedProgramId)
+            var selected = items.FirstOrDefault(item => item.ProgramId == wantedId)
                            ?? items.FirstOrDefault();
             list.SelectedItem = selected;
+            _selectedProgramId = selected?.ProgramId;
             ShowProgramDetails(selected);
         }
 

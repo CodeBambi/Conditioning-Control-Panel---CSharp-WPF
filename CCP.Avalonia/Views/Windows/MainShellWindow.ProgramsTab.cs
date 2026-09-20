@@ -40,7 +40,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     ActionText = Loc.Get(premium ? "btn_program_locked" : "btn_program_enroll"),
                     IsActionEnabled = false,
                     ActionOpacity = 0.5,
-                    ReasonText = Loc.Get(premium ? "programs_locked_hint" : "programs_unavailable"),
+                    // Tier metadata stays, but nothing here can be started - by a pledge or
+                    // otherwise - so every card gets the truthful unavailable explanation rather
+                    // than programs_locked_hint, which promises a pledge unlocks execution.
+                    ReasonText = Loc.Get("programs_unavailable"),
                     ReasonVisible = true,
                     CardOpacity = premium ? 0.72 : 1.0
                 });
