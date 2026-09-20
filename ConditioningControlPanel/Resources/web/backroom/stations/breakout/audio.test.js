@@ -1,3 +1,5 @@
+import {createGame} from './game.js';
+import {routeFinaleAudio} from './finale-audio.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createAudio, createBeat, cutoffFor, layerLevel, hitSemis, hitCutoff, timeScaleCents, LOOP_STEPS, MIN_LEAD_S, WOBBLE_CENTS } from './audio.js';
@@ -82,7 +84,7 @@ test('curves: cutoff is exponential 300..12k, layers fade in above their thresho
   assert.ok(Math.abs(hitCutoff(1) - 9600) < 1e-6);
 });
 
-test('before start(): every method is a no-op, the beat still runs on the fallback clock', () => {
+test('before start(): cues stay silent and grey tempo applies to the fallback clock', () => {
   const { audio, ctx } = make();
   const t0 = audio.now();
   assert.ok(t0 >= 0 && t0 < 1);
@@ -92,7 +94,7 @@ test('before start(): every method is a no-op, the beat still runs on the fallba
   audio.setSaturation(0.6); audio.setState('grey');
   assert.equal(ctx(), null, 'no context is built before a gesture');
   assert.ok(audio.beat.nextSixteenth(audio.now()) > audio.now());
-  assert.equal(audio.beat.spb, 60 / 96);
+  assert.equal(audio.beat.spb, 60 / (96 * .72));
 });
 
 test('start() is idempotent, builds one context, resumes it, and the bed schedules ahead', () => {
@@ -221,8 +223,26 @@ test('slow-mo pitches the bed down two semitones at 0.35, straight at 1; grey ad
   audio.setTimeScale(1);
   assert.equal(audio.bedDetuneCents + 0, 0);
   audio.setState('grey');
-  assert.equal(audio.wobbleDepth, WOBBLE_CENTS, 'grey: +-8 cents');
+  assert.equal(audio.wobbleDepth, 18, 'every grey entry uses the established distorted scene');
   audio.setState('colour');
   assert.ok(audio.wobbleDepth < 0.01, 'colour: the wobble is gone');
   audio.destroy();
+});
+
+test('tempo changes keep beat helpers consistent', () => {
+  const beat=createBeat(96);
+  beat.setTempo(96*.72);
+  assert.ok(Math.abs(beat.spb-60/(96*.72))<1e-9);
+  assert.equal(beat.stepIndex(beat.sixteenth*8),8);
+  beat.setTempo(96);
+  assert.equal(beat.spb,.625);
+});
+
+test('every ordinary grey entry slows the existing music scene and colour restores it',()=>{
+ const {audio}=make({bpm:120});
+ audio.setState('colour');assert.equal(audio.beat.spb,.5);
+ audio.setState('grey');assert.ok(Math.abs(audio.beat.spb-.5/.72)<1e-9);
+ audio.setState('grey');assert.ok(Math.abs(audio.beat.spb-.5/.72)<1e-9);
+ audio.setState('colour');assert.equal(audio.beat.spb,.5);
+ audio.destroy();
 });
