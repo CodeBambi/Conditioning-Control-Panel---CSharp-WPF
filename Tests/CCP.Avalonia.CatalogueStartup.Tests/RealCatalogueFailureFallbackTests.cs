@@ -98,7 +98,10 @@ public sealed class RealCatalogueFailureFallbackTests
                     Directory.Delete(customFolder);
                     File.WriteAllText(customFolder, "owned custom path failure");
 
+                    var firstAssets = Directory.CreateDirectory(Path.Combine(profile, "assets-first")).FullName;
+                    var secondAssets = Directory.CreateDirectory(Path.Combine(profile, "assets-second")).FullName;
                     var settings = new SettingsService();
+                    settings.Current.CustomAssetsPath = firstAssets;
                     settings.Current.Language = "en";
                     settings.Current.Welcomed = true;
                     settings.SaveImmediate();
@@ -110,6 +113,16 @@ public sealed class RealCatalogueFailureFallbackTests
                         .SetupWithLifetime(lifetime);
 
                     var app = Assert.IsType<FailingCatalogueApp>(Application.Current);
+                    Assert.Equal(firstAssets, CorePaths.EffectiveAssets);
+                    CoreSettings.Current.CustomAssetsPath = secondAssets;
+                    Assert.Equal(secondAssets, CorePaths.EffectiveAssets);
+                    Directory.Delete(secondAssets);
+                    Assert.Equal(Path.Combine(profile, "assets"), CorePaths.EffectiveAssets);
+                    CoreSettings.Current.CustomAssetsPath = null;
+                    Assert.Equal(Path.Combine(profile, "assets"), CorePaths.EffectiveAssets);
+                    CoreSettings.Current.CustomAssetsPath = firstAssets;
+                    Assert.Equal(firstAssets, CorePaths.EffectiveAssets);
+
                     var candidate = Assert.IsType<SessionManager>(app.Candidate);
                     var partial = Assert.Single(candidate.BuiltInSessions,
                         session => session.Id == "real_failure_builtin");
