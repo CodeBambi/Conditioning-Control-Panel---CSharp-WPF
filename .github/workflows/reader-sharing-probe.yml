@@ -1,0 +1,82 @@
+# Diagnostic-only Windows experiment for the flaky language persistence failure. The earlier
+# probe (run 35529596079) passed 3/3 on .NET 8.0.31, so the original cause is NOT established and
+# nothing here claims one. This runs a different, controlled question: does a concurrent reader
+# that withholds FileShare.Delete block SettingsService's atomic File.Move publish on Windows?
+#
+# The negative control is EXPECTED to fail to persist. That is the measurement, not a regression,
+# and it is not a production fix. Runs the experiment ONCE — never retry-until-green.
+#
+# Push-triggered on this probe branch only. language-probe.yml is pinned to a different branch and
+# is untouched, so it cannot fire here. build.yml, Core and the shipping stack are untouched.
+name: reader-sharing-probe
+
+on:
+  push:
+    branches: [avalonia-port/probe-windows-reader-sharing]
+
+jobs:
+  windows-reader-sharing-probe:
+    runs-on: windows-latest
+    # Bounded: the experiment is seconds of work, so anything near this is a hang.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          # Same environment as the earlier probe: 8.0 runtime for the net8.0 testhost,
+          # 10.0 SDK because that is what the repo builds with.
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      # Results directory exists before anything can fail, so the artifact survives a build break.
+      - name: Effective environment
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP/probe" | Out-Null
+          # The PowerShell host's framework and the INSTALLED tooling, NOT the testhost runtime.
+          # The testhost records its own actual runtime and owned profile into
+          # probe/testhost-runtime.log and probe/reader-sharing-probe.log.
+          @(
+            "[reader-probe] pwsh-host-os=$([System.Runtime.InteropServices.RuntimeInformation]::OSDescription)"
+            "[reader-probe] pwsh-host-framework=$([System.Runtime.InteropServices.RuntimeInformation]::FrameworkDescription)"
+          ) | Tee-Object -FilePath "$env:RUNNER_TEMP/probe/environment.log"
+          dotnet --info 2>&1 | Tee-Object -Append -FilePath "$env:RUNNER_TEMP/probe/environment.log"
+
+      - name: Build language suite
+        shell: pwsh
+        run: |
+          dotnet build Tests/CCP.Avalonia.Language.Tests/CCP.Avalonia.Language.Tests.csproj -c Release 2>&1 |
+            Tee-Object -FilePath "$env:RUNNER_TEMP/probe/build.log"
+          exit $LASTEXITCODE
+
+      # ONE run, in its own fresh testhost process, filtered to the experiment only — the original
+      # language test is not executed here and is not modified.
+      - name: Run reader-sharing experiment (once)
+        shell: pwsh
+        env:
+          # Existing seam: makes the testhost record its real runtime, owned profile and the
+          # per-control observations, pass or fail.
+          CCP_PROBE_LOG_DIR: ${{ runner.temp }}/probe
+        run: |
+          dotnet test Tests/CCP.Avalonia.Language.Tests/CCP.Avalonia.Language.Tests.csproj `
+            -c Release --no-build `
+            --filter "FullyQualifiedName~ReaderSharingProbeTests" `
+            --blame-hang --blame-hang-timeout 5m `
+            --logger "trx;LogFileName=reader-sharing-probe.trx" `
+            --results-directory "$env:RUNNER_TEMP/probe" 2>&1 |
+            Tee-Object -FilePath "$env:RUNNER_TEMP/probe/reader-sharing-probe-run.log"
+          $code = $LASTEXITCODE
+          Write-Host "[reader-probe] exit=$code"
+          "{`"run`":1,`"exitCode`":$code}" |
+            Out-File -Append -Encoding utf8 "$env:RUNNER_TEMP/probe/run.jsonl"
+          # A non-zero exit means a PREDICTION was wrong, which is itself the finding. It is
+          # surfaced rather than swallowed, and it is never retried.
+          exit $code
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-reader-sharing-probe
+          path: ${{ runner.temp }}/probe/
+          if-no-files-found: warn
